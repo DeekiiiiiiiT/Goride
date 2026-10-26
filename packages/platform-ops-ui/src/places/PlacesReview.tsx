@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { PLACE_KINDS, placeKind } from '@roam/plug-core';
 
 type Item = {
   id: string;
@@ -7,7 +8,19 @@ type Item = {
   suggestion: string | null;
   distinct_users: number;
   best_accuracy_m: number | null;
-  payload: { name?: string; kind?: string; pcode?: string; lat?: number; lng?: number };
+  payload: {
+    name?: string;
+    kind?: string;
+    pcode?: string;
+    lat?: number;
+    lng?: number;
+    phone?: string | null;
+    hours?: string | null;
+    services?: string[];
+    brand?: string | null;
+    accuracyM?: number;
+    photoUrl?: string | null;
+  };
   created_at: string;
 };
 
@@ -174,10 +187,8 @@ export function PlacesReview({
             <select id="kind-filter" className="min-h-10 rounded-md border border-slate-300 px-2" value={kind} onChange={(event) => setKind(event.target.value)}>
               <option value="all">All</option>
               <option value="new">New</option>
-              <option value="move">Move</option>
               <option value="merge">Merge</option>
-              <option value="mechanic">Mechanic</option>
-              <option value="parts">Parts</option>
+              {PLACE_KINDS.map((kind) => <option key={kind.id} value={kind.id}>{kind.mapLabel}</option>)}
             </select>
             <button
               type="button"
@@ -216,7 +227,7 @@ export function PlacesReview({
                       <td className="px-3 py-2">
                         <button type="button" className="text-left" onClick={() => { setIndex(itemIndex); setView('item'); }}>
                           <span className="font-medium">{item.payload?.name || 'Unnamed place'}</span>
-                          <span className="block text-xs text-slate-500">{item.payload?.pcode || item.kind}</span>
+                          <span className="block text-xs text-slate-500">{placeKind(item.payload?.kind)?.mapLabel || item.payload?.kind || item.kind}</span>
                         </button>
                       </td>
                       <td className="px-3 py-2 text-slate-600">{item.distinct_users} people · {item.best_accuracy_m ?? '—'} m</td>
@@ -235,11 +246,20 @@ export function PlacesReview({
           <div className="rounded-lg border border-slate-200 bg-white p-4">
             <p className="text-xs uppercase text-slate-500">Proposed pin</p>
             <p className="mt-2 text-sm text-slate-600">
-              {current?.payload?.lat && current?.payload?.lng
+              {current?.payload?.lat != null && current?.payload?.lng != null
                 ? `${current.payload.lat}, ${current.payload.lng}`
                 : 'This submission has no map point yet.'}
             </p>
-            <a className="mt-3 inline-block text-sm text-blue-700" href={current?.payload?.lat ? `https://www.google.com/maps?q=${current.payload.lat},${current.payload.lng}` : undefined} target="_blank" rel="noreferrer">Street View</a>
+            <p className="mt-2 text-sm text-slate-600">
+              {placeKind(current?.payload?.kind)?.mapLabel || 'Type not set'}
+              {current?.payload?.brand ? ` · ${current.payload.brand}` : ''}
+              {current?.payload?.phone ? ` · ${current.payload.phone}` : ''}
+              {current?.payload?.hours ? ` · ${current.payload.hours}` : ''}
+            </p>
+            {current?.payload?.services?.length ? <p className="mt-1 text-sm text-slate-600">{current.payload.services.join(', ')}</p> : null}
+            <p className="mt-1 text-sm text-slate-600">{current?.distinct_users ?? 0} people · {current?.best_accuracy_m ?? current?.payload?.accuracyM ?? '—'} m</p>
+            {current?.payload?.photoUrl ? <img src={current.payload.photoUrl} alt="" className="mt-3 max-h-48 rounded-md" /> : null}
+            <a className="mt-3 inline-block text-sm text-blue-700" href={current?.payload?.lat != null ? `https://www.google.com/maps?q=${current.payload.lat},${current.payload.lng}` : undefined} target="_blank" rel="noreferrer">Street View</a>
           </div>
           <div className="rounded-lg border border-slate-200 bg-white p-4">
             {!current ? <p>The queue is clear.</p> : (

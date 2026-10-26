@@ -40,15 +40,18 @@ function sessionBody(role = 'explorer_user') {
       role: 'authenticated',
       phone: '+18765550199',
       email: 'driver@example.com',
-      app_metadata: { provider: 'phone', providers: ['phone'], role, roles: [role] },
+      app_metadata: { provider: 'google', providers: ['google'], role, roles: [role] },
       user_metadata: { display_name: 'Test Driver', app: 'plug' },
     },
   };
 }
 
 /** Answer catalog and explorer calls inside the test. The app has no demo switch. */
-export async function standIn(page: Page, options?: { role?: string; persist?: boolean }) {
+export async function standIn(page: Page, options?: { role?: string; persist?: boolean; flagsOff?: boolean }) {
   const role = options?.role || 'explorer_user';
+  const flags = options?.flagsOff
+    ? Object.fromEntries(Object.keys(FLAGS).map((name) => [name, false]))
+    : FLAGS;
   if (options?.persist) {
     await page.addInitScript((session) => {
       localStorage.setItem('sb-example-auth-plug', JSON.stringify(session));
@@ -62,6 +65,18 @@ export async function standIn(page: Page, options?: { role?: string; persist?: b
     sessionStorage.setItem('plug-accuracy', '12');
     sessionStorage.setItem('plug-pin-lat', '18.0128');
     sessionStorage.setItem('plug-pin-lng', '-76.7967');
+    const fix = {
+      coords: { latitude: 18.0128, longitude: -76.7967, accuracy: 12, altitude: null, altitudeAccuracy: null, heading: null, speed: null },
+      timestamp: Date.now(),
+    };
+    Object.defineProperty(navigator, 'geolocation', {
+      configurable: true,
+      value: {
+        getCurrentPosition: (ok) => ok(fix),
+        watchPosition: (ok) => { ok(fix); return 1; },
+        clearWatch: () => undefined,
+      },
+    });
   });
   await page.context().grantPermissions(['geolocation']);
   await page.context().setGeolocation({ latitude: 18.0128, longitude: -76.7967, accuracy: 12 });
@@ -112,8 +127,12 @@ export async function standIn(page: Page, options?: { role?: string; persist?: b
     const url = new URL(route.request().url());
     const path = url.pathname.replace(/.*\/explorer/, '') || '/';
     const method = route.request().method();
+    if (path === '/join' && method === 'POST') {
+      await route.fulfill({ json: { ok: true, displayName: role === 'passenger' ? 'Test Driver' : null } });
+      return;
+    }
     if (path.startsWith('/flags')) {
-      await route.fulfill({ json: { flags: FLAGS } });
+      await route.fulfill({ json: { flags } });
       return;
     }
     if (path.startsWith('/garage') || path === '/vehicles' && method === 'GET') {
@@ -146,6 +165,6 @@ export async function standIn(page: Page, options?: { role?: string; persist?: b
       await route.fulfill({ json: { pins, level: {}, trust: {} } });
       return;
     }
-    await route.fulfill({ json: { ok: true, vehicles, notifications: [], logs: [], pins, flags: FLAGS, reminders: [] } });
+    await route.fulfill({ json: { ok: true, vehicles, notifications: [], logs: [], pins, flags, reminders: [] } });
   });
 }

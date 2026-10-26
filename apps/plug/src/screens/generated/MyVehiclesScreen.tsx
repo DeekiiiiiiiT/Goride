@@ -365,7 +365,7 @@ export function MyVehiclesScreen() {
                 Jamaica Road Code Reminders
               </h5>
               <p className={"font-body-sm text-body-sm text-on-surface-variant mt-0.5"}>
-                {"Automated SMS & push reminders trigger 30, 14, and 3 days before your Fitness Certificate, Registration Disc, and Insurance policies expire at Island Traffic Authority depots."}
+                {"Push reminders trigger 30, 14, and 3 days before your Fitness Certificate, Registration Disc, and Insurance policies expire at Island Traffic Authority depots."}
               </p>
             </div>
           </div>

@@ -3,11 +3,13 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet.markercluster';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
+import { placeKind } from '@roam/plug-core';
 import { publicGet } from '../api';
 import { writeStationCache } from '../offline';
 import { getPlugRuntime } from '../shell/click';
 
 type Station = { id: string; name: string; brand?: string; lat: number; lng: number; prices?: Record<string, number> };
+type Place = { id: string; name: string; kind: string; lat: number; lng: number };
 
 function pinPrice(prices: Record<string, number> | undefined, grade: string): string {
   const value = prices?.[grade];
@@ -47,18 +49,26 @@ function listenRecenter(map: L.Map, zoom: number) {
 export function ExploreMap() {
   const node = useRef<HTMLDivElement>(null);
   const [grade, setGrade] = useState(sessionStorage.getItem('plug-grade') || 'e10_87');
+  const [chip, setChip] = useState(sessionStorage.getItem('plug-chip') || '');
   const [stations, setStations] = useState<Station[]>([]);
+  const [places, setPlaces] = useState<Place[]>([]);
 
   useEffect(() => {
     const load = () => {
       setGrade(sessionStorage.getItem('plug-grade') || 'e10_87');
-      void publicGet<{ stations: Station[] }>('/stations')
-        .then((body) => {
-          const rows = body.stations || [];
-          writeStationCache(rows);
-          setStations(rows);
-        })
-        .catch(() => setStations([]));
+      const next = sessionStorage.getItem('plug-chip') || '';
+      setChip(next);
+      if (!next || next === 'fuel') {
+        void publicGet<{ stations: Station[] }>('/stations')
+          .then((body) => {
+            const rows = body.stations || [];
+            writeStationCache(rows);
+            setStations(rows);
+          })
+          .catch(() => setStations([]));
+      } else setStations([]);
+      const placePath = !next ? '/places' : `/places?kind=${encodeURIComponent(next === 'fuel' ? 'fuel' : next)}`;
+      void publicGet<{ places: Place[] }>(placePath).then((body) => setPlaces(body.places || [])).catch(() => setPlaces([]));
     };
     load();
     window.addEventListener('plug-refresh', load);
@@ -108,6 +118,19 @@ export function ExploreMap() {
         getPlugRuntime().go(`/stations/${row.id}`);
       }).addTo(group);
     });
+    places.filter((row) => Number.isFinite(row.lat) && Number.isFinite(row.lng)).forEach((row) => {
+      const label = row.name.replace(/[<>&"]/g, '');
+      const iconName = placeKind(row.kind)?.icon || 'place';
+      const icon = L.divIcon({
+        className: '',
+        html: `<button type="button" aria-label="${label}" style="width:44px;height:44px;border:2px solid #fff;border-radius:999px;background:#1e1b17;color:#fff;padding:0;box-shadow:0 2px 8px rgba(0,0,0,.28)"><span class="material-symbols-outlined" style="font-size:22px;line-height:40px">${iconName}</span></button>`,
+        iconSize: [44, 44],
+        iconAnchor: [22, 22],
+      });
+      L.marker([row.lat, row.lng], { icon }).on('click', () => {
+        getPlugRuntime().go(`/places/${row.id}`);
+      }).addTo(group);
+    });
     group.addTo(map);
     const stopRecenter = listenRecenter(map, map.getZoom());
     return () => {
@@ -115,7 +138,7 @@ export function ExploreMap() {
       group.remove();
       map.remove();
     };
-  }, [stations, grade]);
+  }, [stations, places, grade, chip]);
 
   return <div ref={node} className="absolute inset-0 z-0" />;
 }

@@ -17,8 +17,6 @@ export type PlugRuntime = {
   closeSheet: () => void;
   signedIn: () => boolean;
   flagOn: (flag: string) => boolean;
-  sendCode: (phone: string) => Promise<void>;
-  verifyCode: (phone: string, code: string) => Promise<void>;
   signOut: () => Promise<void>;
   continueWithGoogle: () => Promise<void>;
 };
@@ -63,13 +61,6 @@ export function garagePath(suffix = ''): string {
   const id = openVehicle();
   if (!id) return '/garage';
   return suffix ? `/garage/${id}/${suffix}` : `/garage/${id}`;
-}
-
-export function phoneFrom(raw: string): string {
-  const digits = raw.replace(/\D/g, '');
-  if (digits.startsWith('1876')) return `+${digits}`;
-  if (digits.startsWith('876')) return `+1${digits}`;
-  return `+1876${digits}`;
 }
 
 export async function openDirections(stationId?: string) {
@@ -182,20 +173,31 @@ export function odometerWarning(reading: number): string | null {
   return null;
 }
 
+export function sectionFlag(path: string): string | null {
+  if (path === '/paused') return null;
+  if (path.includes('/documents')) return 'plug.documents';
+  if (path.startsWith('/garage')) return 'plug.garage';
+  if (path.startsWith('/fuel')) return 'plug.fuel_log';
+  if (path.startsWith('/parts')) return 'plug.parts';
+  if (path.startsWith('/map') || path.startsWith('/contributions') || path.startsWith('/pending') || path.startsWith('/parish')) return 'plug.map_it';
+  if (path === '/tolls') return 'plug.tolls';
+  if (path === '/explore' || path.startsWith('/explore/')) return 'plug.explore';
+  return null;
+}
+
 export function goPath(path: string) {
   const rt = getPlugRuntime();
   const here = currentPath();
   if (path.startsWith('/fuel') && !isFuel(here)) sessionStorage.setItem('plug-fuel-from', here);
+  const flag = sectionFlag(path);
+  if (flag && !rt.flagOn(flag)) {
+    rt.go('/paused');
+    return;
+  }
   if (!rt.signedIn() && pathNeedsAccount(path)) {
     rt.signIn(path);
     return;
   }
-  const tab = tabFor(path, null);
-  if (rt.signedIn() && tab === 'garage' && !rt.flagOn('plug.garage')) return;
-  if (rt.signedIn() && tab === 'map' && !rt.flagOn('plug.map_it')) return;
-  if (rt.signedIn() && path.startsWith('/fuel') && !rt.flagOn('plug.fuel_log')) return;
-  if (rt.signedIn() && path.startsWith('/parts') && !rt.flagOn('plug.parts')) return;
-  if (rt.signedIn() && path === '/tolls' && !rt.flagOn('plug.tolls')) return;
   rt.go(path);
 }
 

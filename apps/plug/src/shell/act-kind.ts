@@ -6,9 +6,7 @@ const EXACT: Record<string, string> = {
   close: 'close',
   cancel: 'close',
   'cancel-scan': 'close',
-  'clear-phone': 'clear-phone',
   'continue-with-google': 'google',
-  'continue-with-phone': 'phone',
   'pick-catalog': 'catalog',
   'continue-with-apple': 'apple',
   'open-station': 'open-station',
@@ -21,7 +19,6 @@ const EXACT: Record<string, string> = {
   'see-all': 'see-all',
   'my-car': 'my-car',
   'create-account': 'signup',
-  'sign-up-with-phone': 'signup',
   notifications: 'inbox',
   parishSelectorBtn: 'inbox',
   tune: 'filters',
@@ -57,7 +54,6 @@ const EXACT: Record<string, string> = {
   input: 'search',
   'station-search-input': 'search',
   'support-search': 'search',
-  'phone-input': 'noop',
   contribute: 'map',
   rewards: 'account',
   profile: 'account',
@@ -188,8 +184,12 @@ const PATTERNS: [RegExp, string][] = [
 
 export function kindFor(act: string, screen = ''): string | null {
   if (!act) return null;
+  if (act.startsWith('service-')) return 'explore';
+  if (act === 'map-one') return 'map';
+  if (act === 'toll-rates') return 'tolls';
+  if (act === 'log-a-service') return 'garage';
   if (EXACT[act]) return EXACT[act];
-  if (act.startsWith('otp-') || /^[0-9]$/.test(act)) return 'otp-digit';
+  if (/^[0-9]$/.test(act)) return 'digit';
   if (/^class-btn-/.test(act)) return 'toggle';
   for (const [pattern, kind] of PATTERNS) {
     if (pattern.test(act)) return kind;

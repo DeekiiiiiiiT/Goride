@@ -54,6 +54,9 @@ export function AccountScreen() {
                   <h2 className={"font-headline-sm text-headline-sm text-on-surface font-bold tracking-tight truncate"} data-slot={"display-name"}>
                     Your account
                   </h2>
+                  <p className={"font-body-sm text-body-sm text-on-surface-variant"} data-slot={"sign-in-method"}>
+                    Signed in with email
+                  </p>
                 </div>
               </div>
             </div>
@@ -229,7 +232,7 @@ export function AccountScreen() {
                       Notification Settings
                     </p>
                     <p className={"font-body-sm text-body-sm text-on-surface-variant truncate"}>
-                      {"SMS alerts, price drop radar & reminders"}
+                      {"Push reminders, price drop radar & reminders"}
                     </p>
                   </div>
                 </div>

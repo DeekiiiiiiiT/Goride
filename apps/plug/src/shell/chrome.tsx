@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { publicGet } from '../api';
 import type { PlugTab } from '../nav';
 import { readQueue } from '../offline';
-import { getPlugRuntime } from './click';
+import { SignInForm } from '../screens/SignInForm';
 import { onPlugClick } from './actions';
 import { DirectionsScreen } from '../screens/generated/DirectionsScreen';
 import { FiltersScreen } from '../screens/generated/FiltersScreen';
@@ -11,33 +11,29 @@ const TAB_ICON: Record<PlugTab, string> = {
   explore: 'explore',
   garage: 'directions_car',
   map: 'add_location_alt',
+  inbox: 'inbox',
   account: 'person',
 };
 
 export function TabBar({
   active,
-  signedIn,
-  flagOn,
 }: {
   active: PlugTab | null;
   signedIn: boolean;
   flagOn: (flag: string) => boolean;
 }) {
-  const hide = (flag: string) => signedIn && !flagOn(flag);
   return (
     <nav aria-label="Plug sections" className="absolute bottom-0 inset-x-0 z-50 pb-safe bg-surface shadow-[0_-2px_12px_rgba(28,25,23,0.06)]" data-plug-tabs data-way-out="tabs">
       <div className="relative flex justify-around items-center h-16 px-space-xs">
         <TabLink id="explore" label="Explore" icon={TAB_ICON.explore} active={active === 'explore'} />
-        {hide('plug.garage') ? <span className="flex-1" /> : <TabLink id="garage" label="Garage" icon={TAB_ICON.garage} active={active === 'garage'} />}
-        {hide('plug.fuel_log') ? <span className="w-14" /> : (
-          <div className="relative flex items-center justify-center w-14">
-            <button type="button" aria-label="Log Fuel Action" data-path="log-fuel" data-way-out="primary" onClick={onPlugClick} className="pressable absolute -top-6 w-14 h-14 min-w-[48px] min-h-[48px] rounded-full bg-gradient-to-tr from-primary to-secondary-container text-on-primary flex flex-col items-center justify-center shadow-[0_8px_20px_-4px_rgba(163,57,0,0.45)]">
-              <span className="material-symbols-outlined text-[26px]">local_gas_station</span>
-              <span className="font-label-sm text-[12px] uppercase tracking-tight -mt-0.5">Log</span>
-            </button>
-          </div>
-        )}
-        {hide('plug.map_it') ? <span className="flex-1" /> : <TabLink id="map-it" label="Map It" icon="add_location_alt" active={active === 'map'} />}
+        <TabLink id="garage" label="Garage" icon={TAB_ICON.garage} active={active === 'garage'} />
+        <div className="relative flex items-center justify-center w-14">
+          <button type="button" aria-label="Map It" data-path="map-it" data-way-out="primary" onClick={onPlugClick} className="pressable absolute -top-6 w-14 h-14 min-w-[48px] min-h-[48px] rounded-full bg-gradient-to-tr from-primary to-secondary-container text-on-primary flex flex-col items-center justify-center shadow-[0_8px_20px_-4px_rgba(163,57,0,0.45)]">
+            <span className="material-symbols-outlined text-[26px]">add_location_alt</span>
+            <span className="font-label-sm text-[10px] uppercase tracking-tight -mt-0.5">Map It</span>
+          </button>
+        </div>
+        <TabLink id="inbox" label="Inbox" icon={TAB_ICON.inbox} active={active === 'inbox'} />
         <TabLink id="account" label="Account" icon={TAB_ICON.account} active={active === 'account'} />
       </div>
     </nav>
@@ -119,46 +115,14 @@ export function PlugChrome({
 }
 
 function SignInSheet({ returnTo, keyboard, onClose, onDone }: { returnTo: string; keyboard: number; onClose: () => void; onDone: (dest: string) => void }) {
-  const [phone, setPhone] = useState('');
-  const [code, setCode] = useState('');
-  const [sent, setSent] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const send = async () => {
-    setError(null);
-    try {
-      const digits = phone.replace(/\D/g, '');
-      const full = digits.startsWith('876') ? `+1${digits}` : digits.startsWith('1876') ? `+${digits}` : `+1876${digits}`;
-      sessionStorage.setItem('plug-phone', full);
-      await getPlugRuntime().sendCode(full);
-      setSent(true);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not send the code');
-    }
-  };
-  const verify = async () => {
-    setError(null);
-    try {
-      await getPlugRuntime().verifyCode(sessionStorage.getItem('plug-phone') || '', code);
-      onDone(returnTo);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'That code did not work');
-    }
-  };
   return (
     <div className="absolute inset-0 z-[75] flex items-end justify-center bg-on-surface/40" data-plug-overlay onClick={onClose}>
-      <form className="w-full max-w-[430px] rounded-t-3xl bg-surface p-4 pb-safe" style={{ marginBottom: keyboard }} role="dialog" aria-label="Sign in" aria-modal="true" onClick={(event) => event.stopPropagation()} onSubmit={(event) => { event.preventDefault(); void (sent ? verify() : send()); }}>
+      <div className="max-h-[90dvh] w-full max-w-[430px] overflow-auto rounded-t-3xl bg-surface p-4 pb-safe" style={{ marginBottom: keyboard }} role="dialog" aria-label="Sign in" aria-modal="true" onClick={(event) => event.stopPropagation()}>
         <h2 className="font-headline-sm text-headline-sm">Sign in to continue</h2>
         <p className="mt-1 text-sm text-on-surface-variant">You will come back to the same place.</p>
-        {sent ? (
-          <input className="mt-4 h-12 w-full rounded-xl bg-surface-container-low px-3" type="text" inputMode="numeric" autoComplete="one-time-code" enterKeyHint="done" aria-label="Code" value={code} onChange={(event) => setCode(event.target.value)} placeholder="6-digit code" />
-        ) : (
-          <input className="mt-4 h-12 w-full rounded-xl bg-surface-container-low px-3" type="tel" inputMode="tel" autoComplete="tel" enterKeyHint="send" aria-label="Phone" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="876 555 0199" />
-        )}
-        {error ? <p role="alert" className="mt-2 text-sm text-error">{error}</p> : null}
-        <button type="submit" className="pressable mt-4 min-h-12 w-full rounded-xl bg-primary font-bold text-on-primary">{sent ? 'Verify' : 'Send code'}</button>
-        <button type="button" className="pressable mt-2 min-h-12 w-full rounded-xl bg-surface-container-lowest font-bold" data-act="continue-with-google" onClick={onPlugClick}>Continue with Google</button>
+        <SignInForm onDone={() => onDone(returnTo)} />
         <button type="button" className="pressable mt-2 min-h-12 w-full rounded-xl" onClick={onClose}>Not now</button>
-      </form>
+      </div>
     </div>
   );
 }

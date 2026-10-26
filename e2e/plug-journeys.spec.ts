@@ -18,13 +18,10 @@ test.beforeEach(async ({ page }) => {
 
 test('eight Plug journeys', async ({ page }) => {
   await page.goto('/#/welcome');
-  await page.getByRole('button', { name: /Continue with phone/ }).click();
-  await wayOut(page);
-
-  await page.getByRole('textbox', { name: /Phone Number/ }).fill('5550199');
-  await press(page, /^Continue/);
-  await page.getByRole('textbox', { name: /^Code$/ }).fill('123456');
-  await press(page, /Verify/);
+  await page.getByRole('textbox', { name: 'Email' }).fill('driver@example.com');
+  await page.getByRole('textbox', { name: 'Password' }).fill('correct-horse');
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await expect(page).toHaveURL(/#\/profile/);
   await press(page, /Complete Setup/);
   await press(page, /I Agree/);
   await press(page, /^Continue/);
@@ -46,14 +43,11 @@ test('eight Plug journeys', async ({ page }) => {
   await press(page, /Explore without an account/);
   await page.getByRole('button', { name: /Total Half Way Tree/ }).first().click();
   await wayOut(page);
-  await press(page, /Directions/);
-  await page.getByRole('link', { name: /Waze/ }).click();
-  await page.getByRole('button', { name: /Log Fuel Action/ }).click();
+  await page.getByRole('link', { name: /Log Fuel Here/ }).click();
   await expect(page.getByRole('dialog', { name: 'Sign in' })).toBeVisible();
-  await page.getByRole('textbox', { name: 'Phone' }).fill('5550199');
-  await page.getByRole('button', { name: 'Send code' }).click();
-  await page.getByRole('textbox', { name: 'Code' }).fill('123456');
-  await page.getByRole('button', { name: /^Verify$/ }).click();
+  await page.getByRole('textbox', { name: 'Email' }).fill('driver@example.com');
+  await page.getByRole('textbox', { name: 'Password' }).fill('correct-horse');
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page).toHaveURL(/#\/fuel/);
   await wayOut(page);
 
@@ -87,13 +81,13 @@ test('eight Plug journeys', async ({ page }) => {
   await wayOut(page);
   await page.getByRole('button', { name: /Parts stores/ }).click();
   await expect(page).toHaveURL(/#\/explore/);
-  await expect(page.getByText('Nearby places')).toBeVisible();
+  await expect(page.getByText('Parts stores')).toBeVisible();
 
   await page.getByRole('button', { name: /Map It/ }).click();
   await wayOut(page);
-  await page.getByRole('radio', { name: /Mechanic/ }).click();
-  await wayOut(page);
-  await press(page, /confirm pin location/i);
+  await page.getByRole('radio', { name: 'Mechanic', exact: true }).click();
+  await expect(page).toHaveURL(/\/map\/pin$/);
+  await page.locator('[data-act="confirm-pin-location"]').evaluate((el) => (el as HTMLButtonElement).click());
   await press(page, /Snap station/);
   await page.locator('#place-name').fill('Corner shop');
   await press(page, /Submit for Review/);
@@ -106,16 +100,20 @@ test('eight Plug journeys', async ({ page }) => {
 
   await page.getByRole('button', { name: /^explore Explore$/ }).click();
   await wayOut(page);
-  await page.getByRole('textbox', { name: /Search stations/ }).click();
+  await page.getByRole('textbox', { name: /Search mechanics/ }).click();
   await page.getByRole('searchbox', { name: 'Search query' }).fill('Total');
   await page.getByRole('button', { name: /Total Half Way Tree/ }).first().click();
   await expect(page).toHaveURL(/#\/stations\//);
+  await page.getByRole('button', { name: /Directions/ }).click();
+  await expect(page.getByRole('link', { name: /Waze/ })).toBeVisible();
+  await page.keyboard.press('Escape');
   await page.getByRole('button', { name: /go back/i }).first().click();
   await page.getByRole('button', { name: /^explore Explore$/ }).click();
-  await page.getByRole('button', { name: /^toll Tolls$/ }).click();
+  await page.getByRole('button', { name: /Tolls/ }).click();
+  await page.getByRole('button', { name: 'See toll rates' }).click();
   await expect(page).toHaveURL(/#\/tolls/);
   await page.getByRole('button', { name: /go back/i }).first().click();
-  await page.getByRole('button', { name: /Parish Selection & Alerts/ }).click();
+  await page.getByRole('button', { name: /Notifications/ }).click();
   await expect(page).toHaveURL(/#\/inbox/);
   await page.getByRole('button', { name: /go back/i }).first().click();
   await page.getByRole('button', { name: /^Filters$/ }).click();

@@ -224,7 +224,7 @@ export function ProfileScreen() {
               verified_user
             </span>
             <p className={"font-body-sm text-body-sm leading-tight text-on-surface-variant"}>
-              Your phone number stays strictly private. Only your
+              Only your
               <span className={"font-bold text-on-surface"}>
                 Display Name
               </span>

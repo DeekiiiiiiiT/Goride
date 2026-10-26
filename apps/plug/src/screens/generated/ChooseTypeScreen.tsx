@@ -85,7 +85,7 @@ export function ChooseTypeScreen() {
               </span>
             </div>
             <div aria-label={"Roadside place categories"} className={"grid grid-cols-2 gap-space-sm"} id={"categoryGrid"} role={"radiogroup"}>
-              <button onClick={onPlugClick} aria-checked={"true"} className={"category-card group relative text-left p-space-md rounded-xl bg-surface-container-lowest shadow-md transition-all duration-200 active:scale-[0.98] cursor-pointer flex flex-col justify-between min-h-[148px]"} data-title={"Gas Station"} data-type={"gas-station"} role={"radio"} type={"button"} data-act={"gas-station-petrol-diesel-kerosene-pump-services"}>
+              <button onClick={onPlugClick} aria-checked={"false"} aria-label={"Fuel station"} data-kind={"fuel"} className={"category-card group relative text-left p-space-md rounded-xl bg-surface-container-lowest shadow-md transition-all duration-200 active:scale-[0.98] cursor-pointer flex flex-col justify-between min-h-[148px]"} data-title={"Fuel station"} data-type={"fuel"} role={"radio"} type={"button"} data-act={"gas-station-petrol-diesel-kerosene-pump-services"}>
                 <div className={"selection-indicator absolute top-3 right-3 w-6 h-6 rounded-full bg-primary text-on-primary flex items-center justify-center shadow-sm"}>
                   <span className={"material-symbols-outlined text-[16px]"}>
                     check
@@ -98,14 +98,14 @@ export function ChooseTypeScreen() {
                 </div>
                 <div className={"flex flex-col"}>
                   <span className={"card-title font-headline-sm text-headline-sm text-primary font-bold"}>
-                    Gas Station
+                    Fuel station
                   </span>
                   <span className={"card-desc font-body-sm text-body-sm text-on-surface line-clamp-2 mt-0.5"}>
                     {"Petrol, diesel, kerosene & pump services"}
                   </span>
                 </div>
               </button>
-              <button onClick={onPlugClick} aria-checked={"false"} className={"category-card group relative text-left p-space-md rounded-xl bg-surface-container shadow-sm hover:shadow-md transition-all duration-200 active:scale-[0.98] cursor-pointer flex flex-col justify-between min-h-[148px]"} data-title={"Auto Parts Store"} data-type={"auto-parts"} role={"radio"} type={"button"} data-act={"auto-parts-spares-filters-japanese-import-stock"}>
+              <button onClick={onPlugClick} aria-checked={"false"} className={"category-card group relative text-left p-space-md rounded-xl bg-surface-container shadow-sm hover:shadow-md transition-all duration-200 active:scale-[0.98] cursor-pointer flex flex-col justify-between min-h-[148px]"} aria-label={"Parts store"} data-kind={"parts_store"} data-title={"Parts store"} data-type={"parts_store"} role={"radio"} type={"button"} data-act={"auto-parts-spares-filters-japanese-import-stock"}>
                 <div className={"selection-indicator hidden absolute top-3 right-3 w-6 h-6 rounded-full bg-primary text-on-primary items-center justify-center shadow-sm"}>
                   <span className={"material-symbols-outlined text-[16px]"}>
                     check
@@ -118,14 +118,14 @@ export function ChooseTypeScreen() {
                 </div>
                 <div className={"flex flex-col"}>
                   <span className={"card-title font-headline-sm text-headline-sm text-on-surface font-semibold"}>
-                    Auto Parts
+                    Parts store
                   </span>
                   <span className={"card-desc font-body-sm text-body-sm text-on-surface-variant line-clamp-2 mt-0.5"}>
                     Spares, filters, Japanese import stock
                   </span>
                 </div>
               </button>
-              <button onClick={onPlugClick} aria-checked={"false"} className={"category-card group relative text-left p-space-md rounded-xl bg-surface-container shadow-sm hover:shadow-md transition-all duration-200 active:scale-[0.98] cursor-pointer flex flex-col justify-between min-h-[148px]"} data-title={"Mechanic Shop"} data-type={"mechanic"} role={"radio"} type={"button"} data-act={"mechanic-servicing-diagnostics-bay-repairs"}>
+              <button onClick={onPlugClick} aria-checked={"false"} className={"category-card group relative text-left p-space-md rounded-xl bg-surface-container shadow-sm hover:shadow-md transition-all duration-200 active:scale-[0.98] cursor-pointer flex flex-col justify-between min-h-[148px]"} aria-label={"Mechanic"} data-kind={"mechanic"} data-title={"Mechanic"} data-type={"mechanic"} role={"radio"} type={"button"} data-act={"mechanic-servicing-diagnostics-bay-repairs"}>
                 <div className={"selection-indicator hidden absolute top-3 right-3 w-6 h-6 rounded-full bg-primary text-on-primary items-center justify-center shadow-sm"}>
                   <span className={"material-symbols-outlined text-[16px]"}>
                     check
@@ -145,7 +145,7 @@ export function ChooseTypeScreen() {
                   </span>
                 </div>
               </button>
-              <button onClick={onPlugClick} aria-checked={"false"} className={"category-card group relative text-left p-space-md rounded-xl bg-surface-container shadow-sm hover:shadow-md transition-all duration-200 active:scale-[0.98] cursor-pointer flex flex-col justify-between min-h-[148px]"} data-title={"Air Pump"} data-type={"air-pump"} role={"radio"} type={"button"} data-act={"air-pump-free-or-paid-gauge-tire-inflation"}>
+              <button onClick={onPlugClick} aria-checked={"false"} className={"category-card group relative text-left p-space-md rounded-xl bg-surface-container shadow-sm hover:shadow-md transition-all duration-200 active:scale-[0.98] cursor-pointer flex flex-col justify-between min-h-[148px]"} aria-label={"Tyres & air"} data-kind={"tyre_air"} data-title={"Tyres & air"} data-type={"tyre_air"} role={"radio"} type={"button"} data-act={"air-pump-free-or-paid-gauge-tire-inflation"}>
                 <div className={"selection-indicator hidden absolute top-3 right-3 w-6 h-6 rounded-full bg-primary text-on-primary items-center justify-center shadow-sm"}>
                   <span className={"material-symbols-outlined text-[16px]"}>
                     check
@@ -158,14 +158,14 @@ export function ChooseTypeScreen() {
                 </div>
                 <div className={"flex flex-col"}>
                   <span className={"card-title font-headline-sm text-headline-sm text-on-surface font-semibold"}>
-                    Air Pump
+                    Tyres & air
                   </span>
                   <span className={"card-desc font-body-sm text-body-sm text-on-surface-variant line-clamp-2 mt-0.5"}>
                     Free or paid gauge tire inflation
                   </span>
                 </div>
               </button>
-              <button onClick={onPlugClick} aria-checked={"false"} className={"category-card group relative text-left p-space-md rounded-xl bg-surface-container shadow-sm hover:shadow-md transition-all duration-200 active:scale-[0.98] cursor-pointer flex flex-col justify-between min-h-[148px]"} data-title={"Restroom"} data-type={"restroom"} role={"radio"} type={"button"} data-act={"restroom-public-customer-only-depot-stops"}>
+              <button onClick={onPlugClick} aria-checked={"false"} className={"category-card group relative text-left p-space-md rounded-xl bg-surface-container shadow-sm hover:shadow-md transition-all duration-200 active:scale-[0.98] cursor-pointer flex flex-col justify-between min-h-[148px]"} aria-label={"Restroom"} data-kind={"restroom"} data-title={"Restroom"} data-type={"restroom"} role={"radio"} type={"button"} data-act={"restroom-public-customer-only-depot-stops"}>
                 <div className={"selection-indicator hidden absolute top-3 right-3 w-6 h-6 rounded-full bg-primary text-on-primary items-center justify-center shadow-sm"}>
                   <span className={"material-symbols-outlined text-[16px]"}>
                     check
@@ -185,7 +185,7 @@ export function ChooseTypeScreen() {
                   </span>
                 </div>
               </button>
-              <button onClick={onPlugClick} aria-checked={"false"} className={"category-card group relative text-left p-space-md rounded-xl bg-surface-container shadow-sm hover:shadow-md transition-all duration-200 active:scale-[0.98] cursor-pointer flex flex-col justify-between min-h-[148px]"} data-title={"Car Wash"} data-type={"car-wash"} role={"radio"} type={"button"} data-act={"car-wash-hand-wash-pressure-detailing-bay"}>
+              <button onClick={onPlugClick} aria-checked={"false"} className={"category-card group relative text-left p-space-md rounded-xl bg-surface-container shadow-sm hover:shadow-md transition-all duration-200 active:scale-[0.98] cursor-pointer flex flex-col justify-between min-h-[148px]"} aria-label={"Car wash"} data-kind={"car_wash"} data-title={"Car wash"} data-type={"car_wash"} role={"radio"} type={"button"} data-act={"car-wash-hand-wash-pressure-detailing-bay"}>
                 <div className={"selection-indicator hidden absolute top-3 right-3 w-6 h-6 rounded-full bg-primary text-on-primary items-center justify-center shadow-sm"}>
                   <span className={"material-symbols-outlined text-[16px]"}>
                     check
@@ -198,14 +198,14 @@ export function ChooseTypeScreen() {
                 </div>
                 <div className={"flex flex-col"}>
                   <span className={"card-title font-headline-sm text-headline-sm text-on-surface font-semibold"}>
-                    Car Wash
+                    Car wash
                   </span>
                   <span className={"card-desc font-body-sm text-body-sm text-on-surface-variant line-clamp-2 mt-0.5"}>
                     Hand wash, pressure detailing bay
                   </span>
                 </div>
               </button>
-              <button onClick={onPlugClick} aria-checked={"false"} className={"category-card group relative text-left p-space-md rounded-xl bg-surface-container shadow-sm hover:shadow-md transition-all duration-200 active:scale-[0.98] cursor-pointer flex flex-col justify-between min-h-[148px]"} data-title={"EV Charging"} data-type={"ev-charging"} role={"radio"} type={"button"} data-act={"ev-charging-level-2-dc-fast-charging-plugs"}>
+              <button onClick={onPlugClick} aria-checked={"false"} className={"category-card group relative text-left p-space-md rounded-xl bg-surface-container shadow-sm hover:shadow-md transition-all duration-200 active:scale-[0.98] cursor-pointer flex flex-col justify-between min-h-[148px]"} aria-label={"Toll"} data-kind={"toll"} data-title={"Toll"} data-type={"toll"} role={"radio"} type={"button"} data-act={"ev-charging-level-2-dc-fast-charging-plugs"}>
                 <div className={"selection-indicator hidden absolute top-3 right-3 w-6 h-6 rounded-full bg-primary text-on-primary items-center justify-center shadow-sm"}>
                   <span className={"material-symbols-outlined text-[16px]"}>
                     check
@@ -218,14 +218,14 @@ export function ChooseTypeScreen() {
                 </div>
                 <div className={"flex flex-col"}>
                   <span className={"card-title font-headline-sm text-headline-sm text-on-surface font-semibold"}>
-                    EV Charging
+                    Toll
                   </span>
                   <span className={"card-desc font-body-sm text-body-sm text-on-surface-variant line-clamp-2 mt-0.5"}>
                     {"Level 2 & DC fast charging plugs"}
                   </span>
                 </div>
               </button>
-              <button onClick={onPlugClick} aria-checked={"false"} className={"category-card group relative text-left p-space-md rounded-xl bg-surface-container shadow-sm hover:shadow-md transition-all duration-200 active:scale-[0.98] cursor-pointer flex flex-col justify-between min-h-[148px]"} data-title={"Tyre Shop"} data-type={"tyre-shop"} role={"radio"} type={"button"} data-act={"tyre-shop-vulcanizing-patching-used-tyres"}>
+              <button onClick={onPlugClick} aria-checked={"false"} className={"category-card group relative text-left p-space-md rounded-xl bg-surface-container shadow-sm hover:shadow-md transition-all duration-200 active:scale-[0.98] cursor-pointer flex flex-col justify-between min-h-[148px]"} aria-label={"Roadside help"} data-kind={"roadside"} data-title={"Roadside help"} data-type={"roadside"} role={"radio"} type={"button"} data-act={"tyre-shop-vulcanizing-patching-used-tyres"}>
                 <div className={"selection-indicator hidden absolute top-3 right-3 w-6 h-6 rounded-full bg-primary text-on-primary items-center justify-center shadow-sm"}>
                   <span className={"material-symbols-outlined text-[16px]"}>
                     check
@@ -238,7 +238,7 @@ export function ChooseTypeScreen() {
                 </div>
                 <div className={"flex flex-col"}>
                   <span className={"card-title font-headline-sm text-headline-sm text-on-surface font-semibold"}>
-                    Tyre Shop
+                    Roadside help
                   </span>
                   <span className={"card-desc font-body-sm text-body-sm text-on-surface-variant line-clamp-2 mt-0.5"}>
                     Vulcanizing, patching, used tyres
@@ -272,7 +272,7 @@ export function ChooseTypeScreen() {
                     Selected:
                   </span>
                   <span className={"font-label-md text-label-md text-primary font-bold"} id={"selectedLabel"}>
-                    Gas Station
+                    Choose a type
                   </span>
                 </div>
                 <span className={"font-label-sm text-label-sm text-on-surface-variant"}>

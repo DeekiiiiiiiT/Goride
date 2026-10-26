@@ -71,26 +71,6 @@ export function NotificationSettingsScreen() {
                   check_circle
                 </span>
               </button>
-              <button onClick={onPlugClick} className={"w-full min-h-[48px] px-space-md py-space-sm rounded-lg bg-surface-container-lowest shadow-sm flex items-center justify-between transition-all active:scale-[0.98]"} id={"channel-sms-btn"} type={"button"} data-act={"channel-sms-btn"}>
-                <div className={"flex items-center gap-space-sm min-w-0"}>
-                  <div className={"w-8 h-8 rounded-full bg-secondary-container text-on-secondary-container flex items-center justify-center shrink-0"} id={"channel-sms-icon"}>
-                    <span className={"material-symbols-outlined text-[18px]"}>
-                      sms
-                    </span>
-                  </div>
-                  <div className={"flex flex-col text-left truncate"}>
-                    <span className={"font-label-md text-label-md text-on-surface"}>
-                      SMS alerts
-                    </span>
-                    <span className={"font-body-sm text-body-sm text-on-surface-variant"}>
-                      {"Low-data & offline transit texts"}
-                    </span>
-                  </div>
-                </div>
-                <span className={"material-symbols-outlined text-secondary-container text-[22px]"} id={"channel-sms-check"} style={{ fontVariationSettings: "'FILL' 1" }}>
-                  check_circle
-                </span>
-              </button>
             </div>
           </div>
           <div className={"mb-space-lg"}>
@@ -289,14 +269,6 @@ export function NotificationSettingsScreen() {
                 Edit
               </button>
             </div>
-          </div>
-          <div className={"bg-surface-container-low rounded-xl p-space-md flex items-start gap-space-sm"}>
-            <span className={"material-symbols-outlined text-secondary text-[20px] shrink-0 mt-0.5"}>
-              verified_user
-            </span>
-            <p className={"font-body-sm text-body-sm text-on-surface-variant leading-relaxed"}>
-              SMS notifications are sent free of charge courtesy of Roam Plug Jamaica community partners and road safety advocates across all 14 parishes.
-            </p>
           </div>
           <div className={"fixed bottom-6 inset-x-margin max-w-sm mx-auto bg-inverse-surface text-inverse-on-surface px-space-md py-space-sm rounded-xl shadow-lg flex items-center justify-between opacity-0 pointer-events-none transition-all duration-300 z-50 transform translate-y-4"} id={"toast"}>
             <div className={"flex items-center gap-space-xs"}>

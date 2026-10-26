@@ -1,4 +1,5 @@
 import { buildFitMessage } from '@roam/types/partsResolution';
+import { signInProviderLabel, supabasePlugApp } from '../authClient';
 import { plugSend, publicGet } from '../api';
 import { readQueue, readStationCache, writeStationCache } from '../offline';
 import { handlePlugClick, onPlugClick } from '../shell/actions';
@@ -361,15 +362,18 @@ function paintStationRows(root: HTMLElement, stations: Station[], empty: string)
       event.stopPropagation();
       onPlugClick({ preventDefault() {}, stopPropagation() {}, currentTarget: button } as unknown as Parameters<typeof onPlugClick>[0]);
     });
+    const icon = document.createElement('span');
+    icon.className = 'material-symbols-outlined text-primary';
+    icon.textContent = 'local_gas_station';
     const name = document.createElement('span');
-    name.className = 'font-bold';
+    name.className = 'flex-1 font-bold';
     name.textContent = station.name;
     const meta = document.createElement('span');
     meta.className = 'text-sm';
     const distance = station.lat != null && station.lng != null ? kmBetween(station.lat, station.lng) : null;
     const price = priceFor(station, grade);
-    meta.textContent = [distance, price != null ? money(price) : ''].filter(Boolean).join(' · ');
-    button.append(name, meta);
+    meta.textContent = [distance, price != null ? money(price) : 'No price yet'].filter(Boolean).join(' · ');
+    button.append(icon, name, meta);
     slot.appendChild(button);
   });
 }
@@ -567,6 +571,8 @@ async function fillAccount(root: HTMLElement) {
   const name = profile?.display_name || sessionStorage.getItem('plug-name') || 'Your account';
   const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase() || '').join('') || 'You';
   slotText(root, 'display-name', name);
+  const { data: sessionData } = await supabasePlugApp.auth.getSession();
+  slotText(root, 'sign-in-method', signInProviderLabel(sessionData.session?.user?.app_metadata?.provider));
   const cars = garageBody.vehicles?.length ? garageBody.vehicles : exported.user_vehicle || [];
   const car = cars[0];
   const carName = car ? (car.nickname || [car.year, car.make, car.model].filter(Boolean).join(' ')) : '';
@@ -991,7 +997,12 @@ async function fillPins(root: HTMLElement) {
   pins.forEach((pin) => {
     const line = document.createElement('p');
     line.className = 'px-4 py-3 font-bold';
-    line.textContent = `${pin.name} · ${pin.status === 'approved' ? 'Approved' : 'Waiting for approval'}`;
+    const status = pin.status === 'verified' || pin.status === 'approved'
+      ? 'Approved'
+      : pin.status === 'rejected'
+        ? 'Not approved'
+        : 'Pending';
+    line.textContent = `${pin.name} · ${status}`;
     slot.appendChild(line);
   });
 }

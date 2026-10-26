@@ -100,7 +100,7 @@ export function NotificationsScreen() {
                     Alert Preferences
                   </span>
                   <span className={"font-body-sm text-body-sm text-on-surface-variant"}>
-                    {"Manage SMS alerts, Fitness reminders & Gas Radar"}
+                    {"Manage push reminders, Fitness reminders & Gas Radar"}
                   </span>
                 </div>
               </div>

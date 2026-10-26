@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { onPlugClick } from '../../shell/actions';
 import { bindScreen } from '../../shell/bind';
+import { SignInForm } from '../SignInForm';
 
 
 export function WelcomeScreen() {
@@ -12,7 +13,7 @@ export function WelcomeScreen() {
         <div className={"flex flex-col w-full pb-6 space-y-5 animate-fade-in"}>
           <header className={"flex items-center justify-between w-full pt-2"}>
             <div className={"flex items-center gap-2"}>
-              <img alt={"Roam Plug Logo"} className={"w-10 h-10 object-contain rounded-lg shadow-sm"} src={"https://lh3.googleusercontent.com/aida/AEtjO1XmALotlSP9jE2bot3DOkJ9Ouv5qiEOhn6k5boTQAQyORbZ89jqFUeeYqmFsjj5bdbR2x_KtjR475faejSGjZEtHwg05XZvaKrwL6wsAA6CeMMoznwZmIopNqbNDc-PwEYvLdAiyUOxupw9hdYwSZUeE7EsllxyZLZrF4-oCp3vPr0DJHQguvKyS-XcjunCplI096YEPFDRGv51pM7SAdx6BDkUroNb7w53Cg1TdbpLtCaz5QQdeAfvjwE"} />
+              <img alt={"Roam Plug"} className={"w-10 h-10 object-contain"} src={"/icons/icon-192.png"} />
               <div className={"flex flex-col"}>
                 <span className={"font-headline-sm text-headline-sm text-on-surface leading-none tracking-tight"}>
                   Roam Plug
@@ -58,46 +59,10 @@ export function WelcomeScreen() {
                 Roam Plug
               </span>
             </h1>
-            <p className={"font-body-lg text-body-lg text-on-surface-variant leading-relaxed"}>
-              Fuel prices, car care and every motoring spot in Jamaica — free.
-            </p>
-          </div>
-          <div className={"flex items-center justify-between w-full px-4 py-3 rounded-lg bg-surface-container-low shadow-sm"}>
-            <div className={"flex items-center gap-1.5"}>
-              <span className={"material-symbols-outlined text-[18px] text-primary"} style={{ fontVariationSettings: "'FILL' 1" }}>
-                block
-              </span>
-              <span className={"font-label-md text-label-md text-on-surface font-semibold"}>
-                No ads
-              </span>
-            </div>
-            <span className={"w-1 h-1 rounded-full bg-outline-variant"} />
-            <div className={"flex items-center gap-1.5"}>
-              <span className={"material-symbols-outlined text-[18px] text-tertiary-container"} style={{ fontVariationSettings: "'FILL' 1" }}>
-                group
-              </span>
-              <span className={"font-label-md text-label-md text-on-surface font-semibold"}>
-                Community powered
-              </span>
-            </div>
-            <span className={"w-1 h-1 rounded-full bg-outline-variant"} />
-            <div className={"flex items-center gap-1.5"}>
-              <span className={"material-symbols-outlined text-[18px] text-primary-container"} style={{ fontVariationSettings: "'FILL' 1" }}>
-                verified
-              </span>
-              <span className={"font-label-md text-label-md text-on-surface font-semibold"}>
-                100% Free
-              </span>
-            </div>
           </div>
           <div className={"flex flex-col w-full space-y-3 pt-2"}>
-            <button onClick={onPlugClick} className={"w-full min-h-[52px] px-6 py-3.5 rounded-xl bg-surface-container-lowest text-on-surface font-headline-sm text-headline-sm flex items-center justify-center gap-2 shadow-sm active:scale-[0.98] transition-all duration-150"} type={"button"} data-act={"continue-with-google"} data-way-out={"primary"}>
-              Continue with Google
-            </button>
-            <button onClick={onPlugClick} className={"w-full min-h-[52px] px-6 py-3.5 rounded-xl bg-primary-container text-on-primary font-headline-sm text-headline-sm flex items-center justify-center gap-2 shadow-md active:scale-[0.98] transition-all duration-150"} type={"button"} data-act={"continue-with-phone"} data-way-out={"primary"}>
-              Continue with phone
-            </button>
-            <button onClick={onPlugClick} className={"w-full min-h-[48px] px-6 py-3 rounded-xl bg-surface-container-highest text-on-surface font-label-lg text-label-lg font-bold flex items-center justify-center gap-2 hover:bg-surface-container-high active:scale-[0.98] transition-colors"} id={"explore-btn"} type={"button"} data-act={"explore-btn"}>
+            <SignInForm />
+            <button onClick={onPlugClick} className={"w-full min-h-[52px] px-6 py-3 rounded-xl bg-surface-container-highest text-on-surface font-label-lg text-label-lg font-bold flex items-center justify-center gap-2 hover:bg-surface-container-high active:scale-[0.98] transition-colors"} id={"explore-btn"} type={"button"} data-act={"explore-btn"}>
               <span className={"material-symbols-outlined text-[18px] text-secondary"}>
                 near_me
               </span>

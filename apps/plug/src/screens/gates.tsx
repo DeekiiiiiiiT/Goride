@@ -3,7 +3,6 @@ import { plugSend, publicGet } from '../api';
 import { catalogVariant } from '../shell/facts';
 import { EmptyGarageScreen } from './generated/EmptyGarageScreen';
 import { EmptyInboxScreen } from './generated/EmptyInboxScreen';
-import { EmptyMapScreen } from './generated/EmptyMapScreen';
 import { ExploreLoadingScreen } from './generated/ExploreLoadingScreen';
 import { FirstSaveScreen } from './generated/FirstSaveScreen';
 import { HomeExploreScreen } from './generated/HomeExploreScreen';
@@ -29,12 +28,11 @@ export function ExploreGate() {
   }, []);
   useEffect(() => {
     void publicGet<{ stations: unknown[] }>('/stations')
-      .then((body) => setMode(body.stations?.length ? 'ready' : 'empty'))
-      .catch(() => setMode('empty'));
+      .then(() => setMode('ready'))
+      .catch(() => setMode('ready'));
   }, []);
   if (offline) return <OfflineChipScreen />;
   if (mode === 'loading') return <ExploreLoadingScreen />;
-  if (mode === 'empty') return <EmptyMapScreen />;
   return <HomeExploreScreen />;
 }
 

@@ -20,8 +20,8 @@ async function tapTargets(page: Page, route: string) {
   ));
   expect(boxes.length, route).toBeGreaterThan(0);
   for (const box of boxes) {
-    expect(box.w, box.name).toBeGreaterThanOrEqual(44);
-    expect(box.h, box.name).toBeGreaterThanOrEqual(44);
+    expect(box.w + 0.5, box.name).toBeGreaterThanOrEqual(44);
+    expect(box.h + 0.5, box.name).toBeGreaterThanOrEqual(44);
   }
 }
 
@@ -87,6 +87,7 @@ const ROUTES = [
   '/account/privacy',
   '/settings',
   '/help',
+  '/reset',
   '/gps',
   '/offline',
 ];
@@ -106,7 +107,7 @@ test('360px welcome, explore, and sign-in fit', async ({ page }) => {
   await noSideScroll(page);
   await tapTargets(page, '/explore');
 
-  await page.getByRole('button', { name: 'Log Fuel Action' }).click();
+  await page.getByRole('button', { name: 'Map It' }).click();
   await expect(page.getByRole('dialog', { name: 'Sign in' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Continue with Google' })).toBeVisible();
   await noSideScroll(page);

@@ -207,6 +207,40 @@ export function priceAgeLabel(updatedAt: string, now: string): string {
   return `updated ${Math.round(hours / 24)} d ago`;
 }
 
+export const PLACE_KINDS = [
+  { id: 'mechanic', label: 'Mechanics', mapLabel: 'Mechanic', icon: 'build', empty: 'No mechanics mapped near you yet' },
+  { id: 'parts_store', label: 'Parts stores', mapLabel: 'Parts store', icon: 'settings', empty: 'No parts stores mapped near you yet' },
+  { id: 'fuel', label: 'Fuel prices', mapLabel: 'Fuel station', icon: 'local_gas_station', empty: 'No fuel stations mapped near you yet' },
+  { id: 'tyre_air', label: 'Tyres & air', mapLabel: 'Tyres & air', icon: 'tire_repair', empty: 'No tyre and air places mapped near you yet' },
+  { id: 'car_wash', label: 'Car wash', mapLabel: 'Car wash', icon: 'local_car_wash', empty: 'No car washes mapped near you yet' },
+  { id: 'restroom', label: 'Restrooms', mapLabel: 'Restroom', icon: 'wc', empty: 'No restrooms mapped near you yet' },
+  { id: 'toll', label: 'Tolls', mapLabel: 'Toll', icon: 'toll', empty: 'No tolls mapped near you yet' },
+  { id: 'roadside', label: 'Roadside help', mapLabel: 'Roadside help', icon: 'sos', empty: 'No roadside help mapped near you yet' },
+] as const;
+
+export type PlaceKindId = (typeof PLACE_KINDS)[number]['id'];
+
+const PLACE_KIND_IDS = new Set<string>(PLACE_KINDS.map((kind) => kind.id));
+
+export function placeKind(id: string | null | undefined) {
+  return PLACE_KINDS.find((kind) => kind.id === id) || null;
+}
+
+export function validatePlaceDraft(input: { name?: unknown; kind?: unknown }):
+  | { ok: true; name: string; kind: PlaceKindId }
+  | { ok: false; error: string } {
+  const kind = String(input.kind || '');
+  if (!PLACE_KIND_IDS.has(kind)) return { ok: false, error: 'Choose a place type.' };
+  const name = String(input.name || '').trim();
+  if (name.length < 2 || name.length > 80) return { ok: false, error: 'The name needs 2 to 80 characters.' };
+  return { ok: true, name, kind: kind as PlaceKindId };
+}
+
+/** A nearby verified place is a duplicate only when it is the same kind of place. */
+export function sameKind(candidateKind: string, existingKind: string | null | undefined): boolean {
+  return Boolean(existingKind) && candidateKind === existingKind && PLACE_KIND_IDS.has(candidateKind);
+}
+
 export const PLUG_FLAGS = [
   'plug.explore',
   'plug.fuel_log',

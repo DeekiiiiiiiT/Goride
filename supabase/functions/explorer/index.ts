@@ -14,7 +14,9 @@ import {
   mayJoinPlug,
   planPlugFill,
   plugPriceDecision,
+  sameKind,
   suggestReview,
+  validatePlaceDraft,
   writesTouchFleetMoney,
   PLUG_FLAGS,
   sectionEnabled,
@@ -224,13 +226,28 @@ app.post("/odometer-scan", async (c) => {
 
 app.get("/flags", async (c) => {
   try {
-    const user = await requireExplorer(c);
     const sb = admin();
+    const header = c.req.header("Authorization") || "";
+    let userId = "";
+    if (header) {
+      try {
+        userId = (await userFrom(c)).id;
+      } catch {
+        userId = "";
+      }
+    }
     const flags: Record<string, boolean> = {};
-    for (const flag of PLUG_FLAGS) flags[flag] = await allow(sb, user.id, flag);
+    for (const flag of PLUG_FLAGS) {
+      if (userId) {
+        flags[flag] = await allow(sb, userId, flag);
+      } else {
+        const { data: globalFlag } = await sb.from("platform_feature_flags").select("enabled").eq("name", flag).maybeSingle();
+        flags[flag] = Boolean(globalFlag?.enabled);
+      }
+    }
     return c.json({ flags });
   } catch (err) {
-    return c.json({ error: err instanceof Error ? err.message : "Could not load flags" }, 401);
+    return c.json({ error: err instanceof Error ? err.message : "Could not load flags" }, 400);
   }
 });
 
@@ -570,19 +587,46 @@ app.post("/reminders", async (c) => {
   }
 });
 
+function jpegBytes(value: unknown): { bytes: Uint8Array } | { error: string } | null {
+  if (value == null || value === "") return null;
+  if (typeof value !== "string") return { error: "That photo could not be saved." };
+  const cleaned = value.replace(/^data:image\/jpeg;base64,/, "").replace(/\s/g, "");
+  if (cleaned.length > 2_000_000) return { error: "That photo is too large." };
+  let bin = "";
+  try {
+    bin = atob(cleaned);
+  } catch {
+    return { error: "That photo could not be saved." };
+  }
+  if (bin.length > 1_500_000) return { error: "That photo is too large." };
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  if (bytes[0] !== 0xff || bytes[1] !== 0xd8) return { error: "That photo could not be saved." };
+  return { bytes };
+}
+
 app.post("/pins", async (c) => {
   try {
     const user = await requireExplorer(c);
     const body = await c.req.json();
+    const draft = validatePlaceDraft({ name: body.name, kind: body.kind });
+    if (!draft.ok) return c.json({ error: draft.error }, 422);
     const sb = admin();
     await ensureProfile(sb, user);
     if (!(await allow(sb, user.id, "plug.map_it"))) return c.json({ error: "Map It is turned off" }, 403);
     if (!(await hitLimit(sb, user.id, "pin", 20))) return c.json({ error: "Too many pins this hour" }, 429);
     const accuracy = Number(body.accuracyM);
     if (!(accuracy > 0) || accuracy > 100) return c.json({ error: "GPS is not accurate enough to pin this place" }, 422);
+    const photo = jpegBytes(body.photo);
+    if (photo && "error" in photo) return c.json({ error: photo.error }, 422);
     const userHash = await hashExplorerUser(user.id, userPepper());
     const lat = Number(body.lat);
     const lng = Number(body.lng);
+    const services = Array.isArray(body.services) ? body.services.map((item: unknown) => String(item).slice(0, 40)).slice(0, 20) : [];
+    const hours = typeof body.hours === "string" ? body.hours.slice(0, 80) : null;
+    const phone = typeof body.phone === "string" ? body.phone.slice(0, 40) : null;
+    const brand = draft.kind === "fuel" && typeof body.brand === "string" ? body.brand.slice(0, 80) : null;
+    const details = { services, hours, phone, brand };
     if (body.mockLocation) {
       await sb.schema("places").from("place_evidence").insert({
         user_hash: userHash,
@@ -591,21 +635,26 @@ app.post("/pins", async (c) => {
         lng,
         accuracy_m: accuracy,
         mock_location: true,
-        note: body.note || "Held for review",
+        note: "Held for review",
       });
-      return c.json({ status: "held", suggestion: "Held for review" });
+      return c.json({ status: "held", suggestion: "Held for review", photo: false });
     }
-    const { data: nearby } = await sb.schema("places").from("place").select("id,name,lat,lng,geofence_m,status").eq("status", "verified").limit(500);
-    const hit = (nearby || []).find((place) => {
-      const metres = Math.hypot((place.lat - lat) * 111_000, (place.lng - lng) * 111_000);
+    const { data: nearby } = await sb.schema("places").from("place").select("id,name,lat,lng,geofence_m").eq("status", "verified").limit(500);
+    const close = (nearby || []).filter((place) => {
+      const metres = Math.hypot((Number(place.lat) - lat) * 111_000, (Number(place.lng) - lng) * 111_000);
       return metres <= Number(place.geofence_m || 50);
     });
+    const closeIds = close.map((place) => place.id);
+    const { data: caps } = closeIds.length
+      ? await sb.schema("places").from("place_capability").select("place_id,kind").in("place_id", closeIds)
+      : { data: [] as { place_id: string; kind: string }[] };
+    const hit = close.find((place) => (caps || []).some((cap) => cap.place_id === place.id && sameKind(draft.kind, cap.kind)));
     let placeId = hit?.id as string | undefined;
     if (!placeId) {
       const { data: parish } = await sb.schema("places").rpc("parish_pcode", { lat, lng });
       const { data: created, error } = await sb.schema("places").from("place").insert({
-        name: body.name,
-        brand: body.brand || null,
+        name: draft.name,
+        brand,
         lat,
         lng,
         pcode: typeof parish === "string" ? parish : null,
@@ -613,11 +662,21 @@ app.post("/pins", async (c) => {
       }).select("id").single();
       if (error) throw error;
       placeId = created.id;
-      await sb.schema("places").from("place_capability").insert({
+      const { error: capError } = await sb.schema("places").from("place_capability").insert({
         place_id: placeId,
-        kind: body.kind,
-        details: { services: body.services || [], hours: body.hours || null, phone: body.phone || null },
+        kind: draft.kind,
+        details,
       });
+      if (capError) throw capError;
+    }
+    let photoPath: string | null = null;
+    if (photo && "bytes" in photo) {
+      photoPath = `${placeId}/${crypto.randomUUID()}.jpg`;
+      const { error: uploadError } = await sb.storage.from("explorer-photos").upload(photoPath, photo.bytes, {
+        contentType: "image/jpeg",
+        upsert: false,
+      });
+      if (uploadError) photoPath = null;
     }
     await sb.schema("places").from("place_evidence").insert({
       place_id: placeId,
@@ -626,8 +685,9 @@ app.post("/pins", async (c) => {
       lat,
       lng,
       accuracy_m: accuracy,
-      mock_location: Boolean(body.mockLocation),
-      note: body.note || null,
+      mock_location: false,
+      photo_path: photoPath,
+      note: null,
     });
     const { count } = await sb.schema("places").from("place_evidence").select("user_hash", { count: "exact", head: true }).eq("place_id", placeId);
     const suggestion = suggestReview({
@@ -638,13 +698,24 @@ app.post("/pins", async (c) => {
     await sb.schema("places").from("place_change_proposal").insert({
       place_id: placeId,
       kind: hit ? "merge" : "new",
-      payload: { name: body.name, kind: body.kind },
+      payload: {
+        name: draft.name,
+        kind: draft.kind,
+        lat,
+        lng,
+        accuracyM: accuracy,
+        phone,
+        hours,
+        services,
+        brand,
+        photoPath,
+      },
       distinct_users: count || 1,
       best_accuracy_m: accuracy,
       suggestion: suggestion.label,
     });
     await sb.schema("explorer").from("pin_receipt").upsert({ user_id: user.id, place_id: placeId }, { onConflict: "user_id,place_id" });
-    return c.json({ placeId, status: "pending", suggestion: suggestion.label });
+    return c.json({ placeId, status: "pending", suggestion: suggestion.label, photo: Boolean(photoPath) });
   } catch (err) {
     return c.json({ error: err instanceof Error ? err.message : "Could not save pin" }, 400);
   }
@@ -804,7 +875,16 @@ app.get("/admin/places", async (c) => {
     const sb = admin();
     const { data, error } = await sb.schema("places").from("place_change_proposal").select("*").eq("status", "pending").order("created_at");
     if (error) throw error;
-    return c.json({ items: data || [] });
+    const items = await Promise.all((data || []).map(async (item) => {
+      const payload = (item.payload || {}) as { photoPath?: string };
+      let photoUrl: string | null = null;
+      if (payload.photoPath) {
+        const signed = await sb.storage.from("explorer-photos").createSignedUrl(payload.photoPath, 600);
+        photoUrl = signed.data?.signedUrl || null;
+      }
+      return { ...item, payload: { ...payload, photoUrl } };
+    }));
+    return c.json({ items });
   } catch (err) {
     return c.json({ error: err instanceof Error ? err.message : "Could not load queue" }, 403);
   }

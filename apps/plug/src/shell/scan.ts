@@ -1,5 +1,5 @@
 import { getSupabaseFunctionsBaseUrl, supabaseAnonFunctionHeaders } from '@roam/api-client';
-import { supabasePlugApp } from '../../../../packages/auth-client/src/supabase';
+import { supabasePlugApp } from '../authClient';
 /** Reads a dashboard photo. Returns no number when the photo cannot be read. */
 export async function scanPlugPhoto(file: File, signal: AbortSignal): Promise<{ reading: number | null; confidence?: string }> {
   const { data } = await supabasePlugApp.auth.getSession();

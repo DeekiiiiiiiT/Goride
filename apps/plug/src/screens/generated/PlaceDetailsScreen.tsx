@@ -191,7 +191,7 @@ export function PlaceDetailsScreen() {
                 </span>
                 <div className={"grid grid-cols-2 gap-2"} id={"fuels-group"}>
                   <label className={"amenity-chip cursor-pointer h-12 px-3 rounded-lg bg-surface-container flex items-center justify-between transition-colors active:scale-95 select-none"}>
-                    <input defaultChecked={true} className={"hidden"} type={"checkbox"} />
+                    <input defaultChecked={false} className={"hidden"} type={"checkbox"} />
                     <div className={"flex items-center gap-2 min-w-0"}>
                       <span className={"w-3 h-3 rounded-full bg-primary shrink-0"} />
                       <span className={"font-label-md text-label-md text-on-surface font-bold truncate"}>
@@ -203,7 +203,7 @@ export function PlaceDetailsScreen() {
                     </span>
                   </label>
                   <label className={"amenity-chip cursor-pointer h-12 px-3 rounded-lg bg-surface-container flex items-center justify-between transition-colors active:scale-95 select-none"}>
-                    <input defaultChecked={true} className={"hidden"} type={"checkbox"} />
+                    <input defaultChecked={false} className={"hidden"} type={"checkbox"} />
                     <div className={"flex items-center gap-2 min-w-0"}>
                       <span className={"w-3 h-3 rounded-full bg-error shrink-0"} />
                       <span className={"font-label-md text-label-md text-on-surface font-bold truncate"}>
@@ -215,7 +215,7 @@ export function PlaceDetailsScreen() {
                     </span>
                   </label>
                   <label className={"amenity-chip cursor-pointer h-12 px-3 rounded-lg bg-surface-container flex items-center justify-between transition-colors active:scale-95 select-none"}>
-                    <input defaultChecked={true} className={"hidden"} type={"checkbox"} />
+                    <input defaultChecked={false} className={"hidden"} type={"checkbox"} />
                     <div className={"flex items-center gap-2 min-w-0"}>
                       <span className={"w-3 h-3 rounded-full bg-on-surface shrink-0"} />
                       <span className={"font-label-md text-label-md text-on-surface font-bold truncate"}>
@@ -246,7 +246,7 @@ export function PlaceDetailsScreen() {
                 </span>
                 <div className={"grid grid-cols-2 gap-2"} id={"amenities-group"}>
                   <label className={"amenity-chip cursor-pointer h-12 px-3 rounded-lg bg-surface-container flex items-center justify-between transition-colors active:scale-95 select-none"}>
-                    <input defaultChecked={true} className={"hidden"} type={"checkbox"} />
+                    <input defaultChecked={false} className={"hidden"} type={"checkbox"} />
                     <div className={"flex items-center gap-1.5 min-w-0"}>
                       <span className={"material-symbols-outlined text-primary text-[18px]"}>
                         air
@@ -260,7 +260,7 @@ export function PlaceDetailsScreen() {
                     </span>
                   </label>
                   <label className={"amenity-chip cursor-pointer h-12 px-3 rounded-lg bg-surface-container flex items-center justify-between transition-colors active:scale-95 select-none"}>
-                    <input defaultChecked={true} className={"hidden"} type={"checkbox"} />
+                    <input defaultChecked={false} className={"hidden"} type={"checkbox"} />
                     <div className={"flex items-center gap-1.5 min-w-0"}>
                       <span className={"material-symbols-outlined text-primary text-[18px]"}>
                         wc
@@ -274,7 +274,7 @@ export function PlaceDetailsScreen() {
                     </span>
                   </label>
                   <label className={"amenity-chip cursor-pointer h-12 px-3 rounded-lg bg-surface-container flex items-center justify-between transition-colors active:scale-95 select-none"}>
-                    <input defaultChecked={true} className={"hidden"} type={"checkbox"} />
+                    <input defaultChecked={false} className={"hidden"} type={"checkbox"} />
                     <div className={"flex items-center gap-1.5 min-w-0"}>
                       <span className={"material-symbols-outlined text-primary text-[18px]"}>
                         storefront
@@ -302,7 +302,7 @@ export function PlaceDetailsScreen() {
                     </span>
                   </label>
                   <label className={"amenity-chip cursor-pointer h-12 px-3 rounded-lg bg-surface-container flex items-center justify-between transition-colors active:scale-95 select-none"}>
-                    <input defaultChecked={true} className={"hidden"} type={"checkbox"} />
+                    <input defaultChecked={false} className={"hidden"} type={"checkbox"} />
                     <div className={"flex items-center gap-1.5 min-w-0"}>
                       <span className={"material-symbols-outlined text-primary text-[18px]"}>
                         atm
@@ -423,7 +423,7 @@ export function PlaceDetailsScreen() {
                   </div>
                   <div className={"flex flex-col min-w-0"}>
                     <span className={"font-label-md text-label-md text-on-surface font-bold truncate"}>
-                      totem_prices_hwt.jpg
+                      No photo yet
                     </span>
                     <span className={"font-body-sm text-body-sm text-on-surface-variant"}>
                       1.8 MB • Ready to upload

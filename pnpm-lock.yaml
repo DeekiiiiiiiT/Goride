@@ -2303,6 +2303,9 @@ importers:
       '@roam/fuel-core':
         specifier: workspace:*
         version: link:../fuel-core
+      '@roam/plug-core':
+        specifier: workspace:*
+        version: link:../plug-core
       '@roam/roam-shared':
         specifier: workspace:*
         version: link:../roam-shared

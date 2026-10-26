@@ -1,5 +1,5 @@
 import { getSupabaseFunctionsBaseUrl, supabaseAnonFunctionHeaders } from '@roam/api-client';
-import { supabasePlugApp } from '../../../packages/auth-client/src/supabase';
+import { supabasePlugApp } from './authClient';
 
 const catalog = `${getSupabaseFunctionsBaseUrl()}/platform-catalog`;
 const explorer = `${getSupabaseFunctionsBaseUrl()}/explorer`;
@@ -22,17 +22,24 @@ export async function publicGet<T>(path: string): Promise<T> {
   return body as T;
 }
 
+let gateOpen = false;
 let releaseJoin = () => {};
-let joinGate: Promise<void> = Promise.resolve();
+let joinGate: Promise<void> = new Promise<void>((resolve) => {
+  releaseJoin = resolve;
+});
 
 /** Hold Garage and the other signed-in calls until Plug membership is written. */
 export function holdPlugCalls() {
+  if (!gateOpen) return;
+  gateOpen = false;
   joinGate = new Promise<void>((resolve) => {
     releaseJoin = resolve;
   });
 }
 
 export function releasePlugCalls() {
+  if (gateOpen) return;
+  gateOpen = true;
   releaseJoin();
   releaseJoin = () => {};
 }

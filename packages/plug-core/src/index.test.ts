@@ -10,9 +10,12 @@ import {
   plugPriceDecision,
   fillCare,
   projectServiceDue,
+  PLACE_KINDS,
+  sameKind,
   sectionEnabled,
   mayJoinPlug,
   suggestReview,
+  validatePlaceDraft,
   writesTouchFleetMoney,
 } from './index';
 
@@ -123,6 +126,18 @@ describe('care, trust, and review', () => {
     )).toBe(true);
     expect(contributorLevel(0).name).toBe('Scout');
     expect(contributorLevel(5).name).toBe('Guide');
+  });
+
+  it('shares eight place kinds and rejects a bad pin', () => {
+    expect(PLACE_KINDS.map((kind) => kind.id)).toEqual([
+      'mechanic', 'parts_store', 'fuel', 'tyre_air', 'car_wash', 'restroom', 'toll', 'roadside',
+    ]);
+    expect(validatePlaceDraft({ name: 'A', kind: 'mechanic' }).ok).toBe(false);
+    expect(validatePlaceDraft({ name: 'Shop', kind: 'station' }).ok).toBe(false);
+    const ok = validatePlaceDraft({ name: 'Corner shop', kind: 'mechanic' });
+    expect(ok).toEqual({ ok: true, name: 'Corner shop', kind: 'mechanic' });
+    expect(sameKind('mechanic', 'fuel')).toBe(false);
+    expect(sameKind('mechanic', 'mechanic')).toBe(true);
   });
 
   it('keeps sections off until a global flag or an allowlist', () => {

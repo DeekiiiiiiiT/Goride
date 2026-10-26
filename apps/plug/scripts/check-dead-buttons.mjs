@@ -32,4 +32,38 @@ if (failures.length || samples.length) {
   console.error([...failures, ...samples].join('\n'));
   process.exit(1);
 }
+const banned = [
+  'sendCode',
+  'verifyCode',
+  'signInWithOtp',
+  'verifyOtp',
+  'Continue with phone',
+  'Sign Up with Phone',
+  'SMS alerts',
+  'phone-input',
+  'sign-up-with-phone',
+  'channel-sms',
+  'auth-client/src/supabase',
+];
+const srcDir = path.join(root, 'apps/plug/src');
+const authHits = [];
+function walk(dir) {
+  for (const name of fs.readdirSync(dir)) {
+    const full = path.join(dir, name);
+    if (fs.statSync(full).isDirectory()) {
+      walk(full);
+      continue;
+    }
+    if (!/\.(ts|tsx)$/.test(name)) continue;
+    const text = fs.readFileSync(full, 'utf8');
+    for (const phrase of banned) {
+      if (text.includes(phrase)) authHits.push(`${path.relative(root, full)} still has ${phrase}`);
+    }
+  }
+}
+walk(srcDir);
+if (authHits.length) {
+  console.error(authHits.join('\n'));
+  process.exit(1);
+}
 console.log(`plug controls ok (${files.length} screens)`);

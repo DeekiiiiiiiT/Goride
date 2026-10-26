@@ -337,7 +337,7 @@ export function DocumentReminderScreen() {
                     Reminder Triggers
                   </h3>
                   <p className={"font-body-sm text-body-sm text-on-surface-variant"}>
-                    {"Instant SMS & push notifications to your device"}
+                    {"Push reminders on this device"}
                   </p>
                 </div>
                 <div className={"w-8 h-8 rounded-full bg-secondary-fixed/50 flex items-center justify-center text-secondary shrink-0"}>

@@ -1,6 +1,7 @@
 import type { MouseEvent as ReactMouseEvent } from 'react';
+import { validatePlaceDraft } from '@roam/plug-core';
 import { plugSend, publicGet } from '../api';
-import { currentPath } from '../nav';
+import { currentPath, pathNeedsAccount } from '../nav';
 import { readQueue } from '../offline';
 import { kindFor } from './act-kind';
 import { catalogCoversYear, pinFix, type CatalogVehicle } from './facts';
@@ -10,11 +11,11 @@ import {
   getPlugRuntime,
   goPath,
   gradeKey,
+  sectionFlag,
   iconName,
   launchDirections,
   odometerWarning,
   openDirections,
-  phoneFrom,
   rememberGrade,
   saveFuel,
   screenFields,
@@ -28,8 +29,42 @@ const TAB_PATH: Record<string, string> = {
   'garage---my-vehicles': '/garage',
   'log-fuel': '/fuel',
   'map-it': '/map',
+  inbox: '/inbox',
   account: '/account',
 };
+
+let pendingPhoto: string | null = null;
+
+async function photoJpeg(file: File): Promise<string> {
+  const bitmap = await createImageBitmap(file);
+  const max = 1600;
+  const scale = Math.min(1, max / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Could not read that photo');
+  ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.82));
+  if (!blob) throw new Error('Could not read that photo');
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  let binary = '';
+  bytes.forEach((value) => { binary += String.fromCharCode(value); });
+  return btoa(binary);
+}
+
+function checkedServices(el: HTMLElement): string[] {
+  const root = el.closest('[data-plug-screen]');
+  if (!root) return [];
+  const names: string[] = [];
+  root.querySelectorAll('label').forEach((label) => {
+    const box = label.querySelector('input[type="checkbox"]') as HTMLInputElement | null;
+    if (!box?.checked) return;
+    const name = (label.textContent || '').replace(/check_box_outline_blank|check_box/g, '').replace(/\s+/g, ' ').trim();
+    if (name) names.push(name);
+  });
+  return names;
+}
 
 function text(el: HTMLElement): string {
   return `${controlLabel(el)} ${el.getAttribute('aria-label') || ''} ${el.id}`.replace(/\s+/g, ' ').trim();
@@ -43,6 +78,12 @@ export function onPlugClick(event: ReactMouseEvent<HTMLElement>) {
 
 export async function handlePlugClick(el: HTMLElement) {
   const rt = getPlugRuntime();
+  const pathNow = currentPath();
+  if (pathNow === '/map' && el.dataset.kind) {
+    sessionStorage.setItem('plug-place-kind', el.dataset.kind);
+    rt.go('/map/pin');
+    return;
+  }
   const act = el.dataset.act || '';
   const screen = el.closest('[data-plug-screen]')?.getAttribute('data-plug-screen') || '';
   if (el.closest('[data-plug-sheet]') && (act === 'arrow-back' || act === 'close' || act === 'cancel')) {
@@ -50,7 +91,7 @@ export async function handlePlugClick(el: HTMLElement) {
     return;
   }
   const kind = act ? kindFor(act, screen) : '';
-  if (act && !kind && !el.dataset.path && !el.dataset.theme && !el.dataset.make && !el.dataset.stationId) return;
+  if (act && !kind && !el.dataset.path && !el.dataset.kind && !el.dataset.theme && !el.dataset.make && !el.dataset.stationId) return;
   const label = controlLabel(el);
   const blob = text(el).toLowerCase();
   const icon = iconName(el);
@@ -60,10 +101,6 @@ export async function handlePlugClick(el: HTMLElement) {
 
   if (act === 'my-location') {
     window.dispatchEvent(new Event('plug-recenter'));
-    return;
-  }
-  if (act === 'continue-with-phone' || kind === 'phone') {
-    goPath('/signup');
     return;
   }
   if (el.dataset.catalogId) {
@@ -81,11 +118,6 @@ export async function handlePlugClick(el: HTMLElement) {
     }
     return;
   }
-  if (act === 'continue-with-apple' || kind === 'apple') {
-    rt.toast('Apple sign-in is not available');
-    return;
-  }
-
   if (el.dataset.theme) {
     const theme = el.dataset.theme;
     const dark = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
@@ -127,11 +159,15 @@ export async function handlePlugClick(el: HTMLElement) {
   }
   if (dataPath && TAB_PATH[dataPath]) {
     const dest = TAB_PATH[dataPath];
-    if (dest === '/fuel') {
-      goPath('/fuel');
+    if (dataPath === 'map-it') sessionStorage.removeItem('plug-place-kind');
+    if (dest === '/explore') sessionStorage.removeItem('plug-chip');
+    window.dispatchEvent(new Event('plug-refresh'));
+    const flag = sectionFlag(dest);
+    if (flag && !rt.flagOn(flag)) {
+      rt.go('/paused');
       return;
     }
-    if (!rt.signedIn() && dest !== '/explore' && dest !== '/account') {
+    if (!rt.signedIn() && pathNeedsAccount(dest)) {
       rt.signIn(dest);
       return;
     }
@@ -142,12 +178,7 @@ export async function handlePlugClick(el: HTMLElement) {
     rt.back();
     return;
   }
-  if (icon === 'close' || id === 'clear-phone' || /cancel or close|^close$|^cancel scan$/i.test(label)) {
-    if (id === 'clear-phone') {
-      const input = document.getElementById('phone-input') as HTMLInputElement | null;
-      if (input) input.value = '';
-      return;
-    }
+  if (icon === 'close' || /cancel or close|^close$|^cancel scan$/i.test(label)) {
     if (path.startsWith('/fuel')) {
       rt.go(sessionStorage.getItem('plug-fuel-from') || '/explore');
       return;
@@ -188,51 +219,6 @@ export async function handlePlugClick(el: HTMLElement) {
   if (id === 'login-btn' || /^log in$/i.test(label) || blob.includes('log in')) return goPath('/login');
   if (path === '/how' && (id === 'nextBtn' || id === 'skipBtn' || /let's go|ready to roll|create account/i.test(blob))) return goPath('/signup');
 
-  if ((path === '/signup' || path === '/login') && (id === 'submit-btn' || /send code|continue|next/i.test(label))) {
-    const fields = screenFields(el);
-    const phone = phoneFrom(String(fields['phone-input'] || ''));
-    try {
-      sessionStorage.setItem('plug-phone', phone);
-      await rt.sendCode(phone);
-      rt.toast('Code sent');
-      rt.go(`/otp`);
-    } catch (err) {
-      rt.toast(err instanceof Error ? err.message : 'Could not send the code');
-    }
-    return;
-  }
-  if (path === '/otp' && /resend/i.test(blob)) {
-    try {
-      await rt.sendCode(sessionStorage.getItem('plug-phone') || '');
-      rt.toast('Code sent again');
-    } catch (err) {
-      rt.toast(err instanceof Error ? err.message : 'Could not send the code');
-    }
-    return;
-  }
-  if (path === '/otp' && /change number|edit number/i.test(blob)) return rt.go('/signup');
-  if (path === '/otp' && /^\d/.test(label)) {
-    const input = document.getElementById('otp-code') as HTMLInputElement | null;
-    if (input && input.value.length < 6) input.value = `${input.value}${label.replace(/\D/g, '').slice(0, 1)}`;
-    return;
-  }
-  if (path === '/otp' && /delete/i.test(label)) {
-    const input = document.getElementById('otp-code') as HTMLInputElement | null;
-    if (input) input.value = input.value.slice(0, -1);
-    return;
-  }
-  if (path === '/otp' && /verify/i.test(blob)) {
-    const fields = screenFields(el);
-    const code = [0, 1, 2, 3, 4, 5].map((index) => String(fields[`otp-${index}`] || '')).join('')
-      || String(fields['otp-code'] || fields['otp-input'] || fields.code || '');
-    try {
-      await rt.verifyCode(sessionStorage.getItem('plug-phone') || '', code.replace(/\D/g, ''));
-      rt.go(sessionStorage.getItem('plug-profile-done') === '1' ? '/explore' : '/profile');
-    } catch (err) {
-      rt.toast(err instanceof Error ? err.message : 'That code did not work');
-    }
-    return;
-  }
   if (path === '/profile' && (id === 'submit-btn' || /continue|next|save/i.test(label))) {
     const fields = screenFields(el);
     const name = String(fields['first-name-input'] || fields['display-name-input'] || label);
@@ -385,30 +371,22 @@ export async function handlePlugClick(el: HTMLElement) {
     return;
   }
 
-  if (path.startsWith('/explore') && /^fuel$/i.test(label)) {
-    sessionStorage.setItem('plug-chip', 'fuel');
+  if (act !== 'map-one' && el.dataset.kind && (path.startsWith('/explore') || act.startsWith('service-'))) {
+    const current = sessionStorage.getItem('plug-chip') || '';
+    const next = current === el.dataset.kind ? '' : el.dataset.kind;
+    if (next) sessionStorage.setItem('plug-chip', next);
+    else sessionStorage.removeItem('plug-chip');
     window.dispatchEvent(new Event('plug-refresh'));
-    if (path !== '/explore') rt.go('/explore');
+    if (!path.startsWith('/explore')) rt.go('/explore');
     return;
   }
-  if (path.startsWith('/explore') && /tolls/i.test(label)) return goPath('/tolls');
-  if (path.startsWith('/explore') && /mechanics/i.test(label)) {
-    sessionStorage.setItem('plug-chip', 'mechanic');
-    window.dispatchEvent(new Event('plug-refresh'));
-    rt.go('/explore');
-    return;
+  if (act === 'map-one') {
+    if (el.dataset.kind) sessionStorage.setItem('plug-place-kind', el.dataset.kind);
+    else sessionStorage.removeItem('plug-place-kind');
+    return goPath('/map');
   }
-  if (path.startsWith('/explore') && /parts stores|parts/i.test(label) && path === '/explore') {
-    sessionStorage.setItem('plug-chip', 'parts_store');
-    window.dispatchEvent(new Event('plug-refresh'));
-    return;
-  }
-  if (path.startsWith('/explore') && /air|restroom|car wash/i.test(label)) {
-    sessionStorage.setItem('plug-chip', /car wash/i.test(label) ? 'car_wash' : 'restroom');
-    window.dispatchEvent(new Event('plug-refresh'));
-    rt.go('/explore');
-    return;
-  }
+  if (act === 'toll-rates') return goPath('/tolls');
+  if (act === 'log-a-service' && !path.startsWith('/garage')) return goPath(garagePath());
   if (/see all|list/i.test(label) && path.startsWith('/explore')) return rt.go('/explore/list');
   if (/map spot|map it|\+ map/i.test(blob)) return goPath('/map');
   if (/drive now|directions/i.test(blob) && !path.startsWith('/parts')) {
@@ -432,7 +410,7 @@ export async function handlePlugClick(el: HTMLElement) {
     rt.go(`/stations/${el.dataset.stationId}`);
     return;
   }
-  if ((id === 'search-input' || /search stations/i.test(el.getAttribute('placeholder') || '')) && path === '/explore') {
+  if ((id === 'search-input' || /search/i.test(el.getAttribute('placeholder') || '') || /search/i.test(el.getAttribute('aria-label') || '')) && path === '/explore') {
     rt.go('/search');
     return;
   }
@@ -556,18 +534,16 @@ export async function handlePlugClick(el: HTMLElement) {
   }
   if (/coming soon/i.test(blob)) return rt.go('/parts/soon');
 
-  if (path === '/map' && (id === 'continueBtn' || /^continue$/i.test(label))) {
-    if (!sessionStorage.getItem('plug-place-kind')) sessionStorage.setItem('plug-place-kind', 'mechanic');
+  if (path === '/map' && el.dataset.kind) {
+    sessionStorage.setItem('plug-place-kind', el.dataset.kind);
     rt.go('/map/pin');
     return;
   }
-  if (path === '/map' && /mechanic|parts|station|restroom|facility|wash|tyre|tire/i.test(blob)) {
-    const kind = /mechanic/i.test(blob) ? 'mechanic'
-      : /part/i.test(blob) ? 'parts_store'
-        : /restroom|facility/i.test(blob) ? 'restroom'
-          : /wash/i.test(blob) ? 'car_wash'
-            : 'mechanic';
-    sessionStorage.setItem('plug-place-kind', kind);
+  if (path === '/map' && (id === 'continueBtn' || /^continue$/i.test(label))) {
+    if (!sessionStorage.getItem('plug-place-kind')) {
+      rt.toast('Choose a place type.');
+      return;
+    }
     rt.go('/map/pin');
     return;
   }
@@ -587,31 +563,55 @@ export async function handlePlugClick(el: HTMLElement) {
     rt.toast(`${el.dataset.brand} selected`);
     return;
   }
+  if (path === '/map/details' && el.dataset.hours) {
+    sessionStorage.setItem('plug-place-hours', el.dataset.hours);
+    return;
+  }
   if (path === '/map/details' && /snap|photo|camera/i.test(blob)) {
-    sessionStorage.setItem('plug-pin-photo', '1');
-    rt.toast('Photo added');
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      void photoJpeg(file).then((jpeg) => {
+        pendingPhoto = jpeg;
+        rt.toast('Photo ready to send');
+      }).catch(() => {
+        pendingPhoto = null;
+        rt.toast('Could not read that photo');
+      });
+    };
+    input.click();
     return;
   }
   if (path === '/map/details' && (id === 'submit-btn' || /submit|send/i.test(label))) {
     const fields = screenFields(el);
-    const ticks = Object.entries(fields).filter(([, value]) => value === true).map(([key]) => key);
     const fix = pinFix();
     const name = String(fields.name || fields['place-name'] || '').trim();
-    if (!name || !fix) {
-      rt.toast(name ? 'GPS is not accurate enough yet' : 'Add a place name');
+    const draft = validatePlaceDraft({ name, kind: sessionStorage.getItem('plug-place-kind') });
+    if (!draft.ok || !fix) {
+      rt.toast(!draft.ok ? draft.error : 'GPS is not accurate enough yet');
       if (!fix) rt.go('/map/pin/poor');
       return;
     }
+    const photo = pendingPhoto;
     try {
-      const saved = await plugSend<{ placeId?: string; id?: string }>('/pins', 'POST', {
-        name,
-        kind: sessionStorage.getItem('plug-place-kind') || 'mechanic',
+      const saved = await plugSend<{ placeId?: string; id?: string; photo?: boolean }>('/pins', 'POST', {
+        name: draft.name,
+        kind: draft.kind,
         lat: fix.lat,
         lng: fix.lng,
         accuracyM: fix.accuracyM,
-        note: ticks.join(', '),
+        phone: String(fields['phone-number'] || '').trim() || null,
+        hours: sessionStorage.getItem('plug-place-hours'),
+        services: checkedServices(el),
+        brand: draft.kind === 'fuel' ? sessionStorage.getItem('plug-place-brand') : null,
+        photo,
       });
+      pendingPhoto = null;
       if (saved.placeId || saved.id) sessionStorage.setItem('plug-pin', String(saved.placeId || saved.id));
+      rt.toast(photo && !saved.photo ? 'Sent for review. The photo did not save.' : 'Sent for review');
       rt.go('/map/submitted-toast');
     } catch (err) {
       rt.toast(err instanceof Error ? err.message : 'Could not submit that pin');

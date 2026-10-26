@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth';
+import { wantsNewPassword } from '../authClient';
 import { currentPath, fallbackFor, showsTabs, tabFor, TAB_ROOT, type PlugTab } from '../nav';
 import { readQueue } from '../offline';
-import { setPlugRuntime, type PlugRuntime } from './click';
+import { sectionFlag, setPlugRuntime, type PlugRuntime } from './click';
 import { PlugChrome, TabBar } from './chrome';
 import { useKeyboardInset } from './viewport';
 
@@ -12,6 +13,11 @@ export function PlugShell({ children }: { children: ReactNode }) {
   const location = useLocation();
   const auth = useAuth();
   const path = location.pathname || '/';
+  useEffect(() => {
+    if (!auth.flagsLoaded) return;
+    const flag = sectionFlag(path);
+    if (flag && !auth.flagOn(flag as never)) navigate('/paused', { replace: true });
+  }, [auth, navigate, path]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const keyboard = useKeyboardInset();
   const [ownBar, setOwnBar] = useState(false);
@@ -147,11 +153,9 @@ export function PlugShell({ children }: { children: ReactNode }) {
     },
     signedIn: () => auth.signedIn,
     flagOn: (flag) => auth.flagOn(flag as never),
-    sendCode: auth.sendCode,
-    verifyCode: auth.verifyCode,
     signOut: auth.signOut,
     continueWithGoogle: auth.continueWithGoogle,
-  }), [active, auth.continueWithGoogle, auth.flagOn, auth.sendCode, auth.signOut, auth.signedIn, auth.verifyCode, navigate]);
+  }), [active, auth.continueWithGoogle, auth.flagOn, auth.signOut, auth.signedIn, navigate]);
 
   useEffect(() => {
     setPlugRuntime(runtime);
@@ -164,16 +168,16 @@ export function PlugShell({ children }: { children: ReactNode }) {
   }, [auth.signedIn]);
 
   useEffect(() => {
-    const session = auth.session;
-    if (!session || !auth.joined) return;
-    const user = session.user;
-    const meta = (user.app_metadata || {}) as { provider?: string; providers?: string[] };
-    const google = meta.provider === 'google' || (meta.providers || []).includes('google');
-    if (!google) return;
-    const name = String(user.user_metadata?.full_name || user.user_metadata?.name || user.user_metadata?.display_name || '').trim();
+    if (!auth.session || !auth.joined) return;
     const here = currentPath();
-    if (['/', '/welcome', '/signup', '/otp', '/login'].includes(here)) navigate(name ? '/explore' : '/profile');
-  }, [auth.joined, auth.session, navigate]);
+    if (wantsNewPassword()) {
+      if (here !== '/reset') navigate('/reset');
+      return;
+    }
+    if (['/', '/welcome', '/signup', '/otp', '/login'].includes(here)) {
+      navigate(auth.displayName ? '/explore' : '/profile');
+    }
+  }, [auth.displayName, auth.joined, auth.session, navigate]);
 
   useEffect(() => {
     if (!navigator.geolocation) return;
@@ -190,10 +194,18 @@ export function PlugShell({ children }: { children: ReactNode }) {
     if (auth.signedIn && !auth.joined && !auth.joinError) return;
     const timer = window.setTimeout(() => {
       if (auth.joinError) return;
-      navigate(auth.signedIn ? '/explore' : '/welcome');
+      if (!auth.signedIn) {
+        navigate('/welcome');
+        return;
+      }
+      if (wantsNewPassword()) {
+        navigate('/reset');
+        return;
+      }
+      navigate(auth.displayName ? '/explore' : '/profile');
     }, 1500);
     return () => window.clearTimeout(timer);
-  }, [auth.ready, auth.signedIn, auth.joined, auth.joinError, navigate, path]);
+  }, [auth.displayName, auth.ready, auth.signedIn, auth.joined, auth.joinError, navigate, path]);
 
   useEffect(() => {
     const root = scrollRef.current;

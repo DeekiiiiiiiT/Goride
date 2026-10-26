@@ -22,6 +22,7 @@
     "@roam/api-client": "workspace:*",
     "@roam/business-config": "workspace:*",
     "@roam/fuel-core": "workspace:*",
+    "@roam/plug-core": "workspace:*",
     "@roam/roam-shared": "workspace:*",
     "@roam/toll-core": "workspace:*",
     "@roam/types": "workspace:*",

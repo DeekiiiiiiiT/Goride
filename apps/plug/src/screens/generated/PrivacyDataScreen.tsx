@@ -243,7 +243,7 @@ export function PrivacyDataScreen() {
                   info
                 </span>
                 <p className={"font-body-sm text-body-sm font-semibold"}>
-                  Your personal identity, phone number, and vehicle registration are never connected to public road or fuel price posts.
+                  Your personal identity and vehicle registration are never connected to public road or fuel price posts.
                 </p>
               </div>
             </div>

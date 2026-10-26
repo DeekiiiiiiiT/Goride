@@ -18,7 +18,7 @@ export function SubmittedToastScreen() {
             </div>
             <div className={"flex items-baseline gap-1.5"}>
               <span className={"font-headline-sm text-label-lg font-bold text-on-surface tracking-tight"}>
-                Submitted
+                Sent for review
               </span>
               <span className={"font-body-sm text-body-sm text-on-surface-variant font-medium"}>
                 to Island Grid

@@ -25,6 +25,8 @@ import { HelpScreen } from './screens/generated/HelpScreen';
 import { HistoryScreen } from './screens/generated/HistoryScreen';
 import { HowItWorksScreen } from './screens/generated/HowItWorksScreen';
 import { LoginScreen } from './screens/generated/LoginScreen';
+import { PausedScreen } from './screens/PausedScreen';
+import { ResetPasswordScreen } from './screens/ResetPasswordScreen';
 import { LogServiceScreen } from './screens/generated/LogServiceScreen';
 import { MaintenanceScheduleScreen } from './screens/generated/MaintenanceScheduleScreen';
 import { MechanicScreen } from './screens/generated/MechanicScreen';
@@ -95,10 +97,12 @@ export default function App() {
             <Route path="/consent" element={<PrivacyConsentScreen />} />
             <Route path="/permissions" element={<PermissionsScreen />} />
             <Route path="/login" element={<LoginScreen />} />
+            <Route path="/reset" element={<ResetPasswordScreen />} />
             <Route path="/explore/loading" element={<Navigate to="/explore" replace />} />
             <Route path="/explore/empty" element={<Navigate to="/explore" replace />} />
             <Route path="/explore/offline" element={<OfflineChipScreen />} />
             <Route path="/explore/guest" element={<GuestModeScreen />} />
+            <Route path="/paused" element={<PausedScreen />} />
             <Route path="/explore" element={<ExploreGate />} />
             <Route path="/explore/list" element={<StationListScreen />} />
             <Route path="/filters" element={<Navigate to="/explore" replace />} />

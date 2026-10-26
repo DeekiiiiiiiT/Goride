@@ -2,13 +2,14 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './e2e',
-  testMatch: /plug-(journeys|mobile-fit|empty)\.spec\.ts/,
+  testMatch: /plug-(journeys|mobile-fit|empty|auth|home|flags)\.spec\.ts/,
   fullyParallel: false,
   workers: 1,
   timeout: 300_000,
   use: {
     ...devices['Pixel 7'],
     baseURL: 'http://127.0.0.1:3016',
+    actionTimeout: 20_000,
   },
   webServer: {
     command: 'pnpm --filter @roam/plug dev --host 127.0.0.1 --port 3016',

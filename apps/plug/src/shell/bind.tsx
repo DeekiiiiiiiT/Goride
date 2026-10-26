@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { publicGet } from '../api';
-import { kindFor } from './act-kind';
 import { fillScreen } from './fill';
 import { vehicleId } from './facts';
 import { getPlugRuntime } from './click';
@@ -8,25 +7,36 @@ import { onPlugClick } from '../shell/actions';
 
 type Station = { id: string; name: string; brand?: string };
 
+type SearchPlace = { id: string; name: string; kind?: string };
+
 export function SearchBody() {
   const [query, setQuery] = useState('');
   const [rows, setRows] = useState<Station[]>([]);
+  const [places, setPlaces] = useState<SearchPlace[]>([]);
   useEffect(() => {
     const input = document.querySelector('[aria-label="Search query"]') as HTMLInputElement | null;
     const onInput = () => setQuery(input?.value || '');
     input?.addEventListener('input', onInput);
     void publicGet<{ stations: Station[] }>('/stations').then((body) => setRows(body.stations || [])).catch(() => setRows([]));
+    void publicGet<{ places: SearchPlace[] }>('/places').then((body) => setPlaces(body.places || [])).catch(() => setPlaces([]));
     return () => input?.removeEventListener('input', onInput);
   }, []);
-  const shown = rows.filter((row) => !query || `${row.name} ${row.brand || ''}`.toLowerCase().includes(query.toLowerCase()));
+  const q = query.toLowerCase();
+  const shown = rows.filter((row) => !q || `${row.name} ${row.brand || ''}`.toLowerCase().includes(q));
+  const shownPlaces = places.filter((row) => !q || row.name.toLowerCase().includes(q));
   useEffect(() => {
-    if (query && shown.length === 0 && rows.length > 0) getPlugRuntime().go('/search/empty');
-  }, [query, rows.length, shown.length]);
-  if (query && shown.length === 0) return null;
+    if (query && shown.length === 0 && shownPlaces.length === 0 && (rows.length > 0 || places.length > 0)) getPlugRuntime().go('/search/empty');
+  }, [query, rows.length, places.length, shown.length, shownPlaces.length]);
+  if (query && shown.length === 0 && shownPlaces.length === 0) return null;
   return (
     <div className="flex flex-col gap-2 px-4 pb-3 pt-24">
       {shown.map((row) => (
         <button key={row.id} type="button" onClick={onPlugClick} data-station-id={row.id} data-act="open-station" className="min-h-12 rounded-xl bg-surface-container-lowest px-3 text-left font-bold shadow-sm">
+          {row.name}
+        </button>
+      ))}
+      {shownPlaces.map((row) => (
+        <button key={row.id} type="button" onClick={onPlugClick} data-station-id={row.id} data-act="open-place" className="min-h-12 rounded-xl bg-surface-container-lowest px-3 text-left font-bold shadow-sm">
           {row.name}
         </button>
       ))}
@@ -51,18 +61,6 @@ export function bindScreen(file: string, root: HTMLElement) {
       const title = card.querySelector('h2, h3, strong') || card.querySelector('span');
       if (title) title.textContent = name;
     }
-  }
-  if (file === '05-otp.html' && !root.querySelector('#otp-code')) {
-    const input = document.createElement('input');
-    input.id = 'otp-code';
-    input.inputMode = 'numeric';
-    input.maxLength = 6;
-    input.autocomplete = 'one-time-code';
-    input.setAttribute('aria-label', 'Code');
-    input.placeholder = '6-digit code';
-    input.className = 'h-12 w-full rounded-xl bg-surface-container-low px-3 text-center tracking-[0.4em] font-bold';
-    const verify = root.querySelector('[data-act="verify-continue"]');
-    verify?.parentElement?.before(input);
   }
   if (file === '31-maintenance-schedule.html') {
     root.querySelectorAll('div.cursor-pointer').forEach((card) => {
@@ -108,7 +106,12 @@ export function bindScreen(file: string, root: HTMLElement) {
       });
     }
   }
-  hideFlagged(root);
+  if (file === '42-choose-type.html') paintChosenType(root);
+  if (file === '44-place-details.html') {
+    const fuel = sessionStorage.getItem('plug-place-kind') === 'fuel';
+    const brand = root.querySelector<HTMLElement>('#brand-selector');
+    if (brand) brand.hidden = !fuel;
+  }
   tuneFields(root);
   void fillScreen(file, root);
 }
@@ -151,26 +154,11 @@ function tuneFields(root: HTMLElement) {
   });
 }
 
-const KIND_FLAG: Record<string, string> = {
-  'log-fuel': 'plug.fuel_log',
-  parts: 'plug.parts',
-  'parts-map': 'plug.parts',
-  tolls: 'plug.tolls',
-  documents: 'plug.documents',
-  map: 'plug.map_it',
-  'map-kind': 'plug.map_it',
-};
-
-function hideFlagged(root: HTMLElement) {
-  let runtime: ReturnType<typeof getPlugRuntime> | null = null;
-  try {
-    runtime = getPlugRuntime();
-  } catch {
-    return;
-  }
-  const screen = root.getAttribute('data-plug-screen') || '';
-  root.querySelectorAll<HTMLElement>('[data-act]').forEach((el) => {
-    const flag = KIND_FLAG[kindFor(el.dataset.act || '', screen) || ''];
-    if (flag && !runtime?.flagOn(flag)) el.hidden = true;
+function paintChosenType(root: HTMLElement) {
+  const chosen = sessionStorage.getItem('plug-place-kind') || '';
+  root.querySelectorAll<HTMLElement>('[data-kind]').forEach((el) => {
+    el.setAttribute('aria-checked', el.dataset.kind === chosen ? 'true' : 'false');
   });
+  const label = root.querySelector('#selectedLabel');
+  if (label) label.textContent = chosen ? (root.querySelector<HTMLElement>(`[data-kind="${chosen}"]`)?.getAttribute('aria-label') || 'Choose a type') : 'Choose a type';
 }

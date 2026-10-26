@@ -1,9 +1,10 @@
-export type PlugTab = 'explore' | 'garage' | 'map' | 'account';
+export type PlugTab = 'explore' | 'garage' | 'map' | 'inbox' | 'account';
 
 export const TAB_ROOT: Record<PlugTab, string> = {
   explore: '/explore',
   garage: '/garage',
   map: '/map',
+  inbox: '/inbox',
   account: '/account',
 };
 
@@ -17,6 +18,7 @@ const ONBOARDING = new Set([
   '/consent',
   '/permissions',
   '/login',
+  '/reset',
   '/garage/add',
   '/garage/add/model',
   '/garage/add/missing',
@@ -53,7 +55,8 @@ export function showsTabs(path: string): boolean {
 /** Shared pages stay on the tab the person was already using. */
 export function tabFor(path: string, current: PlugTab | null): PlugTab | null {
   if (isOnboarding(path) || isFuel(path)) return null;
-  if (path.startsWith('/inbox') || path === '/contributions' || path.startsWith('/contributions/')) {
+  if (path.startsWith('/inbox')) return 'inbox';
+  if (path === '/contributions' || path.startsWith('/contributions/')) {
     return current || 'explore';
   }
   if (path.startsWith('/garage') || path.startsWith('/parts')) return 'garage';
@@ -68,12 +71,11 @@ export function tabFor(path: string, current: PlugTab | null): PlugTab | null {
 }
 
 export function fallbackFor(path: string): string {
-  if (path === '/otp') return '/signup';
-  if (path === '/profile') return '/otp';
+  if (path === '/otp' || path === '/signup' || path === '/login' || path === '/reset') return '/welcome';
+  if (path === '/profile') return '/welcome';
   if (path === '/consent') return '/profile';
   if (path === '/permissions') return '/consent';
   if (path === '/how') return '/welcome';
-  if (path === '/login' || path === '/signup') return '/welcome';
   if (path === '/garage/add') return '/garage';
   if (path === '/garage/add/model') return '/garage/add';
   if (path === '/garage/add/missing') return '/garage/add/model';
@@ -117,6 +119,7 @@ const GATED = [
   '/parish',
   '/account/privacy',
   '/account/notifications',
+  '/inbox',
 ];
 
 export function pathNeedsAccount(path: string): boolean {

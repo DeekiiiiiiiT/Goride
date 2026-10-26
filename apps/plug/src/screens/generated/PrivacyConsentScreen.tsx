@@ -161,7 +161,7 @@ export function PrivacyConsentScreen() {
                     </span>
                   </div>
                   <p className={"font-body-md text-body-md text-on-surface-variant mt-1.5 leading-snug"}>
-                    Only aggregated totals help build our island road map — never who you are, your phone number, or where you travelled.
+                    Only aggregated totals help build our island road map — never who you are or where you travelled.
                   </p>
                   <div className={"flex items-center gap-2 mt-3 pt-2 text-on-surface-variant font-label-sm text-label-sm"}>
                     <span className={"inline-flex items-center gap-1 bg-surface-container px-2 py-0.5 rounded"}>
