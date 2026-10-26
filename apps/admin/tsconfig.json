@@ -18,7 +18,9 @@
       "@roam/business-config": ["../../packages/business-config/src"],
       "@roam/business-config/*": ["../../packages/business-config/src/*"],
       "@roam/finance-core": ["../../packages/finance-core/src"],
-      "@roam/finance-core/*": ["../../packages/finance-core/src/*"]
+      "@roam/finance-core/*": ["../../packages/finance-core/src/*"],
+      "@roam/dash-admin-client": ["../../packages/dash-admin-client/src"],
+      "@roam/dash-admin-client/*": ["../../packages/dash-admin-client/src/*"]
     }
   },
   "include": ["src"],
