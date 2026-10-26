@@ -3,6 +3,7 @@
  * Never moves pins automatically — returns suggestions for Dominion "Move pin".
  */
 import * as kv from "./kv_store.tsx";
+import { listStationRecords } from "./fleet_table_read_thru.ts";
 import { calculateDistance } from "./geo_matcher.ts";
 import { extractEntryCoords } from "./fuel_station_match.ts";
 
@@ -43,7 +44,7 @@ export async function computePinCalibrationSuggestions(
   const minSamples = opts?.minSamples ?? 10;
   const medianThresholdM = opts?.medianThresholdM ?? 40;
 
-  const stations = ((await kv.getByPrefix("station:")) || []).filter(
+  const stations = ((await listStationRecords()) || []).filter(
     (s: any) => s && s.status === "verified" && s.location?.lat != null,
   );
   const entries = ((await kv.getByPrefix("fuel_entry:")) || []) as any[];

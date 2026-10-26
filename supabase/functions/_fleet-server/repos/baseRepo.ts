@@ -137,6 +137,7 @@ const JSON_KEY_ALIASES = [
   "entrySource",
   "matchedStationId",
   "payloadDate",
+  "cashCollected",
 ] as const;
 
 /** Fuel Review Queue list: typed columns plus the payload fields that screen shows. */

@@ -18,7 +18,7 @@ import { Hono, type Context } from "npm:hono@4.3.11";
 import { requireAuth, requirePermission, requireAnyPermission, type RbacUser } from "./rbac_middleware.ts";
 import { getOrgId } from "./org_scope.ts";
 import { safeErrorResponse } from "./safe_error.ts";
-import { previewWeekClose, reopenWeek, retryFreezeWeek, listClosedWeeks, listOpenWeeks, acknowledgeCashSourceMismatch, WeekCloseError } from "./week_close.ts";
+import { previewWeekClose, prepareWeekClose, reopenWeek, retryFreezeWeek, listClosedWeeks, listOpenWeeks, acknowledgeCashSourceMismatch, WeekCloseError } from "./week_close.ts";
 import { loadWorkflow, startWeekWorkflow } from "./recon_close_workflow.ts";
 import { sealFuelWeekViaHttp } from "./fuel_seal_http.ts";
 import {
@@ -120,8 +120,10 @@ app.get(`${BASE}/workflows/:id`, requirePermission("transactions.view"), async (
   }
 });
 
-// ── POST /week-close/prepare — mark the week pending. Calculation runs in the background.
+// ── POST /week-close/prepare — sign earnings and refresh this week's books.
 // Alias: POST /week-close/sync (same handler; product language for auto-sync).
+// Do not only mark the week pending. That left the earnings draft unsigned
+// and let the old calculator write the fare back over the real trip cash.
 async function handleWeekSync(c: Context) {
   try {
     const org = requireOrg(c);
@@ -140,14 +142,13 @@ async function handleWeekSync(c: Context) {
       return c.json({ error: "weekKey (YYYY-MM-DD) is required" }, 400);
     }
     const serviceLine = normalizeWeekCloseServiceLine(body.serviceLine);
-    await startWeekWorkflow({
-      orgId: org,
-      weekKey,
+    const preview = await prepareWeekClose(org, weekKey, user.userId, {
       serviceLine,
-      kind: "refresh",
-      actorId: user.userId,
+      forceFuelReseal: Boolean(body.forceFuelReseal),
+      forceTollReseal: Boolean(body.forceTollReseal),
+      forceEarningsReseal:
+        Boolean(body.forceEarningsReseal) || Boolean(body.forceAllLaneReseals),
     });
-    const preview = await previewWeekClose(org, weekKey, { serviceLine, skipEngineProbe: true });
     return c.json(preview);
   } catch (e) {
     if (e instanceof WeekCloseError) {

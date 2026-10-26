@@ -1,3 +1,4 @@
+// Stitch: dominion-redesign/d8107f1d4b7c4c8bbb570fed4a8216be
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Copy, KeyRound, Loader2 } from 'lucide-react';
@@ -226,7 +227,7 @@ export function StaffMfaStep({
           <button
             type="submit"
             disabled={busy || !factorId}
-            className="mt-4 w-full rounded-lg bg-amber-500 py-2.5 text-sm font-semibold text-slate-950 disabled:opacity-50"
+            className="mt-4 w-full rounded-lg bg-dominion-blue py-2.5 text-sm font-semibold text-white disabled:opacity-50"
           >
             {busy ? 'Checking…' : mode === 'enroll' ? 'Finish setup' : 'Continue'}
           </button>

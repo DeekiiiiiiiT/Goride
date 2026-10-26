@@ -161,12 +161,24 @@ export function ReconCloseStep({
   const preview = previewQuery.data;
   const reconEvidence = preview?.reconEvidence;
   const weekAlreadyClosed = !!preview?.weekClosed;
-  // Saved blockers are what the steps and the close workflow read, so Close shows those.
-  // Before the calculator has run for this week, fall back to the live preview.
+  // The button follows the live preview (driversReady). Show that same list,
+  // so a real block cannot hide behind an older saved picture that says the week ties.
   const closeCheck = run.closeCheck;
   const closeCheckFailed = closeCheck?.status === 'error';
-  const closeItems: CloseItem[] =
-    closeCheck?.status === 'ok'
+  const liveItems: CloseItem[] = [
+    ...(preview?.blockers || []),
+    ...(preview?.weekBlockers || []),
+  ].map((b) => ({
+    code: b.code,
+    severity: b.severity === 'warn' ? 'warn' : 'block',
+    message: b.message || b.code,
+    driverId: b.driverId,
+    sourceId: b.sourceId,
+    delta: b.delta,
+  }));
+  const closeItems: CloseItem[] = preview
+    ? liveItems
+    : closeCheck?.status === 'ok'
       ? closeCheck.blockers.map((b) => ({
           code: b.code,
           severity: b.severity === 'warn' ? 'warn' : 'block',
@@ -175,7 +187,7 @@ export function ReconCloseStep({
           sourceId: b.source_id,
           delta: b.delta,
         }))
-      : [...(preview?.blockers || []), ...(preview?.weekBlockers || [])];
+      : [];
   const totalBlockers = closeCheckFailed ? 1 : blockingCount(closeItems as CloseBlocker[]);
   // "No activity" confirmations are decisions already made on Upload inputs.
   // They belong in the evidence record, not in the to-do warnings.

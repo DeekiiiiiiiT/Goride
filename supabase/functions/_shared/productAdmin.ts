@@ -5,6 +5,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getJwtRoles, jwtPrimaryRole } from "./authEdge.ts";
 import { resolveEffectiveRoleNames, resolveUserPermissions, userHasProductAccessResolved } from "./rbacQuery.ts";
+import { dominionCan } from "../../../packages/auth-client/src/dominionPermissions.ts";
 
 /** Product identifiers */
 export type ProductKey = "fleet" | "enterprise" | "dash" | "rides" | "driver" | "haul" | "courier";
@@ -249,10 +250,8 @@ export async function requireAnyProductAdmin(
 }
 
 export function canWriteWorldMaps(admin: ProductAdminUser): boolean {
-  const role = (admin.role || "").toLowerCase();
-  if (role === "platform_owner" || role === "superadmin") return true;
-  return admin.roles.some((r) => r === "platform_owner" || r === "superadmin")
-    || (admin.permissions?.includes("platform.geo.write") ?? false);
+  if (dominionCan(admin.role, "maps.publish")) return true;
+  return admin.roles.some((role) => dominionCan(role, "maps.publish"));
 }
 
 /** A buyer can open the desk. They cannot open the rest of the ops console. */

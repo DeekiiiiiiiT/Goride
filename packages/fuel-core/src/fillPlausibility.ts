@@ -115,11 +115,16 @@ export function fillPlausibilityBlocksSave(issues: FillPlausibilityIssue[]): boo
 type WeekFill = {
   id?: string;
   vehicleId?: string;
+  date?: string | null;
   amount?: number;
   liters?: number;
   odometer?: number | null;
   metadata?: { plausibilityAccepted?: boolean } | null;
 };
+
+function fillDay(entry: WeekFill): string {
+  return String(entry.date || '').slice(0, 10);
+}
 
 /** True when a hard or confirm-level issue has not been explicitly accepted. */
 export function weekHasUnreviewedImplausibleFills(entries: WeekFill[]): boolean {
@@ -134,12 +139,17 @@ export function weekHasUnreviewedImplausibleFills(entries: WeekFill[]): boolean 
     const prices = list
       .filter((e) => Number(e.liters) > 0 && Number(e.amount) > 0)
       .map((e) => Number(e.amount) / Number(e.liters));
-    const seen = new Set<number>();
+    const seenDay = new Map<number, string>();
     for (const entry of list) {
       if (entry.metadata?.plausibilityAccepted) continue;
       const odo = Number(entry.odometer) || 0;
-      const duplicate = odo > 0 && seen.has(odo);
-      if (odo > 0) seen.add(odo);
+      const day = fillDay(entry);
+      const priorDay = odo > 0 ? seenDay.get(odo) : undefined;
+      // Same vehicle, same day, same reading is one stop: a card plus cash
+      // payment, or a second copy of the same card fill. A later day that
+      // still shows that reading is a real repeat and still needs acceptance.
+      const duplicate = Boolean(priorDay && priorDay !== day);
+      if (odo > 0 && priorDay == null) seenDay.set(odo, day);
       const peers = prices.filter((p) => {
         const own = Number(entry.liters) > 0 ? Number(entry.amount) / Number(entry.liters) : 0;
         return p !== own;

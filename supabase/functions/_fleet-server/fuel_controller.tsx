@@ -23,6 +23,7 @@ import { acquireFuelFinalizeLock, releaseFuelFinalizeLock } from "./fuel_finaliz
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { fromKvStore } from "./fleet_sql_bridge.ts";
 import * as kv from "./kv_store.tsx";
+import { listStationRecords } from "./fleet_table_read_thru.ts";
 import * as cache from "./cache.ts";
 import * as memCache from "./memory_cache.ts";
 import * as fuelLogic from "./fuel_logic.ts";
@@ -4036,7 +4037,7 @@ async function cleanupResolvedLearntLocations(
     const learntLocations: any[] = (await kv.getByPrefix("learnt_location:")) || [];
     if (learntLocations.length === 0) return { cleaned: 0, details: [] };
 
-    const allStations: any[] = (await kv.getByPrefix("station:")) || [];
+    const allStations: any[] = (await listStationRecords()) || [];
     const details: Array<{ learntId: string; learntName: string; resolvedBy: string; stationName: string }> = [];
 
     for (const loc of learntLocations) {
@@ -4865,7 +4866,7 @@ app.post(`${BASE_PATH}/admin/reconcile-ledger-orphans`, requirePlatformStaff(), 
         
         const [allEntries, allStations] = await Promise.all([
             kv.getByPrefix("fuel_entry:"),
-            kv.getByPrefix("station:")
+            listStationRecords()
         ]);
 
         if (!allEntries || allEntries.length === 0) {
@@ -5866,7 +5867,7 @@ app.post(`${BASE_PATH}/admin/autoheal-merchant-stations`, requirePlatformStaff()
         const apply = body.dryRun === false && applyLinkedPairsOnly;
         const limit = Math.min(Number(body.limit) || 500, 2000);
 
-        const stations = ((await kv.getByPrefix("station:")) || []).filter(
+        const stations = ((await listStationRecords()) || []).filter(
             (s: any) => s && s.id && (!s.status || s.status === "verified"),
         );
 
@@ -6253,7 +6254,7 @@ app.post(`${BASE_PATH}/mileage-adjustments`, requirePermission("fuel.edit_entry"
 // Platform-global station catalogue (intentional — not org-scoped). See FUEL_SYSTEM_AUDIT §G3.
 app.get(`${BASE_PATH}/stations`, async (c) => {
     try {
-        const stations = (await kv.getByPrefix("station:")) || [];
+        const stations = (await listStationRecords()) || [];
         const limitRaw = parseInt(c.req.query("limit") || "0", 10);
         const offsetRaw = parseInt(c.req.query("offset") || "0", 10);
         const fields = (c.req.query("fields") || "").trim(); // e.g. list = id,name,brand,stats,location,status,isPreferred
@@ -6696,7 +6697,7 @@ app.post(`${BASE_PATH}/stations`, requirePermission("fuel.edit_entry"), async (c
 // Phase 9.6: Duplicate audit report ? scan all stations for Plus Code / geofence collisions
 app.get(`${BASE_PATH}/stations/duplicate-audit`, async (c) => {
     try {
-        const allStations: any[] = (await kv.getByPrefix("station:")) || [];
+        const allStations: any[] = (await listStationRecords()) || [];
         const duplicatePairs: { stationA: any; stationB: any; matchType: string; distance: number }[] = [];
 
         for (let i = 0; i < allStations.length; i++) {
@@ -6935,7 +6936,7 @@ app.post(`${BASE_PATH}/admin/stress-test-evidence-bridge`, requirePlatformStaff(
         const vehicle = await kv.get(`vehicle:${vehicleId}`);
         if (!vehicle) throw new Error("Target vehicle required for stress test");
 
-        const stations = await kv.getByPrefix("station:");
+        const stations = await listStationRecords();
         const results = [];
 
         for (let i = 0; i < iterations; i++) {
@@ -7163,7 +7164,7 @@ app.post(`${BASE_PATH}/admin/backfill-hmac-signatures`, requirePlatformStaff(), 
 
 app.post(`${BASE_PATH}/stations/migrate-status`, requirePlatformStaff(), async (c) => {
     try {
-        const stations = await kv.getByPrefix("station:");
+        const stations = await listStationRecords();
         let patchedCount = 0;
 
         for (const station of (stations || [])) {
@@ -7219,7 +7220,7 @@ app.get(`${BASE_PATH}/learnt-locations`, async (c) => {
         const locations: any[] = (await kv.getByPrefix("learnt_location:")) || [];
 
         // Phase 7: Enrich each learnt location with the nearest station within 500m
-        const allStations: any[] = (await kv.getByPrefix("station:")) || [];
+        const allStations: any[] = (await listStationRecords()) || [];
         const NEARBY_RADIUS = 500; // metres
 
         for (const loc of locations) {
@@ -7304,7 +7305,7 @@ app.post(`${BASE_PATH}/learnt-locations/rescan`, requirePermission("fuel.edit_en
         
         const [learntLocations, allStations] = await Promise.all([
             kv.getByPrefix("learnt_location:"),
-            kv.getByPrefix("station:")
+            listStationRecords()
         ]);
         
         if (!learntLocations || learntLocations.length === 0) {

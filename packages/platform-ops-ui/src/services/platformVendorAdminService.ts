@@ -5,8 +5,9 @@ import { API_ENDPOINTS } from '@roam/api-client';
 import type { ExpenseHubCategory, ExpenseVendor } from '@roam/types';
 import { requirePlatformAuthHeaders } from '../auth/platformAuthHeaders';
 
-const V = `${API_ENDPOINTS.admin}/admin/platform-vendors`;
-const C = `${API_ENDPOINTS.admin}/admin/platform-categories`;
+const V = `${API_ENDPOINTS.catalog}/admin/vendors`;
+const VWRITE = `${API_ENDPOINTS.catalog}/admin/vendors`;
+const C = `${API_ENDPOINTS.catalog}/admin/platform-categories`;
 
 async function adminFetch<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
@@ -36,7 +37,7 @@ export const platformVendorAdminService = {
     trn?: string;
     gctRegistered?: boolean;
   }) {
-    return adminFetch<{ success: boolean; data: ExpenseVendor }>(V, {
+    return adminFetch<{ success: boolean; data: ExpenseVendor }>(VWRITE, {
       method: 'POST',
       body: JSON.stringify(body),
     });
@@ -48,7 +49,7 @@ export const platformVendorAdminService = {
       created: ExpenseVendor[];
       skipped: string[];
       summary: { created: number; skipped: number };
-    }>(`${V}/bulk`, { method: 'POST', body: JSON.stringify(body) });
+    }>(`${VWRITE}/bulk`, { method: 'POST', body: JSON.stringify(body) });
   },
 
   updateVendor(
@@ -57,34 +58,34 @@ export const platformVendorAdminService = {
       Pick<ExpenseVendor, 'name' | 'categoryDefault' | 'notes' | 'isActive' | 'status' | 'trn' | 'gctRegistered'>
     >,
   ) {
-    return adminFetch<{ success: boolean; data: ExpenseVendor }>(`${V}/${id}`, {
+    return adminFetch<{ success: boolean; data: ExpenseVendor }>(`${VWRITE}/${id}`, {
       method: 'PUT',
       body: JSON.stringify(body),
     });
   },
 
   deleteVendor(id: string) {
-    return adminFetch<{ success: boolean; data: ExpenseVendor }>(`${V}/${id}`, {
+    return adminFetch<{ success: boolean; data: ExpenseVendor }>(`${VWRITE}/${id}`, {
       method: 'DELETE',
     });
   },
 
   approveVendor(id: string, body: { mergeIntoVendorId?: string; name?: string; notes?: string } = {}) {
-    return adminFetch<{ success: boolean; data: ExpenseVendor }>(`${V}/${id}/approve`, {
+    return adminFetch<{ success: boolean; data: ExpenseVendor }>(`${VWRITE}/${id}/approve`, {
       method: 'POST',
       body: JSON.stringify(body),
     });
   },
 
   rejectVendor(id: string) {
-    return adminFetch<{ success: boolean; data: ExpenseVendor }>(`${V}/${id}/reject`, {
+    return adminFetch<{ success: boolean; data: ExpenseVendor }>(`${VWRITE}/${id}/reject`, {
       method: 'POST',
       body: '{}',
     });
   },
 
   migrateLegacy(confirm = false) {
-    return adminFetch<Record<string, unknown>>(`${V}/migrate-legacy`, {
+    return adminFetch<Record<string, unknown>>(`${API_ENDPOINTS.admin}/admin/platform-vendors/migrate-legacy`, {
       method: 'POST',
       body: JSON.stringify(confirm ? { confirm: true, dryRun: false } : { dryRun: true }),
     });

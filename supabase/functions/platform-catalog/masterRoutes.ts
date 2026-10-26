@@ -28,14 +28,14 @@ function actionFor(table: TableName, row: Record<string, unknown>): DominionActi
   return TABLES[table].edit;
 }
 
-async function saveKeyed(actor: string, key: string, value: unknown) {
-  await runAsMasterActor(actor, () => kv.set(key, value));
+function changeReason(body: Record<string, unknown> | null, fallback: string): string {
+  const reason = String(body?.reason || "").trim();
+  if (body && "reason" in body) delete body.reason;
+  return reason || fallback;
 }
 
-async function removeKeyed(actor: string, table: TableName, id: string) {
-  await runAsMasterActor(actor, async () => {
-    await kv.del(`${TABLES[table].prefix}${id}`);
-  });
+async function saveKeyed(actor: string, key: string, value: unknown, reason: string) {
+  await runAsMasterActor(actor, () => kv.set(key, value), reason);
 }
 
 const VENDOR_PREFIX = "platform_vendor:";
@@ -57,13 +57,14 @@ export function registerMasterRoutes(app: App) {
     if (!dominionCan(auth.role, action)) {
       return c.json({ error: "Forbidden", message: "You cannot change that" }, 403);
     }
+    const reason = changeReason(row, action);
     const id = String(row.id || "").trim() || crypto.randomUUID();
     const key = `${TABLES[table].prefix}${id}`;
     const existing = await kv.get(key);
     const prior = existing && typeof existing === "object" ? existing as Record<string, unknown> : {};
     const value = { ...prior, ...row, id };
     try {
-      await saveKeyed(auth.email, `${TABLES[table].prefix}${id}`, value);
+      await saveKeyed(auth.email, key, value, reason);
       return c.json({ success: true, data: value });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Could not save";
@@ -80,8 +81,11 @@ export function registerMasterRoutes(app: App) {
       return c.json({ error: "Forbidden", message: "You cannot change that" }, 403);
     }
     const id = c.req.param("id");
+    const reason = changeReason({ reason: c.req.query("reason") || "" }, TABLES[table].edit);
     try {
-      await removeKeyed(auth.email, table, id);
+      await runAsMasterActor(auth.email, async () => {
+        await kv.del(`${TABLES[table].prefix}${id}`);
+      }, reason);
       return c.json({ success: true });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Could not delete";
@@ -92,6 +96,17 @@ export function registerMasterRoutes(app: App) {
 
 function registerVendorRoutes(app: App) {
   const base = "/admin/vendors";
+
+  app.get(base, async (c) => {
+    const auth = await requirePlatformAdmin(c);
+    if (auth instanceof Response) return auth;
+    const status = String(c.req.query("status") || "").trim();
+    let items = (await kv.getByPrefix(VENDOR_PREFIX)) as Array<Record<string, unknown>>;
+    if (c.req.query("includeInactive") !== "1") items = items.filter((vendor) => vendor.isActive !== false);
+    if (status) items = items.filter((vendor) => String(vendor.status || "verified") === status);
+    items.sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
+    return c.json({ items });
+  });
 
   async function allow(c: Parameters<typeof requirePlatformAdmin>[0]) {
     const auth = await requirePlatformAdmin(c);
@@ -126,7 +141,7 @@ function registerVendorRoutes(app: App) {
       createdAt: now,
       updatedAt: now,
     };
-    await saveKeyed(auth.email, `${VENDOR_PREFIX}${vendor.id}`, vendor);
+    await saveKeyed(auth.email, `${VENDOR_PREFIX}${vendor.id}`, vendor, changeReason(body, "vendors.edit"));
     return c.json({ success: true, data: vendor });
   });
 
@@ -162,7 +177,7 @@ function registerVendorRoutes(app: App) {
         createdAt: now,
         updatedAt: now,
       };
-      await saveKeyed(auth.email, `${VENDOR_PREFIX}${vendor.id}`, vendor);
+      await saveKeyed(auth.email, `${VENDOR_PREFIX}${vendor.id}`, vendor, changeReason(body, "vendors.edit"));
       created.push(vendor);
     }
     return c.json({ success: true, created, skipped, summary: { created: created.length, skipped: skipped.length } });
@@ -187,7 +202,7 @@ function registerVendorRoutes(app: App) {
       updatedAt: new Date().toISOString(),
     };
     if (!next.name) return c.json({ error: "Name required" }, 400);
-    await saveKeyed(auth.email, `${VENDOR_PREFIX}${id}`, next);
+    await saveKeyed(auth.email, `${VENDOR_PREFIX}${id}`, next, changeReason(body, "vendors.edit"));
     return c.json({ success: true, data: next });
   });
 
@@ -198,7 +213,7 @@ function registerVendorRoutes(app: App) {
     const existing = await kv.get(`${VENDOR_PREFIX}${id}`) as Record<string, unknown> | null;
     if (!existing) return c.json({ error: "Vendor not found" }, 404);
     const next = { ...existing, isActive: false, updatedAt: new Date().toISOString() };
-    await saveKeyed(auth.email, `${VENDOR_PREFIX}${id}`, next);
+    await saveKeyed(auth.email, `${VENDOR_PREFIX}${id}`, next, changeReason({ reason: c.req.query("reason") || "" }, "vendors.edit"));
     return c.json({ success: true, data: next });
   });
 
@@ -222,7 +237,7 @@ function registerVendorRoutes(app: App) {
         mergedIntoVendorId: mergeIntoId,
         updatedAt: new Date().toISOString(),
       };
-      await saveKeyed(auth.email, `${VENDOR_PREFIX}${id}`, merged);
+      await saveKeyed(auth.email, `${VENDOR_PREFIX}${id}`, merged, changeReason(body, "vendors.edit"));
       await remapVendorReferences(id, mergeIntoId);
       return c.json({ success: true, data: merged, mergedInto: target });
     }
@@ -236,7 +251,7 @@ function registerVendorRoutes(app: App) {
       notes: body.notes !== undefined ? String(body.notes || "").trim() || undefined : existing.notes,
       categoryDefault: body.categoryDefault !== undefined ? body.categoryDefault : existing.categoryDefault,
     };
-    await saveKeyed(auth.email, `${VENDOR_PREFIX}${id}`, next);
+    await saveKeyed(auth.email, `${VENDOR_PREFIX}${id}`, next, changeReason(body, "vendors.edit"));
     return c.json({ success: true, data: next });
   });
 
@@ -246,8 +261,48 @@ function registerVendorRoutes(app: App) {
     const id = c.req.param("id");
     const existing = await kv.get(`${VENDOR_PREFIX}${id}`) as Record<string, unknown> | null;
     if (!existing) return c.json({ error: "Vendor not found" }, 404);
+    const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
     const next = { ...existing, status: "rejected", isActive: false, updatedAt: new Date().toISOString() };
-    await saveKeyed(auth.email, `${VENDOR_PREFIX}${id}`, next);
+    await saveKeyed(auth.email, `${VENDOR_PREFIX}${id}`, next, changeReason(body, "vendors.edit"));
     return c.json({ success: true, data: next });
+  });
+}
+
+export function registerTollRateRoutes(app: App) {
+  app.post("/admin/toll-rates", async (c) => {
+    const auth = await requirePlatformAdmin(c);
+    if (auth instanceof Response) return auth;
+    if (!dominionCan(auth.role, "tolls.edit")) {
+      return c.json({ error: "Forbidden", message: "You cannot change that" }, 403);
+    }
+    const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+    const reason = changeReason(body, "tolls.edit");
+    try {
+      const { publishTollRates, saveTollRateStore, migrateToVersionedStore } = await import("../_fleet-server/toll_rate_schedule.ts");
+      const result = await runAsMasterActor(auth.email, async () => {
+        if (body.current && Array.isArray(body.versions) && body.__replaceStore === true) {
+          const store = migrateToVersionedStore(body);
+          await saveTollRateStore(store);
+          return { success: true, store };
+        }
+        const published = await publishTollRates({
+          effectiveDate: typeof body.effectiveDate === "string" ? body.effectiveDate : undefined,
+          effectiveFrom: typeof body.effectiveFrom === "string" ? body.effectiveFrom : typeof body.effectiveDate === "string" ? body.effectiveDate : undefined,
+          operator: typeof body.operator === "string" ? body.operator : undefined,
+          currency: typeof body.currency === "string" ? body.currency : undefined,
+          plazas: Array.isArray(body.plazas) ? body.plazas as never : [],
+          vehicleClasses: Array.isArray(body.vehicleClasses) ? body.vehicleClasses as never : [],
+          routeRateGroups: Array.isArray(body.routeRateGroups) ? body.routeRateGroups as never : [],
+          createdBy: auth.email || reason,
+        });
+        return { success: true, published: published.published, store: published.store, current: published.store.current, versions: published.store.versions };
+      }, reason);
+      return c.json(result);
+    } catch (err) {
+      const named = err as { name?: string; message?: string; reason?: string };
+      if (named?.name === "TollRatePublishError") return c.json({ error: named.message, reason: named.reason }, 400);
+      const message = err instanceof Error ? err.message : "Could not save toll rates";
+      return c.json({ error: message }, 500);
+    }
   });
 }

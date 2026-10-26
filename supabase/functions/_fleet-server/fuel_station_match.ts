@@ -3,6 +3,7 @@
  * One implementation so the two save paths cannot drift.
  */
 import * as kv from "./kv_store.tsx";
+import { listStationRecords } from "./fleet_table_read_thru.ts";
 import * as fuelLogic from "./fuel_logic.ts";
 import { auditLogic } from "./audit_logic.ts";
 import {
@@ -115,7 +116,7 @@ export type StationMatchDeps = {
 const defaultDeps = (): StationMatchDeps => ({
   get: (key) => kv.get(key),
   set: (key, value) => kv.set(key, value),
-  getByPrefix: (prefix) => kv.getByPrefix(prefix),
+  getByPrefix: (prefix) => (prefix === "station:" ? listStationRecords() : kv.getByPrefix(prefix)),
 });
 
 /** Bump visit + price stats on a station from a fuel entry (writes lastUpdated, not lastVisited). */

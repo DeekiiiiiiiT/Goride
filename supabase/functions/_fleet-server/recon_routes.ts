@@ -859,6 +859,52 @@ function isDeskSnapshot(value: unknown): value is { sources: unknown[]; steps: u
   return Array.isArray(row.sources) && Array.isArray(row.steps) && row.evaluation != null && row.run != null && typeof row.run === "object";
 }
 
+/** Step rail + Continue follow current blockers, not the last saved picture. */
+async function overlayLiveStepGates(
+  orgId: string,
+  line: ReconLine,
+  weekKey: string,
+  run: WeekRunRow,
+  snapshot: { sources?: unknown; evaluation?: unknown; closeCheck?: unknown; run: Record<string, unknown> },
+) {
+  try {
+    const sources = (Array.isArray(snapshot.sources) ? snapshot.sources : []) as Array<{
+      id?: string;
+      requirement?: SourceRequirement;
+      status?: SourceAggregateStatus;
+      inputHash?: string;
+    }>;
+    const { counts, closeCheck } = await computeLiveStepCounts(
+      orgId,
+      weekKey,
+      line,
+      sources.map((s) => ({
+        requirement: (s.requirement || "required") as SourceRequirement,
+        status: (s.status || "missing") as SourceAggregateStatus,
+      })),
+      run.id,
+    );
+    const stepRows = await loadRunSteps(run.id);
+    const completedSteps = stepRows
+      .filter((r) => r.completed_at)
+      .map((r) => ({
+        stepId: r.step_id as RunStepId,
+        completedAt: r.completed_at,
+        inputsHashAtComplete: r.inputs_hash_at_complete,
+      }));
+    const sourceSnaps: ReconSourceSnapshot[] = sources.map((s) => ({
+      id: String(s.id || "") as ReconSourceId,
+      status: (s.status || "missing") as SourceAggregateStatus,
+      inputHash: String(s.inputHash || ""),
+    }));
+    const evaluation = evaluateRun({ sources: sourceSnaps, stepCounts: counts, completedSteps });
+    return { ...snapshot, evaluation, closeCheck };
+  } catch (e) {
+    console.warn("[recon] live step gates failed", e instanceof Error ? e.message : e);
+    return snapshot;
+  }
+}
+
 function withLiveRun(
   snapshot: { run: Record<string, unknown> },
   run: WeekRunRow,
@@ -1386,8 +1432,12 @@ export function registerReconRoutes(app: Hono) {
           return c.json({ success: true, ...payload });
         }
         if (isDeskSnapshot(run.desk_snapshot)) {
-          logReconPhase("desk_read", started, { hit: true, weekKey, line });
-          return c.json({ success: true, ...withLiveRun(run.desk_snapshot, run) });
+          // The saved picture keeps "in progress" after the pay list is empty,
+          // and Continue only appears once the step is ready. Recompute the
+          // gates from the current blockers on each open.
+          const live = await overlayLiveStepGates(orgId, line, weekKey, run, run.desk_snapshot);
+          logReconPhase("desk_read", started, { hit: true, weekKey, line, liveGates: true });
+          return c.json({ success: true, ...withLiveRun(live, run) });
         }
         await requestWeekDesk(run);
         logReconPhase("desk_read", started, { hit: false, weekKey, line });

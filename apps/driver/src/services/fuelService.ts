@@ -3,6 +3,7 @@ import { publicAnonKey } from '../utils/supabase/info';
 import { FuelCard, FuelEntry, MileageAdjustment, FuelScenario } from '../types/fuel';
 import { FinancialTransaction } from '../types/data';
 import { API_ENDPOINTS } from './apiConfig';
+import { catalogPages } from '@roam/api-client';
 import { settlementService } from './settlementService';
 import { throwIfCatalogGateBlocked } from './api';
 import { unwrapFuelEntriesPayload } from '@roam/fuel-core';
@@ -247,11 +248,7 @@ export const fuelService = {
 
   // --- Gas Stations ---
   async getStations(): Promise<any[]> {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/stations`, {
-      headers: await authHeaders(null),
-    });
-    if (!response.ok) throw new Error("Failed to fetch stations");
-    return response.json();
+    return catalogPages('driver', '/v1/stations', 'stations');
   },
 
   async checkStationDuplicate(plusCode: string, lat: number, lng: number, excludeId?: string, category?: string): Promise<any> {

@@ -14,6 +14,7 @@ import {
   type AuthIntent,
 } from './components/onboarding/HaulOnboardingFlow';
 import { hasCompletedOnboarding } from './lib/onboardingStorage';
+import { syncCatalog } from '@roam/api-client';
 
 const SPLASH_MIN_MS = 2000;
 
@@ -27,6 +28,10 @@ function HaulerApp() {
     const timer = window.setTimeout(() => setSplashMinElapsed(true), SPLASH_MIN_MS);
     return () => window.clearTimeout(timer);
   }, []);
+
+  useEffect(() => {
+    if (user) syncCatalog('haul');
+  }, [user]);
 
   if (loading || !splashMinElapsed) {
     return <HaulSplashScreen />;

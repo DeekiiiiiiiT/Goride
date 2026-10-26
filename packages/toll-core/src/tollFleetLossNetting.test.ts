@@ -6,6 +6,7 @@ import {
   sumTollChargedToDriversFromEvents,
   tollEventDate,
 } from './tollFleetLossNetting.ts';
+import { computeTollWeekNetting } from './tollWeekNetting.ts';
 
 describe('tollEventDate — fleet-tz calendar day (one-week rule)', () => {
   it('keeps a late-UTC timestamp on the correct Jamaica day (W4)', () => {
@@ -34,6 +35,28 @@ describe('tollEventDate — fleet-tz calendar day (one-week rule)', () => {
     expect(filterTollEventsInDateRange(events, '2026-08-31', '2026-09-06')).toHaveLength(1);
     // …and NOT in the following week, which a naive UTC slice would have done.
     expect(filterTollEventsInDateRange(events, '2026-09-07', '2026-09-13')).toHaveLength(0);
+  });
+
+  it('keeps a driver charge so a personal toll nets to zero', () => {
+    const events = [
+      {
+        eventType: 'toll_charge',
+        sourceType: 'transaction',
+        sourceId: 'gps',
+        date: '2026-09-11',
+        netAmount: -275,
+      },
+      {
+        eventType: 'toll_charged_to_driver',
+        sourceId: 'gps',
+        date: '2026-09-11',
+        netAmount: -275,
+        metadata: { version: 1 },
+      },
+    ];
+    const week = filterTollEventsInDateRange(events, '2026-09-07', '2026-09-13');
+    expect(week).toHaveLength(2);
+    expect(computeTollWeekNetting(week).netLoss).toBe(0);
   });
 });
 

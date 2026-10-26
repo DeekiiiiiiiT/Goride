@@ -42,5 +42,18 @@ if (rbac.includes('schema("fleet")')) {
   failed = true;
 }
 
+const closedDoor = [
+  join(root, "register_residual_monolith_routes.tsx"),
+  join(root, "fleet_table_dual_write.ts"),
+  join(root, "..", "platform-catalog", "index.ts"),
+];
+for (const file of closedDoor) {
+  const text = readFileSync(file, "utf8");
+  if (text.includes('schema("fleet")') || text.includes('schema: "fleet"')) {
+    console.error(`${file} must use a public view, not the fleet schema`);
+    failed = true;
+  }
+}
+
 if (failed) process.exit(1);
 console.log("customer portal auth guard ok");

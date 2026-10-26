@@ -5,7 +5,10 @@ import { PRIVATE_LIST_CACHE, STABLE_GET_CACHE } from "../_shared/cacheControl.ts
 import { registerGeoRoutes } from "./geoRoutes.ts";
 import { assertRateLimit } from "../_shared/rateLimit.ts";
 import { requirePlatformAdmin } from "../_shared/platformAdmin.ts";
-import { registerMasterRoutes } from "./masterRoutes.ts";
+import { registerCategoryRoutes } from "./categoryRoutes.ts";
+import { registerMasterRoutes, registerTollRateRoutes } from "./masterRoutes.ts";
+import { registerPartSourcingRoutes } from "../_fleet-server/part_sourcing_routes.ts";
+import { registerPendingVehicleCatalogRoutes } from "../_fleet-server/pending_vehicle_catalog_routes.ts";
 
 const app = new Hono().basePath("/platform-catalog");
 
@@ -264,6 +267,15 @@ app.get("/vehicle-catalog", async (c) => {
 
 registerGeoRoutes(app);
 registerMasterRoutes(app);
+registerTollRateRoutes(app);
+registerCategoryRoutes(app);
+try {
+  const writer = admin();
+  registerPartSourcingRoutes(app, writer);
+  registerPendingVehicleCatalogRoutes(app, writer);
+} catch (err) {
+  console.error("catalog master writes not mounted", err instanceof Error ? err.message : err);
+}
 
 app.get("/v1/changes", async (c) => {
   try {
@@ -327,6 +339,20 @@ app.get("/admin/quality", async (c) => {
   } catch (err) {
     return fail(err, "Could not load quality");
   }
+});
+
+app.all("/admin/*", async (c) => {
+  const path = new URL(c.req.url).pathname;
+  const moved = path.includes("/admin/part-")
+    || path.includes("/admin/vehicle-catalog-pending")
+    || path.includes("/admin/catalog-gate");
+  if (!moved) return c.json({ error: "Not found" }, 404);
+  const url = new URL(c.req.url);
+  const marker = "/platform-catalog/";
+  const at = url.pathname.indexOf(marker);
+  if (at < 0) return c.json({ error: "Not found" }, 404);
+  url.pathname = `${url.pathname.slice(0, at)}/platform-catalog/make-server-37f42386/${url.pathname.slice(at + marker.length)}`;
+  return app.fetch(new Request(url, c.req.raw));
 });
 
 app.all("/v1/*", async (c) => {

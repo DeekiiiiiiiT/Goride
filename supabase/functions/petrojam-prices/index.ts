@@ -7,6 +7,7 @@ import { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import { cors } from "https://deno.land/x/hono@v4.3.11/middleware.ts";
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { requirePlatformAdmin } from "../_shared/platformAdmin.ts";
+import { dominionCan } from "../../../packages/auth-client/src/dominionPermissions.ts";
 import {
   fetchPetrojamPrices,
   PETROJAM_PRICE_URL,
@@ -29,8 +30,6 @@ function svc(): SupabaseClient {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
   );
 }
-
-const ADMIN_WRITE_ROLES = new Set(["platform_owner", "superadmin", "rides_admin"]);
 
 function rowToApi(r: Record<string, unknown>) {
   return {
@@ -158,8 +157,8 @@ app.get("/admin/prices", async (c) => {
 app.post("/admin/sync", async (c) => {
   const auth = await requirePlatformAdmin(c);
   if (auth instanceof Response) return auth;
-  if (!ADMIN_WRITE_ROLES.has(auth.role)) {
-    return c.json({ error: "forbidden", message: "Platform owner required to sync prices" }, 403);
+  if (!dominionCan(auth.role, "catalog.write")) {
+    return c.json({ error: "Forbidden", message: "You cannot change that" }, 403);
   }
 
   const body = await c.req.json().catch(() => ({})) as {

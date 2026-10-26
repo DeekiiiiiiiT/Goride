@@ -2,8 +2,8 @@
  * Dual-write from KV writes into fleet.* tables (via public.fleet_* views).
  * Failures must throw — silent drops caused Approved fuel expenses with no Transaction Log row.
  */
-import { getServiceClient, getServiceClientWithSchema } from "./service_client.ts";
-import { currentMasterActor } from "./master_actor.ts";
+import { getServiceClient } from "./service_client.ts";
+import { currentMasterActor, currentMasterReason } from "./master_actor.ts";
 import { orgOf, resolveDomain } from "./fleet_domains.ts";
 import {
   isFleetTableWriteEnabled,
@@ -22,6 +22,8 @@ function tableName(table: string): string {
 /** Global catalogs. Every other fleet domain belongs to one company. */
 const GLOBAL_DOMAINS = new Set(["stations", "toll_plazas", "platform_vendors"]);
 const MASTER_TABLES = new Set(["stations", "toll_plazas", "platform_vendors"]);
+// payload_json stays on these three tables. Typed columns do not hold contact,
+// amenities, parish text, or plaza direction. Dropping the column would erase them.
 
 async function logMetric(domain: FleetDomain, status: string, reason?: string, legacyKvId?: string) {
   try {
@@ -56,11 +58,11 @@ export async function dualWriteFleetKvUpsert(key: string, value: unknown): Promi
     throw new Error(`[fleetDualWrite] ${def.domain} ${key} is missing a company`);
   }
   if (MASTER_TABLES.has(def.table)) {
-    const { error: rpcError } = await getServiceClientWithSchema("fleet").rpc("upsert_master", {
+    const { error: rpcError } = await getServiceClient().rpc("fleet_upsert_master", {
       p_table: def.table,
       p_row: row,
       p_actor: currentMasterActor() ?? "",
-      p_action: "",
+      p_action: currentMasterReason(),
     });
     if (rpcError) {
       console.error(`[fleetDualWrite] upsert ${def.domain} ${key}:`, rpcError.message);
@@ -83,6 +85,21 @@ export async function dualWriteFleetKvDelete(key: string): Promise<void> {
   const def = resolveDomain(key);
   if (!def) return;
   if (!isFleetTableWriteEnabled(def.domain)) return;
+  if (MASTER_TABLES.has(def.table)) {
+    const id = key.includes(":") ? key.slice(key.indexOf(":") + 1) : key;
+    const { error: rpcError } = await getServiceClient().rpc("fleet_delete_master", {
+      p_table: def.table,
+      p_id: id,
+      p_actor: currentMasterActor() ?? "",
+    });
+    if (rpcError) {
+      console.error(`[fleetDualWrite] delete ${def.domain} ${key}:`, rpcError.message);
+      await logMetric(def.domain, "fail", rpcError.message, key);
+      throw new Error(`[fleetDualWrite] delete ${def.domain} failed: ${rpcError.message}`);
+    }
+    await logMetric(def.domain, "ok", "deleted", key);
+    return;
+  }
   const { error } = await fleetClient().from(tableName(def.table)).delete().eq("legacy_kv_id", key);
   if (error) {
     const id = key.includes(":") ? key.slice(key.indexOf(":") + 1) : key;

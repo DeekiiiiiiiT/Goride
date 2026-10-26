@@ -105,11 +105,13 @@ Deno.test("shapeFleetRow keeps named JSON fields and hides the blob", () => {
     amount: 500,
     service_line: "rideshare",
     tollCharges: 275,
+    cashCollected: 620,
     dropoffTime: "2026-10-01T18:00:00Z",
     tollRefundResolution: { status: "pending" },
     metaTripId: "trip-9",
   });
   assertEquals(payload.tollCharges, 275);
+  assertEquals(payload.cashCollected, 620);
   assertEquals(payload.dropoffTime, "2026-10-01T18:00:00Z");
   assertEquals((payload.tollRefundResolution as { status: string }).status, "pending");
   assertEquals((payload.metadata as { tripId: string }).tripId, "trip-9");

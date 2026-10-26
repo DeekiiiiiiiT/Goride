@@ -18,10 +18,22 @@ import { unifiedLedgerClient } from "../../_shared/unifiedLedger/postEntry.ts";
 
 const EXCLUDED_FROM_GREEN = new Set(["rides_ledger_lines"]);
 
+type LedgerScope = "all" | "fleet";
+
+/** Rides and platform staff see every book. A Fleet admin sees Fleet books only. */
+async function ledgerScope(c: Parameters<typeof requireProductAdmin>[0]): Promise<LedgerScope | Response> {
+  const rides = await requireProductAdmin(c, "rides");
+  if (!(rides instanceof Response)) return "all";
+  const fleet = await requireProductAdmin(c, "fleet");
+  if (fleet instanceof Response) return rides;
+  if (fleet.isPlatformRole) return "all";
+  return "fleet";
+}
+
 export function registerUnifiedLedgerAdminRoutes(admin: Hono) {
   admin.get("/ledger/unified/feed", async (c) => {
-    const adminUser = await requireProductAdmin(c, "rides");
-    if (adminUser instanceof Response) return adminUser;
+    const scope = await ledgerScope(c);
+    if (scope instanceof Response) return scope;
 
     if (!isLedgerReadUnifiedEnabled()) {
       return c.json({ error: "feature_disabled", message: "Set LEDGER_READ_UNIFIED=1" }, 403);
@@ -29,7 +41,8 @@ export function registerUnifiedLedgerAdminRoutes(admin: Hono) {
 
     const page = Math.max(1, Number(c.req.query("page") ?? 1));
     const limit = Math.min(100, Math.max(1, Number(c.req.query("limit") ?? 50)));
-    const product = c.req.query("product")?.trim() || undefined;
+    const requested = c.req.query("product")?.trim() || undefined;
+    const product = scope === "fleet" ? "roam_fleet" : requested;
     const from = c.req.query("from")?.trim() || undefined;
     const to = c.req.query("to")?.trim() || undefined;
     const organizationId = c.req.query("organization_id")?.trim() || undefined;
@@ -45,7 +58,7 @@ export function registerUnifiedLedgerAdminRoutes(admin: Hono) {
         limit,
         offset: (page - 1) * limit,
       });
-      return c.json({ entries, total, page, limit, source: "ledger.entries" });
+      return c.json({ entries, total, page, limit, source: "ledger.entries", scope });
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       console.error("[unifiedLedger] feed:", message);
@@ -54,8 +67,17 @@ export function registerUnifiedLedgerAdminRoutes(admin: Hono) {
   });
 
   admin.get("/ledger/unified/reconciliation", async (c) => {
-    const adminUser = await requireProductAdmin(c, "rides");
-    if (adminUser instanceof Response) return adminUser;
+    const scope = await ledgerScope(c);
+    if (scope instanceof Response) return scope;
+    if (scope === "fleet") {
+      return c.json({
+        islands: [],
+        anomaly_count: 0,
+        healthy: true,
+        scope,
+        green_definition: "Fleet books only.",
+      });
+    }
 
     try {
       const islands = await reconcileLedgerIslands();
@@ -94,8 +116,9 @@ export function registerUnifiedLedgerAdminRoutes(admin: Hono) {
 
   /** Phase 0 soak go/no-go snapshot */
   admin.get("/ledger/unified/soak-status", async (c) => {
-    const adminUser = await requireProductAdmin(c, "rides");
-    if (adminUser instanceof Response) return adminUser;
+    const scope = await ledgerScope(c);
+    if (scope instanceof Response) return scope;
+    if (scope === "fleet") return c.json({ scope });
     try {
       const client = unifiedLedgerClient();
       const { data, error } = await client.rpc("ledger_soak_status");
@@ -121,8 +144,9 @@ export function registerUnifiedLedgerAdminRoutes(admin: Hono) {
   });
 
   admin.get("/ledger/unified/reconciliation/amounts", async (c) => {
-    const adminUser = await requireProductAdmin(c, "rides");
-    if (adminUser instanceof Response) return adminUser;
+    const scope = await ledgerScope(c);
+    if (scope instanceof Response) return scope;
+    if (scope === "fleet") return c.json({ amounts: [], scope });
 
     if (!isLedgerReadUnifiedEnabled()) {
       return c.json({ error: "feature_disabled", message: "Set LEDGER_READ_UNIFIED=1" }, 403);
@@ -139,15 +163,15 @@ export function registerUnifiedLedgerAdminRoutes(admin: Hono) {
   });
 
   admin.get("/ledger/unified/reconciliation/balances", async (c) => {
-    const adminUser = await requireProductAdmin(c, "rides");
-    if (adminUser instanceof Response) return adminUser;
+    const scope = await ledgerScope(c);
+    if (scope instanceof Response) return scope;
 
     if (!isLedgerReadUnifiedEnabled()) {
       return c.json({ error: "feature_disabled", message: "Set LEDGER_READ_UNIFIED=1" }, 403);
     }
 
     try {
-      const balances = await checkProductBalances();
+      const balances = await checkProductBalances(scope === "fleet" ? ["roam_fleet"] : undefined);
       const unbalanced = balances.filter((b) => !b.balanced);
       return c.json({
         balances,

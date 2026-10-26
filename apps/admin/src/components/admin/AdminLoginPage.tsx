@@ -1,3 +1,4 @@
+// Stitch: dominion-redesign/d8107f1d4b7c4c8bbb570fed4a8216be
 import React, { useState } from 'react';
 import { Shield, Loader2, AlertCircle, KeyRound } from 'lucide-react';
 import { supabase } from '../../utils/supabase/client';
@@ -97,47 +98,32 @@ export function AdminLoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 dark:bg-slate-950 flex">
-      <div className="hidden lg:flex lg:w-1/2 flex-col items-center justify-center p-12 bg-gradient-to-br from-slate-100 to-slate-200 border-r border-slate-200 dark:from-slate-900 dark:to-slate-950 dark:border-slate-800">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="bg-amber-500/20 p-3 rounded-xl">
-            <Shield className="w-8 h-8 text-amber-400" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">Roam Dominion</h1>
-            <p className="text-slate-600 dark:text-slate-400 text-sm">Super Admin Portal</p>
-          </div>
-        </div>
-        <p className="text-slate-500 text-center max-w-sm leading-relaxed">
-          Manage customer accounts, fuel stations, toll databases, and platform settings from a single control plane.
-        </p>
-      </div>
-
-      <div className="flex-1 flex items-center justify-center p-8">
-        <div className="w-full max-w-md">
-          <div className="lg:hidden flex items-center gap-3 mb-8 justify-center">
-            <div className="bg-amber-500/20 p-2.5 rounded-xl">
-              <Shield className="w-6 h-6 text-amber-400" />
+    <div className="flex min-h-screen items-center justify-center bg-[#f1f5f9] p-8 text-[#0f172a]">
+      <div className="w-full max-w-md">
+          <div className="mb-8 flex items-center justify-center gap-3">
+            <div className="rounded-xl bg-dominion-navy p-2.5">
+              <Shield className="h-6 w-6 text-white" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">Roam Dominion</h1>
-              <p className="text-slate-400 text-xs">Super Admin Portal</p>
+              <h1 className="text-xl font-bold tracking-tight text-[#0f172a]">Dominion</h1>
+              <p className="text-xs text-[#64748b]">Roam Admin Console</p>
             </div>
           </div>
+          <p className="mb-4 text-center text-xs font-medium text-[#64748b]">1 Sign in · 2 Authenticator</p>
 
-          <div className="bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 rounded-2xl p-8">
+          <div className="rounded-2xl border border-[#e2e8f0] bg-[#ffffff] p-8">
             <div className="flex items-center gap-3 mb-6">
               <div className="p-2 rounded-lg bg-blue-500/20">
                 <KeyRound className="w-5 h-5 text-blue-400" />
               </div>
               <div>
-                <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
-                  {forgotMode ? 'Reset Password' : 'Admin Login'}
+                <h2 className="text-lg font-semibold text-[#0f172a]">
+                  {forgotMode ? 'Reset Password' : 'Sign in'}
                 </h2>
-                <p className="text-slate-400 text-sm">
+                <p className="text-sm text-[#64748b]">
                   {forgotMode
                     ? 'We will email a link that opens on roamdominion.co'
-                    : 'Sign in to the admin portal'}
+                    : 'Then use the code from your authenticator app.'}
                 </p>
               </div>
             </div>
@@ -169,27 +155,27 @@ export function AdminLoginPage() {
 
             <form onSubmit={forgotMode ? handleForgotPassword : handleLogin} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Email</label>
+                <label className="mb-1.5 block text-sm font-medium text-[#334155]">Email</label>
                 <input
                   type="email"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
                   placeholder="admin@roamdominion.co"
                   required
-                  className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-lg text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50 text-sm dark:bg-slate-800 dark:border-slate-700 dark:text-white dark:placeholder:text-slate-500"
+                  className="w-full rounded-lg border border-[#cbd5e1] bg-[#ffffff] px-3 py-2.5 text-sm text-[#0f172a] placeholder:text-[#94a3b8] focus:border-dominion-blue focus:outline-none focus:ring-2 focus:ring-dominion-blue/40"
                 />
               </div>
 
               {!forgotMode && (
               <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Password</label>
+                <label className="mb-1.5 block text-sm font-medium text-[#334155]">Password</label>
                 <input
                   type="password"
                   value={password}
                   onChange={e => setPassword(e.target.value)}
                   placeholder="Enter password"
                   required
-                  className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-lg text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50 text-sm dark:bg-slate-800 dark:border-slate-700 dark:text-white dark:placeholder:text-slate-500"
+                  className="w-full rounded-lg border border-[#cbd5e1] bg-[#ffffff] px-3 py-2.5 text-sm text-[#0f172a] placeholder:text-[#94a3b8] focus:border-dominion-blue focus:outline-none focus:ring-2 focus:ring-dominion-blue/40"
                 />
               </div>
               )}
@@ -198,7 +184,7 @@ export function AdminLoginPage() {
                 <button
                   type="button"
                   onClick={() => { setForgotMode(true); setError(null); setSuccess(null); }}
-                  className="text-sm text-amber-600 hover:text-amber-500 dark:text-amber-400"
+                  className="text-sm text-dominion-blue"
                 >
                   Forgot password?
                 </button>
@@ -217,7 +203,7 @@ export function AdminLoginPage() {
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm"
+                className="flex w-full items-center justify-center gap-2 rounded-lg bg-dominion-blue py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {isLoading ? (
                   <>
@@ -234,17 +220,12 @@ export function AdminLoginPage() {
             </>
             )}
 
-            <div className="mt-6 pt-4 border-t border-slate-200 dark:border-slate-800 text-center">
-              <a
-                href="/"
-                className="text-slate-500 hover:text-slate-300 text-sm transition-colors"
-              >
-                Back to home
-              </a>
+            <div className="mt-6 border-t border-slate-200 pt-4 text-center">
+              <a href="/" className="text-sm text-slate-500">Back to home</a>
+              <p className="mt-2 font-mono text-xs text-slate-400">roamfleet.co/admin</p>
             </div>
           </div>
         </div>
-      </div>
     </div>
   );
 }

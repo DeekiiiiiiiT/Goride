@@ -1,6 +1,7 @@
 import { assertEquals, assertNotEquals } from "jsr:@std/assert";
 import {
   buildFuelWeekHashParts,
+  fuelSnapshotMoneyKey,
   fuelSnapshotWritePlan,
   shouldReuseFuelSnapshot,
   snapshotRoutingFailed,
@@ -105,6 +106,35 @@ Deno.test("a failed route snapshot is retried, and a second failure is not copie
     savedRoutingFailed: false,
     freshRoutingFailed: false,
   }), true);
+});
+
+Deno.test("same fuel totals stay lockable when only the fingerprint moved", () => {
+  const saved = {
+    totalSpend: 30300,
+    reports: [{
+      vehicleId: "5179KZ",
+      totalGasCardCost: 30300,
+      driverShare: 2631.694703810315,
+      companyShare: 27668.305296189686,
+      miscellaneousCost: 0,
+    }],
+  };
+  const rebuilt = {
+    totalSpend: 30300.004,
+    reports: [{
+      vehicleId: "5179KZ",
+      totalGasCardCost: "30300",
+      driverShare: 2631.69,
+      companyShare: 27668.31,
+      miscellaneousCost: 0,
+    }],
+  };
+  assertEquals(fuelSnapshotMoneyKey(saved), fuelSnapshotMoneyKey(rebuilt));
+  const moved = {
+    ...rebuilt,
+    reports: [{ ...rebuilt.reports[0], driverShare: 2700 }],
+  };
+  assertNotEquals(fuelSnapshotMoneyKey(saved), fuelSnapshotMoneyKey(moved));
 });
 
 Deno.test("fuel week hash ignores distance computed_at", () => {

@@ -1,20 +1,14 @@
 import {
   LayoutDashboard,
-  Users,
   Shield,
   Car,
-  UserCog,
   ClipboardList,
   Database,
   BarChart3,
   MapPin,
   Info,
   Globe,
-  Zap,
-  UserPlus,
-  Megaphone,
   AlertTriangle,
-  HardDrive,
   Inbox,
   Wrench,
   Layers,
@@ -23,13 +17,7 @@ import {
   KeyRound,
   ShieldAlert,
   Receipt,
-  Utensils,
-  Navigation,
-  Radio,
   Settings,
-  ExternalLink,
-  Building2,
-  Truck,
   Search,
   Store,
   Brain,
@@ -71,39 +59,6 @@ export const GLOBAL_SETTINGS_CHILDREN: NavChild[] = [
   { id: 'global-settings-danger', label: 'Danger Zone', icon: AlertTriangle },
 ];
 
-export const FLEET_SETTINGS_CHILDREN: NavChild[] = [
-  { id: 'fleet-settings-general', label: 'General', icon: Globe },
-  { id: 'fleet-settings-features', label: 'Features', icon: Zap },
-  { id: 'fleet-settings-registration', label: 'Registration', icon: UserPlus },
-  { id: 'fleet-settings-security', label: 'Security', icon: Shield },
-  { id: 'fleet-settings-announcements', label: 'Announcements', icon: Megaphone },
-];
-
-export const ENTERPRISE_SETTINGS_CHILDREN: NavChild[] = [
-  { id: 'enterprise-settings-general', label: 'General', icon: Globe },
-  { id: 'enterprise-settings-features', label: 'Features', icon: Zap },
-  { id: 'enterprise-settings-registration', label: 'Registration', icon: UserPlus },
-  { id: 'enterprise-settings-security', label: 'Security', icon: Shield },
-  { id: 'enterprise-settings-announcements', label: 'Announcements', icon: Megaphone },
-];
-
-/** @deprecated Legacy IDs — use GLOBAL/FLEET/ENTERPRISE settings children */
-export const SETTINGS_CHILDREN: NavChild[] = [
-  { id: 'settings-general', label: 'General', icon: Globe },
-  { id: 'settings-features', label: 'Features', icon: Zap },
-  { id: 'settings-registration', label: 'Registration', icon: UserPlus },
-  { id: 'settings-security', label: 'Security', icon: Shield },
-  { id: 'settings-announcements', label: 'Announcements', icon: Megaphone },
-  { id: 'settings-danger', label: 'Danger Zone', icon: AlertTriangle },
-];
-
-export const ROAM_ENTERPRISE_CHILDREN: NavChild[] = [
-  { id: 'enterprise-overview', label: 'Overview', icon: BarChart3 },
-  { id: 'enterprise-customers', label: 'Customer Accounts', icon: Users },
-  { id: 'enterprise-team-members', label: 'Team Members', icon: UserCog },
-  ...ENTERPRISE_SETTINGS_CHILDREN,
-];
-
 export const FUEL_MANAGEMENT_CHILDREN: NavChild[] = [
   { id: 'fuel-jaa-cards', label: 'JAA Gas Cards', icon: CreditCard },
   { id: 'fuel-brain', label: 'Fuel Brain', icon: Brain },
@@ -111,8 +66,6 @@ export const FUEL_MANAGEMENT_CHILDREN: NavChild[] = [
   { id: 'fuel-stations', label: 'Station Database', icon: Database },
   { id: 'plug-places', label: 'Places Review', icon: MapPin },
   { id: 'fuel-analytics', label: 'Station Analytics', icon: BarChart3 },
-  { id: 'fuel-cost-analytics', label: 'Fuel Cost Analytics', icon: Gauge },
-  { id: 'fuel-evidence-bridge', label: 'Evidence Bridge', icon: ShieldCheck },
 ];
 
 export const TOLL_MANAGEMENT_CHILDREN: NavChild[] = [
@@ -120,7 +73,6 @@ export const TOLL_MANAGEMENT_CHILDREN: NavChild[] = [
   { id: 'toll-stations', label: 'Toll Database', icon: MapPin },
   { id: 'toll-info', label: 'Toll Info', icon: Info },
   { id: 'toll-settings', label: 'Toll Settings', icon: Settings },
-  { id: 'toll-live-monitor', label: 'Live Toll Monitor', icon: Radio },
 ];
 
 export const WORLD_MAPS_CHILDREN: NavChild[] = [
@@ -158,37 +110,6 @@ export const ACCOUNTING_VENDOR_CHILDREN: NavChild[] = [
   { id: 'pending-vendor-requests', label: 'Pending vendor requests', icon: Inbox },
 ];
 
-export const ROAM_FLEET_CHILDREN: NavChild[] = [
-  { id: 'fleet-overview', label: 'Overview', icon: BarChart3 },
-  { id: 'fleet-customers', label: 'Customer Accounts', icon: Users },
-  { id: 'fleet-team-members', label: 'Team Members', icon: UserCog },
-  ...FLEET_SETTINGS_CHILDREN,
-  { id: 'fleet-admin-link', label: 'Open Fleet Admin →', icon: ExternalLink, href: 'https://roamfleet.co/admin' },
-];
-
-export const ROAM_DASH_CHILDREN: NavChild[] = [
-  { id: 'roam-dash-overview', label: 'Overview', icon: BarChart3 },
-  { id: 'dash-merchants', label: 'Merchants', icon: Store },
-  { id: 'roam-dash-admin-link', label: 'Open Rush Admin →', icon: ExternalLink, href: 'https://roamrush.app/admin' },
-];
-
-export const ROAM_RIDES_CHILDREN: NavChild[] = [
-  { id: 'roam-rides-overview', label: 'Overview', icon: BarChart3 },
-  { id: 'rides-users', label: 'User Management', icon: Users },
-  { id: 'roam-rides-admin-link', label: 'Open Rides Admin →', icon: ExternalLink, href: 'https://roam-s.co/admin' },
-];
-
-export const ROAM_DRIVER_CHILDREN: NavChild[] = [
-  { id: 'roam-driver-overview', label: 'Overview', icon: BarChart3 },
-  { id: 'driver-users', label: 'User Management', icon: Users },
-  { id: 'roam-driver-admin-link', label: 'Open Driver Admin →', icon: ExternalLink, href: 'https://roamdriver.co/admin' },
-];
-
-export const ROAM_HAUL_CHILDREN: NavChild[] = [
-  { id: 'roam-haul-overview', label: 'Overview', icon: BarChart3 },
-  { id: 'roam-haul-admin-link', label: 'Open Haul Admin →', icon: ExternalLink, href: 'https://roamhaul.co/admin' },
-];
-
 export const API_CENTER_CHILDREN: NavChild[] = [
   { id: 'api-center-overview', label: 'Overview', icon: Gauge },
   { id: 'api-center-usage', label: 'Usage & Costs', icon: BarChart3 },
@@ -199,44 +120,16 @@ export const API_CENTER_CHILDREN: NavChild[] = [
   { id: 'api-center-billing', label: 'Provider Billing', icon: Receipt },
 ];
 
-export const DATABASE_MANAGEMENT_ITEM = { id: 'db-management', label: 'Database Management', icon: Database };
-
 const GLOBAL_SETTINGS_PAGES = GLOBAL_SETTINGS_CHILDREN.map((c) => c.id);
-const FLEET_SETTINGS_PAGES = FLEET_SETTINGS_CHILDREN.map((c) => c.id);
-const ENTERPRISE_SETTINGS_PAGES = ENTERPRISE_SETTINGS_CHILDREN.map((c) => c.id);
-const LEGACY_SETTINGS_PAGES = SETTINGS_CHILDREN.map((c) => c.id);
 
-/** Customer operations and Roam's own tax books. Owner only until each screen moves. */
+/** Roam's own tax books. Owner only. */
 const OWNER_ONLY_PAGES = [
   'global-identity',
   'activity-log',
-  'enterprise-overview',
-  'enterprise-customers',
-  'enterprise-team-members',
-  'fleet-overview',
-  'fleet-customers',
-  'fleet-team-members',
-  'driver-user-detail',
-  'rider-user-detail',
-  'roam-driver-overview',
-  'driver-users',
-  'roam-rides-overview',
-  'rides-users',
-  'roam-haul-overview',
-  'roam-dash-overview',
-  'dash-merchants',
-  'fuel-analytics',
-  'fuel-cost-analytics',
-  'fuel-evidence-bridge',
-  'toll-live-monitor',
+  'platform-team',
   'gct-entities',
   'gct-ledger',
   'gct-remittance',
-  'db-management',
-  'db-settings',
-  'unified-ledger',
-  ...FLEET_SETTINGS_PAGES,
-  ...ENTERPRISE_SETTINGS_PAGES,
 ];
 
 const SHARED_PLATFORM_PAGES = [
@@ -249,12 +142,12 @@ const SHARED_PLATFORM_PAGES = [
   'apps-directory',
   'change-requests',
   'platform-ops',
-  'platform-team',
   'matching-brain',
   'fuel-jaa-cards',
   'fuel-brain',
   'fuel-prices',
   'fuel-stations',
+  'fuel-analytics',
   'plug-places',
   'toll-brain',
   'toll-stations',
@@ -284,7 +177,6 @@ const SHARED_PLATFORM_PAGES = [
 
 export function pageAllowedForRole(role: string | null | undefined, pageId: string): boolean {
   if (role === 'platform_owner') {
-    if (pageId.startsWith('db-biz-') || pageId.startsWith('db-customer-')) return true;
     const ownerPages = PLATFORM_ROLE_PAGES.platform_owner ?? [];
     return ownerPages.includes(pageId);
   }
@@ -304,12 +196,11 @@ export const PLATFORM_ROLE_PAGES: Record<string, string[]> = {
     'api-center-budgets',
     'api-center-logs',
     'api-center-billing',
-    'settings',
-    ...LEGACY_SETTINGS_PAGES,
   ],
   platform_support: [...SHARED_PLATFORM_PAGES],
   platform_analyst: [
     'dashboard',
+    ...SHARED_PLATFORM_PAGES,
     'api-center',
     'api-center-overview',
     'api-center-usage',
@@ -320,26 +211,45 @@ export const PLATFORM_ROLE_PAGES: Record<string, string[]> = {
 
 /** Legacy page IDs → new routes */
 export const LEGACY_PAGE_REDIRECTS: Record<string, string> = {
-  customers: 'enterprise-customers',
+  customers: 'dashboard',
+  'enterprise-customers': 'dashboard',
+  'fleet-customers': 'dashboard',
+  'team-members': 'dashboard',
+  'enterprise-team-members': 'dashboard',
+  'fleet-team-members': 'dashboard',
+  drivers: 'dashboard',
+  'driver-users': 'dashboard',
+  'driver-user-detail': 'dashboard',
+  'rides-users': 'dashboard',
+  'rider-user-detail': 'dashboard',
+  'dash-merchants': 'dashboard',
+  'roam-dash-merchants': 'dashboard',
+  'enterprise-overview': 'dashboard',
+  'fleet-overview': 'dashboard',
+  'roam-dash-overview': 'dashboard',
+  'roam-rides-overview': 'dashboard',
+  'roam-driver-overview': 'dashboard',
+  'roam-haul-overview': 'dashboard',
+  'db-management': 'dashboard',
+  'db-settings': 'dashboard',
+  'unified-ledger': 'dashboard',
+  'fuel-cost-analytics': 'fuel-analytics',
+  'fuel-evidence-bridge': 'fuel-analytics',
   'parts-sourcing': 'parts-catalog',
-  'team-members': 'enterprise-team-members',
-  drivers: 'driver-users',
-  'roam-dash-merchants': 'dash-merchants',
   settings: 'global-settings-general',
   'settings-general': 'global-settings-general',
-  'settings-features': 'fleet-settings-features',
-  'settings-registration': 'fleet-settings-registration',
+  'settings-features': 'global-settings-general',
+  'settings-registration': 'global-settings-general',
   'settings-security': 'global-settings-security',
-  'settings-announcements': 'fleet-settings-announcements',
+  'settings-announcements': 'global-settings-general',
   'settings-danger': 'global-settings-danger',
   'expense-categories': 'vendor-database',
-  // Silent Attach lives under Station Database → Resolution Queue
   'fuel-silent-attach': 'fuel-stations',
-  // Fleet customer screens removed from Dominion — send bookmarks to Live Monitor
-  'toll-analytics': 'toll-live-monitor',
-  'toll-logs': 'toll-live-monitor',
-  'tag-inventory': 'toll-live-monitor',
-  'toll-tags': 'toll-live-monitor',
+  'toll-analytics': 'toll-stations',
+  'toll-logs': 'toll-stations',
+  'tag-inventory': 'toll-stations',
+  'toll-tags': 'toll-stations',
+  'toll-live-monitor': 'toll-stations',
 };
 
 /** Two-level Dominion menu. Customer apps are not listed here. */
@@ -365,7 +275,7 @@ export const DOMINION_SECTIONS: { id: string; label: string; icon: typeof Layout
         id: 'fuel-home',
         label: 'Fuel',
         icon: Fuel,
-        activeWhen: ['fuel-stations', 'fuel-prices', 'fuel-jaa-cards'],
+        activeWhen: ['fuel-stations', 'fuel-prices', 'fuel-analytics', 'fuel-jaa-cards'],
       },
       {
         id: 'tolls-home',
@@ -434,24 +344,7 @@ export const DOMINION_SECTIONS: { id: string; label: string; icon: typeof Layout
   },
 ];
 
-export const SECTION_META = {
-  platform: { label: 'Platform', icon: Shield },
-  businessSegments: { label: 'Business Segments', icon: Layers },
-  enterprise: { label: 'Roam Enterprise', icon: Building2 },
-  fleet: { label: 'Roam Fleet', icon: Truck },
-  dash: { label: 'Roam Rush', icon: Utensils },
-  rides: { label: 'Roam Rides', icon: Navigation },
-  haul: { label: 'Roam Haul', icon: Truck },
-  driver: { label: 'Roam Driver', icon: Car },
-  accounting: { label: 'Accounting', icon: Receipt },
-  gct: { label: 'GCT', icon: Scale },
-  accountingVendors: { label: 'Vendors', icon: Store },
-} as const;
-
 export function settingsTabFromPageId(pageId: string): string | null {
   if (pageId.startsWith('global-settings-')) return pageId.replace('global-settings-', '');
-  if (pageId.startsWith('fleet-settings-')) return pageId.replace('fleet-settings-', '');
-  if (pageId.startsWith('enterprise-settings-')) return pageId.replace('enterprise-settings-', '');
-  if (pageId.startsWith('settings-')) return pageId.replace('settings-', '');
   return null;
 }

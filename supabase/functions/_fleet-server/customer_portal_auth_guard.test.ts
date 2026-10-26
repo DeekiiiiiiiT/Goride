@@ -39,3 +39,17 @@ Deno.test("access lookup does not read the fleet schema", async () => {
     throw new Error('rbac_middleware.ts must read fleet_workforce_memberships, not schema("fleet")');
   }
 });
+
+Deno.test("health and master saves do not open the fleet schema", async () => {
+  const files = [
+    new URL("./register_residual_monolith_routes.tsx", import.meta.url),
+    new URL("./fleet_table_dual_write.ts", import.meta.url),
+    new URL("../platform-catalog/index.ts", import.meta.url),
+  ];
+  for (const file of files) {
+    const text = await Deno.readTextFile(file);
+    if (text.includes('schema("fleet")') || text.includes('schema: "fleet"')) {
+      throw new Error(`${file.pathname} must use a public view, not the fleet schema`);
+    }
+  }
+});

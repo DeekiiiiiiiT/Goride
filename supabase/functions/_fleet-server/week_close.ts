@@ -1897,6 +1897,31 @@ async function prepareWeekCloseBody(
   const preview = await previewWeekClose(orgId, week, {
     serviceLine: normalizeWeekCloseServiceLine(opts?.serviceLine),
   });
+  // The step rail reads the saved blocker list, not this preview. Refresh it
+  // or a cleared cash gap and a signed earnings statement stay "in progress".
+  try {
+    const { publishWeekDesk } = await import("./recon_routes.ts");
+    await publishWeekDesk(orgId, normalizeWeekCloseServiceLine(opts?.serviceLine), week, actorId);
+  } catch (e) {
+    console.warn("[week_close] desk refresh failed", e instanceof Error ? e.message : e);
+  }
+  try {
+    const { writeDriverWeekBlockers } = await import("./recon_week_blockers.ts");
+    const line = normalizeWeekCloseServiceLine(opts?.serviceLine);
+    const { data: driverRows, error: driverErr } = await sb()
+      .from("driver_financial_periods")
+      .select("driver_id")
+      .eq("organization_id", orgId)
+      .eq("period_anchor", week);
+    if (driverErr) throw new Error(driverErr.message);
+    for (const driverRow of driverRows ?? []) {
+      const driverId = String(driverRow.driver_id || "");
+      if (!driverId) continue;
+      await writeDriverWeekBlockers(orgId, week, driverId, line);
+    }
+  } catch (e) {
+    console.warn("[week_close] blocker refresh failed", e instanceof Error ? e.message : e);
+  }
   preview.tollPeriodSealDriftCount = periodSync.preRebuildTollDriftCount;
   preview.periodsRebuiltAfterSeal = periodSync.rebuilt;
   if (periodSync.failedDriverIds.length > 0) {

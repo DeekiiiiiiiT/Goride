@@ -17,6 +17,7 @@ import {
   isYmdInFuelWeek,
   type PeriodWeekOption,
 } from './fuelWeekPeriod';
+import { classifyFuelMiscResidual } from '@roam/fuel-core';
 import { FUEL_SPEND_EPS } from './fuelMoneyEpsilon';
 import {
   buildFuelVehicleSnapshots,
@@ -122,20 +123,20 @@ export function buildFuelStepCounts(input: BuildFuelStepCountsInput): Record<Fue
       counts['policy-check'].informational += 1;
     }
 
-    // H2: negative misc (over-explained) is a data-quality signal; positive blocks leakage
-    const miscAbs = Math.abs(Number(v.misc) || 0);
-    if (miscAbs > FUEL_SPEND_EPS) {
-      if (v.misc < 0) {
-        if (leakageReviewed) {
-          counts['data-quality'].informational += 1;
-        } else {
-          counts['data-quality'].actionable += 1;
-        }
-      } else if (leakageReviewed) {
-        counts['leakage-gap'].informational += 1;
-      } else {
-        counts['leakage-gap'].actionable += 1;
+    // A negative leftover inside the allowed band is not unfinished work.
+    // Counting every one blocked Data quality, which locked the later steps,
+    // so Finalize jumped back to a step that was already done.
+    const misc = Number(v.misc) || 0;
+    if (misc < -FUEL_SPEND_EPS) {
+      const beyondBand =
+        classifyFuelMiscResidual(Number(v.totalSpend) || 0, misc) === 'over_explained';
+      if (beyondBand) {
+        if (leakageReviewed) counts['data-quality'].informational += 1;
+        else counts['data-quality'].actionable += 1;
       }
+    } else if (misc > FUEL_SPEND_EPS) {
+      if (leakageReviewed) counts['leakage-gap'].informational += 1;
+      else counts['leakage-gap'].actionable += 1;
     }
 
     if (v.totalSpend > FUEL_SPEND_EPS && !v.isFinalized) {

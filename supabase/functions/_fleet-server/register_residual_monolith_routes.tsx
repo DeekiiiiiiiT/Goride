@@ -16,6 +16,7 @@ import { dataUrlFromFile, odometerVisionBody, parseOdometerVision } from "../_sh
 import { GoogleGenerativeAI } from "npm:@google/generative-ai";
 import * as kv from "./kv_store.tsx";
 import { listStationRecords } from "./fleet_table_read_thru.ts";
+import { dominionCan } from "../../../packages/auth-client/src/dominionPermissions.ts";
 import { stampDriverHomePin } from "./fuel_shift_km.ts";
 import { splitCashAwaitingSaveBlocked } from "../../../packages/fuel-core/src/fuelSplitCashLifecycle.ts";
 import * as cache from "./cache.ts";
@@ -8174,8 +8175,8 @@ export function registerResidualMonolithRoutes(app: Hono) {
       // Only platform_owner (superadmin) can invite platform staff
       const rbacUser = c.get('rbacUser') as any;
       const callerRole = rbacUser?.resolvedRole || rbacUser?.role;
-      if (callerRole !== 'platform_owner' && callerRole !== 'superadmin') {
-        return c.json({ error: "Only the platform owner can invite platform staff" }, 403);
+      if (!dominionCan(callerRole, "staff.manage")) {
+        return c.json({ error: "Forbidden", message: "You cannot change that" }, 403);
       }
 
       const { email, name, role } = await c.req.json();
@@ -8894,8 +8895,8 @@ export function registerResidualMonolithRoutes(app: Hono) {
     try {
       const rbacUser = c.get('rbacUser') as any;
       const callerRole = rbacUser?.resolvedRole || rbacUser?.role;
-      if (callerRole !== 'platform_owner' && callerRole !== 'superadmin') {
-        return c.json({ error: "Only the platform owner can view platform team" }, 403);
+      if (!dominionCan(callerRole, "staff.manage")) {
+        return c.json({ error: "Forbidden", message: "You cannot change that" }, 403);
       }
 
       const users = await listAllAuthUsers((args) => supabase.auth.admin.listUsers(args));
@@ -8927,8 +8928,8 @@ export function registerResidualMonolithRoutes(app: Hono) {
     try {
       const rbacUser = c.get('rbacUser') as any;
       const callerRole = rbacUser?.resolvedRole || rbacUser?.role;
-      if (callerRole !== 'platform_owner' && callerRole !== 'superadmin') {
-        return c.json({ error: "Only the platform owner can change platform roles" }, 403);
+      if (!dominionCan(callerRole, "staff.manage")) {
+        return c.json({ error: "Forbidden", message: "You cannot change that" }, 403);
       }
 
       const targetId = c.req.param('id');
@@ -9006,8 +9007,8 @@ export function registerResidualMonolithRoutes(app: Hono) {
     try {
       const rbacUser = c.get('rbacUser') as any;
       const callerRole = rbacUser?.resolvedRole || rbacUser?.role;
-      if (callerRole !== 'platform_owner' && callerRole !== 'superadmin') {
-        return c.json({ error: "Only the platform owner can remove platform staff" }, 403);
+      if (!dominionCan(callerRole, "staff.manage")) {
+        return c.json({ error: "Forbidden", message: "You cannot change that" }, 403);
       }
 
       const targetId = c.req.param('id');
@@ -11221,8 +11222,8 @@ export function registerResidualMonolithRoutes(app: Hono) {
   function assertVehicleCatalogAccess(c: any) {
     const rbacUser = c.get("rbacUser") as any;
     const callerRole = rbacUser?.resolvedRole || rbacUser?.role;
-    if (callerRole !== "platform_owner" && callerRole !== "superadmin" && callerRole !== "platform_support") {
-      return c.json({ error: "Only platform owner or support can manage the vehicle catalog" }, 403);
+    if (!dominionCan(callerRole, "catalog.write")) {
+      return c.json({ error: "Forbidden", message: "You cannot change that" }, 403);
     }
     return null;
   }
@@ -13946,71 +13947,23 @@ export function registerResidualMonolithRoutes(app: Hono) {
     }
   });
 
-  // POST /admin/fuel-stations — add a new fuel station
+  // POST /admin/fuel-stations — retired. Dominion saves through the catalog.
   app.post("/make-server-37f42386/admin/fuel-stations", async (c) => {
-    try {
-      const auth = await verifySuperadmin(c);
-      if (auth instanceof Response) return auth;
-
-      const station = await c.req.json();
-      if (!station.id) station.id = crypto.randomUUID();
-      if (!station.name) return c.json({ error: "Station name is required" }, 400);
-
-      // Ensure required fields have defaults
-      station.status = station.status || "verified";
-      station.brand = station.brand || "";
-      station.address = station.address || "";
-      station.location = station.location || { lat: 0, lng: 0 };
-      station.stats = station.stats || { totalVisits: 0, lastVisited: null };
-      station.amenities = station.amenities || [];
-      station.dataSource = station.dataSource || "manual";
-      station.contactInfo = station.contactInfo || {};
-      station.createdAt = station.createdAt || new Date().toISOString();
-
-      await kv.set(`station:${station.id}`, stampOrg(station, c));
-      return c.json({ success: true, data: station });
-    } catch (e: any) {
-      console.log(`admin/fuel-stations POST error: ${e.message}`);
-      return c.json({ error: e.message }, 500);
-    }
+    const auth = await verifySuperadmin(c);
+    if (auth instanceof Response) return auth;
+    return c.json({ error: "Save stations from the Dominion catalog" }, 410);
   });
 
-  // PUT /admin/fuel-stations/:id — update a fuel station
   app.put("/make-server-37f42386/admin/fuel-stations/:id", async (c) => {
-    try {
-      const auth = await verifySuperadmin(c);
-      if (auth instanceof Response) return auth;
-
-      const id = c.req.param("id");
-      const updates = await c.req.json();
-      const existing = await kv.get(`station:${id}`);
-      if (!existing) return c.json({ error: "Station not found" }, 404);
-
-      const merged = { ...existing, ...updates, id };
-      await kv.set(`station:${id}`, stampOrg(merged, c));
-      return c.json({ success: true, data: merged });
-    } catch (e: any) {
-      console.log(`admin/fuel-stations PUT error: ${e.message}`);
-      return c.json({ error: e.message }, 500);
-    }
+    const auth = await verifySuperadmin(c);
+    if (auth instanceof Response) return auth;
+    return c.json({ error: "Save stations from the Dominion catalog" }, 410);
   });
 
-  // DELETE /admin/fuel-stations/:id — delete a fuel station
   app.delete("/make-server-37f42386/admin/fuel-stations/:id", async (c) => {
-    try {
-      const auth = await verifySuperadmin(c);
-      if (auth instanceof Response) return auth;
-
-      const id = c.req.param("id");
-      const existing = await kv.get(`station:${id}`);
-      if (!existing) return c.json({ error: "Station not found" }, 404);
-
-      await kv.del(`station:${id}`);
-      return c.json({ success: true });
-    } catch (e: any) {
-      console.log(`admin/fuel-stations DELETE error: ${e.message}`);
-      return c.json({ error: e.message }, 500);
-    }
+    const auth = await verifySuperadmin(c);
+    if (auth instanceof Response) return auth;
+    return c.json({ error: "Save stations from the Dominion catalog" }, 410);
   });
 
   // ---------------------------------------------------------------------------

@@ -84,8 +84,9 @@ export async function computeEarningsEngineAmountsForWeek(
       gross: round2(share.earningsGross),
     };
   } catch (e) {
-    console.warn("[sealEarningsWeek] engine compute failed", driverId, periodAnchor, e);
-    return null;
+    const message = e instanceof Error ? e.message : String(e);
+    console.warn("[sealEarningsWeek] engine compute failed", driverId, periodAnchor, message);
+    throw new Error(`Earnings could not be signed for ${driverId} ${periodAnchor}: ${message}`);
   }
 }
 

@@ -128,7 +128,13 @@ jobs:
         run: node scripts/admin-reachability.mjs
 
       - name: Catalog contract
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: node scripts/catalog-contract.mjs
+
+      - name: Dominion Stitch contract
+        run: node scripts/stitch-contract.mjs
 
       - name: Typecheck admin
         run: node scripts/admin-typecheck-baseline.mjs

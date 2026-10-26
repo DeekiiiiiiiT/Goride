@@ -139,11 +139,144 @@ export async function requestPlatformVendor(
   return { vendor, alreadyExists: false };
 }
 
+type CategoryWrite =
+  | { ok: true; data: ExpenseHubCategory }
+  | { ok: false; status: number; error: string };
+
+export async function createPlatformCategory(body: {
+  id?: string;
+  label?: string;
+  name?: string;
+  value?: string;
+  notes?: string;
+}): Promise<CategoryWrite> {
+  const label = String(body.label || body.name || "").trim();
+  if (!label) return { ok: false, status: 400, error: "Category name is required" };
+  const slugParts = label.split(/[^a-zA-Z0-9]+/).filter(Boolean);
+  const autoValue = slugParts
+    .map((p: string) => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase())
+    .join("");
+  const value = String(body.value || autoValue || "Custom").trim();
+  if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(value)) {
+    return { ok: false, status: 400, error: "Category code must start with a letter (letters/numbers/_ only)" };
+  }
+  if (BUILT_IN_CATEGORIES.some((b) => b.value.toLowerCase() === value.toLowerCase())) {
+    return { ok: false, status: 409, error: "That category already exists in the standard list" };
+  }
+  const existing = await listPlatformCategories();
+  if (existing.some((row) => row.isActive !== false && String(row.value || "").toLowerCase() === value.toLowerCase())) {
+    return { ok: false, status: 409, error: "A category with that code already exists" };
+  }
+  const category: ExpenseHubCategory = {
+    id: body.id || crypto.randomUUID(),
+    value,
+    label,
+    notes: body.notes ? String(body.notes).trim() : undefined,
+    isSystem: false,
+    isActive: true,
+    createdAt: nowIso(),
+    updatedAt: nowIso(),
+  };
+  await kv.set(`${CATEGORY_PREFIX}${category.id}`, category);
+  return { ok: true, data: category };
+}
+
+export async function updatePlatformCategory(
+  id: string,
+  body: { label?: string; notes?: string; isActive?: boolean },
+): Promise<CategoryWrite> {
+  const label = body.label != null ? String(body.label).trim() : "";
+  if (id.startsWith("system:")) {
+    const value = id.slice("system:".length);
+    const builtIn = BUILT_IN_CATEGORIES.find((b) => b.value === value);
+    if (!builtIn) return { ok: false, status: 404, error: "Category not found" };
+    const nextLabel = label || builtIn.label;
+    if (!nextLabel) return { ok: false, status: 400, error: "Category name is required" };
+    const all = await listPlatformCategories();
+    const existingOverride = all.find((row) => String(row.value || "").toLowerCase() === value.toLowerCase());
+    const now = nowIso();
+    const next: ExpenseHubCategory = existingOverride
+      ? {
+          ...existingOverride,
+          label: nextLabel,
+          notes: body.notes !== undefined ? String(body.notes).trim() || undefined : existingOverride.notes,
+          isActive: body.isActive !== undefined ? Boolean(body.isActive) : existingOverride.isActive !== false,
+          updatedAt: now,
+        }
+      : {
+          id: crypto.randomUUID(),
+          value: builtIn.value,
+          label: nextLabel,
+          notes: body.notes !== undefined ? String(body.notes).trim() || undefined : undefined,
+          isSystem: false,
+          isActive: true,
+          createdAt: now,
+          updatedAt: now,
+        };
+    await kv.set(`${CATEGORY_PREFIX}${next.id}`, next);
+    return { ok: true, data: next };
+  }
+  const existing = (await kv.get(`${CATEGORY_PREFIX}${id}`)) as ExpenseHubCategory | null;
+  if (!existing) return { ok: false, status: 404, error: "Category not found" };
+  const nextLabel = label || existing.label;
+  if (!nextLabel) return { ok: false, status: 400, error: "Category name is required" };
+  const next: ExpenseHubCategory = {
+    ...existing,
+    label: nextLabel,
+    notes: body.notes !== undefined ? String(body.notes).trim() || undefined : existing.notes,
+    isActive: body.isActive !== undefined ? Boolean(body.isActive) : existing.isActive !== false,
+    updatedAt: nowIso(),
+  };
+  await kv.set(`${CATEGORY_PREFIX}${id}`, next);
+  return { ok: true, data: next };
+}
+
+export async function retirePlatformCategory(id: string): Promise<CategoryWrite> {
+  if (id.startsWith("system:")) {
+    const value = id.slice("system:".length);
+    const builtIn = BUILT_IN_CATEGORIES.find((b) => b.value === value);
+    if (!builtIn) return { ok: false, status: 404, error: "Category not found" };
+    const all = await listPlatformCategories();
+    const existingOverride = all.find((row) => String(row.value || "").toLowerCase() === value.toLowerCase());
+    const now = nowIso();
+    const next: ExpenseHubCategory = existingOverride
+      ? { ...existingOverride, isActive: false, updatedAt: now }
+      : {
+          id: crypto.randomUUID(),
+          value: builtIn.value,
+          label: builtIn.label,
+          isSystem: false,
+          isActive: false,
+          createdAt: now,
+          updatedAt: now,
+        };
+    await kv.set(`${CATEGORY_PREFIX}${next.id}`, next);
+    return { ok: true, data: next };
+  }
+  const existing = (await kv.get(`${CATEGORY_PREFIX}${id}`)) as ExpenseHubCategory | null;
+  if (!existing) return { ok: false, status: 404, error: "Category not found" };
+  const next: ExpenseHubCategory = { ...existing, isActive: false, updatedAt: nowIso() };
+  await kv.set(`${CATEGORY_PREFIX}${id}`, next);
+  return { ok: true, data: next };
+}
+
 type VerifyFn = (
   c: Context,
 ) => Promise<{ userId: string; email: string; name: string } | Response>;
 
 export function registerPlatformVendorRoutes(app: Hono, verifySuperadmin: VerifyFn) {
+  app.use("/make-server-37f42386/admin/platform-vendors/*", async (c, next) => {
+    if (c.req.method === "GET" || c.req.path.endsWith("/migrate-legacy")) return next();
+    const auth = await verifySuperadmin(c);
+    if (auth instanceof Response) return auth;
+    return c.json({ error: "Save vendors from the Dominion catalog" }, 410);
+  });
+  app.post(ADMIN, async (c: Context) => {
+    const auth = await verifySuperadmin(c);
+    if (auth instanceof Response) return auth;
+    return c.json({ error: "Save vendors from the Dominion catalog" }, 410);
+  });
+
   // ── Super Admin: vendors ───────────────────────────────────────────────
   app.get(ADMIN, async (c: Context) => {
     const auth = await verifySuperadmin(c);
@@ -467,142 +600,19 @@ export function registerPlatformVendorRoutes(app: Hono, verifySuperadmin: Verify
   app.post(ADMIN_CAT, async (c: Context) => {
     const auth = await verifySuperadmin(c);
     if (auth instanceof Response) return auth;
-    const body = await c.req.json();
-    const label = String(body.label || body.name || "").trim();
-    if (!label) return c.json({ error: "Category name is required" }, 400);
-    const slugParts = label.split(/[^a-zA-Z0-9]+/).filter(Boolean);
-    const autoValue = slugParts
-      .map((p: string) => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase())
-      .join("");
-    const value = String(body.value || autoValue || "Custom").trim();
-    if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(value)) {
-      return c.json({ error: "Category code must start with a letter (letters/numbers/_ only)" }, 400);
-    }
-    if (BUILT_IN_CATEGORIES.some((b) => b.value.toLowerCase() === value.toLowerCase())) {
-      return c.json({ error: "That category already exists in the standard list" }, 409);
-    }
-    const existing = await listPlatformCategories();
-    if (
-      existing.some(
-        (c) => c.isActive !== false && String(c.value || "").toLowerCase() === value.toLowerCase(),
-      )
-    ) {
-      return c.json({ error: "A category with that code already exists" }, 409);
-    }
-    const category: ExpenseHubCategory = {
-      id: body.id || crypto.randomUUID(),
-      value,
-      label,
-      notes: body.notes ? String(body.notes).trim() : undefined,
-      isSystem: false,
-      isActive: true,
-      createdAt: nowIso(),
-      updatedAt: nowIso(),
-    };
-    await kv.set(`${CATEGORY_PREFIX}${category.id}`, category);
-    return c.json({ success: true, data: category });
+    return c.json({ error: "Save categories from the Dominion catalog" }, 410);
   });
 
   app.put(`${ADMIN_CAT}/:id`, async (c: Context) => {
     const auth = await verifySuperadmin(c);
     if (auth instanceof Response) return auth;
-    const id = c.req.param("id");
-    const body = await c.req.json();
-    const label = body.label != null ? String(body.label).trim() : "";
-
-    // Built-ins are code seeds — editing materializes a platform override (same value, new label).
-    if (id.startsWith("system:")) {
-      const value = id.slice("system:".length);
-      const builtIn = BUILT_IN_CATEGORIES.find((b) => b.value === value);
-      if (!builtIn) return c.json({ error: "Category not found" }, 404);
-      const nextLabel = label || builtIn.label;
-      if (!nextLabel) return c.json({ error: "Category name is required" }, 400);
-      const all = await listPlatformCategories();
-      const existingOverride = all.find(
-        (c) => String(c.value || "").toLowerCase() === value.toLowerCase(),
-      );
-      const now = nowIso();
-      const next: ExpenseHubCategory = existingOverride
-        ? {
-            ...existingOverride,
-            label: nextLabel,
-            notes:
-              body.notes !== undefined
-                ? String(body.notes).trim() || undefined
-                : existingOverride.notes,
-            isActive:
-              body.isActive !== undefined ? Boolean(body.isActive) : existingOverride.isActive !== false,
-            updatedAt: now,
-          }
-        : {
-            id: crypto.randomUUID(),
-            value: builtIn.value,
-            label: nextLabel,
-            notes: body.notes !== undefined ? String(body.notes).trim() || undefined : undefined,
-            isSystem: false,
-            isActive: true,
-            createdAt: now,
-            updatedAt: now,
-          };
-      await kv.set(`${CATEGORY_PREFIX}${next.id}`, next);
-      return c.json({ success: true, data: next });
-    }
-
-    const existing = (await kv.get(`${CATEGORY_PREFIX}${id}`)) as ExpenseHubCategory | null;
-    if (!existing) return c.json({ error: "Category not found" }, 404);
-    const nextLabel = label || existing.label;
-    if (!nextLabel) return c.json({ error: "Category name is required" }, 400);
-    const next: ExpenseHubCategory = {
-      ...existing,
-      label: nextLabel,
-      notes:
-        body.notes !== undefined ? String(body.notes).trim() || undefined : existing.notes,
-      isActive: body.isActive !== undefined ? Boolean(body.isActive) : existing.isActive !== false,
-      updatedAt: nowIso(),
-    };
-    await kv.set(`${CATEGORY_PREFIX}${id}`, next);
-    return c.json({ success: true, data: next });
+    return c.json({ error: "Save categories from the Dominion catalog" }, 410);
   });
 
-  /** Soft-delete category (built-ins become suppressed via inactive platform override). */
   app.delete(`${ADMIN_CAT}/:id`, async (c: Context) => {
     const auth = await verifySuperadmin(c);
     if (auth instanceof Response) return auth;
-    const id = c.req.param("id");
-
-    if (id.startsWith("system:")) {
-      const value = id.slice("system:".length);
-      const builtIn = BUILT_IN_CATEGORIES.find((b) => b.value === value);
-      if (!builtIn) return c.json({ error: "Category not found" }, 404);
-      const all = await listPlatformCategories();
-      const existingOverride = all.find(
-        (c) => String(c.value || "").toLowerCase() === value.toLowerCase(),
-      );
-      const now = nowIso();
-      const next: ExpenseHubCategory = existingOverride
-        ? { ...existingOverride, isActive: false, updatedAt: now }
-        : {
-            id: crypto.randomUUID(),
-            value: builtIn.value,
-            label: builtIn.label,
-            isSystem: false,
-            isActive: false,
-            createdAt: now,
-            updatedAt: now,
-          };
-      await kv.set(`${CATEGORY_PREFIX}${next.id}`, next);
-      return c.json({ success: true, data: next });
-    }
-
-    const existing = (await kv.get(`${CATEGORY_PREFIX}${id}`)) as ExpenseHubCategory | null;
-    if (!existing) return c.json({ error: "Category not found" }, 404);
-    const next: ExpenseHubCategory = {
-      ...existing,
-      isActive: false,
-      updatedAt: nowIso(),
-    };
-    await kv.set(`${CATEGORY_PREFIX}${id}`, next);
-    return c.json({ success: true, data: next });
+    return c.json({ error: "Save categories from the Dominion catalog" }, 410);
   });
 
   // ── Fleet: request pending vendor (replaces org create) ────────────────
@@ -624,7 +634,7 @@ export function registerPlatformVendorRoutes(app: Hono, verifySuperadmin: Verify
 }
 
 /** Remap vendorId on expense docs + rule groups when merging. */
-async function remapVendorReferences(fromId: string, toId: string) {
+export async function remapVendorReferences(fromId: string, toId: string) {
   const docs = (await kv.getByPrefix("expense_doc:")) as Array<{
     id: string;
     vendorId?: string;

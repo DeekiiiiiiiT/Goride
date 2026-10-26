@@ -2,7 +2,7 @@ import React, { Suspense, useState, useEffect, useCallback, useMemo } from 'reac
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { BrowserRouter } from 'react-router-dom';
 import { AuthRecoveryGate } from '@roam/auth-client';
-import { API_ENDPOINTS } from '@roam/api-client';
+import { API_ENDPOINTS, syncCatalog } from '@roam/api-client';
 import { AppConfigGates, AppConfigProvider } from '@roam/rush-app-config';
 import { Loader2 } from 'lucide-react';
 import { Session } from '@supabase/supabase-js';
@@ -262,6 +262,10 @@ function DashCustomerShell() {
   );
   const [outOfZoneReturnTo, setOutOfZoneReturnTo] = useState<string>('delivery-address');
   const [menuOpen, setMenuOpen] = useState(false);
+
+  useEffect(() => {
+    syncCatalog('rush');
+  }, []);
 
   const { data: ordersPayload } = useQuery({
     queryKey: ['customer-orders'],

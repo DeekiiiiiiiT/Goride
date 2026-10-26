@@ -1,7 +1,9 @@
 /**
  * Guard: ineligible-usage report + eligibility-aware summarize (Audit §10).
  */
-import { assert } from "https://deno.land/std@0.224.0/assert/mod.ts";
+import { assert, assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
+import { isTollIncludedInSpend } from "../../../packages/finance-core/src/tollLedgerIntegrity.ts";
+import { tollLedgerRowToIntegrity } from "./toll_financial_reset.ts";
 
 const RESET = new URL("./toll_financial_reset.ts", import.meta.url);
 const PERIOD = new URL("./toll_period_controller.tsx", import.meta.url);
@@ -27,6 +29,24 @@ Deno.test("toll_financial_reset exports ineligible report helpers", async () => 
   assert(
     /isTollIncludedInSpend\(integrity\)/.test(src),
     "missing-event scan must skip non-spend rows via isTollIncludedInSpend",
+  );
+});
+
+Deno.test("rejected personal toll stays in spend when the ledger row is read", () => {
+  const row = tollLedgerRowToIntegrity({
+    id: "ea0380fb-bc98-47fd-b597-e1d1ca0a0027",
+    status: "rejected",
+    resolution: "personal",
+    amount: -275,
+    payment_method: "fleet_account",
+    plaza: "Spanish Town",
+    metadata: { serviceLineSource: "unattributed" },
+  });
+  assertEquals(row.resolution, "personal");
+  assertEquals(isTollIncludedInSpend(row), true);
+  assertEquals(
+    isTollIncludedInSpend(tollLedgerRowToIntegrity({ status: "rejected", amount: -275 })),
+    false,
   );
 });
 

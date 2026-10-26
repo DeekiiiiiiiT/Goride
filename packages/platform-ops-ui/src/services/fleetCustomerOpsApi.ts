@@ -408,7 +408,7 @@ export const fleetCustomerOpsApi = {
       { headers: await authHeaders(null) },
     );
     if (!response.ok) throw new Error(await readError(response, 'Failed to load unified ledger'));
-    return response.json() as Promise<{ entries: UnifiedLedgerEntry[]; total: number; page: number; limit: number }>;
+    return response.json() as Promise<{ entries: UnifiedLedgerEntry[]; total: number; page: number; limit: number; scope?: 'all' | 'fleet' }>;
   },
 
   async fetchUnifiedLedgerReconciliation() {

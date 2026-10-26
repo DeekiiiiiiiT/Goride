@@ -73,7 +73,7 @@ export const BLOCKER_LABELS: Record<string, string> = {
   TOLL_SPEND_SPLIT: 'Toll total does not equal cash + tag spend',
   TOLL_EVENT_ORPHANED: 'Toll money events don’t match live tolls — repair before close',
   TOLL_EVENT_MISSING: 'Live tolls have no money event — re-post before close',
-  TOLL_EVENT_INELIGIBLE: 'Toll money events still on quarantined/voided rows — reverse before close',
+  TOLL_EVENT_INELIGIBLE: 'A toll that is not in this week’s spend still has a money charge — clear it before close',
   TOLL_EVENT_AMOUNT_MISMATCH: 'Toll money event amount ≠ live ledger — repair before close',
   TOLL_PAYMENT_METHOD_UNKNOWN: 'Toll rows missing cash/tag payment method — set method and rebuild',
   FUEL_ENGINE_DRIFT: 'Fuel seal no longer matches Consumption — reseal before close',

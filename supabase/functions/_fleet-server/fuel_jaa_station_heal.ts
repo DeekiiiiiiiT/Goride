@@ -4,6 +4,7 @@
  */
 
 import * as kv from "./kv_store.tsx";
+import { listStationRecords } from "./fleet_table_read_thru.ts";
 import {
   matchUniqueVerifiedStationForRecord,
   matchUniqueVerifiedStationForRecordAsync,
@@ -143,7 +144,7 @@ export async function attachJaaPairIfUniqueMerchant(
 
   const stations =
     opts?.stations ||
-    ((await kv.getByPrefix("station:")) || []).filter(
+    ((await listStationRecords()) || []).filter(
       (s: VerifiedStation) => s && s.id && (!s.status || s.status === "verified"),
     );
 
@@ -362,7 +363,7 @@ export async function healUnpairedStatementEntry(
 
   const stations =
     opts?.stations ||
-    ((await kv.getByPrefix("station:")) || []).filter(
+    ((await listStationRecords()) || []).filter(
       (s: VerifiedStation) => s && s.id && (!s.status || s.status === "verified"),
     );
 

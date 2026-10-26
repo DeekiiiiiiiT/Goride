@@ -1,43 +1,20 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import {
-  Shield,
-  LogOut,
-  Menu,
-  X,
-  ChevronRight,
-  Database,
-  Fuel,
-  Activity,
-  HardDrive,
-  Receipt,
-  Map,
-} from 'lucide-react';
+// Stitch: dominion-redesign/d2798e5c0de74b93857cc67b7b940b23
+import React, { useEffect, useState } from 'react';
+import { LayoutDashboard, LogOut, Menu, Search, X } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
-import { AdminNavSection } from './AdminNavSection';
-import { AdminNavGroup } from './AdminNavGroup';
 import { ThemeToggle } from './ThemeToggle';
 import {
   NAV_ITEMS,
-  PLATFORM_CHILDREN,
-  ROAM_ENTERPRISE_CHILDREN,
-  ROAM_FLEET_CHILDREN,
-  ROAM_DASH_CHILDREN,
-  ROAM_RIDES_CHILDREN,
-  ROAM_HAUL_CHILDREN,
-  ROAM_DRIVER_CHILDREN,
-  FUEL_MANAGEMENT_CHILDREN,
-  TOLL_MANAGEMENT_CHILDREN,
+  PLATFORM_ROLE_PAGES,
+  DOMINION_SECTIONS,
+  API_CENTER_CHILDREN,
   VEHICLE_DATABASE_CHILDREN,
   WORLD_MAPS_CHILDREN,
+  FUEL_MANAGEMENT_CHILDREN,
+  TOLL_MANAGEMENT_CHILDREN,
   GCT_CHILDREN,
   ACCOUNTING_VENDOR_CHILDREN,
   GLOBAL_SETTINGS_CHILDREN,
-  SETTINGS_CHILDREN,
-  API_CENTER_CHILDREN,
-  DATABASE_MANAGEMENT_ITEM,
-  PLATFORM_ROLE_PAGES,
-  SECTION_META,
-  DOMINION_SECTIONS,
   type NavChild,
 } from './adminNavConfig';
 
@@ -47,92 +24,44 @@ interface AdminLayoutProps {
   onNavigate: (page: string) => void;
 }
 
-function useSectionOpen(currentPage: string, childIds: string[]) {
-  const isChild = childIds.includes(currentPage);
-  const [open, setOpen] = useState(isChild);
-  useEffect(() => {
-    if (isChild) setOpen(true);
-  }, [currentPage, isChild]);
-  return [open, setOpen] as const;
-}
-
-function allNavChildren(): NavChild[] {
-  return [
-    ...NAV_ITEMS,
-    ...PLATFORM_CHILDREN,
-    ...ROAM_ENTERPRISE_CHILDREN,
-    ...ROAM_FLEET_CHILDREN,
-    ...ROAM_DASH_CHILDREN,
-    ...ROAM_RIDES_CHILDREN,
-    ...ROAM_HAUL_CHILDREN,
-    ...ROAM_DRIVER_CHILDREN,
-    ...FUEL_MANAGEMENT_CHILDREN,
-    ...TOLL_MANAGEMENT_CHILDREN,
+function pageTitle(currentPage: string): string {
+  if (currentPage === 'dashboard') return 'Overview';
+  const lists = [
+    ...DOMINION_SECTIONS.flatMap((section) => section.children),
     ...VEHICLE_DATABASE_CHILDREN,
     ...WORLD_MAPS_CHILDREN,
+    ...FUEL_MANAGEMENT_CHILDREN,
+    ...TOLL_MANAGEMENT_CHILDREN,
     ...GCT_CHILDREN,
     ...ACCOUNTING_VENDOR_CHILDREN,
     ...GLOBAL_SETTINGS_CHILDREN,
-    ...SETTINGS_CHILDREN,
     ...API_CENTER_CHILDREN,
-    DATABASE_MANAGEMENT_ITEM,
-    ...DOMINION_SECTIONS.flatMap((section) => section.children),
   ];
+  const exact = lists.find((item) => item.id === currentPage);
+  if (exact) return exact.label;
+  const sectionHit = DOMINION_SECTIONS
+    .flatMap((section) => section.children)
+    .find((item) => item.activeWhen?.includes(currentPage));
+  return sectionHit?.label || 'Overview';
 }
 
-function settingsPageTitle(currentPage: string, label: string): string {
-  if (currentPage.startsWith('global-settings-')) return `Global Settings — ${label}`;
-  if (currentPage.startsWith('fleet-settings-')) return `Roam Fleet Settings — ${label}`;
-  if (currentPage.startsWith('enterprise-settings-')) return `Roam Enterprise Settings — ${label}`;
-  if (currentPage.startsWith('settings-')) return `Platform Settings — ${label}`;
-  return label;
-}
-
-function pageTitle(currentPage: string): string {
-  const child = allNavChildren().find((c) => c.id === currentPage);
-  if (child) {
-    if (
-      currentPage.startsWith('settings-')
-      || currentPage.startsWith('global-settings-')
-      || currentPage.startsWith('fleet-settings-')
-      || currentPage.startsWith('enterprise-settings-')
-    ) {
-      return settingsPageTitle(currentPage, child.label);
-    }
-    if (currentPage.startsWith('gct-')) {
-      return `Accounting — GCT — ${child.label}`;
-    }
-    if (currentPage === 'vendor-database' || currentPage === 'pending-vendor-requests') {
-      return `Accounting — ${child.label}`;
-    }
-    return child.label;
-  }
-  if (currentPage === 'db-management') return 'Database Management';
-  if (currentPage === 'unified-ledger') return 'Unified Ledger Feed';
-  if (currentPage === 'db-settings') return 'Database Management — Settings';
-  if (currentPage.startsWith('db-biz-')) return 'Database Management';
-  if (currentPage.startsWith('db-customer-')) return 'Database Management — Customer Ledgers';
-  if (currentPage.startsWith('api-center-')) {
-    const tab = API_CENTER_CHILDREN.find((c) => c.id === currentPage);
-    return tab ? `API Command Center — ${tab.label}` : 'API Command Center';
-  }
-  if (currentPage === 'driver-user-detail') return 'Driver user';
-  if (currentPage === 'rider-user-detail') return 'Rider user';
-  if (currentPage === 'global-identity') return 'Global Identity Search';
-  return 'Dashboard';
+function roleLabel(role: string): string {
+  if (role === 'platform_owner') return 'Owner';
+  if (role === 'platform_support') return 'Support';
+  if (role === 'platform_analyst') return 'Analyst';
+  return 'Staff';
 }
 
 export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutProps) {
   const { user, role, signOut, session } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [query, setQuery] = useState('');
   const [pendingCatalogOpenCount, setPendingCatalogOpenCount] = useState(0);
 
   const resolved = role || '';
   const allowedPages = PLATFORM_ROLE_PAGES[resolved] || [];
   const canViewPage = (pageId: string) => allowedPages.includes(pageId);
-
-  const filterChildren = (items: NavChild[]) =>
-    items.filter((c) => canViewPage(c.id) || !!c.href);
+  const needle = query.trim().toLowerCase();
 
   useEffect(() => {
     const token = session?.access_token;
@@ -154,85 +83,6 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
     };
   }, [session?.access_token, resolved]);
 
-  const visiblePlatform = filterChildren(PLATFORM_CHILDREN);
-  const visibleEnterprise = filterChildren(ROAM_ENTERPRISE_CHILDREN);
-  const visibleFleet = filterChildren(ROAM_FLEET_CHILDREN);
-  const visibleDash = filterChildren(ROAM_DASH_CHILDREN);
-  const visibleRides = filterChildren(ROAM_RIDES_CHILDREN);
-  const visibleHaul = filterChildren(ROAM_HAUL_CHILDREN);
-  const visibleDriver = filterChildren(ROAM_DRIVER_CHILDREN);
-  const visibleFuel = filterChildren(FUEL_MANAGEMENT_CHILDREN);
-  const visibleToll = filterChildren(TOLL_MANAGEMENT_CHILDREN);
-  const visibleWorldMaps = filterChildren(WORLD_MAPS_CHILDREN);
-  const visibleVehicleDb = filterChildren(VEHICLE_DATABASE_CHILDREN).map((c) =>
-    c.id === 'pending-motor-vehicles'
-      ? { ...c, badgeCount: pendingCatalogOpenCount }
-      : c,
-  );
-  const visibleGct = filterChildren(GCT_CHILDREN);
-  const visibleAccountingVendors = filterChildren(ACCOUNTING_VENDOR_CHILDREN);
-  const visibleGlobalSettings = filterChildren(GLOBAL_SETTINGS_CHILDREN);
-  const visibleLegacySettings = filterChildren(SETTINGS_CHILDREN);
-  const visibleApiCenter = filterChildren(API_CENTER_CHILDREN);
-  const canViewDbManagement = canViewPage('db-management');
-
-  const platformIds = useMemo(() => visiblePlatform.map((c) => c.id), [visiblePlatform]);
-  const enterpriseIds = useMemo(() => visibleEnterprise.filter((c) => !c.href).map((c) => c.id), [visibleEnterprise]);
-  const fleetIds = useMemo(() => visibleFleet.filter((c) => !c.href).map((c) => c.id), [visibleFleet]);
-  const dashIds = useMemo(() => visibleDash.filter((c) => !c.href).map((c) => c.id), [visibleDash]);
-  const ridesIds = useMemo(() => visibleRides.filter((c) => !c.href).map((c) => c.id), [visibleRides]);
-  const haulIds = useMemo(() => visibleHaul.filter((c) => !c.href).map((c) => c.id), [visibleHaul]);
-  const driverIds = useMemo(() => visibleDriver.filter((c) => !c.href).map((c) => c.id), [visibleDriver]);
-  const fuelIds = useMemo(() => visibleFuel.map((c) => c.id), [visibleFuel]);
-  const tollIds = useMemo(() => visibleToll.map((c) => c.id), [visibleToll]);
-  const vehicleIds = useMemo(() => visibleVehicleDb.map((c) => c.id), [visibleVehicleDb]);
-  const worldIds = useMemo(() => visibleWorldMaps.map((c) => c.id), [visibleWorldMaps]);
-  const gctIds = useMemo(() => visibleGct.map((c) => c.id), [visibleGct]);
-  const accountingVendorIds = useMemo(
-    () => visibleAccountingVendors.map((c) => c.id),
-    [visibleAccountingVendors],
-  );
-  const accountingIds = useMemo(
-    () => [...gctIds, ...accountingVendorIds],
-    [gctIds, accountingVendorIds],
-  );
-  const globalSettingsIds = useMemo(() => visibleGlobalSettings.map((c) => c.id), [visibleGlobalSettings]);
-  const legacySettingsIds = useMemo(() => visibleLegacySettings.map((c) => c.id), [visibleLegacySettings]);
-  const apiIds = useMemo(() => visibleApiCenter.map((c) => c.id), [visibleApiCenter]);
-
-  const [platformOpen, setPlatformOpen] = useSectionOpen(currentPage, platformIds);
-  const [enterpriseOpen, setEnterpriseOpen] = useSectionOpen(currentPage, enterpriseIds);
-  const [fleetOpen, setFleetOpen] = useSectionOpen(currentPage, fleetIds);
-  const [dashOpen, setDashOpen] = useSectionOpen(currentPage, dashIds);
-  const [ridesOpen, setRidesOpen] = useSectionOpen(currentPage, ridesIds);
-  const [haulOpen, setHaulOpen] = useSectionOpen(currentPage, haulIds);
-  const [driverOpen, setDriverOpen] = useSectionOpen(currentPage, driverIds);
-  const [fuelOpen, setFuelOpen] = useSectionOpen(currentPage, fuelIds);
-  const [tollOpen, setTollOpen] = useSectionOpen(currentPage, tollIds);
-  const [vehicleDbOpen, setVehicleDbOpen] = useSectionOpen(currentPage, vehicleIds);
-  const [worldOpen, setWorldOpen] = useSectionOpen(currentPage, worldIds);
-  const [gctOpen, setGctOpen] = useSectionOpen(currentPage, gctIds);
-  const [accountingVendorsOpen, setAccountingVendorsOpen] = useSectionOpen(
-    currentPage,
-    accountingVendorIds,
-  );
-  const [accountingOpen, setAccountingOpen] = useSectionOpen(currentPage, accountingIds);
-  const businessSegmentIds = useMemo(
-    () => [...enterpriseIds, ...fleetIds, ...driverIds, ...ridesIds, ...haulIds, ...dashIds],
-    [enterpriseIds, fleetIds, driverIds, ridesIds, haulIds, dashIds],
-  );
-  const [businessSegmentsOpen, setBusinessSegmentsOpen] = useSectionOpen(currentPage, businessSegmentIds);
-  const [globalSettingsOpen, setGlobalSettingsOpen] = useSectionOpen(currentPage, globalSettingsIds);
-  const [apiCenterOpen, setApiCenterOpen] = useSectionOpen(currentPage, apiIds);
-  const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
-
-  const isDbPage =
-    currentPage === 'db-management'
-    || currentPage === 'db-settings'
-    || currentPage === 'unified-ledger'
-    || currentPage.startsWith('db-biz-')
-    || currentPage.startsWith('db-customer-');
-
   const handleNav = (page: string) => {
     onNavigate(page);
     setMobileOpen(false);
@@ -241,257 +91,167 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
   const userName = (user as { user_metadata?: { name?: string } })?.user_metadata?.name
     || user?.email?.split('@')[0]
     || 'Admin';
-  const userEmail = user?.email || '';
-  const initials = userName.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2);
+  const initials = userName.split(' ').map((word) => word[0]).join('').toUpperCase().slice(0, 2);
+  const title = pageTitle(currentPage);
 
-  const platformSection = {
-    key: 'platform',
-    ...SECTION_META.platform,
-    children: visiblePlatform,
-    open: platformOpen,
-    setOpen: setPlatformOpen,
-    isActive: platformIds.includes(currentPage),
+  const itemClass = (active: boolean) =>
+    `flex w-full items-center gap-3 rounded-lg px-3 py-1.5 text-left text-sm transition-colors ${
+      active
+        ? 'bg-dominion-blue font-medium text-white'
+        : 'text-[#cbd5e1] hover:bg-[#334155] hover:text-white'
+    }`;
+
+  const renderChild = (child: NavChild) => {
+    const Icon = child.icon;
+    const active = !child.href && (
+      currentPage === child.id || (child.activeWhen?.includes(currentPage) ?? false)
+    );
+    const badge = child.id === 'vehicles-home' || child.id === 'change-requests'
+      ? pendingCatalogOpenCount
+      : child.badgeCount;
+    const body = (
+      <>
+        <Icon className={`h-4 w-4 shrink-0 ${active ? 'text-white' : 'text-[#94a3b8]'}`} />
+        <span className="truncate">{child.label}</span>
+        {typeof badge === 'number' && badge > 0 ? (
+          <span className="ml-auto rounded-full bg-white/20 px-1.5 text-[10px] font-semibold">
+            {badge > 99 ? '99+' : badge}
+          </span>
+        ) : null}
+      </>
+    );
+    if (child.href) {
+      return (
+        <a key={child.id} href={child.href} className={itemClass(false)}>
+          {body}
+        </a>
+      );
+    }
+    return (
+      <button key={child.id} type="button" onClick={() => handleNav(child.id)} className={itemClass(active)}>
+        {body}
+      </button>
+    );
   };
 
-  const businessSegmentSections = [
-    {
-      key: 'enterprise',
-      ...SECTION_META.enterprise,
-      children: visibleEnterprise,
-      open: enterpriseOpen,
-      setOpen: setEnterpriseOpen,
-      isActive: enterpriseIds.includes(currentPage),
-    },
-    {
-      key: 'fleet',
-      ...SECTION_META.fleet,
-      children: visibleFleet,
-      open: fleetOpen,
-      setOpen: setFleetOpen,
-      isActive: fleetIds.includes(currentPage),
-    },
-    {
-      key: 'driver',
-      ...SECTION_META.driver,
-      children: visibleDriver,
-      open: driverOpen,
-      setOpen: setDriverOpen,
-      isActive: driverIds.includes(currentPage),
-    },
-    {
-      key: 'rides',
-      ...SECTION_META.rides,
-      children: visibleRides,
-      open: ridesOpen,
-      setOpen: setRidesOpen,
-      isActive: ridesIds.includes(currentPage),
-    },
-    {
-      key: 'haul',
-      ...SECTION_META.haul,
-      children: visibleHaul,
-      open: haulOpen,
-      setOpen: setHaulOpen,
-      isActive: haulIds.includes(currentPage),
-    },
-    {
-      key: 'dash',
-      ...SECTION_META.dash,
-      children: visibleDash,
-      open: dashOpen,
-      setOpen: setDashOpen,
-      isActive: dashIds.includes(currentPage),
-    },
-  ];
-
-  const infraSections = [
-    {
-      key: 'fuel',
-      label: 'Fuel Management',
-      icon: Fuel,
-      children: visibleFuel,
-      open: fuelOpen,
-      setOpen: setFuelOpen,
-      isActive: fuelIds.includes(currentPage),
-    },
-    {
-      key: 'toll',
-      label: 'Toll Management',
-      icon: Activity,
-      children: visibleToll,
-      open: tollOpen,
-      setOpen: setTollOpen,
-      isActive: tollIds.includes(currentPage),
-    },
-    {
-      key: 'vehicle',
-      label: 'Vehicle Database',
-      icon: HardDrive,
-      children: visibleVehicleDb,
-      open: vehicleDbOpen,
-      setOpen: setVehicleDbOpen,
-      isActive: vehicleIds.includes(currentPage),
-    },
-    {
-      key: 'world',
-      label: 'World Maps',
-      icon: Map,
-      children: visibleWorldMaps,
-      open: worldOpen,
-      setOpen: setWorldOpen,
-      isActive: worldIds.includes(currentPage),
-    },
-  ];
-
-  const accountingSections = [
-    {
-      key: 'gct',
-      ...SECTION_META.gct,
-      children: visibleGct,
-      open: gctOpen,
-      setOpen: setGctOpen,
-      isActive: gctIds.includes(currentPage),
-    },
-    {
-      key: 'accounting-vendors',
-      ...SECTION_META.accountingVendors,
-      children: visibleAccountingVendors,
-      open: accountingVendorsOpen,
-      setOpen: setAccountingVendorsOpen,
-      isActive: accountingVendorIds.includes(currentPage),
-    },
-  ];
+  const overview = NAV_ITEMS[0];
+  const showOverview = !needle || overview.label.toLowerCase().includes(needle) || 'overview'.includes(needle);
 
   return (
-    <div className="flex h-screen bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
-      {mobileOpen && (
-        <div
-          className="fixed inset-0 bg-black/60 z-40 lg:hidden"
+    <div className="flex min-h-screen bg-[#f8fafc] text-[#1e293b]">
+      {mobileOpen ? (
+        <button
+          type="button"
+          aria-label="Close menu"
+          className="fixed inset-0 z-40 bg-slate-900/50 lg:hidden"
           onClick={() => setMobileOpen(false)}
         />
-      )}
+      ) : null}
 
       <aside
-        className={`
-          fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-slate-200 dark:bg-slate-900 dark:border-slate-800 flex flex-col
-          transform transition-transform duration-200 ease-in-out
-          lg:relative lg:translate-x-0
-          ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}
-        `}
+        className={`fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-[#334155] bg-dominion-navy ${
+          mobileOpen ? 'translate-x-0' : '-translate-x-full'
+        } lg:translate-x-0`}
       >
-        <div className="h-16 flex items-center gap-3 px-5 border-b border-slate-200 dark:border-slate-800 shrink-0">
-          <div className="bg-amber-500/20 p-2 rounded-lg">
-            <Shield className="w-5 h-5 text-amber-500 dark:text-amber-400" />
+        <div className="flex h-16 shrink-0 items-center gap-3 border-b border-slate-700/40 px-5">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-dominion-blue text-white">
+            <LayoutDashboard className="h-4 w-4" />
           </div>
           <div className="min-w-0">
-            <h1 className="text-sm font-bold text-slate-900 dark:text-white truncate">Roam Dominion</h1>
-            <p className="text-[11px] text-slate-500 truncate">Platform Admin</p>
+            <p className="text-base font-bold leading-tight text-white">Dominion</p>
+            <p className="text-xs text-[#94a3b8]">Roam Admin Console</p>
           </div>
           <button
             type="button"
             onClick={() => setMobileOpen(false)}
             aria-label="Close menu"
-            className="lg:hidden ml-auto p-1 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+            className="ml-auto text-slate-400 lg:hidden"
           >
-            <X className="w-5 h-5" />
+            <X className="h-5 w-5" />
           </button>
         </div>
 
-        <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1" aria-label="Dominion">
-          {NAV_ITEMS.map((item) => {
-            const Icon = item.icon;
-            const active = currentPage === item.id;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => handleNav(item.id)}
-                className={`
-                  w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
-                  ${active ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800'}
-                `}
-              >
-                <Icon className="w-4.5 h-4.5 shrink-0" />
-                <span className="truncate">{item.label}</span>
-                {active && <ChevronRight className="w-3.5 h-3.5 ml-auto text-amber-400/60" />}
-              </button>
-            );
-          })}
+        <nav className="flex-1 space-y-5 overflow-y-auto px-3 py-4" aria-label="Dominion">
+          {showOverview ? (
+            <button
+              type="button"
+              onClick={() => handleNav(overview.id)}
+              className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium ${
+                currentPage === overview.id
+                  ? 'bg-dominion-blue text-white'
+                  : 'text-[#cbd5e1] hover:bg-[#334155] hover:text-white'
+              }`}
+            >
+              <LayoutDashboard className="h-4 w-4" />
+              Overview
+            </button>
+          ) : null}
 
           {DOMINION_SECTIONS.map((section) => {
-            const children = section.children
-              .filter((child) => canViewPage(child.id))
-              .map((child) =>
-                child.id === 'vehicles-home' || child.id === 'change-requests'
-                  ? { ...child, badgeCount: pendingCatalogOpenCount }
-                  : child,
-              );
+            const children = section.children.filter((child) => {
+              const visible = canViewPage(child.id) || child.activeWhen?.some((pageId) => canViewPage(pageId));
+              if (!visible) return false;
+              if (!needle) return true;
+              return child.label.toLowerCase().includes(needle) || section.label.toLowerCase().includes(needle);
+            });
             if (children.length === 0) return null;
-            const pageIds = children.flatMap((child) => [child.id, ...(child.activeWhen ?? [])]);
-            const open = openSections[section.id] ?? pageIds.includes(currentPage);
             return (
-              <AdminNavSection
-                key={section.id}
-                label={section.label}
-                icon={section.icon}
-                children={children}
-                currentPage={currentPage}
-                open={open}
-                onToggle={() => setOpenSections((prev) => ({ ...prev, [section.id]: !open }))}
-                onNavigate={handleNav}
-                isActive={pageIds.includes(currentPage)}
-              />
+              <div key={section.id} className="space-y-1">
+                <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8]">
+                  {section.label}
+                </p>
+                {children.map(renderChild)}
+              </div>
             );
           })}
         </nav>
-
-        <div className="border-t border-slate-200 dark:border-slate-800 p-4 shrink-0">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-9 h-9 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-700 dark:text-amber-300 text-xs font-bold shrink-0">
-              {initials}
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium text-slate-900 dark:text-white truncate">{userName}</p>
-              <p className="text-[11px] text-slate-500 truncate">{userEmail}</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] uppercase tracking-wider text-amber-700 dark:text-amber-400/80 bg-amber-500/10 px-2 py-0.5 rounded font-semibold">
-              {resolved === 'platform_support' ? 'Support' : resolved === 'platform_analyst' ? 'Analyst' : resolved === 'platform_owner' ? 'Owner' : 'Staff'}
-            </span>
-            <button
-              type="button"
-              onClick={() => void signOut()}
-              className="ml-auto p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
-              aria-label="Sign out"
-              title="Sign out"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
       </aside>
 
-      <div className="flex-1 flex flex-col min-w-0">
-        <header className="h-16 bg-white/80 border-b border-slate-200 dark:bg-slate-900/50 dark:border-slate-800 flex items-center px-4 lg:px-6 shrink-0 backdrop-blur-sm">
+      <div className="flex min-w-0 flex-1 flex-col lg:pl-64">
+        <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-[#e2e8f0] bg-[#ffffff] px-4 shadow-sm lg:px-8">
           <button
             type="button"
             onClick={() => setMobileOpen(true)}
             aria-label="Open menu"
-            className="lg:hidden p-2 -ml-2 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white mr-3"
+            className="mr-3 text-slate-500 lg:hidden"
           >
-            <Menu className="w-5 h-5" />
+            <Menu className="h-5 w-5" />
           </button>
-          <h2 className="text-base font-semibold text-slate-900 dark:text-white">{pageTitle(currentPage)}</h2>
-          <div className="ml-auto flex items-center gap-1">
+          <div className="relative w-full max-w-md">
+            <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search the menu"
+              className="w-full rounded-lg border border-[#e2e8f0] bg-[#f8fafc] py-1.5 pl-9 pr-3 text-sm text-[#0f172a] outline-none focus:border-dominion-blue focus:bg-[#ffffff] focus:ring-1 focus:ring-dominion-blue"
+            />
+          </div>
+          <div className="ml-4 flex items-center gap-3">
             <ThemeToggle />
-            <a href="/" className="px-2 text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors">
-              Back to Fleet Dashboard
-            </a>
+            <div className="hidden text-right sm:block">
+              <p className="text-xs font-semibold text-[#0f172a]">{userName}</p>
+              <p className="font-mono text-[11px] text-[#94a3b8]">{roleLabel(resolved)}</p>
+            </div>
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-900 text-xs font-semibold text-white">
+              {initials}
+            </div>
+            <button
+              type="button"
+              onClick={() => void signOut()}
+              className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-dominion-reject"
+              aria-label="Sign out"
+              title="Sign out"
+            >
+              <LogOut className="h-4 w-4" />
+            </button>
           </div>
         </header>
-        <main className="flex-1 overflow-auto p-4 lg:p-8">
-          <div className="mx-auto max-w-7xl">{children}</div>
+
+        <main className="flex-1 bg-[#f8fafc] p-4 text-[#1e293b] lg:p-8">
+          <p className="mb-4 text-xs font-medium text-[#94a3b8]">
+            Dominion <span className="text-[#334155]">/ {title}</span>
+          </p>
+          <div>{children}</div>
         </main>
       </div>
     </div>

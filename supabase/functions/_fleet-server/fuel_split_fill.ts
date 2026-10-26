@@ -4,6 +4,7 @@
  */
 import type { Context } from "npm:hono@4.3.11";
 import * as kv from "./kv_store.tsx";
+import { listStationRecords } from "./fleet_table_read_thru.ts";
 import { stampOrg, getOrgId } from "./org_scope.ts";
 import {
   resolveFuelPaymentSource,
@@ -628,7 +629,7 @@ export async function backfillUnmatchedSplitFills(opts: {
           get: async (key) => (key.startsWith("station:") ? clone(await kv.get(key)) : memory.get(key)),
           getByPrefix: async (prefix) => {
             if (prefix !== "station:") return [];
-            const rows = (await kv.getByPrefix(prefix)) || [];
+            const rows = await listStationRecords();
             return rows.map((row: unknown) => clone(row));
           },
           set: async (key, value) => {

@@ -1,4 +1,5 @@
 import React from 'react';
+import { syncCatalog } from '@roam/api-client';
 import { Toaster } from 'sonner';
 import { SidebarProvider, SidebarTrigger } from '../ui/sidebar';
 import { useIsMobile } from '../ui/use-mobile';
@@ -19,6 +20,10 @@ export function AppLayout({ children, currentPage, onNavigate, onLogout }: AppLa
   const isMobile = useIsMobile();
   const nav = useFleetNavModel();
   const pageTitle = resolveNavPageTitle(nav, currentPage) ?? 'Roam Fleet';
+
+  React.useEffect(() => {
+    syncCatalog('fleet');
+  }, []);
 
   React.useEffect(() => {
     const isDark = localStorage.getItem('preference_dark_mode') === 'true';

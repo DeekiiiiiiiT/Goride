@@ -248,7 +248,9 @@ export function filterTollEventsInDateRange(
   const start = String(startYmd || '').slice(0, 10);
   const end = String(endYmd || '').slice(0, 10);
   return (events || []).filter((e) => {
-    if (!isTollFleetLossEvent(e)) return false;
+    // Driver charges are not plaza spend, but the week net subtracts them.
+    // Dropping them here made a $0 week look $550 short at "mark reviewed".
+    if (!isTollFleetLossEvent(e) && !isTollChargedToDriverEvent(e)) return false;
     const d = tollEventDate(e);
     if (!d) return false;
     return d >= start && d <= end;

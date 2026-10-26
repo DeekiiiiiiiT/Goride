@@ -27,6 +27,7 @@ import {
   loadLatestFuelWeekSnapshot,
   hashFuelWeekInputs,
   loadFuelWeekSnapshotVersion,
+  fuelSnapshotMoneyKey,
   shadowFuelEngineDrift,
 } from "./fuel_week_compute.ts";
 import { buildFuelSealAmountsByDriver } from "./fuel_close_amounts.ts";
@@ -1505,13 +1506,34 @@ export function registerFuelPeriodRoutes(app: Hono) {
         ymd(period.week_start),
         ymd(period.week_end) || ymd(period.week_start),
       );
+      let snapshotMoney: unknown = loaded.row.money;
+      let snapshotVersionForJob = requestedVersion;
       if (loaded.row.inputs_hash !== liveHash) {
-        return c.json({
-          error: "inputs_changed",
-          message: "This week changed. Prepare it again before locking.",
-        }, 409);
+        // The screen reloads the last saved copy and never writes a new one,
+        // so a moved fingerprint alone cannot be cleared by Refresh.
+        // Rebuild, and lock when the fuel totals are the same to the cent.
+        let rebuilt: Awaited<ReturnType<typeof computeFuelWeekSnapshot>> | null = null;
+        try {
+          rebuilt = await computeFuelWeekSnapshot({
+            orgId,
+            periodId,
+            weekStart: ymd(period.week_start),
+            weekEnd: ymd(period.week_end) || ymd(period.week_start),
+          });
+        } catch (e) {
+          console.warn("[fuel finalize] refresh snapshot failed", e);
+        }
+        const freshMoney = rebuilt?.snapshot?.money;
+        if (!rebuilt?.snapshot || fuelSnapshotMoneyKey(snapshotMoney) !== fuelSnapshotMoneyKey(freshMoney)) {
+          return c.json({
+            error: "inputs_changed",
+            message: "This week changed. Prepare it again before locking.",
+          }, 409);
+        }
+        snapshotMoney = freshMoney;
+        snapshotVersionForJob = Number(rebuilt.snapshot.version) || requestedVersion;
       }
-      const reports = (loaded.row.money as { reports?: unknown[] } | null)?.reports;
+      const reports = (snapshotMoney as { reports?: unknown[] } | null)?.reports;
       if (!Array.isArray(reports) || reports.length === 0) {
         return c.json({
           error: "snapshot_required",
@@ -1607,7 +1629,7 @@ export function registerFuelPeriodRoutes(app: Hono) {
             secondApproverThreshold: thr,
             soleApprover,
             step: "stage",
-            snapshotVersion: body.snapshotVersion ?? null,
+            snapshotVersion: snapshotVersionForJob,
             forceReason: body.forceReason || null,
             forceClientMoney: c.req.header("X-Fuel-Force-Client-Money") === "1",
           },

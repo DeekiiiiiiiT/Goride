@@ -41,6 +41,7 @@ export function UnifiedLedgerFeed({ onBack }: Props) {
   const { accessToken } = usePlatformSession();
   const token = accessToken ?? '';
 
+  const [ledgerScope, setLedgerScope] = useState<'all' | 'fleet'>('all');
   const [entries, setEntries] = useState<UnifiedLedgerEntry[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -71,6 +72,7 @@ export function UnifiedLedgerFeed({ onBack }: Props) {
       });
       setEntries(data.entries);
       setTotal(data.total);
+      setLedgerScope(data.scope === 'fleet' ? 'fleet' : 'all');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load unified ledger');
       setEntries([]);
@@ -142,16 +144,17 @@ export function UnifiedLedgerFeed({ onBack }: Props) {
       </div>
 
       <p className="text-sm text-slate-500 dark:text-slate-400">
-        Enterprise ledger across <strong>Rideshare</strong> (Rides, Driver, Fleet) and{' '}
-        <strong>Delivery</strong> (Dash, Partner, Courier). Feed requires{' '}
-        <code className="text-xs bg-slate-100 dark:bg-slate-800 px-1 rounded">LEDGER_READ_UNIFIED=1</code>;{' '}
-        dual-write requires{' '}
-        <code className="text-xs bg-slate-100 dark:bg-slate-800 px-1 rounded">LEDGER_DUAL_WRITE_ENABLED=1</code>.
-        Shadow compare:{' '}
-        <code className="text-xs bg-slate-100 dark:bg-slate-800 px-1 rounded">LEDGER_SHADOW_READ=1</code>.
+        {ledgerScope === 'fleet'
+          ? 'Fleet customer books only.'
+          : (
+            <>
+              Enterprise ledger across <strong>Rideshare</strong> (Rides, Driver, Fleet) and{' '}
+              <strong>Delivery</strong> (Dash, Partner, Courier).
+            </>
+          )}
       </p>
 
-      {soak && (
+      {ledgerScope === 'all' && soak && (
         <section className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/50 p-4">
           <div className="flex items-center gap-2 mb-2">
             {soak.go_for_phase_b ? (
@@ -193,6 +196,8 @@ export function UnifiedLedgerFeed({ onBack }: Props) {
         </section>
       )}
 
+      {ledgerScope === 'all' && (
+      <>
       <section className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/50 p-4">
         <div className="flex items-center gap-2 mb-3">
           {reconHealthy === true && <CheckCircle2 className="w-5 h-5 text-emerald-500" />}
@@ -281,6 +286,8 @@ export function UnifiedLedgerFeed({ onBack }: Props) {
           </div>
         </section>
       )}
+      </>
+      )}
 
       {/* Deep Reconciliation: Product Balances */}
       {balances.length > 0 && (
@@ -321,6 +328,9 @@ export function UnifiedLedgerFeed({ onBack }: Props) {
         <div className="flex flex-wrap gap-3 mb-4 items-end">
           <label className="text-sm">
             <span className="block text-slate-500 mb-1">Product</span>
+            {ledgerScope === 'fleet' ? (
+              <p className="rounded-lg border border-slate-200 dark:border-slate-600 px-2 py-1.5 text-sm">Roam Fleet</p>
+            ) : (
             <select
               value={product}
               onChange={(e) => { setProduct(e.target.value); setPage(1); }}
@@ -341,6 +351,7 @@ export function UnifiedLedgerFeed({ onBack }: Props) {
                 <option value="platform">Platform (Internal)</option>
               </optgroup>
             </select>
+            )}
           </label>
           <label className="text-sm">
             <span className="block text-slate-500 mb-1">Driver ID</span>

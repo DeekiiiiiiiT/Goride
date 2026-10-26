@@ -5,6 +5,7 @@ import type { AppendCanonicalLedgerResult, CanonicalLedgerEventInput } from '../
 import { OdometerReading } from '../types/vehicle';
 import { TollPlaza } from '../types/toll';
 import { API_ENDPOINTS } from './apiConfig';
+import { catalogPages } from '@roam/api-client';
 import type { CompatiblePartsResponse } from '../types/partSourcing';
 import { compressImage, OCR_COMPRESS_OPTS } from '../utils/compressImage';
 import { isTollCategory } from '../utils/tollCategoryHelper';
@@ -1218,11 +1219,7 @@ export const api = {
   },
 
   async getStations() {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/stations`, {
-        headers: await getHeaders(null),
-    });
-    if (!response.ok) throw new Error("Failed to fetch stations");
-    return response.json();
+    return catalogPages('driver', '/v1/stations', 'stations');
   },
 
   async checkStationDuplicate(plusCode: string, lat: number, lng: number, excludeId?: string, category?: string) {
@@ -1655,11 +1652,7 @@ export const api = {
   // -----------------------------------------------------------------------
 
   async getTollPlazas(): Promise<TollPlaza[]> {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.toll}/toll-plazas`, {
-        headers: await getHeaders(null)
-    });
-    if (!response.ok) throw new Error("Failed to fetch toll plazas");
-    return response.json();
+    return catalogPages<TollPlaza>('driver', '/v1/tolls', 'plazas');
   },
 
   async getTollPlaza(id: string): Promise<TollPlaza> {

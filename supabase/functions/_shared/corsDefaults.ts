@@ -19,6 +19,11 @@ export const CORS_DEFAULT_HEADERS = [
   "x-request-id",
   "X-Roam-Product-Line",
   "X-Roam-Settings-Segment",
+  // Fuel finalize (and reopen) send these. Without them the browser
+  // completes the preflight and then drops the POST as "Failed to fetch".
+  "Idempotency-Key",
+  "If-Match",
+  "X-Fuel-Force-Client-Money",
 ] as const;
 
 export const CORS_EXPOSE_HEADERS = [

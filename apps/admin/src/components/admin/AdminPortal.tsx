@@ -1,34 +1,20 @@
 import React, { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
 import { AdminLayout } from './AdminLayout';
-import type { BusinessType } from '../../types/data';
 import { canWriteWorldMapsFromUser } from './world-maps/WorldMapsPage';
 
 const lazyNamed = (loader: () => Promise<Record<string, unknown>>, name: string) =>
   lazy(() => loader().then((mod) => ({ default: mod[name] as React.ComponentType<any> })));
 
 const AdminDashboard = lazyNamed(() => import('./AdminDashboard'), 'AdminDashboard');
-const CustomerAccounts = lazyNamed(() => import('./CustomerAccounts'), 'CustomerAccounts');
 const PlatformTeam = lazyNamed(() => import('./PlatformTeam'), 'PlatformTeam');
-const TeamMembers = lazyNamed(() => import('./TeamMembers'), 'TeamMembers');
 const ActivityLog = lazyNamed(() => import('./ActivityLog'), 'ActivityLog');
 const TollDatabaseView = lazyNamed(() => import('../toll/TollDatabaseView'), 'TollDatabaseView');
 const TollInfoPage = lazyNamed(() => import('../toll/TollInfoPage'), 'TollInfoPage');
-const PlatformSettings = lazyNamed(() => import('./PlatformSettings'), 'PlatformSettings');
 const GlobalPlatformSettingsPage = lazyNamed(() => import('@roam/admin-core/settings'), 'GlobalPlatformSettingsPage');
 const ApiCommandCenter = lazyNamed(() => import('./api-center/ApiCommandCenter'), 'ApiCommandCenter');
-const DatabaseManagement = lazyNamed(() => import('../database/DatabaseManagement'), 'DatabaseManagement');
-const BusinessTypeCustomers = lazyNamed(() => import('../database/BusinessTypeCustomers'), 'BusinessTypeCustomers');
-const CustomerLedgerView = lazyNamed(() => import('../database/CustomerLedgerView'), 'CustomerLedgerView');
-const LedgerColumnSettings = lazyNamed(() => import('../database/LedgerColumnSettings'), 'LedgerColumnSettings');
 const VehicleCatalogManager = lazyNamed(() => import('./vehicle-catalog/VehicleCatalogManager'), 'VehicleCatalogManager');
 const PendingVehicleCatalogManager = lazyNamed(() => import('./vehicle-catalog/PendingVehicleCatalogManager'), 'PendingVehicleCatalogManager');
 const MaintenanceTemplatesManager = lazyNamed(() => import('./maintenance-templates/MaintenanceTemplatesManager'), 'MaintenanceTemplatesManager');
-const DashOverviewCard = lazyNamed(() => import('./product-overviews/DashOverviewCard'), 'DashOverviewCard');
-const EnterpriseOverviewCard = lazyNamed(() => import('./product-overviews/EnterpriseOverviewCard'), 'EnterpriseOverviewCard');
-const FleetOverviewCard = lazyNamed(() => import('./product-overviews/FleetOverviewCard'), 'FleetOverviewCard');
-const RidesOverviewCard = lazyNamed(() => import('./product-overviews/RidesOverviewCard'), 'RidesOverviewCard');
-const DriverOverviewCard = lazyNamed(() => import('./product-overviews/DriverOverviewCard'), 'DriverOverviewCard');
-const HaulOverviewCard = lazyNamed(() => import('./product-overviews/HaulOverviewCard'), 'HaulOverviewCard');
 const PartsSourcingManager = lazyNamed(() => import('./parts-sourcing/PartsSourcingManager'), 'PartsSourcingManager');
 const CatalogQualityPage = lazyNamed(() => import('./parts-sourcing/CatalogQualityPage'), 'CatalogQualityPage');
 const WorldMapsPage = lazyNamed(() => import('./world-maps/WorldMapsPage'), 'WorldMapsPage');
@@ -45,29 +31,21 @@ import { ErrorBoundary } from '@roam/roam-shared';
 import type { ResolutionQueueSubTab } from '../fuel/stations/ResolutionQueueTab';
 const StationDatabaseView = lazyNamed(() => import('../fuel/stations/StationDatabaseView'), 'StationDatabaseView');
 const PlacesReview = lazyNamed(() => import('@roam/platform-ops-ui'), 'PlacesReview');
-const GasStationAnalytics = lazyNamed(() => import('../fuel/stations/GasStationAnalytics'), 'GasStationAnalytics');
+const StationHealth = lazyNamed(() => import('./DominionHomes'), 'StationHealth');
 import { API_ENDPOINTS } from '../../services/apiConfig';
 import { useAuth } from '../auth/AuthContext';
 import { StaffMfaStep } from '../auth/StaffMfaStep';
 import { supabase } from '../../utils/supabase/client';
 import { LEGACY_PAGE_REDIRECTS, pageAllowedForRole, settingsTabFromPageId } from './adminNavConfig';
-const MerchantVerificationManager = lazyNamed(() => import('./roam-dash/MerchantVerificationManager'), 'MerchantVerificationManager');
 const GlobalIdentitySearch = lazyNamed(() => import('./platform/GlobalIdentitySearch'), 'GlobalIdentitySearch');
 const MatchingBrainPage = lazyNamed(() => import('./matching-brain/MatchingBrainPage'), 'MatchingBrainPage');
 const FuelBrainPage = lazyNamed(() => import('./fuel-brain/FuelBrainPage'), 'FuelBrainPage');
 const FuelPricesPage = lazyNamed(() => import('./fuel-prices/FuelPricesPage'), 'FuelPricesPage');
-const FuelCostAnalyticsPage = lazyNamed(() => import('./fuel-cost-analytics/FuelCostAnalyticsPage'), 'FuelCostAnalyticsPage');
-const EvidenceBridgeAnalytics = lazyNamed(() => import('./fuel-evidence-bridge/EvidenceBridgeAnalytics'), 'EvidenceBridgeAnalytics');
 const AdminJaaGasCardsPage = lazyNamed(() => import('./fuel/AdminJaaGasCardsPage'), 'AdminJaaGasCardsPage');
 const TollBrainPage = lazyNamed(() => import('./toll-brain/TollBrainPage'), 'TollBrainPage');
-const DriverUsersPage = lazyNamed(() => import('./product-users/DriverUsersPage'), 'DriverUsersPage');
-const DriverUserDetailPage = lazyNamed(() => import('./product-users/DriverUserDetailPage'), 'DriverUserDetailPage');
-const RiderUsersPage = lazyNamed(() => import('./product-users/RiderUsersPage'), 'RiderUsersPage');
-const RiderUserDetailPage = lazyNamed(() => import('./product-users/RiderUserDetailPage'), 'RiderUserDetailPage');
 import { applyPortalTheme } from '../../hooks/usePortalTheme';
 import { api } from '../../services/api';
-import { MovedNotice } from './MovedNotice';
-const UnifiedLedgerFeed = lazyNamed(() => import('./UnifiedLedgerFeed'), 'UnifiedLedgerFeed');
+import { DominionLoading, DominionNoAccess } from './DominionStates';
 const AppsDirectory = lazyNamed(() => import('./DominionHomes'), 'AppsDirectory');
 const ChangeRequestInbox = lazyNamed(() => import('./DominionHomes'), 'ChangeRequestInbox');
 const FuelHome = lazyNamed(() => import('./DominionHomes'), 'FuelHome');
@@ -77,34 +55,6 @@ const TaxVendorsHome = lazyNamed(() => import('./DominionHomes'), 'TaxVendorsHom
 const TollsHome = lazyNamed(() => import('./DominionHomes'), 'TollsHome');
 const VehiclesHome = lazyNamed(() => import('./DominionHomes'), 'VehiclesHome');
 
-const MOVED_NOTICES: Record<string, { title: string; appName: string; href: string }> = {
-  'driver-users': { title: 'Driver users', appName: 'Roam Driver admin', href: 'https://roamdriver.co/admin/users' },
-  'driver-user-detail': { title: 'Driver user', appName: 'Roam Driver admin', href: 'https://roamdriver.co/admin/users' },
-  'roam-driver-overview': { title: 'Roam Driver', appName: 'Roam Driver admin', href: 'https://roamdriver.co/admin' },
-  'rides-users': { title: 'Riders', appName: 'Roam Rides admin', href: 'https://roam-s.co/admin/users' },
-  'rider-user-detail': { title: 'Rider', appName: 'Roam Rides admin', href: 'https://roam-s.co/admin/users' },
-  'roam-rides-overview': { title: 'Roam Rides', appName: 'Roam Rides admin', href: 'https://roam-s.co/admin' },
-  'dash-merchants': { title: 'Merchants', appName: 'Roam Rush admin', href: 'https://roamrush.app/admin' },
-  'roam-dash-overview': { title: 'Roam Rush', appName: 'Roam Rush admin', href: 'https://roamrush.app/admin' },
-  'enterprise-team-members': { title: 'Enterprise team', appName: 'Roam Enterprise admin', href: 'https://roamenterprise.co/admin' },
-  'enterprise-customers': { title: 'Enterprise customers', appName: 'Roam Enterprise admin', href: 'https://roamenterprise.co/admin' },
-  'enterprise-overview': { title: 'Roam Enterprise', appName: 'Roam Enterprise admin', href: 'https://roamenterprise.co/admin' },
-  'fleet-customers': { title: 'Fleet customers', appName: 'Roam Fleet admin', href: 'https://roamfleet.co/admin' },
-  'fleet-team-members': { title: 'Fleet team', appName: 'Roam Fleet admin', href: 'https://roamfleet.co/admin' },
-  'fleet-overview': { title: 'Roam Fleet', appName: 'Roam Fleet admin', href: 'https://roamfleet.co/admin' },
-  'toll-live-monitor': { title: 'Live tolls', appName: 'Roam Rides admin', href: 'https://roam-s.co/admin/live-tolls' },
-  'roam-haul-overview': { title: 'Roam Haul', appName: 'Roam Haul admin', href: 'https://roamhaul.co/admin' },
-  'db-management': { title: 'Customer books', appName: 'Roam Fleet admin', href: 'https://roamfleet.co/admin' },
-  'db-settings': { title: 'Customer books', appName: 'Roam Fleet admin', href: 'https://roamfleet.co/admin' },
-  'fuel-analytics': { title: 'Station analytics', appName: 'Roam Fleet admin', href: 'https://roamfleet.co/admin' },
-  'fuel-cost-analytics': { title: 'Fuel cost', appName: 'Roam Fleet admin', href: 'https://roamfleet.co/admin' },
-  'fuel-evidence-bridge': { title: 'Evidence bridge', appName: 'Roam Fleet admin', href: 'https://roamfleet.co/admin' },
-  'unified-ledger': { title: 'Combined ledger', appName: 'Roam Fleet admin', href: 'https://roamfleet.co/admin' },
-};
-
-const TollLiveMonitorPage = lazy(() =>
-  import('../../pages/TollLiveMonitorPage').then((m) => ({ default: m.TollLiveMonitorPage })),
-);
 const TollSettingsPage = lazy(() =>
   import('../../pages/TollSettingsPage').then((m) => ({ default: m.TollSettingsPage })),
 );
@@ -112,11 +62,6 @@ const TollSettingsPage = lazy(() =>
 function normalizePortalPage(page: string): string {
   return LEGACY_PAGE_REDIRECTS[page] ?? page;
 }
-
-type NavExtras = {
-  userId?: string;
-  customer?: { id: string; name: string; email: string; businessType: BusinessType };
-} | null;
 
 /**
  * AdminPortal — Dominion platform shell that routes purely via internal page IDs.
@@ -147,9 +92,6 @@ export function AdminPortal() {
     }
     return params.get('sub') === 'spatial-review' ? 'spatial-review' : 'unresolved-stops';
   }, []);
-  const [navData, setNavData] = useState<NavExtras>(null);
-  const [navHistory, setNavHistory] = useState<string[]>([]);
-
   const writePageUrl = useCallback((page: string) => {
     const url = new URL(window.location.href);
     url.searchParams.set('page', page);
@@ -158,45 +100,11 @@ export function AdminPortal() {
 
   const setCurrentPage = useCallback((page: string) => {
     const next = normalizePortalPage(page);
-    setNavData(null);
     setCurrentPageRaw(next);
     writePageUrl(next);
   }, [writePageUrl]);
 
   const currentPage = currentPageRaw;
-
-  const handleNavigate = (page: string, data?: unknown) => {
-    setNavHistory((prev) => [...prev, currentPage]);
-    if (data && typeof data === 'object') {
-      const d = data as {
-        userId?: string;
-        customer?: NonNullable<NavExtras>['customer'];
-      };
-      if (d.customer !== undefined) {
-        setNavData({ customer: d.customer, userId: d.userId });
-      } else if (d.userId) {
-        setNavData({ userId: d.userId });
-      } else {
-        setNavData(null);
-      }
-    } else {
-      setNavData(null);
-    }
-    const next = normalizePortalPage(page);
-    setCurrentPageRaw(next);
-    writePageUrl(next);
-  };
-
-  const handleBack = () => {
-    const prev = navHistory[navHistory.length - 1];
-    if (prev) {
-      setNavHistory((h) => h.slice(0, -1));
-      const next = normalizePortalPage(prev);
-      setCurrentPageRaw(next);
-      writePageUrl(next);
-      setNavData(null);
-    }
-  };
 
   const accessToken = session?.access_token;
 
@@ -261,41 +169,24 @@ export function AdminPortal() {
     );
   }
 
-  const moved = MOVED_NOTICES[currentPage]
-    ?? (currentPage.startsWith('fleet-settings-')
-      ? { title: 'Fleet settings', appName: 'Roam Fleet admin', href: 'https://roamfleet.co/admin' }
-      : null)
-    ?? (currentPage.startsWith('enterprise-settings-')
-      ? { title: 'Enterprise settings', appName: 'Roam Enterprise admin', href: 'https://roamenterprise.co/admin' }
-      : null)
-    ?? (currentPage.startsWith('db-biz-') || currentPage.startsWith('db-customer-')
-      ? { title: 'Customer books', appName: 'Roam Fleet admin', href: 'https://roamfleet.co/admin' }
-      : null);
-
   if (!pageAllowedForRole(role, currentPage)) {
     return (
       <AdminLayout currentPage={currentPage} onNavigate={setCurrentPage}>
-        <div className="rounded-xl border border-slate-200 bg-white p-8 dark:border-slate-800 dark:bg-slate-900/40">
-          <h1 className="text-lg font-semibold text-slate-900 dark:text-white">Not allowed</h1>
-          <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-            Your role cannot open this page.
-          </p>
-        </div>
-      </AdminLayout>
-    );
-  }
-
-  if (moved) {
-    return (
-      <AdminLayout currentPage={currentPage} onNavigate={setCurrentPage}>
-        <MovedNotice title={moved.title} appName={moved.appName} href={moved.href} />
+        {role === 'platform_owner' ? (
+          <div className="rounded-xl border border-[#e2e8f0] bg-white p-8">
+            <h1 className="text-lg font-semibold text-[#0f172a]">This page is not in Dominion</h1>
+            <p className="mt-2 text-sm text-[#64748b]">Customer lists live in each product’s own admin.</p>
+          </div>
+        ) : (
+          <DominionNoAccess />
+        )}
       </AdminLayout>
     );
   }
 
   return (
     <AdminLayout currentPage={currentPage} onNavigate={setCurrentPage}>
-      <Suspense fallback={<div className="p-8 text-sm text-slate-500">Loading…</div>}>
+      <Suspense fallback={<DominionLoading />}>
       {currentPage === 'dashboard' && <AdminDashboard onNavigate={setCurrentPage} />}
       {currentPage === 'vehicles-home' && <VehiclesHome onNavigate={setCurrentPage} />}
       {currentPage === 'places-home' && <PlacesHome onNavigate={setCurrentPage} />}
@@ -306,45 +197,11 @@ export function AdminPortal() {
       {currentPage === 'change-requests' && <ChangeRequestInbox onNavigate={setCurrentPage} />}
       {currentPage === 'platform-ops' && <PlatformOpsHome onNavigate={setCurrentPage} />}
 
-      {currentPage === 'enterprise-overview' && (
-        <div className="rounded-xl border border-slate-200 bg-white overflow-hidden min-h-[560px] dark:border-slate-800 dark:bg-slate-900/40">
-          <EnterpriseOverviewCard onNavigate={setCurrentPage} />
-        </div>
-      )}
-      {currentPage === 'fleet-overview' && (
-        <div className="rounded-xl border border-slate-200 bg-white overflow-hidden min-h-[560px] dark:border-slate-800 dark:bg-slate-900/40">
-          <FleetOverviewCard onNavigate={setCurrentPage} />
-        </div>
-      )}
       {currentPage === 'global-identity' && (
         <div className="rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900/40 overflow-hidden min-h-[560px] p-2">
           <GlobalIdentitySearch />
         </div>
       )}
-      {currentPage === 'enterprise-customers' && <CustomerAccounts productLine="enterprise" />}
-      {(currentPage === 'fleet-customers') && (
-        <CustomerAccounts productLine="fleet" />
-      )}
-      {currentPage === 'enterprise-team-members' && <TeamMembers productLine="enterprise" />}
-      {currentPage === 'fleet-team-members' && (
-        <TeamMembers productLine="fleet" />
-      )}
-      {currentPage === 'dash-merchants' && <MerchantVerificationManager />}
-
-      {currentPage === 'driver-users' && (
-        <DriverUsersPage onOpenUser={(id: string) => handleNavigate('driver-user-detail', { userId: id })} />
-      )}
-      {currentPage === 'driver-user-detail' && navData?.userId && (
-        <DriverUserDetailPage userId={navData.userId} onBack={handleBack} />
-      )}
-
-      {currentPage === 'rides-users' && (
-        <RiderUsersPage onOpenUser={(id: string) => handleNavigate('rider-user-detail', { userId: id })} />
-      )}
-      {currentPage === 'rider-user-detail' && navData?.userId && (
-        <RiderUserDetailPage userId={navData.userId} onBack={handleBack} />
-      )}
-
       {currentPage === 'platform-team' && <PlatformTeam />}
       {currentPage === 'matching-brain' && (
         <div className="rounded-xl border border-slate-200 bg-white overflow-hidden min-h-[560px] dark:border-slate-800 dark:bg-slate-900/40">
@@ -385,21 +242,7 @@ export function AdminPortal() {
           />
         </div>
       )}
-      {currentPage === 'fuel-analytics' && (
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px]">
-          <GasStationAnalytics logs={[]} loading={false} onRequestRefresh={() => undefined} />
-        </div>
-      )}
-      {currentPage === 'fuel-cost-analytics' && (
-        <div className="rounded-xl border border-slate-200 bg-white overflow-hidden min-h-[560px] p-6 dark:border-slate-800 dark:bg-slate-900/40">
-          <FuelCostAnalyticsPage />
-        </div>
-      )}
-      {currentPage === 'fuel-evidence-bridge' && (
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px] p-6 dark:bg-card">
-          <EvidenceBridgeAnalytics />
-        </div>
-      )}
+      {currentPage === 'fuel-analytics' && <StationHealth />}
       {currentPage === 'toll-brain' && (
         <div className="rounded-xl border border-slate-200 bg-white overflow-hidden min-h-[560px] p-6 dark:border-slate-800 dark:bg-slate-900/40">
           <TollBrainPage />
@@ -419,13 +262,6 @@ export function AdminPortal() {
         <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px] dark:bg-card p-4">
           <Suspense fallback={<div className="p-8 text-slate-500">Loading toll settings…</div>}>
             <TollSettingsPage onNavigate={setCurrentPage} />
-          </Suspense>
-        </div>
-      )}
-      {currentPage === 'toll-live-monitor' && (
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px] dark:bg-card p-4">
-          <Suspense fallback={<div className="p-8 text-slate-500">Loading toll monitor…</div>}>
-            <TollLiveMonitorPage onNavigate={setCurrentPage} />
           </Suspense>
         </div>
       )}
@@ -529,26 +365,6 @@ export function AdminPortal() {
           <PendingVendorRequestsManager />
         </div>
       )}
-      {currentPage === 'roam-dash-overview' && (
-        <div className="rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900/40 overflow-hidden min-h-[600px]">
-          <DashOverviewCard />
-        </div>
-      )}
-      {currentPage === 'roam-rides-overview' && (
-        <div className="rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900/40 overflow-hidden min-h-[600px]">
-          <RidesOverviewCard />
-        </div>
-      )}
-      {currentPage === 'roam-driver-overview' && (
-        <div className="rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900/40 overflow-hidden min-h-[600px]">
-          <DriverOverviewCard />
-        </div>
-      )}
-      {currentPage === 'roam-haul-overview' && (
-        <div className="rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900/40 overflow-hidden min-h-[600px]">
-          <HaulOverviewCard />
-        </div>
-      )}
       {currentPage.startsWith('global-settings-') && (
         <GlobalPlatformSettingsPage
           apiBaseUrl={API_ENDPOINTS.admin}
@@ -558,45 +374,10 @@ export function AdminPortal() {
           activeTab={settingsTabFromPageId(currentPage) ?? 'general'}
         />
       )}
-      {currentPage.startsWith('fleet-settings-') && (
-        <PlatformSettings
-          segment="fleet"
-          activeTab={settingsTabFromPageId(currentPage) ?? 'general'}
-        />
-      )}
-      {currentPage.startsWith('enterprise-settings-') && (
-        <PlatformSettings
-          segment="enterprise"
-          activeTab={settingsTabFromPageId(currentPage) ?? 'general'}
-        />
-      )}
       {(currentPage === 'api-center' || currentPage.startsWith('api-center-')) && (
         <ApiCommandCenter
           activeTab={currentPage === 'api-center' ? 'overview' : currentPage.replace('api-center-', '')}
           onNavigate={setCurrentPage}
-        />
-      )}
-      {currentPage === 'db-management' && (
-        <DatabaseManagement onNavigate={handleNavigate} />
-      )}
-      {currentPage === 'unified-ledger' && (
-        <UnifiedLedgerFeed onBack={() => setCurrentPage('db-management')} />
-      )}
-      {currentPage === 'db-settings' && (
-        <LedgerColumnSettings onBack={handleBack} />
-      )}
-      {currentPage.startsWith('db-biz-') && (
-        <BusinessTypeCustomers
-          businessType={currentPage.replace('db-biz-', '') as BusinessType}
-          onNavigate={handleNavigate}
-          onBack={handleBack}
-        />
-      )}
-      {currentPage.startsWith('db-customer-') && (
-        <CustomerLedgerView
-          customerId={currentPage.replace('db-customer-', '')}
-          customerData={navData?.customer}
-          onBack={handleBack}
         />
       )}
       </Suspense>

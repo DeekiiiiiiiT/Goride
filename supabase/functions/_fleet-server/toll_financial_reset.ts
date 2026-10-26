@@ -49,6 +49,10 @@ export function tollLedgerRowToIntegrity(row: Record<string, unknown>): TollInte
       ? String(row.reference_number ?? row.referenceNumber)
       : null,
     status: row.status != null ? String(row.status) : null,
+    resolution: (() => {
+      const raw = row.resolution ?? payload.resolution ?? meta.resolution;
+      return raw != null && String(raw).trim() ? String(raw) : null;
+    })(),
     plaza: (row.plaza ?? payload.plaza) != null ? String(row.plaza ?? payload.plaza) : null,
     vendor: row.plaza != null ? String(row.plaza) : null,
     batchId: (row.batch_id ?? row.batchId) != null
@@ -483,7 +487,7 @@ async function loadTollLedgerRowsByIds(
     const { data, error } = await sb()
       .from("fleet_toll_ledger")
       .select(
-        "id, amount, type, status, metadata, driver_id, vehicle_id, date, payment_method, plaza, trip_id, batch_id, audit_trail, payload_json",
+        "id, amount, type, status, resolution, metadata, driver_id, vehicle_id, date, payment_method, plaza, trip_id, batch_id, audit_trail, payload_json",
       )
       .in("id", uniq);
     if (!error && data) {
@@ -597,7 +601,7 @@ async function loadMissingTollSpendRowsForWeek(opts: {
     let q = sb()
       .from("fleet_toll_ledger")
       .select(
-        "id, amount, type, status, metadata, driver_id, vehicle_id, date, payment_method, plaza, trip_id, batch_id, audit_trail, payload_json",
+        "id, amount, type, status, resolution, metadata, driver_id, vehicle_id, date, payment_method, plaza, trip_id, batch_id, audit_trail, payload_json",
       )
       .gte("date", weekStart)
       .lte("date", weekEnd);

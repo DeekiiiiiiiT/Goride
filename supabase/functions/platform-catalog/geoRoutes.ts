@@ -30,7 +30,7 @@ function deliveryDb() {
 function denyWrite(admin: ProductAdminUser): Response | null {
   if (canWriteWorldMaps(admin)) return null;
   return new Response(
-    JSON.stringify({ error: "forbidden", message: "Permission required: platform.geo.write" }),
+    JSON.stringify({ error: "forbidden", message: "Permission required: maps.publish" }),
     { status: 403, headers: { "Content-Type": "application/json" } },
   );
 }

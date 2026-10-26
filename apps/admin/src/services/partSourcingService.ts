@@ -9,7 +9,7 @@ import type {
   CompatiblePartsResponse,
 } from "../types/partSourcing";
 
-const base = () => `${API_ENDPOINTS.admin}/admin`;
+const base = () => `${API_ENDPOINTS.catalog}/admin`;
 
 function edgeHeaders(accessToken: string, contentType?: string): HeadersInit {
   const h: Record<string, string> = {

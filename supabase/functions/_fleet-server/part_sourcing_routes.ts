@@ -5,6 +5,7 @@ import type { Context } from "npm:hono@4.3.11";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import * as kv from "./kv_store.tsx";
 import { requireAuth, requirePermission, assertPlatformStaffResponse } from "./rbac_middleware.ts";
+import { dominionCan } from "../../../packages/auth-client/src/dominionPermissions.ts";
 import { filterByOrg, getOrgId } from "./org_scope.ts";
 import { resolveCatalogIdForKvVehicle } from "./vehicle_catalog_resolve.ts";
 import { registerPartsEnterpriseRoutes } from "./parts_enterprise_routes.ts";
@@ -44,6 +45,21 @@ export function registerPartSourcingRoutes(
   app: { get: unknown; post: unknown; patch: unknown; delete: unknown },
   supabase: SupabaseClient,
 ) {
+  const gate = app as {
+    use: (path: string, handler: (c: Context, next: () => Promise<void>) => Promise<unknown>) => void;
+  };
+  gate.use("/make-server-37f42386/admin/*", async (c, next) => {
+    if (!c.req.path.includes("/admin/part-")) return next();
+    if (c.req.method === "GET" || c.req.method === "HEAD") return next();
+    const denied = assertPartSourcingPlatformAccess(c);
+    if (denied) return denied;
+    const user = c.get("rbacUser") as { resolvedRole?: string; role?: string } | undefined;
+    if (!dominionCan(user?.resolvedRole || user?.role, "catalog.write")) {
+      return c.json({ error: "Forbidden", message: "You cannot change that" }, 403);
+    }
+    await next();
+  });
+
   const route = app as {
     get: (path: string, ...handlers: unknown[]) => void;
     post: (path: string, ...handlers: unknown[]) => void;

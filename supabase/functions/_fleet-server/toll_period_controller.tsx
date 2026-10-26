@@ -288,8 +288,9 @@ function isClaimStillActionable(claim: any, toll: any, disputeRefunds: any[]): b
 
 /**
  * Pre-bucket fleet-loss events by Monday week key once (O(E)).
- * Uses the same date membership as filterTollEventsInDateRange via tollEventDate /
- * isTollFleetLossEvent; week key matches weekKeyFor used for period ids.
+ * Uses the same date membership as filterTollEventsInDateRange via tollEventDate.
+ * Plaza rows and driver charges both stay, so the week list and the review
+ * gate subtract the same charge. Week key matches weekKeyFor used for period ids.
  */
 function bucketFleetLossEventsByWeek(
   events: TollLedgerLikeEvent[],

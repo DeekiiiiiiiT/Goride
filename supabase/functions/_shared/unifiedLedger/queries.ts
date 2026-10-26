@@ -124,9 +124,9 @@ async function manualAmountReconciliation(
 }
 
 /** Phase 6 (Enterprise): Check double-entry balance per product. */
-export async function checkProductBalances(): Promise<BalanceCheck[]> {
+export async function checkProductBalances(only?: string[]): Promise<BalanceCheck[]> {
   const client = unifiedLedgerClient();
-  const products = [
+  const products = only && only.length > 0 ? only : [
     "roam_rides",
     "roam_driver",
     "roam_fleet",

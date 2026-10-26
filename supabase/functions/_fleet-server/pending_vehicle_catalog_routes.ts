@@ -9,6 +9,7 @@ import {
   hasPermission,
   type RbacUser,
 } from "./rbac_middleware.ts";
+import { dominionCan } from "../../../packages/auth-client/src/dominionPermissions.ts";
 import { executeMaintenanceBootstrap } from "./maintenance_bootstrap_core.ts";
 import { canonicalOdometerForVehicle } from "./canonical_vehicle_odometer.ts";
 import { filterByOrg, getOrgId } from "./org_scope.ts";
@@ -62,6 +63,16 @@ const OPEN_STATUSES = ["pending", "needs_info"] as const;
 
 // Wave 5: DRY — use shared assertPlatformStaffResponse from rbac_middleware
 const assertPlatformVehicle = assertPlatformStaffResponse;
+
+function assertCatalogWrite(c: Context): Response | null {
+  const denied = assertPlatformVehicle(c);
+  if (denied) return denied;
+  const user = c.get("rbacUser") as { resolvedRole?: string; role?: string } | undefined;
+  if (!dominionCan(user?.resolvedRole || user?.role, "catalog.write")) {
+    return c.json({ error: "Forbidden", message: "You cannot change that" }, 403);
+  }
+  return null;
+}
 
 function pickRow(raw: Record<string, unknown>, partial: boolean): Record<string, unknown> {
   const out: Record<string, unknown> = {};
@@ -585,7 +596,7 @@ export function registerPendingVehicleCatalogRoutes(
     "/make-server-37f42386/admin/vehicle-catalog-pending-requests/:id/request-info",
     requireAuth(),
     async (c) => {
-      const denied = assertPlatformVehicle(c);
+      const denied = assertCatalogWrite(c);
       if (denied) return denied;
       try {
         const id = c.req.param("id")?.trim() ?? "";
@@ -636,7 +647,7 @@ export function registerPendingVehicleCatalogRoutes(
     "/make-server-37f42386/admin/vehicle-catalog-pending-requests/:id/reject",
     requireAuth(),
     async (c) => {
-      const denied = assertPlatformVehicle(c);
+      const denied = assertCatalogWrite(c);
       if (denied) return denied;
       try {
         const id = c.req.param("id")?.trim() ?? "";
@@ -701,7 +712,7 @@ export function registerPendingVehicleCatalogRoutes(
     "/make-server-37f42386/admin/vehicle-catalog-pending-requests/:id/approve-existing",
     requireAuth(),
     async (c) => {
-      const denied = assertPlatformVehicle(c);
+      const denied = assertCatalogWrite(c);
       if (denied) return denied;
       try {
         const id = c.req.param("id")?.trim() ?? "";
@@ -768,7 +779,7 @@ export function registerPendingVehicleCatalogRoutes(
     "/make-server-37f42386/admin/vehicle-catalog-pending-requests/:id/approve",
     requireAuth(),
     async (c) => {
-      const denied = assertPlatformVehicle(c);
+      const denied = assertCatalogWrite(c);
       if (denied) return denied;
       try {
         const id = c.req.param("id")?.trim() ?? "";

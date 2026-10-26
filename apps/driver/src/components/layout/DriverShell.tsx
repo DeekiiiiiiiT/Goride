@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { syncCatalog } from '@roam/api-client';
 import { useDriver } from '../../contexts/DriverContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { RideDispatchProvider } from '../../contexts/RideDispatchContext';
@@ -75,6 +76,10 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
   const cameraResumeRoutedRef = useRef(false);
   const bottomNavItems = getBottomNavItems();
   const menuNavItems = getNavigationItems(mode);
+
+  useEffect(() => {
+    syncCatalog('driver');
+  }, []);
 
   // After OEM camera kill, reopen check-in / expenses so consumeRestoredPhoto can run.
   useEffect(() => {

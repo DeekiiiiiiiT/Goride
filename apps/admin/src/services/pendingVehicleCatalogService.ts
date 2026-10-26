@@ -145,7 +145,7 @@ export async function listPendingVehicleCatalogRequests(
   if (opts?.limit != null) sp.set("limit", String(opts.limit));
   if (opts?.offset != null) sp.set("offset", String(opts.offset));
   const res = await fetch(
-    `${API_ENDPOINTS.admin}/admin/vehicle-catalog-pending-requests?${sp.toString()}`,
+    `${API_ENDPOINTS.catalog}/admin/vehicle-catalog-pending-requests?${sp.toString()}`,
     { headers: edgeHeaders(accessToken) },
   );
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -174,7 +174,7 @@ export async function requestInfoOnPendingVehicleCatalogRequest(
   message: string,
 ): Promise<void> {
   const res = await fetch(
-    `${API_ENDPOINTS.admin}/admin/vehicle-catalog-pending-requests/${id}/request-info`,
+    `${API_ENDPOINTS.catalog}/admin/vehicle-catalog-pending-requests/${id}/request-info`,
     {
       method: "POST",
       headers: edgeHeaders(accessToken, "application/json"),
@@ -188,7 +188,7 @@ export async function getPendingVehicleCatalogRequest(
   accessToken: string,
   id: string,
 ): Promise<{ item: VehicleCatalogPendingRequest; fleetVehicle: Record<string, unknown> | null }> {
-  const res = await fetch(`${API_ENDPOINTS.admin}/admin/vehicle-catalog-pending-requests/${id}`, {
+  const res = await fetch(`${API_ENDPOINTS.catalog}/admin/vehicle-catalog-pending-requests/${id}`, {
     headers: edgeHeaders(accessToken),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -200,7 +200,7 @@ export async function rejectPendingVehicleCatalogRequest(
   id: string,
   reason?: string,
 ): Promise<void> {
-  const res = await fetch(`${API_ENDPOINTS.admin}/admin/vehicle-catalog-pending-requests/${id}/reject`, {
+  const res = await fetch(`${API_ENDPOINTS.catalog}/admin/vehicle-catalog-pending-requests/${id}/reject`, {
     method: "POST",
     headers: edgeHeaders(accessToken, "application/json"),
     body: JSON.stringify({ reason }),
@@ -214,7 +214,7 @@ export async function approveExistingPendingVehicleCatalogRequest(
   existingCatalogId: string,
 ): Promise<unknown> {
   const res = await fetch(
-    `${API_ENDPOINTS.admin}/admin/vehicle-catalog-pending-requests/${id}/approve-existing`,
+    `${API_ENDPOINTS.catalog}/admin/vehicle-catalog-pending-requests/${id}/approve-existing`,
     {
       method: "POST",
       headers: edgeHeaders(accessToken, "application/json"),
@@ -230,7 +230,7 @@ export async function approvePendingVehicleCatalogRequest(
   id: string,
   catalogPayload: Record<string, unknown>,
 ): Promise<unknown> {
-  const res = await fetch(`${API_ENDPOINTS.admin}/admin/vehicle-catalog-pending-requests/${id}/approve`, {
+  const res = await fetch(`${API_ENDPOINTS.catalog}/admin/vehicle-catalog-pending-requests/${id}/approve`, {
     method: "POST",
     headers: edgeHeaders(accessToken, "application/json"),
     body: JSON.stringify(catalogPayload),

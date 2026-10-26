@@ -7,6 +7,7 @@ import type { AppendCanonicalLedgerResult, CanonicalLedgerEventInput } from '../
 import { OdometerReading } from '../types/vehicle';
 import { TollPlaza } from '../types/toll';
 import { API_ENDPOINTS } from './apiConfig';
+import { catalogPages } from '@roam/api-client';
 import { tollApiErrorFromResponse } from './tollApiError';
 import type { CompatiblePartsResponse } from '../types/partSourcing';
 import type {
@@ -3034,12 +3035,7 @@ export const api = {
   // -----------------------------------------------------------------------
 
   async getTollPlazas(): Promise<TollPlaza[]> {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.toll}/toll-plazas`, {
-        headers: await requireAuthHeaders(null)
-    });
-    if (!response.ok) throw await tollApiErrorFromResponse(response, 'Failed to fetch toll plazas');
-    const body = await response.json();
-    return Array.isArray(body) ? body : (body?.plazas || []);
+    return catalogPages<TollPlaza>('fleet', '/v1/tolls', 'plazas');
   },
 
   async getTollPlaza(id: string): Promise<TollPlaza> {

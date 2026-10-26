@@ -321,6 +321,9 @@ const TRIP_DRIVER_COLUMNS = [
   "distance",
   "duration",
   "net_to_driver",
+  // Week cash compares this to the Uber statement. Without it, cash trips
+  // fall back to the fare and a real match looks like a mismatch.
+  "cashCollected:payload_json->cashCollected",
   "tollCharges:payload_json->tollCharges",
   "dropoffTime:payload_json->dropoffTime",
   "requestTime:payload_json->requestTime",

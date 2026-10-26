@@ -250,6 +250,29 @@ export function shouldReuseFuelSnapshot(args: {
   return args.freshRoutingFailed;
 }
 
+function moneyCents(value: unknown): number {
+  return Math.round((Number(value) || 0) * 100);
+}
+
+/** Fuel totals the lock is allowed to keep when only the fingerprint moved. */
+export function fuelSnapshotMoneyKey(money: unknown): string {
+  const body = money && typeof money === "object"
+    ? money as { reports?: unknown[]; totalSpend?: number }
+    : {};
+  const reports = Array.isArray(body.reports) ? body.reports : [];
+  const parts = reports.map((report) => {
+    const row = report && typeof report === "object" ? report as Record<string, unknown> : {};
+    return [
+      String(row.vehicleId || ""),
+      moneyCents(row.totalGasCardCost),
+      moneyCents(row.driverShare),
+      moneyCents(row.companyShare),
+      moneyCents(row.miscellaneousCost),
+    ].join(":");
+  }).sort();
+  return `${moneyCents(body.totalSpend)}|${parts.join("|")}`;
+}
+
 export function fuelSnapshotWritePlan(args: {
   latestHash: string | null | undefined;
   beforeHash: string;

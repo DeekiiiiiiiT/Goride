@@ -106,7 +106,7 @@ export const stationFuelService = {
   },
 
   async saveStation(station: any) {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/stations`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.catalog}/admin/master/stations`, {
       method: 'POST',
       headers: await authHeaders(),
       body: JSON.stringify(station),
@@ -120,7 +120,10 @@ export const stationFuelService = {
       error.existingStation = (dupeData as { existingStation?: any }).existingStation;
       throw error;
     }
-    if (!response.ok) throw new Error('Failed to save station');
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error((err as { message?: string; error?: string }).message || (err as { error?: string }).error || 'Failed to save station');
+    }
     const result = await response.json();
     if ((result as { autoCleanedLearnt?: unknown }).autoCleanedLearnt !== undefined) {
       return result;
@@ -129,7 +132,7 @@ export const stationFuelService = {
   },
 
   async deleteStation(id: string): Promise<void> {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/stations/${id}`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.catalog}/admin/master/stations/${id}`, {
       method: 'DELETE',
       headers: await authHeaders(null),
     });

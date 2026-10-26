@@ -50,17 +50,20 @@ export const tollOpsApi = {
   },
 
   async saveTollPlaza(plaza: Partial<TollPlaza>): Promise<{ success: boolean; data: TollPlaza }> {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.toll}/toll-plazas`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.catalog}/admin/master/toll_plazas`, {
       method: 'POST',
       headers: await authHeaders(),
       body: JSON.stringify(plaza),
     });
-    if (!response.ok) throw new Error('Failed to save toll plaza');
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error((err as { message?: string; error?: string }).message || (err as { error?: string }).error || 'Failed to save toll plaza');
+    }
     return response.json();
   },
 
   async deleteTollPlaza(id: string): Promise<void> {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.toll}/toll-plazas/${id}`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.catalog}/admin/master/toll_plazas/${id}`, {
       method: 'DELETE',
       headers: await authHeaders(null),
     });
@@ -76,7 +79,7 @@ export const tollOpsApi = {
   },
 
   async saveTollInfo(schedule: unknown) {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.toll}/toll-info`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.catalog}/admin/toll-rates`, {
       method: 'POST',
       headers: await authHeaders(),
       body: JSON.stringify(schedule),
