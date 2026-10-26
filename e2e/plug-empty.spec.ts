@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { PLUG_SUPPLIED_CLOCKS, PLUG_SUPPLIED_NAMES, PLUG_SUPPLIED_PRICES, PLUG_SUPPLIED_STREETS, standIn } from './plug-stand-in';
+import { PLUG_SUPPLIED_CHASSIS, PLUG_SUPPLIED_CLOCKS, PLUG_SUPPLIED_ENGINES, PLUG_SUPPLIED_NAMES, PLUG_SUPPLIED_PRICES, PLUG_SUPPLIED_STREETS, standIn } from './plug-stand-in';
 
 const ROUTES = [
   '/welcome',
@@ -92,7 +92,7 @@ async function showsNothingInvented(page: Page, route: string) {
       && screen?.getAttribute('data-plug-screen') !== '15b-explore-loading.html'
       && screen?.getAttribute('data-filled') === '1';
   });
-  const report = await page.evaluate(({ prices, clocks, streets }) => {
+  const report = await page.evaluate(({ prices, clocks, streets, engines, chassis }) => {
       const moneyRe = /J\$\s*[\d,]+(?:\.\d+)?/g;
       const kmRe = /\d[\d,]*(?:\.\d+)?\s*km/gi;
       const clockRe = /\d{1,2}:\d{2}\s*[AP]M/gi;
@@ -100,6 +100,8 @@ async function showsNothingInvented(page: Page, route: string) {
       const streetRe = /\b[A-Z0-9][\w'.-]*(?:[-\s]+[A-Z0-9][\w'.-]*)*\s+(?:Ave\.?|Avenue|Rd\.?|Road|Street|Lane|Blvd|Dr\.?)\b/g;
       const oemRe = /\b\d{5}-[A-Z0-9]{5}\b/g;
       const shortPartRe = /\b[A-Z]{2}-?\d{3}[A-Z]{0,2}\b/g;
+      const engineRe = /\b\d[A-Z]{2}-[A-Z]{2,3}\b/g;
+      const chassisRe = /\bM\d{3}[A-Z]\b/g;
       const percentRe = /\d+(?:\.\d+)?\s*%/g;
       const countRe = /\b\d+\s+verified matches\b|\b\d+\s+stores\b|find stores\s*\(\s*\d+/gi;
       const allowedPercent = /100%\s*(?:free|private|local)/i;
@@ -111,6 +113,9 @@ async function showsNothingInvented(page: Page, route: string) {
       const strayWhen: string[] = [];
       const strayStreets: string[] = [];
       const strayParts: string[] = [];
+      const strayEngines: string[] = [];
+      const strayChassis: string[] = [];
+      const strayGuarantee: string[] = [];
       const strayPercents: string[] = [];
       const strayCounts: string[] = [];
       const shown = (parent: HTMLElement | null) => {
@@ -156,6 +161,13 @@ async function showsNothingInvented(page: Page, route: string) {
           for (const hit of [...(text.match(oemRe) || []), ...(text.match(shortPartRe) || [])]) {
             if (!supplied(hit, parent, [])) strayParts.push(hit);
           }
+          for (const hit of text.match(engineRe) || []) {
+            if (!supplied(hit, parent, engines)) strayEngines.push(hit);
+          }
+          for (const hit of text.match(chassisRe) || []) {
+            if (!supplied(hit, parent, chassis)) strayChassis.push(hit);
+          }
+          if (/guarantee/i.test(text)) strayGuarantee.push(text.replace(/\s+/g, ' ').trim());
           for (const hit of text.match(percentRe) || []) {
             if (!allowedPercent.test(parent?.textContent || '')) strayPercents.push(hit);
           }
@@ -166,8 +178,8 @@ async function showsNothingInvented(page: Page, route: string) {
       const km = [...(document.body.innerText.match(kmRe) || [])]
         .map((hit) => hit.replace(/\s+/g, ' ').toLowerCase())
         .filter((hit) => !allowedKm.has(hit));
-      return { names, strayMoney, offPrice, km, strayWhen, strayStreets, strayParts, strayPercents, strayCounts };
-    }, { prices: PLUG_SUPPLIED_PRICES, clocks: PLUG_SUPPLIED_CLOCKS, streets: PLUG_SUPPLIED_STREETS });
+      return { names, strayMoney, offPrice, km, strayWhen, strayStreets, strayParts, strayEngines, strayChassis, strayGuarantee, strayPercents, strayCounts };
+    }, { prices: PLUG_SUPPLIED_PRICES, clocks: PLUG_SUPPLIED_CLOCKS, streets: PLUG_SUPPLIED_STREETS, engines: PLUG_SUPPLIED_ENGINES, chassis: PLUG_SUPPLIED_CHASSIS });
     const unknown = report.names.filter((name) => !PLUG_SUPPLIED_NAMES.includes(name));
     expect(unknown, `${route} shows a place the test did not supply`).toEqual([]);
     expect(report.strayMoney, `${route} shows a price with no live row`).toEqual([]);
@@ -176,6 +188,9 @@ async function showsNothingInvented(page: Page, route: string) {
     expect(report.strayWhen, `${route} shows a date or time the stand-in did not supply`).toEqual([]);
     expect(report.strayStreets, `${route} shows a street the stand-in did not supply`).toEqual([]);
     expect(report.strayParts, `${route} shows a part number the stand-in did not supply`).toEqual([]);
+    expect(report.strayEngines, `${route} shows an engine the stand-in did not supply`).toEqual([]);
+    expect(report.strayChassis, `${route} shows a chassis code the stand-in did not supply`).toEqual([]);
+    expect(report.strayGuarantee, `${route} says guarantee`).toEqual([]);
     expect(report.strayPercents, `${route} shows a percentage the stand-in did not supply`).toEqual([]);
     expect(report.strayCounts, `${route} shows a match or store count the stand-in did not supply`).toEqual([]);
     await expect(page.locator('img[src*="aida-public"], [style*="aida-public"]'), route).toHaveCount(0);

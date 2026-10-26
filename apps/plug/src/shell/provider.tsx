@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth';
-import { plugSend } from '../api';
-import { supabasePlugApp } from '../../../../packages/auth-client/src/supabase';
 import { currentPath, fallbackFor, showsTabs, tabFor, TAB_ROOT, type PlugTab } from '../nav';
 import { readQueue } from '../offline';
 import { setPlugRuntime, type PlugRuntime } from './click';
@@ -139,7 +137,10 @@ export function PlugShell({ children }: { children: ReactNode }) {
         no: () => settle(false),
       });
     }),
-    signIn: (returnTo) => setSignReturn(returnTo),
+    signIn: (returnTo) => {
+      if (auth.signedIn) return;
+      setSignReturn(returnTo);
+    },
     openSheet: (name) => setSheet(name),
     closeSheet: () => {
       void releaseRef.current().then(() => setSheet(null));
@@ -162,25 +163,17 @@ export function PlugShell({ children }: { children: ReactNode }) {
     window.dispatchEvent(new Event('plug-refresh'));
   }, [auth.signedIn]);
 
-  const askedJoin = useRef(false);
   useEffect(() => {
     const session = auth.session;
-    if (!session) return;
+    if (!session || !auth.joined) return;
     const user = session.user;
-    const meta = (user.app_metadata || {}) as { role?: string; provider?: string; providers?: string[] };
-    const role = String(meta.role || '');
+    const meta = (user.app_metadata || {}) as { provider?: string; providers?: string[] };
     const google = meta.provider === 'google' || (meta.providers || []).includes('google');
-    if (!role && google && !askedJoin.current) {
-      askedJoin.current = true;
-      void plugSend('/join', 'POST', { ticket: sessionStorage.getItem('plug-join-ticket') || '' })
-        .then(() => supabasePlugApp.auth.refreshSession())
-        .catch(() => { askedJoin.current = false; });
-    }
     if (!google) return;
     const name = String(user.user_metadata?.full_name || user.user_metadata?.name || user.user_metadata?.display_name || '').trim();
     const here = currentPath();
     if (['/', '/welcome', '/signup', '/otp', '/login'].includes(here)) navigate(name ? '/explore' : '/profile');
-  }, [auth.session, navigate]);
+  }, [auth.joined, auth.session, navigate]);
 
   useEffect(() => {
     if (!navigator.geolocation) return;
@@ -194,9 +187,13 @@ export function PlugShell({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (path !== '/') return;
     if (!auth.ready) return;
-    const timer = window.setTimeout(() => navigate(auth.signedIn ? '/explore' : '/welcome'), 1500);
+    if (auth.signedIn && !auth.joined && !auth.joinError) return;
+    const timer = window.setTimeout(() => {
+      if (auth.joinError) return;
+      navigate(auth.signedIn ? '/explore' : '/welcome');
+    }, 1500);
     return () => window.clearTimeout(timer);
-  }, [auth.ready, auth.signedIn, navigate, path]);
+  }, [auth.ready, auth.signedIn, auth.joined, auth.joinError, navigate, path]);
 
   useEffect(() => {
     const root = scrollRef.current;
@@ -294,6 +291,14 @@ export function PlugShell({ children }: { children: ReactNode }) {
         <div ref={scrollRef} data-plug-scroll className={`h-full overflow-x-hidden overscroll-none ${overlayOpen || mapHome ? 'overflow-hidden' : 'overflow-y-auto'}`}>
           <div className={tabsOn && !mapHome ? 'pb-tabbar' : ''}>{children}</div>
         </div>
+        {auth.joinError ? (
+          <div role="alert" className="absolute inset-0 z-[90] flex flex-col items-center justify-center gap-4 bg-surface px-6 text-center">
+            <p className="font-headline-sm text-headline-sm text-on-surface">{auth.joinError}</p>
+            <button type="button" className="pressable min-h-12 rounded-xl bg-primary px-6 font-bold text-on-primary" onClick={() => { void auth.signOut(); }}>
+              Sign out
+            </button>
+          </div>
+        ) : null}
         {tabsOn ? <TabBar active={active} signedIn={auth.signedIn} flagOn={(flag) => auth.flagOn(flag as never)} /> : null}
         <PlugChrome
           toast={toast}

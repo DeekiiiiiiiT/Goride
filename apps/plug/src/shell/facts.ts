@@ -11,6 +11,30 @@ export function catalogVariant(): string | null {
   return sessionStorage.getItem('plug-catalog');
 }
 
+export type CatalogVehicle = {
+  id: string;
+  make?: string | null;
+  model?: string | null;
+  year?: number | null;
+  trim_series?: string | null;
+  catalog_trim?: string | null;
+  chassis_code?: string | null;
+  engine_code?: string | null;
+  production_start_year?: number | null;
+  production_end_year?: number | null;
+};
+
+/** A catalog row covers a chosen year when that year sits in its production span. */
+export function catalogCoversYear(row: CatalogVehicle, year: number): boolean {
+  const start = Number(row.production_start_year);
+  if (Number.isFinite(start) && start > 0) {
+    const end = row.production_end_year == null ? null : Number(row.production_end_year);
+    return year >= start && (end == null || !Number.isFinite(end) || year <= end);
+  }
+  if (row.year != null && Number(row.year) > 0) return Number(row.year) === year;
+  return true;
+}
+
 export type Fix = { lat: number; lng: number; accuracyM: number };
 
 /** A GPS fix the phone actually reported. */

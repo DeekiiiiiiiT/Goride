@@ -133,7 +133,7 @@ export function VehicleNotFoundScreen() {
                   <label className={"font-label-md text-label-md text-on-surface"} htmlFor={"car-engine"}>
                     Displacement
                   </label>
-                  <input className={"w-full h-12 px-3 rounded-lg bg-surface-container-low text-on-surface font-body-md text-body-md focus:bg-surface-container-lowest outline-none shadow-sm"} id={"car-engine"} placeholder={"e.g. 1.5L 1NZ-FXE"} type={"text"} defaultValue={""} />
+                  <input className={"w-full h-12 px-3 rounded-lg bg-surface-container-low text-on-surface font-body-md text-body-md focus:bg-surface-container-lowest outline-none shadow-sm"} id={"car-engine"} placeholder={"Engine size, if you know it"} type={"text"} defaultValue={""} />
                 </div>
               </div>
               <div className={"flex flex-col gap-2 pt-1"}>
@@ -234,7 +234,7 @@ export function VehicleNotFoundScreen() {
               </div>
               <div className={"flex flex-col"}>
                 <span className={"font-label-md text-label-md text-on-surface font-bold"}>
-                  Local Parts Guarantee
+                  Parts matched from the catalog
                 </span>
                 <p className={"font-body-sm text-body-sm text-on-surface-variant mt-0.5"}>
                   Indexing your engine lets mechanics from Montego Bay to Downtown Kingston match genuine oil filters, brake pads, and spark plugs without guessing.

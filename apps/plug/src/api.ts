@@ -19,7 +19,23 @@ export async function publicGet<T>(path: string): Promise<T> {
   return body as T;
 }
 
-export async function plugSend<T>(path: string, method: string, payload?: unknown): Promise<T> {
+let releaseJoin = () => {};
+let joinGate: Promise<void> = Promise.resolve();
+
+/** Hold Garage and the other signed-in calls until Plug membership is written. */
+export function holdPlugCalls() {
+  joinGate = new Promise<void>((resolve) => {
+    releaseJoin = resolve;
+  });
+}
+
+export function releasePlugCalls() {
+  releaseJoin();
+  releaseJoin = () => {};
+}
+
+export async function plugSend<T>(path: string, method: string, payload?: unknown, waitForJoin = true): Promise<T> {
+  if (waitForJoin) await joinGate;
   const response = await fetch(`${explorer}${path}`, {
     method,
     headers: supabaseAnonFunctionHeaders(await authHeaders()),

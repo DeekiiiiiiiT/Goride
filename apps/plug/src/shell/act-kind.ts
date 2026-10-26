@@ -8,6 +8,8 @@ const EXACT: Record<string, string> = {
   'cancel-scan': 'close',
   'clear-phone': 'clear-phone',
   'continue-with-google': 'google',
+  'continue-with-phone': 'phone',
+  'pick-catalog': 'catalog',
   'continue-with-apple': 'apple',
   'open-station': 'open-station',
   'open-place': 'open-place',

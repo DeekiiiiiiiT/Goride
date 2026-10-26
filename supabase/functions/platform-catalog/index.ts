@@ -153,11 +153,19 @@ app.get("/parts", async (c) => {
   }
 });
 
+const CATALOG_COLUMNS = "id,make,model,trim_series,catalog_trim,chassis_code,engine_code,production_start_year,production_end_year";
+
 app.get("/vehicle-catalog", async (c) => {
   try {
-    const q = (c.req.query("q") || "").replace(/[^a-zA-Z0-9 ]/g, "").trim();
     const sb = admin();
-    let query = sb.from("vehicle_catalog").select("id,make,model,year,trim_series").order("make").limit(40);
+    const id = (c.req.query("id") || "").trim();
+    if (id) {
+      const { data, error } = await sb.from("vehicle_catalog").select(CATALOG_COLUMNS).eq("id", id).maybeSingle();
+      if (error) throw error;
+      return cached({ vehicles: data ? [data] : [] });
+    }
+    const q = (c.req.query("q") || "").replace(/[^a-zA-Z0-9 ]/g, "").trim();
+    let query = sb.from("vehicle_catalog").select(CATALOG_COLUMNS).order("make").limit(40);
     if (q) query = query.or(`make.ilike.%${q}%,model.ilike.%${q}%`);
     const { data, error } = await query;
     if (error) throw error;

@@ -2,7 +2,7 @@ import { buildFitMessage } from '@roam/types/partsResolution';
 import { plugSend, publicGet } from '../api';
 import { readQueue, readStationCache, writeStationCache } from '../offline';
 import { handlePlugClick, onPlugClick } from '../shell/actions';
-import { catalogVariant, deviceFix, rememberVehicle, vehicleId } from './facts';
+import { catalogCoversYear, catalogVariant, deviceFix, rememberVehicle, vehicleId, type CatalogVehicle } from './facts';
 import { getPlugRuntime } from './click';
 
 type Vehicle = {
@@ -170,11 +170,13 @@ async function fillVehicle(root: HTMLElement) {
   if (!car) {
     slotText(root, 'car', 'Add a car');
     slotText(root, 'last-reading', 'No reading yet');
+    paintCatalogSpecs(root, null);
     paintGps(root);
     return;
   }
   rememberVehicle(car);
   slotText(root, 'car', carLabel(car));
+  paintCatalogSpecs(root, await catalogRow(car));
   const reading = await lastReading(car);
   const odo = root.querySelector('[data-slot="odometer"]');
   if (odo) odo.textContent = reading == null ? '' : Number(reading).toLocaleString('en-JM');
@@ -1002,20 +1004,78 @@ async function fillParish(root: HTMLElement) {
   if (line) line.textContent = `${count} parishes on the map. Tap a region to inspect gaps.`;
 }
 
+function catalogFacts(row: CatalogVehicle): string[] {
+  return [row.catalog_trim || row.trim_series || '', row.chassis_code || '', row.engine_code || '']
+    .map((value) => String(value).trim())
+    .filter(Boolean);
+}
+
+function paintCatalogSpecs(root: HTMLElement, row: CatalogVehicle | null) {
+  const slot = root.querySelector<HTMLElement>('[data-slot="catalog-specs"]');
+  if (!slot) return;
+  slot.textContent = '';
+  const facts = row ? catalogFacts(row) : [];
+  if (!facts.length) return;
+  const line = document.createElement('p');
+  line.className = 'px-4 py-2 font-label-md text-label-md text-on-surface';
+  line.dataset.liveRow = 'catalog';
+  line.textContent = facts.join(' · ');
+  slot.appendChild(line);
+}
+
+async function catalogRow(car: Vehicle): Promise<CatalogVehicle | null> {
+  const id = car.catalog_variant_id || catalogVariant();
+  if (!id) return null;
+  try {
+    const body = await publicGet<{ vehicles: CatalogVehicle[] }>(`/vehicle-catalog?id=${encodeURIComponent(id)}`);
+    return body.vehicles?.[0] || null;
+  } catch {
+    return null;
+  }
+}
+
+function paintTrimChoices(root: HTMLElement, rows: CatalogVehicle[]) {
+  const slot = root.querySelector<HTMLElement>('[data-slot="trims"]');
+  if (!slot) return;
+  const year = Number(sessionStorage.getItem('plug-year') || '');
+  const shown = year ? rows.filter((row) => catalogCoversYear(row, year)) : rows;
+  slot.textContent = '';
+  shown.forEach((row) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'w-full min-h-12 rounded-xl bg-surface-container-lowest p-4 text-left font-bold shadow-sm';
+    button.dataset.act = 'pick-catalog';
+    button.dataset.catalogId = row.id;
+    if (row.make) button.dataset.make = row.make;
+    if (row.model) button.dataset.model = row.model;
+    const title = [row.make, row.model].filter(Boolean).join(' ').trim() || 'This model';
+    const facts = catalogFacts(row);
+    button.textContent = facts.length ? `${title} · ${facts.join(' · ')}` : title;
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      void handlePlugClick(button);
+    });
+    slot.appendChild(button);
+  });
+}
+
 async function fillCatalog(root: HTMLElement, query: string) {
-  const body = await publicGet<{ vehicles: { id: string; make: string; model: string; year: number }[] }>(
+  const body = await publicGet<{ vehicles: CatalogVehicle[] }>(
     `/vehicle-catalog?q=${encodeURIComponent(query)}`,
   );
   const rows = body.vehicles || [];
+  paintTrimChoices(root, rows);
   if (!rows.length) return;
   const cards = [...root.querySelectorAll<HTMLElement>('[data-make], button')];
   rows.slice(0, 8).forEach((row) => {
     const card = cards.find((node) => {
       const label = (node.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
       if (/continue|skip|back|search|clear|find your/.test(label)) return false;
-      return label.split(' ').includes(row.make.toLowerCase()) || label.split(' ').includes(row.model.toLowerCase());
+      const make = (row.make || '').toLowerCase();
+      const model = (row.model || '').toLowerCase();
+      return (make && label.split(' ').includes(make)) || (model && label.split(' ').includes(model));
     });
-    if (card) card.dataset.make = row.make;
+    if (card && row.make) card.dataset.make = row.make;
   });
 }
 

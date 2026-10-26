@@ -223,61 +223,10 @@ export function sectionEnabled(flag: PlugFlag, globalOn: boolean, allowlisted: b
   return globalOn || allowlisted;
 }
 
-/** A Plug account is granted only for a brand-new Google sign-up that Plug itself started. */
-export type JoinFacts = {
-  role: string;
-  createdAt: string;
-  now: string;
-  providers: string[];
-  ticketIssuedAt: string | null;
-};
-
-const JOIN_WINDOW_MS = 15 * 60 * 1000;
-
-export function joinDecision(facts: JoinFacts): 'grant' | 'refuse' {
-  if (facts.role.trim()) return 'refuse';
-  const providers = facts.providers.map((provider) => provider.trim().toLowerCase()).filter(Boolean);
-  if (providers.length !== 1 || providers[0] !== 'google') return 'refuse';
-  const now = Date.parse(facts.now);
-  const created = Date.parse(facts.createdAt);
-  const issued = facts.ticketIssuedAt ? Date.parse(facts.ticketIssuedAt) : Number.NaN;
-  if (!Number.isFinite(now) || !Number.isFinite(created) || !Number.isFinite(issued)) return 'refuse';
-  if (created > now || now - created > JOIN_WINDOW_MS) return 'refuse';
-  if (issued > now + 5000 || now - issued > JOIN_WINDOW_MS) return 'refuse';
-  if (issued > created + 5000) return 'refuse';
-  return 'grant';
-}
-
-function hex(buf: ArrayBuffer): string {
-  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
-}
-
-export async function signJoinTicket(issuedAt: string, pepper: string): Promise<string> {
-  const key = await crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(pepper),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign'],
-  );
-  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`plug-join:${issuedAt}`));
-  return `${issuedAt}.${hex(sig)}`;
-}
-
-export async function readJoinTicket(token: string, pepper: string, now: string): Promise<string | null> {
-  const dot = token.lastIndexOf('.');
-  if (dot <= 0) return null;
-  const issuedAt = token.slice(0, dot);
-  const expected = await signJoinTicket(issuedAt, pepper);
-  if (expected.length !== token.length) return null;
-  let diff = 0;
-  for (let i = 0; i < expected.length; i += 1) diff |= expected.charCodeAt(i) ^ token.charCodeAt(i);
-  if (diff !== 0) return null;
-  const issued = Date.parse(issuedAt);
-  const at = Date.parse(now);
-  if (!Number.isFinite(issued) || !Number.isFinite(at)) return null;
-  if (at - issued > JOIN_WINDOW_MS || issued > at + 5000) return null;
-  return issuedAt;
+/** Any signed-in Roam account may join Plug. The role is not a reason to refuse. */
+export function mayJoinPlug(role: string): boolean {
+  void role;
+  return true;
 }
 
 export async function hashExplorerUser(userId: string, pepper: string): Promise<string> {

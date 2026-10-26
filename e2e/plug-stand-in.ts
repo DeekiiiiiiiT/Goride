@@ -14,6 +14,8 @@ export const PLUG_SUPPLIED_NAMES = ['Total Half Way Tree', 'Portmore'];
 export const PLUG_SUPPLIED_PRICES = [210];
 export const PLUG_SUPPLIED_CLOCKS: string[] = [];
 export const PLUG_SUPPLIED_STREETS: string[] = [];
+export const PLUG_SUPPLIED_ENGINES: string[] = [];
+export const PLUG_SUPPLIED_CHASSIS: string[] = [];
 
 const STATION = {
   id: 'st_live',
@@ -24,7 +26,7 @@ const STATION = {
   prices: { e10_87: 210 },
 };
 
-function sessionBody() {
+function sessionBody(role = 'explorer_user') {
   const expiresAt = Math.floor(Date.now() / 1000) + 3600;
   return {
     access_token: 'test-access-token',
@@ -38,14 +40,20 @@ function sessionBody() {
       role: 'authenticated',
       phone: '+18765550199',
       email: 'driver@example.com',
-      app_metadata: { provider: 'phone', providers: ['phone'], role: 'explorer_user' },
+      app_metadata: { provider: 'phone', providers: ['phone'], role, roles: [role] },
       user_metadata: { display_name: 'Test Driver', app: 'plug' },
     },
   };
 }
 
 /** Answer catalog and explorer calls inside the test. The app has no demo switch. */
-export async function standIn(page: Page) {
+export async function standIn(page: Page, options?: { role?: string; persist?: boolean }) {
+  const role = options?.role || 'explorer_user';
+  if (options?.persist) {
+    await page.addInitScript((session) => {
+      localStorage.setItem('sb-example-auth-plug', JSON.stringify(session));
+    }, sessionBody(role));
+  }
   const vehicles: Array<Record<string, unknown>> = [];
   const pins: Array<Record<string, unknown>> = [];
   await page.addInitScript(() => {
@@ -68,7 +76,7 @@ export async function standIn(page: Page) {
       await route.fulfill({ json: {} });
       return;
     }
-    await route.fulfill({ json: sessionBody() });
+    await route.fulfill({ json: sessionBody(role) });
   });
 
   await page.route('**/platform-catalog/**', async (route) => {

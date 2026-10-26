@@ -89,37 +89,8 @@ export function VehicleOverviewScreen() {
             <div className={"relative w-full rounded-lg overflow-hidden bg-surface-container flex flex-col"}>
               <div className={"w-full h-44 relative bg-surface-container-high"}>
                 <div className={"absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent"} />
-                <div className={"absolute bottom-3 left-3 right-3 flex items-center justify-between"}>
-                  <span className={"inline-flex items-center gap-1.5 bg-black/60 backdrop-blur-md px-2.5 py-1 rounded-full text-white font-label-md text-label-md"}>
-                    <span className={"w-2 h-2 rounded-full bg-emerald-500 animate-pulse"} />
-                    1KR-FE Turbo
-                  </span>
-                  <span className={"bg-primary-container text-on-primary-container font-label-sm text-label-sm px-2.5 py-1 rounded-full uppercase tracking-wider font-bold"}>
-                    GS Grade
-                  </span>
-                </div>
               </div>
-              <div className={"px-space-md py-2.5 bg-surface-container-high flex items-center justify-between text-on-surface-variant font-label-md text-label-md"}>
-                <div className={"flex items-center gap-1.5"}>
-                  <span className={"material-symbols-outlined text-[16px]"}>
-                    tune
-                  </span>
-                  <span>
-                    1.0L Turbo GS (1KR-FE)
-                  </span>
-                </div>
-                <span className={"text-outline"}>
-                  •
-                </span>
-                <div className={"flex items-center gap-1.5"}>
-                  <span className={"material-symbols-outlined text-[16px]"}>
-                    settings_input_component
-                  </span>
-                  <span>
-                    FWD CVT
-                  </span>
-                </div>
-              </div>
+              <div data-slot={"catalog-specs"} />
             </div>
           </section>
           <nav aria-label={"Vehicle Sections"} className={"w-full bg-surface-container-low p-1 rounded-xl flex items-center gap-1 shadow-sm"}>
@@ -346,20 +317,6 @@ export function VehicleOverviewScreen() {
                   <p className={"font-body-sm text-body-sm text-on-surface-variant mt-0.5"}>
                     {"Crucial for Mount Rosser & Junction grade descents"}
                   </p>
-                  <div className={"flex items-center gap-3 mt-2 text-on-surface-variant font-label-sm text-label-sm"}>
-                    <span>
-                      Target:
-                      <strong>
-                        
-                      </strong>
-                    </span>
-                    <span>
-                      •
-                    </span>
-                    <span>
-                      Akebono / OEM spec
-                    </span>
-                  </div>
                 </div>
               </div>
               <div className={"p-space-sm bg-surface-container-low rounded-xl flex items-start gap-3 relative overflow-hidden"}>

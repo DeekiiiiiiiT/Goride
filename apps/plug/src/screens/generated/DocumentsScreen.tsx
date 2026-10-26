@@ -360,7 +360,7 @@ export function DocumentsScreen() {
             <div className={"flex flex-col gap-1"}>
               <div className={"flex items-center gap-1 text-on-surface"}>
                 <span className={"font-label-lg text-label-lg font-bold"}>
-                  {"Privacy & Vault Guarantee"}
+                  {"Kept private"}
                 </span>
               </div>
               <p className={"font-body-sm text-body-sm text-on-surface-variant leading-relaxed"}>

@@ -194,7 +194,7 @@ export function HelpScreen() {
                     </span>
                   </div>
                   <p className={"font-body-sm text-body-sm text-on-surface-variant mt-0.5 line-clamp-2"}>
-                    Fitment guarantee, 5 quality tiers, local parts desk contacts
+                    Parts matched from the catalog
                   </p>
                 </div>
               </button>

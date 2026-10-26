@@ -17,11 +17,10 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('eight Plug journeys', async ({ page }) => {
-  await page.goto('/#/');
-  await page.getByRole('button', { name: /Get Started/ }).click();
+  await page.goto('/#/welcome');
+  await page.getByRole('button', { name: /Continue with phone/ }).click();
   await wayOut(page);
 
-  await press(page, /^Next/);
   await page.getByRole('textbox', { name: /Phone Number/ }).fill('5550199');
   await press(page, /^Continue/);
   await page.getByRole('textbox', { name: /^Code$/ }).fill('123456');
@@ -149,6 +148,22 @@ const SAMPLE_COPY = [
   'Road Scouts',
   'community XP',
 ];
+
+test('a passenger account reaches Explore', async ({ page }) => {
+  await standIn(page, { role: 'passenger', persist: true });
+  await page.goto('/#/');
+  await expect(page).toHaveURL(/#\/explore/, { timeout: 20_000 });
+  await expect(page.getByRole('dialog', { name: 'Sign in' })).toHaveCount(0);
+  await page.getByRole('button', { name: /Garage/ }).click();
+  await expect(page).toHaveURL(/#\/garage/);
+  await expect(page.getByRole('dialog', { name: 'Sign in' })).toHaveCount(0);
+  const role = await page.evaluate(() => {
+    const raw = localStorage.getItem('sb-example-auth-plug') || '{}';
+    const session = JSON.parse(raw) as { user?: { app_metadata?: { role?: string } } };
+    return session.user?.app_metadata?.role || '';
+  });
+  expect(role).toBe('passenger');
+});
 
 test('public screens stay free of sample people', async ({ page }) => {
   const routes = [

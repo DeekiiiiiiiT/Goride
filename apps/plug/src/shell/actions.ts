@@ -3,7 +3,7 @@ import { plugSend, publicGet } from '../api';
 import { currentPath } from '../nav';
 import { readQueue } from '../offline';
 import { kindFor } from './act-kind';
-import { pinFix } from './facts';
+import { catalogCoversYear, pinFix, type CatalogVehicle } from './facts';
 import {
   controlLabel,
   garagePath,
@@ -60,6 +60,17 @@ export async function handlePlugClick(el: HTMLElement) {
 
   if (act === 'my-location') {
     window.dispatchEvent(new Event('plug-recenter'));
+    return;
+  }
+  if (act === 'continue-with-phone' || kind === 'phone') {
+    goPath('/signup');
+    return;
+  }
+  if (el.dataset.catalogId) {
+    sessionStorage.setItem('plug-catalog', el.dataset.catalogId);
+    if (el.dataset.model) sessionStorage.setItem('plug-model', el.dataset.model);
+    if (el.dataset.make) sessionStorage.setItem('plug-make', el.dataset.make);
+    rt.toast(`${el.dataset.model || 'That car'} selected`);
     return;
   }
   if (act === 'continue-with-google' || kind === 'google') {
@@ -298,14 +309,15 @@ export async function handlePlugClick(el: HTMLElement) {
     let catalogVariantId = sessionStorage.getItem('plug-catalog');
     if (!catalogVariantId) {
       try {
-        const catalog = await publicGet<{ vehicles: { id: string; make: string; model: string; year: number }[] }>(
+        const catalog = await publicGet<{ vehicles: CatalogVehicle[] }>(
           `/vehicle-catalog?q=${encodeURIComponent(`${make} ${model}`)}`,
         );
+        const chosenYear = Number(year);
         const match = catalog.vehicles.find((row) => (
-          row.make.toLowerCase() === make.toLowerCase()
-          && row.model.toLowerCase() === model.toLowerCase()
-          && String(row.year) === String(year)
-        )) || catalog.vehicles.find((row) => row.model.toLowerCase() === model.toLowerCase());
+          (row.make || '').toLowerCase() === make.toLowerCase()
+          && (row.model || '').toLowerCase() === model.toLowerCase()
+          && catalogCoversYear(row, chosenYear)
+        )) || catalog.vehicles.find((row) => (row.model || '').toLowerCase() === model.toLowerCase());
         catalogVariantId = match?.id || '';
         if (catalogVariantId) sessionStorage.setItem('plug-catalog', catalogVariantId);
       } catch {

@@ -94,13 +94,8 @@ export function WelcomeScreen() {
             <button onClick={onPlugClick} className={"w-full min-h-[52px] px-6 py-3.5 rounded-xl bg-surface-container-lowest text-on-surface font-headline-sm text-headline-sm flex items-center justify-center gap-2 shadow-sm active:scale-[0.98] transition-all duration-150"} type={"button"} data-act={"continue-with-google"} data-way-out={"primary"}>
               Continue with Google
             </button>
-            <button onClick={onPlugClick} className={"w-full min-h-[52px] px-6 py-3.5 rounded-xl bg-primary-container text-on-primary font-headline-sm text-headline-sm flex items-center justify-center gap-2 shadow-md active:scale-[0.98] transition-all duration-150"} id={"get-started-btn"} type={"button"} data-act={"get-started-btn"} data-way-out={"primary"}>
-              <span>
-                Get Started
-              </span>
-              <span className={"material-symbols-outlined text-[20px] transition-transform duration-200 group-active:translate-x-1"}>
-                arrow_forward
-              </span>
+            <button onClick={onPlugClick} className={"w-full min-h-[52px] px-6 py-3.5 rounded-xl bg-primary-container text-on-primary font-headline-sm text-headline-sm flex items-center justify-center gap-2 shadow-md active:scale-[0.98] transition-all duration-150"} type={"button"} data-act={"continue-with-phone"} data-way-out={"primary"}>
+              Continue with phone
             </button>
             <button onClick={onPlugClick} className={"w-full min-h-[48px] px-6 py-3 rounded-xl bg-surface-container-highest text-on-surface font-label-lg text-label-lg font-bold flex items-center justify-center gap-2 hover:bg-surface-container-high active:scale-[0.98] transition-colors"} id={"explore-btn"} type={"button"} data-act={"explore-btn"}>
               <span className={"material-symbols-outlined text-[18px] text-secondary"}>
@@ -110,14 +105,6 @@ export function WelcomeScreen() {
                 Explore without an account
               </span>
             </button>
-            <div className={"flex items-center justify-center pt-1"}>
-              <button onClick={onPlugClick} className={"min-h-[48px] px-4 inline-flex items-center justify-center font-label-lg text-label-lg text-on-surface-variant hover:text-on-surface active:text-primary transition-colors"} id={"login-btn"} type={"button"} data-act={"login-btn"}>
-                I already have an account •
-                <span className={"font-bold text-primary ml-1 underline decoration-primary-container decoration-2 underline-offset-4"}>
-                  Log in
-                </span>
-              </button>
-            </div>
           </div>
         </div>
       </main>

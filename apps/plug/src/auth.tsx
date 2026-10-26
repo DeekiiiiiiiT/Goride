@@ -3,12 +3,14 @@ import type { Session } from '@supabase/supabase-js';
 import { supabasePlugApp } from '../../../packages/auth-client/src/supabase';
 import { PLUG_FLAGS, type PlugFlag, sectionEnabled } from '@roam/plug-core';
 import { PLUG_FLAGS_OPEN } from './config';
-import { plugSend } from './api';
+import { holdPlugCalls, plugSend, releasePlugCalls } from './api';
 
 type AuthValue = {
   session: Session | null;
   ready: boolean;
   signedIn: boolean;
+  joined: boolean;
+  joinError: string | null;
   flags: Record<PlugFlag, boolean>;
   flagOn: (flag: PlugFlag) => boolean;
   sendCode: (phone: string) => Promise<void>;
@@ -24,6 +26,8 @@ const FLAGS_OFF = Object.fromEntries(PLUG_FLAGS.map((flag) => [flag, false])) as
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [ready, setReady] = useState(false);
+  const [joined, setJoined] = useState(false);
+  const [joinError, setJoinError] = useState<string | null>(null);
   const [flags, setFlags] = useState<Record<PlugFlag, boolean>>(() => (
     Object.fromEntries(PLUG_FLAGS.map((flag) => [flag, PLUG_FLAGS_OPEN])) as Record<PlugFlag, boolean>
   ));
@@ -37,17 +41,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => data.subscription.unsubscribe();
   }, []);
 
+  const userId = session?.user?.id || '';
   useEffect(() => {
-    if (!session || PLUG_FLAGS_OPEN) return;
+    if (!userId) {
+      setJoined(false);
+      setJoinError(null);
+      releasePlugCalls();
+      return;
+    }
+    let cancelled = false;
+    setJoined(false);
+    setJoinError(null);
+    holdPlugCalls();
+    void plugSend('/join', 'POST', {}, false)
+      .then(() => {
+        if (!cancelled) setJoined(true);
+      })
+      .catch((err) => {
+        if (!cancelled) setJoinError(err instanceof Error && err.message ? err.message : "This account can't use Plug yet");
+      })
+      .finally(() => {
+        if (!cancelled) releasePlugCalls();
+      });
+    return () => {
+      cancelled = true;
+      releasePlugCalls();
+    };
+  }, [userId]);
+
+  useEffect(() => {
+    if (!session || !joined || PLUG_FLAGS_OPEN) return;
     void plugSend<{ flags: Record<PlugFlag, boolean> }>('/flags', 'GET')
       .then((body) => setFlags(body.flags))
       .catch(() => setFlags(FLAGS_OFF));
-  }, [session]);
+  }, [session, joined]);
 
   const value = useMemo<AuthValue>(() => ({
     session,
     ready,
     signedIn: Boolean(session),
+    joined,
+    joinError,
     flags,
     flagOn: (flag) => sectionEnabled(flag, flags[flag], false) || PLUG_FLAGS_OPEN,
     sendCode: async (phone) => {
@@ -65,8 +99,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await supabasePlugApp.auth.signOut();
     },
     continueWithGoogle: async () => {
-      const { ticket } = await plugSend<{ ticket: string }>('/join/ticket', 'POST', {});
-      sessionStorage.setItem('plug-join-ticket', ticket);
       const { error } = await supabasePlugApp.auth.signInWithOAuth({
         provider: 'google',
         options: {
@@ -76,7 +108,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
       if (error) throw error;
     },
-  }), [flags, session, ready]);
+  }), [flags, session, ready, joined, joinError]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
