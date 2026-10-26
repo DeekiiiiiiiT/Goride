@@ -24,6 +24,16 @@ function num(v: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+function coord(v: Record<string, unknown>, axis: "lat" | "lng"): number | null {
+  const direct = num(v[axis]) ?? num(v[axis === "lat" ? "latitude" : "longitude"]);
+  if (direct != null) return direct;
+  const location = v.location;
+  if (location && typeof location === "object") {
+    return num((location as Record<string, unknown>)[axis]);
+  }
+  return null;
+}
+
 function bool(v: unknown): boolean | null {
   if (v === true || v === false) return v;
   if (v === "true" || v === "1") return true;
@@ -305,8 +315,8 @@ export const FLEET_DOMAINS: FleetDomainDef[] = [
         highway: str(v.highway),
         status: str(v.status) ?? "published",
         publish_state: "published",
-        lat: num(v.lat) ?? num(v.latitude),
-        lng: num(v.lng) ?? num(v.longitude),
+        lat: coord(v, "lat"),
+        lng: coord(v, "lng"),
       }),
   },
   {
@@ -376,8 +386,8 @@ export const FLEET_DOMAINS: FleetDomainDef[] = [
           : str(v.status) === "resolved"
             ? "retired"
             : "in_review",
-        lat: num(v.lat) ?? num(v.latitude),
-        lng: num(v.lng) ?? num(v.longitude),
+        lat: coord(v, "lat"),
+        lng: coord(v, "lng"),
         address: str(v.address),
         pcode: str(v.pcode) ?? str(v.parishPcode),
         ...(origin ? { origin_app: origin } : {}),

@@ -4,8 +4,9 @@
 
 **Rule:** Dominion is the brain. It holds shared reference data (vehicles, parts, stations, fuel prices, tolls, maps, GCT rules, vendors), runs the shared engines (Fuel, Toll, Matching Brain), manages Roam staff, keeps Roam's GCT books in an owner-only Back office, and publishes data to the apps. It never lists customer records. Customer screens live in each product's own admin.
 
-**Status:** most of Rev 1 is built and checks pass locally: new menu, page guard, real URLs, moved notices, dead code removed (tsc 254 → 20, none in Dominion's own files), server two-step gate, owner-only GCT books and identity search, Rides live tolls page, Fleet admin customer pages, CI checks. Admin build passes; 30/30 admin tests, 5/5 MFA gate tests, catalog contract OK.
-**But nothing is committed, the migration is not applied, and the Dominion, Fleet and Rides sites are still the old versions.**
+**Status:** shipped **2026-10-26**. The 30-day clock starts this day. Old copies stay until **2026-11-25**, then §3. After that, Dominion writes and the other apps move onto Dominion's own data API (§4 is the next build, not this ship).
+
+The database changes are on production, including the change log, the nightly score, and the pin backfill. The servers `fleet-core`, `fleet-ops`, `fleet-toll`, `platform-catalog`, and `gct-admin` are updated. Dominion, Fleet, Rides, and Enterprise are the new sites. The live overview is the health board. A Dominion login does not download the customer list. Stations score 96% (7 still missing a pin or a parish). Tolls, vendors, vehicles, and GCT rates score 100%. Maps stay "Not scored yet" because that list is empty.
 
 ---
 
