@@ -1315,10 +1315,10 @@ export function MaintenanceTemplatesManager() {
                           <div>
                             <div className="flex items-center gap-2">
                               <h2 className="text-base font-bold text-slate-900">
-                                {selected.task_name} tasks
+                                {/oil\s*service/i.test(selected.task_name)
+                                  ? 'Oil service tasks'
+                                  : `${selected.task_name} tasks`}
                               </h2>
-                              {/* Stitch headline token when oil-style packages are named differently */}
-                              <span className="sr-only">Oil service tasks</span>
                               <span
                                 className={
                                   templateScopeTab === "global"

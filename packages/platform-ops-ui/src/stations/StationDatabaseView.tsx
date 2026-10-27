@@ -4,28 +4,17 @@ import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { FuelEntry } from '../types/fuel';
 import { StationProfile, StationOverride } from '../types/station';
 import { aggregateStations, calculateRegionalStats, generateStationId, normalizeStationName } from '../utils/stationUtils';
-import { getDefaultGeofenceRadius } from '../utils/plusCode';
-import { StationList } from './StationList';
 import { StationDetailView } from './StationDetailView';
-import { StationImportWizard } from './StationImportWizard';
-import { StationExport } from './StationExport';
-import { BulkDeleteStationsModal } from './BulkDeleteStationsModal';
-import { ParentCompanyManager } from './ParentCompanyManager';
 import { VerifiedStationsTab } from './VerifiedStationsTab';
 import { ResolutionQueueTab } from './ResolutionQueueTab';
 import type { ResolutionQueueSubTab } from './ResolutionQueueTab';
-import { PinCalibrationPanel } from './PinCalibrationPanel';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@roam/ui';
-import { Switch } from '@roam/ui';
-import { Label } from '@roam/ui';
-import { Button } from '@roam/ui';
-import { Badge } from '@roam/ui';
-import { Star, Loader2, Upload, Trash2, Plus, ShieldCheck, ShieldOff, Map as MapIcon, Inbox, MapPin, Search } from 'lucide-react';
-import { SpatialIntegrityMap } from './SpatialIntegrityMap';
+import { Loader2, ShieldCheck, ShieldOff, Inbox, MapPin, Search } from 'lucide-react';
 import { fuelService } from '../services/stationFuelService';
 import { api } from '../services/stationOpsApi';
 import { toast } from 'sonner';
 import { AddStationModal } from './AddStationModal';
+
+type DominionStationTab = 'stations' | 'verified' | 'resolution';
 
 export type StationFillSummary = {
   stationId: string;
@@ -51,7 +40,7 @@ export function StationDatabaseView({
   logs: logsFromParent,
   fillSummary,
   loading = false,
-  defaultTab = 'spatial-audit',
+  defaultTab = 'stations',
   defaultResolutionSubTab = 'unresolved-stops',
   enableSilentAttach = false,
   silentAttachPanel,
@@ -63,16 +52,19 @@ export function StationDatabaseView({
   const [isBackendLoading, setIsBackendLoading] = useState(false);
   // Parent-supplied logs win; otherwise use self-fetched entries for the standalone page.
   const logs = logsFromParent ?? internalLogs;
-  const [showPreferredOnly, setShowPreferredOnly] = useState(false);
-  const [isImportOpen, setIsImportOpen] = useState(false);
-  const [isNonFuelImportOpen, setIsNonFuelImportOpen] = useState(false);
-  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isAddStationOpen, setIsAddStationOpen] = useState(false);
   const [editingStation, setEditingStation] = useState<StationProfile | null>(null);
   const [verifyingLearntId, setVerifyingLearntId] = useState<string | null>(null);
   const [verifyingNearbyStation, setVerifyingNearbyStation] = useState<any>(null);
   const [resolutionQueueCount, setResolutionQueueCount] = useState(0);
   const [stationSearch, setStationSearch] = useState('');
+  const initialTab: DominionStationTab =
+    defaultTab === 'verified-stations' || defaultTab === 'verified'
+      ? 'verified'
+      : defaultTab === 'resolution-queue' || defaultTab === 'resolution'
+        ? 'resolution'
+        : 'stations';
+  const [activeTab, setActiveTab] = useState<DominionStationTab>(initialTab);
 
   const handleVerifyLearntLocation = useCallback((learntLoc: any) => {
     const pseudoStation: StationProfile = {
@@ -347,97 +339,6 @@ export function StationDatabaseView({
     }
   };
 
-  const handleImportStations = async (imported: StationOverride[]) => {
-    setIsBackendLoading(true);
-    let count = 0;
-    let dupeSkipped = 0;
-    const newOverrides = { ...stationOverrides };
-    
-    try {
-      for (const item of imported) {
-        if (item.name && item.address) {
-          // Fix 2: Normalize name before generating ID to match the wizard's duplicate-check logic
-          const id = generateStationId(normalizeStationName(item.name), item.address);
-          const updatedItem = {
-            ...item,
-            id,
-            status: 'unverified', // CSV imports are always unverified
-            dataSource: 'import',
-            category: item.category || 'fuel',
-            // Smart default geofence radius based on Plus Code precision (if available)
-            geofenceRadius: item.geofenceRadius ?? (item.plusCode ? getDefaultGeofenceRadius(item.plusCode) : undefined),
-          };
-          
-          try {
-            await fuelService.saveStation(updatedItem);
-            newOverrides[id] = updatedItem;
-            count++;
-          } catch (saveErr: any) {
-            // Phase 8.3: Handle 409 duplicate gracefully — skip and continue
-            if (saveErr?.duplicate) {
-              dupeSkipped++;
-              console.warn(`[Import] Skipped duplicate: "${item.name}" conflicts with "${saveErr.existingStation?.name || 'unknown'}"`);
-            } else {
-              throw saveErr; // Re-throw non-duplicate errors
-            }
-          }
-        }
-      }
-
-      setStationOverrides(newOverrides);
-      if (dupeSkipped > 0) {
-        toast.success(`Cloud Sync: Imported ${count} locations. ${dupeSkipped} duplicate${dupeSkipped > 1 ? 's' : ''} skipped.`, {
-          description: `${dupeSkipped} station${dupeSkipped > 1 ? 's' : ''} matched existing entries and ${dupeSkipped > 1 ? 'were' : 'was'} not re-created.`,
-        });
-      } else {
-        toast.success(`Cloud Sync: Successfully imported ${count} locations.`);
-      }
-    } catch (e) {
-      console.error("Import failed", e);
-      toast.error("Import interrupted. Some stations might not have been saved.");
-    } finally {
-      setIsBackendLoading(false);
-    }
-  };
-
-  const handleConfirmDelete = async (idsToDelete: string[]) => {
-    setIsBackendLoading(true);
-    try {
-      // Delete from backend first
-      for (const id of idsToDelete) {
-        await fuelService.deleteStation(id);
-      }
-      
-      // Immediately update local state to remove deleted stations
-      setStationOverrides(prev => {
-        const next = { ...prev };
-        idsToDelete.forEach(id => {
-          delete next[id];
-        });
-        return next;
-      });
-      
-      toast.success(`Deleted ${idsToDelete.length} stations from cloud.`);
-      
-      // Re-fetch from backend to ensure local state is in sync with KV
-      try {
-        const freshStations = await fuelService.getAllStations({ fields: 'list' });
-        const freshOverrides: Record<string, StationOverride> = {};
-        freshStations.forEach(s => {
-          freshOverrides[s.id] = s;
-        });
-        setStationOverrides(freshOverrides);
-      } catch (syncErr) {
-        console.error('[Delete] Post-delete sync failed, using local state:', syncErr);
-      }
-    } catch (e) {
-      console.error("Delete failed", e);
-      toast.error("Cloud deletion failed.");
-    } finally {
-      setIsBackendLoading(false);
-    }
-  };
-
   // Helper to generate context
   const buildContext = useCallback((inputLogs: FuelEntry[]) => {
     // 1. Start with stations derived from Logs
@@ -504,32 +405,33 @@ export function StationDatabaseView({
       }
     }
 
-    const visibleStations = showPreferredOnly 
-      ? stations.filter(s => s.isPreferred) 
-      : stations;
+    const regionalStats = calculateRegionalStats(stations);
 
-    const regionalStats = calculateRegionalStats(stations); 
-    
     return {
-      stations: visibleStations,
+      stations,
       regionalStats,
       loading,
       togglePreferred,
       updateStationDetails
     };
-  }, [loading, preferredStationIds, showPreferredOnly, stationOverrides, fillSummary]);
+  }, [loading, preferredStationIds, stationOverrides, fillSummary]);
 
   const context = useMemo(() => buildContext(logs), [buildContext, logs]);
 
-  const handleStationSelect = (stationId: string) => {
-    const station = context.stations.find(s => s.id === stationId);
-    if (station) {
-      setSelectedStation(station);
-    }
-  };
+  const filteredStations = useMemo(() => {
+    const q = stationSearch.trim().toLowerCase();
+    const fuelStations = context.stations.filter((s) => s.category !== 'non_fuel');
+    if (!q) return fuelStations;
+    return fuelStations.filter((s) => {
+      const name = (s.name || '').toLowerCase();
+      const brand = (s.brand || '').toLowerCase();
+      const parish = (s.parish || '').toLowerCase();
+      return name.includes(q) || brand.includes(q) || parish.includes(q);
+    });
+  }, [context.stations, stationSearch]);
 
-  const activeStation = selectedStation 
-    ? context.stations.find(s => s.id === selectedStation.id) || selectedStation 
+  const activeStation = selectedStation
+    ? context.stations.find((s) => s.id === selectedStation.id) || selectedStation
     : null;
 
   if (loading) {
@@ -575,194 +477,128 @@ export function StationDatabaseView({
             />
           </div>
           <span className="font-mono text-xs text-slate-500">
-            Total stations: <strong className="text-slate-800">{context.stations.length}</strong>
+            Total stations: <strong className="text-slate-800">{filteredStations.length}</strong>
           </span>
         </div>
       </div>
 
-      <div className="overflow-x-auto overflow-y-visible rounded-[12px] border border-slate-200 bg-white shadow-none dark:border-border dark:bg-card">
-        <Tabs defaultValue={defaultTab} className="w-full">
-          <div className="border-b border-slate-200 px-4 py-3 bg-slate-50 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <h3 className="font-semibold text-slate-900">Stations</h3>
-              <span className="sr-only">Name Brand Parish Status</span>
-            </div>
-            
-            <TabsList className="bg-slate-200/50 p-1">
-              <TabsTrigger value="spatial-audit" className="flex items-center gap-1.5 text-indigo-700 font-bold data-[state=active]:bg-white data-[state=active]:shadow-sm">
-                <MapIcon className="h-3.5 w-3.5" />
-                Spatial Audit
-              </TabsTrigger>
-              <TabsTrigger value="verified-stations">Verified Gas Station</TabsTrigger>
-              <TabsTrigger value="parent-company">Parent Company</TabsTrigger>
-              <TabsTrigger value="unverified-stations" className="flex items-center gap-1.5">
-                Unverified
-                <Badge variant="outline" className="h-4 px-1 text-[8px] border-slate-300 text-slate-400">CSV</Badge>
-              </TabsTrigger>
-              <TabsTrigger value="non-fuel">Non-Fuel Locations</TabsTrigger>
-              <TabsTrigger value="pin-calibration" className="flex items-center gap-1.5">
-                <MapPin className="h-3.5 w-3.5" />
-                Move pin
-              </TabsTrigger>
-              <TabsTrigger value="resolution-queue" className="flex items-center gap-1.5">
-                <Inbox className="h-3.5 w-3.5 opacity-70" />
-                Resolution Queue
-                {resolutionQueueCount > 0 && (
-                  <Badge variant="outline" className="h-4 px-1 text-[8px] border-indigo-200 text-indigo-600">
-                    {resolutionQueueCount}
-                  </Badge>
+      <div className="overflow-hidden rounded-[12px] border border-slate-200 bg-white shadow-none">
+        <div className="flex flex-wrap items-center gap-1 border-b border-slate-200 bg-slate-50 px-4 py-3">
+          {(
+            [
+              { id: 'stations' as const, label: 'Stations' },
+              { id: 'verified' as const, label: 'Verified' },
+              { id: 'resolution' as const, label: 'Resolution' },
+            ] as const
+          ).map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              className={
+                activeTab === tab.id
+                  ? 'inline-flex items-center gap-1.5 rounded-md bg-white px-3 py-1.5 text-sm font-semibold text-slate-900 shadow-sm'
+                  : 'inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-white/70'
+              }
+            >
+              {tab.id === 'resolution' ? <Inbox className="h-3.5 w-3.5 opacity-70" aria-hidden /> : null}
+              {tab.label}
+              {tab.id === 'resolution' && resolutionQueueCount > 0 ? (
+                <span className="rounded border border-indigo-200 px-1 font-mono text-[10px] text-indigo-600">
+                  {resolutionQueueCount}
+                </span>
+              ) : null}
+            </button>
+          ))}
+        </div>
+
+        {activeTab === 'stations' ? (
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse text-left text-xs">
+              <thead>
+                <tr className="border-b border-slate-200 bg-slate-50/60 font-mono text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-5 py-3">Name</th>
+                  <th className="px-5 py-3">Brand</th>
+                  <th className="px-5 py-3">Parish</th>
+                  <th className="px-5 py-3 text-right">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filteredStations.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="px-5 py-8 text-center italic text-slate-400">
+                      The data is not in yet.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredStations.map((station) => {
+                    const verified = station.status === 'verified';
+                    return (
+                      <tr
+                        key={station.id}
+                        className="cursor-pointer transition-colors hover:bg-slate-50/70"
+                        onClick={() => setSelectedStation(station)}
+                      >
+                        <td className="px-5 py-3.5 font-medium text-slate-900">
+                          <span className="inline-flex items-center gap-2.5">
+                            <span className="h-2 w-2 rounded-full bg-[#316bf3]" />
+                            <span>{station.name}</span>
+                          </span>
+                        </td>
+                        <td className="px-5 py-3.5 font-mono text-slate-600">{station.brand || '—'}</td>
+                        <td className="px-5 py-3.5 text-slate-600">{station.parish || '—'}</td>
+                        <td className="px-5 py-3.5 text-right">
+                          {verified ? (
+                            <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 font-mono text-[11px] font-medium text-emerald-700">
+                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                              Verified
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 font-mono text-[11px] font-medium text-amber-700">
+                              <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                              Not verified
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
-              </TabsTrigger>
-            </TabsList>
+              </tbody>
+            </table>
           </div>
+        ) : null}
 
-          {/* --- Spatial Audit Tab --- */}
-          <TabsContent value="spatial-audit" className="m-0 border-0 p-0">
-            <div className="w-full bg-slate-50 pt-2 dark:bg-transparent">
-              <SpatialIntegrityMap />
-            </div>
-          </TabsContent>
+        {activeTab === 'verified' ? (
+          <VerifiedStationsTab
+            stations={context.stations.filter((s) => s.status === 'verified')}
+            onRefresh={fetchData}
+            onSelectStation={(station) => setSelectedStation(station)}
+            onSaveGeofenceRadius={async (stationId, radius) => {
+              const current = stationOverrides[stationId] || {};
+              const updated = {
+                ...current,
+                id: stationId,
+                geofenceRadius: radius,
+              };
+              await fuelService.saveStation(updated);
+              setStationOverrides((prev) => ({ ...prev, [stationId]: updated as any }));
+              await fetchData();
+            }}
+          />
+        ) : null}
 
-          {/* --- Verified Gas Station Tab --- */}
-          <TabsContent value="verified-stations" className="m-0 p-0 border-0">
-             <VerifiedStationsTab 
-               stations={context.stations.filter(s => s.status === 'verified')} 
-               onRefresh={fetchData}
-               onSelectStation={(station) => setSelectedStation(station)}
-               onSaveGeofenceRadius={async (stationId, radius) => {
-                 const current = stationOverrides[stationId] || {};
-                 const updated = {
-                   ...current,
-                   id: stationId,
-                   geofenceRadius: radius,
-                 };
-                 await fuelService.saveStation(updated);
-                 setStationOverrides(prev => ({ ...prev, [stationId]: updated as any }));
-                 // Refresh to reflect the change in the table
-                 await fetchData();
-               }}
-             />
-          </TabsContent>
-
-          {/* --- Parent Company Tab --- */}
-          <TabsContent value="parent-company" className="m-0 p-0 border-0">
-             <ParentCompanyManager />
-          </TabsContent>
-
-          {/* --- Unverified Gas Stations Tab (CSV reference shelf only) --- */}
-          <TabsContent value="unverified-stations" className="m-0 p-0 border-0">
-             <div className="mx-3 mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-               <span className="font-semibold">CSV reference shelf only.</span> Nothing here is merged or copied into your Verified GOD list.
-               Usual workflow: delete a nearby CSV row, then Verify Location from the Resolution Queue with your own pin.
-             </div>
-             <div className="border-b border-slate-100 bg-white p-3 flex justify-end gap-3 items-center">
-               {/* Preferred Toggle */}
-                <div className="flex items-center space-x-2 mr-2">
-                  <Switch 
-                    id="preferred-mode" 
-                    checked={showPreferredOnly}
-                    onCheckedChange={setShowPreferredOnly}
-                  />
-                  <Label htmlFor="preferred-mode" className="text-sm text-slate-600 flex items-center cursor-pointer">
-                    <Star className="h-3 w-3 mr-1 fill-yellow-400 text-yellow-400" />
-                    Preferred Only
-                  </Label>
-                </div>
-                
-                {/* Actions */}
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="bg-white text-blue-600 border-blue-200 hover:bg-blue-50 hover:text-blue-700"
-                  onClick={() => setIsAddStationOpen(true)}
-                >
-                  <Plus className="h-3.5 w-3.5 mr-2" />
-                  Add Station
-                </Button>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="bg-white text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
-                  onClick={() => setIsDeleteModalOpen(true)}
-                >
-                  <Trash2 className="h-3.5 w-3.5 mr-2" />
-                  Bulk Delete
-                </Button>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
-                  onClick={() => setIsImportOpen(true)}
-                >
-                  <Upload className="h-3.5 w-3.5 mr-2" />
-                  Import CSV
-                </Button>
-                <StationExport stations={context.stations.filter(s => (s.dataSource === 'manual' || s.dataSource === 'import') && s.category !== 'non_fuel')} />
-             </div>
-
-             <div className="p-4">
-               <StationList 
-                  context={{
-                      ...context,
-                      stations: context.stations.filter(s => s.status === 'unverified' && s.category !== 'non_fuel')
-                  }} 
-                  onSelectStation={handleStationSelect} 
-                  variant="manager"
-                  selectable
-                  onDeleteSelected={async (ids) => {
-                    await handleConfirmDelete(ids);
-                  }}
-               />
-             </div>
-          </TabsContent>
-
-          {/* --- Non-Fuel Locations Tab --- */}
-          <TabsContent value="non-fuel" className="m-0 p-0 border-0">
-             <div className="border-b border-slate-100 bg-white p-3 flex justify-end gap-3 items-center">
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
-                  onClick={() => setIsNonFuelImportOpen(true)}
-                >
-                  <Upload className="h-3.5 w-3.5 mr-2" />
-                  Import CSV
-                </Button>
-                <StationExport 
-                  stations={context.stations.filter(s => s.category === 'non_fuel' && s.status === 'unverified')} 
-                  filename="non-fuel-locations"
-                />
-             </div>
-
-             <div className="p-4">
-               <StationList 
-                  context={{
-                      ...context,
-                      stations: context.stations.filter(s => s.category === 'non_fuel' && s.status === 'unverified')
-                  }} 
-                  onSelectStation={handleStationSelect} 
-                  variant="manager"
-               />
-             </div>
-          </TabsContent>
-
-          <TabsContent value="pin-calibration" className="m-0 p-0 border-0">
-            <PinCalibrationPanel />
-          </TabsContent>
-
-          {/* --- Resolution Queue: merged unresolved stops + spatial review --- */}
-          <TabsContent value="resolution-queue" className="m-0 p-0 border-0">
-            <ResolutionQueueTab
-              defaultSubTab={defaultResolutionSubTab}
-              onPromoted={() => fetchData()}
-              onVerifyLocation={handleVerifyLearntLocation}
-              onResolved={() => fetchData()}
-              onCountChange={setResolutionQueueCount}
-              enableSilentAttach={enableSilentAttach}
-              silentAttachPanel={silentAttachPanel}
-            />
-          </TabsContent>
-        </Tabs>
+        {activeTab === 'resolution' ? (
+          <ResolutionQueueTab
+            defaultSubTab={defaultResolutionSubTab}
+            onPromoted={() => fetchData()}
+            onVerifyLocation={handleVerifyLearntLocation}
+            onResolved={() => fetchData()}
+            onCountChange={setResolutionQueueCount}
+            enableSilentAttach={enableSilentAttach}
+            silentAttachPanel={silentAttachPanel}
+          />
+        ) : null}
       </div>
 
       <StationDetailView 
@@ -792,29 +628,6 @@ export function StationDatabaseView({
             toast.error(`Demotion failed: ${e.message}`);
           }
         }}
-      />
-
-      <StationImportWizard 
-        isOpen={isImportOpen}
-        onClose={() => setIsImportOpen(false)}
-        onImport={handleImportStations}
-        existingStations={context.stations}
-        mode="fuel"
-      />
-
-      <StationImportWizard 
-        isOpen={isNonFuelImportOpen}
-        onClose={() => setIsNonFuelImportOpen(false)}
-        onImport={handleImportStations}
-        existingStations={context.stations}
-        mode="non_fuel"
-      />
-
-      <BulkDeleteStationsModal 
-        isOpen={isDeleteModalOpen}
-        onClose={() => setIsDeleteModalOpen(false)}
-        stations={stationOverrides}
-        onDelete={handleConfirmDelete}
       />
 
       <AddStationModal 

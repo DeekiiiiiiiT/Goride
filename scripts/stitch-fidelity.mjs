@@ -15,7 +15,7 @@ const readme = readFileSync(join(dir, 'README.md'), 'utf8');
 const report = process.argv.includes('--report');
 const SKIP = new Set(['S1', 'S7', 'S8']);
 const MIN = 80;
-const OLD_KIT = /from ['"](@\/components\/ui|(\.\.?\/)+ui)\//;
+const OLD_KIT = /from ['"](@roam\/ui|@\/components\/ui|(\.\.?\/)+ui)(\/|['"])/;
 
 const strip = (s) => s.replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/&[a-z]+;/g, ' ').replace(/\s+/g, ' ').trim();
 let failed = false;
@@ -33,7 +33,21 @@ for (const row of readme.split('\n').filter((l) => /^\| S\d/.test(l))) {
     if (t.length >= 4 && t.length <= 40 && /[a-z]/.test(t)) labels.add(t);
   }
   const src = readFileSync(join(repo, react), 'utf8');
-  const lower = src.toLowerCase();
+  if (/\bfor fidelity\b/i.test(src)) {
+    console.log(`FAIL ${num} contains "for fidelity" — ${react}`);
+    if (checked) failed = true;
+    continue;
+  }
+  // Strip JSX comments and elements whose class list includes exact tokens sr-only or hidden
+  // (not substrings like overflow-hidden).
+  const visible = src
+    .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+    .replace(/<(\w+)([^>]*className=")([^"]*)("[^>]*>)([\s\S]*?)<\/\1>/g, (all, tag, pre, classes, post) => {
+      const tokens = classes.trim().split(/\s+/);
+      if (tokens.includes('sr-only') || tokens.includes('hidden')) return '';
+      return all;
+    });
+  const lower = visible.toLowerCase();
   const hit = [...labels].filter((l) => lower.includes(l)).length;
   const pct = labels.size ? Math.round((100 * hit) / labels.size) : 100;
   const oldKit = OLD_KIT.test(src);
