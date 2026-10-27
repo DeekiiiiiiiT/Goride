@@ -17,7 +17,12 @@ import { periodAnchorFor, periodEndForAnchor, minorToMajor } from "./financial_l
 import {
   resolveActiveEarningsBundleForDriverWeek,
 } from "./earnings_policy_runtime.ts";
-import { cashHeldClampStamp, computePeriodSettlement, statementBackedSettlement } from "./driver_period_settlement.ts";
+import {
+  cashHeldClampStamp,
+  computePeriodSettlement,
+  statementBackedSettlement,
+} from "./driver_period_settlement.ts";
+import { resolvePostedAdjustments } from "../../../packages/finance-core/src/fuelShareCorrection.ts";
 import {
   computeWeekCommissionShare,
   computeWeekCashBase,
@@ -1264,10 +1269,24 @@ export async function rebuildDriverFinancialPeriod(
   const settlementPaidRaw = cashBase.settlementPaid;
 
   const priorMeta =
-    context.periodMetaByAnchor?.get(periodAnchor) ||
+    context.periodMetaByAnchor?.get(String(periodAnchor || "").slice(0, 10)) ||
     ({} as Record<string, unknown>);
   const priorFcForCustody = (priorMeta.financeCore || {}) as Record<string, unknown>;
   const openingCashCustody = round2(Math.max(0, Number(priorFcForCustody.openingCashCustody) || 0));
+  const postedAdjustments = resolvePostedAdjustments(priorFcForCustody);
+  if (Math.abs(postedAdjustments) > 0.005) {
+    console.log(
+      JSON.stringify({
+        reconPhase: "posted_adjustments",
+        driverId,
+        weekKey: String(periodAnchor || "").slice(0, 10),
+        postedAdjustments,
+        correctionLines: Array.isArray(priorFcForCustody.correctionLines)
+          ? priorFcForCustody.correctionLines.length
+          : 0,
+      }),
+    );
+  }
 
   const fuelNetPay = round2(fuelDriverSpend - fuelDeduction);
   let settled = computePeriodSettlement({
@@ -1284,7 +1303,7 @@ export async function rebuildDriverFinancialPeriod(
     settlementPaid: settlementPaidRaw,
     tipsPaidToDriver: share.tipsPaidToDriver || 0,
     openingCashCustody,
-    postedAdjustments: round2(Number(priorFcForCustody.postedAdjustments) || 0),
+    postedAdjustments,
   });
   // Pocket cash cannot go negative (DB cash_nonneg). Over-return vs collected
   // is fleet-owes on settlement_amount, not a negative held balance.
@@ -1418,6 +1437,7 @@ export async function rebuildDriverFinancialPeriod(
       nonUberTripCash: cashBase.nonUberTripCash,
       cashSourceMismatch: cashBase.cashSourceMismatch,
       overpaidAmount,
+      postedAdjustments,
       tollCashWashEligible,
       tollUnknownPmCount,
       tollUnknownPmAmount: round2(tollUnknownPmAmount),
@@ -1888,9 +1908,20 @@ export async function rebuildOneDriverPeriod(
   }
 
   const context = ctx || { ...(await loadRebuildContext(driverId)), persistLines: true };
-  const rebuilt = await rebuildDriverFinancialPeriod(driverId, periodAnchor, context);
+  const rebuilt = await rebuildDriverFinancialPeriod(driverId, anchor, context);
   const { logReconPhase } = await import("./recon_phase_log.ts");
-  logReconPhase("rebuildOneDriverPeriod", started, { driverId, weekKey: anchor, rows: 1 });
+  logReconPhase("rebuildOneDriverPeriod", started, {
+    driverId,
+    weekKey: anchor,
+    rows: 1,
+    settlementAmount: rebuilt.settlementAmount,
+    postedAdjustments: resolvePostedAdjustments(
+      ((rebuilt.metadata as Record<string, unknown> | undefined)?.financeCore || {}) as Record<
+        string,
+        unknown
+      >,
+    ),
+  });
   return rebuilt;
 }
 
@@ -2414,7 +2445,7 @@ export async function syncPeriodCashFromTransactions(
     settlementPaid: settlementPaidRaw,
     tipsPaidToDriver,
     openingCashCustody: round2(Math.max(0, Number(fc.openingCashCustody) || 0)),
-    postedAdjustments: round2(Number(fc.postedAdjustments) || 0),
+    postedAdjustments: resolvePostedAdjustments(fc),
   });
 
   const fuelFinalized = !!existing.fuel_finalized;

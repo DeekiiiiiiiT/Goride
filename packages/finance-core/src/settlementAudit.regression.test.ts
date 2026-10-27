@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { round2 } from './money.ts';
 import { computePeriodSettlement, statementBackedSettlement } from './driverPeriodSettlement.ts';
 import { getAdjCashBalance, getPeriodSettlementComponents } from './driverSettlementMath.ts';
-import { sumCorrectionLines } from './fuelShareCorrection.ts';
+import { resolvePostedAdjustments, sumCorrectionLines } from './fuelShareCorrection.ts';
 import { getTierForEarningsEH } from './periodShareCash.ts';
 import { isClearedDriverCashPayment } from './driverCashPayment.ts';
 import { foldPayoutCashByWeek } from './payoutCashDedupe.ts';
@@ -37,6 +37,17 @@ describe('settlement audit regressions', () => {
     expect(withTips.netPayout).toBe(10080);
     expect(missingTips.netPayout).toBe(9500);
     expect(withTips.netPayout - missingTips.netPayout).toBe(580);
+  });
+
+  it('resolvePostedAdjustments falls back to correction line sum', () => {
+    const lines = [
+      { sourceWeek: '2026-08-03', amount: 57902.01, sentence: 'Company owes the earlier weeks.', kind: 'fuel_share' as const },
+      { sourceWeek: '2026-10-12', amount: -13191.88, sentence: 'Oct 12 gas-card credit.', kind: 'fuel_share' as const },
+    ];
+    expect(resolvePostedAdjustments({ correctionLines: lines })).toBe(44710.13);
+    expect(resolvePostedAdjustments({ postedAdjustments: 44710.13, correctionLines: [] })).toBe(
+      44710.13,
+    );
   });
 
   it('statement-backed week counts correction lines', () => {

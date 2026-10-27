@@ -4,6 +4,8 @@ steps:
       - build
       - -f
       - Dockerfile.recon-worker
+      - --build-arg
+      - CACHEBUST=$BUILD_ID
       - -t
       - gcr.io/$PROJECT_ID/recon-worker
       - .

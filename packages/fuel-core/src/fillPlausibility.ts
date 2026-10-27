@@ -4,6 +4,9 @@
  * block week close until accepted.
  */
 
+import { countsInFuelLogSpend } from './fuelOpsEligibility.ts';
+import type { FuelEntry } from './fuelTypes.ts';
+
 export const PRICE_BAND_PCT = 15;
 /** Same jump the driver and fleet scanners already flag. */
 export const ODOMETER_JUMP_KM = 1500;
@@ -119,11 +122,35 @@ type WeekFill = {
   amount?: number;
   liters?: number;
   odometer?: number | null;
-  metadata?: { plausibilityAccepted?: boolean } | null;
+  type?: FuelEntry['type'];
+  entryMode?: FuelEntry['entryMode'];
+  paymentSource?: FuelEntry['paymentSource'];
+  metadata?: {
+    plausibilityAccepted?: boolean;
+    jaaRowKind?: string;
+    awaitingCardStatement?: boolean;
+    awaitingCashStatement?: boolean;
+    countsInFuelSpend?: boolean;
+    [key: string]: unknown;
+  } | null;
 };
 
 function fillDay(entry: WeekFill): string {
   return String(entry.date || '').slice(0, 10);
+}
+
+function weekFillCountsInSpend(entry: WeekFill): boolean {
+  return countsInFuelLogSpend({
+    id: String(entry.id || ''),
+    date: String(entry.date || ''),
+    amount: Number(entry.amount) || 0,
+    liters: entry.liters,
+    vehicleId: entry.vehicleId,
+    type: entry.type || 'Card_Transaction',
+    entryMode: entry.entryMode || 'Floating',
+    paymentSource: entry.paymentSource || 'Gas_Card',
+    metadata: entry.metadata ?? undefined,
+  });
 }
 
 /** True when a hard or confirm-level issue has not been explicitly accepted. */
@@ -136,11 +163,12 @@ export function weekHasUnreviewedImplausibleFills(entries: WeekFill[]): boolean 
     byVehicle.set(id, list);
   }
   for (const list of byVehicle.values()) {
-    const prices = list
+    const spendList = list.filter(weekFillCountsInSpend);
+    const prices = spendList
       .filter((e) => Number(e.liters) > 0 && Number(e.amount) > 0)
       .map((e) => Number(e.amount) / Number(e.liters));
     const seenDay = new Map<number, string>();
-    for (const entry of list) {
+    for (const entry of spendList) {
       if (entry.metadata?.plausibilityAccepted) continue;
       const odo = Number(entry.odometer) || 0;
       const day = fillDay(entry);

@@ -88,6 +88,18 @@ export function sumCorrectionLines(lines: CorrectionLine[] | null | undefined): 
   return round2((lines || []).reduce((sum, line) => sum + (Number(line.amount) || 0), 0));
 }
 
+/**
+ * Prefer the stored postedAdjustments total; if missing/NaN, sum correctionLines.
+ * Workers and edge must get the same number even when one field drifts.
+ */
+export function resolvePostedAdjustments(
+  financeCore: { postedAdjustments?: unknown; correctionLines?: unknown } | null | undefined,
+): number {
+  const stored = Number(financeCore?.postedAdjustments);
+  if (Number.isFinite(stored)) return round2(stored);
+  return sumCorrectionLines((financeCore?.correctionLines || []) as CorrectionLine[]);
+}
+
 /** Refuse to post unless the preview is the audited August lines, the net, and the Oct 12 line. */
 export function correctionPreviewAccepted(input: {
   lines: Array<{ sourceWeek: string; amount: number }>;

@@ -1,0 +1,62 @@
+# Deploy Cloud Run recon-worker when settlement/fuel server code changes on main.
+# Keeps the nightly worker on the same math as edge (DRIVER_SETTLEMENTS_AUDIT §2).
+#
+# Required repo secrets (one-time):
+#   GCP_RECON_WORKLOAD_IDENTITY_PROVIDER  — projects/.../workloadIdentityPools/.../providers/...
+#   GCP_RECON_SERVICE_ACCOUNT             — deploy SA email in goride-recon
+# Or for local/manual fallback: scripts/deploy-recon-worker.ps1
+name: Deploy recon-worker
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "supabase/functions/_fleet-server/**"
+      - "packages/**"
+      - "Dockerfile.recon-worker"
+      - "cloudbuild.recon-worker.yaml"
+      - "scripts/recon-worker.ts"
+      - ".github/workflows/deploy-recon-worker.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-recon-worker-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Require GCP auth secrets
+        env:
+          WIF: ${{ secrets.GCP_RECON_WORKLOAD_IDENTITY_PROVIDER }}
+          SA: ${{ secrets.GCP_RECON_SERVICE_ACCOUNT }}
+        run: |
+          set -euo pipefail
+          if [ -z "${WIF:-}" ] || [ -z "${SA:-}" ]; then
+            echo "Missing GCP_RECON_WORKLOAD_IDENTITY_PROVIDER or GCP_RECON_SERVICE_ACCOUNT."
+            echo "Add those GitHub secrets, or redeploy manually with scripts/deploy-recon-worker.ps1."
+            exit 1
+          fi
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_RECON_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_RECON_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Build and deploy recon-worker
+        env:
+          CLOUDSDK_CORE_PROJECT: goride-recon
+        run: |
+          set -euo pipefail
+          gcloud builds submit --project goride-recon --config cloudbuild.recon-worker.yaml .

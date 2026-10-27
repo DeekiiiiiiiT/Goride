@@ -53,4 +53,31 @@ describe('weekHasUnreviewedImplausibleFills', () => {
     ]);
     expect(blocked).toBe(true);
   });
+
+  it('does not block a declined swipe with amount and no litres', () => {
+    const blocked = weekHasUnreviewedImplausibleFills([
+      {
+        id: '425cc129',
+        vehicleId: '5179KZ',
+        date: '2026-09-16',
+        amount: 7001.7,
+        liters: undefined,
+        metadata: { jaaRowKind: 'declined' },
+      },
+    ]);
+    expect(blocked).toBe(false);
+  });
+
+  it('still blocks the same amount with no litres when it is a real fill', () => {
+    const blocked = weekHasUnreviewedImplausibleFills([
+      {
+        id: 'real-zero-liters',
+        vehicleId: '5179KZ',
+        date: '2026-09-16',
+        amount: 7001.7,
+        liters: undefined,
+      },
+    ]);
+    expect(blocked).toBe(true);
+  });
 });

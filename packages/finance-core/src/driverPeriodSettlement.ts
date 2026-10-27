@@ -142,11 +142,21 @@ export function computePeriodSettlementMinor(i: PeriodSettlementInput): PeriodSe
  */
 export function statementBackedSettlement(
   input: Omit<PeriodSettlementInput, 'postedAdjustments'>,
-  financeCore: { postedAdjustments?: unknown } | null | undefined,
+  financeCore: { postedAdjustments?: unknown; correctionLines?: unknown } | null | undefined,
 ): PeriodSettlementResult {
+  const stored = Number(financeCore?.postedAdjustments);
+  let postedAdjustments = Number.isFinite(stored) ? round2(stored) : 0;
+  if (!Number.isFinite(stored) && Array.isArray(financeCore?.correctionLines)) {
+    postedAdjustments = round2(
+      financeCore.correctionLines.reduce(
+        (sum: number, line: { amount?: unknown }) => sum + (Number(line?.amount) || 0),
+        0,
+      ),
+    );
+  }
   return computePeriodSettlement({
     ...input,
-    postedAdjustments: round2(Number(financeCore?.postedAdjustments) || 0),
+    postedAdjustments,
   });
 }
 

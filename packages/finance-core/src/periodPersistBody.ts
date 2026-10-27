@@ -24,6 +24,8 @@ export type FinanceCoreMetaInput = {
   nonUberTripCash?: number;
   cashSourceMismatch?: number;
   overpaidAmount: number;
+  /** Signed correction total applied in settlement math this rebuild. */
+  postedAdjustments?: number;
   tollCashWashEligible: number;
   /**
    * Toll rows counted in spend whose paymentMethod is neither cash nor tag.
@@ -120,6 +122,9 @@ export function buildPeriodMetadata(input: BuildPeriodMetadataInput): Record<str
       cashHeldClamped: fc.cashHeldClamped,
       unclampedCashHeld: fc.unclampedCashHeld,
       overpaidAmount: round2(fc.overpaidAmount),
+      ...(fc.postedAdjustments != null
+        ? { postedAdjustments: round2(Number(fc.postedAdjustments) || 0) }
+        : {}),
       tollCashWashEligible: round2(fc.tollCashWashEligible),
       tollUnknownPmCount: Number(fc.tollUnknownPmCount) || 0,
       tollUnknownPmAmount: round2(Number(fc.tollUnknownPmAmount) || 0),

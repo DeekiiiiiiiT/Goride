@@ -89,6 +89,7 @@ export {
   statementBackedSettlement,
 } from './driverPeriodSettlement.ts';
 export type { PeriodSettlementInput, PeriodSettlementResult, PeriodSettlementMinorResult } from './driverPeriodSettlement.ts';
+export { resolvePostedAdjustments } from './fuelShareCorrection.ts';
 export {
   getAdjCashBalance,
   getPeriodSettlementComponents,
