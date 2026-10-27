@@ -1,44 +1,39 @@
 # Roam Dominion — Enterprise Rebuild Audit
 
-**Rev 10 · 2026-10-27** · Closeout in progress / verified where noted.
+**Rev 12 · 2026-10-27** · All Rev 11 open items closed. Deferred and outside-CI unchanged.
 
 **Rule:** Dominion is the brain. It holds shared reference data, runs the shared engines, manages Roam staff, keeps Roam's GCT books in an owner-only Back office, and publishes data to the apps. It never lists customer records.
 
-**Do not touch:** D1–D5 (the Dominion places screens Stitch saved in the Roam Plug project). S1, S7 and S8 keep their layout; only the colour fix in D-4 is allowed.
+**Do not touch:** D1–D5 (the Dominion places screens Stitch saved in the Roam Plug project).
+
+**Verified closed and live (`ce7cba36`):**
+- Public catalog returns 200 on every route.
+- fleet-toll v89 shows master plazas.
+- Parts routes go to fleet-core.
+- Sidebar colours are fixed.
+- S22 is the real screen.
+- Stitch contract and fidelity pass.
+
+**Verified closed 2026-10-27 (Rev 11 close-out):**
+- **R-1** — Repo migration renamed to `supabase/migrations/20261027015940_station_plaza_contact_columns.sql` (matches production version). Commit when requested.
+- **R-2** — Live smoke on `https://roamdominion.co`: Tolls → Plazas shows **All plazas 12** / **Verified 12**; Platforms & engines loads with family rows and no errors.
 
 ---
 
-## Closed findings
+## Open
 
-### D-1 · Critical — Public catalog stations/tolls — CLOSED
-- Applied migration `station_plaza_contact_columns` to production (GoRide).
-- Verified `/v1/stations` and `/v1/tolls` return **200 with rows** (anon key).
+_(none)_
 
-### D-2 · High — Toll database empty for Dominion — CLOSED
-- **Server:** `GET /toll-plazas` no-org branch now filters `organization_id is null` (master plazas).
-- **Page:** `TollDatabaseView` keeps load errors and shows “Could not load plazas” + Retry.
-- **Deploy:** `fleet-toll` redeployed on main (closeout push).
-
-### D-3 · High — Platforms/engines/catalog tools 404 — FIXED
-- `partSourcingService` `adminGet` / `adminSend` route `part-*`, `vehicle-catalog*`, `catalog-gate*` to platform-catalog; everything else to fleet-core.
-
-### D-4 · Medium — Sidebar dark-on-dark — FIXED
-- `AdminLayout` sidebar slate classes replaced with `#cbd5e1` / `#94a3b8` (layout unchanged).
-
-### D-5 · Medium — S22 Vendors old screen — FIXED
-- Vendors tab uses S22 table shell with live verified rows (`DominionVendorsPanel`).
-- Empty orphan thead + nested `VendorDatabaseManager` removed from this tab.
-- Pending requests stay on `PendingVendorRequestsManager`; decorative empty pending shell removed.
-
-### D-6 · Medium — Push / CI / deploys — CLOSED (Dominion gates)
-- Closeout pushed to `main`. `fleet-toll` redeployed.
-- **Green:** Catalog contract, Admin reachability, Dominion Stitch contract + fidelity, Typecheck admin, Test Supabase Functions, Deploy Supabase Edge Function.
-- GitHub `SUPABASE_ANON_KEY` corrected (was invalid JWT / wrapping newlines).
-- **Note:** Full CI job can still fail later on unrelated `Deno check edge functions` (toll/week_close types). That is outside this Dominion audit.
+### Outside this audit — CI is still red
+- The "Deno check edge functions" step fails with 106 type errors, in these files:
+  - `week_close.ts`, `toll_controller.tsx`, `fuel_period_routes.ts`
+  - `recon_routes.ts`, `evidence_storage.ts`, `claim_service.ts`
+- None of them are Dominion code. They belong to the Driver Settlements work, so fix them there.
+- Until they're fixed, CI can't flag a Dominion break.
 
 ---
 
 ## Deferred (unchanged)
 - Authenticator sign-in on roam-s.co/admin, roamdriver.co/admin and roamenterprise.co/admin.
 - Vehicle catalog saves still go through fleet-core. The permission check is already in place.
-- `payload_json` stays until every reader uses the new columns from D-1.
+- `payload_json` stays until every reader uses the new contact, parish and direction columns.

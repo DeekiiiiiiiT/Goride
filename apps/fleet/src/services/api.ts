@@ -5435,6 +5435,14 @@ export const api = {
 
   async getFuelPeriodClosable(periodId: string): Promise<{
     blockers: Array<{ code: string; message: string }>;
+    implausibleFills?: Array<{
+      date: string;
+      amount: number;
+      liters: number;
+      odometer: number | null;
+      reasons: string[];
+      ids: string[];
+    }>;
     inputsVersion?: number;
     status?: string;
   }> {
@@ -5784,6 +5792,22 @@ export const api = {
     if (!response.ok) {
       const errText = await response.text().catch(() => '');
       throw new Error(errText || 'Leakage review failed');
+    }
+    return response.json();
+  },
+
+  async reviewFuelPeriodImplausibleFills(args: { periodId: string; note: string }) {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fuel}/fuel/periods/${encodeURIComponent(args.periodId)}/implausible-fills/accept`,
+      {
+        method: 'POST',
+        headers: await requireAuthHeaders(),
+        body: JSON.stringify({ note: args.note }),
+      },
+    );
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '');
+      throw new Error(errText || 'Unusual fill accept failed');
     }
     return response.json();
   },

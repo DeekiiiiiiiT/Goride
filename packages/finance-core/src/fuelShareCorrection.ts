@@ -81,7 +81,9 @@ export type CorrectionLine = {
   sourceWeek: string;
   amount: number;
   sentence: string;
-  kind: 'fuel_share' | 'legacy_balance';
+  kind: 'fuel_share' | 'legacy_balance' | 'settle_from_balance';
+  /** Shared id for linked settle-from-balance pairs. */
+  offsetId?: string;
 };
 
 export function sumCorrectionLines(lines: CorrectionLine[] | null | undefined): number {

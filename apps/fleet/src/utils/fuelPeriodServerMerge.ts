@@ -36,17 +36,19 @@ export function serverLockedWeekStarts(rows: FuelPeriodRow[]): Set<string> {
 /**
  * Empty open SQL shells (ensure without materialize) — dropped from landing cards
  * and must not block client gap-fill, or weeks with live fuel spend vanish.
+ * A prepared week (computedAt set) with $0 spend is still a real card.
  */
 export function isHollowOpenFuelPeriodRow(row: {
   status?: string | null;
   lockedAt?: string | null;
   totalSpend?: number | null;
   vehicleCount?: number | null;
+  computedAt?: string | null;
 }): boolean {
   if (isFuelReconPeriodLocked({ status: row.status, lockedAt: row.lockedAt })) return false;
   const totalSpend = Number(row.totalSpend) || 0;
   const vehicleCount = Number(row.vehicleCount) || 0;
-  return totalSpend <= FUEL_SPEND_EPS && vehicleCount <= 0;
+  return !row.computedAt && totalSpend <= FUEL_SPEND_EPS && vehicleCount <= 0;
 }
 
 /** Weeks SQL may own on landing (excludes hollow open shells). */

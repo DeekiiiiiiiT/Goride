@@ -1,7 +1,7 @@
 {
   "slug": "fleet-pay",
-  "generatedAt": "2026-10-27T01:09:21.408Z",
-  "routeCount": 115,
+  "generatedAt": "2026-10-27T12:33:51.196Z",
+  "routeCount": 116,
   "routes": [
     "GET ${BASE}/:anchor",
     "GET ${BASE}/approval-settings",
@@ -96,6 +96,7 @@
     "POST ${BASE}/resolve-refund/bulk",
     "POST ${BASE}/reverse",
     "POST ${BASE}/runs",
+    "POST ${BASE}/settle-from-balance",
     "POST ${BASE}/settlement-allocations/backfill",
     "POST ${BASE}/toll-ledger/:id/plaza",
     "POST ${BASE}/toll-ledger/:id/void",

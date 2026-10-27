@@ -17,6 +17,7 @@ import { computeSettlementLaneMetrics } from '../../../utils/settlementLaneMetri
 import { humanBlockerLabel } from '../../../utils/weekCloseBlockers';
 import { LogCashPaymentModal } from '../../drivers/LogCashPaymentModal';
 import { RecordPayoutModal, type RecordPayoutSavePayload } from '../../drivers/RecordPayoutModal';
+import { SettleFromBalanceModal } from './SettleFromBalanceModal';
 import { Button } from '../../ui/button';
 import { toast } from 'sonner';
 
@@ -72,6 +73,11 @@ export function ReconSettlementStep({
     amount: number;
   } | null>(null);
   const [collectTarget, setCollectTarget] = useState<{
+    driverId: string;
+    name: string;
+    amount: number;
+  } | null>(null);
+  const [settleTarget, setSettleTarget] = useState<{
     driverId: string;
     name: string;
     amount: number;
@@ -269,6 +275,23 @@ export function ReconSettlementStep({
                           Collect
                         </Button>
                       ) : null}
+                      {d.owed > MONEY_EPS ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="h-11"
+                          onClick={() =>
+                            setSettleTarget({
+                              driverId: d.driverId,
+                              name: d.name,
+                              amount: d.owed,
+                            })
+                          }
+                        >
+                          Settle from balance
+                        </Button>
+                      ) : null}
                     </div>
                   </td>
                 </tr>
@@ -336,6 +359,43 @@ export function ReconSettlementStep({
           });
           await qc.invalidateQueries({ queryKey: ['recon-run'] });
           await previewQuery.refetch();
+        }}
+      />
+
+      <SettleFromBalanceModal
+        open={!!settleTarget}
+        onClose={() => setSettleTarget(null)}
+        driverId={settleTarget?.driverId || ''}
+        driverName={settleTarget?.name || ''}
+        owingWeekStart={weekKey}
+        owingAmount={settleTarget?.amount || 0}
+        onConfirm={async ({ creditWeekStart, amount }) => {
+          if (!settleTarget) return;
+          try {
+            await settlementCommandsApi.settleFromBalance({
+              driverId: settleTarget.driverId,
+              owingWeekStart: weekKey,
+              creditWeekStart,
+              amount,
+              idempotencyKey: `settle-from-balance:${settleTarget.driverId}:${weekKey}:${creditWeekStart}:${amount.toFixed(2)}`,
+            });
+            toast.success(
+              `Moved ${MONEY(amount)} onto week of ${creditWeekStart}`,
+            );
+            await qc.invalidateQueries({ queryKey: ['settlements'] });
+            await qc.invalidateQueries({ queryKey: ['recon-run'] });
+            await qc.invalidateQueries({ queryKey: ['recon-close-preview'] });
+            await collectQuery.refetch();
+            await payQuery.refetch();
+            await previewQuery.refetch();
+          } catch (err) {
+            if (isPeriodFrozenError(err)) {
+              toast.error('Reopen the week first');
+              throw err;
+            }
+            toast.error(err instanceof Error ? err.message : 'Settle from balance failed');
+            throw err;
+          }
         }}
       />
     </div>

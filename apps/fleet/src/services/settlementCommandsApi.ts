@@ -436,6 +436,24 @@ export const settlementCommandsApi = {
     return postJson('/collect', body, 'Collect failed');
   },
 
+  async settleFromBalance(body: {
+    driverId: string;
+    owingWeekStart: string;
+    creditWeekStart: string;
+    amount: number;
+    idempotencyKey: string;
+    note?: string;
+  }) {
+    return postJson<{
+      success: boolean;
+      offsetId: string;
+      amount: number;
+      owingWeekStart: string;
+      creditWeekStart: string;
+      idempotent?: boolean;
+    }>('/settle-from-balance', body, 'Settle from balance failed');
+  },
+
   async pay(body: SettlementPayBody) {
     return postJson('/pay', body, 'Pay failed');
   },

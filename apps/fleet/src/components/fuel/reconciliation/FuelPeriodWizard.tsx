@@ -69,6 +69,7 @@ import {
   loadWizardStepNotes,
   materializeWizardPeriodCounts,
   persistLeakageReviewToServer,
+  persistImplausibleFillsAcceptToServer,
   persistWizardStep,
   recordWizardSecondApproval,
 } from './useFuelWizardActions';
@@ -219,6 +220,16 @@ function FuelPeriodWizardInner({
   const [serverPeriodId, setServerPeriodId] = useState<string | null>(null);
   const [serverPeriodVersion, setServerPeriodVersion] = useState<number | null>(null);
   const [serverBlockers, setServerBlockers] = useState<Array<{ code: string; message: string }> | null>(null);
+  const [serverImplausibleFills, setServerImplausibleFills] = useState<
+    Array<{
+      date: string;
+      amount: number;
+      liters: number;
+      odometer: number | null;
+      reasons: string[];
+      ids: string[];
+    }>
+  >([]);
   const [prepareState, setPrepareState] = useState<'idle' | 'preparing' | 'ready' | 'failed'>('idle');
   const [prepareError, setPrepareError] = useState<string | null>(null);
   const [serverReports, setServerReports] = useState<any[] | null>(null);
@@ -249,7 +260,12 @@ function FuelPeriodWizardInner({
   const refreshServerClosable = useCallback(async () => {
     if (!serverPeriodId || periodLocked) return;
     const closable = await api.getFuelPeriodClosable(serverPeriodId).catch(() => null);
-    if (closable) setServerBlockers(Array.isArray(closable.blockers) ? closable.blockers : []);
+    if (closable) {
+      setServerBlockers(Array.isArray(closable.blockers) ? closable.blockers : []);
+      setServerImplausibleFills(
+        Array.isArray(closable.implausibleFills) ? closable.implausibleFills : [],
+      );
+    }
   }, [serverPeriodId, periodLocked]);
 
   const prepareWeek = useCallback(async () => {
@@ -695,6 +711,27 @@ function FuelPeriodWizardInner({
       persistStep(next, validated.note);
     }
   };
+
+  const handleAcceptImplausibleFills = useCallback(
+    async (note: string) => {
+      try {
+        await persistImplausibleFillsAcceptToServer({
+          serverPeriodId,
+          weekStart: period.startDate,
+          weekEnd: period.endDate,
+          setServerPeriodId,
+          note,
+        });
+        setServerImplausibleFills([]);
+        setClosableTick((tick) => tick + 1);
+        await refreshServerClosable();
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Could not accept unusual fills');
+        throw err;
+      }
+    },
+    [serverPeriodId, period.startDate, period.endDate, refreshServerClosable],
+  );
 
   const ensurePeriodId = async (): Promise<string | null> => {
     if (serverPeriodId) return serverPeriodId;
@@ -1532,6 +1569,8 @@ function FuelPeriodWizardInner({
                 onRecordSecondApproval={() => void handleRecordSecondApproval()}
                 settlementRows={settlementRows}
                 closableBlockMessages={serverBlockMessages}
+                implausibleFills={serverImplausibleFills}
+                onAcceptImplausibleFills={handleAcceptImplausibleFills}
                 stopToStopSummary={stopToStopSummary}
                 onFixStopToStop={() => openStopToStopRemediation()}
                 onOpenIntegrityStopToStop={

@@ -16,7 +16,11 @@ import {
   fuelTankLiters,
 } from "../../../packages/fuel-core/src/fuelOpsEligibility.ts";
 import { isEntryInInclusiveYmdRange } from "../../../packages/fuel-core/src/fuelWeekRange.ts";
-import { weekHasUnreviewedImplausibleFills } from "../../../packages/fuel-core/src/fillPlausibility.ts";
+import {
+  listUnreviewedImplausibleFills,
+  type UnreviewedImplausibleFill,
+  weekHasUnreviewedImplausibleFills,
+} from "../../../packages/fuel-core/src/fillPlausibility.ts";
 import { selectOdometerBucketsClosingInWeek } from "../../../packages/fuel-core/src/fuelWeekRange.ts";
 import type { FuelEntry } from "../../../packages/fuel-core/src/fuelTypes.ts";
 import { getServiceClient } from "./service_client.ts";
@@ -492,11 +496,15 @@ export async function weekFlagClosableState(
   return { hasUnacked: false, dispositionLoadFailed: false };
 }
 
+export type FuelWeekClosableBuildResult = EvaluateFuelWeekClosableInput & {
+  implausibleFills: UnreviewedImplausibleFill[];
+};
+
 export async function buildFuelWeekClosableInputForPeriod(
   orgId: string,
   period: Record<string, unknown>,
   snapshots: unknown[],
-): Promise<EvaluateFuelWeekClosableInput> {
+): Promise<FuelWeekClosableBuildResult> {
   const weekStart = ymd(period.week_start);
   const weekEnd = ymd(period.week_end) || weekStart;
   // N-12a: never evaluate against a warm-isolate stale bundle.
@@ -675,6 +683,11 @@ export async function buildFuelWeekClosableInputForPeriod(
     nullOrgFill: await weekHasNullOrgFill(orgId, weekStart, weekEnd),
     implausibleFillsUnreviewed: !period.implausible_fills_reviewed_at
       && weekHasUnreviewedImplausibleFills(weekEntries as Parameters<typeof weekHasUnreviewedImplausibleFills>[0]),
+    implausibleFills: period.implausible_fills_reviewed_at
+      ? []
+      : listUnreviewedImplausibleFills(
+        weekEntries as Parameters<typeof listUnreviewedImplausibleFills>[0],
+      ),
     openPriorWeekStarts: (await loadPriorWeekCredit(getServiceClient(), orgId, weekStart)).openWeekStarts,
     ...(hasFrozenBuckets
       ? {

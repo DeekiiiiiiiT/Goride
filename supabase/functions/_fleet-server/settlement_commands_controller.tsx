@@ -2,7 +2,7 @@
  * Settlement command API — Phase 3 immutable movements + dual-write to KV txs.
  *
  * Routes under /make-server-37f42386/settlements:
- *   POST /collect | /pay | /write-off | /reverse | /verify | /runs
+ *   POST /collect | /pay | /write-off | /reverse | /verify | /runs | /settle-from-balance
  *   GET  /runs/:runId | /queue | /movements
  *   POST /:movementId/approve
  *
@@ -57,6 +57,7 @@ import {
 import { reviewSettlementPay } from "../../../packages/finance-core/src/driverFuelCredit.ts";
 import { hasPendingRestatementDrafts } from "../../../packages/finance-core/src/weekStatement.ts";
 import { getLatestWeekStatements } from "./week_statements.ts";
+import { settleFromBalance } from "./settlement_settle_from_balance.ts";
 
 function requiresApproval(amount: number, threshold = SETTLEMENT_APPROVAL_THRESHOLD): boolean {
   return requiresSettlementApproval(amount, threshold);
@@ -556,6 +557,40 @@ app.post(`${BASE}/collect`, requireSettlementPerm("settlements.collect"), async 
       isCashReceipt: true,
     });
     return c.json({ success: true, movement: mapMovement(movement), period: mapPeriod(period) });
+  } catch (e) {
+    return commandErrorResponse(c, e);
+  }
+});
+
+// ── POST /settle-from-balance ───────────────────────────────────────────────
+app.post(`${BASE}/settle-from-balance`, requireSettlementPerm("settlements.collect"), async (c) => {
+  try {
+    const orgOrResp = await requireOrgId(c);
+    if (typeof orgOrResp !== "string") return orgOrResp;
+    const organizationId = orgOrResp;
+    const user = c.get("rbacUser") as RbacUser;
+    const body = await c.req.json();
+    const driverId = String(body.driverId || "").trim();
+    const result = await settleFromBalance({
+      organizationId,
+      actorId: user.userId,
+      driverId,
+      owingWeekStart: String(body.owingWeekStart || body.weekAnchor || "").slice(0, 10),
+      creditWeekStart: String(body.creditWeekStart || "").slice(0, 10),
+      amount: Number(body.amount),
+      idempotencyKey: String(body.idempotencyKey || "").trim(),
+      note: body.note ? String(body.note) : undefined,
+    });
+    const [owingPeriod, creditPeriod] = await Promise.all([
+      getDriverFinancialPeriodDetail(driverId, result.owingWeekStart),
+      getDriverFinancialPeriodDetail(driverId, result.creditWeekStart),
+    ]);
+    return c.json({
+      success: true,
+      ...result,
+      owingPeriod: mapPeriod(owingPeriod),
+      creditPeriod: mapPeriod(creditPeriod),
+    });
   } catch (e) {
     return commandErrorResponse(c, e);
   }

@@ -242,6 +242,22 @@ export async function persistLeakageReviewToServer(input: {
   }
 }
 
+export async function persistImplausibleFillsAcceptToServer(input: {
+  serverPeriodId: string | null;
+  weekStart: string;
+  weekEnd: string;
+  setServerPeriodId: (id: string) => void;
+  note: string;
+}) {
+  const pid = await ensureWizardPeriodId(input);
+  if (!pid) throw new Error('period missing');
+  await api.reviewFuelPeriodImplausibleFills({
+    periodId: pid,
+    note: input.note,
+  });
+  toast.success('Unusual fills accepted for this week.');
+}
+
 export function settlementPreviewStepIndex() {
   return FUEL_STEP_ORDER.indexOf('settlement-preview');
 }

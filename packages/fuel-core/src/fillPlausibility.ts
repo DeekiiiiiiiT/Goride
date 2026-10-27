@@ -131,12 +131,39 @@ type WeekFill = {
     awaitingCardStatement?: boolean;
     awaitingCashStatement?: boolean;
     countsInFuelSpend?: boolean;
+    fillGroupId?: string;
+    jaaReceiptNumber?: string;
+    splitPumpTotal?: number | string;
+    splitPumpLiters?: number | string;
     [key: string]: unknown;
   } | null;
 };
 
+export type UnreviewedImplausibleFill = {
+  date: string;
+  amount: number;
+  liters: number;
+  odometer: number | null;
+  reasons: string[];
+  ids: string[];
+};
+
+type FillStop = {
+  ids: string[];
+  date: string;
+  amount: number;
+  liters: number;
+  odometer: number | null;
+  accepted: boolean;
+};
+
 function fillDay(entry: WeekFill): string {
   return String(entry.date || '').slice(0, 10);
+}
+
+function metaStr(meta: WeekFill['metadata'], key: string): string {
+  const v = meta?.[key];
+  return typeof v === 'string' && v.length > 0 ? v : '';
 }
 
 function weekFillCountsInSpend(entry: WeekFill): boolean {
@@ -153,8 +180,76 @@ function weekFillCountsInSpend(entry: WeekFill): boolean {
   });
 }
 
-/** True when a hard or confirm-level issue has not been explicitly accepted. */
-export function weekHasUnreviewedImplausibleFills(entries: WeekFill[]): boolean {
+/** Collapse ledger rows into one stop per fillGroupId, else per receipt. */
+export function collapseWeekFillsToStops(entries: WeekFill[]): FillStop[] {
+  const groups = new Map<string, WeekFill[]>();
+  const order: string[] = [];
+  for (const entry of entries) {
+    const gid = metaStr(entry.metadata, 'fillGroupId');
+    const receipt = metaStr(entry.metadata, 'jaaReceiptNumber');
+    const key = gid
+      ? `g:${gid}`
+      : receipt
+        ? `r:${receipt}`
+        : `id:${String(entry.id || `${fillDay(entry)}:${entry.odometer}:${entry.amount}`)}`;
+    if (!groups.has(key)) {
+      groups.set(key, []);
+      order.push(key);
+    }
+    groups.get(key)!.push(entry);
+  }
+
+  return order.map((key) => {
+    const members = groups.get(key) || [];
+    const accepted = members.some((m) => Boolean(m.metadata?.plausibilityAccepted));
+    const days = members.map(fillDay).filter(Boolean).sort();
+    const date = days[0] || '';
+    let amount = 0;
+    let liters = 0;
+    let pumpTotal = 0;
+    let pumpLiters = 0;
+    for (const m of members) {
+      const pt = Number(m.metadata?.splitPumpTotal) || 0;
+      const pl = Number(m.metadata?.splitPumpLiters) || 0;
+      if (pt > pumpTotal) pumpTotal = pt;
+      if (pl > pumpLiters) pumpLiters = pl;
+    }
+    if (pumpTotal > 0) {
+      amount = pumpTotal;
+      liters = pumpLiters;
+    } else {
+      // Card + driver-log of the same receipt: use one row, never sum.
+      const withBoth = members.find(
+        (m) => (Number(m.amount) || 0) > 0 && (Number(m.liters) || 0) > 0,
+      );
+      const withAmount = members.find((m) => (Number(m.amount) || 0) > 0);
+      const pick = withBoth || withAmount || members[0];
+      amount = Number(pick?.amount) || 0;
+      liters = Number(pick?.liters) || 0;
+    }
+    let odometer: number | null = null;
+    for (const m of members) {
+      const odo = Number(m.odometer) || 0;
+      if (odo > 0) {
+        odometer = odo;
+        break;
+      }
+    }
+    return {
+      ids: members.map((m) => String(m.id || '')).filter(Boolean),
+      date,
+      amount,
+      liters,
+      odometer,
+      accepted,
+    };
+  });
+}
+
+/** Flagged stops that still need a week-level accept. */
+export function listUnreviewedImplausibleFills(
+  entries: WeekFill[],
+): UnreviewedImplausibleFill[] {
   const byVehicle = new Map<string, WeekFill[]>();
   for (const entry of entries) {
     const id = String(entry.vehicleId || '');
@@ -162,35 +257,47 @@ export function weekHasUnreviewedImplausibleFills(entries: WeekFill[]): boolean 
     list.push(entry);
     byVehicle.set(id, list);
   }
+  const out: UnreviewedImplausibleFill[] = [];
   for (const list of byVehicle.values()) {
     const spendList = list.filter(weekFillCountsInSpend);
-    const prices = spendList
-      .filter((e) => Number(e.liters) > 0 && Number(e.amount) > 0)
-      .map((e) => Number(e.amount) / Number(e.liters));
+    const stops = collapseWeekFillsToStops(spendList);
+    const prices = stops
+      .filter((s) => s.liters > 0 && s.amount > 0)
+      .map((s) => s.amount / s.liters);
     const seenDay = new Map<number, string>();
-    for (const entry of spendList) {
-      if (entry.metadata?.plausibilityAccepted) continue;
-      const odo = Number(entry.odometer) || 0;
-      const day = fillDay(entry);
+    for (const stop of stops) {
+      if (stop.accepted) continue;
+      const odo = Number(stop.odometer) || 0;
+      const day = stop.date;
       const priorDay = odo > 0 ? seenDay.get(odo) : undefined;
-      // Same vehicle, same day, same reading is one stop: a card plus cash
-      // payment, or a second copy of the same card fill. A later day that
+      // Same vehicle, same stop day, same reading is fine. A later stop that
       // still shows that reading is a real repeat and still needs acceptance.
       const duplicate = Boolean(priorDay && priorDay !== day);
       if (odo > 0 && priorDay == null) seenDay.set(odo, day);
-      const peers = prices.filter((p) => {
-        const own = Number(entry.liters) > 0 ? Number(entry.amount) / Number(entry.liters) : 0;
-        return p !== own;
-      });
+      const own = stop.liters > 0 ? stop.amount / stop.liters : 0;
+      const peers = prices.filter((p) => p !== own);
       const issues = assessFillPlausibility({
-        amount: Number(entry.amount) || 0,
-        liters: Number(entry.liters) || 0,
-        odometer: entry.odometer,
+        amount: stop.amount,
+        liters: stop.liters,
+        odometer: stop.odometer,
         duplicateOdometer: duplicate,
         peerPrices: peers,
+      }).filter((i) => i.severity === 'block' || i.severity === 'confirm');
+      if (issues.length === 0) continue;
+      out.push({
+        date: stop.date,
+        amount: stop.amount,
+        liters: stop.liters,
+        odometer: stop.odometer,
+        reasons: issues.map((i) => i.message),
+        ids: stop.ids,
       });
-      if (issues.some((i) => i.severity === 'block' || i.severity === 'confirm')) return true;
     }
   }
-  return false;
+  return out;
+}
+
+/** True when a hard or confirm-level issue has not been explicitly accepted. */
+export function weekHasUnreviewedImplausibleFills(entries: WeekFill[]): boolean {
+  return listUnreviewedImplausibleFills(entries).length > 0;
 }

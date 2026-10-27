@@ -325,4 +325,24 @@ describe('fuelPeriodServerMerge landing SoT', () => {
     expect(merged[0].startDate).toBe('2026-09-14');
     expect(merged[0].totalSpend).toBeCloseTo(49_690.8, 1);
   });
+
+  it('prepared open week with $0 spend stays on the landing list', () => {
+    const prepared = row({
+      weekStart: '2026-09-14',
+      weekEnd: '2026-09-20',
+      status: 'open',
+      lockedAt: null,
+      totalSpend: 0,
+      vehicleCount: 0,
+      unexplained: 0,
+      computedAt: '2026-10-27T12:00:45Z',
+      leakageReviewedAt: '2026-10-27T12:01:00Z',
+    });
+    expect(isHollowOpenFuelPeriodRow(prepared)).toBe(false);
+    const cards = serverRowsToLandingPeriods([prepared]);
+    expect(cards).toHaveLength(1);
+    expect(cards[0].startDate).toBe('2026-09-14');
+    expect(cards[0].status).toBe('in_progress');
+    expect(serverLandingCoveringWeekStarts([prepared]).has('2026-09-14')).toBe(true);
+  });
 });

@@ -1,7 +1,7 @@
 {
   "slug": "fleet-fuel",
-  "generatedAt": "2026-10-22T22:37:30.438Z",
-  "routeCount": 215,
+  "generatedAt": "2026-10-27T12:33:51.126Z",
+  "routeCount": 216,
   "routes": [
     "DELETE ${BASE_PATH}/admin/evidence-inbox/gate-held/:transactionId",
     "DELETE ${BASE_PATH}/finalized-reports/:weekStart/:identityId",
@@ -170,6 +170,7 @@
     "POST ${BASE}/fuel/periods/:id/finalize",
     "POST ${BASE}/fuel/periods/:id/gap-charges/approve",
     "POST ${BASE}/fuel/periods/:id/gap-charges/recommend",
+    "POST ${BASE}/fuel/periods/:id/implausible-fills/accept",
     "POST ${BASE}/fuel/periods/:id/leakage-review",
     "POST ${BASE}/fuel/periods/:id/leftover-override",
     "POST ${BASE}/fuel/periods/:id/materialize",

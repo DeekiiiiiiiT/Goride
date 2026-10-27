@@ -1,7 +1,7 @@
 /**
  * Finalize step panel — extracted from FuelPeriodWizard (Wave I hygiene).
  */
-import React from 'react';
+import React, { useState } from 'react';
 import { Button } from '../../ui/button';
 import { Checkbox } from '../../ui/checkbox';
 import { FuelExceptionBlockersPanel } from './FuelExceptionBlockersPanel';
@@ -12,6 +12,15 @@ import type {
   FuelUnapprovedTxBlocker,
 } from '../../../utils/fuelFinalizeGating';
 import { formatFuelMoney } from '../../../utils/formatFuelMoney';
+
+export type ImplausibleFillStop = {
+  date: string;
+  amount: number;
+  liters: number;
+  odometer: number | null;
+  reasons: string[];
+  ids?: string[];
+};
 
 export type FuelFinalizeStepProps = {
   periodLocked: boolean;
@@ -37,6 +46,10 @@ export type FuelFinalizeStepProps = {
   settlementRows: FuelSettlementRow[];
   /** Hard closable-gate reasons shown when Finalize is locked. */
   closableBlockMessages?: string[];
+  /** Flagged unusual fills that still need a week-level accept. */
+  implausibleFills?: ImplausibleFillStop[];
+  /** Accept unusual fills for this week (reason ≥ 8 chars). */
+  onAcceptImplausibleFills?: (note: string) => Promise<void>;
   /** Plain-English stop-to-stop summary above the Fix CTA. */
   stopToStopSummary?: string;
   /** Primary: open in-wizard Fix stop-to-stop remediation sheet. */
@@ -81,12 +94,16 @@ export function FuelFinalizeStep(props: FuelFinalizeStepProps) {
     dualApprovalUiMode = 'human',
     settlementRows,
     closableBlockMessages = [],
+    implausibleFills = [],
+    onAcceptImplausibleFills,
     stopToStopSummary,
     onFixStopToStop,
     onOpenStopToStopGapDetail,
     onOpenIntegrityStopToStop,
     provenance,
   } = props;
+  const [implausibleNote, setImplausibleNote] = useState('');
+  const [implausibleBusy, setImplausibleBusy] = useState(false);
   const serviceOnly = dualApprovalUiMode === 'service_only';
   const hasStopToStopBlock = closableBlockMessages.some((m) => {
     const lower = m.toLowerCase();
@@ -98,6 +115,12 @@ export function FuelFinalizeStep(props: FuelFinalizeStepProps) {
       lower.includes('fuel litres do not match')
     );
   });
+  const hasImplausibleBlock = closableBlockMessages.some((m) =>
+    /unusual price|repeated odometer|looks wrong/i.test(m),
+  );
+  const showImplausibleAccept =
+    Boolean(onAcceptImplausibleFills) &&
+    (implausibleFills.length > 0 || hasImplausibleBlock);
   const fixStopToStop = onFixStopToStop || onOpenStopToStopGapDetail;
 
   return (
@@ -139,6 +162,61 @@ export function FuelFinalizeStep(props: FuelFinalizeStepProps) {
                   Open in Fuel Integrity (advanced)
                 </Button>
               ) : null}
+            </div>
+          ) : null}
+          {showImplausibleAccept ? (
+            <div className="mt-3 space-y-2 rounded-md border border-rose-300 bg-white px-3 py-3 text-slate-900">
+              <p className="font-semibold">Accept unusual fills</p>
+              {implausibleFills.length > 0 ? (
+                <ul className="list-inside list-disc space-y-1 text-sm text-slate-800">
+                  {implausibleFills.map((fill) => (
+                    <li key={`${fill.date}-${fill.amount}-${fill.odometer}-${fill.ids?.join(',') || ''}`}>
+                      {fill.date || '—'} · {formatFuelMoney(fill.amount)}
+                      {fill.odometer != null && Number(fill.odometer) > 0
+                        ? ` · odo ${Number(fill.odometer).toLocaleString()}`
+                        : ''}
+                      {fill.reasons?.[0] ? ` — ${fill.reasons[0]}` : ''}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-slate-700">
+                  A fill looks unusual (price or repeated odometer). Accept it to continue.
+                </p>
+              )}
+              <label className="block space-y-1">
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  Accept reason{' '}
+                  <span className="font-normal normal-case text-slate-400">(required, 8+ characters)</span>
+                </span>
+                <textarea
+                  className="min-h-[72px] w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+                  value={implausibleNote}
+                  disabled={periodLocked || implausibleBusy}
+                  onChange={(e) => setImplausibleNote(e.target.value)}
+                  placeholder="Why is this fill acceptable for this week?"
+                  aria-required
+                />
+              </label>
+              <Button
+                type="button"
+                className="min-h-11 w-full sm:w-auto bg-rose-700 text-white hover:bg-rose-800"
+                disabled={
+                  periodLocked ||
+                  implausibleBusy ||
+                  implausibleNote.trim().length < 8 ||
+                  !onAcceptImplausibleFills
+                }
+                onClick={() => {
+                  if (!onAcceptImplausibleFills) return;
+                  setImplausibleBusy(true);
+                  void onAcceptImplausibleFills(implausibleNote.trim())
+                    .then(() => setImplausibleNote(''))
+                    .finally(() => setImplausibleBusy(false));
+                }}
+              >
+                {implausibleBusy ? 'Saving…' : 'Accept unusual fills'}
+              </Button>
             </div>
           ) : null}
         </div>

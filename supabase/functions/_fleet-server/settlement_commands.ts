@@ -187,6 +187,35 @@ export function driverOwesResidual(settlementAmount: number): number {
   return Math.max(0, -(Number(settlementAmount) || 0));
 }
 
+/** Pure guard for settle-from-balance amounts (no I/O). */
+export function validateSettleFromBalanceAmount(opts: {
+  amount: number;
+  owingSettlement: number;
+  creditSettlement: number;
+}): { ok: true; amount: number } | { ok: false; code: string; message: string } {
+  const amount = Math.round((Number(opts.amount) || 0) * 100) / 100;
+  if (!(amount > 0.005)) {
+    return { ok: false, code: "INVALID_AMOUNT", message: "Amount must be greater than zero." };
+  }
+  const owe = driverOwesResidual(opts.owingSettlement);
+  const credit = companyOwesResidual(opts.creditSettlement);
+  if (amount > owe + 0.005) {
+    return {
+      ok: false,
+      code: "EXCEEDS_OWING",
+      message: `Amount $${amount.toFixed(2)} is more than the $${owe.toFixed(2)} this week owes.`,
+    };
+  }
+  if (amount > credit + 0.005) {
+    return {
+      ok: false,
+      code: "EXCEEDS_CREDIT",
+      message: `Amount $${amount.toFixed(2)} is more than the $${credit.toFixed(2)} the credit week owes the driver.`,
+    };
+  }
+  return { ok: true, amount };
+}
+
 /**
  * Cap payouts: paidSoFar + amount must not exceed entitlement.
  * entitlement = total that may ever be paid for the week (e.g. gross positive + tips).

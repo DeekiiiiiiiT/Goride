@@ -1032,6 +1032,8 @@ async function processJobRow(job: Record<string, unknown>) {
         unattributed_reviewed_at: null,
         unattributed_reviewed_by: null,
         unattributed_review_note: null,
+        implausible_fills_reviewed_at: null,
+        implausible_fills_review_note: null,
         data_quality_vehicle_reviews: [],
         stop_to_stop_gap_accepts: [],
         counts: {},
@@ -1774,6 +1776,42 @@ export function registerFuelPeriodRoutes(app: Hono) {
       if (error) return c.json({ error: error.message }, 500);
       await insertAudit(orgId, periodId, "leakage_review", { note, disposition }, actor);
       return c.json({ ok: true, leakageReviewedAt: now, disposition });
+    },
+  );
+
+  app.post(
+    `${BASE}/fuel/periods/:id/implausible-fills/accept`,
+    requirePermission("fuel.finalize"),
+    async (c: Context) => {
+      const orgId = getOrgId(c);
+      if (!orgId) return c.json({ error: "org required" }, 400);
+      const periodId = periodIdParam(c);
+      if (!periodId) return c.json({ error: "period id required" }, 400);
+      const body = await c.req.json().catch(() => ({}));
+      const note = String(body.note || "").trim();
+      if (note.length < 8) {
+        return c.json({ error: "note_too_short", minLength: 8 }, 422);
+      }
+      const period = await loadPeriod(orgId, periodId);
+      if (!period) return c.json({ error: "Not found" }, 404);
+      if (String(period.status) === "locked") {
+        return c.json({ error: "period_locked" }, 409);
+      }
+      const actor = actorId(c);
+      const now = new Date().toISOString();
+      const sb = getServiceClient();
+      const { error } = await sb
+        .from("fuel_reconciliation_period")
+        .update({
+          implausible_fills_reviewed_at: now,
+          implausible_fills_review_note: note,
+          updated_at: now,
+        })
+        .eq("id", periodId)
+        .eq("org_id", orgId);
+      if (error) return c.json({ error: error.message }, 500);
+      await insertAudit(orgId, periodId, "implausible_fills_review", { note }, actor);
+      return c.json({ ok: true, implausibleFillsReviewedAt: now });
     },
   );
 
@@ -2677,6 +2715,7 @@ export function registerFuelPeriodRoutes(app: Hono) {
       const blockers = evaluateFuelWeekClosable(input);
       return c.json({
         blockers,
+        implausibleFills: input.implausibleFills || [],
         inputsVersion: Number(period.version) || 1,
         status: String(period.status || "open"),
       });
