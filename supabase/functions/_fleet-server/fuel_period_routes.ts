@@ -2755,7 +2755,8 @@ export function registerFuelPeriodRoutes(app: Hono) {
           return Array.isArray(payload?.reports) ? payload.reports : [];
         });
         if (reports.length) {
-          return c.json({ version: 1, reused: true, reports, totalSpend: null });
+          // Shadow is read-only preview — never invent a version Finalize could send.
+          return c.json({ version: null, reused: true, reports, totalSpend: null });
         }
       }
       return c.json({ version: null, reports: [], reused: true });

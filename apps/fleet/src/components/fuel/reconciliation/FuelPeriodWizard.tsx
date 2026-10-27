@@ -278,10 +278,18 @@ function FuelPeriodWizardInner({
     setPrepareState('preparing');
     setPrepareError(null);
     try {
-      const computed = await api.getFuelWeekSnapshot(serverPeriodId);
+      // POST /compute creates or reuses a real fuel_week_snapshot (GET /snapshot does not).
+      const computed = await api.computeFuelWeek(serverPeriodId);
       const reports = Array.isArray(computed?.reports) ? computed.reports : [];
       const version = Number(computed?.version) || 0;
-      rememberFuelSnapshotVersion(serverPeriodId, version || null);
+      if (!version) {
+        rememberFuelSnapshotVersion(serverPeriodId, null);
+        setServerReports(null);
+        setPrepareState('failed');
+        setPrepareError("This week's numbers aren't ready yet. Nothing was locked.");
+        return;
+      }
+      rememberFuelSnapshotVersion(serverPeriodId, version);
       setServerReports(reports);
       setPrepareState('ready');
     } catch {
@@ -1173,7 +1181,7 @@ function FuelPeriodWizardInner({
   const finalizeBlockedReason = (() => {
     if (periodLocked) return 'This week is already locked.';
     if (finalizing) return 'Finalizing…';
-    if (prepareState === 'preparing') return 'Preparing this week.';
+    if (prepareState === 'preparing') return "Building this week's numbers…";
     if (prepareState === 'failed') return prepareError || "We couldn't prepare this week's numbers. Nothing was locked.";
     if (liveReports.length === 0) return 'No fuel spend for this week yet.';
     if (serverBlockers == null) return 'Checking whether this week can be locked.';
@@ -1351,7 +1359,7 @@ function FuelPeriodWizardInner({
           />
 
           {prepareState === 'preparing' ? (
-            <p className="text-sm text-slate-600">Preparing this week.</p>
+            <p className="text-sm text-slate-600">Building this week&apos;s numbers…</p>
           ) : null}
           {prepareState === 'failed' ? (
             <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">

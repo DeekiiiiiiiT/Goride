@@ -38,6 +38,57 @@ function fcOf(row: Record<string, unknown>): Record<string, unknown> {
   return fc;
 }
 
+export type SettleMovementHalf = {
+  id: string;
+  amount_minor: number;
+  metadata: { offsetId?: string; role?: string } | null;
+};
+
+/** Pull shared offsetId + absolute major amount from either half's movement. */
+export function resolveStoredSettlePair(
+  clearOwes: SettleMovementHalf | null,
+  applyCredit: SettleMovementHalf | null,
+): { offsetId: string; amount: number } | null {
+  const src = clearOwes || applyCredit;
+  if (!src) return null;
+  const meta = (src.metadata || {}) as { offsetId?: string };
+  const offsetId = String(meta.offsetId || "").trim();
+  const amount = round2(Math.abs(Number(src.amount_minor) || 0) / 100);
+  if (!offsetId || !(amount > 0)) return null;
+  return { offsetId, amount };
+}
+
+/** True only when both movements and both correction lines exist. */
+export function bothSettleHalvesComplete(opts: {
+  clearOwesMovement: boolean;
+  applyCreditMovement: boolean;
+  owingHasLine: boolean;
+  creditHasLine: boolean;
+}): boolean {
+  return (
+    opts.clearOwesMovement &&
+    opts.applyCreditMovement &&
+    opts.owingHasLine &&
+    opts.creditHasLine
+  );
+}
+
+export function periodHasSettleOffsetLine(
+  row: Record<string, unknown> | null,
+  offsetId: string,
+): boolean {
+  if (!row || !offsetId) return false;
+  const fc = fcOf(row);
+  const lines = Array.isArray(fc.correctionLines)
+    ? (fc.correctionLines as CorrectionLine[])
+    : [];
+  return lines.some(
+    (l) =>
+      l.kind === "settle_from_balance" &&
+      String((l as { offsetId?: string }).offsetId || "") === offsetId,
+  );
+}
+
 async function loadPeriod(
   orgId: string,
   driverId: string,
@@ -52,6 +103,25 @@ async function loadPeriod(
     .maybeSingle();
   if (error) throw new Error(error.message);
   return (data as Record<string, unknown> | null) ?? null;
+}
+
+async function loadMovementHalf(
+  orgId: string,
+  idempotencyKey: string,
+): Promise<SettleMovementHalf | null> {
+  const { data, error } = await sb()
+    .from("settlement_movements")
+    .select("id, amount_minor, metadata")
+    .eq("organization_id", orgId)
+    .eq("idempotency_key", idempotencyKey)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data?.id) return null;
+  return {
+    id: String(data.id),
+    amount_minor: Number(data.amount_minor) || 0,
+    metadata: (data.metadata || null) as SettleMovementHalf["metadata"],
+  };
 }
 
 async function appendSettleCorrection(opts: {
@@ -184,20 +254,113 @@ export async function settleFromBalance(opts: {
     );
   }
 
-  const existing = await sb()
-    .from("settlement_movements")
-    .select("id, metadata")
-    .eq("organization_id", opts.organizationId)
-    .eq("idempotency_key", `${idempotencyKey}:clear_owes`)
-    .maybeSingle();
-  if (existing.data?.id) {
-    const meta = (existing.data.metadata || {}) as { offsetId?: string };
+  const clearKey = `${idempotencyKey}:clear_owes`;
+  const creditKey = `${idempotencyKey}:apply_credit`;
+  const [clearMov, creditMov] = await Promise.all([
+    loadMovementHalf(opts.organizationId, clearKey),
+    loadMovementHalf(opts.organizationId, creditKey),
+  ]);
+
+  // Repair / complete path: at least one half already landed.
+  if (clearMov || creditMov) {
+    const stored = resolveStoredSettlePair(clearMov, creditMov);
+    if (!stored) {
+      throw new SettlementCommandError(
+        "SETTLE_PAIR_CORRUPT",
+        "A partial settle-from-balance exists but is missing offsetId or amount.",
+        409,
+      );
+    }
+    const { offsetId, amount } = stored;
+    const noteSuffix = opts.note ? ` ${String(opts.note).trim()}` : "";
+    const clearReason = `Netted against week of ${creditWeek}.${noteSuffix}`.trim();
+    const creditReason = `Netted against week of ${owingWeek}.${noteSuffix}`.trim();
+
+    const [owingRow, creditRow] = await Promise.all([
+      loadPeriod(opts.organizationId, driverId, owingWeek),
+      loadPeriod(opts.organizationId, driverId, creditWeek),
+    ]);
+    let owingHasLine = periodHasSettleOffsetLine(owingRow, offsetId);
+    let creditHasLine = periodHasSettleOffsetLine(creditRow, offsetId);
+
+    const alreadyComplete = bothSettleHalvesComplete({
+      clearOwesMovement: !!clearMov,
+      applyCreditMovement: !!creditMov,
+      owingHasLine,
+      creditHasLine,
+    });
+    if (alreadyComplete) {
+      return {
+        offsetId,
+        amount,
+        owingWeekStart: owingWeek,
+        creditWeekStart: creditWeek,
+        idempotent: true,
+      };
+    }
+
+    await assertFinancePeriodNotLocked(opts.organizationId, owingWeek);
+    await assertFinancePeriodNotLocked(opts.organizationId, creditWeek);
+
+    // Write whichever half is missing (appendSettleCorrection is safe per offsetId).
+    if (!clearMov || !owingHasLine) {
+      await appendSettleCorrection({
+        orgId: opts.organizationId,
+        driverId,
+        week: owingWeek,
+        peerWeek: creditWeek,
+        amount,
+        role: "clear_owes",
+        offsetId,
+        actorId: opts.actorId,
+        idempotencyKey: clearKey,
+        reason: clearReason,
+      });
+    }
+    if (!creditMov || !creditHasLine) {
+      await appendSettleCorrection({
+        orgId: opts.organizationId,
+        driverId,
+        week: creditWeek,
+        peerWeek: owingWeek,
+        amount: -amount,
+        role: "apply_credit",
+        offsetId,
+        actorId: opts.actorId,
+        idempotencyKey: creditKey,
+        reason: creditReason,
+      });
+    }
+
+    const [clearAfter, creditAfter, owingAfter, creditPeriodAfter] = await Promise.all([
+      loadMovementHalf(opts.organizationId, clearKey),
+      loadMovementHalf(opts.organizationId, creditKey),
+      loadPeriod(opts.organizationId, driverId, owingWeek),
+      loadPeriod(opts.organizationId, driverId, creditWeek),
+    ]);
+    owingHasLine = periodHasSettleOffsetLine(owingAfter, offsetId);
+    creditHasLine = periodHasSettleOffsetLine(creditPeriodAfter, offsetId);
+    if (
+      !bothSettleHalvesComplete({
+        clearOwesMovement: !!clearAfter,
+        applyCreditMovement: !!creditAfter,
+        owingHasLine,
+        creditHasLine,
+      })
+    ) {
+      throw new SettlementCommandError(
+        "SETTLE_PAIR_INCOMPLETE",
+        "Settle from balance could not finish both weeks. Retry with the same key.",
+        409,
+      );
+    }
+
     return {
-      offsetId: String(meta.offsetId || ""),
-      amount: round2(Number(opts.amount) || 0),
+      offsetId,
+      amount,
       owingWeekStart: owingWeek,
       creditWeekStart: creditWeek,
-      idempotent: true,
+      idempotent: false,
     };
   }
 
@@ -247,7 +410,7 @@ export async function settleFromBalance(opts: {
     role: "clear_owes",
     offsetId,
     actorId: opts.actorId,
-    idempotencyKey: `${idempotencyKey}:clear_owes`,
+    idempotencyKey: clearKey,
     reason: clearReason,
   });
   await appendSettleCorrection({
@@ -259,7 +422,7 @@ export async function settleFromBalance(opts: {
     role: "apply_credit",
     offsetId,
     actorId: opts.actorId,
-    idempotencyKey: `${idempotencyKey}:apply_credit`,
+    idempotencyKey: creditKey,
     reason: creditReason,
   });
 

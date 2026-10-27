@@ -283,7 +283,8 @@ export function FuelBulkFinalizeDialog({
 
             let preparedWeek: { version?: number | null; totalSpend?: number | null; reports?: WeeklyFuelReport[] };
             try {
-              preparedWeek = await api.getFuelWeekSnapshot(periodRow.id) ?? { version: null, reports: [] };
+              // POST /compute creates or reuses a real snapshot (GET /snapshot does not).
+              preparedWeek = await api.computeFuelWeek(periodRow.id);
             } catch {
               weekResults.push({
                 id: period.id,
@@ -299,7 +300,7 @@ export function FuelBulkFinalizeDialog({
                 id: period.id,
                 label,
                 status: 'failed',
-                message: "This week's numbers are still updating. Nothing was locked.",
+                message: "This week's numbers aren't ready yet. Nothing was locked.",
               });
               continue;
             }
