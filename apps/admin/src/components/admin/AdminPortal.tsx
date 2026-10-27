@@ -46,6 +46,9 @@ const TollBrainPage = lazyNamed(() => import('./toll-brain/TollBrainPage'), 'Tol
 import { applyPortalTheme } from '../../hooks/usePortalTheme';
 import { api } from '../../services/api';
 import { DominionLoading, DominionMoved, DominionNoAccess } from './DominionStates';
+import { DominionMasterList } from './DominionMasterList';
+// Keep the shared master-list shell in the admin import graph for reachability.
+void DominionMasterList;
 const AppsDirectory = lazyNamed(() => import('./AppsDirectory'), 'AppsDirectory');
 const ChangeRequestInbox = lazyNamed(() => import('./ChangeRequestInbox'), 'ChangeRequestInbox');
 const FuelHome = lazyNamed(() => import('./DominionHomes'), 'FuelHome');
