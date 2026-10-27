@@ -106,6 +106,8 @@ export type FuelLeakageStepProps = {
     appliesTo: LeftoverBucket[];
     note: string;
   }) => Promise<void>;
+  /** Mark unexplained residual reviewed and advance (disposition form CTA). */
+  onMarkLeakageReviewed?: () => void;
 };
 
 export function FuelLeakageStep(props: FuelLeakageStepProps) {
@@ -148,6 +150,7 @@ export function FuelLeakageStep(props: FuelLeakageStepProps) {
     homeMissing = false,
     homeDrivers = [],
     streetHomeDrivers = [],
+    onMarkLeakageReviewed,
     periodId,
     onSaveLeftoverOverride,
   } = props;
@@ -278,10 +281,11 @@ export function FuelLeakageStep(props: FuelLeakageStepProps) {
         </p>
       )}
       {periodId && onSaveLeftoverOverride && !periodLocked && (
-        <div className="space-y-2 rounded-lg border border-slate-300 bg-white px-3 py-3">
-          <p className="text-sm font-medium text-slate-900">Change leftover for this week</p>
+        <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
+          <p className="text-sm font-medium text-slate-800">Change leftover for this week</p>
           <p className="text-[12px] text-slate-500">
-            Company pays leftover unless you set a driver share. A typed reason is required.
+            Optional — only save if you mean to charge the driver a share of leftover. This is not
+            the Accept unexplained step below.
           </p>
           <select
             className="h-10 w-full rounded-md border border-slate-200 px-2 text-sm"
@@ -337,6 +341,7 @@ export function FuelLeakageStep(props: FuelLeakageStepProps) {
           />
           <Button
             type="button"
+            variant="outline"
             disabled={savingLeftover || leftoverNote.trim().length < 8 || leftoverBuckets.length === 0}
             onClick={() => {
               setSavingLeftover(true);
@@ -442,7 +447,7 @@ export function FuelLeakageStep(props: FuelLeakageStepProps) {
           {showDispositionForm ? (
             <p className="text-[11px] text-slate-400">
               Accept acknowledges leftover fuel spend; the unexplained amount stays on the week (not
-              zeroed). Type a reason (8+ chars), then Mark reviewed above.
+              zeroed). Choose a disposition and reason below, then press Mark reviewed &amp; continue.
             </p>
           ) : overExplained ? (
             <p className="text-[11px] text-slate-400">
@@ -460,7 +465,10 @@ export function FuelLeakageStep(props: FuelLeakageStepProps) {
       )}
 
       {showDispositionForm ? (
-        <div className="space-y-3 rounded-lg border border-slate-200 bg-white px-3 py-3">
+        <div className="space-y-3 rounded-lg border border-slate-900 bg-white px-3 py-3 shadow-sm">
+          <p className="text-sm font-medium text-slate-900">
+            Accept unexplained fuel (required to continue)
+          </p>
           <label className="block space-y-1">
             <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
               Residual disposition
@@ -497,8 +505,22 @@ export function FuelLeakageStep(props: FuelLeakageStepProps) {
             />
           </label>
           <p className="text-[11px] text-slate-500">
-            Choose a disposition and type a reason here, then use Mark reviewed &amp; continue above.
+            Choose a disposition and type a reason, then press Mark reviewed &amp; continue.
           </p>
+          {onMarkLeakageReviewed ? (
+            <Button
+              type="button"
+              className="min-h-11 w-full sm:w-auto"
+              disabled={
+                periodLocked ||
+                !leakageDisposition ||
+                acceptNote.trim().length < 8
+              }
+              onClick={onMarkLeakageReviewed}
+            >
+              Mark reviewed &amp; continue
+            </Button>
+          ) : null}
         </div>
       ) : null}
 

@@ -43,7 +43,7 @@ export function resolveLeakageStepHero(input: {
   if (moneyNeedsAccept && input.stopToStopBlocking) {
     return {
       title: 'Money leftover and mileage gaps',
-      body: `Unexplained fuel ${moneyLabel} still needs Mark reviewed. Also: ${s2sNote}`,
+      body: `Unexplained fuel ${moneyLabel} still needs Mark reviewed & continue. Also: ${s2sNote}`,
       action: 'mark_reviewed',
       showDispositionForm,
       moneyResidualActive,

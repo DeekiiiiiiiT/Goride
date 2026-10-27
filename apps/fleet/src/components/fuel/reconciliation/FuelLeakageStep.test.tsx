@@ -94,7 +94,53 @@ describe('FuelLeakageStep render', () => {
       />,
     );
     expect(screen.getByText(/Residual disposition/i)).toBeTruthy();
+    expect(screen.getByText(/Accept unexplained fuel \(required to continue\)/i)).toBeTruthy();
     expect(screen.queryByText(/Money residual clear/i)).toBeNull();
+  });
+
+  it('Mark reviewed & continue: disabled until disposition + 8-char reason, then calls handler', async () => {
+    const user = userEvent.setup();
+    const onMark = vi.fn();
+    const { rerender } = render(
+      <FuelLeakageStep
+        {...baseProps}
+        leakage={100}
+        showDispositionForm
+        leakageDisposition={'' as any}
+        acceptNote=""
+        onMarkLeakageReviewed={onMark}
+      />,
+    );
+
+    const btn = screen.getByRole('button', { name: /Mark reviewed & continue/i });
+    expect(btn).toBeDisabled();
+
+    rerender(
+      <FuelLeakageStep
+        {...baseProps}
+        leakage={100}
+        showDispositionForm
+        leakageDisposition="accepted_variance"
+        acceptNote="short"
+        onMarkLeakageReviewed={onMark}
+      />,
+    );
+    expect(screen.getByRole('button', { name: /Mark reviewed & continue/i })).toBeDisabled();
+
+    rerender(
+      <FuelLeakageStep
+        {...baseProps}
+        leakage={100}
+        showDispositionForm
+        leakageDisposition="accepted_variance"
+        acceptNote="long enough reason"
+        onMarkLeakageReviewed={onMark}
+      />,
+    );
+    const enabled = screen.getByRole('button', { name: /Mark reviewed & continue/i });
+    expect(enabled).not.toBeDisabled();
+    await user.click(enabled);
+    expect(onMark).toHaveBeenCalledTimes(1);
   });
 
   it('shows routing health and a running balance that recent weeks already cover', () => {

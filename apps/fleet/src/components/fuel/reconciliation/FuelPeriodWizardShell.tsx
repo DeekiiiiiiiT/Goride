@@ -186,7 +186,7 @@ export function FuelPeriodWizardContinueFooter({
       : activeStepId === 'leakage-gap' && stopToStopBlocking && !moneyNeedsAccept
         ? 'Fix stop-to-stop blockers, then Continue — Finalize still requires mileage to close.'
         : activeStepId === 'leakage-gap' && !leakageReviewed && moneyNeedsAccept
-          ? 'Use “Mark reviewed” above, or finish gap review.'
+          ? 'Choose a reason below and press Mark reviewed & continue.'
           : activeStepId === 'data-quality'
             ? 'Mark every flagged vehicle reviewed before continuing.'
             : 'Finish remaining items on this step to continue.';

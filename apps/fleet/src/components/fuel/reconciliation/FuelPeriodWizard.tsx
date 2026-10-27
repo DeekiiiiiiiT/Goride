@@ -650,7 +650,7 @@ function FuelPeriodWizardInner({
     }
   };
 
-  const handleMarkLeakageReviewed = () => {
+  const handleMarkLeakageReviewedAndContinue = () => {
     const note = stepNoteDraft.trim();
     const validated = validateDisposition({
       disposition: leakageDisposition,
@@ -687,6 +687,13 @@ function FuelPeriodWizardInner({
       note: validated.note,
     }).then(() => setClosableTick((tick) => tick + 1));
     toast.success('Unexplained fuel marked reviewed');
+    // Advance in this handler — do not call handleContinue (stale canContinueStep).
+    const next = FUEL_STEP_ORDER[stepIndex + 1];
+    if (next && activeStepId === 'leakage-gap') {
+      setProgressIndex(Math.max(progressIndex, stepIndex + 1));
+      setActiveStepId(next);
+      persistStep(next, validated.note);
+    }
   };
 
   const ensurePeriodId = async (): Promise<string | null> => {
@@ -1024,13 +1031,13 @@ function FuelPeriodWizardInner({
           body: leakageStepHero.body,
           actionLabel:
             leakageStepHero.action === 'mark_reviewed'
-              ? 'Mark reviewed'
+              ? 'Mark reviewed & continue'
               : leakageStepHero.action === 'fix_stop_to_stop'
                 ? 'Fix stop-to-stop blockers'
                 : undefined,
           onAction:
             leakageStepHero.action === 'mark_reviewed'
-              ? handleMarkLeakageReviewed
+              ? handleMarkLeakageReviewedAndContinue
               : leakageStepHero.action === 'fix_stop_to_stop'
                 ? () => openStopToStopRemediation()
                 : undefined,
@@ -1196,7 +1203,7 @@ function FuelPeriodWizardInner({
     canContinue: canContinueStep,
     isLast,
     setQueueIndex,
-    onMarkLeakageReviewed: handleMarkLeakageReviewed,
+    onMarkLeakageReviewed: handleMarkLeakageReviewedAndContinue,
     onContinue: handleContinue,
     onEditExceptionAt: (qi) => {
       if (exceptionBlockers.length > 0 && onEditFuelEntry) {
@@ -1484,6 +1491,7 @@ function FuelPeriodWizardInner({
                 onFixStopToStop={() => openStopToStopRemediation()}
                 showDispositionForm={leakageStepHero.showDispositionForm}
                 bucketRemediation={bucketRemediation}
+                onMarkLeakageReviewed={handleMarkLeakageReviewedAndContinue}
               />
             )}
 

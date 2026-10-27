@@ -1,6 +1,7 @@
 /**
  * Gap attribution for Unexplained step — turn a number into next actions.
  */
+import { countsInFuelLogSpend } from '@roam/fuel-core';
 import { unexplainedLabel } from '../../../utils/fuelReconGlossary';
 import type { FuelEntry } from '../../../types/fuel';
 import type { Trip } from '../../../types/data';
@@ -32,7 +33,9 @@ export function FuelGapAttribution({
 }: FuelGapAttributionProps) {
   const weekFills = fuelEntries.filter(
     (e) =>
-      e.vehicleId === vehicleId && isEntryInInclusiveYmdRange(e.date, weekStart, weekEnd),
+      e.vehicleId === vehicleId &&
+      isEntryInInclusiveYmdRange(e.date, weekStart, weekEnd) &&
+      countsInFuelLogSpend(e),
   );
   const missingOdoFills = weekFills.filter(
     (e) => e.odometer == null || Number(e.odometer) <= 0,
