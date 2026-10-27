@@ -87,8 +87,9 @@ if (placeholder) {
   failed = true;
 } else {
   const headers = {};
+  // Secrets are sometimes pasted with wrapping newlines; headers reject that.
   const anon = (process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || "")
-    .trim()
+    .replace(/[\r\n\t\s]+/g, "")
     .replace(/^["']|["']$/g, "");
   if (anon) {
     headers.apikey = anon;

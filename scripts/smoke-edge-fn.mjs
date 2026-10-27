@@ -35,8 +35,9 @@ if (!base || !/^https?:\/\//i.test(base) || base.endsWith("/functions/v1/")) {
 }
 
 const root = base.replace(/\/$/, "");
+// Secrets are sometimes pasted with wrapping newlines; headers reject that.
 const anonKey = (process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || "")
-  .trim()
+  .replace(/[\r\n\t\s]+/g, "")
   .replace(/^["']|["']$/g, "");
 const anonHeaders = anonKey
   ? { Authorization: `Bearer ${anonKey}`, apikey: anonKey }
