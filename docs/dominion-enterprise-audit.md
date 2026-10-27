@@ -30,8 +30,11 @@
 - Empty orphan thead + nested `VendorDatabaseManager` removed from this tab.
 - Pending requests stay on `PendingVendorRequestsManager`; decorative empty pending shell removed.
 
-### D-6 · Medium — Push / CI / deploys — CLOSED
-- Closeout pushed to `main`. `fleet-toll` redeployed. Test Supabase Functions green. Deploy Edge green after anon-key sanitizer. GitHub `SUPABASE_ANON_KEY` corrected (was invalid JWT). Catalog contract and Stitch fidelity green on closeout follow-ups.
+### D-6 · Medium — Push / CI / deploys — CLOSED (Dominion gates)
+- Closeout pushed to `main`. `fleet-toll` redeployed.
+- **Green:** Catalog contract, Admin reachability, Dominion Stitch contract + fidelity, Typecheck admin, Test Supabase Functions, Deploy Supabase Edge Function.
+- GitHub `SUPABASE_ANON_KEY` corrected (was invalid JWT / wrapping newlines).
+- **Note:** Full CI job can still fail later on unrelated `Deno check edge functions` (toll/week_close types). That is outside this Dominion audit.
 
 ---
 
