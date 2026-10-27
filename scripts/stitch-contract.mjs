@@ -67,15 +67,20 @@ for (const row of rows) {
     failed = true;
     continue;
   }
-  const reactPath = join(import.meta.dirname, '..', reactFile);
-  if (!existsSync(reactPath)) {
-    console.error(`${num} React file is missing: ${reactFile}`);
-    failed = true;
-    continue;
-  }
-  const source = readFileSync(reactPath, 'utf8');
+  const reactFiles = reactFile.split(/\s*\+\s*/).map((f) => f.trim()).filter(Boolean);
   const marker = `// Stitch: dominion-redesign/${stitchId}`;
-  if (!stitchId || stitchId === '—' || !source.includes(marker)) {
+  let markerHit = false;
+  for (const file of reactFiles) {
+    const reactPath = join(import.meta.dirname, '..', file);
+    if (!existsSync(reactPath)) {
+      console.error(`${num} React file is missing: ${file}`);
+      failed = true;
+      continue;
+    }
+    const source = readFileSync(reactPath, 'utf8');
+    if (source.includes(marker)) markerHit = true;
+  }
+  if (!stitchId || stitchId === '—' || !markerHit) {
     console.error(`${reactFile} is missing ${marker}`);
     failed = true;
   }

@@ -1,3 +1,4 @@
+// Stitch: dominion-redesign/c12e73466d9e4131abe8e5e814f66938
 /**
  * S22 Vendors table — Stitch shell with live verified vendor rows + ops.
  */
