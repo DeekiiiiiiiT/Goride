@@ -10,6 +10,19 @@ import type {
 } from "../types/partSourcing";
 
 const base = () => `${API_ENDPOINTS.catalog}/admin`;
+const coreBase = () => `${API_ENDPOINTS.admin}/admin`;
+
+function adminApiBase(path: string): string {
+  const root = path.split("?")[0] ?? path;
+  if (
+    root.startsWith("part-") ||
+    root.startsWith("vehicle-catalog") ||
+    root.startsWith("catalog-gate")
+  ) {
+    return base();
+  }
+  return coreBase();
+}
 
 function edgeHeaders(accessToken: string, contentType?: string): HeadersInit {
   const h: Record<string, string> = {
@@ -349,13 +362,13 @@ export async function previewPartsForCatalog(
 }
 
 async function adminGet(accessToken: string, path: string): Promise<Record<string, unknown>> {
-  const res = await fetch(`${base()}/${path}`, { headers: edgeHeaders(accessToken) });
+  const res = await fetch(`${adminApiBase(path)}/${path}`, { headers: edgeHeaders(accessToken) });
   if (!res.ok) throw new Error(await parseError(res));
   return await res.json();
 }
 
 async function adminSend(accessToken: string, path: string, method: string, body?: unknown): Promise<Record<string, unknown>> {
-  const res = await fetch(`${base()}/${path}`, {
+  const res = await fetch(`${adminApiBase(path)}/${path}`, {
     method,
     headers: edgeHeaders(accessToken, "application/json"),
     body: body === undefined ? undefined : JSON.stringify(body),

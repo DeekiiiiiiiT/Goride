@@ -28,6 +28,7 @@ type TollOpsTab = 'overview' | 'all-plazas' | 'spatial-audit' | 'verified-plazas
 export function TollDatabaseView() {
   const [plazas, setPlazas] = useState<TollPlaza[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedPlaza, setSelectedPlaza] = useState<TollPlaza | null>(null);
   const [editingPlaza, setEditingPlaza] = useState<TollPlaza | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -36,11 +37,14 @@ export function TollDatabaseView() {
 
   const fetchData = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const data = await api.getTollPlazas();
       setPlazas(data);
     } catch (e) {
       console.error('[TollDatabase] Failed to load plazas:', e);
+      setPlazas([]);
+      setLoadError(e instanceof Error ? e.message : 'Could not load plazas');
     } finally {
       setLoading(false);
     }
@@ -260,6 +264,21 @@ export function TollDatabaseView() {
                     <tr>
                       <td colSpan={5} className="px-6 py-8 text-center text-slate-500">
                         Loading plazas…
+                      </td>
+                    </tr>
+                  ) : loadError ? (
+                    <tr>
+                      <td colSpan={5} className="px-6 py-8 text-center text-slate-600">
+                        <p className="mb-3 font-medium text-slate-800">Could not load plazas</p>
+                        <p className="mb-4 text-[11px] text-slate-500">{loadError}</p>
+                        <button
+                          type="button"
+                          onClick={() => void fetchData()}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                        >
+                          <RefreshCw className="h-3.5 w-3.5" />
+                          Retry
+                        </button>
                       </td>
                     </tr>
                   ) : plazas.length === 0 ? (

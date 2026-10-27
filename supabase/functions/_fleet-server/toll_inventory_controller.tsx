@@ -492,7 +492,7 @@ app.get("/toll-plazas", requirePermission("toll.view"), async (c) => {
     if (org instanceof Response) return org;
     const filters = org
       ? [{ op: "or" as const, value: `organization_id.eq.${org},organization_id.is.null` }]
-      : [{ op: "not" as const, col: "organization_id", operator: "is", value: null }];
+      : [{ op: "is" as const, col: "organization_id", value: null }];
     const res = await queryFleet("toll_plazas", {
       filters,
       order: { col: "updated_at", ascending: false },

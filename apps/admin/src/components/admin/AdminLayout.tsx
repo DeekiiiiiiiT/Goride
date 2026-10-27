@@ -68,7 +68,7 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
     `flex w-full items-center gap-3 rounded-lg px-3 py-1.5 text-left text-sm transition-colors duration-150 ${
       active
         ? 'bg-blue-600 font-medium text-white'
-        : 'text-slate-300 hover:bg-slate-700/50 hover:text-white'
+        : 'text-[#cbd5e1] hover:bg-slate-700/50 hover:text-white'
     }`;
 
   const renderChild = (child: NavChild) => {
@@ -81,7 +81,7 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
       : child.badgeCount;
     const body = (
       <>
-        <Icon className={`h-[18px] w-[18px] shrink-0 ${active ? 'text-white' : 'text-slate-400'}`} />
+        <Icon className={`h-[18px] w-[18px] shrink-0 ${active ? 'text-white' : 'text-[#94a3b8]'}`} />
         <span className="truncate">{child.label}</span>
         {typeof badge === 'number' && badge > 0 ? (
           <span className="ml-auto rounded-full bg-white/20 px-1.5 text-[10px] font-semibold">
@@ -131,7 +131,7 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
             <span className="font-headline text-base font-bold leading-tight tracking-tight text-white">
               Dominion
             </span>
-            <span className="mt-0.5 text-xs font-normal leading-none tracking-normal text-slate-400">
+            <span className="mt-0.5 text-xs font-normal leading-none tracking-normal text-[#94a3b8]">
               Roam Admin Console
             </span>
           </div>
@@ -139,7 +139,7 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
             type="button"
             onClick={() => setMobileOpen(false)}
             aria-label="Close menu"
-            className="ml-auto text-slate-400 lg:hidden"
+            className="ml-auto text-[#94a3b8] lg:hidden"
           >
             <X className="h-5 w-5" />
           </button>
@@ -154,7 +154,7 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
                 className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors duration-150 ${
                   currentPage === overview.id
                     ? 'bg-blue-600 font-medium text-white'
-                    : 'text-slate-300 hover:bg-slate-700/50 hover:text-white'
+                    : 'text-[#cbd5e1] hover:bg-slate-700/50 hover:text-white'
                 }`}
               >
                 <LayoutDashboard className="h-[18px] w-[18px]" />
@@ -173,7 +173,7 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
             if (children.length === 0) return null;
             return (
               <div key={section.id} className="space-y-1">
-                <div className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                <div className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8]">
                   {section.label}
                 </div>
                 {children.map(renderChild)}
@@ -183,12 +183,12 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
         </nav>
 
         <div className="shrink-0 border-t border-slate-700/50 p-3">
-          <div className="flex items-center justify-between rounded bg-slate-900/50 px-3 py-2 font-mono text-xs text-slate-400">
+          <div className="flex items-center justify-between rounded bg-slate-900/50 px-3 py-2 font-mono text-xs text-[#94a3b8]">
             <span className="flex items-center gap-1.5">
               <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
               KGN-DC-01
             </span>
-            <span className="text-slate-400">JMD READY</span>
+            <span className="text-[#94a3b8]">JMD READY</span>
           </div>
         </div>
       </aside>
