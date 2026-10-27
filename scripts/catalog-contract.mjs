@@ -87,7 +87,9 @@ if (placeholder) {
   failed = true;
 } else {
   const headers = {};
-  const anon = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+  const anon = (process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || "")
+    .trim()
+    .replace(/^["']|["']$/g, "");
   if (anon) {
     headers.apikey = anon;
     headers.Authorization = `Bearer ${anon}`;

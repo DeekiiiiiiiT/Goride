@@ -35,6 +35,12 @@ if (!base || !/^https?:\/\//i.test(base) || base.endsWith("/functions/v1/")) {
 }
 
 const root = base.replace(/\/$/, "");
+const anonKey = (process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || "")
+  .trim()
+  .replace(/^["']|["']$/g, "");
+const anonHeaders = anonKey
+  ? { Authorization: `Bearer ${anonKey}`, apikey: anonKey }
+  : {};
 let failed = 0;
 
 async function check(name, fn) {
@@ -48,12 +54,7 @@ async function check(name, fn) {
 }
 
 await check("health", async () => {
-  const anon = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";
-  const res = await fetch(`${root}/health`, {
-    headers: anon
-      ? { Authorization: `Bearer ${anon}`, apikey: anon }
-      : {},
-  });
+  const res = await fetch(`${root}/health`, { headers: anonHeaders });
   // 200 = app OK; 401 = gateway JWT without usable key (worker still booted)
   if (res.status !== 200 && res.status !== 401) {
     throw new Error(`status ${res.status}`);
@@ -67,12 +68,7 @@ await check("health", async () => {
 });
 
 await check("auth missing path 404-or-401", async () => {
-  const anon = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";
-  const res = await fetch(`${root}/zzz-does-not-exist-smoke`, {
-    headers: anon
-      ? { Authorization: `Bearer ${anon}`, apikey: anon }
-      : {},
-  });
+  const res = await fetch(`${root}/zzz-does-not-exist-smoke`, { headers: anonHeaders });
   // Gateway may 401 before routing; function should not 200
   if (res.status === 200) throw new Error("unexpected 200 for missing path");
 });

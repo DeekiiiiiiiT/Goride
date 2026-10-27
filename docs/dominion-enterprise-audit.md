@@ -14,10 +14,10 @@
 - Applied migration `station_plaza_contact_columns` to production (GoRide).
 - Verified `/v1/stations` and `/v1/tolls` return **200 with rows** (anon key).
 
-### D-2 · High — Toll database empty for Dominion — FIXED (awaiting edge deploy)
+### D-2 · High — Toll database empty for Dominion — CLOSED
 - **Server:** `GET /toll-plazas` no-org branch now filters `organization_id is null` (master plazas).
 - **Page:** `TollDatabaseView` keeps load errors and shows “Could not load plazas” + Retry.
-- **Remaining:** Redeploy `fleet-toll` so the server fix is live (CI Deploy after push, or manual `deploy_all`).
+- **Deploy:** `fleet-toll` redeployed on main (closeout push).
 
 ### D-3 · High — Platforms/engines/catalog tools 404 — FIXED
 - `partSourcingService` `adminGet` / `adminSend` route `part-*`, `vehicle-catalog*`, `catalog-gate*` to platform-catalog; everything else to fleet-core.
