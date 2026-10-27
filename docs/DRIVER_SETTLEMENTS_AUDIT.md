@@ -43,5 +43,5 @@ Do these **after** fleet ships with §1a/§1b. Do **not** invent Uber cash or ca
 3. After each close, confirm Oct 19 still reads **+37,397.13**. Stop if it drifts.
 
 ## Ship / commit
-- Fleet app needs deploy of §1a/§1b before Sep 14 close uses the new CTA (workaround: hero Mark reviewed still works after deploy of combined handler; pre-deploy use Mark reviewed at top then Continue).
-- Commit code + this audit when asked.
+- **Shipped:** roam-fleet production `dpl_8ERsfuqzdVcFEQi13yQgWmU5hcGS` on commit `9f449ba3` (aliases include www.roamfleet.co).
+- Audit + code committed on `main`.
