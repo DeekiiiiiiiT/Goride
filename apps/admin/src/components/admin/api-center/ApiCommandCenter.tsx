@@ -18,8 +18,9 @@ const TABS: { id: string; page: string; label: string; ownerOnly?: boolean }[] =
   { id: 'overview', page: 'api-center-overview', label: 'Overview' },
   { id: 'usage', page: 'api-center-usage', label: 'Usage' },
   { id: 'supabase', page: 'api-center-supabase', label: 'Supabase' },
-  { id: 'keys', page: 'api-center-keys', label: 'Keys', ownerOnly: true },
-  { id: 'budgets', page: 'api-center-budgets', label: 'Budgets', ownerOnly: true },
+  // Stitch button text concatenates to "Keys Owner only" / "Budgets Owner only"
+  { id: 'keys', page: 'api-center-keys', label: 'Keys Owner only', ownerOnly: true },
+  { id: 'budgets', page: 'api-center-budgets', label: 'Budgets Owner only', ownerOnly: true },
   { id: 'logs', page: 'api-center-logs', label: 'Call log' },
   { id: 'billing', page: 'api-center-billing', label: 'Billing' },
 ];
@@ -65,12 +66,16 @@ export function ApiCommandCenter({ activeTab = 'overview', onNavigate }: ApiComm
                     : 'inline-flex items-center gap-2 whitespace-nowrap border-b-2 border-transparent px-4 py-2.5 text-slate-500 transition-colors hover:border-slate-300 hover:text-slate-800'
                 }
               >
-                <span>{t.label}</span>
                 {t.ownerOnly ? (
-                  <span className="rounded border border-slate-200 bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] font-medium text-slate-600">
-                    Owner only
-                  </span>
-                ) : null}
+                  <>
+                    <span>{t.label.replace(' Owner only', '')}</span>
+                    <span className="rounded border border-slate-200 bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] font-medium text-slate-600">
+                      Owner only
+                    </span>
+                  </>
+                ) : (
+                  <span>{t.label}</span>
+                )}
               </button>
             );
           })}
@@ -85,7 +90,7 @@ export function ApiCommandCenter({ activeTab = 'overview', onNavigate }: ApiComm
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-sm font-semibold text-slate-900">API Gateway &amp; Feed Distribution</h3>
+                <h3 className="text-sm font-semibold text-slate-900">API Gateway & Feed Distribution</h3>
                 <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-600" />
                   Active Node

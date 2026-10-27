@@ -20,7 +20,7 @@ import { Switch } from '@roam/ui';
 import { Label } from '@roam/ui';
 import { Button } from '@roam/ui';
 import { Badge } from '@roam/ui';
-import { Star, Loader2, Upload, Trash2, Plus, ShieldCheck, ShieldOff, Map as MapIcon, Inbox, MapPin } from 'lucide-react';
+import { Star, Loader2, Upload, Trash2, Plus, ShieldCheck, ShieldOff, Map as MapIcon, Inbox, MapPin, Search } from 'lucide-react';
 import { SpatialIntegrityMap } from './SpatialIntegrityMap';
 import { fuelService } from '../services/stationFuelService';
 import { api } from '../services/stationOpsApi';
@@ -72,6 +72,7 @@ export function StationDatabaseView({
   const [verifyingLearntId, setVerifyingLearntId] = useState<string | null>(null);
   const [verifyingNearbyStation, setVerifyingNearbyStation] = useState<any>(null);
   const [resolutionQueueCount, setResolutionQueueCount] = useState(0);
+  const [stationSearch, setStationSearch] = useState('');
 
   const handleVerifyLearntLocation = useCallback((learntLoc: any) => {
     const pseudoStation: StationProfile = {
@@ -560,11 +561,31 @@ export function StationDatabaseView({
         <h1 className="text-2xl font-bold tracking-tight text-slate-900">Station database</h1>
         <p className="mt-1 text-sm text-slate-500">Fuel stations in Jamaica.</p>
       </div>
-      <div className="overflow-x-auto overflow-y-visible rounded-xl border border-slate-200 bg-white shadow-sm dark:border-border dark:bg-card">
+
+      <div className="mb-6 rounded-[12px] border border-slate-200 bg-white p-4 shadow-none">
+        <div className="flex items-center justify-between gap-4">
+          <div className="relative max-w-md flex-1">
+            <Search className="absolute left-3 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-slate-400" aria-hidden />
+            <input
+              type="text"
+              value={stationSearch}
+              onChange={(e) => setStationSearch(e.target.value)}
+              placeholder="Search station by name, brand, parish..."
+              className="w-full rounded-lg border border-slate-200 bg-slate-50 py-2 pl-9 pr-4 text-xs placeholder:text-slate-400 focus:border-[#316bf3] focus:outline-none focus:ring-1 focus:ring-[#316bf3]"
+            />
+          </div>
+          <span className="font-mono text-xs text-slate-500">
+            Total stations: <strong className="text-slate-800">{context.stations.length}</strong>
+          </span>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto overflow-y-visible rounded-[12px] border border-slate-200 bg-white shadow-none dark:border-border dark:bg-card">
         <Tabs defaultValue={defaultTab} className="w-full">
           <div className="border-b border-slate-200 px-4 py-3 bg-slate-50 flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-4">
               <h3 className="font-semibold text-slate-900">Stations</h3>
+              <span className="sr-only">Name Brand Parish Status</span>
             </div>
             
             <TabsList className="bg-slate-200/50 p-1">

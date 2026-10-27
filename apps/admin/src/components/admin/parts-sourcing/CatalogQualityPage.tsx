@@ -2,7 +2,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Info } from "lucide-react";
 import { useAuth } from "../../auth/AuthContext";
-import { Button } from "../../ui/button";
+import { Button } from "../maintenance-templates/plainUi";
 import { partsEnterpriseApi, listSuppliers } from "../../../services/partSourcingService";
 import type { SupplierRecord } from "../../../types/partSourcing";
 import { GuidedPartDialog } from "./GuidedPartDialog";

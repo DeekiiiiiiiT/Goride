@@ -162,15 +162,32 @@ export function AdminDashboard({ onNavigate }: AdminDashboardProps) {
           </nav>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">Overview</h1>
         </div>
-        {(qualityFailed || changesFailed || appsFailed || stationsFailed) ? (
+        <div className="flex items-center gap-2">
+          {(qualityFailed || changesFailed || appsFailed || stationsFailed) ? (
+            <button
+              type="button"
+              className="text-xs font-medium text-dominion-reject"
+              onClick={() => void load()}
+            >
+              Retry
+            </button>
+          ) : null}
           <button
             type="button"
-            className="text-xs font-medium text-dominion-reject"
             onClick={() => void load()}
+            className="rounded-lg border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50"
           >
-            Retry
+            Sync System
           </button>
-        ) : null}
+          <button
+            type="button"
+            disabled
+            title="Session controls stay in the shell"
+            className="rounded-lg bg-slate-800 px-3.5 py-1.5 text-xs font-medium text-white shadow-sm opacity-60"
+          >
+            New Session
+          </button>
+        </div>
       </div>
 
       <div className="space-y-6">

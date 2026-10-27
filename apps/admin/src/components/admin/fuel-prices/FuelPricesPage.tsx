@@ -13,26 +13,21 @@ import {
   Loader2,
   RefreshCw,
 } from "lucide-react";
-import { Alert, AlertDescription, AlertTitle } from "../../ui/alert";
-import { Button } from "../../ui/button";
-import { Label } from "../../ui/label";
 import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  Label,
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "../../ui/select";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "../../ui/alert-dialog";
+} from "../maintenance-templates/plainUi";
 import {
   petrojamPricesService,
   type PetrojamPrice,
@@ -191,18 +186,22 @@ export function FuelPricesPage() {
       </div>
 
       {error ? (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Error</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
+        <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+          <div>
+            <div className="font-semibold">Error</div>
+            <div>{error}</div>
+          </div>
+        </div>
       ) : null}
       {success ? (
-        <Alert className="border-emerald-200 bg-emerald-50 text-emerald-900">
-          <CheckCircle2 className="h-4 w-4" />
-          <AlertTitle>Synced</AlertTitle>
-          <AlertDescription>{success}</AlertDescription>
-        </Alert>
+        <div className="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+          <div>
+            <div className="font-semibold">Synced</div>
+            <div>{success}</div>
+          </div>
+        </div>
       ) : null}
 
       <div className="overflow-hidden rounded-[12px] border border-slate-200/80 bg-white shadow-sm">
@@ -380,24 +379,26 @@ export function FuelPricesPage() {
         </div>
       </div>
 
-      <AlertDialog open={showArchiveConfirm} onOpenChange={setShowArchiveConfirm}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2">
-              <Archive className="h-5 w-5" />
+      <Dialog open={showArchiveConfirm} onOpenChange={setShowArchiveConfirm}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Archive className="h-5 w-5" aria-hidden />
               Import full Petrojam archive?
-            </AlertDialogTitle>
-            <AlertDialogDescription>
+            </DialogTitle>
+            <DialogDescription>
               This pulls every page from Petrojam (back through ~2010). It can take about a minute, and
               duplicates are updated — not doubled.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={syncing}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="outline" disabled={syncing} onClick={() => setShowArchiveConfirm(false)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
               disabled={syncing}
-              onClick={(e) => {
-                e.preventDefault();
+              onClick={() => {
                 setShowArchiveConfirm(false);
                 void runSync(() => petrojamPricesService.sync({ mode: "all" }));
               }}
@@ -410,10 +411,10 @@ export function FuelPricesPage() {
               ) : (
                 "Start full sync"
               )}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

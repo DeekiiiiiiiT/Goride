@@ -32,36 +32,35 @@ import type {
   SupplierPartOfferRecord,
   SupplierRecord,
 } from "../../../types/partSourcing";
-import { Button } from "../../ui/button";
-import { Input } from "../../ui/input";
-import { Label } from "../../ui/label";
+import { toast } from "sonner";
 import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  Input,
+  Label,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableHeader,
   TableRow,
-} from "../../ui/table";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "../../ui/dialog";
-import { Textarea } from "../../ui/textarea";
-import { toast } from "sonner";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../ui/tabs";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../../ui/select";
-import { cn } from "../../ui/utils";
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+  Textarea,
+  cn,
+} from "../maintenance-templates/plainUi";
 
 /** Super Admin is `dark` — Radix default select styling is nearly invisible there. */
 const adminSelectTrigger = cn(
@@ -476,6 +475,7 @@ export function PartsSourcingManager({ mode = "catalog" }: { mode?: "catalog" | 
       </div>
 
       <div className="flex items-center gap-8 border-b border-slate-200">
+        {/* Stitch: Parts catalog 04 · Suppliers and prices 02 */}
         <a
           href="?page=parts-catalog"
           className={`flex items-center gap-2 pb-3 text-sm ${
@@ -485,7 +485,9 @@ export function PartsSourcingManager({ mode = "catalog" }: { mode?: "catalog" | 
           }`}
         >
           <span>Parts catalog</span>
-          <span className={`rounded px-1.5 font-mono text-[11px] ${mode === "catalog" ? "bg-blue-50 text-blue-600" : "bg-slate-100 text-slate-500"}`}>
+          <span
+            className={`rounded px-1.5 font-mono text-[11px] ${mode === "catalog" ? "bg-blue-50 text-blue-600" : "bg-slate-100 text-slate-500"}`}
+          >
             {String(parts.length).padStart(2, "0")}
           </span>
         </a>
@@ -498,7 +500,9 @@ export function PartsSourcingManager({ mode = "catalog" }: { mode?: "catalog" | 
           }`}
         >
           <span>Suppliers and prices</span>
-          <span className={`rounded px-1.5 font-mono text-[11px] ${mode === "supply" ? "bg-blue-50 text-blue-600" : "bg-slate-100 text-slate-500"}`}>
+          <span
+            className={`rounded px-1.5 font-mono text-[11px] ${mode === "supply" ? "bg-blue-50 text-blue-600" : "bg-slate-100 text-slate-500"}`}
+          >
             {String(suppliers.length).padStart(2, "0")}
           </span>
         </a>
@@ -621,10 +625,12 @@ export function PartsSourcingManager({ mode = "catalog" }: { mode?: "catalog" | 
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="text-slate-900 dark:text-slate-100">Name</TableHead>
+                  <TableHead className="text-slate-900 dark:text-slate-100">Part</TableHead>
                   <TableHead className="text-slate-900 dark:text-slate-100">Category</TableHead>
-                  <TableHead className="text-slate-900 dark:text-slate-100">OEM #</TableHead>
-                  <TableHead className="w-[80px]" />
+                  <TableHead className="text-slate-900 dark:text-slate-100">Fitment</TableHead>
+                  <TableHead className="text-right text-slate-900 dark:text-slate-100">
+                    Actions / Status
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -637,42 +643,51 @@ export function PartsSourcingManager({ mode = "catalog" }: { mode?: "catalog" | 
                   <TableRow key={p.id}>
                     <TableCell className="font-medium text-slate-900 dark:text-slate-100">{p.name}</TableCell>
                     <TableCell className="text-sm text-slate-600 dark:text-slate-400">{p.part_category?.label ?? "—"}</TableCell>
-                    <TableCell className="text-sm text-slate-800 dark:text-slate-200">{p.oem_part_number ?? "—"}</TableCell>
-                    <TableCell className="flex gap-1">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          setPartEditingId(p.id);
-                          setPartCategoryId(p.category_id);
-                          setPartName(p.name);
-                          setPartOem(p.oem_part_number ?? "");
-                          setPartDesc(p.description ?? "");
-                          setPartOpen(true);
-                          void loadPartPickers();
-                        }}
-                      >
-                        Edit
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="text-red-600"
-                        onClick={async () => {
-                          if (!window.confirm(`Delete part “${p.name}”?`)) return;
-                          try {
-                            await deletePartMaster(token, p.id);
-                            toast.success("Deleted");
-                            await reloadParts();
-                          } catch (e: unknown) {
-                            toast.error(e instanceof Error ? e.message : "Failed");
-                          }
-                        }}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
+                    <TableCell>
+                      <span className="rounded border border-slate-200 bg-slate-100 px-2 py-0.5 font-mono text-xs text-slate-700">
+                        {p.oem_part_number?.trim() || "—"}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="inline-flex items-center gap-2">
+                        <span className="inline-flex items-center gap-1 rounded border border-emerald-200 bg-emerald-50 px-2 py-0.5 font-mono text-xs text-emerald-700">
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Active fit
+                        </span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setPartEditingId(p.id);
+                            setPartCategoryId(p.category_id);
+                            setPartName(p.name);
+                            setPartOem(p.oem_part_number ?? "");
+                            setPartDesc(p.description ?? "");
+                            setPartOpen(true);
+                            void loadPartPickers();
+                          }}
+                        >
+                          Edit
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="text-red-600"
+                          onClick={async () => {
+                            if (!window.confirm(`Delete part “${p.name}”?`)) return;
+                            try {
+                              await deletePartMaster(token, p.id);
+                              toast.success("Deleted");
+                              await reloadParts();
+                            } catch (e: unknown) {
+                              toast.error(e instanceof Error ? e.message : "Failed");
+                            }
+                          }}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -830,24 +845,30 @@ export function PartsSourcingManager({ mode = "catalog" }: { mode?: "catalog" | 
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="text-slate-900 dark:text-slate-100">Part</TableHead>
                   <TableHead className="text-slate-900 dark:text-slate-100">Supplier</TableHead>
+                  <TableHead className="text-slate-900 dark:text-slate-100">Part</TableHead>
+                  <TableHead className="text-right text-slate-900 dark:text-slate-100">
+                    Price in JMD
+                  </TableHead>
+                  <TableHead className="text-right text-slate-900 dark:text-slate-100">Status</TableHead>
                   <TableHead className="text-slate-900 dark:text-slate-100">SKU</TableHead>
-                  <TableHead className="text-slate-900 dark:text-slate-100">Price</TableHead>
-                  <TableHead className="text-slate-900 dark:text-slate-100">Lead (d)</TableHead>
                   <TableHead className="w-[80px]" />
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {offers.map((o) => (
                   <TableRow key={o.id}>
-                    <TableCell className="font-medium text-slate-900 dark:text-slate-100">{o.part_master?.name ?? o.part_id}</TableCell>
                     <TableCell className="text-slate-800 dark:text-slate-200">{o.supplier?.name ?? o.supplier_id}</TableCell>
-                    <TableCell className="font-mono text-sm text-slate-800 dark:text-slate-200">{o.supplier_sku}</TableCell>
-                    <TableCell className="text-slate-800 dark:text-slate-200">
-                      {o.currency} {Number(o.unit_price).toFixed(2)}
+                    <TableCell className="font-medium text-slate-900 dark:text-slate-100">{o.part_master?.name ?? o.part_id}</TableCell>
+                    <TableCell className="text-right font-mono text-slate-900">
+                      JMD ${Number(o.unit_price).toFixed(2)}
                     </TableCell>
-                    <TableCell className="text-slate-800 dark:text-slate-200">{o.lead_time_days ?? o.supplier?.default_lead_time_days ?? "—"}</TableCell>
+                    <TableCell className="text-right">
+                      <span className="inline-flex items-center gap-1 rounded border border-emerald-200 bg-emerald-50 px-2 py-0.5 font-mono text-xs text-emerald-700">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Active contract
+                      </span>
+                    </TableCell>
+                    <TableCell className="font-mono text-sm text-slate-800 dark:text-slate-200">{o.supplier_sku}</TableCell>
                     <TableCell>
                       <Button
                         type="button"

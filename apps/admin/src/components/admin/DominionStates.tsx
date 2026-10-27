@@ -2,6 +2,9 @@
 import React from 'react';
 import { AlertCircle, Inbox, Lock, Route } from 'lucide-react';
 
+/** S3 page title from Stitch — state cards are composed under this heading. */
+export const DOMINION_STATE_PATTERNS_TITLE = 'State Patterns';
+
 export function DominionLoading() {
   return (
     <div className="rounded-xl border border-slate-200/80 bg-white p-6 shadow-sm">
@@ -135,7 +138,13 @@ export function DominionNoAccess() {
           <Lock className="h-6 w-6" aria-hidden />
         </div>
         <h3 className="mb-1 font-headline text-sm font-semibold text-slate-900">You do not have access</h3>
-        <p className="max-w-xs text-xs font-normal text-slate-500">This area is for the owner.</p>
+        <p className="mb-4 max-w-xs text-xs font-normal text-slate-500">This area is for the owner.</p>
+        <button
+          type="button"
+          className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3.5 py-1.5 text-xs font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50"
+        >
+          Request permission
+        </button>
       </div>
     </div>
   );

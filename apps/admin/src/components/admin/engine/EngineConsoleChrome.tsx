@@ -22,7 +22,7 @@ export function EngineConsoleChrome({
   statusLabel?: string;
 }) {
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-6 p-8 text-slate-900">
+    <div className="min-h-[calc(100vh-4rem)] space-y-6 bg-slate-50 p-8 text-slate-900">
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-xs text-slate-500">

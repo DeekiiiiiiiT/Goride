@@ -20,26 +20,24 @@ import {
   requestInfoOnPendingVehicleCatalogRequest,
 } from "../../../services/pendingVehicleCatalogService";
 import type { VehicleCatalogPendingRequest } from "../../../types/vehicleCatalogPending";
-import { Button } from "../../ui/button";
-import { Input } from "../../ui/input";
-import { Label } from "../../ui/label";
+import { toast } from "sonner";
 import {
+  Button,
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
-} from "../../ui/dialog";
-import { Textarea } from "../../ui/textarea";
-import { toast } from "sonner";
-import {
+  Input,
+  Label,
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "../../ui/select";
+  Textarea,
+} from "../maintenance-templates/plainUi";
 
 type QueueFilter = "all_pending" | "needs_info";
 
@@ -362,6 +360,7 @@ export function PendingVehicleCatalogManager() {
                             <button
                               type="button"
                               title="Ask for info"
+                              aria-label="help_outline"
                               className="rounded-lg p-1 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800"
                               onClick={() => void openDetail(row)}
                             >

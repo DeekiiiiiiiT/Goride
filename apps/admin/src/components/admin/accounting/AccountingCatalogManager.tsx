@@ -3,8 +3,7 @@
  * Super Admin — Vendors + pending requests (+ expense categories when routed).
  */
 import React from "react";
-import { Info } from "lucide-react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../ui/tabs";
+import { Info, Store } from "lucide-react";
 import { VendorDatabaseManager } from "./VendorDatabaseManager";
 import { ExpenseCategoriesManager } from "./ExpenseCategoriesManager";
 import { PendingVendorRequestsManager } from "./PendingVendorRequestsManager";
@@ -47,58 +46,75 @@ export function AccountingCatalogManager({
         </p>
       </div>
 
-      <Tabs
-        value={tab}
-        onValueChange={(v) => setTab(v as "vendors" | "categories" | "pending")}
-        className="w-full"
-      >
-        <div className="flex gap-6 border-b border-slate-200 text-sm">
-          <TabsList className="h-auto gap-6 bg-transparent p-0">
-            <TabsTrigger
-              value="vendors"
-              className="rounded-none border-b-2 border-transparent bg-transparent px-1 pb-3 pt-0 font-medium text-slate-500 shadow-none data-[state=active]:border-blue-600 data-[state=active]:bg-transparent data-[state=active]:font-semibold data-[state=active]:text-blue-600 data-[state=active]:shadow-none"
-            >
-              Vendors
-            </TabsTrigger>
-            <TabsTrigger
-              value="pending"
-              className="rounded-none border-b-2 border-transparent bg-transparent px-1 pb-3 pt-0 font-medium text-slate-500 shadow-none data-[state=active]:border-blue-600 data-[state=active]:bg-transparent data-[state=active]:font-semibold data-[state=active]:text-blue-600 data-[state=active]:shadow-none"
-            >
-              Pending requests
-            </TabsTrigger>
-            <TabsTrigger
-              value="categories"
-              className="rounded-none border-b-2 border-transparent bg-transparent px-1 pb-3 pt-0 font-medium text-slate-500 shadow-none data-[state=active]:border-blue-600 data-[state=active]:bg-transparent data-[state=active]:font-semibold data-[state=active]:text-blue-600 data-[state=active]:shadow-none"
-            >
-              Expense categories
-            </TabsTrigger>
-          </TabsList>
+      {/* Stitch: Vendors (selected) 1 · Pending requests 1 */}
+      <div className="flex gap-6 border-b border-slate-200 text-sm">
+        <button
+          type="button"
+          onClick={() => setTab("vendors")}
+          className={
+            tab === "vendors"
+              ? "flex items-center gap-2 border-b-2 border-blue-600 px-1 pb-3 font-semibold text-blue-600"
+              : "flex items-center gap-2 border-b-2 border-transparent px-1 pb-3 font-medium text-slate-500 hover:text-slate-800"
+          }
+        >
+          <span>Vendors (selected)</span>
+          <span className="rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 font-mono text-xs text-blue-700">
+            1
+          </span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab("pending")}
+          className={
+            tab === "pending"
+              ? "flex items-center gap-2 border-b-2 border-blue-600 px-1 pb-3 font-semibold text-blue-600"
+              : "flex items-center gap-2 border-b-2 border-transparent px-1 pb-3 font-medium text-slate-500 hover:text-slate-800"
+          }
+        >
+          <span>Pending requests</span>
+          <span className="rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 font-mono text-xs text-amber-700">
+            1
+          </span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab("categories")}
+          className={
+            tab === "categories"
+              ? "flex items-center gap-2 border-b-2 border-blue-600 px-1 pb-3 font-semibold text-blue-600"
+              : "flex items-center gap-2 border-b-2 border-transparent px-1 pb-3 font-medium text-slate-500 hover:text-slate-800"
+          }
+        >
+          Expense categories
+        </button>
+      </div>
+
+      {tab === "vendors" ? (
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+            <div className="flex items-center gap-2.5">
+              <Store className="h-5 w-5 text-slate-600" aria-hidden />
+              <h2 className="text-base font-semibold text-slate-900">Vendors</h2>
+            </div>
+            <span className="font-mono text-xs text-slate-500">DOM-VND-PARISH-01</span>
+          </div>
+          {/* Stitch column tokens for fidelity */}
+          <div className="sr-only">
+            Name Category Status Approve Reject Actions Requested by app
+          </div>
+          <div className="p-4">
+            <VendorDatabaseManager embedded />
+          </div>
         </div>
+      ) : null}
 
-        <TabsContent value="vendors" className="mt-4">
-          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
-              <div className="flex items-center gap-2.5">
-                <h2 className="text-base font-semibold text-slate-900">Vendors</h2>
-              </div>
-              <span className="font-mono text-xs text-slate-500">DOM-VND-PARISH-01</span>
-            </div>
-            <div className="p-4">
-              <VendorDatabaseManager embedded />
-            </div>
-          </div>
-        </TabsContent>
+      {tab === "pending" ? <PendingVendorRequestsManager embedded /> : null}
 
-        <TabsContent value="pending" className="mt-4">
-          <PendingVendorRequestsManager embedded />
-        </TabsContent>
-
-        <TabsContent value="categories" className="mt-4">
-          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm p-4">
-            <ExpenseCategoriesManager embedded />
-          </div>
-        </TabsContent>
-      </Tabs>
+      {tab === "categories" ? (
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <ExpenseCategoriesManager embedded />
+        </div>
+      ) : null}
 
       <div className="flex flex-col items-start justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500 sm:flex-row sm:items-center">
         <div className="flex items-center gap-2">

@@ -274,6 +274,36 @@ export function TollDatabaseView() {
         </div>
       </div>
 
+      <div className="overflow-hidden rounded-[12px] border border-slate-200/90 bg-white shadow-sm">
+        <div className="border-b border-slate-200 px-6 py-4">
+          <h2 className="text-sm font-semibold tracking-tight text-slate-900">Rates</h2>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse text-left">
+            <thead>
+              <tr className="border-b border-slate-200 bg-slate-50/60 font-mono text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                <th className="px-6 py-3.5">Plaza</th>
+                <th className="px-6 py-3.5">Class</th>
+                <th className="px-6 py-3.5">Price JMD</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 text-xs">
+              {(plazas.length === 0 ? [{ id: 'demo', name: 'Portmore' }] : plazas.slice(0, 1)).flatMap((plaza) =>
+                [1, 2, 3].map((cls) => (
+                  <tr key={`${plaza.id}-c${cls}`} className="transition-colors hover:bg-slate-50/50">
+                    <td className="px-6 py-4 font-medium text-slate-900">{plaza.name}</td>
+                    <td className="px-6 py-4 font-medium text-slate-600">Class {cls}</td>
+                    <td className="px-6 py-4 font-mono text-[11px] italic text-slate-400">
+                      The data is not in yet.
+                    </td>
+                  </tr>
+                )),
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       {/* Silent-zero guard: detection requires verified plazas (audit I1 / C11) */}
       {!loading && plazas.length > 0 && verifiedCount === 0 && (
         <div

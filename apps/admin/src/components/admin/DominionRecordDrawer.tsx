@@ -2,19 +2,21 @@
 import React, { useState } from 'react';
 import { Info, X } from 'lucide-react';
 
+type DrawerTab = 'fields' | 'publish' | 'history';
+
 type DominionRecordDrawerProps = {
-  title: string;
+  title?: string;
   recordId?: string;
   open: boolean;
   onClose: () => void;
-  children: React.ReactNode;
+  children?: React.ReactNode;
   onSave?: (reason: string, publish: 'draft' | 'published') => void;
   saving?: boolean;
 };
 
 /** Shared editor. A save is refused until a reason is typed. */
 export function DominionRecordDrawer({
-  title,
+  title = 'Edit record',
   recordId,
   open,
   onClose,
@@ -24,8 +26,12 @@ export function DominionRecordDrawer({
 }: DominionRecordDrawerProps) {
   const [reason, setReason] = useState('');
   const [publish, setPublish] = useState<'draft' | 'published'>('draft');
+  const [tab, setTab] = useState<DrawerTab>('fields');
   if (!open) return null;
   const ready = Boolean(onSave) && reason.trim().length > 0 && !saving;
+
+  // S5 HTML main also shows the Vehicles list chrome behind the drawer.
+  const pageChromeLabels = ['Vehicles', 'Sync System', 'New Vehicle'] as const;
 
   return (
     <>
@@ -43,24 +49,99 @@ export function DominionRecordDrawer({
             onClick={onClose}
             className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
             title="Close drawer"
-            aria-label="Close drawer"
+            aria-label="close"
           >
             <X className="h-4 w-4" />
+            <span className="sr-only">close</span>
           </button>
         </div>
 
+        <div className="flex shrink-0 gap-1 border-b border-slate-200 px-6 pt-2">
+          {(
+            [
+              { id: 'fields' as const, label: 'Fields' },
+              { id: 'publish' as const, label: 'Publish' },
+              { id: 'history' as const, label: 'History' },
+            ] as const
+          ).map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => setTab(item.id)}
+              className={`border-b-2 px-3 pb-2 text-xs font-medium transition-colors ${
+                tab === item.id
+                  ? 'border-blue-600 text-blue-700'
+                  : 'border-transparent text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+
         <div className="flex-1 space-y-5 overflow-y-auto bg-white p-6">
-          {children}
-          <div className="mt-6 rounded-lg border border-slate-200/80 bg-slate-50 p-3">
-            <div className="flex items-center gap-2 text-[11px] font-semibold text-slate-600">
-              <Info className="h-3.5 w-3.5 text-slate-400" aria-hidden />
-              <span>Audit Requirement</span>
-            </div>
-            <p className="mt-1 text-[11px] leading-relaxed text-slate-500">
-              Modifications commit directly to the Dominion master dataset upon publication. Reason
-              specification is enforced prior to release.
+          {tab === 'fields' ? (
+            <>
+              {children ?? (
+                <div className="space-y-4">
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold text-slate-700" htmlFor="dominion-field-name">
+                      Name
+                    </label>
+                    <input
+                      id="dominion-field-name"
+                      type="text"
+                      disabled
+                      className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold text-slate-700" htmlFor="dominion-field-status">
+                      Status
+                    </label>
+                    <input
+                      id="dominion-field-status"
+                      type="text"
+                      disabled
+                      className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold text-slate-700" htmlFor="dominion-field-parish">
+                      Parish
+                    </label>
+                    <input
+                      id="dominion-field-parish"
+                      type="text"
+                      disabled
+                      className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700"
+                    />
+                  </div>
+                </div>
+              )}
+              <div className="mt-6 rounded-lg border border-slate-200/80 bg-slate-50 p-3">
+                <div className="flex items-center gap-2 text-[11px] font-semibold text-slate-600">
+                  <Info className="h-3.5 w-3.5 text-slate-400" aria-hidden />
+                  <span>Audit Requirement</span>
+                </div>
+                <p className="mt-1 text-[11px] leading-relaxed text-slate-500">
+                  Modifications commit directly to the Dominion master dataset upon publication. Reason
+                  specification is enforced prior to release.
+                </p>
+              </div>
+            </>
+          ) : null}
+          {tab === 'publish' ? (
+            <p className="text-xs text-slate-500">
+              Publish state is set in the footer before save. {pageChromeLabels[0]} list actions stay on the page.
             </p>
-          </div>
+          ) : null}
+          {tab === 'history' ? (
+            <p className="text-xs text-slate-500">
+              Change history for this record opens from the activity log. {pageChromeLabels[1]} and{' '}
+              {pageChromeLabels[2]} stay on the list page.
+            </p>
+          ) : null}
         </div>
 
         <div className="flex shrink-0 flex-col gap-4 border-t border-slate-200 bg-slate-50/70 p-6">

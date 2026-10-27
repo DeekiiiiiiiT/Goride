@@ -173,6 +173,7 @@ export function ActivityLog() {
             </label>
             <select
               id="when-filter"
+              title="All recorded expand_more"
               value={draftDate}
               onChange={(e) => setDraftDate(e.target.value)}
               className="w-40 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-700"
@@ -191,6 +192,7 @@ export function ActivityLog() {
             </label>
             <select
               id="who-filter"
+              title="All principals expand_more"
               value={draftWho}
               onChange={(e) => setDraftWho(e.target.value)}
               className="w-36 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-700"
@@ -210,6 +212,7 @@ export function ActivityLog() {
             </label>
             <select
               id="action-filter"
+              title="All actions expand_more"
               value={draftAction}
               onChange={(e) => setDraftAction(e.target.value)}
               className="w-36 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-700"

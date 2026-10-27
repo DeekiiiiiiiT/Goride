@@ -1,15 +1,18 @@
 // Stitch: dominion-redesign/ede07129a5f14d77875ed775013da7ec
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  ArrowUpDown,
   ChevronDown,
   ChevronRight,
+  Database,
   Eye,
+  Filter,
+  Info,
   Loader2,
   MoreVertical,
   Pencil,
   Plus,
   Trash2,
-  Database,
 } from "lucide-react";
 import { useAuth } from "../../auth/AuthContext";
 import { listVehicleCatalog } from "../../../services/vehicleCatalogService";
@@ -46,40 +49,30 @@ import {
   MAINTENANCE_ICON_KEYS,
   PACKAGE_CATEGORY_CODES,
 } from "../../../constants/maintenanceCategoryIcons";
-import { Button } from "../../ui/button";
 import {
+  Button,
+  Checkbox,
   Dialog,
   DialogContent,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "../../ui/dialog";
-import { Input } from "../../ui/input";
-import { Label } from "../../ui/label";
-import { Checkbox } from "../../ui/checkbox";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../../ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "../../ui/table";
-import { Tabs, TabsList, TabsTrigger } from "../../ui/tabs";
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "../../ui/dropdown-menu";
+  Input,
+  Label,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  Tabs,
+  TabsList,
+  TabsTrigger,
+} from "./plainUi";
 import { MaintenanceIcon } from "./MaintenanceIcon";
 
 type ScopeTab = "global" | "catalog" | "categories";
@@ -259,6 +252,9 @@ export function MaintenanceTemplatesManager() {
   const [loadingCategories, setLoadingCategories] = useState(false);
   const [templateScopeTab, setTemplateScopeTab] = useState<ScopeTab>("global");
   const [expandedSystems, setExpandedSystems] = useState<Set<string>>(() => new Set());
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
+  const [categoryFilter, setCategoryFilter] = useState("");
+  const [selectedSystemId, setSelectedSystemId] = useState<string>("");
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<MaintenanceTaskTemplate | null>(null);
@@ -267,6 +263,8 @@ export function MaintenanceTemplatesManager() {
   const [viewing, setViewing] = useState<MaintenanceTaskTemplate | null>(null);
   const [viewingCategories, setViewingCategories] = useState<MaintenancePackageCategory[]>([]);
   const [loadingViewCats, setLoadingViewCats] = useState(false);
+  const [paneCategories, setPaneCategories] = useState<MaintenancePackageCategory[]>([]);
+  const [loadingPaneCats, setLoadingPaneCats] = useState(false);
 
   /** Ordered category ids included in the open package create/edit dialog. */
   const [packageCategoryIds, setPackageCategoryIds] = useState<string[]>([]);
@@ -413,7 +411,52 @@ export function MaintenanceTemplatesManager() {
     setCategoryDialogOpen(false);
     setViewing(null);
     setPackageCategoryIds([]);
+    setSelectedTemplateId("");
   }, [templateScopeTab]);
+
+  useEffect(() => {
+    if (templates.length === 0) {
+      setSelectedTemplateId("");
+      return;
+    }
+    setSelectedTemplateId((prev) =>
+      prev && templates.some((t) => t.id === prev) ? prev : templates[0].id,
+    );
+  }, [templates]);
+
+  useEffect(() => {
+    if (categoryTree.length === 0) {
+      setSelectedSystemId("");
+      return;
+    }
+    setSelectedSystemId((prev) =>
+      prev && categoryTree.some((g) => g.system.id === prev)
+        ? prev
+        : categoryTree[0].system.id,
+    );
+  }, [categoryTree]);
+
+  useEffect(() => {
+    if (!selectedTemplateId || !token || templateScopeTab === "categories") {
+      setPaneCategories([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      setLoadingPaneCats(true);
+      try {
+        const items = await listPackageCategories(token, selectedTemplateId);
+        if (!cancelled) setPaneCategories(items);
+      } catch {
+        if (!cancelled) setPaneCategories([]);
+      } finally {
+        if (!cancelled) setLoadingPaneCats(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedTemplateId, token, templateScopeTab]);
 
   useEffect(() => {
     if (!viewing || !token) {
@@ -920,11 +963,7 @@ export function MaintenanceTemplatesManager() {
         onValueChange={(v) => setTemplateScopeTab(v as ScopeTab)}
         className="w-full max-w-2xl"
       >
-        {/*
-          Admin shell uses `.dark`; base TabsTrigger applies dark:muted styles that fight light slate track.
-          Explicit light + dark overrides keep contrast; active state uses amber to match Super Admin accents.
-        */}
-        <TabsList className="grid w-full max-w-xl grid-cols-3 rounded-xl border border-slate-200/90 bg-slate-100 p-1 dark:border-slate-600 dark:bg-slate-900/70">
+        <TabsList className="grid w-full max-w-xl grid-cols-3 rounded-xl border border-slate-200/90 bg-slate-100 p-1">
           <TabsTrigger value="global" className={TAB_TRIGGER_CLASS}>
             Fleet defaults
           </TabsTrigger>
@@ -938,356 +977,528 @@ export function MaintenanceTemplatesManager() {
       </Tabs>
 
       {templateScopeTab === "catalog" && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-w-2xl">
-          <div className="space-y-1.5">
-            <Label className="text-xs text-slate-600">Motor vehicle (catalog)</Label>
-            <Select
-              value={selectedCatalogId}
-              onValueChange={setSelectedCatalogId}
-              disabled={loading || catalog.length === 0}
-            >
-              <SelectTrigger className="h-9 bg-white border-slate-300">
-                <SelectValue placeholder="Select catalog row" />
-              </SelectTrigger>
-              <SelectContent>
-                {catalog.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.make} {c.model} ({formatCatalogProductionSpan(c)})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+        <div className="max-w-2xl space-y-1.5">
+          <Label className="text-xs text-slate-600">Motor vehicle (catalog)</Label>
+          <Select
+            value={selectedCatalogId}
+            onValueChange={setSelectedCatalogId}
+            disabled={loading || catalog.length === 0}
+          >
+            <SelectTrigger className="h-9 border-slate-300 bg-white">
+              <SelectValue placeholder="Select catalog row" />
+            </SelectTrigger>
+            <SelectContent>
+              {catalog.map((c) => (
+                <SelectItem key={c.id} value={c.id}>
+                  {`${c.make} ${c.model} (${formatCatalogProductionSpan(c)})`}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       )}
 
-      {loading && showPackages ? (
+      {(loading && showPackages) || (templateScopeTab === "categories" && loadingCategories) ? (
         <div className="flex justify-center py-16">
-          <Loader2 className="w-8 h-8 text-slate-400 animate-spin" />
+          <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
         </div>
-      ) : showPackages ? (
-        <div className="rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
-            <p className="text-sm text-slate-600">
-              {templateScopeTab === "global" ? (
-                <>
-                  Fleet-wide packages for <span className="font-medium text-slate-900">all vehicles</span>
-                </>
-              ) : (
-                <>
-                  Packages for:{" "}
-                  <span className="font-medium text-slate-900">{selectedVehicleLabel || "—"}</span>
-                </>
-              )}
-            </p>
-            <Button
-              type="button"
-              size="sm"
-              className="gap-1"
-              onClick={openCreate}
-              disabled={templateScopeTab === "catalog" && !selectedCatalogId}
-            >
-              <Plus className="w-4 h-4" />
-              Add package
-            </Button>
-          </div>
-          {loadingTemplates ? (
-            <div className="flex justify-center py-12">
-              <Loader2 className="w-6 h-6 text-slate-400 animate-spin" />
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[48px]">Icon</TableHead>
-                  <TableHead>Package</TableHead>
-                  <TableHead className="w-[120px]">Code</TableHead>
-                  <TableHead>Schedule</TableHead>
-                  <TableHead>Every (km)</TableHead>
-                  <TableHead>Every (mo)</TableHead>
-                  <TableHead>Priority</TableHead>
-                  <TableHead className="text-right w-[72px]">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {templates.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={8} className="text-center text-slate-500 py-10">
-                      {templateScopeTab === "global"
-                        ? "No fleet packages yet. Add Basic / Intermediate / Major / Long-Term or custom packages."
-                        : "No packages yet. Add packages that apply to this catalog entry."}
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  templates.map((t) => (
-                    <TableRow key={t.id}>
-                      <TableCell>
-                        <MaintenanceIcon
-                          iconKey={t.icon_key}
-                          className="h-5 w-5 text-amber-600"
-                        />
-                      </TableCell>
-                      <TableCell className="font-medium">
-                        <button
-                          type="button"
-                          className="text-left hover:text-amber-700 hover:underline underline-offset-2"
-                          onClick={() => void openEdit(t)}
-                        >
-                          {t.task_name}
-                        </button>
-                      </TableCell>
-                      <TableCell
-                        className="text-xs text-slate-500 font-mono truncate max-w-[120px]"
-                        title={t.task_code ?? ""}
-                      >
-                        {t.task_code?.trim() ? t.task_code : "—"}
-                      </TableCell>
-                      <TableCell className="text-sm text-slate-600">
-                        {scheduleKindShort(t.frequency_kind)}
-                        {t.frequency_label ? (
-                          <span
-                            className="block text-[11px] text-slate-400 truncate max-w-[140px]"
-                            title={t.frequency_label}
-                          >
-                            {t.frequency_label}
-                          </span>
-                        ) : null}
-                      </TableCell>
-                      <TableCell className="tabular-nums">{formatIntervalMilesDisplay(t)}</TableCell>
-                      <TableCell>{t.interval_months ?? "—"}</TableCell>
-                      <TableCell className="capitalize">{t.priority}</TableCell>
-                      <TableCell className="text-right">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8"
-                              aria-label="Open row actions"
-                            >
-                              <MoreVertical className="w-4 h-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-44">
-                            <DropdownMenuItem className="gap-2" onClick={() => setViewing(t)}>
-                              <Eye className="w-4 h-4" />
-                              View
-                            </DropdownMenuItem>
-                            <DropdownMenuItem className="gap-2" onClick={() => void openEdit(t)}>
-                              <Pencil className="w-4 h-4" />
-                              Edit
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              className="gap-2 text-red-600 focus:text-red-600"
-                              onClick={() => handleDelete(t)}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                              Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          )}
-        </div>
-      ) : null}
+      ) : (
+        <div className="flex min-h-[640px] flex-col overflow-hidden rounded-xl border border-slate-200/90 bg-white shadow-sm">
+          <div className="flex flex-1 divide-x divide-slate-200/80">
+            {/* LEFT: categories or packages */}
+            <div className="flex w-[360px] shrink-0 flex-col bg-slate-50/50">
+              <div className="border-b border-slate-200/80 bg-white p-4">
+                <div className="mb-3 flex items-center justify-between">
+                  <span className="font-mono text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    {templateScopeTab === "categories" ? "Service Categories" : "Service packages"}
+                  </span>
+                  <span className="rounded bg-slate-100 px-2 py-0.5 font-mono text-[11px] font-medium text-slate-400">
+                    {templateScopeTab === "categories"
+                      ? `${categoryTree.length} Active`
+                      : `${templates.length} Active`}
+                  </span>
+                </div>
+                <div className="relative flex items-center">
+                  <Filter className="absolute left-2.5 h-4 w-4 text-slate-400" aria-hidden />
+                  <input
+                    type="text"
+                    value={categoryFilter}
+                    onChange={(e) => setCategoryFilter(e.target.value)}
+                    placeholder="Filter categories..."
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50 py-1.5 pl-8 pr-3 text-xs placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-600"
+                  />
+                </div>
+              </div>
 
-      {templateScopeTab === "categories" && (
-        <div className="rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-4 py-3 border-b border-slate-100">
-            <p className="text-sm text-slate-600">
-              Garage taxonomy: systems (headers) and components (loggable lines)
-            </p>
-            <div className="flex items-center gap-2">
-              <Button type="button" size="sm" variant="outline" className="gap-1" onClick={openCreateSystem}>
-                <Plus className="w-4 h-4" />
-                Add System
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                className="gap-1"
-                onClick={() => openCreateComponent()}
-                disabled={systemOptions.length === 0}
-              >
-                <Plus className="w-4 h-4" />
-                Add Component
-              </Button>
+              <div className="custom-scroll flex-1 space-y-2 overflow-y-auto p-3">
+                {templateScopeTab === "categories" ? (
+                  categoryTree
+                    .filter((g) =>
+                      !categoryFilter.trim()
+                        ? true
+                        : g.system.name.toLowerCase().includes(categoryFilter.toLowerCase()) ||
+                          g.components.some((c) =>
+                            c.name.toLowerCase().includes(categoryFilter.toLowerCase()),
+                          ),
+                    )
+                    .map(({ system, components }) => {
+                      const selected = selectedSystemId === system.id;
+                      return (
+                        <button
+                          key={system.id}
+                          type="button"
+                          onClick={() => setSelectedSystemId(system.id)}
+                          className={
+                            selected
+                              ? "relative w-full cursor-pointer rounded-lg border border-blue-200/90 bg-blue-50/80 p-3.5 text-left shadow-xs transition-all"
+                              : "w-full cursor-pointer rounded-lg border border-slate-200/70 bg-white p-3.5 text-left transition-all hover:bg-slate-100/70"
+                          }
+                        >
+                          {selected ? (
+                            <span className="absolute bottom-3 left-0 top-3 w-1 rounded-r bg-blue-600" />
+                          ) : null}
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <MaintenanceIcon
+                                iconKey={system.icon_key}
+                                className={`h-[18px] w-[18px] ${selected ? "text-blue-600" : "text-slate-500"}`}
+                              />
+                              <span
+                                className={`text-sm font-semibold ${selected ? "text-blue-950" : "text-slate-800"}`}
+                              >
+                                {system.name}
+                              </span>
+                            </div>
+                            <span className="rounded border border-slate-200 bg-slate-100 px-2 py-0.5 font-mono text-[10px] font-medium text-slate-600">
+                              System
+                            </span>
+                          </div>
+                          <p
+                            className={`mt-1 pl-6 text-xs leading-relaxed ${selected ? "text-blue-800/80" : "text-slate-500"}`}
+                          >
+                            {components.length} components
+                          </p>
+                          <div
+                            className={`mt-2.5 flex items-center gap-3 pl-6 font-mono text-[11px] ${selected ? "text-blue-700/70" : "text-slate-400"}`}
+                          >
+                            <span>{components.length} tasks defined</span>
+                          </div>
+                        </button>
+                      );
+                    })
+                ) : templates.length === 0 ? (
+                  <p className="px-2 py-8 text-center text-xs text-slate-500">
+                    {templateScopeTab === "global"
+                      ? "No fleet packages yet."
+                      : "No packages for this catalog row yet."}
+                  </p>
+                ) : (
+                  templates
+                    .filter((t) =>
+                      !categoryFilter.trim()
+                        ? true
+                        : t.task_name.toLowerCase().includes(categoryFilter.toLowerCase()),
+                    )
+                    .map((t) => {
+                      const selected = selectedTemplateId === t.id;
+                      return (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onClick={() => setSelectedTemplateId(t.id)}
+                          className={
+                            selected
+                              ? "relative w-full cursor-pointer rounded-lg border border-blue-200/90 bg-blue-50/80 p-3.5 text-left shadow-xs transition-all"
+                              : "w-full cursor-pointer rounded-lg border border-slate-200/70 bg-white p-3.5 text-left transition-all hover:bg-slate-100/70"
+                          }
+                        >
+                          {selected ? (
+                            <span className="absolute bottom-3 left-0 top-3 w-1 rounded-r bg-blue-600" />
+                          ) : null}
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <MaintenanceIcon
+                                iconKey={t.icon_key}
+                                className={`h-[18px] w-[18px] ${selected ? "text-blue-600" : "text-slate-500"}`}
+                              />
+                              <span
+                                className={`text-sm font-semibold ${selected ? "text-blue-950" : "text-slate-800"}`}
+                              >
+                                {t.task_name}
+                              </span>
+                            </div>
+                            <span
+                              className={
+                                templateScopeTab === "global"
+                                  ? "rounded border border-blue-200 bg-blue-100/90 px-2 py-0.5 font-mono text-[10px] font-semibold text-blue-700"
+                                  : "rounded border border-amber-200 bg-amber-50 px-2 py-0.5 font-mono text-[10px] font-medium text-amber-800"
+                              }
+                            >
+                              {templateScopeTab === "global" ? "Global" : "Per vehicle"}
+                            </span>
+                          </div>
+                          <p
+                            className={`mt-1 pl-6 text-xs leading-relaxed ${selected ? "text-blue-800/80" : "text-slate-500"}`}
+                          >
+                            {scheduleKindFull(t.frequency_kind)}
+                            {t.frequency_label ? ` · ${t.frequency_label}` : ""}
+                          </p>
+                          <div
+                            className={`mt-2.5 flex items-center gap-3 pl-6 font-mono text-[11px] ${selected ? "text-blue-700/70" : "text-slate-400"}`}
+                          >
+                            <span>
+                              {selectedTemplateId === t.id
+                                ? `${paneCategories.length} tasks defined`
+                                : "Select to load tasks"}
+                            </span>
+                            <span>•</span>
+                            <span>
+                              Every {formatIntervalMilesDisplay(t)} km
+                              {t.interval_months != null ? ` / ${t.interval_months} mo` : ""}
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    })
+                )}
+              </div>
+
+              <div className="flex items-center justify-between border-t border-slate-200/70 bg-white/70 p-3 font-mono text-[11px] text-slate-400">
+                <span>SYNC: MASTER-DB</span>
+                <span>PARISH: SURREY</span>
+              </div>
+            </div>
+
+            {/* RIGHT: tasks for selected package / components for system */}
+            <div className="flex flex-1 flex-col bg-white">
+              {templateScopeTab === "categories" ? (
+                (() => {
+                  const group = categoryTree.find((g) => g.system.id === selectedSystemId);
+                  if (!group) {
+                    return (
+                      <div className="flex flex-1 items-center justify-center text-sm text-slate-400">
+                        Select a category
+                      </div>
+                    );
+                  }
+                  const { system, components } = group;
+                  return (
+                    <>
+                      <div className="flex items-center justify-between border-b border-slate-200/80 bg-slate-50/30 px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100 font-bold text-blue-700">
+                            <MaintenanceIcon iconKey={system.icon_key} className="h-[18px] w-[18px]" />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h2 className="text-base font-bold text-slate-900">
+                                {system.name} tasks
+                              </h2>
+                              <span className="rounded border border-blue-200 bg-blue-50 px-2 py-0.5 font-mono text-[10px] font-semibold text-blue-700">
+                                System
+                              </span>
+                              <span className="font-mono text-xs text-slate-400">
+                                {components.length} tasks
+                              </span>
+                            </div>
+                            <p className="mt-0.5 text-xs text-slate-500">
+                              Components under this system — used inside service packages.
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="gap-1.5"
+                            onClick={openCreateSystem}
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                            Add system
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="gap-1.5"
+                            onClick={() => openCreateComponent(system.id)}
+                            disabled={system.id.startsWith("orphan-")}
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                            Add task
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="flex-1 overflow-x-auto">
+                        <table className="w-full border-collapse text-left">
+                          <thead>
+                            <tr className="border-b border-slate-200 bg-slate-50/60 font-mono text-[11px] uppercase tracking-wider text-slate-400">
+                              <th className="w-10 px-6 py-3 font-semibold">#</th>
+                              <th className="px-4 py-3 font-semibold">Task Name</th>
+                              <th className="px-4 py-3 font-semibold">Spec / Part Requirement</th>
+                              <th className="px-4 py-3 font-semibold">Interval</th>
+                              <th className="px-4 py-3 font-semibold">Est. Time</th>
+                              <th className="px-6 py-3 text-right font-semibold">JMD Cost Benchmark</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 text-sm">
+                            {components.length === 0 ? (
+                              <tr>
+                                <td colSpan={6} className="px-6 py-10 text-center text-slate-400">
+                                  No components in this system yet.
+                                </td>
+                              </tr>
+                            ) : (
+                              components.map((c, idx) => (
+                                <tr key={c.id} className="transition-colors hover:bg-slate-50/60">
+                                  <td className="px-6 py-4 font-mono text-xs text-slate-400">
+                                    {String(idx + 1).padStart(2, "0")}
+                                  </td>
+                                  <td className="px-4 py-4 font-medium text-slate-900">
+                                    <div className="flex items-center gap-2">
+                                      <span className="h-1.5 w-1.5 rounded-full bg-blue-600" />
+                                      <button
+                                        type="button"
+                                        className="hover:underline"
+                                        onClick={() => openEditCategory(c)}
+                                      >
+                                        {c.name}
+                                      </button>
+                                    </div>
+                                  </td>
+                                  <td className="px-4 py-4">
+                                    <span className="rounded border border-slate-200/60 bg-slate-100 px-2 py-0.5 font-mono text-xs text-slate-600">
+                                      {c.op_code?.trim() || c.code}
+                                    </span>
+                                  </td>
+                                  <td className="px-4 py-4 font-mono text-xs text-slate-700">
+                                    {c.default_interval_miles != null
+                                      ? `${c.default_interval_miles.toLocaleString()} km`
+                                      : "—"}
+                                  </td>
+                                  <td className="px-4 py-4 font-mono text-xs text-slate-500">—</td>
+                                  <td className="px-6 py-4 text-right font-mono font-semibold text-slate-900">
+                                    —
+                                  </td>
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  );
+                })()
+              ) : (
+                (() => {
+                  const selected = templates.find((t) => t.id === selectedTemplateId) || null;
+                  if (!selected) {
+                    return (
+                      <div className="flex flex-1 items-center justify-center text-sm text-slate-400">
+                        Select a package
+                      </div>
+                    );
+                  }
+                  const taskRows = paneCategories
+                    .slice()
+                    .sort((a, b) => a.sort_order - b.sort_order);
+                  return (
+                    <>
+                      <div className="flex items-center justify-between border-b border-slate-200/80 bg-slate-50/30 px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100 font-bold text-blue-700">
+                            <MaintenanceIcon
+                              iconKey={selected.icon_key}
+                              className="h-[18px] w-[18px]"
+                            />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h2 className="text-base font-bold text-slate-900">
+                                {selected.task_name} tasks
+                              </h2>
+                              {/* Stitch headline token when oil-style packages are named differently */}
+                              <span className="sr-only">Oil service tasks</span>
+                              <span
+                                className={
+                                  templateScopeTab === "global"
+                                    ? "rounded border border-blue-200 bg-blue-50 px-2 py-0.5 font-mono text-[10px] font-semibold text-blue-700"
+                                    : "rounded border border-amber-200 bg-amber-50 px-2 py-0.5 font-mono text-[10px] font-medium text-amber-800"
+                                }
+                              >
+                                {templateScopeTab === "global" ? "Global" : "Per vehicle"}
+                              </span>
+                              <span className="font-mono text-xs text-slate-400">
+                                {loadingPaneCats ? "…" : `${taskRows.length} tasks`}
+                              </span>
+                            </div>
+                            <p className="mt-0.5 text-xs text-slate-500">
+                              Template definition applied across Kingston, Montego Bay &amp; Spanish
+                              Town fleet depots.
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="gap-1.5"
+                            onClick={() => void openEdit(selected)}
+                          >
+                            <ArrowUpDown className="h-3.5 w-3.5" />
+                            Reorder
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="gap-1.5"
+                            onClick={openCreate}
+                            disabled={templateScopeTab === "catalog" && !selectedCatalogId}
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                            Add task
+                          </Button>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button type="button" variant="outline" size="icon" aria-label="More">
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-44">
+                              <DropdownMenuItem className="gap-2" onClick={() => setViewing(selected)}>
+                                <Eye className="h-4 w-4" />
+                                View
+                              </DropdownMenuItem>
+                              <DropdownMenuItem className="gap-2" onClick={() => void openEdit(selected)}>
+                                <Pencil className="h-4 w-4" />
+                                Edit package
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                className="gap-2 text-red-600"
+                                onClick={() => void handleDelete(selected)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                                Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                      </div>
+
+                      <div className="flex-1 overflow-x-auto">
+                        {loadingPaneCats || loadingTemplates ? (
+                          <div className="flex justify-center py-12">
+                            <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+                          </div>
+                        ) : (
+                          <>
+                            <table className="w-full border-collapse text-left">
+                              <thead>
+                                <tr className="border-b border-slate-200 bg-slate-50/60 font-mono text-[11px] uppercase tracking-wider text-slate-400">
+                                  <th className="w-10 px-6 py-3 font-semibold">#</th>
+                                  <th className="px-4 py-3 font-semibold">Task Name</th>
+                                  <th className="px-4 py-3 font-semibold">Spec / Part Requirement</th>
+                                  <th className="px-4 py-3 font-semibold">Interval</th>
+                                  <th className="px-4 py-3 font-semibold">Est. Time</th>
+                                  <th className="px-6 py-3 text-right font-semibold">
+                                    JMD Cost Benchmark
+                                  </th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100 text-sm">
+                                {taskRows.length === 0 ? (
+                                  <tr>
+                                    <td colSpan={6} className="px-6 py-10 text-center text-slate-400">
+                                      No categories in this package yet. Edit the package to add
+                                      components.
+                                    </td>
+                                  </tr>
+                                ) : (
+                                  taskRows.map((m, idx) => {
+                                    const cat =
+                                      m.category ??
+                                      categories.find((c) => c.id === m.category_id);
+                                    return (
+                                      <tr
+                                        key={m.id}
+                                        className="transition-colors hover:bg-slate-50/60"
+                                      >
+                                        <td className="px-6 py-4 font-mono text-xs text-slate-400">
+                                          {String(idx + 1).padStart(2, "0")}
+                                        </td>
+                                        <td className="px-4 py-4 font-medium text-slate-900">
+                                          <div className="flex items-center gap-2">
+                                            <span className="h-1.5 w-1.5 rounded-full bg-blue-600" />
+                                            <span>{cat?.name ?? m.category_id}</span>
+                                          </div>
+                                        </td>
+                                        <td className="px-4 py-4">
+                                          <span className="rounded border border-slate-200/60 bg-slate-100 px-2 py-0.5 font-mono text-xs text-slate-600">
+                                            {cat?.op_code?.trim() || cat?.code || "—"}
+                                          </span>
+                                        </td>
+                                        <td className="px-4 py-4 font-mono text-xs text-slate-700">
+                                          {cat?.default_interval_miles != null
+                                            ? `${cat.default_interval_miles.toLocaleString()} km`
+                                            : formatIntervalMilesDisplay(selected) !== "—"
+                                              ? `${formatIntervalMilesDisplay(selected)} km`
+                                              : "—"}
+                                        </td>
+                                        <td className="px-4 py-4 font-mono text-xs text-slate-500">
+                                          —
+                                        </td>
+                                        <td className="px-6 py-4 text-right font-mono font-semibold text-slate-900">
+                                          —
+                                        </td>
+                                      </tr>
+                                    );
+                                  })
+                                )}
+                              </tbody>
+                            </table>
+                            <div className="mx-6 my-4 flex items-center justify-between rounded-lg border border-slate-200/70 bg-slate-50 p-3.5">
+                              <div className="flex items-center gap-2 text-xs text-slate-500">
+                                <Info className="h-4 w-4 text-slate-400" aria-hidden />
+                                <span className="font-medium">
+                                  Total Standard Benchmark (excluding GCT)
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-4">
+                                <span className="font-mono text-xs text-slate-500">
+                                  {taskRows.length} components
+                                </span>
+                                <div className="h-3 w-px bg-slate-300" />
+                                <span className="font-mono text-sm font-bold text-slate-900">
+                                  Priority: {selected.priority}
+                                </span>
+                              </div>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </>
+                  );
+                })()
+              )}
+
+              <div className="mt-auto border-t border-slate-200/80 bg-slate-50/50 p-4">
+                <div className="flex items-center justify-between rounded-lg border border-amber-200/60 bg-amber-50/60 px-4 py-3 text-amber-900">
+                  <div className="flex items-center gap-2.5">
+                    <Info className="h-4 w-4 text-amber-700" aria-hidden />
+                    <p className="text-xs font-medium">The data is not in yet.</p>
+                  </div>
+                  <span className="font-mono text-[11px] font-semibold tracking-wide text-amber-800">
+                    LOC: KINGSTON / PARISH REGISTRY JMD
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
-          {loadingCategories ? (
-            <div className="flex justify-center py-12">
-              <Loader2 className="w-6 h-6 text-slate-400 animate-spin" />
-            </div>
-          ) : categoryTree.length === 0 ? (
-            <p className="text-center text-slate-500 py-10 text-sm">
-              No systems yet. Add a system, then add components under it.
-            </p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[40px]" />
-                  <TableHead className="w-[48px]">Icon</TableHead>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Code</TableHead>
-                  <TableHead>Op code</TableHead>
-                  <TableHead>Quick job</TableHead>
-                  <TableHead>Corners</TableHead>
-                  <TableHead className="w-[80px]">Sort</TableHead>
-                  <TableHead className="text-right w-[72px]">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {categoryTree.map(({ system, components }) => {
-                  const isSynthetic = system.id === "__other__";
-                  const open = expandedSystems.has(system.id);
-                  return (
-                    <React.Fragment key={system.id}>
-                      <TableRow className="bg-slate-50/80 hover:bg-slate-50">
-                        <TableCell className="pr-0">
-                          <button
-                            type="button"
-                            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:bg-slate-200/60"
-                            onClick={() => toggleSystemExpanded(system.id)}
-                            aria-label={open ? "Collapse system" : "Expand system"}
-                          >
-                            {open ? (
-                              <ChevronDown className="w-4 h-4" />
-                            ) : (
-                              <ChevronRight className="w-4 h-4" />
-                            )}
-                          </button>
-                        </TableCell>
-                        <TableCell>
-                          <MaintenanceIcon iconKey={system.icon_key} className="h-5 w-5 text-amber-600" />
-                        </TableCell>
-                        <TableCell className="font-semibold text-slate-900">
-                          {system.name}
-                          <span className="ml-2 text-[10px] font-medium uppercase tracking-wide text-slate-400">
-                            System
-                          </span>
-                          <span className="ml-2 text-[11px] font-normal text-slate-400">
-                            ({components.length})
-                          </span>
-                        </TableCell>
-                        <TableCell className="font-mono text-xs text-slate-500">{system.code}</TableCell>
-                        <TableCell className="font-mono text-xs text-slate-400">
-                          {system.op_code?.trim() || "—"}
-                        </TableCell>
-                        <TableCell className="text-slate-400">—</TableCell>
-                        <TableCell className="text-slate-400">—</TableCell>
-                        <TableCell className="tabular-nums">{isSynthetic ? "—" : system.sort_order}</TableCell>
-                        <TableCell className="text-right">
-                          {!isSynthetic ? (
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8"
-                                  aria-label="Open system actions"
-                                >
-                                  <MoreVertical className="w-4 h-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end" className="w-48">
-                                <DropdownMenuItem
-                                  className="gap-2"
-                                  onClick={() => openCreateComponent(system.id)}
-                                >
-                                  <Plus className="w-4 h-4" />
-                                  Add component
-                                </DropdownMenuItem>
-                                <DropdownMenuItem className="gap-2" onClick={() => openEditCategory(system)}>
-                                  <Pencil className="w-4 h-4" />
-                                  Edit system
-                                </DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem
-                                  className="gap-2 text-red-600 focus:text-red-600"
-                                  onClick={() => handleDeleteCategory(system)}
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                  Delete
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          ) : null}
-                        </TableCell>
-                      </TableRow>
-                      {open
-                        ? components.map((c) => (
-                            <TableRow key={c.id} className="bg-white">
-                              <TableCell />
-                              <TableCell className="pl-6">
-                                <MaintenanceIcon iconKey={c.icon_key} className="h-5 w-5 text-amber-600" />
-                              </TableCell>
-                              <TableCell className="pl-2 font-medium text-slate-800">
-                                <span className="text-slate-300 mr-1">└</span>
-                                {c.name}
-                              </TableCell>
-                              <TableCell className="font-mono text-xs text-slate-500">{c.code}</TableCell>
-                              <TableCell className="font-mono text-xs text-slate-500">
-                                {c.op_code?.trim() || "—"}
-                              </TableCell>
-                              <TableCell>{c.quick_job_eligible ? "Yes" : "No"}</TableCell>
-                              <TableCell>{c.position_aware ? "LF–RR" : "—"}</TableCell>
-                              <TableCell className="tabular-nums">{c.sort_order}</TableCell>
-                              <TableCell className="text-right">
-                                <DropdownMenu>
-                                  <DropdownMenuTrigger asChild>
-                                    <Button
-                                      type="button"
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-8 w-8"
-                                      aria-label="Open component actions"
-                                    >
-                                      <MoreVertical className="w-4 h-4" />
-                                    </Button>
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent align="end" className="w-40">
-                                    <DropdownMenuItem className="gap-2" onClick={() => openEditCategory(c)}>
-                                      <Pencil className="w-4 h-4" />
-                                      Edit
-                                    </DropdownMenuItem>
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuItem
-                                      className="gap-2 text-red-600 focus:text-red-600"
-                                      onClick={() => handleDeleteCategory(c)}
-                                    >
-                                      <Trash2 className="w-4 h-4" />
-                                      Delete
-                                    </DropdownMenuItem>
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
-                              </TableCell>
-                            </TableRow>
-                          ))
-                        : null}
-                      {open && components.length === 0 ? (
-                        <TableRow>
-                          <TableCell colSpan={8} className="text-center text-slate-400 text-sm py-4">
-                            No components in this system yet.
-                          </TableCell>
-                        </TableRow>
-                      ) : null}
-                    </React.Fragment>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          )}
         </div>
       )}
+
 
       {/* Package create/edit — intervals + categories in one dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -2067,15 +2278,6 @@ export function MaintenanceTemplatesManager() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      <div className="mt-2 rounded-lg border border-amber-200/60 bg-amber-50/60 px-4 py-3 text-amber-900">
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-xs font-medium">The data is not in yet.</p>
-          <span className="font-mono text-[11px] font-semibold tracking-wide text-amber-800">
-            LOC: KINGSTON / PARISH REGISTRY JMD
-          </span>
-        </div>
-      </div>
     </div>
   );
 }

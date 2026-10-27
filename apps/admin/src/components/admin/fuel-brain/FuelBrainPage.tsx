@@ -1,7 +1,8 @@
 // Stitch: dominion-redesign/9f3ed86902e5469baf7d6f8ced78c75e
 /**
  * Fuel Brain Control Panel (Dominion → Engines → Engine / Fuel)
- * Classification cards + live deadhead dial/save.
+ * Classification cards + live deadhead dial/save. Toll and Matching
+ * panels mirror the Stitch console layout (standby / navigate).
  */
 
 import { useCallback, useEffect, useState } from 'react';
@@ -11,6 +12,7 @@ import {
   Fuel,
   Loader2,
   MoreHorizontal,
+  Network,
   Route,
   User,
 } from 'lucide-react';
@@ -47,6 +49,78 @@ const CLASS_CARDS = [
   { key: 'personal', label: 'personal', code: 'CLASS_04', Icon: User },
   { key: 'misc', label: 'misc', code: 'CLASS_05', Icon: MoreHorizontal },
 ] as const;
+
+const MATCH_POLICY_CARDS = [
+  {
+    title: 'Default policy',
+    badge: 'PRIMARY',
+    badgeTone: 'primary' as const,
+    policyId: 'POLICY_ID: POL-DEF-01',
+    region: 'KINGSTON METRO',
+  },
+  {
+    title: 'Peak hour surge policy',
+    badge: 'SECONDARY',
+    badgeTone: 'secondary' as const,
+    policyId: 'POLICY_ID: POL-SRG-02',
+    region: 'CROSS-PARISH',
+  },
+  {
+    title: 'Commercial fleet allocation',
+    badge: 'SECONDARY',
+    badgeTone: 'secondary' as const,
+    policyId: 'POLICY_ID: POL-FLT-03',
+    region: 'ISLAND-WIDE',
+  },
+];
+
+function StandbyDial({
+  title,
+  footer,
+  stroke,
+}: {
+  title: string;
+  footer: string;
+  stroke: string;
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center rounded-[12px] border border-slate-200 bg-slate-50/60 p-4 text-center">
+      <div className="mb-2 flex items-center gap-2 self-start text-xs font-semibold text-slate-800">
+        <span>{title}</span>
+      </div>
+      <div className="relative my-2 flex h-36 w-36 items-center justify-center">
+        <svg className="h-36 w-36 -rotate-90" viewBox="0 0 120 120" aria-hidden>
+          <circle
+            cx="60"
+            cy="60"
+            r="48"
+            fill="none"
+            stroke="#e2e8f0"
+            strokeWidth="8"
+            strokeDasharray="301.6"
+            strokeDashoffset="60"
+            strokeLinecap="round"
+          />
+          <circle
+            cx="60"
+            cy="60"
+            r="48"
+            fill="none"
+            stroke={stroke}
+            strokeWidth="8"
+            strokeDasharray="301.6"
+            strokeDashoffset="180"
+            strokeLinecap="round"
+          />
+        </svg>
+        <div className="absolute inset-0 flex flex-col items-center justify-center px-2">
+          <span className="text-[11px] italic leading-snug text-slate-500">The data is not in yet</span>
+        </div>
+      </div>
+      <div className="mt-1 font-mono text-[11px] text-slate-400">{footer}</div>
+    </div>
+  );
+}
 
 export function FuelBrainPage({ onNavigate }: { onNavigate?: (page: string) => void }) {
   const { session } = useAuth();
@@ -133,6 +207,7 @@ export function FuelBrainPage({ onNavigate }: { onNavigate?: (page: string) => v
       onNavigate={onNavigate}
       statusLabel={health?.brain_enabled ? 'Active' : 'Standby'}
     >
+      {/* PANEL 1: FUEL */}
       <section className="space-y-4 rounded-[12px] border border-slate-200 bg-white p-6 shadow-sm">
         <EnginePanelHeader
           icon={<Fuel className="h-[18px] w-[18px]" aria-hidden />}
@@ -186,12 +261,8 @@ export function FuelBrainPage({ onNavigate }: { onNavigate?: (page: string) => v
             </button>
           </div>
 
-          {error ? (
-            <p className="text-xs text-red-600">{error}</p>
-          ) : null}
-          {success ? (
-            <p className="text-xs text-emerald-700">{success}</p>
-          ) : null}
+          {error ? <p className="text-xs text-red-600">{error}</p> : null}
+          {success ? <p className="text-xs text-emerald-700">{success}</p> : null}
 
           {policies.length > 1 ? (
             <div className="flex flex-wrap items-center gap-2">
@@ -264,6 +335,108 @@ export function FuelBrainPage({ onNavigate }: { onNavigate?: (page: string) => v
           ) : (
             <p className="text-xs italic text-slate-500">The data is not in yet</p>
           )}
+        </div>
+      </section>
+
+      {/* PANEL 2: TOLL (standby preview — live controls on TollBrainPage) */}
+      <section className="space-y-5 rounded-[12px] border border-slate-200 bg-white p-6 shadow-sm">
+        <EnginePanelHeader
+          icon={<Route className="h-[18px] w-[18px]" aria-hidden />}
+          title="Toll engine"
+          description="Highway 2000 corridor detection and plaza fare matching in Portmore, Spanish Town, and Vineyards."
+          engineRef="ENGINE_REF: DOM-TOLL-JM"
+          badge="STANDBY"
+          badgeTone="standby"
+        />
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:col-span-7">
+            <StandbyDial title="Detect" footer="PLAZA_DETECTION" stroke="#316bf3" />
+            <StandbyDial title="Match" footer="RATE_CORRELATION" stroke="#10b981" />
+          </div>
+          <div className="flex flex-col justify-between rounded-[12px] border border-slate-200 bg-slate-50/60 p-4 lg:col-span-5">
+            <div>
+              <div className="mb-3 flex items-center justify-between text-xs font-semibold text-slate-800">
+                <span>Dispatch toggles</span>
+                <span className="font-mono text-[10px] text-slate-400">HIGHWAY 2000</span>
+              </div>
+              <div className="space-y-3">
+                {[
+                  ['Portmore Eastbound Dispatch', 'St. Catherine Corridor', true],
+                  ['Spanish Town Westbound Auto-match', 'St. Catherine Corridor', true],
+                  ['Vineyards Plaza JMD Surcharge Sync', 'St. Catherine Corridor', false],
+                ].map(([label, sub, on]) => (
+                  <div
+                    key={String(label)}
+                    className="flex items-center justify-between rounded-lg border border-slate-200/80 bg-white p-2.5"
+                  >
+                    <div>
+                      <div className="text-xs font-medium text-slate-800">{label}</div>
+                      <div className="font-mono text-[10px] text-slate-400">{sub}</div>
+                    </div>
+                    <button
+                      type="button"
+                      disabled
+                      className={`relative h-5 w-9 cursor-default rounded-full p-0.5 ${
+                        on ? 'bg-blue-600' : 'bg-slate-200'
+                      }`}
+                    >
+                      <span
+                        className={`block h-4 w-4 rounded-full bg-white shadow-sm ${on ? 'ml-auto' : ''}`}
+                      />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="mt-3 border-t border-slate-200/60 pt-2 font-mono text-[10px] text-slate-400">
+              DISPATCH_POLICY: DOM-RULE-H2K
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* PANEL 3: MATCHING (standby preview — live controls on MatchingBrainPage) */}
+      <section className="space-y-4 rounded-[12px] border border-slate-200 bg-white p-6 shadow-sm">
+        <EnginePanelHeader
+          icon={<Network className="h-[18px] w-[18px]" aria-hidden />}
+          title="Matching engine"
+          description="Driver allocation, trip assignment policies, and route constraints across Jamaican parishes."
+          engineRef="ENGINE_REF: DOM-MATCH-JM"
+          badge="ACTIVE"
+          badgeTone="active"
+        />
+        <div>
+          <div className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-700">
+            Policy configuration
+          </div>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            {MATCH_POLICY_CARDS.map((card) => (
+              <div
+                key={card.title}
+                className="flex flex-col justify-between rounded-[12px] border border-slate-200 bg-slate-50/60 p-5 transition-colors hover:border-slate-300"
+              >
+                <div>
+                  <div className="mb-3 flex items-center justify-between">
+                    <h3 className="text-xs font-semibold text-slate-900">{card.title}</h3>
+                    <span
+                      className={`rounded border px-2 py-0.5 font-mono text-[10px] font-medium ${
+                        card.badgeTone === 'primary'
+                          ? 'border-blue-200 bg-blue-50 text-blue-700'
+                          : 'border-slate-200 bg-slate-100 text-slate-600'
+                      }`}
+                    >
+                      {card.badge}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs italic text-slate-500">The data is not in yet</p>
+                </div>
+                <div className="mt-6 flex items-center justify-between border-t border-slate-200/60 pt-3 font-mono text-[10px] text-slate-400">
+                  <span>{card.policyId}</span>
+                  <span>{card.region}</span>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
     </EngineConsoleChrome>
