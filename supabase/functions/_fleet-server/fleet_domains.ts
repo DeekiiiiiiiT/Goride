@@ -87,6 +87,18 @@ export function orgOf(v: Record<string, unknown>): string | null {
     ?? str(meta.org_id);
 }
 
+function amenityList(v: Record<string, unknown>): string[] | null {
+  if (!Array.isArray(v.amenities)) return null;
+  const items = v.amenities.map((item) => str(item)).filter((item): item is string => Boolean(item));
+  return items.length ? items : null;
+}
+
+function contactStr(v: Record<string, unknown>, key: "phone" | "website"): string | null {
+  const info = v.contactInfo;
+  if (!info || typeof info !== "object" || Array.isArray(info)) return null;
+  return str((info as Record<string, unknown>)[key]);
+}
+
 function idFrom(key: string, value: Record<string, unknown>, prefix: string): string {
   const fromVal = str(value.id);
   if (fromVal) return fromVal;
@@ -317,6 +329,8 @@ export const FLEET_DOMAINS: FleetDomainDef[] = [
         publish_state: "published",
         lat: coord(v, "lat"),
         lng: coord(v, "lng"),
+        ...(str(v.direction) ? { direction: str(v.direction) } : {}),
+        ...(str(v.parish) ? { parish: str(v.parish) } : {}),
       }),
   },
   {
@@ -390,6 +404,10 @@ export const FLEET_DOMAINS: FleetDomainDef[] = [
         lng: coord(v, "lng"),
         address: str(v.address),
         pcode: str(v.pcode) ?? str(v.parishPcode),
+        ...(str(v.parish) ? { parish: str(v.parish) } : {}),
+        ...(contactStr(v, "phone") ? { phone: contactStr(v, "phone") } : {}),
+        ...(contactStr(v, "website") ? { website: contactStr(v, "website") } : {}),
+        ...(amenityList(v) ? { amenities: amenityList(v) } : {}),
         ...(origin ? { origin_app: origin } : {}),
       });
     },

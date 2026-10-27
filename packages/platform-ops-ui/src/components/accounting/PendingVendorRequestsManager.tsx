@@ -1,28 +1,29 @@
+// Stitch: dominion-redesign/c12e73466d9e4131abe8e5e814f66938
 /**
  * Super Admin — Pending vendor requests from fleet apps.
  */
 import React from 'react';
-import { Check, Loader2, RefreshCw, XCircle } from 'lucide-react';
+import { Check, Info, Loader2, RefreshCw, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import {
-  Badge,
   Button,
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
 } from '@roam/ui';
 import type { ExpenseVendor } from '@roam/types';
 import { platformVendorAdminService } from '../../services/platformVendorAdminService';
 
-export function PendingVendorRequestsManager() {
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '??';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0] ?? ''}${parts[1][0] ?? ''}`.toUpperCase();
+}
+
+export function PendingVendorRequestsManager({ embedded = false }: { embedded?: boolean }) {
   const [pending, setPending] = React.useState<ExpenseVendor[]>([]);
   const [verified, setVerified] = React.useState<ExpenseVendor[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -81,64 +82,84 @@ export function PendingVendorRequestsManager() {
     }
   };
 
-  return (
-    <div className="space-y-4 p-4 md:p-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Pending vendor requests</h2>
-          <p className="mt-0.5 text-sm text-slate-500">
-            Fleet users requested these companies. Approve into the Jamaica catalog, merge into an existing vendor, or reject.
-          </p>
+  const table = (
+    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+        <div className="flex items-center gap-2.5">
+          <h2 className="text-base font-semibold text-slate-900">Pending requests</h2>
         </div>
-        <Button type="button" variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
-          <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
-          Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          <span className="rounded border border-amber-200 bg-amber-50 px-2 py-0.5 font-mono text-xs font-medium text-amber-700">
+            {pending.length} AWAITING REVIEW
+          </span>
+          <Button type="button" variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
+            <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {loading ? (
-        <div className="flex items-center gap-2 py-16 text-slate-500">
+        <div className="flex items-center gap-2 px-6 py-16 text-slate-500">
           <Loader2 className="h-5 w-5 animate-spin" />
           Loading inbox…
         </div>
       ) : (
-        <div className="rounded-xl border border-slate-200 overflow-hidden dark:border-slate-800">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Requested name</TableHead>
-                <TableHead>Org</TableHead>
-                <TableHead>Notes</TableHead>
-                <TableHead>Merge into</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse text-left">
+            <thead>
+              <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                <th className="px-6 py-3">Name</th>
+                <th className="px-6 py-3">Requested by app</th>
+                <th className="px-6 py-3">Status</th>
+                <th className="px-6 py-3">Merge into</th>
+                <th className="px-6 py-3 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 text-sm">
               {pending.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center text-slate-500 py-10">
-                    Inbox clear — no pending vendor requests.
-                  </TableCell>
-                </TableRow>
+                <tr>
+                  <td colSpan={5} className="px-6 py-10 text-center text-slate-500">
+                    The data is not in yet.
+                  </td>
+                </tr>
               ) : (
                 pending.map((v) => (
-                  <TableRow key={v.id}>
-                    <TableCell className="font-medium">
-                      {v.name}
-                      <Badge className="ml-2 bg-amber-50 text-amber-900" variant="secondary">
+                  <tr key={v.id} className="transition-colors hover:bg-slate-50/50">
+                    <td className="px-6 py-3.5 font-medium text-slate-900">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 font-mono text-xs font-bold text-blue-700">
+                          {initials(v.name)}
+                        </div>
+                        <div>
+                          <div>{v.name}</div>
+                          <div className="font-mono text-[11px] text-slate-500">{v.id.slice(0, 12)}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-3.5 text-slate-500">
+                      <span className="inline-flex items-center rounded bg-slate-100 px-2 py-0.5 font-mono text-xs text-slate-800">
+                        Fleet
+                      </span>
+                      {v.requestedByOrgId ? (
+                        <div className="mt-1 font-mono text-[11px] text-slate-400">{v.requestedByOrgId}</div>
+                      ) : null}
+                    </td>
+                    <td className="px-6 py-3.5">
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-800">
+                        <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
                         Pending
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-xs text-slate-500 font-mono">
-                      {v.requestedByOrgId || '—'}
-                    </TableCell>
-                    <TableCell className="text-slate-500 max-w-xs truncate">{v.notes || '—'}</TableCell>
-                    <TableCell>
+                      </span>
+                      {v.notes ? (
+                        <div className="mt-1 max-w-xs truncate text-xs text-slate-500">{v.notes}</div>
+                      ) : null}
+                    </td>
+                    <td className="px-6 py-3.5">
                       <Select
                         value={mergeInto[v.id] || 'none'}
                         onValueChange={(val) => setMergeInto((m) => ({ ...m, [v.id]: val }))}
                       >
-                        <SelectTrigger className="w-[180px] h-8">
+                        <SelectTrigger className="h-8 w-[180px]">
                           <SelectValue placeholder="Promote as new" />
                         </SelectTrigger>
                         <SelectContent>
@@ -150,39 +171,83 @@ export function PendingVendorRequestsManager() {
                           ))}
                         </SelectContent>
                       </Select>
-                    </TableCell>
-                    <TableCell className="text-right space-x-1">
-                      <Button
-                        type="button"
-                        size="sm"
-                        className="bg-emerald-600 hover:bg-emerald-700"
-                        disabled={busyId === v.id}
-                        onClick={() => void approve(v.id)}
-                      >
-                        {busyId === v.id ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <Check className="h-3.5 w-3.5" />
-                        )}
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        className="text-rose-700"
-                        disabled={busyId === v.id}
-                        onClick={() => void reject(v.id)}
-                      >
-                        <XCircle className="h-3.5 w-3.5" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
+                    </td>
+                    <td className="px-6 py-3.5 text-right">
+                      <div className="inline-flex items-center gap-2">
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1 rounded-lg bg-green-700 px-3 py-1.5 text-xs font-medium text-white shadow-sm transition-colors hover:bg-green-800 disabled:opacity-50"
+                          disabled={busyId === v.id}
+                          onClick={() => void approve(v.id)}
+                        >
+                          {busyId === v.id ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Check className="h-3.5 w-3.5" />
+                          )}
+                          Approve
+                        </button>
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1 rounded-lg border border-red-300 bg-white px-3 py-1.5 text-xs font-medium text-red-700 transition-colors hover:bg-red-50 disabled:opacity-50"
+                          disabled={busyId === v.id}
+                          onClick={() => void reject(v.id)}
+                        >
+                          <XCircle className="h-3.5 w-3.5" />
+                          Reject
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
                 ))
               )}
-            </TableBody>
-          </Table>
+            </tbody>
+          </table>
         </div>
       )}
+    </div>
+  );
+
+  if (embedded) {
+    return table;
+  }
+
+  return (
+    <div className="mx-auto w-full max-w-7xl space-y-6 p-8 text-slate-900">
+      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+        <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
+          <span>Dominion</span>
+          <span className="text-slate-300">/</span>
+          <span>Master data</span>
+          <span className="text-slate-300">/</span>
+          <span>Tax and Vendors</span>
+          <span className="text-slate-300">/</span>
+          <span className="font-semibold text-slate-900">Vendors and requests</span>
+        </nav>
+        <div className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 font-mono text-[11px] font-medium text-slate-600">
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+          <span>REGION: JM-KGN</span>
+        </div>
+      </div>
+
+      <div className="space-y-1">
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900">Vendors and requests</h1>
+        <p className="text-sm text-slate-500">
+          Fleet users requested these companies. Approve into the Jamaica catalog, merge into an existing vendor, or reject.
+        </p>
+      </div>
+
+      {table}
+
+      <div className="flex flex-col items-start justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500 sm:flex-row sm:items-center">
+        <div className="flex items-center gap-2">
+          <Info className="h-4 w-4 text-blue-600" aria-hidden />
+          <span className="font-medium text-slate-900">The data is not in yet.</span>
+        </div>
+        <div className="rounded border border-slate-200 bg-slate-100 px-2 py-0.5 font-mono text-[11px] font-medium text-slate-500">
+          LOC: KINGSTON / PARISH REGISTRY JMD
+        </div>
+      </div>
     </div>
   );
 }

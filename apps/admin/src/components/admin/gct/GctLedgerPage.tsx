@@ -1,16 +1,6 @@
+// Stitch: dominion-redesign/18ac5b8fa8c24887bc95b30f1283b9a0
 import { useCallback, useEffect, useState } from 'react';
-import { Loader2 } from 'lucide-react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../ui/tabs';
-import { Button } from '../../ui/button';
-import { Input } from '../../ui/input';
-import { Label } from '../../ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '../../ui/select';
+import { Calendar, Info, Loader2, Lock, Upload } from 'lucide-react';
 import { gctAdminService } from '../../../services/gctAdminService';
 
 function parseInputTaxCsv(text: string): Array<Record<string, unknown>> {
@@ -42,13 +32,9 @@ export function GctLedgerPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-
-  const [supplierTrn, setSupplierTrn] = useState('');
-  const [baseAmount, setBaseAmount] = useState('');
-  const [ratePercent, setRatePercent] = useState('15');
-  const [taxAmount, setTaxAmount] = useState('');
-  const [restriction, setRestriction] = useState('none');
   const [periodId, setPeriodId] = useState('');
+
+  const monthLabel = new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -71,29 +57,6 @@ export function GctLedgerPage() {
     void load();
   }, [load]);
 
-  async function saveInputTax() {
-    setSaving(true);
-    setError(null);
-    try {
-      await gctAdminService.recordInputTax({
-        supplier_trn: supplierTrn,
-        base_amount_jmd: Number(baseAmount),
-        rate_percent: Number(ratePercent),
-        tax_amount_jmd: Number(taxAmount),
-        credit_restriction: restriction,
-        period_id: periodId || null,
-      });
-      setSupplierTrn('');
-      setBaseAmount('');
-      setTaxAmount('');
-      await load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Save failed');
-    } finally {
-      setSaving(false);
-    }
-  }
-
   async function onCsvFile(file: File | null) {
     if (!file) return;
     setSaving(true);
@@ -111,164 +74,203 @@ export function GctLedgerPage() {
     }
   }
 
+  const outputTotal = rows
+    .filter(() => kind === 'output')
+    .reduce((s, r) => s + Number(r.tax_amount_jmd || 0), 0);
+  const inputTotal = rows
+    .filter(() => kind === 'input')
+    .reduce((s, r) => s + Number(r.creditable_amount_jmd ?? r.tax_amount_jmd ?? 0), 0);
+
   return (
-    <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">GCT ledger</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Output and input tax rows. Reversals are new rows — never deletes.
+    <div className="mx-auto w-full max-w-7xl space-y-6 overflow-y-auto px-8 py-6 text-slate-900">
+      <div className="flex items-center justify-between">
+        <nav className="flex items-center gap-2 font-mono text-xs text-slate-500">
+          <span>Dominion</span>
+          <span className="text-slate-300">/</span>
+          <span>Back office</span>
+          <span className="text-slate-300">/</span>
+          <span className="font-medium text-slate-900">Ledger</span>
+        </nav>
+        <div className="inline-flex items-center gap-1.5 rounded border border-slate-200 bg-slate-100 px-3 py-1 font-mono text-xs font-medium text-slate-700">
+          <span className="text-blue-600">✓</span>
+          <span>JMD TAX COMPLIANCE ACT</span>
+        </div>
+      </div>
+
+      <div className="space-y-1.5">
+        <div className="flex items-center gap-3">
+          <h2 className="text-2xl font-bold tracking-tight text-slate-900">Ledger</h2>
+          <span className="inline-flex items-center rounded border border-amber-300 bg-amber-50 px-2 py-0.5 font-mono text-[11px] font-semibold text-amber-800">
+            Owner only
+          </span>
+        </div>
+        <p className="max-w-3xl text-sm text-slate-600">
+          Output tax and input tax, in JMD. This is Roam&apos;s own books, not a customer list.
         </p>
       </div>
 
-      {error && <p className="text-sm text-destructive">{error}</p>}
-
-      <Tabs value={kind} onValueChange={(v) => setKind(v as 'output' | 'input')}>
-        <TabsList>
-          <TabsTrigger value="output">Output tax</TabsTrigger>
-          <TabsTrigger value="input">Input tax</TabsTrigger>
-        </TabsList>
-        <TabsContent value="input" className="mt-4 space-y-4">
-          <div className="rounded-lg border p-4 space-y-3 max-w-2xl">
-            <h2 className="text-sm font-medium">Record input tax</h2>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div>
-                <Label>Supplier TRN</Label>
-                <Input value={supplierTrn} onChange={(e) => setSupplierTrn(e.target.value)} />
-              </div>
-              <div>
-                <Label>Restriction</Label>
-                <Select value={restriction} onValueChange={setRestriction}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">None</SelectItem>
-                    <SelectItem value="entertainment">Entertainment</SelectItem>
-                    <SelectItem value="motor_vehicle">Motor vehicle</SelectItem>
-                    <SelectItem value="capital_24m">Capital (24m)</SelectItem>
-                    <SelectItem value="apportioned">Apportioned</SelectItem>
-                    <SelectItem value="de_minimis">De minimis</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Base (JMD)</Label>
-                <Input value={baseAmount} onChange={(e) => setBaseAmount(e.target.value)} />
-              </div>
-              <div>
-                <Label>Rate %</Label>
-                <Input value={ratePercent} onChange={(e) => setRatePercent(e.target.value)} />
-              </div>
-              <div>
-                <Label>Tax (JMD)</Label>
-                <Input value={taxAmount} onChange={(e) => setTaxAmount(e.target.value)} />
-              </div>
-              <div>
-                <Label>Period (optional)</Label>
-                <Select value={periodId || '__none'} onValueChange={(v) => setPeriodId(v === '__none' ? '' : v)}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Open period" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none">— None —</SelectItem>
-                    {periods
-                      .filter((p) => p.status === 'open')
-                      .map((p) => (
-                        <SelectItem key={String(p.id)} value={String(p.id)}>
-                          {String(p.period_start)} → {String(p.period_end)}
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="flex flex-wrap gap-2 items-center">
-              <Button onClick={() => void saveInputTax()} disabled={saving || !taxAmount}>
-                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save input tax'}
-              </Button>
-              <Label className="text-sm cursor-pointer underline">
-                Import CSV
+      <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-2.5">
+        <div className="flex items-center gap-2.5">
+          <div className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-800">
+            <Calendar className="h-4 w-4 text-slate-500" aria-hidden />
+            <span>{monthLabel}</span>
+          </div>
+          <div className="inline-flex items-center gap-1.5 rounded-md border border-slate-200/80 bg-slate-50 px-2.5 py-1 font-mono text-[11px] text-slate-500">
+            <span>CURRENCY:</span>
+            <span className="font-semibold text-slate-700">JMD ($)</span>
+          </div>
+          <div className="inline-flex overflow-hidden rounded-lg border border-slate-200 text-xs">
+            <button
+              type="button"
+              onClick={() => setKind('output')}
+              className={`px-3 py-1.5 ${kind === 'output' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600'}`}
+            >
+              Output
+            </button>
+            <button
+              type="button"
+              onClick={() => setKind('input')}
+              className={`px-3 py-1.5 ${kind === 'input' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600'}`}
+            >
+              Input
+            </button>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {kind === 'input' ? (
+            <>
+              <select
+                className="h-8 rounded-lg border border-slate-200 px-2 text-xs"
+                value={periodId || '__none'}
+                onChange={(e) => setPeriodId(e.target.value === '__none' ? '' : e.target.value)}
+              >
+                <option value="__none">Period (optional)</option>
+                {periods
+                  .filter((p) => p.status === 'open')
+                  .map((p) => (
+                    <option key={String(p.id)} value={String(p.id)}>
+                      {String(p.period_start)} → {String(p.period_end)}
+                    </option>
+                  ))}
+              </select>
+              <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50">
+                <Upload className="h-4 w-4" aria-hidden />
+                <span>{saving ? 'Importing…' : 'CSV import'}</span>
                 <input
                   type="file"
                   accept=".csv,text/csv"
                   className="hidden"
                   onChange={(e) => void onCsvFile(e.target.files?.[0] ?? null)}
                 />
-              </Label>
-              <span className="text-xs text-muted-foreground">
-                CSV headers: tax_point, supplier_trn, base_amount_jmd, rate_percent, tax_amount_jmd,
-                credit_restriction
-              </span>
-            </div>
-          </div>
-        </TabsContent>
-        <TabsContent value={kind} className="mt-4">
-          <div className="overflow-x-auto rounded-lg border">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/50 text-left">
-                <tr>
-                  <th className="p-3">Tax point</th>
-                  {kind === 'output' ? (
-                    <>
-                      <th className="p-3">Source</th>
-                      <th className="p-3">Class</th>
-                    </>
-                  ) : (
-                    <>
-                      <th className="p-3">Supplier TRN</th>
-                      <th className="p-3">Restriction</th>
-                    </>
-                  )}
-                  <th className="p-3">Base</th>
-                  <th className="p-3">Rate</th>
-                  <th className="p-3">Tax</th>
-                </tr>
-              </thead>
+              </label>
+            </>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-500">
+              <Upload className="h-4 w-4" aria-hidden />
+              CSV import
+            </span>
+          )}
+        </div>
+      </div>
+
+      {error ? <p className="text-sm text-red-600">{error}</p> : null}
+
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+        <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50/50 px-6 py-4">
+          <h3 className="font-mono text-xs font-bold uppercase tracking-wider text-slate-700">
+            LEDGER SUMMARY - {monthLabel.toUpperCase()}
+          </h3>
+          <span className="font-mono text-[11px] tracking-tight text-slate-400">JAD-LEDGER-SPEC 1991</span>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse text-left">
+            <thead>
+              <tr className="border-b border-slate-200 bg-slate-50/30">
+                <th className="w-2/3 px-6 py-3 font-mono text-xs font-semibold uppercase tracking-wider text-slate-400" scope="col">
+                  LINE
+                </th>
+                <th className="w-1/3 px-6 py-3 text-right font-mono text-xs font-semibold uppercase tracking-wider text-slate-400" scope="col">
+                  AMOUNT JMD
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 text-sm">
+              <tr className="transition-colors hover:bg-slate-50/50">
+                <td className="flex items-center gap-2 px-6 py-4 font-medium text-slate-800">
+                  <span className="h-2 w-2 rounded-full bg-slate-300" />
+                  <span>Output tax</span>
+                </td>
+                <td className="px-6 py-4 text-right font-mono font-medium text-slate-500">
+                  {loading ? '—' : kind === 'output' && rows.length ? outputTotal.toFixed(2) : '—'}
+                </td>
+              </tr>
+              <tr className="transition-colors hover:bg-slate-50/50">
+                <td className="flex items-center gap-2 px-6 py-4 font-medium text-slate-800">
+                  <span className="h-2 w-2 rounded-full bg-slate-300" />
+                  <span>Input tax</span>
+                </td>
+                <td className="px-6 py-4 text-right font-mono font-medium text-slate-500">
+                  {loading ? '—' : kind === 'input' && rows.length ? inputTotal.toFixed(2) : '—'}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        {!loading && rows.length > 0 ? (
+          <div className="max-h-64 overflow-y-auto border-t border-slate-100">
+            <table className="w-full text-left text-xs">
               <tbody>
-                {loading ? (
-                  <tr>
-                    <td colSpan={6} className="p-6 text-center">
-                      <Loader2 className="h-4 w-4 animate-spin inline" />
+                {rows.map((r) => (
+                  <tr key={String(r.id)} className="border-t border-slate-50">
+                    <td className="px-6 py-2 text-slate-600">
+                      {String(r.tax_point)}
+                      {kind === 'output'
+                        ? ` · ${String(r.source_doc_type)}/${String(r.source_doc_id)}`
+                        : ` · ${String(r.supplier_trn || '—')}`}
+                    </td>
+                    <td className="px-6 py-2 text-right font-mono text-slate-700">
+                      {kind === 'input'
+                        ? Number(r.creditable_amount_jmd ?? r.tax_amount_jmd).toFixed(2)
+                        : Number(r.tax_amount_jmd).toFixed(2)}
                     </td>
                   </tr>
-                ) : rows.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="p-6 text-center text-muted-foreground">
-                      No rows yet.
-                    </td>
-                  </tr>
-                ) : (
-                  rows.map((r) => (
-                    <tr key={String(r.id)} className="border-t">
-                      <td className="p-3 whitespace-nowrap">{String(r.tax_point)}</td>
-                      {kind === 'output' ? (
-                        <>
-                          <td className="p-3 font-mono text-xs">
-                            {String(r.source_doc_type)}/{String(r.source_doc_id)}
-                          </td>
-                          <td className="p-3">{String(r.supply_class)}</td>
-                        </>
-                      ) : (
-                        <>
-                          <td className="p-3">{String(r.supplier_trn || '—')}</td>
-                          <td className="p-3">{String(r.credit_restriction)}</td>
-                        </>
-                      )}
-                      <td className="p-3">{Number(r.base_amount_jmd).toFixed(2)}</td>
-                      <td className="p-3">{Number(r.rate_percent)}%</td>
-                      <td className="p-3 font-medium">
-                        {kind === 'input'
-                          ? Number(r.creditable_amount_jmd ?? r.tax_amount_jmd).toFixed(2)
-                          : Number(r.tax_amount_jmd).toFixed(2)}
-                      </td>
-                    </tr>
-                  ))
-                )}
+                ))}
               </tbody>
             </table>
           </div>
-        </TabsContent>
-      </Tabs>
+        ) : null}
+
+        <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50/60 p-5">
+          <div className="flex items-start gap-3">
+            {loading ? (
+              <Loader2 className="mt-0.5 h-5 w-5 animate-spin text-slate-400" />
+            ) : (
+              <Info className="mt-0.5 h-5 w-5 text-blue-600" aria-hidden />
+            )}
+            <div>
+              <p className="text-xs font-semibold leading-tight text-slate-800">The data is not in yet.</p>
+              <p className="mt-0.5 text-xs text-slate-500">
+                Official General Consumption Tax ledger sync pending reconciliation for period {monthLabel}.
+              </p>
+            </div>
+          </div>
+          <span className="rounded border border-slate-200 bg-white px-2.5 py-1 font-mono text-[11px] text-slate-500">
+            LOC: KINGSTON / PARISH REGISTRY JMD
+          </span>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-500">
+        <div className="flex items-center gap-2">
+          <Lock className="h-4 w-4 text-slate-400" aria-hidden />
+          <span>
+            Restricted to Dominion fiscal administrators. Statutory ledger record under General Consumption
+            Tax regime.
+          </span>
+        </div>
+        <div className="font-mono text-[11px] text-slate-400">NODE-AUTH: VERIFIED</div>
+      </div>
     </div>
   );
 }

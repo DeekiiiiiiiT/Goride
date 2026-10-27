@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { API_ENDPOINTS } from '../../services/apiConfig';
 import { useAuth } from '../auth/AuthContext';
-import { DominionEmpty, DominionError, DominionLoading } from './DominionStates';
+import { DominionError, DominionLoading } from './DominionStates';
 
 interface AdminDashboardProps {
   onNavigate: (page: string) => void;
@@ -18,22 +18,26 @@ const DATASET_PAGE: Record<string, string> = {
   vendors: 'suppliers-prices',
   vehicles: 'motor-vehicles',
   maps: 'world-quality',
+  places: 'plug-places',
   gct_rates: 'gct-rates',
 };
 
 const DATASET_LABEL: Record<string, string> = {
   stations: 'Stations',
-  tolls: 'Tolls',
+  tolls: 'Toll plazas',
   vendors: 'Vendors',
   vehicles: 'Vehicles',
-  maps: 'Maps',
+  maps: 'Places',
+  places: 'Places',
   gct_rates: 'GCT rates',
 };
 
+const QUALITY_ORDER = ['stations', 'tolls', 'vendors', 'maps', 'vehicles'];
+
 function when(iso?: string | null): string {
-  if (!iso) return 'Not scored yet';
+  if (!iso) return '—';
   const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return 'Not scored yet';
+  if (Number.isNaN(date.getTime())) return '—';
   return date.toLocaleString();
 }
 
@@ -137,118 +141,198 @@ export function AdminDashboard({ onNavigate }: AdminDashboardProps) {
     { id: 'vendors', label: 'Vendors', count: vendorsWaiting, page: 'pending-vendor-requests' },
     { id: 'changes', label: 'Change requests', count: changeRequestCount, page: 'change-requests' },
   ];
-  const qualityRows = (scores.length
-    ? scores
-    : Object.keys(DATASET_LABEL).map((dataset): Score => ({ dataset, score: null }))
-  );
+
+  const scoreByDataset = new Map(scores.map((row) => [row.dataset || '', row]));
+  const qualityRows = QUALITY_ORDER.map((dataset) => scoreByDataset.get(dataset) || { dataset, score: null });
+  for (const row of scores) {
+    const key = row.dataset || '';
+    if (key && !QUALITY_ORDER.includes(key) && key !== 'gct_rates') {
+      qualityRows.push(row);
+    }
+  }
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold tracking-tight text-[#0f172a]">Overview</h1>
-      {(qualityFailed || changesFailed || appsFailed || stationsFailed) ? (
-        <div className="flex justify-end">
-          <button type="button" className="text-sm font-medium text-dominion-reject" onClick={() => void load()}>
+      <div className="flex items-center justify-between pb-6">
+        <div>
+          <nav className="mb-1 flex items-center gap-1.5 text-xs font-normal text-slate-500" aria-label="Breadcrumb">
+            <span>Dominion</span>
+            <span className="text-slate-400">/</span>
+            <span className="font-medium text-slate-700">Overview</span>
+          </nav>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Overview</h1>
+        </div>
+        {(qualityFailed || changesFailed || appsFailed || stationsFailed) ? (
+          <button
+            type="button"
+            className="text-xs font-medium text-dominion-reject"
+            onClick={() => void load()}
+          >
             Retry
           </button>
-        </div>
-      ) : null}
+        ) : null}
+      </div>
 
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {waitingCards.map((card) => (
-          <button
-            key={card.id}
-            type="button"
-            onClick={() => onNavigate(card.page)}
-            className="rounded-xl border border-slate-200 bg-white p-4 text-left"
-          >
-            <p className="text-sm font-medium text-slate-700">{card.label}</p>
-            <p className="mt-2 font-mono text-2xl text-slate-900">{card.count === null ? '—' : card.count}</p>
-            <p className="mt-1 text-xs text-slate-400">Waiting</p>
-          </button>
-        ))}
-      </section>
-
-      <section className="rounded-xl border border-slate-200 bg-white">
-        <h2 className="border-b border-slate-200 px-4 py-3 text-sm font-semibold text-slate-800">
-          Data quality
-          <span className="ml-2 font-normal text-slate-400">{scoredAt ? when(scoredAt) : ''}</span>
-        </h2>
-        {qualityFailed ? (
-          <p className="px-4 py-6 text-sm text-dominion-reject">Could not load this page</p>
-        ) : qualityRows.map((row) => {
-          const key = row.dataset || 'dataset';
-          const label = key === 'tolls' ? 'Toll plazas' : (DATASET_LABEL[key] || key);
-          const value = key === 'stations' && stationLine
-            ? stationLine
-            : typeof row.score === 'number'
-              ? `${row.score}`
-              : null;
-          return (
-            <button
-              key={key}
-              type="button"
-              onClick={() => onNavigate(DATASET_PAGE[key] || 'dashboard')}
-              className="flex w-full items-center justify-between border-b border-slate-100 px-4 py-3 text-left last:border-b-0"
-            >
-              <span className="text-sm text-slate-800">{label}</span>
-              <span className="flex items-center gap-3">
-                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-500">
-                  {value === null ? 'Not loaded' : 'Loaded'}
-                </span>
-                <span className="font-mono text-sm text-slate-700">{value ?? '—'}</span>
-              </span>
-            </button>
-          );
-        })}
-      </section>
-
-      <section className="rounded-xl border border-slate-200 bg-white">
-        <h2 className="border-b border-slate-200 px-4 py-3 text-sm font-semibold text-slate-800">Apps last sync</h2>
-        {appsFailed ? (
-          <p className="px-4 py-6 text-sm text-dominion-reject">Could not load this page</p>
-        ) : consumers.length === 0 ? (
-          <p className="px-4 py-6 text-sm text-slate-500">The data is not in yet.</p>
-        ) : (
-          <ul>
-            {consumers.map((app) => (
-              <li key={app.app_key || app.name} className="flex items-center justify-between border-b border-slate-100 px-4 py-3 last:border-b-0">
-                <span className="text-sm text-slate-800">{app.name || app.app_key}</span>
-                <span className="font-mono text-xs text-slate-500">{app.last_sync_at ? when(app.last_sync_at) : '—'}</span>
-              </li>
+      <div className="space-y-6">
+        <section>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {waitingCards.map((card) => (
+              <button
+                key={card.id}
+                type="button"
+                onClick={() => onNavigate(card.page)}
+                className="rounded-xl border border-slate-200/90 bg-white p-4 text-left shadow-sm transition-all hover:border-slate-300"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-slate-500">{card.label}</span>
+                  <span className="inline-flex items-center rounded bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+                    Waiting
+                  </span>
+                </div>
+                <div className="mt-3 text-2xl font-semibold text-slate-800">
+                  {card.count === null ? '—' : card.count}
+                </div>
+              </button>
             ))}
-          </ul>
-        )}
-      </section>
+          </div>
+        </section>
 
-      <section className="rounded-xl border border-slate-200 bg-white">
-        <h2 className="border-b border-slate-200 px-4 py-3 text-sm font-semibold text-slate-800">Recent changes</h2>
-        {changesFailed ? (
-          <p className="px-4 py-6 text-sm text-dominion-reject">Could not load this page</p>
-        ) : changes.length === 0 ? (
-          <DominionEmpty />
-        ) : (
-          <table className="w-full text-left text-sm">
-            <thead className="text-xs uppercase tracking-wider text-slate-400">
-              <tr>
-                <th className="px-4 py-2 font-medium">When</th>
-                <th className="px-4 py-2 font-medium">Dataset</th>
-                <th className="px-4 py-2 font-medium">Who</th>
-                <th className="px-4 py-2 font-medium">Reason</th>
-              </tr>
-            </thead>
-            <tbody>
-              {changes.map((row) => (
-                <tr key={row.id} className="border-t border-slate-100">
-                  <td className="px-4 py-3 text-slate-500">{when(row.created_at)}</td>
-                  <td className="px-4 py-3">{row.dataset || '—'}</td>
-                  <td className="px-4 py-3">{row.actor || '—'}</td>
-                  <td className="px-4 py-3">{row.reason || row.action || '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </section>
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+          <section className="flex flex-col overflow-hidden rounded-xl border border-slate-200/90 bg-white shadow-sm xl:col-span-2">
+            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+              <div>
+                <h2 className="text-sm font-semibold text-slate-900">Data quality</h2>
+                <p className="mt-0.5 text-xs text-slate-500">
+                  {scoredAt
+                    ? `Last scored ${when(scoredAt)}`
+                    : 'Status and health diagnostics across master entities'}
+                </p>
+              </div>
+            </div>
+            {qualityFailed ? (
+              <p className="px-5 py-6 text-sm text-dominion-reject">Could not load this page</p>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {qualityRows.map((row) => {
+                  const key = row.dataset || 'dataset';
+                  const label = DATASET_LABEL[key] || key;
+                  const value = key === 'stations' && stationLine
+                    ? stationLine
+                    : typeof row.score === 'number'
+                      ? `${row.score}`
+                      : null;
+                  const loaded = value !== null;
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => onNavigate(DATASET_PAGE[key] || 'dashboard')}
+                      className="flex w-full items-center justify-between px-5 py-3.5 text-left transition-colors hover:bg-slate-50/60"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className={`h-1.5 w-1.5 rounded-full ${loaded ? 'bg-[#316bf3]' : 'bg-slate-300'}`} />
+                        <span className="text-sm font-medium text-slate-700">{label}</span>
+                      </div>
+                      <div className="flex items-center gap-6">
+                        <span className="inline-flex items-center rounded-full border border-slate-200/60 bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600">
+                          {loaded ? 'Loaded' : 'Not loaded'}
+                        </span>
+                        <span className="w-auto min-w-8 text-right text-sm font-medium text-slate-500">
+                          {value ?? '—'}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+
+          <section className="flex flex-col overflow-hidden rounded-xl border border-slate-200/90 bg-white shadow-sm xl:col-span-1">
+            <div className="border-b border-slate-100 px-5 py-4">
+              <h2 className="text-sm font-semibold text-slate-900">Apps last sync</h2>
+              <p className="mt-0.5 text-xs text-slate-500">Runtime distribution endpoints</p>
+            </div>
+            {appsFailed ? (
+              <p className="px-5 py-6 text-sm text-dominion-reject">Could not load this page</p>
+            ) : consumers.length === 0 ? (
+              <p className="px-5 py-6 text-sm text-slate-500">The data is not in yet.</p>
+            ) : (
+              <div className="flex-1 divide-y divide-slate-100">
+                {consumers.map((app) => (
+                  <div
+                    key={app.app_key || app.name}
+                    className="flex items-center justify-between px-5 py-4 transition-colors hover:bg-slate-50/60"
+                  >
+                    <span className="text-sm font-medium text-slate-800">{app.name || app.app_key}</span>
+                    <div className="flex items-center gap-3 text-xs text-slate-500">
+                      <span>Last sync</span>
+                      <span className="text-sm font-medium text-slate-700">
+                        {app.last_sync_at ? when(app.last_sync_at) : '—'}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
+
+        <section className="overflow-hidden rounded-xl border border-slate-200/90 bg-white shadow-sm">
+          <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-900">Recent changes</h2>
+              <p className="mt-0.5 text-xs text-slate-500">Audit trail of updates and manual modifications</p>
+            </div>
+          </div>
+          {changesFailed ? (
+            <p className="px-5 py-6 text-sm text-dominion-reject">Could not load this page</p>
+          ) : changes.length === 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse text-left text-xs">
+                <thead>
+                  <tr className="border-b border-slate-200/80 bg-slate-50/75 font-semibold text-slate-600">
+                    <th className="w-1/4 px-5 py-3">When</th>
+                    <th className="w-1/4 px-5 py-3">Dataset</th>
+                    <th className="w-1/4 px-5 py-3">Who</th>
+                    <th className="w-1/4 px-5 py-3">Reason</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td colSpan={4} className="py-12 text-center text-xs font-normal text-slate-400">
+                      The data is not in yet.
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse text-left text-xs">
+                <thead>
+                  <tr className="border-b border-slate-200/80 bg-slate-50/75 font-semibold text-slate-600">
+                    <th className="w-1/4 px-5 py-3">When</th>
+                    <th className="w-1/4 px-5 py-3">Dataset</th>
+                    <th className="w-1/4 px-5 py-3">Who</th>
+                    <th className="w-1/4 px-5 py-3">Reason</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {changes.map((row) => (
+                    <tr key={row.id} className="border-t border-slate-100">
+                      <td className="px-5 py-3 text-slate-500">{when(row.created_at)}</td>
+                      <td className="px-5 py-3 text-slate-700">{row.dataset || '—'}</td>
+                      <td className="px-5 py-3 text-slate-700">{row.actor || '—'}</td>
+                      <td className="px-5 py-3 text-slate-700">{row.reason || row.action || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      </div>
     </div>
   );
 }

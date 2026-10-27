@@ -1,5 +1,6 @@
+// Stitch: dominion-redesign/b61515e096084a9a998447bd94b1438d
 import React, { useCallback, useEffect, useState } from "react";
-import { Loader2, Package, Plus, RefreshCw, Tags, Truck, Link2, ShoppingCart, Trash2, ChevronDown, ChevronRight } from "lucide-react";
+import { Loader2, Package, Plus, RefreshCw, Tags, Truck, Link2, ShoppingCart, Trash2, ChevronDown, ChevronRight, Info } from "lucide-react";
 import { useAuth } from "../../auth/AuthContext";
 import { listVehicleCatalog } from "../../../services/vehicleCatalogService";
 import type { VehicleCatalogRecord } from "../../../types/vehicleCatalog";
@@ -443,29 +444,64 @@ export function PartsSourcingManager({ mode = "catalog" }: { mode?: "catalog" | 
   }
 
   return (
-    <div className="p-4 md:p-6 space-y-4 max-w-[1400px] mx-auto text-slate-900 dark:text-slate-100">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-            <Package className="w-6 h-6 text-amber-600" />
-            {mode === "supply" ? "Suppliers & prices" : "Parts catalog"}
-          </h1>
-          <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-            {mode === "supply" ? "Supplier reference prices. A customer's negotiated price stays in Roam Fleet admin." : "Find a vehicle, then add the parts it uses."}
-          </p>
+    <div className="mx-auto max-w-[1400px] space-y-6 overflow-y-auto px-8 py-6 text-slate-900">
+      <div className="flex items-start justify-between">
+        <div className="space-y-1">
+          <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-xs font-medium text-slate-500">
+            <span>Dominion</span>
+            <span className="text-slate-300">/</span>
+            <span>Master data</span>
+            <span className="text-slate-300">/</span>
+            <span>Vehicles</span>
+            <span className="text-slate-300">/</span>
+            <span className="font-semibold text-slate-900">Parts and suppliers</span>
+          </nav>
+          <div className="pt-1">
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900">Parts and suppliers</h1>
+            <p className="mt-0.5 text-xs text-slate-500">
+              Parts that fit a vehicle, and the suppliers who price them in JMD.
+            </p>
+          </div>
         </div>
-        <Button type="button" variant="outline" size="sm" onClick={() => void refreshTab()} disabled={busy} className="gap-2">
-          {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-          Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          <div className="inline-flex items-center gap-1.5 rounded border border-slate-200 bg-slate-100 px-2.5 py-1 font-mono text-xs font-medium text-slate-700">
+            <span className="h-2 w-2 rounded-full bg-blue-600" />
+            <span>REGION: JM-KGN</span>
+          </div>
+          <Button type="button" variant="outline" size="sm" onClick={() => void refreshTab()} disabled={busy} className="gap-2">
+            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+            Refresh
+          </Button>
+        </div>
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        {mode === "catalog" ? (
-          <Button type="button" size="sm" variant="default">Catalog</Button>
-        ) : (
-          <Button type="button" size="sm" variant="default" onClick={() => setArea("supply")}>Reference prices</Button>
-        )}
+      <div className="flex items-center gap-8 border-b border-slate-200">
+        <a
+          href="?page=parts-catalog"
+          className={`flex items-center gap-2 pb-3 text-sm ${
+            mode === "catalog"
+              ? "border-b-2 border-blue-600 font-semibold text-blue-600"
+              : "font-medium text-slate-500 hover:text-slate-800"
+          }`}
+        >
+          <span>Parts catalog</span>
+          <span className={`rounded px-1.5 font-mono text-[11px] ${mode === "catalog" ? "bg-blue-50 text-blue-600" : "bg-slate-100 text-slate-500"}`}>
+            {String(parts.length).padStart(2, "0")}
+          </span>
+        </a>
+        <a
+          href="?page=suppliers-prices"
+          className={`flex items-center gap-2 pb-3 text-sm ${
+            mode === "supply"
+              ? "border-b-2 border-blue-600 font-semibold text-blue-600"
+              : "font-medium text-slate-500 hover:text-slate-800"
+          }`}
+        >
+          <span>Suppliers and prices</span>
+          <span className={`rounded px-1.5 font-mono text-[11px] ${mode === "supply" ? "bg-blue-50 text-blue-600" : "bg-slate-100 text-slate-500"}`}>
+            {String(suppliers.length).padStart(2, "0")}
+          </span>
+        </a>
       </div>
 
       {mode === "catalog" && token ? <PartsCatalogHome token={token} /> : null}
@@ -1198,6 +1234,21 @@ export function PartsSourcingManager({ mode = "catalog" }: { mode?: "catalog" | 
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-4">
+        <div className="flex items-center gap-3">
+          <Info className="h-4 w-4 text-slate-400" aria-hidden />
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-slate-600">Additional vendor quotes:</span>
+            <span className="rounded border border-slate-200 bg-white px-2 py-0.5 font-mono text-xs font-semibold text-slate-700">
+              The data is not in yet
+            </span>
+          </div>
+        </div>
+        <div className="font-mono text-[11px] tracking-wider text-slate-400">
+          LOC: KINGSTON / PARISH REGISTRY JMD
+        </div>
+      </div>
     </div>
   );
 }

@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Roam Dominion Admin Console</title>
+<!-- Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {},
+          borderRadius: {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "full": "9999px"
+          },
+          spacing: {},
+          fontFamily: {
+            headline: ["Inter", "sans-serif"],
+            display: ["Inter", "sans-serif"],
+            body: ["Inter", "sans-serif"],
+            mono: ["JetBrains Mono", "monospace"],
+            label: ["Public Sans", "sans-serif"]
+          },
+          fontSize: {}
+        },
+      },
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+      font-size: 20px;
+      line-height: 1;
+      display: inline-block;
+      vertical-align: middle;
+    }
+    body {
+      font-family: 'Inter', sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 antialiased min-h-screen flex selection:bg-blue-100 selection:text-blue-700">
+<!-- SIDEBAR (Fixed, Desktop 1440 Shell, Navy #1e293b) -->
+<aside class="fixed top-0 left-0 h-screen w-64 flex flex-col bg-slate-800 border-r border-slate-700/50 z-30 select-none">
+<!-- Sidebar Header / Brand Anchor -->
+<div class="px-5 h-16 flex items-center gap-3 border-b border-slate-700/40 shrink-0">
+<div class="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white shadow-sm shrink-0">
+<span class="material-symbols-outlined text-[20px]" data-icon="shield">shield</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-headline text-base font-bold text-white tracking-tight leading-tight">Dominion</span>
+<span class="text-xs text-slate-400 font-normal leading-none tracking-normal mt-0.5">Roam Admin Console</span>
+</div>
+</div>
+<!-- Navigation Scroll Area -->
+<div class="flex-1 px-3 py-4 overflow-y-auto space-y-5 text-sm">
+<!-- 1. Overview (Standalone top destination) -->
+<div>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-700/50 transition-colors duration-150 text-sm" href="#"><span class="material-symbols-outlined text-slate-400" data-icon="dashboard">dashboard</span><span>Overview</span></a>
+</div>
+<!-- 2. Section: Master data -->
+<div class="space-y-1">
+<div class="px-3 pb-1 text-[11px] font-semibold tracking-wider text-slate-400 uppercase">
+          Master data
+        </div>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg bg-blue-600 text-white font-medium text-sm transition-colors duration-150" href="#"><span class="material-symbols-outlined text-white" data-icon="directions_car">directions_car</span><span>Vehicles</span></a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-700/50 transition-colors duration-150 text-sm" href="#">
+<span class="material-symbols-outlined text-slate-400" data-icon="pin_drop">pin_drop</span>
+<span>Places and Maps</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-700/50 transition-colors duration-150 text-sm" href="#">
+<span class="material-symbols-outlined text-slate-400" data-icon="local_gas_station">local_gas_station</span>
+<span>Fuel</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-700/50 transition-colors duration-150 text-sm" href="#">
+<span class="material-symbols-outlined text-slate-400" data-icon="toll">toll</span>
+<span>Tolls</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-700/50 transition-colors duration-150 text-sm" href="#">
+<span class="material-symbols-outlined text-slate-400" data-icon="receipt_long">receipt_long</span>
+<span>Tax and Vendors</span>
+</a>
+</div>
+<!-- 3. Section: Engines -->
+<div class="space-y-1">
+<div class="px-3 pb-1 text-[11px] font-semibold tracking-wider text-slate-400 uppercase">
+          Engines
+        </div>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-700/50 transition-colors duration-150 text-sm" href="#">
+<span class="material-symbols-outlined text-slate-400" data-icon="bolt">bolt</span>
+<span>Fuel Brain</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-700/50 transition-colors duration-150 text-sm" href="#">
+<span class="material-symbols-outlined text-slate-400" data-icon="alt_route">alt_route</span>
+<span>Toll Brain</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-700/50 transition-colors duration-150 text-sm" href="#">
+<span class="material-symbols-outlined text-slate-400" data-icon="hub">hub</span>
+<span>Matching Brain</span>
+</a>
+</div>
+<!-- 4. Section: Distribution -->
+<div class="space-y-1">
+<div class="px-3 pb-1 text-[11px] font-semibold tracking-wider text-slate-400 uppercase">
+          Distribution
+        </div>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-700/50 transition-colors duration-150 text-sm" href="#">
+<span class="material-symbols-outlined text-slate-400" data-icon="smartphone">smartphone</span>
+<span>Apps</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-700/50 transition-colors duration-150 text-sm" href="#">
+<span class="material-symbols-outlined text-slate-400" data-icon="api">api</span>
+<span>Data API</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-700/50 transition-colors duration-150 text-sm" href="#">
+<span class="material-symbols-outlined text-slate-400" data-icon="sync_alt">sync_alt</span>
+<span>Change requests</span>
+</a>
+</div>
+<!-- 5. Section: Platform -->
+<div class="space-y-1">
+<div class="px-3 pb-1 text-[11px] font-semibold tracking-wider text-slate-400 uppercase">
+          Platform
+        </div>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-700/50 transition-colors duration-150 text-sm" href="#">
+<span class="material-symbols-outlined text-slate-400" data-icon="badge">badge</span>
+<span>Staff and roles</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-700/50 transition-colors duration-150 text-sm" href="#">
+<span class="material-symbols-outlined text-slate-400" data-icon="history">history</span>
+<span>Activity log</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-700/50 transition-colors duration-150 text-sm" href="#">
+<span class="material-symbols-outlined text-slate-400" data-icon="tune">tune</span>
+<span>Platform Ops</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-700/50 transition-colors duration-150 text-sm" href="#">
+<span class="material-symbols-outlined text-slate-400" data-icon="settings">settings</span>
+<span>Global settings</span>
+</a>
+</div>
+<!-- 6. Section: Back office -->
+<div class="space-y-1">
+<div class="px-3 pb-1 text-[11px] font-semibold tracking-wider text-slate-400 uppercase">
+          Back office
+        </div>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-700/50 transition-colors duration-150 text-sm" href="#">
+<span class="material-symbols-outlined text-slate-400" data-icon="domain_verification">domain_verification</span>
+<span>GCT registrations</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-700/50 transition-colors duration-150 text-sm" href="#">
+<span class="material-symbols-outlined text-slate-400" data-icon="menu_book">menu_book</span>
+<span>Ledger</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-700/50 transition-colors duration-150 text-sm" href="#">
+<span class="material-symbols-outlined text-slate-400" data-icon="payments">payments</span>
+<span>Remittance</span>
+</a>
+</div>
+</div>
+<!-- Sidebar Footer Anchor -->
+<div class="p-3 border-t border-slate-700/50 shrink-0">
+<div class="flex items-center justify-between px-3 py-2 text-xs text-slate-400 rounded bg-slate-900/50 font-mono">
+<span class="flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
+          KGN-DC-01
+        </span>
+<span class="text-slate-400">JMD READY</span>
+</div>
+</div>
+</aside>
+<!-- MAIN WRAPPER (1440 Desktop Shell Canvas offset by 256px sidebar) -->
+<div class="pl-64 flex flex-col flex-1 min-w-0">
+<!-- TOP NAVBAR (Sticky White Nav, Search left, Actions right) -->
+<header class="sticky top-0 z-20 h-16 w-full bg-white border-b border-slate-200 px-8 flex items-center justify-between shadow-sm">
+<!-- Global Search -->
+<div class="flex items-center w-96 relative">
+<span class="material-symbols-outlined absolute left-3 text-slate-400 pointer-events-none text-[18px]" data-icon="search">search</span>
+<input class="w-full pl-9 pr-12 py-1.5 text-sm bg-slate-50 border border-slate-200 rounded-lg placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-600 focus:border-blue-600 focus:bg-white transition-all font-body" placeholder="Search entities, engines, routes..." type="text"/>
+<kbd class="absolute right-2.5 top-2 px-1.5 py-0.5 text-[10px] font-mono text-slate-400 bg-slate-100 border border-slate-200 rounded">⌘K</kbd>
+</div>
+<!-- Action Cluster -->
+<div class="flex items-center gap-3">
+<!-- Notification Button -->
+<button class="w-9 h-9 flex items-center justify-center rounded-lg text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors duration-150 relative" title="Notifications">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+<span class="absolute top-2 right-2 w-1.5 h-1.5 bg-blue-600 rounded-full ring-2 ring-white"></span>
+</button>
+<!-- Help Button -->
+<button class="w-9 h-9 flex items-center justify-center rounded-lg text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors duration-150" title="Help &amp; Reference">
+<span class="material-symbols-outlined" data-icon="help_outline">help_outline</span>
+</button>
+<div class="h-5 w-px bg-slate-200 mx-1"></div>
+<!-- Admin Profile -->
+<div class="flex items-center gap-3 pl-1 cursor-pointer group">
+<div class="w-8 h-8 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-semibold ring-2 ring-slate-100">
+            AD
+          </div>
+<div class="flex flex-col text-left">
+<span class="text-xs font-semibold text-slate-900 group-hover:text-blue-600 transition-colors leading-tight">Admin Console</span>
+<span class="text-[11px] text-slate-400 font-mono leading-none mt-0.5">Kingston / Superuser</span>
+</div>
+<span class="material-symbols-outlined text-slate-400 group-hover:text-slate-600 transition-colors text-[18px]" data-icon="expand_more">expand_more</span>
+</div>
+</div>
+</header>
+<!-- CONTENT CANVAS (Clean administrative canvas with title slot & empty state container) -->
+<main class="flex-1 p-8 bg-slate-50/60 flex flex-col min-h-[calc(100vh-4rem)]">
+<!-- Top Page Title Slot -->
+<div class="flex items-start justify-between pb-6 border-b border-slate-200 shrink-0"><div><nav class="flex items-center gap-1.5 text-xs text-slate-400 font-medium mb-1"><span>Dominion</span><span class="material-symbols-outlined text-[14px]" data-icon="chevron_right">chevron_right</span><span>Master data</span><span class="material-symbols-outlined text-[14px]" data-icon="chevron_right">chevron_right</span><span class="text-slate-700 font-semibold">Vehicles</span></nav><h1 class="text-2xl font-bold tracking-tight text-slate-900 font-headline">Vehicles</h1></div><div class="flex items-center gap-2"><button class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-blue-600 text-xs font-medium text-white hover:bg-blue-700 transition-colors shadow-sm"><span class="material-symbols-outlined text-[16px]" data-icon="add">add</span>+ Add record</button></div></div>
+<!-- Blank Canvas / Viewport Placement Container -->
+<div class="flex-1 mt-6 flex flex-col gap-4"><div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 flex flex-wrap items-center justify-between gap-3"><div class="flex flex-wrap items-center gap-3 flex-1 min-w-[280px]"><div class="relative w-64"><span class="material-symbols-outlined absolute left-3 top-2 text-slate-400 pointer-events-none text-[18px]" data-icon="search">search</span><input class="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-600 focus:border-blue-600 focus:bg-white transition-all font-body" placeholder="Search name" type="text"/></div><div class="flex items-center gap-2"><label class="text-xs text-slate-500 font-medium">Status:</label><select class="py-1.5 pl-2.5 pr-8 text-xs bg-slate-50 border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-600 focus:border-blue-600 font-body"><option selected="">All</option><option>Active</option><option>Inactive</option><option>Archived</option></select></div><div class="flex items-center gap-2"><label class="text-xs text-slate-500 font-medium">Publish:</label><select class="py-1.5 pl-2.5 pr-8 text-xs bg-slate-50 border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-600 focus:border-blue-600 font-body"><option selected="">All</option><option>Draft</option><option>Published</option></select></div></div><div class="flex items-center gap-2 text-xs border-l border-slate-200 pl-4 py-0.5"><span class="text-slate-400 font-medium text-[11px]">Legend:</span><span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-600 border border-slate-200">Draft</span><span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">Published</span></div></div><div class="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col flex-1 overflow-hidden"><div class="overflow-x-auto flex-1"><table class="w-full text-left border-collapse text-xs"><thead class="bg-slate-50/80 border-b border-slate-200 text-slate-600 font-semibold"><tr class="divide-x-0"><th class="py-3 px-4 w-10 text-center"><input class="rounded border-slate-300 text-blue-600 opacity-60 cursor-not-allowed" disabled="" type="checkbox"/></th><th class="py-3 px-4">Name</th><th class="py-3 px-4">Id <span class="text-[10px] font-normal font-mono text-slate-400 ml-1">(font-mono)</span></th><th class="py-3 px-4">Status</th><th class="py-3 px-4">Publish</th><th class="py-3 px-4">Updated</th></tr></thead><tbody><tr><td class="py-24 px-4 text-center" colspan="6"><div class="flex flex-col items-center justify-center"><div class="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 mb-2 border border-slate-200"><span class="material-symbols-outlined text-[20px]" data-icon="directions_car">directions_car</span></div><p class="text-sm font-medium text-slate-600 font-body">The data is not in yet.</p><p class="text-xs text-slate-400 mt-1 max-w-sm">No vehicle records have been synchronized or added to this partition.</p></div></td></tr></tbody></table></div><div class="bg-slate-50 border-t border-slate-200 px-4 py-3 flex items-center justify-between text-xs"><div class="flex items-center gap-2"><span class="material-symbols-outlined text-[16px] text-slate-400" data-icon="check_box_outline_blank">check_box_outline_blank</span><span class="text-slate-400 font-medium">None selected</span></div><div class="flex items-center gap-2"><button class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-400 opacity-60 cursor-not-allowed text-xs font-medium" disabled=""><span class="material-symbols-outlined text-[15px]" data-icon="verified">verified</span>Verify</button><button class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-400 opacity-60 cursor-not-allowed text-xs font-medium" disabled=""><span class="material-symbols-outlined text-[15px]" data-icon="download">download</span>Export CSV</button></div></div></div></div>
+</main>
+</div>
+</body></html>

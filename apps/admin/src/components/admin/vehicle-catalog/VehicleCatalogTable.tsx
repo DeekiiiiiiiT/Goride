@@ -1,206 +1,134 @@
+// Stitch: dominion-redesign/d955104c499d440581c90e8a17bfc573 — flat catalog table (S8)
 import React from "react";
-import { ChevronRight, Eye, Pencil, Trash2 } from "lucide-react";
+import { Eye, Pencil, Trash2 } from "lucide-react";
 import { formatCatalogProductionWindow, type VehicleCatalogRecord } from "../../../types/vehicleCatalog";
-import { Button } from "../../ui/button";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "../../ui/table";
-
-export type VehicleCatalogGroupedMake = {
-  make: string;
-  modelGroups: { model: string; rows: VehicleCatalogRecord[] }[];
-  variantCount: number;
-};
 
 export type VehicleCatalogTableProps = {
   items: VehicleCatalogRecord[];
-  groupedCatalog: VehicleCatalogGroupedMake[];
-  expandedMakes: Set<string>;
-  expandedModels: Set<string>;
-  onToggleMake: (make: string) => void;
-  onToggleModel: (make: string, model: string) => void;
-  modelGroupKey: (make: string, model: string) => string;
+  viewingId?: string | null;
   onView: (row: VehicleCatalogRecord) => void;
   onEdit: (row: VehicleCatalogRecord) => void;
   onDelete: (row: VehicleCatalogRecord) => void;
 };
 
+function fuelLabel(row: VehicleCatalogRecord): string {
+  const parts = [row.fuel_category, row.fuel_type].filter((x) => x != null && String(x).trim() !== "");
+  return parts.length ? parts.map((x) => String(x).trim()).join(" · ") : "—";
+}
+
+function modelLabel(row: VehicleCatalogRecord): string {
+  const trim = row.catalog_trim?.trim();
+  if (trim && !row.model.toLowerCase().includes(trim.toLowerCase())) {
+    return `${row.model} ${trim}`;
+  }
+  return row.model;
+}
+
+/** Catalog rows are live master data — treat as Active (no separate lifecycle status yet). */
+function StatusPill() {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-medium text-[#15803d]">
+      <span className="h-1.5 w-1.5 rounded-full bg-[#15803d]" />
+      Active
+    </span>
+  );
+}
+
 export function VehicleCatalogTable({
   items,
-  groupedCatalog,
-  expandedMakes,
-  expandedModels,
-  onToggleMake,
-  onToggleModel,
-  modelGroupKey,
+  viewingId = null,
   onView,
   onEdit,
   onDelete,
 }: VehicleCatalogTableProps) {
   return (
-      <div className="rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900/60 shadow-sm overflow-hidden">
-        <Table className="[&_th]:!text-slate-700 [&_td]:!text-slate-800 [&_tbody_tr]:border-slate-200 [&_tbody_tr:hover]:bg-slate-50 dark:[&_th]:!text-slate-300 dark:[&_td]:!text-slate-200 dark:[&_tbody_tr]:border-slate-800 dark:[&_tbody_tr:hover]:bg-slate-800/40">
-        <TableHeader>
-          <TableRow className="border-slate-200 hover:bg-transparent bg-slate-50 dark:border-slate-700 dark:bg-slate-800/90">
-            <TableHead className="!bg-transparent text-slate-700 dark:text-slate-300">Make</TableHead>
-            <TableHead className="!bg-transparent text-slate-700 dark:text-slate-300">Model</TableHead>
-            <TableHead className="!bg-transparent text-slate-700 dark:text-slate-300">Years</TableHead>
-            <TableHead
-              className="hidden md:table-cell !bg-transparent text-slate-700 dark:text-slate-300"
-              title="Series, facelift phase, or trim grade"
-            >
-              Series / facelift
-            </TableHead>
-            <TableHead
-              className="hidden lg:table-cell !bg-transparent text-slate-700 dark:text-slate-300"
-              title="Full model code or chassis"
-            >
-              Code
-            </TableHead>
-            <TableHead className="hidden lg:table-cell !bg-transparent text-slate-700 dark:text-slate-300">Body</TableHead>
-            <TableHead className="w-[140px] text-right !bg-transparent text-slate-700 dark:text-slate-300">Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {items.length === 0 ? (
-            <TableRow className="hover:bg-transparent border-slate-200 dark:border-slate-800">
-              <TableCell colSpan={7} className="text-center text-slate-500 py-12">
-                No vehicles yet. Add one to get started.
-              </TableCell>
-            </TableRow>
-          ) : (
-            groupedCatalog.flatMap((makeGroup) => {
-              const makeOpen = expandedMakes.has(makeGroup.make);
-              const rowsOut: React.ReactNode[] = [];
-              rowsOut.push(
-                <TableRow
-                  key={`make:${makeGroup.make}`}
-                  className="border-slate-200 !bg-slate-50 hover:!bg-slate-100 [&_td]:!bg-slate-50 hover:[&_td]:!bg-slate-100 [&_td]:!text-slate-900 dark:border-slate-700 dark:!bg-slate-800 dark:hover:!bg-slate-700/95 dark:[&_td]:!bg-slate-800 dark:hover:[&_td]:!bg-slate-700/95 dark:[&_td]:!text-slate-100"
-                >
-                  <TableCell className="!bg-slate-50 font-semibold !text-slate-900 dark:!bg-slate-800 dark:!text-slate-100">
-                    <button
-                      type="button"
-                      className="inline-flex items-center gap-2 rounded-md py-1 pr-2 text-left -ml-1 text-slate-900 hover:bg-slate-100 dark:text-slate-100 dark:hover:bg-slate-700/80"
-                      onClick={() => onToggleMake(makeGroup.make)}
-                      aria-expanded={makeOpen}
-                    >
-                      <ChevronRight
-                        className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${makeOpen ? "rotate-90" : ""}`}
-                        aria-hidden
-                      />
-                      {makeGroup.make}
-                    </button>
-                  </TableCell>
-                  <TableCell className="!bg-slate-50 !text-slate-600 text-sm font-medium dark:!bg-slate-800 dark:!text-slate-400" colSpan={5}>
-                    {makeGroup.modelGroups.length} model
-                    {makeGroup.modelGroups.length === 1 ? "" : "s"} · {makeGroup.variantCount} variant
-                    {makeGroup.variantCount === 1 ? "" : "s"}
-                  </TableCell>
-                  <TableCell className="!bg-slate-50 dark:!bg-slate-800" />
-                </TableRow>,
-              );
-              if (!makeOpen) return rowsOut;
-
-              for (const mg of makeGroup.modelGroups) {
-                const mk = modelGroupKey(makeGroup.make, mg.model);
-                const modelOpen = expandedModels.has(mk);
-                rowsOut.push(
-                  <TableRow
-                    key={`model:${mk}`}
-                    className="border-slate-200 !bg-white hover:!bg-slate-50 [&_td]:!bg-white hover:[&_td]:!bg-slate-50 [&_td]:!text-slate-900 dark:border-slate-700/80 dark:!bg-slate-900/85 dark:hover:!bg-slate-800/90 dark:[&_td]:!bg-slate-900/85 dark:hover:[&_td]:!bg-slate-800/90 dark:[&_td]:!text-slate-100"
+    <div className="overflow-hidden rounded-[12px] border border-slate-200 bg-white shadow-2xs">
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse text-left text-xs">
+          <thead>
+            <tr className="border-b border-slate-200 bg-slate-50/80 text-[11px] font-semibold uppercase tracking-wider text-slate-600">
+              <th className="px-5 py-3">Make</th>
+              <th className="px-5 py-3">Model</th>
+              <th className="px-5 py-3">Year</th>
+              <th className="px-5 py-3">Fuel</th>
+              <th className="px-5 py-3">Body</th>
+              <th className="px-5 py-3">Status</th>
+              <th className="px-5 py-3 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 text-slate-700">
+            {items.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="px-5 py-12 text-center text-xs font-normal text-slate-400">
+                  The data is not in yet.
+                </td>
+              </tr>
+            ) : (
+              items.map((row) => {
+                const inspecting = viewingId === row.id;
+                return (
+                  <tr
+                    key={row.id}
+                    className={
+                      inspecting
+                        ? "bg-blue-50/40 transition-colors hover:bg-blue-50/70"
+                        : "transition-colors hover:bg-slate-50"
+                    }
                   >
-                    <TableCell className="!bg-white pl-8 font-medium !text-slate-900 dark:!bg-slate-900/85 dark:!text-slate-100">
-                      <button
-                        type="button"
-                        className="inline-flex items-center gap-2 rounded-md py-1 pr-2 text-left -ml-1 text-slate-900 hover:bg-slate-100 dark:text-slate-100 dark:hover:bg-slate-800"
-                        onClick={() => onToggleModel(makeGroup.make, mg.model)}
-                        aria-expanded={modelOpen}
-                      >
-                        <ChevronRight
-                          className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${modelOpen ? "rotate-90" : ""}`}
-                          aria-hidden
-                        />
-                        {mg.model}
-                      </button>
-                    </TableCell>
-                    <TableCell className="!bg-white !text-slate-600 text-sm font-medium dark:!bg-slate-900/85 dark:!text-slate-400" colSpan={5}>
-                      {mg.rows.length} variant{mg.rows.length === 1 ? "" : "s"}
-                    </TableCell>
-                    <TableCell className="!bg-white dark:!bg-slate-900/85" />
-                  </TableRow>,
+                    <td className="px-5 py-3.5 font-medium text-slate-900">
+                      <span className="inline-flex items-center gap-2">
+                        {inspecting ? <span className="h-2 w-2 shrink-0 rounded-full bg-blue-600" /> : null}
+                        {row.make}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3.5 font-semibold text-slate-900">{modelLabel(row)}</td>
+                    <td className="px-5 py-3.5 font-mono text-slate-600">
+                      {formatCatalogProductionWindow(row)}
+                    </td>
+                    <td className="px-5 py-3.5">{fuelLabel(row)}</td>
+                    <td className="px-5 py-3.5 text-slate-600">{row.body_type ?? "—"}</td>
+                    <td className="px-5 py-3.5">
+                      <StatusPill />
+                    </td>
+                    <td className="px-5 py-3.5 text-right">
+                      <div className="inline-flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => onView(row)}
+                          title="View specs"
+                          className={
+                            inspecting
+                              ? "rounded-md bg-blue-100 p-1.5 text-blue-600 shadow-2xs transition-colors hover:bg-blue-200"
+                              : "rounded-md p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                          }
+                        >
+                          <Eye className="h-[18px] w-[18px]" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onEdit(row)}
+                          title="Edit vehicle"
+                          className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                        >
+                          <Pencil className="h-[18px] w-[18px]" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onDelete(row)}
+                          title="Delete vehicle"
+                          className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600"
+                        >
+                          <Trash2 className="h-[18px] w-[18px]" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
                 );
-                if (!modelOpen) continue;
-                for (const row of mg.rows) {
-                  rowsOut.push(
-                    <TableRow
-                      key={row.id}
-                      className="border-slate-200 !bg-slate-50 hover:!bg-slate-100 data-[state=selected]:!bg-slate-100 [&_td]:!text-slate-700 dark:border-slate-800 dark:!bg-slate-950/40 dark:hover:!bg-slate-800/35 dark:data-[state=selected]:!bg-slate-800/50 dark:[&_td]:!text-slate-200"
-                    >
-                      <TableCell
-                        className="w-8 min-w-[2rem] border-l-2 border-slate-300 bg-slate-50 pl-3 dark:border-slate-600 dark:bg-slate-900/50"
-                        aria-hidden
-                      />
-                      <TableCell className="!text-slate-900 dark:!text-slate-100 font-medium">{row.model}</TableCell>
-                      <TableCell className="!text-slate-700 dark:!text-slate-200 tabular-nums">
-                        {formatCatalogProductionWindow(row)}
-                      </TableCell>
-                      <TableCell className="hidden md:table-cell text-slate-600 dark:text-slate-400">
-                        {row.trim_series ?? "—"}
-                      </TableCell>
-                      <TableCell className="hidden lg:table-cell text-slate-600 dark:text-slate-400">
-                        {row.full_model_code ?? row.chassis_code ?? row.generation ?? "—"}
-                      </TableCell>
-                      <TableCell className="hidden lg:table-cell text-slate-600 dark:text-slate-400">
-                        {row.body_type ?? "—"}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="inline-flex gap-1 justify-end">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800"
-                            onClick={() => onView(row)}
-                            title="View details"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800"
-                            onClick={() => onEdit(row)}
-                            title="Edit"
-                          >
-                            <Pencil className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-red-400 hover:text-red-300 hover:bg-red-950/50"
-                            onClick={() => onDelete(row)}
-                            title="Delete"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>,
-                  );
-                }
-              }
-              return rowsOut;
-            })
-          )}
-        </TableBody>
-      </Table>
+              })
+            )}
+          </tbody>
+        </table>
       </div>
+    </div>
   );
 }

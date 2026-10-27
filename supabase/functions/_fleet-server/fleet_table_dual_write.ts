@@ -22,8 +22,8 @@ function tableName(table: string): string {
 /** Global catalogs. Every other fleet domain belongs to one company. */
 const GLOBAL_DOMAINS = new Set(["stations", "toll_plazas", "platform_vendors"]);
 const MASTER_TABLES = new Set(["stations", "toll_plazas", "platform_vendors"]);
-// payload_json stays on these three tables. Typed columns do not hold contact,
-// amenities, parish text, or plaza direction. Dropping the column would erase them.
+// payload_json stays. Contact, amenities, parish text, and plaza direction
+// also live on typed columns. Drop the blob only after every reader uses those columns.
 
 async function logMetric(domain: FleetDomain, status: string, reason?: string, legacyKvId?: string) {
   try {

@@ -22,7 +22,7 @@ interface Customer {
 
 export function DatabaseManagement({ onNavigate, customersUrl }: DatabaseManagementProps) {
   const { accessToken } = usePlatformSession();
-  const listUrl = customersUrl ?? `${API_ENDPOINTS.admin}/admin/customers`;
+  const listUrl = customersUrl ?? `${API_ENDPOINTS.admin}/fleet-admin/customers`;
 
   const { data: customers = [], isLoading } = useQuery<Customer[]>({
     queryKey: ['adminCustomers', listUrl],

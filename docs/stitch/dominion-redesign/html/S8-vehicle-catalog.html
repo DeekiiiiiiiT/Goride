@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Dominion - Vehicle Catalog</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;family=Public+Sans:wght@500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "primary-dim": "#485367",
+            "error-container": "#fa746f",
+            "on-primary-fixed-variant": "#515c70",
+            "surface-variant": "#e1e2ed",
+            "on-error": "#fff7f6",
+            "on-secondary-fixed": "#003798",
+            "on-primary-fixed": "#354053",
+            "surface-tint": "#545f74",
+            "surface-bright": "#faf8fe",
+            "on-tertiary-container": "#00612a",
+            "on-surface": "#30323b",
+            "on-secondary-container": "#0047c0",
+            "on-tertiary": "#e9ffe7",
+            "secondary-container": "#dbe1ff",
+            "surface-container": "#eeedf6",
+            "secondary-fixed": "#dbe1ff",
+            "on-secondary": "#faf8ff",
+            "on-tertiary-fixed-variant": "#006c30",
+            "inverse-on-surface": "#9d9ca2",
+            "secondary-dim": "#0049c3",
+            "tertiary-fixed": "#98fba9",
+            "on-surface-variant": "#5d5f68",
+            "secondary-fixed-dim": "#c7d3ff",
+            "surface-container-highest": "#e1e2ed",
+            "error": "#b91c1c",
+            "on-secondary-fixed-variant": "#0050d5",
+            "outline-variant": "#b0b1bc",
+            "on-error-container": "#6e0a12",
+            "primary": "#545f74",
+            "inverse-primary": "#dae6fe",
+            "surface": "#faf8fe",
+            "on-tertiary-fixed": "#004c20",
+            "tertiary-dim": "#00612a",
+            "primary-fixed": "#d8e3fb",
+            "on-primary": "#f8f8ff",
+            "tertiary-container": "#98fba9",
+            "inverse-surface": "#0d0e12",
+            "surface-container-low": "#f4f3fa",
+            "on-background": "#30323b",
+            "secondary": "#316bf3",
+            "on-primary-container": "#475266",
+            "surface-container-lowest": "#ffffff",
+            "surface-container-high": "#e8e7f1",
+            "background": "#faf8fe",
+            "outline": "#797a84",
+            "error-dim": "#67040d",
+            "tertiary": "#15803d",
+            "primary-fixed-dim": "#cad5ed",
+            "surface-dim": "#d9d9e4",
+            "primary-container": "#d8e3fb",
+            "tertiary-fixed-dim": "#8aec9c",
+            "dominion-navy": "#1e293b",
+            "dominion-deep": "#0f172a",
+            "dominion-blue": "#316bf3",
+            "dominion-green": "#15803d",
+            "dominion-amber": "#d97706",
+            "dominion-red": "#b91c1c"
+          },
+          fontFamily: {
+            headline: ["Inter", "sans-serif"],
+            display: ["Inter", "sans-serif"],
+            body: ["Inter", "sans-serif"],
+            label: ["Public Sans", "sans-serif"],
+            mono: ["JetBrains Mono", "monospace"]
+          }
+        },
+      },
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      line-height: 1;
+      display: inline-block;
+      vertical-align: middle;
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.4);
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: rgba(100, 116, 139, 0.35);
+      border-radius: 3px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: rgba(100, 116, 139, 0.6);
+    }
+  </style>
+</head>
+<body class="bg-[#f8fafc] text-slate-800 font-body antialiased min-h-screen flex selection:bg-blue-100 selection:text-blue-900">
+<!-- Left Sidebar (Strict Dominion Admin Shell) -->
+<aside class="fixed top-0 left-0 h-screen w-64 flex flex-col bg-[#1e293b] border-r border-slate-700/50 z-40 select-none shadow-none">
+<!-- Brand Header -->
+<div class="px-5 py-4 border-b border-slate-800/80 flex items-center gap-3">
+<div class="w-9 h-9 rounded-lg bg-blue-600 flex items-center justify-center text-white shadow-sm flex-shrink-0">
+<span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 1;">shield</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-headline text-base font-bold text-white tracking-tight leading-tight">Dominion</span>
+<span class="text-[11px] font-medium text-slate-400 tracking-wide uppercase">Roam Admin Console</span>
+</div>
+</div>
+<!-- Navigation Scroll Container -->
+<div class="flex-1 overflow-y-auto custom-scrollbar px-3 py-4 space-y-5 text-xs">
+<!-- Top Section -->
+<div>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined text-[18px]">dashboard</span>
+<span>Overview</span>
+</a>
+</div>
+<!-- Master Data Group -->
+<div>
+<div class="px-3 pb-1.5 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Master data</div>
+<div class="space-y-0.5">
+<!-- Active: Vehicles -->
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg bg-[#316bf3] text-white font-medium text-sm shadow-sm" href="#">
+<span class="material-symbols-outlined text-[18px]">database</span>
+<span>Vehicles</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined text-[18px]">pin_drop</span>
+<span>Places and Maps</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined text-[18px]">local_gas_station</span>
+<span>Fuel</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined text-[18px]">toll</span>
+<span>Tolls</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined text-[18px]">receipt_long</span>
+<span>Tax and Vendors</span>
+</a>
+</div>
+</div>
+<!-- Engines Group -->
+<div>
+<div class="px-3 pb-1.5 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Engines</div>
+<div class="space-y-0.5">
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined text-[18px]">psychology</span>
+<span>Fuel Brain</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined text-[18px]">route</span>
+<span>Toll Brain</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined text-[18px]">hub</span>
+<span>Matching Brain</span>
+</a>
+</div>
+</div>
+<!-- Distribution Group -->
+<div>
+<div class="px-3 pb-1.5 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Distribution</div>
+<div class="space-y-0.5">
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined text-[18px]">share</span>
+<span>Apps</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined text-[18px]">api</span>
+<span>Data API</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined text-[18px]">sync_alt</span>
+<span>Change requests</span>
+</a>
+</div>
+</div>
+<!-- Platform Group -->
+<div>
+<div class="px-3 pb-1.5 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Platform</div>
+<div class="space-y-0.5">
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined text-[18px]">manage_accounts</span>
+<span>Staff and roles</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined text-[18px]">history</span>
+<span>Activity log</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined text-[18px]">settings</span>
+<span>Platform Ops</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined text-[18px]">tune</span>
+<span>Global settings</span>
+</a>
+</div>
+</div>
+<!-- Back Office Group -->
+<div>
+<div class="px-3 pb-1.5 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Back office</div>
+<div class="space-y-0.5">
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined text-[18px]">account_balance</span>
+<span>GCT registrations</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined text-[18px]">menu_book</span>
+<span>Ledger</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined text-[18px]">payments</span>
+<span>Remittance</span>
+</a>
+</div>
+</div>
+</div>
+<!-- Bottom Status Pill -->
+<div class="p-3 border-t border-slate-800 bg-slate-900/60">
+<div class="flex items-center justify-between px-3 py-2 rounded-md bg-slate-800/80 border border-slate-700/60">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+<span class="font-mono text-[11px] font-semibold tracking-wider text-slate-200">KGN-DC-01</span>
+</div>
+<span class="font-mono text-[10px] text-slate-400 tracking-tight">JMD READY</span>
+</div>
+</div>
+</aside>
+<!-- Main Content Shell -->
+<div class="pl-64 flex-1 flex flex-col min-w-0">
+<!-- Top Navigation Bar -->
+<header class="sticky top-0 z-30 h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8">
+<!-- Search Input on Left -->
+<div class="relative w-96 max-w-md">
+<div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+<span class="material-symbols-outlined text-[19px]">search</span>
+</div>
+<input class="w-full pl-9 pr-14 py-2 bg-slate-50 hover:bg-slate-100/70 focus:bg-white text-xs text-slate-800 rounded-lg border border-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-colors placeholder:text-slate-400" placeholder="Search entities, engines, routes..." type="text"/>
+<div class="absolute inset-y-0 right-0 pr-2.5 flex items-center pointer-events-none">
+<kbd class="inline-flex items-center px-1.5 py-0.5 text-[10px] font-mono text-slate-400 bg-white border border-slate-200 rounded shadow-2xs">⌘K</kbd>
+</div>
+</div>
+<!-- Trailing Cluster -->
+<div class="flex items-center gap-3">
+<button class="relative p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors" title="Notifications">
+<span class="material-symbols-outlined text-[20px]">notifications</span>
+<span class="absolute top-2 right-2 w-2 h-2 bg-blue-600 rounded-full"></span>
+</button>
+<button class="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors" title="Help &amp; Reference">
+<span class="material-symbols-outlined text-[20px]">help_outline</span>
+</button>
+<div class="h-5 w-px bg-slate-200 mx-1"></div>
+<!-- User Badge -->
+<div class="flex items-center gap-3 pl-1">
+<div class="w-8 h-8 rounded-full bg-slate-800 text-white flex items-center justify-center font-mono text-xs font-semibold ring-2 ring-slate-100">
+            AD
+          </div>
+<div class="flex flex-col text-left">
+<span class="text-xs font-semibold text-slate-900 leading-tight">AD Kingston</span>
+<span class="text-[10px] font-mono text-blue-600 font-medium leading-none">Superuser</span>
+</div>
+</div>
+</div>
+</header>
+<!-- Page Body Area -->
+<main class="flex-1 p-8 space-y-6 max-w-[1440px] mx-auto w-full">
+<!-- Breadcrumb -->
+<nav class="flex items-center gap-1.5 text-xs text-slate-500">
+<span class="hover:text-slate-700 cursor-pointer">Dominion</span>
+<span class="material-symbols-outlined text-[14px] text-slate-400">chevron_right</span>
+<span class="hover:text-slate-700 cursor-pointer">Master data</span>
+<span class="material-symbols-outlined text-[14px] text-slate-400">chevron_right</span>
+<span class="hover:text-slate-700 cursor-pointer">Vehicles</span>
+<span class="material-symbols-outlined text-[14px] text-slate-400">chevron_right</span>
+<span class="text-slate-900 font-medium">Vehicle catalog</span>
+</nav>
+<!-- Page Header -->
+<div class="flex flex-col gap-1">
+<h1 class="text-2xl font-bold font-headline text-slate-900 tracking-tight">Vehicle catalog</h1>
+<p class="text-sm text-slate-500">Makes, models, and the record you open with the eye to read specs.</p>
+</div>
+<!-- Action / Toolbar -->
+<div class="flex flex-wrap items-center justify-between gap-4">
+<div class="flex items-center gap-3 flex-1 max-w-lg">
+<!-- Search input -->
+<div class="relative w-full max-w-xs">
+<span class="material-symbols-outlined absolute inset-y-0 left-0 pl-3 flex items-center text-[18px] text-slate-400 pointer-events-none">search</span>
+<input class="w-full pl-9 pr-3 py-2 text-xs bg-white border border-slate-200 rounded-lg text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 shadow-2xs" placeholder="Search make or model" type="text"/>
+</div>
+<!-- Status filter dropdown -->
+<div class="relative w-44">
+<select class="w-full pl-3 pr-8 py-2 text-xs bg-white border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 shadow-2xs cursor-pointer appearance-none">
+<option selected="" value="all">Status: All</option>
+<option value="active">Active</option>
+<option value="maintenance">Maintenance</option>
+<option value="inactive">Inactive</option>
+</select>
+<span class="material-symbols-outlined absolute right-2.5 top-2.5 text-[16px] text-slate-400 pointer-events-none">expand_more</span>
+</div>
+</div>
+<!-- Primary Action -->
+<button class="inline-flex items-center gap-2 px-4 py-2 bg-[#316bf3] hover:bg-blue-600 active:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors">
+<span class="material-symbols-outlined text-[16px]">add</span>
+<span>Import CSV</span>
+</button>
+</div>
+<!-- Vehicle Data Table Card -->
+<div class="bg-white border border-slate-200 rounded-[12px] shadow-2xs overflow-hidden">
+<div class="overflow-x-auto">
+<table class="w-full text-left text-xs border-collapse">
+<thead>
+<tr class="bg-slate-50/80 border-b border-slate-200 text-slate-600 font-semibold uppercase tracking-wider text-[11px]">
+<th class="py-3 px-5">Make</th>
+<th class="py-3 px-5">Model</th>
+<th class="py-3 px-5">Year</th>
+<th class="py-3 px-5">Fuel</th>
+<th class="py-3 px-5">Body</th>
+<th class="py-3 px-5">Status</th>
+<th class="py-3 px-5 text-right">Actions</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-slate-100 text-slate-700">
+<!-- Row 1: Toyota Hiace (Selected/Inspecting) -->
+<tr class="bg-blue-50/40 hover:bg-blue-50/70 transition-colors">
+<td class="py-3.5 px-5 font-medium text-slate-900 flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-blue-600"></span>
+                  Toyota
+                </td>
+<td class="py-3.5 px-5 font-semibold text-slate-900">Hiace High Roof</td>
+<td class="py-3.5 px-5 font-mono text-slate-600">2018</td>
+<td class="py-3.5 px-5">Diesel</td>
+<td class="py-3.5 px-5 text-slate-600">Van (15-Seater)</td>
+<td class="py-3.5 px-5">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-[#15803d] border border-emerald-200">
+<span class="w-1.5 h-1.5 rounded-full bg-[#15803d]"></span>
+                    Active
+                  </span>
+</td>
+<td class="py-3.5 px-5 text-right">
+<div class="inline-flex items-center gap-1">
+<button class="p-1.5 text-blue-600 bg-blue-100 rounded-md hover:bg-blue-200 transition-colors shadow-2xs" title="View specs (Active inspection)">
+<span class="material-symbols-outlined text-[18px]">visibility</span>
+</button>
+<button class="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-md transition-colors" title="Edit vehicle">
+<span class="material-symbols-outlined text-[18px]">edit</span>
+</button>
+</div>
+</td>
+</tr>
+<!-- Row 2: Nissan Caravan NV350 -->
+<tr class="hover:bg-slate-50 transition-colors">
+<td class="py-3.5 px-5 font-medium text-slate-900">Nissan</td>
+<td class="py-3.5 px-5 font-medium text-slate-900">Caravan NV350</td>
+<td class="py-3.5 px-5 font-mono text-slate-600">2019</td>
+<td class="py-3.5 px-5">Diesel</td>
+<td class="py-3.5 px-5 text-slate-600">Panel Van</td>
+<td class="py-3.5 px-5">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-[#15803d] border border-emerald-200">
+<span class="w-1.5 h-1.5 rounded-full bg-[#15803d]"></span>
+                    Active
+                  </span>
+</td>
+<td class="py-3.5 px-5 text-right">
+<div class="inline-flex items-center gap-1">
+<button class="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-md transition-colors" title="View specs">
+<span class="material-symbols-outlined text-[18px]">visibility</span>
+</button>
+<button class="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-md transition-colors" title="Edit vehicle">
+<span class="material-symbols-outlined text-[18px]">edit</span>
+</button>
+</div>
+</td>
+</tr>
+<!-- Row 3: Honda Fit GP5 Hybrid -->
+<tr class="hover:bg-slate-50 transition-colors">
+<td class="py-3.5 px-5 font-medium text-slate-900">Honda</td>
+<td class="py-3.5 px-5 font-medium text-slate-900">Fit GP5 Hybrid</td>
+<td class="py-3.5 px-5 font-mono text-slate-600">2017</td>
+<td class="py-3.5 px-5">Hybrid</td>
+<td class="py-3.5 px-5 text-slate-600">Hatchback</td>
+<td class="py-3.5 px-5">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-[#15803d] border border-emerald-200">
+<span class="w-1.5 h-1.5 rounded-full bg-[#15803d]"></span>
+                    Active
+                  </span>
+</td>
+<td class="py-3.5 px-5 text-right">
+<div class="inline-flex items-center gap-1">
+<button class="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-md transition-colors" title="View specs">
+<span class="material-symbols-outlined text-[18px]">visibility</span>
+</button>
+<button class="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-md transition-colors" title="Edit vehicle">
+<span class="material-symbols-outlined text-[18px]">edit</span>
+</button>
+</div>
+</td>
+</tr>
+<!-- Row 4: Isuzu NPR 400 Turbo -->
+<tr class="hover:bg-slate-50 transition-colors">
+<td class="py-3.5 px-5 font-medium text-slate-900">Isuzu</td>
+<td class="py-3.5 px-5 font-medium text-slate-900">NPR 400 Turbo</td>
+<td class="py-3.5 px-5 font-mono text-slate-600">2020</td>
+<td class="py-3.5 px-5">Diesel</td>
+<td class="py-3.5 px-5 text-slate-600">Light Truck</td>
+<td class="py-3.5 px-5">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-amber-50 text-[#d97706] border border-amber-200">
+<span class="w-1.5 h-1.5 rounded-full bg-[#d97706]"></span>
+                    Maintenance
+                  </span>
+</td>
+<td class="py-3.5 px-5 text-right">
+<div class="inline-flex items-center gap-1">
+<button class="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-md transition-colors" title="View specs">
+<span class="material-symbols-outlined text-[18px]">visibility</span>
+</button>
+<button class="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-md transition-colors" title="Edit vehicle">
+<span class="material-symbols-outlined text-[18px]">edit</span>
+</button>
+</div>
+</td>
+</tr>
+<!-- Row 5: Toyota Probox DX -->
+<tr class="hover:bg-slate-50 transition-colors">
+<td class="py-3.5 px-5 font-medium text-slate-900">Toyota</td>
+<td class="py-3.5 px-5 font-medium text-slate-900">Probox DX</td>
+<td class="py-3.5 px-5 font-mono text-slate-600">2016</td>
+<td class="py-3.5 px-5">Petrol</td>
+<td class="py-3.5 px-5 text-slate-600">Station Wagon</td>
+<td class="py-3.5 px-5">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-[#15803d] border border-emerald-200">
+<span class="w-1.5 h-1.5 rounded-full bg-[#15803d]"></span>
+                    Active
+                  </span>
+</td>
+<td class="py-3.5 px-5 text-right">
+<div class="inline-flex items-center gap-1">
+<button class="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-md transition-colors" title="View specs">
+<span class="material-symbols-outlined text-[18px]">visibility</span>
+</button>
+<button class="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-md transition-colors" title="Edit vehicle">
+<span class="material-symbols-outlined text-[18px]">edit</span>
+</button>
+</div>
+</td>
+</tr>
+<!-- Row 6: Mitsubishi Fuso Canter -->
+<tr class="hover:bg-slate-50 transition-colors">
+<td class="py-3.5 px-5 font-medium text-slate-900">Mitsubishi</td>
+<td class="py-3.5 px-5 font-medium text-slate-900">Fuso Canter</td>
+<td class="py-3.5 px-5 font-mono text-slate-600">2021</td>
+<td class="py-3.5 px-5">Diesel</td>
+<td class="py-3.5 px-5 text-slate-600">Box Truck</td>
+<td class="py-3.5 px-5">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-600 border border-slate-200">
+<span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+                    Inactive
+                  </span>
+</td>
+<td class="py-3.5 px-5 text-right">
+<div class="inline-flex items-center gap-1">
+<button class="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-md transition-colors" title="View specs">
+<span class="material-symbols-outlined text-[18px]">visibility</span>
+</button>
+<button class="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-md transition-colors" title="Edit vehicle">
+<span class="material-symbols-outlined text-[18px]">edit</span>
+</button>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<!-- Read-Only Spec Overlay / Panel (Toyota Hiace High Roof 2018) -->
+<section class="bg-white border border-slate-200 rounded-[12px] shadow-sm overflow-hidden mt-6">
+<!-- Inspector Top Header Bar -->
+<div class="px-6 py-4 bg-slate-50/90 border-b border-slate-200 flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="w-7 h-7 rounded-md bg-blue-600/10 text-blue-600 flex items-center justify-center">
+<span class="material-symbols-outlined text-[18px]">verified</span>
+</div>
+<div>
+<h2 class="text-sm font-bold text-slate-900 font-headline leading-tight">
+                Specification Sheet: Toyota Hiace High Roof (2018)
+              </h2>
+<p class="text-[11px] text-slate-500 mt-0.5 font-mono">VIN PREFIX: KDH201R- | JAMAICA FLEET RECORD</p>
+</div>
+</div>
+<div class="flex items-center gap-3">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-100 border border-slate-200 text-slate-700 text-[10px] font-mono font-semibold tracking-wider">
+<span class="w-1.5 h-1.5 rounded-full bg-blue-600"></span>
+              READ-ONLY INSPECTOR
+            </span>
+<button class="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 rounded-md transition-colors" title="Close specification inspector">
+<span class="material-symbols-outlined text-[18px]">close</span>
+</button>
+</div>
+</div>
+<!-- 7 Specification Sections Grid -->
+<div class="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 bg-white">
+<!-- Section 1: Production -->
+<div class="p-4 rounded-lg bg-slate-50/60 border border-slate-200 flex flex-col justify-between">
+<div class="flex items-center gap-2 pb-2.5 mb-3 border-b border-slate-200">
+<span class="material-symbols-outlined text-blue-600 text-[18px]">precision_manufacturing</span>
+<h3 class="text-[11px] font-semibold text-slate-800 tracking-wider uppercase font-headline">1. Production</h3>
+</div>
+<dl class="space-y-2.5 text-xs">
+<div class="flex flex-col">
+<dt class="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Assembly</dt>
+<dd class="text-slate-900 font-medium mt-0.5">Toyota Auto Body, Japan</dd>
+</div>
+<div class="flex flex-col">
+<dt class="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Era</dt>
+<dd class="text-slate-900 font-medium mt-0.5">5th Generation H200</dd>
+</div>
+<div class="flex flex-col">
+<dt class="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Fleet Grade</dt>
+<dd class="text-slate-900 font-medium mt-0.5">Commuter GL</dd>
+</div>
+<div class="flex flex-col">
+<dt class="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Vin Prefix</dt>
+<dd class="font-mono text-blue-700 font-semibold mt-0.5">KDH201R-</dd>
+</div>
+</dl>
+</div>
+<!-- Section 2: Transmission -->
+<div class="p-4 rounded-lg bg-slate-50/60 border border-slate-200 flex flex-col justify-between">
+<div class="flex items-center gap-2 pb-2.5 mb-3 border-b border-slate-200">
+<span class="material-symbols-outlined text-blue-600 text-[18px]">settings_input_component</span>
+<h3 class="text-[11px] font-semibold text-slate-800 tracking-wider uppercase font-headline">2. Transmission</h3>
+</div>
+<dl class="space-y-2.5 text-xs">
+<div class="flex flex-col">
+<dt class="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Gearbox Type</dt>
+<dd class="text-slate-900 font-medium mt-0.5">4-Speed Automatic ECT</dd>
+</div>
+<div class="flex flex-col">
+<dt class="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Drive Configuration</dt>
+<dd class="text-slate-900 font-medium mt-0.5">Rear-Wheel Drive (RWD)</dd>
+</div>
+<div class="flex flex-col">
+<dt class="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Final Drive Ratio</dt>
+<dd class="font-mono text-slate-900 font-semibold mt-0.5">3.909:1</dd>
+</div>
+</dl>
+</div>
+<!-- Section 3: Body -->
+<div class="p-4 rounded-lg bg-slate-50/60 border border-slate-200 flex flex-col justify-between">
+<div class="flex items-center gap-2 pb-2.5 mb-3 border-b border-slate-200">
+<span class="material-symbols-outlined text-blue-600 text-[18px]">airport_shuttle</span>
+<h3 class="text-[11px] font-semibold text-slate-800 tracking-wider uppercase font-headline">3. Body</h3>
+</div>
+<dl class="space-y-2.5 text-xs">
+<div class="flex flex-col">
+<dt class="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Configuration</dt>
+<dd class="text-slate-900 font-medium mt-0.5">Long Wheelbase High Roof</dd>
+</div>
+<div class="flex flex-col">
+<dt class="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Seating Capacity</dt>
+<dd class="text-slate-900 font-medium mt-0.5">15 Passengers</dd>
+</div>
+<div class="flex flex-col">
+<dt class="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Door Count</dt>
+<dd class="text-slate-900 font-medium mt-0.5">4-Door Slider</dd>
+</div>
+<div class="flex flex-col">
+<dt class="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Cargo Deck</dt>
+<dd class="text-slate-900 font-medium mt-0.5">Reinforced Anti-Skid</dd>
+</div>
+</dl>
+</div>
+<!-- Section 4: Engine -->
+<div class="p-4 rounded-lg bg-slate-50/60 border border-slate-200 flex flex-col justify-between">
+<div class="flex items-center gap-2 pb-2.5 mb-3 border-b border-slate-200">
+<span class="material-symbols-outlined text-blue-600 text-[18px]">oil_barrel</span>
+<h3 class="text-[11px] font-semibold text-slate-800 tracking-wider uppercase font-headline">4. Engine</h3>
+</div>
+<dl class="space-y-2.5 text-xs">
+<div class="flex flex-col">
+<dt class="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Engine Code</dt>
+<dd class="font-mono text-blue-700 font-semibold mt-0.5">1KD-FTV D-4D</dd>
+</div>
+<div class="flex flex-col">
+<dt class="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Displacement</dt>
+<dd class="font-mono text-slate-900 font-medium mt-0.5">2,982 cc / 3.0L</dd>
+</div>
+<div class="flex flex-col">
+<dt class="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Power Output</dt>
+<dd class="font-mono text-slate-900 font-medium mt-0.5">100 kW / 136 PS @ 3,400 RPM</dd>
+</div>
+<div class="flex flex-col">
+<dt class="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Torque</dt>
+<dd class="font-mono text-slate-900 font-medium mt-0.5">300 Nm @ 1,200–2,400 RPM</dd>
+</div>
+</dl>
+</div>
+<!-- Section 5: Fuel -->
+<div class="p-4 rounded-lg bg-slate-50/60 border border-slate-200 flex flex-col justify-between">
+<div class="flex items-center gap-2 pb-2.5 mb-3 border-b border-slate-200">
+<span class="material-symbols-outlined text-blue-600 text-[18px]">local_gas_station</span>
+<h3 class="text-[11px] font-semibold text-slate-800 tracking-wider uppercase font-headline">5. Fuel</h3>
+</div>
+<dl class="space-y-2.5 text-xs">
+<div class="flex flex-col">
+<dt class="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Fuel System</dt>
+<dd class="text-slate-900 font-medium mt-0.5">Common Rail Direct Injection</dd>
+</div>
+<div class="flex flex-col">
+<dt class="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Fuel Grade</dt>
+<dd class="text-slate-900 font-medium mt-0.5">Ultra-Low Sulfur Diesel</dd>
+</div>
+<div class="flex flex-col">
+<dt class="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Tank Capacity</dt>
+<dd class="font-mono text-slate-900 font-semibold mt-0.5">70 Litres</dd>
+</div>
+<div class="flex flex-col">
+<dt class="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Avg Economy</dt>
+<dd class="font-mono text-slate-900 font-medium mt-0.5">8.9 L/100km Fleet Index</dd>
+</div>
+</dl>
+</div>
+<!-- Section 6: Dimensions -->
+<div class="p-4 rounded-lg bg-slate-50/60 border border-slate-200 flex flex-col justify-between">
+<div class="flex items-center gap-2 pb-2.5 mb-3 border-b border-slate-200">
+<span class="material-symbols-outlined text-blue-600 text-[18px]">straighten</span>
+<h3 class="text-[11px] font-semibold text-slate-800 tracking-wider uppercase font-headline">6. Dimensions</h3>
+</div>
+<dl class="space-y-2.5 text-xs">
+<div class="flex flex-col">
+<dt class="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Overall Length</dt>
+<dd class="font-mono text-slate-900 font-medium mt-0.5">4,695 mm</dd>
+</div>
+<div class="flex flex-col">
+<dt class="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Overall Width</dt>
+<dd class="font-mono text-slate-900 font-medium mt-0.5">1,695 mm</dd>
+</div>
+<div class="flex flex-col">
+<dt class="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Overall Height</dt>
+<dd class="font-mono text-slate-900 font-medium mt-0.5">1,980 mm</dd>
+</div>
+<div class="flex flex-col">
+<dt class="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Wheelbase</dt>
+<dd class="font-mono text-slate-900 font-medium mt-0.5">2,570 mm</dd>
+</div>
+</dl>
+</div>
+<!-- Section 7: Weight -->
+<div class="p-4 rounded-lg bg-slate-50/60 border border-slate-200 flex flex-col justify-between lg:col-span-2 xl:col-span-2">
+<div class="flex items-center gap-2 pb-2.5 mb-3 border-b border-slate-200">
+<span class="material-symbols-outlined text-blue-600 text-[18px]">scale</span>
+<h3 class="text-[11px] font-semibold text-slate-800 tracking-wider uppercase font-headline">7. Weight</h3>
+</div>
+<dl class="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
+<div class="flex flex-col">
+<dt class="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Kerb Weight</dt>
+<dd class="font-mono text-slate-900 font-semibold mt-0.5">1,920 kg</dd>
+</div>
+<div class="flex flex-col">
+<dt class="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Gross Vehicle Mass</dt>
+<dd class="font-mono text-slate-900 font-semibold mt-0.5">3,150 kg</dd>
+</div>
+<div class="flex flex-col">
+<dt class="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Payload Rating</dt>
+<dd class="font-mono text-slate-900 font-semibold mt-0.5">1,230 kg</dd>
+</div>
+<div class="flex flex-col">
+<dt class="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Max Towing Capacity</dt>
+<dd class="font-mono text-slate-900 font-semibold mt-0.5">1,400 kg Braked</dd>
+</div>
+</dl>
+</div>
+</div>
+<!-- Footer Meta inside Inspector -->
+<div class="px-6 py-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-[11px] text-slate-500 font-mono">
+<span>PARISH DISPATCH ZONE: CORNWALL &amp; MIDDLESEX &amp; SURREY</span>
+<span>DOMINION GCT STATUS: RECORD VALIDATED (15.0% EXEMPT-TRANSIT)</span>
+</div>
+</section>
+</main>
+</div>
+</body></html>

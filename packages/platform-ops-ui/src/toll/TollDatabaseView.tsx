@@ -1,3 +1,4 @@
+// Stitch: dominion-redesign/e1395d7f82344dcab17453c7d3a98f4d
 import React, { useState, useEffect, useCallback } from 'react';
 import { Tabs, TabsList, TabsTrigger } from '@roam/ui';
 import { Badge } from '@roam/ui';
@@ -159,16 +160,29 @@ export function TollDatabaseView() {
   const learntCount = plazas.filter(p => p.status === 'learnt').length;
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
+    <div className="max-w-6xl w-full space-y-6 animate-in fade-in p-8 duration-500">
+      <div className="mb-4 flex items-center justify-between">
+        <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
+          <span>Dominion</span>
+          <span aria-hidden>›</span>
+          <span>Master data</span>
+          <span aria-hidden>›</span>
+          <span>Tolls</span>
+          <span aria-hidden>›</span>
+          <span className="font-semibold text-slate-900">Toll database</span>
+        </nav>
+        <div className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-100 px-2.5 py-0.5 font-mono text-[10px] text-slate-600">
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+          REGION: JM-KGN
+        </div>
+      </div>
+
       {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <div className="flex items-center gap-2">
-            <Database className="h-6 w-6 text-indigo-600" />
-            <h1 className="text-2xl font-bold text-slate-900">Toll Database</h1>
-          </div>
-          <p className="text-sm text-slate-500 mt-1">
-            Manage toll plaza locations, spatial verification, and verified records.
+          <h1 className="text-2xl font-bold leading-tight tracking-tight text-slate-900">Toll database</h1>
+          <p className="mt-1 text-xs leading-normal text-slate-500">
+            Plazas on Jamaican highways, and the class prices in JMD.
           </p>
         </div>
 
@@ -204,6 +218,59 @@ export function TollDatabaseView() {
             )}
             Refresh
           </Button>
+        </div>
+      </div>
+
+      <div className="overflow-hidden rounded-[12px] border border-slate-200/90 bg-white shadow-sm">
+        <div className="border-b border-slate-200 px-6 py-4">
+          <h2 className="text-sm font-semibold tracking-tight text-slate-900">Plazas</h2>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse text-left">
+            <thead>
+              <tr className="border-b border-slate-200 bg-slate-50/60 font-mono text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                <th className="px-6 py-3.5">Name</th>
+                <th className="px-6 py-3.5">Highway</th>
+                <th className="px-6 py-3.5">Direction</th>
+                <th className="px-6 py-3.5">Parish</th>
+                <th className="px-6 py-3.5">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 text-xs">
+              {loading ? (
+                <tr>
+                  <td colSpan={5} className="px-6 py-8 text-center text-slate-500">
+                    Loading plazas…
+                  </td>
+                </tr>
+              ) : plazas.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-6 py-8 text-center italic text-slate-400">
+                    The data is not in yet.
+                  </td>
+                </tr>
+              ) : (
+                plazas.slice(0, 12).map((plaza) => (
+                  <tr
+                    key={plaza.id}
+                    className="cursor-pointer transition-colors hover:bg-slate-50/50"
+                    onClick={() => setSelectedPlaza(plaza)}
+                  >
+                    <td className="px-6 py-4 font-medium text-slate-900">{plaza.name}</td>
+                    <td className="px-6 py-4 text-slate-600">{plaza.highway || '—'}</td>
+                    <td className="px-6 py-4 text-slate-600">{plaza.direction || '—'}</td>
+                    <td className="px-6 py-4 text-slate-600">{plaza.parish || '—'}</td>
+                    <td className="px-6 py-4">
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-medium text-emerald-700">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                        {plaza.status === 'verified' ? 'Active' : plaza.status || 'Active'}
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 
@@ -394,6 +461,16 @@ export function TollDatabaseView() {
           onEdit={handleEditFromPanel}
         />
       )}
+
+      <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-4 py-3 text-xs text-slate-500 shadow-sm">
+        <div className="flex items-center gap-2 italic text-slate-500">
+          <Database className="h-4 w-4 not-italic text-slate-400" aria-hidden />
+          <span>The data is not in yet.</span>
+        </div>
+        <div className="font-mono text-[10px] uppercase tracking-wider text-slate-400">
+          LOC: KINGSTON / PARISH REGISTRY JMD
+        </div>
+      </div>
     </div>
   );
 }

@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>S15 Places and pins - Dominion</title>
+<!-- Google Fonts: Inter & JetBrains Mono -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols Outlined -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS v3 -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "on-background": "#30323b",
+            "background": "#faf8fe",
+            "surface-bright": "#faf8fe",
+            "tertiary-fixed-dim": "#8aec9c",
+            "tertiary": "#006e31",
+            "secondary-dim": "#0049c3",
+            "on-secondary-container": "#0047c0",
+            "surface-dim": "#d9d9e4",
+            "error-dim": "#67040d",
+            "surface-container": "#eeedf6",
+            "surface": "#faf8fe",
+            "secondary-fixed-dim": "#c7d3ff",
+            "primary-fixed-dim": "#cad5ed",
+            "on-error-container": "#6e0a12",
+            "secondary-container": "#dbe1ff",
+            "on-primary": "#f8f8ff",
+            "primary": "#545f74",
+            "on-tertiary": "#e9ffe7",
+            "surface-variant": "#e1e2ed",
+            "on-primary-fixed": "#354053",
+            "on-secondary": "#faf8ff",
+            "inverse-on-surface": "#9d9ca2",
+            "tertiary-container": "#98fba9",
+            "surface-tint": "#545f74",
+            "inverse-primary": "#dae6fe",
+            "on-secondary-fixed": "#003798",
+            "on-surface": "#30323b",
+            "on-primary-container": "#475266",
+            "error": "#a83836",
+            "on-tertiary-container": "#00612a",
+            "on-surface-variant": "#5d5f68",
+            "on-primary-fixed-variant": "#515c70",
+            "on-error": "#fff7f6",
+            "secondary-fixed": "#dbe1ff",
+            "surface-container-low": "#f4f3fa",
+            "primary-container": "#d8e3fb",
+            "primary-dim": "#485367",
+            "on-tertiary-fixed-variant": "#006c30",
+            "tertiary-fixed": "#98fba9",
+            "secondary": "#0153dc",
+            "outline-variant": "#b0b1bc",
+            "primary-fixed": "#d8e3fb",
+            "tertiary-dim": "#00612a",
+            "error-container": "#fa746f",
+            "on-tertiary-fixed": "#004c20",
+            "inverse-surface": "#0d0e12",
+            "surface-container-lowest": "#ffffff",
+            "outline": "#797a84",
+            "surface-container-high": "#e8e7f1",
+            "on-secondary-fixed-variant": "#0050d5",
+            "surface-container-highest": "#e1e2ed"
+          },
+          borderRadius: {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "full": "9999px"
+          },
+          fontFamily: {
+            headline: ["Inter", "sans-serif"],
+            display: ["Inter", "sans-serif"],
+            body: ["Inter", "sans-serif"],
+            mono: ["JetBrains Mono", "monospace"]
+          }
+        },
+      },
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+    }
+    .custom-scroll::-webkit-scrollbar {
+      width: 4px;
+    }
+    .custom-scroll::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .custom-scroll::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body class="bg-surface text-on-surface font-body antialiased min-h-screen flex selection:bg-secondary-container selection:text-on-secondary-container">
+<!-- Left Sidebar (Navy Dominion Shell, Exact S14 Layout) -->
+<aside class="fixed top-0 left-0 h-screen w-64 flex flex-col bg-slate-800 border-r border-slate-700/50 z-30 select-none">
+<div class="w-64 h-full p-4 flex flex-col justify-between overflow-y-auto custom-scroll">
+<div>
+<!-- Dominion Brand Header -->
+<div class="flex items-center gap-3 px-2 py-2 mb-4">
+<div class="w-8 h-8 rounded-lg bg-[#316bf3] flex items-center justify-center text-white shadow-sm flex-shrink-0">
+<span class="material-symbols-outlined text-[20px]" data-icon="deployed_code">deployed_code</span>
+</div>
+<div class="leading-tight">
+<div class="font-headline text-base font-bold text-white tracking-tight">Dominion</div>
+<div class="font-body text-xs text-slate-400">Roam Admin Console v2.4</div>
+</div>
+</div>
+<!-- Navigation Cluster -->
+<nav class="space-y-4">
+<!-- Overview Section -->
+<div>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined text-[19px]" data-icon="dashboard">dashboard</span>
+<span>Overview</span>
+</a>
+</div>
+<!-- MASTER DATA -->
+<div>
+<div class="px-3 pb-1.5 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Master data</div>
+<div class="space-y-0.5">
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined text-[18px]" data-icon="directions_car">directions_car</span>
+<span>Vehicles</span>
+</a>
+<!-- Active Item: Places and Maps -->
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg bg-[#316bf3] text-white font-medium text-sm shadow-sm" href="#">
+<span class="material-symbols-outlined text-[18px]" data-icon="map">map</span>
+<span>Places and Maps</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined text-[18px]" data-icon="local_gas_station">local_gas_station</span>
+<span>Fuel</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined text-[18px]" data-icon="toll">toll</span>
+<span>Tolls</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined text-[18px]" data-icon="receipt_long">receipt_long</span>
+<span>Tax and Vendors</span>
+</a>
+</div>
+</div>
+<!-- ENGINES -->
+<div>
+<div class="px-3 pb-1.5 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Engines</div>
+<div class="space-y-0.5">
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined text-[18px]" data-icon="psychology">psychology</span>
+<span>Fuel Brain</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined text-[18px]" data-icon="route">route</span>
+<span>Toll Brain</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined text-[18px]" data-icon="hub">hub</span>
+<span>Matching Brain</span>
+</a>
+</div>
+</div>
+<!-- DISTRIBUTION -->
+<div>
+<div class="px-3 pb-1.5 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Distribution</div>
+<div class="space-y-0.5">
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined text-[18px]" data-icon="apps">apps</span>
+<span>Apps</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined text-[18px]" data-icon="api">api</span>
+<span>Data API</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined text-[18px]" data-icon="published_with_changes">published_with_changes</span>
+<span>Change requests</span>
+</a>
+</div>
+</div>
+<!-- PLATFORM -->
+<div>
+<div class="px-3 pb-1.5 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Platform</div>
+<div class="space-y-0.5">
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined text-[18px]" data-icon="badge">badge</span>
+<span>Staff and roles</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined text-[18px]" data-icon="history">history</span>
+<span>Activity log</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined text-[18px]" data-icon="tune">tune</span>
+<span>Platform Ops</span>
+</a>
+</div>
+</div>
+<!-- BACK OFFICE -->
+<div>
+<div class="px-3 pb-1.5 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Back office</div>
+<div class="space-y-0.5">
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined text-[18px]" data-icon="settings">settings</span>
+<span>Global settings</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined text-[18px]" data-icon="description">description</span>
+<span>GCT registrations</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined text-[18px]" data-icon="account_balance">account_balance</span>
+<span>Ledger</span>
+</a>
+</div>
+</div>
+</nav>
+</div>
+<!-- Bottom Region Badge -->
+<div class="pt-4 border-t border-slate-700/50 mt-4">
+<div class="flex items-center justify-between px-2 py-2 rounded-lg bg-slate-900/60 text-xs">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-pulse"></span>
+<span class="font-mono text-slate-300 font-medium text-[11px]">KGN-DC-01</span>
+</div>
+<span class="text-[10px] font-semibold text-slate-400 tracking-wider">JMD READY</span>
+</div>
+</div>
+</div>
+</aside>
+<!-- Main View Container (offset by sidebar w-64) -->
+<div class="pl-64 flex-1 flex flex-col min-h-screen bg-surface">
+<!-- Top Navigation Bar (Header) -->
+<header class="sticky top-0 right-0 h-16 w-full flex items-center justify-between px-8 bg-surface-container-lowest border-b border-outline-variant/30 z-20">
+<!-- Search Input Container -->
+<div class="w-96 relative">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[18px]" data-icon="search">search</span>
+<input class="w-full pl-9 pr-4 py-1.5 text-xs bg-surface-container-low border border-outline-variant/40 rounded-lg text-on-surface placeholder:text-outline focus:outline-none focus:border-[#316bf3] focus:ring-1 focus:ring-[#316bf3] transition-all" placeholder="Search entities, engines, routes... ⌘K" type="text"/>
+</div>
+<!-- Actions & Owner Profile -->
+<div class="flex items-center gap-4">
+<button class="w-8 h-8 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors flex items-center justify-center relative" title="Notifications">
+<span class="material-symbols-outlined text-[20px]" data-icon="notifications">notifications</span>
+<span class="w-1.5 h-1.5 bg-[#316bf3] rounded-full absolute top-1.5 right-1.5"></span>
+</button>
+<button class="w-8 h-8 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors flex items-center justify-center" title="Help &amp; documentation">
+<span class="material-symbols-outlined text-[20px]" data-icon="help_outline">help_outline</span>
+</button>
+<div class="h-6 w-px bg-outline-variant/30"></div>
+<!-- Profile: Owner role SYS-AUTH (No personal name) -->
+<div class="flex items-center gap-2.5 pl-1">
+<div class="w-8 h-8 rounded-full bg-slate-800 text-white font-semibold text-xs flex items-center justify-center ring-2 ring-slate-100">
+            OW
+          </div>
+<div class="leading-tight text-left">
+<div class="text-xs font-semibold text-on-surface">Owner</div>
+<div class="text-[10px] font-mono text-outline font-medium tracking-tight">SYS-AUTH</div>
+</div>
+</div>
+</div>
+</header>
+<!-- Main Content Area -->
+<main class="p-8 max-w-7xl w-full mx-auto flex-1 flex flex-col">
+<!-- Breadcrumb & Top Context Badge -->
+<div class="flex items-center justify-between mb-4">
+<div class="flex items-center gap-2 text-xs text-outline">
+<span class="hover:text-on-surface transition-colors cursor-pointer">Dominion</span>
+<span class="text-outline-variant">&gt;</span>
+<span class="hover:text-on-surface transition-colors cursor-pointer">Master data</span>
+<span class="text-outline-variant">&gt;</span>
+<span class="hover:text-on-surface transition-colors cursor-pointer">Places and Maps</span>
+<span class="text-outline-variant">&gt;</span>
+<span class="text-on-surface font-medium">Places and pins</span>
+</div>
+<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 border border-slate-200 text-slate-700 text-xs font-mono font-medium">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+<span>REGION: JM-KGN</span>
+</div>
+</div>
+<!-- Page Header -->
+<div class="mb-6">
+<h1 class="font-headline text-2xl font-bold text-on-surface tracking-tight">Places and pins</h1>
+<p class="font-body text-sm text-outline mt-1">Named pins. These are points, not parish boundaries.</p>
+</div>
+<!-- Controls & Filter Toolbar -->
+<div class="flex flex-wrap items-center justify-between gap-4 mb-4">
+<div class="flex items-center gap-3">
+<!-- Search Pins -->
+<div class="relative w-80">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[18px]" data-icon="search">search</span>
+<input class="w-full pl-9 pr-4 py-2 text-xs bg-surface-container-lowest border border-outline-variant/40 rounded-lg text-on-surface placeholder:text-outline focus:outline-none focus:border-[#316bf3] focus:ring-1 focus:ring-[#316bf3] shadow-sm transition-all" placeholder="Search places, landmarks, coordinates..." type="text"/>
+</div>
+<!-- Category Chips -->
+<div class="flex items-center bg-surface-container-low p-1 rounded-lg border border-outline-variant/30 text-xs font-medium">
+<button class="px-3 py-1 rounded bg-surface-container-lowest text-on-surface shadow-xs font-semibold">All pins</button>
+<button class="px-3 py-1 rounded text-outline hover:text-on-surface transition-colors">Towns</button>
+<button class="px-3 py-1 rounded text-outline hover:text-on-surface transition-colors">Landmarks</button>
+</div>
+</div>
+<!-- Counter Indicator -->
+<div class="flex items-center gap-2 text-xs font-medium text-outline">
+<span>Total pins:</span>
+<span class="font-mono text-on-surface font-semibold bg-surface-container px-2 py-0.5 rounded">3</span>
+</div>
+</div>
+<!-- Main Content Card: Clean White Card (12px radius, hairline border, shadow-sm) -->
+<div class="bg-surface-container-lowest rounded-[12px] border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+<!-- Table -->
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface-container-low/60 border-b border-slate-200 text-xs font-semibold text-outline uppercase tracking-wider">
+<th class="py-3 px-6">Name</th>
+<th class="py-3 px-6">Parish</th>
+<th class="py-3 px-6">Kind</th>
+<th class="py-3 px-6">Coordinates</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-slate-100 text-sm font-normal text-on-surface">
+<!-- Row 1 -->
+<tr class="hover:bg-slate-50/70 transition-colors">
+<td class="py-3.5 px-6 font-medium text-slate-900 flex items-center gap-2.5">
+<span class="material-symbols-outlined text-[17px] text-[#316bf3]" data-icon="location_on">location_on</span>
+<span>Half Way Tree</span>
+</td>
+<td class="py-3.5 px-6 text-slate-700">St. Andrew</td>
+<td class="py-3.5 px-6">
+<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200">
+                    Town
+                  </span>
+</td>
+<td class="py-3.5 px-6 font-mono text-xs text-slate-600">18.0126, -76.7970</td>
+</tr>
+<!-- Row 2 -->
+<tr class="hover:bg-slate-50/70 transition-colors">
+<td class="py-3.5 px-6 font-medium text-slate-900 flex items-center gap-2.5">
+<span class="material-symbols-outlined text-[17px] text-[#316bf3]" data-icon="location_on">location_on</span>
+<span>Spanish Town</span>
+</td>
+<td class="py-3.5 px-6 text-slate-700">St. Catherine</td>
+<td class="py-3.5 px-6">
+<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200">
+                    Town
+                  </span>
+</td>
+<td class="py-3.5 px-6 font-mono text-xs text-slate-600">17.9911, -76.9574</td>
+</tr>
+<!-- Row 3 -->
+<tr class="hover:bg-slate-50/70 transition-colors">
+<td class="py-3.5 px-6 font-medium text-slate-900 flex items-center gap-2.5">
+<span class="material-symbols-outlined text-[17px] text-[#316bf3]" data-icon="tour">tour</span>
+<span>Devon House</span>
+</td>
+<td class="py-3.5 px-6 text-slate-700">St. Andrew</td>
+<td class="py-3.5 px-6">
+<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-800 border border-amber-200/70">
+                    Landmark
+                  </span>
+</td>
+<td class="py-3.5 px-6 font-mono text-xs text-slate-600">18.0146, -76.7890</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Footer / Notice Callout Box inside card bottom -->
+<div class="p-4 bg-slate-50/50 border-t border-slate-100 flex items-center justify-between text-xs">
+<div class="flex items-center gap-2 text-slate-500">
+<span class="material-symbols-outlined text-[18px] text-slate-400" data-icon="info">info</span>
+<span>The data is not in yet.</span>
+</div>
+<div class="font-mono text-[11px] text-slate-400 tracking-wider">
+            LOC: KINGSTON / PARISH REGISTRY JMD
+          </div>
+</div>
+</div>
+</main>
+</div>
+</body></html>

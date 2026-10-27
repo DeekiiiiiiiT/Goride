@@ -218,7 +218,7 @@ async function loadPlazasFromFleetSql(
   try {
     const { data, error } = await db
       .from("fleet_toll_plazas")
-      .select("id, legacy_kv_id, organization_id, payload_json")
+      .select("id, legacy_kv_id, organization_id, direction, parish, payload_json")
       .limit(500);
     if (error) {
       console.warn("[tollPlazaLoader] fleet.toll_plazas fallback failed:", error.message);
@@ -230,9 +230,13 @@ async function loadPlazasFromFleetSql(
       const payload = (row as { payload_json?: Record<string, unknown> }).payload_json;
       if (!payload || typeof payload !== "object") continue;
       const orgCol = (row as { organization_id?: string | null }).organization_id;
+      const direction = (row as { direction?: string | null }).direction;
+      const parish = (row as { parish?: string | null }).parish;
       const raw: Record<string, unknown> = {
         ...payload,
         organizationId: orgCol ?? payload.organizationId,
+        ...(direction ? { direction } : {}),
+        ...(parish ? { parish } : {}),
       };
       if (!recordBelongsToOrg(raw, organizationId)) continue;
       const id = String((row as { id?: string }).id || payload.id || "");

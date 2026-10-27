@@ -3,6 +3,7 @@ import type { VehicleCatalogCreatePayload, VehicleCatalogRecord } from "../types
 import { publicAnonKey } from "../utils/supabase/info";
 
 const url = () => `${API_ENDPOINTS.admin}/admin/vehicle-catalog`;
+const writeUrl = () => `${API_ENDPOINTS.catalog}/admin/vehicle-catalog`;
 
 /** Must match edge `VEHICLE_CATALOG_PURGE_CONFIRM` in `index.tsx` (purge route). */
 export const VEHICLE_CATALOG_PURGE_CONFIRM_PHRASE = "DELETE ALL";
@@ -118,7 +119,7 @@ export async function createVehicleCatalog(
   accessToken: string,
   payload: VehicleCatalogCreatePayload,
 ): Promise<VehicleCatalogRecord> {
-  const res = await fetchWithRetry(url(), {
+  const res = await fetchWithRetry(writeUrl(), {
     method: "POST",
     headers: edgeHeaders(accessToken, "application/json"),
     body: jsonBodyOmitNullish(payload),
@@ -133,7 +134,7 @@ export async function updateVehicleCatalog(
   id: string,
   payload: Partial<VehicleCatalogCreatePayload> & { expected_updated_at?: string },
 ): Promise<VehicleCatalogRecord> {
-  const res = await fetchWithRetry(`${url()}/${id}`, {
+  const res = await fetchWithRetry(`${writeUrl()}/${id}`, {
     method: "PATCH",
     headers: edgeHeaders(accessToken, "application/json"),
     body: JSON.stringify(payload),
@@ -172,7 +173,7 @@ export async function deleteVehicleCatalog(
   opts?: { force?: boolean },
 ): Promise<{ dependencies?: CatalogDependencyCounts }> {
   const q = opts?.force ? "?force=true" : "";
-  const res = await fetchWithRetry(`${url()}/${id}${q}`, {
+  const res = await fetchWithRetry(`${writeUrl()}/${id}${q}`, {
     method: "DELETE",
     headers: edgeHeaders(accessToken),
   });
@@ -205,7 +206,7 @@ export async function bulkUpsertVehicleCatalog(
   updated: number;
   failed: number;
 }> {
-  const res = await fetchWithRetry(`${url()}/bulk`, {
+  const res = await fetchWithRetry(`${writeUrl()}/bulk`, {
     method: "POST",
     headers: edgeHeaders(accessToken, "application/json"),
     body: JSON.stringify({ import_batch_id: importBatchId, rows }),
@@ -226,7 +227,7 @@ export async function undoVehicleCatalogImportBatch(
   opts?: { force?: boolean },
 ): Promise<{ deleted: number; dependencies: CatalogDependencyCounts | null }> {
   const force = opts?.force === true;
-  const res = await fetchWithRetry(`${url()}/undo-batch`, {
+  const res = await fetchWithRetry(`${writeUrl()}/undo-batch`, {
     method: "POST",
     headers: edgeHeaders(accessToken, "application/json"),
     body: JSON.stringify({
@@ -272,7 +273,7 @@ export async function purgeAllVehicleCatalog(
   accessToken: string,
   confirm: string,
 ): Promise<{ deleted: number }> {
-  const res = await fetchWithRetry(`${url()}/purge`, {
+  const res = await fetchWithRetry(`${writeUrl()}/purge`, {
     method: "POST",
     headers: edgeHeaders(accessToken, "application/json"),
     body: JSON.stringify({ confirm }),

@@ -1,3 +1,4 @@
+// Stitch: dominion-redesign/f213ca85e6014903b9a070adf73b86ba
 /**
  * Platform Admin — JAA Gas Cards: programs, org-scoped cards, master CSV fan-out, unmatched queue.
  */
@@ -708,15 +709,76 @@ export function GasCardsPage({ scope = 'platform' }: { scope?: GasCardScope }) {
   }
 
   return (
-    <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">JAA Gas Cards</h1>
-        <p className="text-sm text-slate-500 mt-1">
+    <div className={`space-y-6 text-slate-900 ${scope === 'platform' ? 'max-w-6xl w-full p-8' : 'p-6'}`}>
+      {scope === 'platform' ? (
+        <div className="mb-4 flex items-center justify-between">
+          <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
+            <span>Dominion</span>
+            <span aria-hidden>›</span>
+            <span>Master data</span>
+            <span aria-hidden>›</span>
+            <span>Fuel</span>
+            <span aria-hidden>›</span>
+            <span className="font-semibold text-slate-900">JAA card catalogue</span>
+          </nav>
+          <div className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-100 px-2.5 py-0.5 font-mono text-[10px] text-slate-600">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+            REGION: JM-KGN
+          </div>
+        </div>
+      ) : null}
+
+      <div className={scope === 'platform' ? 'mb-8' : ''}>
+        <h1 className="text-2xl font-bold leading-tight tracking-tight text-slate-900 dark:text-slate-100">
+          JAA card catalogue
+        </h1>
+        <p className="mt-1 text-xs leading-normal text-slate-500">
           {scope === 'org'
             ? 'Cards assigned to a fleet, unmatched codes, and spend.'
-            : 'Programs and the master CSV. Customer cards are in Fleet admin.'}
+            : 'Platform gas-card programs.'}
         </p>
       </div>
+
+      {scope === 'platform' && tab === 'programs' ? (
+        <div className="mb-6 overflow-hidden rounded-[12px] border border-slate-200/90 bg-white shadow-sm">
+          <table className="w-full border-collapse text-left">
+            <thead>
+              <tr className="border-b border-slate-200 bg-slate-50/60 font-mono text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                <th className="px-6 py-3.5">Program</th>
+                <th className="px-6 py-3.5">Status</th>
+                <th className="px-6 py-3.5">Cards in master list</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 text-xs">
+              {programs.length === 0 ? (
+                <tr>
+                  <td colSpan={3} className="px-6 py-8 text-center italic text-slate-400">
+                    The data is not in yet.
+                  </td>
+                </tr>
+              ) : (
+                programs.map((program) => (
+                  <tr key={program.id || program.companyCode} className="transition-colors hover:bg-slate-50/50">
+                    <td className="px-6 py-4 font-medium text-slate-900">
+                      {program.displayName || program.companyCode || 'JAA'}
+                      <div className="font-mono text-[11px] text-slate-400">{program.companyCode}</div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-medium text-emerald-700">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                        Active
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 font-mono text-[11px] italic text-slate-400">
+                      The data is not in yet.
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
 
       <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-2">
         {tabs.map((t) => (
@@ -724,7 +786,7 @@ export function GasCardsPage({ scope = 'platform' }: { scope?: GasCardScope }) {
             key={t.id}
             type="button"
             onClick={() => setTab(t.id)}
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md ${
+            className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm ${
               tab === t.id
                 ? 'bg-slate-900 text-white'
                 : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
@@ -1221,6 +1283,27 @@ export function GasCardsPage({ scope = 'platform' }: { scope?: GasCardScope }) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {scope === 'platform' ? (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-4 py-3 text-xs shadow-sm">
+            <div className="flex items-center gap-2 text-slate-600">
+              <CreditCard className="h-4 w-4 text-slate-400" aria-hidden />
+              <span>Customer cards stay in Fleet admin.</span>
+            </div>
+            <span className="font-mono text-[11px] text-slate-400">FLEET-ADMIN-ISO</span>
+          </div>
+          <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-4 py-3 text-xs text-slate-500 shadow-sm">
+            <div className="flex items-center gap-2 italic text-slate-500">
+              <AlertCircle className="h-4 w-4 not-italic text-slate-400" aria-hidden />
+              <span>The data is not in yet.</span>
+            </div>
+            <div className="font-mono text-[10px] uppercase tracking-wider text-slate-400">
+              LOC: KINGSTON / PARISH REGISTRY JMD
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -28,33 +28,30 @@ export type AccountCapabilities = {
   canCreate: boolean;
   canResetPassword: boolean;
   canFullDelete: boolean;
-  /** update-user edit — only on Dominion /admin namespace */
+  /** update-user edit. Product admins do not use the removed Dominion /admin customer routes. */
   canEditUser: boolean;
-  /** team role change / remove — only on /admin namespace */
+  /** team role change / remove. Product admin team routes do not expose this here. */
   canManageTeam: boolean;
 };
 
 export function deriveAccountCapabilities(
   callerRole: string | null,
-  apiNamespace: string,
+  _apiNamespace: string,
 ): AccountCapabilities {
   const role = callerRole ?? '';
-  const onAdminNamespace = apiNamespace === '/admin';
 
   const canSuspend = SUSPEND_ROLES.has(role);
   const canEdit = EDIT_ROLES.has(role);
   const canCreate = CREATE_ROLES.has(role);
   const canResetPassword = canSuspend;
-  const canFullDelete =
-    onAdminNamespace && (role === 'superadmin' || role === 'platform_owner');
 
   return {
     canSuspend,
     canEdit,
     canCreate,
     canResetPassword,
-    canFullDelete,
-    canEditUser: canEdit && onAdminNamespace,
-    canManageTeam: canEdit && onAdminNamespace,
+    canFullDelete: false,
+    canEditUser: false,
+    canManageTeam: false,
   };
 }

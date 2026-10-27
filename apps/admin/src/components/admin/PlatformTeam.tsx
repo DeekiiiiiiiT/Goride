@@ -1,3 +1,4 @@
+// Stitch: dominion-redesign/6f4a15ed7e5042329e4453061bf33505
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -24,6 +25,7 @@ import {
   Check,
   X,
   KeyRound,
+  Info,
 } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { API_ENDPOINTS } from '../../services/apiConfig';
@@ -454,315 +456,334 @@ export function PlatformTeam() {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const selectedMember = paginatedList.find((m: PlatformMember) => !isOwnerRow(m) && !isSelf(m)) || null;
+
   // ---------------------------------------------------------------
   // Render
   // ---------------------------------------------------------------
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div className="mx-auto w-full max-w-7xl p-8 text-slate-900">
+      <div className="mb-4 flex items-center justify-between">
+        <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-xs text-slate-500">
+          <span>Dominion</span>
+          <span className="text-slate-400">&gt;</span>
+          <span>Platform</span>
+          <span className="text-slate-400">&gt;</span>
+          <span className="font-medium text-slate-900">Staff and roles</span>
+        </nav>
+        <span className="inline-flex items-center gap-1.5 rounded border border-slate-200 bg-slate-100 px-2.5 py-1 font-mono text-[11px] text-slate-600">
+          <span className="h-1.5 w-1.5 rounded-full bg-blue-600" />
+          REGION: JM-KGN
+        </span>
+      </div>
+
+      <div className="mb-8 flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold text-slate-900 dark:text-white">Platform Team</h1>
-          <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">
-            {displayed.length} member{displayed.length !== 1 ? 's' : ''}
-            {displayed.length !== members.length ? ` (filtered from ${members.length})` : ''}
-          </p>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900">Staff and roles</h1>
+            <span className="inline-flex items-center rounded border border-slate-200 bg-slate-100 px-2 py-0.5 font-mono text-[11px] font-medium text-slate-700">
+              Owner only
+            </span>
+          </div>
+          <p className="mt-1 text-sm text-slate-500">Roam staff. Customer accounts are not listed here.</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2.5">
           <button
+            type="button"
             onClick={() => setInviteOpen(true)}
-            className="inline-flex items-center gap-2 px-3 py-2 bg-amber-500 hover:bg-amber-400 text-black text-sm font-medium rounded-lg transition-colors"
+            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3.5 py-2 text-xs font-medium text-white shadow-sm transition-colors hover:bg-blue-700"
           >
-            <UserPlus className="w-4 h-4" />
-            Invite Staff
+            <UserPlus className="h-4 w-4" />
+            Invite
           </button>
           <button
-            onClick={() => refetch()}
-            disabled={loading}
-            className="inline-flex items-center gap-2 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:border-slate-700 dark:text-slate-300 text-sm rounded-lg transition-colors disabled:opacity-50"
+            type="button"
+            onClick={() => selectedMember && openChangeRole(selectedMember)}
+            disabled={!selectedMember}
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-xs font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50 hover:text-slate-900 disabled:opacity-50"
           >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
+            <ArrowLeftRight className="h-4 w-4" />
+            Change role
+          </button>
+          <button
+            type="button"
+            onClick={() => selectedMember && handleToggleSuspend(selectedMember)}
+            disabled={!selectedMember}
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-xs font-medium text-amber-700 shadow-sm transition-colors hover:border-amber-300 hover:bg-amber-50 disabled:opacity-50"
+          >
+            <ShieldBan className="h-4 w-4" />
+            Suspend
+          </button>
+          <button
+            type="button"
+            onClick={() => selectedMember && handleForceLogout(selectedMember)}
+            disabled={!selectedMember}
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-xs font-medium text-rose-700 shadow-sm transition-colors hover:border-rose-300 hover:bg-rose-50 disabled:opacity-50"
+          >
+            <LogOut className="h-4 w-4" />
+            Sign out
           </button>
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row">
+        <div className="relative max-w-md flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
           <input
             type="text"
             placeholder="Search by name or email..."
             value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 rounded-lg text-sm text-slate-900 placeholder:text-slate-400 dark:text-white dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50"
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
           />
         </div>
-
         <select
           value={roleFilter}
-          onChange={e => setRoleFilter(e.target.value)}
-          className="appearance-none px-3 py-2 bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 rounded-lg text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50 cursor-pointer"
+          onChange={(e) => setRoleFilter(e.target.value)}
+          className="cursor-pointer appearance-none rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
         >
           <option value="all">All Roles</option>
           <option value="platform_owner">Owner</option>
           <option value="platform_support">Support</option>
           <option value="platform_analyst">Analyst</option>
         </select>
-
         <select
           value={statusFilter}
-          onChange={e => setStatusFilter(e.target.value)}
-          className="appearance-none px-3 py-2 bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 rounded-lg text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50 cursor-pointer"
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="cursor-pointer appearance-none rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
         >
           <option value="all">All Statuses</option>
           <option value="active">Active</option>
           <option value="inactive">Inactive</option>
           <option value="suspended">Suspended</option>
         </select>
+        <button
+          type="button"
+          onClick={() => refetch()}
+          disabled={loading}
+          className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-50"
+        >
+          <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+          Refresh
+        </button>
       </div>
 
-      {/* Error state */}
-      {error && (
-        <div className="flex items-start gap-2 bg-red-500/10 border border-red-500/30 text-red-300 rounded-lg px-4 py-3 text-sm">
-          <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+      {error ? (
+        <div className="mb-4 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
           <span>{error}</span>
         </div>
-      )}
+      ) : null}
 
-      {/* Loading state */}
-      {loading && (
+      {loading ? (
         <div className="flex items-center justify-center py-16">
-          <Loader2 className="w-6 h-6 text-slate-500 animate-spin" />
+          <Loader2 className="h-6 w-6 animate-spin text-slate-500" />
         </div>
-      )}
+      ) : null}
 
-      {/* Empty state */}
-      {!loading && !error && displayed.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-16 text-center">
-          <div className="bg-slate-100 p-4 rounded-2xl mb-4 dark:bg-slate-800">
-            <Shield className="w-8 h-8 text-slate-500" />
-          </div>
-          <h3 className="text-base font-semibold text-slate-900 dark:text-white mb-1">
-            {search || roleFilter !== 'all' || statusFilter !== 'all' ? 'No matching members' : 'No platform team members yet'}
-          </h3>
-          <p className="text-sm text-slate-600 dark:text-slate-400 max-w-xs">
-            {search || roleFilter !== 'all' || statusFilter !== 'all'
-              ? 'Try adjusting your search or filter.'
-              : 'Invite support or analyst staff to help manage the platform.'}
-          </p>
-        </div>
-      )}
-
-      {/* Table */}
-      {!loading && !error && displayed.length > 0 && (
-        <div className="bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 rounded-xl">
-          <div className="overflow-x-auto" style={{ overflow: 'visible' }}>
-            <table className="w-full text-sm">
+      {!loading && !error ? (
+        <div className="mb-6 overflow-hidden rounded-[12px] border border-slate-200 bg-white shadow-sm">
+          <div className="w-full overflow-x-auto" style={{ overflow: 'visible' }}>
+            <table className="w-full border-collapse text-left text-sm">
               <thead>
-                <tr className="border-b border-slate-200 dark:border-slate-800 text-left">
+                <tr className="border-b border-slate-200 bg-slate-50/70 font-mono text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                   <SortableHeader label="Name" col="name" />
                   <SortableHeader label="Email" col="email" />
                   <SortableHeader label="Role" col="role" />
-                  <SortableHeader label="Signed Up" col="createdAt" />
-                  <SortableHeader label="Last Active" col="lastSignIn" />
                   <SortableHeader label="Status" col="status" />
-                  <th className="px-4 py-3 text-right">
-                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Actions</span>
-                  </th>
+                  <th className="px-6 py-3 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60">
-                {paginatedList.map((m: PlatformMember) => {
-                  const RoleIcon = ROLE_ICON[m.role] || Shield;
-                  const roleColor = ROLE_COLOR[m.role] || ROLE_COLOR.platform_analyst;
-                  const showActions = !isOwnerRow(m) && !isSelf(m);
-                  return (
-                    <tr key={m.id} className="hover:bg-slate-50 transition-colors dark:hover:bg-slate-800/40">
-                      {/* Name */}
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-slate-200 flex dark:bg-slate-800 items-center justify-center text-xs font-bold text-slate-300 shrink-0">
-                            {(m.name || m.email)[0]?.toUpperCase() || '?'}
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium text-slate-900 dark:text-white truncate max-w-[200px]">
-                              {m.name || '(No name)'}
-                            </span>
-                            {isSelf(m) && (
-                              <span className="text-[10px] uppercase tracking-wider text-amber-400/80 bg-amber-500/10 px-1.5 py-0.5 rounded font-semibold">
-                                You
-                              </span>
-                            )}
-                          </div>
+              <tbody>
+                {displayed.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="py-24 text-center">
+                      <div className="flex flex-col items-center justify-center">
+                        <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full border border-slate-200/80 bg-slate-100 text-slate-400">
+                          <Shield className="h-6 w-6" aria-hidden />
                         </div>
-                      </td>
-                      {/* Email */}
-                      <td className="px-4 py-3 text-slate-400 whitespace-nowrap truncate max-w-[220px]">
-                        {m.email}
-                      </td>
-                      {/* Role */}
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${roleColor}`}>
-                          <RoleIcon className="w-3 h-3" />
-                          {ROLE_LABEL[m.role] || m.role}
-                        </span>
-                      </td>
-                      {/* Signed Up */}
-                      <td className="px-4 py-3 text-slate-400 whitespace-nowrap">
-                        {formatDate(m.createdAt)}
-                      </td>
-                      {/* Last Active */}
-                      <td className="px-4 py-3 text-slate-400 whitespace-nowrap">
-                        {formatRelative(m.lastSignIn)}
-                      </td>
-                      {/* Status */}
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        {m.isSuspended ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-500/15 text-red-400">
-                            <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
-                            Suspended
-                          </span>
-                        ) : m.status === 'active' ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-500/15 text-emerald-400">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                            Active
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-slate-700/50 text-slate-400">
-                            <span className="w-1.5 h-1.5 rounded-full bg-slate-500" />
-                            Inactive
-                          </span>
-                        )}
-                      </td>
-                      {/* Actions */}
-                      <td className="px-4 py-3 whitespace-nowrap text-right">
-                        {showActions ? (
-                          <div className="relative" ref={openDropdown === m.id ? dropdownRef : undefined}>
-                            <button
-                              onClick={(e) => {
-                                if (openDropdown === m.id) {
-                                  setOpenDropdown(null);
-                                } else {
-                                  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                                  setDropdownPos({ top: rect.bottom + 4, left: rect.right - 192 });
-                                  setOpenDropdown(m.id);
-                                }
-                              }}
-                              className="inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-900 dark:hover:bg-slate-700 dark:text-slate-400 dark:hover:text-slate-900 transition-colors dark:hover:text-white"
-                              title="More actions"
-                            >
-                              <MoreVertical className="w-4 h-4" />
-                            </button>
-                            {openDropdown === m.id && (
-                              <div
-                                ref={dropdownRef}
-                                className="fixed w-48 bg-white border border-slate-200 rounded-lg dark:bg-slate-800 dark:border-slate-700 shadow-xl py-1"
-                                style={{ top: dropdownPos.top, left: dropdownPos.left, zIndex: 9999 }}
-                              >
-                                <button
-                                  className="w-full px-3 py-2 text-left text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-700 flex items-center gap-2"
-                                  onClick={() => openChangeRole(m)}
-                                >
-                                  <ArrowLeftRight className="w-4 h-4" /> Change Role
-                                </button>
-                                <button
-                                  className="w-full px-3 py-2 text-left text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-700 flex items-center gap-2"
-                                  onClick={() => handleResetPassword(m)}
-                                >
-                                  <Mail className="w-4 h-4" /> Reset Password
-                                </button>
-                                <button
-                                  className="w-full px-3 py-2 text-left text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-700 flex items-center gap-2"
-                                  onClick={() => { setOpenDropdown(null); setSetPasswordTarget(m); }}
-                                >
-                                  <KeyRound className="w-4 h-4" /> Set New Password
-                                </button>
-                                <button
-                                  className="w-full px-3 py-2 text-left text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-700 flex items-center gap-2"
-                                  onClick={() => handleForceLogout(m)}
-                                >
-                                  <LogOut className="w-4 h-4" /> Force Logout
-                                </button>
-                                <div className="border-t border-slate-200 my-1 dark:border-slate-700" />
-                                {m.isSuspended ? (
-                                  <button
-                                    className="w-full px-3 py-2 text-left text-sm text-emerald-400 hover:bg-slate-700 flex items-center gap-2"
-                                    onClick={() => handleToggleSuspend(m)}
-                                  >
-                                    <ShieldCheck className="w-4 h-4" /> Reactivate Account
-                                  </button>
-                                ) : (
-                                  <button
-                                    className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-slate-700 flex items-center gap-2"
-                                    onClick={() => handleToggleSuspend(m)}
-                                  >
-                                    <ShieldBan className="w-4 h-4" /> Suspend Account
-                                  </button>
-                                )}
-                                <div className="border-t border-slate-200 my-1 dark:border-slate-700" />
-                                <button
-                                  className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-slate-700 flex items-center gap-2"
-                                  onClick={() => handleRemove(m)}
-                                >
-                                  <Trash2 className="w-4 h-4" /> Remove
-                                </button>
-                              </div>
-                            )}
+                        <div className="text-sm font-medium text-slate-900">The data is not in yet</div>
+                        <p className="mt-1 max-w-sm text-xs text-slate-400">
+                          {search || roleFilter !== 'all' || statusFilter !== 'all'
+                            ? 'Try adjusting your search or filter.'
+                            : 'No internal operator identities have been registered to this partition registry.'}
+                        </p>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  paginatedList.map((m: PlatformMember) => {
+                    const RoleIcon = ROLE_ICON[m.role] || Shield;
+                    const roleColor = ROLE_COLOR[m.role] || ROLE_COLOR.platform_analyst;
+                    const showActions = !isOwnerRow(m) && !isSelf(m);
+                    return (
+                      <tr key={m.id} className="border-t border-slate-100 hover:bg-slate-50 transition-colors">
+                        <td className="whitespace-nowrap px-6 py-3">
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-200 text-xs font-bold text-slate-500">
+                              {(m.name || m.email)[0]?.toUpperCase() || '?'}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="max-w-[200px] truncate font-medium text-slate-900">
+                                {m.name || '(No name)'}
+                              </span>
+                              {isSelf(m) ? (
+                                <span className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-blue-700">
+                                  You
+                                </span>
+                              ) : null}
+                            </div>
                           </div>
-                        ) : (
-                          <span className="text-xs text-slate-600">{isSelf(m) ? 'You' : 'Owner'}</span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
+                        </td>
+                        <td className="max-w-[220px] truncate whitespace-nowrap px-6 py-3 text-slate-500">
+                          {m.email}
+                        </td>
+                        <td className="whitespace-nowrap px-6 py-3">
+                          <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${roleColor}`}>
+                            <RoleIcon className="h-3 w-3" />
+                            {ROLE_LABEL[m.role] || m.role}
+                          </span>
+                        </td>
+                        <td className="whitespace-nowrap px-6 py-3">
+                          {m.isSuspended ? (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700">
+                              <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
+                              Suspended
+                            </span>
+                          ) : m.status === 'active' ? (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                              Active
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500">
+                              <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+                              Inactive
+                            </span>
+                          )}
+                        </td>
+                        <td className="whitespace-nowrap px-6 py-3 text-right">
+                          {showActions ? (
+                            <div className="relative" ref={openDropdown === m.id ? dropdownRef : undefined}>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  if (openDropdown === m.id) {
+                                    setOpenDropdown(null);
+                                  } else {
+                                    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                                    setDropdownPos({ top: rect.bottom + 4, left: rect.right - 192 });
+                                    setOpenDropdown(m.id);
+                                  }
+                                }}
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+                                title="More actions"
+                              >
+                                <MoreVertical className="h-4 w-4" />
+                              </button>
+                              {openDropdown === m.id ? (
+                                <div
+                                  ref={dropdownRef}
+                                  className="fixed w-48 rounded-lg border border-slate-200 bg-white py-1 shadow-xl"
+                                  style={{ top: dropdownPos.top, left: dropdownPos.left, zIndex: 9999 }}
+                                >
+                                  <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50" onClick={() => openChangeRole(m)}>
+                                    <ArrowLeftRight className="h-4 w-4" /> Change Role
+                                  </button>
+                                  <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50" onClick={() => handleResetPassword(m)}>
+                                    <Mail className="h-4 w-4" /> Reset Password
+                                  </button>
+                                  <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50" onClick={() => { setOpenDropdown(null); setSetPasswordTarget(m); }}>
+                                    <KeyRound className="h-4 w-4" /> Set New Password
+                                  </button>
+                                  <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50" onClick={() => handleForceLogout(m)}>
+                                    <LogOut className="h-4 w-4" /> Force Logout
+                                  </button>
+                                  <div className="my-1 border-t border-slate-200" />
+                                  {m.isSuspended ? (
+                                    <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-emerald-700 hover:bg-slate-50" onClick={() => handleToggleSuspend(m)}>
+                                      <ShieldCheck className="h-4 w-4" /> Reactivate Account
+                                    </button>
+                                  ) : (
+                                    <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-600 hover:bg-slate-50" onClick={() => handleToggleSuspend(m)}>
+                                      <ShieldBan className="h-4 w-4" /> Suspend Account
+                                    </button>
+                                  )}
+                                  <div className="my-1 border-t border-slate-200" />
+                                  <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-600 hover:bg-slate-50" onClick={() => handleRemove(m)}>
+                                    <Trash2 className="h-4 w-4" /> Remove
+                                  </button>
+                                </div>
+                              ) : null}
+                            </div>
+                          ) : (
+                            <span className="text-xs text-slate-500">{isSelf(m) ? 'You' : 'Owner'}</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>
         </div>
-      )}
+      ) : null}
 
-      {/* Pagination */}
-      {!loading && !error && displayed.length > 0 && (
-        <div className="flex flex-col sm:flex-row items-center justify-between bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 rounded-xl px-4 py-3 gap-3">
-          <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+      {!loading && !error && displayed.length > 0 ? (
+        <div className="mb-6 flex flex-col items-center justify-between gap-3 rounded-[12px] border border-slate-200 bg-white px-4 py-3 sm:flex-row">
+          <div className="flex items-center gap-2 text-sm text-slate-600">
             <span>Rows per page:</span>
             <select
               value={rowsPerPage}
-              onChange={e => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1); }}
-              className="bg-white border border-slate-300 rounded px-2 py-1 text-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+              onChange={(e) => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1); }}
+              className="rounded border border-slate-300 bg-white px-2 py-1 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
             >
               <option value={10}>10</option>
               <option value={25}>25</option>
               <option value={50}>50</option>
             </select>
           </div>
-          <span className="text-sm text-slate-600 dark:text-slate-400">
-            Showing {Math.min((currentPage - 1) * rowsPerPage + 1, displayed.length)}{'-'}{Math.min(currentPage * rowsPerPage, displayed.length)} of {displayed.length}
+          <span className="text-sm text-slate-600">
+            Showing {Math.min((currentPage - 1) * rowsPerPage + 1, displayed.length)}
+            {'-'}
+            {Math.min(currentPage * rowsPerPage, displayed.length)} of {displayed.length}
           </span>
           <div className="flex items-center gap-1">
             <button
-              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              type="button"
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
               disabled={currentPage === 1}
-              className="p-1.5 rounded hover:bg-slate-100 text-slate-500 dark:hover:bg-slate-800 dark:text-slate-400 disabled:opacity-30 transition-colors"
+              className="rounded p-1.5 text-slate-500 transition-colors hover:bg-slate-100 disabled:opacity-30"
             >
-              <ChevronLeft className="w-4 h-4" />
+              <ChevronLeft className="h-4 w-4" />
             </button>
-            <span className="text-sm text-slate-700 dark:text-slate-300 px-2">
+            <span className="px-2 text-sm text-slate-700">
               {currentPage} / {totalPages || 1}
             </span>
             <button
-              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              type="button"
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
               disabled={currentPage >= totalPages}
-              className="p-1.5 rounded hover:bg-slate-100 text-slate-500 dark:hover:bg-slate-800 dark:text-slate-400 disabled:opacity-30 transition-colors"
+              className="rounded p-1.5 text-slate-500 transition-colors hover:bg-slate-100 disabled:opacity-30"
             >
-              <ChevronRight className="w-4 h-4" />
+              <ChevronRight className="h-4 w-4" />
             </button>
           </div>
         </div>
-      )}
+      ) : null}
+
+      <div className="flex items-center justify-between rounded-[12px] border border-slate-200 bg-slate-50 p-4 text-xs text-slate-600">
+        <div className="flex items-center gap-3">
+          <Info className="h-5 w-5 text-blue-600" aria-hidden />
+          <div>
+            <span className="font-medium text-slate-800">Partition scope:</span> Internal operator roster under Roam Kingston Central Command. Customer accounts are isolated in Fleet Admin.
+          </div>
+        </div>
+        <div className="font-mono text-[11px] tracking-tight text-slate-500">
+          LOC: KINGSTON / PARISH REGISTRY JMD
+        </div>
+      </div>
 
       {/* Invite Modal */}
       {inviteOpen && (
@@ -953,10 +974,11 @@ export function PlatformTeam() {
   // Inner component for sortable table headers
   function SortableHeader({ label, col }: { label: string; col: SortKey }) {
     return (
-      <th className="px-4 py-3 whitespace-nowrap">
+      <th className="whitespace-nowrap px-6 py-3">
         <button
+          type="button"
           onClick={() => toggleSort(col)}
-          className="inline-flex items-center gap-1 text-xs font-semibold text-slate-400 uppercase tracking-wider hover:text-slate-900 transition-colors dark:hover:text-white"
+          className="inline-flex items-center gap-1 font-mono text-[11px] font-semibold uppercase tracking-wider text-slate-500 transition-colors hover:text-slate-900"
         >
           {label}
           <SortIcon col={col} />

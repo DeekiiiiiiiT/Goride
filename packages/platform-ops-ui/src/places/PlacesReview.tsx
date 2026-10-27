@@ -1,4 +1,8 @@
 // Stitch: dominion-redesign/19c9df8ede1f4635be7f188be5c24f94
+// Stitch: dominion-redesign/6348f0f2c36149fa9bb2cc9e8fa39577
+// Stitch: dominion-redesign/a87e5505779043e2a48a64a6f6266d2e
+// Stitch: dominion-redesign/7da088e95e1e4fe088a2add010bf9bd3
+// Stitch: dominion-redesign/53ad2876cac241b1aaceeb7bbc307045
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PLACE_KINDS, placeKind } from '@roam/plug-core';
 

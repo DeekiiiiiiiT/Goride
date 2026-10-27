@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>S26 Data API</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace'],
+          },
+          colors: {
+            dominion: {
+              blue: '#316bf3',
+              sidebar: '#1e293b',
+              navyDark: '#0f172a',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #f8fafc;
+      color: #0f172a;
+    }
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+    }
+    .material-symbols-outlined.fill {
+      font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-900 antialiased overflow-x-hidden min-h-screen flex">
+
+  <!-- Dominion Navy Sidebar Shell (exact copy from S25 with Data API active) -->
+  <aside class="w-64 bg-[#0d1527] min-h-screen flex flex-col flex-shrink-0 text-slate-300 border-r border-slate-800/80 z-20">
+    <!-- Brand Header -->
+    <div class="h-16 flex items-center gap-3 px-5 border-b border-slate-800/60">
+      <div class="w-8 h-8 rounded-lg bg-dominion-blue flex items-center justify-center text-white font-bold shadow-sm">
+        <svg class="w-5 h-5 fill-current" viewBox="0 0 24 24">
+          <path d="M12 2L3 7v10l9 5 9-5V7l-9-5zm0 2.2L18.8 8 12 11.8 5.2 8 12 4.2zm-7 5.1l6 3.3v7.3l-6-3.3v-7.3zm14 7.3l-6 3.3v-7.3l6-3.3v7.3z"/>
+        </svg>
+      </div>
+      <div>
+        <div class="font-bold text-white text-base leading-tight tracking-tight">Dominion</div>
+        <div class="text-[11px] text-slate-400 font-mono">Roam Admin Console</div>
+      </div>
+    </div>
+
+    <!-- Navigation List -->
+    <div class="flex-1 overflow-y-auto py-4 px-3 space-y-6 text-xs">
+      
+      <!-- Overview -->
+      <div>
+        <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/60 transition-colors font-medium">
+          <span class="material-symbols-outlined text-[19px]">dashboard</span>
+          <span class="text-sm">Overview</span>
+        </a>
+      </div>
+
+      <!-- MASTER DATA -->
+      <div>
+        <div class="px-3 pb-2 text-[10px] font-semibold text-slate-400 uppercase tracking-wider font-mono">Master Data</div>
+        <div class="space-y-0.5">
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/60 transition-colors">
+            <span class="material-symbols-outlined text-[19px]">directions_car</span>
+            <span class="text-sm">Vehicles</span>
+          </a>
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/60 transition-colors">
+            <span class="material-symbols-outlined text-[19px]">map</span>
+            <span class="text-sm">Places and Maps</span>
+          </a>
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/60 transition-colors">
+            <span class="material-symbols-outlined text-[19px]">local_gas_station</span>
+            <span class="text-sm">Fuel</span>
+          </a>
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/60 transition-colors">
+            <span class="material-symbols-outlined text-[19px]">toll</span>
+            <span class="text-sm">Tolls</span>
+          </a>
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/60 transition-colors">
+            <span class="material-symbols-outlined text-[19px]">receipt_long</span>
+            <span class="text-sm">Tax and Vendors</span>
+          </a>
+        </div>
+      </div>
+
+      <!-- ENGINES -->
+      <div>
+        <div class="px-3 pb-2 text-[10px] font-semibold text-slate-400 uppercase tracking-wider font-mono">Engines</div>
+        <div class="space-y-0.5">
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/60 transition-colors">
+            <span class="material-symbols-outlined text-[19px]">bolt</span>
+            <span class="text-sm">Fuel Brain</span>
+          </a>
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/60 transition-colors">
+            <span class="material-symbols-outlined text-[19px]">close</span>
+            <span class="text-sm">Toll Brain</span>
+          </a>
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/60 transition-colors">
+            <span class="material-symbols-outlined text-[19px]">hub</span>
+            <span class="text-sm">Matching Brain</span>
+          </a>
+        </div>
+      </div>
+
+      <!-- DISTRIBUTION -->
+      <div>
+        <div class="px-3 pb-2 text-[10px] font-semibold text-slate-400 uppercase tracking-wider font-mono">Distribution</div>
+        <div class="space-y-0.5">
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/60 transition-colors">
+            <span class="material-symbols-outlined text-[19px]">apps</span>
+            <span class="text-sm">Apps</span>
+          </a>
+          <!-- Active Item: Data API -->
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg bg-dominion-blue text-white font-medium shadow-sm">
+            <span class="material-symbols-outlined text-[19px]">code</span>
+            <span class="text-sm">Data API</span>
+          </a>
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/60 transition-colors">
+            <span class="material-symbols-outlined text-[19px]">swap_horiz</span>
+            <span class="text-sm">Change requests</span>
+          </a>
+        </div>
+      </div>
+
+      <!-- PLATFORM -->
+      <div>
+        <div class="px-3 pb-2 text-[10px] font-semibold text-slate-400 uppercase tracking-wider font-mono">Platform</div>
+        <div class="space-y-0.5">
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/60 transition-colors">
+            <span class="material-symbols-outlined text-[19px]">badge</span>
+            <span class="text-sm">Staff and roles</span>
+          </a>
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/60 transition-colors">
+            <span class="material-symbols-outlined text-[19px]">history</span>
+            <span class="text-sm">Activity log</span>
+          </a>
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/60 transition-colors">
+            <span class="material-symbols-outlined text-[19px]">terminal</span>
+            <span class="text-sm">Platform Ops</span>
+          </a>
+        </div>
+      </div>
+
+      <!-- BACK OFFICE -->
+      <div>
+        <div class="px-3 pb-2 text-[10px] font-semibold text-slate-400 uppercase tracking-wider font-mono">Back Office</div>
+        <div class="space-y-0.5">
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/60 transition-colors">
+            <span class="material-symbols-outlined text-[19px]">tune</span>
+            <span class="text-sm">Global settings</span>
+          </a>
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/60 transition-colors">
+            <span class="material-symbols-outlined text-[19px]">account_balance</span>
+            <span class="text-sm">GCT registrations</span>
+          </a>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Sidebar Bottom Status Footer -->
+    <div class="p-3 border-t border-slate-800/80 bg-[#090f1d] flex items-center justify-between font-mono text-[11px]">
+      <div class="flex items-center gap-2">
+        <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+        <span class="text-slate-400">KGN-DC-01</span>
+      </div>
+      <span class="bg-slate-800/90 text-slate-300 px-2 py-0.5 rounded border border-slate-700/60 text-[10px]">JMD READY</span>
+    </div>
+  </aside>
+
+  <!-- Main Content Area -->
+  <div class="flex-1 flex flex-col min-w-0 bg-[#f8fafc]">
+    
+    <!-- Top Header -->
+    <header class="h-16 bg-white border-b border-slate-200/90 flex items-center justify-between px-8 sticky top-0 z-10">
+      <!-- Search Input -->
+      <div class="w-full max-w-lg relative">
+        <span class="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-[18px]">search</span>
+        <input 
+          type="text" 
+          placeholder="Search entities, engines, routes... ⌘K" 
+          class="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-xs placeholder:text-slate-400 focus:outline-none focus:border-dominion-blue focus:ring-1 focus:ring-dominion-blue"
+          readonly
+        />
+      </div>
+
+      <!-- Header Trailing Actions & Role: Owner only -->
+      <div class="flex items-center gap-4">
+        <button class="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg transition-colors">
+          <span class="material-symbols-outlined text-[20px]">notifications</span>
+        </button>
+        <button class="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg transition-colors">
+          <span class="material-symbols-outlined text-[20px]">help_outline</span>
+        </button>
+        <div class="h-6 w-px bg-slate-200"></div>
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold text-xs font-mono">
+            OW
+          </div>
+          <div class="flex flex-col">
+            <span class="text-xs font-semibold text-slate-800 leading-tight">Owner</span>
+            <span class="text-[10px] text-slate-400 font-mono uppercase">SYS-AUTH</span>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Page Body -->
+    <main class="flex-1 p-8 max-w-7xl w-full mx-auto space-y-6">
+
+      <!-- Breadcrumb & Region Badge -->
+      <div class="flex items-center justify-between">
+        <nav class="flex items-center gap-2 text-xs text-slate-500 font-medium">
+          <span class="text-slate-400">Dominion</span>
+          <span class="text-slate-300">/</span>
+          <span class="text-slate-400">Distribution</span>
+          <span class="text-slate-300">/</span>
+          <span class="text-slate-800 font-semibold">Data API</span>
+        </nav>
+        <div class="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-blue-50 border border-blue-200/60 font-mono text-[11px] text-blue-700">
+          <span class="w-1.5 h-1.5 rounded-full bg-blue-600"></span>
+          <span>REGION: JM-KGN</span>
+        </div>
+      </div>
+
+      <!-- Page Title & Scope Subtitle -->
+      <div>
+        <h1 class="text-2xl font-bold text-slate-900 tracking-tight">Data API</h1>
+        <p class="text-xs text-slate-500 mt-1">Data pipeline interfaces, rate distribution, and provider connectivity in Jamaica.</p>
+      </div>
+
+      <!-- Tab Navigation Bar -->
+      <div class="border-b border-slate-200">
+        <div class="flex items-center gap-1 -mb-px overflow-x-auto text-xs font-medium">
+          <!-- Overview (Selected) -->
+          <button class="px-4 py-2.5 border-b-2 border-dominion-blue text-dominion-blue font-semibold whitespace-nowrap">
+            Overview
+          </button>
+          
+          <!-- Usage -->
+          <button class="px-4 py-2.5 border-b-2 border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300 whitespace-nowrap transition-colors">
+            Usage
+          </button>
+
+          <!-- Supabase -->
+          <button class="px-4 py-2.5 border-b-2 border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300 whitespace-nowrap transition-colors">
+            Supabase
+          </button>
+
+          <!-- Keys (Owner only) -->
+          <button class="px-4 py-2.5 border-b-2 border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300 whitespace-nowrap transition-colors inline-flex items-center gap-2">
+            <span>Keys</span>
+            <span class="px-1.5 py-0.5 text-[10px] font-mono font-medium rounded bg-slate-100 text-slate-600 border border-slate-200">Owner only</span>
+          </button>
+
+          <!-- Budgets (Owner only) -->
+          <button class="px-4 py-2.5 border-b-2 border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300 whitespace-nowrap transition-colors inline-flex items-center gap-2">
+            <span>Budgets</span>
+            <span class="px-1.5 py-0.5 text-[10px] font-mono font-medium rounded bg-slate-100 text-slate-600 border border-slate-200">Owner only</span>
+          </button>
+
+          <!-- Call log -->
+          <button class="px-4 py-2.5 border-b-2 border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300 whitespace-nowrap transition-colors">
+            Call log
+          </button>
+
+          <!-- Billing -->
+          <button class="px-4 py-2.5 border-b-2 border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300 whitespace-nowrap transition-colors">
+            Billing
+          </button>
+        </div>
+      </div>
+
+      <!-- Top Summary / Context Banner Card (White card, 12px radius, hairline border) -->
+      <div class="bg-white rounded-[12px] border border-slate-200/90 p-5 shadow-sm">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-blue-50 border border-blue-100 text-dominion-blue flex items-center justify-center">
+              <span class="material-symbols-outlined text-[22px]">api</span>
+            </div>
+            <div>
+              <div class="flex items-center gap-2">
+                <h3 class="text-sm font-semibold text-slate-900">API Gateway &amp; Feed Distribution</h3>
+                <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+                  Active Node
+                </span>
+              </div>
+              <p class="text-xs text-slate-500 mt-0.5 font-mono">Partition: Kingston &amp; St. Andrew (JM-01) • Distribution Realm</p>
+            </div>
+          </div>
+          
+          <div class="flex items-center gap-2 font-mono text-xs">
+            <div class="px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-slate-600 flex flex-col">
+              <span class="text-[9px] uppercase tracking-wider text-slate-400 font-semibold">Currency</span>
+              <span class="font-bold text-slate-800">JMD</span>
+            </div>
+            <div class="px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-slate-600 flex flex-col">
+              <span class="text-[9px] uppercase tracking-wider text-slate-400 font-semibold">Partition Loc</span>
+              <span class="font-bold text-slate-800">KINGSTON</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Overview Content Section: Provider Summary Cards -->
+      <div class="space-y-4">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-600 font-mono">
+            <span class="material-symbols-outlined text-[16px] text-slate-400">dns</span>
+            <span>Provider Overview</span>
+          </div>
+          <span class="text-[11px] font-mono text-slate-400">DOMAIN_ZONE: DOM_API_JM</span>
+        </div>
+
+        <!-- 3 Provider Overview Cards: Calls, Errors, Estimated cost with em dashes and kill switch Off -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+          
+          <!-- Card 1: Calls -->
+          <div class="bg-white rounded-[12px] border border-slate-200/90 p-5 shadow-sm flex flex-col justify-between">
+            <div>
+              <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                <span class="text-[11px] font-semibold uppercase tracking-wider text-slate-500 font-mono">Calls</span>
+                <span class="material-symbols-outlined text-[18px] text-slate-400">call_made</span>
+              </div>
+              <div class="py-6 flex items-baseline">
+                <span class="text-3xl font-bold font-mono text-slate-400">&mdash;</span>
+              </div>
+            </div>
+            
+            <div class="pt-3 border-t border-slate-100 flex items-center justify-between">
+              <span class="text-xs text-slate-500 font-medium">Kill switch</span>
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-semibold text-slate-500 font-mono">Off</span>
+                <button type="button" class="w-10 h-5 bg-slate-200 rounded-full relative p-0.5 transition-colors cursor-default" aria-label="Kill switch Off">
+                  <div class="w-4 h-4 bg-white rounded-full shadow-sm"></div>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card 2: Errors -->
+          <div class="bg-white rounded-[12px] border border-slate-200/90 p-5 shadow-sm flex flex-col justify-between">
+            <div>
+              <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                <span class="text-[11px] font-semibold uppercase tracking-wider text-slate-500 font-mono">Errors</span>
+                <span class="material-symbols-outlined text-[18px] text-slate-400">error_outline</span>
+              </div>
+              <div class="py-6 flex items-baseline">
+                <span class="text-3xl font-bold font-mono text-slate-400">&mdash;</span>
+              </div>
+            </div>
+
+            <div class="pt-3 border-t border-slate-100 flex items-center justify-between">
+              <span class="text-xs text-slate-500 font-medium">Kill switch</span>
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-semibold text-slate-500 font-mono">Off</span>
+                <button type="button" class="w-10 h-5 bg-slate-200 rounded-full relative p-0.5 transition-colors cursor-default" aria-label="Kill switch Off">
+                  <div class="w-4 h-4 bg-white rounded-full shadow-sm"></div>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card 3: Estimated cost -->
+          <div class="bg-white rounded-[12px] border border-slate-200/90 p-5 shadow-sm flex flex-col justify-between">
+            <div>
+              <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                <span class="text-[11px] font-semibold uppercase tracking-wider text-slate-500 font-mono">Estimated cost</span>
+                <span class="material-symbols-outlined text-[18px] text-slate-400">payments</span>
+              </div>
+              <div class="py-6 flex items-baseline gap-2">
+                <span class="text-3xl font-bold font-mono text-slate-400">&mdash;</span>
+                <span class="text-xs font-mono font-medium text-slate-400 uppercase">JMD</span>
+              </div>
+            </div>
+
+            <div class="pt-3 border-t border-slate-100 flex items-center justify-between">
+              <span class="text-xs text-slate-500 font-medium">Kill switch</span>
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-semibold text-slate-500 font-mono">Off</span>
+                <button type="button" class="w-10 h-5 bg-slate-200 rounded-full relative p-0.5 transition-colors cursor-default" aria-label="Kill switch Off">
+                  <div class="w-4 h-4 bg-white rounded-full shadow-sm"></div>
+                </button>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Billing Note on Overview & System Empty State Container -->
+      <div class="space-y-4 pt-2">
+        
+        <!-- Billing Note Line on Overview -->
+        <div class="bg-white rounded-[12px] border border-slate-200/90 p-4 shadow-sm flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <span class="material-symbols-outlined text-slate-400 text-[18px]">receipt</span>
+            <span class="text-xs font-medium text-slate-700">The provider bill is not connected yet.</span>
+          </div>
+          <span class="text-[10px] font-mono text-slate-400 uppercase tracking-wider">BILLING_STATUS: PENDING</span>
+        </div>
+
+        <!-- Small Standard Dominion Empty Note -->
+        <div class="rounded-[12px] border border-slate-200 bg-slate-50/80 px-4 py-3 flex items-center justify-between text-xs text-slate-500">
+          <div class="flex items-center gap-2.5">
+            <span class="material-symbols-outlined text-[17px] text-slate-400">info</span>
+            <span class="italic text-slate-500">The data is not in yet.</span>
+          </div>
+          <div class="font-mono text-[10px] text-slate-400 uppercase">
+            LOC: KINGSTON / PARISH REGISTRY JMD
+          </div>
+        </div>
+
+      </div>
+
+    </main>
+  </div>
+
+</body>
+</html>

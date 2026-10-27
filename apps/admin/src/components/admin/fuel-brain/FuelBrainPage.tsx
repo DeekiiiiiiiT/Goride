@@ -1,31 +1,22 @@
+// Stitch: dominion-redesign/9f3ed86902e5469baf7d6f8ced78c75e
 /**
- * Fuel Brain Control Panel (Dominion → Fuel Management)
- * Rule cards: Ride Share / Company Ops / Deadhead (editable) / Personal residual / Misc.
- * Fleet recon always uses Fuel Brain — no kill switch.
+ * Fuel Brain Control Panel (Dominion → Engines → Engine / Fuel)
+ * Classification cards + live deadhead dial/save.
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { useAuth } from '../../auth/AuthContext';
-import { api } from '../../../services/api';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../ui/card';
-import { Badge } from '../../ui/badge';
-import { Alert, AlertDescription, AlertTitle } from '../../ui/alert';
-import { Button } from '../../ui/button';
-import { Input } from '../../ui/input';
-import { Label } from '../../ui/label';
-import { Checkbox } from '../../ui/checkbox';
 import {
-  Brain,
+  Building2,
+  Car,
   Fuel,
   Loader2,
-  AlertCircle,
-  CheckCircle2,
-  Car,
-  Wrench,
+  MoreHorizontal,
   Route,
   User,
-  Droplets,
 } from 'lucide-react';
+import { useAuth } from '../../auth/AuthContext';
+import { api } from '../../../services/api';
+import { EngineConsoleChrome, EnginePanelHeader } from '../engine/EngineConsoleChrome';
 
 type BrainHealth = {
   service: string;
@@ -49,7 +40,15 @@ type BrainPolicy = {
   isDefault: boolean;
 };
 
-export function FuelBrainPage() {
+const CLASS_CARDS = [
+  { key: 'rideshare', label: 'rideshare', code: 'CLASS_01', Icon: Car },
+  { key: 'company', label: 'company', code: 'CLASS_02', Icon: Building2 },
+  { key: 'deadhead', label: 'deadhead', code: 'CLASS_03', Icon: Route },
+  { key: 'personal', label: 'personal', code: 'CLASS_04', Icon: User },
+  { key: 'misc', label: 'misc', code: 'CLASS_05', Icon: MoreHorizontal },
+] as const;
+
+export function FuelBrainPage({ onNavigate }: { onNavigate?: (page: string) => void }) {
   const { session } = useAuth();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -57,6 +56,7 @@ export function FuelBrainPage() {
   const [health, setHealth] = useState<BrainHealth | null>(null);
   const [policy, setPolicy] = useState<BrainPolicy | null>(null);
   const [policies, setPolicies] = useState<BrainPolicy[]>([]);
+  const [saving, setSaving] = useState(false);
 
   const fetchAll = useCallback(async () => {
     if (!session) {
@@ -68,7 +68,7 @@ export function FuelBrainPage() {
     try {
       const [h, p] = await Promise.all([
         api.getFuelBrainHealth().catch(() => null),
-        api.getFuelBrainPolicies().catch((e: any) => {
+        api.getFuelBrainPolicies().catch((e: { status?: number }) => {
           if (e?.status === 401 || e?.status === 403) {
             throw new Error('Platform admin access required for Fuel Brain policies.');
           }
@@ -101,6 +101,7 @@ export function FuelBrainPage() {
     if (!policy || !session) return;
     setSuccess(null);
     setError(null);
+    setSaving(true);
     try {
       const data = await api.putFuelBrainPolicy(policy as unknown as Record<string, unknown>);
       setPolicy(data.policy);
@@ -111,239 +112,160 @@ export function FuelBrainPage() {
       });
       setSuccess('Deadhead rules saved');
       setTimeout(() => setSuccess(null), 2500);
-    } catch (e: any) {
-      setError(e?.message || 'Save failed');
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Save failed');
+    } finally {
+      setSaving(false);
     }
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      <div className="flex min-h-[400px] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+    <EngineConsoleChrome
+      active="fuel"
+      onNavigate={onNavigate}
+      statusLabel={health?.brain_enabled ? 'Active' : 'Standby'}
+    >
+      <section className="space-y-4 rounded-[12px] border border-slate-200 bg-white p-6 shadow-sm">
+        <EnginePanelHeader
+          icon={<Fuel className="h-[18px] w-[18px]" aria-hidden />}
+          title="Fuel engine"
+          description="Classify fuel burn and reimbursement tiers across vehicle operations in Jamaica."
+          engineRef="ENGINE_REF: DOM-FUEL-JM"
+          badge="SELECTED"
+          badgeTone="selected"
+        />
+
         <div>
-          <div className="flex items-center gap-2">
-            <Brain className="h-6 w-6 text-amber-600" />
-            <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-50">Fuel Brain</h1>
-            <Badge variant="outline" className="border-amber-300 text-amber-800 bg-amber-50">
-              Residual Personal
-            </Badge>
+          <div className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-700">
+            Classification
           </div>
-          <p className="mt-1 text-sm text-slate-600 dark:text-slate-400 max-w-2xl">
-            Automated km stack: Ride Share → Company Ops → Deadhead → Personal (leftover). Always on
-            in Fleet recon. Misc is cash leakage only.
-          </p>
-        </div>
-        <Button variant="outline" size="sm" onClick={() => void fetchAll()}>
-          Refresh
-        </Button>
-      </div>
-
-      {error && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Error</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-      {success && (
-        <Alert className="border-emerald-200 bg-emerald-50">
-          <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-          <AlertTitle>Saved</AlertTitle>
-          <AlertDescription>{success}</AlertDescription>
-        </Alert>
-      )}
-
-      {policies.length > 1 && (
-        <div className="flex flex-wrap items-center gap-2">
-          <Label className="text-sm">Policy</Label>
-          <select
-            className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-900"
-            value={policy?.id || ''}
-            onChange={(e) => {
-              const next = policies.find((p) => p.id === e.target.value) || null;
-              setPolicy(next);
-            }}
-          >
-            {policies.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}{p.isDefault ? ' (default)' : ''}
-              </option>
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+            {CLASS_CARDS.map(({ key, label, code, Icon }) => (
+              <div
+                key={key}
+                className="flex flex-col justify-between rounded-[12px] border border-slate-200 bg-slate-50/60 p-4 transition-colors hover:border-slate-300"
+              >
+                <div>
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="text-xs font-semibold text-slate-800">{label}</span>
+                    <Icon className="h-4 w-4 text-slate-400" aria-hidden />
+                  </div>
+                  <div className="mt-3 text-xs italic text-slate-500">The data is not in yet</div>
+                </div>
+                <div className="mt-4 flex items-center justify-between border-t border-slate-200/60 pt-3 font-mono text-[10px] text-slate-400">
+                  <span>{code}</span>
+                  <span>JMD TIER</span>
+                </div>
+              </div>
             ))}
-          </select>
-        </div>
-      )}
-
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Fuel className="h-4 w-4" /> Health
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="text-sm space-y-1">
-          <div>
-            Classify edge:{' '}
-            <Badge variant={health?.brain_enabled ? 'default' : 'secondary'}>
-              {health?.brain_enabled ? 'On' : 'Off'}
-            </Badge>{' '}
-            <span className="text-xs text-slate-500">{health?.stack}</span>
           </div>
-          <p className="text-xs text-slate-500">
-            Fleet recon always consumes Fuel Brain. Edge flag is for classify service only.
-          </p>
-        </CardContent>
-      </Card>
+        </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Car className="h-4 w-4" /> Ride Share
-            </CardTitle>
-            <CardDescription>Locked rule</CardDescription>
-          </CardHeader>
-          <CardContent className="text-sm text-slate-600">
-            Full trip stack from platform imports (On Trip + Enroute + Open + Unavailable). Not
-            editable here.
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Wrench className="h-4 w-4" /> Company Ops
-            </CardTitle>
-            <CardDescription>Locked rule</CardDescription>
-          </CardHeader>
-          <CardContent className="text-sm text-slate-600">
-            Admin mileage adjustments typed Company Misc / Maintenance. Not editable here.
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center gap-2">
-              <User className="h-4 w-4" /> Personal (residual)
-            </CardTitle>
-            <CardDescription>Locked rule</CardDescription>
-          </CardHeader>
-          <CardContent className="text-sm text-slate-600">
-            Everything left after Ride Share, Company Ops, and capped Deadhead. Includes unlabeled
-            miles (missed imports, drift). No driver input.
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Droplets className="h-4 w-4" /> Misc (Leakage)
-            </CardTitle>
-            <CardDescription>Locked rule</CardDescription>
-          </CardHeader>
-          <CardContent className="text-sm text-slate-600">
-            Spend − (all four category $). Efficiency / theft / pump signal — not a km type.
-          </CardContent>
-        </Card>
-      </div>
+        <div className="space-y-4 border-t border-slate-100 pt-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h3 className="text-xs font-semibold text-slate-800">Deadhead rules</h3>
+              <p className="mt-0.5 text-[11px] text-slate-500">
+                Odo gaps between trips first; time bands only when odo missing.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void fetchAll()}
+              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+            >
+              Refresh
+            </button>
+          </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <Route className="h-4 w-4" /> Deadhead rules
-          </CardTitle>
-          <CardDescription>
-            Odo gaps between trips first; time bands only when odo missing. Always capped to leftover
-            after Ride Share + Company Ops.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+          {error ? (
+            <p className="text-xs text-red-600">{error}</p>
+          ) : null}
+          {success ? (
+            <p className="text-xs text-emerald-700">{success}</p>
+          ) : null}
+
+          {policies.length > 1 ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="text-xs font-medium text-slate-600" htmlFor="fuel-policy">
+                Policy
+              </label>
+              <select
+                id="fuel-policy"
+                className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs text-slate-800"
+                value={policy?.id || ''}
+                onChange={(e) => {
+                  const next = policies.find((p) => p.id === e.target.value) || null;
+                  setPolicy(next);
+                }}
+              >
+                {policies.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                    {p.isDefault ? ' (default)' : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
+
           {policy ? (
             <>
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="prefer-odo"
+              <label className="flex items-center gap-2 text-xs text-slate-800">
+                <input
+                  type="checkbox"
                   checked={policy.preferOdoGaps}
-                  onCheckedChange={(v) => setPolicy({ ...policy, preferOdoGaps: !!v })}
+                  onChange={(e) => setPolicy({ ...policy, preferOdoGaps: e.target.checked })}
+                  className="rounded border-slate-300"
                 />
-                <Label htmlFor="prefer-odo">Prefer odometer gaps between trips</Label>
+                Prefer odometer gaps between trips
+              </label>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {(
+                  [
+                    ['deadheadGapMaxMinutes', 'Deadhead gap max (min)'],
+                    ['personalGapMinMinutes', 'Personal gap min (min)'],
+                    ['peakHoursStart', 'Peak hours start'],
+                    ['peakHoursEnd', 'Peak hours end'],
+                    ['industryFallbackPct', 'Industry fallback %'],
+                    ['crossValidationPp', 'Cross-validation (pp)'],
+                  ] as const
+                ).map(([key, label]) => (
+                  <div key={key}>
+                    <label className="mb-1 block text-[11px] font-medium text-slate-600">{label}</label>
+                    <input
+                      type="number"
+                      value={policy[key]}
+                      onChange={(e) =>
+                        setPolicy({ ...policy, [key]: Number(e.target.value) })
+                      }
+                      className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50/70 px-3 text-xs text-slate-900 focus:border-blue-600 focus:bg-white focus:outline-none"
+                    />
+                  </div>
+                ))}
               </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div>
-                  <Label>Deadhead gap max (min)</Label>
-                  <Input
-                    type="number"
-                    value={policy.deadheadGapMaxMinutes}
-                    onChange={(e) =>
-                      setPolicy({ ...policy, deadheadGapMaxMinutes: Number(e.target.value) })
-                    }
-                  />
-                </div>
-                <div>
-                  <Label>Personal gap min (min)</Label>
-                  <Input
-                    type="number"
-                    value={policy.personalGapMinMinutes}
-                    onChange={(e) =>
-                      setPolicy({ ...policy, personalGapMinMinutes: Number(e.target.value) })
-                    }
-                  />
-                </div>
-                <div>
-                  <Label>Peak hours start</Label>
-                  <Input
-                    type="number"
-                    value={policy.peakHoursStart}
-                    onChange={(e) =>
-                      setPolicy({ ...policy, peakHoursStart: Number(e.target.value) })
-                    }
-                  />
-                </div>
-                <div>
-                  <Label>Peak hours end</Label>
-                  <Input
-                    type="number"
-                    value={policy.peakHoursEnd}
-                    onChange={(e) =>
-                      setPolicy({ ...policy, peakHoursEnd: Number(e.target.value) })
-                    }
-                  />
-                </div>
-                <div>
-                  <Label>Industry fallback %</Label>
-                  <Input
-                    type="number"
-                    value={policy.industryFallbackPct}
-                    onChange={(e) =>
-                      setPolicy({ ...policy, industryFallbackPct: Number(e.target.value) })
-                    }
-                  />
-                </div>
-                <div>
-                  <Label>Cross-validation (pp)</Label>
-                  <Input
-                    type="number"
-                    value={policy.crossValidationPp}
-                    onChange={(e) =>
-                      setPolicy({ ...policy, crossValidationPp: Number(e.target.value) })
-                    }
-                  />
-                </div>
-              </div>
-              <p className="text-xs text-slate-500">
-                A gap with no odometer that is too long to call reposition and too short to call personal stays unexplained. It is not split by a percentage.
-              </p>
-              <Button onClick={() => void savePolicy()}>Save deadhead rules</Button>
+              <button
+                type="button"
+                onClick={() => void savePolicy()}
+                disabled={saving}
+                className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-medium text-white shadow-sm hover:bg-blue-700 disabled:opacity-60"
+              >
+                {saving ? 'Saving…' : 'Save deadhead rules'}
+              </button>
             </>
           ) : (
-            <p className="text-sm text-slate-500">
-              No policy loaded — apply migration and redeploy fuel-brain Edge.
-            </p>
+            <p className="text-xs italic text-slate-500">The data is not in yet</p>
           )}
-        </CardContent>
-      </Card>
-    </div>
+        </div>
+      </section>
+    </EngineConsoleChrome>
   );
 }

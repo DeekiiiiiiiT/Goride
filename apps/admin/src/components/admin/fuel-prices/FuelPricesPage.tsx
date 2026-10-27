@@ -1,31 +1,28 @@
+// Stitch: dominion-redesign/b8c603a5127744e887b443ff58b9412d
 /**
  * Petrojam Prices (Dominion → Fuel Management → Prices)
  * Wholesale / ex-refinery rates synced from petrojam.com — not pump prices.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  DollarSign,
-  Loader2,
+  Archive,
   AlertCircle,
   CheckCircle2,
+  Info,
+  Loader2,
   RefreshCw,
-  ExternalLink,
-  CalendarRange,
-  Archive,
-} from 'lucide-react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../ui/card';
-import { Alert, AlertDescription, AlertTitle } from '../../ui/alert';
-import { Button } from '../../ui/button';
-import { Badge } from '../../ui/badge';
-import { Label } from '../../ui/label';
+} from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "../../ui/alert";
+import { Button } from "../../ui/button";
+import { Label } from "../../ui/label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '../../ui/select';
+} from "../../ui/select";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -35,37 +32,53 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from '../../ui/alert-dialog';
+} from "../../ui/alert-dialog";
 import {
   petrojamPricesService,
   type PetrojamPrice,
   type PetrojamSyncResult,
-} from '../../../services/petrojamPricesService';
+} from "../../../services/petrojamPricesService";
 
 const MONTH_LABELS = [
-  'January',
-  'February',
-  'March',
-  'April',
-  'May',
-  'June',
-  'July',
-  'August',
-  'September',
-  'October',
-  'November',
-  'December',
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+
+const PRODUCTS: Array<{
+  key: keyof PetrojamPrice;
+  label: string;
+}> = [
+  { key: "gasolene87", label: "Unleaded 87" },
+  { key: "gasolene90", label: "Unleaded 90" },
+  { key: "autoDiesel", label: "Auto diesel" },
+  { key: "ulsd", label: "ULSD" },
+  { key: "kerosene", label: "Kerosene" },
+  { key: "propane", label: "Propane" },
+  { key: "butane", label: "Butane" },
+  { key: "hfo", label: "HFO" },
+  { key: "asphalt", label: "Asphalt" },
 ];
 
 function fmt(n: number | null | undefined): string {
-  if (n == null || Number.isNaN(n)) return '—';
-  return n.toLocaleString('en-JM', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
+  if (n == null || Number.isNaN(n)) return "The data is not in yet";
+  return `JMD $${n.toLocaleString("en-JM", { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`;
 }
 
-function fmtDate(iso: string): string {
+function fmtDate(iso: string | undefined): string {
+  if (!iso) return "The data is not in yet";
   const d = new Date(`${iso}T12:00:00`);
   if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString('en-JM', { year: 'numeric', month: 'long', day: 'numeric' });
+  return d.toLocaleDateString("en-JM", { year: "numeric", month: "long", day: "numeric" });
 }
 
 function yearOptions(): number[] {
@@ -81,8 +94,8 @@ function summarizeSync(result: PetrojamSyncResult): string {
       ? ` (${fmtDate(result.oldestDate)} → ${fmtDate(result.latestDate)})`
       : result.latestDate
         ? ` (latest ${fmtDate(result.latestDate)})`
-        : '';
-  const pages = result.pagesFetched ? ` across ${result.pagesFetched} page(s)` : '';
+        : "";
+  const pages = result.pagesFetched ? ` across ${result.pagesFetched} page(s)` : "";
   return `Synced ${result.rowCount} weeks${pages} — ${result.inserted} new, ${result.updated} updated${range}`;
 }
 
@@ -93,9 +106,8 @@ export function FuelPricesPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [prices, setPrices] = useState<PetrojamPrice[]>([]);
-
-  const [filterYear, setFilterYear] = useState<string>('all');
-  const [filterMonth, setFilterMonth] = useState<string>('all');
+  const [filterYear, setFilterYear] = useState<string>("all");
+  const [filterMonth, setFilterMonth] = useState<string>("all");
   const [syncYear, setSyncYear] = useState<string>(String(years[0] ?? new Date().getFullYear()));
   const [syncMonth, setSyncMonth] = useState<string>(String(new Date().getMonth() + 1));
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
@@ -104,8 +116,8 @@ export function FuelPricesPage() {
     setLoading(true);
     setError(null);
     try {
-      const year = filterYear === 'all' ? null : Number(filterYear);
-      const month = filterMonth === 'all' ? null : Number(filterMonth);
+      const year = filterYear === "all" ? null : Number(filterYear);
+      const month = filterMonth === "all" ? null : Number(filterMonth);
       const rows = await petrojamPricesService.listPrices({
         limit: year ? 400 : 200,
         year,
@@ -113,7 +125,7 @@ export function FuelPricesPage() {
       });
       setPrices(rows);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load prices');
+      setError(e instanceof Error ? e.message : "Failed to load prices");
     } finally {
       setLoading(false);
     }
@@ -133,290 +145,275 @@ export function FuelPricesPage() {
       setTimeout(() => setSuccess(null), 6000);
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Sync failed');
+      setError(e instanceof Error ? e.message : "Sync failed");
     } finally {
       setSyncing(false);
     }
   };
 
-  const latestScraped = prices[0]?.scrapedAt;
+  const latest = prices[0];
   const busy = syncing || loading;
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <div className="flex items-center gap-2">
-            <DollarSign className="h-6 w-6 text-slate-700 dark:text-slate-200" />
-            <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-50">Petrojam Prices</h1>
-            <Badge variant="secondary">Wholesale</Badge>
-          </div>
-          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            Jamaica Petrojam ex-refinery / base product prices (JMD). These are not retail pump prices —
-            stations add margin and other costs on top.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" size="sm" asChild>
-            <a href="https://www.petrojam.com/price/" target="_blank" rel="noreferrer">
-              Open Petrojam
-              <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
-            </a>
-          </Button>
-          <Button
-            onClick={() => void runSync(() => petrojamPricesService.syncLatest())}
-            disabled={busy}
-          >
-            {syncing ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <RefreshCw className="mr-2 h-4 w-4" />
-            )}
-            Sync latest
-          </Button>
+    <div className="mx-auto w-full max-w-7xl space-y-6 p-8 text-slate-900">
+      <div className="flex items-center justify-between">
+        <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-xs font-medium text-slate-500">
+          <span>Dominion</span>
+          <span aria-hidden>›</span>
+          <span>Master data</span>
+          <span aria-hidden>›</span>
+          <span>Fuel</span>
+          <span aria-hidden>›</span>
+          <span className="font-semibold text-slate-900">Fuel prices</span>
+        </nav>
+        <div className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 font-mono text-[11px] text-slate-600">
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+          <span>REGION: JM-KGN</span>
         </div>
       </div>
 
-      {error && (
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Fuel prices</h1>
+          <p className="mt-1 text-sm text-slate-500">
+            Petrojam wholesale and ex-refinery prices. Not pump prices.
+          </p>
+        </div>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => void runSync(() => petrojamPricesService.syncLatest())}
+          className="inline-flex items-center gap-2 rounded-lg bg-[#316bf3] px-4 py-2 text-xs font-medium text-white shadow-sm transition-colors hover:bg-blue-600 disabled:opacity-60"
+        >
+          {syncing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+          Sync Petrojam
+        </button>
+      </div>
+
+      {error ? (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
           <AlertTitle>Error</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
-      )}
-      {success && (
-        <Alert className="border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100">
+      ) : null}
+      {success ? (
+        <Alert className="border-emerald-200 bg-emerald-50 text-emerald-900">
           <CheckCircle2 className="h-4 w-4" />
           <AlertTitle>Synced</AlertTitle>
           <AlertDescription>{success}</AlertDescription>
         </Alert>
-      )}
+      ) : null}
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <CalendarRange className="h-4 w-4" />
-            Import history
-          </CardTitle>
-          <CardDescription>
-            Pull older Petrojam weeks by year or month (back to 2010), or import the full archive. Full
-            archive walks every page on their site and can take about a minute.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="space-y-2">
-              <Label>Year to sync</Label>
-              <Select value={syncYear} onValueChange={setSyncYear} disabled={busy}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Year" />
-                </SelectTrigger>
-                <SelectContent>
-                  {years.map((y) => (
-                    <SelectItem key={y} value={String(y)}>
-                      {y}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Month to sync</Label>
-              <Select value={syncMonth} onValueChange={setSyncMonth} disabled={busy}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Month" />
-                </SelectTrigger>
-                <SelectContent>
-                  {MONTH_LABELS.map((label, idx) => (
-                    <SelectItem key={label} value={String(idx + 1)}>
-                      {label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+      <div className="overflow-hidden rounded-[12px] border border-slate-200/80 bg-white shadow-sm">
+        {loading ? (
+          <div className="flex items-center justify-center gap-2 py-16 text-sm text-slate-500">
+            <Loader2 className="h-5 w-5 animate-spin" />
+            Loading prices…
           </div>
+        ) : (
+          <table className="w-full border-collapse text-left">
+            <thead>
+              <tr className="border-b border-slate-200/80 bg-slate-50/60 font-mono text-[11px] uppercase tracking-wider text-slate-500">
+                <th scope="col" className="px-6 py-3.5 font-semibold">
+                  Product
+                </th>
+                <th scope="col" className="px-6 py-3.5 font-semibold">
+                  Effective date
+                </th>
+                <th scope="col" className="px-6 py-3.5 text-right font-semibold">
+                  Wholesale JMD
+                </th>
+                <th scope="col" className="px-6 py-3.5 text-right font-semibold">
+                  Ex-refinery JMD
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 text-sm">
+              {PRODUCTS.map((product) => {
+                const value = latest ? (latest[product.key] as number | null | undefined) : null;
+                const hasValue = value != null && !Number.isNaN(value);
+                return (
+                  <tr key={product.key} className="transition-colors hover:bg-slate-50/50">
+                    <td className="px-6 py-4 font-medium text-slate-800">{product.label}</td>
+                    <td className={`px-6 py-4 ${hasValue ? "text-slate-600" : "italic text-slate-400"}`}>
+                      {hasValue ? fmtDate(latest?.priceDate) : "The data is not in yet"}
+                    </td>
+                    <td
+                      className={`px-6 py-4 text-right font-mono ${hasValue ? "text-slate-900" : "italic text-slate-400"}`}
+                    >
+                      {hasValue ? fmt(value) : "The data is not in yet"}
+                    </td>
+                    <td className="px-6 py-4 text-right font-mono italic text-slate-400">
+                      The data is not in yet
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
 
+      <div className="rounded-[12px] border border-slate-200/80 bg-white p-4 shadow-sm">
+        <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-slate-900">Import history</p>
+            <p className="text-xs text-slate-500">Pull older Petrojam weeks, or sync the full archive.</p>
+          </div>
           <div className="flex flex-wrap gap-2">
-            <Button
-              variant="secondary"
+            <Select
+              value={filterYear}
+              onValueChange={(v) => {
+                setFilterYear(v);
+                if (v === "all") setFilterMonth("all");
+              }}
               disabled={busy}
-              onClick={() =>
-                void runSync(() =>
-                  petrojamPricesService.sync({ mode: 'year', year: Number(syncYear) }),
-                )
-              }
             >
-              {syncing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Sync year {syncYear}
-            </Button>
-            <Button
-              variant="secondary"
-              disabled={busy}
-              onClick={() =>
-                void runSync(() =>
-                  petrojamPricesService.sync({
-                    mode: 'month',
-                    year: Number(syncYear),
-                    month: Number(syncMonth),
-                  }),
-                )
-              }
-            >
-              {syncing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Sync {MONTH_LABELS[Number(syncMonth) - 1]} {syncYear}
-            </Button>
-            <Button
-              variant="outline"
-              disabled={busy}
-              onClick={() => setShowArchiveConfirm(true)}
+              <SelectTrigger className="h-8 w-[130px] text-xs">
+                <SelectValue placeholder="Filter year" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All years</SelectItem>
+                {years.map((y) => (
+                  <SelectItem key={y} value={String(y)}>
+                    {y}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={filterMonth} onValueChange={setFilterMonth} disabled={busy || filterYear === "all"}>
+              <SelectTrigger className="h-8 w-[140px] text-xs">
+                <SelectValue placeholder="Filter month" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All months</SelectItem>
+                {MONTH_LABELS.map((label, idx) => (
+                  <SelectItem key={label} value={String(idx + 1)}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="space-y-1.5">
+            <Label className="text-xs">Year to sync</Label>
+            <Select value={syncYear} onValueChange={setSyncYear} disabled={busy}>
+              <SelectTrigger className="h-8 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {years.map((y) => (
+                  <SelectItem key={y} value={String(y)}>
+                    {y}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Month to sync</Label>
+            <Select value={syncMonth} onValueChange={setSyncMonth} disabled={busy}>
+              <SelectTrigger className="h-8 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {MONTH_LABELS.map((label, idx) => (
+                  <SelectItem key={label} value={String(idx + 1)}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            disabled={busy}
+            onClick={() =>
+              void runSync(() => petrojamPricesService.sync({ mode: "year", year: Number(syncYear) }))
+            }
+          >
+            Sync year {syncYear}
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            disabled={busy}
+            onClick={() =>
+              void runSync(() =>
+                petrojamPricesService.sync({
+                  mode: "month",
+                  year: Number(syncYear),
+                  month: Number(syncMonth),
+                }),
+              )
+            }
+          >
+            Sync {MONTH_LABELS[Number(syncMonth) - 1]} {syncYear}
+          </Button>
+          <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => setShowArchiveConfirm(true)}>
+            <Archive className="mr-1.5 h-3.5 w-3.5" />
+            Sync full archive
+          </Button>
+        </div>
+        {prices.length > 1 ? (
+          <p className="mt-3 text-xs text-slate-500">
+            Showing latest week in the product table. {prices.length} weeks stored for this filter.
+          </p>
+        ) : null}
+      </div>
+
+      <div className="flex items-center justify-between rounded-[12px] border border-slate-200/80 bg-white px-5 py-3.5 text-xs shadow-sm">
+        <div className="flex items-center gap-2.5 text-slate-500">
+          <Info className="h-4 w-4 shrink-0 text-slate-400" aria-hidden />
+          <span>The data is not in yet.</span>
+        </div>
+        <div className="font-mono text-[11px] uppercase tracking-wide text-slate-400">
+          LOC: KINGSTON / PETROJAM REFINERY JMD
+        </div>
+      </div>
+
+      <AlertDialog open={showArchiveConfirm} onOpenChange={setShowArchiveConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Archive className="h-5 w-5" />
+              Import full Petrojam archive?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This pulls every page from Petrojam (back through ~2010). It can take about a minute, and
+              duplicates are updated — not doubled.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={syncing}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={syncing}
+              onClick={(e) => {
+                e.preventDefault();
+                setShowArchiveConfirm(false);
+                void runSync(() => petrojamPricesService.sync({ mode: "all" }));
+              }}
             >
               {syncing ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Syncing…
+                </>
               ) : (
-                <Archive className="mr-2 h-4 w-4" />
+                "Start full sync"
               )}
-              Sync full archive
-            </Button>
-          </div>
-
-          <AlertDialog open={showArchiveConfirm} onOpenChange={setShowArchiveConfirm}>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle className="flex items-center gap-2">
-                  <Archive className="h-5 w-5" />
-                  Import full Petrojam archive?
-                </AlertDialogTitle>
-                <AlertDialogDescription>
-                  This pulls every page from Petrojam (back through ~2010). It can take about a minute,
-                  and duplicates are updated — not doubled.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel disabled={syncing}>Cancel</AlertDialogCancel>
-                <AlertDialogAction
-                  disabled={syncing}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    setShowArchiveConfirm(false);
-                    void runSync(() => petrojamPricesService.sync({ mode: 'all' }));
-                  }}
-                >
-                  {syncing ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Syncing…
-                    </>
-                  ) : (
-                    'Start full sync'
-                  )}
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <CardTitle className="text-base">Stored prices</CardTitle>
-              <CardDescription>
-                {latestScraped
-                  ? `Last sync recorded ${new Date(latestScraped).toLocaleString('en-JM')}`
-                  : 'No prices stored yet — sync latest or import history.'}
-              </CardDescription>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Select
-                value={filterYear}
-                onValueChange={(v) => {
-                  setFilterYear(v);
-                  if (v === 'all') setFilterMonth('all');
-                }}
-                disabled={busy}
-              >
-                <SelectTrigger className="w-[140px]">
-                  <SelectValue placeholder="Filter year" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All years</SelectItem>
-                  {years.map((y) => (
-                    <SelectItem key={y} value={String(y)}>
-                      {y}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select
-                value={filterMonth}
-                onValueChange={setFilterMonth}
-                disabled={busy || filterYear === 'all'}
-              >
-                <SelectTrigger className="w-[150px]">
-                  <SelectValue placeholder="Filter month" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All months</SelectItem>
-                  {MONTH_LABELS.map((label, idx) => (
-                    <SelectItem key={label} value={String(idx + 1)}>
-                      {label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="flex items-center justify-center py-16 text-muted-foreground">
-              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-              Loading prices…
-            </div>
-          ) : prices.length === 0 ? (
-            <div className="py-12 text-center text-sm text-muted-foreground">
-              No rows for this filter. Sync latest, a year/month, or the full archive.
-            </div>
-          ) : (
-            <div className="overflow-x-auto rounded-md border">
-              <table className="w-full min-w-[960px] text-left text-sm">
-                <thead className="bg-muted/50 text-xs uppercase tracking-wide text-muted-foreground">
-                  <tr>
-                    <th className="px-3 py-2 font-medium">Date</th>
-                    <th className="px-3 py-2 font-medium">87</th>
-                    <th className="px-3 py-2 font-medium">90</th>
-                    <th className="px-3 py-2 font-medium">Auto Diesel</th>
-                    <th className="px-3 py-2 font-medium">Kerosene</th>
-                    <th className="px-3 py-2 font-medium">Propane</th>
-                    <th className="px-3 py-2 font-medium">Butane</th>
-                    <th className="px-3 py-2 font-medium">HFO</th>
-                    <th className="px-3 py-2 font-medium">Asphalt</th>
-                    <th className="px-3 py-2 font-medium">ULSD</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {prices.map((row) => (
-                    <tr key={row.id || row.priceDate} className="border-t odd:bg-background even:bg-muted/20">
-                      <td className="whitespace-nowrap px-3 py-2 font-medium">{fmtDate(row.priceDate)}</td>
-                      <td className="px-3 py-2 tabular-nums">{fmt(row.gasolene87)}</td>
-                      <td className="px-3 py-2 tabular-nums">{fmt(row.gasolene90)}</td>
-                      <td className="px-3 py-2 tabular-nums">{fmt(row.autoDiesel)}</td>
-                      <td className="px-3 py-2 tabular-nums">{fmt(row.kerosene)}</td>
-                      <td className="px-3 py-2 tabular-nums">{fmt(row.propane)}</td>
-                      <td className="px-3 py-2 tabular-nums">{fmt(row.butane)}</td>
-                      <td className="px-3 py-2 tabular-nums">{fmt(row.hfo)}</td>
-                      <td className="px-3 py-2 tabular-nums">{fmt(row.asphalt)}</td>
-                      <td className="px-3 py-2 tabular-nums">{fmt(row.ulsd)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

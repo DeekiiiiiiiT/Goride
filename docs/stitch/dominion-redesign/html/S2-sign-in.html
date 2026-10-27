@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Dominion — Roam Admin Console</title>
+<!-- Material Symbols Outlined -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Google Fonts: Inter & JetBrains Mono -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;family=Public+Sans:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "error-container": "#fa746f",
+            "tertiary": "#006e31",
+            "surface-variant": "#e1e2ed",
+            "tertiary-dim": "#00612a",
+            "on-error": "#fff7f6",
+            "surface-container-lowest": "#ffffff",
+            "surface-dim": "#d9d9e4",
+            "primary-dim": "#485367",
+            "on-secondary-fixed": "#003798",
+            "on-primary-fixed": "#354053",
+            "inverse-primary": "#dae6fe",
+            "secondary-container": "#dbe1ff",
+            "surface-container-low": "#f4f3fa",
+            "surface-container-highest": "#e1e2ed",
+            "tertiary-container": "#98fba9",
+            "outline-variant": "#b0b1bc",
+            "on-secondary": "#faf8ff",
+            "secondary-fixed-dim": "#c7d3ff",
+            "secondary-dim": "#0049c3",
+            "secondary-fixed": "#dbe1ff",
+            "inverse-surface": "#0d0e12",
+            "on-surface": "#30323b",
+            "secondary": "#0153dc",
+            "error": "#a83836",
+            "outline": "#797a84",
+            "on-tertiary-fixed": "#004c20",
+            "on-primary": "#f8f8ff",
+            "primary-fixed-dim": "#cad5ed",
+            "primary": "#545f74",
+            "on-primary-fixed-variant": "#515c70",
+            "surface-bright": "#faf8fe",
+            "on-tertiary-fixed-variant": "#006c30",
+            "on-tertiary": "#e9ffe7",
+            "on-secondary-container": "#0047c0",
+            "on-primary-container": "#475266",
+            "surface-container": "#eeedf6",
+            "on-surface-variant": "#5d5f68",
+            "primary-fixed": "#d8e3fb",
+            "surface-tint": "#545f74",
+            "tertiary-fixed-dim": "#8aec9c",
+            "on-tertiary-container": "#00612a",
+            "surface": "#faf8fe",
+            "background": "#faf8fe",
+            "surface-container-high": "#e8e7f1",
+            "on-background": "#30323b",
+            "on-secondary-fixed-variant": "#0050d5",
+            "inverse-on-surface": "#9d9ca2",
+            "on-error-container": "#6e0a12",
+            "tertiary-fixed": "#98fba9",
+            "primary-container": "#d8e3fb",
+            "error-dim": "#67040d",
+            // Dominion Core Brand Anchors
+            "dominion-navy": "#1e293b",
+            "dominion-blue": "#316bf3",
+            "dominion-blue-hover": "#2557cb"
+          },
+          borderRadius: {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "full": "9999px"
+          },
+          fontFamily: {
+            headline: ["Inter", "sans-serif"],
+            display: ["Inter", "sans-serif"],
+            body: ["Inter", "sans-serif"],
+            label: ["Public Sans", "sans-serif"],
+            mono: ["JetBrains Mono", "monospace"]
+          }
+        },
+      },
+    }
+  </script>
+</head>
+<body class="bg-slate-50 text-slate-900 font-body min-h-screen flex flex-col justify-between antialiased selection:bg-blue-100 selection:text-blue-900">
+<!-- Architectural Background Grid -->
+<div class="fixed inset-0 pointer-events-none opacity-40 bg-[linear-gradient(to_right,#e2e8f0_1px,transparent_1px),linear-gradient(to_bottom,#e2e8f0_1px,transparent_1px)] bg-[size:4rem_4rem]"></div>
+<!-- Top Ambient Brand Accent -->
+<header class="w-full relative z-10 pt-10 pb-4 flex flex-col items-center">
+<!-- Brand Emblem & Title -->
+<div class="flex items-center gap-3 mb-2">
+<div class="w-10 h-10 rounded-lg bg-dominion-navy flex items-center justify-center shadow-sm">
+<span class="material-symbols-outlined text-white text-2xl" data-icon="shield">shield</span>
+</div>
+<span class="font-headline text-2xl font-bold tracking-tight text-dominion-navy">Dominion</span>
+</div>
+<p class="font-headline text-sm font-medium text-slate-500 tracking-normal mb-3">Roam Admin Console</p>
+<!-- Node Security Chip -->
+<div class="inline-flex items-center gap-2 px-2.5 py-1 rounded bg-slate-200/70 border border-slate-300/80 text-[11px] font-mono text-slate-700">
+<span class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse"></span>
+<span>KGN-DC-01 • Secure Entry</span>
+</div>
+</header>
+<!-- Main Sign-In Stage -->
+<main class="w-full max-w-[460px] mx-auto px-4 relative z-10 flex-1 flex flex-col justify-center py-6">
+<!-- Step Indicator Progress Bar -->
+<div class="mb-5 bg-white border border-slate-200 rounded-lg p-3 shadow-xs">
+<div class="flex items-center justify-between text-xs font-medium mb-2">
+<div class="flex items-center gap-2 text-dominion-blue font-semibold">
+<span class="w-5 h-5 rounded-full bg-blue-50 text-dominion-blue border border-dominion-blue/30 flex items-center justify-center text-[11px] font-mono">1</span>
+<span>1 Sign in</span>
+</div>
+<div class="flex items-center gap-2 text-slate-400">
+<span class="w-5 h-5 rounded-full bg-slate-100 text-slate-500 border border-slate-200 flex items-center justify-center text-[11px] font-mono">2</span>
+<span>2 Authenticator</span>
+</div>
+</div>
+<!-- Segmented Bar -->
+<div class="grid grid-cols-2 gap-2 h-1.5">
+<div class="bg-dominion-blue rounded-full h-full"></div>
+<div class="bg-slate-200 rounded-full h-full"></div>
+</div>
+</div>
+<!-- Step 1 Card: Credentials Form -->
+<section class="bg-white border border-slate-200 rounded-xl shadow-sm p-6 sm:p-7 mb-4">
+<div class="mb-5">
+<h1 class="font-headline text-base font-semibold text-slate-900 tracking-tight">Console credentials</h1>
+<p class="font-body text-xs text-slate-500 mt-0.5">Enter your operator credentials to access Dominion workspace.</p>
+</div>
+<form class="space-y-4" onsubmit="event.preventDefault();">
+<!-- Email Input -->
+<div>
+<label class="block font-label text-xs font-semibold text-slate-700 mb-1.5" for="email">Work email</label>
+<div class="relative">
+<input class="w-full text-sm font-body px-3.5 py-2.5 rounded-lg border border-slate-300 bg-slate-50/50 text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-dominion-blue/20 focus:border-dominion-blue transition-colors" id="email" placeholder="admin@roamfleet.co" type="email"/>
+</div>
+</div>
+<!-- Password Input -->
+<div>
+<div class="flex items-center justify-between mb-1.5">
+<label class="font-label text-xs font-semibold text-slate-700" for="password">Password</label>
+<a class="text-xs text-dominion-blue hover:text-dominion-blue-hover font-medium" href="#">Reset credentials</a>
+</div>
+<div class="relative">
+<input class="w-full text-sm font-mono px-3.5 py-2.5 rounded-lg border border-slate-300 bg-slate-50/50 text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-dominion-blue/20 focus:border-dominion-blue transition-colors pr-10" id="password" placeholder="••••••••••••" type="password"/>
+<button aria-label="Toggle password visibility" class="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 focus:outline-none" id="toggle-password" type="button">
+<span class="material-symbols-outlined text-lg" data-icon="visibility">visibility</span>
+</button>
+</div>
+</div>
+<!-- Continue Action Button -->
+<button class="w-full py-2.5 px-4 rounded-lg bg-dominion-blue text-white font-headline text-sm font-medium hover:bg-dominion-blue-hover focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-dominion-blue transition-colors duration-150 flex items-center justify-center gap-2 shadow-xs" type="submit">
+<span>Continue</span>
+<span class="material-symbols-outlined text-base" data-icon="arrow_forward">arrow_forward</span>
+</button>
+</form>
+<!-- Sub Links -->
+<div class="mt-5 pt-4 border-t border-slate-100 flex items-center justify-center">
+<a class="text-xs text-slate-500 hover:text-slate-800 transition-colors" href="#">
+          Need access or SSO recovery?
+        </a>
+</div>
+</section>
+<!-- Step 2 Preview: Authenticator Section -->
+<section class="bg-white/80 border border-slate-200/80 rounded-xl p-5 shadow-xs">
+<div class="flex items-center gap-2.5 mb-2">
+<div class="w-6 h-6 rounded bg-slate-100 text-slate-600 flex items-center justify-center">
+<span class="material-symbols-outlined text-sm" data-icon="lock_clock">lock_clock</span>
+</div>
+<h2 class="font-headline text-sm font-semibold text-slate-800">Authenticator</h2>
+<span class="ml-auto text-[10px] font-mono bg-slate-100 text-slate-500 px-2 py-0.5 rounded border border-slate-200">STAGE 2</span>
+</div>
+<p class="font-body text-xs text-slate-500 mb-3.5">
+        Use the code from your authenticator app.
+      </p>
+<!-- 6 Empty JetBrains Mono Input Boxes -->
+<div class="grid grid-cols-6 gap-2 mb-3.5">
+<input class="h-10 text-center font-mono text-base font-semibold border border-slate-200 bg-slate-50/70 text-slate-700 rounded focus:outline-none focus:ring-2 focus:ring-dominion-blue cursor-not-allowed" disabled="" maxlength="1" type="text"/>
+<input class="h-10 text-center font-mono text-base font-semibold border border-slate-200 bg-slate-50/70 text-slate-700 rounded focus:outline-none focus:ring-2 focus:ring-dominion-blue cursor-not-allowed" disabled="" maxlength="1" type="text"/>
+<input class="h-10 text-center font-mono text-base font-semibold border border-slate-200 bg-slate-50/70 text-slate-700 rounded focus:outline-none focus:ring-2 focus:ring-dominion-blue cursor-not-allowed" disabled="" maxlength="1" type="text"/>
+<input class="h-10 text-center font-mono text-base font-semibold border border-slate-200 bg-slate-50/70 text-slate-700 rounded focus:outline-none focus:ring-2 focus:ring-dominion-blue cursor-not-allowed" disabled="" maxlength="1" type="text"/>
+<input class="h-10 text-center font-mono text-base font-semibold border border-slate-200 bg-slate-50/70 text-slate-700 rounded focus:outline-none focus:ring-2 focus:ring-dominion-blue cursor-not-allowed" disabled="" maxlength="1" type="text"/>
+<input class="h-10 text-center font-mono text-base font-semibold border border-slate-200 bg-slate-50/70 text-slate-700 rounded focus:outline-none focus:ring-2 focus:ring-dominion-blue cursor-not-allowed" disabled="" maxlength="1" type="text"/>
+</div>
+<!-- Verify Button -->
+<button class="w-full py-2 px-3 rounded-lg bg-slate-100 text-slate-400 font-headline text-xs font-medium cursor-not-allowed border border-slate-200/80 flex items-center justify-center gap-1.5" disabled="" type="button">
+<span class="material-symbols-outlined text-sm" data-icon="verified_user">verified_user</span>
+<span>Verify</span>
+</button>
+</section>
+</main>
+<!-- Footer Line Only -->
+<footer class="w-full py-5 text-center relative z-10">
+<div class="inline-flex items-center gap-1.5 text-xs font-mono text-slate-400">
+<span class="material-symbols-outlined text-sm text-slate-400" data-icon="lock">lock</span>
+<span>roamfleet.co/admin</span>
+</div>
+</footer>
+<script>
+    // Password toggle micro-interaction
+    const toggleBtn = document.getElementById('toggle-password');
+    const passwordInput = document.getElementById('password');
+    if (toggleBtn && passwordInput) {
+      toggleBtn.addEventListener('click', () => {
+        const iconSpan = toggleBtn.querySelector('.material-symbols-outlined');
+        if (passwordInput.type === 'password') {
+          passwordInput.type = 'text';
+          if (iconSpan) iconSpan.textContent = 'visibility_off';
+        } else {
+          passwordInput.type = 'password';
+          if (iconSpan) iconSpan.textContent = 'visibility';
+        }
+      });
+    }
+  </script>
+</body></html>

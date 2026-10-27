@@ -136,6 +136,9 @@ jobs:
       - name: Dominion Stitch contract
         run: node scripts/stitch-contract.mjs
 
+      - name: Dominion Stitch fidelity
+        run: node scripts/stitch-fidelity.mjs
+
       - name: Typecheck admin
         run: node scripts/admin-typecheck-baseline.mjs
 

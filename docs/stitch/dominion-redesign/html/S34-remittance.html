@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>S34 Remittance — Dominion Admin</title>
+<!-- Material Symbols Outlined -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Fonts: Inter & JetBrains Mono -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "surface": "#faf8fe",
+            "on-tertiary-fixed": "#004c20",
+            "on-secondary-fixed": "#003798",
+            "on-primary-fixed": "#354053",
+            "tertiary-fixed": "#98fba9",
+            "inverse-surface": "#0d0e12",
+            "on-background": "#30323b",
+            "on-primary-fixed-variant": "#515c70",
+            "error-container": "#fa746f",
+            "inverse-primary": "#dae6fe",
+            "secondary": "#0153dc",
+            "on-surface": "#30323b",
+            "inverse-on-surface": "#9d9ca2",
+            "background": "#faf8fe",
+            "on-tertiary-fixed-variant": "#006c30",
+            "on-secondary-fixed-variant": "#0050d5",
+            "on-error": "#fff7f6",
+            "tertiary": "#006e31",
+            "primary-container": "#d8e3fb",
+            "surface-container-high": "#e8e7f1",
+            "on-primary-container": "#475266",
+            "error": "#a83836",
+            "secondary-container": "#dbe1ff",
+            "on-primary": "#f8f8ff",
+            "secondary-dim": "#0049c3",
+            "surface-variant": "#e1e2ed",
+            "surface-bright": "#faf8fe",
+            "surface-container-lowest": "#ffffff",
+            "surface-tint": "#545f74",
+            "on-tertiary-container": "#00612a",
+            "on-surface-variant": "#5d5f68",
+            "on-secondary-container": "#0047c0",
+            "tertiary-container": "#98fba9",
+            "tertiary-dim": "#00612a",
+            "primary-dim": "#485367",
+            "outline": "#797a84",
+            "secondary-fixed": "#dbe1ff",
+            "surface-container-low": "#f4f3fa",
+            "primary-fixed-dim": "#cad5ed",
+            "surface-container": "#eeedf6",
+            "primary-fixed": "#d8e3fb",
+            "on-error-container": "#6e0a12",
+            "secondary-fixed-dim": "#c7d3ff",
+            "tertiary-fixed-dim": "#8aec9c",
+            "outline-variant": "#b0b1bc",
+            "surface-container-highest": "#e1e2ed",
+            "error-dim": "#67040d",
+            "on-tertiary": "#e9ffe7",
+            "surface-dim": "#d9d9e4",
+            "on-secondary": "#faf8ff",
+            "primary": "#545f74"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "full": "9999px"
+          },
+          "fontFamily": {
+            "headline": ["Inter", "sans-serif"],
+            "display": ["Inter", "sans-serif"],
+            "body": ["Inter", "sans-serif"],
+            "mono": ["JetBrains Mono", "monospace"],
+            "label": ["Inter", "sans-serif"]
+          }
+        },
+      },
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      display: inline-block;
+      vertical-align: middle;
+      line-height: 1;
+    }
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+    .font-mono-code {
+      font-family: 'JetBrains Mono', monospace;
+    }
+  </style>
+</head>
+<body class="bg-surface text-on-surface antialiased flex h-screen overflow-hidden">
+<!-- ========================================================================= -->
+<!-- SIDEBAR: Standard Dominion Navy Shell (#1e293b / bg-slate-900)             -->
+<!-- ========================================================================= -->
+<aside class="fixed top-0 left-0 h-screen w-64 flex flex-col bg-slate-800 dark:bg-slate-900 border-r border-slate-700/50 shadow-none z-30 select-none">
+<!-- Sidebar Header: Dominion Emblem & Subtext -->
+<div class="p-4 border-b border-slate-700/40">
+<div class="flex items-center gap-3">
+<div class="w-9 h-9 rounded-lg bg-blue-600 flex items-center justify-center text-white font-mono-code font-bold text-base shadow-sm">
+<span class="material-symbols-outlined text-xl" data-icon="account_balance">account_balance</span>
+</div>
+<div class="flex flex-col">
+<span class="font-headline text-lg font-bold text-white tracking-tight leading-snug">Dominion</span>
+<span class="text-xs text-slate-400 font-normal">Roam Admin Console</span>
+</div>
+</div>
+</div>
+<!-- Navigation Shell Items -->
+<nav class="flex-1 overflow-y-auto px-3 py-4 space-y-1 font-headline text-sm font-medium tracking-normal">
+<!-- Overview -->
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined text-lg" data-icon="dashboard">dashboard</span>
+<span>Overview</span>
+</a>
+<!-- Master data -->
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined text-lg" data-icon="database">database</span>
+<span>Master data</span>
+</a>
+<!-- Engines -->
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined text-lg" data-icon="psychology">psychology</span>
+<span>Engines</span>
+</a>
+<!-- Distribution -->
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined text-lg" data-icon="share">share</span>
+<span>Distribution</span>
+</a>
+<!-- Platform -->
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined text-lg" data-icon="settings">settings</span>
+<span>Platform</span>
+</a>
+<!-- BACK OFFICE Sub-group Header -->
+<div class="pt-4 pb-1 px-3">
+<div class="flex items-center justify-between text-[11px] font-semibold text-slate-400 font-mono-code uppercase tracking-wider">
+<span>Back office</span>
+<span class="material-symbols-outlined text-xs text-slate-500" data-icon="expand_more">expand_more</span>
+</div>
+</div>
+<!-- Strictly ONLY: GCT registrations, Ledger, Remittance -->
+<div class="pl-2 space-y-1">
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm" href="#">
+<span class="w-1.5 h-1.5 rounded-full bg-slate-500"></span>
+<span>GCT registrations</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm" href="#">
+<span class="w-1.5 h-1.5 rounded-full bg-slate-500"></span>
+<span>Ledger</span>
+</a>
+<!-- Remittance: Active State -->
+<a class="flex items-center justify-between px-3 py-2 rounded-lg bg-blue-600 text-white font-medium text-sm shadow-sm transition-colors duration-150 ease-in-out" href="#">
+<div class="flex items-center gap-2.5">
+<span class="w-2 h-2 rounded-full bg-white animate-pulse"></span>
+<span class="font-medium text-white">Remittance</span>
+</div>
+<span class="text-[10px] font-mono-code px-1.5 py-0.5 bg-blue-700/80 text-blue-100 rounded tracking-wider uppercase font-semibold">Active</span>
+</a>
+</div>
+</nav>
+<!-- Sidebar Footer -->
+<div class="p-3 border-t border-slate-700/40 bg-slate-900/60 space-y-2">
+<!-- Global Settings Link -->
+<a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors text-xs font-medium" href="#">
+<span class="material-symbols-outlined text-base" data-icon="tune">tune</span>
+<span>Global settings</span>
+</a>
+<!-- Node Telemetry / Registry Badges -->
+<div class="flex items-center justify-between pt-1 px-1">
+<div class="flex items-center gap-1.5">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+<span class="font-mono-code text-[11px] text-slate-400 font-medium">KGN-DC-01</span>
+</div>
+<span class="font-mono-code text-[10px] px-1.5 py-0.5 rounded bg-emerald-950/70 border border-emerald-700/50 text-emerald-400 font-semibold tracking-wider">
+          JMD READY
+        </span>
+</div>
+</div>
+</aside>
+<!-- ========================================================================= -->
+<!-- MAIN WORKSPACE CONTAINER (Left margin 64 to clear fixed sidebar)          -->
+<!-- ========================================================================= -->
+<div class="flex-1 ml-64 flex flex-col h-screen overflow-hidden bg-surface">
+<!-- Top Navigation Bar (Shared Component TopNavBar) -->
+<header class="sticky top-0 right-0 h-16 w-full flex items-center bg-surface-container-lowest border-b border-surface-container shadow-sm px-6 justify-between z-20">
+<!-- Search Input -->
+<div class="w-96 flex items-center gap-2.5 px-3 py-2 bg-surface-container-low rounded-lg border border-outline-variant/30 text-on-surface text-sm focus-within:border-secondary focus-within:bg-surface-container-lowest transition-colors">
+<span class="material-symbols-outlined text-outline text-lg" data-icon="search">search</span>
+<input class="bg-transparent border-0 p-0 text-sm focus:ring-0 text-on-surface placeholder:text-outline w-full outline-none font-body" placeholder="Search remittance records, periods, filing receipts..." type="text"/>
+</div>
+<!-- Trailing Action Badges & User Status -->
+<div class="flex items-center gap-4">
+<!-- Region Tag -->
+<div class="flex items-center gap-1.5 px-2.5 py-1 rounded bg-surface-container border border-outline-variant/40 font-mono-code text-xs text-on-surface-variant font-medium">
+<span class="material-symbols-outlined text-sm text-tertiary" data-icon="location_on">location_on</span>
+<span>REGION: JM-KGN</span>
+</div>
+<!-- Trailing Icon Actions -->
+<button aria-label="Notifications" class="p-2 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors relative" type="button">
+<span class="material-symbols-outlined text-xl" data-icon="notifications">notifications</span>
+<span class="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-blue-600"></span>
+</button>
+<button aria-label="Help" class="p-2 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors" type="button">
+<span class="material-symbols-outlined text-xl" data-icon="help_outline">help_outline</span>
+</button>
+<!-- Divider -->
+<div class="h-6 w-px bg-surface-container-highest"></div>
+<!-- System Role Badge: Strictly Owner only (no fake name) -->
+<div class="flex items-center gap-2 pl-1">
+<div class="w-8 h-8 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center font-mono-code text-xs font-bold ring-1 ring-outline/20">
+            OW
+          </div>
+<div class="flex flex-col text-left">
+<div class="flex items-center gap-1.5">
+<span class="font-mono-code text-xs font-semibold text-on-surface leading-tight">SYS-AUTH</span>
+<span class="text-[10px] font-mono-code px-1 py-0.2 rounded bg-amber-100 text-amber-900 border border-amber-300 font-semibold tracking-wide">Owner</span>
+</div>
+<span class="text-[11px] text-on-surface-variant font-body">Kingston Registry</span>
+</div>
+</div>
+</div>
+</header>
+<!-- Main Scrollable Canvas -->
+<main class="flex-1 overflow-y-auto p-8 space-y-6">
+<!-- Breadcrumbs & Statutory Compliance Ribbon -->
+<div class="flex items-center justify-between">
+<nav aria-label="Breadcrumb" class="flex items-center gap-2 text-xs font-mono-code text-on-surface-variant">
+<span class="hover:text-secondary cursor-pointer">Dominion</span>
+<span class="material-symbols-outlined text-xs text-outline-variant" data-icon="chevron_right">chevron_right</span>
+<span class="hover:text-secondary cursor-pointer">Back office</span>
+<span class="material-symbols-outlined text-xs text-outline-variant" data-icon="chevron_right">chevron_right</span>
+<span class="text-on-surface font-semibold text-secondary">Remittance</span>
+</nav>
+<!-- Statutory Compliance Pill -->
+<div class="flex items-center gap-1.5 px-2.5 py-1 rounded bg-surface-container-lowest border border-outline-variant/40 shadow-xs font-mono-code text-[11px] text-on-surface-variant font-medium">
+<span class="material-symbols-outlined text-sm text-tertiary" data-icon="verified_user">verified_user</span>
+<span>JMD TAX COMPLIANCE ACT (S34)</span>
+</div>
+</div>
+<!-- Page Header: Title, Owner badge, Lede paragraph & Action Buttons -->
+<div class="flex flex-col md:flex-row md:items-start justify-between gap-4 pb-2 border-b border-surface-container-highest">
+<div>
+<div class="flex items-center gap-3">
+<h1 class="font-headline text-2xl font-bold tracking-tight text-on-surface">Remittance</h1>
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium font-mono-code bg-amber-50 text-amber-800 border border-amber-300/80">
+<span class="w-1.5 h-1.5 rounded-full bg-amber-600"></span>
+              Owner only
+            </span>
+</div>
+<p class="font-body text-sm text-on-surface-variant mt-1.5 max-w-2xl leading-relaxed">
+            Filing periods and orphans, in JMD. This is Roam's own filing, not a customer list.
+          </p>
+</div>
+<!-- Action Controls -->
+<div class="flex items-center gap-3 self-start">
+<button class="px-4 py-2 rounded-lg border border-outline-variant/60 bg-surface-container-lowest text-on-surface text-sm font-medium hover:bg-surface-container hover:text-on-surface transition-colors shadow-xs" type="button">
+            Close
+          </button>
+<button class="px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium shadow-sm transition-colors flex items-center gap-2" type="button">
+<span class="material-symbols-outlined text-base" data-icon="send">send</span>
+<span>File</span>
+</button>
+</div>
+</div>
+<!-- ===================================================================== -->
+<!-- SECTION 1: Filing periods (Crisp White Card, 12px radius, hairline border) -->
+<!-- ===================================================================== -->
+<section class="bg-surface-container-lowest rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+<!-- Card Header -->
+<div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-blue-600 text-lg" data-icon="calendar_month">calendar_month</span>
+<h2 class="font-headline text-base font-semibold text-on-surface">Filing periods</h2>
+</div>
+<span class="font-mono-code text-xs text-outline px-2 py-0.5 rounded bg-surface-container-low border border-slate-200">
+            JMD FISCAL LEDGER
+          </span>
+</div>
+<!-- Data Table Container -->
+<div class="overflow-x-auto">
+<table class="w-full text-left text-sm">
+<thead class="bg-surface-container-low/70 border-b border-slate-200">
+<tr>
+<th class="py-3 px-6 font-mono-code text-xs font-semibold text-on-surface-variant uppercase tracking-wider" scope="col">
+                  Period
+                </th>
+<th class="py-3 px-6 font-mono-code text-xs font-semibold text-on-surface-variant uppercase tracking-wider" scope="col">
+                  Status
+                </th>
+<th class="py-3 px-6 font-mono-code text-xs font-semibold text-on-surface-variant uppercase tracking-wider text-right" scope="col">
+                  Amount JMD
+                </th>
+</tr>
+</thead>
+<tbody>
+<!-- Exactly one empty state row saying: "The data is not in yet" -->
+<tr class="hover:bg-transparent">
+<td class="py-14 text-center" colspan="3">
+<div class="flex flex-col items-center justify-center space-y-2">
+<div class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center text-outline mb-1">
+<span class="material-symbols-outlined text-xl" data-icon="pending">pending</span>
+</div>
+<p class="text-sm font-medium text-on-surface-variant">The data is not in yet</p>
+<p class="text-xs text-outline font-mono-code">Awaiting Kingston GCT tax return closure cycle.</p>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Table Card Footer Note -->
+<div class="px-6 py-3 bg-surface-container-low/40 border-t border-slate-100 flex items-center justify-between text-xs text-outline font-mono-code">
+<span>STATUTORY RECORD: SECTION 34 GCT ACT</span>
+<span>REMITTANCE TYPE: DIRECT FISCAL</span>
+</div>
+</section>
+<!-- ===================================================================== -->
+<!-- SECTION 2: Orphans (Clean White Card, 12px radius, hairline border) -->
+<!-- ===================================================================== -->
+<section class="bg-surface-container-lowest rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+<!-- Card Header -->
+<div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-amber-600 text-lg" data-icon="unfold_more">unfold_more</span>
+<h2 class="font-headline text-base font-semibold text-on-surface">Orphans</h2>
+</div>
+<span class="font-mono-code text-xs text-outline px-2 py-0.5 rounded bg-surface-container-low border border-slate-200">
+            UNRECONCILED
+          </span>
+</div>
+<!-- Body Message with standardized Dominion empty state -->
+<div class="p-8">
+<div class="rounded-lg border border-dashed border-slate-200 bg-surface-container-low/30 p-8 text-center flex flex-col items-center justify-center">
+<div class="w-9 h-9 rounded-full bg-surface-container-high/60 flex items-center justify-center text-outline mb-2">
+<span class="material-symbols-outlined text-lg" data-icon="hourglass_empty">hourglass_empty</span>
+</div>
+<p class="text-sm font-medium text-on-surface">The data is not in yet.</p>
+<p class="text-xs text-outline font-mono-code mt-1">No unmatched tax-invoice remittances detected in parish pool.</p>
+</div>
+</div>
+</section>
+<!-- ===================================================================== -->
+<!-- FOOTNOTE & NODE SECURITY LOCK STRIP                                   -->
+<!-- ===================================================================== -->
+<div class="space-y-3 pt-2">
+<!-- Info card with info icon -->
+<div class="flex items-start gap-3 p-4 rounded-xl bg-surface-container-low border border-slate-200/80">
+<span class="material-symbols-outlined text-secondary text-xl mt-0.5 flex-shrink-0" data-icon="info">info</span>
+<div class="flex-1 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+<div>
+<p class="text-sm font-medium text-on-surface">The data is not in yet.</p>
+<p class="text-xs text-on-surface-variant font-mono-code mt-0.5">Parish filing batches settle at 23:59:59 EST.</p>
+</div>
+<div class="flex items-center gap-2 self-start sm:self-auto">
+<span class="font-mono-code text-[11px] px-2.5 py-1 rounded bg-surface-container-lowest border border-outline-variant/30 text-on-surface-variant font-semibold">
+                LOC: KINGSTON / PARISH REGISTRY JMD
+              </span>
+</div>
+</div>
+</div>
+<!-- Security / Node Lock Strip -->
+<div class="flex items-center justify-between px-4 py-2.5 rounded-lg bg-surface-container-high/40 border border-outline-variant/30 font-mono-code text-[11px] text-on-surface-variant">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-sm text-tertiary" data-icon="lock">lock</span>
+<span>Restricted to Dominion fiscal administrators. Statutory remittance register under General Consumption Tax regime.</span>
+</div>
+<div class="flex items-center gap-2 flex-shrink-0">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+<span class="font-semibold text-on-surface">NODE-AUTH: VERIFIED</span>
+</div>
+</div>
+</div>
+</main>
+</div>
+</body></html>

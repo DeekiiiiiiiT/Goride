@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>S32 GCT registrations</title>
+<!-- Google Fonts: Inter & JetBrains Mono -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;family=Public+Sans:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols Outlined -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "primary-container": "#d8e3fb",
+            "on-secondary-fixed-variant": "#0050d5",
+            "tertiary": "#006e31",
+            "secondary-fixed": "#dbe1ff",
+            "primary-fixed": "#d8e3fb",
+            "on-tertiary-container": "#00612a",
+            "inverse-primary": "#dae6fe",
+            "on-surface": "#30323b",
+            "surface-container-high": "#e8e7f1",
+            "background": "#faf8fe",
+            "tertiary-fixed": "#98fba9",
+            "on-tertiary-fixed": "#004c20",
+            "primary-fixed-dim": "#cad5ed",
+            "secondary-dim": "#0049c3",
+            "on-secondary": "#faf8ff",
+            "secondary-container": "#dbe1ff",
+            "on-tertiary": "#e9ffe7",
+            "secondary": "#0153dc",
+            "surface-dim": "#d9d9e4",
+            "on-primary-fixed": "#354053",
+            "inverse-surface": "#0d0e12",
+            "surface-tint": "#545f74",
+            "inverse-on-surface": "#9d9ca2",
+            "surface": "#faf8fe",
+            "on-secondary-fixed": "#003798",
+            "primary": "#545f74",
+            "on-surface-variant": "#5d5f68",
+            "error-container": "#fa746f",
+            "error-dim": "#67040d",
+            "surface-container-highest": "#e1e2ed",
+            "outline": "#797a84",
+            "outline-variant": "#b0b1bc",
+            "error": "#a83836",
+            "on-error-container": "#6e0a12",
+            "surface-bright": "#faf8fe",
+            "on-primary-container": "#475266",
+            "on-error": "#fff7f6",
+            "surface-container-lowest": "#ffffff",
+            "tertiary-container": "#98fba9",
+            "tertiary-fixed-dim": "#8aec9c",
+            "surface-variant": "#e1e2ed",
+            "on-background": "#30323b",
+            "tertiary-dim": "#00612a",
+            "surface-container": "#eeedf6",
+            "on-primary": "#f8f8ff",
+            "primary-dim": "#485367",
+            "on-primary-fixed-variant": "#515c70",
+            "on-secondary-container": "#0047c0",
+            "on-tertiary-fixed-variant": "#006c30",
+            "surface-container-low": "#f4f3fa",
+            "secondary-fixed-dim": "#c7d3ff"
+          },
+          borderRadius: {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "full": "9999px"
+          },
+          fontFamily: {
+            headline: ["Inter", "sans-serif"],
+            display: ["Inter", "sans-serif"],
+            body: ["Inter", "sans-serif"],
+            label: ["Public Sans", "sans-serif"],
+            mono: ["JetBrains Mono", "monospace"]
+          }
+        }
+      }
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-900 font-body antialiased min-h-screen flex selection:bg-blue-100 selection:text-blue-900">
+<!-- Dominion Navy Sidebar Shell (Fixed left) -->
+<aside class="fixed top-0 left-0 h-screen w-64 flex flex-col bg-slate-800 border-r border-slate-700/50 z-30 select-none">
+<div class="w-64 h-full p-4 flex flex-col justify-between overflow-y-auto">
+<!-- Top Brand Anchor -->
+<div>
+<div class="flex items-center gap-3 px-3 py-3 mb-6 border-b border-slate-700/60 pb-5">
+<div class="w-9 h-9 rounded-lg bg-blue-600 flex items-center justify-center text-white shadow-sm font-mono font-bold text-base">
+            D
+          </div>
+<div>
+<div class="font-headline text-lg font-bold text-white tracking-tight leading-tight">Dominion</div>
+<div class="text-[11px] font-mono tracking-wide text-slate-400">Roam Admin Console</div>
+</div>
+</div>
+<!-- Navigation Tabs Cluster -->
+<nav class="space-y-1">
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm font-medium" href="#">
+<span class="material-symbols-outlined text-[20px]">dashboard</span>
+<span>Overview</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm font-medium" href="#">
+<span class="material-symbols-outlined text-[20px]">database</span>
+<span>Master data</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm font-medium" href="#">
+<span class="material-symbols-outlined text-[20px]">psychology</span>
+<span>Engines</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm font-medium" href="#">
+<span class="material-symbols-outlined text-[20px]">share</span>
+<span>Distribution</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm font-medium" href="#">
+<span class="material-symbols-outlined text-[20px]">settings</span>
+<span>Platform</span>
+</a>
+<!-- Back Office Grouping -->
+<div class="pt-4 mt-4 border-t border-slate-700/40">
+<div class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-300 font-medium text-sm">
+<span class="material-symbols-outlined text-[20px]">account_balance</span>
+<span>Back office</span>
+</div>
+<!-- Sub-items under Back Office -->
+<div class="mt-1 ml-5 pl-2 border-l border-slate-700/60 space-y-1">
+<a class="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-blue-600 text-white font-medium text-sm shadow-sm transition-colors" href="#">
+<span class="w-1.5 h-1.5 rounded-full bg-white"></span>
+<span>GCT registrations</span>
+</a>
+<a class="flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/40 transition-colors text-xs font-mono" href="#">
+<span class="w-1.5 h-1.5 rounded-full bg-slate-600"></span>
+<span>Audit journal</span>
+</a>
+<a class="flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/40 transition-colors text-xs font-mono" href="#">
+<span class="w-1.5 h-1.5 rounded-full bg-slate-600"></span>
+<span>Tax clearance</span>
+</a>
+</div>
+</div>
+</nav>
+</div>
+<!-- Sidebar Footer Anchor -->
+<div class="pt-4 border-t border-slate-700/50 space-y-3">
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm font-medium" href="#">
+<span class="material-symbols-outlined text-[20px]">tune</span>
+<span>Global settings</span>
+</a>
+<!-- Bottom Node & Currency Telemetry Indicator -->
+<div class="px-3 py-2.5 rounded-lg bg-slate-900/60 border border-slate-700/50 flex items-center justify-between text-[11px] font-mono text-slate-400">
+<div class="flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+<span class="text-slate-300 font-semibold tracking-wider">KGN-DC-01</span>
+</div>
+<span class="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700 text-[10px] font-medium tracking-wide">JMD READY</span>
+</div>
+</div>
+</div>
+</aside>
+<!-- Right Canvas (Desktop 1440 Layout) -->
+<div class="pl-64 flex-1 flex flex-col min-w-0 bg-[#f8fafc]">
+<!-- TopNavBar -->
+<header class="sticky top-0 right-0 h-16 w-full flex items-center bg-white border-b border-slate-200 z-20 px-8 justify-between shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+<!-- Search Bar -->
+<div class="flex items-center gap-3 w-96">
+<div class="relative w-full">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
+<input class="w-full pl-9 pr-4 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-600 focus:border-blue-600 font-body transition-colors" placeholder="Search registrations, TRN, or records..." type="text"/>
+</div>
+</div>
+<!-- Trailing Cluster -->
+<div class="flex items-center gap-4">
+<!-- Region Tag -->
+<div class="flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-100 border border-slate-200/80 text-[11px] font-mono text-slate-600">
+<span class="material-symbols-outlined text-[14px] text-blue-600">location_on</span>
+<span class="tracking-wide">REGION: JM-KGN</span>
+</div>
+<div class="h-4 w-px bg-slate-200"></div>
+<!-- Action Icons -->
+<button class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors relative" title="Notifications">
+<span class="material-symbols-outlined text-[20px]">notifications</span>
+<span class="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-blue-600 rounded-full"></span>
+</button>
+<button class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors" title="Help &amp; Reference">
+<span class="material-symbols-outlined text-[20px]">help_outline</span>
+</button>
+<div class="h-4 w-px bg-slate-200"></div>
+<!-- Profile / SYS-AUTH Area -->
+<div class="flex items-center gap-2.5 pl-1">
+<div class="w-8 h-8 rounded-lg bg-slate-800 text-white flex items-center justify-center font-mono text-xs font-semibold tracking-wider shadow-inner">
+            SA
+          </div>
+<div class="flex flex-col">
+<span class="text-xs font-mono font-medium text-slate-700 leading-tight">SYS-AUTH</span>
+<div class="mt-0.5">
+<span class="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-semibold tracking-wide bg-blue-50 text-blue-700 border border-blue-200/60">
+                Owner
+              </span>
+</div>
+</div>
+</div>
+</div>
+</header>
+<!-- Main Content Area -->
+<main class="p-8 max-w-[1184px] w-full mx-auto flex flex-col space-y-6">
+<!-- Breadcrumb & Header Section -->
+<div>
+<nav aria-label="Breadcrumb" class="flex items-center gap-1.5 text-xs text-slate-500 font-mono mb-2">
+<span class="text-slate-600 hover:text-slate-900 cursor-pointer">Dominion</span>
+<span class="material-symbols-outlined text-[14px] text-slate-400">chevron_right</span>
+<span class="text-slate-600 hover:text-slate-900 cursor-pointer">Back office</span>
+<span class="material-symbols-outlined text-[14px] text-slate-400">chevron_right</span>
+<span class="text-blue-600 font-semibold">GCT registrations</span>
+</nav>
+<!-- Title Row -->
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-3">
+<h1 class="text-2xl font-bold font-headline text-slate-900 tracking-tight">GCT registrations</h1>
+<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-800 border border-amber-200/70 font-mono">
+              Owner only
+            </span>
+</div>
+<div class="flex items-center gap-2 font-mono text-xs text-slate-500 bg-white border border-slate-200 px-3 py-1.5 rounded-lg shadow-sm">
+<span class="material-symbols-outlined text-[16px] text-slate-400">verified_user</span>
+<span>JMD TAX COMPLIANCE ACT</span>
+</div>
+</div>
+<!-- Lede Description -->
+<p class="mt-1 text-sm text-slate-600">
+          TRN registrations for Roam. Not a customer list.
+        </p>
+</div>
+<!-- Main Table Card -->
+<section class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+<!-- Card Header Toolbar -->
+<div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-white">
+<div class="flex items-center gap-2">
+<span class="text-xs font-semibold uppercase tracking-wider text-slate-500 font-mono">Registry Index</span>
+<span class="px-2 py-0.5 rounded text-[11px] font-mono bg-slate-100 text-slate-600 font-medium">0 ENTRIES</span>
+</div>
+<div class="text-[11px] font-mono text-slate-400">
+            JAD-GCT-SPEC 1991
+          </div>
+</div>
+<!-- Table Structure -->
+<div class="w-full overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-slate-50/75 border-b border-slate-200 text-[11px] font-mono uppercase tracking-wider text-slate-600 select-none">
+<th class="py-3 px-6 font-semibold w-1/4" scope="col">TRN</th>
+<th class="py-3 px-6 font-semibold w-1/2" scope="col">NAME</th>
+<th class="py-3 px-6 font-semibold w-1/4 text-right" scope="col">STATUS</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-slate-100">
+<!-- Empty State in Table Body -->
+<tr>
+<td class="py-20 px-6" colspan="3">
+<div class="flex flex-col items-center justify-center text-center max-w-sm mx-auto">
+<div class="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 mb-3 border border-slate-200/60">
+<span class="material-symbols-outlined text-[24px]">folder_off</span>
+</div>
+<p class="text-sm font-medium text-slate-700 font-headline">The data is not in yet.</p>
+<p class="mt-1 text-xs text-slate-400 font-mono leading-relaxed">
+                      Official General Consumption Tax ledger sync pending validation from Kingston Registry.
+                    </p>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Table Card Footer Status -->
+<div class="px-6 py-3 bg-slate-50/50 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500 font-mono">
+<span>PARISH: ST. ANDREW / KINGSTON</span>
+<span>CURRENCY CODE: JMD</span>
+</div>
+</section>
+<!-- Watchlist Callout Card -->
+<section class="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+<div class="flex items-start gap-4">
+<div class="w-10 h-10 rounded-lg bg-amber-50 border border-amber-200/60 flex items-center justify-center text-amber-700 flex-shrink-0">
+<span class="material-symbols-outlined text-[22px]">visibility</span>
+</div>
+<div class="flex-1">
+<div class="flex items-center justify-between mb-1">
+<h2 class="text-sm font-semibold font-headline text-slate-900 tracking-tight">Watchlist</h2>
+<span class="text-[11px] font-mono text-slate-400 uppercase tracking-wider">TAJ-RECONCILIATION</span>
+</div>
+<div class="mt-2 p-4 rounded-lg bg-slate-50 border border-slate-200/80 flex items-center justify-between">
+<span class="text-sm text-slate-600 font-medium">The data is not in yet.</span>
+<span class="text-xs font-mono text-slate-400">STATUS: IDLE</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Bottom Notice Bar -->
+<div class="rounded-xl border border-blue-100 bg-blue-50/50 p-4 flex items-center justify-between shadow-sm">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-[20px] text-blue-600 flex-shrink-0">info</span>
+<span class="text-sm font-medium text-slate-800">The data is not in yet.</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded bg-white border border-blue-200/60 font-mono text-[11px] font-semibold text-slate-700 shadow-2xs">
+<span class="w-1.5 h-1.5 rounded-full bg-blue-600"></span>
+            LOC: KINGSTON / PARISH REGISTRY JMD
+          </span>
+</div>
+</div>
+</main>
+</div>
+</body></html>

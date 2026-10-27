@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>S31 Global settings</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            brand: {
+              DEFAULT: '#316bf3',
+              hover: '#2554c7',
+            },
+            sidebar: '#1e293b',
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+    }
+  </style>
+</head>
+<body class="bg-slate-50 font-sans text-slate-900 antialiased flex min-h-screen">
+
+  <!-- Navy Sidebar (Exact Dominion Shell copied from S30 with Global settings active) -->
+  <aside class="w-64 bg-[#1e293b] text-slate-300 flex flex-col shrink-0 fixed inset-y-0 left-0 z-30 select-none border-r border-slate-800">
+    <!-- Brand / Product Header -->
+    <div class="h-16 flex items-center gap-3 px-5 border-b border-slate-700/50">
+      <div class="w-8 h-8 rounded-lg bg-[#316bf3] flex items-center justify-center text-white shadow-sm">
+        <span class="material-symbols-outlined text-xl">dataset</span>
+      </div>
+      <div>
+        <div class="text-white font-semibold text-sm tracking-tight leading-tight">Dominion</div>
+        <div class="text-xs text-slate-400 leading-tight">Roam Admin Console</div>
+      </div>
+    </div>
+
+    <!-- Navigation Scroll Area -->
+    <div class="flex-1 overflow-y-auto py-4 px-3 space-y-6">
+      <!-- Section: Main -->
+      <div class="space-y-1">
+        <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 text-sm font-medium transition-colors">
+          <span class="material-symbols-outlined text-lg">dashboard</span>
+          <span>Overview</span>
+        </a>
+      </div>
+
+      <!-- Section: MASTER DATA -->
+      <div class="space-y-1">
+        <div class="px-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wider font-mono">Master data</div>
+        <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 text-sm font-medium transition-colors">
+          <span class="material-symbols-outlined text-lg">directions_car</span>
+          <span>Vehicles</span>
+        </a>
+        <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 text-sm font-medium transition-colors">
+          <span class="material-symbols-outlined text-lg">map</span>
+          <span>Places and Maps</span>
+        </a>
+        <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 text-sm font-medium transition-colors">
+          <span class="material-symbols-outlined text-lg">local_gas_station</span>
+          <span>Fuel</span>
+        </a>
+        <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 text-sm font-medium transition-colors">
+          <span class="material-symbols-outlined text-lg">toll</span>
+          <span>Tolls</span>
+        </a>
+        <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 text-sm font-medium transition-colors">
+          <span class="material-symbols-outlined text-lg">receipt_long</span>
+          <span>Tax and Vendors</span>
+        </a>
+      </div>
+
+      <!-- Section: ENGINES -->
+      <div class="space-y-1">
+        <div class="px-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wider font-mono">Engines</div>
+        <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 text-sm font-medium transition-colors">
+          <span class="material-symbols-outlined text-lg">bolt</span>
+          <span>Fuel Brain</span>
+        </a>
+        <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 text-sm font-medium transition-colors">
+          <span class="material-symbols-outlined text-lg">call_split</span>
+          <span>Toll Brain</span>
+        </a>
+        <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 text-sm font-medium transition-colors">
+          <span class="material-symbols-outlined text-lg">hub</span>
+          <span>Matching Brain</span>
+        </a>
+      </div>
+
+      <!-- Section: DISTRIBUTION -->
+      <div class="space-y-1">
+        <div class="px-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wider font-mono">Distribution</div>
+        <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 text-sm font-medium transition-colors">
+          <span class="material-symbols-outlined text-lg">apps</span>
+          <span>Apps</span>
+        </a>
+        <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 text-sm font-medium transition-colors">
+          <span class="material-symbols-outlined text-lg">code</span>
+          <span>Data API</span>
+        </a>
+        <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 text-sm font-medium transition-colors">
+          <span class="material-symbols-outlined text-lg">sync_alt</span>
+          <span>Change requests</span>
+        </a>
+      </div>
+
+      <!-- Section: PLATFORM -->
+      <div class="space-y-1">
+        <div class="px-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wider font-mono">Platform</div>
+        <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 text-sm font-medium transition-colors">
+          <span class="material-symbols-outlined text-lg">badge</span>
+          <span>Staff and roles</span>
+        </a>
+        <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 text-sm font-medium transition-colors">
+          <span class="material-symbols-outlined text-lg">history</span>
+          <span>Activity log</span>
+        </a>
+        <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 text-sm font-medium transition-colors">
+          <span class="material-symbols-outlined text-lg">tune</span>
+          <span>Platform Ops</span>
+        </a>
+      </div>
+
+      <!-- Section: BACK OFFICE -->
+      <div class="space-y-1">
+        <div class="px-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wider font-mono">Back office</div>
+        <!-- Active Global Settings item -->
+        <a href="#" class="flex items-center justify-between px-3 py-2 rounded-lg bg-[#316bf3] text-white text-sm font-medium shadow-sm">
+          <div class="flex items-center gap-3">
+            <span class="material-symbols-outlined text-lg">settings</span>
+            <span>Global settings</span>
+          </div>
+          <span class="w-1.5 h-1.5 rounded-full bg-white"></span>
+        </a>
+        <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 text-sm font-medium transition-colors">
+          <span class="material-symbols-outlined text-lg">account_balance</span>
+          <span>GCT registrations</span>
+        </a>
+      </div>
+    </div>
+
+    <!-- Node footer status -->
+    <div class="p-3 border-t border-slate-700/50">
+      <div class="flex items-center justify-between px-3 py-2 rounded-lg bg-slate-900/60 border border-slate-800 text-xs">
+        <div class="flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+          <span class="font-mono text-slate-300 text-[11px]">KGN-DC-01</span>
+        </div>
+        <span class="font-mono text-[10px] text-emerald-400 bg-emerald-950/60 border border-emerald-800/50 px-1.5 py-0.5 rounded">JMD READY</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main View Area (offset by sidebar width) -->
+  <div class="flex-1 ml-64 flex flex-col min-w-0">
+    <!-- Top Nav Bar (Exact Dominion Style) -->
+    <header class="h-16 bg-white border-b border-slate-200 sticky top-0 z-20 flex items-center justify-between px-8">
+      <!-- Search Input -->
+      <div class="w-96">
+        <div class="relative flex items-center">
+          <span class="material-symbols-outlined absolute left-3 text-slate-400 text-lg pointer-events-none">search</span>
+          <input
+            type="text"
+            placeholder="Search entities, engines, routes... ⌘K"
+            class="w-full pl-9 pr-4 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-sans text-slate-700 placeholder-slate-400 focus:outline-none focus:border-[#316bf3] focus:bg-white transition-all"
+            readonly
+          />
+        </div>
+      </div>
+
+      <!-- Trailing Controls: Header role Owner only, No personal name -->
+      <div class="flex items-center gap-4">
+        <button class="p-2 text-slate-400 hover:text-slate-600 rounded-lg transition-colors">
+          <span class="material-symbols-outlined text-xl">notifications</span>
+        </button>
+        <button class="p-2 text-slate-400 hover:text-slate-600 rounded-lg transition-colors">
+          <span class="material-symbols-outlined text-xl">help</span>
+        </button>
+        <div class="h-5 w-px bg-slate-200"></div>
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-mono font-medium">
+            OW
+          </div>
+          <div class="text-left">
+            <div class="text-xs font-semibold text-slate-900 leading-tight">Owner</div>
+            <div class="text-[10px] font-mono text-slate-400 leading-tight">SYS-AUTH</div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Page Content Container -->
+    <main class="flex-1 p-8 max-w-5xl w-full">
+      <!-- Breadcrumb & Region badge -->
+      <div class="flex items-center justify-between mb-3">
+        <nav class="flex items-center gap-1.5 text-xs text-slate-500 font-sans">
+          <span>Dominion</span>
+          <span class="material-symbols-outlined text-[13px] text-slate-400">chevron_right</span>
+          <span>Platform</span>
+          <span class="material-symbols-outlined text-[13px] text-slate-400">chevron_right</span>
+          <span class="text-slate-900 font-medium">Global settings</span>
+        </nav>
+        <div class="flex items-center gap-2">
+          <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-mono bg-blue-50 text-blue-700 border border-blue-200/60">
+            <span class="w-1.5 h-1.5 rounded-full bg-[#316bf3]"></span>
+            REGION: JM-KGN
+          </span>
+        </div>
+      </div>
+
+      <!-- Page Title -->
+      <div class="mb-6">
+        <h1 class="text-2xl font-bold tracking-tight text-slate-900">Global settings</h1>
+      </div>
+
+      <!-- Navigation Tabs: General (selected), Security, Danger zone -->
+      <div class="border-b border-slate-200 mb-6 flex gap-8">
+        <button class="pb-3 text-sm font-medium text-[#316bf3] border-b-2 border-[#316bf3] flex items-center gap-2">
+          General
+        </button>
+        <button class="pb-3 text-sm font-medium text-slate-500 hover:text-slate-800 transition-colors">
+          Security
+        </button>
+        <button class="pb-3 text-sm font-medium text-slate-500 hover:text-slate-800 transition-colors">
+          Danger zone
+        </button>
+      </div>
+
+      <!-- Settings Content Area -->
+      <div class="space-y-6">
+
+        <!-- General Section: Platform Identity Card (White card, 12px radius, hairline border) -->
+        <div class="bg-white rounded-[12px] border border-slate-200/90 shadow-sm p-6">
+          <div class="flex items-center justify-between pb-5 border-b border-slate-100">
+            <div>
+              <h2 class="text-base font-semibold text-slate-900">Platform identity</h2>
+              <p class="text-xs text-slate-500 mt-0.5">Core registry attributes and operational parameters for Jamaica nodes.</p>
+            </div>
+            <span class="font-mono text-[10px] text-slate-400 tracking-wider uppercase">PARTITION: JM-KGN-01</span>
+          </div>
+
+          <div class="pt-5 space-y-5">
+            <!-- Platform Name Field -->
+            <div class="grid grid-cols-3 gap-6 items-center">
+              <div>
+                <label class="block text-xs font-medium text-slate-700">Platform name</label>
+                <p class="text-[11px] text-slate-400 mt-0.5">Root instance identifier</p>
+              </div>
+              <div class="col-span-2">
+                <input
+                  type="text"
+                  value="Dominion"
+                  class="w-full max-w-md px-3.5 py-2 text-sm bg-slate-50/70 border border-slate-200 rounded-lg text-slate-900 font-sans focus:outline-none focus:border-[#316bf3] focus:bg-white transition-colors"
+                  readonly
+                />
+              </div>
+            </div>
+
+            <!-- Currency Field -->
+            <div class="grid grid-cols-3 gap-6 items-center pt-4 border-t border-slate-100">
+              <div>
+                <label class="block text-xs font-medium text-slate-700">Platform currency</label>
+                <p class="text-[11px] text-slate-400 mt-0.5">Settlement & ledger denomination</p>
+              </div>
+              <div class="col-span-2">
+                <div class="inline-flex items-center gap-2 px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-lg font-mono text-sm text-slate-800">
+                  <span class="font-semibold text-[#316bf3]">JMD</span>
+                  <span class="text-xs text-slate-400">(Jamaican Dollar)</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Maintenance Mode Switch Field -->
+            <div class="grid grid-cols-3 gap-6 items-center pt-4 border-t border-slate-100">
+              <div>
+                <label class="block text-xs font-medium text-slate-700">Maintenance mode</label>
+                <p class="text-[11px] text-slate-400 mt-0.5">Suspends consumer dispatch and driver booking feeds</p>
+              </div>
+              <div class="col-span-2 flex items-center gap-3">
+                <!-- Toggle switch (Off) -->
+                <button type="button" class="w-11 h-6 bg-slate-200 rounded-full p-0.5 relative transition-colors focus:outline-none cursor-default" aria-pressed="false">
+                  <span class="w-5 h-5 bg-white rounded-full block shadow-sm transform transition-transform"></span>
+                </button>
+                <span class="text-xs font-medium text-slate-600">Off</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Danger Zone Card: Clearly marked separate card with red border -->
+        <div class="bg-white rounded-[12px] border-2 border-red-500 shadow-sm p-6">
+          <div class="flex items-center gap-2.5 pb-4 border-b border-red-100">
+            <span class="material-symbols-outlined text-red-600 text-xl">warning</span>
+            <h2 class="text-base font-semibold text-red-700">Danger zone</h2>
+          </div>
+
+          <div class="pt-5 flex items-center justify-between">
+            <div class="max-w-lg">
+              <div class="text-sm font-medium text-slate-900">Reset platform identity</div>
+              <p class="text-xs text-slate-500 mt-0.5">Restores partition name and default operating flags for the central Kingston console.</p>
+            </div>
+            <!-- One action inside it labeled with no destructive detail beyond the label. No confirm dialog shown. -->
+            <button
+              type="button"
+              class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-medium rounded-lg transition-colors shadow-sm focus:outline-none"
+            >
+              Reset platform identity
+            </button>
+          </div>
+        </div>
+
+        <!-- Small note: The data is not in yet -->
+        <div class="flex items-center justify-between px-4 py-3 rounded-xl bg-slate-100/70 border border-slate-200 text-slate-600 text-xs">
+          <div class="flex items-center gap-2">
+            <span class="material-symbols-outlined text-slate-400 text-base">info</span>
+            <span>The data is not in yet.</span>
+          </div>
+          <div class="font-mono text-[11px] text-slate-400 uppercase">
+            LOC: KINGSTON / PARISH REGISTRY JMD
+          </div>
+        </div>
+
+      </div>
+    </main>
+  </div>
+
+</body>
+</html>

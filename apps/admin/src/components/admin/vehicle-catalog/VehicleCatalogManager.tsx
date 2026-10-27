@@ -1,24 +1,13 @@
+// Stitch: dominion-redesign/d955104c499d440581c90e8a17bfc573
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  type LucideIcon,
-  Armchair,
-  Calendar,
-  CarFront,
   ChevronDown,
-  CircleDot,
-  DoorOpen,
   Download,
   Upload,
-  Fuel,
-  Gauge,
   Loader2,
   Plus,
-  Ruler,
   Search,
-  Settings2,
-  Tag,
   Trash2,
-  Weight,
 } from "lucide-react";
 import { useAuth } from "../../auth/AuthContext";
 import { CatalogOrphansPanel } from "./CatalogOrphansPanel";
@@ -54,7 +43,6 @@ import {
 } from "../../../utils/catalogImportCheckpoint";
 import { toast } from "sonner";
 import { Button } from "../../ui/button";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../../ui/collapsible";
 import {
   Dialog,
   DialogContent,
@@ -82,7 +70,6 @@ import {
   toCreatePayload,
   toPatchPayload,
   resolveMake,
-  MONTH_OPTIONS,
   type FormState,
 } from "./VehicleCatalogEditDialog";
 import {
@@ -91,6 +78,7 @@ import {
   type VehicleCatalogImportStep,
 } from "./VehicleCatalogImportDialog";
 import { VehicleCatalogTable } from "./VehicleCatalogTable";
+import { VehicleSpecificationSheet } from "./VehicleSpecificationSheet";
 
 function rowMatchesSearch(row: VehicleCatalogRecord, q: string): boolean {
   if (!q) return true;
@@ -125,9 +113,6 @@ export function VehicleCatalogManager() {
   const [editingUpdatedAt, setEditingUpdatedAt] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(() => emptyForm());
 
-  /** Grouped table: make → model → variants */
-  const [expandedMakes, setExpandedMakes] = useState<Set<string>>(() => new Set());
-  const [expandedModels, setExpandedModels] = useState<Set<string>>(() => new Set());
   const [classFilter, setClassFilter] = useState<"all" | "car" | "motorcycle">("all");
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -136,57 +121,24 @@ export function VehicleCatalogManager() {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  const groupedCatalog = useMemo(() => {
+  const filteredItems = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    const filtered = items.filter((r) => {
-      if (classFilter !== "all" && (r.vehicle_class ?? "car") !== classFilter) return false;
-      return rowMatchesSearch(r, q);
-    });
-    const byMake = new Map<string, Map<string, VehicleCatalogRecord[]>>();
-    for (const row of filtered) {
-      const make = (row.make ?? "").trim() || "—";
-      const model = (row.model ?? "").trim() || "—";
-      if (!byMake.has(make)) byMake.set(make, new Map());
-      const byModel = byMake.get(make)!;
-      if (!byModel.has(model)) byModel.set(model, []);
-      byModel.get(model)!.push(row);
-    }
-    const variantSort = (a: VehicleCatalogRecord, b: VehicleCatalogRecord) => {
-      const ya = a.production_start_year ?? 0;
-      const yb = b.production_start_year ?? 0;
-      if (yb !== ya) return yb - ya;
-      const ma = a.production_start_month ?? 0;
-      const mb = b.production_start_month ?? 0;
-      return mb - ma;
-    };
-    const makes = [...byMake.keys()].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
-    return makes.map((make) => {
-      const byModel = byMake.get(make)!;
-      const models = [...byModel.keys()].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
-      const modelGroups = models.map((model) => ({
-        model,
-        rows: [...(byModel.get(model) ?? [])].sort(variantSort),
-      }));
-      const variantCount = modelGroups.reduce((n, g) => n + g.rows.length, 0);
-      return { make, modelGroups, variantCount };
-    });
+    return items
+      .filter((r) => {
+        if (classFilter !== "all" && (r.vehicle_class ?? "car") !== classFilter) return false;
+        return rowMatchesSearch(r, q);
+      })
+      .sort((a, b) => {
+        const makeCmp = (a.make ?? "").localeCompare(b.make ?? "", undefined, { sensitivity: "base" });
+        if (makeCmp !== 0) return makeCmp;
+        const modelCmp = (a.model ?? "").localeCompare(b.model ?? "", undefined, { sensitivity: "base" });
+        if (modelCmp !== 0) return modelCmp;
+        const ya = a.production_start_year ?? 0;
+        const yb = b.production_start_year ?? 0;
+        if (yb !== ya) return yb - ya;
+        return (b.production_start_month ?? 0) - (a.production_start_month ?? 0);
+      });
   }, [items, classFilter, searchQuery]);
-
-  // Auto-expand matches when searching
-  useEffect(() => {
-    const q = searchQuery.trim();
-    if (!q) return;
-    const makes = new Set<string>();
-    const models = new Set<string>();
-    for (const g of groupedCatalog) {
-      makes.add(g.make);
-      for (const mg of g.modelGroups) models.add(`${g.make}\u001f${mg.model}`);
-    }
-    setExpandedMakes(makes);
-    setExpandedModels(models);
-  }, [searchQuery, groupedCatalog]);
-
-  const modelGroupKey = (make: string, model: string) => `${make}\u001f${model}`;
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -338,7 +290,7 @@ export function VehicleCatalogManager() {
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [importPreview, setImportPreview] = useState<ParsedCatalogImportRow[] | null>(null);
   const [importUnknownHeaders, setImportUnknownHeaders] = useState<string[]>([]);
-  /** preview → importing → result */
+  /** preview â†’ importing â†’ result */
   const [importStep, setImportStep] = useState<VehicleCatalogImportStep>("preview");
   const [importProgress, setImportProgress] = useState<{ current: number; total: number } | null>(null);
   const [importOutcome, setImportOutcome] = useState<VehicleCatalogImportOutcome | null>(null);
@@ -568,58 +520,58 @@ export function VehicleCatalogManager() {
   }
 
   return (
-    <div className="flex flex-col gap-4 p-4 sm:p-6 text-slate-900 dark:text-slate-200">
+    <div className="mx-auto w-full max-w-[1440px] space-y-6 text-slate-900">
+      <nav className="flex items-center gap-1.5 text-xs text-slate-500" aria-label="Breadcrumb">
+        <span>Dominion</span>
+        <span className="text-slate-400" aria-hidden>›</span>
+        <span>Master data</span>
+        <span className="text-slate-400" aria-hidden>›</span>
+        <span>Vehicles</span>
+        <span className="text-slate-400" aria-hidden>›</span>
+        <span className="font-medium text-slate-900">Vehicle catalog</span>
+      </nav>
+
+      <div className="flex flex-col gap-1">
+        <h1 className="font-headline text-2xl font-bold tracking-tight text-slate-900">Vehicle catalog</h1>
+        <p className="text-sm text-slate-500">
+          Makes, models, and the record you open with the eye to read specs.
+          {listTotal != null && (
+            <span className="ml-1">
+              ({filteredItems.length}
+              {listTotal !== filteredItems.length ? ` of ${listTotal}` : ""} variants)
+            </span>
+          )}
+        </p>
+      </div>
+
       <CatalogOrphansPanel />
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Vehicle catalog</h2>
-          <p className="text-sm text-slate-600 dark:text-slate-400">
-            Platform-wide reference variants for cars and motorcycles. Use separate rows and year ranges for major
-            facelifts or motorcycle model years. Used as reference data for fleets.
-            {listTotal != null && (
-              <span className="ml-1 text-slate-500">
-                ({items.length}
-                {listTotal !== items.length ? ` of ${listTotal}` : ""} variants)
-              </span>
-            )}
-          </p>
-          <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:flex-wrap">
-            <div className="relative w-full sm:max-w-xs">
-              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-              <Input
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search make, model, chassis, engine…"
-                className="h-8 pl-8 bg-white text-sm"
-              />
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-            {(
-              [
-                { id: "all", label: "All" },
-                { id: "car", label: "Cars" },
-                { id: "motorcycle", label: "Motorcycles" },
-              ] as const
-            ).map((opt) => (
-              <Button
-                key={opt.id}
-                type="button"
-                size="sm"
-                variant={classFilter === opt.id ? "default" : "outline"}
-                className={
-                  classFilter === opt.id
-                    ? "h-8 bg-slate-900 text-white hover:bg-slate-800"
-                    : "h-8 border-slate-300 bg-white text-slate-700"
-                }
-                onClick={() => setClassFilter(opt.id)}
-              >
-                {opt.label}
-              </Button>
-            ))}
-            </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex max-w-lg flex-1 flex-wrap items-center gap-3">
+          <div className="relative w-full max-w-xs">
+            <Search className="pointer-events-none absolute inset-y-0 left-0 my-auto ml-3 h-[18px] w-[18px] text-slate-400" />
+            <input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search make or model"
+              type="text"
+              className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-3 text-xs text-slate-800 shadow-2xs placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+          </div>
+          <div className="relative w-44">
+            <select
+              value={classFilter}
+              onChange={(e) => setClassFilter(e.target.value as "all" | "car" | "motorcycle")}
+              className="w-full cursor-pointer appearance-none rounded-lg border border-slate-200 bg-white py-2 pl-3 pr-8 text-xs text-slate-800 shadow-2xs focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            >
+              <option value="all">Class: All</option>
+              <option value="car">Cars</option>
+              <option value="motorcycle">Motorcycles</option>
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-2.5 top-2.5 h-4 w-4 text-slate-400" aria-hidden />
           </div>
         </div>
-        <div className="flex flex-wrap gap-2 shrink-0">
+        <div className="flex flex-wrap items-center gap-2">
           <input
             ref={importFileRef}
             type="file"
@@ -628,21 +580,18 @@ export function VehicleCatalogManager() {
             aria-hidden
             onChange={handleImportFileChange}
           />
-          <Button
+          <button
             type="button"
-            variant="outline"
-            className="gap-2 border-slate-300 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900 dark:border-slate-600 dark:bg-slate-800/80 dark:text-slate-200 dark:hover:bg-slate-700 dark:hover:text-white"
             onClick={handleImportPick}
             disabled={loading || importStep === "importing"}
             title="Import rows from CSV (export first to use as a template)"
+            className="inline-flex items-center gap-2 rounded-lg bg-[#316bf3] px-4 py-2 text-xs font-semibold text-white shadow-xs transition-colors hover:bg-blue-600 active:bg-blue-700 disabled:opacity-50"
           >
-            <Upload className="w-4 h-4" />
+            <Upload className="h-4 w-4" />
             Import CSV
-          </Button>
-          <Button
+          </button>
+          <button
             type="button"
-            variant="outline"
-            className="gap-2 border-slate-300 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900 dark:border-slate-600 dark:bg-slate-800/80 dark:text-slate-200 dark:hover:bg-slate-700 dark:hover:text-white"
             onClick={handleExportCsv}
             disabled={loading}
             title={
@@ -650,97 +599,58 @@ export function VehicleCatalogManager() {
                 ? "Exports headers and column guide; add vehicles or import to fill rows"
                 : "Download catalog with production months, engine code, and engine type columns"
             }
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-xs font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50 disabled:opacity-50"
           >
-            <Download className="w-4 h-4" />
+            <Download className="h-4 w-4" />
             Export CSV
-          </Button>
-          <Button onClick={openCreate} className="gap-2 bg-amber-500 text-slate-950 hover:bg-amber-400">
-            <Plus className="w-4 h-4" />
-            Add vehicle
-          </Button>
-          <Button
+          </button>
+          <button
             type="button"
-            variant="outline"
-            className="gap-2 border-red-300 bg-white text-red-600 hover:bg-red-50 hover:text-red-700 dark:border-red-500/40 dark:bg-slate-800/80 dark:text-red-400 dark:hover:bg-red-950/40 dark:hover:text-red-300"
+            onClick={openCreate}
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-xs font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50"
+          >
+            <Plus className="h-4 w-4" />
+            Add vehicle
+          </button>
+          <button
+            type="button"
             disabled={loading || items.length === 0 || importStep === "importing"}
             title="Remove every row in the motor vehicle catalog (cannot be undone)"
             onClick={() => {
               setPurgeConfirmInput("");
               setPurgeDialogOpen(true);
             }}
+            className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-white px-3.5 py-2 text-xs font-medium text-red-600 shadow-sm transition-colors hover:bg-red-50 disabled:opacity-50"
           >
-            <Trash2 className="w-4 h-4" />
+            <Trash2 className="h-4 w-4" />
             Delete all
-          </Button>
+          </button>
         </div>
       </div>
 
       {error && (
-        <div className="rounded-lg border border-red-500/30 bg-red-950/40 px-3 py-2 text-sm text-red-200">
+        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
           {error}
         </div>
       )}
 
       {loading ? (
         <div className="flex justify-center py-16">
-          <Loader2 className="w-8 h-8 text-slate-400 animate-spin" />
+          <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
         </div>
       ) : (
         <VehicleCatalogTable
-          items={items}
-          groupedCatalog={groupedCatalog}
-          expandedMakes={expandedMakes}
-          expandedModels={expandedModels}
-          onToggleMake={(make) =>
-            setExpandedMakes((prev) => {
-              const next = new Set(prev);
-              if (next.has(make)) next.delete(make);
-              else next.add(make);
-              return next;
-            })
-          }
-          onToggleModel={(make, model) => {
-            const mk = modelGroupKey(make, model);
-            setExpandedModels((prev) => {
-              const next = new Set(prev);
-              if (next.has(mk)) next.delete(mk);
-              else next.add(mk);
-              return next;
-            });
-          }}
-          modelGroupKey={modelGroupKey}
-          onView={setViewRecord}
+          items={filteredItems}
+          viewingId={viewRecord?.id ?? null}
+          onView={(row) => setViewRecord((prev) => (prev?.id === row.id ? null : row))}
           onEdit={openEdit}
           onDelete={openDelete}
         />
       )}
 
-      <Dialog open={viewRecord !== null} onOpenChange={(o) => !o && setViewRecord(null)}>
-        <DialogContent className="sm:max-w-2xl max-h-[92vh] overflow-y-auto bg-white border-slate-200/80 p-0 gap-0 shadow-xl sm:rounded-2xl">
-          {viewRecord && (
-            <>
-              <div className="px-6 pt-6 pb-2 sm:px-8 sm:pt-8">
-                <DialogHeader className="space-y-1 text-left">
-                  <DialogTitle className="text-xl font-semibold tracking-tight text-slate-950 sm:text-2xl">
-                    {viewRecord.make} {viewRecord.model}
-                  </DialogTitle>
-                  <p className="text-sm font-normal text-slate-500">
-                    {formatCatalogProductionWindow(viewRecord)} production
-                  </p>
-                </DialogHeader>
-              </div>
-              <div className="px-6 pb-6 sm:px-8 sm:pb-8">
-                <VehicleViewBody record={viewRecord} />
-              </div>
-              <DialogFooter className="border-t border-slate-100 bg-slate-50/50 px-6 py-4 sm:px-8 sm:py-4">
-                <Button type="button" variant="outline" className="w-full sm:w-auto border-slate-200" onClick={() => setViewRecord(null)}>
-                  Close
-                </Button>
-              </DialogFooter>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
+      {viewRecord ? (
+        <VehicleSpecificationSheet record={viewRecord} onClose={() => setViewRecord(null)} />
+      ) : null}
 
       <VehicleCatalogEditDialog
         open={dialogOpen}
@@ -985,239 +895,3 @@ export function VehicleCatalogManager() {
   );
 }
 
-function viewText(v: string | number | null | undefined): string {
-  if (v === null || v === undefined) return "—";
-  if (typeof v === "string" && v.trim() === "") return "—";
-  return String(v);
-}
-
-function formatCatalogMonthField(m: string | number | null | undefined): string {
-  if (m === null || m === undefined || m === "") return "—";
-  const s = String(m).trim();
-  if (!s) return "—";
-  const opt = MONTH_OPTIONS.find((o) => o.value === s);
-  if (opt && opt.value !== "") return opt.label === "—" ? s : opt.label;
-  return s;
-}
-
-function viewProductionEndYear(y: number | null | undefined): string {
-  if (y === null || y === undefined) return "Ongoing";
-  return viewText(y);
-}
-
-function fuelSummaryLine(r: VehicleCatalogRecord): string {
-  const parts = [r.fuel_category, r.fuel_type, r.fuel_grade].filter(
-    (x) => x != null && String(x).trim() !== "",
-  );
-  return parts.length ? parts.map((x) => String(x).trim()).join(" · ") : "—";
-}
-
-function formatEngineDisplacement(r: VehicleCatalogRecord): string {
-  if (r.engine_displacement_cc != null && Number.isFinite(Number(r.engine_displacement_cc))) {
-    return `${Math.round(Number(r.engine_displacement_cc)).toLocaleString()}cc`;
-  }
-  if (r.engine_displacement_l != null && Number.isFinite(Number(r.engine_displacement_l))) {
-    return `${r.engine_displacement_l}L`;
-  }
-  return "—";
-}
-
-function VehicleSpecItem({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between gap-4 py-3.5">
-      <div className="flex min-w-0 items-center gap-2.5">
-        <Icon className="h-[18px] w-[18px] shrink-0 text-slate-400" strokeWidth={1.5} aria-hidden />
-        <span className="text-[13px] text-slate-500">{label}</span>
-      </div>
-      <span className="shrink-0 text-right text-[13px] font-semibold tabular-nums text-slate-950">{value}</span>
-    </div>
-  );
-}
-
-function VehicleViewBody({ record: r }: { record: VehicleCatalogRecord }) {
-  const colA = (
-    <>
-      <VehicleSpecItem icon={Calendar} label="Production" value={formatCatalogProductionWindow(r)} />
-      <VehicleSpecItem icon={Settings2} label="Transmission" value={viewText(r.transmission)} />
-      <VehicleSpecItem icon={CarFront} label="Body type" value={viewText(r.body_type)} />
-      <VehicleSpecItem icon={DoorOpen} label="Doors" value={viewText(r.doors)} />
-    </>
-  );
-  const colB = (
-    <>
-      <VehicleSpecItem icon={Gauge} label="Engine" value={formatEngineDisplacement(r)} />
-      <VehicleSpecItem icon={CircleDot} label="Drive" value={viewText(r.drivetrain)} />
-      <VehicleSpecItem icon={Fuel} label="Fuel" value={fuelSummaryLine(r)} />
-      <VehicleSpecItem icon={Armchair} label="Seating capacity" value={viewText(r.seating_capacity)} />
-    </>
-  );
-
-  return (
-    <div className="space-y-6">
-      <div className="rounded-2xl border border-slate-200/70 bg-gradient-to-b from-slate-50/90 to-white p-5 shadow-sm sm:p-6">
-        <div className="grid grid-cols-1 gap-0 md:grid-cols-2 md:gap-x-10">
-          <div className="flex flex-col divide-y divide-slate-100">{colA}</div>
-          <div className="flex flex-col divide-y divide-slate-100 border-t border-slate-100 md:border-t-0 md:pt-0">
-            {colB}
-          </div>
-        </div>
-      </div>
-
-      <Collapsible className="group">
-        <CollapsibleTrigger asChild>
-          <button
-            type="button"
-            className="flex w-full items-center justify-between rounded-xl border border-slate-200/80 bg-white px-4 py-3 text-left text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50/90"
-          >
-            <span>Full specifications</span>
-            <ChevronDown className="h-4 w-4 shrink-0 text-slate-400 transition-transform duration-200 group-data-[state=open]:rotate-180" />
-          </button>
-        </CollapsibleTrigger>
-        <CollapsibleContent>
-          <div className="mt-3 space-y-6 rounded-2xl border border-slate-200/60 bg-white p-5 sm:p-6">
-            <ViewSpecSection title="Identification & Core Details">
-              <div className="grid grid-cols-1 gap-0 sm:grid-cols-2 sm:gap-x-8">
-                <div className="flex flex-col divide-y divide-slate-100">
-                  <VehicleSpecItem icon={Tag} label="Full model code" value={viewText(r.full_model_code)} />
-                  <VehicleSpecItem icon={Tag} label="Chassis code" value={viewText(r.chassis_code)} />
-                  <VehicleSpecItem icon={Tag} label="Trim" value={viewText(r.catalog_trim)} />
-                  <VehicleSpecItem icon={Tag} label="Trim suffix code" value={viewText(r.trim_suffix_code)} />
-                  <VehicleSpecItem icon={Tag} label="Emissions prefix" value={viewText(r.emissions_prefix)} />
-                </div>
-                <div className="flex flex-col divide-y divide-slate-100 border-t border-slate-100 sm:border-t-0">
-                  <VehicleSpecItem icon={Tag} label="Generation" value={viewText(r.generation)} />
-                  <VehicleSpecItem icon={Tag} label="Series / facelift" value={viewText(r.trim_series)} />
-                </div>
-              </div>
-            </ViewSpecSection>
-
-            <ViewSpecSection title="Production Lifecycle">
-              <div className="grid grid-cols-1 gap-0 sm:grid-cols-2 sm:gap-x-8">
-                <div className="flex flex-col divide-y divide-slate-100">
-                  <VehicleSpecItem icon={Calendar} label="Production start year" value={viewText(r.production_start_year)} />
-                  <VehicleSpecItem icon={Calendar} label="Production start month" value={formatCatalogMonthField(r.production_start_month)} />
-                </div>
-                <div className="flex flex-col divide-y divide-slate-100 border-t border-slate-100 sm:border-t-0">
-                  <VehicleSpecItem
-                    icon={Calendar}
-                    label="Production end year (empty = ongoing)"
-                    value={viewProductionEndYear(r.production_end_year)}
-                  />
-                  <VehicleSpecItem
-                    icon={Calendar}
-                    label="Production end month"
-                    value={
-                      r.production_end_year === null || r.production_end_year === undefined
-                        ? "—"
-                        : formatCatalogMonthField(r.production_end_month)
-                    }
-                  />
-                </div>
-              </div>
-            </ViewSpecSection>
-
-            <ViewSpecSection title="Dimensions & Body">
-              <div className="grid grid-cols-1 gap-0 sm:grid-cols-2 sm:gap-x-8">
-                <div className="flex flex-col divide-y divide-slate-100">
-                  <VehicleSpecItem icon={CarFront} label="Body type" value={viewText(r.body_type)} />
-                  <VehicleSpecItem icon={DoorOpen} label="Doors" value={viewText(r.doors)} />
-                  <VehicleSpecItem icon={Ruler} label="Length (mm)" value={viewText(r.length_mm)} />
-                  <VehicleSpecItem icon={Ruler} label="Width (mm)" value={viewText(r.width_mm)} />
-                  <VehicleSpecItem icon={Ruler} label="Height (mm)" value={viewText(r.height_mm)} />
-                </div>
-                <div className="flex flex-col divide-y divide-slate-100 border-t border-slate-100 sm:border-t-0">
-                  <VehicleSpecItem icon={Ruler} label="Wheelbase (mm)" value={viewText(r.wheelbase_mm)} />
-                  <VehicleSpecItem icon={Ruler} label="Ground clearance (mm)" value={viewText(r.ground_clearance_mm)} />
-                </div>
-              </div>
-            </ViewSpecSection>
-
-            <ViewSpecSection title="Engine & Transmission">
-              <div className="grid grid-cols-1 gap-0 sm:grid-cols-2 sm:gap-x-8">
-                <div className="flex flex-col divide-y divide-slate-100">
-                  <VehicleSpecItem icon={Gauge} label="Engine code" value={viewText(r.engine_code)} />
-                  <VehicleSpecItem icon={Gauge} label="Engine type" value={viewText(r.engine_type)} />
-                  <VehicleSpecItem icon={Gauge} label="Engine displacement L" value={viewText(r.engine_displacement_l)} />
-                  <VehicleSpecItem icon={Gauge} label="Engine displacement cc" value={viewText(r.engine_displacement_cc)} />
-                  <VehicleSpecItem icon={Settings2} label="Engine configuration" value={viewText(r.engine_configuration)} />
-                </div>
-                <div className="flex flex-col divide-y divide-slate-100 border-t border-slate-100 sm:border-t-0">
-                  <VehicleSpecItem icon={Gauge} label="Horsepower" value={viewText(r.horsepower)} />
-                  <VehicleSpecItem icon={Gauge} label="Torque" value={viewText(r.torque)} />
-                  <VehicleSpecItem icon={Gauge} label="Torque unit" value={viewText(r.torque_unit)} />
-                  <VehicleSpecItem icon={Settings2} label="Transmission" value={viewText(r.transmission)} />
-                  <VehicleSpecItem icon={CircleDot} label="Drivetrain" value={viewText(r.drivetrain)} />
-                </div>
-              </div>
-            </ViewSpecSection>
-
-            <ViewSpecSection title="Fuel System & Fluids">
-              <div className="grid grid-cols-1 gap-0 sm:grid-cols-2 sm:gap-x-8">
-                <div className="flex flex-col divide-y divide-slate-100">
-                  <VehicleSpecItem icon={Fuel} label="Fuel category" value={viewText(r.fuel_category)} />
-                  <VehicleSpecItem icon={Fuel} label="Fuel type" value={viewText(r.fuel_type)} />
-                  <VehicleSpecItem icon={Fuel} label="Fuel grade" value={viewText(r.fuel_grade)} />
-                  <VehicleSpecItem icon={Fuel} label="Fuel tank capacity" value={viewText(r.fuel_tank_capacity)} />
-                  <VehicleSpecItem icon={Fuel} label="Fuel economy (km/L)" value={viewText(r.fuel_economy_km_per_l)} />
-                </div>
-                <div className="flex flex-col divide-y divide-slate-100 border-t border-slate-100 sm:border-t-0">
-                  <VehicleSpecItem icon={Fuel} label="Fuel tank unit" value={viewText(r.fuel_tank_unit)} />
-                  <VehicleSpecItem
-                    icon={Fuel}
-                    label="Estimated (Km) per re-fuel"
-                    value={viewText(r.estimated_km_per_refuel)}
-                  />
-                  <VehicleSpecItem icon={Gauge} label="Engine oil capacity L" value={viewText(r.engine_oil_capacity_l)} />
-                  <VehicleSpecItem icon={Gauge} label="Coolant capacity L" value={viewText(r.coolant_capacity_l)} />
-                </div>
-              </div>
-            </ViewSpecSection>
-
-            <ViewSpecSection title="Wheels & Brakes">
-              <div className="grid grid-cols-1 gap-0 sm:grid-cols-2 sm:gap-x-8">
-                <div className="flex flex-col divide-y divide-slate-100">
-                  <VehicleSpecItem icon={CircleDot} label="Front brake type" value={viewText(r.front_brake_type)} />
-                  <VehicleSpecItem icon={CircleDot} label="Rear brake type" value={viewText(r.rear_brake_type)} />
-                  <VehicleSpecItem icon={Ruler} label="Brake size mm" value={viewText(r.brake_size_mm)} />
-                </div>
-                <div className="flex flex-col divide-y divide-slate-100 border-t border-slate-100 sm:border-t-0">
-                  <VehicleSpecItem icon={CarFront} label="Tire size" value={viewText(r.tire_size)} />
-                  <VehicleSpecItem icon={Settings2} label="Bolt pattern" value={viewText(r.bolt_pattern)} />
-                  <VehicleSpecItem icon={Ruler} label="Wheel offset mm" value={viewText(r.wheel_offset_mm)} />
-                </div>
-              </div>
-            </ViewSpecSection>
-
-            <ViewSpecSection title="Weights & Payload">
-              <div className="grid grid-cols-1 gap-0 sm:grid-cols-2 sm:gap-x-8">
-                <div className="flex flex-col divide-y divide-slate-100">
-                  <VehicleSpecItem icon={Armchair} label="Seating capacity" value={viewText(r.seating_capacity)} />
-                  <VehicleSpecItem icon={Weight} label="Curb weight kg" value={viewText(r.curb_weight_kg)} />
-                  <VehicleSpecItem icon={Weight} label="Gross vehicle weight kg" value={viewText(r.gross_vehicle_weight_kg)} />
-                </div>
-                <div className="flex flex-col divide-y divide-slate-100 border-t border-slate-100 sm:border-t-0">
-                  <VehicleSpecItem icon={Weight} label="Max payload kg" value={viewText(r.max_payload_kg)} />
-                  <VehicleSpecItem icon={Weight} label="Max towing kg" value={viewText(r.max_towing_kg)} />
-                </div>
-              </div>
-            </ViewSpecSection>
-          </div>
-        </CollapsibleContent>
-      </Collapsible>
-
-      <p className="text-center text-[11px] text-slate-400">
-        Updated {new Date(r.updated_at).toLocaleString()}
-        {r.created_at !== r.updated_at && <> · Created {new Date(r.created_at).toLocaleString()}</>}
-      </p>
-    </div>
-  );
-}
-
-function ViewSpecSection({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <h4 className="mb-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">{title}</h4>
-      {children}
-    </div>
-  );
-}

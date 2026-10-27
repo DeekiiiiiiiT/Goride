@@ -1,3 +1,4 @@
+// Stitch: dominion-redesign/ede07129a5f14d77875ed775013da7ec
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ChevronDown,
@@ -8,7 +9,6 @@ import {
   Pencil,
   Plus,
   Trash2,
-  Wrench,
   Database,
 } from "lucide-react";
 import { useAuth } from "../../auth/AuthContext";
@@ -871,29 +871,42 @@ export function MaintenanceTemplatesManager() {
   const isEditingSystem = editingKind === "system";
 
   return (
-    <div className="flex flex-col gap-4 p-4 sm:p-6 text-slate-900">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
-            <Wrench className="w-5 h-5 text-amber-600" />
-            Maintenance templates
-          </h2>
-          <p className="text-sm text-slate-500">
-            A platform or engine schedule is the default. A variant rule wins when both exist.
-          </p>
+    <div className="flex flex-col gap-6 space-y-0 p-8 text-slate-900">
+      <div className="space-y-1.5">
+        <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 font-mono text-xs text-slate-400">
+          <span>Dominion</span>
+          <span className="text-slate-300">/</span>
+          <span>Master data</span>
+          <span className="text-slate-300">/</span>
+          <span>Vehicles</span>
+          <span className="text-slate-300">/</span>
+          <span className="font-medium text-slate-700">Maintenance templates</span>
+        </nav>
+        <div className="flex items-baseline justify-between gap-3 pt-1">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900">Maintenance templates</h1>
+            <p className="mt-0.5 text-sm text-slate-500">
+              Service categories and the tasks inside the selected category.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="rounded-md border border-slate-200/70 bg-slate-100 px-2.5 py-1 font-mono text-xs text-slate-400">
+              REGION: JM-KGN
+            </span>
+            {canMigrate && (
+              <Button
+                type="button"
+                variant="outline"
+                className="gap-2 border-slate-300"
+                onClick={handleMigrate}
+                disabled={migrating}
+              >
+                {migrating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Database className="w-4 h-4" />}
+                Migrate KV logs
+              </Button>
+            )}
+          </div>
         </div>
-        {canMigrate && (
-          <Button
-            type="button"
-            variant="outline"
-            className="gap-2 border-slate-300"
-            onClick={handleMigrate}
-            disabled={migrating}
-          >
-            {migrating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Database className="w-4 h-4" />}
-            Migrate KV logs
-          </Button>
-        )}
       </div>
 
       <FamilyScheduleForm />
@@ -2054,6 +2067,15 @@ export function MaintenanceTemplatesManager() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <div className="mt-2 rounded-lg border border-amber-200/60 bg-amber-50/60 px-4 py-3 text-amber-900">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-xs font-medium">The data is not in yet.</p>
+          <span className="font-mono text-[11px] font-semibold tracking-wide text-amber-800">
+            LOC: KINGSTON / PARISH REGISTRY JMD
+          </span>
+        </div>
+      </div>
     </div>
   );
 }

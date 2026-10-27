@@ -59,7 +59,6 @@ function recoverySurfaceForTeam(
   productLine: 'enterprise' | 'fleet',
 ): AuthRecoverySurface {
   if (apiNamespace === '/enterprise-admin') return 'enterprise';
-  if (apiNamespace === '/admin') return 'dominion';
   return productLine === 'enterprise' ? 'enterprise' : 'fleet';
 }
 

@@ -95,6 +95,26 @@ Deno.test("rowToKvValue keeps payload platform when the blob is present", () => 
   assertEquals(payload.platform, "Roam Rush");
 });
 
+Deno.test("rowToKvValue prefers typed parish, contact, amenities, and direction", () => {
+  const payload = rowToKvValue({
+    parish: "St. Andrew",
+    phone: "876-555-0100",
+    website: "https://rubis.co.jm",
+    amenities: ["atm"],
+    direction: "east",
+    payload_json: {
+      parish: "Kingston",
+      direction: "west",
+      amenities: ["shop"],
+      contactInfo: { phone: "000", website: "https://old.example" },
+    },
+  });
+  assertEquals(payload.parish, "St. Andrew");
+  assertEquals(payload.direction, "east");
+  assertEquals(payload.amenities, ["atm"]);
+  assertEquals(payload.contactInfo, { phone: "876-555-0100", website: "https://rubis.co.jm" });
+});
+
 Deno.test("shapeFleetRow keeps named JSON fields and hides the blob", () => {
   const payload = shapeFleetRow({
     id: "t1",

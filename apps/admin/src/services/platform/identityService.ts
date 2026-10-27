@@ -86,18 +86,6 @@ export async function lookupUserByEmail(
   return res.json() as Promise<CrossProductStatus>;
 }
 
-/** GET /admin/users/:userId/cross-product-status */
-export async function getCrossProductStatus(
-  accessToken: string,
-  userId: string,
-): Promise<CrossProductStatus> {
-  const res = await fetch(`${BASE}/${encodeURIComponent(userId)}/cross-product-status`, {
-    headers: authHeaders(accessToken),
-  });
-  if (!res.ok) throw new Error(await parseError(res));
-  return res.json() as Promise<CrossProductStatus>;
-}
-
 /** DELETE /admin/users/:userId/full-delete — platform owner only */
 export async function fullDeleteUser(
   accessToken: string,

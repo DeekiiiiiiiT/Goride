@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>S25 Apps</title>
+  <!-- Inter & JetBrains Mono Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <!-- Tailwind Play CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            dominion: {
+              blue: '#316bf3',
+              sidebar: '#111827',
+              darknav: '#0f172a',
+              border: '#e2e8f0',
+              sidebarborder: '#1e293b'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    .font-mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+  </style>
+</head>
+<body class="bg-[#f8fafc] text-slate-800 flex h-screen overflow-hidden text-sm antialiased">
+
+  <!-- Dominion Navy Sidebar Shell (S24 exact structure & styling) -->
+  <aside class="w-64 bg-[#0f172a] text-slate-400 flex flex-col shrink-0 border-r border-[#1e293b] select-none h-full z-20">
+    <!-- Brand / Header -->
+    <div class="p-4 flex items-center gap-3 border-b border-slate-800/80">
+      <div class="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold shadow-sm">
+        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+        </svg>
+      </div>
+      <div>
+        <div class="text-white font-semibold text-sm leading-tight tracking-tight">Dominion</div>
+        <div class="text-slate-500 text-xs">Roam Admin Console</div>
+      </div>
+    </div>
+
+    <!-- Navigation List -->
+    <div class="flex-1 overflow-y-auto px-3 py-4 space-y-6 text-xs font-medium">
+      <!-- Section: Overview -->
+      <div>
+        <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:text-slate-200 hover:bg-slate-800/60 transition-colors">
+          <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/>
+          </svg>
+          <span class="text-sm">Overview</span>
+        </a>
+      </div>
+
+      <!-- Section: MASTER DATA -->
+      <div>
+        <div class="px-3 pb-2 text-[10px] font-bold tracking-wider text-slate-500 uppercase">Master Data</div>
+        <div class="space-y-0.5">
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:text-slate-200 hover:bg-slate-800/60 transition-colors">
+            <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z"/>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0"/>
+            </svg>
+            <span class="text-sm">Vehicles</span>
+          </a>
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:text-slate-200 hover:bg-slate-800/60 transition-colors">
+            <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/>
+            </svg>
+            <span class="text-sm">Places and Maps</span>
+          </a>
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:text-slate-200 hover:bg-slate-800/60 transition-colors">
+            <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+            </svg>
+            <span class="text-sm">Fuel</span>
+          </a>
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:text-slate-200 hover:bg-slate-800/60 transition-colors">
+            <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            <span class="text-sm">Tolls</span>
+          </a>
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:text-slate-200 hover:bg-slate-800/60 transition-colors">
+            <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+            </svg>
+            <span class="text-sm">Tax and Vendors</span>
+          </a>
+        </div>
+      </div>
+
+      <!-- Section: ENGINES -->
+      <div>
+        <div class="px-3 pb-2 text-[10px] font-bold tracking-wider text-slate-500 uppercase">Engines</div>
+        <div class="space-y-0.5">
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:text-slate-200 hover:bg-slate-800/60 transition-colors">
+            <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+            </svg>
+            <span class="text-sm">Fuel Brain</span>
+          </a>
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:text-slate-200 hover:bg-slate-800/60 transition-colors">
+            <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+            <span class="text-sm">Toll Brain</span>
+          </a>
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:text-slate-200 hover:bg-slate-800/60 transition-colors">
+            <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/>
+            </svg>
+            <span class="text-sm">Matching Brain</span>
+          </a>
+        </div>
+      </div>
+
+      <!-- Section: DISTRIBUTION (Active Apps Item) -->
+      <div>
+        <div class="px-3 pb-2 text-[10px] font-bold tracking-wider text-slate-500 uppercase">Distribution</div>
+        <div class="space-y-0.5">
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg bg-[#316bf3] text-white font-medium shadow-sm transition-colors">
+            <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/>
+            </svg>
+            <span class="text-sm font-semibold">Apps</span>
+          </a>
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:text-slate-200 hover:bg-slate-800/60 transition-colors">
+            <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/>
+            </svg>
+            <span class="text-sm">Data API</span>
+          </a>
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:text-slate-200 hover:bg-slate-800/60 transition-colors">
+            <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/>
+            </svg>
+            <span class="text-sm">Change requests</span>
+          </a>
+        </div>
+      </div>
+
+      <!-- Section: PLATFORM -->
+      <div>
+        <div class="px-3 pb-2 text-[10px] font-bold tracking-wider text-slate-500 uppercase">Platform</div>
+        <div class="space-y-0.5">
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:text-slate-200 hover:bg-slate-800/60 transition-colors">
+            <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>
+            </svg>
+            <span class="text-sm">Staff and roles</span>
+          </a>
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:text-slate-200 hover:bg-slate-800/60 transition-colors">
+            <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            <span class="text-sm">Activity log</span>
+          </a>
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:text-slate-200 hover:bg-slate-800/60 transition-colors">
+            <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+            </svg>
+            <span class="text-sm">Platform Ops</span>
+          </a>
+        </div>
+      </div>
+
+      <!-- Section: BACK OFFICE -->
+      <div>
+        <div class="px-3 pb-2 text-[10px] font-bold tracking-wider text-slate-500 uppercase">Back Office</div>
+        <div class="space-y-0.5">
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:text-slate-200 hover:bg-slate-800/60 transition-colors">
+            <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+            </svg>
+            <span class="text-sm">Global settings</span>
+          </a>
+          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:text-slate-200 hover:bg-slate-800/60 transition-colors">
+            <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
+            </svg>
+            <span class="text-sm">GCT registrations</span>
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sidebar Bottom Status Pill -->
+    <div class="p-3 border-t border-[#1e293b] flex items-center justify-between text-[11px] font-mono bg-[#0b1120]">
+      <div class="flex items-center gap-2">
+        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+        <span class="text-slate-400 font-medium">KGN-DC-01</span>
+      </div>
+      <span class="px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-mono text-[10px] border border-slate-700">JMD READY</span>
+    </div>
+  </aside>
+
+  <!-- Main Content Wrap -->
+  <div class="flex-1 flex flex-col min-w-0 overflow-hidden bg-[#f8fafc]">
+
+    <!-- Dominion Top Navigation Bar (Owner only, no personal name) -->
+    <header class="h-16 bg-white border-b border-slate-200 px-6 flex items-center justify-between shrink-0 z-10">
+      <!-- Search Input -->
+      <div class="relative w-96">
+        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+          </svg>
+        </div>
+        <input type="text" placeholder="Search entities, engines, routes... ⌘K" class="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-colors">
+      </div>
+
+      <!-- Trailing Actions & Profile -->
+      <div class="flex items-center gap-4">
+        <button class="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors" title="Notifications">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+          </svg>
+        </button>
+        <button class="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors" title="Help">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+        </button>
+        
+        <div class="h-6 w-px bg-slate-200"></div>
+
+        <!-- Header Role: Owner only. No personal name. -->
+        <div class="flex items-center gap-2.5 pl-1">
+          <div class="w-8 h-8 rounded-full bg-slate-900 text-white font-mono text-xs font-semibold flex items-center justify-center tracking-wider">
+            OW
+          </div>
+          <div class="flex flex-col text-left">
+            <span class="text-xs font-semibold text-slate-800 leading-tight">Owner</span>
+            <span class="text-[10px] font-mono text-slate-400 leading-tight">SYS-AUTH</span>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Workspace Area (Content + Open Read-only Drawer) -->
+    <div class="flex-1 flex overflow-hidden relative">
+
+      <!-- Center Scrollable Canvas Content -->
+      <main class="flex-1 overflow-y-auto p-8 max-w-6xl mx-auto w-full">
+        <!-- Breadcrumb & Region Pill -->
+        <div class="flex items-center justify-between mb-4">
+          <nav class="flex items-center gap-2 text-xs font-medium text-slate-500">
+            <span>Dominion</span>
+            <span class="text-slate-400">/</span>
+            <span>Distribution</span>
+            <span class="text-slate-400">/</span>
+            <span class="text-slate-900 font-semibold">Apps</span>
+          </nav>
+          <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 border border-slate-200/80 text-[11px] font-mono text-slate-600">
+            <span class="w-1.5 h-1.5 rounded-full bg-blue-600"></span>
+            <span>REGION: JM-KGN</span>
+          </div>
+        </div>
+
+        <!-- Title & Lede -->
+        <div class="mb-6">
+          <h1 class="text-2xl font-bold tracking-tight text-slate-900">Apps</h1>
+          <p class="text-sm text-slate-500 mt-1">The Roam apps that read published data.</p>
+        </div>
+
+        <!-- Top Overview Metric / Partition Notice Card -->
+        <div class="bg-white border border-slate-200 rounded-[12px] p-4 mb-6 shadow-sm flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <div class="w-9 h-9 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+              </svg>
+            </div>
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-semibold text-slate-800">Consumer App Distribution Nodes</span>
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5"></span> 7 Connected
+                </span>
+              </div>
+              <div class="text-xs font-mono text-slate-400 mt-0.5">Partition: Kingston &amp; St. Andrew (JM-01) &bull; Highway 2000 Corridor</div>
+            </div>
+          </div>
+          <div class="flex items-center gap-2 text-xs font-mono">
+            <span class="px-2.5 py-1 rounded bg-slate-50 border border-slate-200 text-slate-600">CURRENCY: JMD</span>
+            <span class="px-2.5 py-1 rounded bg-slate-50 border border-slate-200 text-slate-600">LOC: KINGSTON</span>
+          </div>
+        </div>
+
+        <!-- Apps Table White Card (12px radius, hairline border) -->
+        <div class="bg-white border border-slate-200 rounded-[12px] shadow-sm overflow-hidden mb-6">
+          <!-- Table Header Controls -->
+          <div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+              </svg>
+              <h2 class="text-xs font-semibold text-slate-800 tracking-wide uppercase">Registered Client Applications</h2>
+            </div>
+            <div class="text-[11px] font-mono text-slate-400">DOMAIN_ZONE: ROAM_DIST_JM</div>
+          </div>
+
+          <!-- The Table -->
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="bg-slate-50/75 border-b border-slate-200 text-[11px] font-mono font-medium text-slate-500 uppercase tracking-wider">
+                <th scope="col" class="py-3 px-5">App</th>
+                <th scope="col" class="py-3 px-5">Site</th>
+                <th scope="col" class="py-3 px-5">Reads</th>
+                <th scope="col" class="py-3 px-5">Last sync</th>
+                <th scope="col" class="py-3 px-5 text-right font-sans">Inspect</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100 text-xs">
+              <!-- Row 1: Roam Plug (Selected / Highlighted matching open drawer) -->
+              <tr class="bg-blue-50/40 hover:bg-blue-50/60 transition-colors">
+                <td class="py-3.5 px-5 font-semibold text-slate-900 flex items-center gap-2.5">
+                  <div class="w-2 h-2 rounded-full bg-blue-600"></div>
+                  <span>Roam Plug</span>
+                  <span class="ml-1 text-[10px] font-mono text-blue-600 bg-blue-100/60 px-1.5 py-0.5 rounded border border-blue-200/60">SELECTED</span>
+                </td>
+                <td class="py-3.5 px-5 font-mono text-blue-600 hover:underline">
+                  <a href="https://roamplug.app" target="_blank" rel="noopener noreferrer">https://roamplug.app</a>
+                </td>
+                <td class="py-3.5 px-5 text-slate-600 font-medium">Stations, places, tolls</td>
+                <td class="py-3.5 px-5 font-mono text-slate-400 italic">The data is not in yet</td>
+                <td class="py-3.5 px-5 text-right">
+                  <button class="px-2 py-1 text-[11px] font-medium text-blue-600 bg-white border border-blue-200 rounded shadow-xs">Drawer open</button>
+                </td>
+              </tr>
+
+              <!-- Row 2: Fleet -->
+              <tr class="hover:bg-slate-50/70 transition-colors">
+                <td class="py-3.5 px-5 font-semibold text-slate-800 flex items-center gap-2.5">
+                  <div class="w-2 h-2 rounded-full bg-slate-300"></div>
+                  <span>Fleet</span>
+                </td>
+                <td class="py-3.5 px-5 font-mono text-blue-600 hover:underline">
+                  <a href="https://roamfleet.co" target="_blank" rel="noopener noreferrer">https://roamfleet.co</a>
+                </td>
+                <td class="py-3.5 px-5 text-slate-600 font-medium">Stations, vehicles, tolls</td>
+                <td class="py-3.5 px-5 font-mono text-slate-400 italic">The data is not in yet</td>
+                <td class="py-3.5 px-5 text-right">
+                  <button class="p-1 text-slate-400 hover:text-slate-600 rounded">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                    </svg>
+                  </button>
+                </td>
+              </tr>
+
+              <!-- Row 3: Driver -->
+              <tr class="hover:bg-slate-50/70 transition-colors">
+                <td class="py-3.5 px-5 font-semibold text-slate-800 flex items-center gap-2.5">
+                  <div class="w-2 h-2 rounded-full bg-slate-300"></div>
+                  <span>Driver</span>
+                </td>
+                <td class="py-3.5 px-5 font-mono text-blue-600 hover:underline">
+                  <a href="https://roamdriver.co" target="_blank" rel="noopener noreferrer">https://roamdriver.co</a>
+                </td>
+                <td class="py-3.5 px-5 text-slate-600 font-medium">Vehicles, stations</td>
+                <td class="py-3.5 px-5 font-mono text-slate-400 italic">The data is not in yet</td>
+                <td class="py-3.5 px-5 text-right">
+                  <button class="p-1 text-slate-400 hover:text-slate-600 rounded">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                    </svg>
+                  </button>
+                </td>
+              </tr>
+
+              <!-- Row 4: Rides -->
+              <tr class="hover:bg-slate-50/70 transition-colors">
+                <td class="py-3.5 px-5 font-semibold text-slate-800 flex items-center gap-2.5">
+                  <div class="w-2 h-2 rounded-full bg-slate-300"></div>
+                  <span>Rides</span>
+                </td>
+                <td class="py-3.5 px-5 font-mono text-blue-600 hover:underline">
+                  <a href="https://roam-s.co" target="_blank" rel="noopener noreferrer">https://roam-s.co</a>
+                </td>
+                <td class="py-3.5 px-5 text-slate-600 font-medium">Tolls, places</td>
+                <td class="py-3.5 px-5 font-mono text-slate-400 italic">The data is not in yet</td>
+                <td class="py-3.5 px-5 text-right">
+                  <button class="p-1 text-slate-400 hover:text-slate-600 rounded">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                    </svg>
+                  </button>
+                </td>
+              </tr>
+
+              <!-- Row 5: Rush -->
+              <tr class="hover:bg-slate-50/70 transition-colors">
+                <td class="py-3.5 px-5 font-semibold text-slate-800 flex items-center gap-2.5">
+                  <div class="w-2 h-2 rounded-full bg-slate-300"></div>
+                  <span>Rush</span>
+                </td>
+                <td class="py-3.5 px-5 font-mono text-blue-600 hover:underline">
+                  <a href="https://roamrush.app" target="_blank" rel="noopener noreferrer">https://roamrush.app</a>
+                </td>
+                <td class="py-3.5 px-5 text-slate-600 font-medium">Places</td>
+                <td class="py-3.5 px-5 font-mono text-slate-400 italic">The data is not in yet</td>
+                <td class="py-3.5 px-5 text-right">
+                  <button class="p-1 text-slate-400 hover:text-slate-600 rounded">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                    </svg>
+                  </button>
+                </td>
+              </tr>
+
+              <!-- Row 6: Haul -->
+              <tr class="hover:bg-slate-50/70 transition-colors">
+                <td class="py-3.5 px-5 font-semibold text-slate-800 flex items-center gap-2.5">
+                  <div class="w-2 h-2 rounded-full bg-slate-300"></div>
+                  <span>Haul</span>
+                </td>
+                <td class="py-3.5 px-5 font-mono text-blue-600 hover:underline">
+                  <a href="https://roamhaul.co" target="_blank" rel="noopener noreferrer">https://roamhaul.co</a>
+                </td>
+                <td class="py-3.5 px-5 text-slate-600 font-medium">Places</td>
+                <td class="py-3.5 px-5 font-mono text-slate-400 italic">The data is not in yet</td>
+                <td class="py-3.5 px-5 text-right">
+                  <button class="p-1 text-slate-400 hover:text-slate-600 rounded">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                    </svg>
+                  </button>
+                </td>
+              </tr>
+
+              <!-- Row 7: Enterprise -->
+              <tr class="hover:bg-slate-50/70 transition-colors">
+                <td class="py-3.5 px-5 font-semibold text-slate-800 flex items-center gap-2.5">
+                  <div class="w-2 h-2 rounded-full bg-slate-300"></div>
+                  <span>Enterprise</span>
+                </td>
+                <td class="py-3.5 px-5 font-mono text-blue-600 hover:underline">
+                  <a href="https://roamenterprise.co" target="_blank" rel="noopener noreferrer">https://roamenterprise.co</a>
+                </td>
+                <td class="py-3.5 px-5 text-slate-600 font-medium">Vendors, tax rates</td>
+                <td class="py-3.5 px-5 font-mono text-slate-400 italic">The data is not in yet</td>
+                <td class="py-3.5 px-5 text-right">
+                  <button class="p-1 text-slate-400 hover:text-slate-600 rounded">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                    </svg>
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Standard Empty / Registry Footer Banner -->
+        <div class="bg-white border border-slate-200 rounded-[12px] p-4 flex items-center justify-between text-xs text-slate-500 shadow-sm">
+          <div class="flex items-center gap-2.5 font-mono italic text-slate-400">
+            <svg class="w-4 h-4 text-slate-400 not-italic shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            <span>The data is not in yet.</span>
+          </div>
+          <div class="font-mono text-[11px] text-slate-400">
+            LOC: KINGSTON / PARISH REGISTRY JMD
+          </div>
+        </div>
+      </main>
+
+      <!-- Read-Only Drawer for Roam Plug (Open right-side drawer) -->
+      <!-- Matches S5/Dominion drawer specs: white background, hairline border, Inter text, JetBrains Mono ids, NO EDIT BUTTON -->
+      <aside class="w-[420px] bg-white border-l border-slate-200 flex flex-col shrink-0 h-full shadow-lg z-20">
+        <!-- Drawer Header -->
+        <div class="p-6 border-b border-slate-200 flex items-center justify-between bg-slate-50/50">
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-mono font-medium text-slate-500 uppercase tracking-wide">Application Inspector</span>
+              <span class="px-2 py-0.5 rounded text-[10px] font-mono bg-blue-50 text-blue-700 border border-blue-200">READ-ONLY</span>
+            </div>
+            <h2 class="text-lg font-bold text-slate-900 mt-1">Roam Plug</h2>
+          </div>
+          <button class="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors" title="Close drawer">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Drawer Body Content (Read-only, repeats site and reads) -->
+        <div class="flex-1 overflow-y-auto p-6 space-y-6 text-xs">
+          <!-- Read-only Alert / Banner -->
+          <div class="p-3 bg-slate-50 border border-slate-200 rounded-[12px] flex items-start gap-2.5 text-slate-600">
+            <svg class="w-4 h-4 text-blue-600 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            <div class="text-[11px] leading-relaxed">
+              This node profile is locked in read-only observation mode. Configuration updates are managed by the Dominion Owner role.
+            </div>
+          </div>
+
+          <!-- App Specification Block -->
+          <div class="space-y-4">
+            <!-- App Name Field -->
+            <div>
+              <label class="block text-[11px] font-mono uppercase text-slate-500 mb-1.5">Application Name</label>
+              <div class="px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-[8px] font-semibold text-slate-900 text-xs">
+                Roam Plug
+              </div>
+            </div>
+
+            <!-- Site Field (Repeated) -->
+            <div>
+              <label class="block text-[11px] font-mono uppercase text-slate-500 mb-1.5">Site (Public Endpoint)</label>
+              <div class="px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-[8px] font-mono text-blue-600 text-xs flex items-center justify-between">
+                <span>https://roamplug.app</span>
+                <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+                </svg>
+              </div>
+            </div>
+
+            <!-- Reads Field (Repeated) -->
+            <div>
+              <label class="block text-[11px] font-mono uppercase text-slate-500 mb-1.5">Reads (Subscribed Feeds)</label>
+              <div class="px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-[8px] text-slate-800 text-xs font-medium">
+                Stations, places, tolls
+              </div>
+            </div>
+
+            <!-- Subscribed Master Tables Grid -->
+            <div>
+              <label class="block text-[11px] font-mono uppercase text-slate-500 mb-1.5">Active Topic Subscriptions</label>
+              <div class="space-y-2">
+                <div class="p-3 border border-slate-200 rounded-[8px] bg-white flex items-center justify-between">
+                  <div class="flex items-center gap-2">
+                    <span class="w-1.5 h-1.5 rounded-full bg-blue-600"></span>
+                    <span class="font-medium text-slate-800">Stations</span>
+                  </div>
+                  <span class="font-mono text-[10px] text-slate-500 bg-slate-100 px-2 py-0.5 rounded">STREAM: DOM_STATION_JM</span>
+                </div>
+                <div class="p-3 border border-slate-200 rounded-[8px] bg-white flex items-center justify-between">
+                  <div class="flex items-center gap-2">
+                    <span class="w-1.5 h-1.5 rounded-full bg-blue-600"></span>
+                    <span class="font-medium text-slate-800">Places</span>
+                  </div>
+                  <span class="font-mono text-[10px] text-slate-500 bg-slate-100 px-2 py-0.5 rounded">STREAM: DOM_PLACES_KGN</span>
+                </div>
+                <div class="p-3 border border-slate-200 rounded-[8px] bg-white flex items-center justify-between">
+                  <div class="flex items-center gap-2">
+                    <span class="w-1.5 h-1.5 rounded-full bg-blue-600"></span>
+                    <span class="font-medium text-slate-800">Tolls</span>
+                  </div>
+                  <span class="font-mono text-[10px] text-slate-500 bg-slate-100 px-2 py-0.5 rounded">STREAM: DOM_TOLL_H2K</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Last Sync Status -->
+            <div>
+              <label class="block text-[11px] font-mono uppercase text-slate-500 mb-1.5">Last Sync Timestamp</label>
+              <div class="p-3 bg-slate-50 border border-slate-200 rounded-[8px] font-mono italic text-slate-400 text-xs">
+                The data is not in yet
+              </div>
+            </div>
+
+            <!-- Parish & Partition Binding -->
+            <div class="pt-2 border-t border-slate-200">
+              <div class="grid grid-cols-2 gap-3 text-[11px]">
+                <div class="bg-slate-50 p-2.5 rounded-[8px] border border-slate-200">
+                  <div class="font-mono text-slate-400 text-[10px] uppercase">Jurisdiction</div>
+                  <div class="font-medium text-slate-700 mt-0.5">Kingston &amp; St. Andrew</div>
+                </div>
+                <div class="bg-slate-50 p-2.5 rounded-[8px] border border-slate-200">
+                  <div class="font-mono text-slate-400 text-[10px] uppercase">Currency Domain</div>
+                  <div class="font-medium text-slate-700 mt-0.5">JMD (Jamaican Dollar)</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Drawer Footer (No edit button, purely read-only informational actions) -->
+        <div class="p-5 border-t border-slate-200 bg-slate-50 flex items-center justify-between">
+          <div class="text-[11px] font-mono text-slate-400">
+            NODE_ID: ROAM-APP-01
+          </div>
+          <button class="px-3.5 py-1.5 bg-white border border-slate-300 text-slate-700 rounded-lg text-xs font-medium hover:bg-slate-50 transition-colors">
+            Close Inspector
+          </button>
+        </div>
+      </aside>
+
+    </div>
+  </div>
+
+</body>
+</html>

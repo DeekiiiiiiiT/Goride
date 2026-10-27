@@ -1,3 +1,4 @@
+// Stitch: dominion-redesign/f0b631aa7be947e8b0723b21450816ba
 // cache-bust: v1.0.3 - Explicitly standardizing Badge import
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { FuelEntry } from '../types/fuel';
@@ -539,12 +540,31 @@ export function StationDatabaseView({
   }
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
+    <div className="w-full max-w-7xl space-y-6 animate-in fade-in overflow-y-auto p-8 text-slate-900 duration-500">
+      <div className="mb-4 flex items-center justify-between">
+        <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-xs font-medium text-slate-500">
+          <span>Dominion</span>
+          <span className="text-slate-400">/</span>
+          <span>Master data</span>
+          <span className="text-slate-400">/</span>
+          <span>Fuel</span>
+          <span className="text-slate-400">/</span>
+          <span className="font-semibold text-slate-800">Station database</span>
+        </nav>
+        <div className="flex items-center gap-1.5 rounded border border-slate-200/80 bg-slate-100 px-2.5 py-1 font-mono text-[11px] text-slate-600">
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+          <span>REGION: JM-KGN</span>
+        </div>
+      </div>
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900">Station database</h1>
+        <p className="mt-1 text-sm text-slate-500">Fuel stations in Jamaica.</p>
+      </div>
       <div className="overflow-x-auto overflow-y-visible rounded-xl border border-slate-200 bg-white shadow-sm dark:border-border dark:bg-card">
         <Tabs defaultValue={defaultTab} className="w-full">
           <div className="border-b border-slate-200 px-4 py-3 bg-slate-50 flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-4">
-              <h3 className="font-semibold text-slate-900">Station Database</h3>
+              <h3 className="font-semibold text-slate-900">Stations</h3>
             </div>
             
             <TabsList className="bg-slate-200/50 p-1">
@@ -879,6 +899,16 @@ export function StationDatabaseView({
           }
         }}
       />
+
+      <div className="flex items-center justify-between rounded-[12px] border border-slate-200 bg-white p-4 text-xs text-slate-500">
+        <div className="flex items-center gap-2.5">
+          <MapPin className="h-4 w-4 text-slate-400" aria-hidden />
+          <span>The data is not in yet.</span>
+        </div>
+        <div className="font-mono text-[11px] uppercase tracking-wider text-slate-400">
+          LOC: KINGSTON / PARISH REGISTRY JMD
+        </div>
+      </div>
     </div>
   );
 }

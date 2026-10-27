@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>S9 Platforms and engines</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;family=Public+Sans:wght@500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "surface": "#faf8fe",
+            "on-primary-fixed-variant": "#515c70",
+            "tertiary-container": "#98fba9",
+            "surface-container-highest": "#e1e2ed",
+            "on-error": "#fff7f6",
+            "secondary-fixed": "#dbe1ff",
+            "on-secondary-fixed-variant": "#0050d5",
+            "tertiary-dim": "#00612a",
+            "tertiary": "#006e31",
+            "secondary": "#0153dc",
+            "tertiary-fixed": "#98fba9",
+            "secondary-container": "#dbe1ff",
+            "primary-container": "#d8e3fb",
+            "on-tertiary": "#e9ffe7",
+            "on-tertiary-fixed": "#004c20",
+            "secondary-fixed-dim": "#c7d3ff",
+            "secondary-dim": "#0049c3",
+            "surface-container-high": "#e8e7f1",
+            "primary-fixed-dim": "#cad5ed",
+            "outline": "#797a84",
+            "on-secondary-container": "#0047c0",
+            "surface-container": "#eeedf6",
+            "tertiary-fixed-dim": "#8aec9c",
+            "surface-dim": "#d9d9e4",
+            "surface-tint": "#545f74",
+            "surface-bright": "#faf8fe",
+            "outline-variant": "#b0b1bc",
+            "on-primary-fixed": "#354053",
+            "on-tertiary-container": "#00612a",
+            "on-tertiary-fixed-variant": "#006c30",
+            "inverse-on-surface": "#9d9ca2",
+            "on-error-container": "#6e0a12",
+            "on-secondary": "#faf8ff",
+            "primary-dim": "#485367",
+            "on-surface": "#30323b",
+            "error": "#a83836",
+            "surface-variant": "#e1e2ed",
+            "primary-fixed": "#d8e3fb",
+            "error-dim": "#67040d",
+            "on-primary-container": "#475266",
+            "inverse-surface": "#0d0e12",
+            "on-primary": "#f8f8ff",
+            "on-secondary-fixed": "#003798",
+            "surface-container-low": "#f4f3fa",
+            "primary": "#545f74",
+            "surface-container-lowest": "#ffffff",
+            "on-surface-variant": "#5d5f68",
+            "inverse-primary": "#dae6fe",
+            "on-background": "#30323b",
+            "error-container": "#fa746f",
+            "background": "#faf8fe"
+          },
+          borderRadius: {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "full": "9999px"
+          },
+          fontFamily: {
+            headline: ["Inter", "sans-serif"],
+            display: ["Inter", "sans-serif"],
+            body: ["Inter", "sans-serif"],
+            label: ["Public Sans", "sans-serif"],
+            mono: ["JetBrains Mono", "monospace"]
+          }
+        }
+      }
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+      font-size: 20px;
+      line-height: 1;
+    }
+    body {
+      font-family: 'Inter', sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+  </style>
+</head>
+<body class="bg-surface text-on-surface flex min-h-screen antialiased overflow-x-hidden">
+<!-- Navy Sidebar (#1e293b) -->
+<aside class="fixed top-0 left-0 h-screen w-64 flex flex-col bg-slate-800 border-r border-slate-700/50 shadow-none z-30 select-none">
+<div class="w-64 h-full p-4 flex flex-col justify-between overflow-y-auto">
+<div>
+<!-- Sidebar Brand Header -->
+<div class="px-2 pt-1 pb-5 border-b border-slate-700/50">
+<div class="flex items-center gap-2.5">
+<div aria-label="Dominion emblem icon" class="h-8 w-8 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold text-sm shadow-sm">
+              D
+            </div>
+<div>
+<h1 class="font-headline text-lg font-bold text-white tracking-tight leading-none">Dominion</h1>
+<span class="font-body text-xs text-slate-400 font-normal">Roam Admin Console</span>
+</div>
+</div>
+</div>
+<!-- Navigation Clusters -->
+<nav class="mt-4 space-y-5">
+<!-- Cluster: Overview -->
+<div>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span>Overview</span>
+</a>
+</div>
+<!-- Cluster: Master data -->
+<div class="space-y-1">
+<div class="px-3 text-[11px] font-semibold text-slate-400 tracking-wider">Master data</div>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg bg-blue-600 text-white font-medium text-sm" href="#">
+<span class="material-symbols-outlined" data-icon="database">database</span>
+<span>Vehicles</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm pl-9" href="#">
+<span>Places and Maps</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm pl-9" href="#">
+<span>Fuel</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm pl-9" href="#">
+<span>Tolls</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm pl-9" href="#">
+<span>Tax and Vendors</span>
+</a>
+</div>
+<!-- Cluster: Engines -->
+<div class="space-y-1">
+<div class="px-3 text-[11px] font-semibold text-slate-400 tracking-wider">Engines</div>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined" data-icon="psychology">psychology</span>
+<span>Fuel Brain</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm pl-9" href="#">
+<span>Toll Brain</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm pl-9" href="#">
+<span>Matching Brain</span>
+</a>
+</div>
+<!-- Cluster: Distribution -->
+<div class="space-y-1">
+<div class="px-3 text-[11px] font-semibold text-slate-400 tracking-wider">Distribution</div>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined" data-icon="share">share</span>
+<span>Apps</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm pl-9" href="#">
+<span>Data API</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm pl-9" href="#">
+<span>Change requests</span>
+</a>
+</div>
+<!-- Cluster: Platform -->
+<div class="space-y-1">
+<div class="px-3 text-[11px] font-semibold text-slate-400 tracking-wider">Platform</div>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span>Staff and roles</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm pl-9" href="#">
+<span>Activity log</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm pl-9" href="#">
+<span>Platform Ops</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm pl-9" href="#">
+<span>Global settings</span>
+</a>
+</div>
+<!-- Cluster: Back office -->
+<div class="space-y-1">
+<div class="px-3 text-[11px] font-semibold text-slate-400 tracking-wider">Back office</div>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined" data-icon="account_balance">account_balance</span>
+<span>GCT registrations</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm pl-9" href="#">
+<span>Ledger</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm pl-9" href="#">
+<span>Remittance</span>
+</a>
+</div>
+</nav>
+</div>
+<!-- Sidebar Status Pill Footer -->
+<div class="pt-4 border-t border-slate-700/50">
+<div class="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-slate-900 border border-slate-700/70 w-full">
+<span class="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+<span class="font-mono text-[11px] font-medium text-slate-300 tracking-tight">KGN-DC-01 JMD READY</span>
+</div>
+</div>
+</div>
+</aside>
+<!-- Shell Wrapper -->
+<div class="ml-64 flex-1 flex flex-col min-w-0">
+<!-- Top Bar -->
+<header class="sticky top-0 right-0 h-16 w-full flex items-center bg-white border-b border-slate-200 shadow-sm z-20 px-8">
+<div class="flex justify-between items-center w-full">
+<!-- Search Input -->
+<div class="relative w-96">
+<span class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+<span class="material-symbols-outlined" data-icon="search">search</span>
+</span>
+<input class="block w-full pl-9 pr-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-600 focus:border-blue-600 font-body transition-colors" placeholder="Search entities, engines, routes..." type="text"/>
+</div>
+<!-- Trailing Actions & Profile -->
+<div class="flex items-center gap-4">
+<button aria-label="Notifications" class="p-2 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors" type="button">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+<button aria-label="Help" class="p-2 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors" type="button">
+<span class="material-symbols-outlined" data-icon="help_outline">help_outline</span>
+</button>
+<div class="h-6 w-px bg-slate-200"></div>
+<div class="flex items-center gap-3 pl-1">
+<div class="h-8 w-8 rounded-full bg-slate-200 text-slate-700 font-semibold text-xs flex items-center justify-center border border-slate-300">
+              AD
+            </div>
+<div class="flex flex-col text-left leading-tight">
+<span class="text-xs font-semibold text-slate-900">AD Kingston</span>
+<span class="text-[11px] text-slate-500">Superuser</span>
+</div>
+</div>
+</div>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="flex-1 p-8 max-w-[1200px] w-full mx-auto">
+<!-- Breadcrumb -->
+<nav aria-label="Breadcrumb" class="flex items-center gap-2 text-xs text-slate-500 font-body mb-3">
+<span>Dominion</span>
+<span class="material-symbols-outlined text-[14px]">chevron_right</span>
+<span>Master data</span>
+<span class="material-symbols-outlined text-[14px]">chevron_right</span>
+<span>Vehicles</span>
+<span class="material-symbols-outlined text-[14px]">chevron_right</span>
+<span class="text-slate-900 font-medium">Platforms and engines</span>
+</nav>
+<!-- Page Header -->
+<div class="mb-6">
+<h1 class="text-2xl font-bold tracking-tight text-slate-900 font-headline">Platforms and engines</h1>
+<p class="text-sm text-slate-600 mt-1 font-body">Shared chassis families, and whether those platforms share body parts.</p>
+</div>
+<!-- Action Bar / Filter Bar -->
+<div class="mb-5 flex items-center justify-between gap-4">
+<div class="relative w-80">
+<span class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+<span class="material-symbols-outlined text-sm" data-icon="search">search</span>
+</span>
+<input class="block w-full pl-9 pr-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-600 focus:border-blue-600 font-body" placeholder="Search families or platforms..." type="text"/>
+</div>
+<div class="flex items-center gap-2">
+<button class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors" type="button">
+<span class="material-symbols-outlined text-sm" data-icon="filter_list">filter_list</span>
+<span>Filter</span>
+</button>
+<button class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors" type="button">
+<span class="material-symbols-outlined text-sm" data-icon="refresh">refresh</span>
+<span>Reload</span>
+</button>
+</div>
+</div>
+<!-- Table Card (12px radius, hairline border border-slate-200/80, shadow-sm, bg-white) -->
+<div class="bg-white rounded-xl border border-slate-200/80 shadow-sm overflow-hidden">
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse text-sm">
+<thead>
+<tr class="border-b border-slate-200/80 bg-slate-50/75">
+<th class="py-3 px-5 text-xs font-semibold text-slate-700 tracking-normal font-headline" scope="col">Family</th>
+<th class="py-3 px-5 text-xs font-semibold text-slate-700 tracking-normal font-headline" scope="col">Platforms</th>
+<th class="py-3 px-5 text-xs font-semibold text-slate-700 tracking-normal font-headline" scope="col">Engines</th>
+<th class="py-3 px-5 text-xs font-semibold text-slate-700 tracking-normal font-headline" scope="col">Shares body parts</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-slate-100 font-body">
+<!-- Row 1: Hiace -->
+<tr class="hover:bg-slate-50/60 transition-colors">
+<td class="py-3.5 px-5 font-semibold text-slate-900 align-middle">
+                  Hiace
+                </td>
+<td class="py-3.5 px-5 text-slate-700 align-middle">
+                  H200 commuter, H200 panel
+                </td>
+<td class="py-3.5 px-5 align-middle">
+<div class="flex items-center gap-1.5 flex-wrap">
+<span class="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-800">1KD-FTV</span>
+<span class="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-800">2KD-FTV</span>
+</div>
+</td>
+<td class="py-3.5 px-5 align-middle">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-800 border border-emerald-200">
+<span class="material-symbols-outlined text-[14px]" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+                    Yes
+                  </span>
+</td>
+</tr>
+<!-- Row 2: Fit -->
+<tr class="hover:bg-slate-50/60 transition-colors">
+<td class="py-3.5 px-5 font-semibold text-slate-900 align-middle">
+                  Fit
+                </td>
+<td class="py-3.5 px-5 text-slate-700 align-middle">
+                  GP5, GK5
+                </td>
+<td class="py-3.5 px-5 align-middle">
+<div class="flex items-center gap-1.5 flex-wrap">
+<span class="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-800">LEB</span>
+<span class="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-800">L15B</span>
+</div>
+</td>
+<td class="py-3.5 px-5 align-middle">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200">
+<span class="material-symbols-outlined text-[14px]">remove_circle_outline</span>
+                    No
+                  </span>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Partition Status Footer -->
+<div class="px-5 py-3.5 border-t border-slate-200/80 bg-slate-50/50 flex items-center justify-between text-xs text-slate-500 font-body">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-slate-400 text-base">info</span>
+<span>Additional partitions: The data is not in yet.</span>
+</div>
+<div class="font-mono text-[11px] text-slate-400">
+            LOC: KINGSTON / PARISH REGISTRY JMD
+          </div>
+</div>
+</div>
+</main>
+</div>
+</body></html>

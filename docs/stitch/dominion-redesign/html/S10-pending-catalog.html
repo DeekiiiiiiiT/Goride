@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>S10 Pending catalog — Dominion Roam Admin Console</title>
+<!-- Material Symbols Outlined -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Fonts: Inter & JetBrains Mono -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "surface": "#faf8fe",
+            "surface-container-lowest": "#ffffff",
+            "tertiary-dim": "#00612a",
+            "on-secondary-fixed-variant": "#0050d5",
+            "secondary-dim": "#0049c3",
+            "primary-fixed-dim": "#cad5ed",
+            "surface-container-high": "#e8e7f1",
+            "on-primary-fixed": "#354053",
+            "inverse-on-surface": "#9d9ca2",
+            "error-container": "#fa746f",
+            "on-background": "#30323b",
+            "outline-variant": "#b0b1bc",
+            "tertiary": "#006e31",
+            "primary-fixed": "#d8e3fb",
+            "error-dim": "#67040d",
+            "tertiary-container": "#98fba9",
+            "primary": "#545f74",
+            "inverse-surface": "#0d0e12",
+            "surface-bright": "#faf8fe",
+            "on-secondary": "#faf8ff",
+            "on-error-container": "#6e0a12",
+            "background": "#faf8fe",
+            "primary-dim": "#485367",
+            "outline": "#797a84",
+            "on-primary-fixed-variant": "#515c70",
+            "surface-container-highest": "#e1e2ed",
+            "on-tertiary": "#e9ffe7",
+            "surface-tint": "#545f74",
+            "secondary-container": "#dbe1ff",
+            "on-error": "#fff7f6",
+            "tertiary-fixed": "#98fba9",
+            "tertiary-fixed-dim": "#8aec9c",
+            "surface-container-low": "#f4f3fa",
+            "surface-container": "#eeedf6",
+            "on-tertiary-container": "#00612a",
+            "error": "#a83836",
+            "on-tertiary-fixed-variant": "#006c30",
+            "on-primary": "#f8f8ff",
+            "on-tertiary-fixed": "#004c20",
+            "inverse-primary": "#dae6fe",
+            "primary-container": "#d8e3fb",
+            "on-secondary-fixed": "#003798",
+            "on-surface": "#30323b",
+            "secondary-fixed-dim": "#c7d3ff",
+            "secondary": "#0153dc",
+            "on-surface-variant": "#5d5f68",
+            "on-secondary-container": "#0047c0",
+            "surface-variant": "#e1e2ed",
+            "secondary-fixed": "#dbe1ff",
+            "on-primary-container": "#475266",
+            "surface-dim": "#d9d9e4"
+          },
+          borderRadius: {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "full": "9999px"
+          },
+          fontFamily: {
+            headline: ["Inter", "sans-serif"],
+            display: ["Inter", "sans-serif"],
+            body: ["Inter", "sans-serif"],
+            mono: ["JetBrains Mono", "monospace"]
+          }
+        }
+      }
+    }
+  </script>
+<style>
+    .font-mono-code {
+      font-family: 'JetBrains Mono', monospace;
+    }
+  </style>
+</head>
+<body class="bg-[#f8fafc] text-slate-800 antialiased font-body flex min-h-screen">
+<!-- ==================== SIDEBAR ==================== -->
+<aside class="fixed top-0 left-0 h-screen w-64 flex flex-col bg-slate-800 dark:bg-slate-900 border-r border-slate-700/50 z-30 select-none">
+<div class="w-64 h-full p-4 flex flex-col justify-between overflow-y-auto">
+<!-- Top Group: Logo & Nav -->
+<div class="flex flex-col gap-6">
+<!-- Logo Header -->
+<div class="flex items-center gap-3 px-2 py-2">
+<div class="w-9 h-9 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold shadow-sm">
+<span class="material-symbols-outlined text-xl" data-icon="deployed_code">deployed_code</span>
+</div>
+<div>
+<div class="font-headline text-lg font-bold text-white tracking-tight leading-none">Dominion</div>
+<div class="text-[11px] font-medium text-slate-400 mt-1">Roam Admin Console</div>
+</div>
+</div>
+<!-- Navigation items according to Shared Components & instructions -->
+<nav class="flex flex-col gap-1 font-headline text-sm font-medium tracking-normal">
+<!-- 1. Overview -->
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined text-lg" data-icon="dashboard">dashboard</span>
+<span>Overview</span>
+</a>
+<!-- 2. Master data (Contains Vehicles which is ACTIVE) -->
+<div class="flex flex-col gap-1 pt-1">
+<div class="flex items-center justify-between px-3 py-1.5 text-xs font-semibold tracking-wider text-slate-400 uppercase">
+<span class="flex items-center gap-2">
+<span class="material-symbols-outlined text-sm" data-icon="database">database</span>
+                Master data
+              </span>
+</div>
+<!-- Sub-items with Vehicles active -->
+<div class="pl-2 flex flex-col gap-1">
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg bg-blue-600 text-white font-medium text-sm shadow-sm" href="#">
+<span class="material-symbols-outlined text-lg" data-icon="directions_car">directions_car</span>
+<span>Vehicles</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-xs font-normal" href="#">
+<span class="w-1.5 h-1.5 rounded-full bg-slate-500 ml-1"></span>
+<span>Parish Registry</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-xs font-normal" href="#">
+<span class="w-1.5 h-1.5 rounded-full bg-slate-500 ml-1"></span>
+<span>Fare Classes (JMD)</span>
+</a>
+</div>
+</div>
+<!-- 3. Engines -->
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm mt-1" href="#">
+<span class="material-symbols-outlined text-lg" data-icon="psychology">psychology</span>
+<span>Engines</span>
+</a>
+<!-- 4. Distribution -->
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined text-lg" data-icon="share">share</span>
+<span>Distribution</span>
+</a>
+<!-- 5. Platform -->
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined text-lg" data-icon="settings">settings</span>
+<span>Platform</span>
+</a>
+<!-- 6. Back office -->
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined text-lg" data-icon="account_balance">account_balance</span>
+<span>Back office</span>
+</a>
+</nav>
+</div>
+<!-- Bottom Nav & Status Pill -->
+<div class="flex flex-col gap-3 pt-4 border-t border-slate-700/50">
+<!-- Global settings item -->
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm" href="#">
+<span class="material-symbols-outlined text-lg" data-icon="tune">tune</span>
+<span>Global settings</span>
+</a>
+<!-- Bottom status pill -->
+<div class="bg-slate-900/90 border border-slate-700/70 rounded-lg px-3 py-2 flex items-center justify-between text-xs">
+<div class="flex items-center gap-2">
+<span class="relative flex h-2 w-2">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+</span>
+<span class="font-mono-code text-slate-300 font-medium tracking-tight text-[11px]">KGN-DC-01</span>
+</div>
+<span class="font-mono-code text-emerald-400 font-semibold text-[10px] tracking-wide">JMD READY</span>
+</div>
+</div>
+</div>
+</aside>
+<!-- ==================== MAIN WRAPPER ==================== -->
+<div class="ml-64 flex-1 flex flex-col min-w-0">
+<!-- Top App Bar -->
+<header class="sticky top-0 z-20 h-16 w-full bg-white border-b border-slate-200 px-8 flex items-center justify-between">
+<!-- Search Input on Left -->
+<div class="flex items-center w-full max-w-md">
+<div class="relative w-full">
+<div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+<span class="material-symbols-outlined text-lg" data-icon="search">search</span>
+</div>
+<input class="block w-full pl-9 pr-12 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-600 focus:border-blue-600 focus:bg-white transition-all font-body" placeholder="Search entities, engines, routes..." type="text"/>
+<div class="absolute inset-y-0 right-0 pr-2.5 flex items-center pointer-events-none">
+<kbd class="font-mono-code text-[10px] text-slate-400 border border-slate-200 bg-white rounded px-1.5 py-0.5">⌘K</kbd>
+</div>
+</div>
+</div>
+<!-- Trailing Identity & Actions -->
+<div class="flex items-center gap-3">
+<button aria-label="Notifications" class="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors relative" type="button">
+<span class="material-symbols-outlined text-xl" data-icon="notifications">notifications</span>
+<span class="absolute top-2 right-2 w-2 h-2 bg-blue-600 rounded-full ring-2 ring-white"></span>
+</button>
+<button aria-label="Help" class="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors" type="button">
+<span class="material-symbols-outlined text-xl" data-icon="help_outline">help_outline</span>
+</button>
+<div class="h-5 w-px bg-slate-200 mx-1"></div>
+<!-- Role "Owner" Only badge (no names, no made up avatars) -->
+<div class="flex items-center gap-2.5 pl-1">
+<div class="w-8 h-8 rounded-lg bg-slate-900 text-white flex items-center justify-center font-mono-code text-xs font-semibold tracking-wider shadow-sm">
+            OW
+          </div>
+<div class="flex flex-col">
+<span class="text-xs font-semibold text-slate-900 leading-tight">Owner</span>
+<span class="font-mono-code text-[10px] text-slate-500 leading-none">SYS-AUTH</span>
+</div>
+</div>
+</div>
+</header>
+<!-- Main Content Area -->
+<main class="flex-1 p-8 max-w-[1440px]">
+<!-- Breadcrumb -->
+<nav aria-label="Breadcrumb" class="flex items-center gap-2 text-xs text-slate-500 mb-3">
+<span class="hover:text-slate-700 transition-colors">Dominion</span>
+<span class="material-symbols-outlined text-xs text-slate-400" data-icon="chevron_right">chevron_right</span>
+<span class="hover:text-slate-700 transition-colors">Master data</span>
+<span class="material-symbols-outlined text-xs text-slate-400" data-icon="chevron_right">chevron_right</span>
+<span class="hover:text-slate-700 transition-colors">Vehicles</span>
+<span class="material-symbols-outlined text-xs text-slate-400" data-icon="chevron_right">chevron_right</span>
+<span class="font-semibold text-slate-900">Pending catalog</span>
+</nav>
+<!-- Page Header -->
+<div class="flex items-start justify-between mb-6">
+<div>
+<h1 class="text-2xl font-bold font-headline text-slate-900 tracking-tight">Pending catalog</h1>
+<p class="text-sm text-slate-600 mt-1 font-body">Catalog requests waiting for a decision.</p>
+</div>
+<div class="flex items-center gap-2">
+<button class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm" type="button">
+<span class="material-symbols-outlined text-base" data-icon="sync">sync</span>
+<span>Refresh queue</span>
+</button>
+</div>
+</div>
+<!-- Pending Table White Card (12px rounded, hairline border) -->
+<div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-6">
+<!-- Table Top Controls Bar -->
+<div class="p-4 border-b border-slate-200/80 bg-white flex flex-wrap items-center justify-between gap-3">
+<div class="flex items-center gap-3 flex-1 min-w-[280px] max-w-md">
+<div class="relative w-full">
+<span class="material-symbols-outlined absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400 text-lg" data-icon="search">search</span>
+<input class="w-full pl-9 pr-3 py-1.5 text-xs rounded-lg border border-slate-200 bg-slate-50/50 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-600 focus:border-blue-600 focus:bg-white font-body" placeholder="Search pending requests..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<!-- Filter Dropdown -->
+<div class="inline-flex rounded-lg border border-slate-200 bg-white p-0.5 text-xs shadow-sm">
+<button class="px-2.5 py-1 rounded-md text-slate-700 bg-slate-100 font-medium">All pending</button>
+<button class="px-2.5 py-1 rounded-md text-slate-500 hover:text-slate-700">Needs info</button>
+</div>
+<!-- Parish Registry Scope Tag -->
+<span class="font-mono-code text-[11px] bg-slate-100 text-slate-600 px-2.5 py-1 rounded-lg border border-slate-200">
+              JMD-REGISTRY: ACTIVE
+            </span>
+</div>
+</div>
+<!-- Table View -->
+<div class="overflow-x-auto">
+<table class="w-full text-left text-xs border-collapse">
+<thead>
+<tr class="bg-slate-50/80 border-b border-slate-200 text-slate-600 font-semibold text-[11px] uppercase tracking-wider">
+<th class="py-3 px-5">Make</th>
+<th class="py-3 px-5">Model</th>
+<th class="py-3 px-5 font-mono-code">Year</th>
+<th class="py-3 px-5">Requested</th>
+<th class="py-3 px-5">Status</th>
+<th class="py-3 px-5 text-right">Actions</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-slate-100 font-body">
+<!-- Row 1: Toyota Hiace -->
+<tr class="hover:bg-slate-50/60 transition-colors">
+<td class="py-4 px-5 font-semibold text-slate-900">
+                  Toyota
+                </td>
+<td class="py-4 px-5 text-slate-800 font-medium">
+                  Hiace
+                </td>
+<td class="py-4 px-5 font-mono-code text-slate-700 font-medium text-xs">
+                  2019
+                </td>
+<td class="py-4 px-5">
+<div class="flex items-center gap-1.5">
+<span class="font-mono-code text-slate-800 font-medium">12 Oct 2026</span>
+<span class="text-slate-400 text-[11px]">from Fleet</span>
+</div>
+</td>
+<td class="py-4 px-5">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-amber-50 text-amber-800 border border-amber-200">
+<span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                    Pending
+                  </span>
+</td>
+<td class="py-4 px-5 text-right">
+<div class="flex items-center justify-end gap-1.5">
+<!-- Approve (Green primary action) -->
+<button class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#15803d] text-white hover:bg-emerald-800 text-xs font-medium transition-colors shadow-xs" type="button">
+<span class="material-symbols-outlined text-sm" data-icon="check">check</span>
+<span>Approve</span>
+</button>
+<!-- Link to existing -->
+<button class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-medium transition-colors" type="button">
+<span class="material-symbols-outlined text-sm text-slate-500" data-icon="link">link</span>
+<span>Link to existing</span>
+</button>
+<!-- Reject -->
+<button class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white border border-red-200 text-[#b91c1c] hover:bg-red-50 text-xs font-medium transition-colors" type="button">
+<span class="material-symbols-outlined text-sm text-[#b91c1c]" data-icon="close">close</span>
+<span>Reject</span>
+</button>
+<!-- Ask for info -->
+<button class="p-1 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors" title="Ask for info" type="button">
+<span class="material-symbols-outlined text-base" data-icon="help_outline">help_outline</span>
+</button>
+</div>
+</td>
+</tr>
+<!-- Row 2: Honda Fit -->
+<tr class="hover:bg-slate-50/60 transition-colors bg-amber-50/10">
+<td class="py-4 px-5 font-semibold text-slate-900">
+                  Honda
+                </td>
+<td class="py-4 px-5 text-slate-800 font-medium">
+                  Fit
+                </td>
+<td class="py-4 px-5 font-mono-code text-slate-700 font-medium text-xs">
+                  2016
+                </td>
+<td class="py-4 px-5">
+<div class="flex items-center gap-1.5">
+<span class="font-mono-code text-slate-800 font-medium">18 Oct 2026</span>
+<span class="text-slate-400 text-[11px]">from Driver</span>
+</div>
+</td>
+<td class="py-4 px-5">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-amber-100 text-amber-900 border border-amber-300">
+<span class="w-1.5 h-1.5 rounded-full bg-amber-600"></span>
+                    Needs info
+                  </span>
+</td>
+<td class="py-4 px-5 text-right">
+<div class="flex items-center justify-end gap-1.5">
+<!-- Approve -->
+<button class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#15803d] text-white hover:bg-emerald-800 text-xs font-medium transition-colors shadow-xs" type="button">
+<span class="material-symbols-outlined text-sm" data-icon="check">check</span>
+<span>Approve</span>
+</button>
+<!-- Link to existing -->
+<button class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-medium transition-colors" type="button">
+<span class="material-symbols-outlined text-sm text-slate-500" data-icon="link">link</span>
+<span>Link to existing</span>
+</button>
+<!-- Reject -->
+<button class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white border border-red-200 text-[#b91c1c] hover:bg-red-50 text-xs font-medium transition-colors" type="button">
+<span class="material-symbols-outlined text-sm text-[#b91c1c]" data-icon="close">close</span>
+<span>Reject</span>
+</button>
+<!-- Ask for info -->
+<button class="p-1 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors" title="Ask for info" type="button">
+<span class="material-symbols-outlined text-base" data-icon="help_outline">help_outline</span>
+</button>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Table Footer / Count -->
+<div class="p-3 bg-slate-50/70 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500">
+<div class="font-mono-code text-[11px]">Showing 2 queued catalog items</div>
+<div class="flex items-center gap-2">
+<span class="text-slate-400 text-[11px]">Dominion Roam Core v4.12</span>
+</div>
+</div>
+</div>
+<!-- Secondary Info Card / Empty State Note Banner -->
+<div class="bg-white rounded-xl border border-slate-200 p-4 shadow-sm flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-500">
+<span class="material-symbols-outlined text-lg" data-icon="info">info</span>
+</div>
+<div>
+<div class="text-xs font-semibold text-slate-800 font-body">The data is not in yet.</div>
+<div class="text-[11px] text-slate-500 mt-0.5">Additional manufacturer spec sheets and tariff matrices will populate once synced.</div>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<span class="font-mono-code text-[11px] font-semibold text-slate-600 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200">
+            LOC: KINGSTON / PARISH REGISTRY JMD
+          </span>
+</div>
+</div>
+</main>
+</div>
+</body></html>

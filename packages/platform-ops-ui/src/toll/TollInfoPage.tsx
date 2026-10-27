@@ -1,3 +1,4 @@
+// Stitch: dominion-redesign/e1395d7f82344dcab17453c7d3a98f4d
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@roam/ui';
 import { Button } from '@roam/ui';
@@ -1193,16 +1194,32 @@ export function TollInfoPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="max-w-6xl w-full space-y-6 p-8">
+      <div className="mb-4 flex items-center justify-between">
+        <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
+          <span>Dominion</span>
+          <span aria-hidden>›</span>
+          <span>Master data</span>
+          <span aria-hidden>›</span>
+          <span>Tolls</span>
+          <span aria-hidden>›</span>
+          <span className="font-semibold text-slate-900">Toll database</span>
+        </nav>
+        <div className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-100 px-2.5 py-0.5 font-mono text-[10px] text-slate-600">
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+          REGION: JM-KGN
+        </div>
+      </div>
+
       {/* Header */}
       <div className="flex flex-col gap-4">
         <div className="flex justify-between items-start">
           <div>
-            <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
-              Toll Info
-            </h2>
-            <p className="text-slate-500 dark:text-slate-400">
-              Manage toll plaza rates, vehicle classifications, and payment information for Jamaica's highway network.
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100 leading-tight">
+              Toll database
+            </h1>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-normal">
+              Plazas on Jamaican highways, and the class prices in JMD.
             </p>
           </div>
           <div className="flex items-center gap-2">

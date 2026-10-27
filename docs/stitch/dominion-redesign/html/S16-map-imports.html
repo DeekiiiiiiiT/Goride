@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>S16 Map imports</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;family=Public+Sans:wght@500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "error-container": "#fa746f",
+            "error-dim": "#67040d",
+            "on-secondary-container": "#0047c0",
+            "surface-container-highest": "#e1e2ed",
+            "on-secondary": "#faf8ff",
+            "primary-dim": "#485367",
+            "on-primary-fixed-variant": "#515c70",
+            "on-surface-variant": "#5d5f68",
+            "surface": "#faf8fe",
+            "on-error": "#fff7f6",
+            "inverse-surface": "#0d0e12",
+            "on-background": "#30323b",
+            "secondary-dim": "#0049c3",
+            "on-secondary-fixed-variant": "#0050d5",
+            "outline": "#797a84",
+            "tertiary": "#006e31",
+            "surface-container-low": "#f4f3fa",
+            "surface-tint": "#545f74",
+            "on-tertiary-fixed": "#004c20",
+            "on-primary-container": "#475266",
+            "surface-dim": "#d9d9e4",
+            "secondary": "#0153dc",
+            "on-tertiary-container": "#00612a",
+            "on-tertiary-fixed-variant": "#006c30",
+            "on-error-container": "#6e0a12",
+            "tertiary-fixed": "#98fba9",
+            "tertiary-container": "#98fba9",
+            "on-tertiary": "#e9ffe7",
+            "on-secondary-fixed": "#003798",
+            "tertiary-dim": "#00612a",
+            "inverse-on-surface": "#9d9ca2",
+            "on-primary": "#f8f8ff",
+            "primary-fixed-dim": "#cad5ed",
+            "secondary-fixed": "#dbe1ff",
+            "tertiary-fixed-dim": "#8aec9c",
+            "outline-variant": "#b0b1bc",
+            "secondary-fixed-dim": "#c7d3ff",
+            "on-primary-fixed": "#354053",
+            "surface-container-high": "#e8e7f1",
+            "primary": "#545f74",
+            "surface-container-lowest": "#ffffff",
+            "on-surface": "#30323b",
+            "surface-container": "#eeedf6",
+            "secondary-container": "#dbe1ff",
+            "background": "#faf8fe",
+            "inverse-primary": "#dae6fe",
+            "primary-container": "#d8e3fb",
+            "error": "#a83836",
+            "surface-variant": "#e1e2ed",
+            "primary-fixed": "#d8e3fb",
+            "surface-bright": "#faf8fe"
+          },
+          borderRadius: {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "full": "9999px"
+          },
+          fontFamily: {
+            headline: ["Inter", "sans-serif"],
+            display: ["Inter", "sans-serif"],
+            body: ["Inter", "sans-serif"],
+            label: ["Public Sans", "sans-serif"],
+            mono: ["JetBrains Mono", "monospace"]
+          }
+        }
+      }
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+      font-size: 18px;
+    }
+    body {
+      background-color: #f8fafc;
+      color: #0f172a;
+      font-family: 'Inter', sans-serif;
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-slate-50 antialiased flex flex-row">
+<!-- SIDEBAR: S15 Dominion Shell Layout -->
+<aside class="fixed top-0 left-0 h-screen w-64 flex flex-col bg-slate-800 border-r border-slate-700/50 z-30 select-none">
+<!-- Brand Header -->
+<div class="h-16 px-5 flex items-center gap-3 border-b border-slate-700/40 shrink-0">
+<div class="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white shadow-sm shrink-0">
+<span class="material-symbols-outlined text-[20px]" data-icon="hub">hub</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-headline text-base font-bold text-white tracking-tight leading-tight">Dominion</span>
+<span class="font-headline text-[11px] font-medium text-slate-400 leading-tight">Roam Admin Console</span>
+</div>
+</div>
+<!-- Navigation Scrollable Area -->
+<div class="flex-1 overflow-y-auto px-3 py-4 space-y-5 text-xs font-medium">
+<!-- Top Overview Item -->
+<div>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors" href="#">
+<span class="material-symbols-outlined text-slate-400" data-icon="dashboard">dashboard</span>
+<span class="text-sm">Overview</span>
+</a>
+</div>
+<!-- MASTER DATA Section -->
+<div class="space-y-1">
+<div class="px-3 pb-1 text-[10px] font-semibold text-slate-400 tracking-wider">MASTER DATA</div>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="directions_car">directions_car</span>
+<span class="text-sm">Vehicles</span>
+</a>
+<!-- ACTIVE ITEM: Places and Maps -->
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg bg-blue-600 text-white font-medium text-sm shadow-sm" href="#">
+<span class="material-symbols-outlined" data-icon="map">map</span>
+<span class="text-sm">Places and Maps</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="local_gas_station">local_gas_station</span>
+<span class="text-sm">Fuel</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="toll">toll</span>
+<span class="text-sm">Tolls</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="receipt_long">receipt_long</span>
+<span class="text-sm">Tax and Vendors</span>
+</a>
+</div>
+<!-- ENGINES Section -->
+<div class="space-y-1">
+<div class="px-3 pb-1 text-[10px] font-semibold text-slate-400 tracking-wider">ENGINES</div>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="local_fire_department">local_fire_department</span>
+<span class="text-sm">Fuel Brain</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="alt_route">alt_route</span>
+<span class="text-sm">Toll Brain</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="hub">hub</span>
+<span class="text-sm">Matching Brain</span>
+</a>
+</div>
+<!-- DISTRIBUTION Section -->
+<div class="space-y-1">
+<div class="px-3 pb-1 text-[10px] font-semibold text-slate-400 tracking-wider">DISTRIBUTION</div>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="phone_iphone">phone_iphone</span>
+<span class="text-sm">Apps</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="api">api</span>
+<span class="text-sm">Data API</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="published_with_changes">published_with_changes</span>
+<span class="text-sm">Change requests</span>
+</a>
+</div>
+<!-- PLATFORM Section -->
+<div class="space-y-1">
+<div class="px-3 pb-1 text-[10px] font-semibold text-slate-400 tracking-wider">PLATFORM</div>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="badge">badge</span>
+<span class="text-sm">Staff and roles</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="history">history</span>
+<span class="text-sm">Activity log</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="dns">dns</span>
+<span class="text-sm">Platform Ops</span>
+</a>
+</div>
+<!-- BACK OFFICE Section -->
+<div class="space-y-1">
+<div class="px-3 pb-1 text-[10px] font-semibold text-slate-400 tracking-wider">BACK OFFICE</div>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="tune">tune</span>
+<span class="text-sm">Global settings</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="fact_check">fact_check</span>
+<span class="text-sm">GCT registrations</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="account_balance_wallet">account_balance_wallet</span>
+<span class="text-sm">Ledger</span>
+</a>
+</div>
+</div>
+<!-- Bottom Status Indicator -->
+<div class="p-3 border-t border-slate-700/50 bg-slate-900/60 shrink-0">
+<div class="flex items-center justify-between text-[11px] font-mono text-slate-400 px-2 py-1.5 rounded bg-slate-800/80 border border-slate-700/60">
+<div class="flex items-center gap-1.5">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+<span class="text-slate-300">KGN-DC-01</span>
+</div>
+<span class="text-slate-400 font-semibold">JMD READY</span>
+</div>
+</div>
+</aside>
+<!-- MAIN CANVAS -->
+<div class="pl-64 flex-1 flex flex-col min-h-screen">
+<!-- TOP NAVIGATION BAR -->
+<header class="sticky top-0 z-20 h-16 bg-white border-b border-slate-200 px-8 flex items-center justify-between shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+<!-- Search Input on Left -->
+<div class="relative w-96">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[18px]" data-icon="search">search</span>
+<input class="w-full pl-9 pr-4 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:bg-white transition-all font-body" placeholder="Search entities, engines, routes... ⌘K" type="text"/>
+</div>
+<!-- Trailing Action Cluster -->
+<div class="flex items-center gap-3">
+<button class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+<button class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors">
+<span class="material-symbols-outlined" data-icon="help_outline">help_outline</span>
+</button>
+<div class="h-4 w-[1px] bg-slate-200 mx-1"></div>
+<!-- SYS-AUTH Profile Badge -->
+<div class="flex items-center gap-2 pl-1 pr-2 py-1 rounded-lg bg-slate-50 border border-slate-200/80">
+<div class="w-6 h-6 rounded-md bg-slate-800 text-white text-[11px] font-mono font-semibold flex items-center justify-center">
+            OW
+          </div>
+<div class="flex flex-col text-left">
+<span class="text-[11px] font-mono font-semibold text-slate-800 tracking-tight leading-none">SYS-AUTH</span>
+<span class="text-[10px] text-slate-500 font-medium leading-tight">Owner</span>
+</div>
+</div>
+</div>
+</header>
+<!-- CONTENT WRAPPER (Desktop 1440 centered workspace) -->
+<main class="flex-1 max-w-[1184px] w-full mx-auto px-8 py-8 flex flex-col space-y-8">
+<!-- HEADER ZONE: Breadcrumbs, Badge & Action Bar -->
+<div class="space-y-3">
+<!-- Breadcrumb & Region Tag -->
+<div class="flex items-center justify-between text-xs">
+<div class="flex items-center gap-1.5 text-slate-500 font-medium font-body">
+<span>Dominion</span>
+<span class="text-slate-300">/</span>
+<span>Master data</span>
+<span class="text-slate-300">/</span>
+<span>Places and Maps</span>
+<span class="text-slate-300">/</span>
+<span class="text-slate-800 font-semibold">Map imports</span>
+</div>
+<div class="inline-flex items-center px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-600 font-mono text-[11px] font-medium tracking-tight">
+            REGION: JM-KGN
+          </div>
+</div>
+<!-- Title, Lede, Action Buttons -->
+<div class="flex items-end justify-between pt-1">
+<div>
+<h1 class="text-2xl font-bold font-headline text-slate-900 tracking-tight leading-tight">Map imports</h1>
+<p class="text-sm text-slate-500 font-body mt-1">Dry run an import, then publish it.</p>
+</div>
+<div class="flex items-center gap-3">
+<button class="px-4 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-slate-200">
+              Dry run
+            </button>
+<button class="px-4 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-blue-400">
+              Publish
+            </button>
+</div>
+</div>
+</div>
+<!-- SECTION 1: Import versions -->
+<section class="space-y-3">
+<div class="flex items-center justify-between">
+<h2 class="text-sm font-semibold font-headline text-slate-900 tracking-tight">Import versions</h2>
+</div>
+<div class="bg-white border border-slate-200 rounded-[12px] shadow-sm overflow-hidden">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="border-b border-slate-100 bg-slate-50/70 text-[11px] font-semibold text-slate-500 tracking-wide">
+<th class="py-3 px-5 font-headline">File</th>
+<th class="py-3 px-5 font-headline">When</th>
+<th class="py-3 px-5 font-headline">Result</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-slate-100 text-xs">
+<tr class="hover:bg-slate-50/40 transition-colors">
+<td class="py-3.5 px-5 font-mono text-slate-800 font-medium">
+                  parishes.geojson
+                </td>
+<td class="py-3.5 px-5 font-mono text-slate-600">
+                  20 Oct 2026
+                </td>
+<td class="py-3.5 px-5">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium text-green-700 bg-green-50 border border-green-200">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+                    Dry run passed
+                  </span>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<!-- SECTION 2: Map quality -->
+<section class="space-y-2">
+<div>
+<h2 class="text-sm font-semibold font-headline text-slate-900 tracking-tight">Map quality</h2>
+<p class="text-xs text-slate-500 font-body">Shape problems.</p>
+</div>
+<div class="bg-white border border-slate-200 rounded-[12px] shadow-sm overflow-hidden">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="border-b border-slate-100 bg-slate-50/70 text-[11px] font-semibold text-slate-500 tracking-wide">
+<th class="py-3 px-5 font-headline">Shape</th>
+<th class="py-3 px-5 font-headline">Problem</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-slate-100 text-xs">
+<tr class="hover:bg-slate-50/40 transition-colors">
+<td class="py-3.5 px-5 font-medium text-slate-800">
+                  St. Catherine outline
+                </td>
+<td class="py-3.5 px-5">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[11px] font-medium text-amber-800 bg-amber-50 border border-amber-200/80">
+<span class="material-symbols-outlined text-amber-600 text-[14px]" data-icon="warning">warning</span>
+                    Gap on the western edge
+                  </span>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<!-- SMALL NOTE BANNER / CALLOUT -->
+<div class="pt-2">
+<div class="flex items-center justify-between px-4 py-3 bg-slate-100/70 border border-slate-200 rounded-[12px] text-xs text-slate-600">
+<div class="flex items-center gap-2.5">
+<span class="material-symbols-outlined text-slate-400 text-[18px]" data-icon="info">info</span>
+<span class="font-normal text-slate-600 font-body">The data is not in yet.</span>
+</div>
+<div class="font-mono text-xs text-slate-400 tracking-tight select-none">
+            LOC: KINGSTON / PARISH REGISTRY JMD
+          </div>
+</div>
+</div>
+</main>
+</div>
+</body></html>

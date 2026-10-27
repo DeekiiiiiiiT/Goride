@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>S27 Change requests | Dominion Admin</title>
+<!-- Material Symbols Outlined -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Fonts: Inter & JetBrains Mono -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;family=Public+Sans:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS v3 -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "secondary": "#0153dc",
+            "on-primary-fixed-variant": "#515c70",
+            "surface-dim": "#d9d9e4",
+            "surface-container-lowest": "#ffffff",
+            "tertiary-container": "#98fba9",
+            "secondary-dim": "#0049c3",
+            "inverse-primary": "#dae6fe",
+            "on-background": "#30323b",
+            "primary-container": "#d8e3fb",
+            "primary-dim": "#485367",
+            "surface-variant": "#e1e2ed",
+            "surface-container-low": "#f4f3fa",
+            "on-tertiary-container": "#00612a",
+            "secondary-fixed-dim": "#c7d3ff",
+            "surface-container-high": "#e8e7f1",
+            "error-dim": "#67040d",
+            "on-tertiary": "#e9ffe7",
+            "secondary-container": "#dbe1ff",
+            "on-primary": "#f8f8ff",
+            "inverse-surface": "#0d0e12",
+            "background": "#faf8fe",
+            "tertiary-fixed-dim": "#8aec9c",
+            "outline-variant": "#b0b1bc",
+            "surface-container": "#eeedf6",
+            "on-error-container": "#6e0a12",
+            "on-primary-container": "#475266",
+            "error": "#a83836",
+            "tertiary-dim": "#00612a",
+            "on-tertiary-fixed": "#004c20",
+            "surface-container-highest": "#e1e2ed",
+            "secondary-fixed": "#dbe1ff",
+            "primary": "#545f74",
+            "surface": "#faf8fe",
+            "surface-bright": "#faf8fe",
+            "on-secondary-fixed": "#003798",
+            "on-primary-fixed": "#354053",
+            "on-secondary-container": "#0047c0",
+            "error-container": "#fa746f",
+            "on-secondary-fixed-variant": "#0050d5",
+            "inverse-on-surface": "#9d9ca2",
+            "on-surface-variant": "#5d5f68",
+            "primary-fixed-dim": "#cad5ed",
+            "on-secondary": "#faf8ff",
+            "on-error": "#fff7f6",
+            "tertiary-fixed": "#98fba9",
+            "tertiary": "#006e31",
+            "on-tertiary-fixed-variant": "#006c30",
+            "outline": "#797a84",
+            "surface-tint": "#545f74",
+            "primary-fixed": "#d8e3fb",
+            "on-surface": "#30323b"
+          },
+          borderRadius: {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "full": "9999px"
+          },
+          fontFamily: {
+            headline: ["Inter", "sans-serif"],
+            display: ["Inter", "sans-serif"],
+            body: ["Inter", "sans-serif"],
+            label: ["Public Sans", "sans-serif"],
+            mono: ["JetBrains Mono", "monospace"]
+          }
+        },
+      },
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+      vertical-align: middle;
+      display: inline-block;
+      line-height: 1;
+    }
+  </style>
+</head>
+<body class="bg-background text-on-surface font-body antialiased flex min-h-screen">
+<!-- ==================== SIDEBAR ==================== -->
+<aside class="fixed top-0 left-0 h-screen w-64 flex flex-col bg-slate-800 border-r border-slate-700/50 z-30 select-none">
+<div class="w-64 h-full p-4 flex flex-col justify-between overflow-y-auto">
+<!-- Top Branding & Navigation Sections -->
+<div class="flex flex-col gap-6">
+<!-- Logo / App Header -->
+<div class="flex items-center gap-3 px-2 py-1">
+<div class="w-8 h-8 rounded bg-secondary flex items-center justify-center text-white font-bold text-base shadow-sm">
+<span class="material-symbols-outlined text-xl" data-icon="deployed_code">deployed_code</span>
+</div>
+<div>
+<h1 class="font-headline text-lg font-bold text-white tracking-tight leading-tight">Dominion</h1>
+<p class="text-xs text-slate-400 font-label tracking-wide">Roam Admin Console</p>
+</div>
+</div>
+<!-- Navigation Grouping -->
+<nav class="flex flex-col gap-5">
+<!-- Master Data Group -->
+<div class="flex flex-col gap-1">
+<span class="px-3 text-[10px] font-semibold uppercase tracking-wider text-slate-400 font-label">Master Data</span>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-xs font-medium" href="#">
+<span class="material-symbols-outlined text-base" data-icon="directions_car">directions_car</span>
+              Vehicles
+            </a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-xs font-medium" href="#">
+<span class="material-symbols-outlined text-base" data-icon="map">map</span>
+              Places and Maps
+            </a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-xs font-medium" href="#">
+<span class="material-symbols-outlined text-base" data-icon="local_gas_station">local_gas_station</span>
+              Fuel
+            </a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-xs font-medium" href="#">
+<span class="material-symbols-outlined text-base" data-icon="toll">toll</span>
+              Tolls
+            </a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-xs font-medium" href="#">
+<span class="material-symbols-outlined text-base" data-icon="receipt_long">receipt_long</span>
+              Tax and Vendors
+            </a>
+</div>
+<!-- Engines Group -->
+<div class="flex flex-col gap-1">
+<span class="px-3 text-[10px] font-semibold uppercase tracking-wider text-slate-400 font-label">Engines</span>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-xs font-medium" href="#">
+<span class="material-symbols-outlined text-base" data-icon="psychology">psychology</span>
+              Fuel Brain
+            </a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-xs font-medium" href="#">
+<span class="material-symbols-outlined text-base" data-icon="alt_route">alt_route</span>
+              Toll Brain
+            </a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-xs font-medium" href="#">
+<span class="material-symbols-outlined text-base" data-icon="hub">hub</span>
+              Matching Brain
+            </a>
+</div>
+<!-- Distribution Group -->
+<div class="flex flex-col gap-1">
+<span class="px-3 text-[10px] font-semibold uppercase tracking-wider text-slate-400 font-label">Distribution</span>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-xs font-medium" href="#">
+<span class="material-symbols-outlined text-base" data-icon="apps">apps</span>
+              Apps
+            </a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-xs font-medium" href="#">
+<span class="material-symbols-outlined text-base" data-icon="terminal">terminal</span>
+              Data API
+            </a>
+<!-- Active item -->
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg bg-secondary text-white font-medium text-xs shadow-sm" href="#">
+<span class="material-symbols-outlined text-base" data-icon="swap_horiz">swap_horiz</span>
+              Change requests
+            </a>
+</div>
+<!-- Platform Group -->
+<div class="flex flex-col gap-1">
+<span class="px-3 text-[10px] font-semibold uppercase tracking-wider text-slate-400 font-label">Platform</span>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-xs font-medium" href="#">
+<span class="material-symbols-outlined text-base" data-icon="badge">badge</span>
+              Staff and roles
+            </a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-xs font-medium" href="#">
+<span class="material-symbols-outlined text-base" data-icon="history">history</span>
+              Activity log
+            </a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-xs font-medium" href="#">
+<span class="material-symbols-outlined text-base" data-icon="dns">dns</span>
+              Platform Ops
+            </a>
+</div>
+<!-- Back Office Group -->
+<div class="flex flex-col gap-1">
+<span class="px-3 text-[10px] font-semibold uppercase tracking-wider text-slate-400 font-label">Back office</span>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-xs font-medium" href="#">
+<span class="material-symbols-outlined text-base" data-icon="tune">tune</span>
+              Global settings
+            </a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-xs font-medium" href="#">
+<span class="material-symbols-outlined text-base" data-icon="fact_check">fact_check</span>
+              GCT registrations
+            </a>
+</div>
+</nav>
+</div>
+<!-- Footer Cluster -->
+<div class="pt-4 border-t border-slate-700/50 flex flex-col gap-2">
+<div class="flex items-center justify-between px-2 text-[11px] font-mono text-slate-400">
+<span class="flex items-center gap-1.5">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span>
+            KGN-DC-01
+          </span>
+<span class="px-2 py-0.5 rounded bg-slate-700/60 text-slate-300 font-medium text-[10px]">
+            JMD READY
+          </span>
+</div>
+</div>
+</div>
+</aside>
+<!-- ==================== MAIN WRAPPER ==================== -->
+<div class="ml-64 flex-1 flex flex-col min-w-0 bg-background">
+<!-- Top Navigation Bar -->
+<header class="sticky top-0 z-20 h-16 w-full bg-surface-container-lowest border-b border-surface-variant flex items-center justify-between px-8">
+<!-- Search Input Area -->
+<div class="flex items-center gap-3 w-96">
+<div class="relative w-full">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-lg pointer-events-none" data-icon="search">search</span>
+<input class="w-full pl-9 pr-4 py-2 bg-surface-container-low border border-surface-variant rounded-lg text-xs font-body text-on-surface placeholder:text-outline-variant focus:outline-none cursor-default" placeholder="Search entities, engines, routes... ⌘K" readonly="" type="text"/>
+</div>
+</div>
+<!-- Header Trailing Action & Identity -->
+<div class="flex items-center gap-5">
+<div class="flex items-center gap-1 border-r border-surface-variant pr-4">
+<button class="w-8 h-8 rounded-lg flex items-center justify-center text-outline hover:text-on-surface hover:bg-surface-container transition-colors" type="button">
+<span class="material-symbols-outlined text-lg" data-icon="notifications">notifications</span>
+</button>
+<button class="w-8 h-8 rounded-lg flex items-center justify-center text-outline hover:text-on-surface hover:bg-surface-container transition-colors" type="button">
+<span class="material-symbols-outlined text-lg" data-icon="help_outline">help_outline</span>
+</button>
+</div>
+<!-- Strict System Profile: Owner only -->
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-lg bg-surface-container-high border border-outline-variant flex items-center justify-center text-on-surface font-mono font-semibold text-xs shadow-sm">
+            OW
+          </div>
+<div class="flex flex-col text-left">
+<span class="text-xs font-semibold text-on-surface leading-tight">Owner</span>
+<span class="text-[10px] font-mono text-outline leading-tight">SYS-AUTH</span>
+</div>
+</div>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="flex-1 p-8 max-w-7xl w-full mx-auto flex flex-col gap-8">
+<!-- Breadcrumbs & Region Row -->
+<div class="flex items-center justify-between">
+<nav class="flex items-center gap-2 text-xs font-medium text-outline">
+<span class="hover:text-on-surface transition-colors cursor-pointer">Dominion</span>
+<span class="text-outline-variant">/</span>
+<span class="hover:text-on-surface transition-colors cursor-pointer">Distribution</span>
+<span class="text-outline-variant">/</span>
+<span class="text-on-surface font-semibold">Change requests</span>
+</nav>
+<!-- Parish/Region Metadata Tag -->
+<div class="flex items-center gap-2 px-3 py-1 rounded bg-surface-container border border-surface-variant text-[11px] font-mono text-on-surface-variant">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>
+          REGION: JM-KGN
+        </div>
+</div>
+<!-- Page Headline Section -->
+<div class="flex flex-col gap-1.5">
+<h2 class="text-2xl font-bold font-headline text-on-surface tracking-tight">Change requests</h2>
+<p class="text-sm text-on-surface-variant font-body">An inbox that links to the queues that already exist. It does not merge them.</p>
+</div>
+<!-- Bento Cards Grid (Exactly 4 cards) -->
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
+<!-- Card 1: Pending vehicles -->
+<div class="bg-surface-container-lowest rounded-xl border border-surface-variant p-5 flex flex-col justify-between hover:border-outline-variant hover:shadow-sm transition-all duration-150 group">
+<div class="flex flex-col gap-3">
+<div class="flex items-center justify-between">
+<span class="text-xs font-medium text-on-surface-variant font-label">Pending vehicles</span>
+<span class="material-symbols-outlined text-outline group-hover:text-secondary text-base transition-colors" data-icon="directions_car">directions_car</span>
+</div>
+<div class="text-3xl font-mono font-medium text-on-surface tracking-tight py-1">
+              —
+            </div>
+</div>
+<div class="pt-4 border-t border-surface-container flex items-center justify-between">
+<a class="text-xs font-medium text-secondary hover:underline flex items-center gap-1 group-hover:gap-1.5 transition-all" href="#">
+<span>Vehicle catalog pending queue</span>
+<span class="text-sm leading-none font-bold">→</span>
+</a>
+</div>
+</div>
+<!-- Card 2: Pending vendors -->
+<div class="bg-surface-container-lowest rounded-xl border border-surface-variant p-5 flex flex-col justify-between hover:border-outline-variant hover:shadow-sm transition-all duration-150 group">
+<div class="flex flex-col gap-3">
+<div class="flex items-center justify-between">
+<span class="text-xs font-medium text-on-surface-variant font-label">Pending vendors</span>
+<span class="material-symbols-outlined text-outline group-hover:text-secondary text-base transition-colors" data-icon="storefront">storefront</span>
+</div>
+<div class="text-3xl font-mono font-medium text-on-surface tracking-tight py-1">
+              —
+            </div>
+</div>
+<div class="pt-4 border-t border-surface-container flex items-center justify-between">
+<a class="text-xs font-medium text-secondary hover:underline flex items-center gap-1 group-hover:gap-1.5 transition-all" href="#">
+<span>Vendor requests queue</span>
+<span class="text-sm leading-none font-bold">→</span>
+</a>
+</div>
+</div>
+<!-- Card 3: Places to review -->
+<div class="bg-surface-container-lowest rounded-xl border border-surface-variant p-5 flex flex-col justify-between hover:border-outline-variant hover:shadow-sm transition-all duration-150 group">
+<div class="flex flex-col gap-3">
+<div class="flex items-center justify-between">
+<span class="text-xs font-medium text-on-surface-variant font-label">Places to review</span>
+<span class="material-symbols-outlined text-outline group-hover:text-secondary text-base transition-colors" data-icon="place">place</span>
+</div>
+<div class="text-3xl font-mono font-medium text-on-surface tracking-tight py-1">
+              —
+            </div>
+</div>
+<div class="pt-4 border-t border-surface-container flex items-center justify-between">
+<a class="text-xs font-medium text-secondary hover:underline flex items-center gap-1 group-hover:gap-1.5 transition-all" href="#">
+<span>Places &amp; map imports</span>
+<span class="text-sm leading-none font-bold">→</span>
+</a>
+</div>
+</div>
+<!-- Card 4: Station resolution -->
+<div class="bg-surface-container-lowest rounded-xl border border-surface-variant p-5 flex flex-col justify-between hover:border-outline-variant hover:shadow-sm transition-all duration-150 group">
+<div class="flex flex-col gap-3">
+<div class="flex items-center justify-between">
+<span class="text-xs font-medium text-on-surface-variant font-label">Station resolution</span>
+<span class="material-symbols-outlined text-outline group-hover:text-secondary text-base transition-colors" data-icon="ev_station">ev_station</span>
+</div>
+<div class="text-3xl font-mono font-medium text-on-surface tracking-tight py-1">
+              —
+            </div>
+</div>
+<div class="pt-4 border-t border-surface-container flex items-center justify-between">
+<a class="text-xs font-medium text-secondary hover:underline flex items-center gap-1 group-hover:gap-1.5 transition-all" href="#">
+<span>Station analytics queue</span>
+<span class="text-sm leading-none font-bold">→</span>
+</a>
+</div>
+</div>
+</div>
+<!-- Small Note Banner / Callout Card -->
+<div class="bg-surface-container-low rounded-xl border border-surface-variant p-5 flex items-start justify-between gap-4">
+<div class="flex items-start gap-3.5">
+<div class="p-1 rounded bg-surface-container text-secondary mt-0.5">
+<span class="material-symbols-outlined text-lg" data-icon="info">info</span>
+</div>
+<div class="flex flex-col gap-1">
+<h4 class="text-xs font-semibold text-on-surface">The data is not in yet.</h4>
+<p class="text-xs text-on-surface-variant">Incoming routing and upstream updates for parishes will populate each specialized queue as synced by the ingestion service.</p>
+</div>
+</div>
+<div class="flex items-center shrink-0">
+<span class="font-mono text-[11px] text-outline px-3 py-1 bg-surface-container-highest rounded border border-surface-variant">
+            LOC: KINGSTON / PARISH REGISTRY JMD
+          </span>
+</div>
+</div>
+</main>
+</div>
+</body></html>

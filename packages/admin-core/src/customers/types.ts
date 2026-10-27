@@ -5,8 +5,8 @@ export type ProductLineAccountsProps = {
   apiBaseUrl: string;
   accessToken: string;
   callerRole: string | null;
-  /** Base path prefix: '/admin' | '/enterprise-admin' | '/fleet-admin' */
-  apiNamespace: '/admin' | '/enterprise-admin' | '/fleet-admin';
+  /** Base path prefix: '/enterprise-admin' | '/fleet-admin' */
+  apiNamespace: '/enterprise-admin' | '/fleet-admin';
   pageTitle?: string;
   subtitle?: string;
   /** Optional org drill-in. If omitted, row click does nothing / no OrganizationDetail. */

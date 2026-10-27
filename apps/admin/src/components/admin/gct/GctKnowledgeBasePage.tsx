@@ -1,3 +1,4 @@
+// Stitch: dominion-redesign/99a841f692104aeb9e98c442c92c5244
 import { useMemo, useRef, useState, type MouseEvent } from 'react';
 import { BookMarked, Search } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '../../ui/alert';

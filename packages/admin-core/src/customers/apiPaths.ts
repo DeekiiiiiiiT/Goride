@@ -1,4 +1,4 @@
-export type ApiNamespace = '/admin' | '/enterprise-admin' | '/fleet-admin';
+export type ApiNamespace = '/enterprise-admin' | '/fleet-admin';
 
 export type CustomerApiPaths = {
   listCustomers: string;
@@ -18,22 +18,6 @@ export function buildCustomerApiPaths(
   apiBaseUrl: string,
   apiNamespace: ApiNamespace,
 ): CustomerApiPaths {
-  if (apiNamespace === '/admin') {
-    return {
-      listCustomers: `${apiBaseUrl}/admin/customers`,
-      createCustomer: `${apiBaseUrl}/admin/create-customer`,
-      updateUser: `${apiBaseUrl}/update-user`,
-      resetPassword: `${apiBaseUrl}/admin/reset-password`,
-      forceLogout: `${apiBaseUrl}/admin/force-logout`,
-      toggleSuspend: `${apiBaseUrl}/admin/toggle-suspend`,
-      setPassword: `${apiBaseUrl}/admin/set-password`,
-      fullDelete: (userId) => `${apiBaseUrl}/admin/users/${userId}/full-delete`,
-      listTeamMembers: `${apiBaseUrl}/admin/team-members`,
-      teamMemberRole: (id) => `${apiBaseUrl}/admin/team-members/${id}/role`,
-      teamMemberDelete: (id) => `${apiBaseUrl}/admin/team-members/${id}`,
-    };
-  }
-
   const prefix = apiNamespace;
   return {
     listCustomers: `${apiBaseUrl}${prefix}/customers`,

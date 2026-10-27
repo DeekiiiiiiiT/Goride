@@ -9,6 +9,7 @@ import { registerCategoryRoutes } from "./categoryRoutes.ts";
 import { registerMasterRoutes, registerTollRateRoutes } from "./masterRoutes.ts";
 import { registerPartSourcingRoutes } from "../_fleet-server/part_sourcing_routes.ts";
 import { registerPendingVehicleCatalogRoutes } from "../_fleet-server/pending_vehicle_catalog_routes.ts";
+import { registerVehicleCatalogWriteRoutes } from "../_fleet-server/vehicle_catalog_write_routes.ts";
 
 const app = new Hono().basePath("/platform-catalog");
 
@@ -76,18 +77,42 @@ const PRIVATE_FIELDS = new Set([
   "payload_json",
 ]);
 
-function publicStation(row: { id: string; name: string | null; payload_json: unknown }) {
+function publicStation(row: {
+  id: string;
+  name: string | null;
+  payload_json: unknown;
+  parish?: string | null;
+  phone?: string | null;
+  website?: string | null;
+  amenities?: string[] | null;
+  lat?: number | null;
+  lng?: number | null;
+  brand?: string | null;
+  address?: string | null;
+  pcode?: string | null;
+}) {
   const payload = publicValue(row.payload_json || {}) as Record<string, unknown>;
   const location = payload.location && typeof payload.location === "object"
     ? payload.location as { lat?: unknown; lng?: unknown }
     : null;
+  const contact = payload.contactInfo && typeof payload.contactInfo === "object" && !Array.isArray(payload.contactInfo)
+    ? { ...(payload.contactInfo as Record<string, unknown>) }
+    : {};
+  if (row.phone) contact.phone = row.phone;
+  if (row.website) contact.website = row.website;
   return {
     ...payload,
     id: row.id,
     name: row.name ?? payload.name ?? null,
-    lat: payload.lat ?? location?.lat ?? null,
-    lng: payload.lng ?? location?.lng ?? null,
+    brand: row.brand ?? payload.brand ?? null,
+    address: row.address ?? payload.address ?? null,
+    pcode: row.pcode ?? payload.pcode ?? null,
+    parish: row.parish || payload.parish || null,
+    lat: row.lat ?? payload.lat ?? location?.lat ?? null,
+    lng: row.lng ?? payload.lng ?? location?.lng ?? null,
     location,
+    contactInfo: Object.keys(contact).length ? contact : payload.contactInfo ?? null,
+    amenities: row.amenities?.length ? row.amenities : payload.amenities ?? null,
     prices: payload.prices ?? null,
     price_updated_at: payload.priceUpdatedAt ?? payload.price_updated_at ?? null,
     capabilities: payload.capabilities ?? null,
@@ -112,7 +137,7 @@ async function listStations(c: { req: { query: (name: string) => string | undefi
     const offset = Math.max(Number(c.req.query("offset") ?? 0) || 0, 0);
     const { data, error } = await sb
       .from("fleet_stations")
-      .select("id,name,payload_json")
+      .select("id,name,brand,address,pcode,parish,phone,website,amenities,lat,lng,payload_json")
       .range(offset, offset + limit - 1);
     if (error) throw error;
     const stations = (data || []).map((row) => publicStation(row));
@@ -129,7 +154,7 @@ app.get("/v1/stations", listStations);
 app.get("/stations/:id", async (c) => {
   try {
     const sb = admin();
-    const { data, error } = await sb.from("fleet_stations").select("id,name,payload_json").eq("id", c.req.param("id")).maybeSingle();
+    const { data, error } = await sb.from("fleet_stations").select("id,name,brand,address,pcode,parish,phone,website,amenities,lat,lng,payload_json").eq("id", c.req.param("id")).maybeSingle();
     if (error) throw error;
     if (!data) return Response.json({ error: "Station not found" }, { status: 404 });
     return cached({ station: publicStation(data) });
@@ -187,7 +212,7 @@ app.get("/tolls", async (c) => {
     const sb = admin();
     const limit = Math.min(Math.max(Number(c.req.query("limit") ?? 100) || 100, 1), 500);
     const offset = Math.max(Number(c.req.query("offset") ?? 0) || 0, 0);
-    const { data, error } = await sb.from("fleet_toll_plazas").select("id,name,highway,payload_json").range(offset, offset + limit - 1);
+    const { data, error } = await sb.from("fleet_toll_plazas").select("id,name,highway,direction,parish,payload_json").range(offset, offset + limit - 1);
     if (error) throw error;
     const plazas = (data || []).map((row) => {
       const payload = publicValue(row.payload_json || {}) as Record<string, unknown>;
@@ -196,6 +221,8 @@ app.get("/tolls", async (c) => {
         id: row.id,
         name: row.name,
         highway: row.highway,
+        direction: row.direction || payload.direction || null,
+        parish: row.parish || payload.parish || null,
         prices: payload.prices || payload.rates || null,
       };
     });
@@ -273,6 +300,7 @@ try {
   const writer = admin();
   registerPartSourcingRoutes(app, writer);
   registerPendingVehicleCatalogRoutes(app, writer);
+  registerVehicleCatalogWriteRoutes(app, writer);
 } catch (err) {
   console.error("catalog master writes not mounted", err instanceof Error ? err.message : err);
 }
@@ -344,7 +372,7 @@ app.get("/admin/quality", async (c) => {
 app.all("/admin/*", async (c) => {
   const path = new URL(c.req.url).pathname;
   const moved = path.includes("/admin/part-")
-    || path.includes("/admin/vehicle-catalog-pending")
+    || path.includes("/admin/vehicle-catalog")
     || path.includes("/admin/catalog-gate");
   if (!moved) return c.json({ error: "Not found" }, 404);
   const url = new URL(c.req.url);

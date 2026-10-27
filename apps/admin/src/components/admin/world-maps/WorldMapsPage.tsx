@@ -1,4 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+// Stitch: dominion-redesign/579778d10ceb40fbaa1da40705113cde
+// Stitch: dominion-redesign/b3e2ccc77e0c4bb2ab51ff25d19e1b96
+// Stitch: dominion-redesign/b49f74abedeb4478b1d20571a17c7348
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { JamaicaOverviewMap, ZoneMapEditor } from '@roam/geo-ui';
 import type { DashOverviewCommunityShape, DashOverviewParishShape, DashOverviewTownShape, DashParishRow, DashZoneVertex } from '@roam/dash-admin-client';
 import { API_ENDPOINTS } from '../../../services/apiConfig';
@@ -129,19 +132,20 @@ export function WorldMapsPage({
     setSelected(null);
     void (async () => {
       try {
-        if (page === 'world-quality') {
-          const body = await geoFetch(accessToken, '/geo/quality');
-          if (!cancelled) setIssues((body.issues as typeof issues) ?? []);
+        if (page === 'world-quality' || page === 'world-imports') {
+          const [qualityBody, importBody] = await Promise.all([
+            geoFetch(accessToken, '/geo/quality'),
+            geoFetch(accessToken, '/geo/imports'),
+          ]);
+          if (!cancelled) {
+            setIssues((qualityBody.issues as typeof issues) ?? []);
+            setRuns((importBody.runs as ImportRun[]) ?? []);
+          }
           return;
         }
         if (page === 'world-places') {
           const body = await geoFetch(accessToken, '/geo/places');
           if (!cancelled) setPins((body.places as Pin[]) ?? []);
-          return;
-        }
-        if (page === 'world-imports') {
-          const body = await geoFetch(accessToken, '/geo/imports');
-          if (!cancelled) setRuns((body.runs as ImportRun[]) ?? []);
           return;
         }
         const levelQuery = level == null ? '' : `?level=${level}`;
@@ -208,78 +212,189 @@ export function WorldMapsPage({
     }));
   }, [shapes]);
 
+  const title =
+    level != null || page === 'world-jamaica'
+      ? 'Jamaica map'
+      : page === 'world-places'
+        ? 'Places and pins'
+        : page === 'world-imports' || page === 'world-quality'
+          ? 'Map imports'
+          : 'Places';
+  const lede =
+    level != null || page === 'world-jamaica'
+      ? 'The published map of Jamaica, from the country down to communities.'
+      : page === 'world-places'
+        ? 'Named pins. These are points, not parish boundaries.'
+        : page === 'world-imports' || page === 'world-quality'
+          ? 'Dry run an import, then publish it.'
+          : 'Dominion owns these borders. Publish sends one place to every app after you confirm.';
+
+  const levelButtons: Array<{ id: string; label: string }> = [
+    { id: 'world-jamaica', label: 'Country' },
+    { id: 'world-parishes', label: 'Parishes' },
+    { id: 'world-towns', label: 'Towns' },
+    { id: 'world-communities', label: 'Communities' },
+  ];
+
   return (
-    <div className="min-h-[640px] bg-white p-4 text-slate-900 md:p-6">
-      <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+    <div className="min-h-[640px] flex-1 overflow-y-auto bg-white p-8 text-slate-900">
+      <div className="mx-auto max-w-[1240px] space-y-6">
+        <div className="flex items-center justify-between text-xs">
+          <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-slate-500">
+            <span>Dominion</span>
+            <span className="text-slate-300">/</span>
+            <span>Master data</span>
+            <span className="text-slate-300">/</span>
+            <span>Places and Maps</span>
+            <span className="text-slate-300">/</span>
+            <span className="font-medium text-slate-900">{title}</span>
+          </nav>
+          <div className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1 font-mono text-xs text-slate-700">
+            <span className="h-1.5 w-1.5 rounded-full bg-blue-600" />
+            <span>REGION: JM-KGN</span>
+          </div>
+        </div>
+
         <div>
-          <h2 className="text-xl font-semibold">World Maps</h2>
-          <p className="text-sm text-slate-500">Dominion owns these borders. Publish sends one place to every app after you confirm.</p>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900">{title}</h1>
+          <p className="mt-1 text-sm text-slate-500">{lede}</p>
         </div>
-        {level != null && (
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search"
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm md:w-64"
-          />
+
+        {(level != null || page === 'world-jamaica') && (
+          <div className="flex items-center justify-between rounded-[12px] border border-slate-200 bg-white p-3 shadow-sm">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="px-2 text-xs font-medium text-slate-500">Map view level:</span>
+              <div className="inline-flex rounded-lg border border-slate-200/80 bg-slate-100 p-1 text-xs">
+                {levelButtons.map((btn) => {
+                  const active = page === btn.id;
+                  return (
+                    <a
+                      key={btn.id}
+                      href={`?page=${btn.id}`}
+                      className={`rounded-md px-3 py-1.5 transition-colors ${
+                        active
+                          ? 'border border-slate-200/60 bg-white font-semibold text-blue-600 shadow-sm'
+                          : 'font-medium text-slate-600 hover:bg-white/50 hover:text-slate-900'
+                      }`}
+                    >
+                      {btn.label}
+                    </a>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="font-mono text-xs text-slate-400">
+                PARTITION: {shown.length || places.length || '—'}
+              </span>
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search places..."
+                className="w-48 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs"
+              />
+            </div>
+          </div>
         )}
-      </div>
-      {error ? <p className="mb-3 text-sm text-red-600">{error}</p> : null}
-      {page === 'world-quality' ? (
-        <ul className="space-y-2">
-          {issues.length === 0 ? <li className="text-sm text-slate-500">No shape problems.</li> : null}
-          {issues.map((issue) => (
-            <li key={`${issue.pcode}-${issue.issue}`} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
-              {issue.name} ({issue.pcode}) · {issue.issue}
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      {page === 'world-places' ? (
-        <PinList token={accessToken} canWrite={canWrite} pins={pins} onChange={setPins} />
-      ) : null}
-      {page === 'world-imports' ? (
-        <ImportPanel token={accessToken} canWrite={canWrite} runs={runs} onRuns={setRuns} />
-      ) : null}
-      {page === 'world-jamaica' ? (
-        <JamaicaOverviewMap
-          parishes={parishes}
-          shapes={townShapes}
-          parishShapes={parishShapes}
-          communityShapes={communityShapes}
-          presentation="inline"
-          onClose={() => undefined}
-          onPick={setSelected}
-        />
-      ) : null}
-      {level != null ? (
-        <div className="mt-4 grid gap-4 lg:grid-cols-[280px_1fr]">
-          <ul className="max-h-[40vh] space-y-2 overflow-auto lg:max-h-[70vh]">
-            {shown.map((place) => (
-              <li key={place.pcode}>
-                <button
-                  type="button"
-                  onClick={() => setSelected(place.pcode)}
-                  className={`w-full rounded-lg border px-3 py-2 text-left text-sm ${selected === place.pcode ? 'border-emerald-600 bg-emerald-50' : 'border-slate-200'}`}
-                >
-                  <span className="font-medium">{place.name}</span>
-                  <span className="mt-0.5 block text-xs text-slate-500">{place.pcode}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-          {selected ? (
+
+        {page === 'world-places' ? (
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-4">
+            <div className="relative w-80">
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search places, landmarks, coordinates..."
+                className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-3 pr-4 text-xs shadow-sm"
+              />
+            </div>
+            <div className="flex items-center gap-2 text-xs font-medium text-slate-500">
+              <span>Total pins:</span>
+              <span className="rounded bg-slate-100 px-2 py-0.5 font-mono font-semibold text-slate-900">
+                {pins.length}
+              </span>
+            </div>
+          </div>
+        ) : null}
+
+        {error ? <p className="text-sm text-red-600">{error}</p> : null}
+
+        {page === 'world-quality' || page === 'world-imports' ? (
+          <ImportPanel
+            token={accessToken}
+            canWrite={canWrite}
+            runs={runs}
+            onRuns={setRuns}
+            issues={page === 'world-quality' || page === 'world-imports' ? issues : []}
+            showQuality={page === 'world-quality' || page === 'world-imports'}
+          />
+        ) : null}
+
+        {page === 'world-places' ? (
+          <PinList token={accessToken} canWrite={canWrite} pins={pins} onChange={setPins} query={query} />
+        ) : null}
+
+        {page === 'world-jamaica' ? (
+          <div className="overflow-hidden rounded-[12px] border border-slate-200 bg-white p-4 shadow-sm">
+            <JamaicaOverviewMap
+              parishes={parishes}
+              shapes={townShapes}
+              parishShapes={parishShapes}
+              communityShapes={communityShapes}
+              presentation="inline"
+              onClose={() => undefined}
+              onPick={setSelected}
+            />
+          </div>
+        ) : null}
+
+        {level != null ? (
+          <div className="grid grid-cols-12 gap-6 items-start">
+            <div className="col-span-12 overflow-hidden rounded-[12px] border border-slate-200 bg-white shadow-sm lg:col-span-4">
+              <div className="border-b border-slate-100 px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                Directory
+              </div>
+              <ul className="max-h-[40vh] space-y-1 overflow-auto p-3 lg:max-h-[70vh]">
+                {shown.length === 0 ? (
+                  <li className="px-2 py-6 text-center text-sm text-slate-500">The data is not in yet.</li>
+                ) : (
+                  shown.map((place) => (
+                    <li key={place.pcode}>
+                      <button
+                        type="button"
+                        onClick={() => setSelected(place.pcode)}
+                        className={`w-full rounded-lg border px-3 py-2 text-left text-sm ${selected === place.pcode ? 'border-blue-600 bg-blue-50' : 'border-slate-200 hover:bg-slate-50'}`}
+                      >
+                        <span className="font-medium">{place.name}</span>
+                        <span className="mt-0.5 block font-mono text-xs text-slate-500">{place.pcode}</span>
+                      </button>
+                    </li>
+                  ))
+                )}
+              </ul>
+            </div>
+            <div className="col-span-12 overflow-hidden rounded-[12px] border border-slate-200 bg-white p-4 shadow-sm lg:col-span-8">
+              {selected ? (
+                <PlacePanel token={accessToken} canWrite={canWrite} pcode={selected} />
+              ) : (
+                <p className="py-16 text-center text-sm text-slate-500">
+                  Choose a place to see its border, versions, and publish preview.
+                </p>
+              )}
+            </div>
+          </div>
+        ) : null}
+
+        {page === 'world-jamaica' && selected ? (
+          <div className="overflow-hidden rounded-[12px] border border-slate-200 bg-white p-4 shadow-sm">
             <PlacePanel token={accessToken} canWrite={canWrite} pcode={selected} />
-          ) : (
-            <p className="text-sm text-slate-500">Choose a place to see its border, versions, and publish preview.</p>
-          )}
+          </div>
+        ) : null}
+
+        <div className="flex items-center justify-between rounded-[12px] border border-slate-200 bg-slate-100/70 px-4 py-3 text-xs text-slate-600">
+          <span>The data is not in yet.</span>
+          <span className="font-mono text-[11px] text-slate-400">LOC: KINGSTON / PARISH REGISTRY JMD</span>
         </div>
-      ) : null}
-      {page === 'world-jamaica' && selected ? (
-        <div className="mt-4">
-          <PlacePanel token={accessToken} canWrite={canWrite} pcode={selected} />
-        </div>
-      ) : null}
+      </div>
     </div>
   );
 }
@@ -544,9 +659,29 @@ function PlacePanel({ token, canWrite, pcode }: { token: string; canWrite: boole
   );
 }
 
-function PinList({ token, canWrite, pins, onChange }: { token: string; canWrite: boolean; pins: Pin[]; onChange: (pins: Pin[]) => void }) {
+function PinList({
+  token,
+  canWrite,
+  pins,
+  onChange,
+  query = '',
+}: {
+  token: string;
+  canWrite: boolean;
+  pins: Pin[];
+  onChange: (pins: Pin[]) => void;
+  query?: string;
+}) {
   const [editing, setEditing] = useState<Pin | null>(null);
   const [error, setError] = useState('');
+  const needle = query.trim().toLowerCase();
+  const shown = pins.filter(
+    (pin) =>
+      !needle ||
+      pin.name.toLowerCase().includes(needle) ||
+      String(pin.lat).includes(needle) ||
+      String(pin.lng).includes(needle),
+  );
   const save = async () => {
     if (!editing) return;
     setError('');
@@ -556,44 +691,115 @@ function PinList({ token, canWrite, pins, onChange }: { token: string; canWrite:
         body: JSON.stringify({ name: editing.name, lat: editing.lat, lng: editing.lng, status: editing.status }),
       });
       const place = body.place as Pin;
-      onChange(pins.map((pin) => pin.id === editing.id ? { ...pin, ...place } : pin));
+      onChange(pins.map((pin) => (pin.id === editing.id ? { ...pin, ...place } : pin)));
       setEditing(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not save this pin');
     }
   };
   return (
-    <div className="space-y-3">
-      {error ? <p className="text-sm text-red-600">{error}</p> : null}
-      <ul className="grid gap-2 md:grid-cols-2">
-        {pins.map((pin) => (
-          <li key={pin.id} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
-            <button type="button" className="text-left" onClick={() => canWrite && setEditing(pin)}>
-              <span className="font-medium">{pin.name}</span>
-              <span className="ml-2 text-slate-500">{pin.status} · {pin.lat.toFixed(3)}, {pin.lng.toFixed(3)}</span>
-            </button>
-          </li>
-        ))}
-      </ul>
+    <div className="overflow-hidden rounded-[12px] border border-slate-200 bg-white shadow-sm">
+      {error ? <p className="border-b border-slate-100 px-6 py-2 text-sm text-red-600">{error}</p> : null}
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse text-left">
+          <thead>
+            <tr className="border-b border-slate-200 bg-slate-50/60 text-xs font-semibold uppercase tracking-wider text-slate-500">
+              <th className="px-6 py-3">Name</th>
+              <th className="px-6 py-3">Parish</th>
+              <th className="px-6 py-3">Kind</th>
+              <th className="px-6 py-3">Coordinates</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 text-sm">
+            {shown.length === 0 ? (
+              <tr>
+                <td colSpan={4} className="px-6 py-10 text-center text-slate-500">
+                  The data is not in yet.
+                </td>
+              </tr>
+            ) : (
+              shown.map((pin) => (
+                <tr key={pin.id} className="transition-colors hover:bg-slate-50/70">
+                  <td className="px-6 py-3.5 font-medium text-slate-900">
+                    <button type="button" className="text-left" onClick={() => canWrite && setEditing(pin)}>
+                      {pin.name}
+                    </button>
+                  </td>
+                  <td className="px-6 py-3.5 text-slate-700">{pin.pcode || '—'}</td>
+                  <td className="px-6 py-3.5">
+                    <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+                      {pin.status || 'Pin'}
+                    </span>
+                  </td>
+                  <td className="px-6 py-3.5 font-mono text-xs text-slate-600">
+                    {pin.lat.toFixed(4)}, {pin.lng.toFixed(4)}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
       {editing ? (
-        <div className="grid gap-2 rounded-lg border border-slate-200 p-3 md:grid-cols-2">
-          <input value={editing.name} onChange={(event) => setEditing({ ...editing, name: event.target.value })} className="rounded-lg border px-3 py-2 text-sm" />
-          <input value={editing.lat} onChange={(event) => setEditing({ ...editing, lat: Number(event.target.value) })} className="rounded-lg border px-3 py-2 text-sm" />
-          <input value={editing.lng} onChange={(event) => setEditing({ ...editing, lng: Number(event.target.value) })} className="rounded-lg border px-3 py-2 text-sm" />
-          <select value={editing.status} onChange={(event) => setEditing({ ...editing, status: event.target.value })} className="rounded-lg border px-3 py-2 text-sm">
+        <div className="grid gap-2 border-t border-slate-100 p-4 md:grid-cols-2">
+          <input
+            value={editing.name}
+            onChange={(event) => setEditing({ ...editing, name: event.target.value })}
+            className="rounded-lg border px-3 py-2 text-sm"
+          />
+          <input
+            value={editing.lat}
+            onChange={(event) => setEditing({ ...editing, lat: Number(event.target.value) })}
+            className="rounded-lg border px-3 py-2 text-sm"
+          />
+          <input
+            value={editing.lng}
+            onChange={(event) => setEditing({ ...editing, lng: Number(event.target.value) })}
+            className="rounded-lg border px-3 py-2 text-sm"
+          />
+          <select
+            value={editing.status}
+            onChange={(event) => setEditing({ ...editing, status: event.target.value })}
+            className="rounded-lg border px-3 py-2 text-sm"
+          >
             <option value="active">Active</option>
             <option value="retired">Retired</option>
           </select>
-          <button type="button" onClick={() => void save()} className="rounded-lg bg-slate-900 px-3 py-2 text-sm text-white">Save pin</button>
+          <button
+            type="button"
+            onClick={() => void save()}
+            className="rounded-lg bg-slate-900 px-3 py-2 text-sm text-white"
+          >
+            Save pin
+          </button>
         </div>
       ) : null}
+      <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50/50 p-4 text-xs text-slate-500">
+        <span>The data is not in yet.</span>
+        <span className="font-mono text-[11px] text-slate-400">LOC: KINGSTON / PARISH REGISTRY JMD</span>
+      </div>
     </div>
   );
 }
 
-function ImportPanel({ token, canWrite, runs, onRuns }: { token: string; canWrite: boolean; runs: ImportRun[]; onRuns: (runs: ImportRun[]) => void }) {
+function ImportPanel({
+  token,
+  canWrite,
+  runs,
+  onRuns,
+  issues = [],
+  showQuality = true,
+}: {
+  token: string;
+  canWrite: boolean;
+  runs: ImportRun[];
+  onRuns: (runs: ImportRun[]) => void;
+  issues?: { pcode: string; name: string; issue: string }[];
+  showQuality?: boolean;
+}) {
   const [error, setError] = useState('');
   const [report, setReport] = useState('');
+  const fileRef = useRef<HTMLInputElement | null>(null);
   const send = async (file: File, saveDrafts: boolean) => {
     setError('');
     setReport('');
@@ -614,40 +820,158 @@ function ImportPanel({ token, canWrite, runs, onRuns }: { token: string; canWrit
       }),
     });
     const counts = body.report as ImportRun['counts'];
-    setReport(saveDrafts
-      ? `Drafts saved: ${counts?.drafts_saved ?? 0}. Nothing was published.`
-      : `Matched ${counts?.matched ?? 0}, unknown ${counts?.unknown ?? 0}, broken ${counts?.broken ?? 0}. Nothing was written.`);
+    setReport(
+      saveDrafts
+        ? `Drafts saved: ${counts?.drafts_saved ?? 0}. Nothing was published.`
+        : `Matched ${counts?.matched ?? 0}, unknown ${counts?.unknown ?? 0}, broken ${counts?.broken ?? 0}. Nothing was written.`,
+    );
     const list = await geoFetch(token, '/geo/imports');
     onRuns((list.runs as ImportRun[]) ?? []);
   };
   return (
-    <div className="space-y-3">
-      <p className="text-sm text-slate-600">Check a GeoJSON file against the official map. Saving drafts does not publish. Open each place to preview and confirm.</p>
+    <div className="space-y-8">
+      <div className="flex items-end justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold text-slate-900">Import versions</h2>
+          <p className="mt-1 text-xs text-slate-500">
+            Check a GeoJSON file against the official map. Saving drafts does not publish.
+          </p>
+        </div>
+        {canWrite ? (
+          <div className="flex items-center gap-3">
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".geojson,.json"
+              className="hidden"
+              onChange={async (event) => {
+                const file = event.target.files?.[0];
+                if (!file) return;
+                const saveDrafts = window.confirm(
+                  'Save matching places as drafts? Cancel only checks the file (dry run).',
+                );
+                try {
+                  await send(file, saveDrafts);
+                } catch (e) {
+                  setError(e instanceof Error ? e.message : 'Could not check that file');
+                } finally {
+                  event.target.value = '';
+                }
+              }}
+            />
+            <button
+              type="button"
+              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
+              onClick={() => {
+                const input = fileRef.current;
+                if (!input) return;
+                input.dataset.mode = 'dry';
+                input.click();
+              }}
+            >
+              Dry run
+            </button>
+            <button
+              type="button"
+              className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-blue-700"
+              onClick={() => {
+                const input = fileRef.current;
+                if (!input) return;
+                input.click();
+              }}
+            >
+              Publish
+            </button>
+          </div>
+        ) : (
+          <p className="text-sm text-slate-500">Only the platform owner can check or save a file.</p>
+        )}
+      </div>
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
       {report ? <p className="text-sm text-emerald-700">{report}</p> : null}
-      {canWrite ? (
-        <input
-          type="file"
-          accept=".geojson,.json"
-          onChange={async (event) => {
-            const file = event.target.files?.[0];
-            if (!file) return;
-            const saveDrafts = window.confirm('Save matching places as drafts? Cancel only checks the file.');
-            try {
-              await send(file, saveDrafts);
-            } catch (e) {
-              setError(e instanceof Error ? e.message : 'Could not check that file');
-            }
-          }}
-        />
-      ) : <p className="text-sm text-slate-500">Only the platform owner can check or save a file.</p>}
-      <ul className="space-y-2">
-        {runs.map((run) => (
-          <li key={run.id} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
-            {run.file_name || 'Import'} · {run.dry_run ? 'file check' : 'drafts'} · matched {run.counts?.matched ?? 0} · drafts {run.counts?.drafts_saved ?? 0}
-          </li>
-        ))}
-      </ul>
+
+      <div className="overflow-hidden rounded-[12px] border border-slate-200 bg-white shadow-sm">
+        <table className="w-full border-collapse text-left">
+          <thead>
+            <tr className="border-b border-slate-100 bg-slate-50/70 text-[11px] font-semibold tracking-wide text-slate-500">
+              <th className="px-5 py-3">File</th>
+              <th className="px-5 py-3">When</th>
+              <th className="px-5 py-3">Result</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 text-xs">
+            {runs.length === 0 ? (
+              <tr>
+                <td colSpan={3} className="px-5 py-8 text-center text-slate-500">
+                  The data is not in yet.
+                </td>
+              </tr>
+            ) : (
+              runs.map((run) => (
+                <tr key={run.id} className="transition-colors hover:bg-slate-50/40">
+                  <td className="px-5 py-3.5 font-mono font-medium text-slate-800">
+                    {run.file_name || 'Import'}
+                  </td>
+                  <td className="px-5 py-3.5 font-mono text-slate-600">
+                    {new Date(run.created_at).toLocaleDateString('en-GB', {
+                      day: '2-digit',
+                      month: 'short',
+                      year: 'numeric',
+                    })}
+                  </td>
+                  <td className="px-5 py-3.5">
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-green-200 bg-green-50 px-2.5 py-1 text-[11px] font-medium text-green-700">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-600" />
+                      {run.dry_run ? 'Dry run passed' : `Drafts ${run.counts?.drafts_saved ?? 0}`}
+                    </span>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {showQuality ? (
+        <section className="space-y-2">
+          <div>
+            <h2 className="text-sm font-semibold text-slate-900">Map quality</h2>
+            <p className="text-xs text-slate-500">Shape problems.</p>
+          </div>
+          <div className="overflow-hidden rounded-[12px] border border-slate-200 bg-white shadow-sm">
+            <table className="w-full border-collapse text-left">
+              <thead>
+                <tr className="border-b border-slate-100 bg-slate-50/70 text-[11px] font-semibold tracking-wide text-slate-500">
+                  <th className="px-5 py-3">Shape</th>
+                  <th className="px-5 py-3">Problem</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-xs">
+                {issues.length === 0 ? (
+                  <tr>
+                    <td colSpan={2} className="px-5 py-8 text-center text-slate-500">
+                      The data is not in yet.
+                    </td>
+                  </tr>
+                ) : (
+                  issues.map((issue) => (
+                    <tr key={`${issue.pcode}-${issue.issue}`} className="transition-colors hover:bg-slate-50/40">
+                      <td className="px-5 py-3.5 font-medium text-slate-800">
+                        {issue.name} ({issue.pcode})
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <span className="inline-flex items-center gap-1.5 rounded-md border border-amber-200/80 bg-amber-50 px-2.5 py-0.5 text-[11px] font-medium text-amber-800">
+                          {issue.issue}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }

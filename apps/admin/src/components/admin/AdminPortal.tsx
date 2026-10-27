@@ -31,12 +31,12 @@ import { ErrorBoundary } from '@roam/roam-shared';
 import type { ResolutionQueueSubTab } from '../fuel/stations/ResolutionQueueTab';
 const StationDatabaseView = lazyNamed(() => import('../fuel/stations/StationDatabaseView'), 'StationDatabaseView');
 const PlacesReview = lazyNamed(() => import('@roam/platform-ops-ui'), 'PlacesReview');
-const StationHealth = lazyNamed(() => import('./DominionHomes'), 'StationHealth');
+const StationHealth = lazyNamed(() => import('./StationHealth'), 'StationHealth');
 import { API_ENDPOINTS } from '../../services/apiConfig';
 import { useAuth } from '../auth/AuthContext';
 import { StaffMfaStep } from '../auth/StaffMfaStep';
 import { supabase } from '../../utils/supabase/client';
-import { LEGACY_PAGE_REDIRECTS, pageAllowedForRole, settingsTabFromPageId } from './adminNavConfig';
+import { LEGACY_PAGE_REDIRECTS, MOVED_PAGES, pageAllowedForRole, settingsTabFromPageId } from './adminNavConfig';
 const GlobalIdentitySearch = lazyNamed(() => import('./platform/GlobalIdentitySearch'), 'GlobalIdentitySearch');
 const MatchingBrainPage = lazyNamed(() => import('./matching-brain/MatchingBrainPage'), 'MatchingBrainPage');
 const FuelBrainPage = lazyNamed(() => import('./fuel-brain/FuelBrainPage'), 'FuelBrainPage');
@@ -45,12 +45,12 @@ const AdminJaaGasCardsPage = lazyNamed(() => import('./fuel/AdminJaaGasCardsPage
 const TollBrainPage = lazyNamed(() => import('./toll-brain/TollBrainPage'), 'TollBrainPage');
 import { applyPortalTheme } from '../../hooks/usePortalTheme';
 import { api } from '../../services/api';
-import { DominionLoading, DominionNoAccess } from './DominionStates';
-const AppsDirectory = lazyNamed(() => import('./DominionHomes'), 'AppsDirectory');
-const ChangeRequestInbox = lazyNamed(() => import('./DominionHomes'), 'ChangeRequestInbox');
+import { DominionLoading, DominionMoved, DominionNoAccess } from './DominionStates';
+const AppsDirectory = lazyNamed(() => import('./AppsDirectory'), 'AppsDirectory');
+const ChangeRequestInbox = lazyNamed(() => import('./ChangeRequestInbox'), 'ChangeRequestInbox');
 const FuelHome = lazyNamed(() => import('./DominionHomes'), 'FuelHome');
 const PlacesHome = lazyNamed(() => import('./DominionHomes'), 'PlacesHome');
-const PlatformOpsHome = lazyNamed(() => import('./DominionHomes'), 'PlatformOpsHome');
+const PlatformOpsHome = lazyNamed(() => import('./PlatformOpsHome'), 'PlatformOpsHome');
 const TaxVendorsHome = lazyNamed(() => import('./DominionHomes'), 'TaxVendorsHome');
 const TollsHome = lazyNamed(() => import('./DominionHomes'), 'TollsHome');
 const VehiclesHome = lazyNamed(() => import('./DominionHomes'), 'VehiclesHome');
@@ -143,7 +143,6 @@ export function AdminPortal() {
   useEffect(() => {
     const onPop = () => {
       const page = new URLSearchParams(window.location.search).get('page') || 'dashboard';
-      setNavData(null);
       setCurrentPageRaw(normalizePortalPage(page));
     };
     window.addEventListener('popstate', onPop);
@@ -166,6 +165,15 @@ export function AdminPortal() {
         onCancel={() => void signOut()}
         onVerified={() => setMfaNeeded(false)}
       />
+    );
+  }
+
+  const moved = MOVED_PAGES[currentPage];
+  if (moved) {
+    return (
+      <AdminLayout currentPage={currentPage} onNavigate={setCurrentPage}>
+        <DominionMoved title={moved.title} appName={moved.appName} href={moved.href} />
+      </AdminLayout>
     );
   }
 
@@ -203,21 +211,13 @@ export function AdminPortal() {
         </div>
       )}
       {currentPage === 'platform-team' && <PlatformTeam />}
-      {currentPage === 'matching-brain' && (
-        <div className="rounded-xl border border-slate-200 bg-white overflow-hidden min-h-[560px] dark:border-slate-800 dark:bg-slate-900/40">
-          <MatchingBrainPage />
-        </div>
-      )}
+      {currentPage === 'matching-brain' && <MatchingBrainPage onNavigate={setCurrentPage} />}
       {currentPage === 'fuel-jaa-cards' && (
         <div className="rounded-xl border border-slate-200 bg-white overflow-hidden min-h-[560px] dark:border-slate-800 dark:bg-slate-900/40">
           <AdminJaaGasCardsPage scope="platform" />
         </div>
       )}
-      {currentPage === 'fuel-brain' && (
-        <div className="rounded-xl border border-slate-200 bg-white overflow-hidden min-h-[560px] p-6 dark:border-slate-800 dark:bg-slate-900/40">
-          <FuelBrainPage />
-        </div>
-      )}
+      {currentPage === 'fuel-brain' && <FuelBrainPage onNavigate={setCurrentPage} />}
       {currentPage === 'fuel-prices' && (
         <div className="rounded-xl border border-slate-200 bg-white overflow-hidden min-h-[560px] p-6 dark:border-slate-800 dark:bg-slate-900/40">
           <FuelPricesPage />
@@ -243,11 +243,7 @@ export function AdminPortal() {
         </div>
       )}
       {currentPage === 'fuel-analytics' && <StationHealth />}
-      {currentPage === 'toll-brain' && (
-        <div className="rounded-xl border border-slate-200 bg-white overflow-hidden min-h-[560px] p-6 dark:border-slate-800 dark:bg-slate-900/40">
-          <TollBrainPage />
-        </div>
-      )}
+      {currentPage === 'toll-brain' && <TollBrainPage onNavigate={setCurrentPage} />}
       {currentPage === 'toll-stations' && (
         <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px] dark:bg-card">
           <TollDatabaseView />
@@ -310,11 +306,9 @@ export function AdminPortal() {
         </div>
       )}
       {currentPage === 'gct-engine' && (
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px] dark:bg-card">
-          <ErrorBoundary>
-            <GctEnginePage />
-          </ErrorBoundary>
-        </div>
+        <ErrorBoundary>
+          <GctEnginePage />
+        </ErrorBoundary>
       )}
       {currentPage === 'gct-rates' && (
         <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px] dark:bg-card">
@@ -324,25 +318,19 @@ export function AdminPortal() {
         </div>
       )}
       {currentPage === 'gct-entities' && (
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px] dark:bg-card">
-          <ErrorBoundary>
-            <GctEntitiesPage />
-          </ErrorBoundary>
-        </div>
+        <ErrorBoundary>
+          <GctEntitiesPage />
+        </ErrorBoundary>
       )}
       {currentPage === 'gct-ledger' && (
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px] dark:bg-card">
-          <ErrorBoundary>
-            <GctLedgerPage />
-          </ErrorBoundary>
-        </div>
+        <ErrorBoundary>
+          <GctLedgerPage />
+        </ErrorBoundary>
       )}
       {currentPage === 'gct-remittance' && (
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px] dark:bg-card">
-          <ErrorBoundary>
-            <GctRemittancePage />
-          </ErrorBoundary>
-        </div>
+        <ErrorBoundary>
+          <GctRemittancePage />
+        </ErrorBoundary>
       )}
       {currentPage === 'gct-knowledge' && (
         <div className="bg-white rounded-xl shadow-sm overflow-hidden h-[calc(100vh-7.5rem)] dark:bg-card">
@@ -372,6 +360,7 @@ export function AdminPortal() {
           userEmail={user?.email}
           userRole={role ?? ''}
           activeTab={settingsTabFromPageId(currentPage) ?? 'general'}
+          onNavigate={setCurrentPage}
         />
       )}
       {(currentPage === 'api-center' || currentPage.startsWith('api-center-')) && (

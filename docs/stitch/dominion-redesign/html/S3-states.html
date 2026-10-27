@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Dominion — State Patterns</title>
+<!-- Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;family=Public+Sans:wght@500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CDN -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Tailwind Configuration -->
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "primary-fixed-dim": "#cad5ed",
+            "on-tertiary": "#e9ffe7",
+            "surface-container-highest": "#e1e2ed",
+            "secondary-fixed-dim": "#c7d3ff",
+            "secondary-fixed": "#dbe1ff",
+            "secondary-container": "#dbe1ff",
+            "inverse-primary": "#dae6fe",
+            "on-tertiary-container": "#00612a",
+            "surface-container-low": "#f4f3fa",
+            "outline-variant": "#b0b1bc",
+            "primary": "#545f74",
+            "on-secondary-fixed": "#003798",
+            "on-tertiary-fixed-variant": "#006c30",
+            "on-primary-fixed-variant": "#515c70",
+            "on-primary-container": "#475266",
+            "inverse-surface": "#0d0e12",
+            "on-tertiary-fixed": "#004c20",
+            "outline": "#797a84",
+            "secondary": "#0153dc",
+            "primary-dim": "#485367",
+            "error": "#a83836",
+            "surface-container": "#eeedf6",
+            "on-secondary-container": "#0047c0",
+            "surface-bright": "#faf8fe",
+            "on-error": "#fff7f6",
+            "error-dim": "#67040d",
+            "background": "#faf8fe",
+            "tertiary-fixed": "#98fba9",
+            "surface-tint": "#545f74",
+            "tertiary": "#006e31",
+            "inverse-on-surface": "#9d9ca2",
+            "on-error-container": "#6e0a12",
+            "on-surface": "#30323b",
+            "tertiary-fixed-dim": "#8aec9c",
+            "surface": "#faf8fe",
+            "on-secondary": "#faf8ff",
+            "tertiary-dim": "#00612a",
+            "tertiary-container": "#98fba9",
+            "surface-dim": "#d9d9e4",
+            "secondary-dim": "#0049c3",
+            "primary-container": "#d8e3fb",
+            "error-container": "#fa746f",
+            "surface-container-high": "#e8e7f1",
+            "on-background": "#30323b",
+            "surface-variant": "#e1e2ed",
+            "primary-fixed": "#d8e3fb",
+            "surface-container-lowest": "#ffffff",
+            "on-surface-variant": "#5d5f68",
+            "on-secondary-fixed-variant": "#0050d5",
+            "on-primary-fixed": "#354053",
+            "on-primary": "#f8f8ff"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "full": "9999px"
+          },
+          "fontFamily": {
+            "headline": ["Inter", "sans-serif"],
+            "display": ["Inter", "sans-serif"],
+            "body": ["Inter", "sans-serif"],
+            "label": ["Public Sans", "sans-serif"],
+            "mono": ["JetBrains Mono", "monospace"]
+          }
+        },
+      },
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+      display: inline-block;
+      vertical-align: middle;
+      line-height: 1;
+    }
+    .material-symbols-outlined[data-weight="fill"] {
+      font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+    }
+  </style>
+</head>
+<body class="bg-[#f8fafc] text-on-surface font-body antialiased min-h-screen flex selection:bg-secondary selection:text-white">
+<!-- Side Navigation Bar (Anchored by Shared Components JSON) -->
+<aside class="fixed top-0 left-0 h-screen w-64 flex flex-col bg-[#1e293b] border-r border-slate-700/50 shadow-none z-30 select-none">
+<div class="w-64 h-full p-4 flex flex-col justify-between overflow-y-auto">
+<!-- Upper Section -->
+<div class="flex flex-col gap-6">
+<!-- Brand Header -->
+<div class="flex items-center gap-3 px-2 py-1">
+<div class="w-9 h-9 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold text-lg tracking-tight shadow-sm shrink-0">
+<span class="material-symbols-outlined text-[20px]" data-icon="deployed_code">deployed_code</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-headline text-lg font-bold text-white tracking-tight leading-snug">Dominion</span>
+<span class="font-label text-xs text-slate-400 font-medium truncate">Roam Admin Console</span>
+</div>
+</div>
+<!-- Navigation Grouping -->
+<nav class="flex flex-col gap-5">
+<!-- Overview Root -->
+<div class="flex flex-col">
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm font-medium" href="#">
+<span class="material-symbols-outlined text-[18px]" data-icon="dashboard">dashboard</span>
+<span>Overview</span>
+</a>
+</div>
+<!-- Section: Master Data -->
+<div class="flex flex-col gap-1">
+<span class="px-3 text-[11px] font-mono font-semibold tracking-wider text-slate-400">MASTER DATA</span>
+<div class="flex flex-col gap-0.5 mt-1">
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm font-medium" href="#">
+<span class="material-symbols-outlined text-[18px]" data-icon="directions_car">directions_car</span>
+<span>Vehicles</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm font-medium" href="#">
+<span class="material-symbols-outlined text-[18px]" data-icon="map">map</span>
+<span>Places and Maps</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm font-medium" href="#">
+<span class="material-symbols-outlined text-[18px]" data-icon="local_gas_station">local_gas_station</span>
+<span>Fuel</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm font-medium" href="#">
+<span class="material-symbols-outlined text-[18px]" data-icon="toll">toll</span>
+<span>Tolls</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm font-medium" href="#">
+<span class="material-symbols-outlined text-[18px]" data-icon="storefront">storefront</span>
+<span>Tax and Vendors</span>
+</a>
+</div>
+</div>
+<!-- Section: Engines -->
+<div class="flex flex-col gap-1">
+<span class="px-3 text-[11px] font-mono font-semibold tracking-wider text-slate-400">ENGINES</span>
+<div class="flex flex-col gap-0.5 mt-1">
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm font-medium" href="#">
+<span class="material-symbols-outlined text-[18px]" data-icon="psychology">psychology</span>
+<span>Fuel Brain</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm font-medium" href="#">
+<span class="material-symbols-outlined text-[18px]" data-icon="alt_route">alt_route</span>
+<span>Toll Brain</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm font-medium" href="#">
+<span class="material-symbols-outlined text-[18px]" data-icon="hub">hub</span>
+<span>Matching Brain</span>
+</a>
+</div>
+</div>
+<!-- Section: Distribution -->
+<div class="flex flex-col gap-1">
+<span class="px-3 text-[11px] font-mono font-semibold tracking-wider text-slate-400">DISTRIBUTION</span>
+<div class="flex flex-col gap-0.5 mt-1">
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm font-medium" href="#">
+<span class="material-symbols-outlined text-[18px]" data-icon="apps">apps</span>
+<span>Apps</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm font-medium" href="#">
+<span class="material-symbols-outlined text-[18px]" data-icon="api">api</span>
+<span>Data API</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm font-medium" href="#">
+<span class="material-symbols-outlined text-[18px]" data-icon="sync_alt">sync_alt</span>
+<span>Change requests</span>
+</a>
+</div>
+</div>
+<!-- Section: Platform -->
+<div class="flex flex-col gap-1">
+<span class="px-3 text-[11px] font-mono font-semibold tracking-wider text-slate-400">PLATFORM</span>
+<div class="flex flex-col gap-0.5 mt-1">
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm font-medium" href="#">
+<span class="material-symbols-outlined text-[18px]" data-icon="badge">badge</span>
+<span>Staff and roles</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm font-medium" href="#">
+<span class="material-symbols-outlined text-[18px]" data-icon="list_alt">list_alt</span>
+<span>Activity log</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm font-medium" href="#">
+<span class="material-symbols-outlined text-[18px]" data-icon="terminal">terminal</span>
+<span>Platform Ops</span>
+</a>
+<!-- Active state mapped precisely to System States / Platform Kit -->
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg bg-blue-600 text-white font-medium text-sm" href="#">
+<span class="material-symbols-outlined text-[18px]" data-icon="tune">tune</span>
+<span>Global settings</span>
+</a>
+</div>
+</div>
+<!-- Section: Back Office -->
+<div class="flex flex-col gap-1">
+<span class="px-3 text-[11px] font-mono font-semibold tracking-wider text-slate-400">BACK OFFICE</span>
+<div class="flex flex-col gap-0.5 mt-1">
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm font-medium" href="#">
+<span class="material-symbols-outlined text-[18px]" data-icon="receipt_long">receipt_long</span>
+<span>GCT registrations</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm font-medium" href="#">
+<span class="material-symbols-outlined text-[18px]" data-icon="account_balance_wallet">account_balance_wallet</span>
+<span>Ledger</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-700/50 transition-colors text-sm font-medium" href="#">
+<span class="material-symbols-outlined text-[18px]" data-icon="payments">payments</span>
+<span>Remittance</span>
+</a>
+</div>
+</div>
+</nav>
+</div>
+<!-- Footer Telemetry & Node Status -->
+<div class="pt-4 border-t border-slate-700/60 flex flex-col gap-2">
+<div class="flex items-center justify-between text-xs font-mono text-slate-400">
+<div class="flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+<span>KGN-DC-01</span>
+</div>
+<span class="px-1.5 py-0.5 rounded bg-slate-700/70 text-slate-300 text-[10px] font-semibold">JMD READY</span>
+</div>
+</div>
+</div>
+</aside>
+<!-- Main Viewport Canvas -->
+<div class="flex-1 ml-64 flex flex-col min-h-screen">
+<!-- Top Navigation Bar (Shared Components JSON standard) -->
+<header class="sticky top-0 z-20 h-16 w-full flex items-center bg-white border-b border-slate-200 shadow-sm">
+<div class="flex justify-between items-center w-full px-8 h-16">
+<!-- Left: Search Engine Entity Input -->
+<div class="flex items-center gap-3 w-96">
+<div class="relative w-full">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[18px]" data-icon="search">search</span>
+<input class="w-full h-9 pl-9 pr-4 text-xs font-body bg-slate-50 border border-slate-200 rounded-lg text-slate-800 placeholder-slate-400 focus:bg-white focus:border-blue-600 focus:ring-1 focus:ring-blue-600 outline-none transition-all" placeholder="Search entities, engines, routes..." type="text"/>
+</div>
+</div>
+<!-- Right: Actions & User Meta -->
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-1 border-r border-slate-200 pr-4">
+<button class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors" title="Notifications">
+<span class="material-symbols-outlined text-[20px]" data-icon="notifications">notifications</span>
+</button>
+<button class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors" title="Help">
+<span class="material-symbols-outlined text-[20px]" data-icon="help_outline">help_outline</span>
+</button>
+</div>
+<!-- Profile Badge -->
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-slate-800 text-white flex items-center justify-center font-mono font-semibold text-xs border border-slate-700">
+              AC
+            </div>
+<div class="flex flex-col text-left">
+<span class="text-xs font-semibold text-slate-900 leading-tight">Admin Console</span>
+<span class="text-[11px] font-mono text-slate-500 leading-tight">Kingston / Superuser</span>
+</div>
+</div>
+</div>
+</div>
+</header>
+<!-- Page Content Area -->
+<main class="flex-1 p-8 max-w-[1184px] w-full">
+<!-- Page Header with Breadcrumbs -->
+<div class="mb-8">
+<nav class="flex items-center gap-2 text-xs font-mono text-slate-500 mb-2">
+<span>Dominion</span>
+<span class="material-symbols-outlined text-[14px]" data-icon="chevron_right">chevron_right</span>
+<span class="text-blue-600 font-medium">System States</span>
+</nav>
+<div class="flex flex-col gap-1">
+<h1 class="text-2xl font-bold tracking-tight text-slate-900 font-headline">State Patterns</h1>
+<p class="text-sm text-slate-500 font-normal">
+            Standardized empty, pending, and exception viewport states across Dominion console modules.
+          </p>
+</div>
+</div>
+<!-- 2-Column Bento Grid of Standardized States -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+<!-- CARD 1: Loading State -->
+<div class="bg-white rounded-xl border border-slate-200/80 shadow-sm p-6 flex flex-col justify-between">
+<div class="flex items-center justify-between pb-4 border-b border-slate-100 mb-5">
+<span class="font-mono text-[11px] font-semibold text-slate-500 tracking-wider">STATE: LOADING</span>
+<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-mono font-medium text-slate-600 bg-slate-100">
+<span class="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span>
+              Live Buffer
+            </span>
+</div>
+<!-- Loading Viewport Canvas -->
+<div class="bg-slate-50/70 rounded-lg p-5 border border-slate-100">
+<!-- Simulated Subdued Table Skeleton -->
+<div class="w-full">
+<!-- Table Header Skeleton -->
+<div class="grid grid-cols-12 gap-3 pb-3 border-b border-slate-200/70 mb-3 text-[11px] font-mono text-slate-400">
+<div class="col-span-3">ENTITY REF</div>
+<div class="col-span-4">PARISH / ZONE</div>
+<div class="col-span-3">TAX STATUS</div>
+<div class="col-span-2 text-right">ACTION</div>
+</div>
+<!-- Skeleton Rows with Pulse Shimmer -->
+<div class="space-y-3">
+<div class="grid grid-cols-12 gap-3 items-center animate-pulse">
+<div class="col-span-3 h-3 bg-slate-200 rounded w-4/5"></div>
+<div class="col-span-4 h-3 bg-slate-200 rounded w-3/4"></div>
+<div class="col-span-3 h-3 bg-slate-200 rounded w-1/2"></div>
+<div class="col-span-2 flex justify-end"><div class="h-3 bg-slate-200 rounded w-8"></div></div>
+</div>
+<div class="grid grid-cols-12 gap-3 items-center animate-pulse">
+<div class="col-span-3 h-3 bg-slate-200/70 rounded w-3/5"></div>
+<div class="col-span-4 h-3 bg-slate-200/70 rounded w-5/6"></div>
+<div class="col-span-3 h-3 bg-slate-200/70 rounded w-2/3"></div>
+<div class="col-span-2 flex justify-end"><div class="h-3 bg-slate-200/70 rounded w-8"></div></div>
+</div>
+<div class="grid grid-cols-12 gap-3 items-center animate-pulse">
+<div class="col-span-3 h-3 bg-slate-200/50 rounded w-4/6"></div>
+<div class="col-span-4 h-3 bg-slate-200/50 rounded w-2/3"></div>
+<div class="col-span-3 h-3 bg-slate-200/50 rounded w-3/5"></div>
+<div class="col-span-2 flex justify-end"><div class="h-3 bg-slate-200/50 rounded w-8"></div></div>
+</div>
+</div>
+</div>
+<!-- Muted Loading Status Indicator -->
+<div class="mt-6 pt-4 border-t border-slate-200/50 flex items-center justify-between">
+<div class="flex items-center gap-2">
+<svg class="animate-spin h-3.5 w-3.5 text-blue-600" fill="none" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+<path class="opacity-75" d="M4 12a8 8 0 018-8v8H4z" fill="currentColor"></path>
+</svg>
+<span class="text-xs font-mono text-slate-500">Loading...</span>
+</div>
+<span class="text-[11px] font-mono text-slate-400">SYNC_IO</span>
+</div>
+</div>
+<div class="mt-4 pt-3 flex items-center justify-between text-xs text-slate-400">
+<span>Pattern: Table &amp; Record Skimmers</span>
+<span class="font-mono text-[11px]">KGN-SCHEMA-V2</span>
+</div>
+</div>
+<!-- CARD 2: Empty State -->
+<div class="bg-white rounded-xl border border-slate-200/80 shadow-sm p-6 flex flex-col justify-between">
+<div class="flex items-center justify-between pb-4 border-b border-slate-100 mb-5">
+<span class="font-mono text-[11px] font-semibold text-slate-500 tracking-wider">STATE: EMPTY</span>
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-mono font-medium text-slate-600 bg-slate-100">
+              No Records
+            </span>
+</div>
+<!-- Empty Viewport Canvas -->
+<div class="bg-slate-50/70 rounded-lg p-8 border border-slate-100 flex flex-col items-center justify-center text-center min-h-[188px]">
+<div class="w-12 h-12 rounded-xl bg-slate-200/60 border border-slate-300/40 flex items-center justify-center text-slate-500 mb-3.5 shadow-sm">
+<span class="material-symbols-outlined text-[24px]" data-icon="inbox">inbox</span>
+</div>
+<h3 class="text-sm font-semibold text-slate-900 font-headline mb-1">Nothing here yet</h3>
+<p class="text-xs text-slate-500 max-w-xs font-normal">The data is not in yet.</p>
+<div class="mt-4">
+<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium text-slate-600 bg-white border border-slate-200 shadow-2xs">
+<span class="material-symbols-outlined text-[14px]" data-icon="refresh">refresh</span>
+                Check for updates
+              </span>
+</div>
+</div>
+<div class="mt-4 pt-3 flex items-center justify-between text-xs text-slate-400">
+<span>Pattern: Unpopulated Entity Views</span>
+<span class="font-mono text-[11px]">INCOMING_SYNC_PENDING</span>
+</div>
+</div>
+<!-- CARD 3: Error State -->
+<div class="bg-white rounded-xl border border-slate-200/80 shadow-sm p-6 flex flex-col justify-between">
+<div class="flex items-center justify-between pb-4 border-b border-slate-100 mb-5">
+<span class="font-mono text-[11px] font-semibold text-red-700 tracking-wider bg-red-50 border border-red-200 px-2 py-0.5 rounded">
+              STATE: EXCEPTION
+            </span>
+<span class="text-xs font-mono text-slate-400">HTTP_ERR</span>
+</div>
+<!-- Error Viewport Canvas -->
+<div class="bg-red-50/30 rounded-lg p-8 border border-red-100 flex flex-col items-center justify-center text-center min-h-[188px]">
+<div class="w-12 h-12 rounded-xl bg-red-50 border border-red-200 flex items-center justify-center text-red-700 mb-3.5 shadow-sm">
+<span class="material-symbols-outlined text-[24px]" data-icon="error_outline">error_outline</span>
+</div>
+<h3 class="text-sm font-semibold text-slate-900 font-headline mb-1">Could not load this page</h3>
+<p class="text-xs text-slate-600 max-w-sm font-normal mb-4">
+              There was a problem retrieving data from the Dominion controller. Check network connection and retry.
+            </p>
+<button class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium text-white bg-slate-800 hover:bg-slate-900 transition-colors shadow-sm">
+<span class="material-symbols-outlined text-[15px]" data-icon="replay">replay</span>
+              Retry
+            </button>
+</div>
+<div class="mt-4 pt-3 flex items-center justify-between text-xs text-slate-400">
+<span>Pattern: Network / Controller Disconnect</span>
+<span class="font-mono text-[11px]">NO_CRASH_DUMP</span>
+</div>
+</div>
+<!-- CARD 4: No Access State -->
+<div class="bg-white rounded-xl border border-slate-200/80 shadow-sm p-6 flex flex-col justify-between">
+<div class="flex items-center justify-between pb-4 border-b border-slate-100 mb-5">
+<span class="font-mono text-[11px] font-semibold text-slate-600 tracking-wider bg-slate-100 border border-slate-200 px-2 py-0.5 rounded">
+              STATE: ACCESS RESTRICTED
+            </span>
+<span class="text-xs font-mono text-slate-400">RBAC_GUARD</span>
+</div>
+<!-- Restricted Access Viewport Canvas -->
+<div class="bg-slate-50/70 rounded-lg p-8 border border-slate-100 flex flex-col items-center justify-center text-center min-h-[188px]">
+<div class="w-12 h-12 rounded-xl bg-slate-200/60 border border-slate-300/50 flex items-center justify-center text-slate-600 mb-3.5 shadow-sm">
+<span class="material-symbols-outlined text-[24px]" data-icon="lock">lock</span>
+</div>
+<h3 class="text-sm font-semibold text-slate-900 font-headline mb-1">You do not have access</h3>
+<p class="text-xs text-slate-500 max-w-xs font-normal mb-4">
+              This area is for the owner.
+            </p>
+<div class="flex items-center gap-3">
+<button class="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 transition-colors">
+                Request permission
+              </button>
+</div>
+</div>
+<div class="mt-4 pt-3 flex items-center justify-between text-xs text-slate-400">
+<span>Pattern: Permission Denied Boundary</span>
+<span class="font-mono text-[11px]">ROLE_DEF_PROTECTED</span>
+</div>
+</div>
+<!-- CARD 5: Moved State (Full Width / Span 2 in Bento) -->
+<div class="lg:col-span-2 bg-white rounded-xl border border-slate-200/80 shadow-sm p-6 flex flex-col justify-between">
+<div class="flex items-center justify-between pb-4 border-b border-slate-100 mb-5">
+<span class="font-mono text-[11px] font-semibold text-amber-800 tracking-wider bg-amber-50 border border-amber-200 px-2 py-0.5 rounded">
+              STATE: RELOCATED
+            </span>
+<span class="text-xs font-mono text-slate-400">301_INTERNAL_ROUTE</span>
+</div>
+<!-- Relocated Viewport Canvas -->
+<div class="bg-amber-50/30 rounded-lg p-8 border border-amber-100 flex flex-col items-center justify-center text-center min-h-[170px]">
+<div class="w-12 h-12 rounded-xl bg-amber-100/70 border border-amber-200 flex items-center justify-center text-amber-700 mb-3.5 shadow-sm">
+<span class="material-symbols-outlined text-[24px]" data-icon="turn_right">turn_right</span>
+</div>
+<h3 class="text-sm font-semibold text-slate-900 font-headline mb-1">This page moved</h3>
+<p class="text-xs text-slate-600 max-w-md font-normal mb-4">
+              Open it in the product admin. Configuration for this resource has migrated to the dedicated service console.
+            </p>
+<a class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 transition-colors shadow-sm" href="#">
+<span>Open Product Admin</span>
+<span class="material-symbols-outlined text-[15px]" data-icon="open_in_new">open_in_new</span>
+</a>
+</div>
+<div class="mt-4 pt-3 flex items-center justify-between text-xs text-slate-400">
+<span>Pattern: Legacy Deprecation &amp; Redirection Viewport</span>
+<span class="font-mono text-[11px]">DOMINION-ROUTER-V4</span>
+</div>
+</div>
+</div>
+<!-- Footer Compliance / Spec Metadata -->
+<div class="mt-10 pt-4 border-t border-slate-200 flex items-center justify-between text-xs font-mono text-slate-400">
+<div class="flex items-center gap-3">
+<span>SPECIFICATION: DOMINION_S3</span>
+<span>•</span>
+<span>PARISH SCOPE: KINGSTON &amp; ST. ANDREW</span>
+</div>
+<div>
+<span>SYSTEM TIMEZONE: UTC-5 (JAMAICA)</span>
+</div>
+</div>
+</main>
+</div>
+</body></html>

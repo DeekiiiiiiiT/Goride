@@ -108,6 +108,20 @@ export function rowToKvValue(row: Record<string, unknown>): Record<string, unkno
   if (payload.distance == null && row.distance != null) payload.distance = row.distance;
   if (payload.duration == null && row.duration != null) payload.duration = row.duration;
   if (payload.netToDriver == null && row.net_to_driver != null) payload.netToDriver = row.net_to_driver;
+  if (typeof row.parish === "string" && row.parish) payload.parish = row.parish;
+  if (typeof row.direction === "string" && row.direction) payload.direction = row.direction;
+  if (Array.isArray(row.amenities) && row.amenities.length) payload.amenities = row.amenities;
+  if (
+    (typeof row.phone === "string" && row.phone) ||
+    (typeof row.website === "string" && row.website)
+  ) {
+    const current = payload.contactInfo && typeof payload.contactInfo === "object" && !Array.isArray(payload.contactInfo)
+      ? { ...(payload.contactInfo as Record<string, unknown>) }
+      : {};
+    if (typeof row.phone === "string" && row.phone) current.phone = row.phone;
+    if (typeof row.website === "string" && row.website) current.website = row.website;
+    payload.contactInfo = current;
+  }
   return payload;
 }
 

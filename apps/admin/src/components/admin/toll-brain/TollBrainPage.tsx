@@ -1,27 +1,14 @@
+// Stitch: dominion-redesign/9f3ed86902e5469baf7d6f8ced78c75e
 /**
- * Toll Brain Control Panel (Dominion → Toll Management)
- * Detect dials + Match dials — source of truth for rides live + fleet recon.
+ * Toll Brain Control Panel (Dominion → Engines → Engine / Toll)
+ * Detect + Match dials with live save actions.
  */
 
 import { useCallback, useEffect, useState } from 'react';
+import { Loader2, Radar, RefreshCw, Route } from 'lucide-react';
 import { projectId } from '../../../utils/supabase/info';
 import { useAuth } from '../../auth/AuthContext';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../ui/card';
-import { Badge } from '../../ui/badge';
-import { Alert, AlertDescription, AlertTitle } from '../../ui/alert';
-import { Button } from '../../ui/button';
-import { Input } from '../../ui/input';
-import { Label } from '../../ui/label';
-import { Checkbox } from '../../ui/checkbox';
-import {
-  Brain,
-  MapPin,
-  GitCompare,
-  Loader2,
-  AlertCircle,
-  CheckCircle2,
-  Radio,
-} from 'lucide-react';
+import { EngineConsoleChrome, EnginePanelHeader } from '../engine/EngineConsoleChrome';
 
 type BrainHealth = {
   service: string;
@@ -54,7 +41,94 @@ type BrainPolicy = {
   isDefault: boolean;
 };
 
-export function TollBrainPage() {
+function DialGraphic({
+  title,
+  icon,
+  stroke,
+  footer,
+}: {
+  title: string;
+  icon: React.ReactNode;
+  stroke: string;
+  footer: string;
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center rounded-[12px] border border-slate-200 bg-slate-50/60 p-4 text-center">
+      <div className="mb-2 flex items-center gap-2 self-start text-xs font-semibold text-slate-800">
+        {icon}
+        <span>{title}</span>
+      </div>
+      <div className="relative my-2 flex h-36 w-36 items-center justify-center">
+        <svg className="h-36 w-36 -rotate-90" viewBox="0 0 120 120" aria-hidden>
+          <circle
+            cx="60"
+            cy="60"
+            r="48"
+            fill="none"
+            stroke="#e2e8f0"
+            strokeWidth="8"
+            strokeDasharray="301.6"
+            strokeDashoffset="60"
+            strokeLinecap="round"
+          />
+          <circle
+            cx="60"
+            cy="60"
+            r="48"
+            fill="none"
+            stroke={stroke}
+            strokeWidth="8"
+            strokeDasharray="301.6"
+            strokeDashoffset="180"
+            strokeLinecap="round"
+          />
+        </svg>
+        <div className="absolute inset-0 flex flex-col items-center justify-center px-2">
+          <span className="text-[11px] italic leading-snug text-slate-500">The data is not in yet</span>
+        </div>
+      </div>
+      <div className="mt-1 font-mono text-[11px] text-slate-400">{footer}</div>
+    </div>
+  );
+}
+
+function ToggleRow({
+  label,
+  sub,
+  checked,
+  onChange,
+}: {
+  label: string;
+  sub: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between rounded-lg border border-slate-200/80 bg-white p-2.5">
+      <div>
+        <div className="text-xs font-medium text-slate-800">{label}</div>
+        <div className="font-mono text-[10px] text-slate-400">{sub}</div>
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        onClick={() => onChange(!checked)}
+        className={`relative h-5 w-9 rounded-full p-0.5 transition-colors ${
+          checked ? 'bg-blue-600' : 'bg-slate-200'
+        }`}
+      >
+        <span
+          className={`block h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
+            checked ? 'ml-auto' : ''
+          }`}
+        />
+      </button>
+    </div>
+  );
+}
+
+export function TollBrainPage({ onNavigate }: { onNavigate?: (page: string) => void }) {
   const { session } = useAuth();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -62,7 +136,6 @@ export function TollBrainPage() {
   const [health, setHealth] = useState<BrainHealth | null>(null);
   const [policy, setPolicy] = useState<BrainPolicy | null>(null);
 
-  // Shared projectId falls back to the default project when VITE_* env is unset (local dev)
   const baseUrl = `https://${projectId}.supabase.co`;
 
   const headers = useCallback(() => {
@@ -127,159 +200,120 @@ export function TollBrainPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      <div className="flex min-h-[400px] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <div className="flex items-center gap-2">
-            <Brain className="h-6 w-6 text-sky-600" />
-            <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-50">Toll Brain</h1>
-            <Badge variant="outline" className="border-sky-300 text-sky-800 bg-sky-50">
-              Detect + Match
-            </Badge>
+    <EngineConsoleChrome
+      active="toll"
+      onNavigate={onNavigate}
+      statusLabel={health?.brain_enabled ? 'Active' : 'Standby'}
+    >
+      <section className="space-y-5 rounded-[12px] border border-slate-200 bg-white p-6 shadow-sm">
+        <EnginePanelHeader
+          icon={<Route className="h-[18px] w-[18px]" aria-hidden />}
+          title="Toll engine"
+          description="Highway 2000 corridor detection and plaza fare matching in Portmore, Spanish Town, and Vineyards."
+          engineRef="ENGINE_REF: DOM-TOLL-JM"
+          badge="SELECTED"
+          badgeTone="selected"
+        />
+
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:col-span-7">
+            <DialGraphic
+              title="Detect"
+              icon={<Radar className="h-4 w-4 text-slate-400" aria-hidden />}
+              stroke="#316bf3"
+              footer="PLAZA_DETECTION"
+            />
+            <DialGraphic
+              title="Match"
+              icon={<RefreshCw className="h-4 w-4 text-slate-400" aria-hidden />}
+              stroke="#10b981"
+              footer="RATE_CORRELATION"
+            />
           </div>
-          <p className="mt-1 text-sm text-slate-600 dark:text-slate-400 max-w-2xl">
-            Platform authority for live plaza detection and toll↔trip classification (Uber, InDrive,
-            Roam). Money finalization stays in rides / fleet.
-          </p>
-        </div>
-        <Button variant="outline" size="sm" onClick={() => void fetchAll()}>
-          Refresh
-        </Button>
-      </div>
 
-      {error && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Error</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-      {success && (
-        <Alert className="border-emerald-200 bg-emerald-50">
-          <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-          <AlertTitle>Saved</AlertTitle>
-          <AlertDescription>{success}</AlertDescription>
-        </Alert>
-      )}
-
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Radio className="h-4 w-4" /> Health
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="text-sm space-y-1">
-          <div>
-            Edge:{' '}
-            <Badge variant={health?.brain_enabled ? 'default' : 'secondary'}>
-              {health?.brain_enabled ? 'Brain on' : 'Brain off'}
-            </Badge>{' '}
-            <span className="text-xs text-slate-500">{health?.stack}</span>
-          </div>
-          <p className="text-xs font-mono text-slate-500">
-            TOLL_BRAIN_ENABLED={health?.flags?.TOLL_BRAIN_ENABLED ?? '?'} · RIDES_USE_TOLL_BRAIN=
-            {health?.flags?.RIDES_USE_TOLL_BRAIN ?? '?'} · FLEET_USE_TOLL_BRAIN=
-            {health?.flags?.FLEET_USE_TOLL_BRAIN ?? '?'}
-          </p>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <MapPin className="h-4 w-4" /> Detect (live + quote)
-          </CardTitle>
-          <CardDescription>
-            GPS / route vs plaza catalog. Rides honor these when RIDES_USE_TOLL_BRAIN=1.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {policy ? (
-            <>
-              <div className="flex flex-wrap gap-4">
-                <div className="flex items-center gap-2">
-                  <Checkbox
-                    id="det-enabled"
+          <div className="flex flex-col justify-between rounded-[12px] border border-slate-200 bg-slate-50/60 p-4 lg:col-span-5">
+            <div>
+              <div className="mb-3 flex items-center justify-between text-xs font-semibold text-slate-800">
+                <span>Dispatch toggles</span>
+                <span className="font-mono text-[10px] text-slate-400">HIGHWAY 2000</span>
+              </div>
+              {policy ? (
+                <div className="space-y-3">
+                  <ToggleRow
+                    label="Detection enabled"
+                    sub="Plaza geofence live"
                     checked={policy.detectionEnabled}
-                    onCheckedChange={(v) => setPolicy({ ...policy, detectionEnabled: !!v })}
+                    onChange={(v) => setPolicy({ ...policy, detectionEnabled: v })}
                   />
-                  <Label htmlFor="det-enabled">Detection enabled</Label>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Checkbox
-                    id="det-enroute"
+                  <ToggleRow
+                    label="Detect while en route"
+                    sub="St. Catherine Corridor"
                     checked={policy.detectEnroute}
-                    onCheckedChange={(v) => setPolicy({ ...policy, detectEnroute: !!v })}
+                    onChange={(v) => setPolicy({ ...policy, detectEnroute: v })}
                   />
-                  <Label htmlFor="det-enroute">Detect while en route to pickup</Label>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Checkbox
-                    id="live-ledger"
+                  <ToggleRow
+                    label="Live ledger materialize"
+                    sub="Fleet sync"
                     checked={policy.liveLedgerMaterializeEnabled}
-                    onCheckedChange={(v) =>
-                      setPolicy({ ...policy, liveLedgerMaterializeEnabled: !!v })
-                    }
-                  />
-                  <Label htmlFor="live-ledger">Live ledger materialize (fleet)</Label>
-                </div>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div>
-                  <Label>Geofence radius (m)</Label>
-                  <Input
-                    type="number"
-                    value={policy.geofenceRadiusM}
-                    onChange={(e) =>
-                      setPolicy({ ...policy, geofenceRadiusM: Number(e.target.value) })
-                    }
+                    onChange={(v) => setPolicy({ ...policy, liveLedgerMaterializeEnabled: v })}
                   />
                 </div>
-                <div>
-                  <Label>Round-trip cooldown (ms)</Label>
-                  <Input
-                    type="number"
-                    value={policy.roundTripCooldownMs}
-                    onChange={(e) =>
-                      setPolicy({ ...policy, roundTripCooldownMs: Number(e.target.value) })
-                    }
-                  />
-                </div>
-              </div>
-              <Button onClick={() => void savePolicy('Detect rules saved')}>Save detect rules</Button>
-            </>
-          ) : (
-            <p className="text-sm text-slate-500">No policy loaded.</p>
-          )}
-        </CardContent>
-      </Card>
+              ) : (
+                <p className="text-xs italic text-slate-500">The data is not in yet</p>
+              )}
+            </div>
+            <div className="mt-3 border-t border-slate-200/60 pt-2 font-mono text-[10px] text-slate-400">
+              DISPATCH_POLICY: DOM-RULE-H2K
+            </div>
+          </div>
+        </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <GitCompare className="h-4 w-4" /> Match (recon)
-          </CardTitle>
-          <CardDescription>
-            Toll expense ↔ trip credit windows. Fleet recon mirrors these dials.
-            Fleet timezone stays in Platform Settings — this dial only controls
-            whether trip clocks are trusted as real UTC.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {policy ? (
-            <>
-              <div className="space-y-2 rounded-md border border-slate-200 p-3">
-                <Label htmlFor="trip-time-mode">Trip time mode (match clock)</Label>
+        {error ? <p className="text-xs text-red-600">{error}</p> : null}
+        {success ? <p className="text-xs text-emerald-700">{success}</p> : null}
+
+        {policy ? (
+          <div className="space-y-4 border-t border-slate-100 pt-4">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <div>
+                <label className="mb-1 block text-[11px] font-medium text-slate-600">
+                  Geofence radius (m)
+                </label>
+                <input
+                  type="number"
+                  value={policy.geofenceRadiusM}
+                  onChange={(e) =>
+                    setPolicy({ ...policy, geofenceRadiusM: Number(e.target.value) })
+                  }
+                  className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50/70 px-3 text-xs"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-[11px] font-medium text-slate-600">
+                  Round-trip cooldown (ms)
+                </label>
+                <input
+                  type="number"
+                  value={policy.roundTripCooldownMs}
+                  onChange={(e) =>
+                    setPolicy({ ...policy, roundTripCooldownMs: Number(e.target.value) })
+                  }
+                  className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50/70 px-3 text-xs"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-[11px] font-medium text-slate-600" htmlFor="trip-time-mode">
+                  Trip time mode
+                </label>
                 <select
                   id="trip-time-mode"
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+                  className="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs"
                   value={policy.tripTimeMode || 'trust_utc'}
                   onChange={(e) =>
                     setPolicy({
@@ -288,129 +322,72 @@ export function TollBrainPage() {
                     })
                   }
                 >
-                  <option value="trust_utc">Trust stored UTC (Uber / InDrive — recommended)</option>
-                  <option value="legacy_reinterpret">
-                    Legacy reinterpret (old CSV imports that baked local time into Z)
-                  </option>
+                  <option value="trust_utc">Trust stored UTC</option>
+                  <option value="legacy_reinterpret">Legacy reinterpret</option>
                 </select>
-                <p className="text-xs text-slate-500">
-                  Wrong overnight matches came from auto-reinterpreting correct Uber times. Keep
-                  Trust stored UTC unless you still have pre-fleetTz CSV trip rows.
-                </p>
               </div>
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="personal-use"
-                  checked={policy.personalUseDetectionEnabled}
-                  onCheckedChange={(v) =>
-                    setPolicy({ ...policy, personalUseDetectionEnabled: !!v })
-                  }
-                />
-                <Label htmlFor="personal-use">Personal-use / orphan detection</Label>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                <div>
-                  <Label>Approach window (min)</Label>
-                  <Input
+              {(
+                [
+                  ['approachMinutes', 'Approach window (min)'],
+                  ['postTripMinutes', 'Post-trip buffer (min)'],
+                  ['orphanProximityMinutes', 'Orphan proximity (min)'],
+                  ['cashAmountDeltaMax', 'Cash amount delta max ($)'],
+                  ['cashReceiptProximityMinutes', 'Cash proximity (min)'],
+                  ['varianceThreshold', 'Variance threshold ($)'],
+                  ['ambiguityMinScore', 'Ambiguity min score'],
+                  ['ambiguityMaxGap', 'Ambiguity max gap'],
+                  ['maxSuggestions', 'Max suggestions'],
+                ] as const
+              ).map(([key, label]) => (
+                <div key={key}>
+                  <label className="mb-1 block text-[11px] font-medium text-slate-600">{label}</label>
+                  <input
                     type="number"
-                    value={policy.approachMinutes}
-                    onChange={(e) =>
-                      setPolicy({ ...policy, approachMinutes: Number(e.target.value) })
-                    }
+                    step={key === 'varianceThreshold' ? '0.01' : undefined}
+                    value={policy[key]}
+                    onChange={(e) => setPolicy({ ...policy, [key]: Number(e.target.value) })}
+                    className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50/70 px-3 text-xs"
                   />
                 </div>
-                <div>
-                  <Label>Post-trip buffer (min)</Label>
-                  <Input
-                    type="number"
-                    value={policy.postTripMinutes}
-                    onChange={(e) =>
-                      setPolicy({ ...policy, postTripMinutes: Number(e.target.value) })
-                    }
-                  />
-                </div>
-                <div>
-                  <Label>Orphan proximity (min)</Label>
-                  <Input
-                    type="number"
-                    value={policy.orphanProximityMinutes}
-                    onChange={(e) =>
-                      setPolicy({ ...policy, orphanProximityMinutes: Number(e.target.value) })
-                    }
-                  />
-                </div>
-                <div>
-                  <Label>Cash amount delta max ($)</Label>
-                  <Input
-                    type="number"
-                    value={policy.cashAmountDeltaMax}
-                    onChange={(e) =>
-                      setPolicy({ ...policy, cashAmountDeltaMax: Number(e.target.value) })
-                    }
-                  />
-                </div>
-                <div>
-                  <Label>Cash proximity (min)</Label>
-                  <Input
-                    type="number"
-                    value={policy.cashReceiptProximityMinutes}
-                    onChange={(e) =>
-                      setPolicy({
-                        ...policy,
-                        cashReceiptProximityMinutes: Number(e.target.value),
-                      })
-                    }
-                  />
-                </div>
-                <div>
-                  <Label>Variance threshold ($)</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    value={policy.varianceThreshold}
-                    onChange={(e) =>
-                      setPolicy({ ...policy, varianceThreshold: Number(e.target.value) })
-                    }
-                  />
-                </div>
-                <div>
-                  <Label>Ambiguity min score</Label>
-                  <Input
-                    type="number"
-                    value={policy.ambiguityMinScore}
-                    onChange={(e) =>
-                      setPolicy({ ...policy, ambiguityMinScore: Number(e.target.value) })
-                    }
-                  />
-                </div>
-                <div>
-                  <Label>Ambiguity max gap</Label>
-                  <Input
-                    type="number"
-                    value={policy.ambiguityMaxGap}
-                    onChange={(e) =>
-                      setPolicy({ ...policy, ambiguityMaxGap: Number(e.target.value) })
-                    }
-                  />
-                </div>
-                <div>
-                  <Label>Max suggestions</Label>
-                  <Input
-                    type="number"
-                    value={policy.maxSuggestions}
-                    onChange={(e) =>
-                      setPolicy({ ...policy, maxSuggestions: Number(e.target.value) })
-                    }
-                  />
-                </div>
-              </div>
-              <Button onClick={() => void savePolicy('Match rules saved')}>Save match rules</Button>
-            </>
-          ) : (
-            <p className="text-sm text-slate-500">No policy loaded.</p>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+              ))}
+            </div>
+            <label className="flex items-center gap-2 text-xs text-slate-800">
+              <input
+                type="checkbox"
+                checked={policy.personalUseDetectionEnabled}
+                onChange={(e) =>
+                  setPolicy({ ...policy, personalUseDetectionEnabled: e.target.checked })
+                }
+                className="rounded border-slate-300"
+              />
+              Personal-use / orphan detection
+            </label>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => void savePolicy('Detect rules saved')}
+                className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-medium text-white shadow-sm hover:bg-blue-700"
+              >
+                Save detect rules
+              </button>
+              <button
+                type="button"
+                onClick={() => void savePolicy('Match rules saved')}
+                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+              >
+                Save match rules
+              </button>
+              <button
+                type="button"
+                onClick={() => void fetchAll()}
+                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+              >
+                Refresh
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </section>
+    </EngineConsoleChrome>
   );
 }

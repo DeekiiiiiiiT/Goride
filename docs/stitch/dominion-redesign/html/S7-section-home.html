@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Dominion - Vehicles Section Home</title>
+<!-- Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;family=Public+Sans:wght@500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "primary": "#316bf3",
+            "dominion-blue": "#316bf3"
+          },
+          borderRadius: {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "full": "9999px"
+          },
+          fontFamily: {
+            headline: ["Inter", "sans-serif"],
+            display: ["Inter", "sans-serif"],
+            body: ["Inter", "sans-serif"],
+            mono: ["JetBrains Mono", "monospace"],
+            label: ["Public Sans", "sans-serif"]
+          }
+        },
+      },
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+      font-size: 20px;
+      line-height: 1;
+      display: inline-block;
+      vertical-align: middle;
+    }
+    body {
+      font-family: 'Inter', sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+</style>
+</head>
+<body class="bg-slate-50 text-slate-800 antialiased min-h-screen flex selection:bg-blue-100 selection:text-blue-700">
+<!-- SIDEBAR (Fixed, Desktop 1440 Shell, Navy #1e293b / slate-900, 260px wide) -->
+<aside class="fixed top-0 left-0 h-screen w-[260px] flex flex-col bg-slate-900 border-r border-slate-800 z-30 select-none">
+<!-- Sidebar Header / Brand Anchor -->
+<div class="px-5 h-16 flex items-center gap-3 border-b border-slate-800 shrink-0">
+<div class="w-8 h-8 rounded-lg bg-[#316bf3] flex items-center justify-center text-white shadow-sm shrink-0">
+<span class="material-symbols-outlined text-[20px]" data-icon="shield">shield</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-headline text-base font-bold text-white tracking-tight leading-tight">Dominion</span>
+<span class="text-xs text-slate-400 font-normal leading-none tracking-normal mt-0.5">Roam Admin Console</span>
+</div>
+</div>
+<!-- Navigation Scroll Area -->
+<div class="flex-1 px-3 py-4 overflow-y-auto space-y-5 text-sm">
+<!-- 1. Overview -->
+<div>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800/80 font-medium text-sm transition-colors duration-150" href="#">
+<span class="material-symbols-outlined text-slate-400" data-icon="dashboard">dashboard</span>
+<span>Overview</span>
+</a>
+</div>
+<!-- 2. Section: MASTER DATA -->
+<div class="space-y-1">
+<div class="px-3 pb-1 text-[11px] font-semibold tracking-wider text-slate-400 uppercase font-mono">
+  MASTER DATA
+</div>
+<!-- Vehicles highlighted with active blue #316bf3 pill -->
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg bg-[#316bf3] text-white font-medium text-sm transition-colors duration-150 shadow-sm" href="#">
+<span class="material-symbols-outlined text-white" data-icon="directions_car">directions_car</span>
+<span>Vehicles</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800/80 transition-colors duration-150 text-sm" href="#">
+<span class="material-symbols-outlined text-slate-400" data-icon="pin_drop">pin_drop</span>
+<span>Places and Maps</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800/80 transition-colors duration-150 text-sm" href="#">
+<span class="material-symbols-outlined text-slate-400" data-icon="local_gas_station">local_gas_station</span>
+<span>Fuel</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800/80 transition-colors duration-150 text-sm" href="#">
+<span class="material-symbols-outlined text-slate-400" data-icon="toll">toll</span>
+<span>Tolls</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800/80 transition-colors duration-150 text-sm" href="#">
+<span class="material-symbols-outlined text-slate-400" data-icon="receipt_long">receipt_long</span>
+<span>Tax and Vendors</span>
+</a>
+</div>
+<!-- 3. Section: ENGINES -->
+<div class="space-y-1">
+<div class="px-3 pb-1 text-[11px] font-semibold tracking-wider text-slate-400 uppercase font-mono">
+  ENGINES
+</div>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800/80 transition-colors duration-150 text-sm" href="#">
+<span class="material-symbols-outlined text-slate-400" data-icon="bolt">bolt</span>
+<span>Fuel Brain</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800/80 transition-colors duration-150 text-sm" href="#">
+<span class="material-symbols-outlined text-slate-400" data-icon="alt_route">alt_route</span>
+<span>Toll Brain</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800/80 transition-colors duration-150 text-sm" href="#">
+<span class="material-symbols-outlined text-slate-400" data-icon="hub">hub</span>
+<span>Matching Brain</span>
+</a>
+</div>
+<!-- 4. Section: DISTRIBUTION -->
+<div class="space-y-1">
+<div class="px-3 pb-1 text-[11px] font-semibold tracking-wider text-slate-400 uppercase font-mono">
+  DISTRIBUTION
+</div>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800/80 transition-colors duration-150 text-sm" href="#">
+<span class="material-symbols-outlined text-slate-400" data-icon="smartphone">smartphone</span>
+<span>Apps</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800/80 transition-colors duration-150 text-sm" href="#">
+<span class="material-symbols-outlined text-slate-400" data-icon="api">api</span>
+<span>Data API</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800/80 transition-colors duration-150 text-sm" href="#">
+<span class="material-symbols-outlined text-slate-400" data-icon="sync_alt">sync_alt</span>
+<span>Change requests</span>
+</a>
+</div>
+<!-- 5. Section: PLATFORM -->
+<div class="space-y-1">
+<div class="px-3 pb-1 text-[11px] font-semibold tracking-wider text-slate-400 uppercase font-mono">
+  PLATFORM
+</div>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800/80 transition-colors duration-150 text-sm" href="#">
+<span class="material-symbols-outlined text-slate-400" data-icon="badge">badge</span>
+<span>Staff and roles</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800/80 transition-colors duration-150 text-sm" href="#">
+<span class="material-symbols-outlined text-slate-400" data-icon="history">history</span>
+<span>Activity log</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800/80 transition-colors duration-150 text-sm" href="#">
+<span class="material-symbols-outlined text-slate-400" data-icon="tune">tune</span>
+<span>Platform Ops</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800/80 transition-colors duration-150 text-sm" href="#">
+<span class="material-symbols-outlined text-slate-400" data-icon="settings">settings</span>
+<span>Global settings</span>
+</a>
+</div>
+<!-- 6. Section: BACK OFFICE -->
+<div class="space-y-1">
+<div class="px-3 pb-1 text-[11px] font-semibold tracking-wider text-slate-400 uppercase font-mono">
+  BACK OFFICE
+</div>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800/80 transition-colors duration-150 text-sm" href="#">
+<span class="material-symbols-outlined text-slate-400" data-icon="domain_verification">domain_verification</span>
+<span>GCT registrations</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800/80 transition-colors duration-150 text-sm" href="#">
+<span class="material-symbols-outlined text-slate-400" data-icon="menu_book">menu_book</span>
+<span>Ledger</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800/80 transition-colors duration-150 text-sm" href="#">
+<span class="material-symbols-outlined text-slate-400" data-icon="payments">payments</span>
+<span>Remittance</span>
+</a>
+</div>
+</div>
+<!-- Sidebar Footer Anchor -->
+<div class="p-3 border-t border-slate-800 shrink-0">
+<div class="flex items-center justify-between px-3 py-2 text-xs text-slate-400 rounded bg-slate-950/60 font-mono">
+<span class="flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
+  KGN-DC-01
+</span>
+<span class="text-slate-400">JMD READY</span>
+</div>
+</div>
+</aside>
+<!-- MAIN WRAPPER (1440 Desktop Shell Canvas offset by 260px sidebar) -->
+<div class="pl-[260px] flex flex-col flex-1 min-w-0">
+<!-- TOP NAVBAR (Sticky White Nav) -->
+<header class="sticky top-0 z-20 h-16 w-full bg-white border-b border-slate-200 px-8 flex items-center justify-between shadow-sm">
+<!-- Global Search -->
+<div class="flex items-center w-96 relative">
+<span class="material-symbols-outlined absolute left-3 text-slate-400 pointer-events-none text-[18px]" data-icon="search">search</span>
+<input class="w-full pl-9 pr-12 py-1.5 text-sm bg-slate-50 border border-slate-200 rounded-lg placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-[#316bf3] focus:border-[#316bf3] focus:bg-white transition-all font-body" placeholder="Search entities, engines, routes..." type="text"/>
+<kbd class="absolute right-2.5 top-2 px-1.5 py-0.5 text-[10px] font-mono text-slate-400 bg-slate-100 border border-slate-200 rounded">⌘K</kbd>
+</div>
+<!-- Action Cluster -->
+<div class="flex items-center gap-3">
+<!-- Notification Button -->
+<button class="w-9 h-9 flex items-center justify-center rounded-lg text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors duration-150 relative" title="Notifications">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+<span class="absolute top-2 right-2 w-1.5 h-1.5 bg-[#316bf3] rounded-full ring-2 ring-white"></span>
+</button>
+<!-- Help Button -->
+<button class="w-9 h-9 flex items-center justify-center rounded-lg text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors duration-150" title="Help &amp; Reference">
+<span class="material-symbols-outlined" data-icon="help_outline">help_outline</span>
+</button>
+<div class="h-5 w-px bg-slate-200 mx-1"></div>
+<!-- Admin Profile Pill -->
+<div class="flex items-center gap-3 pl-1 cursor-pointer group">
+<div class="w-8 h-8 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-semibold ring-2 ring-slate-100">
+  AD
+</div>
+<div class="flex flex-col text-left">
+<span class="text-xs font-semibold text-slate-900 group-hover:text-[#316bf3] transition-colors leading-tight">Admin Console</span>
+<span class="text-[11px] text-slate-400 font-mono leading-none mt-0.5">Kingston / Superuser</span>
+</div>
+<span class="material-symbols-outlined text-slate-400 group-hover:text-slate-600 transition-colors text-[18px]" data-icon="expand_more">expand_more</span>
+</div>
+</div>
+</header>
+<!-- CONTENT CANVAS (Dominion Section Home S7 - Vehicles) -->
+<main class="flex-1 p-8 bg-slate-50 min-h-[calc(100vh-4rem)] flex flex-col space-y-6">
+<!-- Top Breadcrumbs & Page Header -->
+<div class="flex items-start justify-between pb-5 border-b border-slate-200 shrink-0">
+<div>
+<!-- Breadcrumbs: Dominion > Master data > Vehicles -->
+<nav class="flex items-center gap-1.5 text-xs text-slate-400 font-medium mb-1.5">
+<span>Dominion</span>
+<span class="material-symbols-outlined text-[14px]" data-icon="chevron_right">chevron_right</span>
+<span>Master data</span>
+<span class="material-symbols-outlined text-[14px]" data-icon="chevron_right">chevron_right</span>
+<span class="text-slate-700 font-semibold">Vehicles</span>
+</nav>
+<!-- Heading & Lede -->
+<h1 class="text-2xl font-bold tracking-tight text-slate-900 font-headline leading-tight">Vehicles</h1>
+<p class="text-slate-500 text-sm mt-0.5 font-normal">Makes, models, parts, and maintenance.</p>
+</div>
+<!-- Header Action Buttons -->
+<div class="flex items-center gap-2">
+<button class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-sm">
+<span class="material-symbols-outlined text-[16px]" data-icon="refresh">refresh</span>
+    Sync Catalog
+  </button>
+<button class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-[#316bf3] text-xs font-medium text-white hover:bg-blue-700 transition-colors shadow-sm">
+<span class="material-symbols-outlined text-[16px]" data-icon="add">add</span>
+    New Request
+  </button>
+</div>
+</div>
+<!-- Row of 4 Stat Cards -->
+<div class="grid grid-cols-4 gap-4">
+<!-- Card 1 -->
+<div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm hover:border-slate-300 transition-colors">
+<div class="text-slate-500 text-xs uppercase tracking-wider font-medium font-mono">Catalog rows</div>
+<div class="mt-2 text-3xl font-semibold text-slate-900 font-mono tracking-tight">14,820</div>
+</div>
+<!-- Card 2 -->
+<div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm hover:border-slate-300 transition-colors">
+<div class="text-slate-500 text-xs uppercase tracking-wider font-medium font-mono">Open requests</div>
+<div class="mt-2 text-3xl font-semibold text-slate-900 font-mono tracking-tight">38</div>
+</div>
+<!-- Card 3 -->
+<div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm hover:border-slate-300 transition-colors">
+<div class="text-slate-500 text-xs uppercase tracking-wider font-medium font-mono">Parts missing a fit</div>
+<div class="mt-2 text-3xl font-semibold text-slate-900 font-mono tracking-tight">126</div>
+</div>
+<!-- Card 4 -->
+<div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm hover:border-slate-300 transition-colors">
+<div class="text-slate-500 text-xs uppercase tracking-wider font-medium font-mono">Quality score</div>
+<div class="mt-2 text-3xl font-semibold text-slate-900 font-mono tracking-tight">98.4%</div>
+</div>
+</div>
+<!-- Vertical List of Link Rows (Stack with 12px / gap-3) -->
+<div class="space-y-3">
+<!-- Row 1: Vehicle catalog -->
+<a class="group block bg-white rounded-xl border border-slate-200 p-4 hover:border-slate-300 hover:shadow-sm transition-all duration-150" href="#">
+<div class="flex items-center justify-between">
+<div class="min-w-0 pr-4">
+<div class="text-[#316bf3] group-hover:text-blue-700 font-semibold text-base leading-snug flex items-center gap-2">
+<span>Vehicle catalog</span>
+</div>
+<p class="text-slate-500 text-sm mt-0.5 leading-normal">Search makes and models. Open a record with the eye to read specs.</p>
+</div>
+<div class="flex items-center gap-3 shrink-0">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium bg-slate-100 text-slate-600 border border-slate-200">14,820 rows</span>
+<span class="material-symbols-outlined text-slate-400 group-hover:text-slate-600 group-hover:translate-x-0.5 transition-all text-[20px]" data-icon="chevron_right">chevron_right</span>
+</div>
+</div>
+</a>
+<!-- Row 2: Platforms and engines -->
+<a class="group block bg-white rounded-xl border border-slate-200 p-4 hover:border-slate-300 hover:shadow-sm transition-all duration-150" href="#">
+<div class="flex items-center justify-between">
+<div class="min-w-0 pr-4">
+<div class="text-[#316bf3] group-hover:text-blue-700 font-semibold text-base leading-snug">
+        Platforms and engines
+      </div>
+<p class="text-slate-500 text-sm mt-0.5 leading-normal">Shared chassis families and whether they share body parts.</p>
+</div>
+<div class="flex items-center gap-3 shrink-0">
+<span class="material-symbols-outlined text-slate-400 group-hover:text-slate-600 group-hover:translate-x-0.5 transition-all text-[20px]" data-icon="chevron_right">chevron_right</span>
+</div>
+</div>
+</a>
+<!-- Row 3: Pending catalog -->
+<a class="group block bg-white rounded-xl border border-slate-200 p-4 hover:border-slate-300 hover:shadow-sm transition-all duration-150" href="#">
+<div class="flex items-center justify-between">
+<div class="min-w-0 pr-4">
+<div class="text-[#316bf3] group-hover:text-blue-700 font-semibold text-base leading-snug">
+        Pending catalog
+      </div>
+<p class="text-slate-500 text-sm mt-0.5 leading-normal">Requests waiting to be approved, linked, or rejected.</p>
+</div>
+<div class="flex items-center gap-3 shrink-0">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium bg-amber-50 text-amber-700 border border-amber-200">38 pending</span>
+<span class="material-symbols-outlined text-slate-400 group-hover:text-slate-600 group-hover:translate-x-0.5 transition-all text-[20px]" data-icon="chevron_right">chevron_right</span>
+</div>
+</div>
+</a>
+<!-- Row 4: Maintenance templates -->
+<a class="group block bg-white rounded-xl border border-slate-200 p-4 hover:border-slate-300 hover:shadow-sm transition-all duration-150" href="#">
+<div class="flex items-center justify-between">
+<div class="min-w-0 pr-4">
+<div class="text-[#316bf3] group-hover:text-blue-700 font-semibold text-base leading-snug">
+        Maintenance templates
+      </div>
+<p class="text-slate-500 text-sm mt-0.5 leading-normal">Service categories and tasks.</p>
+</div>
+<div class="flex items-center gap-3 shrink-0">
+<span class="material-symbols-outlined text-slate-400 group-hover:text-slate-600 group-hover:translate-x-0.5 transition-all text-[20px]" data-icon="chevron_right">chevron_right</span>
+</div>
+</div>
+</a>
+<!-- Row 5: Parts catalog -->
+<a class="group block bg-white rounded-xl border border-slate-200 p-4 hover:border-slate-300 hover:shadow-sm transition-all duration-150" href="#">
+<div class="flex items-center justify-between">
+<div class="min-w-0 pr-4">
+<div class="text-[#316bf3] group-hover:text-blue-700 font-semibold text-base leading-snug">
+        Parts catalog
+      </div>
+<p class="text-slate-500 text-sm mt-0.5 leading-normal">Parts, categories, and fitment.</p>
+</div>
+<div class="flex items-center gap-3 shrink-0">
+<span class="material-symbols-outlined text-slate-400 group-hover:text-slate-600 group-hover:translate-x-0.5 transition-all text-[20px]" data-icon="chevron_right">chevron_right</span>
+</div>
+</div>
+</a>
+<!-- Row 6: Suppliers and prices -->
+<a class="group block bg-white rounded-xl border border-slate-200 p-4 hover:border-slate-300 hover:shadow-sm transition-all duration-150" href="#">
+<div class="flex items-center justify-between">
+<div class="min-w-0 pr-4">
+<div class="text-[#316bf3] group-hover:text-blue-700 font-semibold text-base leading-snug">
+        Suppliers and prices
+      </div>
+<p class="text-slate-500 text-sm mt-0.5 leading-normal">Suppliers and their offers.</p>
+</div>
+<div class="flex items-center gap-3 shrink-0">
+<span class="material-symbols-outlined text-slate-400 group-hover:text-slate-600 group-hover:translate-x-0.5 transition-all text-[20px]" data-icon="chevron_right">chevron_right</span>
+</div>
+</div>
+</a>
+<!-- Row 7: Data quality -->
+<a class="group block bg-white rounded-xl border border-slate-200 p-4 hover:border-slate-300 hover:shadow-sm transition-all duration-150" href="#">
+<div class="flex items-center justify-between">
+<div class="min-w-0 pr-4">
+<div class="text-[#316bf3] group-hover:text-blue-700 font-semibold text-base leading-snug">
+        Data quality
+      </div>
+<p class="text-slate-500 text-sm mt-0.5 leading-normal">Missing and unverified specs.</p>
+</div>
+<div class="flex items-center gap-3 shrink-0">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium bg-rose-50 text-rose-700 border border-rose-200">126 flagged</span>
+<span class="material-symbols-outlined text-slate-400 group-hover:text-slate-600 group-hover:translate-x-0.5 transition-all text-[20px]" data-icon="chevron_right">chevron_right</span>
+</div>
+</div>
+</a>
+</div>
+</main>
+</div>
+</body></html>
