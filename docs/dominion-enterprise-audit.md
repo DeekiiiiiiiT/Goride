@@ -30,8 +30,8 @@
 - Empty orphan thead + nested `VendorDatabaseManager` removed from this tab.
 - Pending requests stay on `PendingVendorRequestsManager`; decorative empty pending shell removed.
 
-### D-6 · Medium — Push / CI / deploys
-- Code closeout committed and pushed with this rev. Confirm CI, Test Supabase Functions, and Deploy Supabase Edge Function go green; confirm `fleet-toll` deployed for D-2.
+### D-6 · Medium — Push / CI / deploys — CLOSED
+- Closeout pushed to `main`. `fleet-toll` redeployed. Test Supabase Functions green. Deploy Edge green after anon-key sanitizer. GitHub `SUPABASE_ANON_KEY` corrected (was invalid JWT). Catalog contract and Stitch fidelity green on closeout follow-ups.
 
 ---
 

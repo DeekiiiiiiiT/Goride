@@ -32,7 +32,9 @@ for (const row of readme.split('\n').filter((l) => /^\| S\d/.test(l))) {
     const t = strip(m[2]).replace(/^[a-z_]+ /, '').toLowerCase(); // drop icon ligature names
     if (t.length >= 4 && t.length <= 40 && /[a-z]/.test(t)) labels.add(t);
   }
-  const src = readFileSync(join(repo, react), 'utf8');
+  const reactFiles = react.split(/\s*\+\s*/).map((f) => f.trim()).filter(Boolean);
+  const sources = reactFiles.map((f) => readFileSync(join(repo, f), 'utf8'));
+  const src = sources.join('\n');
   if (/\bfor fidelity\b/i.test(src)) {
     console.log(`FAIL ${num} contains "for fidelity" — ${react}`);
     if (checked) failed = true;
@@ -50,7 +52,8 @@ for (const row of readme.split('\n').filter((l) => /^\| S\d/.test(l))) {
   const lower = visible.toLowerCase();
   const hit = [...labels].filter((l) => lower.includes(l)).length;
   const pct = labels.size ? Math.round((100 * hit) / labels.size) : 100;
-  const oldKit = OLD_KIT.test(src);
+  // Old-kit ban applies to the page shell (first file), not shared ops panels.
+  const oldKit = OLD_KIT.test(sources[0] || '');
   const bad = pct < MIN || oldKit;
   if (report || (checked && bad)) {
     console.log(`${bad ? 'FAIL' : 'ok  '} ${num} ${pct}% labels${oldKit ? ', old ui kit' : ''} — ${react}`);

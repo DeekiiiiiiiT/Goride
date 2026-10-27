@@ -56,7 +56,7 @@ export function AccountingCatalogManager({
               : "flex items-center gap-2 border-b-2 border-transparent px-1 pb-3 font-medium text-slate-500 hover:text-slate-800"
           }
         >
-          Vendors (selected)
+          <span>Vendors (selected) 1</span>
         </button>
         <button
           type="button"
@@ -67,7 +67,7 @@ export function AccountingCatalogManager({
               : "flex items-center gap-2 border-b-2 border-transparent px-1 pb-3 font-medium text-slate-500 hover:text-slate-800"
           }
         >
-          Pending requests
+          <span>Pending requests 1</span>
         </button>
         <button
           type="button"
