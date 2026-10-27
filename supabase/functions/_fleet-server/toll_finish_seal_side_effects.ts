@@ -4,8 +4,7 @@
  */
 import { getServiceClient } from "./service_client.ts";
 import { isPeriodFrozen } from "./settlement_period_freeze.ts";
-import { writeDriverWeekBlockers } from "./recon_week_blockers.ts";
-import type { ReconServiceLine } from "../../../packages/finance-core/src/evaluateRun.ts";
+import { writeDriverWeekBlockers, type ReconServiceLine } from "./recon_week_blockers.ts";
 
 export type TollSealSideEffectsResult = {
   periodsRebuilt: number;

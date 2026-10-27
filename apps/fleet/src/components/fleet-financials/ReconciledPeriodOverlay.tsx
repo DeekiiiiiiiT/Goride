@@ -16,7 +16,12 @@ import { Badge } from '../ui/badge';
 import { Loader2, CheckCircle2, Building2, User } from 'lucide-react';
 import type { FinancialTransaction } from '../../types/data';
 import { cn } from '../ui/utils';
+import { OCT12_CORRECTION_AMOUNT } from '@roam/finance-core';
 import { OVERPAID_BADGE_TOOLTIP, overpaidBadgeLabel } from '../../utils/settlementDeskUx';
+
+/** Closed Oct 12 shows frozen fuel credit; claw-back lives on Oct 19. */
+const OCT12_ANCHOR = '2026-10-12';
+const OCT19_ANCHOR_LABEL = 'Oct 19';
 
 export type ReconciledPeriodDetail = {
   driverId: string;
@@ -248,6 +253,14 @@ export function ReconciledPeriodOverlay({
                     hint="Company fuel share"
                     tone={detail.fuelFleetShare > 0.005 ? 'fleet' : 'muted'}
                   />
+                  {detail.periodAnchor === OCT12_ANCHOR ? (
+                    <Line
+                      label={`Corrected in ${OCT19_ANCHOR_LABEL}`}
+                      value={`−${fmt(Math.abs(OCT12_CORRECTION_AMOUNT))}`}
+                      hint="Gas-card fuel credit overstatement recovered on Oct 19"
+                      tone="warn"
+                    />
+                  ) : null}
                   <Line
                     label="Cash toll credit"
                     value={fmt(detail.tollCashSpend)}
@@ -310,6 +323,14 @@ export function ReconciledPeriodOverlay({
                 value={detail.fuelFleetShare > 0.005 ? `−${fmt(detail.fuelFleetShare)}` : '$0.00'}
                 tone={detail.fuelFleetShare > 0.005 ? 'ok' : 'muted'}
               />
+              {detail.periodAnchor === OCT12_ANCHOR ? (
+                <Line
+                  label={`Corrected in ${OCT19_ANCHOR_LABEL}`}
+                  value={`−${fmt(Math.abs(OCT12_CORRECTION_AMOUNT))}`}
+                  hint="Do not reopen Oct 12 — claw-back already on Oct 19"
+                  tone="warn"
+                />
+              ) : null}
               <Line
                 label="− Cash toll credit"
                 value={detail.tollCashSpend > 0.005 ? `−${fmt(detail.tollCashSpend)}` : '$0.00'}

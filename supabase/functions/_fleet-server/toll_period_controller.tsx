@@ -30,7 +30,7 @@
  * Routes:
  *   GET /toll-reconciliation/periods?driverId= – per-period step counts
  *   GET /toll-reconciliation/periods/:weekKey/readiness – TollPeriodReadiness (Phase 4b)
- *   POST /toll-reconciliation/periods/:weekKey/finish – Reviewed stamp (state=ready)
+ *   POST /toll-reconciliation/periods/:weekKey/finish – Reviewed + seal (publishes toll statements)
  *   POST /toll-reconciliation/periods/:weekKey/reopen – restore writability after seal
  */
 
@@ -864,7 +864,9 @@ app.get(`${BASE}/periods/:weekKey/readiness`, async (c: Context) => {
 });
 
 // ─── POST /toll-reconciliation/periods/:weekKey/finish ───────────────────────
-// Finish = Reviewed (state=ready). Does NOT seal — seal remains Close Week.
+// Finish = Reviewed (state=ready) then seal: publishes toll week_statements so
+// the recon Tolls step can clear TOLL_STATEMENT_MISSING. Close Week seal stays
+// idempotent (unchanged statements are skipped).
 app.post(
   `${BASE}/periods/:weekKey/finish`,
   requirePermission("toll.manage"),
@@ -934,12 +936,68 @@ app.post(
         actorId,
       );
 
+      // Seal publishes the toll week_statement. If this fails, finish fails —
+      // never leave the UI saying "reviewed" while TOLL_STATEMENT_MISSING remains.
+      let sealResult: { published: number };
+      try {
+        sealResult = await sealTollWeek({
+          organizationId: orgId,
+          weekKey,
+          actorId: actorId ?? undefined,
+        });
+      } catch (sealErr: unknown) {
+        if (sealErr instanceof SettlementCommandError) {
+          return c.json(
+            { error: sealErr.code, message: sealErr.message, details: sealErr.details },
+            sealErr.status,
+          );
+        }
+        const msg = sealErr instanceof Error ? sealErr.message : String(sealErr);
+        return c.json(
+          {
+            error: "TOLL_SEAL_FAILED",
+            message: `Toll finish sealed failed: ${msg}`,
+            weekKey,
+            state: "ready",
+            period: row,
+            readiness,
+          },
+          500,
+        );
+      }
+
+      const { runTollSealSideEffects } = await import("./toll_finish_seal_side_effects.ts");
+      const sideEffects = await runTollSealSideEffects({
+        organizationId: orgId,
+        weekKey,
+        actorId,
+        serviceLine: "rideshare",
+      });
+
+      try {
+        row = await upsertTollPeriodRow(orgId, weekKey, { state: "sealed" });
+        await insertTollPeriodAudit(
+          orgId,
+          tollPeriodIdFor(orgId, weekKey),
+          "seal",
+          { published: sealResult.published, via: "finish" },
+          actorId,
+        );
+      } catch (sealPersistErr: unknown) {
+        const msg = sealPersistErr instanceof Error ? sealPersistErr.message : String(sealPersistErr);
+        console.warn("[toll-finish] period sealed upsert failed", weekKey, msg);
+      }
+
       return c.json({
         success: true,
         weekKey,
-        state: "ready",
+        state: "sealed",
         period: row,
         readiness,
+        published: sealResult.published,
+        periodsRebuilt: sideEffects.periodsRebuilt,
+        blockersRefreshed: sideEffects.blockersRefreshed,
+        rebuildErrors: sideEffects.rebuildErrors.length ? sideEffects.rebuildErrors : undefined,
         closeWeekHint: `/close-week?week=${weekKey}`,
       });
     } catch (e: any) {
@@ -1287,6 +1345,36 @@ app.post(
       });
     } catch (e: any) {
       return safeErrorResponse(c, e, "TollPeriodController.ineligibleUsageReportPost");
+    }
+  },
+);
+
+// ─── POST /toll/heal/personal-pnl-events ─────────────────────────────────────
+// One-shot §1.3 backfill: toll_charge + toll_charged_to_driver + personal offset
+// for the Sep 11/12 personal tolls (idempotent).
+app.post(
+  `${TOLL_HTTP_PREFIX}/toll/heal/personal-pnl-events`,
+  requirePermission("toll.manage"),
+  async (c: Context) => {
+    try {
+      const orgId = getOrgId(c);
+      if (!orgId) return c.json({ error: "ORG_REQUIRED" }, 400);
+      const body = (await c.req.json().catch(() => ({}))) as { tollIds?: string[] };
+      const { healPersonalTollPnlEvents } = await import("./heal_personal_toll_pnl_events.ts");
+      const { results } = await healPersonalTollPnlEvents({
+        tollIds: Array.isArray(body.tollIds) && body.tollIds.length ? body.tollIds : undefined,
+        stubCtx: c,
+      });
+      const failed = results.filter((r) =>
+        r.tollCharge === "error" || r.chargedToDriver === "error" || r.personalOffset === "error"
+      );
+      return c.json({
+        success: failed.length === 0,
+        results,
+        failedCount: failed.length,
+      }, failed.length ? 500 : 200);
+    } catch (e: any) {
+      return safeErrorResponse(c, e, "TollPeriodController.healPersonalPnl");
     }
   },
 );

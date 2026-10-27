@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { AlertCircle, Bell, CheckCircle2, Loader2, UploadCloud } from 'lucide-react';
+import { toast } from 'sonner';
 import { roamFuelExternalCopy, weekDayKeys } from '@roam/finance-core';
-import type { ReconRunPayload, ReconRunSource } from '../../../services/reconApi';
+import { ReconApiError, type ReconRunPayload, type ReconRunSource } from '../../../services/reconApi';
 
 type RefreshRun = (payload?: ReconRunPayload) => void | Promise<void>;
 import { usePermissions } from '../../../hooks/usePermissions';
@@ -22,6 +23,28 @@ import { CloseWeekUberReimportDialog } from '../CloseWeekUberReimportDialog';
 import { FuelCardSelfUploader } from './FuelCardSelfUploader';
 import { IndriveUploadDialog } from './IndriveUploadDialog';
 import { cn } from '../../ui/utils';
+
+function addBusyId(prev: ReadonlySet<string>, id: string): Set<string> {
+  const next = new Set(prev);
+  next.add(id);
+  return next;
+}
+
+function removeBusyId(prev: ReadonlySet<string>, id: string): Set<string> {
+  const next = new Set(prev);
+  next.delete(id);
+  return next;
+}
+
+function toastReconSourceError(err: unknown, onRefresh: RefreshRun, fallback: string) {
+  if (err instanceof ReconApiError && err.status === 409) {
+    void onRefresh();
+    toast.error('Updated elsewhere — try again');
+    return;
+  }
+  const msg = err instanceof Error ? err.message : fallback;
+  toast.error(msg);
+}
 
 function ActionTip({
   label,
@@ -300,7 +323,7 @@ export function ReconSourcesStep({
   const [fuelSourceId, setFuelSourceId] = useState<'fuel_card_self' | 'fuel_card_roam'>('fuel_card_self');
   const [uberOpen, setUberOpen] = useState(false);
   const [indriveOpen, setIndriveOpen] = useState(false);
-  const [attestBusyId, setAttestBusyId] = useState<string | null>(null);
+  const [attestBusyIds, setAttestBusyIds] = useState<ReadonlySet<string>>(() => new Set());
   const [waiveSourceId, setWaiveSourceId] = useState<string | null>(null);
   const [waiveReason, setWaiveReason] = useState('');
   const [waiveBusy, setWaiveBusy] = useState(false);
@@ -309,6 +332,7 @@ export function ReconSourcesStep({
   const applicable = run.sources.filter((s) => s.requirement !== 'not_applicable');
 
   const remindRoam = async (sourceId: string) => {
+    if (remindSourceId === sourceId) return;
     setRemindSourceId(sourceId);
     try {
       const { requestExternalSource } = await import('../../../services/reconApi');
@@ -318,9 +342,11 @@ export function ReconSourcesStep({
         sourceId,
         { expectedVersion: run.run.version },
       );
-      await onRefresh(payload);
-    } finally {
       setRemindSourceId(null);
+      void onRefresh(payload);
+    } catch (err) {
+      setRemindSourceId(null);
+      toastReconSourceError(err, onRefresh, 'Could not send reminder');
     }
   };
 
@@ -350,8 +376,8 @@ export function ReconSourcesStep({
   };
 
   const submitAttestNone = async (sourceId: string, days: string[]) => {
-    if (attestBusyId || !days.length) return;
-    setAttestBusyId(sourceId);
+    if (attestBusyIds.has(sourceId) || !days.length) return;
+    setAttestBusyIds((prev) => addBusyId(prev, sourceId));
     try {
       const { attestSourceNone } = await import('../../../services/reconApi');
       const payload = await attestSourceNone(
@@ -368,14 +394,17 @@ export function ReconSourcesStep({
           expectedVersion: run.run.version,
         },
       );
-      await onRefresh(payload);
-    } finally {
-      setAttestBusyId(null);
+      // Clear busy as soon as POST returns; refetch only re-confirms setQueryData.
+      setAttestBusyIds((prev) => removeBusyId(prev, sourceId));
+      void onRefresh(payload);
+    } catch (err) {
+      setAttestBusyIds((prev) => removeBusyId(prev, sourceId));
+      toastReconSourceError(err, onRefresh, 'Could not attest no activity');
     }
   };
 
   const submitWaive = async () => {
-    if (!waiveSourceId || !waiveReason.trim()) return;
+    if (!waiveSourceId || !waiveReason.trim() || waiveBusy) return;
     setWaiveBusy(true);
     try {
       const { waiveSource } = await import('../../../services/reconApi');
@@ -385,9 +414,11 @@ export function ReconSourcesStep({
       });
       setWaiveSourceId(null);
       setWaiveReason('');
-      await onRefresh(payload);
-    } finally {
       setWaiveBusy(false);
+      void onRefresh(payload);
+    } catch (err) {
+      setWaiveBusy(false);
+      toastReconSourceError(err, onRefresh, 'Could not waive source');
     }
   };
 
@@ -408,7 +439,7 @@ export function ReconSourcesStep({
             onWaive={(id) => setWaiveSourceId(id)}
             onRemindRoam={(id) => void remindRoam(id)}
             remindBusy={remindSourceId === source.id}
-            attestBusy={attestBusyId === source.id}
+            attestBusy={attestBusyIds.has(source.id)}
             canUploadExternalSources={canUploadExternalSources}
             canWaive={canWaive}
           />

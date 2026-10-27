@@ -17,6 +17,10 @@ import {
 } from "./toll_period_writable.ts";
 import { tollsClearFromGate } from "./period_projector.ts";
 import { isTollIncludedInSpend } from "../../../packages/finance-core/src/tollLedgerIntegrity.ts";
+import {
+  SERVER_STEP_BY_BLOCKER,
+  countBlockersForStep,
+} from "../../../packages/finance-core/src/closeBlockerSteps.ts";
 import { buildCanonicalTollEventFromTollLedger } from "./canonical_from_ops.ts";
 import type { StepId } from "../../../packages/toll-core/src/tollPeriodStepTypes.ts";
 
@@ -69,20 +73,30 @@ Deno.test("Finish→readiness→seal: clear readiness allows Finish; sealed refu
   assertEquals(readiness.blockers.length, 0);
   assertEquals(decideTollFinishAllowed(readiness).allowed, true);
 
-  // After Finish, period is ready (writable until Close seals).
-  const afterFinish = decideTollPeriodSealed({
+  // Finish marks ready before sealTollWeek runs.
+  const afterReady = decideTollPeriodSealed({
     periodState: "ready",
     hasClosedTollStatement: false,
   });
-  assertEquals(afterFinish.sealed, false);
+  assertEquals(afterReady.sealed, false);
 
-  // Close Week seal → mutations must get 409 PERIOD_SEALED (enforce mode).
-  const afterSeal = decideTollPeriodSealed({
+  // Finish then publishes closed toll statements and persists state=sealed.
+  // Mutations must get 409 PERIOD_SEALED (enforce mode). Idempotent re-finish
+  // keeps one statement (sealTollWeek skips unchanged amounts).
+  const afterFinishSeal = decideTollPeriodSealed({
     periodState: "sealed",
     hasClosedTollStatement: true,
   });
-  assertEquals(afterSeal.sealed, true);
-  assertEquals(afterSeal.source, "period");
+  assertEquals(afterFinishSeal.sealed, true);
+  assertEquals(afterFinishSeal.source, "period");
+
+  // Statement alone also seals even if period row lagged (chip / write guard).
+  const statementOnly = decideTollPeriodSealed({
+    periodState: "ready",
+    hasClosedTollStatement: true,
+  });
+  assertEquals(statementOnly.sealed, true);
+  assertEquals(statementOnly.source, "week_statements");
 
   const err = new TollPeriodSealedError("2026-09-07", "period");
   const body = periodSealedBody(err);
@@ -98,6 +112,18 @@ Deno.test("Finish→readiness→seal: clear readiness allows Finish; sealed refu
     }),
     true,
   );
+});
+
+Deno.test("Finish seal contract: TOLL_STATEMENT_MISSING maps to tolls step; statement clears gate", () => {
+  // closeBlockerSteps maps TOLL_STATEMENT_MISSING → 'tolls'. Finish must publish
+  // the statement before steps/tolls/complete or computeLiveStepCounts keeps
+  // tollActionable ≥ 1 via saved blockers.
+  assertEquals(SERVER_STEP_BY_BLOCKER.TOLL_STATEMENT_MISSING, "tolls");
+  const withMissing = [
+    { code: "TOLL_STATEMENT_MISSING", severity: "block" as const },
+  ];
+  assertEquals(countBlockersForStep("tolls", withMissing), 1);
+  assertEquals(countBlockersForStep("tolls", []), 0);
 });
 
 Deno.test("TR-C1a: blockers empty ⟺ tollsClear when readiness present (informational-only legacy)", () => {

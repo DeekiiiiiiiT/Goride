@@ -723,6 +723,34 @@ app.post(`${BASE}/fuel-share-corrections`, requireSettlementPerm("settlements.ap
   }
 });
 
+/** §1.5 — post +3201.27 only when owner confirms Uber cash = trip sum. */
+app.post(`${BASE}/oct12-cash-mismatch-correction`, requireSettlementPerm("settlements.approve"), async (c) => {
+  try {
+    const orgOrResp = await requireOrgId(c);
+    if (typeof orgOrResp !== "string") return orgOrResp;
+    const user = c.get("rbacUser") as RbacUser;
+    const body = assertOnlyKeys(
+      await c.req.json().catch(() => ({})),
+      ["confirm", "driverId"],
+      "Oct 12 cash mismatch",
+    );
+    const driverId = body.driverId ? String(body.driverId) : "";
+    if (!driverId) {
+      return c.json({ error: "driverId required" }, 400);
+    }
+    const { postOct12CashMismatchCorrection } = await import("./oct12_cash_mismatch_correction.ts");
+    const result = await postOct12CashMismatchCorrection({
+      organizationId: orgOrResp,
+      driverId,
+      actorId: user?.userId || null,
+      confirm: body.confirm === true,
+    });
+    return c.json({ success: result.posted || result.reason === "already_posted", ...result });
+  } catch (e) {
+    return commandErrorResponse(c, e);
+  }
+});
+
 app.post(`${BASE}/legacy-weeks`, requireSettlementPerm("settlements.approve"), async (c) => {
   try {
     const orgOrResp = await requireOrgId(c);
