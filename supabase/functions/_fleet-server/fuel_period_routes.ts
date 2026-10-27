@@ -20,6 +20,8 @@ import {
   loadFuelDualApproval,
 } from "./fuel_org_preferences.ts";
 import { sealFuelWeek } from "./fuel_week_seal.ts";
+import { decideMaterializeWrite } from "./fuel_materialize_write.ts";
+import { runSealSideEffects } from "./seal_side_effects.ts";
 import { runFuelSpendShadow } from "./fuel_week_category_loader.ts";
 import { authorizeCronOrServiceRole } from "../_shared/authorizeCronOrServiceRole.ts";
 import {
@@ -410,7 +412,10 @@ async function sealAndFinishFuelWeek(args: {
   version: number;
   now: string;
   failures?: Array<{ driverId: string; error: string }>;
-}) {
+}): Promise<
+  | { ok: true; version: number; fuelSealPublished?: number }
+  | { ok: false; error: string; version: number }
+> {
   const {
     sb,
     orgId,
@@ -428,7 +433,6 @@ async function sealAndFinishFuelWeek(args: {
   const weekKey = ymd(period.week_start);
   const amountsByDriver = buildFuelSealAmountsByDriver(snapshots);
   let fuelSealPublished: number | null = null;
-  let fuelSealError: string | null = null;
   if (String(cursor.step || "") !== "rebuild" && String(cursor.step || "") !== "done") {
     try {
       const sealed = await sealFuelWeek({
@@ -450,15 +454,38 @@ async function sealAndFinishFuelWeek(args: {
         .update({ fuel_seal_error: null, close_receipt: closeReceipt, updated_at: now })
         .eq("id", periodId)
         .eq("org_id", orgId);
-    } catch (sealErr: any) {
-      fuelSealError = sealErr?.message || String(sealErr);
-      console.warn("[fuel_period] post-lock sealFuelWeek failed (non-fatal)", weekKey, sealErr);
+      const sideEffects = await runSealSideEffects({
+        organizationId: orgId,
+        weekKey,
+        actorId: actor,
+        serviceLine: "rideshare",
+      });
+      if (sideEffects.rebuildErrors.length) {
+        console.warn(
+          "[fuel_period] post-seal side effects partial errors",
+          weekKey,
+          sideEffects.rebuildErrors.slice(0, 8),
+        );
+      }
+    } catch (sealErr: unknown) {
+      const fuelSealError = sealErr instanceof Error ? sealErr.message : String(sealErr);
+      console.error("[fuel_period] post-lock sealFuelWeek failed", weekKey, sealErr);
       await insertAudit(orgId, periodId, "fuel_seal_failed", { weekKey, error: fuelSealError }, actor);
       await sb
         .from("fuel_reconciliation_period")
         .update({ fuel_seal_error: fuelSealError, updated_at: now })
         .eq("id", periodId)
         .eq("org_id", orgId);
+      await sb
+        .from("fuel_period_job")
+        .update({
+          state: "failed",
+          failures: [{ error: "fuel_seal_failed", message: fuelSealError }],
+          cursor: { ...cursor, step: "seal" },
+          updated_at: now,
+        })
+        .eq("id", jobId);
+      return { ok: false, error: "fuel_seal_failed", version };
     }
     cursor.step = "rebuild";
     await sb
@@ -486,7 +513,6 @@ async function sealAndFinishFuelWeek(args: {
       gapAccepted: Boolean(period.leakage_reviewed_at),
       moneyCommittedOnLock: true,
       fuelSealPublished,
-      fuelSealError,
     },
     actor,
   );
@@ -503,7 +529,6 @@ async function sealAndFinishFuelWeek(args: {
   return {
     ok: true as const,
     version,
-    ...(fuelSealError ? { fuelSealError } : {}),
     ...(fuelSealPublished != null ? { fuelSealPublished } : {}),
   };
 }
@@ -556,7 +581,7 @@ async function processJobRow(job: Record<string, unknown>) {
     // previous run died after the lock.
     if (period.status === "locked" || period.locked_at) {
       if (String(cursor.step || "") !== "done") {
-        await sealAndFinishFuelWeek({
+        const sealFinish = await sealAndFinishFuelWeek({
           sb,
           orgId,
           periodId,
@@ -571,17 +596,20 @@ async function processJobRow(job: Record<string, unknown>) {
           version: Number(period.version) || nextVersion,
           now,
         });
-      } else {
-        await sb
-          .from("fuel_period_job")
-          .update({
-            state: "succeeded",
-            progress_done: 1,
-            progress_total: 1,
-            updated_at: now,
-          })
-          .eq("id", job.id);
+        if (!sealFinish.ok) {
+          return { ok: false, error: sealFinish.error, version: sealFinish.version, alreadyLocked: true };
+        }
+        return { ok: true, version: sealFinish.version, alreadyLocked: true, ...sealFinish };
       }
+      await sb
+        .from("fuel_period_job")
+        .update({
+          state: "succeeded",
+          progress_done: 1,
+          progress_total: 1,
+          updated_at: now,
+        })
+        .eq("id", job.id);
       return { ok: true, version: Number(period.version) || nextVersion, alreadyLocked: true };
     }
 
@@ -1392,40 +1420,49 @@ export function registerFuelPeriodRoutes(app: Hono) {
       const snapMoney: MaterializeSnapMoneyOk | MaterializeSnapMoneyMiss = weekStart
         ? await aggregateMaterializeMoneyFromSnaps(orgId, weekStart)
         : { ok: false, snapCount: 0 };
-      if (!snapMoney.ok) {
-        return c.json({
-          error: "SNAPSHOTS_MISSING",
-          message: "Fuel totals aren't ready yet. Finish the fuel report before continuing.",
-        }, 409);
+      const write = decideMaterializeWrite({
+        periodLocked: Boolean(row && isFuelPeriodLocked(row)),
+        snapMoneyOk: snapMoney.ok,
+      });
+      if (write.mode === "locked") {
+        return c.json({ ok: true, skipped: "locked", period: mapPeriod(row as any) });
       }
-      const patch = {
-        total_spend: snapMoney.totalSpend,
-        gas_card_spend: snapMoney.gasCardSpend,
-        cash_from_earnings: snapMoney.driverSpend,
-        company_share: snapMoney.companyShare,
-        driver_share: snapMoney.driverShare,
-        unexplained: snapMoney.unexplained,
-        vehicle_count: Number(body.vehicleCount) || 0,
-        driver_count: Number(body.driverCount) || 0,
-        // F-5: persist client degraded signal for server auto-close gate.
-        degraded_inputs: Boolean(body.degradedInputs),
-        computed_at: now,
-        computed_from_hash: `server:materialize:snaps:${snapMoney.snapCount}`,
-        updated_at: now,
-        counts: serverCounts,
-      };
+      // Open week without finalized snaps: save counts only. Finalize writes money from snaps.
+      const patch = write.mode === "counts_only"
+        ? {
+          computed_at: now,
+          computed_from_hash: `server:materialize:counts_pending`,
+          updated_at: now,
+          counts: serverCounts,
+        }
+        : {
+          total_spend: snapMoney.ok ? snapMoney.totalSpend : 0,
+          gas_card_spend: snapMoney.ok ? snapMoney.gasCardSpend : 0,
+          cash_from_earnings: snapMoney.ok ? snapMoney.driverSpend : 0,
+          company_share: snapMoney.ok ? snapMoney.companyShare : 0,
+          driver_share: snapMoney.ok ? snapMoney.driverShare : 0,
+          unexplained: snapMoney.ok ? snapMoney.unexplained : 0,
+          vehicle_count: Number(body.vehicleCount) || 0,
+          driver_count: Number(body.driverCount) || 0,
+          // F-5: persist client degraded signal for server auto-close gate.
+          degraded_inputs: Boolean(body.degradedInputs),
+          computed_at: now,
+          computed_from_hash: `server:materialize:snaps:${snapMoney.ok ? snapMoney.snapCount : 0}`,
+          updated_at: now,
+          counts: serverCounts,
+        };
       if (!row) {
-        const weekStart = ymd(body.weekStart);
-        const weekEnd = ymd(body.weekEnd) || weekStart;
-        if (!weekStart) return c.json({ error: "period not found" }, 404);
+        const createWeekStart = ymd(body.weekStart);
+        const createWeekEnd = ymd(body.weekEnd) || createWeekStart;
+        if (!createWeekStart) return c.json({ error: "period not found" }, 404);
         const { data, error } = await sb
           .from("fuel_reconciliation_period")
           .upsert(
             {
-              id: periodIdFor(orgId, weekStart),
+              id: periodIdFor(orgId, createWeekStart),
               org_id: orgId,
-              week_start: weekStart,
-              week_end: weekEnd,
+              week_start: createWeekStart,
+              week_end: createWeekEnd,
               status: "open",
               version: 1,
               ...patch,
@@ -1436,8 +1473,6 @@ export function registerFuelPeriodRoutes(app: Hono) {
           .single();
         if (error) return c.json({ error: error.message }, 500);
         row = data as any;
-      } else if (row.status === "locked") {
-        return c.json({ ok: true, skipped: "locked", period: mapPeriod(row) });
       } else {
         const { error } = await sb
           .from("fuel_reconciliation_period")
@@ -1450,6 +1485,13 @@ export function registerFuelPeriodRoutes(app: Hono) {
       }
       if (!row) return c.json({ error: "Not found" }, 404);
       await insertAudit(orgId, String(row.id), "materialize", patch, actorId(c));
+      if (write.mode === "counts_only") {
+        return c.json({
+          ok: true,
+          money: "pending_finalize",
+          period: mapPeriod(row as any),
+        });
+      }
       return c.json({ ok: true, period: mapPeriod(row as any) });
     },
   );

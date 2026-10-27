@@ -966,8 +966,8 @@ app.post(
         );
       }
 
-      const { runTollSealSideEffects } = await import("./toll_finish_seal_side_effects.ts");
-      const sideEffects = await runTollSealSideEffects({
+      const { runSealSideEffects } = await import("./seal_side_effects.ts");
+      const sideEffects = await runSealSideEffects({
         organizationId: orgId,
         weekKey,
         actorId,

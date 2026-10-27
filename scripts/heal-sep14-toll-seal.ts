@@ -19,8 +19,8 @@ Deno.env.set("SUPABASE_URL", url);
 Deno.env.set("SUPABASE_SERVICE_ROLE_KEY", key);
 
 const { sealTollWeek } = await import("../supabase/functions/_fleet-server/toll_week_seal.ts");
-const { runTollSealSideEffects } = await import(
-  "../supabase/functions/_fleet-server/toll_finish_seal_side_effects.ts"
+const { runSealSideEffects } = await import(
+  "../supabase/functions/_fleet-server/seal_side_effects.ts"
 );
 const { upsertTollPeriodRow, insertTollPeriodAudit, tollPeriodIdFor } = await import(
   "../supabase/functions/_fleet-server/toll_period_writable.ts"
@@ -34,7 +34,7 @@ const seal = await sealTollWeek({
 });
 console.log("seal result", seal);
 
-const side = await runTollSealSideEffects({
+const side = await runSealSideEffects({
   organizationId: orgId,
   weekKey,
   actorId: actorId || null,

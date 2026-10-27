@@ -1,7 +1,7 @@
 {
   "slug": "fleet-toll",
-  "generatedAt": "2026-10-25T23:17:39.350Z",
-  "routeCount": 100,
+  "generatedAt": "2026-10-27T01:09:21.335Z",
+  "routeCount": 101,
   "routes": [
     "DELETE /toll-plazas/:id",
     "DELETE /toll-tags/:id",
@@ -88,6 +88,7 @@
     "POST ${BASE}/unreconcile",
     "POST ${BASE}/workflow-stage/backfill",
     "POST ${TOLL_HTTP_PREFIX}/toll-ledger/:id/void",
+    "POST ${TOLL_HTTP_PREFIX}/toll/heal/personal-pnl-events",
     "POST ${TOLL_HTTP_PREFIX}/toll/periods/:weekKey/ineligible-usage-report",
     "POST ${TOLL_HTTP_PREFIX}/toll/periods/:weekKey/repair-orphan-events",
     "POST ${TOLL_HTTP_PREFIX}/toll/periods/:weekKey/seal",

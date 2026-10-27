@@ -248,6 +248,7 @@ const MUTATING_ROUTE_INVENTORY = [
   "POST /toll-tags/:id/topup-requested",
   "POST /toll-tags/assign",
   "POST /toll-tags/unassign",
+  "POST /toll/heal/personal-pnl-events",
   "POST /toll/periods/:weekKey/ineligible-usage-report",
   "POST /toll/periods/:weekKey/repair-orphan-events",
   "POST /toll/periods/:weekKey/seal",

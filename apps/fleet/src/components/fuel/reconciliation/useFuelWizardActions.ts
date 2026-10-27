@@ -79,9 +79,12 @@ export async function materializeWizardPeriodCounts(input: {
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : '';
+    // Open weeks have no finalized snaps until Finalize — server returns counts-only
+    // (or a legacy 409). Never toast that as a user-facing error.
     if (message.includes("aren't ready yet") || message.includes('SNAPSHOTS_MISSING')) {
-      toast.error("Fuel totals aren't ready yet. Finish the fuel report before continuing.");
+      return;
     }
+    console.warn('[fuel] materialize failed', err);
   }
 }
 
