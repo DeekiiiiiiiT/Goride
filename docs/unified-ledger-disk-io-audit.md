@@ -1,10 +1,10 @@
 # Unified Ledger Disk IO — Audit
 
-**Rev 8 · 2026-10-28 02:20 UTC · Project `csfllzzastacofsvcdsc` (Nano) · Only open items listed**
+**Rev 9 · 2026-10-28 02:25 UTC · Project `csfllzzastacofsvcdsc` (Nano) · Only open items listed**
 
 ## Status
 
-Verified live: R14 done (`9473 / 9473` rows, 0 null org, `organization_id` NOT NULL, signed sums equal `1,992,697,888` minor on both sides), R15 done (folder gone), R16 done (`fleet-claims` rebuilt/deployed; bundle has 9 `organization_id required for` guards; smoke-edge-fn passed), R17 done (ledger org commit `d7177319`, Uber timeline commit `b72e89ef`; `fleet-ops` redeployed with activity routes). No old fetch-all calls since the cutover — call counts for every `ledger_entries … OFFSET` statement are unchanged. No ledger errors in Postgres logs since 01:00 UTC. `emergency_off` is still `true`.
+Verified live: R14 done (`9473 / 9473` rows, 0 null org, `organization_id` NOT NULL, signed sums equal `1,992,697,888` minor on both sides), R15 done (folder gone), R16 done (`fleet-claims` rebuilt/deployed; bundle has 9 `organization_id required for` guards; smoke-edge-fn passed), R17 done (ledger org commit `d7177319`, Uber timeline commit `b72e89ef`; `fleet-ops` redeployed with activity routes), R11b done (schema-only baseline `20260320000000_baseline_prod_schema.sql`; 689 older files in `supabase/migrations_archive/`; prod history repaired to baseline only; preview branch `r11b-baseline-replay` replayed clean — migration `20260320000000` only, `ledger.entries.organization_id` NOT NULL — then deleted). No old fetch-all calls since the cutover. No ledger errors in Postgres logs since 01:00 UTC. `emergency_off` is still `true`.
 
 ## Open
 
@@ -12,7 +12,6 @@ Verified live: R14 done (`9473 / 9473` rows, 0 null org, `organization_id` NOT N
 |---|---|---|
 | R12 | The "423 MB/day" reading is not a real day. `private.io_daily_temp_bytes()` falls back to the first snapshot (27 Oct 23:54) when none is 24 h old, so it measures the migration night: 443 MB from 23:54 to 01:07, while tracked statements grew only ~20 MB after 01:07. `emergency_off` is still `true`. | Read it again at **29 Oct after 02:07 UTC** (the first full 24 h after the last migration at 01:40). Under 200 MB → turn the week calculator back on from Fleet admin. |
 | R13 | Nano vs one size up. | Decide **4 Nov** from 7 days of `private.io_snapshots`: average under 200 MB/day and Disk IO chart out of the red → stay on Nano. |
-| R11b | Fresh-branch replay still fails: several Apr 2026 versions in prod history do not match the local files. | Take a schema-only dump of prod (`supabase db dump --schema-only`), commit it as one baseline migration, move the older files to `supabase/migrations_archive/`, and run `supabase migration repair` so prod history lists only the baseline + later files. Then create a preview branch, confirm a clean replay, and delete the branch. |
 
 ## Rules
 
