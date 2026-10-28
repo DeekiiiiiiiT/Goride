@@ -10,6 +10,25 @@ function places(sb: SupabaseClient) {
   return sb.schema("places");
 }
 
+export function reviewChipForPlace(row: {
+  status?: string | null;
+  origin_app?: string | null;
+  legacy_payload?: unknown;
+}): string {
+  if (row.status === "learnt") return "learnt";
+  const legacy = row.legacy_payload && typeof row.legacy_payload === "object" && !Array.isArray(row.legacy_payload)
+    ? row.legacy_payload as Record<string, unknown>
+    : {};
+  if (row.status === "pending" && String(legacy.dataSource || "") === "import") return "import";
+  if (row.origin_app === "roam_plug" && row.status === "pending") return "plug";
+  return "hand";
+}
+
+export function evidenceTitle(note: unknown): string {
+  const text = String(note || "").trim();
+  return text || "Evidence";
+}
+
 async function missingChecklist(sb: SupabaseClient, row: Record<string, unknown>): Promise<string[]> {
   const missing: string[] = [];
   if (!row.place_type) missing.push("Type");
@@ -277,14 +296,15 @@ export function registerPlaceAdmin(
       const chip = String(c.req.query("chip") || "");
       const sb = deps.admin();
       const items: Array<Record<string, unknown>> = [];
-      if (!chip || chip === "plug" || chip === "learnt") {
-        let query = places(sb).from("place").select("id,name,place_type,lat,lng,status,origin_app,created_at").in("status", ["pending", "learnt"]).order("created_at", { ascending: false }).limit(100);
+      if (!chip || chip === "plug" || chip === "learnt" || chip === "import" || chip === "hand") {
+        let query = places(sb).from("place").select("id,name,place_type,lat,lng,status,origin_app,legacy_payload,created_at").in("status", ["pending", "learnt"]).order("created_at", { ascending: false }).limit(200);
         if (chip === "plug") query = query.eq("origin_app", "roam_plug").eq("status", "pending");
         if (chip === "learnt") query = query.eq("status", "learnt");
+        if (chip === "import") query = query.eq("status", "pending").filter("legacy_payload->>dataSource", "eq", "import");
         const { data, error } = await query;
         if (error) throw error;
         for (const row of data || []) {
-          const kind = row.status === "learnt" ? "learnt" : row.origin_app === "roam_plug" ? "plug" : "hand";
+          const kind = reviewChipForPlace(row);
           if (chip && kind !== chip) continue;
           items.push({ id: row.id, chip: kind, title: row.name, placeId: row.id, lat: row.lat, lng: row.lng, placeType: row.place_type, createdAt: row.created_at });
         }
@@ -301,9 +321,33 @@ export function registerPlaceAdmin(
         }
       }
       if (!chip || chip === "evidence") {
-        const { data } = await places(sb).from("place_evidence").select("id,place_id,kind,created_at").order("created_at", { ascending: false }).limit(50);
+        const { data, error } = await places(sb).from("place_evidence").select("id,place_id,note,origin_app,accuracy_m,created_at").order("created_at", { ascending: false }).limit(50);
+        if (error) throw error;
         for (const row of data || []) {
-          items.push({ id: row.id, chip: "evidence", title: row.kind || "Evidence", placeId: row.place_id, proposal: false, createdAt: row.created_at });
+          items.push({ id: row.id, chip: "evidence", title: evidenceTitle(row.note), placeId: row.place_id, originApp: row.origin_app, accuracyM: row.accuracy_m, proposal: false, createdAt: row.created_at });
+        }
+      }
+      if (!chip || chip === "hand-review") {
+        const { data, error } = await sb.from("fleet_fuel_entries").select("id,organization_id,payload_json").not("payload_json->metadata->handReview->>reason", "is", null).order("updated_at", { ascending: false }).limit(100);
+        if (error) throw error;
+        for (const row of data || []) {
+          const payload = (row.payload_json || {}) as Record<string, unknown>;
+          const meta = (payload.metadata || {}) as Record<string, unknown>;
+          const review = (meta.handReview || {}) as { reason?: string };
+          if (!String(review.reason || "").trim()) continue;
+          const loc = (meta.locationMetadata || {}) as { lat?: number; lng?: number };
+          items.push({
+            id: row.id,
+            chip: "hand-review",
+            title: String(payload.vendor || payload.location || meta.stationName || "Fuel fill"),
+            placeId: String(payload.matchedStationId || meta.matchedStationId || ""),
+            organizationId: row.organization_id,
+            lat: loc.lat ?? null,
+            lng: loc.lng ?? null,
+            href: "/?page=fuel-stations&tab=resolution-queue",
+            external: true,
+            createdAt: payload.date || null,
+          });
         }
       }
       return c.json({ items });

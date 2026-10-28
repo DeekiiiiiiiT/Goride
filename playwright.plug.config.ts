@@ -12,7 +12,7 @@ export default defineConfig({
   testDir: './e2e',
   testMatch: appleOn
     ? /plug-auth-apple\.spec\.ts/
-    : /plug-(journeys|mobile-fit|empty|auth|home|flags)\.spec\.ts/,
+    : /plug-(journeys|mobile-fit|empty|auth|home|flags|facility)\.spec\.ts/,
   fullyParallel: false,
   workers: 1,
   timeout: 300_000,

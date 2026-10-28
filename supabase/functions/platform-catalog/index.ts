@@ -249,16 +249,21 @@ app.get("/tolls", async (c) => {
     const sb = admin();
     const limit = Math.min(Math.max(Number(c.req.query("limit") ?? 100) || 100, 1), 500);
     const offset = Math.max(Number(c.req.query("offset") ?? 0) || 0, 0);
-    const { data, error } = await sb.from("fleet_toll_plazas").select("id,name,highway,direction,parish,payload_json").range(offset, offset + limit - 1);
+    const { data, error } = await sb.schema("places").from("place")
+      .select("id,name,parish,attributes,legacy_payload")
+      .eq("place_type", "toll_plaza")
+      .range(offset, offset + limit - 1);
     if (error) throw error;
     const plazas = (data || []).map((row) => {
-      const payload = publicValue(row.payload_json || {}) as Record<string, unknown>;
+      const attrs = (row.attributes || {}) as Record<string, unknown>;
+      const legacy = (row.legacy_payload || {}) as Record<string, unknown>;
+      const payload = publicValue({ ...legacy, ...attrs }) as Record<string, unknown>;
       return {
         ...payload,
         id: row.id,
         name: row.name,
-        highway: row.highway,
-        direction: row.direction || payload.direction || null,
+        highway: attrs.highway || legacy.highway || payload.highway || null,
+        direction: attrs.direction || legacy.direction || payload.direction || null,
         parish: row.parish || payload.parish || null,
         prices: payload.prices || payload.rates || null,
       };

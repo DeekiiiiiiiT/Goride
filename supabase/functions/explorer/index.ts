@@ -504,9 +504,11 @@ app.post("/fuel-logs", async (c) => {
     }
     let priceUpdated = false;
     if (stationId && pricePer > 0) {
+      const grade = body.grade || "e10_87";
       await sb.schema("places").from("price_observation").insert({
         station_id: stationId,
-        grade: body.grade || "e10_87",
+        place_id: stationId,
+        grade,
         price_per_litre: pricePer,
         origin_app: "roam_plug",
         user_hash: userHash,
@@ -515,18 +517,13 @@ app.post("/fuel-logs", async (c) => {
       if (!mocked && priceCall === "publish" && decision === "confirm") {
         await sb.schema("places").from("price_current").upsert({
           station_id: stationId,
-          grade: body.grade || "e10_87",
+          place_id: stationId,
+          grade,
           price_per_litre: pricePer,
           observed_at: new Date().toISOString(),
         });
-        const { data: card } = await sb.schema("places").from("public_station").select("prices").eq("id", stationId).maybeSingle();
-        if (card) {
-          await sb.schema("places").from("public_station").update({
-            prices: { ...(card.prices || {}), [body.grade || "e10_87"]: pricePer },
-            price_updated_at: new Date().toISOString(),
-          }).eq("id", stationId);
-          priceUpdated = true;
-        }
+        const { data: card } = await sb.schema("places").from("public_place").select("prices").eq("id", stationId).maybeSingle();
+        priceUpdated = Boolean(card);
       }
     }
     const care = await careFor(sb, user.id, body.vehicleId, Number(body.litres));

@@ -204,6 +204,9 @@ jobs:
           supabase/functions/_fleet-server/station_attach.test.ts
           supabase/functions/_fleet-server/fuel_jaa_station_heal.test.ts
 
+      - name: Deno test places review chips
+        run: deno test --allow-read --allow-env supabase/functions/explorer/place_admin.test.ts
+
       - name: Deno test ledger read API parity
         run: >
           deno test --allow-read --allow-env

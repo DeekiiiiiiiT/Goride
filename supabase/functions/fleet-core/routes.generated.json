@@ -1,7 +1,7 @@
 {
   "slug": "fleet-core",
-  "generatedAt": "2026-10-26T22:16:41.248Z",
-  "routeCount": 675,
+  "generatedAt": "2026-10-28T20:49:32.675Z",
+  "routeCount": 676,
   "routes": [
     "ALL /make-server-37f42386/webhooks/wipay-fleet-modules",
     "DELETE ${ADMIN_CAT}/:id",
@@ -412,6 +412,7 @@
     "POST ${BASE}/workflow-stage/backfill",
     "POST ${FLEET_HUB}/vendors/request",
     "POST ${PREFIX}/driver/workforce/leave",
+    "POST ${PREFIX}/drivers/:id/activity/import-uber-timeline",
     "POST ${PREFIX}/drivers/:id/audit",
     "POST ${PREFIX}/drivers/:id/compliance/verify",
     "POST ${PREFIX}/drivers/:id/notes",

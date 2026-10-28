@@ -263,56 +263,14 @@ async function loadPlazasFromPlaces(
   }
 }
 
-/** Read toll places. Tests that stub `from()` and have no `schema()` still use the view. */
-async function loadPlazasFromFleetSql(
+/** Read toll places. Callers without schema() fall through to the KV copy. */
+async function loadPlazasFromRegister(
   db: SupabaseClient,
   organizationId: string | null,
 ): Promise<LoadedTollPlaza[]> {
   const withSchema = db as SupabaseClient & { schema?: (name: string) => SupabaseClient };
-  if (typeof withSchema.schema === "function") {
-    return loadPlazasFromPlaces(withSchema.schema("places") as unknown as SupabaseClient, organizationId);
-  }
-  try {
-    const { data, error } = await db
-      .from("fleet_toll_plazas")
-      .select("id, legacy_kv_id, organization_id, direction, parish, payload_json")
-      .limit(500);
-    if (error) {
-      console.warn("[tollPlazaLoader] fleet.toll_plazas fallback failed:", error.message);
-      return [];
-    }
-
-    const plazas: LoadedTollPlaza[] = [];
-    for (const row of data ?? []) {
-      const payload = (row as { payload_json?: Record<string, unknown> }).payload_json;
-      if (!payload || typeof payload !== "object") continue;
-      const orgCol = (row as { organization_id?: string | null }).organization_id;
-      const direction = (row as { direction?: string | null }).direction;
-      const parish = (row as { parish?: string | null }).parish;
-      const raw: Record<string, unknown> = {
-        ...payload,
-        organizationId: orgCol ?? payload.organizationId,
-        ...(direction ? { direction } : {}),
-        ...(parish ? { parish } : {}),
-      };
-      if (!recordBelongsToOrg(raw, organizationId)) continue;
-      const id = String((row as { id?: string }).id || payload.id || "");
-      const legacy = String(
-        (row as { legacy_kv_id?: string | null }).legacy_kv_id || `toll_plaza:${id}`,
-      );
-      const parsed = parseKvTollPlaza(legacy, raw);
-      if (parsed && parsed.status === "active") plazas.push(parsed);
-    }
-    if (plazas.length > 0) {
-      console.log(
-        `[tollPlazaLoader] Loaded ${plazas.length} plazas from fleet.toll_plazas (KV empty)`,
-      );
-    }
-    return plazas;
-  } catch (e) {
-    console.warn("[tollPlazaLoader] fleet.toll_plazas fallback error:", e);
-    return [];
-  }
+  if (typeof withSchema.schema !== "function") return [];
+  return loadPlazasFromPlaces(withSchema.schema("places") as unknown as SupabaseClient, organizationId);
 }
 
 export async function loadTollPlazas(
@@ -329,7 +287,7 @@ export async function loadTollPlazas(
   try {
     let plazas: LoadedTollPlaza[] = [];
     try {
-      plazas = await loadPlazasFromFleetSql(db, organizationId);
+      plazas = await loadPlazasFromRegister(db, organizationId);
     } catch (placesErr) {
       console.warn("[tollPlazaLoader] places read failed:", placesErr);
     }

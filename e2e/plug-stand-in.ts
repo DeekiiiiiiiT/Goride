@@ -120,6 +120,43 @@ export async function standIn(page: Page, options?: { role?: string; persist?: b
       await route.fulfill({ json: { tasks: [{ name: 'Oil change', op_code: 'oil' }] } });
       return;
     }
+    if (url.includes('/places/taxonomy')) {
+      await route.fulfill({
+        json: {
+          groups: [{ code: '1', label: 'On site', colour: '#ffe6cc', sort: 1 }],
+          categories: [{ code: '1.4', group_code: '1', slug: 'driver_facilities', label: 'Restroom', sort: 14 }],
+          facilityTypes: [{ slug: 'restroom', category_code: '1.4', label: 'Restroom' }],
+          plugChips: [{ chip: 'fuel', placeType: 'gas_station', label: 'Fuel prices', mapLabel: 'Fuel station', icon: 'local_gas_station', empty: 'No fuel stations mapped near you yet', sort: 3 }],
+        },
+      });
+      return;
+    }
+    if (url.includes('/places/search')) {
+      const facility = new URL(url).searchParams.get('facility');
+      await route.fulfill({
+        json: {
+          results: facility === 'restroom'
+            ? [
+              { place_id: 'far-stop', display_name: 'Far restroom', place_name: 'Far Station', distance_m: 900, category_code: '1.4' },
+              { place_id: 'near-stop', display_name: 'Near restroom', place_name: 'Near Station', distance_m: 80, category_code: '1.4' },
+            ]
+            : [],
+        },
+      });
+      return;
+    }
+    if (url.includes('/places/')) {
+      await route.fulfill({
+        json: {
+          place: {
+            id: 'near-stop',
+            name: 'Near Station',
+            facilities: [{ id: 'fac-1', type: 'restroom', category: '1.4', label: 'Restroom' }],
+          },
+        },
+      });
+      return;
+    }
     await route.fulfill({ json: { vehicles: [], places: [], parts: [] } });
   });
 

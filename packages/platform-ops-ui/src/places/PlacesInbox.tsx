@@ -10,14 +10,18 @@ type Item = {
   lng?: number | null;
   proposal?: boolean;
   placeType?: string;
+  href?: string;
+  external?: boolean;
 };
 
 const CHIPS = [
   { id: "", label: "All" },
   { id: "plug", label: "Plug pin" },
   { id: "learnt", label: "Learnt pin" },
+  { id: "import", label: "Import" },
   { id: "evidence", label: "Evidence" },
-  { id: "hand", label: "Hand review" },
+  { id: "hand", label: "Place changes" },
+  { id: "hand-review", label: "Hand review" },
   { id: "facility", label: "Facility proposal" },
 ];
 
@@ -77,6 +81,10 @@ export function PlacesInbox({
     if (!current) return;
     setNote("");
     try {
+      if (current.external) {
+        if (current.href) window.location.assign(current.href);
+        return;
+      }
       if (current.proposal) {
         await placesSend(apiBase, getToken, `/admin/places/${current.id}`, {
           method: "POST",
@@ -130,9 +138,15 @@ export function PlacesInbox({
           <h3 className="font-semibold">{current.title}</h3>
           <p>Pin {current.lat ?? "—"}, {current.lng ?? "—"}</p>
           <div className="flex flex-wrap gap-2">
-            <button type="button" className="rounded bg-slate-900 px-3 py-1 text-white" onClick={() => act("approve")}>Approve</button>
-            <button type="button" className="rounded border px-3 py-1" onClick={() => act("reject")}>Reject</button>
-            {onOpen ? <button type="button" className="rounded border px-3 py-1" onClick={() => onOpen(current.placeId)}>Open</button> : null}
+            {current.external ? (
+              <button type="button" className="rounded bg-slate-900 px-3 py-1 text-white" onClick={() => { if (current.href) window.location.assign(current.href); }}>Open fuel resolution</button>
+            ) : (
+              <>
+                <button type="button" className="rounded bg-slate-900 px-3 py-1 text-white" onClick={() => act("approve")}>Approve</button>
+                <button type="button" className="rounded border px-3 py-1" onClick={() => act("reject")}>Reject</button>
+                {onOpen && current.placeId ? <button type="button" className="rounded border px-3 py-1" onClick={() => onOpen(current.placeId)}>Open</button> : null}
+              </>
+            )}
           </div>
           <label className="block">
             Change type

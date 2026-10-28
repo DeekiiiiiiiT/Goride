@@ -17,6 +17,32 @@ function supabaseAdmin() {
   );
 }
 
+type PlaceAliasRow = {
+  id: string;
+  organization_id: string | null;
+  issuer: string | null;
+  raw_value: string | null;
+  normalized_value: string | null;
+  place_id: string;
+  source: MerchantAliasSource;
+};
+
+function aliasFromPlace(row: PlaceAliasRow): StationMerchantAliasRow {
+  return {
+    id: row.id,
+    organization_id: String(row.organization_id || ""),
+    issuer: String(row.issuer || ""),
+    raw_name: String(row.raw_value || ""),
+    normalized_name: String(row.normalized_value || ""),
+    station_id: String(row.place_id || ""),
+    source: row.source,
+  };
+}
+
+function merchantAliases() {
+  return supabaseAdmin().schema("places").from("place_alias");
+}
+
 export type MerchantAliasSource = "admin_link" | "heal_auto" | "seed";
 
 export type StationMerchantAliasRow = {
@@ -129,19 +155,19 @@ export async function lookupStationMerchantAlias(opts: {
   if (!normalized) return null;
   const issuer = opts.issuer || "jaa";
 
-  const { data, error } = await supabaseAdmin()
-    .from("station_merchant_aliases")
-    .select("*")
+  const { data, error } = await merchantAliases()
+    .select("id, organization_id, issuer, raw_value, normalized_value, place_id, source")
+    .eq("kind", "merchant_name")
     .eq("organization_id", org)
     .eq("issuer", issuer)
-    .eq("normalized_name", normalized)
+    .eq("normalized_value", normalized)
     .maybeSingle();
 
   if (error) {
     console.warn("[station_merchant_aliases] lookup failed:", error.message);
     return null;
   }
-  return (data as StationMerchantAliasRow) || null;
+  return data ? aliasFromPlace(data as PlaceAliasRow) : null;
 }
 
 export async function upsertStationMerchantAlias(opts: {
@@ -160,12 +186,12 @@ export async function upsertStationMerchantAlias(opts: {
   if (!normalized) return null;
   const issuer = opts.issuer || "jaa";
 
-  const { data: existing, error: existingErr } = await supabaseAdmin()
-    .from("station_merchant_aliases")
-    .select("*")
+  const { data: existing, error: existingErr } = await merchantAliases()
+    .select("id, organization_id, issuer, raw_value, normalized_value, place_id, source")
+    .eq("kind", "merchant_name")
     .eq("organization_id", org)
     .eq("issuer", issuer)
-    .eq("normalized_name", normalized)
+    .eq("normalized_value", normalized)
     .maybeSingle();
 
   if (existingErr) {
@@ -173,12 +199,10 @@ export async function upsertStationMerchantAlias(opts: {
     return null;
   }
 
+  const current = existing ? aliasFromPlace(existing as PlaceAliasRow) : null;
   const decision = resolveAliasUpsertAction(
-    existing
-      ? {
-        station_id: String((existing as StationMerchantAliasRow).station_id),
-        source: (existing as StationMerchantAliasRow).source,
-      }
+    current
+      ? { station_id: current.station_id, source: current.source }
       : null,
     { stationId, source: opts.source },
   );
@@ -187,28 +211,31 @@ export async function upsertStationMerchantAlias(opts: {
     console.warn(
       `[station_merchant_aliases] Conflict: "${raw}" → ${stationId} blocked (${decision.reason})`,
     );
-    return (existing as StationMerchantAliasRow) || null;
+    return current;
   }
 
   if (decision.action === "noop") {
-    return (existing as StationMerchantAliasRow) || null;
+    return current;
   }
 
   const row = {
+    place_id: stationId,
+    kind: "merchant_name",
     organization_id: org,
     issuer,
-    raw_name: raw,
-    normalized_name: normalized,
-    station_id: stationId,
+    raw_value: raw,
+    normalized_value: normalized,
     source: opts.source,
     confirmed_by: opts.confirmedBy || null,
   };
 
-  const existingId = (existing as StationMerchantAliasRow | null)?.id;
+  const existingId = current?.id;
   const write = existingId
-    ? supabaseAdmin().from("station_merchant_aliases").update(row).eq("id", existingId)
-    : supabaseAdmin().from("station_merchant_aliases").insert(row);
-  const { data, error } = await write.select("*").maybeSingle();
+    ? merchantAliases().update(row).eq("id", existingId)
+    : merchantAliases().insert(row);
+  const { data, error } = await write
+    .select("id, organization_id, issuer, raw_value, normalized_value, place_id, source")
+    .maybeSingle();
 
   if (error) {
     console.warn("[station_merchant_aliases] upsert failed:", error.message);
@@ -228,7 +255,7 @@ export async function upsertStationMerchantAlias(opts: {
     console.warn("[station_merchant_aliases] reheal failed:", e);
   }
 
-  return (data as StationMerchantAliasRow) || null;
+  return data ? aliasFromPlace(data as PlaceAliasRow) : null;
 }
 
 /** Escape for PostgREST `or()` ilike filters — commas → space; escape % _ ( ) . */

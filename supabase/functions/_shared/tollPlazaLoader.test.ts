@@ -187,6 +187,64 @@ Deno.test("loadTollPlazas org-scopes foreign plazas out", async () => {
   assertEquals(plazas.map((p) => p.id), ["ours"]);
 });
 
+Deno.test("loadTollPlazas reads toll plazas from places", async () => {
+  invalidateTollPlazaCache();
+  const seen: string[] = [];
+  const db = {
+    schema: (name: string) => {
+      seen.push(name);
+      return {
+        from: (table: string) => {
+          seen.push(table);
+          return {
+            select: () => ({
+              eq: () => ({
+                limit: async () => ({
+                  data: [{
+                    id: "angels",
+                    legacy_kv_id: "toll_plaza:angels",
+                    name: "Angels",
+                    lat: 18,
+                    lng: -76.8,
+                    geofence_m: 200,
+                    status: "verified",
+                    parish: "St. Catherine",
+                    attributes: { direction: "north", highway: "Highway 2000" },
+                    legacy_payload: {
+                      location: { lat: 18, lng: -76.8 },
+                      rates: [{ vehicleClass: "Class 1", amount: 100, currency: "JMD" }],
+                      operationalStatus: "active",
+                      status: "verified",
+                    },
+                  }],
+                  error: null,
+                }),
+              }),
+            }),
+          };
+        },
+      };
+    },
+    from: (table: string) => {
+      seen.push(table);
+      return {
+        select: () => ({
+          eq: () => ({
+            maybeSingle: async () => ({ data: null, error: null }),
+          }),
+        }),
+      };
+    },
+  };
+
+  const plazas = await loadTollPlazas(db as never);
+  assertEquals(seen.includes("fleet_toll_plazas"), false);
+  assertEquals(seen.includes("places"), true);
+  assertEquals(seen.includes("place"), true);
+  assertEquals(plazas.map((p) => p.id), ["angels"]);
+  assertEquals(plazas[0].name, "Angels");
+});
+
 Deno.test("recordBelongsToOrg includes unscoped and legacy placeholder", () => {
   assertEquals(recordBelongsToOrg({ organizationId: "org-a" }, "org-a"), true);
   assertEquals(recordBelongsToOrg({ organizationId: "org-b" }, "org-a"), false);
