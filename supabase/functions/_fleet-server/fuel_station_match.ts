@@ -4,9 +4,11 @@
  */
 import * as kv from "./kv_store.tsx";
 import { listStationRecords } from "./fleet_table_read_thru.ts";
+import { getServiceClient } from "./service_client.ts";
 import * as fuelLogic from "./fuel_logic.ts";
 import { auditLogic } from "./audit_logic.ts";
 import {
+  calculateDistance,
   findMatchingStationSmart,
   NEAR_MISS_CANDIDATE_M,
   type NearMissCandidate,
@@ -111,12 +113,84 @@ export type StationMatchDeps = {
   get: (key: string) => Promise<any>;
   set: (key: string, value: any) => Promise<any>;
   getByPrefix: (prefix: string) => Promise<any[]>;
+  /** Verified and learnt fuel places near a fill. When set, this is the pool. */
+  loadFuelPool?: (lat: number, lng: number, accuracyM: number) => Promise<any[]>;
 };
+
+/** One nearby row, plus its learnt GPS pins, in the shape the matcher already understands. */
+export function fuelStationFromNearbyRow(
+  row: Record<string, unknown>,
+  gpsAliases: { lat: number; lng: number }[] = [],
+): Record<string, unknown> {
+  const status = row.status === "learnt" ? "learnt" : "verified";
+  return {
+    id: row.id,
+    name: row.name,
+    status,
+    brand: "",
+    address: "",
+    location: { lat: Number(row.lat), lng: Number(row.lng) },
+    geofenceRadius: Number(row.effective_geofence_m) || undefined,
+    pinConfirmed: row.pin_state === "offset" ? false : row.pin_state === "confirmed" ? true : undefined,
+    gpsAliases,
+  };
+}
+
+/** Fuel places near a fill: gas stations, and any place with a fuel pump. */
+export async function loadFuelPoolFromPlaces(lat: number, lng: number, accuracyM: number): Promise<any[]> {
+  const accuracy = Number.isFinite(accuracyM) ? accuracyM : 0;
+  const radius = Math.max(600 + accuracy, NEAR_MISS_CANDIDATE_M);
+  const sb = getServiceClient();
+  const { data, error } = await sb.schema("places").rpc("nearby", {
+    p_lat: lat,
+    p_lng: lng,
+    p_radius_m: radius,
+    p_match_profile: "fuel",
+    p_statuses: ["verified", "learnt"],
+  });
+  if (error) throw error;
+  const rows = (data || []) as Array<Record<string, unknown>>;
+  const byId = new Map(rows.map((row) => [String(row.id || ""), row]));
+
+  const { data: aliasRows } = await sb.schema("places").from("place_alias")
+    .select("place_id,lat,lng")
+    .eq("kind", "gps");
+  const aliases = new Map<string, { lat: number; lng: number }[]>();
+  const extraIds: string[] = [];
+  for (const alias of aliasRows || []) {
+    const placeId = String(alias.place_id || "");
+    if (!placeId || alias.lat == null || alias.lng == null) continue;
+    const point = { lat: Number(alias.lat), lng: Number(alias.lng) };
+    const list = aliases.get(placeId) || [];
+    list.push(point);
+    aliases.set(placeId, list);
+    if (!byId.has(placeId) && calculateDistance(lat, lng, point.lat, point.lng) <= radius) {
+      extraIds.push(placeId);
+    }
+  }
+  if (extraIds.length) {
+    const { data: extra } = await sb.schema("places").from("place")
+      .select("id,name,lat,lng,status,pin_state,geofence_m,place_type!inner(default_geofence_m,match_profile)")
+      .in("id", [...new Set(extraIds)])
+      .in("status", ["verified", "learnt"])
+      .neq("pin_state", "offset");
+    for (const row of (extra || []) as Array<Record<string, unknown>>) {
+      const type = row.place_type as { default_geofence_m?: number; match_profile?: string } | undefined;
+      if (type?.match_profile !== "fuel") continue;
+      byId.set(String(row.id), {
+        ...row,
+        effective_geofence_m: Number(row.geofence_m) || Number(type.default_geofence_m) || 150,
+      });
+    }
+  }
+  return [...byId.values()].map((row) => fuelStationFromNearbyRow(row, aliases.get(String(row.id)) || []));
+}
 
 const defaultDeps = (): StationMatchDeps => ({
   get: (key) => kv.get(key),
   set: (key, value) => kv.set(key, value),
   getByPrefix: (prefix) => (prefix === "station:" ? listStationRecords() : kv.getByPrefix(prefix)),
+  loadFuelPool: loadFuelPoolFromPlaces,
 });
 
 /** Bump visit + price stats on a station from a fuel entry (writes lastUpdated, not lastVisited). */
@@ -287,19 +361,21 @@ export async function applyStationMatch(
     }
   }
 
-  // GPS pool is verified stations plus learnt pins. Unverified CSV rows stay out.
-  // A learnt pin is matchable even when its placeholder flag is false.
-  const stationRows =
-    !skipGpsMatching && entryCoords ? (await deps.getByPrefix("station:")) || [] : [];
-  const learntRows =
-    !skipGpsMatching && entryCoords ? (await deps.getByPrefix("learnt_location:")) || [] : [];
-  const verifiedStationsForMatch = [...stationRows, ...learntRows]
-    .filter((s: any) => s && (s.status === "verified" || s.status === "learnt"))
-    .map((s: any) => (s.status === "learnt" ? { ...s, pinConfirmed: undefined } : s))
-    .filter((s: any) => s.status === "learnt" || s.pinConfirmed !== false);
+  // GPS pool is verified or learnt fuel places, including a toll plaza that sells fuel.
+  const gpsAccuracyM = extractEntryGpsAccuracyMeters(entry);
+  const verifiedStationsForMatch = !skipGpsMatching && entryCoords
+    ? (deps.loadFuelPool
+      ? await deps.loadFuelPool(entryLat, entryLng, gpsAccuracyM)
+      : [
+          ...((await deps.getByPrefix("station:")) || []),
+          ...((await deps.getByPrefix("learnt_location:")) || []),
+        ]
+          .filter((s: any) => s && (s.status === "verified" || s.status === "learnt"))
+          .map((s: any) => (s.status === "learnt" ? { ...s, pinConfirmed: undefined } : s))
+          .filter((s: any) => s.status === "learnt" || s.pinConfirmed !== false))
+    : [];
 
   if (!skipGpsMatching && entryCoords) {
-    const gpsAccuracyM = extractEntryGpsAccuracyMeters(entry);
     const smartResult = findMatchingStationSmart(
       entryLat,
       entryLng,
@@ -335,34 +411,36 @@ export async function applyStationMatch(
         );
         return { outcome: "learnt", stations: verifiedStationsForMatch };
       }
-      bumpStationPriceStats(matchedStation, entry);
-      await deps.set(`station:${matchedStation.id}`, matchedStation);
+      // The match pool is a geo-only copy. Write the stored record so brand, address and pin survive.
+      const full = (await deps.get(`station:${matchedStation.id}`)) ?? matchedStation;
+      bumpStationPriceStats(full, entry);
+      await deps.set(`station:${full.id}`, full);
 
-      entry.matchedStationId = matchedStation.id;
-      entry.vendor = matchedStation.name;
-      entry.location = matchedStation.name;
-      entry.stationAddress = matchedStation.address || entry.stationAddress || "";
+      entry.matchedStationId = full.id;
+      entry.vendor = full.name;
+      entry.location = full.name;
+      entry.stationAddress = full.address || entry.stationAddress || "";
       entry.metadata = {
         ...entry.metadata,
         locationStatus: "verified",
         verificationMethod: "gps_handshake",
-        matchedStationId: matchedStation.id,
+        matchedStationId: full.id,
         matchDistance: smartResult.distance,
         matchConfidence: smartResult.confidence,
         nearMissCandidates: candidates,
         stationResolution: buildStationResolution({
           state: "verified",
           reason: "GPS_IN_GEOFENCE",
-          stationId: matchedStation.id,
+          stationId: full.id,
           candidates,
           entry,
           decidedBy: "gps",
         }),
       };
 
-      await signVerifiedEntry(entry, matchedStation, deferSignature);
+      await signVerifiedEntry(entry, full, deferSignature);
       console.log(
-        `[SmartGeoMatch] POST entry ${entry.id} matched "${matchedStation.name}" (${matchedStation.id}) at ${smartResult.distance}m [${smartResult.confidence}]`,
+        `[SmartGeoMatch] POST entry ${entry.id} matched "${full.name}" (${full.id}) at ${smartResult.distance}m [${smartResult.confidence}]`,
       );
       return {
         outcome: "verified",

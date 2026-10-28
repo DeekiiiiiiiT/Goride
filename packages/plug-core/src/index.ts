@@ -207,24 +207,26 @@ export function priceAgeLabel(updatedAt: string, now: string): string {
   return `updated ${Math.round(hours / 24)} d ago`;
 }
 
-export const PLACE_KINDS = [
-  { id: 'mechanic', label: 'Mechanics', mapLabel: 'Mechanic', icon: 'build', empty: 'No mechanics mapped near you yet' },
-  { id: 'parts_store', label: 'Parts stores', mapLabel: 'Parts store', icon: 'settings', empty: 'No parts stores mapped near you yet' },
-  { id: 'fuel', label: 'Fuel prices', mapLabel: 'Fuel station', icon: 'local_gas_station', empty: 'No fuel stations mapped near you yet' },
-  { id: 'tyre_air', label: 'Tyres & air', mapLabel: 'Tyres & air', icon: 'tire_repair', empty: 'No tyre and air places mapped near you yet' },
-  { id: 'car_wash', label: 'Car wash', mapLabel: 'Car wash', icon: 'local_car_wash', empty: 'No car washes mapped near you yet' },
-  { id: 'restroom', label: 'Restrooms', mapLabel: 'Restroom', icon: 'wc', empty: 'No restrooms mapped near you yet' },
-  { id: 'toll', label: 'Tolls', mapLabel: 'Toll', icon: 'toll', empty: 'No tolls mapped near you yet' },
-  { id: 'roadside', label: 'Roadside help', mapLabel: 'Roadside help', icon: 'sos', empty: 'No roadside help mapped near you yet' },
-] as const;
+export type PlaceKindId =
+  | 'mechanic'
+  | 'parts_store'
+  | 'fuel'
+  | 'tyre_air'
+  | 'car_wash'
+  | 'restroom'
+  | 'toll'
+  | 'roadside';
 
-export type PlaceKindId = (typeof PLACE_KINDS)[number]['id'];
-
-const PLACE_KIND_IDS = new Set<string>(PLACE_KINDS.map((kind) => kind.id));
-
-export function placeKind(id: string | null | undefined) {
-  return PLACE_KINDS.find((kind) => kind.id === id) || null;
-}
+const PLACE_KIND_IDS = new Set<string>([
+  'mechanic',
+  'parts_store',
+  'fuel',
+  'tyre_air',
+  'car_wash',
+  'restroom',
+  'toll',
+  'roadside',
+]);
 
 export function validatePlaceDraft(input: { name?: unknown; kind?: unknown }):
   | { ok: true; name: string; kind: PlaceKindId }
@@ -239,6 +241,39 @@ export function validatePlaceDraft(input: { name?: unknown; kind?: unknown }):
 /** A nearby verified place is a duplicate only when it is the same kind of place. */
 export function sameKind(candidateKind: string, existingKind: string | null | undefined): boolean {
   return Boolean(existingKind) && candidateKind === existingKind && PLACE_KIND_IDS.has(candidateKind);
+}
+
+/** Plug's eight kinds, and the place type each one saves as. */
+export const PLACE_TYPE_BY_KIND: Record<PlaceKindId, string> = {
+  mechanic: 'mechanic_garage',
+  parts_store: 'parts_store',
+  fuel: 'gas_station',
+  tyre_air: 'tyre_shop',
+  car_wash: 'car_wash',
+  restroom: 'public_restroom',
+  toll: 'toll_plaza',
+  roadside: 'roadside_assistance',
+};
+
+const KIND_BY_PLACE_TYPE: Record<string, PlaceKindId> = {
+  mechanic_garage: 'mechanic',
+  parts_store: 'parts_store',
+  gas_station: 'fuel',
+  tyre_shop: 'tyre_air',
+  car_wash: 'car_wash',
+  public_restroom: 'restroom',
+  toll_plaza: 'toll',
+  roadside_assistance: 'roadside',
+};
+
+export function placeTypeForKind(kind: string): string | null {
+  if (!PLACE_KIND_IDS.has(kind)) return null;
+  return PLACE_TYPE_BY_KIND[kind as PlaceKindId];
+}
+
+export function kindForPlaceType(placeType: string | null | undefined): PlaceKindId | null {
+  if (!placeType) return null;
+  return KIND_BY_PLACE_TYPE[placeType] || null;
 }
 
 export const PLUG_FLAGS = [

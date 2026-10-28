@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { placeKind } from '@roam/plug-core';
 import { publicGet } from '../api';
 import { writeStationCache } from '../offline';
 import { onPlugClick } from '../shell/actions';
+import { chipById, sortedChips, type PlugChip } from './plugChips';
 
 type Station = {
   id: string;
@@ -15,6 +15,23 @@ type Station = {
 };
 
 type Place = { id: string; name: string; kind: string; lat: number; lng: number };
+type FacilityHit = { place_id: string; display_name: string; place_name: string; distance_m: number; facility: string };
+
+const KINGSTON = { lat: 18.0179, lng: -76.8099 };
+
+function here(): Promise<{ lat: number; lng: number }> {
+  return new Promise((resolve) => {
+    if (!navigator.geolocation) {
+      resolve(KINGSTON);
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (position) => resolve({ lat: position.coords.latitude, lng: position.coords.longitude }),
+      () => resolve(KINGSTON),
+      { timeout: 2500, maximumAge: 60000 },
+    );
+  });
+}
 
 function priceOf(row: Station, grade: string): number {
   return Number(row.prices?.[grade] ?? Number.POSITIVE_INFINITY);
@@ -23,15 +40,20 @@ function priceOf(row: Station, grade: string): number {
 export function ExploreSheet() {
   const [grade, setGrade] = useState(sessionStorage.getItem('plug-grade') || 'e10_87');
   const [chip, setChip] = useState(sessionStorage.getItem('plug-chip') || '');
+  const [category, setCategory] = useState(sessionStorage.getItem('plug-category') || '');
+  const [facilities, setFacilities] = useState<FacilityHit[]>([]);
   const [stations, setStations] = useState<Station[]>([]);
   const [places, setPlaces] = useState<Place[]>([]);
+  const [chips, setChips] = useState<PlugChip[]>([]);
   const [signedIn, setSignedIn] = useState(document.body.dataset.signedIn === '1');
 
   useEffect(() => {
     const load = () => {
       setGrade(sessionStorage.getItem('plug-grade') || 'e10_87');
       const next = sessionStorage.getItem('plug-chip') || '';
+      const nextCategory = sessionStorage.getItem('plug-category') || '';
       setChip(next);
+      setCategory(nextCategory);
       setSignedIn(document.body.dataset.signedIn === '1');
       const showStations = !next || next === 'fuel';
       if (showStations) {
@@ -48,13 +70,26 @@ export function ExploreSheet() {
       } else {
         void publicGet<{ places: Place[] }>('/places?kind=fuel').then((body) => setPlaces(body.places || [])).catch(() => setPlaces([]));
       }
+      if (nextCategory) {
+        void here().then(async (pin) => {
+          const tree = await publicGet<{ facilityTypes?: { slug: string; category_code: string }[] }>('/places/taxonomy').catch(() => ({ facilityTypes: [] }));
+          const kinds = (tree.facilityTypes || []).filter((row) => row.category_code === nextCategory);
+          const lists = await Promise.all(kinds.map((kind) => publicGet<{ results?: FacilityHit[] }>(
+            `/places/search?facility=${encodeURIComponent(kind.slug)}&lat=${pin.lat}&lng=${pin.lng}`,
+          ).then((body) => (body.results || []).map((row) => ({ ...row, facility: kind.slug }))).catch(() => [] as FacilityHit[])));
+          setFacilities(lists.flat().sort((a, b) => Number(a.distance_m) - Number(b.distance_m)));
+        });
+      } else setFacilities([]);
+      void publicGet<{ plugChips?: PlugChip[] }>('/places/taxonomy')
+        .then((body) => setChips(sortedChips(body.plugChips)))
+        .catch(() => setChips([]));
     };
     load();
     window.addEventListener('plug-refresh', load);
     return () => window.removeEventListener('plug-refresh', load);
   }, []);
 
-  const kind = placeKind(chip);
+  const kind = chipById(chips, chip);
   const title = !chip ? 'All near you' : (kind?.label || 'Nearby places');
   const ranked = [...stations].sort((a, b) => priceOf(a, grade) - priceOf(b, grade));
   const priced = ranked.filter((row) => priceOf(row, grade) < Number.POSITIVE_INFINITY);
@@ -91,9 +126,19 @@ export function ExploreSheet() {
           </button>
         </div>
       ) : null}
+      {facilities.map((hit) => {
+        const attached = hit.display_name && hit.display_name !== hit.place_name;
+        const label = attached ? `${hit.display_name} · at ${hit.place_name}` : hit.place_name;
+        return (
+          <button key={`${hit.place_id}-${hit.facility}-${label}`} type="button" onClick={onPlugClick} data-act="open-facility" data-place-id={hit.place_id} data-facility={hit.facility} className="mb-2 flex min-h-12 w-full items-center gap-2 rounded-xl bg-surface-container-lowest p-3 text-left shadow-sm">
+            <span className="material-symbols-outlined text-primary">place</span>
+            <span className="font-bold">{label}</span>
+          </button>
+        );
+      })}
       {showPlaces ? places.map((place) => (
         <button key={place.id} type="button" onClick={onPlugClick} data-act="open-place" data-station-id={place.id} className="mb-2 flex min-h-12 w-full items-center gap-2 rounded-xl bg-surface-container-lowest p-3 text-left shadow-sm">
-          <span className="material-symbols-outlined text-primary">{placeKind(place.kind)?.icon || 'place'}</span>
+          <span className="material-symbols-outlined text-primary">{chipById(chips, place.kind)?.icon || 'place'}</span>
           <span className="font-bold">{place.name}</span>
         </button>
       )) : null}

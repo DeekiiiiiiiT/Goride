@@ -14,13 +14,14 @@ import {
   mayJoinPlug,
   planPlugFill,
   plugPriceDecision,
-  sameKind,
+  placeTypeForKind,
   suggestReview,
   validatePlaceDraft,
   writesTouchFleetMoney,
   PLUG_FLAGS,
   sectionEnabled,
 } from "../_shared/plugCore.ts";
+import { registerPlaceAdmin } from "./place_admin.ts";
 
 const app = new Hono().basePath("/explorer");
 app.use("*", cors());
@@ -187,6 +188,17 @@ async function hitLimit(sb: SupabaseClient, userId: string, action: string, max:
   await sb.schema("explorer").from("write_window").upsert({ ...key, hits });
   return true;
 }
+
+app.get("/places/taxonomy", async (c) => {
+  try {
+    const sb = admin();
+    const { data, error } = await sb.schema("places").rpc("taxonomy");
+    if (error) throw error;
+    return c.json(data || {});
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : "Could not load categories" }, 400);
+  }
+});
 
 app.get("/health", (c) => c.json({ service: "explorer", status: "ok" }));
 
@@ -626,7 +638,6 @@ app.post("/pins", async (c) => {
     const hours = typeof body.hours === "string" ? body.hours.slice(0, 80) : null;
     const phone = typeof body.phone === "string" ? body.phone.slice(0, 40) : null;
     const brand = draft.kind === "fuel" && typeof body.brand === "string" ? body.brand.slice(0, 80) : null;
-    const details = { services, hours, phone, brand };
     if (body.mockLocation) {
       await sb.schema("places").from("place_evidence").insert({
         user_hash: userHash,
@@ -639,35 +650,57 @@ app.post("/pins", async (c) => {
       });
       return c.json({ status: "held", suggestion: "Held for review", photo: false });
     }
-    const { data: nearby } = await sb.schema("places").from("place").select("id,name,lat,lng,geofence_m").eq("status", "verified").limit(500);
-    const close = (nearby || []).filter((place) => {
-      const metres = Math.hypot((Number(place.lat) - lat) * 111_000, (Number(place.lng) - lng) * 111_000);
-      return metres <= Number(place.geofence_m || 50);
+    const placeType = placeTypeForKind(draft.kind);
+    if (!placeType) return c.json({ error: "Choose a place type." }, 422);
+    const { data: nearby, error: nearbyError } = await sb.schema("places").rpc("nearby", {
+      p_lat: lat,
+      p_lng: lng,
+      p_radius_m: 2000,
+      p_statuses: ["verified"],
     });
-    const closeIds = close.map((place) => place.id);
-    const { data: caps } = closeIds.length
-      ? await sb.schema("places").from("place_capability").select("place_id,kind").in("place_id", closeIds)
-      : { data: [] as { place_id: string; kind: string }[] };
-    const hit = close.find((place) => (caps || []).some((cap) => cap.place_id === place.id && sameKind(draft.kind, cap.kind)));
+    if (nearbyError) throw nearbyError;
+    const hit = (nearby || []).find((place: { place_type?: string; distance_m?: number; effective_geofence_m?: number }) =>
+      place.place_type === placeType && Number(place.distance_m) <= Number(place.effective_geofence_m || 50)
+    );
     let placeId = hit?.id as string | undefined;
     if (!placeId) {
       const { data: parish } = await sb.schema("places").rpc("parish_pcode", { lat, lng });
+      let brandId: string | null = null;
+      if (brand) {
+        const { data: brands } = await sb.schema("places").from("brand").select("id,name,aliases");
+        const match = (brands || []).find((item: { name?: string; aliases?: string[] }) => {
+          const wanted = brand.toLowerCase();
+          return item.name?.toLowerCase() === wanted || (item.aliases || []).some((alias) => alias.toLowerCase() === wanted);
+        });
+        brandId = match?.id || null;
+      }
       const { data: created, error } = await sb.schema("places").from("place").insert({
         name: draft.name,
-        brand,
+        brand_id: brandId,
+        place_type: placeType,
         lat,
         lng,
         pcode: typeof parish === "string" ? parish : null,
         status: "pending",
+        pin_state: "unchecked",
+        origin_app: "roam_plug",
+        attributes: { services, hours, phone, ...(brand && !brandId ? { brand_text: brand } : {}) },
       }).select("id").single();
       if (error) throw error;
       placeId = created.id;
-      const { error: capError } = await sb.schema("places").from("place_capability").insert({
-        place_id: placeId,
-        kind: draft.kind,
-        details,
-      });
-      if (capError) throw capError;
+      const { data: typeRow } = await sb.schema("places").from("place_type").select("default_facilities").eq("slug", placeType).maybeSingle();
+      const facilities = Array.isArray(typeRow?.default_facilities) ? typeRow.default_facilities : [];
+      if (facilities.length) {
+        const { error: facilityError } = await sb.schema("places").from("place_facility").insert(
+          facilities.map((facility: string) => ({
+            place_id: placeId,
+            facility_type: facility,
+            source: "plug_proposal",
+            attributes: {},
+          })),
+        );
+        if (facilityError) throw facilityError;
+      }
     }
     let photoPath: string | null = null;
     if (photo && "bytes" in photo) {
@@ -821,6 +854,31 @@ app.delete("/vehicles/:id", async (c) => {
   }
 });
 
+app.post("/places/:id/facility", async (c) => {
+  try {
+    const user = await requireExplorer(c);
+    const sb = admin();
+    const placeId = c.req.param("id");
+    const body = await c.req.json();
+    const facility = String(body.facility || "").trim();
+    const action = body.action === "remove" ? "facility_remove" : "facility_add";
+    if (!facility) return c.json({ error: "Choose a facility" }, 400);
+    const { data: known } = await sb.schema("places").from("facility_type").select("slug").eq("slug", facility).maybeSingle();
+    if (!known) return c.json({ error: `Unknown facility ${facility}` }, 400);
+    const { error } = await sb.schema("places").from("place_change_proposal").insert({
+      place_id: placeId,
+      kind: action,
+      payload: { facility_type: facility, label: body.label || null },
+      distinct_users: 1,
+      suggestion: "facility",
+    });
+    if (error) throw error;
+    return c.json({ ok: true, by: user.id });
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : "Could not suggest that facility" }, 400);
+  }
+});
+
 app.post("/pins/:id/withdraw", async (c) => {
   try {
     const user = await requireExplorer(c);
@@ -834,7 +892,7 @@ app.post("/pins/:id/withdraw", async (c) => {
     const { data: place } = await sb.schema("places").from("place").select("status").eq("id", placeId).maybeSingle();
     if (place?.status === "pending" && !count) {
       await sb.schema("places").from("place_change_proposal").delete().eq("place_id", placeId);
-      await sb.schema("places").from("place_capability").delete().eq("place_id", placeId);
+      await sb.schema("places").from("place_facility").delete().eq("place_id", placeId);
       await sb.schema("places").from("place").delete().eq("id", placeId).eq("status", "pending");
     }
     return c.json({ ok: true });
@@ -899,33 +957,47 @@ app.post("/admin/places/:id", async (c) => {
     const action = String(body.action || "");
     const { data: proposal } = await sb.schema("places").from("place_change_proposal").select("*").eq("id", id).single();
     if (!proposal) return c.json({ error: "That item is gone" }, 404);
-    if (action === "approve") {
+    const proposalKind = String(proposal.kind || "");
+    if (action === "approve" && proposalKind === "facility_add") {
+      const payload = (proposal.payload || {}) as { facility_type?: string; label?: string; attributes?: Record<string, unknown> };
+      if (!payload.facility_type) return c.json({ error: "That facility is missing a type" }, 400);
+      const { error: addError } = await sb.schema("places").from("place_facility").insert({
+        place_id: proposal.place_id,
+        facility_type: payload.facility_type,
+        label: payload.label || null,
+        attributes: payload.attributes || {},
+        source: "plug_proposal",
+      });
+      if (addError) throw addError;
+    } else if (action === "approve" && proposalKind === "facility_remove") {
+      const payload = (proposal.payload || {}) as { facility_type?: string; facility_id?: string };
+      let remove = sb.schema("places").from("place_facility").delete().eq("place_id", proposal.place_id);
+      remove = payload.facility_id
+        ? remove.eq("id", payload.facility_id)
+        : remove.eq("facility_type", payload.facility_type || "");
+      const { error: removeError } = await remove;
+      if (removeError) throw removeError;
+    } else if (action === "approve") {
       const name = typeof body.name === "string" ? body.name.trim() : "";
-      await sb.schema("places").from("place").update({
+      const { error: verifyError } = await sb.schema("places").from("place").update({
         status: "verified",
         verified_at: new Date().toISOString(),
+        verified_by: owner.id,
         ...(name ? { name } : {}),
       }).eq("id", proposal.place_id);
-      const { data: place } = await sb.schema("places").from("place").select("*").eq("id", proposal.place_id).single();
-      const { data: cap } = await sb.schema("places").from("place_capability").select("kind,details").eq("place_id", proposal.place_id).limit(1);
-      if (place) {
-        await sb.schema("places").from("public_place").upsert({
-          id: place.id,
-          name: place.name,
-          brand: place.brand,
-          kind: cap?.[0]?.kind || "mechanic",
-          lat: place.lat,
-          lng: place.lng,
-          pcode: place.pcode,
-          details: cap?.[0]?.details || {},
-        });
-      }
+      if (verifyError) throw verifyError;
     } else if (action === "reject") {
-      await sb.schema("places").from("place").update({ status: "rejected" }).eq("id", proposal.place_id);
-      await sb.schema("places").from("public_place").delete().eq("id", proposal.place_id);
+      if (proposalKind !== "facility_add" && proposalKind !== "facility_remove") {
+        await sb.schema("places").from("place").update({ status: "rejected" }).eq("id", proposal.place_id);
+      }
+    } else if (action === "type" && body.placeType) {
+      const { error: typeError } = await sb.schema("places").from("place").update({
+        place_type: String(body.placeType),
+      }).eq("id", proposal.place_id);
+      if (typeError) throw typeError;
     } else if (action === "merge" && body.intoId) {
       await sb.schema("places").from("place_evidence").update({ place_id: body.intoId }).eq("place_id", proposal.place_id);
-      await sb.schema("places").from("place").update({ status: "duplicate" }).eq("id", proposal.place_id);
+      await sb.schema("places").from("place").update({ status: "duplicate", duplicate_of: body.intoId }).eq("id", proposal.place_id);
     } else {
       return c.json({ error: "Choose approve, reject, or merge" }, 400);
     }
@@ -938,11 +1010,15 @@ app.post("/admin/places/:id", async (c) => {
       ? { title: "Place not added", body: "Your pin was not approved." }
       : action === "merge"
       ? { title: "Pin matched", body: "Your pin was matched to a place already on the map." }
+      : action === "type"
+      ? { title: "Place type updated", body: "The place type was changed during review." }
       : { title: "Place approved", body: "Your pin is now on the map." };
     const { data: receipts } = await sb.schema("explorer").from("pin_receipt").select("user_id").eq("place_id", proposal.place_id);
     for (const receipt of receipts || []) {
       await notifyPlugUser(sb, receipt.user_id as string, note.title, note.body);
     }
+    const { error: publishError } = await sb.schema("places").rpc("refresh_public_place", { p_place_id: proposal.place_id });
+    if (publishError) throw publishError;
     const { error: coverageError } = await sb.schema("places").rpc("refresh_coverage");
     if (coverageError) throw coverageError;
     return c.json({ ok: true });
@@ -997,6 +1073,8 @@ async function retailEstimate(sb: SupabaseClient, grade: string): Promise<number
   const value = Number(data);
   return value > 0 ? value : null;
 }
+
+registerPlaceAdmin(app, { admin, requireOwner });
 
 if (!Deno.env.get("PLUG_USER_HASH_PEPPER")?.trim()) {
   Deno.serve(() => Response.json({ error: "PLUG_USER_HASH_PEPPER is not set" }, { status: 500 }));

@@ -10,7 +10,9 @@ import {
   plugPriceDecision,
   fillCare,
   projectServiceDue,
-  PLACE_KINDS,
+  kindForPlaceType,
+  PLACE_TYPE_BY_KIND,
+  placeTypeForKind,
   sameKind,
   sectionEnabled,
   mayJoinPlug,
@@ -129,7 +131,7 @@ describe('care, trust, and review', () => {
   });
 
   it('shares eight place kinds and rejects a bad pin', () => {
-    expect(PLACE_KINDS.map((kind) => kind.id)).toEqual([
+    expect(Object.keys(PLACE_TYPE_BY_KIND)).toEqual([
       'mechanic', 'parts_store', 'fuel', 'tyre_air', 'car_wash', 'restroom', 'toll', 'roadside',
     ]);
     expect(validatePlaceDraft({ name: 'A', kind: 'mechanic' }).ok).toBe(false);
@@ -138,6 +140,10 @@ describe('care, trust, and review', () => {
     expect(ok).toEqual({ ok: true, name: 'Corner shop', kind: 'mechanic' });
     expect(sameKind('mechanic', 'fuel')).toBe(false);
     expect(sameKind('mechanic', 'mechanic')).toBe(true);
+    expect(placeTypeForKind('fuel')).toBe('gas_station');
+    expect(placeTypeForKind('restroom')).toBe('public_restroom');
+    expect(kindForPlaceType('toll_plaza')).toBe('toll');
+    expect(kindForPlaceType('hospital')).toBeNull();
   });
 
   it('keeps sections off until a global flag or an allowlist', () => {

@@ -83,6 +83,9 @@ export const WORLD_MAPS_CHILDREN: NavChild[] = [
   { id: 'world-places', label: 'Places & pins', icon: MapPin },
   { id: 'world-imports', label: 'Imports & versions', icon: Layers },
   { id: 'world-quality', label: 'Data quality', icon: ClipboardCheck },
+  { id: 'places-register', label: 'Places register', icon: MapPin },
+  { id: 'places-categories', label: 'Categories', icon: Layers },
+  { id: 'places-review', label: 'Review', icon: Inbox },
 ];
 
 export const VEHICLE_DATABASE_CHILDREN: NavChild[] = [
@@ -167,6 +170,9 @@ const SHARED_PLATFORM_PAGES = [
   'world-places',
   'world-imports',
   'world-quality',
+  'places-register',
+  'places-categories',
+  'places-review',
   'gct-engine',
   'gct-rates',
   'gct-knowledge',
@@ -273,7 +279,7 @@ export const DOMINION_SECTIONS: { id: string; label: string; icon: typeof Layout
         id: 'places-home',
         label: 'Places and Maps',
         icon: MapPin,
-        activeWhen: ['world-jamaica', 'world-parishes', 'world-towns', 'world-communities', 'world-places', 'world-imports', 'world-quality', 'plug-places'],
+        activeWhen: ['world-jamaica', 'world-parishes', 'world-towns', 'world-communities', 'world-places', 'world-imports', 'world-quality', 'plug-places', 'places-register', 'places-categories', 'places-review'],
       },
       {
         id: 'fuel-home',

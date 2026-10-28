@@ -4,6 +4,7 @@
 import { assertEquals } from "jsr:@std/assert";
 import {
   applyStationMatch,
+  fuelStationFromNearbyRow,
   mirrorStationOntoCash,
   type StationMatchDeps,
 } from "./fuel_station_match.ts";
@@ -131,4 +132,55 @@ Deno.test("a second fill at a learnt pin reuses it", async () => {
   assertEquals(card.metadata.learntLocationId, "learnt-1");
   assertEquals(card.metadata.locationStatus, "unknown");
   assertEquals([...store.keys()].filter((key) => key.startsWith("learnt_location:")).length, 1);
+});
+
+Deno.test("a GPS match writes back the full station (brand and address unchanged)", async () => {
+  const full = {
+    id: "rubis-spanish-town",
+    name: "Rubis Spanish Town",
+    brand: "Rubis",
+    address: "Spanish Town Road",
+    parish: "St. Catherine",
+    phone: "876-555-0100",
+    status: "verified",
+    pinConfirmed: true,
+    geofenceRadius: 180,
+    location: { lat: 17.991, lng: -76.979 },
+    stats: { totalVisits: 4, lastPrice: 172 },
+  };
+  const stripped = fuelStationFromNearbyRow({
+    id: full.id,
+    name: full.name,
+    status: "verified",
+    lat: 17.991,
+    lng: -76.979,
+    effective_geofence_m: 150,
+    pin_state: "confirmed",
+  });
+  const store = new Map<string, unknown>([[`station:${full.id}`, full]]);
+  const deps: StationMatchDeps = {
+    get: async (key) => store.get(key),
+    set: async (key, value) => { store.set(key, value); },
+    getByPrefix: async () => [],
+    loadFuelPool: async () => [stripped],
+  };
+  const card: Record<string, any> = {
+    id: "card-full",
+    liters: 20,
+    amount: 3600,
+    metadata: { locationMetadata: { lat: 17.99105, lng: -76.979, accuracy: 8 } },
+  };
+  const match = await applyStationMatch(card, { deferSignature: true, deps });
+  const saved = store.get(`station:${full.id}`) as Record<string, any>;
+  assertEquals(match.outcome, "verified");
+  assertEquals(saved.brand, "Rubis");
+  assertEquals(saved.address, "Spanish Town Road");
+  assertEquals(saved.parish, "St. Catherine");
+  assertEquals(saved.phone, "876-555-0100");
+  assertEquals(saved.pinConfirmed, true);
+  assertEquals(saved.geofenceRadius, 180);
+  assertEquals(saved.stats.totalVisits, 5);
+  assertEquals(card.stationAddress, "Spanish Town Road");
+  assertEquals(stripped.brand, "");
+  assertEquals(stripped.address, "");
 });

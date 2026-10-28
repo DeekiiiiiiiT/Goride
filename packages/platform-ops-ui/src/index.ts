@@ -73,6 +73,8 @@ export { tollOpsApi } from './services/tollOpsApi';
 
 export { StationDatabaseView } from './stations/StationDatabaseView';
 export { PlacesReview } from './places/PlacesReview';
+export { PlacesDesk } from './places/PlacesDesk';
+export { PlacesInbox } from './places/PlacesInbox';
 export {
   ResolutionQueueTab,
   type ResolutionQueueSubTab,

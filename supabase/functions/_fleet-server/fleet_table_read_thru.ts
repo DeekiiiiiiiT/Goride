@@ -10,6 +10,7 @@ import {
   iterateFleet,
 } from "./repos/baseRepo.ts";
 import { resolveDomain } from "./fleet_domains.ts";
+import { getServiceClient } from "./service_client.ts";
 
 export async function readMappedKvKey(key: string): Promise<any | undefined> {
   const def = resolveDomain(key);
@@ -50,13 +51,48 @@ export class FleetReadThruError extends Error {
   }
 }
 
-/** Station master rows from the public table. Callers no longer scan the old key-value prefix. */
+/** Gas stations from the place register, in the shape Fleet already reads. */
 export async function listStationRecords(): Promise<Record<string, unknown>[]> {
-  const out: Record<string, unknown>[] = [];
-  for await (const row of iterateFleet("stations", { order: { col: "id", ascending: true } })) {
-    out.push(row as Record<string, unknown>);
-  }
-  return out;
+  const sb = getServiceClient();
+  const places = sb.schema("places");
+  const { data, error } = await places
+    .from("place")
+    .select("id,name,lat,lng,address,parish,phone,website,status,pin_state,geofence_m,plus_code,pcode,origin_app,legacy_payload,brand_id")
+    .eq("place_type", "gas_station")
+    .order("id", { ascending: true });
+  if (error) throw error;
+  const { data: brands, error: brandError } = await places.from("brand").select("id,name");
+  if (brandError) throw brandError;
+  const brandName = new Map((brands || []).map((row) => [String(row.id), String(row.name || "")]));
+  return (data || []).map((row) => {
+    const legacy = row.legacy_payload && typeof row.legacy_payload === "object" && !Array.isArray(row.legacy_payload)
+      ? { ...(row.legacy_payload as Record<string, unknown>) }
+      : {};
+    const status = row.status === "pending" ? "unverified" : row.status === "closed" ? "resolved" : row.status;
+    const station: Record<string, unknown> = {
+      ...legacy,
+      id: row.id,
+      name: row.name,
+      brand: (row.brand_id ? brandName.get(String(row.brand_id)) : "") || legacy.brand || "",
+      status,
+      address: row.address,
+      parish: row.parish,
+      phone: row.phone,
+      website: row.website,
+      lat: row.lat,
+      lng: row.lng,
+      plusCode: row.plus_code,
+      pcode: row.pcode,
+      originApp: row.origin_app,
+      location: { lat: row.lat, lng: row.lng },
+    };
+    if (row.pin_state === "offset") station.pinConfirmed = false;
+    else if (row.pin_state === "confirmed") station.pinConfirmed = true;
+    else delete station.pinConfirmed;
+    if (row.geofence_m == null) delete station.geofenceRadius;
+    else station.geofenceRadius = row.geofence_m;
+    return station;
+  });
 }
 
 export async function readMappedKvPrefix(prefix: string): Promise<any[] | null> {

@@ -166,10 +166,12 @@ app.get("/stations/:id", async (c) => {
 app.get("/places", async (c) => {
   try {
     const sb = admin();
-    let query = sb.schema("places").from("public_place").select("id,name,brand,kind,lat,lng,pcode,details");
+    let query = sb.schema("places").from("public_place").select("id,name,brand,kind,lat,lng,pcode,details,place_type").neq("place_type", "gas_station");
     const kind = c.req.query("kind");
     const pcode = c.req.query("pcode");
     if (kind) query = query.eq("kind", kind);
+    const category = c.req.query("category");
+    if (category) query = query.eq("category_code", category);
     if (pcode) query = query.eq("pcode", pcode);
     const { data, error } = await query;
     if (error) throw error;
@@ -179,10 +181,45 @@ app.get("/places", async (c) => {
   }
 });
 
+app.get("/places/taxonomy", async (c) => {
+  try {
+    const sb = admin();
+    const { data, error } = await sb.schema("places").rpc("taxonomy");
+    if (error) throw error;
+    return cached(data || {});
+  } catch (err) {
+    return fail(err, "Could not load categories");
+  }
+});
+
+app.get("/places/search", async (c) => {
+  try {
+    const sb = admin();
+    const facility = String(c.req.query("facility") || "").trim();
+    const lat = Number(c.req.query("lat"));
+    const lng = Number(c.req.query("lng"));
+    if (!facility || !Number.isFinite(lat) || !Number.isFinite(lng)) {
+      return Response.json({ error: "A facility and a pin are required" }, { status: 400 });
+    }
+    const { data, error } = await sb.schema("places").rpc("search_facility", {
+      p_facility_type: facility,
+      p_lat: lat,
+      p_lng: lng,
+      p_radius_m: Number(c.req.query("radius") || 8000),
+    });
+    if (error) throw error;
+    return cached({ results: data || [] });
+  } catch (err) {
+    return fail(err, "Could not search facilities");
+  }
+});
+
 app.get("/places/:id", async (c) => {
   try {
     const sb = admin();
-    const { data, error } = await sb.schema("places").from("public_place").select("id,name,brand,kind,lat,lng,pcode,details").eq("id", c.req.param("id")).maybeSingle();
+    const { data, error } = await sb.schema("places").from("public_place")
+      .select("id,name,brand,kind,lat,lng,pcode,details,address,place_type,group_code,category_code,facilities,facility_types,plus_code")
+      .eq("id", c.req.param("id")).maybeSingle();
     if (error) throw error;
     if (!data) return Response.json({ error: "Place not found" }, { status: 404 });
     return cached({ place: data });

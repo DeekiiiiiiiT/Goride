@@ -371,11 +371,27 @@ export async function handlePlugClick(el: HTMLElement) {
     return;
   }
 
+  if (act === 'service-category' && el.dataset.category) {
+    const current = sessionStorage.getItem('plug-category') || '';
+    const next = current === el.dataset.category ? '' : el.dataset.category;
+    if (next) sessionStorage.setItem('plug-category', next);
+    else sessionStorage.removeItem('plug-category');
+    sessionStorage.removeItem('plug-chip');
+    window.dispatchEvent(new Event('plug-refresh'));
+    if (!path.startsWith('/explore')) rt.go('/explore');
+    return;
+  }
+  if (act === 'open-facility' && el.dataset.placeId) {
+    const facility = el.dataset.facility ? `?facility=${encodeURIComponent(el.dataset.facility)}` : '';
+    return goPath(`/places/${el.dataset.placeId}${facility}`);
+  }
+
   if (act !== 'map-one' && el.dataset.kind && (path.startsWith('/explore') || act.startsWith('service-'))) {
     const current = sessionStorage.getItem('plug-chip') || '';
     const next = current === el.dataset.kind ? '' : el.dataset.kind;
     if (next) sessionStorage.setItem('plug-chip', next);
     else sessionStorage.removeItem('plug-chip');
+    sessionStorage.removeItem('plug-category');
     window.dispatchEvent(new Event('plug-refresh'));
     if (!path.startsWith('/explore')) rt.go('/explore');
     return;

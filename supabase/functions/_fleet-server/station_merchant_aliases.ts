@@ -204,11 +204,11 @@ export async function upsertStationMerchantAlias(opts: {
     confirmed_by: opts.confirmedBy || null,
   };
 
-  const { data, error } = await supabaseAdmin()
-    .from("station_merchant_aliases")
-    .upsert(row, { onConflict: "organization_id,issuer,normalized_name" })
-    .select("*")
-    .maybeSingle();
+  const existingId = (existing as StationMerchantAliasRow | null)?.id;
+  const write = existingId
+    ? supabaseAdmin().from("station_merchant_aliases").update(row).eq("id", existingId)
+    : supabaseAdmin().from("station_merchant_aliases").insert(row);
+  const { data, error } = await write.select("*").maybeSingle();
 
   if (error) {
     console.warn("[station_merchant_aliases] upsert failed:", error.message);

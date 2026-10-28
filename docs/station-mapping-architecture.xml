@@ -1,0 +1,262 @@
+<mxfile host="app.diagrams.net" version="24.0.0">
+  <diagram id="station-mapping" name="Station mapping">
+    <mxGraphModel dx="1600" dy="1000" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2700" pageHeight="1350" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- Title -->
+        <mxCell id="title" value="&lt;b&gt;Dominion → Fuel → Station database: how gas station mapping works&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:13px&quot;&gt;Left: how stations get in, get managed and get stored. Right: how a driver's fuel fill gets matched to a station.&lt;/font&gt;" style="text;html=1;align=left;verticalAlign=top;fontSize=22;" vertex="1" parent="1">
+          <mxGeometry x="40" y="10" width="1500" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- ============ SECTION 1: INPUTS ============ -->
+        <mxCell id="sec1" value="1. How a station gets into Dominion" style="rounded=1;arcSize=2;whiteSpace=wrap;html=1;fillColor=#F8FAFC;strokeColor=#94A3B8;dashed=1;verticalAlign=top;align=left;spacingLeft=12;spacingTop=6;fontStyle=1;fontSize=15;" vertex="1" parent="1">
+          <mxGeometry x="40" y="80" width="1500" height="200" as="geometry" />
+        </mxCell>
+        <mxCell id="s1a" value="&lt;b&gt;Add Station (by hand)&lt;/b&gt;&lt;br&gt;Admin enters name, brand, address and map pin. A duplicate check runs first: same plus code, or inside another station's 150 m circle → warning" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#CCFBF1;strokeColor=#0D9488;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="60" y="125" width="270" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="s1b" value="&lt;b&gt;CSV Import Wizard&lt;/b&gt;&lt;br&gt;Bulk upload of many stations. Rows arrive as &lt;i&gt;unverified&lt;/i&gt;, so they are NOT used to match driver fills until someone verifies them" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#CCFBF1;strokeColor=#0D9488;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="355" y="125" width="270" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="s1c" value="&lt;b&gt;Learnt locations&lt;/b&gt;&lt;br&gt;A driver fills up where no station exists in the database → the system drops a &lt;i&gt;learnt&lt;/i&gt; pin there. An admin later promotes it into a real station (or rejects / merges it)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#CCFBF1;strokeColor=#0D9488;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="650" y="125" width="270" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="s1d" value="&lt;b&gt;Evidence Inbox&lt;/b&gt;&lt;br&gt;GPS evidence collected from fills. Admin merges it into an existing station (tightens the pin) or turns it into a learnt pin" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#CCFBF1;strokeColor=#0D9488;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="945" y="125" width="270" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="s1e" value="&lt;b&gt;Gas card statement names&lt;/b&gt;&lt;br&gt;The card issuer's name for a station (e.g. &quot;FESCO BEECHWOOD&quot;) is saved as a &lt;i&gt;merchant alias&lt;/i&gt; of a verified station, so future statement lines translate automatically" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#CCFBF1;strokeColor=#0D9488;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1240" y="125" width="280" height="130" as="geometry" />
+        </mxCell>
+
+        <!-- ============ SECTION 2: DOMINION SCREEN ============ -->
+        <mxCell id="sec2" value="2. Dominion screen: Master data → Fuel → Station database (the three tabs)" style="rounded=1;arcSize=2;whiteSpace=wrap;html=1;fillColor=#F8FAFC;strokeColor=#94A3B8;dashed=1;verticalAlign=top;align=left;spacingLeft=12;spacingTop=6;fontStyle=1;fontSize=15;" vertex="1" parent="1">
+          <mxGeometry x="40" y="310" width="1500" height="240" as="geometry" />
+        </mxCell>
+        <mxCell id="t1" value="&lt;b&gt;Stations tab&lt;/b&gt;&lt;br&gt;Every station, any status (verified, unverified, learnt).&lt;br&gt;Add · Import · Export · Map view · Bulk assign · Bulk delete · Parent companies (brands)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DBEAFE;strokeColor=#2563EB;fontSize=12;align=left;spacingLeft=10;" vertex="1" parent="1">
+          <mxGeometry x="60" y="355" width="440" height="170" as="geometry" />
+        </mxCell>
+        <mxCell id="t2" value="&lt;b&gt;Verified tab = Master Verified Ledger (source of truth)&lt;/b&gt;&lt;br&gt;Only stations with status = verified.&lt;br&gt;Each row: location + plus code · GPS aliases · geofence radius (Standard = ±150 m) · actions (add alias, sync pin, proof of work, edit).&lt;br&gt;&lt;b&gt;Sync Orphans&lt;/b&gt; button: finds fuel transactions with no station and links them to a verified station" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DBEAFE;strokeColor=#2563EB;fontSize=12;align=left;spacingLeft=10;" vertex="1" parent="1">
+          <mxGeometry x="530" y="355" width="480" height="170" as="geometry" />
+        </mxCell>
+        <mxCell id="t3" value="&lt;b&gt;Resolution tab (needs a person)&lt;/b&gt;&lt;br&gt;Unresolved stops · Learnt locations · Spatial review · Evidence inbox · Pin calibration · &lt;b&gt;Hand review&lt;/b&gt; (card statement vs driver log disagree).&lt;br&gt;Actions: Confirm station · Link · Dismiss · Promote · Reject · Merge" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEE2E2;strokeColor=#DC2626;fontSize=12;align=left;spacingLeft=10;" vertex="1" parent="1">
+          <mxGeometry x="1040" y="355" width="480" height="170" as="geometry" />
+        </mxCell>
+
+        <!-- ============ SECTION 3: SERVER ============ -->
+        <mxCell id="sec3" value="3. Server: fleet-fuel edge function (the API the screen calls)" style="rounded=1;arcSize=2;whiteSpace=wrap;html=1;fillColor=#F8FAFC;strokeColor=#94A3B8;dashed=1;verticalAlign=top;align=left;spacingLeft=12;spacingTop=6;fontStyle=1;fontSize=15;" vertex="1" parent="1">
+          <mxGeometry x="40" y="580" width="1500" height="200" as="geometry" />
+        </mxCell>
+        <mxCell id="r1" value="&lt;b&gt;Create / list&lt;/b&gt;&lt;br&gt;GET /stations&lt;br&gt;POST /stations&lt;br&gt;GET /stations/check-duplicate" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFEDD5;strokeColor=#EA580C;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="60" y="625" width="225" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="r2" value="&lt;b&gt;Downgrade / remove&lt;/b&gt;&lt;br&gt;POST /stations/demote&lt;br&gt;DELETE /stations/:id&lt;br&gt;GET /stations/duplicate-audit" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFEDD5;strokeColor=#EA580C;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="305" y="625" width="225" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="r3" value="&lt;b&gt;Learnt + evidence&lt;/b&gt;&lt;br&gt;/learnt-locations (rescan, promote, reject, merge)&lt;br&gt;/stations/promote-learnt&lt;br&gt;/admin/evidence-inbox/merge-to-station" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFEDD5;strokeColor=#EA580C;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="550" y="625" width="225" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="r4" value="&lt;b&gt;Pins + aliases&lt;/b&gt;&lt;br&gt;PATCH /stations/:id/alias&lt;br&gt;PATCH /stations/:id/sync-master-pin&lt;br&gt;statement merchant-alias heal" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFEDD5;strokeColor=#EA580C;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="795" y="625" width="225" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="r5" value="&lt;b&gt;Sync Orphans&lt;/b&gt;&lt;br&gt;POST /admin/reconcile-ledger-orphans&lt;br&gt;re-runs matching on fills that have no station" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFEDD5;strokeColor=#EA580C;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1040" y="625" width="225" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="r6" value="&lt;b&gt;Review queues&lt;/b&gt;&lt;br&gt;/admin/spatial-review-queue&lt;br&gt;/admin/provisional-fills&lt;br&gt;/admin/platform-ops-attach-station&lt;br&gt;/admin/dismiss-hand-review" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFEDD5;strokeColor=#EA580C;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1285" y="625" width="235" height="130" as="geometry" />
+        </mxCell>
+
+        <!-- ============ SECTION 4: STORAGE ============ -->
+        <mxCell id="sec4" value="4. Where it is stored (Supabase) and where it is shown" style="rounded=1;arcSize=2;whiteSpace=wrap;html=1;fillColor=#F8FAFC;strokeColor=#94A3B8;dashed=1;verticalAlign=top;align=left;spacingLeft=12;spacingTop=6;fontStyle=1;fontSize=15;" vertex="1" parent="1">
+          <mxGeometry x="40" y="810" width="1500" height="260" as="geometry" />
+        </mxCell>
+        <mxCell id="db1" value="&lt;b&gt;fleet.stations&lt;/b&gt;&lt;br&gt;(private master list, 204 rows)&lt;br&gt;name · brand · address · parish&lt;br&gt;lat / lng · plus code&lt;br&gt;status: verified / unverified / learnt&lt;br&gt;geofence radius (default 150 m)&lt;br&gt;GPS aliases · pin confirmed" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;size=12;fillColor=#DCFCE7;strokeColor=#16A34A;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="60" y="855" width="250" height="190" as="geometry" />
+        </mxCell>
+        <mxCell id="db2" value="&lt;b&gt;learnt_location&lt;/b&gt;&lt;br&gt;(key-value store)&lt;br&gt;auto-made pins from fills that matched nothing" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;size=12;fillColor=#DCFCE7;strokeColor=#16A34A;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="400" y="875" width="200" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="db3" value="&lt;b&gt;station_merchant_aliases&lt;/b&gt;&lt;br&gt;card statement name → verified station" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;size=12;fillColor=#DCFCE7;strokeColor=#16A34A;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="795" y="875" width="225" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="db4" value="&lt;b&gt;Fuel entries (fills)&lt;/b&gt;&lt;br&gt;each carries matchedStationId + stationResolution (state, reason, who decided)" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;size=12;fillColor=#DCFCE7;strokeColor=#16A34A;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1110" y="875" width="230" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="trig" value="&lt;b&gt;Auto-copy trigger&lt;/b&gt;&lt;br&gt;sync_public_station&lt;br&gt;runs on every insert / update / delete" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FEF9C3;strokeColor=#CA8A04;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="160" y="1090" width="200" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="pub" value="&lt;b&gt;places.public_station&lt;/b&gt;&lt;br&gt;public copy: ONLY verified stations with a pin. If a station loses verified, it is removed here.&lt;br&gt;Pump prices update only from verified fills" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;size=12;fillColor=#DCFCE7;strokeColor=#16A34A;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="420" y="1085" width="280" height="125" as="geometry" />
+        </mxCell>
+        <mxCell id="plug" value="&lt;b&gt;Roam Plug / Explorer map&lt;/b&gt;&lt;br&gt;customers see stations + prices" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E0E7FF;strokeColor=#4F46E5;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="760" y="1110" width="220" height="75" as="geometry" />
+        </mxCell>
+
+        <!-- ============ SECTION 5: MATCHING ============ -->
+        <mxCell id="sec5" value="5. Matching a driver's fuel fill to a station (shared matcher used by Fleet and Plug)" style="rounded=1;arcSize=2;whiteSpace=wrap;html=1;fillColor=#FAF5FF;strokeColor=#7C3AED;dashed=1;verticalAlign=top;align=left;spacingLeft=12;spacingTop=6;fontStyle=1;fontSize=15;" vertex="1" parent="1">
+          <mxGeometry x="1600" y="80" width="1000" height="1130" as="geometry" />
+        </mxCell>
+        <mxCell id="m0" value="&lt;b&gt;Driver logs a fuel fill&lt;/b&gt; (driver app)&lt;br&gt;GPS point + accuracy + time of fix,&lt;br&gt;optional &quot;I was at station X&quot;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDE9FE;strokeColor=#7C3AED;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1900" y="125" width="320" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="m1" value="Came from the gas card statement?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FEF9C3;strokeColor=#CA8A04;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1960" y="235" width="200" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="m1y" value="&lt;b&gt;Skip GPS&lt;/b&gt;&lt;br&gt;Station named by merchant alias, or by pairing with the driver's own log. If the two disagree → &lt;b&gt;Hand review&lt;/b&gt; (Resolution tab)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDE9FE;strokeColor=#7C3AED;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="2270" y="240" width="300" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="m2" value="Admin already picked a verified station?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FEF9C3;strokeColor=#CA8A04;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1960" y="375" width="200" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="m2y" value="&lt;b&gt;VERIFIED&lt;/b&gt; (manual override)&lt;br&gt;linked + signed" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DCFCE7;strokeColor=#16A34A;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="2270" y="390" width="300" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="m3" value="&lt;b&gt;Build the GPS pool&lt;/b&gt;&lt;br&gt;verified stations (pin confirmed) + learnt pins.&lt;br&gt;Unverified CSV rows are left out" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDE9FE;strokeColor=#7C3AED;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1900" y="515" width="320" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="m4" value="&lt;b&gt;Search&lt;/b&gt;: stations within 600 m + GPS accuracy" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDE9FE;strokeColor=#7C3AED;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1900" y="610" width="320" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="m5" value="&lt;b&gt;Accept&lt;/b&gt; a station only if&lt;br&gt;distance ≤ its geofence (150 m default) + GPS accuracy" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDE9FE;strokeColor=#7C3AED;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1900" y="690" width="320" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="m6" value="What matched?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FEF9C3;strokeColor=#CA8A04;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1960" y="785" width="200" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="o1" value="&lt;b&gt;VERIFIED&lt;/b&gt;&lt;br&gt;Fill linked to the station. High trust score → auto-locked + signed. Price feeds the public map" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DCFCE7;strokeColor=#16A34A;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1620" y="960" width="180" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="o2" value="&lt;b&gt;REVIEW REQUIRED&lt;/b&gt;&lt;br&gt;2+ stations too close to tell apart (ambiguous) → Resolution tab" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEE2E2;strokeColor=#DC2626;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1815" y="960" width="180" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="o3" value="&lt;b&gt;PROVISIONAL&lt;/b&gt; (late log)&lt;br&gt;Missed the circle, but exactly one verified station within 1 km and GPS accurate to 50 m. Confirmed later by statement alias or admin Link. Driver names a different station → review" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEF3C7;strokeColor=#D97706;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="2010" y="960" width="180" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="o4" value="&lt;b&gt;NEW LEARNT LOCATION&lt;/b&gt;&lt;br&gt;Nothing nearby → a learnt pin is created → Learnt locations queue (can be promoted to a station)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#CCFBF1;strokeColor=#0D9488;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="2205" y="960" width="180" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="o5" value="&lt;b&gt;NO GPS&lt;/b&gt;&lt;br&gt;No location on the fill → unresolved stop in the Resolution tab" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEE2E2;strokeColor=#DC2626;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="2400" y="960" width="180" height="140" as="geometry" />
+        </mxCell>
+
+        <!-- ============ LEGEND ============ -->
+        <mxCell id="leg" value="&lt;b&gt;Colour key&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#0D9488&quot;&gt;■&lt;/font&gt; ways a station gets in &amp;nbsp; &lt;font color=&quot;#2563EB&quot;&gt;■&lt;/font&gt; Dominion screen &amp;nbsp; &lt;font color=&quot;#EA580C&quot;&gt;■&lt;/font&gt; server routes &amp;nbsp; &lt;font color=&quot;#16A34A&quot;&gt;■&lt;/font&gt; stored data / good outcome &amp;nbsp; &lt;font color=&quot;#DC2626&quot;&gt;■&lt;/font&gt; needs a person &amp;nbsp; &lt;font color=&quot;#7C3AED&quot;&gt;■&lt;/font&gt; matching steps &amp;nbsp; &lt;font color=&quot;#CA8A04&quot;&gt;◆&lt;/font&gt; decision" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#CBD5E1;fontSize=12;align=left;spacingLeft=10;" vertex="1" parent="1">
+          <mxGeometry x="1040" y="1110" width="500" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- ============ EDGES: inputs → server ============ -->
+        <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#0D9488;" edge="1" parent="1" source="s1a" target="t1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#0D9488;" edge="1" parent="1" source="s1b" target="t1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#0D9488;" edge="1" parent="1" source="s1c" target="t3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#0D9488;" edge="1" parent="1" source="s1d" target="t3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#0D9488;" edge="1" parent="1" source="s1e" target="t3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- tabs → server -->
+        <mxCell id="e6" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#2563EB;" edge="1" parent="1" source="t1" target="r1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e7" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#2563EB;" edge="1" parent="1" source="t1" target="r2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e8" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#2563EB;" edge="1" parent="1" source="t2" target="r4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e9" value="Sync Orphans" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#2563EB;fontSize=10;" edge="1" parent="1" source="t2" target="r5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e10" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#DC2626;" edge="1" parent="1" source="t3" target="r3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e11" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#DC2626;" edge="1" parent="1" source="t3" target="r6">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- server → storage -->
+        <mxCell id="e12" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#EA580C;" edge="1" parent="1" source="r1" target="db1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e13" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#EA580C;" edge="1" parent="1" source="r2" target="db1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e14" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#EA580C;" edge="1" parent="1" source="r3" target="db2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e15" value="promote" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#EA580C;dashed=1;fontSize=10;" edge="1" parent="1" source="db2" target="db1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e16" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#EA580C;" edge="1" parent="1" source="r4" target="db3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e17" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#EA580C;" edge="1" parent="1" source="r5" target="db4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e18" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#EA580C;" edge="1" parent="1" source="r6" target="db4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- storage → public -->
+        <mxCell id="e19" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#16A34A;" edge="1" parent="1" source="db1" target="trig">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e20" value="verified + has pin" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#16A34A;fontSize=10;" edge="1" parent="1" source="trig" target="pub">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e21" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#16A34A;" edge="1" parent="1" source="pub" target="plug">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- matching flow -->
+        <mxCell id="f1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#7C3AED;" edge="1" parent="1" source="m0" target="m1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="f2" value="Yes" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#7C3AED;fontSize=11;" edge="1" parent="1" source="m1" target="m1y">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="f3" value="No" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#7C3AED;fontSize=11;" edge="1" parent="1" source="m1" target="m2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="f4" value="Yes" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#7C3AED;fontSize=11;" edge="1" parent="1" source="m2" target="m2y">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="f5" value="No" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#7C3AED;fontSize=11;" edge="1" parent="1" source="m2" target="m3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="f6" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#7C3AED;" edge="1" parent="1" source="m3" target="m4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="f7" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#7C3AED;" edge="1" parent="1" source="m4" target="m5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="f8" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#7C3AED;" edge="1" parent="1" source="m5" target="m6">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="f9" value="one clear station" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#16A34A;fontSize=10;" edge="1" parent="1" source="m6" target="o1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="f10" value="several" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#DC2626;fontSize=10;" edge="1" parent="1" source="m6" target="o2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="f11" value="near miss" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#D97706;fontSize=10;" edge="1" parent="1" source="m6" target="o3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="f12" value="nothing" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#0D9488;fontSize=10;" edge="1" parent="1" source="m6" target="o4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="f13" value="no GPS" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#DC2626;fontSize=10;" edge="1" parent="1" source="m6" target="o5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

@@ -34,6 +34,7 @@ interface StationDatabaseViewProps {
   /** Dominion-only: Silent Attach sub-tab inside Resolution Queue. */
   enableSilentAttach?: boolean;
   silentAttachPanel?: React.ReactNode;
+  fuelReview?: React.ReactNode;
 }
 
 export function StationDatabaseView({
@@ -44,6 +45,7 @@ export function StationDatabaseView({
   defaultResolutionSubTab = 'unresolved-stops',
   enableSilentAttach = false,
   silentAttachPanel,
+  fuelReview,
 }: StationDatabaseViewProps) {
   const [selectedStation, setSelectedStation] = useState<StationProfile | null>(null);
   const [preferredStationIds, setPreferredStationIds] = useState<Set<string>>(new Set());
@@ -597,6 +599,7 @@ export function StationDatabaseView({
             onCountChange={setResolutionQueueCount}
             enableSilentAttach={enableSilentAttach}
             silentAttachPanel={silentAttachPanel}
+            fuelReview={fuelReview}
           />
         ) : null}
       </div>

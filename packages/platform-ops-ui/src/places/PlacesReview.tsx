@@ -4,7 +4,6 @@
 // Stitch: dominion-redesign/7da088e95e1e4fe088a2add010bf9bd3
 // Stitch: dominion-redesign/53ad2876cac241b1aaceeb7bbc307045
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { PLACE_KINDS, placeKind } from '@roam/plug-core';
 
 type Item = {
   id: string;
@@ -30,6 +29,7 @@ type Item = {
 };
 
 type Coverage = { pcode: string; kind: string; verified_count: number; pending_count: number };
+type PlugChip = { chip: string; mapLabel: string; sort: number };
 
 type View = 'queue' | 'item' | 'coverage' | 'parishes';
 
@@ -74,6 +74,7 @@ export function PlacesReview({
   const [showMerge, setShowMerge] = useState(false);
   const [mergeId, setMergeId] = useState('');
   const [editName, setEditName] = useState('');
+  const [chips, setChips] = useState<PlugChip[]>([]);
   const nameRef = useRef<HTMLInputElement>(null);
 
   const tokenRef = useRef(getToken);
@@ -86,16 +87,19 @@ export function PlacesReview({
       const token = await tokenRef.current();
       if (!token) throw new Error('Sign in to Dominion first');
       const headers = { Authorization: `Bearer ${token}` };
-      const [queue, cover] = await Promise.all([
+      const [queue, cover, tree] = await Promise.all([
         fetch(`${apiBase}/admin/places`, { headers }),
         fetch(`${apiBase}/admin/coverage`, { headers }),
+        fetch(`${apiBase}/admin/taxonomy`, { headers }),
       ]);
       const queueBody = await queue.json();
       const coverBody = await cover.json();
+      const treeBody = tree.ok ? await tree.json() : {};
       if (!queue.ok) throw new Error(queueBody.error || 'Could not load the queue');
       setItems(queueBody.items || []);
       setCoverage(coverBody.coverage || []);
       setPending(coverBody.pending || 0);
+      setChips([...(treeBody.plugChips || [])].sort((a: PlugChip, b: PlugChip) => a.sort - b.sort));
       setIndex(0);
       setSelected([]);
     } catch (err) {
@@ -243,7 +247,7 @@ export function PlacesReview({
             </select>
             <select aria-label="Type" className="h-8 rounded border border-[#e2e8f0] px-2 text-xs" value={kind} onChange={(event) => setKind(event.target.value)}>
               <option value="all">All types</option>
-              {PLACE_KINDS.map((kindOption) => <option key={kindOption.id} value={kindOption.id}>{kindOption.mapLabel}</option>)}
+              {chips.map((kindOption) => <option key={kindOption.chip} value={kindOption.chip}>{kindOption.mapLabel}</option>)}
             </select>
             <select aria-label="Evidence" className="h-8 rounded border border-[#e2e8f0] px-2 text-xs" value={evidence} onChange={(event) => setEvidence(event.target.value)}>
               <option value="all">All evidence</option>
@@ -291,7 +295,7 @@ export function PlacesReview({
                       <td className="px-3 py-3">
                         <button type="button" className="text-left" onClick={() => { setIndex(itemIndex); setView('item'); }}>
                           <span className="font-semibold">{item.payload?.name || 'Unnamed place'}</span>
-                          <span className="block text-xs text-[#64748b]">{placeKind(item.payload?.kind)?.mapLabel || item.payload?.kind || item.kind}</span>
+                          <span className="block text-xs text-[#64748b]">{chips.find((row) => row.chip === (item.payload?.kind || item.kind))?.mapLabel || item.payload?.kind || item.kind}</span>
                         </button>
                       </td>
                       <td className="px-3 py-3 font-mono text-xs">{item.payload?.pcode || '—'}</td>
@@ -356,7 +360,7 @@ export function PlacesReview({
             </div>
             <div className="rounded border border-[#e2e8f0] p-4">
               <h3 className="text-sm font-semibold">Place identity</h3>
-              <p className="mt-2 text-xs uppercase text-[#64748b]">{placeKind(current.payload?.kind)?.mapLabel || current.payload?.kind || current.kind}</p>
+              <p className="mt-2 text-xs uppercase text-[#64748b]">{chips.find((row) => row.chip === (current.payload?.kind || current.kind))?.mapLabel || current.payload?.kind || current.kind}</p>
               {current.payload?.brand ? <p className="mt-2 text-sm">Brand {current.payload.brand}</p> : null}
               {current.payload?.phone ? <p className="mt-2 text-sm">Phone {current.payload.phone}</p> : null}
               {current.payload?.hours ? <p className="mt-1 text-sm">Hours {current.payload.hours}</p> : null}

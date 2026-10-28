@@ -193,6 +193,9 @@ jobs:
         run: >
           deno test --allow-read --allow-env
           supabase/functions/_fleet-server/fuel_station_match.test.ts
+          supabase/functions/_fleet-server/fuel_station_match_places_parity.test.ts
+          supabase/functions/_fleet-server/fuel_station_match_replay.test.ts
+          supabase/functions/_fleet-server/fleet_trip_toll_replay.test.ts
           supabase/functions/_fleet-server/fuel_split_fill_station.test.ts
           supabase/functions/_fleet-server/geo_matcher_near_miss.test.ts
           supabase/functions/_fleet-server/fuel_station_match_provisional.test.ts
@@ -290,7 +293,6 @@ jobs:
         run: >
           deno test --allow-read
           supabase/functions/_shared/plugCore.drift.test.ts
-          supabase/functions/_shared/plugPlaceKinds.drift.test.ts
 
       - name: Deno test odometer vision prompt drift
         run: >

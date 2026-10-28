@@ -3,10 +3,10 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet.markercluster';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
-import { placeKind } from '@roam/plug-core';
 import { publicGet } from '../api';
 import { writeStationCache } from '../offline';
 import { getPlugRuntime } from '../shell/click';
+import { sortedChips, type PlugChip } from './plugChips';
 
 type Station = { id: string; name: string; brand?: string; lat: number; lng: number; prices?: Record<string, number> };
 type Place = { id: string; name: string; kind: string; lat: number; lng: number };
@@ -52,6 +52,7 @@ export function ExploreMap() {
   const [chip, setChip] = useState(sessionStorage.getItem('plug-chip') || '');
   const [stations, setStations] = useState<Station[]>([]);
   const [places, setPlaces] = useState<Place[]>([]);
+  const [icons, setIcons] = useState<Record<string, string>>({});
 
   useEffect(() => {
     const load = () => {
@@ -69,6 +70,11 @@ export function ExploreMap() {
       } else setStations([]);
       const placePath = !next ? '/places' : `/places?kind=${encodeURIComponent(next === 'fuel' ? 'fuel' : next)}`;
       void publicGet<{ places: Place[] }>(placePath).then((body) => setPlaces(body.places || [])).catch(() => setPlaces([]));
+      void publicGet<{ plugChips?: PlugChip[] }>('/places/taxonomy').then((body) => {
+        const nextIcons: Record<string, string> = {};
+        for (const row of sortedChips(body.plugChips)) nextIcons[row.chip] = row.icon;
+        setIcons(nextIcons);
+      }).catch(() => setIcons({}));
     };
     load();
     window.addEventListener('plug-refresh', load);
@@ -120,7 +126,7 @@ export function ExploreMap() {
     });
     places.filter((row) => Number.isFinite(row.lat) && Number.isFinite(row.lng)).forEach((row) => {
       const label = row.name.replace(/[<>&"]/g, '');
-      const iconName = placeKind(row.kind)?.icon || 'place';
+      const iconName = icons[row.kind] || 'place';
       const icon = L.divIcon({
         className: '',
         html: `<button type="button" aria-label="${label}" style="width:44px;height:44px;border:2px solid #fff;border-radius:999px;background:#1e1b17;color:#fff;padding:0;box-shadow:0 2px 8px rgba(0,0,0,.28)"><span class="material-symbols-outlined" style="font-size:22px;line-height:40px">${iconName}</span></button>`,
@@ -138,7 +144,7 @@ export function ExploreMap() {
       group.remove();
       map.remove();
     };
-  }, [stations, places, grade, chip]);
+  }, [stations, places, grade, chip, icons]);
 
   return <div ref={node} className="absolute inset-0 z-0" />;
 }

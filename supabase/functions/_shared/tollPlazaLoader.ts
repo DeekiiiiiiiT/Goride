@@ -210,11 +210,68 @@ async function loadRateScheduleValue(
   return (data as { value?: unknown } | null)?.value ?? null;
 }
 
-/** Read plazas from fleet.toll_plazas when KV `toll_plaza:%` is empty. */
+/** Toll places, with rates still carried in the saved payload. */
+async function loadPlazasFromPlaces(
+  places: SupabaseClient,
+  organizationId: string | null,
+): Promise<LoadedTollPlaza[]> {
+  try {
+    const { data, error } = await places
+      .from("place")
+      .select("id, legacy_kv_id, name, lat, lng, geofence_m, status, parish, address, operator, attributes, legacy_payload")
+      .eq("place_type", "toll_plaza")
+      .limit(500);
+    if (error) {
+      console.warn("[tollPlazaLoader] places.place fallback failed:", error.message);
+      return [];
+    }
+    const plazas: LoadedTollPlaza[] = [];
+    for (const row of data ?? []) {
+      const legacy = ((row as { legacy_payload?: Record<string, unknown> }).legacy_payload) || {};
+      const attrs = ((row as { attributes?: Record<string, unknown> }).attributes) || {};
+      const lat = (row as { lat?: number }).lat;
+      const lng = (row as { lng?: number }).lng;
+      const direction = typeof attrs.direction === "string" ? attrs.direction : undefined;
+      const parish = (row as { parish?: string | null }).parish;
+      const geofence = (row as { geofence_m?: number | null }).geofence_m;
+      const raw: Record<string, unknown> = {
+        ...legacy,
+        id: (row as { id?: string }).id,
+        name: (row as { name?: string }).name,
+        lat,
+        lng,
+        location: { lat, lng },
+        geofenceRadius: geofence ?? legacy.geofenceRadius ?? 200,
+        status: (row as { status?: string }).status === "verified" ? "verified" : (row as { status?: string }).status,
+        organizationId: legacy.organizationId,
+        ...(direction ? { direction } : {}),
+        ...(parish ? { parish } : {}),
+      };
+      if (!recordBelongsToOrg(raw, organizationId)) continue;
+      const id = String((row as { id?: string }).id || "");
+      const legacyKey = String((row as { legacy_kv_id?: string | null }).legacy_kv_id || `toll_plaza:${id}`);
+      const parsed = parseKvTollPlaza(legacyKey, raw);
+      if (parsed && parsed.status === "active") plazas.push(parsed);
+    }
+    if (plazas.length > 0) {
+      console.log(`[tollPlazaLoader] Loaded ${plazas.length} plazas from places.place (KV empty)`);
+    }
+    return plazas;
+  } catch (e) {
+    console.warn("[tollPlazaLoader] places.place fallback error:", e);
+    return [];
+  }
+}
+
+/** Read toll places. Tests that stub `from()` and have no `schema()` still use the view. */
 async function loadPlazasFromFleetSql(
   db: SupabaseClient,
   organizationId: string | null,
 ): Promise<LoadedTollPlaza[]> {
+  const withSchema = db as SupabaseClient & { schema?: (name: string) => SupabaseClient };
+  if (typeof withSchema.schema === "function") {
+    return loadPlazasFromPlaces(withSchema.schema("places") as unknown as SupabaseClient, organizationId);
+  }
   try {
     const { data, error } = await db
       .from("fleet_toll_plazas")
@@ -270,32 +327,34 @@ export async function loadTollPlazas(
   }
 
   try {
-    const { data, error } = await db
-      .from(KV_TABLE)
-      .select("key, value")
-      .like("key", "toll_plaza:%")
-      .limit(500);
-
-    if (error) {
-      console.error("[tollPlazaLoader] Failed to load toll plazas:", error.message);
-      return cached?.orgKey === orgKey ? cached.plazas : cached?.plazas ?? [];
-    }
-
     let plazas: LoadedTollPlaza[] = [];
-    for (const row of data ?? []) {
-      const raw = row.value as Record<string, unknown> | null;
-      if (!raw || typeof raw !== "object") continue;
-      if (!recordBelongsToOrg(raw, organizationId)) continue;
-      const parsed = parseKvTollPlaza(row.key, raw);
-      if (parsed && parsed.status === "active") {
-        plazas.push(parsed);
-      }
+    try {
+      plazas = await loadPlazasFromFleetSql(db, organizationId);
+    } catch (placesErr) {
+      console.warn("[tollPlazaLoader] places read failed:", placesErr);
     }
 
-    // SQL is the migrated SSOT for fleet plazas. If KV was emptied after dual-write,
-    // fall back so detection does not silently run with an empty catalogue.
     if (plazas.length === 0) {
-      plazas = await loadPlazasFromFleetSql(db, organizationId);
+      const { data, error } = await db
+        .from(KV_TABLE)
+        .select("key, value")
+        .like("key", "toll_plaza:%")
+        .limit(500);
+
+      if (error) {
+        console.error("[tollPlazaLoader] Failed to load toll plazas:", error.message);
+        return cached?.orgKey === orgKey ? cached.plazas : cached?.plazas ?? [];
+      }
+
+      for (const row of data ?? []) {
+        const raw = row.value as Record<string, unknown> | null;
+        if (!raw || typeof raw !== "object") continue;
+        if (!recordBelongsToOrg(raw, organizationId)) continue;
+        const parsed = parseKvTollPlaza(row.key, raw);
+        if (parsed && parsed.status === "active") {
+          plazas.push(parsed);
+        }
+      }
     }
 
     try {

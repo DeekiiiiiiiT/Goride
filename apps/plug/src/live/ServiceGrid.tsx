@@ -1,37 +1,87 @@
 import { useEffect, useState } from 'react';
-import { PLACE_KINDS } from '@roam/plug-core';
+import { publicGet } from '../api';
 import { onPlugClick } from '../shell/actions';
+import { sortedChips, type PlugChip } from './plugChips';
 
 function selectedKind(): string {
   return sessionStorage.getItem('plug-chip') || '';
 }
 
+type Category = { code: string; label: string; group_code: string };
+type Group = { code: string; label: string; colour: string };
+type Taxonomy = { categories?: Category[]; groups?: Group[]; plugChips?: PlugChip[] };
+
 export function ServiceGrid() {
   const [chip, setChip] = useState(selectedKind);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [chips, setChips] = useState<PlugChip[] | null>(null);
+  const [chipError, setChipError] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     const sync = () => setChip(selectedKind());
     window.addEventListener('plug-refresh', sync);
+    publicGet<Taxonomy>('/places/taxonomy')
+      .then((body) => {
+        setCategories(body.categories || []);
+        setGroups(body.groups || []);
+        setChips(sortedChips(body.plugChips));
+        setChipError(false);
+      })
+      .catch(() => {
+        setCategories([]);
+        setGroups([]);
+        setChips([]);
+        setChipError(true);
+      });
     return () => window.removeEventListener('plug-refresh', sync);
-  }, []);
+  }, [attempt]);
+  const colour = new Map(groups.map((group) => [group.code, group.colour]));
   return (
-    <div className="grid grid-cols-4 gap-2" data-plug-services>
-      {PLACE_KINDS.map((kind) => {
-        const on = chip === kind.id;
-        return (
-          <button
-            key={kind.id}
-            type="button"
-            onClick={onPlugClick}
-            data-act={`service-${kind.id}`}
-            data-kind={kind.id}
-            aria-pressed={on}
-            className={`pressable flex min-h-[44px] flex-col items-center justify-center gap-1 rounded-xl p-2 text-center ${on ? 'bg-secondary-container text-on-primary' : 'bg-surface-container-lowest text-on-surface shadow-sm'}`}
-          >
-            <span className="material-symbols-outlined text-[22px]">{kind.icon}</span>
-            <span className="font-label-sm text-[10px] font-bold leading-tight">{kind.label}</span>
-          </button>
-        );
-      })}
+    <div className="flex flex-col gap-3">
+      <div className="grid grid-cols-4 gap-2" data-plug-services>
+        {chips === null ? Array.from({ length: 8 }, (_, index) => (
+          <div key={index} className="min-h-[44px] animate-pulse rounded-xl bg-surface-container-high" />
+        )) : chips.map((kind) => {
+          const on = chip === kind.chip;
+          return (
+            <button
+              key={kind.chip}
+              type="button"
+              onClick={onPlugClick}
+              data-act={`service-${kind.chip}`}
+              data-kind={kind.chip}
+              aria-pressed={on}
+              className={`pressable flex min-h-[44px] flex-col items-center justify-center gap-1 rounded-xl p-2 text-center ${on ? 'bg-secondary-container text-on-primary' : 'bg-surface-container-lowest text-on-surface shadow-sm'}`}
+            >
+              <span className="material-symbols-outlined text-[22px]">{kind.icon}</span>
+              <span className="font-label-sm text-[10px] font-bold leading-tight">{kind.label}</span>
+            </button>
+          );
+        })}
+      </div>
+      {chipError ? (
+        <button type="button" className="min-h-[44px] text-left text-sm font-bold" onClick={() => setAttempt((value) => value + 1)}>
+          Couldn’t load services. Try again.
+        </button>
+      ) : null}
+      {categories.length > 0 && (
+        <div className="flex gap-2 overflow-x-auto pb-1" data-plug-categories>
+          {categories.map((category) => (
+            <button
+              key={category.code}
+              type="button"
+              onClick={onPlugClick}
+              data-act="service-category"
+              data-category={category.code}
+              className="min-h-[44px] shrink-0 rounded-full px-3 text-sm font-bold"
+              style={{ background: colour.get(category.group_code) || '#e2e8f0' }}
+            >
+              {category.label}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

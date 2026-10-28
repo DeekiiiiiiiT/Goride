@@ -6,7 +6,7 @@ import { SpatialReviewTab } from './SpatialReviewTab';
 import { api } from '../services/stationOpsApi';
 import { buildUnresolvedStopRows } from './buildUnresolvedStopRows';
 
-export type ResolutionQueueSubTab = 'unresolved-stops' | 'spatial-review' | 'silent-attach';
+export type ResolutionQueueSubTab = 'unresolved-stops' | 'spatial-review' | 'silent-attach' | 'fuel-places';
 
 export interface ResolutionQueueTabProps {
   defaultSubTab?: ResolutionQueueSubTab;
@@ -17,6 +17,7 @@ export interface ResolutionQueueTabProps {
   /** Dominion-only: show Silent Station Attach sub-tab. */
   enableSilentAttach?: boolean;
   silentAttachPanel?: React.ReactNode;
+  fuelReview?: React.ReactNode;
 }
 
 export function ResolutionQueueTab({
@@ -27,6 +28,7 @@ export function ResolutionQueueTab({
   onCountChange,
   enableSilentAttach = false,
   silentAttachPanel,
+  fuelReview,
 }: ResolutionQueueTabProps) {
   const initialSub =
     defaultSubTab === 'silent-attach' && !enableSilentAttach ? 'unresolved-stops' : defaultSubTab;
@@ -117,6 +119,11 @@ export function ResolutionQueueTab({
               </Badge>
             )}
           </TabsTrigger>
+          {fuelReview && (
+            <TabsTrigger value="fuel-places" className="text-xs sm:text-sm gap-1.5">
+              Fuel places
+            </TabsTrigger>
+          )}
           {enableSilentAttach && (
             <TabsTrigger value="silent-attach" className="text-xs sm:text-sm gap-1.5">
               Silent Attach
@@ -137,6 +144,12 @@ export function ResolutionQueueTab({
       <TabsContent value="spatial-review" className="m-0 p-0 border-0">
         <SpatialReviewTab onResolved={handleResolved} />
       </TabsContent>
+
+      {fuelReview ? (
+        <TabsContent value="fuel-places" className="m-0 p-0 border-0">
+          {fuelReview}
+        </TabsContent>
+      ) : null}
 
       {enableSilentAttach && (
         <TabsContent

@@ -198,7 +198,10 @@ export function PlacesHome({ onNavigate }: { onNavigate: (page: string) => void 
         { id: 'world-places', label: 'Places and pins', detail: 'Named places and map pins.' },
         { id: 'world-imports', label: 'Imports and versions', detail: 'Dry run, then publish.' },
         { id: 'world-quality', label: 'Map quality', detail: 'Map rows that fail a check.' },
-        { id: 'plug-places', label: 'Places review', detail: 'Places a person still needs to confirm.' },
+        { id: 'places-register', label: 'Places register', detail: 'Every place, with its type and facilities.' },
+        { id: 'places-categories', label: 'Categories', detail: 'Groups, types, facilities, and brands.' },
+        { id: 'places-review', label: 'Review', detail: 'Pins and facility suggestions waiting for a decision.' },
+        { id: 'plug-places', label: 'Plug pins', detail: 'The same review, showing only Plug pins.' },
       ]}
     />
   );

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { onPlugClick } from '../../shell/actions';
 import { bindScreen } from '../../shell/bind';
+import { PlaceFacilities } from '../../live/PlaceFacilities';
 
 
 export function PartsStoreScreen() {
@@ -35,6 +36,7 @@ export function PartsStoreScreen() {
         </div>
       </header>
       <main className={"flex-1 w-full bg-surface pt-16 pb-28"}>
+        <PlaceFacilities />
         <div className={"flex flex-col w-full"}>
           <div className={"relative w-full h-56 bg-surface-container-high overflow-hidden"}>
             <div className={"w-full h-full bg-surface-container flex items-center justify-center text-primary"} aria-hidden={"true"}><span className={"material-symbols-outlined text-[32px]"}>image</span></div>

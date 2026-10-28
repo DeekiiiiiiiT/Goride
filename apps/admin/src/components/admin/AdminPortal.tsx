@@ -30,7 +30,8 @@ const GctKnowledgeBasePage = lazyNamed(() => import('./gct/GctKnowledgeBasePage'
 import { ErrorBoundary } from '@roam/roam-shared';
 import type { ResolutionQueueSubTab } from '../fuel/stations/ResolutionQueueTab';
 const StationDatabaseView = lazyNamed(() => import('../fuel/stations/StationDatabaseView'), 'StationDatabaseView');
-const PlacesReview = lazyNamed(() => import('@roam/platform-ops-ui'), 'PlacesReview');
+const PlacesPage = lazyNamed(() => import('./places/PlacesPage'), 'PlacesPage');
+const FuelPlacesReview = lazyNamed(() => import('./places/PlacesPage'), 'FuelPlacesReview');
 const StationHealth = lazyNamed(() => import('./StationHealth'), 'StationHealth');
 import { API_ENDPOINTS } from '../../services/apiConfig';
 import { useAuth } from '../auth/AuthContext';
@@ -234,17 +235,14 @@ export function AdminPortal() {
             fillSummary={fillSummary}
             defaultTab={stationDbDefaultTab}
             defaultResolutionSubTab={resolutionSubTab}
+            fuelReview={<FuelPlacesReview />}
           />
         </div>
       )}
-      {currentPage === 'plug-places' && (
-        <div className="min-h-[600px] rounded-xl bg-white shadow-sm dark:bg-card">
-          <PlacesReview
-            apiBase={API_ENDPOINTS.explorer}
-            getToken={async () => (await supabase.auth.getSession()).data.session?.access_token ?? null}
-          />
-        </div>
-      )}
+      {currentPage === 'plug-places' && <PlacesPage mode="review" chip="plug" />}
+      {currentPage === 'places-register' && <PlacesPage mode="register" />}
+      {currentPage === 'places-categories' && <PlacesPage mode="categories" />}
+      {currentPage === 'places-review' && <PlacesPage mode="review" />}
       {currentPage === 'fuel-analytics' && <StationHealth />}
       {currentPage === 'toll-brain' && <TollBrainPage onNavigate={setCurrentPage} />}
       {currentPage === 'toll-stations' && (
