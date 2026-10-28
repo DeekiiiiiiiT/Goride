@@ -21,6 +21,8 @@ import { ReconCloseStep } from './ReconCloseStep';
 import { PastWeeksReturnLink } from '../settlements/past-weeks/PastWeeksReturnLink';
 import { TollsCheckFailedBanner, TollsLockedBanner } from './TollsLockedBanner';
 import { api } from '../../../services/api';
+import { useAuth } from '../../auth/AuthContext';
+import { hasAnyJwtRole } from '@roam/auth-client';
 import { Button } from '../../ui/button';
 import { cn } from '../../ui/utils';
 import { toast } from 'sonner';
@@ -145,6 +147,10 @@ export function ReconRunPage({
   onStepChange?: (step: RunStepId) => void;
   onOpenRemittance?: () => void;
 }) {
+  const { session } = useAuth();
+  const canResumeCalculator = session?.user
+    ? hasAnyJwtRole(session.user, ['fleet_admin', 'platform_owner', 'superadmin'])
+    : false;
   const [activeStep, setActiveStep] = useState<RunStepId>(() => stepFromQuery());
   const queryClient = useQueryClient();
   const runQueryKey = useMemo(() => ['recon-run', line, weekKey] as const, [line, weekKey]);
@@ -165,7 +171,12 @@ export function ReconRunPage({
     queryFn: () => fetchRun(line, weekKey),
     staleTime: 0,
     retry: false,
-    refetchInterval: (query) => (query.state.data?.deskReady === false ? 3000 : false),
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      if (data?.calculatorPaused) return 8000;
+      if (data?.deskReady === false) return 3000;
+      return false;
+    },
   });
 
   const statusQuery = useQuery({
@@ -425,6 +436,20 @@ export function ReconRunPage({
   }
 
   if (runQuery.data?.deskReady === false) {
+    if (runQuery.data.calculatorPaused) {
+      return (
+        <div className="flex h-48 flex-col items-center justify-center gap-2 px-6 text-center text-sm text-slate-600">
+          <p>Week calculator is paused by an admin.</p>
+          {canResumeCalculator ? (
+            <a href="/admin" className="text-slate-900 underline">
+              Resume it in Week calculator.
+            </a>
+          ) : (
+            <p>Ask a product admin to resume it.</p>
+          )}
+        </div>
+      );
+    }
     return (
       <div className="flex h-48 items-center justify-center text-sm text-slate-500">
         <Loader2 className="mr-2 h-5 w-5 animate-spin" />

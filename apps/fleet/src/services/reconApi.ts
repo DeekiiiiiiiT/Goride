@@ -121,6 +121,8 @@ export type ReconCloseCheck =
 
 export type ReconRunPayload = {
   deskReady?: boolean;
+  /** True when an admin has stopped the week calculator, so the desk will not fill in. */
+  calculatorPaused?: boolean;
   closeCheck?: ReconCloseCheck;
   run: {
     id: string;

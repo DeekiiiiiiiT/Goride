@@ -916,14 +916,26 @@ function withLiveRun(
   };
 }
 
-function preparingPayload(run: WeekRunRow) {
+async function calculatorIsPaused(): Promise<boolean> {
+  const { data, error } = await getServiceClient().rpc("recon_worker_status");
+  // Fail closed. A status outage must not look like "still preparing" while the calculator is stopped.
+  if (error || !data || typeof data !== "object") return true;
+  return Boolean((data as { emergencyOff?: boolean }).emergencyOff);
+}
+
+function preparingPayload(run: WeekRunRow, calculatorPaused: boolean) {
   return {
     deskReady: false,
+    calculatorPaused,
     run: deskRunFields(run),
     evaluation: {
       stage: "collecting",
       steps: [],
-      nextAction: { kind: "wait", targetId: "sources", label: "Preparing this week" },
+      nextAction: {
+        kind: "wait",
+        targetId: "sources",
+        label: calculatorPaused ? "Week calculator is paused" : "Preparing this week",
+      },
     },
     attribution: { rowCount: 0, amountMajor: 0, rows: [] },
     sources: [],
@@ -1440,8 +1452,9 @@ export function registerReconRoutes(app: Hono) {
           return c.json({ success: true, ...withLiveRun(live, run) });
         }
         await requestWeekDesk(run);
-        logReconPhase("desk_read", started, { hit: false, weekKey, line });
-        return c.json({ success: true, ...preparingPayload(run) });
+        const calculatorPaused = await calculatorIsPaused();
+        logReconPhase("desk_read", started, { hit: false, weekKey, line, calculatorPaused });
+        return c.json({ success: true, ...preparingPayload(run, calculatorPaused) });
       } catch (e) {
         return safeErrorResponse(c, e, "recon-run-get");
       }
