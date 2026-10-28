@@ -7,8 +7,10 @@
 R1–R10 closed in prod: schemas restored (R2), signed reversals + page `meta` + `range_summary` (R3/R4/R6), edge read path + parity (R5/R7/R8/R10), six Fleet bundles + roamfleet.co redeployed (R1). Disk spill still **~90 MB/day**. `make-server-37f42386` is not in the live function list.
 
 **Still gated by the clock:**
-- **R12** — resume `emergency_off` only after one full calendar day under 200 MB temp post-R1 deploy.
-- **R13** — Nano vs size-up after 7 days of `private.io_snapshots` from the R1 deploy.
+- **R12** — resume `emergency_off` only after one full calendar day under 200 MB temp post-R1 deploy (deploy window ~2026-10-28 01:00 UTC; check temp with `select pg_size_pretty(private.io_daily_temp_bytes());` then flip from Fleet admin recon worker switch).
+- **R13** — Nano vs size-up after 7 days of `private.io_snapshots` from that R1 deploy (decision ~2026-11-04). Stay Nano if average &lt; 200 MB/day and Disk IO chart out of red.
+
+**R11:** Committed on `main` (`a0f92373`, migration rename `3f9f74db`). Fresh-DB migration replay still unproven here (Docker Desktop not running; Supabase preview branch is ~$0.013/hr — create when you want that proof). Migration list is aligned with remote (`2026102719*` + `20261028003841` + `04952` + `011000`).
 
 ## Must fix — prod is broken or money is wrong
 
