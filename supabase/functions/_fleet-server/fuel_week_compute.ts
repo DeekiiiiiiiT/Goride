@@ -11,7 +11,7 @@ import { queryFleet } from "./repos/baseRepo.ts";
 import { filterFuelScenariosForOrg } from "./fuel_scenario_scope.ts";
 import { loadOrgPreferences } from "./fuel_org_preferences.ts";
 import { listOdometerLedger } from "./odometer_ledger.ts";
-import { listAllUnifiedCanonicalEvents } from "../_shared/unifiedLedger/queries.ts";
+import { orgVersion, weekSummary } from "../_shared/unifiedLedger/readApi.ts";
 import { FUEL_ENGINE_VERSION, fuelShadowDrift } from "../../../packages/fuel-core/src/fuelEngine.ts";
 import { addDaysYmd } from "../../../packages/fuel-core/src/fleetTime.ts";
 
@@ -65,7 +65,8 @@ export type FuelWeekHashSources = {
   drivers: Array<Record<string, unknown>>;
   vehicles: Array<Record<string, unknown>>;
   prefs: Record<string, unknown>;
-  fares: Array<Record<string, unknown>>;
+  /** Ledger fare fingerprint: org entry_seq + week_summary fare rows (not raw fare events). */
+  fareFingerprintParts: string[];
   distances: Array<Record<string, unknown>>;
   anchors: Array<Record<string, unknown>>;
   leftoverOverride?: unknown;
@@ -97,9 +98,7 @@ export function buildFuelWeekHashParts(sources: FuelWeekHashSources): string[] {
   const vehicleParts = sources.vehicles.map((row) =>
     `vehicle:${row.id}:${row.currentDriverId || row.current_driver_id || ""}:${row.fuelScenarioId || row.fuel_scenario_id || ""}`
   );
-  const fareParts = sources.fares.map((row) =>
-    `fare:${row.id}:${row.driverId || ""}:${row.grossAmount || 0}`
-  );
+  const fareParts = sources.fareFingerprintParts;
   const distanceParts = sources.distances.map((row) =>
     `distance:${row.vehicle_id}:${row.deadhead_km}:${row.trip_km}:${row.personal_km}:${row.stale}`
   );
@@ -145,22 +144,31 @@ export function buildFuelWeekHashParts(sources: FuelWeekHashSources): string[] {
 
 export async function hashFuelWeekInputs(orgId: string, weekStart: string, weekEnd: string): Promise<string> {
   const entries = await loadWeekFuelEntries(orgId, weekStart, weekEnd);
-  const [trips, adjustments, policies, drivers, vehicles, scenariosRaw, prefs, fares] = await Promise.all([
-    loadOrgRows("trips", orgId, { dateFrom: addDaysYmd(weekStart, -1), dateTo: weekEnd }),
-    loadOrgRows("fuel_adjustments", orgId),
-    loadOrgRows("earnings_policies", orgId),
-    loadOrgRows("drivers", orgId),
-    loadOrgRows("vehicles", orgId),
-    kv.getByPrefix("fuel_scenario:"),
-    loadOrgPreferences(orgId),
-    listAllUnifiedCanonicalEvents({
-      organizationId: orgId,
-      entryTypes: ["fare_earning"],
-      from: weekStart,
-      to: weekEnd,
-      maxRows: 8000,
-    }),
-  ]);
+  const [trips, adjustments, policies, drivers, vehicles, scenariosRaw, prefs, ver, fareSummary] =
+    await Promise.all([
+      loadOrgRows("trips", orgId, { dateFrom: addDaysYmd(weekStart, -1), dateTo: weekEnd }),
+      loadOrgRows("fuel_adjustments", orgId),
+      loadOrgRows("earnings_policies", orgId),
+      loadOrgRows("drivers", orgId),
+      loadOrgRows("vehicles", orgId),
+      kv.getByPrefix("fuel_scenario:"),
+      loadOrgPreferences(orgId),
+      orgVersion(orgId),
+      weekSummary({
+        organizationId: orgId,
+        from: `${String(weekStart).slice(0, 10)}T00:00:00.000Z`,
+        to: `${String(weekEnd).slice(0, 10)}T23:59:59.999Z`,
+        entryTypes: ["fare_earning"],
+        products: ["roam_driver", "roam_fleet"],
+      }),
+    ]);
+  const fareFingerprintParts = [
+    `org_seq:${ver?.entry_seq ?? 0}:${ver?.changed_at ?? ""}`,
+    ...fareSummary.map(
+      (r) =>
+        `fare_sum:${r.week_start}:${r.driver_id || ""}:${r.gross_minor}:${r.entry_count}:${r.sum_minor}`,
+    ),
+  ];
   const weekAdjustments = adjustments.filter((row) => {
     const day = ymd(row.date);
     return day >= weekStart && day <= weekEnd;
@@ -210,7 +218,7 @@ export async function hashFuelWeekInputs(orgId: string, weekStart: string, weekE
     drivers,
     vehicles,
     prefs: prefs as Record<string, unknown>,
-    fares: (fares || []) as Array<Record<string, unknown>>,
+    fareFingerprintParts,
     distances: (saved.data || []) as Array<Record<string, unknown>>,
     anchors,
     leftoverOverride,

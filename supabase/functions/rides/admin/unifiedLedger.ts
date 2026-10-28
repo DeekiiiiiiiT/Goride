@@ -9,11 +9,12 @@ import {
   ledgerRetiredIslands,
 } from "../../_shared/unifiedLedger/flags.ts";
 import {
-  listUnifiedLedgerEntries,
   reconcileLedgerIslands,
   reconcileAmountsBySource,
   checkProductBalances,
 } from "../../_shared/unifiedLedger/queries.ts";
+import { ledgerPage } from "../../_shared/unifiedLedger/readApi.ts";
+import { thisWeekRange } from "../../_shared/unifiedLedger/dateRange.ts";
 import { unifiedLedgerClient } from "../../_shared/unifiedLedger/postEntry.ts";
 
 const EXCLUDED_FROM_GREEN = new Set(["rides_ledger_lines"]);
@@ -39,26 +40,40 @@ export function registerUnifiedLedgerAdminRoutes(admin: Hono) {
       return c.json({ error: "feature_disabled", message: "Set LEDGER_READ_UNIFIED=1" }, 403);
     }
 
-    const page = Math.max(1, Number(c.req.query("page") ?? 1));
     const limit = Math.min(100, Math.max(1, Number(c.req.query("limit") ?? 50)));
     const requested = c.req.query("product")?.trim() || undefined;
     const product = scope === "fleet" ? "roam_fleet" : requested;
-    const from = c.req.query("from")?.trim() || undefined;
-    const to = c.req.query("to")?.trim() || undefined;
+    const defaults = thisWeekRange();
+    const from = c.req.query("from")?.trim() || defaults.from;
+    const to = c.req.query("to")?.trim() || defaults.to;
     const organizationId = c.req.query("organization_id")?.trim() || undefined;
     const driverId = c.req.query("driver_id")?.trim() || undefined;
+    const afterEffectiveAt = c.req.query("afterEffectiveAt")?.trim() || undefined;
+    const afterId = c.req.query("afterId")?.trim() || undefined;
+
+    if (!organizationId) {
+      return c.json({ error: "organization_id required", message: "Pass organization_id for keyset ledger feed" }, 400);
+    }
 
     try {
-      const { entries, total } = await listUnifiedLedgerEntries({
+      const page = await ledgerPage({
         organizationId,
-        product,
-        driverId,
         from,
         to,
+        products: product ? [product] : undefined,
+        driverIds: driverId ? [driverId] : undefined,
+        afterEffectiveAt,
+        afterId,
         limit,
-        offset: (page - 1) * limit,
       });
-      return c.json({ entries, total, page, limit, source: "ledger.entries", scope });
+      return c.json({
+        entries: page.rows,
+        hasMore: page.hasMore,
+        nextCursor: page.nextCursor,
+        limit,
+        source: "ledger.entries",
+        scope,
+      });
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       console.error("[unifiedLedger] feed:", message);

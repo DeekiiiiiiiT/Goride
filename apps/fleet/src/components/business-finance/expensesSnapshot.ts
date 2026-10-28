@@ -14,20 +14,20 @@ export async function fetchAllCanonicalEvents(
   eventTypes?: string,
 ): Promise<Record<string, unknown>[]> {
   const all: Record<string, unknown>[] = [];
-  let offset = 0;
-  const limit = 500;
+  let cursor: string | undefined;
+  const limit = 200;
   for (let i = 0; i < 40; i++) {
     const page = await api.getCanonicalLedgerEvents({
       startDate,
       endDate,
       eventTypes,
       limit,
-      offset,
+      cursor,
     });
     const chunk = page.data || [];
     all.push(...chunk);
-    if (!page.hasMore || chunk.length === 0) break;
-    offset += limit;
+    if (!page.hasMore || chunk.length === 0 || !page.nextCursor) break;
+    cursor = page.nextCursor;
   }
   return all;
 }

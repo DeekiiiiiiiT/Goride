@@ -39,28 +39,23 @@ export async function fetchAllLedgerEventValuesForDrivers(
   opts?: LedgerDriverFetchOpts,
 ): Promise<any[]> {
   if (!driverIds.length) return [];
-  const { listAllUnifiedCanonicalEvents } = await import("../_shared/unifiedLedger/queries.ts");
-  const seen = new Set<string>();
-  const all: any[] = [];
-  const maxRows = opts?.maxRows ?? 50_000;
-  const from = opts?.from;
-  const to = opts?.to;
-  for (const did of driverIds) {
-    const rows = await listAllUnifiedCanonicalEvents({
-      products: ["roam_driver", "roam_fleet"],
-      driverId: did,
-      from,
-      to,
-      maxRows,
-    });
-    for (const r of rows) {
-      const id = String(r.id || "");
-      if (id && seen.has(id)) continue;
-      if (id) seen.add(id);
-      all.push(r);
-    }
-  }
-  return filterByOrg(all, c);
+  const orgId = getOrgId(c);
+  if (!orgId) throw new Error("fetchAllLedgerEventValuesForDrivers requires organization");
+  const { listCanonicalViaPage } = await import("../_shared/unifiedLedger/readApi.ts");
+  const { lastNWeeksRange } = await import("../_shared/unifiedLedger/dateRange.ts");
+  const defaults = lastNWeeksRange(4);
+  const from = opts?.from || `${defaults.from}T00:00:00.000Z`;
+  const to = opts?.to || `${defaults.to}T23:59:59.999Z`;
+  const maxRows = Math.min(opts?.maxRows ?? 2000, 5000);
+  const rows = await listCanonicalViaPage({
+    organizationId: orgId,
+    from,
+    to,
+    driverIds,
+    products: ["roam_driver", "roam_fleet"],
+    maxRows,
+  });
+  return filterByOrg(rows, c);
 }
 
 function emptyBucket(): FareEarningsDriverBucket {
@@ -158,25 +153,37 @@ async function scanFareEarningsByDriver(
   today: string,
   monthStart: string,
   monthEnd: string,
-  maxRows = 100_000,
+  _maxRows = 100_000,
 ): Promise<FareEarningsAggregateResult> {
-  const { listAllUnifiedCanonicalEvents } = await import("../_shared/unifiedLedger/queries.ts");
-  const rows = await listAllUnifiedCanonicalEvents({
-    products: ["roam_driver", "roam_fleet"],
+  const orgId = getOrgId(c);
+  if (!orgId) {
+    return { byDriver: new Map(), truncated: true, source: "ledger_entries_scan", totalEntriesProcessed: 0 };
+  }
+  const { weekSummary } = await import("../_shared/unifiedLedger/readApi.ts");
+  const { lastNWeeksRange } = await import("../_shared/unifiedLedger/dateRange.ts");
+  // Lifetime via week_summary over last 52 weeks (never unbounded scan).
+  const life = lastNWeeksRange(52);
+  const rows = await weekSummary({
+    organizationId: orgId,
+    from: `${life.from}T00:00:00.000Z`,
+    to: `${life.to}T23:59:59.999Z`,
     entryTypes: ["fare_earning"],
-    maxRows,
+    products: ["roam_driver", "roam_fleet"],
   });
-  const entryValues = filterByOrg(rows, c);
-  const truncated = rows.length >= maxRows;
+  filterByOrg(
+    rows.map((r) => ({ organizationId: r.organization_id })),
+    c,
+  );
   const byDriver = new Map<string, FareEarningsDriverBucket>();
+  let totalEntriesProcessed = 0;
 
-  for (const e of entryValues) {
-    if (!e) continue;
-    const driverId = String(e.driverId || "").trim();
+  for (const r of rows) {
+    const driverId = String(r.driver_id || "").trim();
     if (!driverId || driverId === "unknown") continue;
-    const gross = Number(e.grossAmount) || 0;
-    const entryDate = String(e.date || "").substring(0, 10);
-    if (!entryDate || entryDate.length !== 10) continue;
+    const gross = Number(r.gross_minor || r.sum_minor || 0) / 100;
+    const count = Number(r.entry_count) || 0;
+    const weekStart = String(r.week_start || "").slice(0, 10);
+    totalEntriesProcessed += count;
 
     let bucket = byDriver.get(driverId);
     if (!bucket) {
@@ -184,23 +191,32 @@ async function scanFareEarningsByDriver(
       byDriver.set(driverId, bucket);
     }
     bucket.lifetimeEarnings += gross;
-    bucket.lifetimeTripCount += 1;
-    if (entryDate >= monthStart && entryDate <= monthEnd) {
+    bucket.lifetimeTripCount += count;
+    // Approximate month/today from week grain (RPC path preferred above).
+    if (weekStart && weekStart >= monthStart && weekStart <= monthEnd) {
       bucket.monthlyEarnings += gross;
-      bucket.monthlyTripCount += 1;
+      bucket.monthlyTripCount += count;
     }
-    if (entryDate === today) {
-      bucket.todayEarnings += gross;
-      bucket.todayTripCount += 1;
+    if (weekStart === today || (weekStart <= today && today <= addDaysApprox(weekStart, 6))) {
+      // Today cannot be precise from week grain — leave today at 0 unless week is current.
+      if (weekStart <= today && today <= addDaysApprox(weekStart, 6) && count > 0) {
+        /* keep today from fare SQL when available; scan fallback skips today */
+      }
     }
   }
 
   return {
     byDriver,
-    truncated,
+    truncated: true,
     source: "ledger_entries_scan",
-    totalEntriesProcessed: entryValues.length,
+    totalEntriesProcessed,
   };
+}
+
+function addDaysApprox(ymd: string, days: number): string {
+  const [y, m, d] = ymd.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d + days));
+  return dt.toISOString().slice(0, 10);
 }
 
 /**
@@ -269,12 +285,15 @@ export async function fetchCanonicalLedgerEventsInPeriod(
   periodStart: string,
   periodEnd: string,
 ): Promise<any[]> {
-  const { listAllUnifiedCanonicalEvents } = await import("../_shared/unifiedLedger/queries.ts");
-  const rows = await listAllUnifiedCanonicalEvents({
-    products: ["roam_driver", "roam_fleet"],
+  const orgId = getOrgId(c);
+  if (!orgId) throw new Error("fetchCanonicalLedgerEventsInPeriod requires organization");
+  const { listCanonicalViaPage } = await import("../_shared/unifiedLedger/readApi.ts");
+  const rows = await listCanonicalViaPage({
+    organizationId: orgId,
     from: `${periodStart}T00:00:00.000Z`,
     to: `${periodEnd}T23:59:59.999Z`,
-    maxRows: 100_000,
+    products: ["roam_driver", "roam_fleet"],
+    maxRows: 1000,
   });
   return filterByOrg(rows, c);
 }

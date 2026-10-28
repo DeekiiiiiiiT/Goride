@@ -2877,6 +2877,7 @@ interface TollLedgerRecord {
 }
 
 interface TollLedgerFilters {
+  organizationId?: string;
   vehicleId?: string;
   driverId?: string;
   tollTagId?: string;
@@ -3791,26 +3792,42 @@ async function queryTollLedgerEntries(filters: TollLedgerFilters): Promise<TollL
   try {
     const { isLedgerReadUnifiedTollEnabled } = await import("../_shared/unifiedLedger/flags.ts");
     if (isLedgerReadUnifiedTollEnabled()) {
-      const { listUnifiedLedgerEntries } = await import("../_shared/unifiedLedger/queries.ts");
-      const { entries } = await listUnifiedLedgerEntries({
+      const ctx = getTollContext();
+      const orgId = String(filters.organizationId || (ctx ? getOrgId(ctx) : "") || "").trim();
+      if (!orgId) throw new Error("organizationId required for unified toll ledger page");
+      const { ledgerPage } = await import("../_shared/unifiedLedger/readApi.ts");
+      const { lastNWeeksRange } = await import("../_shared/unifiedLedger/dateRange.ts");
+      const defaults = filters.dateFrom && filters.dateTo
+        ? { from: String(filters.dateFrom).slice(0, 10), to: String(filters.dateTo).slice(0, 10) }
+        : lastNWeeksRange(4);
+      const page = await ledgerPage({
+        organizationId: orgId,
+        from: `${defaults.from}T00:00:00.000Z`,
+        to: `${defaults.to}T23:59:59.999Z`,
         products: ["roam_fleet", "roam_driver"],
-        sourceSystem: "kv_toll_ledger",
-        limit: 5000,
-        offset: 0,
-        skipCount: true,
+        entryTypes: [
+          "toll_charge",
+          "toll_refund",
+          "toll_charge_offset",
+          "toll_reimbursement",
+          "toll_charged_to_driver",
+          "toll_charge_reversed",
+        ],
+        driverIds: filters.driverId ? [filters.driverId] : undefined,
+        vehicleId: filters.vehicleId || undefined,
+        limit: 200,
       });
-      return entries.map((e) => {
-        const meta = (e.metadata ?? {}) as Record<string, unknown>;
+      return page.rows.map((e) => {
         const amtMajor = Number(e.amount_minor ?? 0) / 100;
-        const typ = String(meta.toll_type ?? "usage") as TollType;
+        const typ = "usage" as TollType;
         const now = new Date().toISOString();
         return {
           id: String(e.reference_id ?? e.id),
           createdAt: now,
           updatedAt: now,
-          vehicleId: meta.vehicle_id != null ? String(meta.vehicle_id) : null,
+          vehicleId: e.vehicle_id != null ? String(e.vehicle_id) : null,
           vehiclePlate: null,
-          driverId: meta.driver_id != null ? String(meta.driver_id) : null,
+          driverId: e.driver_id != null ? String(e.driver_id) : null,
           driverName: null,
           tollTagId: null,
           tagNumber: null,
@@ -3824,21 +3841,21 @@ async function queryTollLedgerEntries(filters: TollLedgerFilters): Promise<TollL
           paymentMethod: "tag_balance",
           status: "resolved",
           resolution: null,
-          isReconciled: true,
+          isReconciled: !!e.is_reconciled,
           tripId: null,
           matchConfidence: null,
           matchedAt: null,
           matchedBy: null,
-          batchId: null,
+          batchId: e.batch_id != null ? String(e.batch_id) : null,
           batchName: null,
           importedAt: null,
           sourceFile: null,
           receiptUrl: null,
           referenceNumber: null,
-          description: null,
+          description: e.description != null ? String(e.description) : null,
           notes: null,
           auditTrail: [],
-          metadata: { ...(meta as Record<string, unknown>), source: "ledger.entries" },
+          metadata: { source: "ledger.entries", direction: e.direction },
         } as TollLedgerRecord;
       });
     }

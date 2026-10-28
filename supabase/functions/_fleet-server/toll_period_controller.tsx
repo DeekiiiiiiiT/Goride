@@ -315,14 +315,28 @@ function bucketFleetLossEventsByWeek(
   return buckets;
 }
 
-/** Load canonical events that drive Business Finance P&L Tolls / Net Toll Loss. */
+/** Load week-grain sums that drive Business Finance P&L Tolls / Net Toll Loss. */
 async function loadTollFleetLossLedgerEvents(opts?: {
+  organizationId?: string | null;
   driverId?: string;
   from?: string;
   to?: string;
 }): Promise<Record<string, unknown>[]> {
-  const { listAllUnifiedCanonicalEvents } = await import("../_shared/unifiedLedger/queries.ts");
-  return await listAllUnifiedCanonicalEvents({
+  const org = String(opts?.organizationId || "").trim();
+  if (!org) throw new Error("loadTollFleetLossLedgerEvents requires organizationId");
+  const { lastNWeeksRange } = await import("../_shared/unifiedLedger/dateRange.ts");
+  // week_summary requires Mon–Sun; always use a week-aligned 26-week window.
+  const { from, to } = lastNWeeksRange(26);
+  void opts?.from;
+  void opts?.to;
+  const {
+    weekSummary,
+    weekSummaryToCanonicalEvents,
+  } = await import("../_shared/unifiedLedger/readApi.ts");
+  const summary = await weekSummary({
+    organizationId: org,
+    from: `${from}T00:00:00.000Z`,
+    to: `${to}T23:59:59.999Z`,
     products: ["roam_driver", "roam_fleet"],
     entryTypes: [
       "toll_charge",
@@ -333,12 +347,9 @@ async function loadTollFleetLossLedgerEvents(opts?: {
       "toll_charged_to_driver",
       "toll_charge_reversed",
     ],
-    driverId: opts?.driverId,
-    from: opts?.from,
-    to: opts?.to,
-    // 26-week lookback — avoid 100k scan that stampeded statement_timeout.
-    maxRows: 25_000,
+    driverIds: opts?.driverId ? [opts.driverId] : undefined,
   });
+  return weekSummaryToCanonicalEvents(summary);
 }
 
 // ─── GET /toll-reconciliation/periods ───────────────────────────────────
@@ -350,7 +361,12 @@ app.get(`${BASE}/periods`, requirePermission('toll.view'), async (c) => {
 
     const [{ tollTx, trips }, fleetLossEvents] = await Promise.all([
       loadTollLedgerWithTrips(fromYmd, toYmd),
-      loadTollFleetLossLedgerEvents({ driverId, from: fromYmd, to: toYmd }),
+      loadTollFleetLossLedgerEvents({
+        organizationId: getOrgId(c),
+        driverId,
+        from: fromYmd,
+        to: toYmd,
+      }),
     ]);
     // Quarantined synthetic cash rows must not inflate spend or net loss.
     const quarantinedTollIds = new Set(

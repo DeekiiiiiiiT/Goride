@@ -4,7 +4,13 @@
  */
 import type { Context, Hono } from "npm:hono@4.3.11";
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
-import { requireAuth, requirePermission, hasPermission, type RbacUser } from "./rbac_middleware.ts";
+import {
+  requireAuth,
+  requirePermission,
+  requireAnyPermission,
+  hasPermission,
+  type RbacUser,
+} from "./rbac_middleware.ts";
 import { getOrgId } from "./org_scope.ts";
 import { appendDriverAuditEvent } from "./drivers_audit.ts";
 import { isFeatureEnabled, FEATURE_FLAGS } from "./feature_flags.ts";
@@ -16,6 +22,7 @@ import {
   clusterEventsByJob,
   computeEventAcceptanceRate,
   deriveStatusSegments,
+  activityServiceLinesForPlatform,
   isUnsupportedActivityPlatform,
   mapDeliveryStatusToCanonical,
   mapOfferStatusToCanonical,
@@ -27,6 +34,13 @@ import {
   tripCoverageKeys,
   type ActivityEventLike,
 } from "./driver_activity_logic.ts";
+import {
+  UBER_ACTIVITY_SERVICE_LINE,
+  UBER_ACTIVITY_SOURCE,
+  canCommitUberActivityTimeline,
+  parseUberActivityTimelineText,
+  type UberTimelineParsedEvent,
+} from "./uber_activity_timeline_parse.ts";
 
 const PREFIX = "/make-server-37f42386";
 const GRACE_SECONDS = 300;
@@ -674,7 +688,8 @@ export function registerDriverActivityRoutes(app: Hono) {
       }
 
       const platform = c.req.query("platform") || c.req.query("platforms") || "";
-      if (isUnsupportedActivityPlatform(platform.split(",")[0])) {
+      const platformFirst = platform.split(",")[0];
+      if (isUnsupportedActivityPlatform(platformFirst)) {
         return c.json({
           success: true,
           orgId,
@@ -694,7 +709,8 @@ export function registerDriverActivityRoutes(app: Hono) {
       const fromQ = c.req.query("from") || new Date(Date.now() - 7 * 86400000).toISOString();
       const toQ = c.req.query("to") || new Date().toISOString();
       const window = clampActivityWindow(fromQ, toQ, 31);
-      const serviceLines = (c.req.query("serviceLines") || "roam_rides,roam_rush")
+      const defaultLines = activityServiceLinesForPlatform(platformFirst || null);
+      const serviceLines = (c.req.query("serviceLines") || defaultLines)
         .split(",")
         .map((s) => s.trim())
         .filter(Boolean);
@@ -909,7 +925,7 @@ export function registerDriverActivityRoutes(app: Hono) {
       const fromQ = c.req.query("from") || new Date(Date.now() - 7 * 86400000).toISOString();
       const toQ = c.req.query("to") || new Date().toISOString();
       const window = clampActivityWindow(fromQ, toQ, 31);
-      const serviceLines = (c.req.query("serviceLines") || "roam_rides,roam_rush")
+      const serviceLines = (c.req.query("serviceLines") || activityServiceLinesForPlatform(null))
         .split(",")
         .map((s) => s.trim())
         .filter(Boolean);
@@ -1011,7 +1027,7 @@ export function registerDriverActivityRoutes(app: Hono) {
       const fromQ = c.req.query("from") || new Date(Date.now() - 7 * 86400000).toISOString();
       const toQ = c.req.query("to") || new Date().toISOString();
       const window = clampActivityWindow(fromQ, toQ, 31);
-      const serviceLines = (c.req.query("serviceLines") || "roam_rides,roam_rush")
+      const serviceLines = (c.req.query("serviceLines") || activityServiceLinesForPlatform(null))
         .split(",")
         .map((s) => s.trim())
         .filter(Boolean);
@@ -1055,6 +1071,161 @@ export function registerDriverActivityRoutes(app: Hono) {
         headers: {
           "Content-Type": "text/csv; charset=utf-8",
           "Content-Disposition": `attachment; filename="driver-activity-${driverId}.csv"`,
+        },
+      });
+    },
+  );
+
+  // ── Uber app activity timeline import (Data Center) ─────────────────────
+  app.post(
+    `${PREFIX}/drivers/:id/activity/import-uber-timeline`,
+    requireAuth({ requireOrg: true }),
+    requireAnyPermission("data.import", "drivers.edit"),
+    async (c) => {
+      const orgId = getOrgId(c);
+      const driverId = String(c.req.param("id") || "").trim();
+      if (!driverId) return c.json({ error: "driverId required" }, 400);
+
+      const flagOn = await isFeatureEnabled(FEATURE_FLAGS.DRIVER_ACTIVITY, orgId);
+      if (!flagOn) {
+        return c.json({
+          error: "driver_activity_disabled",
+          message: "Driver Activity is not enabled for this organization.",
+        }, 404);
+      }
+
+      let body: {
+        text?: string;
+        timeZone?: string;
+        replaceFrom?: string;
+        replaceTo?: string;
+        importBatchId?: string;
+        assumeChronological?: boolean;
+      };
+      try {
+        body = await c.req.json();
+      } catch {
+        return c.json({ error: "Invalid JSON body" }, 400);
+      }
+
+      const text = String(body?.text || "");
+      if (!text.trim()) return c.json({ error: "text required" }, 400);
+
+      const timeZone = String(body?.timeZone || "America/Jamaica").trim() || "America/Jamaica";
+      const assumeChronological = Boolean(body?.assumeChronological);
+      const parsed = parseUberActivityTimelineText(text, {
+        timeZone,
+        driverId,
+        assumeChronological,
+      });
+      if (!canCommitUberActivityTimeline(parsed)) {
+        return c.json({
+          error: "no_events",
+          message: "No valid Uber activity events found in the pasted text.",
+          warnings: parsed.warnings,
+          stats: parsed.stats,
+        }, 400);
+      }
+
+      const rangeFrom = body.replaceFrom || parsed.dateRange!.from;
+      const rangeTo = body.replaceTo || parsed.dateRange!.to;
+      const importBatchId = String(body.importBatchId || crypto.randomUUID());
+
+      const sb = serviceClient();
+
+      // Replace prior Uber-app imports for this driver overlapping the range
+      const { data: deletedRows, error: delErr } = await sb
+        .from("fleet_driver_activity_events")
+        .delete()
+        .eq("organization_id", orgId)
+        .eq("driver_id", driverId)
+        .eq("source", UBER_ACTIVITY_SOURCE)
+        .eq("service_line", UBER_ACTIVITY_SERVICE_LINE)
+        .gte("occurred_at", rangeFrom)
+        .lte("occurred_at", rangeTo)
+        .select("id");
+
+      if (delErr) {
+        console.error("[activity] uber timeline replace delete failed", delErr.message);
+        return c.json({ error: delErr.message }, 500);
+      }
+      const replaced = (deletedRows || []).length;
+
+      const projection: Array<Omit<ProjectionRow, "id" | "ingested_at">> = parsed.events.map(
+        (e: UberTimelineParsedEvent) => ({
+          organization_id: orgId,
+          driver_id: driverId,
+          service_line: UBER_ACTIVITY_SERVICE_LINE,
+          source: UBER_ACTIVITY_SOURCE,
+          source_event_id: String(e.source_event_id),
+          event_type: e.event_type,
+          occurred_at: e.occurred_at,
+          job_ref: e.job_ref,
+          job_seq: e.job_seq,
+          payload: {
+            ...e.payload,
+            importBatchId,
+            localDate: e.local_date,
+            localTime: e.local_time,
+            timeZone,
+          },
+        }),
+      );
+
+      let inserted = 0;
+      const chunk = 500;
+      for (let i = 0; i < projection.length; i += chunk) {
+        const slice = projection.slice(i, i + chunk);
+        const result = await insertProjectionRows(sb, slice);
+        inserted += result.inserted;
+      }
+
+      // Coverage: presence + trip honesty for Uber app timeline window
+      const { error: covErr } = await sb.from("fleet_activity_source_coverage").upsert(
+        {
+          service_line: UBER_ACTIVITY_SERVICE_LINE,
+          source: UBER_ACTIVITY_SOURCE,
+          covered_from: rangeFrom,
+          covered_to: rangeTo,
+          note: `Uber app timeline import batch ${importBatchId}`,
+        },
+        { onConflict: "service_line,source,covered_from" },
+      );
+      if (covErr) {
+        console.warn("[activity] uber coverage upsert failed", covErr.message);
+      }
+
+      const rbacUser = c.get("rbacUser") as RbacUser | undefined;
+      try {
+        await appendDriverAuditEvent(c, {
+          driverId,
+          actorId: rbacUser?.userId || "system",
+          action: "uber_activity_timeline_import",
+          reason: `Imported ${inserted} Uber activity events (${parsed.stats.days} days)`,
+          before: { replaced, rangeFrom, rangeTo },
+          after: { inserted, importBatchId, stats: parsed.stats },
+        });
+      } catch (auditErr) {
+        console.warn("[activity] uber import audit failed", auditErr);
+      }
+
+      return c.json({
+        success: true,
+        orgId,
+        driverId,
+        inserted,
+        replaced,
+        importBatchId,
+        dateRange: { from: rangeFrom, to: rangeTo },
+        warnings: parsed.warnings,
+        stats: parsed.stats,
+        summary: {
+          days: parsed.stats.days,
+          eventCount: parsed.stats.eventCount,
+          offersAccepted: parsed.stats.offersAccepted,
+          tripsCompleted: parsed.stats.tripsCompleted,
+          driverCancels: parsed.stats.driverCancels,
+          riderCancels: parsed.stats.riderCancels,
         },
       });
     },

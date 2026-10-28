@@ -18,7 +18,7 @@ function sources(patch: Partial<FuelWeekHashSources> = {}): FuelWeekHashSources 
     drivers: [{ id: "d1", fuelScenarioId: "s1" }],
     vehicles: [{ id: "v1", currentDriverId: "d1" }],
     prefs: { personalAllowance: { weeklyKm: 50 } },
-    fares: [],
+    fareFingerprintParts: [],
     distances: [{ vehicle_id: "v1", deadhead_km: 1, trip_km: 12, personal_km: 0, stale: false }],
     anchors: [],
     ...patch,

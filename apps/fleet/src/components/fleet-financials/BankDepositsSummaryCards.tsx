@@ -136,7 +136,14 @@ function KpiCard({
   );
 }
 
-export function BankDepositsSummaryCards({ rows }: { rows: FleetBankReceiveRow[] }) {
+export function BankDepositsSummaryCards({
+  rows,
+  updatedLabel,
+}: {
+  rows: FleetBankReceiveRow[];
+  /** Optional "Updated hh:mm" when API provides a timestamp. */
+  updatedLabel?: string | null;
+}) {
   const byPlatform = useMemo(() => {
     return {
       uber: metricsForPlatform(rows, 'uber'),
@@ -184,6 +191,8 @@ export function BankDepositsSummaryCards({ rows }: { rows: FleetBankReceiveRow[]
   }));
 
   return (
+    <div className="space-y-2">
+    {updatedLabel ? <p className="text-xs text-slate-500">Updated {updatedLabel}</p> : null}
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
       <KpiCard
         title="Expected deposits"
@@ -226,6 +235,7 @@ export function BankDepositsSummaryCards({ rows }: { rows: FleetBankReceiveRow[]
         platformLines={varianceLines}
         valueClassName={totalVarianceWeeks > 0 ? 'text-rose-700 dark:text-rose-400' : undefined}
       />
+    </div>
     </div>
   );
 }

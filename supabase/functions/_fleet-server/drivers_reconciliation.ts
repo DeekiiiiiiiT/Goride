@@ -134,7 +134,7 @@ async function sumUberLedgerNet(
     const events = await fetchAllLedgerEventValuesForDrivers(driverIds, c, {
       from: `${from}T00:00:00.000Z`,
       to: `${to}T23:59:59.999Z`,
-      maxRows: 50_000,
+      maxRows: 1000,
     });
     const period = events.filter((v: any) =>
       canonicalEventInSelectedWindow(v as Record<string, unknown>, from, to),

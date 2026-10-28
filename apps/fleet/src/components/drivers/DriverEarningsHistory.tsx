@@ -6,12 +6,13 @@ import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Download, Target, CalendarDays, Database } from "lucide-react";
 import { TierConfig, QuotaConfig, Trip, FinancialTransaction } from "../../types/data";
-import { deriveDriverFinancialDateRange } from "../../utils/driverFinancialDateRange";
 import { format } from "date-fns";
 import { exportToCSV } from "../../utils/csvHelpers";
 import { toast } from "sonner";
 import { ScrollArea } from "../ui/scroll-area";
 import { useDriverEarningsHistory } from "../../hooks/useDriverEarningsHistory";
+import { lastNStatementWeeks } from "../../contexts/LedgerPeriodContext";
+import { ledgerFetchErrorCopy } from "../../utils/ledgerRangeError";
 
 interface DriverEarningsHistoryProps {
   driverId: string;
@@ -96,17 +97,19 @@ function convertRows(rows: any[]): PeriodRow[] {
 
 export function DriverEarningsHistory({
   driverId,
-  trips,
-  transactions,
+  trips: _trips,
+  transactions: _transactions,
   rangeFrom,
   rangeTo,
 }: DriverEarningsHistoryProps) {
+  void _trips;
+  void _transactions;
   const [periodType, setPeriodType] = useState<PeriodType>('weekly');
   const [selectedRowIdx, setSelectedRowIdx] = useState<number | null>(null);
 
   /**
    * Financials period only (owned by Financials date control — not Overview header).
-   * Falls back to trip/tx activity span only when Financials range is unset.
+   * When unset, default last 4 statement weeks (never full lifetime).
    */
   const financialRangeKey = useMemo(() => {
     const rFrom = toYmd(rangeFrom);
@@ -114,14 +117,14 @@ export function DriverEarningsHistory({
     return rFrom && rTo ? `${rFrom}|${rTo}` : "";
   }, [rangeFrom, rangeTo]);
 
-  const activityRangeKey = useMemo(() => {
-    if (financialRangeKey) return financialRangeKey;
-    const r = deriveDriverFinancialDateRange(trips, transactions);
-    return r ? `${r.startDate}|${r.endDate}` : "";
-  }, [financialRangeKey, trips, transactions]);
+  const defaultFourWeekKey = useMemo(() => {
+    const r = lastNStatementWeeks(4);
+    return `${r.startDate}|${r.endDate}`;
+  }, []);
 
-  const startDate = activityRangeKey ? activityRangeKey.split("|")[0] : undefined;
-  const endDate = activityRangeKey ? activityRangeKey.split("|")[1] : undefined;
+  const rangeKey = financialRangeKey || defaultFourWeekKey;
+  const startDate = rangeKey.split("|")[0];
+  const endDate = rangeKey.split("|")[1];
 
   const {
     rows: rqRows,
@@ -130,7 +133,9 @@ export function DriverEarningsHistory({
     isFetchingNextPage,
     loading: rqLoading,
     error: rqError,
+    errorDetail: rqErrorDetail,
     success: rqSuccess,
+    refetch: rqRefetch,
   } = useDriverEarningsHistory({
     driverId,
     periodType,
@@ -140,10 +145,8 @@ export function DriverEarningsHistory({
 
   const activePeriodData = useMemo(() => convertRows(rqRows), [rqRows]);
 
-  const waitingForRange = !financialRangeKey && !activityRangeKey;
-  const dataSource: 'waiting' | 'loading' | 'ledger' | 'error' = waitingForRange
-    ? 'waiting'
-    : rqLoading && activePeriodData.length === 0
+  const dataSource: 'loading' | 'ledger' | 'error' =
+    rqLoading && activePeriodData.length === 0
       ? 'loading'
       : rqError
         ? 'error'
@@ -220,15 +223,6 @@ export function DriverEarningsHistory({
     toast.success("History Exported");
   };
 
-  if (dataSource === 'waiting' && activePeriodData.length === 0) {
-    return (
-      <div className="text-center p-8 border border-dashed rounded-lg text-slate-400">
-        <p className="text-sm font-medium text-slate-500">Choose a Financials period to load earnings history.</p>
-        <p className="text-xs text-slate-400 mt-1">Use the Financials period control above — not the Overview calendar.</p>
-      </div>
-    );
-  }
-
   if (dataSource === 'loading') {
     return (
       <div className="text-center p-8 border border-dashed rounded-lg text-slate-400">
@@ -239,11 +233,13 @@ export function DriverEarningsHistory({
 
   if (dataSource === 'error') {
     return (
-      <div className="text-center p-6 border border-dashed border-rose-200 rounded-lg bg-rose-50/50 text-slate-700 space-y-2">
-        <p className="text-sm font-medium text-rose-800">Could not load earnings history</p>
-        <p className="text-xs text-slate-600 max-w-md mx-auto">
-          The ledger request failed. Check the browser console for details, refresh the page, or confirm you are signed in.
+      <div className="text-center p-6 border border-dashed border-rose-200 rounded-lg bg-rose-50/50 text-slate-700 space-y-3">
+        <p className="text-sm font-medium text-rose-800">
+          {ledgerFetchErrorCopy(rqErrorDetail, 'Could not load earnings history')}
         </p>
+        <Button type="button" variant="outline" size="sm" onClick={() => void rqRefetch()}>
+          Retry
+        </Button>
       </div>
     );
   }

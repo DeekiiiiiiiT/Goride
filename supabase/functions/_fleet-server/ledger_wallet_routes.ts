@@ -11,9 +11,6 @@ import { fromKvStore } from "./fleet_sql_bridge.ts";
 import { listCashHeldPeriods } from "./driver_financial_periods.ts";
 import { getRidesPaymentDb } from "../_shared/ridesPaymentDb.ts";
 import { driverDebtAccountKeyForUser } from "../_shared/ridesAccountKeys.ts";
-import { DEFAULT_FLEET_TZ } from "../../../packages/finance-core/src/periodKey.ts";
-import { expectedBankWeekKey } from "../../../packages/finance-core/src/businessStatement.ts";
-
 const PREFIX = "/make-server-37f42386";
 const DRIVER_LIST_CAP = 5000;
 const TOP_N = 5;
@@ -51,28 +48,6 @@ function payoutScheduledLabel(periodEndYmd: string): string {
   return `${day} ${months[end.getUTCMonth()]}`;
 }
 
-function eventMeta(raw: Record<string, unknown>): Record<string, unknown> {
-  const m = raw.metadata;
-  return m && typeof m === "object" ? (m as Record<string, unknown>) : {};
-}
-
-function isOrgBankEvent(raw: Record<string, unknown>): boolean {
-  if (String(raw.eventType || "") !== "payout_bank") return false;
-  const meta = eventMeta(raw);
-  if (meta.recipient === "org") return true;
-  if (String(meta.source || "") === "payments_organization") return true;
-  if (String(meta.bankRole || "") === "org_deposit") return true;
-  return false;
-}
-
-function inferFleetBankPlatform(raw: Record<string, unknown>): BankPlatform {
-  const meta = eventMeta(raw);
-  const platform = String(meta.platform || meta.sourcePlatform || "").toLowerCase();
-  if (platform.includes("indrive") || platform.includes("in_drive")) return "indrive";
-  if (platform.includes("roam")) return "roam";
-  return "uber";
-}
-
 function normalizeBankPlatform(raw: unknown): BankPlatform {
   const p = String(raw || "uber").toLowerCase();
   if (p === "indrive" || p === "roam" || p === "uber") return p;
@@ -96,37 +71,68 @@ async function buildBankDepositsBalanceForPeriod(
   confirmedWeekCount: number;
   unconfirmedWeekCount: number;
 }> {
-  const {
-    listAllUnifiedCanonicalEvents,
-    dedupeOrgBankCanonicalEvents,
-  } = await import("../_shared/unifiedLedger/queries.ts");
+  const orgId = getOrgId(c);
+  if (!orgId) throw new Error("Organization required for bank deposits expected");
 
-  const all = dedupeOrgBankCanonicalEvents(
-    await listAllUnifiedCanonicalEvents({
-      products: ["roam_driver", "roam_fleet"],
+  const {
+    ledgerPage,
+    mapPageRowToCanonical,
+  } = await import("../_shared/unifiedLedger/readApi.ts");
+  const { dedupeOrgBankCanonicalEvents } = await import("../_shared/unifiedLedger/queries.ts");
+  const { expectedBankWeekKey } = await import("../../../packages/finance-core/src/businessStatement.ts");
+  const { lastNWeeksRange } = await import("../_shared/unifiedLedger/dateRange.ts");
+  // Never unbounded: clamp to last 12 weeks when the desk asks for a wider window.
+  const defaults = lastNWeeksRange(12);
+  const from = startDate && startDate >= defaults.from ? startDate : defaults.from;
+  const to = endDate && endDate <= defaults.to ? endDate : (endDate || defaults.to);
+
+  const pageRows: Awaited<ReturnType<typeof ledgerPage>>["rows"] = [];
+  let afterEffectiveAt: string | undefined;
+  let afterId: string | undefined;
+  for (let i = 0; i < 10; i++) {
+    const page = await ledgerPage({
+      organizationId: orgId,
+      from: `${from}T00:00:00.000Z`,
+      to: `${to}T23:59:59.999Z`,
       entryTypes: ["payout_bank"],
-      maxRows: 100_000,
-    }),
-  );
-  const scoped = filterByOrg(all, c) as Record<string, unknown>[];
+      products: ["roam_driver", "roam_fleet"],
+      afterEffectiveAt,
+      afterId,
+      limit: 200,
+    });
+    pageRows.push(...page.rows);
+    if (!page.hasMore || !page.nextCursor) break;
+    afterEffectiveAt = page.nextCursor.effectiveAt;
+    afterId = page.nextCursor.id;
+  }
+
+  const mapped = dedupeOrgBankCanonicalEvents(pageRows.map(mapPageRowToCanonical));
+  filterByOrg(mapped, c);
 
   const orgByWeek = new Map<string, number>();
   const allByWeek = new Map<string, number>();
   const platformByWeek = new Map<string, BankPlatform>();
 
-  for (const raw of scoped) {
-    if (String(raw.eventType || "") !== "payout_bank") continue;
-    const driverId = String(raw.driverId || "");
-    if (driverId.startsWith("00000000") && !isOrgBankEvent(raw)) continue;
-    const weekStartYmd = expectedBankWeekKey(raw, DEFAULT_FLEET_TZ);
-    if (!weekStartYmd) continue;
-    const add = Math.abs(Number(raw.netAmount) || 0);
+  for (const row of mapped) {
+    const weekStartYmd = expectedBankWeekKey(row);
+    if (!weekStartYmd || !/^\d{4}-\d{2}-\d{2}$/.test(weekStartYmd)) continue;
+    const add = Math.abs(Number(row.netAmount) || 0);
     if (add < 1e-9) continue;
     allByWeek.set(weekStartYmd, round2((allByWeek.get(weekStartYmd) || 0) + add));
-    if (!platformByWeek.has(weekStartYmd) || isOrgBankEvent(raw)) {
-      platformByWeek.set(weekStartYmd, inferFleetBankPlatform(raw));
+    const meta =
+      row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
+        ? (row.metadata as Record<string, unknown>)
+        : {};
+    const plat = normalizeBankPlatform(row.platform);
+    const isOrg =
+      meta.recipient === "org" ||
+      meta.source === "payments_organization" ||
+      meta.bankRole === "org_deposit" ||
+      !row.driverId;
+    if (!platformByWeek.has(weekStartYmd) || isOrg) {
+      platformByWeek.set(weekStartYmd, plat);
     }
-    if (isOrgBankEvent(raw)) {
+    if (isOrg) {
       orgByWeek.set(weekStartYmd, round2((orgByWeek.get(weekStartYmd) || 0) + add));
     }
   }

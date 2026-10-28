@@ -162,22 +162,21 @@ export async function buildStatementCards(
   const rollups = orgId ? await loadRollup(orgId, startDate, endDate) : null;
   const useFacts = rollups != null;
 
-  const {
-    listAllUnifiedCanonicalEvents,
-    filterCanonicalEventsByPlatform,
-  } = await import("../_shared/unifiedLedger/queries.ts");
+  const { filterCanonicalEventsByPlatform } = await import("../_shared/unifiedLedger/queries.ts");
+  const { listCanonicalViaPage } = await import("../_shared/unifiedLedger/readApi.ts");
 
   const lateTo = addIsoDays(endDate, 7);
+  // Statement assembly still needs payout rows; bounded via listCanonicalViaPage (org+dates required).
   const [weekEvents, lateDeposits] = await Promise.all([
-    listAllUnifiedCanonicalEvents({
+    listCanonicalViaPage({
       organizationId: orgId,
       products: ["roam_driver", "roam_fleet"],
       entryTypes: useFacts ? PAYOUT_TYPES : FALLBACK_TYPES,
       from: `${startDate}T00:00:00.000Z`,
       to: `${endDate}T23:59:59.999Z`,
-      maxRows: 5000,
+      maxRows: 1000,
     }),
-    listAllUnifiedCanonicalEvents({
+    listCanonicalViaPage({
       organizationId: orgId,
       products: ["roam_driver", "roam_fleet"],
       entryTypes: ["payout_bank"],

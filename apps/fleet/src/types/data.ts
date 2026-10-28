@@ -301,6 +301,15 @@ export interface CanonicalBatchAuditSnapshot {
   total: number;
   byDriver: Record<string, number>;
   byEventType: Record<string, number>;
+  /** Optional fold from `ledger.batch_totals` when the route uses the read model. */
+  batchTotals?: Array<{
+    entry_type?: string;
+    entryType?: string;
+    entry_count?: number;
+    entryCount?: number;
+    sum_minor?: number;
+    sumMinor?: number;
+  }>;
 }
 
 export type FieldType = 'text' | 'number' | 'date' | 'address';
@@ -709,19 +718,29 @@ export interface LedgerFilterParams {
   maxAmount?: number;
   searchTerm?: string;
   limit?: number;
+  /** @deprecated Prefer nextCursor / afterEffectiveAt+afterId keyset paging. */
   offset?: number;
+  /** Pipe-encoded keyset cursor: `${effectiveAt}|${id}` */
+  cursor?: string;
+  afterEffectiveAt?: string;
+  afterId?: string;
   sortBy?: 'date' | 'amount' | 'createdAt';
   sortDir?: 'asc' | 'desc';
 }
 
 export interface PaginatedLedgerResponse {
   data: LedgerEntry[];
-  total: number;
-  page: number;
+  /** Optional — keyset pages may omit exact totals. */
+  total?: number;
+  page?: number;
   limit: number;
   hasMore: boolean;
+  /** Pipe-encoded `${effectiveAt}|${id}` when more rows exist. */
+  nextCursor?: string | null;
+  /** ISO timestamp when summary/read-model was last refreshed (optional). */
+  updatedAt?: string | null;
   /** Server responds with canonical list metadata when present. */
-  meta?: { source?: 'canonical' };
+  meta?: { source?: 'canonical'; updatedAt?: string };
 }
 
 export interface LedgerDriverOverview {

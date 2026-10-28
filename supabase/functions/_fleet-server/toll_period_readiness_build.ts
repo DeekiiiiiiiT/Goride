@@ -7,11 +7,6 @@
  */
 import { periodEndForAnchor } from "../../../packages/finance-core/src/periodKey.ts";
 import {
-  filterTollEventsInDateRange,
-  type TollLedgerLikeEvent,
-} from "../../../packages/toll-core/src/tollFleetLossNetting.ts";
-import { computeTollWeekNetting } from "../../../packages/toll-core/src/tollWeekNetting.ts";
-import {
   incrementDisputeRefundCount,
   incrementLandingUnclaimedTollCount,
   incrementUnderpaidClaimCount,
@@ -184,24 +179,45 @@ export async function buildWeekReadiness(opts: {
 
     let eventsNetLoss = cardsNetLoss;
     try {
-      const { listAllUnifiedCanonicalEvents } = await import("../_shared/unifiedLedger/queries.ts");
-      const events = await listAllUnifiedCanonicalEvents({
+      const orgId = String(opts.orgId || "").trim();
+      if (!orgId) throw new Error("org required for toll readiness ledger totals");
+      // Totals-only: week_summary for toll entry types (no row scan).
+      const { weekSummary, sumWeekSummaryMajor } = await import("../_shared/unifiedLedger/readApi.ts");
+      const tollTypes = [
+        "toll_charge",
+        "toll_refund",
+        "toll_charge_offset",
+        "toll_reimbursement",
+        "toll_charged_to_driver",
+        "toll_charge_reversed",
+      ];
+      const summary = await weekSummary({
+        organizationId: orgId,
+        from: `${String(weekKey).slice(0, 10)}T00:00:00.000Z`,
+        to: `${String(weekEnd).slice(0, 10)}T23:59:59.999Z`,
+        entryTypes: tollTypes,
         products: ["roam_driver", "roam_fleet"],
-        entryTypes: [
-          "toll_charge",
-          "toll_refund",
-          "toll_charge_offset",
-          "toll_reimbursement",
-          "toll_charged_to_driver",
-          "toll_charge_reversed",
-        ],
-        from: weekKey,
-        to: weekEnd,
-        maxRows: 50_000,
-        ...(driverId ? { driverId } : {}),
+        ...(driverId ? { driverIds: [driverId] } : {}),
       });
-      const weekEvents = filterTollEventsInDateRange(events as TollLedgerLikeEvent[], weekKey, weekEnd);
-      eventsNetLoss = computeTollWeekNetting(weekEvents).netLoss;
+      const charge = sumWeekSummaryMajor(
+        summary.filter((r) => r.entry_type === "toll_charge"),
+        "abs_sum_minor",
+      );
+      const refund = sumWeekSummaryMajor(
+        summary.filter((r) =>
+          r.entry_type === "toll_refund" ||
+          r.entry_type === "toll_reimbursement" ||
+          r.entry_type === "toll_charge_offset"
+        ),
+        "abs_sum_minor",
+      );
+      const charged = sumWeekSummaryMajor(
+        summary.filter((r) =>
+          r.entry_type === "toll_charged_to_driver" || r.entry_type === "toll_charge_reversed"
+        ),
+        "abs_sum_minor",
+      );
+      eventsNetLoss = Math.round((charge - refund - charged) * 100) / 100;
     } catch (e) {
       console.warn("[toll-readiness] events netting skipped", e);
     }

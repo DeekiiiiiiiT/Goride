@@ -6,6 +6,7 @@ import { currentFuelListWindow } from '../utils/fuelListWindow';
 import { useLedgerPeriod } from '../contexts/LedgerPeriodContext';
 import { useLedgerQuery } from '../hooks/useLedgerQuery';
 import { isFuelServerSortKey } from '../utils/fuelSortKeys';
+import { ledgerFetchErrorCopy } from '../utils/ledgerRangeError';
 import { FuelLedgerTable, ALL_COLUMNS, DEFAULT_VISIBLE_KEYS } from './fuel-ledger/FuelLedgerTable';
 import type { SortDir } from './fuel-ledger/FuelLedgerTable';
 import { FuelLedgerColumnToggle } from './fuel-ledger/FuelLedgerColumnToggle';
@@ -99,7 +100,9 @@ export function FuelLedgerPage({ organizationId, columnConfig }: FuelLedgerPageP
   const entries = rowsQuery.data?.data || [];
   const total = rowsQuery.data?.total ?? 0;
   const loading = rowsQuery.isFetching;
-  const error = rowsQuery.error ? ((rowsQuery.error as Error).message || 'Failed to load fuel entries') : null;
+  const error = rowsQuery.error
+    ? ledgerFetchErrorCopy(rowsQuery.error, 'Failed to load fuel entries')
+    : null;
 
   const handlePageChange = (newPage: number) => setPage(newPage);
   const handlePageSizeChange = (newSize: number) => {

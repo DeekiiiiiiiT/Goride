@@ -619,28 +619,36 @@ async function resolveDriverAliasIds(driverId: string): Promise<string[]> {
   return Array.from(ids);
 }
 
-/** Load fare/tip/payout_cash for driver alias IDs from unified ledger.entries (BF SSOT). */
-async function loadLedgerEventsForDriverIds(driverIds: string[]): Promise<any[]> {
+/**
+ * Load fare/tip/payout_cash for driver alias IDs via keyset driver_page (org + date required).
+ * Default window: last 52 Mon–Sun weeks (never unbounded / never per-alias 40k).
+ */
+async function loadLedgerEventsForDriverIds(
+  driverIds: string[],
+  organizationId: string | null | undefined,
+  range?: { from: string; to: string },
+): Promise<any[]> {
   if (!driverIds.length) return [];
-  const { listAllUnifiedCanonicalEvents } = await import("../_shared/unifiedLedger/queries.ts");
-  const aliasSet = new Set(driverIds.map((id) => String(id)));
-  const merged = new Map<string, Record<string, unknown>>();
-  // Dual-write may key accounts by Roam or platform external UUID — resolve each alias.
-  for (const id of driverIds) {
-    const chunk = await listAllUnifiedCanonicalEvents({
-      driverId: id,
-      products: ["roam_driver", "roam_fleet"],
-      entryTypes: ["fare_earning", "tip", "payout_cash", "promotion", "prior_period_adjustment"],
-      maxRows: 40_000,
-    });
-    for (const e of chunk) {
-      const did = String(e.driverId || "");
-      if (did && !aliasSet.has(did) && did !== String(id)) continue;
-      const key = String(e.id || (String(e.eventType) + "|" + String(e.date) + "|" + String(e.driverId) + "|" + String(e.netAmount)));
-      merged.set(key, e);
-    }
+  const org = String(organizationId || "").trim();
+  if (!org) {
+    console.warn("[DriverFinancialPeriods] skip ledger load — missing organizationId");
+    return [];
   }
-  return [...merged.values()];
+  const {
+    weekSummary,
+    weekSummaryToCanonicalEvents,
+  } = await import("../_shared/unifiedLedger/readApi.ts");
+  const { lastNWeeksRange } = await import("../_shared/unifiedLedger/dateRange.ts");
+  const bounds = range ?? lastNWeeksRange(52);
+  const summary = await weekSummary({
+    organizationId: org,
+    from: `${bounds.from}T00:00:00.000Z`,
+    to: `${bounds.to}T23:59:59.999Z`,
+    driverIds,
+    products: ["roam_driver", "roam_fleet"],
+    entryTypes: ["fare_earning", "tip", "payout_cash", "promotion", "prior_period_adjustment"],
+  });
+  return weekSummaryToCanonicalEvents(summary);
 }
 
 async function loadDriverTransactionsForSettlement(
@@ -668,6 +676,7 @@ export async function loadRebuildContext(
   const timezone = await getFleetTimezone();
   const driverIds = await resolveDriverAliasIds(driverId);
   const idSet = new Set(driverIds.map(String));
+  const organizationIdEarly = await resolveDriverOrganizationId(driverId);
 
   const [
     { tollTx, trips },
@@ -689,7 +698,7 @@ export async function loadRebuildContext(
       return loadIndexedDocs({ kind: "finalized_report", driverIds });
     })(),
     loadAllByPrefix("claim:"),
-    loadLedgerEventsForDriverIds(driverIds),
+    loadLedgerEventsForDriverIds(driverIds, organizationIdEarly),
     kv.get("preferences:general"),
     kv.getByPrefix("earnings_policy:"),
   ]);
@@ -728,7 +737,7 @@ export async function loadRebuildContext(
     (ledgerEvents || []).filter((e: any) => e && String(e.eventType || "") === "payout_cash"),
     timezone,
   );
-  const organizationId = await resolveDriverOrganizationId(driverId);
+  const organizationId = organizationIdEarly;
 
   const fuelReconByWeekStart = new Map<string, FuelReconPeriodLockRow>();
   if (organizationId) {

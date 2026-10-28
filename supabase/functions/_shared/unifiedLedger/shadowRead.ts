@@ -1,6 +1,7 @@
 /**
  * Phase B shadow read — compare legacy vs unified without changing the HTTP response.
  * Grep logs: event":"unified_shadow_read"
+ * L-13: when on, uses count(*) in SQL — no 5k row fetch.
  */
 import { isLedgerShadowIslandEnabled } from "./flags.ts";
 import { unifiedLedgerClient } from "./postEntry.ts";
@@ -48,7 +49,7 @@ export function shadowCompareAsync(input: ShadowReadInput): void {
 
 export async function shadowCompare(input: ShadowReadInput): Promise<ShadowReadResult> {
   if (!isLedgerShadowIslandEnabled(input.island)) {
-    const skipped: ShadowReadResult = {
+    return {
       status: "skipped",
       island: input.island,
       legacy_count: input.legacyCount,
@@ -59,16 +60,15 @@ export async function shadowCompare(input: ShadowReadInput): Promise<ShadowReadR
       delta_amount_minor: null,
       sample_mismatches: [],
     };
-    return skipped;
   }
 
   const client = unifiedLedgerClient();
-  let rq = client
+  // Count only — never fetch receipt rows (L-13).
+  const { count, error } = await client
     .from("ledger_source_receipts")
-    .select("source_id, ledger_entry_id", { count: "exact" })
+    .select("id", { count: "exact", head: true })
     .eq("source_system", input.island);
 
-  const { data: receipts, error, count } = await rq.limit(5000);
   if (error) {
     logShadow({ island: input.island, status: "fail", reason: error.message });
     return {
@@ -84,38 +84,10 @@ export async function shadowCompare(input: ShadowReadInput): Promise<ShadowReadR
     };
   }
 
-  const unifiedCount = count ?? (receipts?.length ?? 0);
+  const unifiedCount = count ?? 0;
   const deltaCount = unifiedCount - input.legacyCount;
-
-  let unifiedAmount: number | null = null;
-  if (input.legacyAmountMinor !== undefined && receipts && receipts.length > 0) {
-    const entryIds = receipts
-      .map((r: { ledger_entry_id: string }) => r.ledger_entry_id)
-      .slice(0, 1000);
-    const { data: entries } = await client
-      .from("ledger_entries")
-      .select("amount_minor")
-      .in("id", entryIds);
-    unifiedAmount = (entries ?? []).reduce(
-      (s: number, e: { amount_minor: number }) => s + Math.abs(e.amount_minor ?? 0),
-      0,
-    );
-  }
-
-  const receiptIds = new Set(
-    (receipts ?? []).map((r: { source_id: string }) => String(r.source_id)),
-  );
-  const sampleMismatches = (input.sampleKeys ?? [])
-    .filter((k) => !receiptIds.has(k))
-    .slice(0, 10);
-
-  const deltaAmount =
-    input.legacyAmountMinor !== undefined && unifiedAmount !== null
-      ? unifiedAmount - Math.abs(input.legacyAmountMinor)
-      : null;
-
   const status: ShadowReadResult["status"] =
-    deltaCount === 0 && (deltaAmount === null || deltaAmount === 0) ? "ok" : "drift";
+    deltaCount === 0 ? "ok" : "drift";
 
   const result: ShadowReadResult = {
     status,
@@ -124,11 +96,10 @@ export async function shadowCompare(input: ShadowReadInput): Promise<ShadowReadR
     unified_count: unifiedCount,
     delta_count: deltaCount,
     legacy_amount_minor: input.legacyAmountMinor ?? null,
-    unified_amount_minor: unifiedAmount,
-    delta_amount_minor: deltaAmount,
-    sample_mismatches: sampleMismatches,
+    unified_amount_minor: null,
+    delta_amount_minor: null,
+    sample_mismatches: [],
   };
-
-  logShadow(result);
+  logShadow(result as unknown as Record<string, unknown>);
   return result;
 }

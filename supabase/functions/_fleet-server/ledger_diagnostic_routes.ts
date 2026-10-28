@@ -155,13 +155,16 @@ export function registerLedgerDiagnosticRoutes(app: Hono) {
       };
 
       const fetchFareEarningRows = async () => {
-        const { listAllUnifiedCanonicalEvents } = await import("../_shared/unifiedLedger/queries.ts");
-        const rows = await listAllUnifiedCanonicalEvents({
-          products: ["roam_driver", "roam_fleet"],
-          entryTypes: ["fare_earning"],
+        if (!readerOrgId) return [];
+        const { listCanonicalViaPage } = await import("../_shared/unifiedLedger/readApi.ts");
+        const rows = await listCanonicalViaPage({
+          organizationId: readerOrgId,
           from: `${startDate}T00:00:00.000Z`,
           to: `${endDate}T23:59:59.999Z`,
-          maxRows: 50_000,
+          entryTypes: ["fare_earning"],
+          products: ["roam_driver", "roam_fleet"],
+          driverIds: allDriverIds,
+          maxRows: 1000,
         });
         const want = new Set(allDriverIds.map((id) => String(id).toLowerCase()));
         return rows.filter((e) => want.has(String(e.driverId || "").toLowerCase()));

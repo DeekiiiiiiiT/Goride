@@ -144,7 +144,7 @@ export async function resolveTollCloseAmounts(opts: {
       const { computeTollWeekNetting } = await import(
         "../../../packages/toll-core/src/tollWeekNetting.ts"
       );
-      const events = await loadCanonicalTollEventsForDriverWeek(driverId, weekKey);
+      const events = await loadCanonicalTollEventsForDriverWeek(driverId, weekKey, organizationId);
       if (events.length > 0) {
         const net = computeTollWeekNetting(events);
         fromEvents = {

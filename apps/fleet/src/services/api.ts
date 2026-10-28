@@ -29,6 +29,7 @@ import {
   seedPreferencesCache,
 } from './preferencesClient';
 import { unwrapFuelEntriesPayload } from '@roam/fuel-core';
+import { normalizeLedgerNextCursor } from '../utils/ledgerCursor';
 
 /** Fresh Idempotency-Key for toll money POSTs (retries / double-clicks). */
 function newTollIdempotencyKey(prefix = 'toll'): string {
@@ -338,7 +339,7 @@ export const api = {
     return response.json();
   },
 
-  /** Phase 7: scan canonical ledger rows for `batchId` (org-scoped recount). */
+  /** Phase 7: scan canonical ledger rows for `batchId` (org-scoped recount). Prefer `batch_totals` when present. */
   async getCanonicalBatchAudit(batchId: string): Promise<CanonicalBatchAuditSnapshot> {
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.financial}/ledger/canonical-batch-audit/${encodeURIComponent(batchId)}`,
@@ -352,7 +353,28 @@ export const api = {
     if (!body?.success || !body?.data) {
       throw new Error('Invalid canonical batch audit response');
     }
-    return body.data as CanonicalBatchAuditSnapshot;
+    const data = body.data as CanonicalBatchAuditSnapshot & {
+      batch_totals?: CanonicalBatchAuditSnapshot['batchTotals'];
+    };
+    const totalsRows = data.batchTotals || data.batch_totals;
+    if (Array.isArray(totalsRows) && totalsRows.length > 0) {
+      const byEventType: Record<string, number> = { ...(data.byEventType || {}) };
+      let total = 0;
+      for (const row of totalsRows) {
+        const t = String(row.entry_type || row.entryType || 'unknown');
+        const n = Number(row.entry_count ?? row.entryCount ?? 0) || 0;
+        byEventType[t] = (byEventType[t] || 0) + n;
+        total += n;
+      }
+      return {
+        batchId: data.batchId || batchId,
+        total: data.total != null ? Number(data.total) : total,
+        byDriver: data.byDriver || {},
+        byEventType,
+        batchTotals: totalsRows,
+      };
+    }
+    return data as CanonicalBatchAuditSnapshot;
   },
 
   async getBatchDeletePreview(id: string): Promise<{
@@ -1320,6 +1342,50 @@ export const api = {
       throw new Error(err.error || 'Failed to fetch activity summary');
     }
     return response.json();
+  },
+
+  /** Import Uber app activity timeline (paste/Excel text) into Activity tab events. */
+  async importUberActivityTimeline(
+    driverId: string,
+    body: {
+      text: string;
+      timeZone?: string;
+      replaceFrom?: string;
+      replaceTo?: string;
+      importBatchId?: string;
+      /** True for Chronological Excel/CSV (oldest→newest). False for Uber app paste. */
+      assumeChronological?: boolean;
+    },
+  ) {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fleetCore}/drivers/${encodeURIComponent(driverId)}/activity/import-uber-timeline`,
+      {
+        method: 'POST',
+        headers: await requireAuthHeaders(null),
+        body: JSON.stringify(body),
+      },
+    );
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.message || data.error || 'Failed to import Uber activity timeline');
+    }
+    return data as {
+      success: boolean;
+      inserted: number;
+      replaced: number;
+      importBatchId: string;
+      dateRange: { from: string; to: string };
+      warnings: string[];
+      stats: Record<string, number>;
+      summary: {
+        days: number;
+        eventCount: number;
+        offersAccepted: number;
+        tripsCompleted: number;
+        driverCancels: number;
+        riderCancels: number;
+      };
+    };
   },
 
   getDriverActivityExportUrl(
@@ -6436,7 +6502,21 @@ export const api = {
     if (params.maxAmount !== undefined) qp.set('maxAmount', String(params.maxAmount));
     if (params.searchTerm) qp.set('searchTerm', params.searchTerm);
     if (params.limit) qp.set('limit', String(params.limit));
-    if (params.offset) qp.set('offset', String(params.offset));
+    // Prefer keyset cursor; keep offset only as legacy fallback when no cursor is set.
+    const cursor =
+      params.cursor ||
+      (params.afterEffectiveAt && params.afterId
+        ? `${params.afterEffectiveAt}|${params.afterId}`
+        : undefined);
+    if (cursor) {
+      qp.set('cursor', cursor);
+      qp.set('afterEffectiveAt', params.afterEffectiveAt || cursor.split('|')[0]);
+      qp.set('afterId', params.afterId || cursor.split('|').slice(1).join('|'));
+    } else if (params.offset != null) {
+      qp.set('offset', String(params.offset));
+    }
+    if (params.afterEffectiveAt && !cursor) qp.set('afterEffectiveAt', params.afterEffectiveAt);
+    if (params.afterId && !cursor) qp.set('afterId', params.afterId);
     if (params.sortBy) qp.set('sortBy', params.sortBy);
     if (params.sortDir) qp.set('sortDir', params.sortDir);
 
@@ -6448,7 +6528,27 @@ export const api = {
       const errText = await response.text();
       throw new Error(`Ledger query failed: ${errText}`);
     }
-    return response.json();
+    const body = await response.json();
+    const nextCursor =
+      normalizeLedgerNextCursor(body?.nextCursor) ??
+      normalizeLedgerNextCursor(body?.next_cursor) ??
+      null;
+    const hasMore =
+      typeof body?.hasMore === 'boolean'
+        ? body.hasMore
+        : typeof body?.has_more === 'boolean'
+          ? body.has_more
+          : Boolean(nextCursor);
+    return {
+      ...body,
+      data: body?.data ?? body?.rows ?? [],
+      hasMore,
+      nextCursor,
+      updatedAt: body?.updatedAt ?? body?.meta?.updatedAt ?? null,
+      total: body?.total,
+      page: body?.page,
+      limit: body?.limit ?? params.limit ?? 50,
+    } as PaginatedLedgerResponse;
   },
 
   async getLedgerCount(): Promise<{
@@ -7050,21 +7150,57 @@ export const api = {
     endDate?: string;
     /** Comma-separated, e.g. `payout_bank` — same ledger source as PERIOD Transferred to Bank. */
     eventTypes?: string;
+    eventType?: string;
+    platform?: string;
+    direction?: string;
+    batchId?: string;
+    vehicleId?: string;
+    isReconciled?: boolean;
+    searchTerm?: string;
+    minAmount?: number;
+    maxAmount?: number;
     limit?: number;
+    /** @deprecated Prefer cursor / afterEffectiveAt+afterId. */
     offset?: number;
+    /** Pipe-encoded `${effectiveAt}|${id}` */
+    cursor?: string;
+    afterEffectiveAt?: string;
+    afterId?: string;
   }): Promise<{
     data: Record<string, unknown>[];
-    page: number;
+    page?: number;
     limit: number;
     hasMore: boolean;
+    nextCursor?: string | null;
+    updatedAt?: string | null;
   }> {
     const qp = new URLSearchParams();
     if (params.driverId) qp.set('driverId', params.driverId);
     if (params.startDate) qp.set('startDate', params.startDate);
     if (params.endDate) qp.set('endDate', params.endDate);
     if (params.eventTypes) qp.set('eventTypes', params.eventTypes);
+    if (params.eventType) qp.set('eventType', params.eventType);
+    if (params.platform) qp.set('platform', params.platform);
+    if (params.direction) qp.set('direction', params.direction);
+    if (params.batchId) qp.set('batchId', params.batchId);
+    if (params.vehicleId) qp.set('vehicleId', params.vehicleId);
+    if (params.isReconciled !== undefined) qp.set('isReconciled', String(params.isReconciled));
+    if (params.searchTerm) qp.set('searchTerm', params.searchTerm);
+    if (params.minAmount !== undefined) qp.set('minAmount', String(params.minAmount));
+    if (params.maxAmount !== undefined) qp.set('maxAmount', String(params.maxAmount));
     if (params.limit != null) qp.set('limit', String(params.limit));
-    if (params.offset != null) qp.set('offset', String(params.offset));
+    const cursor =
+      params.cursor ||
+      (params.afterEffectiveAt && params.afterId
+        ? `${params.afterEffectiveAt}|${params.afterId}`
+        : undefined);
+    if (cursor) {
+      qp.set('cursor', cursor);
+      qp.set('afterEffectiveAt', params.afterEffectiveAt || cursor.split('|')[0]);
+      qp.set('afterId', params.afterId || cursor.split('|').slice(1).join('|'));
+    } else if (params.offset != null) {
+      qp.set('offset', String(params.offset));
+    }
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.financial}/ledger/canonical-events?${qp.toString()}`,
       { headers: await requireAuthHeaders(null) },
@@ -7073,7 +7209,25 @@ export const api = {
       const errText = await response.text();
       throw new Error(`Canonical ledger query failed: ${errText}`);
     }
-    return response.json();
+    const body = await response.json();
+    const nextCursor =
+      normalizeLedgerNextCursor(body?.nextCursor) ??
+      normalizeLedgerNextCursor(body?.next_cursor) ??
+      null;
+    const hasMore =
+      typeof body?.hasMore === 'boolean'
+        ? body.hasMore
+        : typeof body?.has_more === 'boolean'
+          ? body.has_more
+          : Boolean(nextCursor);
+    return {
+      data: body?.data ?? body?.rows ?? [],
+      page: body?.page,
+      limit: body?.limit ?? params.limit ?? 50,
+      hasMore,
+      nextCursor,
+      updatedAt: body?.updatedAt ?? body?.meta?.updatedAt ?? null,
+    };
   },
 
   /** Idempotently sync historical fixed expenses + generic transactions into Business Finance. */

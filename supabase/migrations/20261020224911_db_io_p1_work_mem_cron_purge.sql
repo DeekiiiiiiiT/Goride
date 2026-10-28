@@ -1,11 +1,11 @@
--- Disk IO P1 (docs/supabase-disk-io-optimization-plan.md).
--- !! Part 1 CAUSED A FULL API OUTAGE and was reverted by 20261020231600 — see that file.
--- 1) API-role work_mem: list-path sorts (~6 MB of wide ledger/trip rows) were spilling to temp
---    files at the 2 MB default — 1.4 TB written on a 387 MB database. Role-scoped, not global.
---    PostgREST applies impersonated-role settings per request.
+-- Disk IO P1 (docs/supabase-disk-io-optimization-plan.md / unified-ledger-disk-io-audit.md).
+-- !! Original Part 1 used work_mem = '8MB' and caused a full API outage (PostgREST lowercases
+--    unit suffixes → '8mb' rejected). Reverted by 20261020231600. This file is patched to
+--    unitless 8192 (kB) so fresh branch replay stays API-safe. Do NOT reintroduce unit suffixes.
+-- 1) API-role work_mem: list-path sorts spill to temp at the 2 MB default. Role-scoped.
 --    Rollback: alter role <role> reset work_mem;
-alter role service_role  set work_mem = '8MB';
-alter role authenticated set work_mem = '8MB';
+alter role service_role  set work_mem = 8192;
+alter role authenticated set work_mem = 8192;
 
 -- 2) pg_cron history was never purged (419,813 rows; 7 jobs fire every minute).
 --    Keep 7 days. A fresh database has no pg_cron, so the schedule is skipped there.

@@ -81,13 +81,23 @@ describe('DriverActivityTab smoke', () => {
     expect(screen.getByTestId('driver-activity-tab')).toBeTruthy();
   });
 
-  it('renders unsupported platform state for Uber filter', async () => {
+  it('renders unsupported platform state for InDrive filter only', async () => {
+    expect(isUnsupportedActivityPlatform('Uber')).toBe(false);
+    expect(isUnsupportedActivityPlatform('InDrive')).toBe(true);
+    const { DriverActivityTab } = await import('./DriverActivityTab');
+    renderWithQuery(
+      <DriverActivityTab driverId="driver-1" selectedPlatforms={new Set(['InDrive'])} />,
+    );
+    expect(await screen.findByTestId('activity-unsupported-platform')).toBeTruthy();
+  });
+
+  it('loads Activity tab when Uber platform filter is selected', async () => {
     const { DriverActivityTab } = await import('./DriverActivityTab');
     renderWithQuery(
       <DriverActivityTab driverId="driver-1" selectedPlatforms={new Set(['Uber'])} />,
     );
-    expect(await screen.findByTestId('activity-unsupported-platform')).toBeTruthy();
-    expect(isUnsupportedActivityPlatform('Uber')).toBe(true);
+    expect(await screen.findByTestId('driver-activity-tab')).toBeTruthy();
+    expect(screen.queryByTestId('activity-unsupported-platform')).toBeNull();
   });
 
   it('shows trips-recorded presence-not banner from honesty message', async () => {

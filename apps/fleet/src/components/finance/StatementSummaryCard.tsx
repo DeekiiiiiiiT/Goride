@@ -42,6 +42,8 @@ type Props = {
   onOpenTollRecon?: () => void;
   onOpenLine?: LineClick;
   deltas?: { earnings: number; net: number; trips: number } | null;
+  /** Optional "Updated hh:mm" from API when available. */
+  updatedLabel?: string | null;
 };
 
 function tieStateOf(summary: StatementSummary): 'ties' | 'off' | 'not_checked' {
@@ -100,7 +102,7 @@ function Row({
   );
 }
 
-export function StatementSummaryCard({ summary, onOpenTollRecon, onOpenLine, deltas }: Props) {
+export function StatementSummaryCard({ summary, onOpenTollRecon, onOpenLine, deltas, updatedLabel }: Props) {
   const [fareOpen, setFareOpen] = useState(true);
   const [refundsOpen, setRefundsOpen] = useState(true);
   const [payoutOpen, setPayoutOpen] = useState(true);
@@ -239,6 +241,7 @@ export function StatementSummaryCard({ summary, onOpenTollRecon, onOpenLine, del
               {` · ${deltaText(deltas.trips, false)} trips`}
             </p>
           )}
+          {updatedLabel ? <p className="text-xs text-slate-500">Updated {updatedLabel}</p> : null}
         </div>
         <button type="button" className="text-sm text-indigo-700 underline" onClick={() => onOpenLine?.('trips')}>
           Trips {summary.tripCount ?? 0}

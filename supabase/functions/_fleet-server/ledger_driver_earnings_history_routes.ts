@@ -147,7 +147,7 @@ export function registerLedgerDriverEarningsHistoryRoutes(app: Hono) {
       const allEntries = await fetchAllLedgerEventValuesForDrivers(driverIdsResolved, c, {
         from: fromIso,
         to: toIso,
-        maxRows: 20_000,
+        maxRows: 1000,
       });
       console.log(`[Ledger EarningsHistory] Canonical ledger_event rows for driver(s): ${allEntries.length}`);
 

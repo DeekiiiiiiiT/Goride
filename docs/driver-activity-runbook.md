@@ -47,3 +47,21 @@ before Wave 0 cannot be rebuilt — coverage banner must say “presence not rec
 2. Confirm anon cannot execute activity RPCs / read activity views.
 3. Flip KV `feature_flag:driver_activity` enabled (org list or global).
 4. UI gets `driver_activity` from `/enterprise/me/modules` (wired from the same flag).
+
+## Uber app activity timeline import
+
+Uber Activity tab data does **not** come from the official weekly `driver_activity.csv` (that file only updates Overview → Time Metrics).
+
+| Step | Where |
+|---|---|
+| Paste / upload timeline | Data Center → Uber → Activity timeline panel |
+| API | `POST /make-server-37f42386/drivers/:id/activity/import-uber-timeline` |
+| Storage | `fleet.driver_activity_events` (`source=uber_app_activity`, `service_line=uber`) |
+| Replace | Re-import deletes prior `uber_app_activity` rows for that driver overlapping the parsed date range, then inserts |
+| Coverage | Upserts `fleet.activity_source_coverage` for `(uber, uber_app_activity)` |
+
+Permissions: `data.import` or `drivers.edit`. Feature flag `driver_activity` must be on.
+
+Empty Activity tab with platform filter Uber → “No Uber activity timeline imported… Data Center → Uber → Activity timeline.”
+
+InDrive remains unsupported on the Activity tab.

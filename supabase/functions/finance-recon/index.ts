@@ -665,11 +665,65 @@ Deno.serve(async (req) => {
       console.warn("[finance-recon] statement control skipped:", errMsg(statementErr));
     }
 
+    // Phase 2: week_totals vs live ledger.entries drift (ledger.recon_check).
+    try {
+      const orgIds = [
+        ...new Set(
+          rows
+            .map((r: { organization_id?: string }) => String(r.organization_id || "").trim())
+            .filter(Boolean),
+        ),
+      ];
+      for (const orgId of orgIds.slice(0, 20)) {
+        const { data: driftRows, error: rcErr } = await supabase.rpc("ledger_recon_check", {
+          p_org: orgId,
+        });
+        if (rcErr) {
+          console.warn("[finance-recon] ledger_recon_check skipped:", rcErr.message);
+          break;
+        }
+        const n = Array.isArray(driftRows) ? driftRows.length : 0;
+        if (n > 0) {
+          drifts.push({
+            runId,
+            driverId: "",
+            week: fromYmd,
+            kind: "LEDGER_WEEK_TOTALS_DRIFT",
+            field: orgId,
+            persisted: n,
+            expected: 0,
+            severity: "error",
+          });
+          console.error(`[finance-recon] ledger_recon_check org=${orgId} driftRows=${n}`);
+        }
+      }
+    } catch (rcCatch) {
+      console.warn("[finance-recon] ledger_recon_check skipped:", errMsg(rcCatch));
+    }
+
     const ok = drifts.length === 0;
     if (!ok) {
       const summary = `[finance-recon] runId=${runId} ${drifts.length} drift(s), nullOrg=${nullOrg}`;
       console.error(summary, drifts.slice(0, 5));
       await postReconWebhook(runId, drifts, summary);
+    }
+
+    // L-12: alert when daily temp IO exceeds 500MB (public wrapper over private.io_daily_temp_bytes).
+    try {
+      const { data: dailyTemp, error: ioErr } = await supabase.rpc("io_daily_temp_bytes");
+      if (ioErr) {
+        console.warn("[finance-recon] io_daily_temp_bytes unavailable:", ioErr.message);
+      } else {
+        const bytes = Number(dailyTemp) || 0;
+        const limit = 500 * 1024 * 1024;
+        if (bytes > limit) {
+          console.error(
+            `[finance-recon] ALERT daily temp IO ${bytes} bytes (>${limit}). Investigate private.io_snapshots.`,
+          );
+        }
+      }
+    } catch (ioCatch) {
+      console.warn("[finance-recon] io_daily_temp_bytes check skipped:", errMsg(ioCatch));
     }
 
     const { error: persistErr } = await supabase.from("finance_recon_runs").insert({

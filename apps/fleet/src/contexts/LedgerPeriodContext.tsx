@@ -2,5 +2,8 @@
 export {
   LedgerPeriodProvider,
   useLedgerPeriod,
+  thisStatementWeek,
+  lastCompleteStatementWeek,
+  lastNStatementWeeks,
   type LedgerPeriod,
 } from '@roam/platform-ops-ui';

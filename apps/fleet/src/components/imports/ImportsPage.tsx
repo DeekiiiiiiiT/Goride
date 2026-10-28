@@ -118,6 +118,11 @@ import { registerFuelCardWithRecon } from '../../utils/registerFuelCardWithRecon
 import { fuelDateBounds } from '../../utils/fuelStatementImportFlow';
 import { buildPaymentLedgerCanonicalEvents } from '../../utils/buildPaymentLedgerCanonicalEvents';
 import type { PaymentLedgerLine } from '@roam/types/paymentLedgerLine';
+import { UberActivityTimelineImportPanel } from './UberActivityTimelineImportPanel';
+import {
+  looksLikeOfficialUberDriverActivityCsv,
+  looksLikeUberActivityTimeline,
+} from '../../utils/uberActivityTimelineParse';
 import type { DriverQualitySnapshot } from '../../types/data';
 import { computeUberImportReconciliation } from '../../utils/uberImportReconciliation';
 import { reconcileUberNetFareByDriver } from '../../utils/uberStatementReconciliation';
@@ -472,7 +477,21 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
                     // Generic excel → treat first row as headers
                     const json = XLSX.utils.sheet_to_json(sheet, { defval: '' }) as ParsedRow[];
                     const headers = json.length > 0 ? Object.keys(json[0]) : [];
-                    const type = detectFileType(headers, file.name);
+                    let type = detectFileType(headers, file.name);
+                    // App timeline Excel often has free-text cells / no official weekly headers
+                    if (type !== 'uber_driver_activity' && !looksLikeOfficialUberDriverActivityCsv(headers)) {
+                      const flat = (XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' }) as unknown[][])
+                        .flat()
+                        .map((c) => String(c ?? '').trim())
+                        .filter(Boolean)
+                        .join('\n');
+                      if (looksLikeUberActivityTimeline(flat)) {
+                        type = 'uber_activity_timeline';
+                        toast.info(
+                          `${file.name}: detected as Uber app activity timeline — use the Activity timeline panel below (not trip/payment merge).`,
+                        );
+                      }
+                    }
                     pushParsed({
                         id: Math.random().toString(36).substr(2, 9),
                         name: file.name,
@@ -989,7 +1008,19 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
                                   toast.warning(
                                       'Canonical ledger recount is empty — refresh the driver screen in a few seconds.',
                                   );
+                                  return;
                               }
+                              const byType = Object.entries(audit.byEventType || {})
+                                  .filter(([, n]) => Number(n) > 0)
+                                  .sort((a, b) => Number(b[1]) - Number(a[1]))
+                                  .slice(0, 6)
+                                  .map(([t, n]) => `${t} ${n}`)
+                                  .join(' · ');
+                              toast.success(
+                                  byType
+                                      ? `Batch ledger: ${audit.total} total · ${byType}`
+                                      : `Batch ledger: ${audit.total} events`,
+                              );
                           })
                           .catch(() => {});
                   }
@@ -1448,6 +1479,7 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
       if (type === 'uber_payment_org') return <div className="p-2 bg-teal-100 rounded-lg text-teal-600"><CheckCircle className="h-5 w-5" /></div>;
       if (type === 'uber_driver_quality') return <div className="p-2 bg-purple-100 rounded-lg text-purple-600"><Zap className="h-5 w-5" /></div>;
       if (type === 'uber_driver_activity') return <div className="p-2 bg-indigo-100 rounded-lg text-indigo-600"><Zap className="h-5 w-5" /></div>;
+      if (type === 'uber_activity_timeline') return <div className="p-2 bg-violet-100 rounded-lg text-violet-600"><Clock className="h-5 w-5" /></div>;
       if (type === 'uber_vehicle_performance') return <div className="p-2 bg-orange-100 rounded-lg text-orange-600"><Car className="h-5 w-5" /></div>;
       if (type === 'uber_driver_time_distance') return <div className="p-2 bg-indigo-100 rounded-lg text-indigo-600"><Clock className="h-5 w-5" /></div>;
       if (type === 'uber_vehicle_time_distance') return <div className="p-2 bg-indigo-100 rounded-lg text-indigo-600"><Car className="h-5 w-5" /></div>;
@@ -1461,6 +1493,7 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
       if (type === 'uber_payment_driver') return <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-200 border-emerald-200">Driver Payment</Badge>;
       if (type === 'uber_payment_org') return <Badge className="bg-teal-100 text-teal-700 hover:bg-teal-200 border-teal-200">Org. Payment</Badge>;
       if (type === 'uber_driver_quality') return <Badge className="bg-purple-100 text-purple-700 hover:bg-purple-200 border-purple-200">Driver Quality</Badge>;
+      if (type === 'uber_activity_timeline') return <Badge className="bg-violet-100 text-violet-700 hover:bg-violet-200 border-violet-200">Activity Timeline</Badge>;
       if (type === 'uber_vehicle_performance') return <Badge className="bg-orange-100 text-orange-700 hover:bg-orange-200 border-orange-200">Vehicle Perf.</Badge>;
       if (type === 'uber_driver_activity') return <Badge className="bg-indigo-100 text-indigo-700 hover:bg-indigo-200 border-indigo-200">Driver Activity</Badge>;
       if (type === 'uber_driver_time_distance') return <Badge className="bg-cyan-100 text-cyan-700 hover:bg-cyan-200 border-cyan-200">Driver Time</Badge>;
@@ -1672,7 +1705,7 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
         const allImportCards: Record<string, Array<{ id: string; icon: React.ReactNode | string; color: string; subtext?: string; description: string; action?: () => void }>> = {
           'platform': [
             { id: 'Uber Sync', icon: isParsing ? <Zap className="h-6 w-6" /> : <CloudDownload className="h-6 w-6" />, color: 'bg-indigo-600 text-white', description: 'Sync Uber Fleet vehicles & driver assignments (trips still via CSV)', action: handleUberSync },
-            { id: 'Uber', icon: 'UB', color: 'bg-black text-white', description: 'Upload Uber Trip Activity and Payment Orders CSV files' },
+            { id: 'Uber', icon: 'UB', color: 'bg-black text-white', description: 'Upload Uber Trip Activity and Payment Orders CSV files. Optional: paste or upload Uber app activity timeline for the Activity tab.' },
             { id: 'InDrive', icon: 'IN', color: 'bg-blue-500 text-white', description: 'Upload your InDrive trip export CSV file' },
           ],
           'trips': [
@@ -1842,7 +1875,7 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
                     <CardTitle>Upload {selectedPlatform} Data</CardTitle>
                     <CardDescription>
                         {selectedPlatform === 'Uber' 
-                        ? 'Upload "Trip Activity" AND "Payment Orders" files together.' 
+                        ? 'Upload "Trip Activity" AND "Payment Orders" files together. Optional activity timeline is below.' 
                         : selectedPlatform === 'Fuel'
                         ? 'Upload JAA StatementDetails.xls (or a flat fuel CSV). Summary files are not used for fill matching.'
                         : `Upload your ${selectedPlatform} CSV export files.`}
@@ -1887,6 +1920,11 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
                 )}
               </div>
             </div>
+            {selectedPlatform === 'Uber' && (
+              <div className="mt-6">
+                <UberActivityTimelineImportPanel />
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
@@ -1983,6 +2021,11 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
                           </div>
                       </CardContent>
                   </Card>
+                  {selectedPlatform === 'Uber' && (
+                    <div className="mt-4">
+                      <UberActivityTimelineImportPanel />
+                    </div>
+                  )}
               </div>
           </div>
       )}

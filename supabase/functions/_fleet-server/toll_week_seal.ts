@@ -120,6 +120,7 @@ export async function loadPlazaTollCardsForDriverWeek(
 export async function loadCanonicalTollEventsForDriverWeek(
   driverId: string,
   weekKey: string,
+  organizationId?: string | null,
 ): Promise<Record<string, unknown>[]> {
   const weekEnd = periodEndForAnchor(weekKey);
   // SQL lte(effective_at, Sunday YMD) truncates to midnight and drops Sunday
@@ -129,11 +130,22 @@ export async function loadCanonicalTollEventsForDriverWeek(
   const next = new Date(Date.UTC(y, m - 1, d + 1));
   const nextMondayYmd = next.toISOString().slice(0, 10);
 
-  const { listAllUnifiedCanonicalEvents } = await import("../_shared/unifiedLedger/queries.ts");
+  const org = String(organizationId || "").trim();
+  if (!org) {
+    console.warn("[sealTollWeek] loadCanonicalTollEvents skipped — missing organizationId");
+    return [];
+  }
+
+  // Prefer week_summary totals path when caller only needs sums; for quarantine
+  // filtering we still need rows via keyset page (org + week bounded).
+  const { listCanonicalViaPage } = await import("../_shared/unifiedLedger/readApi.ts");
   const { filterTollEventsInDateRange } = await import(
     "../../../packages/toll-core/src/tollFleetLossNetting.ts"
   );
-  const events = await listAllUnifiedCanonicalEvents({
+  const events = await listCanonicalViaPage({
+    organizationId: org,
+    from: weekKey,
+    to: nextMondayYmd,
     products: ["roam_driver", "roam_fleet"],
     entryTypes: [
       "toll_charge",
@@ -143,10 +155,8 @@ export async function loadCanonicalTollEventsForDriverWeek(
       "toll_charged_to_driver",
       "toll_charge_reversed",
     ],
-    driverId,
-    from: weekKey,
-    to: nextMondayYmd,
-    maxRows: 50_000,
+    driverIds: [driverId],
+    maxRows: 1000,
   });
 
   const inWeek = filterTollEventsInDateRange(events, weekKey, weekEnd);

@@ -50,6 +50,9 @@ export function registerLedgerQuerySummaryRoutes(app: Hono) {
   // Phase 2: Use requireOrg to ensure organization context for data isolation
   app.get(`${PREFIX}/ledger`, requireAuth({ requireOrg: true }), async (c) => {
     try {
+      const orgId = getOrgId(c);
+      if (!orgId) return c.json({ error: "Organization required", code: "ORG_REQUIRED" }, 403);
+
       const driverId = c.req.query("driverId");
       const driverIdsParam = c.req.query("driverIds");
       const vehicleId = c.req.query("vehicleId");
@@ -61,24 +64,22 @@ export function registerLedgerQuerySummaryRoutes(app: Hono) {
       const platform = c.req.query("platform");
       const isReconciledParam = c.req.query("isReconciled");
       const batchId = c.req.query("batchId");
-      const sourceType = c.req.query("sourceType");
-      const minAmountParam = c.req.query("minAmount");
-      const maxAmountParam = c.req.query("maxAmount");
       const searchTerm = c.req.query("searchTerm");
       const limitParam = c.req.query("limit");
-      const offsetParam = c.req.query("offset");
-      const sortBy = c.req.query("sortBy") || "date";
-      const sortDir = c.req.query("sortDir") || "desc";
+      const afterEffectiveAt = c.req.query("afterEffectiveAt") || undefined;
+      const afterId = c.req.query("afterId") || undefined;
+      const minAmountParam = c.req.query("minAmount");
+      const maxAmountParam = c.req.query("maxAmount");
 
-      const limit = limitParam ? parseInt(limitParam) : 50;
-      const offset = offsetParam ? parseInt(offsetParam) : 0;
+      const limit = Math.min(Math.max(limitParam ? parseInt(limitParam, 10) : 50, 1), 200);
       const minAmount = minAmountParam ? parseFloat(minAmountParam) : undefined;
       const maxAmount = maxAmountParam ? parseFloat(maxAmountParam) : undefined;
 
-      const {
-        listAllUnifiedCanonicalEvents,
-        filterCanonicalEventsByPlatform,
-      } = await import("../_shared/unifiedLedger/queries.ts");
+      const { ledgerPage, mapPageRowToCanonical } = await import("../_shared/unifiedLedger/readApi.ts");
+      const { thisWeekRange } = await import("../_shared/unifiedLedger/dateRange.ts");
+      const defaults = thisWeekRange();
+      const from = startDate || defaults.from;
+      const to = endDate || defaults.to;
 
       const types = eventTypesParam
         ? String(eventTypesParam).split(",").map((x) => x.trim()).filter(Boolean)
@@ -92,73 +93,41 @@ export function registerLedgerQuerySummaryRoutes(app: Hono) {
           ? [driverId]
           : [];
 
-      let mapped = await listAllUnifiedCanonicalEvents({
-        products: ["roam_driver", "roam_fleet"],
+      const page = await ledgerPage({
+        organizationId: orgId,
+        from: `${from}T00:00:00.000Z`,
+        to: `${to}T23:59:59.999Z`,
         entryTypes: types,
-        driverId: driverIds.length === 1 ? driverIds[0] : undefined,
-        from: startDate ? `${startDate}T00:00:00.000Z` : undefined,
-        to: endDate ? `${endDate}T23:59:59.999Z` : undefined,
-        maxRows: 50_000,
+        products: ["roam_driver", "roam_fleet"],
+        platform: platform || undefined,
+        direction: direction || undefined,
+        driverIds: driverIds.length ? driverIds : undefined,
+        batchId: batchId || undefined,
+        vehicleId: vehicleId || undefined,
+        reconciled:
+          isReconciledParam !== undefined && isReconciledParam !== null && isReconciledParam !== ""
+            ? isReconciledParam === "true" || isReconciledParam === "1"
+            : undefined,
+        search: searchTerm || undefined,
+        amountMinMinor: minAmount !== undefined && Number.isFinite(minAmount) ? Math.round(minAmount * 100) : undefined,
+        amountMaxMinor: maxAmount !== undefined && Number.isFinite(maxAmount) ? Math.round(maxAmount * 100) : undefined,
+        afterEffectiveAt,
+        afterId,
+        limit,
       });
 
-      if (driverIds.length > 1) {
-        const want = new Set(driverIds.map((d) => d.toLowerCase()));
-        mapped = mapped.filter((e) => want.has(String(e.driverId || "").toLowerCase()));
-      }
-      if (platform) mapped = filterCanonicalEventsByPlatform(mapped, platform);
-      if (direction) mapped = mapped.filter((e) => String(e.direction || "") === direction);
-      if (vehicleId) mapped = mapped.filter((e) => String(e.vehicleId || "") === vehicleId);
-      if (batchId) mapped = mapped.filter((e) => String(e.batchId || "") === batchId);
-      if (sourceType) mapped = mapped.filter((e) => String(e.sourceType || "") === sourceType);
-      if (isReconciledParam !== undefined && isReconciledParam !== null && isReconciledParam !== "") {
-        const want = isReconciledParam === "true" || isReconciledParam === "1";
-        mapped = mapped.filter((e) => Boolean(e.isReconciled) === want);
-      }
-      if (searchTerm) {
-        const q = String(searchTerm).toLowerCase();
-        mapped = mapped.filter((e) => String(e.description || "").toLowerCase().includes(q));
-      }
-
+      let mapped = page.rows.map(mapPageRowToCanonical);
       mapped = filterByOrg(mapped, c);
       mapped.forEach((e: any) => {
         if (e.platform === "GoRide") e.platform = "Roam";
         if (typeof e.description === "string") e.description = e.description.replace(/GoRide/g, "Roam");
       });
 
-      if (minAmount !== undefined) {
-        mapped = mapped.filter((e) => Math.abs(Number(e.netAmount) || 0) >= minAmount!);
-      }
-      if (maxAmount !== undefined) {
-        mapped = mapped.filter((e) => Math.abs(Number(e.netAmount) || 0) <= maxAmount!);
-      }
-
-      const asc = sortDir === "asc";
-      mapped.sort((a, b) => {
-        let av: any = "";
-        let bv: any = "";
-        if (sortBy === "amount") {
-          av = Math.abs(Number(a.netAmount) || 0);
-          bv = Math.abs(Number(b.netAmount) || 0);
-        } else if (sortBy === "createdAt") {
-          av = String(a.createdAt || "");
-          bv = String(b.createdAt || "");
-        } else {
-          av = String(a.date || "");
-          bv = String(b.date || "");
-        }
-        if (av < bv) return asc ? -1 : 1;
-        if (av > bv) return asc ? 1 : -1;
-        return 0;
-      });
-
-      const total = mapped.length;
-      const pageRows = mapped.slice(offset, offset + limit);
       return c.json({
-        data: pageRows,
-        total,
-        page: Math.floor(offset / limit) + 1,
+        data: mapped,
         limit,
-        hasMore: offset + limit < total,
+        hasMore: page.hasMore,
+        nextCursor: page.nextCursor,
         meta: { source: "ledger.entries" as const },
       });
     } catch (e: any) {
@@ -173,14 +142,14 @@ export function registerLedgerQuerySummaryRoutes(app: Hono) {
       const orgId = getOrgId(c);
       const { unifiedLedgerClient } = await import("../_shared/unifiedLedger/postEntry.ts");
       const ul = unifiedLedgerClient();
-      let ledgerQ = ul.from("ledger_entries").select("*", { count: "exact", head: true });
+      let ledgerQ = ul.from("ledger_entries").select("id", { count: "exact", head: true });
       if (orgId) ledgerQ = ledgerQ.eq("organization_id", orgId);
 
       let tripQ = fromKvStore()
-        .select("*", { count: "exact", head: true })
+        .select("*", { count: "estimated", head: true })
         .like("key", "trip:%");
       let txQ = fromKvStore()
-        .select("*", { count: "exact", head: true })
+        .select("*", { count: "estimated", head: true })
         .like("key", "transaction:%");
       if (orgId) {
         tripQ = tripQ.eq("value->>organizationId", orgId);
@@ -200,9 +169,12 @@ export function registerLedgerQuerySummaryRoutes(app: Hono) {
     }
   });
 
-  // ─── GET /ledger/summary// ─── GET /ledger/summary — Aggregate totals for a filter set (`ledger_event:*` only) ──
+  // ─── GET /ledger/summary — Aggregate totals via range_summary (exact window) ──
   app.get(`${PREFIX}/ledger/summary`, requireAuth(), async (c) => {
     try {
+      const orgId = getOrgId(c);
+      if (!orgId) return c.json({ error: "Organization required", code: "ORG_REQUIRED" }, 403);
+
       const driverId = c.req.query("driverId");
       const driverIdsParam = c.req.query("driverIds");
       const startDate = c.req.query("startDate");
@@ -211,10 +183,11 @@ export function registerLedgerQuerySummaryRoutes(app: Hono) {
       const direction = c.req.query("direction");
       const platform = c.req.query("platform");
 
-      const {
-        listAllUnifiedCanonicalEvents,
-        filterCanonicalEventsByPlatform,
-      } = await import("../_shared/unifiedLedger/queries.ts");
+      const { rangeSummary } = await import("../_shared/unifiedLedger/readApi.ts");
+      const { thisWeekRange } = await import("../_shared/unifiedLedger/dateRange.ts");
+      const defaults = thisWeekRange();
+      const fromYmd = String(startDate || defaults.from).slice(0, 10);
+      const toYmd = String(endDate || defaults.to).slice(0, 10);
 
       const driverIds = driverIdsParam
         ? String(driverIdsParam).split(",").map((x) => x.trim()).filter(Boolean)
@@ -222,53 +195,46 @@ export function registerLedgerQuerySummaryRoutes(app: Hono) {
           ? [driverId]
           : [];
 
-      let entries = await listAllUnifiedCanonicalEvents({
-        products: ["roam_driver", "roam_fleet"],
+      const rows = await rangeSummary({
+        organizationId: orgId,
+        from: `${fromYmd}T00:00:00.000Z`,
+        to: `${toYmd}T23:59:59.999Z`,
         entryTypes: eventType ? [eventType] : undefined,
-        driverId: driverIds.length === 1 ? driverIds[0] : undefined,
-        from: startDate ? `${startDate}T00:00:00.000Z` : undefined,
-        to: endDate ? `${endDate}T23:59:59.999Z` : undefined,
-        maxRows: 50_000,
+        driverIds: driverIds.length ? driverIds : undefined,
+        platform: platform || undefined,
+        direction: direction || undefined,
+        products: ["roam_driver", "roam_fleet"],
       });
-
-      if (driverIds.length > 1) {
-        const want = new Set(driverIds.map((d) => d.toLowerCase()));
-        entries = entries.filter((e) => want.has(String(e.driverId || "").toLowerCase()));
-      }
-      if (platform) entries = filterCanonicalEventsByPlatform(entries, platform);
-      if (direction) entries = entries.filter((e) => String(e.direction || "") === direction);
-      entries = filterByOrg(entries, c);
+      filterByOrg(
+        rows.map((r) => ({ organizationId: r.organization_id })),
+        c,
+      );
 
       let totalInflow = 0;
       let totalOutflow = 0;
-      let reconciledCount = 0;
-      let unreconciledCount = 0;
+      let totalEntries = 0;
       const byEventType: Record<string, { count: number; total: number }> = {};
       const byPlatform: Record<string, { count: number; total: number }> = {};
 
-      for (const e of entries) {
-        const net = Number(e.netAmount) || 0;
-        if (e.direction === "inflow" || net > 0) {
-          totalInflow += Math.abs(net);
-        } else {
-          totalOutflow += Math.abs(net);
-        }
+      for (const r of rows) {
+        const net = Number(r.sum_minor) / 100;
+        const count = Number(r.entry_count) || 0;
+        totalEntries += count;
 
-        if (e.isReconciled === true || e.isReconciled === "true") {
-          reconciledCount++;
-        } else {
-          unreconciledCount++;
-        }
+        const dir = String(r.direction || "");
+        if (dir === "inflow" || net > 0) totalInflow += Math.abs(net);
+        else totalOutflow += Math.abs(net);
 
-        const et = String(e.eventType || "other");
+        const et = String(r.entry_type || "other");
         if (!byEventType[et]) byEventType[et] = { count: 0, total: 0 };
-        byEventType[et].count++;
+        byEventType[et].count += count;
         byEventType[et].total += net;
 
-        const pl = (e.platform === "GoRide" ? "Roam" : e.platform) || "Unknown";
-        if (!byPlatform[String(pl)]) byPlatform[String(pl)] = { count: 0, total: 0 };
-        byPlatform[String(pl)].count++;
-        byPlatform[String(pl)].total += net;
+        const plRaw = String(r.platform || "Unknown");
+        const pl = plRaw === "GoRide" ? "Roam" : plRaw;
+        if (!byPlatform[pl]) byPlatform[pl] = { count: 0, total: 0 };
+        byPlatform[pl].count += count;
+        byPlatform[pl].total += net;
       }
 
       return c.json({
@@ -277,14 +243,14 @@ export function registerLedgerQuerySummaryRoutes(app: Hono) {
           totalInflow: Number(totalInflow.toFixed(2)),
           totalOutflow: Number(totalOutflow.toFixed(2)),
           netBalance: Number((totalInflow - totalOutflow).toFixed(2)),
-          totalEntries: entries.length,
-          entryCount: entries.length,
-          reconciledCount,
-          unreconciledCount,
+          totalEntries,
+          entryCount: totalEntries,
+          reconciledCount: 0,
+          unreconciledCount: 0,
           byEventType,
           byPlatform,
         },
-        meta: { source: "ledger.entries" as const },
+        meta: { source: "ledger.range_summary" as const },
       });
     } catch (e: any) {
       console.log(`[Ledger Summary] Error: ${e.message}`);

@@ -6,7 +6,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { format, parseISO, addDays } from 'date-fns';
-import { CalendarRange, ChevronRight, Landmark, Loader2, RefreshCw, Settings2, X } from 'lucide-react';
+import { CalendarRange, ChevronRight, Landmark, Loader2, RefreshCw, Settings2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '../../services/api';
 import {
@@ -22,12 +22,15 @@ import {
   type FleetBankReceiveRow,
 } from '../../utils/fleetBankReceive';
 import { useFleetTimezone } from '../../utils/timezoneDisplay';
+import { lastNStatementWeeks } from '../../contexts/LedgerPeriodContext';
+import { ledgerFetchErrorCopy } from '../../utils/ledgerRangeError';
 import { useAuth } from '../auth/AuthContext';
 import { usePermissions } from '../../hooks/usePermissions';
 import { BusinessFinanceDeskChrome } from '../business-finance/BusinessFinanceDeskChrome';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
+import { Skeleton } from '../ui/skeleton';
 import {
   Table,
   TableBody,
@@ -52,6 +55,25 @@ import { BankDepositsSummaryCards } from './BankDepositsSummaryCards';
 type DeskTab = 'outstanding' | 'completed';
 type StatusFilter = 'all' | FleetBankDisplayStatus;
 
+const BANK_LOOKBACK_STEP_WEEKS = 12;
+
+/** Monday yyyy-MM-dd → Sunday of that statement week. */
+function mondayToSundayYmd(mondayYmd: string): string {
+  try {
+    const d = parseISO(mondayYmd);
+    return format(addDays(d, 6), 'yyyy-MM-dd');
+  } catch {
+    return mondayYmd;
+  }
+}
+
+function defaultBankWeekBounds(weekCount: number): { fromMonday: string; toMonday: string } {
+  const range = lastNStatementWeeks(weekCount);
+  // lastNStatementWeeks endDate is Sunday — week picker uses Mondays.
+  const toMonday = format(addDays(parseISO(range.endDate), -6), 'yyyy-MM-dd');
+  return { fromMonday: range.startDate, toMonday };
+}
+
 const MONEY = (n: number | null | undefined) => {
   if (n == null || !Number.isFinite(n)) return '—';
   const body = Math.abs(n).toLocaleString(undefined, {
@@ -61,22 +83,22 @@ const MONEY = (n: number | null | undefined) => {
   return `${n < 0 ? '-' : ''}$${body}`;
 };
 
-async function fetchAllPayoutBankEvents(startDate?: string, endDate?: string) {
+async function fetchAllPayoutBankEvents(startDate: string, endDate: string) {
   const all: Record<string, unknown>[] = [];
-  let offset = 0;
-  const limit = 500;
+  let cursor: string | undefined;
+  const limit = 200;
   for (let i = 0; i < 40; i++) {
     const page = await api.getCanonicalLedgerEvents({
       eventTypes: 'payout_bank',
       startDate,
       endDate,
       limit,
-      offset,
+      cursor,
     });
     const chunk = page.data || [];
     all.push(...chunk);
-    if (!page.hasMore || chunk.length === 0) break;
-    offset += limit;
+    if (!page.hasMore || chunk.length === 0 || !page.nextCursor) break;
+    cursor = page.nextCursor;
   }
   return all;
 }
@@ -248,8 +270,10 @@ export function FleetFinancialsPage({
   const queryClient = useQueryClient();
   const [deskTab, setDeskTab] = useState<DeskTab>('outstanding');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
-  const [weekFrom, setWeekFrom] = useState(initialWeekFrom || '');
-  const [weekTo, setWeekTo] = useState(initialWeekTo || '');
+  const [lookbackWeeks, setLookbackWeeks] = useState(BANK_LOOKBACK_STEP_WEEKS);
+  const defaultBounds = useMemo(() => defaultBankWeekBounds(lookbackWeeks), [lookbackWeeks]);
+  const [weekFrom, setWeekFrom] = useState(initialWeekFrom || defaultBounds.fromMonday);
+  const [weekTo, setWeekTo] = useState(initialWeekTo || defaultBounds.toMonday);
   const [enterRow, setEnterRow] = useState<FleetBankReceiveRow | null>(null);
   const [enterAmount, setEnterAmount] = useState('');
   const [savingKey, setSavingKey] = useState<string | null>(null);
@@ -262,20 +286,31 @@ export function FleetFinancialsPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- apply handoff once on mount / hint change
   }, [initialWeekFrom, initialWeekTo]);
 
+  // Keep From bound to lookback when ops extends via "Show older" (unless a handoff set both ends).
+  useEffect(() => {
+    if (initialWeekFrom || initialWeekTo) return;
+    setWeekFrom(defaultBounds.fromMonday);
+    setWeekTo((prev) => prev || defaultBounds.toMonday);
+  }, [defaultBounds.fromMonday, defaultBounds.toMonday, initialWeekFrom, initialWeekTo]);
+
+  const effectiveFromMonday = weekFrom || defaultBounds.fromMonday;
+  const effectiveToMonday = weekTo || defaultBounds.toMonday;
+  const apiEndDate = mondayToSundayYmd(effectiveToMonday);
+
   const bankQuery = useQuery({
-    queryKey: ['fleet-bank-expected', weekFrom || null, weekTo || null],
-    queryFn: () => fetchAllPayoutBankEvents(weekFrom || undefined, weekTo || undefined),
+    queryKey: ['fleet-bank-expected', effectiveFromMonday, apiEndDate],
+    queryFn: () => fetchAllPayoutBankEvents(effectiveFromMonday, apiEndDate),
   });
 
   // Roam card trips in fleet KV → expected org bank (Layer A org payout path).
   const roamTripsQuery = useQuery({
-    queryKey: ['fleet-roam-card-expected', organizationId, weekFrom || null, weekTo || null],
+    queryKey: ['fleet-roam-card-expected', organizationId, effectiveFromMonday, apiEndDate],
     queryFn: async () => {
       const res = await api.getTripsFiltered({
         platform: 'Roam',
         organizationId: organizationId || undefined,
-        startDate: weekFrom || undefined,
-        endDate: weekTo || undefined,
+        startDate: effectiveFromMonday,
+        endDate: apiEndDate,
         limit: 2000,
       });
       return (res.data ?? []).filter(
@@ -333,9 +368,9 @@ export function FleetFinancialsPage({
 
   const scopedByFilters = useMemo(() => {
     return rows
-      .filter((r) => (!weekFrom ? true : r.weekStartYmd >= weekFrom))
-      .filter((r) => (!weekTo ? true : r.weekStartYmd <= weekTo));
-  }, [rows, weekFrom, weekTo]);
+      .filter((r) => r.weekStartYmd >= effectiveFromMonday)
+      .filter((r) => r.weekStartYmd <= effectiveToMonday);
+  }, [rows, effectiveFromMonday, effectiveToMonday]);
 
   const statusCounts = useMemo(() => {
     const counts = {
@@ -473,7 +508,15 @@ export function FleetFinancialsPage({
       </div>
 
       {/* KPI dashboard — respects the week filter below */}
-      <BankDepositsSummaryCards rows={scopedByFilters} />
+      {loading ? (
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-busy="true" aria-label="Loading deposit totals">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-36 w-full rounded-xl" />
+          ))}
+        </div>
+      ) : (
+        <BankDepositsSummaryCards rows={scopedByFilters} />
+      )}
 
       {/* Week range toolbar */}
       <div className="flex flex-wrap items-end justify-between gap-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 py-3">
@@ -490,23 +533,43 @@ export function FleetFinancialsPage({
             <label className="text-xs text-slate-500">To (Monday)</label>
             <Input type="date" value={weekTo} onChange={(e) => setWeekTo(e.target.value)} className="w-44 h-9" />
           </div>
-          {(weekFrom || weekTo) && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-9 text-slate-500"
-              onClick={() => {
-                setWeekFrom('');
-                setWeekTo('');
-              }}
-            >
-              <X className="h-3.5 w-3.5 mr-1" />
-              Clear
-            </Button>
-          )}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-9"
+            onClick={() => setLookbackWeeks((w) => w + BANK_LOOKBACK_STEP_WEEKS)}
+          >
+            Show older
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-9 text-slate-500"
+            onClick={() => {
+              const next = defaultBankWeekBounds(BANK_LOOKBACK_STEP_WEEKS);
+              setLookbackWeeks(BANK_LOOKBACK_STEP_WEEKS);
+              setWeekFrom(next.fromMonday);
+              setWeekTo(next.toMonday);
+            }}
+          >
+            Reset to {BANK_LOOKBACK_STEP_WEEKS} weeks
+          </Button>
         </div>
+        <p className="text-xs text-slate-500 pb-2">
+          Showing last {lookbackWeeks} weeks by default · never loads unbounded history
+        </p>
       </div>
+
+      {bankQuery.isError && (
+        <div className="flex items-center justify-between gap-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+          <span>{ledgerFetchErrorCopy(bankQuery.error, 'Failed to load bank deposits')}</span>
+          <button type="button" className="underline" onClick={() => void bankQuery.refetch()}>
+            Retry
+          </button>
+        </div>
+      )}
 
       {/* Fleet platform IDs — settings, collapsed by default */}
       <Collapsible className="group/platform-ids rounded-lg border border-slate-200 dark:border-slate-800">
@@ -566,9 +629,11 @@ export function FleetFinancialsPage({
       />
 
       {loading ? (
-        <div className="flex items-center gap-2 text-slate-500 py-16 justify-center">
-          <Loader2 className="h-5 w-5 animate-spin" />
-          Loading fleet bank payouts…
+        <div className="space-y-3 py-4" aria-busy="true" aria-label="Loading bank deposit rows">
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-3/4" />
         </div>
       ) : rows.length === 0 ? (
         <div className="rounded-lg border border-dashed border-slate-200 dark:border-slate-700 p-10 text-center text-slate-500 text-sm">

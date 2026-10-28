@@ -50,22 +50,34 @@ export function registerLedgerIndriveWalletRoutes(app: Hono) {
       let source: "ledger.entries" = "ledger.entries";
 
       {
-        const { listAllUnifiedCanonicalEvents } = await import("../_shared/unifiedLedger/queries.ts");
-        // Primary Roam UUID is what dual-write account keys use.
-        const unified = await listAllUnifiedCanonicalEvents({
-          driverId,
+        const orgId = getOrgId(c);
+        if (!orgId) return c.json({ error: "Organization required", code: "ORG_REQUIRED" }, 403);
+        const { weekSummary } = await import("../_shared/unifiedLedger/readApi.ts");
+        const { lastNWeeksRange } = await import("../_shared/unifiedLedger/dateRange.ts");
+        // Lifetime ≈ last 52 weeks (never unbounded).
+        const life = lastNWeeksRange(52);
+        const summary = await weekSummary({
+          organizationId: orgId,
+          from: `${life.from}T00:00:00.000Z`,
+          to: `${life.to}T23:59:59.999Z`,
+          driverIds: allDriverIds,
           products: ["roam_driver", "roam_fleet"],
-          maxRows: 50_000,
         });
-        // Also include alias-id matches that may live in metadata.driverId only.
-        const aliasSet = new Set(allDriverIds.map((id) => String(id).toLowerCase()));
-        ledgerVals = filterByOrg(
-          unified.filter((e) => {
-            const did = String(e.driverId || "").toLowerCase();
-            return !did || aliasSet.has(did) || did === String(driverId).toLowerCase();
-          }),
+        filterByOrg(
+          summary.map((r) => ({ organizationId: r.organization_id })),
           c,
         );
+        // Expand week_summary into synthetic canonical rows for shared fee/load math.
+        ledgerVals = summary.map((r) => ({
+          eventType: r.entry_type,
+          date: r.week_start,
+          netAmount: Number(r.sum_minor) / 100,
+          grossAmount: Number(r.gross_minor || r.sum_minor) / 100,
+          driverId: r.driver_id,
+          platform: r.platform,
+          direction: r.direction,
+          organizationId: r.organization_id,
+        }));
       }
 
       const { periodLoads, lifetimeLoads } = computeIndriveWalletLoadsFromLedgerEntries(
@@ -145,13 +157,30 @@ export function registerLedgerIndriveWalletRoutes(app: Hono) {
       let source: "ledger.entries" = "ledger.entries";
 
       {
-        const { listAllUnifiedCanonicalEvents } = await import("../_shared/unifiedLedger/queries.ts");
-        const unified = await listAllUnifiedCanonicalEvents({
+        if (!orgId) return c.json({ error: "Organization required", code: "ORG_REQUIRED" }, 403);
+        const { weekSummary } = await import("../_shared/unifiedLedger/readApi.ts");
+        const { lastNWeeksRange } = await import("../_shared/unifiedLedger/dateRange.ts");
+        const life = lastNWeeksRange(52);
+        const summary = await weekSummary({
+          organizationId: orgId,
+          from: `${life.from}T00:00:00.000Z`,
+          to: `${life.to}T23:59:59.999Z`,
           products: ["roam_driver", "roam_fleet"],
-          // Lifetime wallet/fee math needs full history (not just the request window).
-          maxRows: 100_000,
         });
-        ledgerVals = filterByOrg(unified, c);
+        filterByOrg(
+          summary.map((r) => ({ organizationId: r.organization_id })),
+          c,
+        );
+        ledgerVals = summary.map((r) => ({
+          eventType: r.entry_type,
+          date: r.week_start,
+          netAmount: Number(r.sum_minor) / 100,
+          grossAmount: Number(r.gross_minor || r.sum_minor) / 100,
+          driverId: r.driver_id,
+          platform: r.platform,
+          direction: r.direction,
+          organizationId: r.organization_id,
+        }));
       }
 
       const driverIdRecords = (drivers || [])

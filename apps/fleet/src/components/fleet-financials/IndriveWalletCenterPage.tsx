@@ -82,8 +82,8 @@ async function fetchWalletCreditsPage(
   endDate: string,
 ): Promise<LedgerEntry[]> {
   const merged: LedgerEntry[] = [];
-  let offset = 0;
-  const limit = 250;
+  let cursor: string | undefined;
+  const limit = 200;
   const maxPages = 20;
   for (let p = 0; p < maxPages; p++) {
     const res = await api.getLedgerEntries({
@@ -93,13 +93,13 @@ async function fetchWalletCreditsPage(
       eventTypes: ['wallet_credit'],
       platform: 'InDrive',
       limit,
-      offset,
+      cursor,
       sortBy: 'date',
       sortDir: 'desc',
     });
     merged.push(...(res.data || []));
-    if (!res.hasMore || !res.data?.length) break;
-    offset += limit;
+    if (!res.hasMore || !res.data?.length || !res.nextCursor) break;
+    cursor = res.nextCursor;
   }
   return merged;
 }

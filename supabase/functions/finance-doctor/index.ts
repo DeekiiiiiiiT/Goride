@@ -57,17 +57,31 @@ Deno.serve(async (req) => {
   );
 
   try {
+    // Keyset scan (no OFFSET) — L-14. Cap 1000 pages × 100 rows = 100k safety.
     const entries: EntryRow[] = [];
-    const page = 1000;
-    for (let from = 0; from < 50000; from += page) {
-      const { data, error } = await supabase
+    const page = 100;
+    let afterAt: string | null = null;
+    let afterId: string | null = null;
+    for (let i = 0; i < 1000; i++) {
+      let q = supabase
         .from("ledger_entries")
         .select("id, idempotency_key, entry_type, amount_minor, effective_at, metadata, reference_id")
-        .range(from, from + page - 1);
+        .order("effective_at", { ascending: false })
+        .order("id", { ascending: false })
+        .limit(page);
+      if (afterAt && afterId) {
+        q = q.or(
+          `effective_at.lt.${afterAt},and(effective_at.eq.${afterAt},id.lt.${afterId})`,
+        );
+      }
+      const { data, error } = await q;
       if (error) throw error;
       const rows = (data || []) as EntryRow[];
       entries.push(...rows);
       if (rows.length < page) break;
+      const last = rows[rows.length - 1]!;
+      afterAt = String(last.effective_at);
+      afterId = String(last.id);
     }
     const meta = (e: EntryRow) =>
       e.metadata && typeof e.metadata === "object" ? e.metadata : {};

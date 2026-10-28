@@ -140,6 +140,7 @@ export function useDriverEarningsHistory(opts: {
     isFetchingNextPage: query.isFetchingNextPage,
     loading: query.isLoading || (query.isFetching && !query.isFetchingNextPage),
     error: query.isError,
+    errorDetail: query.error,
     success: query.isSuccess,
     readModel: query.data?.pages?.[0]?.readModel,
     refetch: query.refetch,

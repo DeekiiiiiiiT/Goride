@@ -128,7 +128,7 @@ export interface FileData {
   name: string;
   rows: ParsedRow[];
   headers: string[];
-  type: 'uber_trip' | 'uber_payment' | 'uber_payment_driver' | 'uber_payment_org' | 'uber_driver_quality' | 'uber_vehicle_performance' | 'uber_driver_activity' | 'uber_driver_time_distance' | 'uber_vehicle_time_distance' | 'uber_rental_contract' | 'fuel_statement' | 'generic';
+  type: 'uber_trip' | 'uber_payment' | 'uber_payment_driver' | 'uber_payment_org' | 'uber_driver_quality' | 'uber_vehicle_performance' | 'uber_driver_activity' | 'uber_activity_timeline' | 'uber_driver_time_distance' | 'uber_vehicle_time_distance' | 'uber_rental_contract' | 'fuel_statement' | 'generic';
   validationErrors?: string[];
   reportDate?: string; // ISO String
   customMapping?: Record<string, string>;
@@ -183,7 +183,7 @@ const VALIDATION_RULES = {
 };
 
 export function validateFile(file: FileData): string[] {
-    if (file.type === 'generic') return [];
+    if (file.type === 'generic' || file.type === 'uber_activity_timeline') return [];
     
     const errors: string[] = [];
     if (!file.rows || file.rows.length === 0) {
@@ -191,7 +191,7 @@ export function validateFile(file: FileData): string[] {
         return errors;
     }
 
-    const rules = VALIDATION_RULES[file.type];
+    const rules = VALIDATION_RULES[file.type as keyof typeof VALIDATION_RULES];
     if (!rules) return [];
 
     // Check strict required (Supports OR logic via nested arrays)
@@ -327,12 +327,20 @@ export function detectFileType(headers: string[], fileName: string = ''): FileDa
         name.includes('vehicle_performance')
     ) return 'uber_vehicle_performance';
 
-    // 7. Driver Activity (Hours)
+    // 7. Driver Activity (Hours) — official weekly Uber report only.
+    // Do not match filename alone: app timeline Excel is often named Driver_Activity*.xlsx
     if (
-        (has('Online Hours') && 
-        (has('On Trip Hours') || has('OnTrip Hours') || has('Driver UUID') || has('Driver Name'))) ||
-        name.includes('driver_activity')
+        (has('Online Hours') || has('Hours Online') || has('Time Online') || has('Time online')) &&
+        (has('On Trip Hours') || has('OnTrip Hours') || has('Time on trip') || has('Time On Trip') ||
+         has('Driver UUID') || has('Driver Name'))
     ) return 'uber_driver_activity';
+
+    // 7.0b App activity timeline (Date/Event/Time or free-text paste columns)
+    if (
+        (has('Date') || has('Day')) &&
+        (has('Event') || has('Activity') || has('Status')) &&
+        (has('Time') || has('Timestamp'))
+    ) return 'uber_activity_timeline';
 
     // 7.1 Driver Time & Distance (New) - High Priority Check
     // We strictly check for 'Driver UUID' to distinguish from Vehicle files
@@ -1188,6 +1196,9 @@ export function mergeAndProcessData(
     
     // 1. Process all files
     files.forEach(file => {
+        // App timeline paste/Excel is imported via Activity panel — never merge into metrics
+        if (file.type === 'uber_activity_timeline') return;
+
         if (file.type === 'uber_driver_time_distance') {
              file.rows.forEach(row => {
                  const dId = cleanId(row['Driver UUID']);

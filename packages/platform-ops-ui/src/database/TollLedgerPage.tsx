@@ -5,6 +5,7 @@ import { api } from '../services/ledgerApi';
 import { useLedgerPeriod } from '../contexts/LedgerPeriodContext';
 import { useLedgerQuery } from '../hooks/useLedgerQuery';
 import { isTollServerSortKey } from '../utils/tollSortKeys';
+import { ledgerFetchErrorCopy } from '../utils/ledgerRangeError';
 import { TollLedgerTable, ALL_COLUMNS, DEFAULT_VISIBLE_KEYS } from './toll-ledger/TollLedgerTable';
 import type { SortDir } from './toll-ledger/TollLedgerTable';
 import { TollLedgerColumnToggle } from './toll-ledger/TollLedgerColumnToggle';
@@ -97,7 +98,9 @@ export function TollLedgerPage({ organizationId, columnConfig, onOpenTollRecon }
   const entries = rowsQuery.data?.data || [];
   const total = rowsQuery.data?.total ?? 0;
   const loading = rowsQuery.isFetching;
-  const error = rowsQuery.error ? ((rowsQuery.error as Error).message || 'Failed to load toll transactions') : null;
+  const error = rowsQuery.error
+    ? ledgerFetchErrorCopy(rowsQuery.error, 'Failed to load toll transactions')
+    : null;
 
   const handlePageChange = (newPage: number) => setPage(newPage);
   const handlePageSizeChange = (newSize: number) => {

@@ -3905,19 +3905,22 @@ export function registerResidualMonolithRoutes(app: Hono) {
     },
   );
 
-  // ─── GET /ledger/canonical-events — List canonical events (org-scoped) ────────────────
+  // ─── GET /ledger/canonical-events — List canonical events (org-scoped, keyset) ─────────
   // BF SSOT: ledger.entries (Phase E retired live ledger_event:* KV — no KV fallback).
   app.get("/make-server-37f42386/ledger/canonical-events", requireAuth(), async (c) => {
     try {
+      const orgId = getOrgId(c);
+      if (!orgId) return c.json({ error: "Organization required", code: "ORG_REQUIRED" }, 403);
+
       const driverId = c.req.query("driverId");
       const startDate = c.req.query("startDate");
       const endDate = c.req.query("endDate");
       // Comma-separated event types, e.g. payout_bank,payout_cash — keeps Settlement from paging fare noise.
       const eventTypesParam = c.req.query("eventTypes");
       const limitParam = c.req.query("limit");
-      const offsetParam = c.req.query("offset");
-      const limit = Math.min(Math.max(limitParam ? parseInt(limitParam, 10) : 50, 1), 500);
-      const offset = Math.max(offsetParam ? parseInt(offsetParam, 10) : 0, 0);
+      const afterEffectiveAt = c.req.query("afterEffectiveAt") || undefined;
+      const afterId = c.req.query("afterId") || undefined;
+      const limit = Math.min(Math.max(limitParam ? parseInt(limitParam, 10) : 50, 1), 200);
       const eventTypes = eventTypesParam
         ? String(eventTypesParam)
             .split(",")
@@ -3925,10 +3928,12 @@ export function registerResidualMonolithRoutes(app: Hono) {
             .filter(Boolean)
         : [];
 
-      const {
-        listAllUnifiedCanonicalEvents,
-        dedupeOrgBankCanonicalEvents,
-      } = await import("../_shared/unifiedLedger/queries.ts");
+      const { ledgerPage, mapPageRowToCanonical } = await import("../_shared/unifiedLedger/readApi.ts");
+      const { dedupeOrgBankCanonicalEvents } = await import("../_shared/unifiedLedger/queries.ts");
+      const { thisWeekRange } = await import("../_shared/unifiedLedger/dateRange.ts");
+      const defaults = thisWeekRange();
+      const from = startDate || defaults.from;
+      const to = endDate || defaults.to;
 
       const primaryDriverId = driverId
         ? String(driverId)
@@ -3937,23 +3942,24 @@ export function registerResidualMonolithRoutes(app: Hono) {
             .filter(Boolean)[0]
         : undefined;
 
-      const all = dedupeOrgBankCanonicalEvents(
-        await listAllUnifiedCanonicalEvents({
-          products: ["roam_driver", "roam_fleet"],
-          entryTypes: eventTypes.length > 0 ? eventTypes : undefined,
-          driverId: primaryDriverId,
-          from: startDate ? `${startDate}T00:00:00.000Z` : undefined,
-          to: endDate ? `${endDate}T23:59:59.999Z` : undefined,
-          maxRows: Math.min(Math.max(offset + limit + 200, 1000), 50_000),
-        }),
-      );
-      const filtered = filterByOrg(all, c);
-      const pageRows = filtered.slice(offset, offset + limit);
-      return c.json({
-        data: pageRows,
-        page: Math.floor(offset / limit) + 1,
+      const page = await ledgerPage({
+        organizationId: orgId,
+        from: `${from}T00:00:00.000Z`,
+        to: `${to}T23:59:59.999Z`,
+        products: ["roam_driver", "roam_fleet"],
+        entryTypes: eventTypes.length > 0 ? eventTypes : undefined,
+        driverIds: primaryDriverId ? [primaryDriverId] : undefined,
+        afterEffectiveAt,
+        afterId,
         limit,
-        hasMore: offset + limit < filtered.length,
+      });
+      const mapped = dedupeOrgBankCanonicalEvents(page.rows.map(mapPageRowToCanonical));
+      const filtered = filterByOrg(mapped, c);
+      return c.json({
+        data: filtered,
+        limit,
+        hasMore: page.hasMore,
+        nextCursor: page.nextCursor,
         meta: { source: "ledger.entries" as const },
       });
     } catch (e: any) {
@@ -3980,26 +3986,31 @@ export function registerResidualMonolithRoutes(app: Hono) {
           return c.json({ error: "Forbidden" }, 403);
         }
 
-        const { listAllUnifiedCanonicalEvents } = await import("../_shared/unifiedLedger/queries.ts");
-        const allRows = await listAllUnifiedCanonicalEvents({
-          products: ["roam_driver", "roam_fleet"],
-          maxRows: 200_000,
-        });
-        const values = allRows.filter((v) => String(v.batchId || "") === batchId);
-        const scoped = filterByOrg(values, c);
+        const orgId = getOrgId(c);
+        if (!orgId) return c.json({ error: "Organization required", code: "ORG_REQUIRED" }, 403);
+
+        const { batchTotals } = await import("../_shared/unifiedLedger/readApi.ts");
+        const totals = await batchTotals({ organizationId: orgId, batchId });
+        filterByOrg(
+          totals.map((r) => ({ organizationId: r.organization_id })),
+          c,
+        );
         const byDriver: Record<string, number> = {};
         const byEventType: Record<string, number> = {};
-        for (const v of scoped) {
-          const d = typeof v.driverId === "string" && v.driverId.trim() ? v.driverId.trim() : "unknown";
-          const t = typeof v.eventType === "string" && v.eventType.trim() ? v.eventType.trim() : "unknown";
-          byDriver[d] = (byDriver[d] || 0) + 1;
-          byEventType[t] = (byEventType[t] || 0) + 1;
+        let total = 0;
+        for (const r of totals) {
+          const d = r.driver_id && String(r.driver_id).trim() ? String(r.driver_id).trim() : "unknown";
+          const t = r.entry_type && String(r.entry_type).trim() ? String(r.entry_type).trim() : "unknown";
+          const n = Number(r.entry_count) || 0;
+          byDriver[d] = (byDriver[d] || 0) + n;
+          byEventType[t] = (byEventType[t] || 0) + n;
+          total += n;
         }
         return c.json({
           success: true,
           data: {
             batchId,
-            total: scoped.length,
+            total,
             byDriver,
             byEventType,
           },

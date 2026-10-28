@@ -37,6 +37,9 @@ export { DatabaseLedgerPage } from './database/DatabaseLedgerPage';
 export {
   LedgerPeriodProvider,
   useLedgerPeriod,
+  thisStatementWeek,
+  lastCompleteStatementWeek,
+  lastNStatementWeeks,
   type LedgerPeriod,
 } from './contexts/LedgerPeriodContext';
 export {

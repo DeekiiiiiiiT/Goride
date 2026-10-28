@@ -41,7 +41,7 @@ import {
   personalAllowanceBonusKey,
 } from "../../../packages/fuel-core/src/personalAllowance.ts";
 import type { FuelEntry } from "../../../packages/fuel-core/src/fuelTypes.ts";
-import { listAllUnifiedCanonicalEvents } from "../_shared/unifiedLedger/queries.ts";
+import { weekSummary } from "../_shared/unifiedLedger/readApi.ts";
 
 function ymd(value: unknown): string {
   return String(value || "").split("T")[0];
@@ -521,21 +521,19 @@ export async function prepareFuelWeekReports(args: {
       if (km > 0) bonusByDriverId.set(id, km);
     }
     const ledgerGrossByDriverId = new Map<string, number>();
-    const fareRows = await listAllUnifiedCanonicalEvents({
+    const fareSummary = await weekSummary({
       organizationId: orgId,
+      from: `${String(weekStart).slice(0, 10)}T00:00:00.000Z`,
+      to: `${String(weekEnd).slice(0, 10)}T23:59:59.999Z`,
       entryTypes: ["fare_earning"],
-      from: weekStart,
-      to: weekEnd,
-      maxRows: 8000,
+      products: ["roam_driver", "roam_fleet"],
     });
-    for (const row of fareRows) {
-      const driverId = String(row.driverId || "");
+    for (const r of fareSummary) {
+      const driverId = String(r.driver_id || "");
       if (!driverId) continue;
-      const gross = Number(row.grossAmount);
-      ledgerGrossByDriverId.set(
-        driverId,
-        (ledgerGrossByDriverId.get(driverId) || 0) + (Number.isFinite(gross) ? gross : 0),
-      );
+      const gross = Number(r.gross_minor || r.sum_minor || 0) / 100;
+      if (!Number.isFinite(gross)) continue;
+      ledgerGrossByDriverId.set(driverId, (ledgerGrossByDriverId.get(driverId) || 0) + gross);
     }
     const legacy = {
       tiers: Array.isArray(prefs.tiers) ? prefs.tiers : [],

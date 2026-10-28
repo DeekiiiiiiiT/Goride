@@ -13,6 +13,7 @@ import { TabLoadingSkeleton } from '../../ui/TabLoadingSkeleton';
 import { ContentVisibilityList } from '../ContentVisibilityList';
 import { MetricCard } from '../OverviewMetricsGrid';
 import {
+  activityServiceLinesForPlatform,
   isUnsupportedActivityPlatform,
   type CoverageHonesty,
   type CoverageWindow,
@@ -25,7 +26,7 @@ export type DriverActivityTabProps = {
   selectedPlatforms?: Set<string>;
 };
 
-type ServiceLineFilter = 'all' | 'roam_rides' | 'roam_rush' | 'fleet_ops';
+type ServiceLineFilter = 'all' | 'roam_rides' | 'roam_rush' | 'fleet_ops' | 'uber';
 
 function formatDuration(seconds: number | null | undefined): string {
   if (seconds == null || !Number.isFinite(seconds)) return '—';
@@ -103,7 +104,7 @@ function readActivityFiltersFromUrl(): {
   const q = new URLSearchParams(window.location.search);
   const sl = q.get('actLine') || 'all';
   const serviceLine: ServiceLineFilter =
-    sl === 'roam_rides' || sl === 'roam_rush' || sl === 'fleet_ops' ? sl : 'all';
+    sl === 'roam_rides' || sl === 'roam_rush' || sl === 'fleet_ops' || sl === 'uber' ? sl : 'all';
   const sort = q.get('actSort') === 'asc' ? 'asc' : 'desc';
   return {
     serviceLine,
@@ -183,7 +184,13 @@ function UnsupportedPlatformState({ platform }: { platform: string }) {
   );
 }
 
-function emptyIdleCopy(honesty?: CoverageHonesty | null): string {
+function emptyIdleCopy(
+  honesty?: CoverageHonesty | null,
+  opts?: { uberPlatform?: boolean },
+): string {
+  if (opts?.uberPlatform) {
+    return 'No Uber activity timeline imported for this period. Add it in Data Center → Uber → Activity timeline.';
+  }
   if (honesty && !honesty.presenceRecorded && honesty.tripsRecorded) {
     return 'No presence sessions in this period. Trip events may still appear below when filters allow — presence logging was not active for the full window.';
   }
@@ -220,8 +227,13 @@ export function DriverActivityTab({ driverId, selectedPlatforms }: DriverActivit
   const [exporting, setExporting] = useState(false);
   const [focusedIdx, setFocusedIdx] = useState(0);
 
-  const serviceLines =
-    serviceLine === 'all' ? 'roam_rides,roam_rush,fleet_ops' : serviceLine;
+  const uberPlatform =
+    Boolean(platformFilter) && String(platformFilter).trim().toLowerCase() === 'uber';
+  const serviceLines = uberPlatform
+    ? 'uber'
+    : serviceLine === 'all'
+      ? activityServiceLinesForPlatform(null)
+      : serviceLine;
   const resolvedEventTypes = resolveEventTypesFilter(eventType, statusFilter);
 
   useEffect(() => {
@@ -441,6 +453,7 @@ export function DriverActivityTab({ driverId, selectedPlatforms }: DriverActivit
             <SelectItem value="roam_rides">Roam Rides</SelectItem>
             <SelectItem value="roam_rush">Roam Rush</SelectItem>
             <SelectItem value="fleet_ops">Fleet ops</SelectItem>
+            <SelectItem value="uber">Uber</SelectItem>
           </SelectContent>
         </Select>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -504,14 +517,16 @@ export function DriverActivityTab({ driverId, selectedPlatforms }: DriverActivit
           className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-sm text-slate-600"
           data-testid="activity-not-recorded"
         >
-          Activity was not recorded for this window.
+          {uberPlatform
+            ? 'No Uber activity timeline imported for this period. Add it in Data Center → Uber → Activity timeline.'
+            : 'Activity was not recorded for this window.'}
         </div>
       ) : events.length === 0 ? (
         <div
           className="rounded-md border border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-600"
           data-testid="activity-empty-idle"
         >
-          {emptyIdleCopy(honesty)}
+          {emptyIdleCopy(honesty, { uberPlatform })}
         </div>
       ) : (
         <div

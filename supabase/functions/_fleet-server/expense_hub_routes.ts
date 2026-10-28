@@ -393,15 +393,31 @@ export function registerExpenseHubRoutes(app: {
 
         let rows: Array<Record<string, unknown>> = [];
         {
-          const { listAllUnifiedCanonicalEvents } = await import("../_shared/unifiedLedger/queries.ts");
-          const unified = await listAllUnifiedCanonicalEvents({
-            products: ["roam_driver", "roam_fleet"],
-            entryTypes: eventTypes,
+          const orgId = getOrgId(c);
+          if (!orgId) throw new Error("Organization required for expense hub spend");
+          // Totals for the chart: range_summary by type × day (exact calendar window).
+          const { rangeSummary } = await import("../_shared/unifiedLedger/readApi.ts");
+          const summary = await rangeSummary({
+            organizationId: orgId,
             from: `${start}T00:00:00.000Z`,
             to: `${end}T23:59:59.999Z`,
-            maxRows: 50_000,
+            entryTypes: eventTypes,
+            products: ["roam_driver", "roam_fleet"],
           });
-          rows = filterByOrg(unified, c) as Array<Record<string, unknown>>;
+          filterByOrg(
+            summary.map((r) => ({ organizationId: r.organization_id })),
+            c,
+          );
+          rows = summary.map((r) => ({
+            eventType: r.entry_type,
+            date: r.day,
+            netAmount: Number(r.sum_minor) / 100,
+            grossAmount: Number(r.gross_minor || r.sum_minor) / 100,
+            direction: r.direction,
+            organizationId: r.organization_id,
+            category: undefined,
+            sourceType: undefined,
+          }));
         }
 
         for (const e of rows) {

@@ -20,7 +20,7 @@ export type ActivityEventType =
   | "system_cancelled"
   | "admin_action";
 
-export type ActivityServiceLine = "roam_rides" | "roam_rush" | "fleet_ops";
+export type ActivityServiceLine = "roam_rides" | "roam_rush" | "fleet_ops" | "uber";
 
 export type ActivityEventLike = {
   event_type: string;
@@ -403,9 +403,11 @@ export function sourceFullyRecorded(windows: CoverageWindow[]): boolean {
   return windows.length > 0 && windows.every((w) => w.recorded);
 }
 
-/** Presence source keys for honesty banners. */
+/** Presence source keys for honesty banners (native presence log + Uber app timeline). */
 export function presenceCoverageKeys(coverageBySource: CoverageBySource): string[] {
-  return Object.keys(coverageBySource).filter((k) => k.includes("driver_presence_log"));
+  return Object.keys(coverageBySource).filter(
+    (k) => k.includes("driver_presence_log") || k.includes("uber_app_activity"),
+  );
 }
 
 /** Trip/offer/order source keys (non-presence). */
@@ -544,8 +546,8 @@ export function clusterEventsByJob<T extends ActivityEventLike>(
   return out;
 }
 
+/** InDrive still has no per-event timeline. Uber is supported via app timeline import. */
 export const UNSUPPORTED_ACTIVITY_PLATFORMS = new Set([
-  "uber",
   "indrive",
   "in drive",
   "in_drive",
@@ -554,4 +556,15 @@ export const UNSUPPORTED_ACTIVITY_PLATFORMS = new Set([
 export function isUnsupportedActivityPlatform(platform: string | null | undefined): boolean {
   if (!platform) return false;
   return UNSUPPORTED_ACTIVITY_PLATFORMS.has(platform.trim().toLowerCase());
+}
+
+/** Map driver-header platform filter → activity service_line query. */
+export function activityServiceLinesForPlatform(
+  platform: string | null | undefined,
+  allLines = "roam_rides,roam_rush,fleet_ops,uber",
+): string {
+  if (!platform) return allLines;
+  const p = platform.trim().toLowerCase();
+  if (p === "uber") return "uber";
+  return allLines;
 }

@@ -14,7 +14,8 @@ import { isCashSettlementV2Enabled } from "../cashSettlement/flags.ts";
 import {
   isLedgerReadUnifiedRidesEnabled,
 } from "../../_shared/unifiedLedger/flags.ts";
-import { listUnifiedLedgerEntries } from "../../_shared/unifiedLedger/queries.ts";
+import { ledgerPage } from "../../_shared/unifiedLedger/readApi.ts";
+import { thisWeekRange } from "../../_shared/unifiedLedger/dateRange.ts";
 import { shadowCompareAsync } from "../../_shared/unifiedLedger/shadowRead.ts";
 
 function ridesSvc() {
@@ -25,7 +26,19 @@ function ridesSvc() {
   );
 }
 
-function mapUnifiedToLines(entries: Record<string, unknown>[]) {
+function mapUnifiedToLines(
+  entries: Array<{
+    id: string;
+    entry_type: string;
+    amount_minor: number;
+    currency: string;
+    effective_at: string;
+    product: string;
+    reference_type: string | null;
+    reference_id: string | null;
+    description?: string | null;
+  }>,
+) {
   return entries.map((e) => ({
     id: e.id,
     entry_type: e.entry_type,
@@ -35,7 +48,7 @@ function mapUnifiedToLines(entries: Record<string, unknown>[]) {
     product: e.product,
     reference_type: e.reference_type,
     reference_id: e.reference_id,
-    metadata: e.metadata,
+    metadata: { description: e.description },
     source: "ledger.entries",
   }));
 }
@@ -60,20 +73,30 @@ export function registerPlatformLedgerAdminRoutes(admin: Hono) {
     const readUnified = isLedgerReadUnifiedRidesEnabled() && grain === "line";
 
     if (readUnified) {
+      const organizationId = c.req.query("organization_id")?.trim() || undefined;
+      if (!organizationId) {
+        return c.json({ error: "organization_id required", message: "Pass organization_id for keyset ledger page" }, 400);
+      }
+      const defaults = thisWeekRange();
+      const rangeFrom = from || defaults.from;
+      const rangeTo = to || defaults.to;
+      const afterEffectiveAt = c.req.query("afterEffectiveAt")?.trim() || undefined;
+      const afterId = c.req.query("afterId")?.trim() || undefined;
       // Writers post roam_rides / roam_driver — never the deprecated alias "rides".
-      const { entries, total } = await listUnifiedLedgerEntries({
+      const result = await ledgerPage({
+        organizationId,
+        from: rangeFrom,
+        to: rangeTo,
         products: ["roam_rides", "roam_driver"],
-        sourceSystem: "rides_payment_journal",
-        driverId: driverUserId,
-        from,
-        to,
+        driverIds: driverUserId ? [driverUserId] : undefined,
+        afterEffectiveAt,
+        afterId,
         limit,
-        offset: (page - 1) * limit,
       });
       return c.json({
-        lines: mapUnifiedToLines(entries),
-        total,
-        page,
+        lines: mapUnifiedToLines(result.rows),
+        hasMore: result.hasMore,
+        nextCursor: result.nextCursor,
         limit,
         source: "ledger.entries",
       });

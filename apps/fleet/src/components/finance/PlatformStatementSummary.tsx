@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { AlertCircle, Car, FileText, Loader2 } from 'lucide-react';
+import { AlertCircle, Car, FileText } from 'lucide-react';
 import { api } from '../../services/api';
 import { StatementSummaryCard } from './StatementSummaryCard';
 import type { StatementPlatform, StatementSummary } from '../../types/statementSummary';
@@ -8,6 +8,9 @@ import { useLedgerPeriod } from '../../contexts/LedgerPeriodContext';
 import { addIsoDays } from '@roam/finance-core';
 import { formatMoney } from '@roam/ui/formatMoney';
 import { cn } from '../ui/utils';
+import { Skeleton } from '../ui/skeleton';
+import { ledgerFetchErrorCopy } from '../../utils/ledgerRangeError';
+import { formatUpdatedHhMm } from '../../utils/ledgerCursor';
 
 type OpenTollReconOpts = { startYmd: string; endYmd: string };
 
@@ -92,7 +95,14 @@ export function PlatformStatementSummary({
 
   const summaries = (statementQuery.data?.summaries ?? []) as StatementSummary[];
   const drivers = ((statementQuery.data as { drivers?: StatementSummary[] } | undefined)?.drivers ?? []) as StatementSummary[];
-  const weekClosed = Boolean((statementQuery.data as { meta?: { weekClosed?: boolean } } | undefined)?.meta?.weekClosed);
+  const statementMeta = (statementQuery.data as {
+    meta?: { weekClosed?: boolean; updatedAt?: string; last_entry_at?: string };
+    updatedAt?: string;
+  } | undefined);
+  const weekClosed = Boolean(statementMeta?.meta?.weekClosed);
+  const updatedLabel = formatUpdatedHhMm(
+    statementMeta?.updatedAt || statementMeta?.meta?.updatedAt || statementMeta?.meta?.last_entry_at,
+  );
   const imported = summaries.some((row) => row.importFileHash || row.importedAt);
   const reconciled = summaries.some((row) => row.platform === 'Uber' && row.tieState === 'ties');
   const priorRows = (priorQuery.data?.summaries ?? []) as StatementSummary[];
@@ -199,8 +209,9 @@ export function PlatformStatementSummary({
       </div>
 
       {statementQuery.isLoading && (
-        <div className="flex items-center gap-2 text-sm text-slate-500">
-          <Loader2 className="h-4 w-4 animate-spin" /> Loading statement…
+        <div className="space-y-3" aria-busy="true" aria-label="Loading statement">
+          <Skeleton className="h-28 w-full rounded-xl" />
+          <Skeleton className="h-28 w-full rounded-xl" />
         </div>
       )}
 
@@ -208,10 +219,14 @@ export function PlatformStatementSummary({
         <div className="flex items-center justify-between gap-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
           <span className="flex items-center gap-2">
             <AlertCircle className="h-4 w-4" />
-            {(statementQuery.error as Error)?.message || 'Failed to load statement summary'}
+            {ledgerFetchErrorCopy(statementQuery.error, 'Failed to load statement summary')}
           </span>
           <button type="button" className="underline" onClick={() => void statementQuery.refetch()}>Retry</button>
         </div>
+      )}
+
+      {updatedLabel && !statementQuery.isLoading && (
+        <p className="text-xs text-slate-500">Updated {updatedLabel}</p>
       )}
 
       <div className="grid gap-4">

@@ -140,7 +140,7 @@ export function useDriverPayoutPeriodRows(opts: {
 
   // Prefer ledger payout_bank + payout_cash (PERIOD SSOT for Bank Settled / Uber Cash Collected).
   const payoutBankQuery = useQuery({
-    queryKey: ['ledgerPayoutCashBank', driverId, financialBundle.expandedIds.join(',')],
+    queryKey: ['ledgerPayoutCashBank', driverId, financialBundle.expandedIds.join(','), startDate || '', endDate || ''],
     queryFn: async () => {
       const ids = financialBundle.expandedIds.length
         ? financialBundle.expandedIds.join(',')
@@ -148,7 +148,9 @@ export function useDriverPayoutPeriodRows(opts: {
       const page = await api.getCanonicalLedgerEvents({
         driverId: ids,
         eventTypes: 'payout_bank,payout_cash',
-        limit: 500,
+        startDate,
+        endDate,
+        limit: 200,
       });
       return (page.data || []).filter((e) => {
         const et = String(e.eventType || '');
@@ -156,7 +158,7 @@ export function useDriverPayoutPeriodRows(opts: {
       });
     },
     staleTime: DRIVER_FINANCIAL_STALE_MS,
-    enabled: enabled && Boolean(driverId) && !useSharedWeekly,
+    enabled: enabled && Boolean(driverId) && !useSharedWeekly && Boolean(startDate && endDate),
   });
 
   const payoutBankEvents = payoutBankQuery.data ?? [];

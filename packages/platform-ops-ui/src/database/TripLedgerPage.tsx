@@ -8,10 +8,11 @@ import { TripLedgerFilterBar, TripLedgerFilters, EMPTY_FILTERS } from './trip-le
 import { TripLedgerStats } from './trip-ledger/TripLedgerStats';
 import { TripLedgerExport } from './trip-ledger/TripLedgerExport';
 import { useServiceLineScope } from '../contexts/ServiceLineScopeContext';
-import { useLedgerPeriod } from '../contexts/LedgerPeriodContext';
+import { thisStatementWeek, useLedgerPeriod } from '../contexts/LedgerPeriodContext';
 import { useQuery } from '@tanstack/react-query';
 import { useLedgerQuery } from '../hooks/useLedgerQuery';
 import { toTripApiSortKey, isTripServerSortKey } from '../utils/tripSortKeys';
+import { ledgerFetchErrorCopy } from '../utils/ledgerRangeError';
 
 const STORAGE_KEY = 'roam_trip_ledger_columns';
 const STORAGE_VERSION_KEY = 'roam_trip_ledger_columns_v';
@@ -198,7 +199,9 @@ export function TripLedgerPage({ organizationId, columnConfig, headerActions, ro
   const trips = rowsQuery.data?.data || [];
   const total = rowsQuery.data?.total || 0;
   const loading = rowsQuery.isFetching;
-  const error = rowsQuery.error ? ((rowsQuery.error as Error).message || 'Failed to load trip data') : null;
+  const error = rowsQuery.error
+    ? ledgerFetchErrorCopy(rowsQuery.error, 'Failed to load trip data')
+    : null;
 
   useEffect(() => {
     lastPageTripsRef.current = trips;
@@ -257,13 +260,20 @@ export function TripLedgerPage({ organizationId, columnConfig, headerActions, ro
   };
   const handleRetry = () => { void rowsQuery.refetch(); };
   const handleFiltersChange = (next: TripLedgerFilters) => {
+    if (!next.dateFrom && !next.dateTo) {
+      // All-time removed — fall back to this statement week.
+      const week = thisStatementWeek();
+      setFilters({ ...next, dateFrom: week.startDate, dateTo: week.endDate });
+      setPage(0);
+      setKeysetCursor(null);
+      setPeriod(week);
+      return;
+    }
     setFilters(next);
     setPage(0);
     setKeysetCursor(null);
     if (next.dateFrom && next.dateTo) {
       setPeriod({ startDate: next.dateFrom, endDate: next.dateTo });
-    } else if (!next.dateFrom && !next.dateTo) {
-      setPeriod({ startDate: '', endDate: '' });
     }
   };
 

@@ -48,14 +48,33 @@ export function registerFinanceAdminRoutes(app: Hono) {
         sampleKeys: (data ?? []).map((r: { id?: string }) => String(r.id ?? "")).filter(Boolean).slice(0, 20),
       });
       if (isLedgerReadUnifiedDashEnabled()) {
-        const { listUnifiedLedgerEntries } = await import("../../_shared/unifiedLedger/queries.ts");
-        const { entries, total } = await listUnifiedLedgerEntries({
+        const { ledgerPage } = await import("../../_shared/unifiedLedger/readApi.ts");
+        const { thisWeekRange } = await import("../../_shared/unifiedLedger/dateRange.ts");
+        const organizationId = c.req.query("organization_id")?.trim() || undefined;
+        if (!organizationId) {
+          return c.json({ error: "organization_id required" }, 400);
+        }
+        const defaults = thisWeekRange();
+        const from = c.req.query("from")?.trim() || defaults.from;
+        const to = c.req.query("to")?.trim() || defaults.to;
+        const afterEffectiveAt = c.req.query("afterEffectiveAt")?.trim() || undefined;
+        const afterId = c.req.query("afterId")?.trim() || undefined;
+        const result = await ledgerPage({
+          organizationId,
+          from,
+          to,
           products: ["roam_dash", "roam_partner", "roam_courier"],
-          sourceSystem: "dash_payments",
+          afterEffectiveAt,
+          afterId,
           limit,
-          offset,
         });
-        return c.json({ payouts: entries, total, page, limit, source: "ledger.entries" });
+        return c.json({
+          payouts: result.rows,
+          hasMore: result.hasMore,
+          nextCursor: result.nextCursor,
+          limit,
+          source: "ledger.entries",
+        });
       }
     } catch (shErr) {
       console.error("[dash finance] shadow/unified read:", shErr);

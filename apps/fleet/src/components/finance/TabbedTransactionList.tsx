@@ -7,7 +7,6 @@ import { FuelExpenseLedgerPage } from '../database/FuelExpenseLedgerPage';
 import { PlatformStatementSummary } from './PlatformStatementSummary';
 import { LedgerPeriodProvider, useLedgerPeriod } from '../../contexts/LedgerPeriodContext';
 import { PeriodWeekDropdown } from '../ui/PeriodWeekDropdown';
-import { ALL_TIME_OPTION_ID } from '../../utils/periodWeekOptions';
 import { useAuth } from '../auth/AuthContext';
 import { useBusinessConfig } from '../auth/BusinessConfigContext';
 import { API_ENDPOINTS } from '../../services/apiConfig';
@@ -162,12 +161,7 @@ function LedgersInner({
           <PeriodWeekDropdown
             selectedStart={period.startDate || undefined}
             selectedEnd={period.endDate || undefined}
-            prependAllTimeOption
             onSelect={(opt) => {
-              if (opt.id === ALL_TIME_OPTION_ID || (!opt.startDate && !opt.endDate)) {
-                setPeriod({ startDate: '', endDate: '' });
-                return;
-              }
               if (opt.startDate && opt.endDate) {
                 setPeriod({ startDate: opt.startDate, endDate: opt.endDate });
               }
