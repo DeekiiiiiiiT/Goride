@@ -1,34 +1,19 @@
 # Unified Ledger Disk IO — Audit
 
-**Rev 17 · 2026-10-28 04:25 UTC · Project `csfllzzastacofsvcdsc` (Nano) · Fixed — only waiting items left**
+**Rev 18 · 2026-10-28 12:45 UTC · Project `csfllzzastacofsvcdsc` (Nano) · Fixed — two dated checks left**
 
 ## Status
 
-Drain stopped, verified live: no new temp files from 04:01 to 04:23 UTC (`temp_files` flat at 423,223; was ~100 files/hour). `pgss-daily-reset` is scheduled at 04:08 UTC daily. Logging is off, no restart. Week calculator still paused.
+Fixed and committed (`81a3ae5d`). Verified live at 12:44 UTC: **0 bytes** of temp written since 04:07 UTC (8.5 hours), `temp_files` flat at 423,223, `pg_stat_statements` at 237 entries, `pgss-daily-reset` scheduled, no restart. The `io_daily_temp_bytes()` reading still includes the old drain until its 24 h window rolls past 04:07 today.
 
-## Open
+## Left
 
 | ID | Action | When |
 |---|---|---|
-| R23 | Done. `supabase/migrations/20261028040000_pgss_daily_reset.sql` and this doc are in source control. | 2026-10-28 |
 | R12 | Turn the week calculator back on (Fleet admin → Week calculator). | **29 Oct after 04:07 UTC**, if `select pg_size_pretty(private.io_daily_temp_bytes());` is under 200 MB. |
-| R13 | Stay on Nano, or move one size up. | **4 Nov**: stay on Nano if the 7-day average is under 200 MB/day and Disk IO is out of the red. |
+| R13 | Stay on Nano. Move one size up only if the check fails. | **4 Nov**: 7-day average under 200 MB/day and Disk IO chart out of the red. |
 
-## Watch — 2026-10-28
-
-Checked live after the 04:07 UTC snapshot. Gate not met. Calculator stays paused.
-
-| Check | Result | Pass |
-|---|---|---|
-| `private.io_daily_temp_bytes()` | 1,461 MB | No. Needs under 200 MB |
-| `extensions.pg_stat_statements` | 36 | Yes |
-| Latest `temp_files` | 423,223 (flat) | Yes |
-| `pgss-daily-reset` | `8 4 * * *` | Yes |
-| Week calculator | paused | Stays paused |
-
-Next check: 29 Oct after 04:07 UTC. Do not resume on this number.
-
-If the drain ever returns, check `select count(*) from extensions.pg_stat_statements;` first (should stay in the hundreds), then confirm the reset job still exists in `cron.job`.
+If the drain ever returns: `select count(*) from extensions.pg_stat_statements;` should stay in the hundreds, and `pgss-daily-reset` must still be in `cron.job`.
 
 ## Rules
 
