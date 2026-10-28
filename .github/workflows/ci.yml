@@ -171,24 +171,6 @@ jobs:
         with:
           deno-version: v2.x
 
-      - name: Deno check edge functions
-        run: deno check supabase/functions/_shared/orderToFleetTrip.ts supabase/functions/_fleet-server/workforce_invite_routes.ts supabase/functions/_fleet-server/rush_settlement_routes.ts supabase/functions/_fleet-server/fleet_module_checkout.ts supabase/functions/_fleet-server/fleet_wipay.ts supabase/functions/_fleet-server/trips_org_scope.ts supabase/functions/delivery/courierFleetAttribution.ts supabase/functions/_fleet-server/fuel_period_routes.ts
-
-      - name: Deno check fleet-toll tag types
-        run: node scripts/check-fleet-toll-types.mjs
-
-      - name: Deno test dominion access
-        run: deno test --no-check supabase/functions/_fleet-server/dominion_access.test.ts
-
-      - name: Deno test platform MFA gate
-        run: deno test --no-check supabase/functions/_fleet-server/platform_mfa_gate.test.ts
-
-      - name: Deno test parts sourcing rules
-        run: >
-          deno test --allow-read --allow-env
-          supabase/functions/_fleet-server/parts_resolution.test.ts
-          supabase/functions/_fleet-server/catalog_privacy.test.ts
-
       - name: Deno test split fill station match
         run: >
           deno test --allow-read --allow-env
@@ -206,6 +188,24 @@ jobs:
 
       - name: Deno test places review chips
         run: deno test --allow-read --allow-env supabase/functions/explorer/place_admin.test.ts
+
+      - name: Deno check edge functions
+        run: deno check supabase/functions/_shared/orderToFleetTrip.ts supabase/functions/_fleet-server/workforce_invite_routes.ts supabase/functions/_fleet-server/rush_settlement_routes.ts supabase/functions/_fleet-server/fleet_module_checkout.ts supabase/functions/_fleet-server/fleet_wipay.ts supabase/functions/_fleet-server/trips_org_scope.ts supabase/functions/delivery/courierFleetAttribution.ts supabase/functions/_fleet-server/fuel_period_routes.ts
+
+      - name: Deno check fleet-toll tag types
+        run: node scripts/check-fleet-toll-types.mjs
+
+      - name: Deno test dominion access
+        run: deno test --no-check supabase/functions/_fleet-server/dominion_access.test.ts
+
+      - name: Deno test platform MFA gate
+        run: deno test --no-check supabase/functions/_fleet-server/platform_mfa_gate.test.ts
+
+      - name: Deno test parts sourcing rules
+        run: >
+          deno test --allow-read --allow-env
+          supabase/functions/_fleet-server/parts_resolution.test.ts
+          supabase/functions/_fleet-server/catalog_privacy.test.ts
 
       - name: Deno test ledger read API parity
         run: >
