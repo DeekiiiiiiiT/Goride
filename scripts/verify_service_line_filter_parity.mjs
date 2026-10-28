@@ -80,7 +80,7 @@ if (!dfp.includes("metadata->>rideshareTripCount.is.null")) {
 
 const migPath = join(
   root,
-  "supabase/migrations/20260908220000_settlement_queue_sql_aggregates.sql",
+  "supabase/migrations_archive/20260908220000_settlement_queue_sql_aggregates.sql",
 );
 const mig = readFileSync(migPath, "utf8");
 if (!mig.includes("dfp_service_line_matches") || !mig.includes("COALESCE((p_metadata->>'rushTripCount')")) {
