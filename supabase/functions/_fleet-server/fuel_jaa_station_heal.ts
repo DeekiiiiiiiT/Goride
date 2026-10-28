@@ -27,6 +27,18 @@ const HEALABLE_STATUSES = new Set([
 
 const AUTO_REASON = "Auto: JAA linked + unique merchant match";
 
+function verifiedStationsOnly(rows: Array<Record<string, unknown>>): VerifiedStation[] {
+  const out: VerifiedStation[] = [];
+  for (const row of rows) {
+    const id = row.id;
+    const status = row.status;
+    if (typeof id !== "string" || id.length === 0) continue;
+    if (status != null && status !== "" && status !== "verified") continue;
+    out.push(row as VerifiedStation);
+  }
+  return out;
+}
+
 function metaOf(entry: Record<string, unknown>): Record<string, unknown> {
   const m = entry?.metadata;
   return m && typeof m === "object" ? (m as Record<string, unknown>) : {};
@@ -144,9 +156,7 @@ export async function attachJaaPairIfUniqueMerchant(
 
   const stations =
     opts?.stations ||
-    ((await listStationRecords()) || []).filter(
-      (s: VerifiedStation) => s && s.id && (!s.status || s.status === "verified"),
-    );
+    verifiedStationsOnly((await listStationRecords()) || []);
 
   const odoSeed = driver.odometer != null ? driver : statement;
   const odo = await odometerSequenceHealthy(
@@ -363,9 +373,7 @@ export async function healUnpairedStatementEntry(
 
   const stations =
     opts?.stations ||
-    ((await listStationRecords()) || []).filter(
-      (s: VerifiedStation) => s && s.id && (!s.status || s.status === "verified"),
-    );
+    verifiedStationsOnly((await listStationRecords()) || []);
 
   const orgId = String(
     (entry as { organizationId?: string }).organizationId ||
