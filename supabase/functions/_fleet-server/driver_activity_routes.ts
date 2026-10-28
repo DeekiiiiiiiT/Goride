@@ -962,14 +962,16 @@ export function registerDriverActivityRoutes(app: Hono) {
         expired: offersExpired,
       });
 
-      const cancels = list.filter((e) =>
-        e.event_type === "driver_cancelled" || e.event_type === "rider_cancelled" ||
-        e.event_type === "system_cancelled"
-      ).length;
-      const completes = list.filter((e) => e.event_type === "job_completed").length;
-      const cancelDen = cancels + completes;
+      const driverCancels = list.filter((e) => e.event_type === "driver_cancelled").length;
+      const riderCancels = list.filter((e) => e.event_type === "rider_cancelled").length;
+      const systemCancels = list.filter((e) => e.event_type === "system_cancelled").length;
+      const cancels = driverCancels + riderCancels + systemCancels;
+      const tripsCompleted = list.filter((e) => e.event_type === "job_completed").length;
+      const cancelDen = cancels + tripsCompleted;
       const cancellationRate = cancelDen > 0 ? (cancels / cancelDen) * 100 : null;
 
+      const onlineSessions = list.filter((e) => e.event_type === "went_online").length;
+      const offlineSessions = list.filter((e) => e.event_type === "went_offline").length;
       const openSessionCount = segments.filter((s) => s.kind === "online" && s.to == null).length;
       const sessionsClosedByTimeout = segments.filter((s) => s.closedBy === "timeout").length;
 
@@ -1001,6 +1003,12 @@ export function registerDriverActivityRoutes(app: Hono) {
         offersExpired,
         acceptanceRate,
         cancellationRate,
+        tripsCompleted,
+        driverCancels,
+        riderCancels,
+        systemCancels,
+        onlineSessions,
+        offlineSessions,
         basis,
         openSessionCount,
         sessionsClosedByTimeout,

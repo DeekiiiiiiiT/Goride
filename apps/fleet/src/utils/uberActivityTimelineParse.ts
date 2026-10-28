@@ -811,3 +811,64 @@ export function parseUberActivityTimelineFromTable(
 export function canCommitUberActivityTimeline(result: UberTimelineParseResult): boolean {
   return result.events.length > 0 && result.stats.days >= 1;
 }
+
+export type UberTimelineFileDriverIdentity = {
+  uberUuid: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  displayName: string | null;
+};
+
+/**
+ * Read Driver UUID / name from a structured timeline CSV/Excel row set.
+ * UUID is usually only on the first data row; later rows leave it blank.
+ */
+export function extractUberTimelineDriverIdentity(
+  headers: string[],
+  rows: Record<string, string>[],
+): UberTimelineFileDriverIdentity {
+  const norm = headers.map((h) => h.trim().toLowerCase());
+  const uuidKey =
+    headers[
+      norm.findIndex(
+        (h) => h === 'driver uuid' || h === 'driver id' || h === 'uber uuid' || h.includes('driver uuid'),
+      )
+    ] || null;
+  const firstKey =
+    headers[norm.findIndex((h) => h.includes('first name') || h === 'first')] || null;
+  const lastKey =
+    headers[norm.findIndex((h) => h.includes('last name') || h === 'last')] || null;
+  const nameKey =
+    headers[norm.findIndex((h) => h === 'driver name' || h === 'name')] || null;
+
+  let uberUuid: string | null = null;
+  let firstName: string | null = null;
+  let lastName: string | null = null;
+  let displayName: string | null = null;
+
+  for (const row of rows) {
+    if (!uberUuid && uuidKey) {
+      const v = String(row[uuidKey] || '').trim();
+      if (v) uberUuid = v.toLowerCase();
+    }
+    if (!firstName && firstKey) {
+      const v = String(row[firstKey] || '').trim();
+      if (v) firstName = v;
+    }
+    if (!lastName && lastKey) {
+      const v = String(row[lastKey] || '').trim();
+      if (v) lastName = v;
+    }
+    if (!displayName && nameKey) {
+      const v = String(row[nameKey] || '').trim();
+      if (v) displayName = v;
+    }
+    if (uberUuid && (displayName || firstName || lastName)) break;
+  }
+
+  if (!displayName && (firstName || lastName)) {
+    displayName = [firstName, lastName].filter(Boolean).join(' ').trim() || null;
+  }
+
+  return { uberUuid, firstName, lastName, displayName };
+}

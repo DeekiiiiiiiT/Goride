@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
   canCommitUberActivityTimeline,
+  extractUberTimelineDriverIdentity,
   looksLikeOfficialUberDriverActivityCsv,
   looksLikeUberActivityTimeline,
   parseUberActivityDuration,
@@ -146,6 +147,42 @@ describe('structured rows + table helpers', () => {
     );
     expect(result.stats.onlineEvents).toBe(1);
     expect(result.stats.offlineEvents).toBe(1);
+  });
+
+  it('extracts Driver UUID from first data row only', () => {
+    const identity = extractUberTimelineDriverIdentity(
+      [
+        'Driver UUID',
+        'Driver first name',
+        'Driver last name',
+        'Date',
+        'Time',
+        'Activity / Event',
+        'Duration / Status',
+      ],
+      [
+        {
+          'Driver UUID': '52ff47da-ef48-41b8-93d5-80a09b85ce5b',
+          'Driver first name': 'KENNY GREGORY',
+          'Driver last name': 'RATTRAYCAS',
+          Date: '13/10/2026',
+          Time: '7:14 am',
+          'Activity / Event': 'Online',
+          'Duration / Status': '',
+        },
+        {
+          'Driver UUID': '',
+          'Driver first name': '',
+          'Driver last name': '',
+          Date: '13/10/2026',
+          Time: '8:31 am',
+          'Activity / Event': 'Offline',
+          'Duration / Status': '1h 17m',
+        },
+      ],
+    );
+    expect(identity.uberUuid).toBe('52ff47da-ef48-41b8-93d5-80a09b85ce5b');
+    expect(identity.displayName).toBe('KENNY GREGORY RATTRAYCAS');
   });
 
   it('accepts DD/MM/YYYY dates and lowercase am/pm (fleet CSV export)', () => {

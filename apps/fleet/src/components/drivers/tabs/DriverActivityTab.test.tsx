@@ -68,6 +68,10 @@ vi.mock('../context/DriverPeriodContext', () => ({
   }),
 }));
 
+vi.mock('../../ui/PeriodWeekDropdown', () => ({
+  PeriodWeekDropdown: () => <div data-testid="activity-period-dropdown">Period</div>,
+}));
+
 function renderWithQuery(ui: React.ReactElement) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(<QueryClientProvider client={qc}>{ui}</QueryClientProvider>);

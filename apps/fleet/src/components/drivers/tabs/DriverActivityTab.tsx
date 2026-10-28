@@ -4,12 +4,14 @@
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { format } from 'date-fns';
 import { AlertTriangle, ChevronDown, ChevronRight, Download, Lock } from 'lucide-react';
 import { api } from '../../../services/api';
 import { Badge } from '../../ui/badge';
 import { Button } from '../../ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../ui/select';
 import { TabLoadingSkeleton } from '../../ui/TabLoadingSkeleton';
+import { PeriodWeekDropdown } from '../../ui/PeriodWeekDropdown';
 import { ContentVisibilityList } from '../ContentVisibilityList';
 import { MetricCard } from '../OverviewMetricsGrid';
 import {
@@ -18,6 +20,7 @@ import {
   type CoverageHonesty,
   type CoverageWindow,
 } from '../../../utils/driverActivityModel';
+import type { PeriodWeekOption } from '../../../utils/periodWeekOptions';
 import { useDriverPeriod } from '../context/DriverPeriodContext';
 import { formatInFleetTz, fleetCalendarDay, useFleetTimezone } from '../../../utils/timezoneDisplay';
 
@@ -201,11 +204,23 @@ function emptyIdleCopy(
 }
 
 export function DriverActivityTab({ driverId, selectedPlatforms }: DriverActivityTabProps) {
-  const { period } = useDriverPeriod();
+  const { period, setPeriod } = useDriverPeriod();
   const fleetTimezone = useFleetTimezone() || 'America/Jamaica';
   const from = period.from.toISOString();
   const to = period.to.toISOString();
+  const periodStartYmd = format(period.from, 'yyyy-MM-dd');
+  const periodEndYmd = format(period.to, 'yyyy-MM-dd');
   const listRef = useRef<HTMLDivElement>(null);
+
+  const onPeriodSelect = useCallback(
+    (week: PeriodWeekOption) => {
+      setPeriod({
+        from: new Date(`${week.startDate}T12:00:00`),
+        to: new Date(`${week.endDate}T12:00:00`),
+      });
+    },
+    [setPeriod],
+  );
 
   const platformFilter = useMemo(() => {
     if (!selectedPlatforms || selectedPlatforms.has('All') || selectedPlatforms.size === 0) {
@@ -246,10 +261,11 @@ export function DriverActivityTab({ driverId, selectedPlatforms }: DriverActivit
   }, [serviceLine, eventType, statusFilter, sort]);
 
   const summaryQuery = useQuery({
-    queryKey: ['driverActivitySummary', driverId, from, to, serviceLines],
+    // v2: includes tripsCompleted / session / cancel counts for Activity cards
+    queryKey: ['driverActivitySummary', 'v2', driverId, from, to, serviceLines],
     queryFn: () => api.getDriverActivitySummary(driverId, { from, to, serviceLines }),
     enabled: Boolean(driverId) && !unsupported,
-    staleTime: 120_000,
+    staleTime: 30_000,
   });
 
   const pageQuery = useQuery({
@@ -400,6 +416,19 @@ export function DriverActivityTab({ driverId, selectedPlatforms }: DriverActivit
 
   return (
     <div className="space-y-4" data-testid="driver-activity-tab">
+      <div className="flex flex-wrap items-center gap-2" data-testid="activity-period-control">
+        <span className="text-xs font-medium text-slate-500 whitespace-nowrap">Period</span>
+        <PeriodWeekDropdown
+          selectedStart={periodStartYmd}
+          selectedEnd={periodEndYmd}
+          onSelect={onPeriodSelect}
+          weekCount={24}
+          allowCustomRange
+          placeholder="Select period"
+          buttonClassName="h-9"
+        />
+      </div>
+
       <CoverageBanner coverage={coverage} honesty={honesty} tz={fleetTimezone} />
 
       {failedLanes.length > 0 && (
@@ -411,7 +440,10 @@ export function DriverActivityTab({ driverId, selectedPlatforms }: DriverActivit
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-5" data-testid="activity-summary-strip">
+      <div
+        className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7"
+        data-testid="activity-summary-strip"
+      >
         <MetricCard
           title="Online hours"
           value={
@@ -423,24 +455,68 @@ export function DriverActivityTab({ driverId, selectedPlatforms }: DriverActivit
           }
         />
         <MetricCard
-          title="Utilization"
-          value={summary?.utilizationPct != null ? `${Math.round(summary.utilizationPct)}%` : '—'}
+          title="Offers Accepted"
+          value={
+            summaryQuery.isLoading
+              ? '…'
+              : summary?.offersAccepted != null
+                ? summary.offersAccepted
+                : '—'
+          }
         />
-        <MetricCard title="Offers" value={summary?.offersReceived ?? '—'} />
         <MetricCard
-          title="Acceptance"
-          value={summary?.acceptanceRate == null ? '—' : `${Math.round(summary.acceptanceRate)}%`}
+          title="Trips Completed"
+          value={
+            summaryQuery.isLoading
+              ? '…'
+              : summary?.tripsCompleted != null
+                ? summary.tripsCompleted
+                : '—'
+          }
         />
         <MetricCard
-          title="Cancels"
-          value={summary?.cancellationRate == null ? '—' : `${Math.round(summary.cancellationRate)}%`}
+          title="Driver Cancelled"
+          value={
+            summaryQuery.isLoading
+              ? '…'
+              : summary?.driverCancels != null
+                ? summary.driverCancels
+                : '—'
+          }
+        />
+        <MetricCard
+          title="Rider Cancelled"
+          value={
+            summaryQuery.isLoading
+              ? '…'
+              : summary?.riderCancels != null
+                ? summary.riderCancels
+                : '—'
+          }
+        />
+        <MetricCard
+          title="Online Sessions"
+          value={
+            summaryQuery.isLoading
+              ? '…'
+              : summary?.onlineSessions != null
+                ? summary.onlineSessions
+                : '—'
+          }
+        />
+        <MetricCard
+          title="Offline Sessions"
+          value={
+            summaryQuery.isLoading
+              ? '…'
+              : summary?.offlineSessions != null
+                ? summary.offlineSessions
+                : '—'
+          }
         />
       </div>
       {summary?.basis && summary.basis !== 'event' && (
         <p className="text-xs text-slate-500">Basis: {summary.basis}</p>
-      )}
-      {summary?.acceptanceRate == null && (summary?.offersReceived ?? 0) === 0 && (
-        <p className="text-xs text-slate-500">Acceptance: no offers in period</p>
       )}
 
       <div className="flex flex-wrap items-center gap-2" data-testid="activity-filters">
@@ -518,8 +594,8 @@ export function DriverActivityTab({ driverId, selectedPlatforms }: DriverActivit
           data-testid="activity-not-recorded"
         >
           {uberPlatform
-            ? 'No Uber activity timeline imported for this period. Add it in Data Center → Uber → Activity timeline.'
-            : 'Activity was not recorded for this window.'}
+            ? `No Uber activity timeline for ${periodStartYmd} → ${periodEndYmd}. Change Period above, or import in Data Center → Uber → Activity timeline.`
+            : `Activity was not recorded for ${periodStartYmd} → ${periodEndYmd}.`}
         </div>
       ) : events.length === 0 ? (
         <div
@@ -527,6 +603,9 @@ export function DriverActivityTab({ driverId, selectedPlatforms }: DriverActivit
           data-testid="activity-empty-idle"
         >
           {emptyIdleCopy(honesty, { uberPlatform })}
+          <p className="mt-2 text-xs text-slate-500">
+            Showing {periodStartYmd} → {periodEndYmd}. Use Period above to change weeks.
+          </p>
         </div>
       ) : (
         <div
