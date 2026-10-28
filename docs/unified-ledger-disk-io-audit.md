@@ -1,36 +1,34 @@
 # Unified Ledger Disk IO — Audit
 
-**Rev 14 · 2026-10-28 03:20 UTC · Project `csfllzzastacofsvcdsc` (Nano) · Only open items listed**
+**Rev 17 · 2026-10-28 04:25 UTC · Project `csfllzzastacofsvcdsc` (Nano) · Fixed — only waiting items left**
 
 ## Status
 
-R20 is live. `anon.work_mem = 8192` (unitless). An anonymous read of `driver_play_store_releases` returned 200 within 60 seconds. No `8mb` / API errors in that minute. Authenticator stays at 65536.
-
-R21 is live. Fleet production (`www.roamfleet.co`, deployment `dpl_qFTHoMp7dmWdt9urmfa1gfYCg3Ji`) includes “Week calculator is paused by an admin.” `fleet-core` is deployed and treats a failed calculator status check as paused. `emergency_off` stays `true`.
-
-R18 logging is on. `current_setting('log_temp_files')` = `0`. Postmaster start is still 21 Oct 05:28 (no restart). The platform API rejects a bare `0`. `log_temp_files=1B` is what it accepts, and Postgres stores that as `0`. Evidence window started **2026-10-28 03:12 UTC**. Lines are already appearing. Do not name a statement before **09:12 UTC**.
-
-The drain is **not** named yet. Do not resume the week calculator.
+Drain stopped, verified live: no new temp files from 04:01 to 04:23 UTC (`temp_files` flat at 423,223; was ~100 files/hour). `pgss-daily-reset` is scheduled at 04:08 UTC daily. Logging is off, no restart. Week calculator still paused.
 
 ## Open
 
-| ID | Finding | Fix |
+| ID | Action | When |
 |---|---|---|
-| R18 | Logging now records every temp file. The source is still unnamed. | At or after 09:12 UTC, run the query below, add up sizes per statement, and record the top statement here. Then `postgres-config delete --config log_temp_files --no-restart`. |
-| R12 | Week calculator stopped. Last hours before the pause: 332 MB, 320 MB, 356 MB. | Resume only after R18 names the source and one full day reads under 200 MB. |
-| R13 | Nano vs one size up. | Decide **4 Nov** from 7 days of snapshots, after R18 is fixed. |
+| R23 | Done. `supabase/migrations/20261028040000_pgss_daily_reset.sql` and this doc are in source control. | 2026-10-28 |
+| R12 | Turn the week calculator back on (Fleet admin → Week calculator). | **29 Oct after 04:07 UTC**, if `select pg_size_pretty(private.io_daily_temp_bytes());` is under 200 MB. |
+| R13 | Stay on Nano, or move one size up. | **4 Nov**: stay on Nano if the 7-day average is under 200 MB/day and Disk IO is out of the red. |
 
-**R18 log query** (Supabase dashboard → Logs → Logs Explorer):
+## Watch — 2026-10-28
 
-```sql
-select timestamp, event_message
-from postgres_logs
-where event_message like '%temporary file%' or event_message like 'STATEMENT:%'
-order by timestamp desc
-limit 500
-```
+Checked live after the 04:07 UTC snapshot. Gate not met. Calculator stays paused.
 
-Each `temporary file: … size N` line is followed by the `STATEMENT:` that wrote it. Add up sizes per statement; the largest total is the source. Once it is fixed, turn logging off with `postgres-config delete --config log_temp_files --no-restart`.
+| Check | Result | Pass |
+|---|---|---|
+| `private.io_daily_temp_bytes()` | 1,461 MB | No. Needs under 200 MB |
+| `extensions.pg_stat_statements` | 36 | Yes |
+| Latest `temp_files` | 423,223 (flat) | Yes |
+| `pgss-daily-reset` | `8 4 * * *` | Yes |
+| Week calculator | paused | Stays paused |
+
+Next check: 29 Oct after 04:07 UTC. Do not resume on this number.
+
+If the drain ever returns, check `select count(*) from extensions.pg_stat_statements;` first (should stay in the hundreds), then confirm the reset job still exists in `cron.job`.
 
 ## Rules
 
@@ -38,7 +36,4 @@ Each `temporary file: … size N` line is followed by the `STATEMENT:` that wrot
 2. Every role setting, cron job and seed row lives in an active migration; check API logs within 60 s.
 3. The database adds up; the app asks for answers. No edge function sums raw ledger rows.
 4. Every ledger read passes org + date range to SQL. No `select *`, no OFFSET, no exact count unless it is on screen.
-5. A capped read that hits its cap is an error, never a partial answer.
-6. Never drop a function, schema or nullable column until every deployed bundle has the matching change.
-7. A cause is named only from temp-file lines, not from timeouts or guesses.
-8. Raising `work_mem` on a login role raises it for every role that doesn't set its own.
+5. Every growing log or stats store has a purge or reset job.

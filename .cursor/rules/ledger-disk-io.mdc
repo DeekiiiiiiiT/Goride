@@ -1,0 +1,24 @@
+---
+description: Keep the unified-ledger Disk IO drain from coming back
+alwaysApply: true
+---
+
+# Ledger Disk IO
+
+Source: `docs/unified-ledger-disk-io-audit.md`. Project `csfllzzastacofsvcdsc` stays on Nano until the 4 Nov decision.
+
+## Do not
+
+- Resume the week calculator before **29 Oct 04:07 UTC**, and only if `select pg_size_pretty(private.io_daily_temp_bytes());` is under 200 MB. Fleet admin → Week calculator. If the number fails, wait another full day.
+- Change compute size before **4 Nov**. Stay on Nano only if the 7-day average is under 200 MB/day and Disk IO is out of the red. Otherwise move one size up.
+- Turn `log_temp_files` back on, or restart the database, to “check” this.
+- Write role memory as `8MB` or `8mb`. Use unitless kB: `alter role authenticated set work_mem = 8192;`
+- Drop or skip `pgss-daily-reset` (`8 4 * * *`) or `ledger-io-snapshots-hourly`.
+- Sum raw ledger rows in an edge function. The database adds up; the app asks for the answer.
+- Read the ledger without org and date range. No `select *`, no OFFSET, no exact count unless that number is on screen.
+
+## If temp files start climbing again
+
+1. `select count(*) from extensions.pg_stat_statements;` — should stay in the hundreds.
+2. `select jobname, schedule from cron.job where jobname = 'pgss-daily-reset';` — the row must exist.
+3. Do not resume the calculator and do not resize while that check is open.
