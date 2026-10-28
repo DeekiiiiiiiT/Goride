@@ -1,5 +1,5 @@
 import { shouldPostUnifiedLedger } from "./flags.ts";
-import { ledgerPostEntry, majorToMinor } from "./postEntry.ts";
+import { ledgerPostEntry, majorToMinor, requireOrganizationId } from "./postEntry.ts";
 import { logDualWriteMetric } from "./metrics.ts";
 import type { DashCaptureSplit } from "../dashMoneySplit.ts";
 
@@ -13,7 +13,16 @@ export type DashTransactionDualWrite = {
   kind: "order_capture" | "order_refund" | "merchant_payout" | "merchant_payout_reversal" | "courier_payout";
   /** Marketplace capture split — when set on order_capture, posts platform / courier / merchant lines. */
   split?: DashCaptureSplit | null;
+  /** Required for unified ledger visibility; falls back to ORGANIZATION_ID env when omitted. */
+  organizationId?: string | null;
 };
+
+function resolveDashOrganizationId(row: DashTransactionDualWrite): string {
+  return requireOrganizationId(
+    row.organizationId || Deno.env.get("ORGANIZATION_ID"),
+    `dash_payments:${row.transactionId}`,
+  );
+}
 
 /** Resolve product based on transaction kind */
 function resolveDashProduct(kind: DashTransactionDualWrite["kind"]):
@@ -73,6 +82,7 @@ async function dualWriteDashPaymentInner(
 ): Promise<"ok" | "skipped"> {
   const currency = row.currency ?? "JMD";
   const product = resolveDashProduct(row.kind);
+  const organizationId = resolveDashOrganizationId(row);
 
   // Marketplace capture: three accrual lines instead of full gross → merchant
   if (row.kind === "order_capture" && row.split) {
@@ -93,6 +103,7 @@ async function dualWriteDashPaymentInner(
         amountMinor: majorToMinor(split.platformFee),
         currency,
         product,
+        organizationId,
         referenceType: "order",
         referenceId: row.orderId,
         metadata: baseMeta,
@@ -108,6 +119,7 @@ async function dualWriteDashPaymentInner(
         amountMinor: majorToMinor(Math.abs(split.platformFee)),
         currency,
         product,
+        organizationId,
         referenceType: "order",
         referenceId: row.orderId,
         metadata: { ...baseMeta, subsidy: true },
@@ -128,6 +140,7 @@ async function dualWriteDashPaymentInner(
         amountMinor: majorToMinor(split.courierPayable),
         currency,
         product: "roam_courier",
+        organizationId,
         referenceType: "order",
         referenceId: row.orderId,
         metadata: baseMeta,
@@ -146,6 +159,7 @@ async function dualWriteDashPaymentInner(
         amountMinor: majorToMinor(split.merchantReceivable),
         currency,
         product: "roam_partner",
+        organizationId,
         referenceType: "order",
         referenceId: row.orderId,
         metadata: baseMeta,
@@ -203,6 +217,7 @@ async function dualWriteDashPaymentInner(
     amountMinor,
     currency,
     product,
+    organizationId,
     referenceType: row.kind.includes("payout") ? "payout" : "order",
     referenceId: row.orderId,
     metadata: { merchant_id: row.merchantId, courier_id: row.courierId, kind: row.kind },

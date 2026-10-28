@@ -1,5 +1,5 @@
 import { shouldPostUnifiedLedger } from "./flags.ts";
-import { ledgerPostEntry, majorToMinor } from "./postEntry.ts";
+import { ledgerPostEntry, majorToMinor, requireOrganizationId } from "./postEntry.ts";
 import { logDualWriteMetric } from "./metrics.ts";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -37,11 +37,25 @@ export async function dualWriteTollLedgerKv(entry: {
     return;
   }
 
+  let organizationId: string;
+  try {
+    organizationId = requireOrganizationId(entry.organizationId, `kv_toll_ledger:${entry.id}`);
+  } catch (e) {
+    logDualWriteMetric({
+      source_system: "kv_toll_ledger",
+      status: "fail",
+      reason: e instanceof Error ? e.message : String(e),
+      source_id: entry.id,
+      amount_minor: amountMinor,
+    });
+    throw e;
+  }
+
   // Prefer org fleet account; fall back to driver digital — never platform:clearing for both legs.
   let counterparty = "";
   let product: "roam_fleet" | "roam_driver" = "roam_fleet";
-  if (entry.organizationId && UUID_RE.test(entry.organizationId)) {
-    counterparty = `org:${entry.organizationId}:fleet`;
+  if (UUID_RE.test(organizationId)) {
+    counterparty = `org:${organizationId}:fleet`;
     product = "roam_fleet";
   } else if (entry.driverId && UUID_RE.test(entry.driverId)) {
     counterparty = `user:${entry.driverId}:driver:digital`;
@@ -80,7 +94,7 @@ export async function dualWriteTollLedgerKv(entry: {
       amountMinor,
       currency: entry.currency ?? "JMD",
       product,
-      organizationId: entry.organizationId ?? null,
+      organizationId,
       effectiveAt: entry.date ? `${entry.date}T12:00:00.000Z` : new Date().toISOString(),
       referenceType: "toll",
       referenceId: entry.id,
@@ -113,7 +127,7 @@ export async function dualWriteTollLedgerKv(entry: {
         amountMinor,
         currency: entry.currency ?? "JMD",
         product,
-        organizationId: entry.organizationId ?? null,
+        organizationId,
         effectiveAt: entry.date ? `${entry.date}T12:00:00.000Z` : new Date().toISOString(),
         referenceType: "toll",
         referenceId: entry.id,

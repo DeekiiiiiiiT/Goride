@@ -215,6 +215,9 @@ export async function emitDriverTollCharge(
   }
 
   const company = await companyOnToll(p.tollId);
+  if (!company) {
+    throw new Error(`organization_id required for toll charge ${p.tollId}`);
+  }
 
   // Always post to SQL unified financial ledger (not behind the projection flag).
   try {

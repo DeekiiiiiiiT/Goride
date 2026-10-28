@@ -17,7 +17,10 @@ const root = join(__dirname, "..", "supabase", "functions");
 const SKIP_DIRS = new Set(["node_modules", ".deno", "dist"]);
 /** Bundled / generated edge entrypoints — lint sources only. */
 const SKIP_FILE_RE =
-  /[/\\](fleet-(core|ops|pay|fuel|toll|claims)|make-server-37f42386)[/\\]index\.ts$/i;
+  /[/\\]fleet-(core|ops|pay|fuel|toll|claims)[/\\]index\.ts$/i;
+
+/** R15: resurrecting the monolith entry would reintroduce fetch-all drains. */
+const BANNED_PATH_RE = /[/\\]make-server-37f42386[/\\]/i;
 
 async function walk(dir, out = []) {
   const entries = await readdir(dir, { withFileTypes: true });
@@ -41,6 +44,10 @@ const files = await walk(root);
 for (const file of files) {
   const text = await readFile(file, "utf8");
   const rel = relative(join(__dirname, ".."), file).replace(/\\/g, "/");
+  if (BANNED_PATH_RE.test(file)) {
+    failures.push(`${rel}: make-server-37f42386 is retired — routes live in fleet-* bundles`);
+    continue;
+  }
   const withoutComments = text
     .replace(/\/\*[\s\S]*?\*\//g, "")
     .replace(/(^|[^:])\/\/.*$/gm, "$1");

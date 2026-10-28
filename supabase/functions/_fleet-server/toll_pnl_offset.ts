@@ -115,7 +115,13 @@ function buildOffsetEvent(
       offsetsIdempotencyKey: originalChargeKeyFor(p.sourceType, p.sourceId),
       version,
     },
-    ...(p.organizationId ? { organizationId: p.organizationId } : {}),
+    organizationId: p.organizationId
+      ? String(p.organizationId)
+      : (() => {
+          throw new Error(
+            `organization_id required for toll_charge_offset ${p.sourceType}:${p.sourceId}`,
+          );
+        })(),
   };
 }
 
@@ -286,7 +292,15 @@ export async function reinstateTollCharge(
       reinstatesOffsetKey: offsetIdempotencyKey,
       version,
     },
-    ...(p.organizationId ? { organizationId: p.organizationId } : {}),
+    organizationId: (() => {
+      const id = String(p.organizationId || "").trim();
+      if (!id) {
+        throw new Error(
+          `organization_id required for toll_charge_reinstate ${p.sourceType}:${p.sourceId}`,
+        );
+      }
+      return id;
+    })(),
   };
 
   const result = await appendCanonicalLedgerEvents([event], c as never);

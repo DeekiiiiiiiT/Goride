@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { shouldPostUnifiedLedger } from "./flags.ts";
-import { ledgerPostEntry } from "./postEntry.ts";
+import { ledgerPostEntry, requireOrganizationId } from "./postEntry.ts";
 import { logDualWriteMetric } from "./metrics.ts";
 
 export type RidesJournalLineDualWrite = {
@@ -15,7 +15,38 @@ export type RidesJournalLineDualWrite = {
   metadata?: Record<string, unknown>;
   createdByUserId?: string | null;
   journalEntryId?: string | null;
+  organizationId?: string | null;
 };
+
+function orgFromAccountKey(key: string): string | null {
+  const m = /^org:([0-9a-f-]{36}):/i.exec(key);
+  return m?.[1] ?? null;
+}
+
+async function resolveRidesOrganizationId(
+  client: SupabaseClient,
+  line: RidesJournalLineDualWrite,
+): Promise<string> {
+  const fromLine = String(line.organizationId || "").trim();
+  if (fromLine) return requireOrganizationId(fromLine, `rides:${line.entryType}`);
+  const fromDebit = orgFromAccountKey(line.debitAccountKey);
+  if (fromDebit) return fromDebit;
+  const fromCredit = orgFromAccountKey(line.creditAccountKey);
+  if (fromCredit) return fromCredit;
+  if (line.rideId) {
+    const { data } = await client
+      .from("ride_requests")
+      .select("organization_id")
+      .eq("id", line.rideId)
+      .maybeSingle();
+    const fromRide = String(data?.organization_id || "").trim();
+    if (fromRide) return requireOrganizationId(fromRide, `rides:${line.rideId}`);
+  }
+  return requireOrganizationId(
+    Deno.env.get("ORGANIZATION_ID"),
+    `rides_payment_journal:${line.entryType}`,
+  );
+}
 
 /** Determine product based on account keys - rider-centric = roam_rides, driver-centric = roam_driver */
 function resolveRidesProduct(debitKey: string, creditKey: string): "roam_rides" | "roam_driver" {
@@ -69,6 +100,7 @@ export async function dualWriteRidesJournalLine(
 
   const product = resolveRidesProduct(line.debitAccountKey, line.creditAccountKey);
   const amountMinor = Math.abs(line.amountMinor);
+  const organizationId = await resolveRidesOrganizationId(client, line);
 
   try {
     const result = await ledgerPostEntry({
@@ -80,6 +112,7 @@ export async function dualWriteRidesJournalLine(
       currency: line.currency,
       requestHash: line.requestHash,
       product,
+      organizationId,
       referenceType: line.rideId ? "ride" : null,
       referenceId: line.rideId,
       metadata: line.metadata ?? {},
@@ -149,6 +182,10 @@ export async function dualWriteRideLedgerLine(line: LedgerLineDualWrite): Promis
     amountMinor: amount,
     currency: line.currency ?? "JMD",
     product: "roam_driver",
+    organizationId: requireOrganizationId(
+      Deno.env.get("ORGANIZATION_ID"),
+      `rides_ledger_lines:${line.lineId}`,
+    ),
     referenceType: "ride",
     referenceId: line.rideId,
     metadata: { line_kind: line.lineKind, reporting_only: true },

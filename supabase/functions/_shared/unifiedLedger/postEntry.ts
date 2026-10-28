@@ -7,6 +7,21 @@ export type PostEntryResult = {
   entry_id?: string | null;
 };
 
+const ORG_UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Fail closed — null-org ledger rows are invisible to org-scoped reads. */
+export function requireOrganizationId(
+  value: string | null | undefined,
+  context: string,
+): string {
+  const id = String(value || "").trim();
+  if (!ORG_UUID_RE.test(id)) {
+    throw new Error(`organization_id required for ${context}`);
+  }
+  return id;
+}
+
 export type PostEntryParams = {
   idempotencyKey: string;
   entryType: string;
@@ -15,7 +30,8 @@ export type PostEntryParams = {
   amountMinor: number;
   currency: string;
   requestHash?: string | null;
-  organizationId?: string | null;
+  /** Required — posts without org never land in week_totals / Settlements. */
+  organizationId: string;
   product?: 
     | "roam_rides" | "roam_driver" | "roam_fleet"  // Rideshare
     | "roam_dash" | "roam_partner" | "roam_courier" // Delivery
@@ -47,6 +63,10 @@ export function unifiedLedgerClient(): SupabaseClient {
 export async function ledgerPostEntry(
   params: PostEntryParams,
 ): Promise<PostEntryResult> {
+  const organizationId = requireOrganizationId(
+    params.organizationId,
+    `ledgerPostEntry:${params.entryType}`,
+  );
   const client = unifiedLedgerClient();
   const { data, error } = await client.rpc("ledger_post_entry", {
     p_idempotency_key: params.idempotencyKey,
@@ -56,7 +76,7 @@ export async function ledgerPostEntry(
     p_amount_minor: params.amountMinor,
     p_currency: params.currency,
     p_request_hash: params.requestHash ?? null,
-    p_organization_id: params.organizationId ?? null,
+    p_organization_id: organizationId,
     p_product: params.product ?? "platform",
     p_effective_at: params.effectiveAt ?? new Date().toISOString(),
     p_reference_type: params.referenceType ?? null,

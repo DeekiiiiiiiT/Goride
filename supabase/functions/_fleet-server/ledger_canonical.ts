@@ -542,9 +542,17 @@ export async function appendCanonicalLedgerEvents(
       };
 
       const stamped = stampOrg(record, c);
-      const orgId = typeof (stamped as { organizationId?: string }).organizationId === "string"
-        ? (stamped as { organizationId: string }).organizationId
-        : null;
+      let orgId = typeof (stamped as { organizationId?: string }).organizationId === "string"
+        ? String((stamped as { organizationId: string }).organizationId).trim()
+        : "";
+      if (!orgId && typeof base.organizationId === "string") {
+        orgId = base.organizationId.trim();
+      }
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(orgId)) {
+        throw new Error(
+          `organization_id required for canonical event ${String(base.eventType)}:${idem}`,
+        );
+      }
 
       const metaBase =
         base.metadata && typeof base.metadata === "object" && !Array.isArray(base.metadata)

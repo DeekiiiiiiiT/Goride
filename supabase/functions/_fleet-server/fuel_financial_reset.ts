@@ -232,6 +232,11 @@ export async function postFuelFinalizedEventsFromReport(
   const driverSpend = reportDriverSpendMajor(report);
   const gasCard = Math.abs(Number(report.gasCardSpend) || 0);
   const organizationId = await organizationForFuelReport(report, driverId);
+  if (!organizationId) {
+    throw new Error(
+      `fuel finalize requires organizationId (driver ${driverId}, week ${weekKey})`,
+    );
+  }
   const results: PostFinancialEventResult[] = [];
 
   const active = await listActiveFuelEventsForWeek(driverId, weekKey);
@@ -285,6 +290,7 @@ export async function postFuelFinalizedEventsFromReport(
       sourceSystem: "fuel_ops",
       sourceId,
       driverId,
+      organizationId,
       vehicleId: report.vehicleId || null,
       occurredAt: weekKey,
       amountMajor: 0,
@@ -307,6 +313,7 @@ export async function postFuelFinalizedEventsFromReport(
         sourceSystem: "fuel_ops",
         sourceId,
         driverId,
+        organizationId,
         occurredAt: weekKey,
         amountMajor: -deduction,
         direction: deduction >= 0 ? "outflow" : "inflow",
@@ -331,6 +338,7 @@ export async function postFuelFinalizedEventsFromReport(
         sourceSystem: "fuel_ops",
         sourceId,
         driverId,
+        organizationId,
         occurredAt: weekKey,
         amountMajor: -leftoverDriver,
         direction: "outflow",
@@ -358,6 +366,7 @@ export async function postFuelFinalizedEventsFromReport(
         sourceSystem: "fuel_ops",
         sourceId,
         driverId,
+        organizationId,
         occurredAt: weekKey,
         amountMajor: -fleetShare,
         direction: fleetShare >= 0 ? "outflow" : "inflow",
@@ -381,6 +390,7 @@ export async function postFuelFinalizedEventsFromReport(
         sourceSystem: "fuel_ops",
         sourceId,
         driverId,
+        organizationId,
         occurredAt: weekKey,
         amountMajor: -driverSpend,
         direction: "outflow",

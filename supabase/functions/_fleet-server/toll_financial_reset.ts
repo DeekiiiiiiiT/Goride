@@ -299,6 +299,7 @@ export async function ensureActiveTollUsagePostedForEntry(entry: {
   location?: string;
   plaza?: string;
   metadata?: Record<string, unknown> | null;
+  organizationId?: string | null;
 }): Promise<{ posted: boolean; skipped: boolean; error?: string }> {
   const id = String(entry.id || "").trim();
   const t = String(entry.type || "").toLowerCase();
@@ -316,6 +317,42 @@ export async function ensureActiveTollUsagePostedForEntry(entry: {
   const active = await listActiveTollUsageEventsForSourceIds([id]);
   if (active.length > 0) return { posted: false, skipped: true };
 
+  const { periodKeyFor } = await import("../../../packages/finance-core/src/periodKey.ts");
+  const day = String(entry.date || "").slice(0, 10);
+  const weekKey =
+    periodKeyFor(/^\d{4}-\d{2}-\d{2}$/.test(day) ? day : new Date().toISOString().slice(0, 10)) ||
+    "";
+
+  let orgId = String(entry.organizationId || "").trim();
+  if (!orgId) {
+    const { getServiceClient } = await import("./service_client.ts");
+    const sb = getServiceClient();
+    const { data: tollRow } = await sb
+      .from("fleet_toll_ledger")
+      .select("organization_id")
+      .eq("id", id)
+      .maybeSingle();
+    orgId = String((tollRow as { organization_id?: string } | null)?.organization_id || "").trim();
+  }
+  if (!orgId && /^\d{4}-\d{2}-\d{2}$/.test(weekKey)) {
+    const { getServiceClient } = await import("./service_client.ts");
+    const sb = getServiceClient();
+    const { data: per } = await sb
+      .from("driver_financial_periods")
+      .select("organization_id")
+      .eq("driver_id", String(entry.driverId))
+      .eq("period_anchor", weekKey)
+      .maybeSingle();
+    orgId = String((per as { organization_id?: string } | null)?.organization_id || "").trim();
+  }
+  if (!orgId) {
+    return {
+      posted: false,
+      skipped: false,
+      error: `organization_id required for toll_usage ${id}`,
+    };
+  }
+
   const { postFinancialEvent } = await import("./financial_ledger.ts");
   const generation = await nextTollUsagePostGeneration(id);
   const idempotencyKey =
@@ -325,6 +362,7 @@ export async function ensureActiveTollUsagePostedForEntry(entry: {
 
   const result = await postFinancialEvent({
     idempotencyKey,
+    organizationId: orgId,
     domain: "toll",
     eventType: "toll_usage",
     sourceSystem: "toll_workflow",
@@ -350,21 +388,7 @@ export async function ensureActiveTollUsagePostedForEntry(entry: {
   if (result.inserted === true) {
     // Non-fatal: invalidate $0 N/A seals when late toll_usage lands for the week.
     try {
-      const { periodKeyFor } = await import("../../../packages/finance-core/src/periodKey.ts");
-      const day = String(entry.date || "").slice(0, 10);
-      const weekKey =
-        periodKeyFor(/^\d{4}-\d{2}-\d{2}$/.test(day) ? day : new Date().toISOString().slice(0, 10)) ||
-        "";
       if (/^\d{4}-\d{2}-\d{2}$/.test(weekKey)) {
-        const { getServiceClient } = await import("./service_client.ts");
-        const sb = getServiceClient();
-        const { data: per } = await sb
-          .from("driver_financial_periods")
-          .select("organization_id")
-          .eq("driver_id", String(entry.driverId))
-          .eq("period_anchor", weekKey)
-          .maybeSingle();
-        const orgId = String((per as { organization_id?: string } | null)?.organization_id || "").trim();
         if (orgId) {
           const { getLatestWeekStatement } = await import("./week_statements.ts");
           const latest = await getLatestWeekStatement(orgId, String(entry.driverId), weekKey, "toll");

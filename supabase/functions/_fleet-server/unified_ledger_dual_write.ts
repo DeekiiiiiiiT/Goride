@@ -110,6 +110,19 @@ export async function fleetDualWriteCanonicalEvent(event: {
   // Product: roam_driver for driver earnings, roam_fleet for org-level
   const product = hasValidDriverId ? "roam_driver" : "roam_fleet";
 
+  const orgId = String(event.organizationId || "").trim();
+  if (!uuidRe.test(orgId)) {
+    logDualWriteMetric({
+      source_system: "kv_ledger_event",
+      status: "fail",
+      reason: `organization_id required for ${event.eventType}`,
+      source_id: event.id,
+      entry_type: event.eventType,
+      amount_minor: amountMinor,
+    });
+    throw new Error(`organization_id required for kv_ledger_event:${event.id}`);
+  }
+
   // Stamp top-level canonical fields into metadata so unified reads keep platform/driver/direction.
   const mergedMeta: Record<string, unknown> = {
     ...(event.metadata ?? {}),
@@ -131,7 +144,7 @@ export async function fleetDualWriteCanonicalEvent(event: {
     p_amount_minor: amountMinor,
     p_currency: event.currency ?? "JMD",
     p_product: product,
-    p_organization_id: event.organizationId ?? null,
+    p_organization_id: orgId,
     p_effective_at: event.date ? `${event.date}T12:00:00.000Z` : new Date().toISOString(),
     p_reference_type: event.sourceType,
     p_reference_id: event.sourceId,

@@ -5491,6 +5491,7 @@ app.post(`${BASE}/toll-pnl-offset-backfill/backfill`, requirePermission('toll.ma
             date: cand.date,
             amount: cand.amount,
             reason: cand.reason,
+            organizationId: (cand as { organizationId?: string }).organizationId || getOrgId(c),
           },
           c,
         );
@@ -6124,6 +6125,7 @@ app.post(`${BASE}/personal-use/auto-charge`, requirePermission('toll.manage'), a
                 date: toll.date,
                 amount,
                 reason: "personal",
+                organizationId: (toll as { organizationId?: string }).organizationId || getOrgId(c),
               },
               c,
             );
@@ -7396,6 +7398,7 @@ app.post(`${BASE}/resolve`, requirePermission('toll.manage'), async (c) => {
               date: tx.date,
               amount,
               reason: "personal",
+              organizationId: (tx as { organizationId?: string }).organizationId || getOrgId(c),
             },
             c,
           );
@@ -7990,6 +7993,10 @@ async function applyRefundResolution(params: {
             date: String(trip.date || now),
             amount,
             reason: newReason,
+            organizationId:
+              (trip as { organizationId?: string }).organizationId ||
+              (trip as { organization_id?: string }).organization_id ||
+              null,
           },
           { get: () => undefined },
         );
@@ -8002,6 +8009,10 @@ async function applyRefundResolution(params: {
             vehicleId: trip.vehicleId,
             date: String(trip.date || now),
             amount,
+            organizationId:
+              (trip as { organizationId?: string }).organizationId ||
+              (trip as { organization_id?: string }).organization_id ||
+              null,
           },
           { get: () => undefined },
         );

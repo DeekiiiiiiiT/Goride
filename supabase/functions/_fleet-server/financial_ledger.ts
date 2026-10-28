@@ -31,6 +31,9 @@ export interface FinancialAllocationInput {
   metadata?: Record<string, unknown>;
 }
 
+const ORG_UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export interface PostFinancialEventInput {
   idempotencyKey: string;
   requestHash?: string;
@@ -43,7 +46,8 @@ export interface PostFinancialEventInput {
   occurredAt: string | Date;
   amountMajor: number; // signed major units (JMD)
   direction?: FinancialDirection;
-  organizationId?: string | null;
+  /** Required — null-org posts are invisible to Settlements / Statement. */
+  organizationId: string;
   product?: string;
   debitAccountKey?: string | null;
   creditAccountKey?: string | null;
@@ -111,6 +115,18 @@ export async function postFinancialEvent(
   input: PostFinancialEventInput,
 ): Promise<PostFinancialEventResult> {
   try {
+    const organizationId = String(input.organizationId || "").trim();
+    if (!ORG_UUID_RE.test(organizationId)) {
+      return {
+        ok: false,
+        inserted: false,
+        skipped: false,
+        conflict: false,
+        eventId: null,
+        ledgerEntryId: null,
+        error: `organization_id required for ${input.eventType}`,
+      };
+    }
     const occurred =
       typeof input.occurredAt === "string"
         ? input.occurredAt
@@ -146,7 +162,7 @@ export async function postFinancialEvent(
       p_amount_minor: amountMinor,
       p_currency: "JMD",
       p_direction: direction,
-      p_organization_id: input.organizationId || null,
+      p_organization_id: organizationId,
       p_product: input.product || (input.domain === "earnings" ? "roam_driver" : "roam_fleet"),
       p_debit_account_key: input.debitAccountKey || null,
       p_credit_account_key: input.creditAccountKey || null,
@@ -208,10 +224,32 @@ export async function reverseFinancialEvent(opts: {
   amountMajor: number; // original signed amount — reversal flips direction
   occurredAt?: string;
   payload?: Record<string, unknown>;
+  organizationId?: string | null;
 }): Promise<PostFinancialEventResult> {
+  let organizationId = String(opts.organizationId || "").trim();
+  if (!ORG_UUID_RE.test(organizationId)) {
+    const { data } = await sb()
+      .from("financial_events")
+      .select("organization_id")
+      .eq("id", opts.priorEventId)
+      .maybeSingle();
+    organizationId = String(data?.organization_id || "").trim();
+  }
+  if (!ORG_UUID_RE.test(organizationId)) {
+    return {
+      ok: false,
+      inserted: false,
+      skipped: false,
+      conflict: false,
+      eventId: null,
+      ledgerEntryId: null,
+      error: `organization_id required to reverse ${opts.priorEventId}`,
+    };
+  }
   const flipped = -opts.amountMajor;
   return postFinancialEvent({
     idempotencyKey: opts.idempotencyKey,
+    organizationId,
     domain: opts.domain,
     eventType: opts.eventType,
     sourceSystem: opts.sourceSystem,

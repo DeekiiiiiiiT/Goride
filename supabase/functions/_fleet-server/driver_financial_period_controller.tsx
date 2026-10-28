@@ -734,6 +734,10 @@ app.post(`${BASE}/backfill`, requirePermission('transactions.edit'), async (c) =
     const body = await c.req.json().catch(() => ({}));
     const dryRun = body.dryRun !== false;
     const onlyDriver = body.driverId ? String(body.driverId) : null;
+    const requestOrgId = String(getOrgId(c as never) || body.organizationId || "").trim();
+    if (!requestOrgId && !dryRun) {
+      return c.json({ error: "ORG_REQUIRED", message: "organizationId is required for backfill posts" }, 400);
+    }
 
     const { tollTx } = await loadAllTollLedgerWithTrips();
     const usage = tollTx.filter(
@@ -765,6 +769,7 @@ app.post(`${BASE}/backfill`, requirePermission('transactions.edit'), async (c) =
       if (amt <= 0) continue;
       const r = await postFinancialEvent({
         idempotencyKey: `backfill:toll_usage:${tx.id}`,
+        organizationId: String(tx.organizationId || requestOrgId),
         domain: "toll",
         eventType: "toll_usage",
         sourceSystem: "backfill",
@@ -806,6 +811,7 @@ app.post(`${BASE}/backfill`, requirePermission('transactions.edit'), async (c) =
       if (amt === 0) continue;
       const r = await postFinancialEvent({
         idempotencyKey: `backfill:driver_charge:${t.id}`,
+        organizationId: String(t.organizationId || requestOrgId),
         domain: "toll",
         eventType: amt < 0 ? "toll_charged_to_driver" : "toll_charge_reversed",
         sourceSystem: "backfill",
@@ -837,8 +843,10 @@ app.post(`${BASE}/backfill`, requirePermission('transactions.edit'), async (c) =
       const deduction = Math.abs(Number(fr.driverShare) || 0);
       const fleetShare = Math.abs(Number(fr.companyShare) || 0);
       const keyBase = `backfill:fuel_finalized:${fr.id || fr.driverId}:${start}`;
+      const fuelOrg = String(fr.organizationId || fr.organization_id || requestOrgId);
       await postFinancialEvent({
         idempotencyKey: `${keyBase}:finalized`,
+        organizationId: fuelOrg,
         domain: "fuel",
         eventType: "fuel_finalized",
         sourceSystem: "backfill",
@@ -852,6 +860,7 @@ app.post(`${BASE}/backfill`, requirePermission('transactions.edit'), async (c) =
       if (deduction > 0) {
         await postFinancialEvent({
           idempotencyKey: `${keyBase}:deduction`,
+          organizationId: fuelOrg,
           domain: "fuel",
           eventType: "fuel_deduction",
           sourceSystem: "backfill",
@@ -867,6 +876,7 @@ app.post(`${BASE}/backfill`, requirePermission('transactions.edit'), async (c) =
       if (fleetShare > 0) {
         await postFinancialEvent({
           idempotencyKey: `${keyBase}:fleet_share`,
+          organizationId: fuelOrg,
           domain: "fuel",
           eventType: "fuel_fleet_share",
           sourceSystem: "backfill",
