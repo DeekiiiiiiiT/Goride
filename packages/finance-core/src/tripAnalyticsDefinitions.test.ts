@@ -103,7 +103,7 @@ describe('trip analytics definitions', () => {
       'utf8',
     );
     const sql = readFileSync(
-      resolve(root, 'supabase/migrations/20261021190000_trip_analytics_facts.sql'),
+      resolve(root, 'supabase/migrations_archive/20261021190000_trip_analytics_facts.sql'),
       'utf8',
     );
     expect(edge).toContain('tripAnalyticsDefinitions.ts');

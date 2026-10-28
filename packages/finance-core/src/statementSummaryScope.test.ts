@@ -7,7 +7,7 @@ describe('statement summary org scope', () => {
       new URL('../../../supabase/functions/_fleet-server/statement_summary_build.ts', import.meta.url),
       'utf8',
     );
-    const call = src.slice(src.indexOf('listAllUnifiedCanonicalEvents'));
+    const call = src.slice(src.indexOf('listCanonicalViaPage'));
     expect(call.includes('organizationId:')).toBe(true);
     expect(call.includes('from:')).toBe(true);
     expect(call.includes('to:')).toBe(true);
