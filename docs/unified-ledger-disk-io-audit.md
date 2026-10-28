@@ -10,7 +10,7 @@ Verified live: R14 done (`9473 / 9473` rows, 0 null org, `organization_id` NOT N
 
 | ID | Finding | Fix |
 |---|---|---|
-| R12 | The "423 MB/day" reading is not a real day. `private.io_daily_temp_bytes()` falls back to the first snapshot (27 Oct 23:54) when none is 24 h old, so it measures the migration night: 443 MB from 23:54 to 01:07, while tracked statements grew only ~20 MB after 01:07. `emergency_off` is still `true`. | Read it again at **29 Oct after 02:07 UTC** (the first full 24 h after the last migration at 01:40). Under 200 MB → turn the week calculator back on from Fleet admin. |
+| R12 | Pre-gate reading at 2026-10-28 02:21 UTC is still migration-night noise: `io_daily_temp_bytes()` = **778,971,870** (~743 MB) across snapshots from 27 Oct 23:54 → 28 Oct 02:07. `emergency_off` is still `true`. Agent wake armed for the gate. | Read it again at **29 Oct after 02:07 UTC**. Under 200 MB → Resume week calculator from Fleet admin (`/admin` → Week calculator). |
 | R13 | Nano vs one size up. | Decide **4 Nov** from 7 days of `private.io_snapshots`: average under 200 MB/day and Disk IO chart out of the red → stay on Nano. |
 
 ## Rules
