@@ -85,6 +85,14 @@ export function WeekCalculatorPage({ accessToken }: { accessToken: string }) {
   };
 
   const resume = async () => {
+    const ok = await confirm({
+      title: 'Turn the week calculator back on?',
+      description:
+        'Only do this after the daily disk check is under 200 MB. Turning it on early can fill the disk again.',
+      confirmLabel: 'Resume',
+      variant: 'danger',
+    });
+    if (!ok) return;
     setBusy(true);
     setError(null);
     try {
