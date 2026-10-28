@@ -153,6 +153,9 @@ create trigger place_fill_pcode
 revoke all on function places.fill_place_pcode() from public, anon, authenticated;
 grant execute on function places.fill_place_pcode() to service_role;
 
+revoke all on function public.io_daily_temp_bytes() from public, anon, authenticated;
+grant execute on function public.io_daily_temp_bytes() to service_role;
+
 do $$
 begin
   update places.place

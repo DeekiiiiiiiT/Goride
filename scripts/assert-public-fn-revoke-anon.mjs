@@ -14,7 +14,10 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const migrationsDir = join(__dirname, "..", "supabase", "migrations");
+const migrationsDirs = [
+  join(__dirname, "..", "supabase", "migrations"),
+  join(__dirname, "..", "supabase", "migrations_archive"),
+];
 
 /** Migrations at/after R4-01 must revoke on every new public function create. */
 const FORWARD_CUTOFF = "20261020140000";
@@ -59,7 +62,13 @@ const CREATE_FN_RE =
 const REVOKE_FN_RE =
   /REVOKE\s+(?:ALL|EXECUTE)\s+ON\s+FUNCTION\s+public\.([a-zA-Z0-9_]+)\s*\([^)]*\)\s+FROM\s+([^;]+)/gi;
 
-const files = (await readdir(migrationsDir)).filter((f) => f.endsWith(".sql")).sort();
+const files = [];
+for (const dir of migrationsDirs) {
+  for (const name of await readdir(dir)) {
+    if (name.endsWith(".sql")) files.push({ dir, name });
+  }
+}
+files.sort((a, b) => a.name.localeCompare(b.name));
 
 /** @type {Map<string, { createFile: string; revokeFile: string | null }>} */
 const latest = new Map();
@@ -99,8 +108,8 @@ function revokedNamesInFile(text, file) {
 }
 
 for (const file of files) {
-  const text = await readFile(join(migrationsDir, file), "utf8");
-  const version = file.slice(0, 14);
+  const text = await readFile(join(file.dir, file.name), "utf8");
+  const version = file.name.slice(0, 14);
 
   CREATE_FN_RE.lastIndex = 0;
   let m;
@@ -108,16 +117,16 @@ for (const file of files) {
     const name = m[1];
     const prev = latest.get(name);
     latest.set(name, {
-      createFile: file,
-      revokeFile: prev?.revokeFile && prev.createFile > file ? prev.revokeFile : null,
+      createFile: file.name,
+      revokeFile: prev?.revokeFile && prev.createFile > file.name ? prev.revokeFile : null,
     });
   }
 
   const revoked = revokedNamesInFile(text, file);
   for (const name of revoked) {
-    const prev = latest.get(name) ?? { createFile: file, revokeFile: null };
-    if (!prev.revokeFile || file >= prev.revokeFile) {
-      latest.set(name, { ...prev, revokeFile: file });
+    const prev = latest.get(name) ?? { createFile: file.name, revokeFile: null };
+    if (!prev.revokeFile || file.name >= prev.revokeFile) {
+      latest.set(name, { ...prev, revokeFile: file.name });
     }
   }
 
