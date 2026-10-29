@@ -10,7 +10,10 @@ where id = '<matchedStationId>';
 -- 2. After 2026-10-29 04:15 UTC. Expect zero rows.
 select * from places.migration_health;
 
--- 3. Coverage after refresh_coverage. Expect about 56 verified fuel, 12 verified toll, 148 pending fuel.
+-- 3. After the price engine is live. Review queue and stale share. Read only.
+select * from places.price_engine_health;
+
+-- 4. Coverage after refresh_coverage. Expect about 56 verified fuel, 12 verified toll, 148 pending fuel.
 select kind,
   sum(verified_count) as verified,
   sum(pending_count) as pending

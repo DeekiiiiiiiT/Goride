@@ -2,16 +2,28 @@ import { useEffect, useState } from 'react';
 import { publicGet } from '../api';
 import { writeStationCache } from '../offline';
 import { onPlugClick } from '../shell/actions';
+import { deviceFix } from '../shell/facts';
 import { chipById, sortedChips, type PlugChip } from './plugChips';
+import {
+  confidenceDotClass,
+  confidenceLabel,
+  confidenceTone,
+  gradeLabel as pumpGradeLabel,
+  moneyJmd,
+  readPumpQuote,
+  relativeAge,
+} from './pumpPrice';
 
 type Station = {
   id: string;
   name: string;
   brand?: string;
+  address?: string;
   lat: number;
   lng: number;
   pcode?: string;
-  prices?: Record<string, number>;
+  prices?: Record<string, unknown>;
+  price_updated_at?: string | null;
 };
 
 type Place = { id: string; name: string; kind: string; lat: number; lng: number };
@@ -34,7 +46,18 @@ function here(): Promise<{ lat: number; lng: number }> {
 }
 
 function priceOf(row: Station, grade: string): number {
-  return Number(row.prices?.[grade] ?? Number.POSITIVE_INFINITY);
+  return readPumpQuote(row.prices, grade).price ?? Number.POSITIVE_INFINITY;
+}
+
+function kmLabel(lat: number, lng: number): string | null {
+  const fix = deviceFix() || KINGSTON;
+  const toRad = (value: number) => (value * Math.PI) / 180;
+  const dLat = toRad(lat - fix.lat);
+  const dLng = toRad(lng - fix.lng);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(fix.lat)) * Math.cos(toRad(lat)) * Math.sin(dLng / 2) ** 2;
+  const km = 2 * 6371 * Math.asin(Math.sqrt(a));
+  if (!Number.isFinite(km)) return null;
+  return km < 10 ? `${km.toFixed(1)} km` : `${Math.round(km)} km`;
 }
 
 export function ExploreSheet() {
@@ -95,7 +118,7 @@ export function ExploreSheet() {
   const priced = ranked.filter((row) => priceOf(row, grade) < Number.POSITIVE_INFINITY);
   const top = chip === 'fuel' ? priced[0] : undefined;
   const rest = chip === 'fuel' ? ranked.filter((row) => row.id !== top?.id) : (!chip ? ranked : []);
-  const gradeLabel = grade === 'e10_90' ? 'E-10 90' : grade === 'diesel' ? 'Diesel' : 'E-10 87';
+  const gradeLabel = pumpGradeLabel(grade);
   const showPlaces = chip !== 'fuel';
   const emptyPlaces = showPlaces && places.length === 0 && (chip !== '' || stations.length === 0);
   const emptyFuel = chip === 'fuel' && ranked.length === 0 && places.length === 0;
@@ -117,7 +140,7 @@ export function ExploreSheet() {
           Create an account to pin price updates and save your car
         </button>
       ) : null}
-      {top ? <StationHero station={top} grade={grade} gradeLabel={gradeLabel} cheapest /> : null}
+      {top ? <StationHero station={top} grade={grade} cheapest /> : null}
       {emptyPlaces || emptyFuel ? (
         <div className="mb-3">
           <p className="text-sm">{kind?.empty || 'Nothing is mapped near you yet'}</p>
@@ -160,33 +183,163 @@ export function ExploreSheet() {
         </div>
       ) : null}
       {rest.map((row) => (
-        <button key={row.id} type="button" onClick={onPlugClick} data-station-id={row.id} data-act="open-station" data-live-name={row.name} data-live-row="station" className="mt-2 flex min-h-12 w-full items-center justify-between gap-2 rounded-xl bg-surface-container-lowest p-3 text-left shadow-sm">
-          <span className="material-symbols-outlined text-primary">local_gas_station</span>
-          <span className="flex-1 font-bold">{row.name}</span>
-          <span>{priceOf(row, grade) < Number.POSITIVE_INFINITY ? `J$${priceOf(row, grade).toFixed(2)}` : 'No price yet'}</span>
-        </button>
+        <NearbyStationCard key={row.id} station={row} grade={grade} />
       ))}
     </div>
   );
 }
 
-function StationHero({ station, grade, gradeLabel, cheapest }: { station: Station; grade: string; gradeLabel: string; cheapest: boolean }) {
-  const price = priceOf(station, grade);
+function StationHero({ station, grade, cheapest }: { station: Station; grade: string; cheapest: boolean }) {
+  const quote = readPumpQuote(station.prices, grade);
+  const price = quote.price;
+  const tone = confidenceTone(quote);
+  const conf = confidenceLabel(quote);
+  const age = relativeAge(quote.observedAt || station.price_updated_at);
+  const confLine = [conf, age].filter(Boolean).join(' • ');
+  const distance = Number.isFinite(station.lat) && Number.isFinite(station.lng) ? kmLabel(station.lat, station.lng) : null;
+  const hasPrice = price != null && Number.isFinite(price);
+
   return (
-    <div className="w-full rounded-2xl bg-surface-container-lowest p-space-md shadow-md mb-space-md" data-live-name={station.name} data-live-row="station">
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex items-start gap-2">
-          <span className="material-symbols-outlined text-primary">local_gas_station</span>
-          <div>
-            <div className="font-bold">{station.name}</div>
-            {cheapest ? <span className="text-[12px] font-bold text-on-tertiary-fixed">Cheapest {gradeLabel}</span> : null}
+    <div
+      className="bg-surface-container-lowest rounded-xl p-space-md shadow-md flex flex-col gap-3 relative overflow-hidden transition-all mb-space-md"
+      data-live-name={station.name}
+      data-live-row="station"
+    >
+      {cheapest ? <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-primary to-secondary-container" /> : null}
+      <div className="flex items-start justify-between gap-space-xs pt-0.5">
+        <div className="flex items-center gap-2.5">
+          <div className="w-11 h-11 rounded-lg bg-surface-container-high flex items-center justify-center text-primary font-headline-sm shrink-0">
+            <span className="material-symbols-outlined text-[24px]">local_gas_station</span>
+          </div>
+          <div className="flex flex-col min-w-0">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {cheapest ? (
+                <span className="px-2 py-0.5 rounded-full bg-tertiary-fixed text-on-tertiary-fixed font-label-sm text-label-sm flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[13px]" style={{ fontVariationSettings: "'FILL' 1" }}>stars</span>
+                  CHEAPEST
+                </span>
+              ) : null}
+              {distance ? <span className="font-label-sm text-label-sm text-on-surface-variant font-medium">{distance}</span> : null}
+            </div>
+            <h3 className="font-headline-sm text-headline-sm text-on-surface truncate mt-0.5">{station.name}</h3>
           </div>
         </div>
-        <div className="text-right font-bold text-primary">{Number.isFinite(price) && price < Number.POSITIVE_INFINITY ? `J$${price.toFixed(2)}` : 'No price yet'}</div>
+        <div className="text-right shrink-0">
+          {hasPrice ? (
+            <>
+              <div className="font-headline-lg text-headline-lg text-primary tabular-nums tracking-tight">{moneyJmd(price)}</div>
+              <span className="font-label-sm text-label-sm text-on-surface-variant">per Litre</span>
+            </>
+          ) : (
+            <div className="font-body-md text-body-md text-on-surface-variant italic">No price yet</div>
+          )}
+        </div>
       </div>
-      <div className="mt-3 grid grid-cols-2 gap-2">
-        <button type="button" onClick={onPlugClick} data-station-id={station.id} data-act="drive-now" className="h-11 min-h-[44px] rounded-xl bg-primary text-on-primary font-bold">Drive now</button>
-        <button type="button" onClick={onPlugClick} data-station-id={station.id} data-act="log-fill" className="h-11 min-h-[44px] rounded-xl bg-surface-container-high font-bold">Log fill-up</button>
+      {confLine ? (
+        <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-surface-container-low text-on-surface-variant">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className={`w-2 h-2 rounded-full shrink-0 ${tone === 'outdated' ? 'bg-outline' : confidenceDotClass(tone).split(' ')[0] || 'bg-secondary-container'}`} />
+            <span className="font-body-sm text-body-sm text-on-surface truncate">{confLine}</span>
+          </div>
+        </div>
+      ) : null}
+      <div className="grid grid-cols-2 gap-space-xs pt-1">
+        <button type="button" onClick={onPlugClick} data-station-id={station.id} data-act="drive-now" className="h-12 rounded-xl bg-primary text-on-primary font-label-lg text-label-lg flex items-center justify-center gap-2 active:bg-primary-container transition-all shadow-sm">
+          <span className="material-symbols-outlined text-[18px]">near_me</span>
+          <span>Drive now</span>
+        </button>
+        <button type="button" onClick={onPlugClick} data-station-id={station.id} data-act="log-fill" className="h-12 rounded-xl bg-surface-container-high text-on-surface font-label-lg text-label-lg flex items-center justify-center gap-2 active:bg-surface-variant transition-colors">
+          <span className="material-symbols-outlined text-[18px] text-secondary">local_gas_station</span>
+          <span>Log fill-up</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function NearbyStationCard({ station, grade }: { station: Station; grade: string }) {
+  const quote = readPumpQuote(station.prices, grade);
+  const price = quote.price;
+  const tone = confidenceTone(quote);
+  const conf = confidenceLabel(quote);
+  const age = relativeAge(quote.observedAt || station.price_updated_at);
+  const confLine = [conf, age].filter(Boolean).join(' • ');
+  const distance = Number.isFinite(station.lat) && Number.isFinite(station.lng) ? kmLabel(station.lat, station.lng) : null;
+  const outdated = tone === 'outdated';
+  const hasPrice = price != null && Number.isFinite(price);
+
+  if (outdated && hasPrice) {
+    return (
+      <div className="bg-surface-container-high rounded-xl p-space-md flex flex-col gap-3 relative transition-all mt-2" data-live-name={station.name} data-live-row="station">
+        <div className="flex items-start justify-between gap-space-xs">
+          <div className="flex items-center gap-2.5">
+            <div className="w-10 h-10 rounded-lg bg-surface-container-highest flex items-center justify-center text-outline shrink-0">
+              <span className="material-symbols-outlined text-[20px]">history_toggle_off</span>
+            </div>
+            <div className="flex flex-col min-w-0">
+              <div className="flex items-center gap-1.5">
+                <span className="px-2 py-0.5 rounded-full bg-surface-container-highest text-on-surface-variant font-label-sm text-label-sm flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[12px]">schedule</span>
+                  {conf || "Last week's rate"}
+                </span>
+                {distance ? <span className="font-label-sm text-label-sm text-on-surface-variant">{distance}</span> : null}
+              </div>
+              <h4 className="font-headline-sm text-label-lg text-on-surface truncate mt-0.5">{station.name}</h4>
+            </div>
+          </div>
+          <div className="text-right shrink-0">
+            <div className="font-headline-sm text-headline-sm text-on-surface-variant tabular-nums line-through opacity-70">{moneyJmd(price)}</div>
+            <span className="font-label-sm text-label-sm text-on-surface-variant">unconfirmed</span>
+          </div>
+        </div>
+        <button type="button" onClick={onPlugClick} data-station-id={station.id} data-act="log-fill" className="w-full h-11 rounded-xl bg-surface-container-lowest text-primary font-label-lg text-label-lg flex items-center justify-center gap-1.5 active:bg-surface-container transition-colors shadow-sm">
+          <span className="material-symbols-outlined text-[18px]">edit_calendar</span>
+          <span>Update This Price</span>
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col gap-3 relative overflow-hidden transition-all mt-2" data-live-name={station.name} data-live-row="station">
+      <div className="flex items-start justify-between gap-space-xs">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-10 h-10 rounded-lg bg-surface-container-high flex items-center justify-center text-primary shrink-0">
+            <span className="material-symbols-outlined text-[20px]">local_gas_station</span>
+          </div>
+          <div className="flex flex-col min-w-0">
+            {distance ? <span className="font-label-sm text-label-sm text-on-surface-variant font-medium">{distance}</span> : null}
+            <button type="button" onClick={onPlugClick} data-station-id={station.id} data-act="open-station" className="font-headline-sm text-headline-sm text-on-surface truncate text-left">
+              {station.name}
+            </button>
+          </div>
+        </div>
+        <div className="text-right shrink-0">
+          {hasPrice ? (
+            <>
+              <div className="font-headline-sm text-headline-sm text-on-surface tabular-nums tracking-tight">{moneyJmd(price)}</div>
+              <span className="font-label-sm text-label-sm text-on-surface-variant">per Litre</span>
+            </>
+          ) : (
+            <span className="font-body-sm text-body-sm text-on-surface-variant italic">No price yet</span>
+          )}
+        </div>
+      </div>
+      {confLine ? (
+        <div className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-surface-container-low text-on-surface-variant">
+          <span className={`w-2 h-2 rounded-full shrink-0 ${confidenceDotClass(tone).split(' ')[0] || 'bg-outline'}`} />
+          <span className="font-body-sm text-body-sm text-on-surface truncate">{confLine}</span>
+        </div>
+      ) : null}
+      <div className="grid grid-cols-2 gap-space-xs">
+        <button type="button" onClick={onPlugClick} data-station-id={station.id} data-act="drive-now" className="h-11 rounded-xl bg-surface-container-high text-on-surface font-label-lg text-label-lg flex items-center justify-center gap-1.5">
+          <span className="material-symbols-outlined text-[18px]">near_me</span>
+          <span>Drive now</span>
+        </button>
+        <button type="button" onClick={onPlugClick} data-station-id={station.id} data-act="log-fill" className="h-11 rounded-xl bg-surface-container-high text-on-surface font-label-lg text-label-lg flex items-center justify-center gap-1.5">
+          <span className="material-symbols-outlined text-[18px] text-secondary">local_gas_station</span>
+          <span>Log fill-up</span>
+        </button>
       </div>
     </div>
   );

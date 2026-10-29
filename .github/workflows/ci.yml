@@ -189,6 +189,23 @@ jobs:
       - name: Deno test places review chips
         run: deno test --allow-read --allow-env supabase/functions/explorer/place_admin.test.ts
 
+      - name: Typecheck Plug
+        env:
+          VITE_SUPABASE_URL: https://ci-placeholder.supabase.co
+          VITE_SUPABASE_ANON_KEY: ci-placeholder-anon-key
+        run: pnpm --filter @roam/plug typecheck
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Plug journeys
+        run: |
+          npx playwright test -c playwright.plug.config.ts
+          PLUG_E2E_APPLE=1 npx playwright test -c playwright.plug.config.ts
+
+      - name: Deno test price engine math
+        run: deno test --allow-read supabase/functions/_shared/priceEngineMath.test.ts
+
       - name: Deno check edge functions
         run: deno check supabase/functions/_shared/orderToFleetTrip.ts supabase/functions/_fleet-server/workforce_invite_routes.ts supabase/functions/_fleet-server/rush_settlement_routes.ts supabase/functions/_fleet-server/fleet_module_checkout.ts supabase/functions/_fleet-server/fleet_wipay.ts supabase/functions/_fleet-server/trips_org_scope.ts supabase/functions/delivery/courierFleetAttribution.ts supabase/functions/_fleet-server/fuel_period_routes.ts
 
@@ -357,22 +374,8 @@ jobs:
       - name: Typecheck fuel-core
         run: pnpm --filter @roam/fuel-core typecheck
 
-      - name: Typecheck Plug
-        env:
-          VITE_SUPABASE_URL: https://ci-placeholder.supabase.co
-          VITE_SUPABASE_ANON_KEY: ci-placeholder-anon-key
-        run: pnpm --filter @roam/plug typecheck
-
       - name: Plug screens have a way out
         run: node --experimental-strip-types apps/plug/scripts/check-dead-buttons.mjs
-
-      - name: Install Playwright browser
-        run: npx playwright install --with-deps chromium
-
-      - name: Plug journeys
-        run: |
-          npx playwright test -c playwright.plug.config.ts
-          PLUG_E2E_APPLE=1 npx playwright test -c playwright.plug.config.ts
 
       - name: Public stations take parish from coordinates
         run: node apps/plug/scripts/check-station-parish.mjs

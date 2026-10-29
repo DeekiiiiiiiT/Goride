@@ -1,0 +1,19 @@
+{
+  "error": {
+    "code": 400,
+    "message": "Project 'projects/7083594865949473827' not found or deleted.",
+    "status": "INVALID_ARGUMENT",
+    "details": [
+      {
+        "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+        "reason": "USER_PROJECT_DENIED",
+        "domain": "googleapis.com",
+        "metadata": {
+          "service": "stitch.googleapis.com",
+          "containerInfo": "projects/7083594865949473827",
+          "consumer": "projects/7083594865949473827"
+        }
+      }
+    ]
+  }
+}

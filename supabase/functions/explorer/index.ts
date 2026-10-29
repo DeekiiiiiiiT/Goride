@@ -13,7 +13,6 @@ import {
   fillCare,
   mayJoinPlug,
   planPlugFill,
-  plugPriceDecision,
   placeTypeForKind,
   suggestReview,
   validatePlaceDraft,
@@ -21,7 +20,9 @@ import {
   PLUG_FLAGS,
   sectionEnabled,
 } from "../_shared/plugCore.ts";
+import { priceStatusFor, resolvePlugGrade } from "../_shared/priceEngineMath.ts";
 import { registerPlaceAdmin } from "./place_admin.ts";
+import { registerPriceEngineAdmin } from "./price_engine_admin.ts";
 
 const app = new Hono().basePath("/explorer");
 app.use("*", cors());
@@ -391,7 +392,7 @@ app.post("/fuel-logs", async (c) => {
     if (!(await allow(sb, user.id, "plug.fuel_log"))) return c.json({ error: "Fuel logging is turned off" }, 403);
     if (!(await hitLimit(sb, user.id, "fuel", 30))) return c.json({ error: "Too many fuel logs this hour" }, 429);
 
-    const { data: vehicle } = await sb.schema("explorer").from("user_vehicle").select("id").eq("id", body.vehicleId).eq("user_id", user.id).maybeSingle();
+    const { data: vehicle } = await sb.schema("explorer").from("user_vehicle").select("id, catalog_variant_id").eq("id", body.vehicleId).eq("user_id", user.id).maybeSingle();
     if (!vehicle) return c.json({ error: "That vehicle is not in your garage" }, 404);
 
     const { data: last } = await sb.schema("explorer").from("odometer_reading").select("reading").eq("vehicle_id", body.vehicleId).order("recorded_at", { ascending: false }).limit(1);
@@ -445,9 +446,7 @@ app.post("/fuel-logs", async (c) => {
     let decision = decidePlugStation(match);
     if (mocked && decision === "learnt") decision = "review";
     const pricePer = Number(body.litres) > 0 ? Number(body.amount) / Number(body.litres) : 0;
-    const estimate = await retailEstimate(sb, String(body.grade || "e10_87"));
-    const priceCall = mocked ? "hold" : estimate ? plugPriceDecision(pricePer, estimate) : "hold";
-    const writes = planPlugFill({ decision, price: priceCall });
+    const writes = planPlugFill({ decision, price: pricePer > 0 ? "report" : "none" });
     const touched = writesTouchFleetMoney(writes.map((write) => write.table));
     if (touched.length) throw new Error("Plug fill tried to touch fleet money");
     let stationId = decision === "confirm" || (decision === "review" && match.station) ? match.station?.id || null : null;
@@ -492,7 +491,7 @@ app.post("/fuel-logs", async (c) => {
     });
     if (stationId || mocked) {
       const { error: evidenceError } = await sb.schema("places").from("place_evidence").insert({
-        station_id: stationId,
+        place_id: stationId,
         user_hash: userHash,
         origin_app: "roam_plug",
         lat: Number.isFinite(lat) ? lat : null,
@@ -502,29 +501,27 @@ app.post("/fuel-logs", async (c) => {
       });
       if (evidenceError) throw evidenceError;
     }
-    let priceUpdated = false;
-    if (stationId && pricePer > 0) {
-      const grade = body.grade || "e10_87";
-      await sb.schema("places").from("price_observation").insert({
-        station_id: stationId,
+    let priceStatus: "checking" | "published" | "review" = "checking";
+    if (pricePer > 0 && Number(body.litres) > 0 && Number(body.amount) > 0) {
+      const locked = await lockedVehicleGrade(sb, vehicle.catalog_variant_id);
+      const gradeChoice = resolvePlugGrade(locked, body.grade ? String(body.grade) : null);
+      const { data: report, error: priceError } = await sb.schema("places").from("plug_price_report").insert({
+        fuel_log_id: log.id,
+        reporter_hash: userHash,
+        catalog_variant_id: vehicle.catalog_variant_id || null,
         place_id: stationId,
-        grade,
-        price_per_litre: pricePer,
-        origin_app: "roam_plug",
-        user_hash: userHash,
-        in_band: priceCall === "publish",
-      });
-      if (!mocked && priceCall === "publish" && decision === "confirm") {
-        await sb.schema("places").from("price_current").upsert({
-          station_id: stationId,
-          place_id: stationId,
-          grade,
-          price_per_litre: pricePer,
-          observed_at: new Date().toISOString(),
-        });
-        const { data: card } = await sb.schema("places").from("public_place").select("prices").eq("id", stationId).maybeSingle();
-        priceUpdated = Boolean(card);
-      }
+        grade: gradeChoice.grade,
+        grade_source: gradeChoice.source,
+        litres: Number(body.litres),
+        amount: Number(body.amount),
+        gps_accuracy_m: body.accuracyM ?? null,
+        mock_location: mocked,
+        station_match: decision === "learnt" ? "new_place" : decision === "confirm" ? "auto" : "manual",
+        reported_at: log.created_at,
+      }).select("id").single();
+      if (priceError) throw priceError;
+      const { data: check } = await sb.schema("places").from("price_report_check").select("status").eq("source", "plug").eq("report_id", report.id).maybeSingle();
+      priceStatus = priceStatusFor(check?.status);
     }
     const care = await careFor(sb, user.id, body.vehicleId, Number(body.litres));
     await syncServiceReminder(sb, user.id, body.vehicleId, care);
@@ -533,12 +530,12 @@ app.post("/fuel-logs", async (c) => {
       createdAt: log.created_at,
       stationId,
       decision,
-      price: priceCall,
+      priceStatus,
       odometer: Number(body.odometer),
       kmPerLitre: care.kmPerLitre,
       nextServiceOn: care.dueOn,
       serviceStatus: care.status,
-      priceUpdated,
+      priceUpdated: priceStatus === "published",
       locationUsed: Number.isFinite(lat) && Number.isFinite(lng),
     });
   } catch (err) {
@@ -772,6 +769,7 @@ app.delete("/me", async (c) => {
     const user = await requireExplorer(c);
     const sb = admin();
     const userHash = await hashExplorerUser(user.id, userPepper());
+    await sb.schema("places").from("plug_price_report").delete().eq("reporter_hash", userHash);
     await sb.schema("places").from("place_evidence").delete().eq("user_hash", userHash);
     const { error } = await sb.auth.admin.deleteUser(user.id);
     if (error) throw error;
@@ -1064,14 +1062,15 @@ app.post("/demand", async (c) => {
   }
 });
 
-async function retailEstimate(sb: SupabaseClient, grade: string): Promise<number | null> {
-  const { data, error } = await sb.schema("places").rpc("latest_retail_estimate", { p_grade: grade });
-  if (error) return null;
-  const value = Number(data);
-  return value > 0 ? value : null;
+async function lockedVehicleGrade(sb: SupabaseClient, catalogVariantId: string | null | undefined): Promise<string | null> {
+  if (!catalogVariantId) return null;
+  const { data, error } = await sb.from("vehicle_catalog").select("fuel_grade").eq("id", catalogVariantId).maybeSingle();
+  if (error || !data) return null;
+  return typeof data.fuel_grade === "string" ? data.fuel_grade : null;
 }
 
 registerPlaceAdmin(app, { admin, requireOwner });
+registerPriceEngineAdmin(app, { admin, requireOwner });
 
 if (!Deno.env.get("PLUG_USER_HASH_PEPPER")?.trim()) {
   Deno.serve(() => Response.json({ error: "PLUG_USER_HASH_PEPPER is not set" }, { status: 500 }));

@@ -8,6 +8,16 @@ on:
       - 'playwright.dominion.config.ts'
       - 'packages/platform-ops-ui/src/places/**'
       - 'apps/admin/src/components/admin/places/**'
+      - 'apps/admin/src/components/admin/fuel-prices/PriceEnginePage.tsx'
+      - '.github/workflows/dominion-places-e2e.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'e2e/dominion-places.spec.ts'
+      - 'playwright.dominion.config.ts'
+      - 'packages/platform-ops-ui/src/places/**'
+      - 'apps/admin/src/components/admin/places/**'
+      - 'apps/admin/src/components/admin/fuel-prices/PriceEnginePage.tsx'
       - '.github/workflows/dominion-places-e2e.yml'
 
 jobs:

@@ -2,8 +2,8 @@ import { useState } from "react";
 import { PlaceCategories } from "./PlaceCategories";
 import { PlaceEditor } from "./PlaceEditor";
 import { PlaceRecord } from "./PlaceRecord";
-import { PlacesInbox } from "./PlacesInbox";
 import { PlacesRegister } from "./PlacesRegister";
+import { PlacesReview } from "./PlacesReview";
 import type { PlacesStates } from "./placesApi";
 
 export function PlacesDesk({
@@ -31,7 +31,7 @@ export function PlacesDesk({
   }
   if (mode === "categories") return <PlaceCategories apiBase={apiBase} getToken={getToken} states={states} />;
   if (mode === "review") {
-    return <PlacesInbox apiBase={apiBase} getToken={getToken} states={states} chip={chip} onOpen={(placeId) => { setId(placeId); setView("record"); }} />;
+    return <PlacesReview apiBase={apiBase} getToken={getToken} />;
   }
   return (
     <PlacesRegister

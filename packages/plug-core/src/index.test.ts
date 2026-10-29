@@ -7,7 +7,6 @@ import {
   hashExplorerUser,
   impossibleTravel,
   planPlugFill,
-  plugPriceDecision,
   fillCare,
   projectServiceDue,
   kindForPlaceType,
@@ -23,7 +22,7 @@ import {
 
 describe('Plug fill isolation', () => {
   it('never plans a write into fleet money', () => {
-    const writes = planPlugFill({ decision: 'learnt', price: 'publish' });
+    const writes = planPlugFill({ decision: 'learnt', price: 'report' });
     const tables = writes.map((w) => w.table);
     expect(writesTouchFleetMoney(tables)).toEqual([]);
     expect(tables).toContain('explorer.fuel_log');
@@ -35,9 +34,9 @@ describe('Plug fill isolation', () => {
   });
 
   it('a confirm does not open a new station row', () => {
-    const tables = planPlugFill({ decision: 'confirm', price: 'hold' }).map((w) => w.table);
+    const tables = planPlugFill({ decision: 'confirm', price: 'report' }).map((w) => w.table);
     expect(tables).not.toContain('fleet.stations');
-    expect(tables).toContain('places.price_observation');
+    expect(tables).toContain('places.plug_price_report');
   });
 });
 
@@ -50,14 +49,14 @@ describe('station and price decisions', () => {
   });
 
   it('reuses a learnt station instead of opening another one', () => {
-    const tables = planPlugFill({ decision: 'review', price: 'hold' }).map((w) => w.table);
+    const tables = planPlugFill({ decision: 'review', price: 'none' }).map((w) => w.table);
     expect(tables).not.toContain('fleet.stations');
   });
 
-  it('publishes in-band prices and holds the rest', () => {
-    expect(plugPriceDecision(270, 280)).toBe('publish');
-    expect(plugPriceDecision(400, 280)).toBe('hold');
-    expect(plugPriceDecision(20, 280)).toBe('hold');
+  it('sends a priced fill to the price engine, not the public price table', () => {
+    const tables = planPlugFill({ decision: 'confirm', price: 'report' }).map((w) => w.table);
+    expect(tables).toContain('places.plug_price_report');
+    expect(tables).not.toContain('places.price_observation');
   });
 });
 

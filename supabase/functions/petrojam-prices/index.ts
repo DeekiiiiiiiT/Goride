@@ -202,6 +202,10 @@ app.post("/admin/sync", async (c) => {
 
   const dates = fetched.rows.map((r) => r.priceDate).sort();
   const latestDate = dates.at(-1) ?? null;
+  if (latestDate) {
+    const { error: staleError } = await svc().schema("places").rpc("price_engine_mark_stale", { p_date: latestDate });
+    if (staleError) logLine({ event: "price_engine_stale_failed", error: staleError.message });
+  }
   const oldestDate = dates[0] ?? null;
 
   logLine({
@@ -305,6 +309,11 @@ app.post("/cron/sync-latest", async (c) => {
   try {
     const { inserted, updated } = await upsertScraped(fetched.rows, scrapedAt);
     const dates = fetched.rows.map((r) => r.priceDate).sort();
+    const latestDate = dates.at(-1) ?? null;
+    if (latestDate) {
+      const { error: staleError } = await svc().schema("places").rpc("price_engine_mark_stale", { p_date: latestDate });
+      if (staleError) logLine({ event: "price_engine_stale_failed", error: staleError.message });
+    }
     logLine({
       event: "cron_sync_ok",
       inserted,

@@ -1,4 +1,3 @@
-import { isPriceOutlier } from '../../fuel-core/src/retailPriceEstimate.ts';
 import { calculateDistance, type SmartMatchResult } from '../../location/src/stationMatch.ts';
 
 /** Tables a Plug fill must never insert into. */
@@ -21,8 +20,8 @@ export const FLEET_MONEY_TABLES = [
 export type PlugWriteTable =
   | 'explorer.fuel_log'
   | 'explorer.odometer_reading'
-  | 'places.price_observation'
-  | 'places.station_evidence'
+  | 'places.plug_price_report'
+  | 'places.place_evidence'
   | 'fleet.stations';
 
 export type PlugWrite = {
@@ -43,24 +42,17 @@ export function decidePlugStation(match: Pick<SmartMatchResult, 'confidence' | '
   return 'learnt';
 }
 
-export function plugPriceDecision(paidPerLitre: number, retailEstimate: number): 'publish' | 'hold' {
-  if (!(paidPerLitre > 0) || !(retailEstimate > 0)) return 'hold';
-  if (paidPerLitre < retailEstimate * 0.5) return 'hold';
-  if (isPriceOutlier(paidPerLitre, retailEstimate)) return 'hold';
-  return 'publish';
-}
-
 export function planPlugFill(input: {
   decision: PlugStationDecision;
-  price: 'publish' | 'hold' | 'none';
+  price: 'report' | 'none';
 }): PlugWrite[] {
   const writes: PlugWrite[] = [
     { table: 'explorer.fuel_log', originApp: 'roam_plug' },
     { table: 'explorer.odometer_reading', originApp: 'roam_plug' },
-    { table: 'places.station_evidence', originApp: 'roam_plug' },
+    { table: 'places.place_evidence', originApp: 'roam_plug' },
   ];
-  if (input.price === 'publish' || input.price === 'hold') {
-    writes.push({ table: 'places.price_observation', originApp: 'roam_plug' });
+  if (input.price === 'report') {
+    writes.push({ table: 'places.plug_price_report', originApp: 'roam_plug' });
   }
   if (input.decision === 'learnt') {
     writes.push({ table: 'fleet.stations', organizationId: null, originApp: 'roam_plug' });

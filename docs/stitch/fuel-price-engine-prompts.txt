@@ -1,0 +1,309 @@
+FUEL PRICE ENGINE — STITCH PROMPTS (GOOGLE STITCH)
+
+Two parts. Paste each part into Stitch on its own.
+Part 1 = Roam Dominion desktop screens (new "Price Engine" page under Fuel).
+Part 2 = Roam Plug mobile screens (new price states and updates to existing screens).
+Roam Fleet driver app: NO changes. Drivers keep taking the pump photo exactly as today.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+PART 1 — Roam Dominion - Price Engine (Desktop Admin, for the owner):
+
+Design high-fidelity desktop admin screens for the "Price Engine" page of Roam Dominion — the master database admin for Jamaica. The Price Engine turns fuel prices reported by Roam Fleet drivers (from a photo of the pump) and Roam Plug users (from their fuel logs) into one trusted price per station and fuel grade. Nothing is ever deleted: prices that look unusual go to a Review queue where the owner approves or rejects them in one click. The owner must be able to see at a glance which prices are live, how confident each one is, and why any report is waiting for review.
+
+BRAND IDENTITY:
+- Match the existing Roam Dominion admin style exactly:
+  - Left sidebar in dark navy (#1E293B) with white text; active item is a filled blue pill (#2563EB)
+  - Sidebar sections: MASTER DATA (Vehicles, Places and Maps, Fuel (active), Tolls, Tax and Vendors) | ENGINES (Fuel Brain, Toll Brain, Matching Brain) | DISTRIBUTION | PLATFORM | BACK OFFICE
+  - Top bar: search "Search entities, engines, routes..." with ⌘K hint, dark-mode toggle, avatar "DT — Deeki T, Owner"
+  - Page sits in one large white card on a light gray background (#F1F5F9)
+  - Breadcrumb: Dominion › Master data › Fuel › Price Engine
+  - Small "REGION: JM-KGN" pill top right of the card
+  - Numbers, prices and codes in a monospace font (like "JMD $201.8128"); everything else Inter
+- Primary action / links: Blue (#2563EB)
+- Approve: Green (#16A34A)
+- Reject: Red (#DC2626)
+- Needs review / warning: Amber (#D97706)
+- Neutral / waiting: Slate (#64748B)
+- Source tags: "Fleet" = navy chip (#1E293B, white text) with a truck icon; "Plug" = orange chip (#EA580C, white text) with a phone icon
+- Confidence pills: High = green, Medium = amber, Low = slate; "May be outdated" = slate with a clock icon
+- Fuel grade chips: E-10 87 green (#16A34A), E-10 90 red (#DC2626), Diesel charcoal (#1C1917), ULSD charcoal outline
+- Currency always JMD / J$, volume in litres, Jamaica parishes and places (Half Way Tree, Spanish Town Road, Portmore, Constant Spring, Moneague)
+- Station names in the real format used in Dominion: "TotalEnergies, Half Way Tree", "Texaco, Molynes Road", "FESCO Spanish Town Road", "RUBiS Half Way Tree", "Petcom | Moneague", "Jampet, Willowdene"
+- Light theme default, dark mode variant
+
+DESIGN PRINCIPLES:
+- Desktop-first (1440px wide), keyboard friendly
+- Tabs across the top of the page: Overview | Review (with count badge) | Published prices | Reporters | Settings
+- Every number explains itself on hover (tooltip with how it was worked out)
+- Petrojam wholesale price for the grade is always shown next to a reported price, so the owner can judge it instantly
+- Nothing is hidden: rejected reports stay visible in a "Rejected" filter
+- Keyboard shortcuts shown on buttons (A approve, R reject, G change grade, N next)
+
+---
+
+SCREEN P1: PRICE ENGINE - OVERVIEW
+- Page title "Price Engine" with subtext "Turns driver fuel reports into one trusted price per station and grade."
+- Right of title: "Petrojam week: 22 October 2026" pill and "Recalculate all" secondary button
+- Row of 5 stat cards:
+  - "Live prices" — 41 of 56 verified stations have a price this week
+  - "Waiting for review" — 3 reports • oldest 2 days (amber, links to Review tab)
+  - "May be outdated" — 15 prices from an older Petrojam week (slate)
+  - "Reports this week" — 52 (Fleet 49 • Plug 3), small split bar navy/orange
+  - "Median reports per price" — 2
+- Card "Why reports went to review (last 30 days)": horizontal bar chart with reasons: Out of bounds 2 | Big change 1 | Unusual for station 0 | Grade unknown 4 | Mock location 0 | Duplicate 1
+- Card "Price this week vs Petrojam": small line chart, E-10 87 average pump price (orange line) vs Petrojam wholesale (blue line) across the last 8 weeks, with the gap labelled "+13.6%"
+- Card "Coverage by parish": compact table Parish | Stations | With live price | Outdated
+- Card "Engine health" checklist with green checks: "Daily job ran 05:00 today", "Petrojam synced 22 Oct", "No report older than 3 days in review"
+
+SCREEN P2: PRICE ENGINE - REVIEW QUEUE
+- Tab "Review" active, badge "3"
+- Filter bar: Source (All | Fleet | Plug) | Reason (multi-select) | Grade | Parish | Status (Waiting | Approved | Rejected)
+- Table rows (one per report):
+  - Checkbox
+  - Source chip (Fleet / Plug)
+  - Station: "Jampet, Willowdene" + parish "St Catherine"
+  - Grade chip
+  - Reported price large monospace: "J$39.07 / L"
+  - Petrojam wholesale beside it in muted text: "Petrojam J$201.81"
+  - Difference badge: "−81% vs Petrojam" (red text)
+  - Reason pills: "Out of bounds" (amber)
+  - Reporter: "Driver: Kenny R." or "Plug user #4F2A"
+  - Reported: "27 Oct, 10:22"
+  - Quick buttons at row end: ✓ Approve (green outline) | ✕ Reject (red outline)
+- Example second row: Fleet, "TotalEnergies, Half Way Tree", Diesel, "J$250.10 / L", Petrojam J$246.91, "+1.3%", reason "Grade unknown"
+- Bulk bar when rows selected: "Approve 2 selected" | "Reject 2 selected"
+- Empty state: green check illustration, "Nothing waiting. Every report this week was accepted."
+
+SCREEN P3: PRICE ENGINE - REVIEW ITEM (SPLIT VIEW)
+- Opens when a review row is clicked
+- Left (55%): evidence
+  - Pump photo large (Fleet) with the numbers the app read overlaid: "Amount J$4,290.00 • Litres 109.80"
+  - Or for Plug: "Entered by user" card with amount and litres
+  - Calculation line: "J$4,290.00 ÷ 109.80 L = J$39.07 / L"
+  - Small map with the station pin and the fill's GPS point with accuracy circle ("±8 m")
+- Right (45%): decision panel
+  - Reason banner (amber): "Out of bounds — less than 80% of Petrojam wholesale"
+  - Comparison table: This report J$39.07 | Petrojam wholesale J$201.81 | Station's current price J$229.20 (Medium, 2 reports) | Station median last 7 days J$229.20
+  - Sparkline: this station's published price over the last 8 weeks with the new report as a red dot
+  - Grade: chip with "Change grade (G)" link → small picker E-10 87 | E-10 90 | Diesel | ULSD
+  - Reporter card: name or Plug ID, source chip, trust weight "2.0", "48 reports • 47 accepted • 0 rejected"
+  - Note field: "Why (optional)"
+- Sticky action bar bottom:
+  - "Approve (A)" green
+  - "Reject (R)" red with reason dropdown: Wrong reading | Wrong grade | Wrong station | Test entry | Other
+  - "Fix and approve" (opens amount / litres / grade edit, keeps the original visible)
+  - "Skip (N)"
+- After a decision: toast "Rejected — next report loaded" and the next item opens
+
+SCREEN P4: PRICE ENGINE - PUBLISHED PRICES
+- Tab "Published prices" active
+- Toolbar: grade selector chips (E-10 87 | E-10 90 | Diesel | ULSD) | Parish filter | Confidence filter | toggle "Show outdated" | search "Search station"
+- Table:
+  - Station + brand logo
+  - Parish
+  - Price large monospace "J$229.20"
+  - vs Petrojam: "+13.6%"
+  - Confidence pill (High / Medium / Low)
+  - Reports: "3 (Fleet 3 • Plug 0)"
+  - Petrojam week: "22 Oct"
+  - Updated: "2 h ago"
+  - Status: "Live" (green dot) or "May be outdated" (slate clock)
+- Row click opens screen P5
+- Header summary line: "41 live • 15 may be outdated • cheapest E-10 87: Cool Oasis, Portmore J$224.90"
+
+SCREEN P5: STATION PRICE DETAIL (RIGHT DRAWER)
+- Drawer 520px wide over the Published prices table
+- Header: "Texaco, Molynes Road" • St Andrew • verified badge
+- Current prices card: one row per grade with price, confidence, reports, updated
+- Chart: 8-week price history per grade (lines in grade colors) with Petrojam wholesale dashed
+- "Reports this week" list: source chip, reporter, price, status pill (Accepted / Approved / Waiting / Rejected), time
+- Footer buttons: "Open place in Places register" | "Recalculate this station"
+
+SCREEN P6: PRICE ENGINE - REPORTERS
+- Tab "Reporters" active, sub-tabs: Fleet drivers | Plug users
+- Table:
+  - Reporter (driver name for Fleet; "Plug user #4F2A" + parish for Plug — never a real name or phone)
+  - Trust weight with a small bar (0.1 – 3.0)
+  - Reports | Accepted | Sent to review | Rejected by owner
+  - Last report
+  - Trend arrow (trust rising / falling)
+- Side card: "Most influential this week" top 5 by share of published prices, with a warning if one reporter is over 30%
+- Row action: "Reset trust to default"
+
+SCREEN P7: PRICE ENGINE - SETTINGS
+- Tab "Settings" active
+- Form card "When a report goes to review":
+  - "Below Petrojam ×" number input 0.80 and "Above Petrojam ×" 1.50 with live example: "Today for E-10 87: below J$161.45 or above J$302.72 goes to review"
+  - "Change vs last price more than" 12%
+  - "Unusual for this station after" 4 reports, sensitivity 3.5
+- Form card "Trust":
+  - "Fleet driver starting trust" 2.0
+  - "Plug user starting trust" 1.0
+- Form card "Price window":
+  - "Use reports from the current Petrojam week, up to" 7 days
+- Info strip: "Changing a setting re-checks waiting reports. It never deletes anything."
+- "Save settings" blue button, "Reset to defaults" link, last changed "by Deeki T, 28 Oct"
+
+ADDITIONAL UI COMPONENTS (DOMINION):
+- Source chip (Fleet navy / Plug orange)
+- Reason pill (amber) with tooltip explaining the rule
+- Confidence pill (High / Medium / Low) and "May be outdated" pill
+- Price vs Petrojam difference badge (green within band, red outside)
+- Pump photo viewer with zoom
+- Price history sparkline and chart
+- Trust weight bar
+- Keyboard shortcut hints on buttons
+- Toasts: "Approved — price updated", "Rejected — next report loaded", "Settings saved"
+
+INTERACTIONS:
+- Approve / Reject recalculates the station's price immediately and shows the new price in a toast
+- Hover a reason pill → tooltip with the exact rule and numbers
+- Hover a price → tooltip "Weighted median of 3 reports this Petrojam week"
+- Auto-advance to the next review item after each decision
+- "Fix and approve" keeps the original values visible in grey beside the edited ones
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+PART 2 — Roam Plug - Fuel price states (Mobile app updates):
+
+Design high-fidelity mobile screens for Roam Plug, a free motoring companion app for drivers in Jamaica. These screens update how fuel prices are shown and logged. Prices on the map are no longer one driver's number: Roam Plug combines reports from many drivers and the Roam Fleet into one trusted price per station and grade, shows how confident it is, and says plainly when a price may be outdated. When a driver logs fuel, their price is checked first and appears on the map shortly after.
+
+BRAND IDENTITY:
+- Theme: "Sunset Orange" — energetic, enthusiastic and bold
+- LIGHT MODE (default):
+  - Primary: Vivid Orange (#ea580c)
+  - Secondary: Warm Orange (#f97316)
+  - Tertiary: Golden Yellow (#eab308) — the "Cheapest" tag
+  - Success / verified / High confidence: #16a34a
+  - Error: #dc2626
+  - Warning / Medium confidence: #d97706
+  - Neutral / Low confidence / May be outdated: #57534e
+  - Background: #FAFAF9, Surface cards: #FFFFFF, Text: #1C1917
+  - Gradient 1: linear-gradient(135deg, #ea580c, #eab308)
+  - Gradient 2: linear-gradient(135deg, #f97316, #fbbf24)
+- DARK MODE: Primary #fb923c, Secondary #fdba74, Tertiary #fde047, Success #22c55e, Error #ef4444, Warning #f59e0b, Neutral #d6d3d1, Background #292524, Surface #44403c
+- Fuel grade chips: E-10 87 green (#16a34a), E-10 90 red (#dc2626), Diesel / ULSD charcoal (#1C1917 light, #d6d3d1 dark)
+- Typography: Inter; prices in tabular numerals
+- Brand name "Roam Plug"; currency J$, km, litres
+- Jamaica context: stations like "Texaco Barbican", "Total Constant Spring", "Rubis Hope Road", "Cool Oasis Portmore"; cars like 2019 Toyota Roomy, Honda Fit, Toyota Axio
+
+DESIGN PRINCIPLES:
+- Mobile-first, 48px minimum tap targets, safe areas
+- Every price shows: the price, its age, and its confidence — glanceable at the pump
+- Confidence shown with simple words, never jargon: "Confirmed by 3 drivers" (green), "Confirmed by 2 drivers" or "From a fleet driver" (amber), "1 driver report" (gray)
+- A price that may be outdated is still shown, greyed slightly, with a clock icon and "May be outdated"
+- The driver never sees another person's raw report — only the combined price
+- Calm, honest wording: the app never says "wrong", it says "checking"
+
+---
+
+SCREEN 17b: FUEL - STATION LIST (PRICE STATES)
+- Same layout as the existing station list (Map | List toggle, grade chips E-10 87 | E-10 90 | Diesel, sort Cheapest | Nearest | Recently updated)
+- Station cards now show under the price:
+  - Card 1: "Total Constant Spring" • 1.4 km • "J$229.20" • green dot "Confirmed by 3 drivers • 2 h ago" • golden "Cheapest" tag
+  - Card 2: "Texaco Barbican" • 2.1 km • "J$231.50" • amber dot "From a fleet driver • yesterday"
+  - Card 3: "Rubis Hope Road" • 2.8 km • "J$230.10" • gray dot "1 driver report • 3 h ago"
+  - Card 4: "Cool Oasis Portmore" • 9.6 km • price greyed "J$226.40" • clock icon "May be outdated • last week's price"
+  - Card 5: "Petcom Moneague" • 64 km • "No price yet" with link "Be the first to log fuel here"
+- Sort note under the chips: "Cheapest uses this week's prices first"
+
+SCREEN 19b: STATION DETAIL - PRICE CARD
+- Same station detail layout (header photo, name "Rubis Hope Road", address, Plus Code, Verified by Roam)
+- Price table card redesigned, one row per grade:
+  - E-10 87 — J$229.20 — "Confirmed by 3 drivers" green pill — "updated 2 h ago"
+  - E-10 90 — J$238.40 — "From a fleet driver" amber pill — "yesterday"
+  - Diesel — J$251.10 — greyed — "May be outdated" clock pill — "last week"
+- Tap a row → small sheet "About this price": "Combined from 3 driver reports this week. Prices in Jamaica change weekly with Petrojam; this one is for the week of 22 October."
+- Note under the card: "Prices come from drivers' fuel logs and are checked before they show"
+- Secondary actions row keeps "Price looks wrong"
+
+SCREEN 26b: LOG FUEL - FUEL DETAILS (GRADE LOCKED)
+- Same as the existing fuel details screen (station detected card "You're at Texaco Barbican", amount, litres, auto price per litre "J$231.50 / L", filled the tank toggle, date & time)
+- Fuel grade now pre-selected and locked from the car:
+  - Large chip "E-10 87" with a lock icon and caption "From your 2019 Toyota Roomy"
+  - Small link "Not right? Change grade" → opens three chips; choosing another grade shows a gentle amber note "Your car usually takes E-10 87 — we'll double-check this price"
+- "Save Fuel Log" button
+
+SCREEN 27b: LOG FUEL - SAVED (PRICE CHECKING)
+- Same success screen (checkmark, "Fuel logged!", fuel economy card, this fill card, next service card)
+- Community card on Gradient 2 replaced with:
+  - Variant A (checking): "Thanks! We're checking your E-10 87 price at Texaco Barbican — it'll help every driver shortly" with a small spinner icon
+  - Variant B (published): "Your price helped update Texaco Barbican for every driver 🎉" with the new price "J$231.50"
+  - Variant C (needs a check): neutral card "Your price looks different from this week's — the Roam team will take a look" (no red, no blame)
+- "Done" button
+
+SCREEN 58: PRICE LOOKS WRONG - BOTTOM SHEET
+- Opens from Station detail → "Price looks wrong"
+- Header "What's the price at the pump?"
+- Grade chips (E-10 87 | E-10 90 | Diesel)
+- Shown price for reference: "We show J$229.20"
+- Option list (radio):
+  - "The price is different" → reveals input "J$ ___ / L" and "Add a photo of the pump sign" (optional)
+  - "This grade isn't sold here"
+  - "The station is closed"
+- Caption: "Reports are checked before the map changes"
+- "Send" button
+- Confirmation toast: "Thanks — we'll check it"
+
+SCREEN 59: NOTIFICATION - YOUR PRICE
+- Inbox cards (add to the existing Notifications screen):
+  - "Your E-10 87 price at Texaco Barbican is now live ✓" (green)
+  - "We couldn't use your price at Rubis Hope Road — it didn't match the pump this week" (gray, with "Why?" link)
+  - "Prices changed this week — 4 stations near you have new prices" (orange)
+- Tap "Why?" → simple sheet: the reason in plain words and "Log fuel again next time to help"
+
+SCREEN 15b: HOME - CHEAPEST CARD STATES
+- Same home map + sheet
+- "Cheapest E-10 87 near you" card variants:
+  - Live: "Total Constant Spring • J$229.20 • 1.4 km • Confirmed by 3 drivers"
+  - Only outdated prices nearby: greyed card "Cheapest last week: Cool Oasis Portmore J$226.40 • May be outdated" + "Log fuel to update it"
+- Map price bubbles: live = solid orange bubble; outdated = white bubble with gray text and a tiny clock
+
+ADDITIONAL UI COMPONENTS (PLUG):
+- Confidence line (dot + words): green "Confirmed by N drivers", amber "From a fleet driver", gray "1 driver report"
+- "May be outdated" pill with clock icon
+- Locked grade chip with "From your car" caption
+- "Checking your price" card with spinner
+- Outdated map price bubble
+- "About this price" info sheet
+
+INTERACTIONS:
+- Grade chip on the map switches all bubbles and confidence lines instantly
+- Tapping a confidence line opens "About this price"
+- After saving a fuel log, the Saved card updates from "checking" to "published" live if the price goes up within a few seconds
+- Outdated prices are never hidden, only greyed with a clock

@@ -12,9 +12,10 @@
 -- places.place only (migration 20261028210000). This script drops
 -- places.public_station and does not rewrite that function.
 --
--- Same release, after this script commits: stop sending station_id on
--- places.price_observation and places.price_current (plug_public_price.ts
--- and explorer/index.ts), rebuild fleet-fuel, and redeploy fleet-fuel and explorer.
+-- Same release, after this script commits: rebuild fleet-fuel and redeploy
+-- fleet-fuel and explorer. Intakes already write the price engine, not
+-- station_id. This script drops station_id, places.latest_retail_estimate,
+-- and the old in_band flag. price_current stays; the engine still fills it.
 --
 -- KV station and toll saves are safe: fleet.upsert_master writes places and returns
 -- before it touches a fleet table.
@@ -82,7 +83,23 @@ begin
       join places.facility_type ft on ft.slug = f.facility_type
       where f.place_id = place.id;
 
-      select jsonb_object_agg(pc.grade, pc.price_per_litre), max(pc.observed_at)
+      select
+        case
+          when count(pc.grade) = 0 then null
+          else coalesce(jsonb_object_agg(pc.grade, to_jsonb(pc.price_per_litre)), '{}'::jsonb)
+            || coalesce(jsonb_object_agg(
+              pc.grade || '_card',
+              jsonb_build_object(
+                'price', pc.price_per_litre,
+                'confidence', pc.confidence,
+                'reports', pc.report_count,
+                'petrojam_week', pc.petrojam_week,
+                'observed_at', pc.observed_at,
+                'outdated', coalesce(pc.outdated, false)
+              )
+            ), '{}'::jsonb)
+        end,
+        max(pc.observed_at)
         into next_prices, next_price_at
       from places.price_current pc
       where pc.place_id = place.id;
@@ -175,5 +192,8 @@ begin
   drop function if exists places.public_station_update();
 
   drop table if exists places.place_capability;
+
+  drop function if exists places.latest_retail_estimate(text);
+  drop table if exists places.price_observation;
 end
 $retire$;

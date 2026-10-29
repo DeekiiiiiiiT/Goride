@@ -1,0 +1,845 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Roam Dominion Admin - Places Review</title>
+<!-- Material Symbols Outlined -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Google Fonts: Inter & JetBrains Mono -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "on-tertiary-fixed": "#00174b",
+            "surface-bright": "#f7f9fb",
+            "on-primary-container": "#7c839b",
+            "surface-container-highest": "#e0e3e5",
+            "on-primary": "#ffffff",
+            "background": "#f7f9fb",
+            "primary-fixed-dim": "#bec6e0",
+            "on-primary-fixed": "#131b2e",
+            "on-background": "#191c1e",
+            "secondary": "#515f74",
+            "tertiary-fixed": "#dbe1ff",
+            "on-tertiary-fixed-variant": "#003ea8",
+            "secondary-fixed": "#d5e3fc",
+            "primary-fixed": "#dae2fd",
+            "surface-dim": "#d8dadc",
+            "tertiary-fixed-dim": "#b4c5ff",
+            "primary": "#000000",
+            "surface-variant": "#e0e3e5",
+            "outline-variant": "#c6c6cd",
+            "surface-tint": "#565e74",
+            "secondary-container": "#d5e3fc",
+            "on-tertiary-container": "#497cff",
+            "inverse-on-surface": "#eff1f3",
+            "on-error-container": "#93000a",
+            "inverse-surface": "#2d3133",
+            "surface-container-high": "#e6e8ea",
+            "primary-container": "#131b2e",
+            "on-secondary-fixed": "#0d1c2e",
+            "on-primary-fixed-variant": "#3f465c",
+            "on-error": "#ffffff",
+            "surface-container-lowest": "#ffffff",
+            "on-tertiary": "#ffffff",
+            "surface-container-low": "#f2f4f6",
+            "on-surface-variant": "#45464d",
+            "on-secondary-fixed-variant": "#3a485b",
+            "surface-container": "#eceef0",
+            "on-surface": "#191c1e",
+            "on-secondary-container": "#57657a",
+            "inverse-primary": "#bec6e0",
+            "secondary-fixed-dim": "#b9c7df",
+            "outline": "#76777d",
+            "error": "#ba1a1a",
+            "tertiary-container": "#00174b",
+            "tertiary": "#000000",
+            "surface": "#f7f9fb",
+            "on-secondary": "#ffffff",
+            "error-container": "#ffdad6"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.125rem",
+            "lg": "0.25rem",
+            "xl": "0.5rem",
+            "full": "0.75rem"
+          },
+          "spacing": {
+            "margin-compact": "1rem",
+            "gutter-compact": "0.75rem",
+            "space-xs": "0.25rem",
+            "space-xl": "1.5rem",
+            "gutter": "1rem",
+            "space-sm": "0.375rem",
+            "margin": "1.5rem",
+            "space-md": "0.75rem",
+            "space-lg": "1rem"
+          },
+          "fontFamily": {
+            "label-md": ["Inter"],
+            "code-sm": ["JetBrains Mono"],
+            "headline-lg": ["Inter"],
+            "body-lg": ["Inter"],
+            "headline-md": ["Inter"],
+            "label-sm": ["Inter"],
+            "headline-sm": ["Inter"],
+            "body-md": ["Inter"],
+            "body-sm": ["Inter"],
+            "label-lg": ["Inter"]
+          },
+          "fontSize": {
+            "label-md": ["12px", { "lineHeight": "14px", "fontWeight": "500" }],
+            "code-sm": ["11px", { "lineHeight": "14px", "fontWeight": "500" }],
+            "headline-lg": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.02em", "fontWeight": "600" }],
+            "body-lg": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+            "headline-md": ["18px", { "lineHeight": "24px", "letterSpacing": "-0.015em", "fontWeight": "600" }],
+            "label-sm": ["11px", { "lineHeight": "12px", "letterSpacing": "0.04em", "fontWeight": "600" }],
+            "headline-sm": ["15px", { "lineHeight": "20px", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+            "body-md": ["13px", { "lineHeight": "18px", "fontWeight": "400" }],
+            "body-sm": ["12px", { "lineHeight": "16px", "fontWeight": "400" }],
+            "label-lg": ["13px", { "lineHeight": "16px", "fontWeight": "500" }]
+          }
+        }
+      }
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+      font-size: 18px;
+      line-height: 1;
+      display: inline-block;
+      vertical-align: middle;
+    }
+    .custom-scroll::-webkit-scrollbar {
+      width: 4px;
+      height: 4px;
+    }
+    .custom-scroll::-webkit-scrollbar-track {
+      background: #f1f5f9;
+    }
+    .custom-scroll::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 2px;
+    }
+  </style>
+</head>
+<body class="bg-background text-on-surface antialiased font-body-md text-body-md min-h-screen overflow-x-hidden selection:bg-secondary-container">
+<!-- ==================== LEFT SIDEBAR (SideNavBar Shared Component) ==================== -->
+<aside class="flex flex-col justify-between h-screen w-60 py-space-md px-space-xs fixed left-0 top-0 z-40 bg-surface-container-lowest border-r border-outline-variant select-none">
+<div>
+<!-- Brand & Header -->
+<div class="px-space-md py-space-sm mb-space-md border-b border-surface-container pb-space-md">
+<div class="flex items-center gap-space-sm">
+<div class="w-7 h-7 rounded bg-primary-container text-on-primary flex items-center justify-center font-code-sm text-code-sm font-semibold tracking-tighter">
+            RD
+          </div>
+<div>
+<div class="font-headline-sm text-headline-sm font-semibold tracking-tight text-on-surface">Roam Dominion</div>
+<div class="font-code-sm text-code-sm text-on-surface-variant font-normal">Fleet Operations Console</div>
+</div>
+</div>
+</div>
+<!-- Navigation Links -->
+<nav aria-label="Main Navigation" class="space-y-0.5 px-space-xs">
+<!-- Tab 1: Vehicle Database -->
+<a class="flex items-center gap-space-sm px-space-md py-2 text-on-surface-variant font-label-md text-label-md hover:bg-surface-container-low rounded transition-colors duration-150 ease-in-out" href="#vehicles">
+<span class="material-symbols-outlined text-outline" data-icon="directions_car">directions_car</span>
+<span>Vehicle Database</span>
+</a>
+<!-- Tab 2: Fuel -->
+<a class="flex items-center gap-space-sm px-space-md py-2 text-on-surface-variant font-label-md text-label-md hover:bg-surface-container-low rounded transition-colors duration-150 ease-in-out" href="#fuel">
+<span class="material-symbols-outlined text-outline" data-icon="local_gas_station">local_gas_station</span>
+<span>Fuel</span>
+</a>
+<!-- Tab 3: Places Review (ACTIVE) -->
+<a class="flex items-center justify-between px-space-md py-2 bg-surface-container text-on-surface font-label-md text-label-md rounded border-l-2 border-primary transition-colors duration-150 ease-in-out" href="#places-review">
+<div class="flex items-center gap-space-sm">
+<span class="material-symbols-outlined text-on-surface" data-icon="rate_review" data-weight="fill" style="font-variation-settings: 'FILL' 1;">rate_review</span>
+<span class="font-semibold text-on-surface">Places Review</span>
+</div>
+<span class="bg-[#ba1a1a] text-on-error font-code-sm text-code-sm px-1.5 py-0.5 rounded-full font-semibold">184</span>
+</a>
+<!-- Tab 4: Tolls -->
+<a class="flex items-center gap-space-sm px-space-md py-2 text-on-surface-variant font-label-md text-label-md hover:bg-surface-container-low rounded transition-colors duration-150 ease-in-out" href="#tolls">
+<span class="material-symbols-outlined text-outline" data-icon="toll">toll</span>
+<span>Tolls</span>
+</a>
+<!-- Tab 5: System Logs -->
+<a class="flex items-center gap-space-sm px-space-md py-2 text-on-surface-variant font-label-md text-label-md hover:bg-surface-container-low rounded transition-colors duration-150 ease-in-out" href="#logs">
+<span class="material-symbols-outlined text-outline" data-icon="terminal">terminal</span>
+<span>System Logs</span>
+</a>
+<!-- Tab 6: Settings -->
+<a class="flex items-center gap-space-sm px-space-md py-2 text-on-surface-variant font-label-md text-label-md hover:bg-surface-container-low rounded transition-colors duration-150 ease-in-out" href="#settings">
+<span class="material-symbols-outlined text-outline" data-icon="settings">settings</span>
+<span>Settings</span>
+</a>
+</nav>
+</div>
+<!-- CTA & Footer Nav -->
+<div class="px-space-xs space-y-space-sm border-t border-surface-container pt-space-md">
+<!-- CTA Button -->
+<button class="w-full flex items-center justify-center gap-space-xs h-8 bg-surface-container text-on-surface font-label-md text-label-md border border-outline-variant rounded hover:bg-surface-container-high transition-colors duration-150 ease-in-out">
+<span class="material-symbols-outlined text-outline" data-icon="file_download">file_download</span>
+<span>Export Fleet Data</span>
+</button>
+<!-- Footer Tabs -->
+<div class="pt-space-xs space-y-0.5">
+<a class="flex items-center gap-space-sm px-space-md py-1.5 text-on-surface-variant font-label-md text-label-md hover:bg-surface-container-low rounded transition-colors duration-150 ease-in-out" href="#docs">
+<span class="material-symbols-outlined text-outline" data-icon="help">help</span>
+<span>Documentation</span>
+</a>
+<a class="flex items-center gap-space-sm px-space-md py-1.5 text-on-surface-variant font-label-md text-label-md hover:bg-surface-container-low rounded transition-colors duration-150 ease-in-out" href="#support">
+<span class="material-symbols-outlined text-outline" data-icon="headset_mic">headset_mic</span>
+<span>Support</span>
+</a>
+</div>
+<!-- User Mini Profile -->
+<div class="flex items-center gap-space-sm px-space-sm pt-space-xs mt-space-xs border-t border-surface-container-low">
+<div class="w-7 h-7 rounded-full bg-secondary-fixed text-on-secondary-fixed font-code-sm text-code-sm flex items-center justify-center font-bold">
+          AD
+        </div>
+<div class="overflow-hidden">
+<div class="font-label-md text-label-md text-on-surface truncate">Chief Dispatcher</div>
+<div class="font-code-sm text-code-sm text-on-surface-variant truncate">ops@roamdominion.io</div>
+</div>
+</div>
+</div>
+</aside>
+<!-- ==================== TOP BAR (TopNavBar Shared Component) ==================== -->
+<header class="flex justify-between items-center h-12 px-space-lg w-[calc(100%-15rem)] ml-60 fixed top-0 right-0 z-30 bg-surface-container-lowest border-b border-outline-variant select-none">
+<!-- Breadcrumbs / Left Context -->
+<div class="flex items-center gap-space-md">
+<div class="flex items-center gap-space-xs text-on-surface-variant font-label-md text-label-md">
+<span class="font-medium hover:text-on-surface cursor-pointer">Dominion Admin</span>
+<span class="text-outline">/</span>
+<span class="font-medium hover:text-on-surface cursor-pointer">Places</span>
+<span class="text-outline">/</span>
+<span class="text-on-surface font-semibold">Places Review</span>
+</div>
+<!-- Quick Nav Cluster -->
+<div class="h-4 w-[1px] bg-outline-variant mx-space-xs"></div>
+<nav class="flex items-center gap-space-md">
+<a class="text-on-surface-variant font-label-md text-label-md hover:text-on-surface transition-colors" href="#">Fleet Network</a>
+<a class="text-on-surface font-label-md text-label-md border-b-2 border-primary pb-space-xs" href="#">Audit Queue</a>
+<a class="text-on-surface-variant font-label-md text-label-md hover:text-on-surface transition-colors" href="#">Discrepancies</a>
+</nav>
+</div>
+<!-- Actions & Global Controls -->
+<div class="flex items-center gap-space-sm">
+<button class="h-8 px-space-md bg-surface-container-lowest border border-outline-variant text-on-surface font-label-md text-label-md rounded hover:bg-surface-container-low transition-colors duration-150 ease-in-out flex items-center gap-1.5">
+<span class="material-symbols-outlined text-outline" data-icon="sync">sync</span>
+<span>Batch Sync</span>
+</button>
+<button class="h-8 px-space-md bg-primary-container text-on-primary font-label-md text-label-md rounded hover:bg-[#1e293b] transition-colors duration-150 ease-in-out flex items-center gap-1.5 shadow-sm">
+<span class="material-symbols-outlined text-white" data-icon="add">add</span>
+<span>Create Record</span>
+</button>
+<div class="h-4 w-[1px] bg-outline-variant mx-1"></div>
+<button class="w-8 h-8 flex items-center justify-center text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low rounded" title="Notifications">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+<button class="w-8 h-8 flex items-center justify-center text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low rounded" title="Help">
+<span class="material-symbols-outlined" data-icon="help_outline">help_outline</span>
+</button>
+</div>
+</header>
+<!-- ==================== MAIN WORKSPACE ==================== -->
+<main class="ml-60 pt-16 pb-28 px-space-xl max-w-[1440px]">
+<!-- Page Header & Metrics Strip -->
+<section class="mb-space-lg">
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-space-md mb-space-md">
+<div>
+<h1 class="font-headline-lg text-headline-lg text-on-surface font-bold tracking-tight">Places Moderation Queue</h1>
+<p class="font-body-md text-body-md text-on-surface-variant mt-0.5">Scout telemetry clustering and verification ledger across 14 parishes.</p>
+</div>
+<!-- Operational Time Info -->
+<div class="flex items-center gap-2 font-code-sm text-code-sm bg-surface-container-low px-space-md py-1 rounded border border-outline-variant text-on-surface-variant">
+<span class="w-2 h-2 rounded-full bg-[#16a34a] animate-pulse"></span>
+<span>Telemetry Mesh: Active (Sync 14s ago)</span>
+</div>
+</div>
+<!-- 4 Top Status Summary Metric Cards (Bento Style hairline cards) -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-space-md">
+<!-- Card 1: Queue Metric / SLA Warning -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded p-space-md flex flex-col justify-between">
+<div class="flex items-start justify-between">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Queue Backlog</span>
+<span class="inline-flex items-center gap-1 font-label-sm text-label-sm px-1.5 py-0.5 rounded bg-[#fff7ed] text-[#ea580c] border border-[#fed7aa] font-semibold">
+<span class="material-symbols-outlined text-[14px]" data-icon="warning">warning</span> SLA At Risk
+            </span>
+</div>
+<div class="mt-space-sm">
+<div class="font-headline-lg text-headline-lg font-bold text-on-surface">184 <span class="font-body-md text-body-md font-normal text-on-surface-variant">waiting</span></div>
+<div class="font-code-sm text-code-sm text-on-surface-variant mt-1">+28 submissions since 08:00 EST</div>
+</div>
+</div>
+<!-- Card 2: Oldest in Queue -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded p-space-md flex flex-col justify-between">
+<div class="flex items-start justify-between">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Oldest Unreviewed</span>
+<span class="font-code-sm text-code-sm text-[#ba1a1a] font-semibold bg-[#fef2f2] px-1.5 py-0.5 rounded border border-[#fecaca]">72h SLA Limit</span>
+</div>
+<div class="mt-space-sm">
+<div class="font-headline-lg text-headline-lg font-bold text-on-surface">3 days</div>
+<div class="font-body-sm text-body-sm text-on-surface-variant mt-1 truncate" title="Sammy's Tyre - Kingston">Sammy's Tyre • Kingston</div>
+</div>
+</div>
+<!-- Card 3: Processed / Approved today -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded p-space-md flex flex-col justify-between">
+<div class="flex items-start justify-between">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Throughput Today</span>
+<span class="inline-flex items-center gap-0.5 font-label-sm text-label-sm px-1.5 py-0.5 rounded bg-[#f0fdf4] text-[#16a34a] border border-[#bbf7d0] font-semibold">
+<span class="material-symbols-outlined text-[14px]" data-icon="trending_up">trending_up</span> On Track
+            </span>
+</div>
+<div class="mt-space-sm">
+<div class="font-headline-lg text-headline-lg font-bold text-on-surface">62 <span class="font-body-md text-body-md font-normal text-on-surface-variant">approved</span></div>
+<div class="font-code-sm text-code-sm text-on-surface-variant mt-1">Average review time: 42s/record</div>
+</div>
+</div>
+<!-- Card 4: Rejection / Accuracy Rate -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded p-space-md flex flex-col justify-between">
+<div class="flex items-start justify-between">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Rejection Rate</span>
+<span class="font-code-sm text-code-sm text-[#16a34a] font-medium bg-[#f0fdf4] px-1.5 py-0.5 rounded border border-[#bbf7d0]">Optimal Range</span>
+</div>
+<div class="mt-space-sm">
+<div class="font-headline-lg text-headline-lg font-bold text-on-surface">8% <span class="font-body-md text-body-md font-normal text-on-surface-variant">rate</span></div>
+<div class="font-code-sm text-code-sm text-on-surface-variant mt-1">Within fleet safety threshold (&lt;12%)</div>
+</div>
+</div>
+</div>
+</section>
+<!-- ==================== FILTER TOOLBAR ==================== -->
+<section class="bg-surface-container-lowest border border-outline-variant rounded p-space-md mb-space-md">
+<div class="flex flex-wrap items-center justify-between gap-space-sm">
+<!-- Dropdown cluster -->
+<div class="flex flex-wrap items-center gap-space-sm flex-1">
+<!-- Parish Dropdown -->
+<div class="relative">
+<select class="h-8 pl-2 pr-7 bg-surface-container-lowest border border-outline-variant rounded font-body-md text-body-md text-on-surface focus:outline-none focus:border-secondary focus:ring-0 cursor-pointer appearance-none">
+<option>All Parishes (14)</option>
+<option selected="">St Andrew</option>
+<option>Kingston</option>
+<option>Clarendon</option>
+<option>Manchester</option>
+<option>St Catherine</option>
+</select>
+<span class="material-symbols-outlined pointer-events-none absolute right-1.5 top-2 text-outline text-[16px]" data-icon="expand_more">expand_more</span>
+</div>
+<!-- Place Type Dropdown -->
+<div class="relative">
+<select class="h-8 pl-2 pr-7 bg-surface-container-lowest border border-outline-variant rounded font-body-md text-body-md text-on-surface focus:outline-none focus:border-secondary focus:ring-0 cursor-pointer appearance-none">
+<option selected="">All Types</option>
+<option>Gas Station</option>
+<option>Mechanic / Repair</option>
+<option>Parts &amp; Auto Mart</option>
+<option>Tyre Vulcanizing</option>
+</select>
+<span class="material-symbols-outlined pointer-events-none absolute right-1.5 top-2 text-outline text-[16px]" data-icon="expand_more">expand_more</span>
+</div>
+<!-- Evidence Strength Dropdown -->
+<div class="relative">
+<select class="h-8 pl-2 pr-7 bg-surface-container-lowest border border-outline-variant rounded font-body-md text-body-md text-on-surface focus:outline-none focus:border-secondary focus:ring-0 cursor-pointer appearance-none">
+<option selected="">All Evidence</option>
+<option>Strong (&gt;4 pins, ±10m)</option>
+<option>Moderate</option>
+<option>Weak (Review photo)</option>
+</select>
+<span class="material-symbols-outlined pointer-events-none absolute right-1.5 top-2 text-outline text-[16px]" data-icon="expand_more">expand_more</span>
+</div>
+<!-- Source Dropdown -->
+<div class="relative">
+<select class="h-8 pl-2 pr-7 bg-surface-container-lowest border border-outline-variant rounded font-body-md text-body-md text-on-surface focus:outline-none focus:border-secondary focus:ring-0 cursor-pointer appearance-none">
+<option selected="">All Sources</option>
+<option>Scout Submissions</option>
+<option>Automated Ingestion</option>
+<option>Telemetry Ping Fusion</option>
+</select>
+<span class="material-symbols-outlined pointer-events-none absolute right-1.5 top-2 text-outline text-[16px]" data-icon="expand_more">expand_more</span>
+</div>
+<!-- Age Filter Dropdown -->
+<div class="relative">
+<select class="h-8 pl-2 pr-7 bg-surface-container-lowest border border-outline-variant rounded font-body-md text-body-md text-on-surface focus:outline-none focus:border-secondary focus:ring-0 cursor-pointer appearance-none">
+<option selected="">All Ages</option>
+<option>&gt; 48 hours</option>
+<option>24 - 48 hours</option>
+<option>&lt; 24 hours</option>
+</select>
+<span class="material-symbols-outlined pointer-events-none absolute right-1.5 top-2 text-outline text-[16px]" data-icon="expand_more">expand_more</span>
+</div>
+<!-- Sort Selector -->
+<div class="relative">
+<select class="h-8 pl-2 pr-7 bg-surface-container-low border border-outline-variant rounded font-label-md text-label-md text-on-surface font-medium focus:outline-none focus:border-secondary focus:ring-0 cursor-pointer appearance-none">
+<option selected="">Sort: Strongest evidence first</option>
+<option>Sort: Oldest queued first</option>
+<option>Sort: Most contributors</option>
+<option>Sort: Discrepancy risk score</option>
+</select>
+<span class="material-symbols-outlined pointer-events-none absolute right-1.5 top-2 text-outline text-[16px]" data-icon="sort">sort</span>
+</div>
+</div>
+<!-- Search Input with Keyboard Shortcut Hint -->
+<div class="relative min-w-[280px]">
+<span class="material-symbols-outlined absolute left-2.5 top-2 text-outline text-[16px]" data-icon="search">search</span>
+<input class="h-8 w-full pl-8 pr-12 bg-surface-container-lowest border border-outline-variant rounded font-body-md text-body-md text-on-surface placeholder:text-outline focus:outline-none focus:border-secondary focus:ring-0" placeholder="Filter records by name, ID or road..." type="text"/>
+<div class="absolute right-2 top-1.5 flex items-center gap-0.5">
+<kbd class="font-code-sm text-code-sm text-on-surface-variant bg-surface-container-low border border-outline-variant px-1 rounded">⌘K</kbd>
+</div>
+</div>
+</div>
+</section>
+<!-- ==================== GROUPED PLACES MODERATION TABLE ==================== -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded overflow-hidden">
+<!-- Table Header & Controls Bar -->
+<div class="px-space-md py-2 border-b border-surface-container flex items-center justify-between bg-surface-container-low">
+<div class="flex items-center gap-space-sm text-on-surface-variant font-label-md text-label-md">
+<span class="font-semibold text-on-surface">Queue Ledger</span>
+<span class="text-outline">•</span>
+<span>12 items currently selected for batch operations</span>
+</div>
+<div class="flex items-center gap-2">
+<button class="h-7 px-2 font-label-sm text-label-sm bg-surface-container-lowest border border-outline-variant rounded text-on-surface hover:bg-surface-container flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]" data-icon="view_column">view_column</span> Columns (7)
+          </button>
+<button class="h-7 px-2 font-label-sm text-label-sm bg-surface-container-lowest border border-outline-variant rounded text-on-surface hover:bg-surface-container flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]" data-icon="refresh">refresh</span> Live Reload
+          </button>
+</div>
+</div>
+<!-- Table Viewport -->
+<div class="overflow-x-auto custom-scroll">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="h-8 bg-[#f8fafc] text-[#64748b] font-label-sm text-label-sm uppercase tracking-[0.04em] border-b border-[#cbd5e1] select-none">
+<!-- Select Column -->
+<th class="w-10 px-space-md text-center">
+<input checked="" class="w-3.5 h-3.5 rounded-[2px] border-[1.5px] border-[#94a3b8] text-primary focus:ring-0 focus:ring-offset-0 cursor-pointer" type="checkbox"/>
+</th>
+<th class="px-space-md">Place Name &amp; Type</th>
+<th class="px-space-md">Parish &amp; Sub-Locality</th>
+<th class="px-space-md">Evidence Breakdown &amp; Telemetry</th>
+<th class="px-space-md">Recommendation</th>
+<th class="px-space-md">Queued</th>
+<th class="px-space-md text-right pr-6">Direct Actions</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-surface-container-low font-body-md text-body-md text-on-surface">
+<!-- Row 1: Precision Auto Works (Selected) -->
+<tr class="h-10 hover:bg-[#f8fafc] bg-[#eff6ff]/40 transition-colors">
+<td class="px-space-md text-center">
+<input checked="" class="w-3.5 h-3.5 rounded-[2px] border-[1.5px] border-[#94a3b8] text-primary focus:ring-0 focus:ring-offset-0 cursor-pointer" type="checkbox"/>
+</td>
+<td class="px-space-md">
+<div class="font-semibold text-on-surface leading-tight">Precision Auto Works</div>
+<div class="font-code-sm text-code-sm text-on-surface-variant flex items-center gap-1">
+<span>Mechanic / Repair</span>
+<span class="text-outline">•</span>
+<span class="text-outline">#PL-1049</span>
+</div>
+</td>
+<td class="px-space-md">
+<div class="text-on-surface leading-tight">St Andrew • Half-Way-Tree</div>
+<div class="font-code-sm text-code-sm text-on-surface-variant">Constant Spring Rd</div>
+</td>
+<td class="px-space-md">
+<div class="flex items-center gap-1.5">
+<span class="font-medium text-on-surface">5 pins</span>
+<span class="text-outline">•</span>
+<span>4 people</span>
+<span class="text-outline">•</span>
+<span class="font-code-sm text-code-sm font-semibold text-[#16a34a] bg-[#f0fdf4] px-1 rounded border border-[#bbf7d0]">best ±9 m</span>
+</div>
+<div class="font-code-sm text-code-sm text-on-surface-variant mt-0.5">High confidence geometry • Scout verified</div>
+</td>
+<td class="px-space-md">
+<!-- Green Pill: Approve — strong -->
+<span class="inline-flex items-center gap-1 h-5 px-1.5 rounded-[3px] font-label-sm text-label-sm font-semibold bg-[#f0fdf4] text-[#16a34a] border border-[#bbf7d0]">
+<span class="material-symbols-outlined text-[13px]" data-icon="verified">verified</span> Approve — strong
+                </span>
+</td>
+<td class="px-space-md font-code-sm text-code-sm text-on-surface-variant">
+                1h 14m ago
+              </td>
+<td class="px-space-md text-right pr-6">
+<div class="flex items-center justify-end gap-1.5">
+<button class="h-7 px-2 font-label-sm text-label-sm bg-surface-container-lowest border border-outline-variant rounded text-on-surface hover:bg-surface-container">
+                    Review Details
+                  </button>
+<button class="h-7 px-2.5 font-label-sm text-label-sm bg-[#0f172a] text-white rounded hover:bg-[#1e293b] font-medium flex items-center gap-1 shadow-sm">
+<span class="material-symbols-outlined text-white text-[14px]" data-icon="check">check</span> Approve
+                  </button>
+</div>
+</td>
+</tr>
+<!-- Row 2: Rubis / TotalEnergies HWT Dual Pin (Selected, Duplicate) -->
+<tr class="h-10 hover:bg-[#f8fafc] bg-[#eff6ff]/40 transition-colors">
+<td class="px-space-md text-center">
+<input checked="" class="w-3.5 h-3.5 rounded-[2px] border-[1.5px] border-[#94a3b8] text-primary focus:ring-0 focus:ring-offset-0 cursor-pointer" type="checkbox"/>
+</td>
+<td class="px-space-md">
+<div class="font-semibold text-on-surface leading-tight">Rubis / TotalEnergies HWT Dual Pin</div>
+<div class="font-code-sm text-code-sm text-on-surface-variant flex items-center gap-1">
+<span>Gas Station &amp; Mart</span>
+<span class="text-outline">•</span>
+<span class="text-outline">#PL-1051</span>
+</div>
+</td>
+<td class="px-space-md">
+<div class="text-on-surface leading-tight">St Andrew • Half-Way-Tree</div>
+<div class="font-code-sm text-code-sm text-on-surface-variant">Clock Tower Intersection</div>
+</td>
+<td class="px-space-md">
+<div class="flex items-center gap-1.5">
+<span class="font-medium text-on-surface">8 pins</span>
+<span class="text-outline">•</span>
+<span>6 people</span>
+<span class="text-outline">•</span>
+<span class="font-code-sm text-code-sm font-semibold text-on-surface bg-surface-container px-1 rounded">best ±12 m</span>
+</div>
+<div class="font-code-sm text-code-sm text-[#ea580c] font-medium mt-0.5 flex items-center gap-1">
+<span class="material-symbols-outlined text-[13px]" data-icon="content_copy">content_copy</span> Near existing ID #PL-882, 14m offset
+                </div>
+</td>
+<td class="px-space-md">
+<!-- Orange Pill: Likely duplicate of Total HWT -->
+<span class="inline-flex items-center gap-1 h-5 px-1.5 rounded-[3px] font-label-sm text-label-sm font-semibold bg-[#fff7ed] text-[#ea580c] border border-[#fed7aa]">
+<span class="material-symbols-outlined text-[13px]" data-icon="difference">difference</span> Likely duplicate of Total HWT
+                </span>
+</td>
+<td class="px-space-md font-code-sm text-code-sm text-on-surface-variant">
+                3h 40m ago
+              </td>
+<td class="px-space-md text-right pr-6">
+<div class="flex items-center justify-end gap-1.5">
+<button class="h-7 px-2 font-label-sm text-label-sm bg-surface-container-lowest border border-[#fed7aa] text-[#ea580c] hover:bg-[#fff7ed] rounded font-medium flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]" data-icon="call_merge">call_merge</span> Merge with Total HWT
+                  </button>
+<button class="h-7 px-2 font-label-sm text-label-sm bg-surface-container-lowest border border-[#fecaca] text-[#dc2626] hover:bg-[#fef2f2] rounded">
+                    Reject
+                  </button>
+</div>
+</td>
+</tr>
+<!-- Row 3: Sammy's Night Tyre Vulcanizing (Weak) -->
+<tr class="h-10 hover:bg-[#f8fafc] transition-colors">
+<td class="px-space-md text-center">
+<input class="w-3.5 h-3.5 rounded-[2px] border-[1.5px] border-[#94a3b8] text-primary focus:ring-0 focus:ring-offset-0 cursor-pointer" type="checkbox"/>
+</td>
+<td class="px-space-md">
+<div class="font-semibold text-on-surface leading-tight">Sammy's Night Tyre Vulcanizing</div>
+<div class="font-code-sm text-code-sm text-on-surface-variant flex items-center gap-1">
+<span>Tyre / Puncture Repair</span>
+<span class="text-outline">•</span>
+<span class="text-outline">#PL-0994</span>
+</div>
+</td>
+<td class="px-space-md">
+<div class="text-on-surface leading-tight">Kingston • Marcus Garvey Drive</div>
+<div class="font-code-sm text-code-sm text-on-surface-variant">Wharf Area Port Gate 4</div>
+</td>
+<td class="px-space-md">
+<div class="flex items-center gap-1.5">
+<span class="font-medium text-on-surface">1 pin</span>
+<span class="text-outline">•</span>
+<span>1 person</span>
+<span class="text-outline">•</span>
+<span class="font-code-sm text-code-sm font-semibold text-[#dc2626] bg-[#fef2f2] px-1 rounded border border-[#fecaca]">best ±42 m</span>
+</div>
+<div class="font-code-sm text-code-sm text-[#d97706] mt-0.5 flex items-center gap-1">
+<span class="material-symbols-outlined text-[13px]" data-icon="no_photography">no_photography</span> 1 blurry photo reported
+                </div>
+</td>
+<td class="px-space-md">
+<!-- Amber Pill: Weak — check photo -->
+<span class="inline-flex items-center gap-1 h-5 px-1.5 rounded-[3px] font-label-sm text-label-sm font-semibold bg-[#fffbeb] text-[#d97706] border border-[#fde68a]">
+<span class="material-symbols-outlined text-[13px]" data-icon="warning_amber">warning_amber</span> Weak — check photo
+                </span>
+</td>
+<td class="px-space-md font-code-sm text-code-sm text-[#ba1a1a] font-semibold">
+                3 days ago
+              </td>
+<td class="px-space-md text-right pr-6">
+<div class="flex items-center justify-end gap-1.5">
+<button class="h-7 px-2 font-label-sm text-label-sm bg-surface-container-lowest border border-outline-variant rounded text-on-surface hover:bg-surface-container flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]" data-icon="image">image</span> Inspect Photo
+                  </button>
+<button class="h-7 px-2 font-label-sm text-label-sm bg-surface-container-lowest border border-outline-variant text-on-surface-variant hover:text-on-surface hover:bg-surface-container rounded">
+                    Request Rescout
+                  </button>
+</div>
+</td>
+</tr>
+<!-- Row 4: TotalEnergies Mandeville (Selected) -->
+<tr class="h-10 hover:bg-[#f8fafc] bg-[#eff6ff]/40 transition-colors">
+<td class="px-space-md text-center">
+<input checked="" class="w-3.5 h-3.5 rounded-[2px] border-[1.5px] border-[#94a3b8] text-primary focus:ring-0 focus:ring-offset-0 cursor-pointer" type="checkbox"/>
+</td>
+<td class="px-space-md">
+<div class="font-semibold text-on-surface leading-tight">TotalEnergies Mandeville Restroom &amp; Air</div>
+<div class="font-code-sm text-code-sm text-on-surface-variant flex items-center gap-1">
+<span>Gas &amp; Convenience</span>
+<span class="text-outline">•</span>
+<span class="text-outline">#PL-1053</span>
+</div>
+</td>
+<td class="px-space-md">
+<div class="text-on-surface leading-tight">Manchester • Mandeville Bypass</div>
+<div class="font-code-sm text-code-sm text-on-surface-variant">Westbound Service Corridor</div>
+</td>
+<td class="px-space-md">
+<div class="flex items-center gap-1.5">
+<span class="font-medium text-on-surface">4 pins</span>
+<span class="text-outline">•</span>
+<span>3 people</span>
+<span class="text-outline">•</span>
+<span class="font-code-sm text-code-sm font-semibold text-[#16a34a] bg-[#f0fdf4] px-1 rounded border border-[#bbf7d0]">best ±8 m</span>
+</div>
+<div class="font-code-sm text-code-sm text-on-surface-variant mt-0.5">Scout telemetry aligned with OpenStreetMap node</div>
+</td>
+<td class="px-space-md">
+<!-- Green Pill: Approve — strong -->
+<span class="inline-flex items-center gap-1 h-5 px-1.5 rounded-[3px] font-label-sm text-label-sm font-semibold bg-[#f0fdf4] text-[#16a34a] border border-[#bbf7d0]">
+<span class="material-symbols-outlined text-[13px]" data-icon="verified">verified</span> Approve — strong
+                </span>
+</td>
+<td class="px-space-md font-code-sm text-code-sm text-on-surface-variant">
+                5h 02m ago
+              </td>
+<td class="px-space-md text-right pr-6">
+<div class="flex items-center justify-end gap-1.5">
+<button class="h-7 px-2 font-label-sm text-label-sm bg-surface-container-lowest border border-outline-variant rounded text-on-surface hover:bg-surface-container">
+                    Review Details
+                  </button>
+<button class="h-7 px-2.5 font-label-sm text-label-sm bg-[#0f172a] text-white rounded hover:bg-[#1e293b] font-medium flex items-center gap-1 shadow-sm">
+<span class="material-symbols-outlined text-white text-[14px]" data-icon="check">check</span> Approve
+                  </button>
+</div>
+</td>
+</tr>
+<!-- Row 5: Mario's Wholesale Parts Hub (Pending) -->
+<tr class="h-10 hover:bg-[#f8fafc] transition-colors">
+<td class="px-space-md text-center">
+<input class="w-3.5 h-3.5 rounded-[2px] border-[1.5px] border-[#94a3b8] text-primary focus:ring-0 focus:ring-offset-0 cursor-pointer" type="checkbox"/>
+</td>
+<td class="px-space-md">
+<div class="font-semibold text-on-surface leading-tight">Mario's Wholesale Parts Hub</div>
+<div class="font-code-sm text-code-sm text-on-surface-variant flex items-center gap-1">
+<span>Parts &amp; Auto Mart</span>
+<span class="text-outline">•</span>
+<span class="text-outline">#PL-1055</span>
+</div>
+</td>
+<td class="px-space-md">
+<div class="text-on-surface leading-tight">St Catherine • Spanish Town Centre</div>
+<div class="font-code-sm text-code-sm text-on-surface-variant">Burke Road Commercial</div>
+</td>
+<td class="px-space-md">
+<div class="flex items-center gap-1.5">
+<span class="font-medium text-on-surface">3 pins</span>
+<span class="text-outline">•</span>
+<span>2 people</span>
+<span class="text-outline">•</span>
+<span class="font-code-sm text-code-sm font-semibold text-on-surface bg-surface-container px-1 rounded">best ±18 m</span>
+</div>
+<div class="font-code-sm text-code-sm text-on-surface-variant mt-0.5">Automated phone ledger cross-reference pending</div>
+</td>
+<td class="px-space-md">
+<!-- Slate/Muted Pill: Pending verification -->
+<span class="inline-flex items-center gap-1 h-5 px-1.5 rounded-[3px] font-label-sm text-label-sm font-semibold bg-[#f5f5f4] text-[#57534e] border border-[#e7e5e4]">
+<span class="material-symbols-outlined text-[13px]" data-icon="hourglass_empty">hourglass_empty</span> Pending verification
+                </span>
+</td>
+<td class="px-space-md font-code-sm text-code-sm text-on-surface-variant">
+                8h 45m ago
+              </td>
+<td class="px-space-md text-right pr-6">
+<div class="flex items-center justify-end gap-1.5">
+<button class="h-7 px-2 font-label-sm text-label-sm bg-surface-container-lowest border border-outline-variant rounded text-on-surface hover:bg-surface-container">
+                    Review Details
+                  </button>
+<button class="h-7 px-2 font-label-sm text-label-sm bg-surface-container-lowest border border-outline-variant text-on-surface hover:bg-surface-container">
+                    Hold
+                  </button>
+</div>
+</td>
+</tr>
+<!-- Row 6: Derrick's 24/7 Wash (Selected) -->
+<tr class="h-10 hover:bg-[#f8fafc] bg-[#eff6ff]/40 transition-colors">
+<td class="px-space-md text-center">
+<input checked="" class="w-3.5 h-3.5 rounded-[2px] border-[1.5px] border-[#94a3b8] text-primary focus:ring-0 focus:ring-offset-0 cursor-pointer" type="checkbox"/>
+</td>
+<td class="px-space-md">
+<div class="font-semibold text-on-surface leading-tight">Derrick's 24/7 High-Pressure Wash</div>
+<div class="font-code-sm text-code-sm text-on-surface-variant flex items-center gap-1">
+<span>Wash &amp; Fleet Care</span>
+<span class="text-outline">•</span>
+<span class="text-outline">#PL-1058</span>
+</div>
+</td>
+<td class="px-space-md">
+<div class="text-on-surface leading-tight">Clarendon • May Pen Bypass</div>
+<div class="font-code-sm text-code-sm text-on-surface-variant">Mineral Heights Turnoff</div>
+</td>
+<td class="px-space-md">
+<div class="flex items-center gap-1.5">
+<span class="font-medium text-on-surface">2 pins</span>
+<span class="text-outline">•</span>
+<span>2 people</span>
+<span class="text-outline">•</span>
+<span class="font-code-sm text-code-sm font-semibold text-[#16a34a] bg-[#f0fdf4] px-1 rounded border border-[#bbf7d0]">best ±15 m</span>
+</div>
+<div class="font-code-sm text-code-sm text-on-surface-variant mt-0.5">High fleet utility route • 24-hr diesel access</div>
+</td>
+<td class="px-space-md">
+<!-- Green Pill: Approve — strong -->
+<span class="inline-flex items-center gap-1 h-5 px-1.5 rounded-[3px] font-label-sm text-label-sm font-semibold bg-[#f0fdf4] text-[#16a34a] border border-[#bbf7d0]">
+<span class="material-symbols-outlined text-[13px]" data-icon="verified">verified</span> Approve — strong
+                </span>
+</td>
+<td class="px-space-md font-code-sm text-code-sm text-on-surface-variant">
+                11h 20m ago
+              </td>
+<td class="px-space-md text-right pr-6">
+<div class="flex items-center justify-end gap-1.5">
+<button class="h-7 px-2 font-label-sm text-label-sm bg-surface-container-lowest border border-outline-variant rounded text-on-surface hover:bg-surface-container">
+                    Review Details
+                  </button>
+<button class="h-7 px-2.5 font-label-sm text-label-sm bg-[#0f172a] text-white rounded hover:bg-[#1e293b] font-medium flex items-center gap-1 shadow-sm">
+<span class="material-symbols-outlined text-white text-[14px]" data-icon="check">check</span> Approve
+                  </button>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- ==================== PAGINATION TOOLBAR ==================== -->
+<div class="px-space-md py-space-sm border-t border-outline-variant bg-surface-container-lowest flex flex-col sm:flex-row sm:items-center justify-between gap-space-sm">
+<div class="flex items-center gap-space-md font-body-sm text-body-sm text-on-surface-variant">
+<span>Showing <strong class="text-on-surface font-semibold">1–15</strong> of <strong class="text-on-surface font-semibold">184</strong> places</span>
+<div class="flex items-center gap-1 pl-space-md border-l border-surface-container">
+<span>Show</span>
+<select class="h-6 pl-1 pr-6 bg-surface-container-low border border-outline-variant rounded font-code-sm text-code-sm text-on-surface focus:outline-none cursor-pointer">
+<option selected="">15 rows per page</option>
+<option>30 rows per page</option>
+<option>50 rows per page</option>
+<option>100 rows per page</option>
+</select>
+</div>
+</div>
+<!-- Pagination Buttons -->
+<div class="flex items-center gap-1">
+<button class="h-7 px-2 font-label-sm text-label-sm bg-surface-container-lowest border border-outline-variant rounded text-outline cursor-not-allowed opacity-60 flex items-center gap-1" disabled="">
+<span class="material-symbols-outlined text-[14px]" data-icon="chevron_left">chevron_left</span> Previous
+          </button>
+<button class="w-7 h-7 font-label-sm text-label-sm bg-primary-container text-on-primary font-semibold rounded flex items-center justify-center">
+            1
+          </button>
+<button class="w-7 h-7 font-label-sm text-label-sm bg-surface-container-lowest hover:bg-surface-container-low text-on-surface border border-outline-variant rounded flex items-center justify-center">
+            2
+          </button>
+<button class="w-7 h-7 font-label-sm text-label-sm bg-surface-container-lowest hover:bg-surface-container-low text-on-surface border border-outline-variant rounded flex items-center justify-center">
+            3
+          </button>
+<span class="px-1 text-outline font-code-sm text-code-sm">...</span>
+<button class="w-7 h-7 font-label-sm text-label-sm bg-surface-container-lowest hover:bg-surface-container-low text-on-surface border border-outline-variant rounded flex items-center justify-center">
+            13
+          </button>
+<button class="h-7 px-2 font-label-sm text-label-sm bg-surface-container-lowest border border-outline-variant rounded text-on-surface hover:bg-surface-container flex items-center gap-1">
+            Next <span class="material-symbols-outlined text-[14px]" data-icon="chevron_right">chevron_right</span>
+</button>
+</div>
+</div>
+</div>
+<!-- ==================== TELEMETRY STATUS BAR & HOTKEYS CHEAT-SHEET ==================== -->
+<div class="mt-space-md bg-surface-container-lowest border border-outline-variant rounded px-space-md py-2 flex flex-col md:flex-row items-center justify-between gap-space-sm text-on-surface-variant font-code-sm text-code-sm">
+<div class="flex items-center gap-space-md">
+<div class="flex items-center gap-1.5 text-on-surface">
+<span class="material-symbols-outlined text-[16px] text-[#16a34a]" data-icon="sensors">sensors</span>
+<span class="font-medium">Cluster Fusion:</span> 24 Scouts reporting live from Kingston &amp; St Andrew
+        </div>
+<div class="h-3 w-[1px] bg-outline-variant"></div>
+<div>GPS Drift Threshold: ≤ 15.0m</div>
+</div>
+<!-- Hotkeys Legend -->
+<div class="flex items-center gap-space-md select-none">
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-outline font-semibold">Hotkeys:</span>
+<div class="flex items-center gap-1">
+<kbd class="bg-surface-container-low border border-outline-variant px-1 rounded text-on-surface font-semibold">A</kbd>
+<span class="text-on-surface-variant">Quick Approve</span>
+</div>
+<div class="flex items-center gap-1">
+<kbd class="bg-surface-container-low border border-outline-variant px-1 rounded text-on-surface font-semibold">R</kbd>
+<span class="text-on-surface-variant">Reject Place</span>
+</div>
+<div class="flex items-center gap-1">
+<kbd class="bg-surface-container-low border border-outline-variant px-1 rounded text-on-surface font-semibold">S</kbd>
+<span class="text-on-surface-variant">Flag Rescout</span>
+</div>
+<div class="flex items-center gap-1">
+<kbd class="bg-surface-container-low border border-outline-variant px-1 rounded text-on-surface font-semibold">J</kbd>
+<span class="text-on-surface-variant">Next Item</span>
+</div>
+</div>
+</div>
+</main>
+<!-- ==================== BULK ACTION FLOATING BAR (Surface Tier 2) ==================== -->
+<aside class="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 bg-[#ffffff] border border-[#cbd5e1] rounded shadow-[0_4px_6px_-1px_rgba(15,23,42,0.06),0_2px_4px_-2px_rgba(15,23,42,0.04)] px-space-lg py-2 flex items-center gap-space-md select-none">
+<!-- Count badge & summary -->
+<div class="flex items-center gap-space-sm pr-space-md border-r border-[#e2e8f0]">
+<span class="w-5 h-5 rounded-full bg-primary-container text-white font-code-sm text-code-sm flex items-center justify-center font-bold">
+        12
+      </span>
+<span class="font-label-md text-label-md text-on-surface font-semibold">
+        12 selected places across 4 parishes
+      </span>
+</div>
+<!-- Actions cluster -->
+<div class="flex items-center gap-2">
+<!-- Green button: Approve 12 selected -->
+<button class="h-8 px-3.5 bg-[#16a34a] hover:bg-[#15803d] text-white font-label-md text-label-md font-semibold rounded flex items-center gap-1.5 transition-colors shadow-sm">
+<span class="material-symbols-outlined text-white text-[16px]" data-icon="check_circle">check_circle</span>
+<span>Approve 12 selected</span>
+</button>
+<!-- Red button: Reject selected -->
+<button class="h-8 px-3 bg-[#ffffff] hover:bg-[#fef2f2] text-[#dc2626] border border-[#fecaca] font-label-md text-label-md font-semibold rounded flex items-center gap-1.5 transition-colors">
+<span class="material-symbols-outlined text-[#dc2626] text-[16px]" data-icon="cancel">cancel</span>
+<span>Reject selected</span>
+</button>
+<!-- Secondary action: Mark for Field Scout Check -->
+<button class="h-8 px-3 bg-[#ffffff] hover:bg-[#f1f5f9] text-[#334155] border border-[#cbd5e1] font-label-md text-label-md font-medium rounded flex items-center gap-1.5 transition-colors">
+<span class="material-symbols-outlined text-outline text-[16px]" data-icon="person_pin_circle">person_pin_circle</span>
+<span>Mark for Field Scout Check</span>
+</button>
+<!-- Secondary action: Deselect all -->
+<button class="h-8 px-2.5 text-on-surface-variant hover:text-on-surface font-label-md text-label-md transition-colors ml-1">
+        Deselect all
+      </button>
+</div>
+</aside>
+<!-- Keyboard Shortcuts Micro-interaction Support -->
+<script>
+    document.addEventListener('keydown', (e) => {
+      // Hotkey micro-interactions: visual feedback for hotkeys in production console
+      if (['a', 'A'].includes(e.key) && !e.target.matches('input, textarea')) {
+        console.log('Dominion Action: Quick Approve triggered via Hotkey (A)');
+      } else if (['r', 'R'].includes(e.key) && !e.target.matches('input, textarea')) {
+        console.log('Dominion Action: Reject Place triggered via Hotkey (R)');
+      } else if (['s', 'S'].includes(e.key) && !e.target.matches('input, textarea')) {
+        console.log('Dominion Action: Flag Rescout triggered via Hotkey (S)');
+      }
+    });
+  </script>
+</body></html>

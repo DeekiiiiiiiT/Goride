@@ -145,6 +145,11 @@ export async function handlePlugClick(el: HTMLElement) {
     goPath('/fuel');
     return;
   }
+  if (el.dataset.act === 'report-price' || kind === 'report-price') {
+    if (el.dataset.stationId) sessionStorage.setItem('plug-station', el.dataset.stationId);
+    rt.openSheet('price-wrong');
+    return;
+  }
   if (el.dataset.act === 'see-all') {
     rt.go('/explore/list');
     return;
@@ -193,6 +198,12 @@ export async function handlePlugClick(el: HTMLElement) {
   }
   if (el.dataset.act === 'tune' || id === 'filters' || /^filters$/i.test(label)) {
     rt.openSheet('filters');
+    return;
+  }
+  if (act === 'toggle-grades-btn' || kind === 'toggle-grades' || id === 'toggle-grades-btn') {
+    const tray = document.getElementById('grades-tray');
+    tray?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    tray?.classList.toggle('ring-1');
     return;
   }
 

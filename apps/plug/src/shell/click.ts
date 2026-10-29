@@ -98,17 +98,84 @@ export function gradeKey(el: HTMLElement, label: string): string | null {
   return null;
 }
 
+export function preferredGrade(): string {
+  return sessionStorage.getItem('plug-preferred-grade')
+    || sessionStorage.getItem('plug-grade')
+    || 'e10_87';
+}
+
 export function rememberGrade(grade: string, el: HTMLElement) {
   sessionStorage.setItem('plug-grade', grade);
-  const group = el.parentElement;
+  if (!sessionStorage.getItem('plug-preferred-grade')) {
+    sessionStorage.setItem('plug-preferred-grade', grade);
+  }
+  const tray = el.closest('[data-grade-tray], [data-plug-grades], #grades-tray, #grade-selector');
+  const group = tray || el.parentElement;
+  const lockedTray = Boolean(el.closest('[data-grade-tray], #grades-tray') || group?.id === 'grades-tray' || (group as HTMLElement | null)?.dataset?.gradeTray);
   group?.querySelectorAll('button').forEach((button) => {
     const on = gradeKey(button, controlLabel(button)) === grade;
-    button.classList.toggle('bg-secondary', on);
-    button.classList.toggle('text-on-secondary', on);
-    button.classList.toggle('bg-secondary-container', on);
-    button.classList.toggle('text-on-primary', on);
+    if (lockedTray) {
+      button.classList.toggle('bg-primary-container', on);
+      button.classList.toggle('text-on-primary-container', on);
+      button.classList.toggle('shadow-sm', on);
+      button.classList.toggle('bg-surface-container', !on);
+      button.classList.toggle('text-on-surface', !on);
+    } else {
+      button.classList.toggle('bg-secondary', on);
+      button.classList.toggle('text-on-secondary', on);
+      button.classList.toggle('bg-secondary-container', on);
+      button.classList.toggle('text-on-primary', on);
+    }
   });
+  const root = el.closest<HTMLElement>('[data-plug-screen]');
+  if (root) paintLockedGradeChrome(root, grade);
   window.dispatchEvent(new Event('plug-refresh'));
+}
+
+function gradeTitle(grade: string): string {
+  if (grade === 'e10_90') return 'Super Premium';
+  if (grade === 'diesel' || grade === 'ulsd') return 'Ultra Low Sulfur';
+  return 'Unleaded Regular';
+}
+
+export function paintLockedGradeChrome(root: HTMLElement, selected?: string | null) {
+  const preferred = preferredGrade();
+  const current = selected || sessionStorage.getItem('plug-grade') || preferred;
+  const label = current === 'e10_90' ? 'E-10 90' : current === 'diesel' || current === 'ulsd' ? 'ULSD' : 'E-10 87';
+  const preferredLabel = preferred === 'e10_90' ? 'E-10 90' : preferred === 'diesel' || preferred === 'ulsd' ? 'ULSD' : 'E-10 87';
+  const car = sessionStorage.getItem('plug-car-name') || 'your car';
+  root.querySelectorAll<HTMLElement>('[data-slot="locked-grade-badge"]').forEach((node) => {
+    node.textContent = label;
+    node.className = current === 'e10_90'
+      ? 'bg-rose-700 text-surface-container-lowest font-headline-sm text-headline-sm px-3 py-1 rounded-lg tracking-wide shadow-sm'
+      : current === 'diesel' || current === 'ulsd'
+        ? 'bg-inverse-surface text-inverse-on-surface font-headline-sm text-headline-sm px-3 py-1 rounded-lg tracking-wide shadow-sm'
+        : 'bg-[#16a34a] text-surface-container-lowest font-headline-sm text-headline-sm px-3 py-1 rounded-lg tracking-wide shadow-sm';
+  });
+  root.querySelectorAll<HTMLElement>('[data-slot="locked-grade-title"]').forEach((node) => {
+    node.textContent = gradeTitle(current);
+  });
+  root.querySelectorAll<HTMLElement>('[data-slot="locked-grade-callout"]').forEach((node) => {
+    node.innerHTML = `From your <strong class="text-on-surface font-semibold">${car}</strong> — normally runs on ${preferredLabel}.`;
+  });
+  root.querySelectorAll<HTMLElement>('[data-slot="grade-mismatch-note"]').forEach((node) => {
+    node.textContent = `Your car normally runs on ${preferredLabel}. Choosing another grade will flag a quick verification before pushing rates to the Roam Plug island map.`;
+  });
+  root.querySelectorAll<HTMLElement>('[data-grade-hint]').forEach((node) => {
+    const key = node.dataset.gradeHint || '';
+    node.textContent = key === preferred ? 'Recommended' : node.textContent || '';
+    if (key === 'e10_87' && preferred !== 'e10_87') node.textContent = 'Regular';
+    if (key === preferred) node.textContent = 'Recommended';
+  });
+  const tray = root.querySelector('#grades-tray, [data-grade-tray]');
+  tray?.querySelectorAll('button').forEach((button) => {
+    const on = gradeKey(button as HTMLElement, controlLabel(button as HTMLElement)) === current;
+    button.classList.toggle('bg-primary-container', on);
+    button.classList.toggle('text-on-primary-container', on);
+    button.classList.toggle('shadow-sm', on);
+    button.classList.toggle('bg-surface-container', !on);
+    button.classList.toggle('text-on-surface', !on);
+  });
 }
 
 export async function saveFuel(el: HTMLElement) {
@@ -155,8 +222,12 @@ export async function saveFuel(el: HTMLElement) {
     return;
   }
   try {
-    const saved = await plugSend<{ first?: boolean; createdAt?: string }>('/fuel-logs', 'POST', payload);
+    const saved = await plugSend<{ first?: boolean; createdAt?: string; priceStatus?: string }>('/fuel-logs', 'POST', payload);
     remember(saved.createdAt || queuedAt);
+    sessionStorage.setItem('plug-price-status', saved.priceStatus || 'checking');
+    if (saved.priceStatus === 'published') rt.toast('That price is on the map.');
+    else if (saved.priceStatus === 'review') rt.toast('That price is waiting for a check before it goes on the map.');
+    else rt.toast('Checking that price.');
     if (saved.first) sessionStorage.setItem('plug-first-fill', '1');
     else sessionStorage.removeItem('plug-first-fill');
     rt.go('/fuel/saved');

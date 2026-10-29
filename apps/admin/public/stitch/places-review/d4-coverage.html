@@ -1,0 +1,897 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Roam Dominion Admin - Places &amp; Parishes Coverage Overview</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "on-surface": "#131b2e",
+            "on-background": "#131b2e",
+            "error-container": "#ffdad6",
+            "tertiary": "#001626",
+            "on-secondary-container": "#fefcff",
+            "on-tertiary": "#ffffff",
+            "on-error-container": "#93000a",
+            "secondary-fixed": "#dbe1ff",
+            "on-primary-container": "#8590a6",
+            "primary-fixed-dim": "#bcc7de",
+            "on-primary": "#ffffff",
+            "on-tertiary-fixed": "#001d31",
+            "secondary-container": "#316bf3",
+            "inverse-on-surface": "#eef0ff",
+            "primary": "#091426",
+            "surface-container-lowest": "#ffffff",
+            "tertiary-fixed": "#cce5ff",
+            "surface": "#faf8ff",
+            "tertiary-container": "#002b45",
+            "surface-container-low": "#f2f3ff",
+            "on-secondary-fixed-variant": "#003ea8",
+            "surface-variant": "#dae2fd",
+            "surface-container": "#eaedff",
+            "on-primary-fixed": "#111c2d",
+            "error": "#ba1a1a",
+            "secondary-fixed-dim": "#b4c5ff",
+            "on-tertiary-container": "#2f96db",
+            "surface-dim": "#d2d9f4",
+            "inverse-primary": "#bcc7de",
+            "on-secondary": "#ffffff",
+            "inverse-surface": "#283044",
+            "surface-bright": "#faf8ff",
+            "primary-fixed": "#d8e3fb",
+            "surface-container-highest": "#dae2fd",
+            "secondary": "#0051d5",
+            "on-surface-variant": "#45474c",
+            "on-secondary-fixed": "#00174b",
+            "outline-variant": "#c5c6cd",
+            "primary-container": "#1e293b",
+            "on-primary-fixed-variant": "#3c475a",
+            "background": "#faf8ff",
+            "tertiary-fixed-dim": "#93ccff",
+            "surface-container-high": "#e2e7ff",
+            "on-tertiary-fixed-variant": "#004b73",
+            "surface-tint": "#545f73",
+            "on-error": "#ffffff",
+            "outline": "#75777d"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.125rem",
+            "lg": "0.25rem",
+            "xl": "0.5rem",
+            "full": "0.75rem"
+          },
+          "spacing": {
+            "space-xxs": "0.125rem",
+            "space-lg": "1rem",
+            "margin": "1.5rem",
+            "space-2xl": "2rem",
+            "space-xs": "0.25rem",
+            "space-sm": "0.5rem",
+            "space-xl": "1.5rem",
+            "margin-compact": "1rem",
+            "space-md": "0.75rem",
+            "gutter": "1rem",
+            "gutter-dense": "0.75rem"
+          },
+          "fontFamily": {
+            "code-tabular": ["JetBrains Mono"],
+            "headline-md": ["Inter"],
+            "body-lg": ["Inter"],
+            "body-md": ["Inter"],
+            "label-sm": ["Inter"],
+            "label-lg": ["Inter"],
+            "headline-lg": ["Inter"],
+            "headline-xl": ["Inter"],
+            "label-md": ["Inter"],
+            "headline-sm": ["Inter"],
+            "body-sm": ["Inter"]
+          },
+          "fontSize": {
+            "code-tabular": ["12px", { "lineHeight": "16px", "fontWeight": "400" }],
+            "headline-md": ["18px", { "lineHeight": "24px", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+            "body-lg": ["15px", { "lineHeight": "22px", "fontWeight": "400" }],
+            "body-md": ["13px", { "lineHeight": "18px", "fontWeight": "400" }],
+            "label-sm": ["11px", { "lineHeight": "14px", "letterSpacing": "0.04em", "fontWeight": "600" }],
+            "label-lg": ["13px", { "lineHeight": "16px", "fontWeight": "500" }],
+            "headline-lg": ["22px", { "lineHeight": "28px", "letterSpacing": "-0.015em", "fontWeight": "600" }],
+            "headline-xl": ["28px", { "lineHeight": "36px", "letterSpacing": "-0.02em", "fontWeight": "600" }],
+            "label-md": ["12px", { "lineHeight": "16px", "letterSpacing": "0.01em", "fontWeight": "500" }],
+            "headline-sm": ["15px", { "lineHeight": "20px", "letterSpacing": "-0.005em", "fontWeight": "600" }],
+            "body-sm": ["12px", { "lineHeight": "16px", "fontWeight": "400" }]
+          }
+        }
+      }
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+      font-size: 18px;
+      line-height: 1;
+    }
+    .material-symbols-outlined.fill {
+      font-variation-settings: 'FILL' 1;
+    }
+  </style>
+</head>
+<body class="bg-surface text-on-surface antialiased min-h-screen flex selection:bg-secondary-fixed selection:text-on-secondary-fixed">
+<!-- ================= FIXED ENTERPRISE DRAWER (SideNav) ================= -->
+<aside class="fixed top-0 left-0 h-screen w-60 z-40 bg-primary-container dark:bg-primary border-r border-outline-variant/30 flex flex-col justify-between p-4">
+<div class="flex flex-col gap-4">
+<!-- Monogram Header -->
+<div class="flex items-center gap-3 px-2 py-1">
+<div class="w-8 h-8 rounded bg-secondary-container flex items-center justify-center text-surface-container-lowest font-headline-md font-bold tracking-tight shadow-sm">
+          RD
+        </div>
+<div class="flex flex-col">
+<span class="text-headline-md font-headline-md font-bold text-surface-container-lowest leading-none">Roam Dominion</span>
+<span class="text-label-sm font-label-sm text-on-primary-container leading-tight mt-1 tracking-wider uppercase">Admin Infrastructure</span>
+</div>
+</div>
+<!-- Navigation List -->
+<nav class="flex flex-col gap-1 mt-3">
+<!-- Dashboard -->
+<a class="text-on-primary-container hover:text-surface-container-lowest font-label-md px-3 py-2 flex items-center gap-3 transition-colors rounded" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span>Dashboard</span>
+</a>
+<!-- Places Review (ACTIVE) -->
+<a class="bg-primary text-surface-container-lowest border-l-2 border-secondary-container font-label-md px-3 py-2 flex items-center justify-between rounded-r transition-colors" href="#">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined fill text-secondary-container" data-icon="rate_review" data-weight="fill">rate_review</span>
+<span class="font-semibold">Places Review</span>
+</div>
+<span class="bg-secondary-container text-surface-container-lowest font-code-tabular text-label-sm px-1.5 py-0.5 rounded font-bold">184</span>
+</a>
+<!-- Fuel Radar & Pricing -->
+<a class="text-on-primary-container hover:text-surface-container-lowest font-label-md px-3 py-2 flex items-center gap-3 transition-colors rounded" href="#">
+<span class="material-symbols-outlined" data-icon="local_gas_station">local_gas_station</span>
+<span>Fuel Radar &amp; Pricing</span>
+</a>
+<!-- Scout Leaderboards -->
+<a class="text-on-primary-container hover:text-surface-container-lowest font-label-md px-3 py-2 flex items-center gap-3 transition-colors rounded" href="#">
+<span class="material-symbols-outlined" data-icon="leaderboard">leaderboard</span>
+<span>Scout Leaderboards</span>
+</a>
+<!-- Moderation Queue -->
+<a class="text-on-primary-container hover:text-surface-container-lowest font-label-md px-3 py-2 flex items-center gap-3 transition-colors rounded" href="#">
+<span class="material-symbols-outlined" data-icon="gavel">gavel</span>
+<span>Moderation Queue</span>
+</a>
+<!-- System Settings -->
+<a class="text-on-primary-container hover:text-surface-container-lowest font-label-md px-3 py-2 flex items-center gap-3 transition-colors rounded" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span>System Settings</span>
+</a>
+<!-- Admin Profile -->
+<a class="text-on-primary-container hover:text-surface-container-lowest font-label-md px-3 py-2 flex items-center gap-3 transition-colors rounded" href="#">
+<span class="material-symbols-outlined" data-icon="admin_panel_settings">admin_panel_settings</span>
+<span>Admin Profile</span>
+</a>
+</nav>
+</div>
+<!-- SideNav Footer -->
+<div class="border-t border-outline-variant/20 pt-3 flex flex-col gap-1">
+<a class="text-on-primary-container hover:text-surface-container-lowest font-label-md px-3 py-1.5 flex items-center gap-3 transition-colors rounded text-body-sm" href="#">
+<span class="material-symbols-outlined" data-icon="help">help</span>
+<span>Documentation</span>
+</a>
+<a class="text-on-primary-container hover:text-surface-container-lowest font-label-md px-3 py-1.5 flex items-center gap-3 transition-colors rounded text-body-sm" href="#">
+<span class="material-symbols-outlined" data-icon="history">history</span>
+<span>Audit Logs</span>
+</a>
+<div class="px-3 py-2 mt-2 bg-primary/40 rounded flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+<span class="text-label-sm font-label-sm text-surface-container-lowest">Mesh Gateway v4.18</span>
+</div>
+<span class="text-label-sm font-code-tabular text-on-primary-container">PROD-JM</span>
+</div>
+</div>
+</aside>
+<!-- ================= MAIN CONTENT WRAPPER ================= -->
+<div class="ml-60 flex-1 min-w-0 flex flex-col">
+<!-- ================= TOP APP BAR ================= -->
+<header class="fixed top-0 left-60 right-0 h-[52px] z-30 bg-surface-container-lowest dark:bg-primary-container border-b border-outline-variant/30 flex items-center justify-between px-6 shadow-sm">
+<!-- Left: Breadcrumb & Sync Indicator -->
+<div class="flex items-center gap-4">
+<nav class="flex items-center gap-1.5 text-label-md font-label-md text-on-surface-variant">
+<span>Roam Dominion</span>
+<span class="text-outline-variant">/</span>
+<span>Places &amp; Parishes</span>
+<span class="text-outline-variant">/</span>
+<span class="text-secondary font-semibold">Coverage Overview</span>
+</nav>
+<div class="h-4 w-px bg-outline-variant/40"></div>
+<div class="flex items-center gap-1.5 px-2 py-0.5 rounded bg-emerald-50 border border-emerald-200 text-emerald-800 text-label-sm font-label-sm">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-ping"></span>
+<span>Live Sync Active • 14 Parishes</span>
+</div>
+</div>
+<!-- Right: Search, Actions, Profile -->
+<div class="flex items-center gap-3">
+<!-- Search bar on left of cluster -->
+<div class="relative w-64">
+<span class="absolute inset-y-0 left-2.5 flex items-center pointer-events-none text-outline">
+<span class="material-symbols-outlined" data-icon="search">search</span>
+</span>
+<input class="w-full h-8 pl-8 pr-3 text-body-sm font-body-sm bg-surface-bright border border-outline-variant/60 rounded focus:border-secondary focus:ring-1 focus:ring-secondary outline-none transition-all placeholder:text-outline/70" placeholder="Filter parishes, contributors, or tags..." type="text"/>
+</div>
+<div class="h-4 w-px bg-outline-variant/40"></div>
+<button class="h-8 px-2.5 rounded bg-surface-container-lowest border border-outline-variant/60 text-on-surface font-label-md text-label-md hover:bg-surface-container-low transition-colors flex items-center gap-1.5">
+<span class="material-symbols-outlined" data-icon="tune">tune</span>
+<span>Filter</span>
+</button>
+<button class="h-8 px-2.5 rounded bg-surface-container-lowest border border-outline-variant/60 text-on-surface font-label-md text-label-md hover:bg-surface-container-low transition-colors flex items-center gap-1.5">
+<span class="material-symbols-outlined" data-icon="file_download">file_download</span>
+<span>Export CSV</span>
+</button>
+<button class="h-8 px-3 rounded bg-secondary text-surface-container-lowest font-label-md text-label-md hover:bg-secondary-container transition-colors flex items-center gap-1.5 shadow-sm">
+<span class="material-symbols-outlined" data-icon="sync">sync</span>
+<span>Batch Re-index</span>
+</button>
+<div class="h-4 w-px bg-outline-variant/40"></div>
+<!-- Tariq C. Profile Pill -->
+<div class="flex items-center gap-2 pl-1 pr-2 py-1 rounded hover:bg-surface-container transition-colors cursor-pointer border border-transparent hover:border-outline-variant/40">
+<div class="w-7 h-7 rounded bg-primary-container text-surface-container-lowest flex items-center justify-center font-bold text-label-sm">
+            TC
+          </div>
+<div class="flex flex-col text-left">
+<span class="text-label-md font-label-md font-semibold text-on-surface leading-tight">Tariq C.</span>
+<span class="text-label-sm font-label-sm text-on-surface-variant text-[10px] leading-none">Super Admin</span>
+</div>
+<span class="material-symbols-outlined text-outline" data-icon="expand_more">expand_more</span>
+</div>
+</div>
+</header>
+<!-- ================= CANVAS BODY ================= -->
+<main class="mt-[52px] p-6 space-y-6 max-w-[1440px]">
+<!-- Subheader Control Ribbon -->
+<section class="flex items-center justify-between bg-surface-container-lowest border border-outline-variant/40 rounded p-3 px-4 shadow-[0px_1px_2px_0px_rgba(15,23,42,0.04)]">
+<div class="flex items-center gap-3">
+<div class="flex items-center gap-2">
+<span class="text-label-sm font-label-sm text-outline uppercase tracking-wider">Territory Filter:</span>
+<div class="relative">
+<select class="h-7 text-label-md font-label-md bg-surface border border-outline-variant/60 rounded px-2 pr-7 py-0 text-on-surface focus:border-secondary focus:ring-0 cursor-pointer">
+<option selected="">All Parishes (14 Total)</option>
+<option>Surrey County (Kingston, St. Andrew, Portland, St. Thomas)</option>
+<option>Middlesex County (St. Catherine, St. Mary, St. Ann, Manchester, Clarendon)</option>
+<option>Cornwall County (St. James, Hanover, Westmoreland, St. Elizabeth, Trelawny)</option>
+</select>
+</div>
+</div>
+<div class="h-4 w-px bg-outline-variant/40"></div>
+<div class="flex items-center gap-2">
+<span class="text-label-sm font-label-sm text-outline uppercase tracking-wider">Window:</span>
+<div class="relative">
+<select class="h-7 text-label-md font-label-md bg-surface border border-outline-variant/60 rounded px-2 pr-7 py-0 text-on-surface focus:border-secondary focus:ring-0 cursor-pointer">
+<option selected="">Last 14 Days ▾</option>
+<option>Today (00:00 - Current)</option>
+<option>Last 30 Days</option>
+<option>Quarter-to-Date (Q4)</option>
+</select>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-3">
+<span class="text-label-sm font-label-sm text-on-surface-variant flex items-center gap-1">
+<span class="material-symbols-outlined text-secondary text-[16px]" data-icon="cloud_done">cloud_done</span>
+            Last telemetry refresh: <span class="font-code-tabular font-medium text-on-surface">11:42:09 AM EST</span>
+</span>
+<button class="text-secondary hover:text-secondary-container text-label-sm font-label-sm font-semibold flex items-center gap-1">
+<span class="material-symbols-outlined text-[15px]" data-icon="refresh">refresh</span>
+            Force Ping
+          </button>
+</div>
+</section>
+<!-- ================= 2. TOP METRIC CARDS (4 Cards Grid) ================= -->
+<section class="grid grid-cols-4 gap-4">
+<!-- Card 1: WAITING IN QUEUE -->
+<div class="bg-surface-container-lowest border border-outline-variant/40 rounded p-4 shadow-[0px_1px_2px_0px_rgba(15,23,42,0.04)] hover:border-slate-300 transition-colors">
+<div class="flex items-center justify-between">
+<span class="text-label-sm font-label-sm text-outline uppercase tracking-wider">WAITING IN QUEUE</span>
+<span class="inline-flex items-center gap-1 bg-surface-container-high text-secondary font-code-tabular text-[11px] font-semibold px-1.5 py-0.5 rounded">
+              +14 since 08:00 AM
+            </span>
+</div>
+<div class="mt-2 flex items-baseline gap-2">
+<span class="text-headline-xl font-headline-xl font-code-tabular text-on-surface font-bold">184</span>
+<span class="text-body-sm font-body-sm text-on-surface-variant">places</span>
+</div>
+<div class="mt-2 pt-2 border-t border-outline-variant/20 flex items-center justify-between text-label-sm font-label-sm">
+<span class="text-on-surface-variant">Queue Allocation</span>
+<span class="font-code-tabular text-error font-medium">12 unassigned in queue</span>
+</div>
+</div>
+<!-- Card 2: OLDEST WAITING -->
+<div class="bg-surface-container-lowest border border-outline-variant/40 rounded p-4 shadow-[0px_1px_2px_0px_rgba(15,23,42,0.04)] hover:border-slate-300 transition-colors">
+<div class="flex items-center justify-between">
+<span class="text-label-sm font-label-sm text-outline uppercase tracking-wider">OLDEST WAITING</span>
+<span class="inline-flex items-center gap-1 bg-amber-50 border border-amber-200 text-amber-800 text-[11px] font-semibold px-1.5 py-0.5 rounded">
+<span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+              SLA Warning
+            </span>
+</div>
+<div class="mt-2 flex items-baseline gap-2">
+<span class="text-headline-xl font-headline-xl font-code-tabular text-on-surface font-bold text-amber-700">3<span class="text-headline-md"> days</span></span>
+<span class="text-body-sm font-body-sm text-outline">(Threshold: 48h)</span>
+</div>
+<div class="mt-2 pt-2 border-t border-outline-variant/20 flex items-center justify-between text-label-sm font-label-sm">
+<span class="text-on-surface-variant truncate max-w-[170px]" title="Sammy's Tyre - Kingston">Target: Sammy's Tyre - Kingston</span>
+<a class="text-secondary font-semibold hover:underline" href="#">Inspect</a>
+</div>
+</div>
+<!-- Card 3: APPROVED TODAY -->
+<div class="bg-surface-container-lowest border border-outline-variant/40 rounded p-4 shadow-[0px_1px_2px_0px_rgba(15,23,42,0.04)] hover:border-slate-300 transition-colors">
+<div class="flex items-center justify-between">
+<span class="text-label-sm font-label-sm text-outline uppercase tracking-wider">APPROVED TODAY</span>
+<span class="inline-flex items-center gap-1 bg-emerald-50 border border-emerald-200 text-emerald-800 font-code-tabular text-[11px] font-semibold px-1.5 py-0.5 rounded">
+              +29.1% vs yesterday
+            </span>
+</div>
+<div class="mt-2 flex items-baseline gap-2">
+<span class="text-headline-xl font-headline-xl font-code-tabular text-on-surface font-bold text-emerald-700">62</span>
+<span class="text-body-sm font-body-sm text-on-surface-variant">verified listings</span>
+</div>
+<div class="mt-2 pt-2 border-t border-outline-variant/20 flex items-center justify-between text-label-sm font-label-sm">
+<span class="text-on-surface-variant">Throughput</span>
+<span class="font-code-tabular text-emerald-700 font-medium">129% vs 48 daily target</span>
+</div>
+</div>
+<!-- Card 4: REJECTION RATE -->
+<div class="bg-surface-container-lowest border border-outline-variant/40 rounded p-4 shadow-[0px_1px_2px_0px_rgba(15,23,42,0.04)] hover:border-slate-300 transition-colors">
+<div class="flex items-center justify-between">
+<span class="text-label-sm font-label-sm text-outline uppercase tracking-wider">REJECTION RATE</span>
+<span class="inline-flex items-center gap-1 bg-surface-container-high text-on-surface font-label-sm text-[11px] font-semibold px-1.5 py-0.5 rounded">
+<span class="material-symbols-outlined text-[13px] text-secondary" data-icon="shield">shield</span>
+              Within 10% threshold
+            </span>
+</div>
+<div class="mt-2 flex items-baseline gap-2">
+<span class="text-headline-xl font-headline-xl font-code-tabular text-on-surface font-bold">8<span class="text-headline-md">%</span></span>
+<span class="text-body-sm font-body-sm text-on-surface-variant">post-audit</span>
+</div>
+<div class="mt-2 pt-2 border-t border-outline-variant/20 flex items-center justify-between text-label-sm font-label-sm">
+<span class="text-on-surface-variant">Audit Batch Sample</span>
+<span class="font-code-tabular text-on-surface font-medium">16 rejected of 200 reviewed</span>
+</div>
+</div>
+</section>
+<!-- ================= 3. MIDDLE GRID SECTION (2 Columns) ================= -->
+<section class="grid grid-cols-12 gap-4">
+<!-- Left Column: Jamaica Parish Coverage Density Map (approx 65% = 8 cols) -->
+<div class="col-span-8 bg-surface-container-lowest border border-outline-variant/40 rounded p-4 shadow-[0px_1px_2px_0px_rgba(15,23,42,0.04)] flex flex-col justify-between">
+<div>
+<div class="flex items-center justify-between border-b border-outline-variant/20 pb-3">
+<div>
+<h2 class="text-headline-sm font-headline-sm text-on-surface">Jamaica Parish Coverage Density Map</h2>
+<p class="text-body-sm font-body-sm text-outline mt-0.5">Real-time choropleth verification density mapped by telemetry mesh centroids across 14 parishes.</p>
+</div>
+<!-- Density Legend -->
+<div class="flex items-center gap-3 bg-surface-bright border border-outline-variant/30 rounded px-3 py-1">
+<span class="text-label-sm font-label-sm text-outline uppercase">Density (Places):</span>
+<div class="flex items-center gap-1 text-[11px] font-code-tabular">
+<span class="w-3 h-3 rounded bg-blue-100 border border-blue-200 inline-block"></span>
+<span class="text-outline">0-100</span>
+</div>
+<div class="flex items-center gap-1 text-[11px] font-code-tabular">
+<span class="w-3 h-3 rounded bg-blue-300 border border-blue-400 inline-block"></span>
+<span class="text-outline">101-250</span>
+</div>
+<div class="flex items-center gap-1 text-[11px] font-code-tabular">
+<span class="w-3 h-3 rounded bg-blue-500 inline-block"></span>
+<span class="text-outline">251-500</span>
+</div>
+<div class="flex items-center gap-1 text-[11px] font-code-tabular">
+<span class="w-3 h-3 rounded bg-blue-800 inline-block"></span>
+<span class="text-outline font-semibold">500+</span>
+</div>
+</div>
+</div>
+<!-- Stylized Interactive Choropleth SVG Map of Jamaica -->
+<div class="relative w-full h-[270px] mt-3 bg-surface-bright/50 border border-outline-variant/20 rounded flex items-center justify-center overflow-hidden">
+<!-- Grid Matrix Backdrop -->
+<div class="absolute inset-0 bg-[radial-gradient(#cbd5e1_1px,transparent_1px)] [background-size:16px_16px] opacity-40"></div>
+<svg class="w-full h-full max-h-[260px] select-none" fill="none" stroke-linecap="round" stroke-linejoin="round" viewbox="0 0 920 380">
+<!-- Jamaica Parish Polygons (Geometrically stylized high-fidelity administrative bounds) -->
+<g class="transition-all duration-150">
+<!-- Hanover (101-250) -->
+<polygon class="hover:fill-blue-400 cursor-pointer" fill="#93c5fd" points="40,110 95,95 125,125 90,165 45,150" stroke="#ffffff" stroke-width="2"></polygon>
+<!-- Westmoreland (101-250) -->
+<polygon class="hover:fill-blue-400 cursor-pointer" fill="#93c5fd" points="45,150 90,165 145,160 170,210 110,240 50,210" stroke="#ffffff" stroke-width="2"></polygon>
+<!-- St. James (251-500) -->
+<polygon class="hover:fill-blue-600 cursor-pointer" fill="#3b82f6" points="95,95 160,85 185,125 155,160 125,125" stroke="#ffffff" stroke-width="2"></polygon>
+<!-- Trelawny (101-250) -->
+<polygon class="hover:fill-blue-400 cursor-pointer" fill="#93c5fd" points="160,85 240,90 250,150 185,160 185,125" stroke="#ffffff" stroke-width="2"></polygon>
+<!-- St. Elizabeth (101-250) -->
+<polygon class="hover:fill-blue-400 cursor-pointer" fill="#93c5fd" points="145,160 210,160 230,230 170,250 170,210" stroke="#ffffff" stroke-width="2"></polygon>
+<!-- Manchester (101-250) -->
+<polygon class="hover:fill-blue-400 cursor-pointer" fill="#93c5fd" points="210,160 280,155 295,230 230,230" stroke="#ffffff" stroke-width="2"></polygon>
+<!-- St. Ann (101-250) -->
+<polygon class="hover:fill-blue-400 cursor-pointer" fill="#93c5fd" points="240,90 355,80 370,145 280,155 250,150" stroke="#ffffff" stroke-width="2"></polygon>
+<!-- Clarendon (101-250) -->
+<polygon class="hover:fill-blue-400 cursor-pointer" fill="#93c5fd" points="280,155 370,145 390,200 370,265 295,230" stroke="#ffffff" stroke-width="2"></polygon>
+<!-- St. Catherine (251-500) -->
+<polygon class="hover:fill-blue-600 cursor-pointer" fill="#3b82f6" points="370,145 460,135 480,210 420,240 390,200" stroke="#ffffff" stroke-width="2"></polygon>
+<!-- St. Mary (0-100) -->
+<polygon class="hover:fill-blue-300 cursor-pointer" fill="#dbeafe" points="355,80 470,95 490,140 460,135 370,145" stroke="#ffffff" stroke-width="2"></polygon>
+<!-- St. Andrew (500+) -->
+<polygon class="hover:fill-blue-900 cursor-pointer" fill="#1e40af" points="460,135 530,130 550,190 480,210" stroke="#ffffff" stroke-width="2"></polygon>
+<!-- Kingston (500+) -->
+<polygon class="hover:fill-black cursor-pointer" fill="#172554" points="480,195 530,190 535,215 485,215" stroke="#ffffff" stroke-width="2"></polygon>
+<!-- Portland (0-100) -->
+<polygon class="hover:fill-blue-300 cursor-pointer" fill="#dbeafe" points="470,95 590,120 575,170 530,130" stroke="#ffffff" stroke-width="2"></polygon>
+<!-- St. Thomas (0-100) -->
+<polygon class="hover:fill-blue-300 cursor-pointer" fill="#dbeafe" points="530,170 575,170 610,210 535,225" stroke="#ffffff" stroke-width="2"></polygon>
+</g>
+<!-- Parish Labels / Geocodes -->
+<text class="text-[11px] font-bold fill-slate-700 pointer-events-none" x="80" y="130">Hanover</text>
+<text class="text-[11px] font-bold fill-slate-700 pointer-events-none" x="75" y="195">Westmoreland</text>
+<text class="text-[11px] font-bold fill-white pointer-events-none" x="135" y="125">St. James</text>
+<text class="text-[11px] font-bold fill-slate-700 pointer-events-none" x="200" y="125">Trelawny</text>
+<text class="text-[11px] font-bold fill-slate-700 pointer-events-none" x="165" y="205">St. Elizabeth</text>
+<text class="text-[11px] font-bold fill-slate-700 pointer-events-none" x="230" y="195">Manchester</text>
+<text class="text-[11px] font-bold fill-slate-700 pointer-events-none" x="285" y="115">St. Ann</text>
+<text class="text-[11px] font-bold fill-slate-700 pointer-events-none" x="315" y="200">Clarendon</text>
+<text class="text-[11px] font-bold fill-white pointer-events-none" x="405" y="175">St. Catherine</text>
+<text class="text-[11px] font-bold fill-slate-700 pointer-events-none" x="405" y="115">St. Mary</text>
+<text class="text-[11px] font-bold fill-white pointer-events-none" x="475" y="160">St. Andrew</text>
+<text class="text-[11px] font-bold fill-slate-700 pointer-events-none" x="530" y="140">Portland</text>
+<text class="text-[11px] font-bold fill-slate-700 pointer-events-none" x="555" y="195">St. Thomas</text>
+</svg>
+<!-- Popover Pin Indicators (Kingston, St. Andrew, St. Catherine) -->
+<!-- Kingston Popover Pin -->
+<div class="absolute bottom-10 right-[35%] transform -translate-x-4 bg-primary text-surface-container-lowest px-2 py-1 rounded shadow-lg border border-secondary-container text-label-sm font-label-sm flex items-center gap-1.5 z-10">
+<span class="w-2 h-2 rounded-full bg-secondary-container animate-pulse"></span>
+<span><strong>Kingston:</strong> 642 verified</span>
+</div>
+<!-- St. Andrew Pin -->
+<div class="absolute top-14 right-[38%] bg-surface-container-lowest text-on-surface px-2 py-1 rounded shadow-md border border-outline-variant/60 text-label-sm font-label-sm flex items-center gap-1.5 z-10">
+<span class="w-1.5 h-1.5 rounded-full bg-blue-600"></span>
+<span><strong>St. Andrew:</strong> 588 verified</span>
+</div>
+<!-- St. Catherine Pin -->
+<div class="absolute bottom-20 left-[44%] bg-surface-container-lowest text-on-surface px-2 py-1 rounded shadow-md border border-outline-variant/60 text-label-sm font-label-sm flex items-center gap-1.5 z-10">
+<span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+<span><strong>St. Catherine:</strong> 341 verified</span>
+</div>
+</div>
+</div>
+<!-- Bottom Summary Strip -->
+<div class="mt-3 pt-3 border-t border-outline-variant/20 flex items-center justify-between">
+<div class="flex items-center gap-6 text-label-md font-label-md">
+<div>
+<span class="text-outline">Total Verified: </span>
+<span class="font-bold text-on-surface font-code-tabular">2,490 places</span>
+</div>
+<div class="h-3 w-px bg-outline-variant/40"></div>
+<div>
+<span class="text-outline">Island Coverage: </span>
+<span class="font-bold text-emerald-700 font-code-tabular">79.4%</span>
+</div>
+<div class="h-3 w-px bg-outline-variant/40"></div>
+<div>
+<span class="text-outline">Unmapped Pockets: </span>
+<span class="font-bold text-amber-700 font-code-tabular">14</span>
+</div>
+</div>
+<a class="text-secondary hover:text-secondary-container font-label-md text-label-md font-semibold flex items-center gap-1" href="#">
+<span>View Mesh Topology</span>
+<span class="material-symbols-outlined text-[16px]" data-icon="arrow_forward">arrow_forward</span>
+</a>
+</div>
+</div>
+<!-- Right Column: Places Approved per Day Chart (approx 35% = 4 cols) -->
+<div class="col-span-4 bg-surface-container-lowest border border-outline-variant/40 rounded p-4 shadow-[0px_1px_2px_0px_rgba(15,23,42,0.04)] flex flex-col justify-between">
+<div>
+<div class="flex items-start justify-between">
+<div>
+<h2 class="text-headline-sm font-headline-sm text-on-surface">Places Approved per Day</h2>
+<p class="text-body-sm font-body-sm text-outline mt-0.5">Verification velocity over the last 14 days.</p>
+</div>
+<span class="inline-flex items-center gap-0.5 bg-emerald-50 border border-emerald-200 text-emerald-800 font-code-tabular text-[11px] font-semibold px-1.5 py-0.5 rounded">
+                +18.4% WoW
+              </span>
+</div>
+<!-- Key stats row -->
+<div class="grid grid-cols-2 gap-2 mt-3 pt-2 border-t border-outline-variant/20">
+<div class="bg-surface-bright p-2 rounded border border-outline-variant/20">
+<span class="text-label-sm font-label-sm text-outline block">Peak Day (Nov 11)</span>
+<span class="text-headline-md font-headline-md font-code-tabular text-on-surface font-bold">74 <span class="text-label-sm font-normal text-outline">approved</span></span>
+</div>
+<div class="bg-surface-bright p-2 rounded border border-outline-variant/20">
+<span class="text-label-sm font-label-sm text-outline block">Rolling 7-Day Avg</span>
+<span class="text-headline-md font-headline-md font-code-tabular text-secondary font-bold">64.4 <span class="text-label-sm font-normal text-outline">/ day</span></span>
+</div>
+</div>
+<!-- Stylized SVG Area & Line Velocity Chart -->
+<div class="mt-4 relative h-[180px] w-full">
+<svg class="w-full h-full overflow-visible" viewbox="0 0 380 180">
+<defs>
+<lineargradient id="areaGrad" x1="0" x2="0" y1="0" y2="1">
+<stop offset="0%" stop-color="#2563eb" stop-opacity="0.28"></stop>
+<stop offset="100%" stop-color="#2563eb" stop-opacity="0.0"></stop>
+</lineargradient>
+</defs>
+<!-- Horizontal Reference Gridlines -->
+<line stroke="#f1f5f9" stroke-width="1" x1="20" x2="380" y1="20" y2="20"></line>
+<text class="text-[9px] font-code-tabular fill-slate-400" x="0" y="24">80</text>
+<line stroke="#f1f5f9" stroke-width="1" x1="20" x2="380" y1="65" y2="65"></line>
+<text class="text-[9px] font-code-tabular fill-slate-400" x="0" y="69">60</text>
+<line stroke="#f1f5f9" stroke-width="1" x1="20" x2="380" y1="110" y2="110"></line>
+<text class="text-[9px] font-code-tabular fill-slate-400" x="0" y="114">40</text>
+<line stroke="#e2e8f0" stroke-width="1" x1="20" x2="380" y1="155" y2="155"></line>
+<text class="text-[9px] font-code-tabular fill-slate-400" x="0" y="158">0</text>
+<!-- Target Baseline (48 places threshold) -->
+<line stroke="#94a3b8" stroke-dasharray="3 3" stroke-width="1" x1="20" x2="380" y1="92" y2="92"></line>
+<text class="text-[9px] font-code-tabular fill-slate-500 font-medium" x="310" y="88">Target: 48/day</text>
+<!-- Area Fill -->
+<!-- 14 data points: Nov 1 (42) -> Nov 14 (62) with Nov 11 Peak (74) -->
+<path d="M 25 105 
+                         L 52 98 
+                         L 79 110 
+                         L 106 85 
+                         L 133 90 
+                         L 160 78 
+                         L 187 72 
+                         L 214 68 
+                         L 241 62 
+                         L 268 55 
+                         L 295 32 
+                         L 322 48 
+                         L 349 52 
+                         L 376 58 
+                         L 376 155 
+                         L 25 155 Z" fill="url(#areaGrad)"></path>
+<!-- Stroke Line -->
+<path d="M 25 105 
+                         L 52 98 
+                         L 79 110 
+                         L 106 85 
+                         L 133 90 
+                         L 160 78 
+                         L 187 72 
+                         L 214 68 
+                         L 241 62 
+                         L 268 55 
+                         L 295 32 
+                         L 322 48 
+                         L 349 52 
+                         L 376 58" fill="none" stroke="#2563eb" stroke-linecap="round" stroke-width="2.2"></path>
+<!-- Data point pins -->
+<circle cx="295" cy="32" fill="#1e40af" r="3.5" stroke="#ffffff" stroke-width="2"></circle>
+<circle cx="376" cy="58" fill="#2563eb" r="3.5" stroke="#ffffff" stroke-width="2"></circle>
+<!-- Peak Pin Label -->
+<rect fill="#0f172a" height="18" rx="2" width="54" x="268" y="8"></rect>
+<text class="text-[10px] font-code-tabular fill-white font-bold" x="274" y="21">Nov 11: 74</text>
+</svg>
+</div>
+</div>
+<!-- Bottom Axis Labels -->
+<div class="flex items-center justify-between text-[10px] font-code-tabular text-outline pt-2 border-t border-outline-variant/20">
+<span>Nov 01</span>
+<span>Nov 04</span>
+<span>Nov 07</span>
+<span>Nov 11 (Peak)</span>
+<span>Today</span>
+</div>
+</div>
+</section>
+<!-- ================= 4. BOTTOM GRID SECTION ================= -->
+<section class="grid grid-cols-12 gap-4">
+<!-- Left / Main Table: Parish Verification Registry Table (approx 70% = 8 cols or 9 cols) -->
+<div class="col-span-9 bg-surface-container-lowest border border-outline-variant/40 rounded p-4 shadow-[0px_1px_2px_0px_rgba(15,23,42,0.04)]">
+<div class="flex items-center justify-between mb-3">
+<div>
+<h2 class="text-headline-sm font-headline-sm text-on-surface">Parish Verification Registry</h2>
+<p class="text-body-sm font-body-sm text-outline">Category distribution breakdown across verified nodes and moderation backlogs.</p>
+</div>
+<div class="flex items-center gap-2">
+<span class="text-label-sm font-label-sm text-outline">Showing: <strong>8 of 14 Parishes</strong></span>
+<button class="h-7 px-2 border border-outline-variant/60 rounded text-label-sm font-label-sm hover:bg-surface-bright transition-colors text-on-surface">
+                Expand All Parishes
+              </button>
+</div>
+</div>
+<!-- Data Table -->
+<div class="overflow-x-auto border border-outline-variant/40 rounded">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="h-[34px] bg-[#f8fafc] border-b border-outline-variant/30 text-label-sm font-label-sm text-outline uppercase tracking-wider">
+<th class="px-3 font-semibold">Parish</th>
+<th class="px-2 font-semibold text-right">Gas stations</th>
+<th class="px-2 font-semibold text-right">Parts stores</th>
+<th class="px-2 font-semibold text-right">Mechanics</th>
+<th class="px-2 font-semibold text-right">Air pumps</th>
+<th class="px-2 font-semibold text-right">Restrooms</th>
+<th class="px-2 font-semibold text-right">Car washes</th>
+<th class="px-3 font-semibold text-right">Pending</th>
+<th class="px-3 font-semibold text-center">Actions</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-outline-variant/20 text-body-md font-body-md font-code-tabular">
+<!-- Kingston -->
+<tr class="h-[38px] hover:bg-[#f8fafc] transition-colors">
+<td class="px-3 font-medium text-on-surface font-label-md">Kingston</td>
+<td class="px-2 text-right text-on-surface">48</td>
+<td class="px-2 text-right text-on-surface">82</td>
+<td class="px-2 text-right text-on-surface">114</td>
+<td class="px-2 text-right text-on-surface">42</td>
+<td class="px-2 text-right text-on-surface">36</td>
+<td class="px-2 text-right text-on-surface">28</td>
+<td class="px-3 text-right">
+<span class="inline-block px-1.5 py-0.2 rounded bg-surface-container font-semibold text-on-surface">24</span>
+</td>
+<td class="px-3 text-center">
+<a class="text-secondary hover:text-secondary-container font-label-md font-semibold text-body-sm hover:underline" href="#">Review</a>
+</td>
+</tr>
+<!-- St. Andrew -->
+<tr class="h-[38px] hover:bg-[#f8fafc] transition-colors">
+<td class="px-3 font-medium text-on-surface font-label-md">St. Andrew</td>
+<td class="px-2 text-right text-on-surface">64</td>
+<td class="px-2 text-right text-on-surface">96</td>
+<td class="px-2 text-right text-on-surface">138</td>
+<td class="px-2 text-right text-on-surface">58</td>
+<td class="px-2 text-right text-on-surface">44</td>
+<td class="px-2 text-right text-on-surface">38</td>
+<td class="px-3 text-right">
+<span class="inline-block px-1.5 py-0.2 rounded bg-surface-container font-semibold text-on-surface">31</span>
+</td>
+<td class="px-3 text-center">
+<a class="text-secondary hover:text-secondary-container font-label-md font-semibold text-body-sm hover:underline" href="#">Review</a>
+</td>
+</tr>
+<!-- St. Catherine (Pending Flagged Yellow) -->
+<tr class="h-[38px] hover:bg-[#f8fafc] transition-colors bg-amber-50/30">
+<td class="px-3 font-medium text-on-surface font-label-md flex items-center gap-1.5 pt-2">
+<span>St. Catherine</span>
+<span class="material-symbols-outlined text-amber-600 text-[14px]" data-icon="flag" title="High backlog flag">flag</span>
+</td>
+<td class="px-2 text-right text-on-surface">38</td>
+<td class="px-2 text-right text-on-surface">44</td>
+<td class="px-2 text-right text-on-surface">68</td>
+<td class="px-2 text-right text-on-surface">32</td>
+<td class="px-2 text-right text-on-surface">22</td>
+<td class="px-2 text-right text-on-surface">18</td>
+<td class="px-3 text-right">
+<span class="inline-block px-2 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 font-bold">42</span>
+</td>
+<td class="px-3 text-center">
+<a class="text-secondary hover:text-secondary-container font-label-md font-semibold text-body-sm hover:underline" href="#">Review</a>
+</td>
+</tr>
+<!-- Manchester -->
+<tr class="h-[38px] hover:bg-[#f8fafc] transition-colors">
+<td class="px-3 font-medium text-on-surface font-label-md">Manchester</td>
+<td class="px-2 text-right text-on-surface">24</td>
+<td class="px-2 text-right text-on-surface">28</td>
+<td class="px-2 text-right text-on-surface">42</td>
+<td class="px-2 text-right text-on-surface">18</td>
+<td class="px-2 text-right text-on-surface">14</td>
+<td class="px-2 text-right text-on-surface">11</td>
+<td class="px-3 text-right">
+<span class="inline-block px-1.5 py-0.2 rounded bg-surface-container font-semibold text-on-surface">19</span>
+</td>
+<td class="px-3 text-center">
+<a class="text-secondary hover:text-secondary-container font-label-md font-semibold text-body-sm hover:underline" href="#">Review</a>
+</td>
+</tr>
+<!-- St. James -->
+<tr class="h-[38px] hover:bg-[#f8fafc] transition-colors">
+<td class="px-3 font-medium text-on-surface font-label-md">St. James</td>
+<td class="px-2 text-right text-on-surface">32</td>
+<td class="px-2 text-right text-on-surface">36</td>
+<td class="px-2 text-right text-on-surface">54</td>
+<td class="px-2 text-right text-on-surface">26</td>
+<td class="px-2 text-right text-on-surface">20</td>
+<td class="px-2 text-right text-on-surface">15</td>
+<td class="px-3 text-right">
+<span class="inline-block px-1.5 py-0.2 rounded bg-surface-container font-semibold text-on-surface">22</span>
+</td>
+<td class="px-3 text-center">
+<a class="text-secondary hover:text-secondary-container font-label-md font-semibold text-body-sm hover:underline" href="#">Review</a>
+</td>
+</tr>
+<!-- St. Ann -->
+<tr class="h-[38px] hover:bg-[#f8fafc] transition-colors">
+<td class="px-3 font-medium text-on-surface font-label-md">St. Ann</td>
+<td class="px-2 text-right text-on-surface">21</td>
+<td class="px-2 text-right text-on-surface">22</td>
+<td class="px-2 text-right text-on-surface">34</td>
+<td class="px-2 text-right text-on-surface">19</td>
+<td class="px-2 text-right text-on-surface">16</td>
+<td class="px-2 text-right text-on-surface">12</td>
+<td class="px-3 text-right">
+<span class="inline-block px-1.5 py-0.2 rounded bg-surface-container font-semibold text-on-surface">15</span>
+</td>
+<td class="px-3 text-center">
+<a class="text-secondary hover:text-secondary-container font-label-md font-semibold text-body-sm hover:underline" href="#">Review</a>
+</td>
+</tr>
+<!-- Clarendon -->
+<tr class="h-[38px] hover:bg-[#f8fafc] transition-colors">
+<td class="px-3 font-medium text-on-surface font-label-md">Clarendon</td>
+<td class="px-2 text-right text-on-surface">19</td>
+<td class="px-2 text-right text-on-surface">20</td>
+<td class="px-2 text-right text-on-surface">30</td>
+<td class="px-2 text-right text-on-surface">15</td>
+<td class="px-2 text-right text-on-surface">11</td>
+<td class="px-2 text-right text-on-surface">8</td>
+<td class="px-3 text-right">
+<span class="inline-block px-1.5 py-0.2 rounded bg-surface-container font-semibold text-on-surface">18</span>
+</td>
+<td class="px-3 text-center">
+<a class="text-secondary hover:text-secondary-container font-label-md font-semibold text-body-sm hover:underline" href="#">Review</a>
+</td>
+</tr>
+<!-- Westmoreland -->
+<tr class="h-[38px] hover:bg-[#f8fafc] transition-colors">
+<td class="px-3 font-medium text-on-surface font-label-md">Westmoreland</td>
+<td class="px-2 text-right text-on-surface">16</td>
+<td class="px-2 text-right text-on-surface">14</td>
+<td class="px-2 text-right text-on-surface">22</td>
+<td class="px-2 text-right text-on-surface">12</td>
+<td class="px-2 text-right text-on-surface">9</td>
+<td class="px-2 text-right text-on-surface">7</td>
+<td class="px-3 text-right">
+<span class="inline-block px-1.5 py-0.2 rounded bg-surface-container font-semibold text-on-surface">13</span>
+</td>
+<td class="px-3 text-center">
+<a class="text-secondary hover:text-secondary-container font-label-md font-semibold text-body-sm hover:underline" href="#">Review</a>
+</td>
+</tr>
+</tbody>
+<!-- Totals row -->
+<tfoot>
+<tr class="h-[42px] bg-[#f8fafc] border-t-2 border-outline-variant/50 font-bold text-on-surface font-code-tabular text-body-sm">
+<td class="px-3 font-label-md uppercase tracking-wider text-outline">Totals (14 Parishes)</td>
+<td class="px-2 text-right" colspan="6">
+<span class="text-emerald-700 font-semibold mr-2 font-label-md">2,490 Verified Places across Island</span>
+</td>
+<td class="px-3 text-right">
+<span class="inline-block px-2 py-0.5 rounded bg-error/10 text-error font-bold">184 Pending</span>
+</td>
+<td class="px-3 text-center">
+<button class="text-secondary hover:underline font-label-md font-semibold text-[11px]">Batch Review</button>
+</td>
+</tr>
+</tfoot>
+</table>
+</div>
+</div>
+<!-- Right Side Card: Top Contributors (This Week) (approx 30% = 3 cols) -->
+<div class="col-span-3 bg-surface-container-lowest border border-outline-variant/40 rounded p-4 shadow-[0px_1px_2px_0px_rgba(15,23,42,0.04)] flex flex-col justify-between">
+<div>
+<div class="flex items-center justify-between border-b border-outline-variant/20 pb-2.5">
+<div>
+<h2 class="text-headline-sm font-headline-sm text-on-surface">Top Contributors</h2>
+<p class="text-label-sm font-label-sm text-outline">This Week (Strict Anonymized)</p>
+</div>
+<span class="material-symbols-outlined text-outline" data-icon="military_tech">military_tech</span>
+</div>
+<!-- List of Contributors (Display names only, no avatars/phones) -->
+<ul class="divide-y divide-outline-variant/20 mt-1">
+<!-- 1. JamScout_876 -->
+<li class="py-2.5 flex items-center justify-between hover:bg-surface-bright px-1 rounded transition-colors">
+<div class="flex items-center gap-2">
+<span class="w-5 h-5 rounded-full bg-amber-100 text-amber-900 flex items-center justify-center font-code-tabular text-[10px] font-bold">1</span>
+<div class="flex flex-col">
+<span class="text-label-md font-label-md font-semibold text-on-surface">JamScout_876</span>
+<span class="text-[11px] font-body-sm text-outline">2 Pending</span>
+</div>
+</div>
+<div class="text-right">
+<span class="text-label-md font-label-md font-bold text-emerald-700 font-code-tabular block">38 Approved</span>
+<span class="text-[10px] font-code-tabular text-outline">98% Accuracy</span>
+</div>
+</li>
+<!-- 2. IslandCruiser_JM -->
+<li class="py-2.5 flex items-center justify-between hover:bg-surface-bright px-1 rounded transition-colors">
+<div class="flex items-center gap-2">
+<span class="w-5 h-5 rounded-full bg-slate-200 text-slate-800 flex items-center justify-center font-code-tabular text-[10px] font-bold">2</span>
+<div class="flex flex-col">
+<span class="text-label-md font-label-md font-semibold text-on-surface">IslandCruiser_JM</span>
+<span class="text-[11px] font-body-sm text-outline">4 Pending</span>
+</div>
+</div>
+<div class="text-right">
+<span class="text-label-md font-label-md font-bold text-emerald-700 font-code-tabular block">31 Approved</span>
+<span class="text-[10px] font-code-tabular text-outline">95% Accuracy</span>
+</div>
+</li>
+<!-- 3. KgnRoadMaster -->
+<li class="py-2.5 flex items-center justify-between hover:bg-surface-bright px-1 rounded transition-colors">
+<div class="flex items-center gap-2">
+<span class="w-5 h-5 rounded-full bg-orange-100 text-orange-800 flex items-center justify-center font-code-tabular text-[10px] font-bold">3</span>
+<div class="flex flex-col">
+<span class="text-label-md font-label-md font-semibold text-on-surface">KgnRoadMaster</span>
+<span class="text-[11px] font-body-sm text-outline">1 Pending</span>
+</div>
+</div>
+<div class="text-right">
+<span class="text-label-md font-label-md font-bold text-emerald-700 font-code-tabular block">27 Approved</span>
+<span class="text-[10px] font-code-tabular text-outline">99% Accuracy</span>
+</div>
+</li>
+<!-- 4. MandevilleDriver -->
+<li class="py-2.5 flex items-center justify-between hover:bg-surface-bright px-1 rounded transition-colors">
+<div class="flex items-center gap-2">
+<span class="w-5 h-5 rounded-full bg-surface-container text-on-surface-variant flex items-center justify-center font-code-tabular text-[10px] font-bold">4</span>
+<div class="flex flex-col">
+<span class="text-label-md font-label-md font-semibold text-on-surface">MandevilleDriver</span>
+<span class="text-[11px] font-body-sm text-outline">3 Pending</span>
+</div>
+</div>
+<div class="text-right">
+<span class="text-label-md font-label-md font-bold text-emerald-700 font-code-tabular block">22 Approved</span>
+<span class="text-[10px] font-code-tabular text-outline">94% Accuracy</span>
+</div>
+</li>
+<!-- 5. MoBayScout_01 -->
+<li class="py-2.5 flex items-center justify-between hover:bg-surface-bright px-1 rounded transition-colors">
+<div class="flex items-center gap-2">
+<span class="w-5 h-5 rounded-full bg-surface-container text-on-surface-variant flex items-center justify-center font-code-tabular text-[10px] font-bold">5</span>
+<div class="flex flex-col">
+<span class="text-label-md font-label-md font-semibold text-on-surface">MoBayScout_01</span>
+<span class="text-[11px] font-body-sm text-outline">5 Pending</span>
+</div>
+</div>
+<div class="text-right">
+<span class="text-label-md font-label-md font-bold text-emerald-700 font-code-tabular block">19 Approved</span>
+<span class="text-[10px] font-code-tabular text-outline">91% Accuracy</span>
+</div>
+</li>
+<!-- 6. ClarendonWheels -->
+<li class="py-2.5 flex items-center justify-between hover:bg-surface-bright px-1 rounded transition-colors">
+<div class="flex items-center gap-2">
+<span class="w-5 h-5 rounded-full bg-surface-container text-on-surface-variant flex items-center justify-center font-code-tabular text-[10px] font-bold">6</span>
+<div class="flex flex-col">
+<span class="text-label-md font-label-md font-semibold text-on-surface">ClarendonWheels</span>
+<span class="text-[11px] font-body-sm text-outline">2 Pending</span>
+</div>
+</div>
+<div class="text-right">
+<span class="text-label-md font-label-md font-bold text-emerald-700 font-code-tabular block">14 Approved</span>
+<span class="text-[10px] font-code-tabular text-outline">96% Accuracy</span>
+</div>
+</li>
+</ul>
+</div>
+<!-- Bottom Scout Leaderboard Link -->
+<div class="pt-3 border-t border-outline-variant/20 mt-2">
+<a class="text-secondary hover:text-secondary-container font-label-md text-label-md font-semibold flex items-center justify-between group" href="#">
+<span>View All Scouts Leaderboard</span>
+<span class="material-symbols-outlined text-[16px] group-hover:translate-x-0.5 transition-transform" data-icon="arrow_forward">arrow_forward</span>
+</a>
+</div>
+</div>
+</section>
+<!-- System status and audit timestamp footer -->
+<footer class="pt-2 pb-6 flex items-center justify-between text-label-sm font-label-sm text-outline border-t border-outline-variant/30">
+<div class="flex items-center gap-4">
+<span>Roam Dominion Enterprise Infrastructure © 2024</span>
+<span>•</span>
+<span class="flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+            All systems normal. 0 cluster degradation alerts.
+          </span>
+</div>
+<div class="flex items-center gap-3 font-code-tabular">
+<span>Cluster: AWS-US-EAST-1 (Kingston Edge Proxy)</span>
+<span>Latency: 28ms</span>
+</div>
+</footer>
+</main>
+</div>
+</body></html>

@@ -18,9 +18,9 @@ type PlaceBody = {
     place_facility: { id: string; facility_type: string; label: string | null; attributes: Record<string, unknown> }[];
     place_alias: { id: string; kind: string; raw_value: string | null; lat: number | null; lng: number | null }[];
   };
-  evidence: { id: string; kind: string; created_at: string }[];
+  evidence: { id: string; note: string | null; origin_app: string | null; accuracy_m: number | null; created_at: string }[];
   history: { action: string; reason: string | null; created_at: string }[];
-  prices: { grade: string; price_per_litre: number }[];
+  prices: { grade: string; price_per_litre: number; observed_at: string | null }[];
   public: boolean;
 };
 
@@ -126,13 +126,13 @@ export function PlaceRecord({
       )}
       {tab === "Evidence" && (
         <ul className="space-y-2 text-sm">
-          {body.evidence.map((row) => <li key={row.id}>{row.kind} · {new Date(row.created_at).toLocaleString()}</li>)}
+          {body.evidence.map((row) => <li key={row.id}>{row.note || "Evidence"} · {row.origin_app || "unknown"} · {new Date(row.created_at).toLocaleString()}</li>)}
           {body.evidence.length === 0 ? <li className="text-slate-500">No evidence.</li> : null}
         </ul>
       )}
       {tab === "Prices" && showPrices && (
         <ul className="space-y-2 text-sm">
-          {body.prices.map((row) => <li key={row.grade}>{row.grade}: {row.price_per_litre}</li>)}
+          {body.prices.map((row) => <li key={row.grade}>{row.grade}: J${Number(row.price_per_litre).toFixed(2)}{row.observed_at ? ` · ${new Date(row.observed_at).toLocaleString()}` : ""}</li>)}
           {body.prices.length === 0 ? <li className="text-slate-500">No pump prices yet.</li> : null}
         </ul>
       )}

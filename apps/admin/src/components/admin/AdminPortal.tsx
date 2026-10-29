@@ -42,6 +42,7 @@ const GlobalIdentitySearch = lazyNamed(() => import('./platform/GlobalIdentitySe
 const MatchingBrainPage = lazyNamed(() => import('./matching-brain/MatchingBrainPage'), 'MatchingBrainPage');
 const FuelBrainPage = lazyNamed(() => import('./fuel-brain/FuelBrainPage'), 'FuelBrainPage');
 const FuelPricesPage = lazyNamed(() => import('./fuel-prices/FuelPricesPage'), 'FuelPricesPage');
+const PriceEnginePage = lazyNamed(() => import('./fuel-prices/PriceEnginePage'), 'PriceEnginePage');
 const AdminJaaGasCardsPage = lazyNamed(() => import('./fuel/AdminJaaGasCardsPage'), 'AdminJaaGasCardsPage');
 const TollBrainPage = lazyNamed(() => import('./toll-brain/TollBrainPage'), 'TollBrainPage');
 import { applyPortalTheme } from '../../hooks/usePortalTheme';
@@ -225,6 +226,11 @@ export function AdminPortal() {
       {currentPage === 'fuel-prices' && (
         <div className="rounded-xl border border-slate-200 bg-white overflow-hidden min-h-[560px] p-6 dark:border-slate-800 dark:bg-slate-900/40">
           <FuelPricesPage />
+        </div>
+      )}
+      {currentPage === 'fuel-price-engine' && (
+        <div className="min-h-[560px] overflow-x-auto bg-[#f4f3fa] -m-4 lg:-m-8">
+          <PriceEnginePage />
         </div>
       )}
       {currentPage === 'activity-log' && <ActivityLog />}

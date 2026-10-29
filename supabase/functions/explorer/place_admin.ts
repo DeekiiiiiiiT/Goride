@@ -24,6 +24,9 @@ export function reviewChipForPlace(row: {
   return "hand";
 }
 
+export const PLACE_EVIDENCE_COLUMNS = "id, note, origin_app, accuracy_m, created_at";
+export const PLACE_PRICE_COLUMNS = "grade, price_per_litre, observed_at, confidence, report_count, petrojam_week, valid_until, outdated";
+
 export function evidenceTitle(note: unknown): string {
   const text = String(note || "").trim();
   return text || "Evidence";
@@ -147,18 +150,21 @@ export function registerPlaceAdmin(
       `).eq("id", id).maybeSingle();
       if (error) throw error;
       if (!data) return c.json({ error: "Place not found" }, 404);
-      const [{ data: evidence }, historyResult, { data: prices }, { data: publicRow }] = await Promise.all([
-        places(sb).from("place_evidence").select("id, kind, created_at").eq("place_id", id).order("created_at", { ascending: false }).limit(20),
+      const [evidenceResult, historyResult, pricesResult, publicResult] = await Promise.all([
+        places(sb).from("place_evidence").select(PLACE_EVIDENCE_COLUMNS).eq("place_id", id).order("created_at", { ascending: false }).limit(20),
         sb.schema("fleet").from("master_change_log").select("action, reason, actor, created_at").eq("dataset", "place").eq("record_id", id).order("created_at", { ascending: false }).limit(20),
-        places(sb).from("price_current").select("grade, price_per_litre, updated_at").eq("place_id", id),
+        places(sb).from("price_current").select(PLACE_PRICE_COLUMNS).eq("place_id", id),
         places(sb).from("public_place").select("id").eq("id", id).maybeSingle(),
       ]);
+      if (evidenceResult.error) throw evidenceResult.error;
+      if (pricesResult.error) throw pricesResult.error;
+      if (publicResult.error) throw publicResult.error;
       return c.json({
         place: data,
-        evidence: evidence || [],
+        evidence: evidenceResult.data || [],
         history: historyResult.error ? [] : (historyResult.data || []),
-        prices: prices || [],
-        public: Boolean(publicRow),
+        prices: pricesResult.data || [],
+        public: Boolean(publicResult.data),
       });
     } catch (err) {
       return c.json({ error: err instanceof Error ? err.message : "Could not load place" }, 400);
@@ -320,8 +326,26 @@ export function registerPlaceAdmin(
           items.push({ id: row.id, chip: kind, title: payload.name || row.kind, placeId: row.place_id, lat: payload.lat, lng: payload.lng, proposal: true, kind: row.kind, createdAt: row.created_at });
         }
       }
+      if (chip === "price") {
+        const { data, error } = await places(sb).from("price_report_check").select("source, report_id, reasons, detail, checked_at").eq("status", "review").order("checked_at", { ascending: true }).limit(50);
+        if (error) throw error;
+        for (const row of data || []) {
+          const detail = (row.detail || {}) as { place_name?: string; grade?: string; price?: number; place_id?: string };
+          const price = detail.price != null ? `J$${Number(detail.price).toFixed(2)}` : "Price";
+          items.push({
+            id: row.report_id,
+            chip: "price",
+            title: `${detail.place_name || "Station"} · ${detail.grade || "grade"} · ${price}`,
+            placeId: detail.place_id || "",
+            href: "/?page=fuel-price-engine",
+            external: true,
+            reasons: row.reasons,
+            createdAt: row.checked_at,
+          });
+        }
+      }
       if (!chip || chip === "evidence") {
-        const { data, error } = await places(sb).from("place_evidence").select("id,place_id,note,origin_app,accuracy_m,created_at").order("created_at", { ascending: false }).limit(50);
+        const { data, error } = await places(sb).from("place_evidence").select("id, place_id, note, origin_app, accuracy_m, created_at").order("created_at", { ascending: false }).limit(50);
         if (error) throw error;
         for (const row of data || []) {
           items.push({ id: row.id, chip: "evidence", title: evidenceTitle(row.note), placeId: row.place_id, originApp: row.origin_app, accuracyM: row.accuracy_m, proposal: false, createdAt: row.created_at });

@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Roam Dominion Admin - Merge into Existing Place</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+          },
+          colors: {
+            brand: {
+              DEFAULT: '#ea580c',
+              dark: '#c2410c',
+              light: '#fff7ed',
+              border: '#ffedd5',
+            },
+            admin: {
+              stone: '#57534e',
+              bg: '#f8fafc',
+              card: '#ffffff',
+              border: '#e2e8f0',
+            }
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-[#f1f5f9] font-sans text-slate-800 min-h-screen antialiased relative overflow-hidden">
+
+  <!-- Desktop Admin Dashboard Backdrop (1440px layout simulated behind overlay) -->
+  <div class="w-full min-h-screen filter blur-[2px] opacity-75 select-none pointer-events-none flex flex-col bg-[#f8fafc]">
+    <!-- Top Admin Header -->
+    <header class="bg-white border-b border-slate-200 h-16 px-8 flex items-center justify-between sticky top-0 z-0">
+      <div class="flex items-center space-x-6">
+        <div class="flex items-center space-x-3">
+          <div class="w-9 h-9 bg-slate-900 rounded-lg flex items-center justify-center text-white font-bold text-lg tracking-wider">
+            RD
+          </div>
+          <div>
+            <div class="font-bold text-slate-900 text-base leading-tight">Roam Dominion</div>
+            <div class="text-xs text-slate-500 font-medium tracking-wide">JAMAICA MOTORING INFRASTRUCTURE ADMIN</div>
+          </div>
+        </div>
+        <div class="h-6 w-px bg-slate-200"></div>
+        <nav class="flex items-center space-x-1">
+          <span class="px-3 py-1.5 rounded-md text-sm font-medium text-slate-600">Overview</span>
+          <span class="px-3 py-1.5 rounded-md text-sm font-semibold text-slate-900 bg-slate-100">Moderation Queue (18)</span>
+          <span class="px-3 py-1.5 rounded-md text-sm font-medium text-slate-600">Places & Stations</span>
+          <span class="px-3 py-1.5 rounded-md text-sm font-medium text-slate-600">Petrojam Pricing</span>
+          <span class="px-3 py-1.5 rounded-md text-sm font-medium text-slate-600">Scout Network</span>
+        </nav>
+      </div>
+
+      <div class="flex items-center space-x-4">
+        <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5"></span> Live Sync • St. Andrew Active
+        </span>
+        <div class="w-8 h-8 rounded-full bg-slate-200 border border-slate-300 flex items-center justify-center text-slate-700 text-xs font-semibold">
+          JM
+        </div>
+      </div>
+    </header>
+
+    <!-- Admin Content Area Behind Modal -->
+    <main class="flex-1 p-8 max-w-[1440px] mx-auto w-full grid grid-cols-12 gap-6">
+      <div class="col-span-12 flex items-center justify-between">
+        <div>
+          <h1 class="text-2xl font-bold text-slate-900">Scout Place Submission Review #JM-9402</h1>
+          <p class="text-sm text-slate-500 mt-1">Constant Spring Road & Half-Way-Tree Junction, St. Andrew Parish</p>
+        </div>
+        <div class="flex space-x-3">
+          <button class="px-4 py-2 bg-white border border-slate-300 rounded-lg text-sm font-medium text-slate-700">Approve As New</button>
+          <button class="px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-medium">Merge Existing</button>
+        </div>
+      </div>
+
+      <div class="col-span-8 bg-white rounded-xl border border-slate-200 p-6 shadow-sm min-h-[500px]">
+        <div class="h-64 bg-slate-100 rounded-lg border border-slate-200 flex items-center justify-center text-slate-400 text-sm">
+          Map Viewport (Kingston 10 Coordinates 18.0124° N, 76.7992° W)
+        </div>
+      </div>
+      <div class="col-span-4 bg-white rounded-xl border border-slate-200 p-6 shadow-sm space-y-4">
+        <div class="h-4 bg-slate-200 rounded w-2/3"></div>
+        <div class="h-4 bg-slate-100 rounded w-full"></div>
+        <div class="h-4 bg-slate-100 rounded w-4/5"></div>
+        <div class="h-24 bg-slate-50 rounded-lg border border-slate-100"></div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Modal Backdrop / Darkened Scrim -->
+  <div class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+
+    <!-- Modal Container: 1040px wide on desktop for rich 2-column compare + selection sidebar -->
+    <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-[1040px] overflow-hidden my-auto transform transition-all flex flex-col max-h-[92vh]">
+
+      <!-- Modal Header -->
+      <div class="px-7 py-5 border-b border-slate-200 bg-white flex items-center justify-between shrink-0">
+        <div class="flex items-center space-x-3">
+          <div class="w-10 h-10 rounded-xl bg-orange-50 border border-orange-200 flex items-center justify-center text-orange-600">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path>
+            </svg>
+          </div>
+          <div>
+            <div class="flex items-center space-x-2">
+              <h2 class="text-xl font-bold text-slate-900 leading-tight">Merge into an existing place</h2>
+              <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-orange-100 text-orange-800 border border-orange-200">De-duplication</span>
+            </div>
+            <p class="text-xs text-slate-500 mt-0.5">Combine submitted community place telemetry with an existing gazetted database record to prevent duplicate POIs on island radar.</p>
+          </div>
+        </div>
+
+        <button type="button" class="text-slate-400 hover:text-slate-600 hover:bg-slate-100 p-2 rounded-lg transition-colors" title="Close modal">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Modal Body (Scrollable) -->
+      <div class="px-7 py-6 overflow-y-auto space-y-6 flex-1 bg-[#fafafa]">
+
+        <!-- Step 1: Nearby Places Search & Candidate Picker -->
+        <div class="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+            <div>
+              <label class="block text-xs font-bold uppercase tracking-wider text-slate-600">1. Select Target Record in Roam Database</label>
+              <p class="text-xs text-slate-500">Search nearby places within 500m radius of submitted GPS coordinates (Constant Spring Rd & HWT)</p>
+            </div>
+            <div class="text-xs text-slate-400 font-medium">GPS Radius: <span class="text-slate-700 font-semibold">500 m</span> • 2 potential matches found</div>
+          </div>
+
+          <!-- Search Input Box -->
+          <div class="relative mb-3.5">
+            <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+              </svg>
+            </div>
+            <input type="text" value="Total Half-Way-Tree" class="w-full pl-10 pr-24 py-2.5 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-900 font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all" placeholder="Search by place name, address, or station brand...">
+            <span class="absolute inset-y-0 right-0 pr-3 flex items-center text-xs font-semibold text-orange-600 bg-orange-50 px-2 my-1.5 mr-2 rounded border border-orange-200">
+              Active Match
+            </span>
+          </div>
+
+          <!-- Places Candidates List with Distance -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <!-- Candidate 1: Total Half-Way-Tree (Selected) -->
+            <div class="relative border-2 border-orange-500 bg-orange-50/40 rounded-xl p-3.5 flex items-start justify-between shadow-sm cursor-pointer transition-all">
+              <div class="flex items-start space-x-3">
+                <div class="mt-0.5">
+                  <input type="radio" name="selected_candidate" checked class="w-4 h-4 text-orange-600 border-slate-300 focus:ring-orange-500">
+                </div>
+                <div>
+                  <div class="flex items-center space-x-2">
+                    <span class="font-bold text-sm text-slate-900">Total Half-Way-Tree</span>
+                    <span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800">VERIFIED HUB</span>
+                  </div>
+                  <div class="text-xs text-slate-500 mt-0.5">Half-Way-Tree Clock Tower Circle, Kingston 10</div>
+                  <div class="flex items-center space-x-2 mt-2">
+                    <span class="inline-flex items-center text-xs font-bold text-orange-700 bg-orange-100/80 px-2 py-0.5 rounded">
+                      <svg class="w-3 h-3 mr-1 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                      </svg>
+                      40 m away
+                    </span>
+                    <span class="text-[11px] text-slate-400">• ID: ROAM-JM-0082</span>
+                  </div>
+                </div>
+              </div>
+              <span class="text-xs font-semibold text-orange-700 bg-orange-100 px-2 py-0.5 rounded-full">Target</span>
+            </div>
+
+            <!-- Candidate 2: Rubis Hope Road (Unselected) -->
+            <div class="relative border border-slate-200 bg-white hover:border-slate-300 rounded-xl p-3.5 flex items-start justify-between cursor-pointer transition-all">
+              <div class="flex items-start space-x-3">
+                <div class="mt-0.5">
+                  <input type="radio" name="selected_candidate" class="w-4 h-4 text-orange-600 border-slate-300 focus:ring-orange-500">
+                </div>
+                <div>
+                  <div class="flex items-center space-x-2">
+                    <span class="font-bold text-sm text-slate-800">Rubis Hope Road</span>
+                    <span class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600">GAS STATION</span>
+                  </div>
+                  <div class="text-xs text-slate-500 mt-0.5">14 Hope Road, Kingston 10</div>
+                  <div class="flex items-center space-x-2 mt-2">
+                    <span class="inline-flex items-center text-xs font-medium text-slate-600 bg-slate-100 px-2 py-0.5 rounded">
+                      <svg class="w-3 h-3 mr-1 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
+                      </svg>
+                      180 m away
+                    </span>
+                    <span class="text-[11px] text-slate-400">• ID: ROAM-JM-0144</span>
+                  </div>
+                </div>
+              </div>
+              <button class="text-xs text-slate-400 hover:text-slate-600 font-medium">Select</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step 2: Side-by-Side Comparison & Conflict Resolution -->
+        <div class="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+          <div class="px-5 py-4 border-b border-slate-200 bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <h3 class="text-sm font-bold uppercase tracking-wider text-slate-700">2. Side-by-Side Field Comparison & Selection</h3>
+              <p class="text-xs text-slate-500">Select which attributes and values to retain in the consolidated place record.</p>
+            </div>
+            <div class="flex items-center space-x-3 text-xs">
+              <span class="flex items-center text-slate-600"><span class="w-2.5 h-2.5 rounded-full bg-blue-500 mr-1.5"></span> Submitted (Scout)</span>
+              <span class="flex items-center text-slate-600"><span class="w-2.5 h-2.5 rounded-full bg-emerald-500 mr-1.5"></span> Existing (Roam Base)</span>
+            </div>
+          </div>
+
+          <!-- Comparison Table Structure -->
+          <div class="divide-y divide-slate-100">
+
+            <!-- Field 1: Name -->
+            <div class="p-4 grid grid-cols-12 gap-4 items-center hover:bg-slate-50/70 transition-colors">
+              <div class="col-span-12 sm:col-span-2">
+                <span class="text-xs font-bold uppercase tracking-wider text-slate-500">Field</span>
+                <div class="font-bold text-slate-800 text-sm mt-0.5">Place Name</div>
+                <div class="text-[11px] text-slate-400">Primary title shown on map card</div>
+              </div>
+
+              <!-- Submitted Column: Precision Auto Works -->
+              <div class="col-span-12 sm:col-span-5 bg-blue-50/50 rounded-xl p-3.5 border border-blue-200/80 relative">
+                <div class="flex items-start justify-between">
+                  <div class="flex items-center space-x-2">
+                    <span class="px-2 py-0.5 text-[10px] font-bold rounded bg-blue-100 text-blue-800">SUBMITTED BY SCOUT</span>
+                    <span class="text-[11px] text-slate-400">Tariq C. (Lvl 3)</span>
+                  </div>
+                  <label class="inline-flex items-center space-x-1.5 cursor-pointer">
+                    <input type="radio" name="keep_name" class="w-4 h-4 text-orange-600 border-slate-300 focus:ring-orange-500">
+                    <span class="text-xs font-semibold text-slate-600">Keep this</span>
+                  </label>
+                </div>
+                <div class="mt-2 text-base font-bold text-slate-900">Precision Auto Works</div>
+                <div class="text-xs text-slate-500 mt-0.5">Submitted as specialized auto mechanical & brake bay</div>
+              </div>
+
+              <!-- Existing Column: Total Half-Way-Tree (Retained / Checked) -->
+              <div class="col-span-12 sm:col-span-5 bg-emerald-50/50 rounded-xl p-3.5 border-2 border-emerald-500 relative">
+                <div class="flex items-start justify-between">
+                  <div class="flex items-center space-x-2">
+                    <span class="px-2 py-0.5 text-[10px] font-bold rounded bg-emerald-100 text-emerald-800">CURRENT DATABASE</span>
+                    <span class="text-[11px] text-emerald-700 font-semibold">Gazetted Master</span>
+                  </div>
+                  <label class="inline-flex items-center space-x-1.5 cursor-pointer">
+                    <input type="radio" name="keep_name" checked class="w-4 h-4 text-orange-600 border-slate-300 focus:ring-orange-500">
+                    <span class="text-xs font-bold text-emerald-800">Keep this ✓</span>
+                  </label>
+                </div>
+                <div class="mt-2 text-base font-bold text-slate-900">Total Half-Way-Tree</div>
+                <div class="text-xs text-slate-600 mt-0.5">
+                  <span class="text-slate-500">Alias added: </span>
+                  <span class="font-medium bg-white px-1.5 py-0.5 rounded border border-slate-200 text-slate-700">"Precision Auto Works at Total"</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Field 2: Pin & Geolocation Coordinates -->
+            <div class="p-4 grid grid-cols-12 gap-4 items-center hover:bg-slate-50/70 transition-colors">
+              <div class="col-span-12 sm:col-span-2">
+                <span class="text-xs font-bold uppercase tracking-wider text-slate-500">Field</span>
+                <div class="font-bold text-slate-800 text-sm mt-0.5">Pin / Geolocation</div>
+                <div class="text-[11px] text-slate-400">Lat / Long coordinates & precision</div>
+              </div>
+
+              <!-- Submitted Column: Pin -->
+              <div class="col-span-12 sm:col-span-5 bg-blue-50/70 rounded-xl p-3.5 border-2 border-orange-500 relative">
+                <div class="flex items-start justify-between">
+                  <div class="flex items-center space-x-2">
+                    <span class="px-2 py-0.5 text-[10px] font-bold rounded bg-blue-100 text-blue-800">SUBMITTED PIN</span>
+                    <span class="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-orange-100 text-orange-800">RECOMMENDED</span>
+                  </div>
+                  <label class="inline-flex items-center space-x-1.5 cursor-pointer">
+                    <input type="radio" name="keep_pin" checked class="w-4 h-4 text-orange-600 border-slate-300 focus:ring-orange-500">
+                    <span class="text-xs font-bold text-orange-800">Keep this ✓</span>
+                  </label>
+                </div>
+                <div class="mt-2 font-mono text-xs font-bold text-slate-800 flex items-center space-x-2">
+                  <span>18.01248° N, 76.79932° W</span>
+                  <span class="px-1.5 py-0.5 text-[10px] bg-white rounded border border-slate-200 text-slate-600 font-sans">±2m GPS</span>
+                </div>
+                <p class="text-xs text-slate-600 mt-1">High precision scout capture directly at the rear service bay entry gate on Constant Spring Rd.</p>
+              </div>
+
+              <!-- Existing Column: Pin -->
+              <div class="col-span-12 sm:col-span-5 bg-emerald-50/40 rounded-xl p-3.5 border border-emerald-200/80 relative">
+                <div class="flex items-start justify-between">
+                  <div class="flex items-center space-x-2">
+                    <span class="px-2 py-0.5 text-[10px] font-bold rounded bg-emerald-100 text-emerald-800">EXISTING PIN</span>
+                  </div>
+                  <label class="inline-flex items-center space-x-1.5 cursor-pointer">
+                    <input type="radio" name="keep_pin" class="w-4 h-4 text-orange-600 border-slate-300 focus:ring-orange-500">
+                    <span class="text-xs font-semibold text-slate-600">Keep this</span>
+                  </label>
+                </div>
+                <div class="mt-2 font-mono text-xs font-semibold text-slate-700 flex items-center space-x-2">
+                  <span>18.01215° N, 76.79910° W</span>
+                  <span class="px-1.5 py-0.5 text-[10px] bg-slate-100 rounded text-slate-500 font-sans">Road Centroid (40m offset)</span>
+                </div>
+                <p class="text-xs text-slate-500 mt-1">Old centroid placed near the street pump canopy island.</p>
+              </div>
+            </div>
+
+            <!-- Field 3: Services & Amenities (Multi-Select Checkboxes) -->
+            <div class="p-4 grid grid-cols-12 gap-4 items-start hover:bg-slate-50/70 transition-colors">
+              <div class="col-span-12 sm:col-span-2 pt-1">
+                <span class="text-xs font-bold uppercase tracking-wider text-slate-500">Field</span>
+                <div class="font-bold text-slate-800 text-sm mt-0.5">Services & Tags</div>
+                <div class="text-[11px] text-slate-400">Merge or choose services to make live</div>
+                <div class="mt-3">
+                  <button type="button" class="text-xs text-orange-600 font-semibold hover:underline">Select All Combined</button>
+                </div>
+              </div>
+
+              <!-- Submitted Services (Precision Auto Works) -->
+              <div class="col-span-12 sm:col-span-5 bg-blue-50/50 rounded-xl p-3.5 border border-blue-200/80 space-y-2">
+                <div class="flex items-center justify-between pb-1.5 border-b border-blue-200/50">
+                  <span class="text-xs font-bold text-blue-900">Submitted Mechanic Services (3)</span>
+                  <span class="text-[11px] text-blue-700">Check to add</span>
+                </div>
+
+                <label class="flex items-start space-x-2.5 p-2 rounded-lg bg-white border border-blue-100 cursor-pointer hover:border-orange-400 transition-colors">
+                  <input type="checkbox" checked class="mt-0.5 w-4 h-4 text-orange-600 rounded border-slate-300 focus:ring-orange-500">
+                  <div>
+                    <span class="text-xs font-bold text-slate-900">Brake Specialist Bay & Rotor Machining</span>
+                    <p class="text-[11px] text-slate-500">Disc skimming, pad changes, hydraulic flush</p>
+                  </div>
+                </label>
+
+                <label class="flex items-start space-x-2.5 p-2 rounded-lg bg-white border border-blue-100 cursor-pointer hover:border-orange-400 transition-colors">
+                  <input type="checkbox" checked class="mt-0.5 w-4 h-4 text-orange-600 rounded border-slate-300 focus:ring-orange-500">
+                  <div>
+                    <span class="text-xs font-bold text-slate-900">Certified Mechanic On-Duty</span>
+                    <p class="text-[11px] text-slate-500">Mon–Sat 8:00 AM – 6:00 PM • Master Tech (Patrick B.)</p>
+                  </div>
+                </label>
+
+                <label class="flex items-start space-x-2.5 p-2 rounded-lg bg-white border border-blue-100 cursor-pointer hover:border-orange-400 transition-colors">
+                  <input type="checkbox" checked class="mt-0.5 w-4 h-4 text-orange-600 rounded border-slate-300 focus:ring-orange-500">
+                  <div>
+                    <span class="text-xs font-bold text-slate-900">Direct Phone: (876) 926-0419</span>
+                    <p class="text-[11px] text-slate-500">Service desk direct extension line</p>
+                  </div>
+                </label>
+              </div>
+
+              <!-- Existing Services (Total Half-Way-Tree) -->
+              <div class="col-span-12 sm:col-span-5 bg-emerald-50/50 rounded-xl p-3.5 border border-emerald-200/80 space-y-2">
+                <div class="flex items-center justify-between pb-1.5 border-b border-emerald-200/50">
+                  <span class="text-xs font-bold text-emerald-900">Existing Station Amenities (4)</span>
+                  <span class="text-[11px] text-emerald-700">Check to retain</span>
+                </div>
+
+                <label class="flex items-start space-x-2.5 p-2 rounded-lg bg-white border border-emerald-100 cursor-pointer hover:border-emerald-400 transition-colors">
+                  <input type="checkbox" checked class="mt-0.5 w-4 h-4 text-orange-600 rounded border-slate-300 focus:ring-orange-500">
+                  <div>
+                    <span class="text-xs font-bold text-slate-900">Petrojam Fuel Pumps (E-10 87, E-10 90, ULSD)</span>
+                    <p class="text-[11px] text-slate-500">Weekly automated gazetted price updates</p>
+                  </div>
+                </label>
+
+                <label class="flex items-start space-x-2.5 p-2 rounded-lg bg-white border border-emerald-100 cursor-pointer hover:border-emerald-400 transition-colors">
+                  <input type="checkbox" checked class="mt-0.5 w-4 h-4 text-orange-600 rounded border-slate-300 focus:ring-orange-500">
+                  <div>
+                    <span class="text-xs font-bold text-slate-900">Working Digital Air Compressor</span>
+                    <p class="text-[11px] text-slate-500">Community verified 4 hours ago • Free</p>
+                  </div>
+                </label>
+
+                <label class="flex items-start space-x-2.5 p-2 rounded-lg bg-white border border-emerald-100 cursor-pointer hover:border-emerald-400 transition-colors">
+                  <input type="checkbox" checked class="mt-0.5 w-4 h-4 text-orange-600 rounded border-slate-300 focus:ring-orange-500">
+                  <div>
+                    <span class="text-xs font-bold text-slate-900">Convenience Mart & Clean Restroom</span>
+                    <p class="text-[11px] text-slate-500">Bonjour mart, 24/7 key access</p>
+                  </div>
+                </label>
+
+                <label class="flex items-start space-x-2.5 p-2 rounded-lg bg-white border border-emerald-100 cursor-pointer hover:border-emerald-400 transition-colors">
+                  <input type="checkbox" checked class="mt-0.5 w-4 h-4 text-orange-600 rounded border-slate-300 focus:ring-orange-500">
+                  <div>
+                    <span class="text-xs font-bold text-slate-900">Card Payment (Multilink, Visa, Mastercard)</span>
+                    <p class="text-[11px] text-slate-500">Cash and Point-of-Sale machines active</p>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Merge Summary & XP Award Notice -->
+        <div class="bg-amber-50/70 border border-amber-200 rounded-xl p-4 flex items-center justify-between text-xs text-amber-900">
+          <div class="flex items-center space-x-3">
+            <div class="w-8 h-8 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+              </svg>
+            </div>
+            <div>
+              <span class="font-bold text-amber-950">Scout Contribution Handling:</span>
+              <span class="text-amber-800 ml-1">Submitting driver Tariq C. will receive full <strong>+25 Scout XP</strong> and an in-app notification confirming their mechanic bay was merged into the master Half-Way-Tree hub.</span>
+            </div>
+          </div>
+          <span class="px-2.5 py-1 bg-white font-bold rounded-md border border-amber-300 text-amber-900 shrink-0">
+            Audit Log: JM-MRG-881
+          </span>
+        </div>
+
+      </div>
+
+      <!-- Modal Footer Action Bar -->
+      <div class="px-7 py-4 border-t border-slate-200 bg-white flex items-center justify-between shrink-0">
+        <div class="text-xs text-slate-500">
+          Target ID: <span class="font-mono font-semibold text-slate-700">ROAM-JM-0082</span> • 6 fields consolidated • 0 conflicts unresolved
+        </div>
+
+        <div class="flex items-center space-x-3">
+          <!-- Cancel Button in Stone #57534e -->
+          <button type="button" class="px-5 py-2.5 rounded-lg border border-[#57534e]/30 bg-white hover:bg-stone-50 text-[#57534e] text-sm font-semibold transition-all">
+            Cancel
+          </button>
+
+          <!-- Primary Merge Button in Orange #ea580c -->
+          <button type="button" class="px-6 py-2.5 rounded-lg bg-[#ea580c] hover:bg-[#c2410c] text-white text-sm font-bold shadow-md shadow-orange-500/20 flex items-center space-x-2 transition-all">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path>
+            </svg>
+            <span>Merge into Existing Place</span>
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</body>
+</html>

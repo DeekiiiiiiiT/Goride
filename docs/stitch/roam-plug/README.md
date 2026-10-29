@@ -85,6 +85,10 @@ HTML only, under `docs/stitch/roam-plug/html/`. The phone app shows these files.
 | Approved pin | `46b-approved.html` | `/contributions/approved` |
 | Empty search | `49b-empty-search.html` | `/search/empty` |
 | Empty inbox | `50b-empty-inbox.html` | `/inbox/empty` |
+| Fuel details grade locked | `26c-fuel-details-grade-locked.html` | `/fuel/details` |
+| Saved price checking | `27c-saved-price-checking.html` | `/fuel/saved` |
+| Notifications your price | `50c-notifications-your-price.html` | `/inbox` |
+| Price looks wrong sheet | `58-price-looks-wrong.html` | Station detail sheet |
 | Dominion review queue | `D1-review-queue.html` | Dominion Places Review |
 | Dominion split review | `D2-review-item.html` | Dominion Places Review |
 | Dominion merge | `D3-merge.html` | Dominion Places Review |

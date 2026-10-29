@@ -11,6 +11,16 @@ on:
       - 'supabase/tests/parts_rev2_checks.sql'
       - 'supabase/tests/vehicle_database_rebuild_checks.sql'
       - 'supabase/tests/places_checks.sql'
+      - 'supabase/tests/price_engine_checks.sql'
+      - '.github/workflows/parts-sql-checks.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/migrations/**'
+      - 'supabase/tests/parts_rev2_checks.sql'
+      - 'supabase/tests/vehicle_database_rebuild_checks.sql'
+      - 'supabase/tests/places_checks.sql'
+      - 'supabase/tests/price_engine_checks.sql'
       - '.github/workflows/parts-sql-checks.yml'
   workflow_dispatch:
 
@@ -52,3 +62,5 @@ jobs:
           docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/vehicle_database_rebuild_checks.sql
           docker cp supabase/tests/places_checks.sql "$db_container":/tmp/places_checks.sql
           docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/places_checks.sql
+          docker cp supabase/tests/price_engine_checks.sql "$db_container":/tmp/price_engine_checks.sql
+          docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/price_engine_checks.sql

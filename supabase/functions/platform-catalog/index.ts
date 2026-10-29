@@ -130,6 +130,25 @@ function publicValue(value: unknown): unknown {
   return out;
 }
 
+async function overlayPrices<T extends { id?: string; prices?: unknown; price_updated_at?: unknown }>(
+  sb: ReturnType<typeof admin>,
+  stations: T[],
+): Promise<T[]> {
+  const ids = stations.map((row) => String(row.id || "")).filter(Boolean);
+  if (!ids.length) return stations;
+  const { data, error } = await sb.schema("places").from("public_place").select("id, prices, price_updated_at").in("id", ids);
+  if (error || !data) return stations;
+  const byId = new Map(data.map((row) => [String(row.id), row]));
+  return stations.map((station) => {
+    const card = byId.get(String(station.id));
+    const prices = card?.prices;
+    if (!prices || typeof prices !== "object" || Array.isArray(prices) || Object.keys(prices as object).length === 0) {
+      return station;
+    }
+    return { ...station, prices, price_updated_at: card.price_updated_at || station.price_updated_at };
+  });
+}
+
 async function listStations(c: { req: { query: (name: string) => string | undefined } }) {
   try {
     const sb = admin();
@@ -140,7 +159,7 @@ async function listStations(c: { req: { query: (name: string) => string | undefi
       .select("id,name,brand,address,pcode,parish,phone,website,amenities,lat,lng,payload_json")
       .range(offset, offset + limit - 1);
     if (error) throw error;
-    const stations = (data || []).map((row) => publicStation(row));
+    const stations = await overlayPrices(sb, (data || []).map((row) => publicStation(row)));
     return cached({ stations, limit, offset });
   } catch (err) {
     return fail(err, "Could not load stations");
@@ -157,7 +176,8 @@ app.get("/stations/:id", async (c) => {
     const { data, error } = await sb.from("fleet_stations").select("id,name,brand,address,pcode,parish,phone,website,amenities,lat,lng,payload_json").eq("id", c.req.param("id")).maybeSingle();
     if (error) throw error;
     if (!data) return Response.json({ error: "Station not found" }, { status: 404 });
-    return cached({ station: publicStation(data) });
+    const [station] = await overlayPrices(sb, [publicStation(data)]);
+    return cached({ station });
   } catch (err) {
     return fail(err, "Could not load station");
   }

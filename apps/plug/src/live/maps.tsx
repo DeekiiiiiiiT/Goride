@@ -7,13 +7,14 @@ import { publicGet } from '../api';
 import { writeStationCache } from '../offline';
 import { getPlugRuntime } from '../shell/click';
 import { sortedChips, type PlugChip } from './plugChips';
+import { readPumpQuote } from './pumpPrice';
 
-type Station = { id: string; name: string; brand?: string; lat: number; lng: number; prices?: Record<string, number> };
+type Station = { id: string; name: string; brand?: string; lat: number; lng: number; prices?: Record<string, unknown> };
 type Place = { id: string; name: string; kind: string; lat: number; lng: number };
 
-function pinPrice(prices: Record<string, number> | undefined, grade: string): string {
-  const value = prices?.[grade];
-  return value == null || !Number.isFinite(Number(value)) ? '' : String(Math.round(Number(value)));
+function pinPrice(prices: Record<string, unknown> | undefined, grade: string): string {
+  const value = readPumpQuote(prices, grade).price;
+  return value == null ? '' : String(Math.round(value));
 }
 
 function pinColor(name: string, brand?: string): string {

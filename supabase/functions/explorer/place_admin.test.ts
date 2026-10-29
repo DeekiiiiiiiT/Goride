@@ -1,5 +1,5 @@
 import { assertEquals } from "jsr:@std/assert";
-import { evidenceTitle, reviewChipForPlace } from "./place_admin.ts";
+import { evidenceTitle, PLACE_EVIDENCE_COLUMNS, PLACE_PRICE_COLUMNS, reviewChipForPlace } from "./place_admin.ts";
 
 Deno.test("imported pending places are not hand review", () => {
   assertEquals(reviewChipForPlace({
@@ -14,6 +14,13 @@ Deno.test("imported pending places are not hand review", () => {
   }), "plug");
   assertEquals(reviewChipForPlace({ status: "learnt", origin_app: "roam_fleet" }), "learnt");
   assertEquals(reviewChipForPlace({ status: "pending", origin_app: "manual" }), "hand");
+});
+
+Deno.test("place detail asks for columns that exist", () => {
+  assertEquals(PLACE_EVIDENCE_COLUMNS.includes("kind"), false);
+  assertEquals(PLACE_EVIDENCE_COLUMNS.includes("note"), true);
+  assertEquals(PLACE_PRICE_COLUMNS.includes("updated_at"), false);
+  assertEquals(PLACE_PRICE_COLUMNS.includes("observed_at"), true);
 });
 
 Deno.test("evidence uses the note, or a plain title", () => {

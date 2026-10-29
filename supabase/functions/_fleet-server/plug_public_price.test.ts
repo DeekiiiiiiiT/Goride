@@ -1,34 +1,53 @@
 /**
- * A published fleet price writes price_current only.
- * The database trigger refreshes the public card.
+ * A fleet fill records an intake row. The database publishes the public price.
  */
 import { assertEquals } from "jsr:@std/assert";
-import { noteFleetPrice } from "./plug_public_price.ts";
+import { submitFleetPriceReport } from "./plug_public_price.ts";
 
-Deno.test("noteFleetPrice writes price tables and never the public station view", async () => {
+Deno.test("submitFleetPriceReport writes the intake table only", async () => {
   const tables: string[] = [];
+  const inserted: Record<string, unknown>[] = [];
   const client = {
     schema: () => ({
-      rpc: async () => ({ data: 250, error: null }),
       from: (table: string) => {
         tables.push(table);
         return {
-          insert: async () => ({ error: null }),
-          upsert: async () => ({ error: null }),
+          insert: async (row: Record<string, unknown>) => {
+            inserted.push(row);
+            return { error: null };
+          },
+          select: () => ({
+            eq: () => ({
+              maybeSingle: async () => ({ data: null, error: { message: "skip" } }),
+            }),
+          }),
         };
       },
     }),
+    from: () => ({
+      select: () => ({
+        eq: () => ({
+          maybeSingle: async () => ({ data: null, error: null }),
+        }),
+      }),
+    }),
   };
 
-  await noteFleetPrice({
-    liters: 10,
-    amount: 2500,
+  await submitFleetPriceReport({
+    id: "fill-1",
+    liters: 40,
+    amount: 9168,
     matchedStationId: "station-1",
-    metadata: { stationResolutionState: "verified" },
+    organizationId: "org-1",
+    driverId: "driver-1",
+    fuelType: "Gasoline_87",
+    metadata: { stationResolutionState: "verified", jaaFuelType: "ADO" },
   }, client as never);
 
-  assertEquals(tables.includes("price_observation"), true);
-  assertEquals(tables.includes("price_current"), true);
-  assertEquals(tables.includes("public_station"), false);
+  assertEquals(tables.includes("fleet_price_report"), true);
+  assertEquals(tables.includes("price_observation"), false);
+  assertEquals(tables.includes("price_current"), false);
   assertEquals(tables.includes("public_place"), false);
+  assertEquals(inserted[0]?.grade, "e10_87");
+  assertEquals(inserted[0]?.grade_source, "fill");
 });

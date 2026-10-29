@@ -4,3 +4,4 @@
 @source '../../../packages/platform-ops-ui/src/**/*.{js,ts,jsx,tsx}';
 @import 'tw-animate-css';
 @import './styles/globals.css';
+@import './components/admin/fuel-prices/priceEngineTheme.css';

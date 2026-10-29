@@ -121,70 +121,89 @@ export function FuelDetailsScreen() {
                 </div>
               </div>
             </div>
-            <div className={"flex flex-col gap-space-xs"}>
+            <div className={"bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col gap-space-sm"} data-grade-locked={"1"}>
               <div className={"flex items-center justify-between"}>
-                <label className={"font-label-lg text-label-lg font-bold text-on-surface"}>
-                  Fuel Grade
+                <label className={"font-label-lg text-label-lg text-on-surface flex items-center gap-1.5"}>
+                  <span>
+                    Fuel Grade Dispensed
+                  </span>
+                  <span className={"material-symbols-outlined text-[16px] text-secondary"} title={"Matched to your car's engine requirements"}>
+                    verified
+                  </span>
                 </label>
-                <span className={"font-body-sm text-body-sm text-on-surface-variant"}>
-                  Jamaican standard specs
+                <span className={"font-label-sm text-label-sm bg-secondary-fixed text-on-secondary-fixed font-bold px-2 py-0.5 rounded-full"}>
+                  AUTO-LOCKED
                 </span>
               </div>
-              <div className={"grid grid-cols-3 gap-space-xs"} id={"grade-selector"}>
-                <button onClick={onPlugClick} className={"grade-pill flex flex-col items-center justify-between p-space-sm rounded-xl min-h-[64px] bg-secondary text-on-secondary shadow-md transition-all active:scale-95 text-left"} data-grade={"87"} type={"button"} data-act={"87-e-10-87-regular"}>
-                  <div className={"w-full flex items-center justify-between"}>
-                    <span className={"w-6 h-6 rounded-full bg-green-600 text-white font-label-sm text-label-sm flex items-center justify-center font-bold"}>
-                      87
-                    </span>
-                    <span className={"material-symbols-outlined text-[18px] grade-check"} style={{ fontVariationSettings: "'FILL' 1" }}>
-                      check_circle
-                    </span>
-                  </div>
-                  <div className={"w-full mt-2"}>
-                    <span className={"font-label-lg text-label-lg block leading-tight font-bold"}>
+              <div className={"bg-surface-container-low rounded-xl p-space-md flex flex-col gap-space-sm relative"}>
+                <div className={"flex items-center justify-between"}>
+                  <div className={"flex items-center gap-space-sm"}>
+                    <span className={"bg-[#16a34a] text-surface-container-lowest font-headline-sm text-headline-sm px-3 py-1 rounded-lg tracking-wide shadow-sm"} data-slot={"locked-grade-badge"}>
                       E-10 87
                     </span>
-                    <span className={"font-label-sm text-label-sm opacity-90 block"}>
-                      Regular
-                    </span>
+                    <div className={"flex flex-col"}>
+                      <span className={"font-label-lg text-label-lg text-on-surface font-bold"} data-slot={"locked-grade-title"}>
+                        Unleaded Regular
+                      </span>
+                      <span className={"font-body-sm text-body-sm text-on-surface-variant flex items-center gap-1"}>
+                        <span className={"material-symbols-outlined text-[14px] text-outline"}>
+                          lock
+                        </span>
+                        Vehicle default choice
+                      </span>
+                    </div>
                   </div>
-                </button>
-                <button onClick={onPlugClick} className={"grade-pill flex flex-col items-center justify-between p-space-sm rounded-xl min-h-[64px] bg-surface-container-lowest text-on-surface shadow-sm transition-all active:scale-95 text-left"} data-grade={"90"} type={"button"} data-act={"90-e-10-90-super-premium"}>
-                  <div className={"w-full flex items-center justify-between"}>
-                    <span className={"w-6 h-6 rounded-full bg-red-600 text-white font-label-sm text-label-sm flex items-center justify-center font-bold"}>
-                      90
+                  <button onClick={onPlugClick} className={"text-secondary font-label-md text-label-md min-h-[44px] flex items-center justify-center underline-offset-2 hover:underline"} id={"toggle-grades-btn"} type={"button"} data-act={"toggle-grades-btn"}>
+                    Change
+                  </button>
+                </div>
+                <div className={"flex items-start gap-2 bg-surface-container-lowest p-space-sm rounded-lg"}>
+                  <span className={"material-symbols-outlined text-[18px] text-secondary shrink-0 mt-0.5"}>
+                    directions_car
+                  </span>
+                  <p className={"font-body-sm text-body-sm text-on-surface-variant"} data-slot={"locked-grade-callout"}>
+                    From your car — this grade is the usual pick for this vehicle.
+                  </p>
+                </div>
+              </div>
+              <div className={"flex flex-col gap-space-xs mt-space-xs"} id={"grades-tray"} data-plug-grades={"1"} data-grade-tray={"1"}>
+                <span className={"font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider"}>
+                  Available Island Octanes
+                </span>
+                <div className={"grid grid-cols-3 gap-2"} id={"grade-selector"}>
+                  <button onClick={onPlugClick} className={"flex flex-col items-center justify-center py-2.5 px-1.5 rounded-xl bg-primary-container text-on-primary-container shadow-sm min-h-[52px] text-center"} data-grade={"e10_87"} data-plug-grade={"e10_87"} type={"button"} data-act={"e-10-87"}>
+                    <span className={"font-label-lg text-label-lg font-bold leading-none"}>
+                      E-10 87
                     </span>
-                    <span className={"material-symbols-outlined text-[18px] grade-check opacity-0"}>
-                      check_circle
+                    <span className={"font-label-sm text-label-sm opacity-90 mt-1"} data-grade-hint={"e10_87"}>
+                      Recommended
                     </span>
-                  </div>
-                  <div className={"w-full mt-2"}>
-                    <span className={"font-label-lg text-label-lg block leading-tight font-bold"}>
+                  </button>
+                  <button onClick={onPlugClick} className={"flex flex-col items-center justify-center py-2.5 px-1.5 rounded-xl bg-surface-container text-on-surface hover:bg-surface-container-high transition-colors min-h-[52px] text-center"} data-grade={"e10_90"} data-plug-grade={"e10_90"} type={"button"} data-act={"e-10-90"}>
+                    <span className={"font-label-lg text-label-lg font-bold leading-none"}>
                       E-10 90
                     </span>
-                    <span className={"font-label-sm text-label-sm text-on-surface-variant block"}>
+                    <span className={"font-label-sm text-label-sm text-on-surface-variant mt-1"}>
                       Super Premium
                     </span>
-                  </div>
-                </button>
-                <button onClick={onPlugClick} className={"grade-pill flex flex-col items-center justify-between p-space-sm rounded-xl min-h-[64px] bg-surface-container-lowest text-on-surface shadow-sm transition-all active:scale-95 text-left"} data-grade={"ulsd"} type={"button"} data-act={"d-ulsd-ultra-low-s"}>
-                  <div className={"w-full flex items-center justify-between"}>
-                    <span className={"w-6 h-6 rounded-full bg-stone-900 text-white font-label-sm text-label-sm flex items-center justify-center font-bold"}>
-                      D
-                    </span>
-                    <span className={"material-symbols-outlined text-[18px] grade-check opacity-0"}>
-                      check_circle
-                    </span>
-                  </div>
-                  <div className={"w-full mt-2"}>
-                    <span className={"font-label-lg text-label-lg block leading-tight font-bold"}>
+                  </button>
+                  <button onClick={onPlugClick} className={"flex flex-col items-center justify-center py-2.5 px-1.5 rounded-xl bg-surface-container text-on-surface hover:bg-surface-container-high transition-colors min-h-[52px] text-center"} data-grade={"diesel"} data-plug-grade={"diesel"} type={"button"} data-act={"ulsd"}>
+                    <span className={"font-label-lg text-label-lg font-bold leading-none"}>
                       ULSD
                     </span>
-                    <span className={"font-label-sm text-label-sm text-on-surface-variant block"}>
-                      Ultra Low S.
+                    <span className={"font-label-sm text-label-sm text-on-surface-variant mt-1"}>
+                      Ultra Low Sulfur
                     </span>
-                  </div>
-                </button>
+                  </button>
+                </div>
+                <div className={"mt-space-xs bg-tertiary-fixed/30 rounded-xl p-space-sm flex items-start gap-space-sm"}>
+                  <span className={"material-symbols-outlined text-tertiary text-[20px] shrink-0 mt-0.5"}>
+                    info
+                  </span>
+                  <p className={"font-body-sm text-body-sm text-on-tertiary-fixed leading-tight"} data-slot={"grade-mismatch-note"}>
+                    Your car normally runs on E-10 87. Choosing another grade will flag a quick verification before pushing rates to the Roam Plug island map.
+                  </p>
+                </div>
               </div>
             </div>
             <div className={"bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col gap-space-md"}>

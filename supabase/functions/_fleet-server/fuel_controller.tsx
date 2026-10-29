@@ -4588,13 +4588,11 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
 
 
     const match = await applyStationMatch(entry);
-    if (match.outcome === "verified") {
-        try {
-            const { noteFleetPrice } = await import("./plug_public_price.ts");
-            await noteFleetPrice(entry);
-        } catch (priceErr) {
-            console.warn("[plug-price] fleet price note skipped", priceErr);
-        }
+    try {
+        const { submitFleetPriceReport } = await import("./plug_public_price.ts");
+        await submitFleetPriceReport(entry);
+    } catch (priceErr) {
+        console.warn("[plug-price] fleet price report skipped", priceErr);
     }
     const allStationsForEntry = match.stations;
     if (match.outcome === "no_gps") {

@@ -73,6 +73,36 @@ export { tollOpsApi } from './services/tollOpsApi';
 
 export { StationDatabaseView } from './stations/StationDatabaseView';
 export { PlacesReview } from './places/PlacesReview';
+export { PlacesReviewQueue } from './places/PlacesReviewQueue';
+export type { PlacesReviewQueueProps } from './places/PlacesReviewQueue';
+export { PlacesReviewSplit } from './places/PlacesReviewSplit';
+export type { PlacesReviewSplitProps } from './places/PlacesReviewSplit';
+export {
+  strong as placesReviewStrong,
+  pill as placesReviewPill,
+  ageDays as placesReviewAgeDays,
+  kindLabel as placesReviewKindLabel,
+  gradeFromItem as placesReviewGrade,
+  queuedAgo as placesReviewQueuedAgo,
+  osmEmbedSrc as placesReviewOsmEmbedSrc,
+  type PlacesReviewItem,
+  type Item as PlacesReviewItemAlias,
+  type PlugChip as PlacesReviewPlugChip,
+  type Coverage as PlacesReviewCoverageRow,
+  type PlacesReviewView,
+} from './places/placesReviewShared';
+export {
+  PlacesReviewMerge,
+  type PlacesReviewMergeItem,
+  type PlacesReviewMergeProps,
+} from './places/PlacesReviewMerge';
+export {
+  PlacesReviewCoverage,
+  type PlacesReviewCoverageKind,
+  type PlacesReviewCoverageProps,
+  type PlacesReviewCoverageSection,
+  type PlacesReviewParishTotal,
+} from './places/PlacesReviewCoverage';
 export { PlacesDesk } from './places/PlacesDesk';
 export { PlacesInbox } from './places/PlacesInbox';
 export {

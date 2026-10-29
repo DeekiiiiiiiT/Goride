@@ -529,6 +529,7 @@ export const PAGE_PERMISSIONS: Record<string, DominionPageSensitivity> = {
   'fuel-jaa-cards': 'standard',
   'fuel-brain': 'standard',
   'fuel-prices': 'standard',
+  'fuel-price-engine': 'standard',
   'fuel-stations': 'standard',
   'plug-places': 'standard',
   'fuel-analytics': 'standard',

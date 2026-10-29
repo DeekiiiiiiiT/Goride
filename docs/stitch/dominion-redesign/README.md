@@ -8,15 +8,15 @@ HTML lives in `docs/stitch/dominion-redesign/html/` only. Do not copy these file
 
 The five place screens below are the canonical Plug designs, confirmed in Stitch on 26 Oct 2026. Plug still holds the originals. Fake contributor names, trust scores, OCR scores, and mesh widgets are not to be built. The new shell is S1.
 
-Status meanings: `Final — do not touch` (D1–D5), `Ported` (passes stitch-fidelity + PNG), `Not ported` (work remaining), `Superseded by S7 — do not build`.
+Status meanings: `Final — do not touch` (D1–D5), `Ported` (passes stitch-fidelity + PNG), `In progress` (P1–P7 Price Engine — match Downloads HTML), `Not ported` (work remaining), `Superseded by S7 — do not build`.
 
 | # | Screen | Stitch id | HTML file | Dominion page id | React file | Status |
 |---|---|---|---|---|---|---|
-| D1 | Places review queue | `19c9df8ede1f4635be7f188be5c24f94` | `html/D1-review-queue.html` | `plug-places` | `packages/platform-ops-ui/src/places/PlacesReview.tsx` | Final — do not touch. Fake names, scores, and Fleet export removed. |
-| D2 | Review one place | `6348f0f2c36149fa9bb2cc9e8fa39577` | `html/D2-review-item.html` | `plug-places` | `packages/platform-ops-ui/src/places/PlacesReview.tsx` | Final — do not touch. Live inside Places review, This place. |
-| D3 | Merge into an existing place | `a87e5505779043e2a48a64a6f6266d2e` | `html/D3-merge.html` | `plug-places` | `packages/platform-ops-ui/src/places/PlacesReview.tsx` | Final — do not touch. Live as the merge window. |
-| D4 | Coverage overview | `7da088e95e1e4fe088a2add010bf9bd3` | `html/D4-coverage.html` | `plug-places` | `packages/platform-ops-ui/src/places/PlacesReview.tsx` | Final — do not touch. Live as Parish coverage. The Jamaica border map stays on its own page. |
-| D5 | Parish coverage table | `53ad2876cac241b1aaceeb7bbc307045` | `html/D5-parish-coverage.html` | `plug-places` | `packages/platform-ops-ui/src/places/PlacesReview.tsx` | Final — do not touch. Live as the parish table on Parish coverage. |
+| D1 | Places review queue | `19c9df8ede1f4635be7f188be5c24f94` | `html/D1-review-queue.html` | `plug-places` | `packages/platform-ops-ui/src/places/PlacesReviewQueue.tsx` | Ported. Exact Stitch from Downloads pack 2 queue; live `/admin/places`. |
+| D2 | Review one place | `6348f0f2c36149fa9bb2cc9e8fa39577` | `html/D2-review-item.html` | `plug-places` | `packages/platform-ops-ui/src/places/PlacesReviewSplit.tsx` | Ported. Exact Stitch from Downloads pack 4 split; OSM map + live item. |
+| D3 | Merge into an existing place | `a87e5505779043e2a48a64a6f6266d2e` | `html/D3-merge.html` | `plug-places` | `packages/platform-ops-ui/src/places/PlacesReviewMerge.tsx` | Ported. Exact Stitch merge modal; live intoId. |
+| D4 | Coverage overview | `7da088e95e1e4fe088a2add010bf9bd3` | `html/D4-coverage.html` | `plug-places` | `packages/platform-ops-ui/src/places/PlacesReviewCoverage.tsx` | Ported. KPIs + registry from live `/admin/coverage`. No fake chart/map. |
+| D5 | Parish coverage table | `53ad2876cac241b1aaceeb7bbc307045` | `html/D5-parish-coverage.html` | `plug-places` | `packages/platform-ops-ui/src/places/PlacesReviewCoverage.tsx` | Ported. Parish table section; live coverage rows. |
 | S1 | App shell | `d2798e5c0de74b93857cc67b7b940b23` | `html/S1-shell.html` | all | `apps/admin/src/components/admin/AdminLayout.tsx` | Ported. Approved 26 Oct 2026. |
 | S2 | Sign in and authenticator | `d8107f1d4b7c4c8bbb570fed4a8216be` | `html/S2-sign-in.html` | login | `apps/admin/src/components/admin/AdminLoginPage.tsx` | Ported. Auth and MFA stay. |
 | S3 | States kit | `9f614905032a4b24ae49582568108a9e` | `html/S3-states.html` | all | `apps/admin/src/components/admin/DominionStates.tsx` | Ported. Loading, error, empty, moved, and no-access stay. |
@@ -35,6 +35,13 @@ Status meanings: `Final — do not touch` (D1–D5), `Ported` (passes stitch-fid
 | S16 | Map imports | `b49f74abedeb4478b1d20571a17c7348` | `html/S16-map-imports.html` | `world-imports` | `apps/admin/src/components/admin/world-maps/WorldMapsPage.tsx` | Ported. Import runs and world-quality results stay on this page. |
 | S17 | Station database | `f0b631aa7be947e8b0723b21450816ba` | `html/S17-station-database.html` | `fuel-stations` | `packages/platform-ops-ui/src/stations/StationDatabaseView.tsx` | Ported. Station list, verified, and resolution stay. |
 | S18 | Fuel prices | `b8c603a5127744e887b443ff58b9412d` | `html/S18-fuel-prices.html` | `fuel-prices` | `apps/admin/src/components/admin/fuel-prices/FuelPricesPage.tsx` | Ported. Petrojam wholesale sync stays. |
+| P1 | Price Engine overview | `aab110819721426fab7839674b931f9e` | `html/P1-price-engine-overview.html` | `fuel-price-engine` | `apps/admin/public/stitch/price-engine/p1-overview.html` | Stitch HTML served live (Downloads export). Sample Stitch data. |
+| P2 | Price Engine review queue | `c48abb51fac94d12855c1a228d093ef9` | `html/P2-price-engine-review-queue.html` | `fuel-price-engine` | `apps/admin/public/stitch/price-engine/p2-review-queue.html` | Stitch HTML served live (Downloads export). Sample Stitch data. |
+| P3 | Price Engine review split | `7517e96d14c9411ba89ed96f0528fa5b` | `html/P3-price-engine-review-split.html` | `fuel-price-engine` | `apps/admin/public/stitch/price-engine/p3-review-split.html` | Stitch HTML served live (Downloads export). Sample Stitch data. |
+| P4 | Price Engine published | `0e5ad3b5a7bc4367a7bac6052e218e62` | `html/P4-price-engine-published.html` | `fuel-price-engine` | `apps/admin/public/stitch/price-engine/p4-published.html` | Stitch HTML served live (Downloads export). Sample Stitch data. |
+| P5 | Price Engine station drawer | `609d9c97497c4497b653da65f6fb595f` | `html/P5-price-engine-station-drawer.html` | `fuel-price-engine` | `apps/admin/public/stitch/price-engine/p5-station-drawer.html` | Stitch HTML served live (Downloads export). Sample Stitch data. |
+| P6 | Price Engine reporters | `429241b1ca5945f68cd597d5c1923b7c` | `html/P6-price-engine-reporters.html` | `fuel-price-engine` | `apps/admin/public/stitch/price-engine/p6-reporters.html` | Stitch HTML served live (Downloads export). Sample Stitch data. |
+| P7 | Price Engine settings | `fd5c351e3fba488d94de12155b13762e` | `html/P7-price-engine-settings.html` | `fuel-price-engine` | `apps/admin/public/stitch/price-engine/p7-settings.html` | Stitch HTML served live (Downloads export). Sample Stitch data. |
 | S19 | Station analytics | `4016415050784fcdbbaa4a9e516fa47b` | `html/S19-station-analytics.html` | `fuel-analytics` | `apps/admin/src/components/admin/StationHealth.tsx` | Ported. Station list health only. Customer fuel spending stays in Fleet. |
 | S20 | JAA card catalogue | `f213ca85e6014903b9a070adf73b86ba` | `html/S20-jaa-cards.html` | `fuel-jaa-cards` | `packages/platform-ops-ui/src/fleet-customer/GasCardsPage.tsx` | Ported. Platform-scoped programs and master CSV stay. |
 | S21 | Toll database | `e1395d7f82344dcab17453c7d3a98f4d` | `html/S21-toll-database.html` | `toll-stations` | `packages/platform-ops-ui/src/toll/TollDatabaseView.tsx` | Ported. Plazas on TollDatabaseView; rates and classes on TollInfoPage. |

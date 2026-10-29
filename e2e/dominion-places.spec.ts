@@ -112,6 +112,12 @@ test('register blocks verify until the checklist is clear', async ({ page }) => 
   await expect(page.getByRole('button', { name: 'Verify' })).toBeDisabled();
   await expect(page.getByText(/Open duplicate/)).toBeVisible();
 
+  await page.goto('/?page=fuel-price-engine');
+  await expect(page.getByRole('heading', { name: 'Price Engine' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Review/ })).toBeVisible();
+
+  await page.goto('/?page=places-register');
+  await page.getByRole('button', { name: 'Add a place' }).click();
   await typeSelect.selectOption('Mechanic garage');
   await page.getByPlaceholder('Name').fill('New garage');
   await expect(page.getByText('None nearby of this type.')).toBeVisible();

@@ -9,7 +9,7 @@ export type CachedStation = {
   lat?: number;
   lng?: number;
   pcode?: string | null;
-  prices?: Record<string, number>;
+  prices?: Record<string, unknown>;
 };
 
 export function writeStationCache(stations: CachedStation[]) {

@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_dashboard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;family=Public+Sans:wght@500;600;700&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{colors:{"surface":"#faf8fe","on-primary":"#f8f8ff","tertiary-container":"#98fba9","surface-container-low":"#f4f3fa","on-error":"#fff7f6","tertiary-fixed":"#98fba9","on-surface":"#30323b","on-secondary-fixed":"#003798","secondary-fixed":"#dbe1ff","on-error-container":"#6e0a12","on-tertiary-fixed":"#004c20","on-primary-container":"#475266","outline":"#797a84","error-dim":"#67040d","on-tertiary-container":"#00612a","surface-bright":"#faf8fe","inverse-on-surface":"#9d9ca2","surface-variant":"#e1e2ed","on-secondary-container":"#0047c0","secondary-fixed-dim":"#c7d3ff","error":"#a83836","surface-dim":"#d9d9e4","on-secondary":"#faf8ff","on-primary-fixed":"#354053","secondary":"#0153dc","on-surface-variant":"#5d5f68","on-tertiary":"#e9ffe7","secondary-container":"#dbe1ff","on-primary-fixed-variant":"#515c70","on-tertiary-fixed-variant":"#006c30","tertiary":"#006e31","background":"#faf8fe","surface-tint":"#545f74","surface-container-lowest":"#ffffff","on-background":"#30323b","inverse-surface":"#0d0e12","tertiary-dim":"#00612a","tertiary-fixed-dim":"#8aec9c","on-secondary-fixed-variant":"#0050d5","primary-container":"#d8e3fb","surface-container-high":"#e8e7f1","error-container":"#fa746f","secondary-dim":"#0049c3","surface-container":"#eeedf6","primary-fixed-dim":"#cad5ed","primary":"#545f74","outline-variant":"#b0b1bc","primary-dim":"#485367","primary-fixed":"#d8e3fb","inverse-primary":"#dae6fe","surface-container-highest":"#e1e2ed"},borderRadius:{"DEFAULT":"0.25rem","lg":"0.5rem","xl":"0.75rem","full":"9999px"},spacing:{},fontFamily:{headline:["Inter"],display:["Inter"],body:["Inter"],label:["Public Sans"]},fontSize:{}}}}</script></head><body class="overflow-auto bg-surface font-body text-on-surface antialiased"><div class="pl-0"><main class="w-full pt-0 bg-surface-container-low min-h-screen"><div class="w-full px-8 py-8"><div class="flex flex-col w-full">
+<!-- Top Context Navigation & Header -->
+<div class="flex flex-col gap-4 mb-6">
+<nav class="flex items-center gap-2 text-xs font-mono text-outline">
+<span class="hover:text-on-surface transition-colors cursor-pointer">Dominion</span>
+<span>›</span>
+<span class="hover:text-on-surface transition-colors cursor-pointer">Master data</span>
+<span>›</span>
+<span class="hover:text-on-surface transition-colors cursor-pointer">Fuel</span>
+<span>›</span>
+<span class="hover:text-on-surface transition-colors cursor-pointer">Price Engine</span>
+<span>›</span>
+<span class="text-secondary font-semibold">Review #REP-8821</span>
+</nav>
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+<div>
+<div class="flex items-center gap-3">
+<h1 class="text-2xl font-headline font-bold text-on-surface tracking-tight">Price Engine — Reviewing Report #REP-8821</h1>
+<span class="px-2 py-0.5 rounded-full bg-error/10 text-error text-xs font-mono font-medium">Flagged Anomaly</span>
+</div>
+<p class="text-xs text-on-surface-variant font-label mt-1 flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[15px] text-outline">local_gas_station</span>
+<span>Station: Jampet, Willowdene • St. Catherine, Jamaica</span>
+</p>
+</div>
+<!-- Quick Nav Shortcut Tip -->
+<div class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-container text-xs text-on-surface-variant font-mono self-start md:self-auto shadow-sm">
+<span class="material-symbols-outlined text-[16px] text-secondary">keyboard</span>
+<span>Tip: Press <kbd class="px-1 py-0.5 rounded bg-surface-container-highest text-on-surface font-bold">R</kbd> then <kbd class="px-1 py-0.5 rounded bg-surface-container-highest text-on-surface font-bold">Enter</kbd> to reject &amp; advance</span>
+</div>
+</div>
+<!-- Navigation Tabs -->
+<div class="flex items-center gap-2 mt-2">
+<button class="px-4 py-2 text-xs font-headline font-semibold text-on-surface-variant hover:text-on-surface rounded-lg transition-colors">
+        Overview
+      </button>
+<button class="px-4 py-2 text-xs font-headline font-bold text-on-secondary bg-secondary rounded-lg flex items-center gap-2 shadow-sm">
+<span>Review</span>
+<span class="px-1.5 py-0.2 rounded-full bg-surface-container-lowest text-secondary text-[11px] font-mono">3</span>
+</button>
+<button class="px-4 py-2 text-xs font-headline font-semibold text-on-surface-variant hover:text-on-surface rounded-lg transition-colors">
+        Published prices
+      </button>
+<button class="px-4 py-2 text-xs font-headline font-semibold text-on-surface-variant hover:text-on-surface rounded-lg transition-colors">
+        Reporters
+      </button>
+<button class="px-4 py-2 text-xs font-headline font-semibold text-on-surface-variant hover:text-on-surface rounded-lg transition-colors">
+        Settings
+      </button>
+</div>
+</div>
+<!-- Split View (55% / 45%) -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start pb-28">
+<!-- LEFT PANEL: Evidence & Capture (55% -> 7 Cols) -->
+<div class="lg:col-span-7 flex flex-col gap-6">
+<!-- Header Source Banner -->
+<div class="p-4 rounded-xl bg-surface-container flex items-center justify-between shadow-sm">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-lg bg-inverse-surface text-on-primary flex items-center justify-center">
+<span class="material-symbols-outlined text-[18px]">local_shipping</span>
+</div>
+<div>
+<div class="text-xs font-headline font-bold text-on-surface">Source: Roam Fleet Driver Report</div>
+<div class="text-[11px] font-mono text-outline">Submission ID: #SUB-2026-882194</div>
+</div>
+</div>
+<div class="flex items-center gap-1.5 text-xs font-mono text-tertiary bg-tertiary-container/30 px-2.5 py-1 rounded-md">
+<span class="material-symbols-outlined text-[14px]">verified</span>
+<span>Authenticated App</span>
+</div>
+</div>
+<!-- Pump Photo Simulation Card with OCR Overlays -->
+<div class="relative bg-inverse-surface rounded-xl overflow-hidden shadow-md flex flex-col">
+<div class="p-3 bg-surface-container-highest/20 flex items-center justify-between text-surface-container-low text-xs font-mono">
+<span class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px] text-secondary">photo_camera</span>
+<span>IMG_8821_PUMP_DISPENSER.JPG</span>
+</span>
+<span class="text-outline-variant text-[11px]">Auto-dewarped &amp; Contrast enhanced</span>
+</div>
+<!-- High-Res Simulated Dispenser Image with OCR tags -->
+<div class="relative w-full h-[400px] bg-slate-900 overflow-hidden flex items-center justify-center">
+<img class="w-full h-full object-cover opacity-80" data-alt="Close up photograph of a dusty commercial gasoline pump digital display meter in Willowdene Jamaica under tropical daylight. High contrast LCD displays show lit total sale numbers in Jamaican dollars and fuel litres pumped on a weathered metallic Gilbarco dispenser casing." src="https://lh3.googleusercontent.com/aida-public/AB6AXuC5RX9QyoxCWUEfZSGixZZ50s9M_YyPnrkHrCSIMQN8iHVYcm61VdIJEGiBp-tr4x3IMCs1qNPWSzQJaXoaQpf1k6b7MgZs5y-zYMIpPQph2_MOz8ZRmEC5dO-ZJtKCPAbQqpAoCOdbIJ6kzb0vZt5mfc6fHG6u3AJ1WFlxea39Vg_PeoB5iepNgo8tkhIzkATgl4EbsKHyeyaqDdmhx1vEFBEt6Mt3dOLWGTt8xzU"/>
+<!-- OCR Overlay Layer 1: Total Sale -->
+<div class="absolute top-[28%] left-[22%] w-[48%] h-[24%] bg-tertiary/20 backdrop-blur-[2px] rounded-lg p-2 flex flex-col justify-between shadow-lg">
+<div class="flex items-center justify-between">
+<span class="text-[10px] font-mono font-bold bg-tertiary text-on-tertiary px-1.5 py-0.5 rounded">OCR: TOTAL SALE</span>
+<span class="text-[10px] font-mono font-bold bg-surface-container-lowest text-tertiary px-1.5 py-0.5 rounded">98.4% conf</span>
+</div>
+<div class="text-xl md:text-2xl font-mono font-bold text-on-primary tracking-widest text-right drop-shadow">
+              J$4,290.00
+            </div>
+</div>
+<!-- OCR Overlay Layer 2: Litres -->
+<div class="absolute bottom-[24%] left-[22%] w-[48%] h-[22%] bg-tertiary/20 backdrop-blur-[2px] rounded-lg p-2 flex flex-col justify-between shadow-lg">
+<div class="flex items-center justify-between">
+<span class="text-[10px] font-mono font-bold bg-tertiary text-on-tertiary px-1.5 py-0.5 rounded">OCR: VOLUME (L)</span>
+<span class="text-[10px] font-mono font-bold bg-surface-container-lowest text-tertiary px-1.5 py-0.5 rounded">97.8% conf</span>
+</div>
+<div class="text-xl md:text-2xl font-mono font-bold text-on-primary tracking-widest text-right drop-shadow">
+              109.80 L
+            </div>
+</div>
+<!-- Pump Unit Label Overlay -->
+<div class="absolute top-4 left-4 bg-inverse-surface/80 backdrop-blur text-surface-container-lowest font-mono text-[11px] px-2 py-1 rounded">
+            Pump #04 • Willowdene East
+          </div>
+</div>
+<div class="p-3 bg-surface-container text-on-surface-variant text-xs flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px] text-tertiary">check_circle</span>
+<span>OCR Bounding Box Engine v2.1 validated clean capture</span>
+</div>
+<button class="text-xs font-mono text-secondary hover:underline flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">zoom_in</span>
+<span>Full resolution</span>
+</button>
+</div>
+</div>
+<!-- Mathematical Calculation Callout -->
+<div class="p-5 rounded-xl bg-surface-container flex flex-col gap-3 shadow-sm">
+<div class="flex items-center justify-between">
+<span class="text-xs font-headline font-bold text-on-surface uppercase tracking-wider">Engine Computed Ratio</span>
+<span class="text-xs font-mono text-error font-semibold flex items-center gap-1">
+<span class="material-symbols-outlined text-[15px]">priority_high</span>
+            Anomaly Discrepancy
+          </span>
+</div>
+<div class="flex items-center justify-between p-3.5 rounded-lg bg-surface-container-lowest shadow-sm">
+<div class="flex items-center gap-3">
+<div class="text-sm font-mono font-bold text-on-surface">J$4,290.00</div>
+<span class="text-outline font-mono">÷</span>
+<div class="text-sm font-mono font-bold text-on-surface">109.80 L</div>
+<span class="text-outline font-mono">=</span>
+<div class="text-base font-mono font-bold text-error px-2 py-0.5 rounded bg-error/10">J$39.07 / L</div>
+</div>
+<span class="text-[11px] font-mono text-outline">Expected: ~J$229.20</span>
+</div>
+<div class="text-xs text-on-surface-variant flex items-start gap-2 bg-surface-container-high/60 p-2.5 rounded-lg">
+<span class="material-symbols-outlined text-[16px] text-outline mt-0.5">info</span>
+<span>Engine diagnosis: Dispenser volume meter misread factor (10x), driver pumped commercial kerosene, or driver recorded fleet depot bulk pump index.</span>
+</div>
+</div>
+<!-- Geographic & Device Verification -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+<!-- Geo Card -->
+<div class="p-4 rounded-xl bg-surface-container shadow-sm flex flex-col justify-between gap-3">
+<div class="flex items-center justify-between">
+<span class="text-xs font-headline font-bold text-on-surface">Geographic Validation</span>
+<span class="text-[11px] font-mono text-tertiary bg-tertiary-container/30 px-2 py-0.5 rounded font-medium">On-premises</span>
+</div>
+<!-- Mini Map Simulation with Willowdene pin -->
+<div class="w-full h-36 bg-surface-container-high rounded-lg relative overflow-hidden flex items-center justify-center shadow-inner" data-location="Willowdene, St. Catherine, Jamaica" style="">
+<!-- Simulated GIS radial target overlay -->
+<div class="absolute w-20 h-20 rounded-full bg-secondary/20 flex items-center justify-center">
+<div class="w-10 h-10 rounded-full bg-secondary/30 flex items-center justify-center">
+<div class="w-3 h-3 rounded-full bg-secondary shadow-md"></div>
+</div>
+</div>
+<!-- Station Icon -->
+<div class="absolute top-6 right-10 bg-on-surface text-surface-container-lowest px-1.5 py-0.5 rounded text-[10px] font-mono flex items-center gap-1 shadow">
+<span class="material-symbols-outlined text-[12px]">local_gas_station</span>
+<span>Jampet Station</span>
+</div>
+</div>
+<div class="space-y-1 text-xs font-mono">
+<div class="flex justify-between text-on-surface-variant">
+<span>Station Geo:</span>
+<span class="text-on-surface font-medium">17.9941° N, 76.9922° W</span>
+</div>
+<div class="flex justify-between text-on-surface-variant">
+<span>Driver GPS:</span>
+<span class="text-on-surface font-medium">17.9942° N, 76.9921° W (±8 m)</span>
+</div>
+</div>
+</div>
+<!-- Telemetry Card -->
+<div class="p-4 rounded-xl bg-surface-container shadow-sm flex flex-col justify-between gap-3">
+<div class="flex items-center justify-between">
+<span class="text-xs font-headline font-bold text-on-surface">Telemetry &amp; Ingestion</span>
+<span class="text-[10px] font-mono uppercase text-outline">EXIF DATA</span>
+</div>
+<div class="space-y-2.5 text-xs font-mono">
+<div class="p-2 rounded bg-surface-container-lowest flex items-center justify-between">
+<span class="text-outline">Capture Time:</span>
+<span class="text-on-surface font-semibold">27 Oct 2026, 10:22 EST</span>
+</div>
+<div class="p-2 rounded bg-surface-container-lowest flex items-center justify-between">
+<span class="text-outline">Hardware:</span>
+<span class="text-on-surface font-semibold truncate max-w-[150px]">Samsung Galaxy A34</span>
+</div>
+<div class="p-2 rounded bg-surface-container-lowest flex items-center justify-between">
+<span class="text-outline">App Build:</span>
+<span class="text-on-surface font-semibold">Fleet App v3.4.1</span>
+</div>
+<div class="p-2 rounded bg-surface-container-lowest flex items-center justify-between">
+<span class="text-outline">Uplink:</span>
+<span class="text-on-surface font-semibold">Digicel LTE (4 bars)</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- RIGHT PANEL: Evaluation & Decision (45% -> 5 Cols) -->
+<div class="lg:col-span-5 flex flex-col gap-6">
+<!-- Amber Anomaly Alert Banner -->
+<div class="p-4 rounded-xl bg-amber-500/10 text-on-surface shadow-sm flex items-start gap-3.5">
+<span class="material-symbols-outlined text-amber-600 text-[24px] mt-0.5">warning</span>
+<div class="flex flex-col gap-1">
+<div class="text-xs font-headline font-bold text-amber-700 uppercase tracking-wide">Out of Bounds Rule Triggered</div>
+<div class="text-xs text-on-surface leading-relaxed">
+            Reported price (<strong class="font-mono text-error">J$39.07</strong>) is less than 80% of current Petrojam wholesale (<strong class="font-mono">J$201.81</strong>). Automatic publishing halted.
+          </div>
+</div>
+</div>
+<!-- Comparative Benchmark Table -->
+<div class="rounded-xl bg-surface-container p-4 shadow-sm flex flex-col gap-3">
+<div class="text-xs font-headline font-bold text-on-surface uppercase tracking-wider">Benchmark Index Comparison</div>
+<div class="flex flex-col gap-1.5 font-mono text-xs">
+<div class="flex items-center justify-between p-2.5 rounded-lg bg-error/10 text-error">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-error"></span>
+<span class="font-semibold">This Report (#8821)</span>
+</div>
+<span class="text-sm font-bold">J$39.07</span>
+</div>
+<div class="flex items-center justify-between p-2.5 rounded-lg bg-surface-container-lowest">
+<div class="flex items-center gap-2 text-on-surface-variant">
+<span class="w-2 h-2 rounded-full bg-outline"></span>
+<span>Petrojam Wholesale Baseline</span>
+</div>
+<span class="font-semibold text-on-surface">J$201.81</span>
+</div>
+<div class="flex items-center justify-between p-2.5 rounded-lg bg-surface-container-lowest">
+<div class="flex items-center gap-2 text-on-surface-variant">
+<span class="w-2 h-2 rounded-full bg-secondary"></span>
+<span>Station Published Price</span>
+</div>
+<div class="flex items-center gap-1.5">
+<span class="font-semibold text-on-surface">J$229.20</span>
+<span class="text-[10px] text-outline font-label">(2 reports)</span>
+</div>
+</div>
+<div class="flex items-center justify-between p-2.5 rounded-lg bg-surface-container-lowest">
+<div class="flex items-center gap-2 text-on-surface-variant">
+<span class="w-2 h-2 rounded-full bg-tertiary"></span>
+<span>Willowdene 7-Day Median</span>
+</div>
+<span class="font-semibold text-on-surface">J$229.20</span>
+</div>
+</div>
+</div>
+<!-- Historical Sparkline / Chart -->
+<div class="rounded-xl bg-surface-container p-4 shadow-sm flex flex-col gap-3">
+<div class="flex items-center justify-between">
+<span class="text-xs font-headline font-bold text-on-surface uppercase tracking-wider">8-Week Price Trend (E-10 87)</span>
+<span class="text-[11px] font-mono text-outline">Jampet Willowdene</span>
+</div>
+<!-- Inline SVG Trendline Chart -->
+<div class="w-full h-32 bg-surface-container-lowest rounded-lg p-2 relative flex flex-col justify-end">
+<svg class="w-full h-24 overflow-visible" preserveaspectratio="none" viewbox="0 0 300 80">
+<!-- Grid lines -->
+<line class="text-surface-variant" stroke="currentColor" stroke-dasharray="2,2" stroke-width="1" x1="0" x2="300" y1="20" y2="20"></line>
+<line class="text-surface-variant" stroke="currentColor" stroke-dasharray="2,2" stroke-width="1" x1="0" x2="300" y1="50" y2="50"></line>
+<!-- Historical stable band (~J$228-230) -->
+<path class="text-secondary" d="M 0,25 Q 40,24 80,26 T 150,23 T 220,25 T 280,24" fill="none" stroke="currentColor" stroke-width="2.5"></path>
+<!-- Historic datapoints -->
+<circle class="text-secondary fill-current" cx="20" cy="25" r="3"></circle>
+<circle class="text-secondary fill-current" cx="80" cy="26" r="3"></circle>
+<circle class="text-secondary fill-current" cx="150" cy="23" r="3"></circle>
+<circle class="text-secondary fill-current" cx="220" cy="25" r="3"></circle>
+<!-- Plummet line to anomalous report -->
+<line class="text-error" stroke="currentColor" stroke-dasharray="3,3" stroke-width="2" x1="280" x2="295" y1="24" y2="72"></line>
+<!-- Anomalous point -->
+<circle class="text-error fill-current" cx="295" cy="72" r="5"></circle>
+</svg>
+<!-- Chart labels -->
+<div class="flex items-center justify-between text-[10px] font-mono text-outline mt-1 px-1">
+<span>Wk 36 (J$228.40)</span>
+<span>Wk 40</span>
+<span class="text-error font-bold">Today (J$39.07!)</span>
+</div>
+</div>
+</div>
+<!-- Fuel Grade Selector -->
+<div class="rounded-xl bg-surface-container p-4 shadow-sm flex flex-col gap-3">
+<div class="flex items-center justify-between">
+<span class="text-xs font-headline font-bold text-on-surface uppercase tracking-wider">Report Fuel Grade</span>
+<span class="text-xs font-mono text-outline">Press <kbd class="font-bold">G</kbd> to cycle</span>
+</div>
+<div class="grid grid-cols-4 gap-1.5 text-xs font-headline">
+<button class="py-2 text-center rounded-lg bg-secondary text-on-secondary font-bold shadow-sm">
+            E-10 87
+          </button>
+<button class="py-2 text-center rounded-lg bg-surface-container-lowest text-on-surface hover:bg-surface-container-high transition-colors font-semibold">
+            E-10 90
+          </button>
+<button class="py-2 text-center rounded-lg bg-surface-container-lowest text-on-surface hover:bg-surface-container-high transition-colors font-semibold">
+            Diesel
+          </button>
+<button class="py-2 text-center rounded-lg bg-surface-container-lowest text-on-surface hover:bg-surface-container-high transition-colors font-semibold">
+            ULSD
+          </button>
+</div>
+</div>
+<!-- Reporter Profile Card -->
+<div class="rounded-xl bg-surface-container p-4 shadow-sm flex flex-col gap-3">
+<div class="text-xs font-headline font-bold text-on-surface uppercase tracking-wider">Reporter Profile</div>
+<div class="flex items-center justify-between p-3 rounded-lg bg-surface-container-lowest">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-surface-variant flex items-center justify-center font-bold text-on-surface-variant">
+              KR
+            </div>
+<div>
+<div class="text-xs font-headline font-bold text-on-surface">Kenny R.</div>
+<div class="text-[11px] font-mono text-outline">Fleet ID: #DRV-1049</div>
+</div>
+</div>
+<div class="text-right font-mono">
+<div class="text-xs font-bold text-secondary">Weight: 2.0</div>
+<div class="text-[10px] text-tertiary">Fleet Driver</div>
+</div>
+</div>
+<div class="grid grid-cols-3 gap-2 text-center font-mono text-xs">
+<div class="p-2 rounded bg-surface-container-lowest">
+<div class="text-outline text-[10px]">TOTAL</div>
+<div class="font-bold text-on-surface">48</div>
+</div>
+<div class="p-2 rounded bg-surface-container-lowest">
+<div class="text-tertiary text-[10px]">ACCEPTED</div>
+<div class="font-bold text-tertiary">47</div>
+</div>
+<div class="p-2 rounded bg-surface-container-lowest">
+<div class="text-error text-[10px]">REJECTED</div>
+<div class="font-bold text-error">0</div>
+</div>
+</div>
+</div>
+<!-- Audit Notes Field -->
+<div class="rounded-xl bg-surface-container p-4 shadow-sm flex flex-col gap-3">
+<div class="flex items-center justify-between">
+<label class="text-xs font-headline font-bold text-on-surface uppercase tracking-wider">Audit Log Reason Note</label>
+<span class="text-[10px] font-mono text-outline">Optional</span>
+</div>
+<!-- Quick chips -->
+<div class="flex flex-wrap gap-1.5">
+<button class="text-[11px] font-label px-2 py-1 rounded bg-surface-container-lowest hover:bg-surface-container-high text-on-surface transition-colors" onclick="document.getElementById('audit-note').value = 'Misread pump amount (unit calculation issue)';">
+            Misread pump amount
+          </button>
+<button class="text-[11px] font-label px-2 py-1 rounded bg-surface-container-lowest hover:bg-surface-container-high text-on-surface transition-colors" onclick="document.getElementById('audit-note').value = 'Wrong fuel grade logged by driver';">
+            Wrong fuel grade
+          </button>
+<button class="text-[11px] font-label px-2 py-1 rounded bg-surface-container-lowest hover:bg-surface-container-high text-on-surface transition-colors" onclick="document.getElementById('audit-note').value = 'Internal telemetry test report';">
+            Driver test
+          </button>
+</div>
+<textarea class="w-full text-xs font-body p-2.5 rounded-lg bg-surface-container-lowest text-on-surface placeholder:text-outline focus:outline-none focus:ring-1 focus:ring-secondary resize-none" id="audit-note" placeholder="Why (optional notes for audit log)..." rows="2"></textarea>
+</div>
+</div>
+</div>
+<!-- Sticky Decision Bar at Bottom -->
+<div class="fixed bottom-0 left-64 right-0 bg-surface/95 backdrop-blur-md p-4 shadow-xl z-30 flex items-center justify-between">
+<div class="flex items-center gap-3">
+<span class="text-xs font-mono text-outline flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-error animate-ping"></span>
+<span>Action required for #REP-8821</span>
+</span>
+<span class="text-xs text-on-surface-variant font-label">Queue: 1 of 3 pending</span>
+</div>
+<!-- Actions -->
+<div class="flex items-center gap-3">
+<!-- Skip -->
+<button class="px-4 py-2 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface text-xs font-headline font-semibold flex items-center gap-1.5 transition-colors">
+<span>Skip (N)</span>
+</button>
+<!-- Fix & Approve -->
+<button class="px-4 py-2 rounded-lg bg-secondary/10 hover:bg-secondary/20 text-secondary text-xs font-headline font-semibold flex items-center gap-1.5 transition-colors">
+<span class="material-symbols-outlined text-[16px]">edit</span>
+<span>Fix and approve</span>
+</button>
+<!-- Reject (Dropdown preset) -->
+<div class="flex items-center rounded-lg overflow-hidden bg-error text-on-error shadow-sm">
+<button class="px-4 py-2 hover:bg-error-dim text-xs font-headline font-semibold flex items-center gap-1.5 transition-colors">
+<span class="material-symbols-outlined text-[16px]">cancel</span>
+<span>Reject (R)</span>
+</button>
+<span class="w-[1px] h-6 bg-on-error/20"></span>
+<div class="px-2.5 py-2 text-[11px] font-mono bg-error hover:bg-error-dim cursor-pointer flex items-center gap-1">
+<span>Wrong reading</span>
+<span class="material-symbols-outlined text-[14px]">arrow_drop_down</span>
+</div>
+</div>
+<!-- Approve -->
+<button class="px-5 py-2 rounded-lg bg-tertiary hover:bg-tertiary-dim text-on-tertiary text-xs font-headline font-bold flex items-center gap-1.5 shadow-sm transition-colors">
+<span class="material-symbols-outlined text-[16px]">check_circle</span>
+<span>Approve (A)</span>
+</button>
+</div>
+</div>
+</div>
+<script>
+  // Keyboard shortcut listener for efficient triage
+  window.addEventListener('keydown', function(e) {
+    if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return;
+    if (e.key === 'r' || e.key === 'R') {
+      const noteField = document.getElementById('audit-note');
+      if (noteField && !noteField.value) {
+        noteField.value = 'Auto-rejected: Out-of-bounds wholesale threshold mismatch.';
+      }
+    }
+  });
+</script></div></main></div></body></html>

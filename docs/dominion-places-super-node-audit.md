@@ -1,127 +1,94 @@
 # Audit: Dominion Places (Super-Node register)
 
-**Rev 7 · 2026-10-28 21:00 UTC** · Status: **Engineering items closed 28 Oct. Data work and the 12 Nov retirement are still open.** · Project `csfllzzastacofsvcdsc`
+**Rev 8 · 2026-10-28 21:40 UTC** · Status: **Live. 5 engineering items + data work open. Retirement on or after 12 Nov.** · Project `csfllzzastacofsvcdsc`
 
-Remediation (28 Oct): the retirement script no longer drops Fleet's station or toll views. Coverage now counts each verified place once (live: 56 fuel and 12 toll verified, 148 fuel pending) after parish codes were filled from the pin. Evidence shows in Review. Imported stations use the Import chip, and fuel hand-review rows link to station resolution. Coverage rebuilds once per save, not once per row. Extra public grants are revoked. SQL checks, a Plug restroom journey, and a Dominion register check are in CI. The data steps are in [places-register-data-ops.md](places-register-data-ops.md). Do not run the retirement script before 12 Nov 2026. `places.migration_health` is empty. The health job is scheduled for 04:15 UTC and had not run yet at the time of this note. GitHub ran the fuel station and Places review tests green on 28 Oct. The rest of CI still stops on an older edge typecheck that is outside this Places work.
+Audit only; the owner implements. This doc lists open items only. Rev 8 is a full sweep:
+- git and CI runs
+- edge versions and the repo bundles
+- migration history
+- DB functions and grants
+- the live API
+- the Rev 2 UI and test plan
+- data
 
-Audit only; the owner implements. This is a **full sweep**, not a re-check of the last round. It covers code, database, security, CI, deploys, both live sites, the screens planned in Rev 2, tests and data.
+All Rev 7 engineering items (1–12) were verified closed:
+- the retirement script now keeps Fleet's views
+- coverage counts are right (56 + 12 verified, 148 pending)
+- statement-level coverage triggers
+- grants revoked
+- Review inbox evidence and the import chip
+- commits pushed
+- the edge deploy is green (`fleet-core` v174)
 
-Already proven and not repeated here:
-- Register, ids and the public map (56 stations + 12 tolls)
-- R1 fix in `fleet-fuel` v139
-- Live `platform-catalog /places/taxonomy` and `/places/search` (fuel near Half Way Tree returns stations)
-- Dominion redeployed (hook fired 19:23)
-- Plug live bundle uses taxonomy and search
-- anon blocked from `places` (REST RPC → `permission denied for schema places`)
+## Open: engineering
 
-## A. Must fix before 2026-11-12 (the retirement script)
+> Items 1 and 2 are now replaced by the Fuel Price Engine. See [fuel-price-engine-plan.md](fuel-price-engine-plan.md).
 
-**1 · Critical: the script would break every Fleet station and toll read.**
-- Evidence: KV reads of `station:`, `toll_plaza:` and `learnt_location:` go through [baseRepo.ts](../supabase/functions/_fleet-server/repos/baseRepo.ts). `fleetTable()` maps them to `public.fleet_stations` / `public.fleet_toll_plazas`, which are built on `fleet.stations` / `fleet.toll_plazas`.
-  - That's about 49 calls, including R1's `deps.get`.
-  - KV deletes go through the same views.
-  - [platform-catalog/index.ts:139,157](../supabase/functions/platform-catalog/index.ts#L139) reads `public.fleet_stations`.
-  - [places_phase8_retire.sql](../scripts/sql/places_phase8_retire.sql) drops them all.
-- Fix: remove from the script the drops of:
-  - `fleet.stations`, `fleet.toll_plazas`, `fleet.station_quality`
-  - `public.fleet_stations`, `public.fleet_toll_plazas`
-  - `stations_view_write()`, `tolls_view_write()`
-  
-  These are Fleet's permanent interface to `places`. Cut the 14-day log check down to `places.public_station` and `public.station_merchant_aliases`.
-
-**2 · Critical: the script would break every place save.**
-- Evidence: `places.refresh_coverage()` reads `places.public_station`. It runs from the triggers on `place`, `place_facility` and `price_current`. The script drops `public_station` but doesn't rewrite `refresh_coverage`, so after it runs, every place, facility, price and Fleet KV station save errors.
-- Fix: the script (or a migration before it) rewrites `refresh_coverage()` to count only `places.public_place` (verified) and `places.place` (pending). This also fixes item 7.
-
-## B. Release
-
-**3 · High: the latest code isn't in git.**
-- Evidence: 6 files are modified and uncommitted (`plug_public_price.ts`, `station_merchant_aliases.ts`, `tollPlazaLoader.ts` + test, `explorer/index.ts`, `places_phase8_retire.sql`), and `main` is 2 commits ahead of `origin`. The live functions were deployed from the working copy.
-- Fix: commit (after 1–2) and push.
-
-**4 · High: CI has never run the places tests.**
-- Evidence: the `CI` workflow failed on every push since at least 2026-10-27. The latest failure (run 40753713241) is `ENOENT …/20260908220000_settlement_queue_sql_aggregates.sql` in the service-line parity step. That step comes before the Deno tests, so the replay, parity and toll tests listed in `ci.yml` have never run on GitHub. They pass locally (13/13). The fix is in the unpushed `4a512efe`.
-- Fix: push, then confirm the next `CI` run is green **through** the Deno test step.
-
-**5 · High: the edge deploy workflow is red.**
-- Evidence: `Deploy Supabase Edge Function` fails with `FAIL fleet-core: routes.generated.json is stale (committed 675, actual 676)` (runs at 04:46 and 19:22). The repo bundle [fleet-core/index.ts](../supabase/functions/fleet-core/index.ts) still has the old toll loader (`.from("fleet_toll_plazas")`).
-- Fix: run `node scripts/edge-route-manifest.mjs fleet-core` and `node scripts/build-edge-bundle.mjs fleet-core`, commit both, and redeploy `fleet-core`. Confirm the workflow goes green.
-
-## C. Bugs
-
-**6 · Medium: the Review inbox never shows evidence.**
-- Evidence: [place_admin.ts](../supabase/functions/explorer/place_admin.ts) (`/admin/review`, evidence branch) selects `kind` from `places.place_evidence`. That column doesn't exist, and the error is discarded (`const { data } = …`), so the **Evidence** chip is always empty.
-- Fix: select `id, place_id, note, origin_app, accuracy_m, created_at`, use `note || 'Evidence'` as the title, and return the query error instead of dropping it.
-
-**7 · Medium: the coverage numbers are empty and would double-count.**
-- Evidence: `places.coverage_count` has **0 rows**, so the Places home and Plug `/admin/coverage` show no coverage. When `refresh_coverage()` does run, it counts each verified station twice: as `station` (from `public_station`) and as `fuel` (from `public_place`).
-- Fix: the rewrite in item 2, then run `select places.refresh_coverage();` once. Check that `coverage_count` sums to 56 fuel + 12 toll verified and 148 fuel pending.
-
-**8 · Medium: the inbox is flooded with CSV imports, and fuel's hand review is missing from it.**
-- Evidence: `/admin/review` lists all 148 pending CSV-imported stations under the **hand** chip. The fuel hand-review and provisional-fill items (`/admin/provisional-fills`) aren't in the inbox. Fuel added its own "Fuel places" sub-tab instead (`ResolutionQueueTab.tsx`). Rev 2 U2 (one inbox) is only half done.
-- Fix: give pending rows with `legacy_payload->>'dataSource' = 'import'` the chip **import**. Add `/admin/provisional-fills` rows with `reason = 'HAND_REVIEW'` as chip **hand review**, linking to the fuel resolution screen.
-
-## D. Hygiene
-
-**9 · Low: views and functions have more permissions than they need.**
-- Evidence: `public.fleet_stations` and `public.fleet_toll_plazas` grant anon **and** authenticated INSERT/UPDATE/DELETE/TRUNCATE. `public.station_merchant_aliases` grants authenticated the same. (These are `public` schema defaults.) `stations_view_write`, `tolls_view_write`, `alias_view_write` and `sync_price_place_id` are executable by anon. These are blocked today only because the views are `security_invoker` and anon/authenticated have no `places` usage.
-- Fix: `revoke all on public.fleet_stations, public.fleet_toll_plazas, public.station_merchant_aliases from anon, authenticated;` and `revoke execute on function` those four functions `from public, anon, authenticated;`.
-
-**10 · Low: coverage is rebuilt in full on every row change.**
-- Evidence: `refresh_coverage()` deletes and rebuilds the whole table from the row-level triggers. A 1,000-row CSV import does 1,000 full rebuilds, and this database is sensitive to disk IO.
-- Fix: move the `refresh_coverage()` call to `FOR EACH STATEMENT` triggers on `place` and `place_facility`, and keep `refresh_public_place` per row.
-
-## E. Missing tests from the plan
-
-**11 · Medium: no SQL checks for search and the public projection.**
-- Evidence: there is no `supabase/tests/places_*_checks.sql`.
-- Fix: add `supabase/tests/places_checks.sql` asserting:
-  - `search_facility` returns attached plus `search_as_facility` places, verified only, ordered by distance
-  - a pending or `offset` place is not in `public_place`
-  - adding or removing a facility updates `facility_types`
-  - every `place_type` / `facility_type` category exists
-  
-  Run it in `ci.yml`.
-
-**12 · Medium: no browser tests for the new screens.**
-- Evidence: `e2e/plug-journeys.spec.ts` doesn't cover facility search or the place facility page. No `e2e` spec covers Dominion's Places register, editor, inbox or categories.
+**1 · High: Plug can never show a fuel price.**
+- Evidence: `places.latest_retail_estimate()` returns `null` unless `fuel.retail_price_markup` has a published row. That table has **0 rows**, so the estimate is `null` and [plug_public_price.ts](../supabase/functions/_fleet-server/plug_public_price.ts) holds every Fleet price. `price_current` has 0 rows, and 0 public places have prices. The only observation (27 Oct, J$39.07/L) was held. Petrojam data is current (2026-10-22, 87 = 201.81).
+- No screen writes `retail_price_markup`. Dominion → Fuel → Prices only syncs Petrojam, and Fleet analytics only reads markups. (Rev 8 wrongly pointed at that screen.)
+- The markup exists because Petrojam publishes the **wholesale** price, while drivers pay the **pump** price. The check only publishes a price that is at least 50% of the expected pump price and less than 18% above it. That is how it threw out the J$39.07 entry.
+- Petrojam alone is close enough. Fleet fills since 1 Sep paid a median J$229.2/L against wholesale J$201.81 (+13.6%). With no markup, 71 of 75 fills pass. The 4 that fail are the J$39.07 entry and higher-priced fills that are probably diesel or 90, which item 2 fixes.
+- Owner rule: every price is captured. A normal price goes public automatically. An outrageous one goes to a person in the Review inbox. Nothing is thrown away. Prices come from the driver's pump photo (Fleet calculates amount ÷ litres), and that flow is unchanged. The J$39.07 entry came from that flow, so this is exactly the misread the review catches.
 - Fix:
-  - Plug: search "restroom" → results sorted by distance → tap → place opens with `?facility=` highlighted → facilities grouped by L1.
-  - Dominion: add one place of each type; the duplicate panel appears within the radius; Verify is blocked until the checklist passes.
+  - The reference is the Petrojam wholesale price for the grade (no markup).
+  - In `noteFleetPrice` and the Plug fill path, always insert the `price_observation`.
+  - If the price is between 80% and 150% of wholesale, also write `price_current` (public).
+  - Otherwise mark the observation `needs_review` and add it to the Places **Review** inbox under a new chip, **Price**. Approve writes `price_current`; Reject marks it rejected.
+  - With no wholesale row for the grade, send it to review.
+  - Replace the markup-based `plugPriceDecision` / `latest_retail_estimate` gate with this rule.
+- Check: with today's Fleet fills (median J$229.2 vs J$201.81 wholesale), 74 of 75 publish and the J$39.07 entry lands in Review.
+- Check after the next matched fill: a new `price_observation` with `in_band = true` and a `price_current` row for that station.
 
-## F. Data work (Dominion, no code)
+**2 · Medium: every Fleet price is filed as 87, even diesel.**
+- Evidence: `noteFleetPrice` hard-codes `grade: "e10_87"`. Fills carry a grade in `fuelType` (25 rows) or `metadata.jaaFuelType` (73 rows).
+- Fix: map `fuelType ?? metadata.jaaFuelType` to `e10_87` / `e10_90` / `diesel`, use it for the estimate and both writes, and skip the note when the grade is unknown.
 
-**13 · Facilities are almost empty, so most searches return nothing.**
-- Evidence: all 204 gas stations have **only** `fuel_pump`. Searching restroom or ATM near Half Way Tree returns `[]`.
-- Fix: in the Places register, add the real facilities (restroom, ATM, air/water, convenience store…) to the 56 verified stations first.
+**3 · Medium: the Evidence and Prices tabs on every place are always empty.**
+- Evidence: `GET /admin/register/:id` in [place_admin.ts:151-153](../supabase/functions/explorer/place_admin.ts#L151):
+  - selects `kind` from `place_evidence` (that column doesn't exist)
+  - selects `updated_at` from `price_current` (the column is `observed_at`)
+  
+  Both errors are dropped (`{ data: evidence }`, `{ data: prices }`).
+- Fix: select `id, note, origin_app, accuracy_m, created_at` and `grade, price_per_litre, observed_at`, and return any query error instead of an empty list.
 
-**14 · Brands are missing.**
-- Evidence: 99 gas stations have no brand. Recurring names include **Gulfstream (12)**, First (5), Jampet, Blaize, Tomijam, JamGas, G.A. Hamilton, MZ, Buds and Johnson's (2 each). 1 station is named TotalEnergies but has no brand.
-- Fix: add those brands in **Categories → Brands**, then bulk-assign them.
-
-**15 · The other 15 place types have no places.**
-- Evidence: every place is a `gas_station` or `toll_plaza`. Mechanics, pharmacies, supermarkets and the rest are empty, and 0 Plug proposals are open.
-- Fix: map them in the register, starting with the types Plug shows on its home grid (mechanic, parts store, tyres & air, car wash, restroom, roadside help).
-
-**16 · The forms, the verification backlog and the pins.**
+**4 · Medium: the migration history doesn't match the repo.**
 - Evidence:
-  - 42 of 44 facility types and 10 of 17 place types have no `attribute_schema`, so their editor forms show no detail fields (hours, ATM bank, EV connector…).
-  - 148 stations are still pending.
-  - 0 verified pins are `confirmed`.
+  - Production has `20261028195252 places_phase6_health`, `20261028205022 places_coverage_grants`, `20261028205141 places_fill_pcode`, `20261028205221 places_fill_pcode_guard` and `20261028205603 revoke_io_daily_temp_bytes_anon`.
+  - The repo has `20261028200000_places_phase6_health.sql` and `20261028210000_places_coverage_grants.sql` (which also holds the pcode fill), and no file for the IO revoke.
+  - A `supabase db push` would try to re-run the two repo files.
 - Fix:
-  - Write the attribute schemas in **Categories** (start with the gas station's hours and attendant, and the ATM's bank).
-  - Work the pending queue.
-  - Mark pins confirmed as stations are checked on site.
+  - `supabase migration repair --status reverted 20261028195252 20261028205022 20261028205141 20261028205221`
+  - `supabase migration repair --status applied 20261028200000 20261028210000`
+  - Add the IO revoke to the repo as `20261028205603_revoke_io_daily_temp_bytes_anon.sql` and commit.
+  - `supabase migration list` then shows no differences.
 
-## G. Checks to run
+**5 · High: the Places SQL checks and browser tests have never run.**
+- Evidence:
+  - [places_checks.sql](../supabase/tests/places_checks.sql) runs only in `parts-sql-checks.yml` (trigger: `pull_request`).
+  - [dominion-places.spec.ts](../e2e/dominion-places.spec.ts) runs only in `dominion-places-e2e.yml` (`pull_request` / manual).
+  - Work goes straight to `main`, so neither workflow has a single run.
+  - In `ci.yml`, **Plug journeys** (which hold the restroom journey) were skipped on every run, because the earlier step **Deno check edge functions** fails. That step has 106 type errors, all outside Places (`week_close.ts` 47, `toll_controller.tsx` 42, the rest finance/recon).
+- Fix:
+  - Add `push: branches: [main]` with the same `paths` to both workflows.
+  - In `ci.yml`, move **Typecheck Plug**, **Install Playwright browser** and **Plug journeys** above **Deno check edge functions**, as was done for the Places Deno tests.
+  - Run both workflows once manually and confirm they're green.
 
-- **After the next GPS-matched fill** (there have been none since 18:00 UTC): `select name, brand_id, address, parish, phone, pin_state, geofence_m from places.place where id = '<matchedStationId>'` is unchanged, and `geofence_m` is still `null` if it was before.
-- **After 2026-10-29 04:15 UTC:** the `places-migration-health` cron shows `succeeded`, and `places.migration_health` returns 0 rows.
+## Open: checks
 
-## Order
+- **Next GPS-matched fill** (none since 18:00 UTC): `select name, brand_id, address, parish, phone, pin_state, geofence_m from places.place where id = '<matchedStationId>'` is unchanged, and `geofence_m` is still `null` if it was before.
+- **After 2026-10-29 04:15 UTC:** `places-migration-health` shows `succeeded` in `cron.job_run_details` (it has no runs yet), and `places.migration_health` returns 0 rows.
 
-1. Items 1, 2, 6, 7 and 9 together in one migration + code commit.
-2. Then 3, 4 and 5 (commit, push, CI green, fleet-core redeployed).
-3. Then 8, 10, 11 and 12.
-4. Data work 13–16 any time.
-5. Retirement on or after 2026-11-12, with 14 clean days. Afterwards, stop sending `station_id` on price writes and redeploy `fleet-fuel` and `explorer`.
+## Open: data (Dominion, no code; steps in [places-register-data-ops.md](places-register-data-ops.md))
+
+| Gap | Now | Do |
+|---|---|---|
+| Facilities | All 204 stations have only `fuel_pump`. Restroom/ATM search returns nothing. | Add real facilities, verified stations first |
+| Brands | 99 stations brandless: Gulfstream 12, First 5, Jampet, Blaize, Tomijam, JamGas, G.A. Hamilton, MZ, Buds, Johnson's 2 each; 1 TotalEnergies | Add the brands, bulk-assign |
+| Other place types | 0 places outside gas stations and tolls | Map the Plug home-grid types first (mechanic, parts, tyres & air, car wash, restroom, roadside) |
+| Detail forms | 42/44 facility types and 10/17 place types have no attribute schema | Gas station (hours, attendant) and ATM (bank) first |
+| Verification | 148 stations pending, 0 pins confirmed | Work the queue; confirm pins on site |
+
+## Then, on or after 2026-11-12 00:00 UTC
+
+Run [places_phase8_retire.sql](../scripts/sql/places_phase8_retire.sql) after 14 days with no errors from `places.public_station` or `public.station_merchant_aliases`. In the same release, stop sending `station_id` on price writes, and rebuild and redeploy `fleet-fuel` and `explorer`.

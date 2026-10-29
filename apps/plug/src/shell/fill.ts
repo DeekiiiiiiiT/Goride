@@ -4,7 +4,19 @@ import { plugSend, publicGet } from '../api';
 import { readQueue, readStationCache, writeStationCache } from '../offline';
 import { handlePlugClick, onPlugClick } from '../shell/actions';
 import { catalogCoversYear, catalogVariant, deviceFix, rememberVehicle, vehicleId, type CatalogVehicle } from './facts';
-import { getPlugRuntime } from './click';
+import { getPlugRuntime, paintLockedGradeChrome, preferredGrade } from './click';
+import {
+  confidenceDotClass,
+  confidenceLabel,
+  confidencePillClass,
+  confidenceTone,
+  gradeBadgeClass,
+  gradeLabel as pumpGradeLabel,
+  moneyJmd,
+  pricedGrades,
+  readPumpQuote,
+  relativeAge,
+} from '../live/pumpPrice';
 
 type Vehicle = {
   id: string;
@@ -24,7 +36,7 @@ type Station = {
   lat?: number;
   lng?: number;
   pcode?: string | null;
-  prices?: Record<string, number>;
+  prices?: Record<string, unknown>;
   price_updated_at?: string | null;
 };
 
@@ -221,22 +233,137 @@ function paintPrices(root: HTMLElement, station: Station) {
   const prices = station.prices || {};
   root.querySelectorAll<HTMLElement>('[data-slot="prices"]').forEach((slot) => {
     slot.textContent = '';
-    Object.entries(prices).forEach(([grade, value]) => {
-      const amount = Number(value);
-      if (!Number.isFinite(amount)) return;
-      const row = document.createElement('div');
-      row.className = 'p-3 rounded-xl bg-surface-container-low flex items-center justify-between';
-      row.dataset.liveRow = 'station';
-      row.dataset.liveName = station.name;
-      const name = document.createElement('span');
-      name.className = 'font-label-lg text-on-surface';
-      name.textContent = gradeLabel(grade);
-      const price = document.createElement('span');
-      price.className = 'font-bold text-on-surface';
-      price.textContent = money(amount);
-      row.append(name, price);
-      slot.appendChild(row);
+    const grades = pricedGrades(prices);
+    grades.forEach((grade, index) => {
+      const quote = readPumpQuote(prices, grade);
+      if (quote.price == null) return;
+      if (index > 0) {
+        const divider = document.createElement('div');
+        divider.className = 'h-px bg-surface-variant mx-space-md';
+        slot.appendChild(divider);
+      }
+      const tone = confidenceTone(quote);
+      const age = relativeAge(quote.observedAt || station.price_updated_at);
+      const conf = confidenceLabel(quote);
+      const muted = tone === 'outdated';
+
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'w-full text-left p-space-md flex items-center justify-between hover:bg-surface-container-low transition-colors group';
+      button.dataset.act = 'log-fill';
+      button.dataset.stationId = station.id;
+      button.dataset.liveRow = 'station';
+      button.dataset.liveName = station.name;
+      button.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onPlugClick({ preventDefault() {}, stopPropagation() {}, currentTarget: button } as unknown as Parameters<typeof onPlugClick>[0]);
+      });
+
+      const left = document.createElement('div');
+      left.className = 'flex items-start gap-3 min-w-0';
+
+      const badgeWrap = document.createElement('div');
+      badgeWrap.className = 'flex flex-col items-center';
+      const badge = document.createElement('span');
+      badge.className = `px-2 py-1 rounded-md ${gradeBadgeClass(grade)} font-label-md text-label-md font-bold tracking-tight`;
+      badge.textContent = pumpGradeLabel(grade);
+      badgeWrap.appendChild(badge);
+
+      const mid = document.createElement('div');
+      mid.className = 'flex flex-col min-w-0';
+      const priceRow = document.createElement('div');
+      priceRow.className = muted
+        ? 'flex items-baseline gap-2 opacity-75'
+        : 'flex items-baseline gap-2';
+      const priceEl = document.createElement('span');
+      priceEl.className = muted
+        ? 'font-price-display text-price-display text-on-surface-variant font-bold tracking-tight'
+        : 'font-price-display text-price-display text-on-surface font-extrabold tracking-tight';
+      priceEl.style.fontVariantNumeric = 'tabular-nums';
+      priceEl.textContent = moneyJmd(quote.price);
+      const perL = document.createElement('span');
+      perL.className = 'font-label-sm text-label-sm text-on-surface-variant';
+      perL.textContent = '/L';
+      priceRow.append(priceEl, perL);
+
+      const confRow = document.createElement('div');
+      confRow.className = 'flex items-center gap-2 mt-1';
+      if (conf) {
+        const pill = document.createElement('span');
+        pill.className = `inline-flex items-center gap-1 px-2 py-0.5 rounded-full ${confidencePillClass(tone)} font-label-sm text-label-sm font-semibold`;
+        if (tone === 'outdated') {
+          const icon = document.createElement('span');
+          icon.className = 'material-symbols-outlined text-[12px] text-outline';
+          icon.textContent = 'schedule';
+          pill.appendChild(icon);
+        } else if (tone === 'medium' && (quote.fleetCount || 0) > 0 && (quote.plugCount || 0) === 0) {
+          const icon = document.createElement('span');
+          icon.className = 'material-symbols-outlined text-[12px] text-amber-700';
+          icon.textContent = 'local_shipping';
+          pill.appendChild(icon);
+        } else {
+          const dot = document.createElement('span');
+          dot.className = `w-1.5 h-1.5 rounded-full ${confidenceDotClass(tone).split(' ')[0]}`;
+          pill.appendChild(dot);
+        }
+        const pillText = document.createElement('span');
+        pillText.textContent = conf;
+        pill.appendChild(pillText);
+        confRow.appendChild(pill);
+      }
+      if (age) {
+        const ageEl = document.createElement('span');
+        ageEl.className = 'font-body-sm text-body-sm text-on-surface-variant truncate';
+        ageEl.textContent = `• ${age}`;
+        confRow.appendChild(ageEl);
+      }
+      mid.append(priceRow, confRow);
+      left.append(badgeWrap, mid);
+
+      const chevron = document.createElement('div');
+      chevron.className = 'flex items-center text-on-surface-variant group-hover:text-primary transition-colors shrink-0 pl-2';
+      const chevronIcon = document.createElement('span');
+      chevronIcon.className = 'material-symbols-outlined text-[22px]';
+      chevronIcon.textContent = 'chevron_right';
+      chevron.appendChild(chevronIcon);
+
+      button.append(left, chevron);
+      slot.appendChild(button);
     });
+
+    const callout = document.createElement('div');
+    callout.className = 'p-space-md rounded-xl bg-surface-container-low flex items-start gap-3';
+    const calloutIcon = document.createElement('span');
+    calloutIcon.className = 'material-symbols-outlined text-primary text-[20px] shrink-0 mt-0.5';
+    calloutIcon.textContent = 'verified_user';
+    const calloutBody = document.createElement('div');
+    calloutBody.className = 'flex flex-col';
+    const calloutText = document.createElement('p');
+    calloutText.className = 'font-body-sm text-body-sm text-on-surface-variant leading-relaxed';
+    calloutText.textContent = "Prices come from Jamaican drivers' fuel logs and Petrojam index calculations, verified prior to map sync.";
+    const calloutActions = document.createElement('div');
+    calloutActions.className = 'flex items-center gap-4 mt-2';
+    const reportBtn = document.createElement('button');
+    reportBtn.type = 'button';
+    reportBtn.dataset.act = 'report-price';
+    reportBtn.dataset.stationId = station.id;
+    reportBtn.className = 'font-label-md text-label-md text-secondary font-bold hover:underline flex items-center gap-1';
+    const reportIcon = document.createElement('span');
+    reportIcon.className = 'material-symbols-outlined text-[16px]';
+    reportIcon.textContent = 'report_problem';
+    const reportLabel = document.createElement('span');
+    reportLabel.textContent = 'Price looks wrong?';
+    reportBtn.append(reportIcon, reportLabel);
+    reportBtn.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      onPlugClick({ preventDefault() {}, stopPropagation() {}, currentTarget: reportBtn } as unknown as Parameters<typeof onPlugClick>[0]);
+    });
+    calloutActions.appendChild(reportBtn);
+    calloutBody.append(calloutText, calloutActions);
+    callout.append(calloutIcon, calloutBody);
+    slot.appendChild(callout);
   });
   const when = station.price_updated_at ? new Date(station.price_updated_at) : null;
   setSlot(root, 'price-updated', when && !Number.isNaN(when.getTime()) ? `Updated ${when.toLocaleDateString('en-JM')}` : null);
@@ -278,6 +405,8 @@ async function fillStation(root: HTMLElement) {
   if (!station) return;
   sessionStorage.setItem('plug-station', station.id);
   sessionStorage.setItem('plug-station-name', station.name);
+  if (station.address?.trim()) sessionStorage.setItem('plug-station-address', station.address.trim());
+  else sessionStorage.removeItem('plug-station-address');
   slotText(root, 'station-name', station.name);
   root.querySelectorAll<HTMLElement>('[data-slot="station-name"]').forEach((node) => {
     node.dataset.liveName = station.name;
@@ -303,8 +432,7 @@ function kmBetween(lat: number, lng: number): string | null {
 }
 
 function priceFor(station: Station, grade: string): number | null {
-  const value = Number(station.prices?.[grade]);
-  return Number.isFinite(value) ? value : null;
+  return readPumpQuote(station.prices, grade).price;
 }
 
 async function loadStations(offlineOnly: boolean): Promise<Station[]> {
@@ -319,14 +447,23 @@ async function loadStations(offlineOnly: boolean): Promise<Station[]> {
   }
 }
 
+function wireAct(el: HTMLElement) {
+  el.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    onPlugClick({ preventDefault() {}, stopPropagation() {}, currentTarget: el } as unknown as Parameters<typeof onPlugClick>[0]);
+  });
+}
+
 function paintStationRows(root: HTMLElement, stations: Station[], empty: string) {
   let slot = root.querySelector<HTMLElement>('[data-live-list="stations"]');
   if (!slot) {
     slot = document.createElement('div');
     slot.dataset.liveList = 'stations';
-    slot.className = 'flex flex-col gap-2 px-4 py-3';
+    slot.className = 'flex flex-col gap-space-md px-gutter py-3';
     (root.querySelector('main') || root).appendChild(slot);
   }
+  slot.className = 'flex flex-col gap-space-md';
   slot.textContent = '';
   const grade = sessionStorage.getItem('plug-grade') || 'e10_87';
   const priced = stations.map((station) => priceFor(station, grade)).filter((value): value is number => value != null);
@@ -349,32 +486,173 @@ function paintStationRows(root: HTMLElement, stations: Station[], empty: string)
     return;
   }
   const ranked = [...stations].sort((a, b) => (priceFor(a, grade) ?? Number.POSITIVE_INFINITY) - (priceFor(b, grade) ?? Number.POSITIVE_INFINITY));
+  let cheapestMarked = false;
   ranked.forEach((station) => {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.dataset.act = 'open-station';
-    button.dataset.stationId = station.id;
-    button.dataset.liveName = station.name;
-    button.dataset.liveRow = 'station';
-    button.className = 'flex min-h-12 w-full items-center justify-between gap-2 rounded-xl bg-surface-container-lowest p-3 text-left shadow-sm';
-    button.addEventListener('click', (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      onPlugClick({ preventDefault() {}, stopPropagation() {}, currentTarget: button } as unknown as Parameters<typeof onPlugClick>[0]);
-    });
-    const icon = document.createElement('span');
-    icon.className = 'material-symbols-outlined text-primary';
-    icon.textContent = 'local_gas_station';
-    const name = document.createElement('span');
-    name.className = 'flex-1 font-bold';
-    name.textContent = station.name;
-    const meta = document.createElement('span');
-    meta.className = 'text-sm';
+    const quote = readPumpQuote(station.prices, grade);
+    const price = quote.price;
+    const isCheapest = price != null && !cheapestMarked;
+    if (isCheapest) cheapestMarked = true;
     const distance = station.lat != null && station.lng != null ? kmBetween(station.lat, station.lng) : null;
-    const price = priceFor(station, grade);
-    meta.textContent = [distance, price != null ? money(price) : 'No price yet'].filter(Boolean).join(' · ');
-    button.append(icon, name, meta);
-    slot.appendChild(button);
+    const whereLine = [distance, station.address?.trim()].filter(Boolean).join(' • ');
+    const tone = confidenceTone(quote);
+    const conf = confidenceLabel(quote);
+    const age = relativeAge(quote.observedAt || station.price_updated_at);
+    const confLine = [conf, age].filter(Boolean).join(' • ');
+
+    const card = document.createElement('div');
+    card.className = price == null
+      ? 'flex flex-col p-space-md rounded-2xl bg-surface-container-low shadow-sm gap-space-md'
+      : 'flex flex-col p-space-md rounded-2xl bg-surface-container-lowest shadow-sm gap-space-sm relative overflow-hidden';
+    card.dataset.liveName = station.name;
+    card.dataset.liveRow = 'station';
+
+    const top = document.createElement('div');
+    top.className = 'flex items-start justify-between gap-space-sm';
+
+    const left = document.createElement('div');
+    left.className = 'flex flex-col min-w-0';
+    const nameBtn = document.createElement('button');
+    nameBtn.type = 'button';
+    nameBtn.dataset.act = 'open-station';
+    nameBtn.dataset.stationId = station.id;
+    nameBtn.className = 'text-left font-headline-sm text-headline-sm text-on-surface truncate';
+    nameBtn.textContent = station.name;
+    wireAct(nameBtn);
+    left.appendChild(nameBtn);
+    if (whereLine) {
+      const meta = document.createElement('span');
+      meta.className = 'font-body-sm text-body-sm text-on-surface-variant truncate';
+      meta.textContent = whereLine;
+      left.appendChild(meta);
+    }
+
+    const right = document.createElement('div');
+    right.className = 'flex flex-col items-end shrink-0';
+    if (price != null) {
+      if (isCheapest) {
+        const badge = document.createElement('div');
+        badge.className = 'px-2 py-0.5 rounded-full bg-tertiary-fixed text-on-tertiary-fixed font-label-sm text-label-sm font-bold flex items-center gap-1 mb-1';
+        const star = document.createElement('span');
+        star.className = 'text-tertiary text-[11px]';
+        star.textContent = '★';
+        const cheapestLabel = document.createElement('span');
+        cheapestLabel.textContent = 'Cheapest';
+        badge.append(star, cheapestLabel);
+        right.appendChild(badge);
+      }
+      const priceRow = document.createElement('div');
+      priceRow.className = tone === 'outdated' ? 'flex items-baseline opacity-60' : 'flex items-baseline';
+      const priceEl = document.createElement('span');
+      priceEl.className = tone === 'outdated'
+        ? 'font-price-display text-price-display text-outline font-bold tracking-tight line-through'
+        : 'font-price-display text-price-display text-on-surface font-extrabold tracking-tight';
+      priceEl.style.fontVariantNumeric = 'tabular-nums';
+      priceEl.textContent = moneyJmd(price);
+      const perL = document.createElement('span');
+      perL.className = tone === 'outdated'
+        ? 'font-label-sm text-label-sm text-outline ml-1 font-semibold'
+        : 'font-label-sm text-label-sm text-on-surface-variant ml-1 font-semibold';
+      perL.textContent = '/ L';
+      priceRow.append(priceEl, perL);
+      right.appendChild(priceRow);
+    } else {
+      const none = document.createElement('span');
+      none.className = 'font-body-md text-body-md text-on-surface-variant italic font-medium';
+      none.textContent = 'No price yet';
+      right.appendChild(none);
+    }
+
+    top.append(left, right);
+    card.appendChild(top);
+
+    if (price != null && confLine) {
+      const confWrap = document.createElement('div');
+      confWrap.className = 'flex flex-wrap items-center justify-between gap-2 pt-1';
+      const pill = document.createElement('div');
+      pill.className = 'flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-container text-on-surface';
+      if (tone === 'outdated') {
+        const icon = document.createElement('span');
+        icon.className = 'material-symbols-outlined text-[18px] text-outline shrink-0';
+        icon.textContent = 'schedule';
+        pill.appendChild(icon);
+      } else {
+        const dot = document.createElement('span');
+        dot.className = `w-2.5 h-2.5 rounded-full ${confidenceDotClass(tone)}`;
+        pill.appendChild(dot);
+      }
+      const pillText = document.createElement('span');
+      pillText.className = 'font-label-md text-label-md';
+      pillText.textContent = confLine;
+      pill.appendChild(pillText);
+      confWrap.appendChild(pill);
+      card.appendChild(confWrap);
+    }
+
+    if (price == null) {
+      const prompt = document.createElement('button');
+      prompt.type = 'button';
+      prompt.dataset.act = 'log-fill';
+      prompt.dataset.stationId = station.id;
+      prompt.className = 'flex items-center justify-between p-space-md rounded-xl bg-surface-container-lowest hover:bg-surface-bright active:scale-[0.99] transition-all shadow-sm w-full text-left';
+      const promptLeft = document.createElement('div');
+      promptLeft.className = 'flex items-center gap-space-sm min-w-0';
+      const promptIconWrap = document.createElement('div');
+      promptIconWrap.className = 'w-10 h-10 rounded-full bg-primary-fixed flex items-center justify-center text-primary shrink-0';
+      const promptIcon = document.createElement('span');
+      promptIcon.className = 'material-symbols-outlined text-[20px]';
+      promptIcon.textContent = 'add_a_photo';
+      promptIconWrap.appendChild(promptIcon);
+      const promptCopy = document.createElement('div');
+      promptCopy.className = 'flex flex-col min-w-0';
+      const promptTitle = document.createElement('span');
+      promptTitle.className = 'font-label-lg text-label-lg text-primary font-bold truncate';
+      promptTitle.textContent = 'Be the first to log fuel here';
+      const promptSub = document.createElement('span');
+      promptSub.className = 'font-body-sm text-body-sm text-on-surface-variant';
+      promptSub.textContent = 'Snap pump or pump sign to help travelers';
+      promptCopy.append(promptTitle, promptSub);
+      promptLeft.append(promptIconWrap, promptCopy);
+      prompt.appendChild(promptLeft);
+      wireAct(prompt);
+      card.appendChild(prompt);
+    } else {
+      const actions = document.createElement('div');
+      actions.className = 'flex items-center justify-between pt-space-xs gap-space-sm';
+      const drive = document.createElement('button');
+      drive.type = 'button';
+      drive.dataset.act = 'drive-now';
+      drive.dataset.stationId = station.id;
+      drive.className = isCheapest
+        ? 'flex-1 h-11 rounded-xl bg-primary text-on-primary flex items-center justify-center gap-1.5 font-label-lg text-label-lg active:scale-[0.98] transition-transform shadow-sm'
+        : 'flex-1 h-11 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface flex items-center justify-center gap-1.5 font-label-lg text-label-lg active:scale-[0.98] transition-transform';
+      const driveIcon = document.createElement('span');
+      driveIcon.className = 'material-symbols-outlined text-[18px]';
+      driveIcon.textContent = isCheapest ? 'directions' : 'turn_sharp_right';
+      const driveLabel = document.createElement('span');
+      driveLabel.textContent = 'Drive Here';
+      drive.append(driveIcon, driveLabel);
+      wireAct(drive);
+
+      const secondary = document.createElement('button');
+      secondary.type = 'button';
+      secondary.dataset.act = 'log-fill';
+      secondary.dataset.stationId = station.id;
+      secondary.className = isCheapest
+        ? 'h-11 px-space-md rounded-xl bg-surface-container hover:bg-surface-container-high text-primary flex items-center justify-center gap-1 font-label-md text-label-md active:scale-95 transition-transform'
+        : 'h-11 px-space-md rounded-xl bg-surface-container text-on-surface-variant flex items-center justify-center gap-1 font-label-md text-label-md';
+      const secondaryIcon = document.createElement('span');
+      secondaryIcon.className = 'material-symbols-outlined text-[18px]';
+      secondaryIcon.textContent = isCheapest ? 'edit_calendar' : 'add_circle';
+      const secondaryLabel = document.createElement('span');
+      secondaryLabel.textContent = isCheapest ? 'Confirm' : 'Log';
+      secondary.append(secondaryIcon, secondaryLabel);
+      wireAct(secondary);
+
+      actions.append(drive, secondary);
+      card.appendChild(actions);
+    }
+
+    slot.appendChild(card);
   });
 }
 
@@ -463,14 +741,24 @@ function paintReceipt(root: HTMLElement) {
   const station = saved?.stationName || sessionStorage.getItem('plug-station-name') || '';
   const amount = saved && Number(saved.amount) > 0 ? money(Number(saved.amount)) : '';
   const litres = saved && Number(saved.litres) > 0 ? `${Number(saved.litres)} L` : '';
-  const grade = saved?.grade ? gradeLabel(saved.grade) : '';
-  const rate = saved && Number(saved.amount) > 0 && Number(saved.litres) > 0
-    ? `${money(Number(saved.amount) / Number(saved.litres))} / L`
+  const gradeKey = saved?.grade || sessionStorage.getItem('plug-grade') || preferredGrade();
+  const grade = gradeLabel(gradeKey);
+  const rateNum = saved && Number(saved.amount) > 0 && Number(saved.litres) > 0
+    ? Number(saved.amount) / Number(saved.litres)
+    : null;
+  const rate = rateNum != null ? `${money(rateNum)} / L` : '';
+  const odo = saved?.odometer != null && Number(saved.odometer) > 0
+    ? `${Number(saved.odometer).toLocaleString('en-JM')} km`
     : '';
+  const car = sessionStorage.getItem('plug-car-name') || '';
   slotText(root, 'receipt-station', station || 'Not entered yet');
   slotText(root, 'receipt-amount', amount || 'Not entered yet');
   slotText(root, 'receipt-litres', litres);
   slotText(root, 'receipt-grade', grade && rate ? `${grade} @ ${rate}` : grade || 'Not entered yet');
+  slotText(root, 'receipt-grade-badge', grade || '—');
+  slotText(root, 'receipt-rate', rate || '—');
+  const subtitle = [car ? `${car} updated` : '', odo ? `Odometer at ${odo}` : ''].filter(Boolean).join(' • ');
+  slotText(root, 'saved-subtitle', subtitle || 'Fuel log saved');
   const formula = root.querySelector('#rate-formula');
   if (formula) formula.textContent = amount && litres ? `${amount} ÷ ${litres}` : 'Not entered yet';
   const display = root.querySelector('#rate-display');
@@ -481,9 +769,43 @@ function paintReceipt(root: HTMLElement) {
   if (volume && saved && document.activeElement !== volume && !volume.value) volume.value = saved.litres ? String(saved.litres) : '';
   const savedAt = saved?.savedAt ? whenLabel(saved.savedAt, true) : '';
   setSlot(root, 'fill-time', savedAt || null);
+  const priceStatus = sessionStorage.getItem('plug-price-status') || 'checking';
+  const priceLine = priceStatus === 'published'
+    ? 'On the map'
+    : priceStatus === 'review'
+      ? 'Waiting for a check. It is not on the map yet.'
+      : 'Checking this price';
+  setSlot(root, 'price-status', priceLine);
   root.querySelectorAll<HTMLElement>('[data-slot="fill-time"]').forEach((node) => {
     if (savedAt) node.dataset.liveRow = 'fill';
   });
+
+  // Stitch 27c: show one live consensus card — never demo tab switchers.
+  root.querySelector('#consensus-tab-bar')?.remove();
+  const status = priceStatus === 'published' || priceStatus === 'review' ? priceStatus : 'checking';
+  root.querySelectorAll<HTMLElement>('[data-price-card], #state-card-checking, #state-card-published, #state-card-review').forEach((card) => {
+    const key = card.dataset.priceCard
+      || (card.id === 'state-card-published' ? 'published' : card.id === 'state-card-review' ? 'review' : 'checking');
+    card.classList.toggle('hidden', key !== status);
+  });
+  const stationBit = station || 'this station';
+  slotText(root, 'consensus-checking-body', `Thanks! We're cross-referencing your ${grade} price at ${stationBit} — it'll help nearby drivers shortly.`);
+  slotText(root, 'consensus-published-body', rateNum != null
+    ? `${stationBit} price board updated to ${money(rateNum)}/L.`
+    : `${stationBit} price board updated.`);
+  slotText(root, 'consensus-published-grade', `${grade} verified active`);
+  slotText(root, 'consensus-published-price', rateNum != null ? money(rateNum) : '—');
+  slotText(root, 'consensus-review-body', `Your price looks slightly different from this week's baseline — the Roam Plug team will take a friendly peek. We've logged your fuel at ${stationBit} perfectly.`);
+
+  if (root.querySelector('[data-grade-locked], #grades-tray')) {
+    if (!sessionStorage.getItem('plug-preferred-grade')) {
+      sessionStorage.setItem('plug-preferred-grade', preferredGrade());
+    }
+    if (!sessionStorage.getItem('plug-grade')) {
+      sessionStorage.setItem('plug-grade', preferredGrade());
+    }
+    paintLockedGradeChrome(root, sessionStorage.getItem('plug-grade'));
+  }
 }
 
 async function fillPlace(root: HTMLElement) {
@@ -942,7 +1264,7 @@ async function fillParts(root: HTMLElement) {
 }
 
 async function fillInbox(root: HTMLElement) {
-  const body = await plugSend<{ notifications: { title?: string; body?: string }[] }>('/notifications', 'GET').catch(() => ({ notifications: [] as { title?: string; body?: string }[] }));
+  const body = await plugSend<{ notifications: { title?: string; body?: string; created_at?: string | null; kind?: string | null }[] }>('/notifications', 'GET').catch(() => ({ notifications: [] as { title?: string; body?: string; created_at?: string | null; kind?: string | null }[] }));
   const notes = body.notifications || [];
   root.querySelectorAll('span').forEach((node) => {
     if ((node.textContent || '').trim() === 'No new alerts' || /^\d+ new alerts$/.test((node.textContent || '').trim())) {
@@ -955,6 +1277,7 @@ async function fillInbox(root: HTMLElement) {
     return;
   }
   slot.textContent = '';
+  slot.className = 'flex flex-col gap-space-sm';
   if (!notes.length) {
     const line = document.createElement('p');
     line.className = 'px-1 py-3 text-sm';
@@ -963,10 +1286,39 @@ async function fillInbox(root: HTMLElement) {
     return;
   }
   notes.forEach((item) => {
-    const line = document.createElement('p');
-    line.className = 'px-1 py-3 font-bold';
-    line.textContent = [item.title, item.body].filter(Boolean).join(' — ');
-    slot.appendChild(line);
+    const title = (item.title || '').trim() || 'Update';
+    const bodyText = (item.body || '').trim();
+    const when = item.created_at ? whenLabel(item.created_at, true) : '';
+    const kind = String(item.kind || title).toLowerCase();
+    const priceNote = /price|pump|fuel|radar|scout|published|live/i.test(kind + title + bodyText);
+    const icon = priceNote
+      ? (/couldn|mismatch|discrep|review|not match/i.test(title + bodyText) ? 'history_toggle_off' : 'check_circle')
+      : 'notifications';
+    const eyebrow = priceNote
+      ? (/couldn|mismatch|discrep|review|not match/i.test(title + bodyText) ? 'Pump Discrepancy' : 'Live on Radar')
+      : 'Alert';
+    const card = document.createElement('div');
+    card.className = 'relative overflow-hidden rounded-xl bg-surface-container-lowest shadow-sm flex flex-col gap-space-sm p-space-md';
+    card.innerHTML = `
+      <div class="flex items-start gap-space-sm">
+        <div class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center shrink-0 text-primary-container">
+          <span class="material-symbols-outlined text-[22px]" style="font-variation-settings: 'FILL' 1;">${icon}</span>
+        </div>
+        <div class="flex flex-col flex-1 min-w-0">
+          <div class="flex items-center justify-between gap-space-xs mb-1">
+            <span class="font-label-sm text-label-sm text-primary font-bold uppercase tracking-wider">${eyebrow}</span>
+            ${when ? `<span class="font-label-sm text-label-sm text-on-surface-variant">${when}</span>` : ''}
+          </div>
+          <h3 class="font-headline-sm text-headline-sm text-on-surface font-bold leading-snug"></h3>
+          ${bodyText ? '<p class="font-body-md text-body-md text-on-surface-variant mt-space-xs leading-relaxed"></p>' : ''}
+        </div>
+      </div>
+    `;
+    const heading = card.querySelector('h3');
+    if (heading) heading.textContent = title;
+    const para = card.querySelector('p');
+    if (para && bodyText) para.textContent = bodyText;
+    slot.appendChild(card);
   });
 }
 

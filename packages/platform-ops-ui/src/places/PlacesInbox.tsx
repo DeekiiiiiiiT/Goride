@@ -20,6 +20,7 @@ const CHIPS = [
   { id: "learnt", label: "Learnt pin" },
   { id: "import", label: "Import" },
   { id: "evidence", label: "Evidence" },
+  { id: "price", label: "Price" },
   { id: "hand", label: "Place changes" },
   { id: "hand-review", label: "Hand review" },
   { id: "facility", label: "Facility proposal" },
@@ -139,7 +140,7 @@ export function PlacesInbox({
           <p>Pin {current.lat ?? "—"}, {current.lng ?? "—"}</p>
           <div className="flex flex-wrap gap-2">
             {current.external ? (
-              <button type="button" className="rounded bg-slate-900 px-3 py-1 text-white" onClick={() => { if (current.href) window.location.assign(current.href); }}>Open fuel resolution</button>
+              <button type="button" className="rounded bg-slate-900 px-3 py-1 text-white" onClick={() => { if (current.href) window.location.assign(current.href); }}>{current.chip === "price" ? "Open price review" : "Open fuel resolution"}</button>
             ) : (
               <>
                 <button type="button" className="rounded bg-slate-900 px-3 py-1 text-white" onClick={() => act("approve")}>Approve</button>
