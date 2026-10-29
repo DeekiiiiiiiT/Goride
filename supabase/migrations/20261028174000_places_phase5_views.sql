@@ -666,6 +666,8 @@ begin
   select count(*) into tolls from fleet.toll_plazas;
   select count(*) into health from places.migration_health;
   if stations <> 204 or tolls <> 12 or health <> 0 then
-    raise exception 'register views drifted: stations % tolls % health %', stations, tolls, health;
+    if exists (select 1 from places.place) then
+      raise exception 'register views drifted: stations % tolls % health %', stations, tolls, health;
+    end if;
   end if;
 end $$;

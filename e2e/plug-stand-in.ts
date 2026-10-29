@@ -26,6 +26,18 @@ const STATION = {
   prices: { e10_87: 210 },
 };
 
+/** Matches `20261028191804_places_plug_chips.sql` seed rows. */
+const PLUG_CHIPS = [
+  { chip: 'mechanic', placeType: 'mechanic_garage', label: 'Mechanics', mapLabel: 'Mechanic', icon: 'build', empty: 'No mechanics mapped near you yet', sort: 1 },
+  { chip: 'parts_store', placeType: 'parts_store', label: 'Parts stores', mapLabel: 'Parts store', icon: 'settings', empty: 'No parts stores mapped near you yet', sort: 2 },
+  { chip: 'fuel', placeType: 'gas_station', label: 'Fuel prices', mapLabel: 'Fuel station', icon: 'local_gas_station', empty: 'No fuel stations mapped near you yet', sort: 3 },
+  { chip: 'tyre_air', placeType: 'tyre_shop', label: 'Tyres & air', mapLabel: 'Tyres & air', icon: 'tire_repair', empty: 'No tyre and air places mapped near you yet', sort: 4 },
+  { chip: 'car_wash', placeType: 'car_wash', label: 'Car wash', mapLabel: 'Car wash', icon: 'local_car_wash', empty: 'No car washes mapped near you yet', sort: 5 },
+  { chip: 'restroom', placeType: 'public_restroom', label: 'Restrooms', mapLabel: 'Restroom', icon: 'wc', empty: 'No restrooms mapped near you yet', sort: 6 },
+  { chip: 'toll', placeType: 'toll_plaza', label: 'Tolls', mapLabel: 'Toll', icon: 'toll', empty: 'No tolls mapped near you yet', sort: 7 },
+  { chip: 'roadside', placeType: 'roadside_assistance', label: 'Roadside help', mapLabel: 'Roadside help', icon: 'sos', empty: 'No roadside help mapped near you yet', sort: 8 },
+];
+
 function sessionBody(role = 'explorer_user') {
   const expiresAt = Math.floor(Date.now() / 1000) + 3600;
   return {
@@ -126,7 +138,7 @@ export async function standIn(page: Page, options?: { role?: string; persist?: b
           groups: [{ code: '1', label: 'On site', colour: '#ffe6cc', sort: 1 }],
           categories: [{ code: '1.4', group_code: '1', slug: 'driver_facilities', label: 'Restroom', sort: 14 }],
           facilityTypes: [{ slug: 'restroom', category_code: '1.4', label: 'Restroom' }],
-          plugChips: [{ chip: 'fuel', placeType: 'gas_station', label: 'Fuel prices', mapLabel: 'Fuel station', icon: 'local_gas_station', empty: 'No fuel stations mapped near you yet', sort: 3 }],
+          plugChips: PLUG_CHIPS,
         },
       });
       return;
