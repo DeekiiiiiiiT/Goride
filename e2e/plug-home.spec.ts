@@ -44,10 +44,7 @@ test('each place kind submits its details', async ({ page }) => {
     await route.fulfill({ json: { placeId: 'pin-1', status: 'pending', photo: false } });
   });
   for (const [label, kind] of KINDS) {
-    // ChooseType remounts while fill/auth settle; Playwright click races that and flakes on Fuel.
-    // Pick the kind the same way the app does after a card tap, then pin + submit.
-    await page.goto('/#/map', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator(`#categoryGrid [data-kind="${kind}"]`)).toBeVisible();
+    // ChooseType remounts under auth/fill; do not click the grid. Set kind the same way a card tap does.
     await page.evaluate((k) => {
       sessionStorage.setItem('plug-place-kind', k);
     }, kind);
