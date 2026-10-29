@@ -187,6 +187,65 @@ interface ExpenseItem {
   receiptUrl?: string;
 }
 
+const FUEL_GRADE_OPTIONS = [
+  { value: 'Gasoline_87', label: 'E-10 87' },
+  { value: 'Gasoline_90', label: 'E-10 90' },
+  { value: 'Diesel', label: 'Diesel' },
+  { value: 'ULSD', label: 'ULSD' },
+] as const;
+
+function preferredFuelType(vehicle: { fuelSettings?: { fuelType?: string }; fuel_grade?: string; fuelGrade?: string } | undefined): string {
+  const raw = String(vehicle?.fuelSettings?.fuelType || vehicle?.fuel_grade || vehicle?.fuelGrade || '');
+  const text = raw.toLowerCase();
+  if (!text) return '';
+  if (text.includes('ulsd')) return 'ULSD';
+  if (text.includes('diesel') || text.includes('ado')) return 'Diesel';
+  if (/90|91|93/.test(text)) return 'Gasoline_90';
+  if (text.includes('87') || text.includes('e10') || text.includes('gasoline')) return 'Gasoline_87';
+  return '';
+}
+
+function FuelGradeStep({
+  value,
+  onChange,
+  onContinue,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  onContinue?: () => void;
+}) {
+  return (
+    <div className="space-y-4">
+      <div>
+        <p className="text-sm font-semibold text-slate-900">What grade did you pump?</p>
+        <p className="text-xs text-slate-500 mt-1">Pre-selected from the vehicle. Change it if the pump was different.</p>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        {FUEL_GRADE_OPTIONS.map((option) => {
+          const selected = value === option.value;
+          return (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => onChange(option.value)}
+              className={`min-h-16 rounded-xl border px-3 text-base font-semibold ${
+                selected ? 'border-emerald-600 bg-emerald-50 text-emerald-900' : 'border-slate-200 bg-white text-slate-800'
+              }`}
+            >
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
+      {onContinue ? (
+        <Button type="button" className="w-full h-12" disabled={!value} onClick={onContinue}>
+          Continue
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
 export function DriverExpenses({ defaultOpen = false, mode, cameraResume = null, onBack }: ExpenseLoggerProps) {
   const { user } = useAuth();
   const { isFleetDriver } = useDriver();
@@ -224,6 +283,7 @@ export function DriverExpenses({ defaultOpen = false, mode, cameraResume = null,
   
   const [isScanning, setIsScanning] = useState(false);
   const [fuelPumpStep, setFuelPumpStep] = useState<FuelPumpStep>(resumeBoot?.fuelPumpStep ?? 'photo');
+  const [fuelGrade, setFuelGrade] = useState('');
   const [pumpFromOcr, setPumpFromOcr] = useState(false);
 
   const [date, setDate] = useState<Date>(new Date());
@@ -299,6 +359,7 @@ export function DriverExpenses({ defaultOpen = false, mode, cameraResume = null,
     setVehicleClass('');
     setCollector('');
     setFuelEntry({});
+    setFuelGrade('');
     setFuelPumpStep('photo');
     setPumpFromOcr(false);
     setFuelGpsManualRetriesLeft(MAX_MANUAL_FUEL_GPS_RETRIES);
@@ -606,13 +667,13 @@ export function DriverExpenses({ defaultOpen = false, mode, cameraResume = null,
           }
           if (data?.stationName) setMerchant(data.stationName);
           setPumpFromOcr(gotOcr);
-          setFuelPumpStep('confirm');
-          toast.success(gotOcr ? "Review the numbers from your photo" : "Photo saved — enter pump numbers to confirm");
+          setFuelPumpStep('grade');
+          toast.success(gotOcr ? "Review the numbers from your photo" : "Photo saved — choose the grade, then confirm the pump numbers");
         } catch (error) {
           console.error("Pump scan error:", error);
           setPumpFromOcr(false);
-          setFuelPumpStep('confirm');
-          toast.error("Could not read pump. Enter total and liters, then confirm.");
+          setFuelPumpStep('grade');
+          toast.error("Could not read pump. Choose the grade, then enter total and liters.");
         } finally {
           setIsScanning(false);
         }
@@ -853,6 +914,7 @@ export function DriverExpenses({ defaultOpen = false, mode, cameraResume = null,
                   ? 'rideshare_cash'
                   : 'driver_cash'))
           : undefined,
+        fuelType: isFuel ? fuelGrade || undefined : undefined,
         needsLogReview: (isFuel && fuelEntry.odometerMethod && fuelEntry.odometerMethod !== 'ai_verified') ? true : undefined,
         logReviewReason: (isFuel && fuelEntry.odometerMethod === 'photo_review')
             ? 'AI scan failed — odometer photo pending admin review'
@@ -933,6 +995,13 @@ export function DriverExpenses({ defaultOpen = false, mode, cameraResume = null,
         setFuelPumpStep('photo');
         return;
       }
+      if (!fuelGrade) {
+        const msg = 'Choose the fuel grade';
+        setSubmitError(msg);
+        toast.error(msg);
+        setFuelPumpStep('grade');
+        return;
+      }
       const splitCheck = validateSplitPumpAmounts(amount, fuelEntry.volume || '');
       if (!splitCheck.ok) {
         setSubmitError(splitCheck.error);
@@ -992,6 +1061,7 @@ export function DriverExpenses({ defaultOpen = false, mode, cameraResume = null,
           driverName: canonicalDriverName,
           amount: 0,
           liters: 0,
+          fuelType: fuelGrade || undefined,
           odometer: fuelEntry.odometerReading,
           odometerImageUrl: odometerProofUrl || undefined,
           type: 'Manual_Entry',
@@ -1008,6 +1078,7 @@ export function DriverExpenses({ defaultOpen = false, mode, cameraResume = null,
             driverClaim: fuelEntry.driverClaim,
             parentCompany: fuelEntry.parentCompany,
             paymentSource: 'company_card',
+            fuelType: fuelGrade || undefined,
             countsInFuelSpend: false,
             countsInFuelVolume: false,
           },
@@ -1139,6 +1210,12 @@ export function DriverExpenses({ defaultOpen = false, mode, cameraResume = null,
         setViewState('odometer_scan');
         return;
       }
+      if (!fuelGrade) {
+        const msg = "Choose the fuel grade";
+        setSubmitError(msg);
+        toast.error(msg);
+        return;
+      }
       if (!assignedGasCard) {
         const msg = "No Active gas card assigned to you. Contact your fleet manager.";
         setSubmitError(msg);
@@ -1180,6 +1257,7 @@ export function DriverExpenses({ defaultOpen = false, mode, cameraResume = null,
             driverClaim: fuelEntry.driverClaim,
             parentCompany: fuelEntry.parentCompany,
             paymentSource: 'company_card',
+            fuelType: fuelGrade || undefined,
             countsInFuelSpend: false,
             countsInFuelVolume: false,
           },
@@ -1254,6 +1332,7 @@ export function DriverExpenses({ defaultOpen = false, mode, cameraResume = null,
           odometer: fuelEntry.odometerReading,
           odometerImageUrl: odometerProofUrl || undefined,
           type: 'Manual_Entry',
+          fuelType: fuelGrade || undefined,
           entryMode: 'Anchor',
           paymentSource: 'Gas_Card',
           entrySource: 'driver-portal',
@@ -1266,6 +1345,7 @@ export function DriverExpenses({ defaultOpen = false, mode, cameraResume = null,
             driverClaim: fuelEntry.driverClaim,
             parentCompany: fuelEntry.parentCompany,
             paymentSource: 'company_card',
+            fuelType: fuelGrade || undefined,
             countsInFuelSpend: false,
             countsInFuelVolume: false,
           },
@@ -1319,6 +1399,13 @@ export function DriverExpenses({ defaultOpen = false, mode, cameraResume = null,
              setSubmitError(msg);
              toast.error(msg);
              setFuelPumpStep('photo');
+             return;
+        }
+        if (!fuelGrade) {
+             const msg = "Choose the fuel grade";
+             setSubmitError(msg);
+             toast.error(msg);
+             setFuelPumpStep('grade');
              return;
         }
         if (fuelPumpStep !== 'submit') {
@@ -1858,6 +1945,7 @@ export function DriverExpenses({ defaultOpen = false, mode, cameraResume = null,
     if (method === 'gas_card') {
       setFuelPumpStep('photo');
       setViewState('gas_card_details');
+      void rememberVehicleGrade();
       await loadGasCard();
       return;
     }
@@ -1865,13 +1953,27 @@ export function DriverExpenses({ defaultOpen = false, mode, cameraResume = null,
     if (method === 'gas_card_and_cash') {
       setFuelPumpStep('photo');
       setViewState('split_details');
+      void rememberVehicleGrade();
       await loadGasCard();
       return;
     }
 
     setFuelPumpStep('photo');
     setGasCardLookupDone(true);
+    void rememberVehicleGrade();
     setViewState('entry_details');
+  };
+
+  const rememberVehicleGrade = async () => {
+    try {
+      const vehicles = await api.getVehicles().catch(() => []);
+      const resolvedVehicleId = resolveVehicleIdForDriver(driverRecord, vehicles, user?.id);
+      const vehicle = (vehicles as any[]).find((row) => row.id === resolvedVehicleId);
+      const hinted = preferredFuelType(vehicle);
+      if (hinted) setFuelGrade((current) => current || hinted);
+    } catch {
+      /* the driver can still tap a grade */
+    }
   };
 
   const handleRetakePumpPhoto = () => {
@@ -2504,6 +2606,9 @@ export function DriverExpenses({ defaultOpen = false, mode, cameraResume = null,
               {fuelNoGpsManualVerifyNotice && (
                 <div className="px-6 pt-6 pb-0">{fuelNoGpsManualVerifyNotice}</div>
               )}
+              <div className="px-6 pt-6">
+                <FuelGradeStep value={fuelGrade} onChange={setFuelGrade} />
+              </div>
               <GasCardSummary
                 odometer={fuelEntry.odometerReading || 0}
                 date={date}
@@ -2540,6 +2645,14 @@ export function DriverExpenses({ defaultOpen = false, mode, cameraResume = null,
                   onClear={handleRetakePumpPhoto}
                   fileName={receiptFile?.name}
                   draftExtras={{ viewState: 'split_details' }}
+                />
+              )}
+
+              {fuelPumpStep === 'grade' && (
+                <FuelGradeStep
+                  value={fuelGrade}
+                  onChange={setFuelGrade}
+                  onContinue={() => setFuelPumpStep('confirm')}
                 />
               )}
 
@@ -2643,6 +2756,14 @@ export function DriverExpenses({ defaultOpen = false, mode, cameraResume = null,
                           onClear={handleRetakePumpPhoto}
                           fileName={receiptFile?.name}
                           draftExtras={{ viewState: 'entry_details' }}
+                        />
+                      )}
+
+                      {fuelPumpStep === 'grade' && (
+                        <FuelGradeStep
+                          value={fuelGrade}
+                          onChange={setFuelGrade}
+                          onContinue={() => setFuelPumpStep('confirm')}
                         />
                       )}
 

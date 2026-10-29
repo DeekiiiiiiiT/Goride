@@ -1,3 +1,5 @@
+// Stitch: dominion-redesign/7da088e95e1e4fe088a2add010bf9bd3
+// Stitch: dominion-redesign/53ad2876cac241b1aaceeb7bbc307045
 // Stitch D4: docs/stitch/dominion-redesign/html/D4-coverage.html (main canvas; aside/header stripped)
 // Stitch D5: docs/stitch/dominion-redesign/html/D5-parish-coverage.html (parish table; aside/header stripped)
 // No fake choropleth polygons, daily chart series, or contributor leaderboards.

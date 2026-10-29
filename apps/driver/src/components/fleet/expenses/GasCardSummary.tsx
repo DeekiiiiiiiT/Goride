@@ -5,7 +5,7 @@ import { CheckCircle2, Clock, CreditCard, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 
 /** Cash fuel flows use this step type elsewhere; Gas Card never uses pump steps. */
-export type FuelPumpStep = 'photo' | 'confirm' | 'submit';
+export type FuelPumpStep = 'photo' | 'grade' | 'confirm' | 'submit';
 
 interface GasCardSummaryProps {
   odometer: number;

@@ -18,6 +18,8 @@ export type ReviewItem = {
   place_name?: string;
   parish?: string;
   weight?: number;
+  litres?: number | null;
+  amount?: number | null;
 };
 
 export type Published = {
@@ -129,7 +131,7 @@ const REASON_LABELS: Record<string, string> = {
 };
 
 export function reasonLabel(code: string): string {
-  return REASON_LABELS[code] || code.replaceAll("_", " ").toLowerCase();
+  return REASON_LABELS[code] || code.replace(/_/g, " ").toLowerCase();
 }
 
 export function stationName(item: ReviewItem): string {

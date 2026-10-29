@@ -441,6 +441,16 @@ export async function persistFuelMatchPair(
     };
   }
 
+  try {
+    const { syncFleetPriceReport } = await import("./plug_public_price.ts");
+    const driverNow = (await kv.get(`fuel_entry:${linked.driver.id}`)) || driverFresh;
+    const statementNow = (await kv.get(`fuel_entry:${linked.statement.id}`)) || statementFresh;
+    await syncFleetPriceReport(driverNow as Record<string, unknown>);
+    await syncFleetPriceReport(statementNow as Record<string, unknown>);
+  } catch (priceErr) {
+    console.warn("[plug-price] matched fill skipped", priceErr);
+  }
+
   return {
     ok: true,
     statementId: String(linked.statement.id),

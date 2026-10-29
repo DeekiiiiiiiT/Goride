@@ -383,6 +383,7 @@ export async function ensureFuelEntryForApprovedTx(
     driverName: driverName || undefined,
     organizationId: companyId || undefined,
     transactionId: tx.id,
+    fuelType: tx.fuelType || tx.metadata?.fuelType,
     matchedStationId: tx.matchedStationId || tx.metadata?.matchedStationId,
     receiptUrl: tx.receiptUrl || tx.metadata?.receiptUrl,
     odometerProofUrl: tx.odometerProofUrl || tx.metadata?.odometerProofUrl,
@@ -481,6 +482,12 @@ export async function ensureFuelEntryForApprovedTx(
     };
   }
   await kv.set(`fuel_entry:${fuelEntry.id}`, toSave);
+  try {
+    const { syncFleetPriceReport } = await import("./plug_public_price.ts");
+    await syncFleetPriceReport(toSave);
+  } catch (priceErr) {
+    console.warn("[plug-price] approved fill skipped", priceErr);
+  }
   await syncLinkedExpenseTransaction(fuelEntry);
   try {
     await projectFromFuelEntry(toSave as Record<string, unknown>, (toSave as any).organizationId);

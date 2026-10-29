@@ -1,94 +1,95 @@
-# Audit: Dominion Places (Super-Node register)
+# Audit: Dominion Places (Super-Node register) + Fuel Price Engine
 
-**Rev 8 · 2026-10-28 21:40 UTC** · Status: **Live. 5 engineering items + data work open. Retirement on or after 12 Nov.** · Project `csfllzzastacofsvcdsc`
+**Rev 9 · 2026-10-29 03:00 UTC** · Status: **Register live and correct. Price engine live but only 4 prices publish: 3 engine bugs. CI blocked by 2 fixable checks.** · Project `csfllzzastacofsvcdsc`
 
-Audit only; the owner implements. This doc lists open items only. Rev 8 is a full sweep:
+Audit only; the owner implements. This is a full sweep:
 - git and CI runs
-- edge versions and the repo bundles
+- edge versions
 - migration history
-- DB functions and grants
-- the live API
-- the Rev 2 UI and test plan
+- DB functions and triggers
+- the live sites
+- the UI against the Stitch prompts
 - data
 
-All Rev 7 engineering items (1–12) were verified closed:
-- the retirement script now keeps Fleet's views
-- coverage counts are right (56 + 12 verified, 148 pending)
-- statement-level coverage triggers
-- grants revoked
-- Review inbox evidence and the import chip
-- commits pushed
-- the edge deploy is green (`fleet-core` v174)
+Closed since Rev 8:
+- item 3 (place Evidence and Prices tabs)
+- item 4 (migration history matches production)
+- item 5 (the Places workflows now run on `main`)
 
-## Open: engineering
+The price engine is built and deployed:
+- 7 engine migrations
+- `fleet-fuel` v144, `explorer` v28, `platform-catalog` v150, `petrojam-prices` v146
+- the Dominion Price Engine tabs, including the station drawer
+- Plug price states live on roamplug.app
+- delete-my-data removes the user's reports (and the delete trigger recalculates)
 
-> Items 1 and 2 are now replaced by the Fuel Price Engine. See [fuel-price-engine-plan.md](fuel-price-engine-plan.md).
+## A. Price engine bugs (fix first: they stop prices publishing)
 
-**1 · High: Plug can never show a fuel price.**
-- Evidence: `places.latest_retail_estimate()` returns `null` unless `fuel.retail_price_markup` has a published row. That table has **0 rows**, so the estimate is `null` and [plug_public_price.ts](../supabase/functions/_fleet-server/plug_public_price.ts) holds every Fleet price. `price_current` has 0 rows, and 0 public places have prices. The only observation (27 Oct, J$39.07/L) was held. Petrojam data is current (2026-10-22, 87 = 201.81).
-- No screen writes `retail_price_markup`. Dominion → Fuel → Prices only syncs Petrojam, and Fleet analytics only reads markups. (Rev 8 wrongly pointed at that screen.)
-- The markup exists because Petrojam publishes the **wholesale** price, while drivers pay the **pump** price. The check only publishes a price that is at least 50% of the expected pump price and less than 18% above it. That is how it threw out the J$39.07 entry.
-- Petrojam alone is close enough. Fleet fills since 1 Sep paid a median J$229.2/L against wholesale J$201.81 (+13.6%). With no markup, 71 of 75 fills pass. The 4 that fail are the J$39.07 entry and higher-priced fills that are probably diesel or 90, which item 2 fixes.
-- Owner rule: every price is captured. A normal price goes public automatically. An outrageous one goes to a person in the Review inbox. Nothing is thrown away. Prices come from the driver's pump photo (Fleet calculates amount ÷ litres), and that flow is unchanged. The J$39.07 entry came from that flow, so this is exactly the misread the review catches.
-- Fix:
-  - The reference is the Petrojam wholesale price for the grade (no markup).
-  - In `noteFleetPrice` and the Plug fill path, always insert the `price_observation`.
-  - If the price is between 80% and 150% of wholesale, also write `price_current` (public).
-  - Otherwise mark the observation `needs_review` and add it to the Places **Review** inbox under a new chip, **Price**. Approve writes `price_current`; Reject marks it rejected.
-  - With no wholesale row for the grade, send it to review.
-  - Replace the markup-based `plugPriceDecision` / `latest_retail_estimate` gate with this rule.
-- Check: with today's Fleet fills (median J$229.2 vs J$201.81 wholesale), 74 of 75 publish and the J$39.07 entry lands in Review.
-- Check after the next matched fill: a new `price_observation` with `in_band = true` and a `price_current` row for that station.
-
-**2 · Medium: every Fleet price is filed as 87, even diesel.**
-- Evidence: `noteFleetPrice` hard-codes `grade: "e10_87"`. Fills carry a grade in `fuelType` (25 rows) or `metadata.jaaFuelType` (73 rows).
-- Fix: map `fuelType ?? metadata.jaaFuelType` to `e10_87` / `e10_90` / `diesel`, use it for the estimate and both writes, and skip the note when the grade is unknown.
-
-**3 · Medium: the Evidence and Prices tabs on every place are always empty.**
-- Evidence: `GET /admin/register/:id` in [place_admin.ts:151-153](../supabase/functions/explorer/place_admin.ts#L151):
-  - selects `kind` from `place_evidence` (that column doesn't exist)
-  - selects `updated_at` from `price_current` (the column is `observed_at`)
-  
-  Both errors are dropped (`{ data: evidence }`, `{ data: prices }`).
-- Fix: select `id, note, origin_app, accuracy_m, created_at` and `grade, price_per_litre, observed_at`, and return any query error instead of an empty list.
-
-**4 · Medium: the migration history doesn't match the repo.**
+**1 · High: Fleet never reads the vehicle's grade, so half the reports have no grade.**
 - Evidence:
-  - Production has `20261028195252 places_phase6_health`, `20261028205022 places_coverage_grants`, `20261028205141 places_fill_pcode`, `20261028205221 places_fill_pcode_guard` and `20261028205603 revoke_io_daily_temp_bytes_anon`.
-  - The repo has `20261028200000_places_phase6_health.sql` and `20261028210000_places_coverage_grants.sql` (which also holds the pcode fill), and no file for the IO revoke.
-  - A `supabase db push` would try to re-run the two repo files.
+  - 39 of 77 Fleet reports are `grade = unknown`, and 0 have `grade_source = 'vehicle'`.
+  - Both Fleet vehicles are 87: `fleet.vehicles.vehicle_catalog_id` → `vehicle_catalog.fuel_grade = '87'`, and `5179KZ` also has `fuelSettings.fuelType = 'Gasoline_87'`.
+  - But `catalogGrade()` in [plug_public_price.ts](../supabase/functions/_fleet-server/plug_public_price.ts#L71) and the backfill in `20261028230000_places_price_engine_functions.sql` (around line 905) look for `payload_json->>'vehicleCatalogId'` / `'catalogId'`, which don't exist.
+  - Result: 53 reports in review, only 4 prices published, and the health view shows `outdated_share = 1.0` (every live price is from an older week, because the recent fills are stuck in review).
+- Root cause (owner, confirmed in code): the driver app's fuel log has **no grade step**. `apps/driver/src` only has a `fuelType` type definition; no screen asks for it.
 - Fix:
-  - `supabase migration repair --status reverted 20261028195252 20261028205022 20261028205141 20261028205221`
-  - `supabase migration repair --status applied 20261028200000 20261028210000`
-  - Add the IO revoke to the repo as `20261028205603_revoke_io_daily_temp_bytes_anon.sql` and commit.
-  - `supabase migration list` then shows no differences.
+  1. **Driver app (Roam Fleet), fuel log:** add a grade step with large chips (E-10 87 | E-10 90 | Diesel | ULSD), pre-selected from the vehicle and changeable by the driver. Save it as `fuelType` on the fill. The pump photo step is unchanged.
+  2. **Pre-select source:** read the vehicle's grade in this order: `fleet.vehicles.vehicle_catalog_id` → `vehicle_catalog.fuel_grade`, then `payload_json->>'vehicle_catalog_fuel_grade_hint'`, then `fuelSettings.fuelType`. `catalogGrade()` in `plug_public_price.ts` uses the same order as a fallback for fills saved without a grade.
+  3. **The 39 old reports:** set their grade with **Change grade** in Price Engine → Review (both vehicles are 87), or in one pass by re-running `places.price_engine_check` after step 2. Then press **Recalculate all**.
+- Check: `select count(*) from places.fleet_price_report where grade = 'unknown'` → 0, and `price_current` has prices dated this Petrojam week.
 
-**5 · High: the Places SQL checks and browser tests have never run.**
+**2 · Medium: an unknown grade is also labelled "out of bounds".**
+- Evidence: 40 reports carry `OUT_OF_BOUNDS`, but 39 of them are normal prices (J$221–250) whose only real problem is the missing grade. With no grade there's no Petrojam row, and the rule counts that as out of bounds (that was this plan's wording). Only the J$39.07 report is truly out of bounds.
+- Fix: in `places.price_engine_check`, skip the bounds and big-change checks when the grade is `unknown`, so `GRADE_UNKNOWN` is the only reason. Add a new migration; don't edit the applied one.
+
+**3 · Medium: fills are counted twice, and duplicates flood the review queue.**
 - Evidence:
-  - [places_checks.sql](../supabase/tests/places_checks.sql) runs only in `parts-sql-checks.yml` (trigger: `pull_request`).
-  - [dominion-places.spec.ts](../e2e/dominion-places.spec.ts) runs only in `dominion-places-e2e.yml` (`pull_request` / manual).
-  - Work goes straight to `main`, so neither workflow has a single run.
-  - In `ci.yml`, **Plug journeys** (which hold the restroom journey) were skipped on every run, because the earlier step **Deno check edge functions** fails. That step has 106 type errors, all outside Places (`week_close.ts` 47, `toll_controller.tsx` 42, the rest finance/recon).
+  - 19 reports come from gas-card statement rows (`Card_Transaction`). 18 of them carry `metadata.jaaMatchedDriverEntryId`, which points at a driver log that already has its own report. So the same fill counts twice.
+  - The matching rule sends `DUPLICATE` to **review** (13 reports, e.g. FESCO Beechwood, 13 Oct 02:34, three rows). The plan meant "keep, don't count twice", not review.
 - Fix:
-  - Add `push: branches: [main]` with the same `paths` to both workflows.
-  - In `ci.yml`, move **Typecheck Plug**, **Install Playwright browser** and **Plug journeys** above **Deno check edge functions**, as was done for the Places Deno tests.
-  - Run both workflows once manually and confirm they're green.
+  - At intake, don't create a report for a `Card_Transaction` whose `jaaMatchedDriverEntryId` already has one. Instead, if the driver's report has no grade, copy the statement's `jaaFuelType` onto it (`grade_source = 'statement'`).
+  - Unpaired statement rows still report.
+  - Give `DUPLICATE` its own status `duplicate` (kept, weight 0, not in review), and move the existing 13 to it.
 
-## Open: checks
+**4 · Low: no "Fix and approve" on a review item.**
+- Evidence: [PriceEngineReview.tsx](../apps/admin/src/components/admin/fuel-prices/PriceEngineReview.tsx) has Approve, Reject and Change grade, but not the "Fix and approve" from Stitch P3 (edit amount and litres, original kept beside them).
+- Fix: add `POST /admin/prices/review/:source/:id/fix`. It stores the corrected amount and litres in `price_report_check.detail.corrected`, keeps the intake row unchanged, approves, and recalculates the place. The UI shows the original greyed next to the edit.
 
-- **Next GPS-matched fill** (none since 18:00 UTC): `select name, brand_id, address, parish, phone, pin_state, geofence_m from places.place where id = '<matchedStationId>'` is unchanged, and `geofence_m` is still `null` if it was before.
-- **After 2026-10-29 04:15 UTC:** `places-migration-health` shows `succeeded` in `cron.job_run_details` (it has no runs yet), and `places.migration_health` returns 0 rows.
+## B. CI: two checks stop everything after them
 
-## Open: data (Dominion, no code; steps in [places-register-data-ops.md](places-register-data-ops.md))
+**5 · High: the Stitch check fails, so the price tests and Plug journeys are skipped.**
+- Evidence: `ci.yml` step **Dominion Stitch contract** (run 40807657500) reports that `PlacesReviewQueue.tsx`, `PlacesReviewSplit.tsx`, `PlacesReviewMerge.tsx` and `PlacesReviewCoverage.tsx` are missing `// Stitch: dominion-redesign/<id>`. They have `// Stitch D1: docs/...html` instead. Every later step is skipped, including **Deno test price engine math** and **Plug journeys**.
+- Fix: add these exact first lines (ids from `docs/stitch/dominion-redesign/README.md`):
+  - Queue: `// Stitch: dominion-redesign/19c9df8ede1f4635be7f188be5c24f94`
+  - Split: `// Stitch: dominion-redesign/6348f0f2c36149fa9bb2cc9e8fa39577`
+  - Merge: `// Stitch: dominion-redesign/a87e5505779043e2a48a64a6f6266d2e`
+  - Coverage: both `…/7da088e95e1e4fe088a2add010bf9bd3` and `…/53ad2876cac241b1aaceeb7bbc307045`
+
+**6 · High: the Places and price SQL checks can't run on a fresh database.**
+- Evidence: `Parts SQL checks` (run 40807657489) stops at `public gas stations changed: place 0 card 0`. [20261028173000_places_phase4_public.sql:451](../supabase/migrations/20261028173000_places_phase4_public.sql#L451) asserts exactly 56 public stations. That's true in production but 0 on the empty CI database, so `places_checks.sql` and `price_engine_checks.sql` never run. Any replay (`verify-migrations-replay`, a branch, local) fails the same way.
+- Fix: wrap that assertion in `if exists (select 1 from places.place) then … end if;`. Production already applied this file, so the edit only affects replays. Then confirm `Parts SQL checks` is green.
+
+**Note:** after 5, `ci.yml` will still stop at **Deno check edge functions** (106 type errors, all outside Places: `week_close.ts`, `toll_controller.tsx`, finance/recon). The Places and price steps already run before it.
+
+## C. Checks to run
+
+- **Next GPS-matched Fleet fill** (there have been none since 28 Oct 18:00 UTC):
+  - its station is unchanged: `select name, brand_id, address, parish, phone, pin_state, geofence_m from places.place where id = '<matchedStationId>'`
+  - a `fleet_price_report` row appears with a grade from the vehicle (after item 1), status `accepted`, and `price_current` updated for this Petrojam week
+- **2026-10-29 after 05:00 UTC:** `places-migration-health` (04:15) and `places-price-engine-daily` (05:00) both show `succeeded` in `cron.job_run_details` (neither has run yet), and `places.migration_health` returns 0 rows.
+- **After items 1–3:** `places.price_engine_health` shows `review_count` ≈ 1 (the J$39.07 report) and `outdated_share` well below 1.
+
+## D. Data (Dominion, no code; steps in [places-register-data-ops.md](places-register-data-ops.md))
 
 | Gap | Now | Do |
 |---|---|---|
-| Facilities | All 204 stations have only `fuel_pump`. Restroom/ATM search returns nothing. | Add real facilities, verified stations first |
-| Brands | 99 stations brandless: Gulfstream 12, First 5, Jampet, Blaize, Tomijam, JamGas, G.A. Hamilton, MZ, Buds, Johnson's 2 each; 1 TotalEnergies | Add the brands, bulk-assign |
-| Other place types | 0 places outside gas stations and tolls | Map the Plug home-grid types first (mechanic, parts, tyres & air, car wash, restroom, roadside) |
-| Detail forms | 42/44 facility types and 10/17 place types have no attribute schema | Gas station (hours, attendant) and ATM (bank) first |
+| Review queue | 53 reports (≈1 real once items 1–3 are done) | Reject the J$39.07 report (wrong reading) |
+| Facilities | All 204 stations have only `fuel_pump` | Add real facilities, verified stations first |
+| Brands | 99 brandless: Gulfstream 12, First 5, Jampet, Blaize, Tomijam, JamGas, G.A. Hamilton, MZ, Buds, Johnson's | Add the brands, bulk-assign |
+| Other place types | 0 places outside gas stations and tolls | Map mechanic, parts, tyres & air, car wash, restroom, roadside first |
+| Detail forms | Check in **Categories** after `places_register_forms` | Gas station (hours, attendant) and ATM (bank) first |
 | Verification | 148 stations pending, 0 pins confirmed | Work the queue; confirm pins on site |
 
-## Then, on or after 2026-11-12 00:00 UTC
+## E. On or after 2026-11-12 00:00 UTC
 
-Run [places_phase8_retire.sql](../scripts/sql/places_phase8_retire.sql) after 14 days with no errors from `places.public_station` or `public.station_merchant_aliases`. In the same release, stop sending `station_id` on price writes, and rebuild and redeploy `fleet-fuel` and `explorer`.
+Run [places_phase8_retire.sql](../scripts/sql/places_phase8_retire.sql). It already includes `price_observation`, `in_band` and `latest_retail_estimate`. Run it after 14 days with no errors from `places.public_station` or `public.station_merchant_aliases`. In the same release, stop sending `station_id` on price writes, and rebuild and redeploy `fleet-fuel` and `explorer`.

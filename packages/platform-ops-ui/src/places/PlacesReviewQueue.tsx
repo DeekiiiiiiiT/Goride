@@ -1,3 +1,4 @@
+// Stitch: dominion-redesign/19c9df8ede1f4635be7f188be5c24f94
 // Stitch D1: docs/stitch/dominion-redesign/html/D1-review-queue.html
 import {
   accuracyBadgeClass,

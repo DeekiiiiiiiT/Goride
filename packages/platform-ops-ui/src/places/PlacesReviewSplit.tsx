@@ -1,3 +1,4 @@
+// Stitch: dominion-redesign/6348f0f2c36149fa9bb2cc9e8fa39577
 // Stitch D2: docs/stitch/dominion-redesign/html/D2-review-item.html
 import { useRef } from 'react';
 import {

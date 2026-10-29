@@ -1,3 +1,4 @@
+// Stitch: dominion-redesign/a87e5505779043e2a48a64a6f6266d2e
 // Stitch D3: docs/stitch/dominion-redesign/html/D3-merge.html (modal only; aside/header stripped)
 import type { FormEvent } from 'react';
 

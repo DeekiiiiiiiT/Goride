@@ -230,6 +230,28 @@ export function PriceEngineReviewTab({
     }
   };
 
+  const setGradeMany = async (grade: string) => {
+    const targets = pageItems.filter((item) => selectedIds.has(rowKey(item)));
+    if (!targets.length || !grade) return;
+    setBusy(true);
+    try {
+      for (const item of targets) {
+        await peFetch(`/admin/prices/review/${item.source}/${item.report_id}/grade`, {
+          method: "POST",
+          body: JSON.stringify({ grade }),
+        });
+      }
+      setSelectedIds(new Set());
+      load();
+      refreshCounts();
+      onChanged();
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Could not set that grade");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const focusItem =
     splitItem || pageItems.find((item) => selectedIds.has(rowKey(item))) || pageItems[0] || null;
 
@@ -563,6 +585,23 @@ export function PriceEngineReviewTab({
                 Reject {bulkN} selected (R)
               </span>
             </button>
+            <select
+              aria-label="Set grade on selected"
+              disabled={busy}
+              defaultValue=""
+              onChange={(event) => {
+                const grade = event.target.value;
+                event.target.value = "";
+                if (grade) void setGradeMany(grade);
+              }}
+              className="px-3 py-1.5 rounded-lg bg-surface-container-lowest text-xs font-medium text-on-surface"
+            >
+              <option value="">Set grade…</option>
+              <option value="e10_87">E-10 87</option>
+              <option value="e10_90">E-10 90</option>
+              <option value="diesel">Diesel</option>
+              <option value="ulsd">ULSD</option>
+            </select>
             <button
               type="button"
               title="Deselect all"
@@ -859,13 +898,36 @@ function ReviewSplitView({
   onChanged: () => void;
 }) {
   const [grade, setGrade] = useState(reportGrade(item));
+  const [fixLitres, setFixLitres] = useState(item.litres != null ? String(item.litres) : "");
+  const [fixAmount, setFixAmount] = useState(item.amount != null ? String(item.amount) : "");
   const price = reportPrice(item);
   const wholesale = item.detail?.wholesale;
   const reportLabel = item.report_id.slice(0, 8).toUpperCase();
 
   useEffect(() => {
     setGrade(reportGrade(item));
+    setFixLitres(item.litres != null ? String(item.litres) : "");
+    setFixAmount(item.amount != null ? String(item.amount) : "");
   }, [item]);
+
+  const fixAndApprove = async () => {
+    const litres = Number(fixLitres);
+    const amount = Number(fixAmount);
+    if (!(litres > 0) || !(amount > 0)) {
+      onError("Enter the corrected amount and litres");
+      return;
+    }
+    try {
+      await peFetch(`/admin/prices/review/${item.source}/${item.report_id}/fix`, {
+        method: "POST",
+        body: JSON.stringify({ litres, amount }),
+      });
+      onChanged();
+      onBack();
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Could not fix that price");
+    }
+  };
 
   return (
     <div className="flex flex-col w-full space-y-6 pb-8">
@@ -1044,6 +1106,47 @@ function ReviewSplitView({
                 </div>
               ) : null}
             </div>
+          </div>
+
+          <div className="rounded-xl bg-surface-container p-4 shadow-sm flex flex-col gap-3">
+            <div className="text-xs font-headline font-bold text-on-surface uppercase tracking-wider">
+              Fix the reading
+            </div>
+            <p className="text-[11px] text-on-surface-variant">
+              The original stays on the fill. The corrected amount and litres are what get published.
+            </p>
+            <label className="text-xs text-on-surface-variant flex flex-col gap-1">
+              Amount (J$)
+              <input
+                inputMode="decimal"
+                value={fixAmount}
+                onChange={(event) => setFixAmount(event.target.value)}
+                className="rounded-lg bg-surface-container-lowest px-3 py-2 text-sm text-on-surface"
+              />
+              <span className="text-[11px] text-outline line-through">
+                Original {item.amount != null ? money(Number(item.amount)) : "—"}
+              </span>
+            </label>
+            <label className="text-xs text-on-surface-variant flex flex-col gap-1">
+              Litres
+              <input
+                inputMode="decimal"
+                value={fixLitres}
+                onChange={(event) => setFixLitres(event.target.value)}
+                className="rounded-lg bg-surface-container-lowest px-3 py-2 text-sm text-on-surface"
+              />
+              <span className="text-[11px] text-outline line-through">
+                Original {item.litres != null ? `${Number(item.litres)} L` : "—"}
+              </span>
+            </label>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void fixAndApprove()}
+              className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-secondary text-on-secondary font-headline font-semibold text-sm shadow-sm disabled:opacity-50"
+            >
+              Fix and approve
+            </button>
           </div>
 
           <label className="rounded-xl bg-surface-container p-4 shadow-sm block text-xs space-y-2">

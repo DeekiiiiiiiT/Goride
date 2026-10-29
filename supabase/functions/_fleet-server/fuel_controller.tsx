@@ -837,6 +837,12 @@ app.post(`${BASE_PATH}/admin/jaa-promote-gateheld`, requirePlatformStaff(), asyn
       } catch (healErr) {
         console.warn("[jaa-promote] unpaired merchant heal failed", healErr);
       }
+      try {
+        const { syncFleetPriceReport } = await import("./plug_public_price.ts");
+        await syncFleetPriceReport(entry);
+      } catch (priceErr) {
+        console.warn("[plug-price] statement fill skipped", priceErr);
+      }
       if (receipt) existingReceipts.add(receipt);
       promoted++;
     }
@@ -3874,6 +3880,12 @@ async function linkOrphanEntriesToStation(
             entry.signature = await auditLogic.generateRecordHash(entry);
             entry.signedAt = new Date().toISOString();
             await kv.set(`fuel_entry:${entry.id}`, entry);
+            try {
+              const { syncFleetPriceReport } = await import("./plug_public_price.ts");
+              await syncFleetPriceReport(entry);
+            } catch (priceErr) {
+              console.warn("[plug-price] linked fill skipped", priceErr);
+            }
             linkedIds.add(entry.id);
             linkedCount++;
             console.log(`[Link] Direct-linked source entry ${entry.id} ? station ${stationId}`);
@@ -3908,6 +3920,12 @@ async function linkOrphanEntriesToStation(
                 entry.signature = await auditLogic.generateRecordHash(entry);
                 entry.signedAt = new Date().toISOString();
                 await kv.set(`fuel_entry:${entry.id}`, entry);
+                try {
+                  const { syncFleetPriceReport } = await import("./plug_public_price.ts");
+                  await syncFleetPriceReport(entry);
+                } catch (priceErr) {
+                  console.warn("[plug-price] swept fill skipped", priceErr);
+                }
                 linkedIds.add(entry.id);
                 linkedCount++;
                 console.log(`[Link] Spatial-swept entry ${entry.id} (${Math.round(dist)}m) ? station ${stationId}`);
@@ -4589,8 +4607,8 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
 
     const match = await applyStationMatch(entry);
     try {
-        const { submitFleetPriceReport } = await import("./plug_public_price.ts");
-        await submitFleetPriceReport(entry);
+        const { syncFleetPriceReport } = await import("./plug_public_price.ts");
+        await syncFleetPriceReport(entry);
     } catch (priceErr) {
         console.warn("[plug-price] fleet price report skipped", priceErr);
     }
@@ -4949,6 +4967,12 @@ app.post(`${BASE_PATH}/admin/reconcile-ledger-orphans`, requirePlatformStaff(), 
                 entry.signedAt = new Date().toISOString();
 
                 await kv.set(`fuel_entry:${entry.id}`, entry);
+                try {
+                  const { syncFleetPriceReport } = await import("./plug_public_price.ts");
+                  await syncFleetPriceReport(entry);
+                } catch (priceErr) {
+                  console.warn("[plug-price] reconciled fill skipped", priceErr);
+                }
 
                 // Queue Station Update
                 const stats = stationUpdateMap.get(matchedStation.id) || { 
@@ -6205,6 +6229,12 @@ app.delete(`${BASE_PATH}/fuel-entries/:id`, requirePermission("fuel.delete_entry
     const existing = await kv.get(`fuel_entry:${id}`);
     if (!existing) return c.json({ error: "Not found" }, 404);
     if (!belongsToOrg(existing, c)) return c.json({ error: "Forbidden" }, 403);
+    try {
+      const { rejectFleetPriceReport } = await import("./plug_public_price.ts");
+      await rejectFleetPriceReport(id);
+    } catch (priceErr) {
+      console.warn("[plug-price] delete did not update the price report", priceErr);
+    }
     await kv.del(`fuel_entry:${id}`);
     try {
       await deleteCanonicalLedgerBySource("transaction", [id]);

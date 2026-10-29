@@ -114,13 +114,22 @@ INSERT INTO places.plug_price_report (
 DO $$
 DECLARE
   status text;
+  weight numeric;
 BEGIN
-  SELECT c.status INTO status
+  SELECT c.status, c.weight INTO status, weight
+  FROM places.price_report_check c
+  JOIN places.plug_price_report r ON r.id = c.report_id
+  WHERE r.fuel_log_id = '00000000-0000-4000-8000-000000000001';
+  IF status <> 'accepted' THEN
+    RAISE EXCEPTION 'the earlier plug price should count once, got %', status;
+  END IF;
+
+  SELECT c.status, c.weight INTO status, weight
   FROM places.price_report_check c
   JOIN places.plug_price_report r ON r.id = c.report_id
   WHERE r.fuel_log_id = '00000000-0000-4000-8000-000000000002';
-  IF status <> 'review' THEN
-    RAISE EXCEPTION 'a duplicate plug price should wait for review, got %', status;
+  IF status <> 'duplicate' OR weight <> 0 THEN
+    RAISE EXCEPTION 'a later duplicate should be kept at weight 0, got % weight %', status, weight;
   END IF;
 END $$;
 
@@ -131,6 +140,59 @@ BEGIN
   SELECT review_count INTO queue FROM places.price_engine_health;
   IF queue < 1 THEN
     RAISE EXCEPTION 'health view lost the review queue';
+  END IF;
+END $$;
+
+INSERT INTO places.fleet_price_report (
+  fuel_entry_id, organization_id, driver_id, place_id, grade, grade_source,
+  litres, amount, station_state, reported_at
+) VALUES (
+  'price-engine-nograde', 'org-engine', 'driver-a', 'price-engine-station', 'unknown', 'unknown',
+  10, 2300, 'verified', now()
+);
+
+DO $$
+DECLARE
+  status text;
+  reasons text[];
+  report_id uuid;
+BEGIN
+  SELECT c.status, c.reasons, r.id INTO status, reasons, report_id
+  FROM places.price_report_check c
+  JOIN places.fleet_price_report r ON r.id = c.report_id
+  WHERE r.fuel_entry_id = 'price-engine-nograde';
+
+  IF status <> 'review' OR NOT ('GRADE_UNKNOWN' = ANY (reasons)) OR ('OUT_OF_BOUNDS' = ANY (reasons)) THEN
+    RAISE EXCEPTION 'unknown grade should only be grade unknown, status % reasons %', status, reasons;
+  END IF;
+
+  BEGIN
+    PERFORM places.price_engine_review('fleet', report_id, 'approved', null, null);
+    RAISE EXCEPTION 'approve on an unknown grade should be refused';
+  EXCEPTION
+    WHEN OTHERS THEN
+      IF SQLERRM NOT LIKE '%Set the grade first%' THEN
+        RAISE;
+      END IF;
+  END;
+END $$;
+
+INSERT INTO places.place (id, place_type, name, lat, lng, status, pin_state)
+VALUES ('price-engine-other', 'gas_station', 'Engine other', 18.01, -76.79, 'verified', 'confirmed');
+
+UPDATE places.fleet_price_report
+SET place_id = 'price-engine-other'
+WHERE fuel_entry_id = 'price-engine-c';
+
+DO $$
+DECLARE
+  moved int;
+BEGIN
+  SELECT count(*) INTO moved
+  FROM places.price_current
+  WHERE place_id = 'price-engine-other' AND grade = 'e10_87' AND price_per_litre > 0;
+  IF moved <> 1 THEN
+    RAISE EXCEPTION 'moving a report should publish the new station';
   END IF;
 END $$;
 

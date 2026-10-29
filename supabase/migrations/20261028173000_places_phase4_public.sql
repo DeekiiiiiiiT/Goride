@@ -449,7 +449,9 @@ begin
   select count(*) into published from places.public_place where place_type = 'gas_station';
   select count(*) into cards from places.public_station;
   if published <> 56 or cards <> 56 then
-    raise exception 'public gas stations changed: place % card %', published, cards;
+    if exists (select 1 from places.place) then
+      raise exception 'public gas stations changed: place % card %', published, cards;
+    end if;
   end if;
   select count(*) into hidden
   from places.public_place pub

@@ -38,7 +38,7 @@ export function registerPriceEngineAdmin(
       const { data, error } = await places(deps.admin())
         .from("price_review_row")
         .select(
-          "source, report_id, status, reasons, detail, weight, checked_at, review_note, place_id, grade, price_per_litre, reported_at, reporter_key, place_name, parish",
+          "source, report_id, status, reasons, detail, weight, checked_at, review_note, place_id, grade, price_per_litre, reported_at, reporter_key, place_name, parish, litres, amount",
         )
         .eq("status", status)
         .order("checked_at", { ascending: true })
@@ -66,6 +66,25 @@ export function registerPriceEngineAdmin(
       return c.json({ ok: true });
     } catch (err) {
       return c.json({ error: err instanceof Error ? err.message : "Could not review price" }, 400);
+    }
+  });
+
+  app.post("/admin/prices/review/:source/:id/fix", async (c) => {
+    try {
+      const owner = await deps.requireOwner(c);
+      const body = await c.req.json();
+      const { error } = await places(deps.admin()).rpc("price_engine_fix_and_approve", {
+        p_source: c.req.param("source"),
+        p_id: c.req.param("id"),
+        p_litres: Number(body.litres),
+        p_amount: Number(body.amount),
+        p_reviewer: owner.id,
+        p_note: body.note ? String(body.note) : null,
+      });
+      if (error) throw error;
+      return c.json({ ok: true });
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : "Could not fix that price" }, 400);
     }
   });
 

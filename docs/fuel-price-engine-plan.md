@@ -1,238 +1,61 @@
-# Fuel Price Engine: implementation plan
+# Fuel Price Engine
 
-**Rev 1 · 2026-10-28** · Plan only, no code changed · Project `csfllzzastacofsvcdsc`
+**Rev 2 · 2026-10-28** · Built, deployed, and running on live data. 23 items left (below). Project `csfllzzastacofsvcdsc`.
 
-Written for: the owner, and Cursor implementing it. This replaces items 1–2 of [dominion-places-super-node-audit.md](dominion-places-super-node-audit.md). Screens are in [stitch/fuel-price-engine-prompts.txt](stitch/fuel-price-engine-prompts.txt).
+Written for: the owner, and Cursor implementing it. Screens: [stitch/fuel-price-engine-prompts.txt](stitch/fuel-price-engine-prompts.txt).
 
-## Rules this plan keeps
+Rules: no report is ever deleted, and a doubtful report goes to Review. Plug only shows the engine's price. Fleet's pump-photo capture never changes.
 
-- **Capture everything.** No report is ever deleted. A report that looks wrong goes to the **Review** queue, and the owner decides.
-- **Plug never shows a raw report.** It only shows the engine's published price.
-- **Fleet's capture flow is unchanged.** The driver photographs the pump, and Fleet calculates amount ÷ litres. The engine only reads the fill after it is saved.
-- **The matcher is unchanged.** It decides *which place* a fill belongs to. The engine decides *what the price is*.
-- **Everything lives in `places`**, with text place ids, RLS on and no anon grants, like the rest of the register.
+## Where it stands (live, 28 Oct)
 
-## What exists today, and what changes
+- All 7 migrations are applied. explorer, fleet-fuel, petrojam-prices and platform-catalog were redeployed at 02:40 UTC. The daily 05:00 job is scheduled.
+- There are 77 Fleet reports. **24 are accepted and 53 are in Review.** Of the 53, 39 have no grade, 13 are duplicates (5 pairs and one triple), and 1 is the J$39.07 fill.
+- Only 4 stations have a price, and all 4 are "May be outdated". That part is correct: no accepted fill since Petrojam's 22 Oct week.
+- **CI never ran any engine test.** CI stops at step 39, "Dominion Stitch contract". The Parts SQL replay stops in a Places migration first. Local Deno tests pass (8/8). Plug typecheck is clean.
 
-| Today | Problem | Becomes |
+## To do: all of it, in one release
+
+### Engine SQL: one new migration
+
+| # | Problem | Fix |
 |---|---|---|
-| Fleet: `noteFleetPrice` writes `places.price_observation` and, if "in band", `price_current` | Grade hard-coded 87; the band needs a markup that doesn't exist, so nothing ever publishes | `places.fleet_price_report` (intake) → engine |
-| Plug: `explorer /fuel-logs` writes `price_observation` + `price_current` directly | One driver's number goes straight to the public map | `places.plug_price_report` (intake) → engine |
-| `price_current` → `public_place.prices` | No confidence, no sample size, no staleness | `price_current` is written **only by the engine**, with confidence, report count and valid-until |
-| `price_observation`, `in_band`, `plugPriceDecision`, `latest_retail_estimate` | Gate instead of review | Retired (added to the 12 Nov retirement list once the engine is live) |
+| 1 | **Both halves of a duplicate are flagged.** Each report sees the other as its duplicate, so both get weight 0 and the price counts **zero** times, not once. This holds all 13 duplicates in prod. | In `price_engine_check`, mark `DUPLICATE` only when the other report is **earlier** (on a tie, the lower `id` wins). |
+| 2 | Duplicates go to Review. The plan says "kept, not counted twice", so they don't need the owner. | A report whose only reason is `DUPLICATE` → `accepted` with weight 0. |
+| 3 | Every no-grade report also gets `OUT_OF_BOUNDS`, because there's no wholesale price for "unknown". Review shows 2 reasons where only 1 is real. | Skip the bounds check when the grade is unknown. |
+| 4 | `UNUSUAL_FOR_STATION` uses MAD, and a station's prices are often identical (e.g. 229.3578 ×3). That makes MAD 0, so a 1-cent difference gets flagged. | Use `greatest(MAD, 1% of median)`. |
+| 5 | Trust updates use `UPDATE … FROM` with several rows per reporter, so only one row's +0.05/−0.10 lands. `accepted` also goes up by 1 per publish, not per report. | Sum the change and count the reports per reporter in a sub-select, then apply them once. |
+| 6 | **Approve works on a no-grade or unverified-place report.** It leaves Review but can never publish. Bulk Approve on the 39 would clear them silently. | `price_engine_review` refuses `approved` while the grade is `unknown` or the status is `waiting_place`. The error says "Set the grade first" or "Verify the station first". |
+| 7 | **The retirement script will break publishing.** `price_current`'s only unique key is `(station_id, grade)`. Once retirement drops `station_id`, the engine's `on conflict (place_id, grade)` has no key and fails. | Add `unique (place_id, grade)` on `places.price_current` now. |
+| 8 | Changing a report's place, amount or litres doesn't re-run the engine. The triggers fire on insert and delete only. | Add an `after update of place_id, grade, litres, amount` trigger on both intakes. It re-checks the report, then publishes the old and new place/grade. |
+| 9 | Plug reports are copied into `fleet.master_change_log` (with `reporter_hash`). After "delete my data" the copy stays. | Drop `plug_price_report_master_change`. Plug data isn't master data. |
+| 10 | — | The migration ends by re-checking every report that isn't owner-decided, then republishing every place/grade. That clears #1–#4 from the live queue. |
 
-Production facts this plan is sized to:
-- **Volume:** 75 Fleet fills with a price since 1 Sep, about 1 a day across 56 verified stations. Plug fuel logs: 0, since Plug isn't launched.
-- **Petrojam:** weekly wholesale rows (latest 2026-10-22).
-- **Postgres:** 17. TimescaleDB is **not available** in this project, so the design uses plain tables and no continuous aggregates. At this volume they aren't needed.
-- **Disk IO:** this database is IO-sensitive. The engine runs per report plus one daily job, never every 15 minutes.
+### Fleet intake
 
-## Why Fleet and Plug are separate intakes
-
-| | Fleet | Plug |
+| # | Problem | Fix |
 |---|---|---|
-| Who | Your company's drivers | Anonymous public users (`user_hash`) |
-| Data owner | Fleet business record (private to the company) | The public user, who can delete their data |
-| Evidence | Pump photo, odometer, gas card statement, verified station | GPS, odometer, user-entered grade |
-| Default trust | 2.0 | 1.0 |
-| Grade source | Vehicle catalog → fill `fuelType` → card statement `jaaFuelType` | Locked from the user's vehicle (catalog `fuel_grade`) |
-| On "delete my data" | Kept (company record) | Deleted with the user; published prices are recomputed |
+| 11 | **Live fills with no grade are dropped.** `submitFleetPriceReport` returns early on `unknown`. Half of today's fills have no grade, so half of new fills would vanish. The backfill kept them. | Insert them with `grade = 'unknown'`. They wait in Review. |
+| 12 | **Live fills are stamped at midnight.** `reported_at = entry.date` is a date only. Migration 250000 fixed exactly this for the backfill, because it made same-day fills look like duplicates. | Use the save time (`new Date().toISOString()`), the same as the backfill's `created_at`. |
+| 13 | **Only the first save reaches the engine.** Later changes are dropped: a corrected amount (re-POST of the same id, duplicate key swallowed), a gas-card fill completed by `jaa/adopt-statement`, a station set by `stations/promote-learnt` / evidence-inbox / `reconcile-ledger-orphans`, or a deleted fill (`DELETE /fuel-entries/:id`). | Make one `syncFleetPriceReport(entry)` and call it from all of those routes. It upserts on `fuel_entry_id` (updating place, grade, litres and amount, so #8 fires). On delete it sets the check to `rejected` with the note "fill deleted": kept, never counted. |
 
-Two intake tables keep company data from ever mixing with public data. They also let a Plug user's delete remove only their own rows. Both feed **one engine** through a read-only view.
+### Dominion and CI
 
-## Tables (all in `places`)
+| # | Problem | Fix |
+|---|---|---|
+| 14 | No bulk grade. The 39 no-grade reports would take 39 separate clicks. | Add **Set grade** to the bulk bar in [PriceEngineReview.tsx](../apps/admin/src/components/admin/fuel-prices/PriceEngineReview.tsx). It calls the existing `/grade` route for each selected row. |
+| 15 | A new admin `tsc` error: `replaceAll` at [priceEngineApi.ts:132](../apps/admin/src/components/admin/fuel-prices/priceEngineApi.ts#L132). | `.replace(/_/g, " ")`. |
+| 16 | **CI fails before any engine test.** 4 Places review files are missing their `// Stitch:` lines (`PlacesReviewQueue`, `Split`, `Merge`, `Coverage` ×2). | Add the 5 markers that `node scripts/stitch-contract.mjs` prints. |
+| 17 | **The Parts SQL replay fails before `price_engine_checks.sql`.** `places_phase4_public` asserts 56 public stations, and a fresh database has 0. | Wrap that assertion in `if exists (select 1 from places.place)`. Prod already applied it, so only replay changes. |
+| 18 | The SQL test expects a duplicate Plug report in `review`. | After #2, expect `accepted`, weight 0. Add cases: a pair counts once (#1), no-grade isn't `OUT_OF_BOUNDS` (#3), Approve on unknown grade is refused (#6), and a place change republishes both places (#8). |
 
-```sql
--- Fleet intake: one row per saved Fleet fuel fill that has a price
-create table places.fleet_price_report (
-  id uuid primary key default gen_random_uuid(),
-  fuel_entry_id text unique not null,           -- fleet.fuel_entries.id
-  organization_id text not null,
-  driver_id text, vehicle_id text,
-  place_id text references places.place(id),   -- null until the matcher resolves a place
-  grade text not null check (grade in ('e10_87','e10_90','diesel','ulsd','unknown')),
-  grade_source text not null check (grade_source in ('vehicle','fill','statement','unknown')),
-  litres numeric not null check (litres > 0),
-  amount numeric not null check (amount > 0),
-  price_per_litre numeric generated always as (round(amount / litres, 4)) stored,
-  pump_photo_path text,
-  station_state text,                           -- matcher's stationResolution.state
-  gps_accuracy_m numeric,
-  reported_at timestamptz not null,
-  created_at timestamptz not null default now()
-);
+### Data, after deploy
 
--- Plug intake: one row per Plug fuel log that has a price
-create table places.plug_price_report (
-  id uuid primary key default gen_random_uuid(),
-  fuel_log_id uuid unique not null,             -- explorer.fuel_log.id
-  reporter_hash text not null,                  -- same user_hash Plug already uses
-  catalog_variant_id uuid,
-  place_id text references places.place(id),
-  grade text not null check (grade in ('e10_87','e10_90','diesel','ulsd','unknown')),
-  grade_source text not null check (grade_source in ('vehicle_locked','user_changed','unknown')),
-  litres numeric not null check (litres > 0),
-  amount numeric not null check (amount > 0),
-  price_per_litre numeric generated always as (round(amount / litres, 4)) stored,
-  gps_accuracy_m numeric, mock_location boolean not null default false,
-  station_match text not null check (station_match in ('auto','manual','new_place')),
-  reported_at timestamptz not null,
-  created_at timestamptz not null default now()
-);
+| # | What | Done when |
+|---|---|---|
+| 19 | Link vehicle **5179KZ** to its catalog entry in Dominion, so future fills get the vehicle grade. It's the only vehicle, and it has no catalog link. | New fills show `grade_source = vehicle`. |
+| 20 | Bulk **Set grade E-10 87** on the 39 no-grade reports. The vehicle's other fills are 36 × 87 and 2 × 90, so check the 90 ones first. Then Reject the J$39.07 fill. | The Review queue is 0, or only real doubts. |
+| 21 | Check the first runs: the daily job (05:00 UTC, 29 Oct), and Petrojam's 29 Oct week via `petrojam-weekly-sync`. | `cron.job_run_details` shows success. Prices from older weeks show "May be outdated". |
+| 22 | Watch the first live Fleet fill after deploy. | It has a report with a real time, and it's accepted or in Review within seconds. |
+| 23 | Run `scripts/sql/places_phase8_retire.sql` on or after 12 Nov, only after #7. | `price_observation` and `latest_retail_estimate` are gone, and a new fill still publishes. |
 
--- One engine view over both
-create view places.price_report as
-  select 'fleet' as source, id, place_id, grade, price_per_litre, reported_at,
-         'fleet:' || coalesce(driver_id, organization_id) as reporter_key
-  from places.fleet_price_report
-  union all
-  select 'plug', id, place_id, grade, price_per_litre, reported_at,
-         'plug:' || reporter_hash
-  from places.plug_price_report;
-
--- The engine's verdict on each report (one row per report)
-create table places.price_report_check (
-  source text not null, report_id uuid not null,
-  status text not null check (status in ('accepted','review','waiting_place','approved','rejected')),
-  reasons text[] not null default '{}',          -- see "Checks"
-  detail jsonb not null default '{}',            -- wholesale, expected, last price, median, mad...
-  weight numeric not null,
-  checked_at timestamptz not null default now(),
-  reviewed_by uuid, reviewed_at timestamptz, review_note text,
-  primary key (source, report_id)
-);
-
--- Reporter trust (Fleet drivers and Plug users)
-create table places.price_reporter (
-  reporter_key text primary key,                 -- 'fleet:<driver>' | 'plug:<hash>'
-  source text not null,
-  trust_weight numeric not null check (trust_weight between 0.1 and 3.0),
-  reports int not null default 0, accepted int not null default 0,
-  owner_rejected int not null default 0,
-  last_report_at timestamptz, updated_at timestamptz not null default now()
-);
-
--- Every price the engine ever published (history); price_current stays the "current" pointer
-create table places.published_fuel_price (
-  id uuid primary key default gen_random_uuid(),
-  place_id text not null references places.place(id),
-  grade text not null,
-  price_per_litre numeric not null,
-  report_count int not null, fleet_count int not null, plug_count int not null,
-  spread_pct numeric,
-  confidence text not null check (confidence in ('high','medium','low')),
-  petrojam_week date not null,                    -- the Petrojam price date this price belongs to
-  window_start timestamptz not null, window_end timestamptz not null,
-  published_at timestamptz not null default now(),
-  valid_until timestamptz not null
-);
-
--- Settings the owner can change in Dominion (one row)
-create table places.price_engine_settings (
-  id int primary key default 1 check (id = 1),
-  bounds_low numeric not null default 0.80,      -- × Petrojam wholesale
-  bounds_high numeric not null default 1.50,
-  change_pct numeric not null default 0.12,      -- vs last published, Petrojam-adjusted
-  mad_k numeric not null default 3.5,
-  mad_min_reports int not null default 4,
-  window_days int not null default 7,
-  fleet_weight numeric not null default 2.0,
-  plug_weight numeric not null default 1.0,
-  updated_at timestamptz not null default now(), updated_by uuid
-);
-
--- Add to price_current: confidence, report_count, petrojam_week, valid_until, published_id
-```
-
-Indexes: `(place_id, grade, reported_at desc)` on both intake tables, and `(status)` on `price_report_check`. Add both intake tables and `published_fuel_price` to the `fleet.log_master_change` audit trail.
-
-## Checks (Stage 2): flag, never delete
-
-Each report gets every reason that applies. **Any reason → `review`**, except `PLACE_NOT_VERIFIED`, which → `waiting_place` and is re-checked when the place is verified.
-
-| Reason | Rule |
-|---|---|
-| `GRADE_UNKNOWN` | No grade from the vehicle, the fill, the statement (Fleet) or the vehicle lock (Plug) |
-| `GRADE_CHANGED` | Plug user changed the grade the vehicle locked |
-| `OUT_OF_BOUNDS` | Price outside `bounds_low`–`bounds_high` × Petrojam wholesale for that grade and the week of `reported_at` (no Petrojam row → this reason) |
-| `BIG_CHANGE` | More than `change_pct` away from the place's current published price, after adding Petrojam's change since that price's week |
-| `UNUSUAL_FOR_STATION` | Place has ≥ `mad_min_reports` accepted reports in `window_days` and the price is more than `mad_k` × MAD from their median |
-| `MOCK_LOCATION` | Plug report with `mock_location = true` |
-| `DUPLICATE` | Same reporter, same place and grade, within 10 minutes. Kept, but not counted twice. |
-| `PLACE_NOT_VERIFIED` | Place is pending, learnt or new → `waiting_place` |
-
-Owner **Approve** → `approved` (counts like accepted). Owner **Reject** → `rejected` (kept for the record, never counted). Every decision feeds the reporter's trust.
-
-## Trust (Stage 3)
-
-- New reporter: `fleet_weight` (2.0) or `plug_weight` (1.0).
-- After each publish:
-  - within 3% of the published price → +0.05
-  - more than 10% away → −0.10
-  - owner Reject → −0.20
-  - capped 0.1–3.0
-- No reports for 30 days: drift 5% back toward the default, once a week.
-
-## Aggregation and publishing (Stages 4–5), Jamaica-specific
-
-Pump prices in Jamaica move with Petrojam's weekly price. So the window is "**this Petrojam week**", not a clock window. Hourly tiers wouldn't work at about 1 report a day.
-
-- **Window:** accepted + approved reports for the place and grade since the latest Petrojam price date, capped at `window_days`.
-- **Price:** weighted median by trust.
-- **Confidence:**
-  - **high:** 3 or more reports and spread ≤ 2%
-  - **medium:** 2 reports, or 1 Fleet report (it has a pump photo)
-  - **low:** 1 Plug report
-- **valid_until:** latest Petrojam date + 8 days.
-- **When Petrojam publishes a new week:** every current price from an older week is marked **may be outdated**. It is **still shown** with that label (never hidden), until a new report for the new week replaces it.
-- **No reports in the window:** keep showing the last price with its age and "may be outdated".
-
-## When it runs (no 15-minute jobs)
-
-1. **On every new report** (trigger on both intake tables): run the checks, then recompute that one place and grade. Prices update within seconds, with almost no IO.
-2. **On owner Approve/Reject:** recompute that place and grade.
-3. **When `petrojam-prices` syncs a new week:** mark older prices "may be outdated".
-4. **Daily 05:00 UTC (`places-price-engine-daily`):** trust drift, expire `valid_until`, refresh the health view.
-5. **On place verified:** re-check its `waiting_place` reports.
-
-## Code changes
-
-| Where | Change |
-|---|---|
-| [plug_public_price.ts](../supabase/functions/_fleet-server/plug_public_price.ts) | Replace `noteFleetPrice` with `submitFleetPriceReport`: insert `fleet_price_report`. Grade order: vehicle catalog `fuel_grade` → fill `fuelType` → `metadata.jaaFuelType` → `unknown`. No decision logic here. |
-| [explorer/index.ts](../supabase/functions/explorer/index.ts) `POST /fuel-logs` | Replace the `price_observation` / `price_current` block with an insert into `plug_price_report`. The grade comes from the vehicle's catalog `fuel_grade` (`grade_source = 'vehicle_locked'`). If the body's grade differs, `user_changed`. Response: `priceStatus: 'checking' \| 'published' \| 'review'`. |
-| `explorer` delete-my-data (`DELETE /me`) | Also delete that user's `plug_price_report` rows, then recompute the affected places. |
-| New SQL functions | `places.price_engine_check(source, id)`, `places.price_engine_publish(place_id, grade)`, `places.price_engine_daily()`, `places.price_engine_review(source, id, decision, note)` |
-| [petrojam-prices](../supabase/functions/petrojam-prices/index.ts) | After a new week is saved, call `places.price_engine_mark_stale(new_date)` |
-| `refresh_public_place` | `prices` becomes `{grade: {price, confidence, reports, petrojam_week, observed_at, outdated}}` |
-| `platform-catalog` / Plug | Show confidence, report count, age and "May be outdated" (screens in the Stitch file) |
-| `explorer` admin | New routes for the Dominion screens: `/admin/prices/overview`, `/review`, `/published`, `/reporters`, `/settings`, `POST /admin/prices/review/:source/:id` |
-| Remove | `plugPriceDecision`, `places.latest_retail_estimate`, `price_observation` writes, `in_band` |
-
-## Backfill (gives real prices on day one)
-
-Insert every Fleet fill since 2026-09-01 with a verified station and `amount`/`liters` > 0 into `fleet_price_report`, then run the engine once. On today's data that's about 75 reports. Item 2's grade fix applies, and the J$39.07 fill lands in **Review** (`OUT_OF_BOUNDS`) instead of being thrown away. Move the 1 legacy `price_observation` row across too.
-
-## Health (add to the nightly checks)
-
-`places.price_engine_health` returns one row with:
-- review queue size and age of the oldest item
-- the share of current prices that are outdated
-- the median report count per published price
-- reasons as a share of reports (alert if `UNUSUAL_FOR_STATION` > 5%)
-- the share of published prices that come from the top 10 reporters
-
-## Build order
-
-1. Schema + settings + RLS (migration).
-2. Engine functions + triggers + daily cron (migration), with SQL tests in `supabase/tests/price_engine_checks.sql`. These must run on `push` to `main` (audit item 5).
-3. Fleet intake + backfill, then confirm prices appear for stations with recent fills.
-4. Plug intake + grade lock + delete-my-data.
-5. Petrojam stale hook.
-6. Dominion **Fuel → Price Engine** screens and the Plug price states (Stitch file).
-7. Add `price_observation`, `in_band`, `plugPriceDecision` and `latest_retail_estimate` to the retirement script.
-
-Tests:
-- Deno unit tests for the weighted median, each reason and confidence
-- one replay test that pushes the 75 backfill reports through and asserts the published prices
-- a Plug journey: log fuel → "checking" → price shows with its confidence
+Outside this plan, for the fuel audits: 4 Fleet fills look entered twice. On 5 Oct 15:35 there are two J$5,000 / 21.33 L fills 2 s apart, and on 13 Oct three fills fall within 6 s. If they are double entries, the fuel charge is doubled too.
