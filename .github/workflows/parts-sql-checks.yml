@@ -41,15 +41,16 @@ jobs:
           sudo tar -xzf /tmp/supabase.tar.gz -C /usr/local/bin
           supabase --version
 
-      # ECR public anonymous pulls hit "Data limit exceeded" on busy days. Cache + Docker Hub fallback.
+      # Avoid supabase db start (pulls Realtime/etc from ECR and hits Data limit exceeded).
+      # One Postgres image + db reset against its URL is enough for SQL checks.
       - name: Cache Supabase Postgres image
         id: cache-pg
         uses: actions/cache@v4
         with:
           path: /tmp/supabase-postgres-17.6.1.106.tar
-          key: supabase-postgres-17.6.1.106
+          key: supabase-postgres-17.6.1.106-v2
 
-      - name: Prefetch Postgres image
+      - name: Start Postgres only
         env:
           PG_IMAGE: public.ecr.aws/supabase/postgres:17.6.1.106
           PG_FALLBACK: supabase/postgres:17.6.1.106
@@ -57,46 +58,43 @@ jobs:
           set -euo pipefail
           if [ -f /tmp/supabase-postgres-17.6.1.106.tar ]; then
             docker load -i /tmp/supabase-postgres-17.6.1.106.tar
-            exit 0
+          else
+            pulled=0
+            for attempt in 1 2 3 4 5 6 7 8; do
+              if docker pull "$PG_IMAGE" || docker pull "$PG_FALLBACK"; then
+                pulled=1
+                break
+              fi
+              echo "image pull failed (attempt ${attempt}); waiting"
+              sleep $((attempt * 20))
+            done
+            test "$pulled" = 1
+            if ! docker image inspect "$PG_IMAGE" >/dev/null 2>&1; then
+              docker tag "$PG_FALLBACK" "$PG_IMAGE"
+            fi
+            docker save "$PG_IMAGE" -o /tmp/supabase-postgres-17.6.1.106.tar
           fi
-          pulled=0
-          for attempt in 1 2 3 4 5 6; do
-            if docker pull "$PG_IMAGE" || docker pull "$PG_FALLBACK"; then
-              pulled=1
+          docker rm -f parts-sql-pg >/dev/null 2>&1 || true
+          docker run -d --name parts-sql-pg -e POSTGRES_HOST_AUTH_METHOD=trust -p 54322:5432 "$PG_IMAGE"
+          for _ in $(seq 1 60); do
+            if docker exec parts-sql-pg pg_isready -U postgres >/dev/null 2>&1; then
               break
             fi
-            echo "image pull failed (attempt ${attempt}); waiting"
-            sleep $((attempt * 20))
+            sleep 2
           done
-          test "$pulled" = 1
-          if ! docker image inspect "$PG_IMAGE" >/dev/null 2>&1; then
-            docker tag "$PG_FALLBACK" "$PG_IMAGE"
-          fi
-          docker save "$PG_IMAGE" -o /tmp/supabase-postgres-17.6.1.106.tar
-
-      - name: Start the database
-        run: |
-          set -euo pipefail
-          for attempt in 1 2 3; do
-            if supabase db start; then
-              exit 0
-            fi
-            echo "supabase db start failed (attempt ${attempt}); waiting before retry"
-            sleep $((attempt * 10))
-          done
-          echo "supabase db start failed after retries"
-          exit 1
+          docker exec parts-sql-pg pg_isready -U postgres
 
       - name: Apply migrations without seed data
+        env:
+          SUPABASE_DB_URL: postgresql://postgres@127.0.0.1:54322/postgres
         run: |
           set -euo pipefail
-          supabase db reset --no-seed
+          supabase db reset --db-url "$SUPABASE_DB_URL" --no-seed
 
       - name: Parts sourcing SQL checks
         run: |
           set -euo pipefail
-          db_container="$(docker ps --format '{{.Names}}' | grep '^supabase_db_' | head -n 1)"
-          test -n "$db_container"
+          db_container=parts-sql-pg
           docker cp supabase/tests/parts_rev2_checks.sql "$db_container":/tmp/parts_rev2_checks.sql
           docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/parts_rev2_checks.sql
           docker cp supabase/tests/vehicle_database_rebuild_checks.sql "$db_container":/tmp/vehicle_database_rebuild_checks.sql

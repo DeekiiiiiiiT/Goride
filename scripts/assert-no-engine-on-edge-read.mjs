@@ -32,7 +32,14 @@ if (!preview.includes('skipEngineProbe: true')) {
   console.error('Close preview must skip the fuel, toll, and earnings engines.');
   process.exit(1);
 }
-if (preview.includes('prepareWeekClose(')) {
+// GET /preview is a page read. POST /prepare and /sync may call prepareWeekClose on purpose.
+const previewGetStart = preview.indexOf('/preview`');
+const previewGetEnd = preview.indexOf('app.get(`${BASE}/workflows');
+const previewGet =
+  previewGetStart >= 0 && previewGetEnd > previewGetStart
+    ? preview.slice(previewGetStart, previewGetEnd)
+    : '';
+if (!previewGet || !previewGet.includes('previewWeekClose(') || previewGet.includes('prepareWeekClose(')) {
   console.error('Refresh must not calculate the week inside the page request.');
   process.exit(1);
 }
