@@ -75,8 +75,17 @@ jobs:
             docker save "$PG_IMAGE" -o /tmp/supabase-postgres-17.6.1.106.tar
           fi
           docker rm -f parts-sql-pg >/dev/null 2>&1 || true
-          docker run -d --name parts-sql-pg -e POSTGRES_HOST_AUTH_METHOD=trust -p 54322:5432 "$PG_IMAGE"
-          for _ in $(seq 1 60); do
+          docker run -d --name parts-sql-pg \
+            -e POSTGRES_PASSWORD=postgres \
+            -e POSTGRES_HOST_AUTH_METHOD=trust \
+            -p 54322:5432 \
+            "$PG_IMAGE"
+          for _ in $(seq 1 90); do
+            if ! docker ps --format '{{.Names}}' | grep -q '^parts-sql-pg$'; then
+              echo "parts-sql-pg exited early"
+              docker logs parts-sql-pg || true
+              exit 1
+            fi
             if docker exec parts-sql-pg pg_isready -U postgres >/dev/null 2>&1; then
               break
             fi
@@ -86,7 +95,7 @@ jobs:
 
       - name: Apply migrations without seed data
         env:
-          SUPABASE_DB_URL: postgresql://postgres@127.0.0.1:54322/postgres
+          SUPABASE_DB_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
         run: |
           set -euo pipefail
           supabase db reset --db-url "$SUPABASE_DB_URL" --no-seed
