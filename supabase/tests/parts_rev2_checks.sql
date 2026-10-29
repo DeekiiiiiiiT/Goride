@@ -24,12 +24,26 @@ INSERT INTO public.part_interchange_group (id, code, fit_scope)
 VALUES ('55555555-5555-4555-8555-555555555555', 'REV2-OIL', 'powertrain')
 ON CONFLICT (code) DO NOTHING;
 
--- Schema-only CI has no seed rows; engine-family fit rules require an engine-level component.
-INSERT INTO public.maintenance_service_categories (id, code, name, kind, op_code, sort_order)
-SELECT 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1', 'rev2-eng-oil', 'Rev2 oil filter', 'component', 'ENG-OIL', 10
-WHERE NOT EXISTS (
-  SELECT 1 FROM public.maintenance_service_categories WHERE op_code = 'ENG-OIL'
-);
+-- Schema-only CI has no garage seed. Coverage + engine-fit checks need the 10 core components.
+INSERT INTO public.maintenance_service_categories (id, code, name, kind, icon_key, sort_order)
+VALUES
+  ('b1000000-0000-4000-8000-000000000004', 'rev2-brakes', 'Brakes', 'system', 'brakes', 4),
+  ('b1000000-0000-4000-8000-000000000008', 'rev2-suspension', 'Suspension', 'system', 'suspension', 8)
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO public.maintenance_service_categories (id, code, name, kind, op_code, parent_id, icon_key, sort_order)
+VALUES
+  ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1', 'rev2-eng-oil', 'Oil filter', 'component', 'ENG-OIL', NULL, 'wrench', 10),
+  ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2', 'rev2-eng-spark', 'Spark plugs', 'component', 'ENG-SPARK', NULL, 'wrench', 20),
+  ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3', 'rev2-eng-therm', 'Thermostat', 'component', 'ENG-THERM', NULL, 'wrench', 30),
+  ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa4', 'rev2-filt-air', 'Air filter', 'component', 'FILT-AIR', NULL, 'wrench', 40),
+  ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa5', 'rev2-hvac-cabin', 'Cabin filter', 'component', 'HVAC-CABIN', NULL, 'wrench', 50),
+  ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa6', 'rev2-brk-pads', 'Brake pads', 'component', 'BRK-PADS', 'b1000000-0000-4000-8000-000000000004', 'brakes', 60),
+  ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa7', 'rev2-brk-rotor', 'Brake rotor', 'component', 'BRK-ROTOR', 'b1000000-0000-4000-8000-000000000004', 'brakes', 70),
+  ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa8', 'rev2-belt-serp', 'Serpentine belt', 'component', 'BELT-SERP', NULL, 'wrench', 80),
+  ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa9', 'rev2-lgt-wiper', 'Wipers', 'component', 'LGT-WIPER', NULL, 'wrench', 90),
+  ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa10', 'rev2-sus-shock', 'Shock absorber', 'component', 'SUS-SHOCK', 'b1000000-0000-4000-8000-000000000008', 'suspension', 100)
+ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO public.part_master (id, category_id, name, oem_part_number, manufacturer, part_kind, interchange_group_id, maintenance_component_id)
 SELECT
@@ -124,7 +138,8 @@ BEGIN
       'fitScope', 'powertrain',
       'targetKind', 'engine_family',
       'targetCode', 'REV2-1NZ-FE',
-      'categorySlug', 'rev2-engine'
+      'categorySlug', 'rev2-engine',
+      'componentOpCode', 'ENG-OIL'
     )),
     '77777777-7777-4777-8777-777777777777'
   ) INTO result;
