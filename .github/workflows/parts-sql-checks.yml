@@ -44,7 +44,16 @@ jobs:
       - name: Start the database
         run: |
           set -euo pipefail
-          supabase db start
+          # public.ecr.aws sometimes returns "Data limit exceeded"; retry a few times.
+          for attempt in 1 2 3 4 5; do
+            if supabase db start; then
+              exit 0
+            fi
+            echo "supabase db start failed (attempt ${attempt}); waiting before retry"
+            sleep $((attempt * 15))
+          done
+          echo "supabase db start failed after retries"
+          exit 1
 
       - name: Apply migrations without seed data
         run: |

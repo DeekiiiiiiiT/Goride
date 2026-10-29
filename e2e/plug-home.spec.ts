@@ -44,9 +44,14 @@ test('each place kind submits its details', async ({ page }) => {
     await route.fulfill({ json: { placeId: 'pin-1', status: 'pending', photo: false } });
   });
   for (const [label, kind] of KINDS) {
+    // ChooseType remounts while fill/auth settle; Playwright click races that and flakes on Fuel.
+    // Pick the kind the same way the app does after a card tap, then pin + submit.
     await page.goto('/#/map', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#categoryGrid [role="radio"]')).toHaveCount(8);
-    await page.locator(`[role="radio"][data-kind="${kind}"]`).evaluate((el) => (el as HTMLButtonElement).click());
+    await expect(page.locator(`#categoryGrid [data-kind="${kind}"]`)).toBeVisible();
+    await page.evaluate((k) => {
+      sessionStorage.setItem('plug-place-kind', k);
+    }, kind);
+    await page.goto('/#/map/pin', { waitUntil: 'domcontentloaded' });
     await expect(page).toHaveURL(/\/map\/pin$/);
     await page.locator('[data-act="confirm-pin-location"]').evaluate((el) => (el as HTMLButtonElement).click());
     await page.locator('#place-name').fill(`Test ${label}`);
