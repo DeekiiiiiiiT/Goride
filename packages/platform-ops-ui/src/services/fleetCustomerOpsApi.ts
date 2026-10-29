@@ -2,7 +2,7 @@
  * Token-based calls for the customer screens that moved to Fleet admin.
  * Uses the signed-in session from PlatformSessionProvider. No Dominion login.
  */
-import { API_ENDPOINTS, getSupabaseFunctionsBaseUrl, projectId, publicAnonKey } from '@roam/api-client';
+import { API_ENDPOINTS, projectId, publicAnonKey } from '@roam/api-client';
 import { requirePlatformAuthHeaders } from '../auth/platformAuthHeaders';
 import { ledgerApi } from './ledgerApi';
 import type { FuelEntry } from '../types/fuel';
@@ -316,13 +316,23 @@ export const fleetCustomerOpsApi = {
   },
 
   async listPetrojamPrices(limit = 120): Promise<PetrojamPrice[]> {
+    const headers = await authHeaders(null);
+    headers.apikey = headers.apikey || publicAnonKey;
+    headers.Accept = 'application/json';
     const response = await fetch(
-      `${getSupabaseFunctionsBaseUrl()}/petrojam-prices/admin/prices?limit=${limit}`,
-      { headers: await authHeaders() },
+      `https://${projectId}.supabase.co/rest/v1/fuel_petrojam_prices?select=id,price_date,gasolene_87,gasolene_90,auto_diesel,ulsd&order=price_date.desc&limit=${limit}`,
+      { headers },
     );
     if (!response.ok) throw new Error(await readError(response, 'Failed to load prices'));
-    const data = await response.json();
-    return (data.prices || []) as PetrojamPrice[];
+    const rows = await response.json() as Array<Record<string, unknown>>;
+    return rows.map((row) => ({
+      id: String(row.id),
+      priceDate: String(row.price_date || '').slice(0, 10),
+      gasolene87: row.gasolene_87 == null ? null : Number(row.gasolene_87),
+      gasolene90: row.gasolene_90 == null ? null : Number(row.gasolene_90),
+      autoDiesel: row.auto_diesel == null ? null : Number(row.auto_diesel),
+      ulsd: row.ulsd == null ? null : Number(row.ulsd),
+    }));
   },
 
   async listRetailMarkups(): Promise<RetailMarkupVersion[]> {

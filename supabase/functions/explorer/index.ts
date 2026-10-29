@@ -21,6 +21,7 @@ import {
   sectionEnabled,
 } from "../_shared/plugCore.ts";
 import { priceStatusFor, resolvePlugGrade } from "../_shared/priceEngineMath.ts";
+import { requirePlatformAdmin } from "../_shared/platformAdmin.ts";
 import { registerPlaceAdmin } from "./place_admin.ts";
 import { registerPriceEngineAdmin } from "./price_engine_admin.ts";
 
@@ -1069,7 +1070,7 @@ async function lockedVehicleGrade(sb: SupabaseClient, catalogVariantId: string |
   return typeof data.fuel_grade === "string" ? data.fuel_grade : null;
 }
 
-registerPlaceAdmin(app, { admin, requireOwner });
+registerPlaceAdmin(app, { admin, requireOwner, requirePlatformAdmin });
 registerPriceEngineAdmin(app, { admin, requireOwner });
 
 if (!Deno.env.get("PLUG_USER_HASH_PEPPER")?.trim()) {

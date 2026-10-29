@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useBenchmarkName } from "../refineries/useRefineries";
 import {
   peFetch,
   type OverviewPayload,
@@ -91,6 +92,7 @@ export function PriceEngineOverviewTab({
   recalcBusy: boolean;
   refreshKey?: number;
 }) {
+  const benchmarkName = useBenchmarkName();
   const [data, setData] = useState<OverviewPayload | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -196,7 +198,7 @@ export function PriceEngineOverviewTab({
             <div className="text-2xl font-mono font-bold text-on-surface tracking-tight">
               {data.outdatedPrices ?? 0} prices
             </div>
-            <p className="text-[11px] text-on-surface-variant mt-0.5">from an older Petrojam week</p>
+            <p className="text-[11px] text-on-surface-variant mt-0.5">from an older {benchmarkName} week</p>
           </div>
           <div className="flex items-center gap-1 text-[11px] text-outline font-mono">
             <span className="w-1.5 h-1.5 rounded-full bg-outline-variant" />
@@ -295,7 +297,7 @@ export function PriceEngineOverviewTab({
           <div>
             <div className="flex items-center justify-between mb-1">
               <div>
-                <h3 className="text-sm font-headline font-bold text-on-surface">Price this week vs Petrojam</h3>
+                <h3 className="text-sm font-headline font-bold text-on-surface">Price this week vs {benchmarkName}</h3>
                 <p className="text-xs text-on-surface-variant">
                   E-10 87 average pump price vs wholesale refinery baseline (8 weeks)
                 </p>
@@ -308,7 +310,7 @@ export function PriceEngineOverviewTab({
               </div>
               <div className="flex items-center gap-2">
                 <span className="w-3 h-1 rounded-full bg-primary-container" />
-                <span className="text-outline">Petrojam wholesale</span>
+                <span className="text-outline">{benchmarkName} ex-refinery</span>
               </div>
             </div>
             <div className="w-full h-52 relative mt-2">
@@ -322,7 +324,7 @@ export function PriceEngineOverviewTab({
           </div>
           <div className="flex items-center justify-between text-xs pt-3 mt-2 border-t-0 font-mono text-outline-variant flex-wrap gap-2">
             <span>
-              Current Petrojam week: <strong className="text-on-surface">{formatPetrojamWeekLabel(petrojamWeek)}</strong>
+              Current {benchmarkName} week: <strong className="text-on-surface">{formatPetrojamWeekLabel(petrojamWeek)}</strong>
             </span>
             <span>
               Live prices: <strong className="text-secondary">{live}</strong>
@@ -423,7 +425,7 @@ export function PriceEngineOverviewTab({
                 <Ms name="check_circle" className="text-tertiary text-[18px] mt-0.5 shrink-0" />
                 <div className="text-xs">
                   <div className="font-medium text-on-surface">
-                    Petrojam week {formatPetrojamWeekLabel(petrojamWeek)}
+                    {benchmarkName} week {formatPetrojamWeekLabel(petrojamWeek)}
                   </div>
                   <div className="text-outline text-[11px]">Wholesale matrix matching index</div>
                 </div>
@@ -498,7 +500,7 @@ export function PriceEngineOverviewTab({
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-container text-on-surface-variant text-xs font-mono">
             <Ms name="calendar_month" className="text-[16px] text-primary" />
             <span>
-              Petrojam week:{" "}
+              {benchmarkName} week:{" "}
               <strong className="text-on-surface font-semibold">{formatPetrojamWeekLabel(petrojamWeek)}</strong>
             </span>
           </div>

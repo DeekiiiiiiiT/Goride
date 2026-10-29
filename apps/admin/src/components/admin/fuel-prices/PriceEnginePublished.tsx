@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useBenchmarkName } from "../refineries/useRefineries";
 import { gradeLabel, money, peFetch, type Published, type Tab } from "./priceEngineApi";
 
 function Ms({ name, className = "" }: { name: string; className?: string }) {
@@ -301,6 +302,7 @@ export function PriceEnginePublishedTab({
   reviewCount?: number;
   petrojamWeek?: string;
 }) {
+  const benchmarkName = useBenchmarkName();
   const [items, setItems] = useState<Published[]>([]);
   const [loading, setLoading] = useState(true);
   const [grade, setGrade] = useState<GradeKey>("e10_87");
@@ -411,7 +413,7 @@ export function PriceEnginePublishedTab({
             <span className="font-mono text-xs font-semibold text-on-surface tracking-wider">REGION: JM-KGN</span>
           </div>
           <div className="px-2.5 py-1.5 rounded-lg bg-surface-container text-xs font-mono text-outline">
-            {petrojamWeek !== "—" ? `PETROJAM ${petrojamWeek}` : "PETROJAM"}
+            {petrojamWeek !== "—" ? `${benchmarkName} ${petrojamWeek}` : benchmarkName}
           </div>
         </div>
       </div>
@@ -548,7 +550,7 @@ export function PriceEnginePublishedTab({
                   <th className="py-3 px-4">Published Price</th>
                   <th className="py-3 px-3">Confidence</th>
                   <th className="py-3 px-4">Reports Breakdown</th>
-                  <th className="py-3 px-3">Petrojam Week</th>
+                  <th className="py-3 px-3">{benchmarkName} week</th>
                   <th className="py-3 px-3">Updated</th>
                   <th className="py-3 px-3">Status</th>
                   <th className="py-3 px-4 text-right">Actions</th>
@@ -705,7 +707,7 @@ export function PriceEnginePublishedTab({
           <span className="font-bold text-on-surface">Price Engine Consensus Algorithm:</span>
           <p className="leading-relaxed text-[11px] text-outline">
             Published retail prices are derived via median aggregation of Fleet driver purchase receipts and verified
-            crowd reports within a configurable decay window. Petrojam weekly updates set the wholesale baseline.
+            crowd reports within a configurable decay window. {benchmarkName} weekly updates set the ex-refinery baseline.
             Stations with stale observations automatically flag as{" "}
             <span className="font-medium text-on-surface">May be outdated</span>.
           </p>

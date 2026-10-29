@@ -5,6 +5,164 @@ type Owner = { id: string };
 type Ctx = { req: { header: (name: string) => string | undefined; query: (name: string) => string | undefined; param: (name: string) => string; json: () => Promise<Record<string, unknown>> } };
 
 const PAGE = 50;
+const PCODE = /^JM\d{2}$/;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const ISSUES = new Set(["duplicate", "no_brand", "parish_mismatch", "pin_unchecked", "company_name", "not_verified"]);
+const PINS = new Set(["unchecked", "confirmed", "offset"]);
+const SOURCES = new Set(["fleet", "plug", "manual", "import"]);
+const SORTS = new Set(["issue_count", "name", "updated_at", "parish_name", "status", "brand_name", "geofence_m", "price_e10_87", "pin_state"]);
+
+export type StationListQuery = {
+  page: number;
+  q: string;
+  status: string;
+  pcode: string;
+  brand: string;
+  pin: string;
+  source: string;
+  issue: string;
+  sort: string;
+  dir: "asc" | "desc";
+};
+
+export function parseStationListQuery(input: {
+  page?: string | null;
+  q?: string | null;
+  status?: string | null;
+  pcode?: string | null;
+  brand?: string | null;
+  pin?: string | null;
+  source?: string | null;
+  issue?: string | null;
+  sort?: string | null;
+  dir?: string | null;
+}): { ok: true; value: StationListQuery } | { ok: false; error: string } {
+  const pcode = String(input.pcode || "").trim();
+  if (pcode && !PCODE.test(pcode)) return { ok: false, error: "Parish code must look like JM01" };
+  const brand = String(input.brand || "").trim();
+  if (brand && brand !== "none" && !UUID.test(brand)) return { ok: false, error: "Brand must be a UUID or none" };
+  const pin = String(input.pin || "").trim();
+  if (pin && !PINS.has(pin)) return { ok: false, error: "Unknown pin state" };
+  const source = String(input.source || "").trim();
+  if (source && !SOURCES.has(source)) return { ok: false, error: "Unknown source" };
+  const issue = String(input.issue || "").trim();
+  if (issue && !ISSUES.has(issue)) return { ok: false, error: "Unknown issue" };
+  const sort = String(input.sort || "issue_count").trim() || "issue_count";
+  if (!SORTS.has(sort)) return { ok: false, error: "Unknown sort" };
+  const dirRaw = String(input.dir || "").trim();
+  const dir = dirRaw === "asc" || dirRaw === "desc" ? dirRaw : (sort === "name" || sort === "parish_name" || sort === "brand_name" ? "asc" : "desc");
+  return {
+    ok: true,
+    value: {
+      page: Math.max(1, Number(input.page || 1) || 1),
+      q: String(input.q || "").trim(),
+      status: String(input.status || "").trim(),
+      pcode,
+      brand,
+      pin,
+      source,
+      issue,
+      sort,
+      dir,
+    },
+  };
+}
+
+export function placePatchFromBody(body: Record<string, unknown>): Record<string, unknown> {
+  const patch: Record<string, unknown> = {};
+  if ("placeType" in body || "place_type" in body) {
+    patch.place_type = String(body.placeType ?? body.place_type ?? "").trim() || null;
+  }
+  if ("name" in body) patch.name = String(body.name ?? "").trim() || null;
+  if ("lat" in body) patch.lat = body.lat == null || body.lat === "" ? null : Number(body.lat);
+  if ("lng" in body) patch.lng = body.lng == null || body.lng === "" ? null : Number(body.lng);
+  if ("address" in body) patch.address = body.address ? String(body.address) : null;
+  if ("parish" in body) patch.parish = body.parish ? String(body.parish) : null;
+  if ("phone" in body) patch.phone = body.phone ? String(body.phone) : null;
+  if ("website" in body) patch.website = body.website ? String(body.website) : null;
+  if ("brandId" in body || "brand_id" in body) {
+    const raw = "brandId" in body ? body.brandId : body.brand_id;
+    patch.brand_id = raw ? String(raw) : null;
+  }
+  if ("geofenceM" in body || "geofence_m" in body) {
+    const raw = "geofenceM" in body ? body.geofenceM : body.geofence_m;
+    patch.geofence_m = raw == null || raw === "" ? null : Number(raw);
+  }
+  if ("attributes" in body) patch.attributes = (body.attributes as Record<string, unknown>) || {};
+  if ("pinState" in body || "pin_state" in body) {
+    const raw = String(("pinState" in body ? body.pinState : body.pin_state) || "");
+    patch.pin_state = raw === "offset" || raw === "confirmed" ? raw : "unchecked";
+  }
+  if ("plusCode" in body || "plus_code" in body) {
+    const raw = "plusCode" in body ? body.plusCode : body.plus_code;
+    patch.plus_code = raw ? String(raw) : null;
+  }
+  if ("status" in body) patch.status = body.status ? String(body.status) : null;
+  if ("verifiedAt" in body || "verified_at" in body) {
+    const raw = "verifiedAt" in body ? body.verifiedAt : body.verified_at;
+    patch.verified_at = raw ? String(raw) : null;
+  }
+  return patch;
+}
+
+function ownerRefusal(err: unknown, fallback: string): { message: string; status: 400 | 403 } {
+  const message = err instanceof Error ? err.message : fallback;
+  return { message, status: /only the owner/i.test(message) ? 403 : 400 };
+}
+
+type FlagRow = {
+  status?: string | null;
+  brand_id?: string | null;
+  brand_name?: string | null;
+  price_e10_87?: number | null;
+  parish_text_mismatch?: boolean | null;
+  pin_state?: string | null;
+  company_style_name?: boolean | null;
+  possible_duplicate?: boolean | null;
+  possible_duplicate_ids?: string[] | null;
+  pcode1?: string | null;
+  parish_name?: string | null;
+};
+
+export function summarizeStationFlags(rows: FlagRow[]) {
+  const issues = {
+    duplicate: 0,
+    no_brand: 0,
+    parish_mismatch: 0,
+    pin_unchecked: 0,
+    company_name: 0,
+    not_verified: 0,
+  };
+  let verified = 0;
+  let pending = 0;
+  let priced = 0;
+  const parishes = new Map<string, string>();
+  const brands = new Map<string, string>();
+  for (const row of rows) {
+    if (row.status === "verified") verified += 1;
+    if (row.status === "pending") pending += 1;
+    if (row.price_e10_87 != null) priced += 1;
+    if (row.possible_duplicate || (row.possible_duplicate_ids || []).length) issues.duplicate += 1;
+    if (!row.brand_id) issues.no_brand += 1;
+    if (row.parish_text_mismatch) issues.parish_mismatch += 1;
+    if (row.pin_state === "unchecked") issues.pin_unchecked += 1;
+    if (row.company_style_name) issues.company_name += 1;
+    if (row.status !== "verified") issues.not_verified += 1;
+    if (row.pcode1 && row.parish_name) parishes.set(row.pcode1, row.parish_name);
+    if (row.brand_id && row.brand_name) brands.set(row.brand_id, row.brand_name);
+  }
+  return {
+    summary: {
+      total: rows.length,
+      verified,
+      pending,
+      priced,
+      issues,
+    },
+    parishes: [...parishes.entries()].map(([pcode, name]) => ({ pcode, name })).sort((a, b) => a.name.localeCompare(b.name)),
+    brands: [...brands.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name)),
+  };
+}
 
 function places(sb: SupabaseClient) {
   return sb.schema("places");
@@ -59,13 +217,22 @@ async function duplicateHits(sb: SupabaseClient, lat: number, lng: number, place
   });
 }
 
+type ReadGuard = (c: any) => Promise<Owner | Response>;
+
 export function registerPlaceAdmin(
   app: Hono,
-  deps: { admin: () => SupabaseClient; requireOwner: (c: any) => Promise<Owner> },
+  deps: { admin: () => SupabaseClient; requireOwner: (c: any) => Promise<Owner>; requirePlatformAdmin: ReadGuard },
 ) {
+  async function allowRead(c: any): Promise<Response | null> {
+    const auth = await deps.requirePlatformAdmin(c);
+    if (auth instanceof Response) return auth;
+    return null;
+  }
+
   app.get("/admin/taxonomy", async (c) => {
     try {
-      await deps.requireOwner(c);
+      const denied = await allowRead(c);
+      if (denied) return denied;
       const { data, error } = await places(deps.admin()).rpc("taxonomy");
       if (error) throw error;
       return c.json(data || {});
@@ -76,7 +243,8 @@ export function registerPlaceAdmin(
 
   app.get("/admin/register/nearby", async (c) => {
     try {
-      await deps.requireOwner(c);
+      const denied = await allowRead(c);
+      if (denied) return denied;
       const lat = Number(c.req.query("lat"));
       const lng = Number(c.req.query("lng"));
       const placeType = String(c.req.query("type") || "");
@@ -90,10 +258,29 @@ export function registerPlaceAdmin(
 
   app.get("/admin/register", async (c) => {
     try {
-      await deps.requireOwner(c);
+      const denied = await allowRead(c);
+      if (denied) return denied;
       const sb = places(deps.admin());
       const page = Math.max(1, Number(c.req.query("page") || 1));
       const q = String(c.req.query("q") || "").trim();
+      const placeTypeEarly = String(c.req.query("type") || "");
+      if (placeTypeEarly === "gas_station") {
+        const parsed = parseStationListQuery({
+          page: c.req.query("page"),
+          q: c.req.query("q"),
+          status: c.req.query("status"),
+          pcode: c.req.query("pcode"),
+          brand: c.req.query("brand"),
+          pin: c.req.query("pin"),
+          source: c.req.query("source"),
+          issue: c.req.query("issue"),
+          sort: c.req.query("sort"),
+          dir: c.req.query("dir"),
+        });
+        if (!parsed.ok) return c.json({ error: parsed.error }, 400);
+        const listed = await loadGasStations(deps.admin(), parsed.value);
+        return c.json(listed);
+      }
       const group = String(c.req.query("group") || "");
       const category = String(c.req.query("category") || "");
       const placeType = String(c.req.query("type") || "");
@@ -138,7 +325,8 @@ export function registerPlaceAdmin(
 
   app.get("/admin/register/:id", async (c) => {
     try {
-      await deps.requireOwner(c);
+      const denied = await allowRead(c);
+      if (denied) return denied;
       const sb = deps.admin();
       const id = c.req.param("id");
       const { data, error } = await places(sb).from("place").select(`
@@ -159,11 +347,13 @@ export function registerPlaceAdmin(
       if (evidenceResult.error) throw evidenceResult.error;
       if (pricesResult.error) throw pricesResult.error;
       if (publicResult.error) throw publicResult.error;
+      const wholesale = await places(sb).rpc("wholesale_on", { p_grade: "e10_87", p_on: new Date().toISOString().slice(0, 10) });
       return c.json({
         place: data,
         evidence: evidenceResult.data || [],
         history: historyResult.error ? [] : (historyResult.data || []),
         prices: pricesResult.data || [],
+        wholesaleE10: wholesale.error ? null : wholesale.data,
         public: Boolean(publicResult.data),
       });
     } catch (err) {
@@ -178,7 +368,8 @@ export function registerPlaceAdmin(
       const saved = await savePlace(deps.admin(), owner.id, null, body);
       return c.json(saved);
     } catch (err) {
-      return c.json({ error: err instanceof Error ? err.message : "Could not save place" }, 400);
+      const refused = ownerRefusal(err, "Could not save place");
+      return c.json({ error: refused.message }, refused.status);
     }
   });
 
@@ -189,7 +380,8 @@ export function registerPlaceAdmin(
       const saved = await savePlace(deps.admin(), owner.id, c.req.param("id"), body);
       return c.json(saved);
     } catch (err) {
-      return c.json({ error: err instanceof Error ? err.message : "Could not save place" }, 400);
+      const refused = ownerRefusal(err, "Could not save place");
+      return c.json({ error: refused.message }, refused.status);
     }
   });
 
@@ -236,6 +428,23 @@ export function registerPlaceAdmin(
       } else if (action === "remove-facility" && body.facility) {
         const { error } = await places(sb).from("place_facility").delete().in("place_id", ids).eq("facility_type", String(body.facility));
         if (error) throw error;
+      } else if (action === "set_brand") {
+        const reason = body.reason ? String(body.reason) : null;
+        for (const id of ids) {
+          await applyRegisterUpdate(sb, id, { brand_id: body.brandId ? String(body.brandId) : null }, null, owner.id, reason);
+        }
+      } else if (action === "pin_confirmed") {
+        const reason = body.reason ? String(body.reason) : null;
+        for (const id of ids) {
+          await applyRegisterUpdate(sb, id, { pin_state: "confirmed" }, null, owner.id, reason);
+        }
+      } else if (action === "duplicate_of") {
+        if (!body.duplicateOf) return c.json({ error: "Choose the station to keep" }, 400);
+        const reason = body.reason ? String(body.reason) : null;
+        for (const id of ids) {
+          if (id === String(body.duplicateOf)) continue;
+          await applyRegisterUpdate(sb, id, { status: "duplicate", duplicate_of: String(body.duplicateOf) }, null, owner.id, reason);
+        }
       } else if (action === "verify") {
         const blocked: string[] = [];
         for (const id of ids) {
@@ -254,7 +463,8 @@ export function registerPlaceAdmin(
       }
       return c.json({ ok: true });
     } catch (err) {
-      return c.json({ error: err instanceof Error ? err.message : "Could not update places" }, 400);
+      const refused = ownerRefusal(err, "Could not update places");
+      return c.json({ error: refused.message }, refused.status);
     }
   });
 
@@ -412,13 +622,50 @@ export function registerPlaceAdmin(
   });
 }
 
-async function savePlace(sb: SupabaseClient, _ownerId: string | null, id: string | null, body: Record<string, unknown>) {
+async function applyRegisterUpdate(
+  sb: SupabaseClient,
+  id: string,
+  patch: Record<string, unknown>,
+  facilities: unknown[] | null,
+  actor: string | null,
+  reason: string | null,
+  extra?: { addAlias?: Record<string, unknown> | null; removeAlias?: string | null },
+) {
+  const { error } = await places(sb).rpc("save_register_update", {
+    p_id: id,
+    p_patch: patch,
+    p_facilities: facilities,
+    p_actor: actor,
+    p_reason: reason,
+    p_add_alias: extra?.addAlias || null,
+    p_remove_alias: extra?.removeAlias || null,
+  });
+  if (error) throw error;
+}
+
+async function savePlace(sb: SupabaseClient, ownerId: string | null, id: string | null, body: Record<string, unknown>) {
+  const reason = body.reason ? String(body.reason) : null;
   if (id && body.duplicateOf) {
-    const { error } = await places(sb).from("place").update({
-      status: "duplicate",
-      duplicate_of: String(body.duplicateOf),
-    }).eq("id", id);
-    if (error) throw error;
+    await applyRegisterUpdate(sb, id, { status: "duplicate", duplicate_of: String(body.duplicateOf) }, null, ownerId, reason);
+    return { id, ok: true };
+  }
+  if (id) {
+    const patch = placePatchFromBody(body);
+    const facilities = Array.isArray(body.facilities) ? body.facilities : null;
+    const addAlias = body.addAlias && typeof body.addAlias === "object" ? body.addAlias as Record<string, unknown> : null;
+    const removeAlias = body.removeAliasId ? String(body.removeAliasId) : null;
+    if (!Object.keys(patch).length && facilities == null && !addAlias && !removeAlias) {
+      throw new Error("Nothing to change");
+    }
+    await applyRegisterUpdate(sb, id, patch, facilities, ownerId, reason, { addAlias, removeAlias });
+    if (body.verify === true) {
+      const { data: current } = await places(sb).from("place").select("id,name,place_type,lat,lng").eq("id", id).single();
+      const missing = await missingChecklist(sb, current || {});
+      if (missing.length) return { id, ok: false, missing };
+      await applyRegisterUpdate(sb, id, { status: "verified", verified_at: new Date().toISOString() }, null, ownerId, reason || "verified");
+      const { error: publishError } = await places(sb).rpc("refresh_public_place", { p_place_id: id });
+      if (publishError) throw publishError;
+    }
     return { id, ok: true };
   }
   const placeType = String(body.placeType || body.place_type || "").trim();
@@ -443,34 +690,69 @@ async function savePlace(sb: SupabaseClient, _ownerId: string | null, id: string
     pin_state: body.pinState === "offset" || body.pinState === "confirmed" ? body.pinState : "unchecked",
   };
   const db = places(sb);
-  const saved = id
-    ? await db.from("place").update(row).eq("id", id).select("id").single()
-    : await db.from("place").insert({ ...row, status: "pending", origin_app: "manual" }).select("id").single();
+  const saved = await db.from("place").insert({ ...row, status: "pending", origin_app: "manual" }).select("id").single();
   if (saved.error) throw saved.error;
   const placeId = String(saved.data.id);
   if (Array.isArray(body.facilities)) {
-    await db.from("place_facility").delete().eq("place_id", placeId);
-    const facilities = (body.facilities as Array<Record<string, unknown> | string>).map((item) => {
-      if (typeof item === "string") return { place_id: placeId, facility_type: item, source: "admin", attributes: {}, label: null };
-      return {
-        place_id: placeId,
-        facility_type: String(item.type || item.facility_type),
-        label: item.label ? String(item.label) : null,
-        attributes: (item.attributes as Record<string, unknown>) || {},
-        source: "admin",
-      };
-    }).filter((item) => item.facility_type);
-    if (facilities.length) {
-      const { error } = await db.from("place_facility").insert(facilities);
-      if (error) throw error;
-    }
+    await applyRegisterUpdate(sb, placeId, {}, body.facilities, ownerId, reason || "created");
   }
   if (body.verify === true) {
     const { data: current } = await db.from("place").select("id,name,place_type,lat,lng").eq("id", placeId).single();
     const missing = await missingChecklist(sb, current || {});
     if (missing.length) return { id: placeId, ok: false, missing };
-    await db.from("place").update({ status: "verified", verified_at: new Date().toISOString() }).eq("id", placeId);
+    await applyRegisterUpdate(sb, placeId, { status: "verified", verified_at: new Date().toISOString() }, null, ownerId, reason || "verified");
     await db.rpc("refresh_public_place", { p_place_id: placeId });
   }
   return { id: placeId, ok: true };
+}
+
+async function loadGasStations(sb: SupabaseClient, filters: StationListQuery) {
+  const db = places(sb);
+  let query = db.from("station_list_row").select("*", { count: "exact" });
+  if (filters.status) query = query.eq("status", filters.status);
+  if (filters.pcode) query = query.eq("pcode1", filters.pcode);
+  if (filters.brand === "none") query = query.is("brand_id", null);
+  else if (filters.brand) query = query.eq("brand_id", filters.brand);
+  if (filters.pin) query = query.eq("pin_state", filters.pin);
+  if (filters.source) query = query.eq("source", filters.source);
+  if (filters.issue === "duplicate") query = query.eq("possible_duplicate", true);
+  if (filters.issue === "no_brand") query = query.eq("no_brand", true);
+  if (filters.issue === "parish_mismatch") query = query.eq("parish_text_mismatch", true);
+  if (filters.issue === "pin_unchecked") query = query.eq("pin_unchecked", true);
+  if (filters.issue === "company_name") query = query.eq("company_style_name", true);
+  if (filters.issue === "not_verified") query = query.eq("not_verified", true);
+  if (filters.q) {
+    const { data: aliasHits } = await db.from("place_alias").select("place_id").ilike("normalized_value", `%${filters.q.toLowerCase()}%`).limit(50);
+    const ids = (aliasHits || []).map((row) => row.place_id).filter(Boolean);
+    const parts = [
+      `name.ilike.%${filters.q}%`,
+      `address.ilike.%${filters.q}%`,
+      `plus_code.ilike.%${filters.q}%`,
+      `brand_name.ilike.%${filters.q}%`,
+      `parish_name.ilike.%${filters.q}%`,
+    ];
+    if (ids.length) parts.push(`id.in.(${ids.join(",")})`);
+    query = query.or(parts.join(","));
+  }
+  const from = (filters.page - 1) * PAGE;
+  const ascending = filters.dir === "asc";
+  let ordered = query.order(filters.sort, { ascending });
+  if (filters.sort !== "name") ordered = ordered.order("name", { ascending: true });
+  const listed = await ordered.range(from, from + PAGE - 1);
+  if (listed.error) throw listed.error;
+  const summaryQuery = await db.from("station_list_row").select("status,brand_id,brand_name,price_e10_87,parish_text_mismatch,pin_state,company_style_name,possible_duplicate,possible_duplicate_ids,pcode1,parish_name");
+  if (summaryQuery.error) throw summaryQuery.error;
+  const fills = await sb.rpc("fleet_station_fill_summary");
+  const fillById = new Map<string, { fill_count: number; last_fill_at: string | null }>();
+  if (!fills.error) {
+    for (const row of (fills.data || []) as Array<{ station_id?: string; fill_count?: number; last_fill_at?: string | null }>) {
+      if (row.station_id) fillById.set(row.station_id, { fill_count: Number(row.fill_count || 0), last_fill_at: row.last_fill_at || null });
+    }
+  }
+  const rows = ((listed.data || []) as Array<Record<string, unknown>>).map((row) => {
+    const fill = fillById.get(String(row.id));
+    return { ...row, fill_count: fill?.fill_count ?? 0, last_fill_at: fill?.last_fill_at ?? null };
+  });
+  const rolled = summarizeStationFlags((summaryQuery.data || []) as FlagRow[]);
+  return { rows, total: listed.count || 0, page: filters.page, ...rolled };
 }

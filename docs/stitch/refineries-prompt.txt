@@ -1,0 +1,85 @@
+STITCH PROMPT — Dominion · Refineries (replaces S18 "Fuel prices", adds S18b dialog)
+Project: Dominion Redesign (7083594865949473827) · Design system: Dominion
+Make: Screen 1 (Refineries page) and Screen 2 (Add refinery / enter prices dialog), each in Light and Dark, plus a 390-wide phone version of Screen 1.
+
+------------------------------------------------------------------------------
+OVERALL LOOK — high fidelity, modern
+
+A premium, modern market-data console in the Dominion design system. It should feel like Bloomberg or Stripe Sigma rebuilt with calm, airy spacing: crisp 1px borders, 12–16px corner radius, subtle layered surfaces (page background a very light cool grey, cards white with a hairline border and a very soft shadow), generous whitespace, and a strict 8px spacing grid. Typography: the Dominion sans for text, and the Dominion mono with tabular figures for every price, date and count. Large price numbers are confident and light-weight, not bold blocks. Colour is restrained: neutral greys almost everywhere, Dominion blue for selection and primary actions, a small set of muted data colours for chart lines (blue, teal, violet, amber), green only for "Current" freshness, and amber for "Due" or "Revised". Price rises and falls use ▲ / ▼ with neutral text, never alarm red. Use soft micro-details: hairline dividers, small pill chips, subtle hover lift on cards, focus rings, skeleton shimmer. Keep it real: no glassmorphism, no gradients on data, no 3D, no decorative illustrations, no "REGION" badges or "LOC:" footers.
+
+Shell: the existing Dominion admin shell. Left sidebar is dark navy with "Fuel" selected; the top bar is white with the search field and the owner avatar "DT · Owner".
+
+------------------------------------------------------------------------------
+SCREEN 1 — REFINERIES
+
+HEADER
+- Breadcrumb: Dominion › Master data › Fuel › Refineries
+- Title "Refineries". Subtitle: "Every refinery's ex-refinery prices. The benchmark refinery is what pump prices are measured against."
+- Right: primary button "+ Add refinery".
+
+A — REFINERY CARDS (a horizontal row of cards, 300px wide each)
+Card 1 (selected, with a 2px blue ring):
+  - A small square monogram tile "PJ" on the left, then "Petrojam" (semibold) and "Petroleum Corporation of Jamaica" (small grey).
+  - Chips: "Benchmark" (blue tint), "Active" (green dot).
+  - Rows in small mono: "Kingston, Jamaica" · "Latest week  22 Oct 2026" · "9 products".
+  - Bottom: a freshness chip "Current" (green) and small grey text "Synced 22 Oct, 20:28".
+Card 2: a dashed-border card, the same height, with a "+" icon and the text "Add a refinery" and, underneath in small grey, "Jamaica has one today. Add more as they open."
+
+SELECTED REFINERY HEADER (one slim full-width card under the cards)
+Left: "Petrojam" with the "Benchmark" chip; under it, small grey text: "Source: petrojam.com/price · automatic, weekly on Thursdays · Next expected Thu 29 Oct".
+Right: the freshness chip "Current", then a split button "Sync now" with a caret that opens a menu: "Sync a year…", "Sync a month…", "Sync full archive…".
+
+B — PRICE BOARD
+Card title "Ex-refinery prices", with a week stepper on the right: "‹  Week of 22 Oct 2026  ›" with a small calendar icon.
+Row 1, "Motor fuels": four large tiles in a row. Each tile has:
+  - The product name (e.g. "Gasolene 87"), with a tiny unit label on the right: "per litre".
+  - A large mono price "J$201.81".
+  - A change line: "▼ J$4.50 · −2.2% vs 15 Oct".
+  - A small 12-week sparkline across the bottom of the tile.
+  - A thin 52-week range bar with a dot marking this week, with tiny labels "52w low J$188.40" and "high J$221.90" at its ends.
+  Tile values: Gasolene 87 J$201.81 ▼ J$4.50 (−2.2%) · Gasolene 90 J$210.58 ▼ J$4.50 (−2.1%) · Auto diesel J$246.91 ▲ J$1.59 (+0.6%) · ULSD J$271.60 ▲ J$2.94 (+1.1%).
+  On the ULSD tile, show a small amber chip "Revised" with a tooltip open: "Revised 23 Oct · was J$271.40".
+Row 2, "Other products": a compact 5-column strip of smaller tiles (name, price, change, unit), with no sparkline: Kerosene J$229.73 · Propane J$85.77 · Butane J$106.19 · HFO J$141.19 · Asphalt J$131.87. The unit label on these reads "unit not set" in muted italic.
+
+Two columns below (about 8/12 and 4/12):
+
+C — TREND (left)
+Card title "Price trend". Top right: a segmented control "12w · 26w · 52w (selected) · 5y · All". Under the title, a row of toggle chips with coloured dots: "Gasolene 87" (on), "Gasolene 90" (on), "Auto diesel" (on), "ULSD" (on), "Kerosene" (off), "Propane" (off), "Butane" (off), "HFO" (off), "Asphalt" (off).
+A clean multi-line chart: x axis weeks Nov 2025 → Oct 2026, y axis J$/L 140 → 290, light horizontal gridlines only, smooth lines, no area fills. Show a vertical hover line on 22 Oct with a tooltip card: "Week of 22 Oct 2026 · Gasolene 87 J$201.81 ▼4.50 · Gasolene 90 J$210.58 ▼4.50 · Auto diesel J$246.91 ▲1.59 · ULSD J$271.60 ▲2.94".
+Bottom right: a disabled switch "Compare refineries" with the caption "Add a second refinery to compare".
+
+D — SYNC & HEALTH (right)
+Card title "Sync & health".
+- A top block: the freshness chip "Current" and "Latest week 22 Oct 2026 · synced 22 Oct, 20:28".
+- A small stat row: "Gaps since 2023: 0" · "Revised weeks: 1" (a link).
+- A list titled "Recent runs", 6 rows, each with a status dot, the time, the trigger and the result, in small text:
+  "22 Oct 20:28 · Schedule · 1 new week · 7s"
+  "19 Oct 19:32 · Schedule · No new week · 11s"
+  "12 Oct 21:53 · Schedule · No new week · 9s"
+  "05 Oct 21:15 · Owner · Full archive · 1,183 weeks · 5m 17s"
+  "28 Sep 20:17 · Schedule · 1 new week · 7s"
+  "21 Sep 18:57 · Schedule · 1 revised · 10s" (amber dot)
+- Footer link "View all runs ›".
+
+E — WEEKLY HISTORY (full width)
+Card title "Weekly history". Right: a "Year: 2026" dropdown and a secondary button "Export CSV".
+A dense table with sticky header. Columns: Week · Gasolene 87 · Gasolene 90 · Auto diesel · ULSD · Kerosene · Propane · Butane · HFO · Asphalt · Source. All prices are right-aligned mono with 4 decimals. Show 8 rows from 22 Oct 2026 back to 3 Sep 2026, with realistic slowly moving values (87 ≈ 201–210, 90 ≈ 210–218, Auto diesel ≈ 238–247, ULSD ≈ 260–272). One ULSD cell has a tiny amber corner marker (revised). Source column shows "Scrape". Rows have a zebra-free hover tint. Footer: "Showing 1–52 of 1,183 weeks · Feb 2004 – Oct 2026" with pagination.
+
+F — PRODUCTS & UNITS (collapsible card, shown collapsed, with its header row visible)
+"Products & units · 9 products · 5 without a unit" and a chevron.
+
+------------------------------------------------------------------------------
+SCREEN 2 — DIALOG "Add refinery" (S18b), centred over the dimmed page, 640px wide
+
+A two-step stepper at the top: "1  Refinery" (active) — "2  Prices".
+Step 1 fields in a 2-column grid: Name · Operator · Country (Jamaica) · Status (Active / Planned / Closed segmented) · Location (a place picker with search, "Optional") · Website · Price source (radio cards: "Automatic — Petrojam page format" / "Entered by hand") · a switch row "Use as benchmark" with helper text "Only one refinery can be the benchmark. Pump prices are compared against it." Footer: "Cancel" and the primary "Continue".
+Also show a small inset frame of Step 2: "Week's prices" with an "Effective date" picker, then a 2-column list of product inputs with unit suffixes ("Gasolene 87 · J$ ____ per litre", …), a required "Source link or document" field with an upload button, a required "Reason" field, and the primary "Save prices". Show an amber inline note on one input: "This week already has J$201.8128. Saving creates a revision; the old value is kept."
+
+------------------------------------------------------------------------------
+STATES (one small extra frame): a skeleton shimmer for the cards and tiles; an error card "Could not load refinery prices. Nothing was changed." with "Retry"; a refinery with no prices yet: "No prices yet" with the buttons "Enter week's prices" and "Sync now"; and a read-only note for staff: "You can view prices. Only the owner can sync or add refineries."
+
+PHONE VERSION (390 wide): refinery cards scroll sideways; the selected header stacks; motor-fuel tiles stack one per row; other products become a 2-column grid; the trend chart is full width with 12w default; Sync & health comes after the chart; the history table scrolls inside its card. No page-level horizontal scrolling.
+
+DARK VARIANT: Dominion dark tokens (deep navy page, slightly raised card surfaces, soft borders). Chart lines stay readable on the dark background, and the blue ring and chips keep their contrast.
+
+Do NOT include: the word "wholesale", any customer, fleet, vehicle or driver data, pump prices, AI badges, fake live tickers, region badges or location footers.

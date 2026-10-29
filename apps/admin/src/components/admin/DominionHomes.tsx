@@ -222,9 +222,9 @@ export function FuelHome({ onNavigate }: { onNavigate: (page: string) => void })
       ]}
       items={[
         { id: 'fuel-stations', label: 'Stations', detail: 'The station list, including ones still in review.' },
-        { id: 'fuel-prices', label: 'Prices', detail: 'Petrojam wholesale prices.' },
+        { id: 'fuel-prices', label: 'Refineries', detail: 'Refineries and their ex-refinery prices. Petrojam is the benchmark.' },
         { id: 'fuel-price-engine', label: 'Price Engine', detail: 'The pump price Plug is allowed to show, and the ones waiting for you.' },
-        { id: 'fuel-analytics', label: 'Station analytics', detail: 'How complete the station list is. Customer fuel spending stays in Fleet.' },
+        { id: 'fuel-analytics', label: 'Station analytics', detail: 'Pump prices against Petrojam, coverage and data trust by parish and brand.' },
         { id: 'fuel-jaa-cards', label: 'Gas-card programs', detail: 'Programs and the master list. Customer cards are in Fleet admin.' },
       ]}
     />

@@ -1,6 +1,6 @@
 /**
- * Petrojam wholesale prices — Dominion Fuel Management → Prices
- * Sync latest page, year, month, or full archive from petrojam.com/price/
+ * Refinery prices. The function name and cron URL stay petrojam-prices.
+ * Petrojam is one refinery. A changed week is kept as a new revision.
  */
 
 import { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
@@ -8,13 +8,8 @@ import { cors } from "https://deno.land/x/hono@v4.3.11/middleware.ts";
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { requirePlatformAdmin } from "../_shared/platformAdmin.ts";
 import { dominionCan } from "../../../packages/auth-client/src/dominionPermissions.ts";
-import {
-  fetchPetrojamPrices,
-  PETROJAM_PRICE_URL,
-  type PetrojamFetchResult,
-  type PetrojamPriceRow,
-  type PetrojamSyncMode,
-} from "./scrape.ts";
+import { PETROJAM_PRICE_URL, type PetrojamSyncMode } from "./scrape.ts";
+import { syncActiveRefineries, syncOneRefinery, writeRefinerySnapshot, type ActiveRefinery } from "./refinerySync.ts";
 
 const app = new Hono().basePath("/petrojam-prices");
 
@@ -31,81 +26,21 @@ function svc(): SupabaseClient {
   );
 }
 
-function rowToApi(r: Record<string, unknown>) {
-  return {
-    id: r.id,
-    priceDate: r.price_date,
-    gasolene87: r.gasolene_87 != null ? Number(r.gasolene_87) : null,
-    gasolene90: r.gasolene_90 != null ? Number(r.gasolene_90) : null,
-    autoDiesel: r.auto_diesel != null ? Number(r.auto_diesel) : null,
-    kerosene: r.kerosene != null ? Number(r.kerosene) : null,
-    propane: r.propane != null ? Number(r.propane) : null,
-    butane: r.butane != null ? Number(r.butane) : null,
-    hfo: r.hfo != null ? Number(r.hfo) : null,
-    asphalt: r.asphalt != null ? Number(r.asphalt) : null,
-    ulsd: r.ulsd != null ? Number(r.ulsd) : null,
-    sourceUrl: r.source_url,
-    scrapedAt: r.scraped_at,
-    createdAt: r.created_at,
-    updatedAt: r.updated_at,
-  };
+function jsonError(message: string, status = 500) {
+  return { error: message, message };
 }
 
-function toDbRow(row: PetrojamPriceRow, scrapedAt: string) {
-  return {
-    price_date: row.priceDate,
-    gasolene_87: row.gasolene87,
-    gasolene_90: row.gasolene90,
-    auto_diesel: row.autoDiesel,
-    kerosene: row.kerosene,
-    propane: row.propane,
-    butane: row.butane,
-    hfo: row.hfo,
-    asphalt: row.asphalt,
-    ulsd: row.ulsd,
-    source_url: PETROJAM_PRICE_URL,
-    scraped_at: scrapedAt,
-    updated_at: scrapedAt,
-  };
+async function markEngineStale(db: SupabaseClient) {
+  const { data: latest, error } = await db.schema("places").rpc("latest_petrojam_date");
+  if (error || !latest) return;
+  const { error: staleError } = await db.schema("places").rpc("price_engine_mark_stale", { p_date: latest });
+  if (staleError) logLine({ event: "price_engine_stale_failed", error: staleError.message });
 }
 
-async function upsertScraped(
-  scraped: PetrojamPriceRow[],
-  scrapedAt: string,
-): Promise<{ inserted: number; updated: number }> {
-  const db = svc();
-  const dates = scraped.map((r) => r.priceDate);
-
-  // Chunk existing lookups / upserts for large archive syncs
-  const existingSet = new Set<string>();
-  for (let i = 0; i < dates.length; i += 200) {
-    const slice = dates.slice(i, i + 200);
-    const { data: existing, error: existingErr } = await db
-      .from("fuel_petrojam_prices")
-      .select("price_date")
-      .in("price_date", slice);
-    if (existingErr) throw new Error(existingErr.message);
-    for (const r of existing ?? []) {
-      existingSet.add((r as { price_date: string }).price_date);
-    }
-  }
-
-  const payload = scraped.map((r) => toDbRow(r, scrapedAt));
-  for (let i = 0; i < payload.length; i += 100) {
-    const slice = payload.slice(i, i + 100);
-    const { error: upsertErr } = await db.from("fuel_petrojam_prices").upsert(slice, {
-      onConflict: "price_date",
-    });
-    if (upsertErr) throw new Error(upsertErr.message);
-  }
-
-  let inserted = 0;
-  let updated = 0;
-  for (const d of dates) {
-    if (existingSet.has(d)) updated += 1;
-    else inserted += 1;
-  }
-  return { inserted, updated };
+async function readRefinery(db: SupabaseClient, slug: string): Promise<ActiveRefinery | null> {
+  const { data, error } = await db.rpc("refinery_list");
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as ActiveRefinery[]).find((row) => row.slug === slug) ?? null;
 }
 
 app.get("/health", (c) => {
@@ -117,131 +52,203 @@ app.get("/health", (c) => {
   });
 });
 
-app.get("/admin/prices", async (c) => {
+app.get("/admin/refineries", async (c) => {
   const auth = await requirePlatformAdmin(c);
   if (auth instanceof Response) return auth;
-
-  const limitRaw = Number(c.req.query("limit") || 104);
-  const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 1000) : 104;
-  const yearRaw = c.req.query("year");
-  const monthRaw = c.req.query("month");
-  const year = yearRaw ? Number(yearRaw) : null;
-  const month = monthRaw ? Number(monthRaw) : null;
-
-  const db = svc();
-  let q = db.from("fuel_petrojam_prices").select("*").order("price_date", { ascending: false }).limit(limit);
-
-  if (year && Number.isFinite(year)) {
-    if (month && month >= 1 && month <= 12) {
-      const monthStart = `${year}-${String(month).padStart(2, "0")}-01`;
-      const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
-      const monthEnd = `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
-      q = q.gte("price_date", monthStart).lte("price_date", monthEnd);
-    } else {
-      q = q.gte("price_date", `${year}-01-01`).lte("price_date", `${year}-12-31`);
-    }
-  }
-
-  const { data, error } = await q;
-
-  if (error) {
-    logLine({ event: "list_failed", error: error.message });
-    return c.json({ error: "list_failed", message: error.message }, 500);
-  }
-
-  return c.json({
-    prices: (data ?? []).map((r) => rowToApi(r as Record<string, unknown>)),
-  });
+  const { data, error } = await svc().rpc("refinery_list");
+  if (error) return c.json(jsonError(error.message), 500);
+  const list = (data ?? []) as Array<Record<string, unknown>>;
+  const benchmark = list.find((row) => row.is_benchmark) ?? null;
+  return c.json({ refineries: list, benchmark });
 });
 
-app.post("/admin/sync", async (c) => {
+app.get("/admin/refineries/:slug/board", async (c) => {
   const auth = await requirePlatformAdmin(c);
   if (auth instanceof Response) return auth;
-  if (!dominionCan(auth.role, "catalog.write")) {
-    return c.json({ error: "Forbidden", message: "You cannot change that" }, 403);
+  const week = c.req.query("week") || null;
+  const { data, error } = await svc().rpc("refinery_board", { p_slug: c.req.param("slug"), p_week: week });
+  if (error) return c.json(jsonError(error.message), 500);
+  if (data && typeof data === "object" && (data as { error?: string }).error === "not_found") {
+    return c.json({ error: "not_found" }, 404);
   }
+  return c.json(data);
+});
 
+app.get("/admin/refineries/:slug/series", async (c) => {
+  const auth = await requirePlatformAdmin(c);
+  if (auth instanceof Response) return auth;
+  const products = (c.req.query("products") || "").split(",").map((s) => s.trim()).filter(Boolean);
+  const { data, error } = await svc().rpc("refinery_series", {
+    p_slug: c.req.param("slug"),
+    p_products: products.length ? products : null,
+    p_from: c.req.query("from") || null,
+    p_to: c.req.query("to") || null,
+    p_compare: c.req.query("compare") === "1",
+  });
+  if (error) return c.json(jsonError(error.message), 500);
+  return c.json(data);
+});
+
+app.get("/admin/refineries/:slug/history", async (c) => {
+  const auth = await requirePlatformAdmin(c);
+  if (auth instanceof Response) return auth;
+  const year = c.req.query("year");
+  const page = c.req.query("page");
+  const { data, error } = await svc().rpc("refinery_history", {
+    p_slug: c.req.param("slug"),
+    p_year: year ? Number(year) : null,
+    p_page: page ? Number(page) : 1,
+  });
+  if (error) return c.json(jsonError(error.message), 500);
+  return c.json(data);
+});
+
+app.get("/admin/refineries/:slug/versions", async (c) => {
+  const auth = await requirePlatformAdmin(c);
+  if (auth instanceof Response) return auth;
+  const { data, error } = await svc().rpc("refinery_versions", {
+    p_slug: c.req.param("slug"),
+    p_product: c.req.query("product"),
+    p_week: c.req.query("week"),
+  });
+  if (error) return c.json(jsonError(error.message), 500);
+  return c.json({ versions: data ?? [] });
+});
+
+app.get("/admin/refineries/:slug/runs", async (c) => {
+  const auth = await requirePlatformAdmin(c);
+  if (auth instanceof Response) return auth;
+  const { data, error } = await svc().rpc("refinery_runs", {
+    p_slug: c.req.param("slug"),
+    p_limit: Number(c.req.query("limit") || 10),
+  });
+  if (error) return c.json(jsonError(error.message), 500);
+  return c.json(data);
+});
+
+app.post("/admin/refineries", async (c) => {
+  const auth = await requirePlatformAdmin(c);
+  if (auth instanceof Response) return auth;
+  if (!dominionCan(auth.role, "catalog.write")) return c.json({ error: "Forbidden" }, 403);
+  const body = await c.req.json().catch(() => ({}));
+  const { data, error } = await svc().rpc("refinery_save", {
+    p_slug: null,
+    p_patch: body,
+    p_actor: auth.id,
+    p_reason: body.reason ?? null,
+  });
+  if (error) return c.json(jsonError(error.message), 400);
+  return c.json({ refinery: data });
+});
+
+app.patch("/admin/refineries/:slug", async (c) => {
+  const auth = await requirePlatformAdmin(c);
+  if (auth instanceof Response) return auth;
+  if (!dominionCan(auth.role, "catalog.write")) return c.json({ error: "Forbidden" }, 403);
+  const body = await c.req.json().catch(() => ({}));
+  const { data, error } = await svc().rpc("refinery_save", {
+    p_slug: c.req.param("slug"),
+    p_patch: body,
+    p_actor: auth.id,
+    p_reason: body.reason ?? null,
+  });
+  if (error) return c.json(jsonError(error.message), 400);
+  return c.json({ refinery: data });
+});
+
+app.post("/admin/refineries/:slug/prices", async (c) => {
+  const auth = await requirePlatformAdmin(c);
+  if (auth instanceof Response) return auth;
+  if (!dominionCan(auth.role, "catalog.write")) return c.json({ error: "Forbidden" }, 403);
   const body = await c.req.json().catch(() => ({})) as {
-    mode?: PetrojamSyncMode;
-    year?: number;
-    month?: number;
-    maxPages?: number;
+    effective_date?: string;
+    prices?: Record<string, number>;
+    source_url?: string;
+    reason?: string;
+    document_name?: string;
+    document_base64?: string;
   };
-
-  const mode: PetrojamSyncMode = body.mode || "latest";
-  if (!["latest", "year", "month", "all"].includes(mode)) {
-    return c.json({ error: "invalid_mode", message: "mode must be latest|year|month|all" }, 400);
+  if (!body.effective_date || !body.prices || !body.reason) {
+    return c.json({ error: "invalid", message: "Date, prices, and a reason are required" }, 400);
   }
+  const db = svc();
+  const refinery = await readRefinery(db, c.req.param("slug"));
+  if (!refinery) return c.json({ error: "not_found" }, 404);
 
-  let fetched: PetrojamFetchResult;
-  try {
-    fetched = await fetchPetrojamPrices({
-      mode,
-      year: body.year != null ? Number(body.year) : undefined,
-      month: body.month != null ? Number(body.month) : undefined,
-      maxPages: body.maxPages != null ? Number(body.maxPages) : undefined,
+  let sourceUrl = (body.source_url || "").trim();
+  if (body.document_base64 && body.document_name) {
+    const bytes = Uint8Array.from(atob(body.document_base64), (ch) => ch.charCodeAt(0));
+    const path = `${refinery.slug}/${body.effective_date}/${body.document_name.replace(/[^\w.\-]+/g, "_")}`;
+    const { error: uploadError } = await db.storage.from("refinery-price-sources").upload(path, bytes, {
+      upsert: true,
+      contentType: body.document_name.toLowerCase().endsWith(".pdf") ? "application/pdf" : "application/octet-stream",
     });
-  } catch (e) {
-    const message = e instanceof Error ? e.message : "Scrape failed";
-    logLine({ event: "scrape_failed", mode, error: message });
-    return c.json({ error: "scrape_failed", message }, 502);
+    if (uploadError) return c.json(jsonError(uploadError.message), 400);
+    if (!sourceUrl) sourceUrl = path;
   }
+  if (!sourceUrl) return c.json({ error: "invalid", message: "A source link or document is required" }, 400);
 
-  const scrapedAt = new Date().toISOString();
-  let inserted = 0;
-  let updated = 0;
+  const rows = Object.entries(body.prices)
+    .filter(([, value]) => value != null && value !== ("" as unknown) && Number.isFinite(Number(value)))
+    .map(([code, value]) => ({
+      product_code: code,
+      effective_date: body.effective_date,
+      price_jmd: Number(value),
+    }));
   try {
-    const result = await upsertScraped(fetched.rows, scrapedAt);
-    inserted = result.inserted;
-    updated = result.updated;
+    const written = await writeRefinerySnapshot(db, refinery.id, rows, {
+      source: "manual",
+      sourceUrl,
+      trigger: "manual_entry",
+      actor: auth.id,
+      mode: "latest",
+      reason: body.reason,
+      enteredBy: auth.id,
+    });
+    if (written.error) return c.json(jsonError(written.error), 400);
+    await markEngineStale(db);
+    return c.json({ ok: true, run: written });
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Upsert failed";
-    logLine({ event: "upsert_failed", error: message });
-    return c.json({ error: "sync_failed", message }, 500);
+    return c.json(jsonError(e instanceof Error ? e.message : "Save failed"), 400);
   }
+});
 
-  const dates = fetched.rows.map((r) => r.priceDate).sort();
-  const latestDate = dates.at(-1) ?? null;
-  if (latestDate) {
-    const { error: staleError } = await svc().schema("places").rpc("price_engine_mark_stale", { p_date: latestDate });
-    if (staleError) logLine({ event: "price_engine_stale_failed", error: staleError.message });
-  }
-  const oldestDate = dates[0] ?? null;
-
-  logLine({
-    event: "sync_ok",
-    userId: auth.id,
+app.post("/admin/refineries/:slug/sync", async (c) => {
+  const auth = await requirePlatformAdmin(c);
+  if (auth instanceof Response) return auth;
+  if (!dominionCan(auth.role, "catalog.write")) return c.json({ error: "Forbidden" }, 403);
+  const body = await c.req.json().catch(() => ({})) as { mode?: PetrojamSyncMode; year?: number; month?: number };
+  const mode = body.mode || "latest";
+  if (!["latest", "year", "month", "all"].includes(mode)) return c.json({ error: "invalid_mode" }, 400);
+  const db = svc();
+  const refinery = await readRefinery(db, c.req.param("slug"));
+  if (!refinery) return c.json({ error: "not_found" }, 404);
+  const run = await syncOneRefinery(db, refinery, {
     mode,
     year: body.year,
     month: body.month,
-    inserted,
-    updated,
-    latestDate,
-    oldestDate,
-    pagesFetched: fetched.pagesFetched,
-    rowCount: fetched.rows.length,
+    trigger: "owner",
+    actor: auth.id,
   });
-
-  return c.json({
-    ok: true,
-    mode,
-    year: fetched.year ?? body.year ?? null,
-    month: fetched.month ?? body.month ?? null,
-    inserted,
-    updated,
-    latestDate,
-    oldestDate,
-    pagesFetched: fetched.pagesFetched,
-    rowCount: fetched.rows.length,
-    scrapedAt,
-  });
+  if (!run.error) await markEngineStale(db);
+  const status = run.error ? 500 : 200;
+  return c.json({ ok: !run.error, run }, status);
 });
 
-/**
- * Weekly cron / CI: sync latest page using service role or CRON_SECRET.
- * Note: Edge injects new-format sb_secret keys; GitHub often still has legacy eyJ service_role JWT.
- * Accept exact env key match, cron secret, OR a verified legacy service_role JWT.
- */
+app.patch("/admin/refinery-products/:code", async (c) => {
+  const auth = await requirePlatformAdmin(c);
+  if (auth instanceof Response) return auth;
+  if (!dominionCan(auth.role, "catalog.write")) return c.json({ error: "Forbidden" }, 403);
+  const body = await c.req.json().catch(() => ({})) as { label?: string; unit?: string };
+  const { data, error } = await svc().rpc("refinery_patch_product", {
+    p_code: c.req.param("code"),
+    p_label: body.label ?? null,
+    p_unit: body.unit === undefined ? null : body.unit,
+  });
+  if (error) return c.json(jsonError(error.message), 400);
+  return c.json({ product: data });
+});
+
 app.post("/cron/sync-latest", async (c) => {
   const authHeader = c.req.header("Authorization") || "";
   const cronSecret = (Deno.env.get("CRON_SECRET") || Deno.env.get("FLEET_CRON_SECRET") || "").trim();
@@ -261,15 +268,12 @@ app.post("/cron/sync-latest", async (c) => {
     }
   };
 
-  /** Prove Bearer is a real service_role JWT (env may be sb_* while CI still uses legacy eyJ). */
   const verifyLegacyServiceRoleJwt = async (jwt: string): Promise<boolean> => {
     if (decodeRole(jwt) !== "service_role") return false;
     const url = (Deno.env.get("SUPABASE_URL") || "").trim();
     if (!url) return false;
     try {
-      const client = createClient(url, jwt, {
-        auth: { persistSession: false, autoRefreshToken: false },
-      });
+      const client = createClient(url, jwt, { auth: { persistSession: false, autoRefreshToken: false } });
       const { error } = await client.auth.admin.listUsers({ page: 1, perPage: 1 });
       return !error;
     } catch {
@@ -283,56 +287,19 @@ app.post("/cron/sync-latest", async (c) => {
   if (!serviceMatch && !cronMatch && token.startsWith("eyJ") && decodeRole(token) === "service_role") {
     legacyJwtOk = await verifyLegacyServiceRoleJwt(token);
   }
-  const ok = serviceMatch || cronMatch || legacyJwtOk;
-  if (!serviceKey && !cronSecret) {
-    logLine({ event: "cron_misconfigured" });
-    return c.json({
-      error: "server_misconfigured",
-      message: "No SUPABASE_SERVICE_ROLE_KEY or CRON_SECRET in function env",
-    }, 500);
-  }
-  if (!ok) {
-    logLine({ event: "cron_unauthorized", hasToken: !!token, hasServiceKey: !!serviceKey, hasCronSecret: !!cronSecret });
-    return c.json({ error: "unauthorized" }, 401);
-  }
+  if (!serviceKey && !cronSecret) return c.json({ error: "server_misconfigured" }, 500);
+  if (!(serviceMatch || cronMatch || legacyJwtOk)) return c.json({ error: "unauthorized" }, 401);
 
-  let fetched: PetrojamFetchResult;
   try {
-    fetched = await fetchPetrojamPrices({ mode: "latest" });
+    const db = svc();
+    const { status, runs } = await syncActiveRefineries(db, { mode: "latest", trigger: "schedule" });
+    if (status === 200) await markEngineStale(db);
+    logLine({ event: status === 200 ? "cron_sync_ok" : "cron_sync_error", runs });
+    return c.json({ ok: status === 200, runs }, status);
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Scrape failed";
-    logLine({ event: "cron_scrape_failed", error: message });
-    return c.json({ error: "scrape_failed", message }, 502);
-  }
-
-  const scrapedAt = new Date().toISOString();
-  try {
-    const { inserted, updated } = await upsertScraped(fetched.rows, scrapedAt);
-    const dates = fetched.rows.map((r) => r.priceDate).sort();
-    const latestDate = dates.at(-1) ?? null;
-    if (latestDate) {
-      const { error: staleError } = await svc().schema("places").rpc("price_engine_mark_stale", { p_date: latestDate });
-      if (staleError) logLine({ event: "price_engine_stale_failed", error: staleError.message });
-    }
-    logLine({
-      event: "cron_sync_ok",
-      inserted,
-      updated,
-      latestDate: dates.at(-1) ?? null,
-      rowCount: fetched.rows.length,
-    });
-    return c.json({
-      ok: true,
-      mode: "latest",
-      inserted,
-      updated,
-      latestDate: dates.at(-1) ?? null,
-      rowCount: fetched.rows.length,
-      scrapedAt,
-    });
-  } catch (e) {
-    const message = e instanceof Error ? e.message : "Upsert failed";
-    return c.json({ error: "sync_failed", message }, 500);
+    const message = e instanceof Error ? e.message : "Sync failed";
+    logLine({ event: "cron_sync_failed", error: message });
+    return c.json({ ok: false, error: message, runs: [] }, 500);
   }
 });
 

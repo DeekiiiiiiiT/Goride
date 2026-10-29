@@ -29,10 +29,10 @@ const GctRemittancePage = lazyNamed(() => import('./gct/GctRemittancePage'), 'Gc
 const GctKnowledgeBasePage = lazyNamed(() => import('./gct/GctKnowledgeBasePage'), 'GctKnowledgeBasePage');
 import { ErrorBoundary } from '@roam/roam-shared';
 import type { ResolutionQueueSubTab } from '../fuel/stations/ResolutionQueueTab';
-const StationDatabaseView = lazyNamed(() => import('../fuel/stations/StationDatabaseView'), 'StationDatabaseView');
+const StationDatabasePage = lazyNamed(() => import('./station-database/StationDatabasePage'), 'StationDatabasePage');
 const PlacesPage = lazyNamed(() => import('./places/PlacesPage'), 'PlacesPage');
 const FuelPlacesReview = lazyNamed(() => import('./places/PlacesPage'), 'FuelPlacesReview');
-const StationHealth = lazyNamed(() => import('./StationHealth'), 'StationHealth');
+const StationAnalyticsPage = lazyNamed(() => import('./station-analytics/StationAnalyticsPage'), 'StationAnalyticsPage');
 import { API_ENDPOINTS } from '../../services/apiConfig';
 import { useAuth } from '../auth/AuthContext';
 import { StaffMfaStep } from '../auth/StaffMfaStep';
@@ -41,7 +41,7 @@ import { LEGACY_PAGE_REDIRECTS, MOVED_PAGES, pageAllowedForRole, settingsTabFrom
 const GlobalIdentitySearch = lazyNamed(() => import('./platform/GlobalIdentitySearch'), 'GlobalIdentitySearch');
 const MatchingBrainPage = lazyNamed(() => import('./matching-brain/MatchingBrainPage'), 'MatchingBrainPage');
 const FuelBrainPage = lazyNamed(() => import('./fuel-brain/FuelBrainPage'), 'FuelBrainPage');
-const FuelPricesPage = lazyNamed(() => import('./fuel-prices/FuelPricesPage'), 'FuelPricesPage');
+const RefineriesPage = lazyNamed(() => import('./refineries/RefineriesPage'), 'RefineriesPage');
 const PriceEnginePage = lazyNamed(() => import('./fuel-prices/PriceEnginePage'), 'PriceEnginePage');
 const AdminJaaGasCardsPage = lazyNamed(() => import('./fuel/AdminJaaGasCardsPage'), 'AdminJaaGasCardsPage');
 const TollBrainPage = lazyNamed(() => import('./toll-brain/TollBrainPage'), 'TollBrainPage');
@@ -74,7 +74,6 @@ function normalizePortalPage(page: string): string {
 export function AdminPortal() {
   const { session, user, role, signOut } = useAuth();
   const [mfaNeeded, setMfaNeeded] = useState(true);
-  const [fillSummary, setFillSummary] = useState<{ stationId: string; fillCount: number; lastFillAt: string | null }[]>([]);
   const [currentPageRaw, setCurrentPageRaw] = useState(() => {
     if (typeof window !== 'undefined') {
       const page = new URLSearchParams(window.location.search).get('page');
@@ -98,9 +97,20 @@ export function AdminPortal() {
     return params.get('sub') === 'spatial-review' ? 'spatial-review' : 'unresolved-stops';
   }, []);
   const writePageUrl = useCallback((page: string) => {
+    const allowed: Record<string, string[]> = {
+      'fuel-analytics': ['grade', 'week', 'pcode', 'brand'],
+      'fuel-prices': ['refinery', 'week', 'range', 'year'],
+      'fuel-stations': ['q', 'status', 'pcode', 'brand', 'pin', 'source', 'issue', 'sort', 'dir', 'p', 'tab', 'sub'],
+    };
     const url = new URL(window.location.href);
-    url.searchParams.set('page', page);
-    window.history.pushState({ page }, '', `${url.pathname}${url.search}`);
+    const keep = new Set(allowed[page] || []);
+    const next = new URLSearchParams();
+    next.set('page', page);
+    for (const key of keep) {
+      const value = url.searchParams.get(key);
+      if (value) next.set(key, value);
+    }
+    window.history.pushState({ page }, '', `${url.pathname}?${next.toString()}`);
   }, []);
 
   const setCurrentPage = useCallback((page: string) => {
@@ -112,23 +122,6 @@ export function AdminPortal() {
   const currentPage = currentPageRaw;
 
   const accessToken = session?.access_token;
-
-  useEffect(() => {
-    if (mfaNeeded || !accessToken || currentPage !== 'fuel-stations') return;
-    let cancel = false;
-    void fetch(`${API_ENDPOINTS.admin}/admin/station-fill-summary`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    })
-      .then(async (res) => {
-        if (!res.ok || cancel) return;
-        const data = await res.json();
-        if (!cancel) setFillSummary(Array.isArray(data.stations) ? data.stations : []);
-      })
-      .catch(() => {});
-    return () => {
-      cancel = true;
-    };
-  }, [accessToken, currentPage, mfaNeeded]);
 
   useEffect(() => {
     if (!session) {
@@ -224,8 +217,8 @@ export function AdminPortal() {
       )}
       {currentPage === 'fuel-brain' && <FuelBrainPage onNavigate={setCurrentPage} />}
       {currentPage === 'fuel-prices' && (
-        <div className="rounded-xl border border-slate-200 bg-white overflow-hidden min-h-[560px] p-6 dark:border-slate-800 dark:bg-slate-900/40">
-          <FuelPricesPage />
+        <div className="min-h-[560px] bg-slate-50 -m-4 lg:-m-8 dark:bg-[#0b1220]">
+          <RefineriesPage />
         </div>
       )}
       {currentPage === 'fuel-price-engine' && (
@@ -235,21 +228,19 @@ export function AdminPortal() {
       )}
       {currentPage === 'activity-log' && <ActivityLog />}
       {currentPage === 'fuel-stations' && (
-        <div className="min-h-[600px] rounded-xl bg-white shadow-sm overflow-x-auto overflow-y-visible dark:bg-card dark:shadow-none dark:ring-1 dark:ring-border">
-          <StationDatabaseView
-            logs={[]}
-            fillSummary={fillSummary}
-            defaultTab={stationDbDefaultTab}
-            defaultResolutionSubTab={resolutionSubTab}
-            fuelReview={<FuelPlacesReview />}
-          />
-        </div>
+        <StationDatabasePage
+          canWrite={role === 'platform_owner'}
+          defaultTab={stationDbDefaultTab}
+          defaultResolutionSubTab={resolutionSubTab}
+          fuelReview={<FuelPlacesReview />}
+          onNavigate={setCurrentPage}
+        />
       )}
       {currentPage === 'plug-places' && <PlacesPage mode="review" chip="plug" />}
       {currentPage === 'places-register' && <PlacesPage mode="register" />}
       {currentPage === 'places-categories' && <PlacesPage mode="categories" />}
       {currentPage === 'places-review' && <PlacesPage mode="review" />}
-      {currentPage === 'fuel-analytics' && <StationHealth />}
+      {currentPage === 'fuel-analytics' && <StationAnalyticsPage onNavigate={setCurrentPage} />}
       {currentPage === 'toll-brain' && <TollBrainPage onNavigate={setCurrentPage} />}
       {currentPage === 'toll-stations' && (
         <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px] dark:bg-card">

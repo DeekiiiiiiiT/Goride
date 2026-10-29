@@ -40,7 +40,12 @@ jobs:
 
           RESP="$(curl "${CURL_ARGS[@]}")"
           echo "$RESP" | grep -q 'HTTP_CODE:200' || {
-            echo "Sync failed (expected HTTP 200)"
+            echo "Sync failed (expected HTTP 200). An error run returns HTTP 500."
+            echo "$RESP" | tail -c 400
+            exit 1
+          }
+          echo "$RESP" | grep -q '"ok":false' && {
+            echo "Sync reported an error run"
             echo "$RESP" | tail -c 400
             exit 1
           }

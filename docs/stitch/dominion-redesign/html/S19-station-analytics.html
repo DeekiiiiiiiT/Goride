@@ -1,15 +1,16 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>S19 Station analytics</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
-  <script>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>S19 Station analytics</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
     tailwind.config = {
       theme: {
         extend: {
@@ -29,253 +30,1246 @@
       }
     }
   </script>
-  <style>
+<style>
     .material-symbols-outlined {
       font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
     }
   </style>
-</head>
+<meta content="web_dashboard" name="shell-type"/></head>
 <body class="bg-[#f8fafc] text-slate-900 font-sans antialiased min-h-screen flex text-[13px]">
-
-  <!-- DOMINION NAVY SIDEBAR (EXACT COPY OF S18) -->
-  <aside class="w-64 bg-[#0f172a] flex flex-col min-h-screen border-r border-slate-800 text-slate-400 select-none flex-shrink-0">
-    <!-- Header Logo -->
-    <div class="h-16 flex items-center px-5 gap-3 border-b border-slate-800/80">
-      <div class="w-8 h-8 rounded-lg bg-[#316bf3] flex items-center justify-center text-white shadow-sm">
-        <svg class="w-5 h-5 fill-current" viewBox="0 0 24 24">
-          <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-      </div>
-      <div>
-        <div class="text-white font-semibold text-sm tracking-tight leading-none">Dominion</div>
-        <div class="text-[11px] text-slate-400 mt-1 leading-none">Roam Admin Console</div>
-      </div>
-    </div>
-
-    <!-- Navigation List -->
-    <div class="flex-1 overflow-y-auto py-4 px-3 space-y-5">
-      <!-- Overview -->
-      <div>
-        <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 transition-colors">
-          <span class="material-symbols-outlined text-[19px]">grid_view</span>
-          <span class="font-medium text-[13px]">Overview</span>
-        </a>
-      </div>
-
-      <!-- Master Data Group -->
-      <div>
-        <div class="px-3 pb-1.5 text-[10px] font-semibold text-slate-300 uppercase tracking-wider font-mono">Master data</div>
-        <div class="space-y-0.5">
-          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 transition-colors">
-            <span class="material-symbols-outlined text-[19px]">directions_car</span>
-            <span class="font-medium text-[13px]">Vehicles</span>
-          </a>
-          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 transition-colors">
-            <span class="material-symbols-outlined text-[19px]">map</span>
-            <span class="font-medium text-[13px]">Places and Maps</span>
-          </a>
-          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg bg-[#316bf3] text-white font-medium shadow-sm">
-            <span class="material-symbols-outlined text-[19px]">local_gas_station</span>
-            <span class="text-[13px]">Fuel</span>
-          </a>
-          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 transition-colors">
-            <span class="material-symbols-outlined text-[19px]">toll</span>
-            <span class="font-medium text-[13px]">Tolls</span>
-          </a>
-          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 transition-colors">
-            <span class="material-symbols-outlined text-[19px]">description</span>
-            <span class="font-medium text-[13px]">Tax and Vendors</span>
-          </a>
-        </div>
-      </div>
-
-      <!-- Engines Group -->
-      <div>
-        <div class="px-3 pb-1.5 text-[10px] font-semibold text-slate-300 uppercase tracking-wider font-mono">Engines</div>
-        <div class="space-y-0.5">
-          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 transition-colors">
-            <span class="material-symbols-outlined text-[19px]">bolt</span>
-            <span class="font-medium text-[13px]">Fuel Brain</span>
-          </a>
-          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 transition-colors">
-            <span class="material-symbols-outlined text-[19px]">close</span>
-            <span class="font-medium text-[13px]">Toll Brain</span>
-          </a>
-          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 transition-colors">
-            <span class="material-symbols-outlined text-[19px]">share</span>
-            <span class="font-medium text-[13px]">Matching Brain</span>
-          </a>
-        </div>
-      </div>
-
-      <!-- Distribution Group -->
-      <div>
-        <div class="px-3 pb-1.5 text-[10px] font-semibold text-slate-300 uppercase tracking-wider font-mono">Distribution</div>
-        <div class="space-y-0.5">
-          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 transition-colors">
-            <span class="material-symbols-outlined text-[19px]">smartphone</span>
-            <span class="font-medium text-[13px]">Apps</span>
-          </a>
-          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 transition-colors">
-            <span class="material-symbols-outlined text-[19px]">hub</span>
-            <span class="font-medium text-[13px]">Data API</span>
-          </a>
-          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 transition-colors">
-            <span class="material-symbols-outlined text-[19px]">sync_alt</span>
-            <span class="font-medium text-[13px]">Change requests</span>
-          </a>
-        </div>
-      </div>
-
-      <!-- Platform Group -->
-      <div>
-        <div class="px-3 pb-1.5 text-[10px] font-semibold text-slate-300 uppercase tracking-wider font-mono">Platform</div>
-        <div class="space-y-0.5">
-          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 transition-colors">
-            <span class="material-symbols-outlined text-[19px]">badge</span>
-            <span class="font-medium text-[13px]">Staff and roles</span>
-          </a>
-          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 transition-colors">
-            <span class="material-symbols-outlined text-[19px]">history</span>
-            <span class="font-medium text-[13px]">Activity log</span>
-          </a>
-          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 transition-colors">
-            <span class="material-symbols-outlined text-[19px]">terminal</span>
-            <span class="font-medium text-[13px]">Platform Ops</span>
-          </a>
-        </div>
-      </div>
-
-      <!-- Back Office Group -->
-      <div>
-        <div class="px-3 pb-1.5 text-[10px] font-semibold text-slate-300 uppercase tracking-wider font-mono">Back office</div>
-        <div class="space-y-0.5">
-          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 transition-colors">
-            <span class="material-symbols-outlined text-[19px]">settings</span>
-            <span class="font-medium text-[13px]">Global settings</span>
-          </a>
-          <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 transition-colors">
-            <span class="material-symbols-outlined text-[19px]">verified</span>
-            <span class="font-medium text-[13px]">GCT registrations</span>
-          </a>
-        </div>
-      </div>
-    </div>
-
-    <!-- Status footer in sidebar -->
-    <div class="p-3 border-t border-slate-800/80">
-      <div class="bg-slate-900/90 rounded px-2.5 py-1.5 flex items-center justify-between text-[11px] font-mono border border-slate-800">
-        <span class="flex items-center gap-1.5 text-slate-300">
-          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+<!-- DOMINION NAVY SIDEBAR (EXACT COPY OF S18) -->
+<aside class="w-64 bg-[#0f172a] flex flex-col min-h-screen border-r border-slate-800 text-slate-400 select-none flex-shrink-0">
+<!-- Header Logo -->
+<div class="h-16 flex items-center px-5 gap-3 border-b border-slate-800/80">
+<div class="w-8 h-8 rounded-lg bg-[#316bf3] flex items-center justify-center text-white shadow-sm">
+<svg class="w-5 h-5 fill-current" viewbox="0 0 24 24">
+<path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</div>
+<div>
+<div class="text-white font-semibold text-sm tracking-tight leading-none">Dominion</div>
+<div class="text-[11px] text-slate-400 mt-1 leading-none">Roam Admin Console</div>
+</div>
+</div>
+<!-- Navigation List -->
+<div class="flex-1 overflow-y-auto py-4 px-3 space-y-5">
+<!-- Overview -->
+<div>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 transition-colors" href="#">
+<span class="material-symbols-outlined text-[19px]">grid_view</span>
+<span class="font-medium text-[13px]">Overview</span>
+</a>
+</div>
+<!-- Master Data Group -->
+<div>
+<div class="px-3 pb-1.5 text-[10px] font-semibold text-slate-300 uppercase tracking-wider font-mono">Master data</div>
+<div class="space-y-0.5">
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 transition-colors" href="#">
+<span class="material-symbols-outlined text-[19px]">directions_car</span>
+<span class="font-medium text-[13px]">Vehicles</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 transition-colors" href="#">
+<span class="material-symbols-outlined text-[19px]">map</span>
+<span class="font-medium text-[13px]">Places and Maps</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg bg-[#316bf3] text-white font-medium shadow-sm" href="#">
+<span class="material-symbols-outlined text-[19px]">local_gas_station</span>
+<span class="text-[13px]">Fuel</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 transition-colors" href="#">
+<span class="material-symbols-outlined text-[19px]">toll</span>
+<span class="font-medium text-[13px]">Tolls</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 transition-colors" href="#">
+<span class="material-symbols-outlined text-[19px]">description</span>
+<span class="font-medium text-[13px]">Tax and Vendors</span>
+</a>
+</div>
+</div>
+<!-- Engines Group -->
+<div>
+<div class="px-3 pb-1.5 text-[10px] font-semibold text-slate-300 uppercase tracking-wider font-mono">Engines</div>
+<div class="space-y-0.5">
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 transition-colors" href="#">
+<span class="material-symbols-outlined text-[19px]">bolt</span>
+<span class="font-medium text-[13px]">Fuel Brain</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 transition-colors" href="#">
+<span class="material-symbols-outlined text-[19px]">close</span>
+<span class="font-medium text-[13px]">Toll Brain</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 transition-colors" href="#">
+<span class="material-symbols-outlined text-[19px]">share</span>
+<span class="font-medium text-[13px]">Matching Brain</span>
+</a>
+</div>
+</div>
+<!-- Distribution Group -->
+<div>
+<div class="px-3 pb-1.5 text-[10px] font-semibold text-slate-300 uppercase tracking-wider font-mono">Distribution</div>
+<div class="space-y-0.5">
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 transition-colors" href="#">
+<span class="material-symbols-outlined text-[19px]">smartphone</span>
+<span class="font-medium text-[13px]">Apps</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 transition-colors" href="#">
+<span class="material-symbols-outlined text-[19px]">hub</span>
+<span class="font-medium text-[13px]">Data API</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 transition-colors" href="#">
+<span class="material-symbols-outlined text-[19px]">sync_alt</span>
+<span class="font-medium text-[13px]">Change requests</span>
+</a>
+</div>
+</div>
+<!-- Platform Group -->
+<div>
+<div class="px-3 pb-1.5 text-[10px] font-semibold text-slate-300 uppercase tracking-wider font-mono">Platform</div>
+<div class="space-y-0.5">
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 transition-colors" href="#">
+<span class="material-symbols-outlined text-[19px]">badge</span>
+<span class="font-medium text-[13px]">Staff and roles</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 transition-colors" href="#">
+<span class="material-symbols-outlined text-[19px]">history</span>
+<span class="font-medium text-[13px]">Activity log</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 transition-colors" href="#">
+<span class="material-symbols-outlined text-[19px]">terminal</span>
+<span class="font-medium text-[13px]">Platform Ops</span>
+</a>
+</div>
+</div>
+<!-- Back Office Group -->
+<div>
+<div class="px-3 pb-1.5 text-[10px] font-semibold text-slate-300 uppercase tracking-wider font-mono">Back office</div>
+<div class="space-y-0.5">
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 transition-colors" href="#">
+<span class="material-symbols-outlined text-[19px]">settings</span>
+<span class="font-medium text-[13px]">Global settings</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 transition-colors" href="#">
+<span class="material-symbols-outlined text-[19px]">verified</span>
+<span class="font-medium text-[13px]">GCT registrations</span>
+</a>
+</div>
+</div>
+</div>
+<!-- Status footer in sidebar -->
+<div class="p-3 border-t border-slate-800/80">
+<div class="bg-slate-900/90 rounded px-2.5 py-1.5 flex items-center justify-between text-[11px] font-mono border border-slate-800">
+<span class="flex items-center gap-1.5 text-slate-300">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
           KGN-DC-01
         </span>
-        <span class="text-slate-400 font-medium">JMD READY</span>
-      </div>
-    </div>
-  </aside>
-
-  <!-- MAIN VIEWPORT -->
-  <div class="flex-1 flex flex-col min-w-0">
-    <!-- Top Bar -->
-    <header class="h-16 bg-white border-b border-slate-200 px-8 flex items-center justify-between sticky top-0 z-10">
-      <!-- Search Input -->
-      <div class="relative w-80">
-        <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[18px]">search</span>
-        <input 
-          type="text" 
-          placeholder="Search entities, engines, routes... ⌘K" 
-          class="w-full pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs placeholder:text-slate-400 text-slate-700 focus:outline-none focus:border-[#316bf3] focus:bg-white transition-colors"
-          readonly
-        />
-      </div>
-
-      <!-- Right Header Actions (Owner role only, no personal name) -->
-      <div class="flex items-center gap-4">
-        <button class="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
-          <span class="material-symbols-outlined text-[20px]">notifications</span>
-        </button>
-        <button class="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
-          <span class="material-symbols-outlined text-[20px]">help</span>
-        </button>
-        <div class="h-5 w-px bg-slate-200"></div>
-        <div class="flex items-center gap-2.5">
-          <div class="w-8 h-8 rounded-full bg-black text-white flex items-center justify-center font-bold text-xs tracking-wider">
+<span class="text-slate-400 font-medium">JMD READY</span>
+</div>
+</div>
+</aside>
+<!-- MAIN VIEWPORT -->
+<div class="flex-1 flex flex-col min-w-0">
+<!-- Top Bar -->
+<header class="h-16 bg-white border-b border-slate-200 px-8 flex items-center justify-between sticky top-0 z-10">
+<!-- Search Input -->
+<div class="relative w-80">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[18px]">search</span>
+<input class="w-full pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs placeholder:text-slate-400 text-slate-700 focus:outline-none focus:border-[#316bf3] focus:bg-white transition-colors" placeholder="Search entities, engines, routes... ⌘K" readonly="" type="text"/>
+</div>
+<!-- Right Header Actions (Owner role only, no personal name) -->
+<div class="flex items-center gap-4">
+<button class="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
+<span class="material-symbols-outlined text-[20px]">notifications</span>
+</button>
+<button class="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
+<span class="material-symbols-outlined text-[20px]">help</span>
+</button>
+<div class="h-5 w-px bg-slate-200"></div>
+<div class="flex items-center gap-2.5">
+<div class="w-8 h-8 rounded-full bg-black text-white flex items-center justify-center font-bold text-xs tracking-wider">
             OW
           </div>
-          <div class="text-left leading-tight">
-            <div class="font-semibold text-slate-900 text-xs">Owner</div>
-            <div class="text-[10px] text-slate-400 font-mono tracking-tight">SYS-AUTH</div>
+<div class="text-left leading-tight">
+<div class="font-semibold text-slate-900 text-xs">Owner</div>
+<div class="text-[10px] text-slate-400 font-mono tracking-tight">SYS-AUTH</div>
+</div>
+</div>
+</div>
+</header>
+<!-- Page Content Area -->
+<main class="flex-1 p-8 max-w-6xl w-full"><div class="flex flex-col w-full space-y-6">
+<!-- TOP BREADCRUMB & HEADER -->
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+<div>
+<div class="flex items-center gap-1.5 text-xs text-on-surface-variant font-medium tracking-wide mb-1">
+<span>Dominion</span>
+<span class="text-outline-variant">›</span>
+<span>Master data</span>
+<span class="text-outline-variant">›</span>
+<span>Fuel</span>
+<span class="text-outline-variant">›</span>
+<span class="text-on-surface font-semibold">Station analytics</span>
+</div>
+<h1 class="text-2xl font-bold tracking-tight text-on-surface">Station analytics</h1>
+<p class="text-xs text-on-surface-variant mt-0.5">Pump prices against Petrojam, coverage and data trust by parish and brand.</p>
+</div>
+<div class="flex items-center gap-3">
+<button class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-surface-container-lowest text-on-surface text-xs font-semibold shadow-sm hover:bg-surface-container transition-colors">
+<span class="material-symbols-outlined text-[16px]">download</span>
+        Export CSV
+      </button>
+</div>
+</div>
+<!-- FILTER CONTROLS & FRESHNESS STRIP -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden"><div class="flex items-center justify-between mb-4 pb-3 border-b border-slate-100">
+<div>
+<div class="flex items-center gap-2">
+<span class="w-2.5 h-2.5 rounded-sm bg-gradient-to-r from-red-500 via-blue-500 to-emerald-500"></span>
+<h2 class="text-sm font-bold text-slate-900 tracking-tight">By brand</h2>
+</div>
+<p class="text-[11px] text-on-surface-variant mt-0.5">Median pump price by retail petroleum brand across Jamaican network (Scale J$215 – J$255)</p>
+</div>
+<div class="text-[11px] font-mono text-slate-600 bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200/60 font-semibold">9 active categories</div>
+</div>
+<!-- Horizontal Bar Chart with brand pills and distinct color identities -->
+<div class="space-y-3">
+<!-- TotalEnergies (Red/Blue gradient) -->
+<div class="flex items-center text-xs group">
+<div class="w-32 flex items-center gap-2 truncate">
+<span class="w-5 h-5 rounded-full bg-red-600 text-white font-bold text-[9px] flex items-center justify-center shrink-0 shadow-xs">TE</span>
+<span class="font-medium text-slate-900 truncate">TotalEnergies</span>
+</div>
+<div class="flex-1 mx-3 h-5 bg-slate-100 rounded-md overflow-hidden flex items-center border border-slate-200/50 p-0.5">
+<div class="bg-gradient-to-r from-red-500 to-rose-600 h-full rounded-sm flex items-center justify-end px-2 shadow-xs" style="width: 78%"></div>
+</div>
+<span class="w-20 font-mono font-bold text-right text-slate-900">J$246.20</span>
+<span class="w-16 font-mono text-[10px] text-slate-500 text-right bg-slate-50 py-0.5 px-1 rounded ml-1">2 / 38</span>
+</div>
+<!-- Texaco (Texaco Red/Black) -->
+<div class="flex items-center text-xs group">
+<div class="w-32 flex items-center gap-2 truncate">
+<span class="w-5 h-5 rounded-full bg-rose-700 text-white font-bold text-[9px] flex items-center justify-center shrink-0 shadow-xs">TX</span>
+<span class="font-medium text-slate-900 truncate">Texaco</span>
+</div>
+<div class="flex-1 mx-3 h-5 bg-slate-100 rounded-md overflow-hidden flex items-center border border-slate-200/50 p-0.5">
+<div class="bg-gradient-to-r from-rose-600 to-red-700 h-full rounded-sm flex items-center justify-end px-2 shadow-xs" style="width: 87.5%"></div>
+</div>
+<span class="w-20 font-mono font-bold text-right text-error font-semibold">J$250.06</span>
+<span class="w-16 font-mono text-[10px] text-slate-500 text-right bg-slate-50 py-0.5 px-1 rounded ml-1">1 / 44</span>
+</div>
+<!-- Rubis (Rubis Blue) -->
+<div class="flex items-center text-xs group">
+<div class="w-32 flex items-center gap-2 truncate">
+<span class="w-5 h-5 rounded-full bg-blue-700 text-white font-bold text-[9px] flex items-center justify-center shrink-0 shadow-xs">RB</span>
+<span class="font-medium text-slate-900 truncate">Rubis</span>
+</div>
+<div class="flex-1 mx-3 h-5 bg-slate-100 rounded-md overflow-hidden flex items-center border border-slate-200/50 p-0.5">
+<div class="bg-gradient-to-r from-blue-600 to-indigo-600 h-full rounded-sm flex items-center justify-end px-2 shadow-xs" style="width: 65%"></div>
+</div>
+<span class="w-20 font-mono font-bold text-right text-slate-900">J$241.00</span>
+<span class="w-16 font-mono text-[10px] text-slate-500 text-right bg-slate-50 py-0.5 px-1 rounded ml-1">1 / 51</span>
+</div>
+<!-- FESCO (Emerald green low price champion) -->
+<div class="flex items-center text-xs group">
+<div class="w-32 flex items-center gap-2 truncate">
+<span class="w-5 h-5 rounded-full bg-emerald-600 text-white font-bold text-[9px] flex items-center justify-center shrink-0 shadow-xs">FE</span>
+<span class="font-semibold text-emerald-800 truncate">FESCO</span>
+</div>
+<div class="flex-1 mx-3 h-5 bg-emerald-50 rounded-md overflow-hidden flex items-center border border-emerald-200/60 p-0.5">
+<div class="bg-gradient-to-r from-emerald-500 to-teal-500 h-full rounded-sm flex items-center justify-end px-2 shadow-xs" style="width: 16.6%"></div>
+</div>
+<span class="w-20 font-mono font-bold text-right text-emerald-700">J$221.66</span>
+<span class="w-16 font-mono text-[10px] text-emerald-700 text-right bg-emerald-50 font-bold py-0.5 px-1 rounded ml-1">2 / 21</span>
+</div>
+<!-- Unipet (Orange/Amber) -->
+<div class="flex items-center text-xs group">
+<div class="w-32 flex items-center gap-2 truncate">
+<span class="w-5 h-5 rounded-full bg-amber-600 text-white font-bold text-[9px] flex items-center justify-center shrink-0 shadow-xs">UN</span>
+<span class="font-medium text-slate-900 truncate">Unipet</span>
+</div>
+<div class="flex-1 mx-3 h-5 bg-slate-100 rounded-md overflow-hidden flex items-center border border-slate-200/50 p-0.5">
+<div class="bg-gradient-to-r from-amber-500 to-orange-500 h-full rounded-sm flex items-center justify-end px-2 shadow-xs" style="width: 25%"></div>
+</div>
+<span class="w-20 font-mono font-bold text-right text-slate-900">J$225.00</span>
+<span class="w-16 font-mono text-[10px] text-slate-500 text-right bg-slate-50 py-0.5 px-1 rounded ml-1">1 / 4</span>
+</div>
+<!-- Blaize (Sky/Cyan) -->
+<div class="flex items-center text-xs group">
+<div class="w-32 flex items-center gap-2 truncate">
+<span class="w-5 h-5 rounded-full bg-sky-600 text-white font-bold text-[9px] flex items-center justify-center shrink-0 shadow-xs">BL</span>
+<span class="font-medium text-slate-900 truncate">Blaize</span>
+</div>
+<div class="flex-1 mx-3 h-5 bg-slate-100 rounded-md overflow-hidden flex items-center border border-slate-200/50 p-0.5">
+<div class="bg-gradient-to-r from-sky-500 to-blue-500 h-full rounded-sm flex items-center justify-end px-2 shadow-xs" style="width: 26%"></div>
+</div>
+<span class="w-20 font-mono font-bold text-right text-slate-900">J$225.40</span>
+<span class="w-16 font-mono text-[10px] text-slate-500 text-right bg-slate-50 py-0.5 px-1 rounded ml-1">1 / 2</span>
+</div>
+<!-- Jampet -->
+<div class="flex items-center text-xs group">
+<div class="w-32 flex items-center gap-2 truncate">
+<span class="w-5 h-5 rounded-full bg-indigo-600 text-white font-bold text-[9px] flex items-center justify-center shrink-0 shadow-xs">JP</span>
+<span class="font-medium text-slate-900 truncate">Jampet</span>
+</div>
+<div class="flex-1 mx-3 h-5 bg-slate-100 rounded-md overflow-hidden flex items-center border border-slate-200/50 p-0.5">
+<div class="bg-gradient-to-r from-indigo-500 to-purple-600 h-full rounded-sm flex items-center justify-end px-2 shadow-xs" style="width: 27.5%"></div>
+</div>
+<span class="w-20 font-mono font-bold text-right text-slate-900">J$226.00</span>
+<span class="w-16 font-mono text-[10px] text-slate-500 text-right bg-slate-50 py-0.5 px-1 rounded ml-1">1 / 3</span>
+</div>
+<!-- Buds -->
+<div class="flex items-center text-xs group">
+<div class="w-32 flex items-center gap-2 truncate">
+<span class="w-5 h-5 rounded-full bg-teal-600 text-white font-bold text-[9px] flex items-center justify-center shrink-0 shadow-xs">BD</span>
+<span class="font-medium text-slate-900 truncate">Buds</span>
+</div>
+<div class="flex-1 mx-3 h-5 bg-slate-100 rounded-md overflow-hidden flex items-center border border-slate-200/50 p-0.5">
+<div class="bg-gradient-to-r from-teal-500 to-emerald-600 h-full rounded-sm flex items-center justify-end px-2 shadow-xs" style="width: 27.5%"></div>
+</div>
+<span class="w-20 font-mono font-bold text-right text-slate-900">J$226.00</span>
+<span class="w-16 font-mono text-[10px] text-slate-500 text-right bg-slate-50 py-0.5 px-1 rounded ml-1">1 / 1</span>
+</div>
+<!-- No brand set -->
+<div class="flex items-center text-xs group">
+<div class="w-32 flex items-center gap-2 truncate">
+<span class="w-5 h-5 rounded-full bg-slate-300 text-slate-700 font-bold text-[9px] flex items-center justify-center shrink-0">?</span>
+<span class="font-medium text-slate-500 italic truncate">No brand set</span>
+</div>
+<div class="flex-1 mx-3 h-5 bg-slate-100 rounded-md overflow-hidden flex items-center border border-slate-200/50 p-0.5">
+<div class="bg-slate-400 h-full rounded-sm flex items-center justify-end px-2 shadow-xs" style="width: 20%"></div>
+</div>
+<span class="w-20 font-mono font-bold text-right text-slate-600">J$223.00</span>
+<span class="w-16 font-mono text-[10px] text-slate-400 text-right bg-slate-50 py-0.5 px-1 rounded ml-1">0 / 65</span>
+</div>
+</div>
+<!-- Axis Scale Markers -->
+<div class="flex items-center text-[10px] font-mono text-slate-500 pt-3 mt-3 border-t border-slate-100">
+<span class="w-32 font-semibold text-slate-700">Scale benchmark:</span>
+<div class="flex-1 mx-3 flex justify-between font-bold">
+<span>J$215</span>
+<span>J$225</span>
+<span>J$235</span>
+<span>J$245</span>
+<span>J$255</span>
+</div>
+<span class="w-36 text-right font-medium text-slate-400">Coverage</span>
+</div>
+<!-- Sub-text at bottom -->
+<div class="mt-3 pt-3 bg-slate-50 px-3 py-2 rounded-lg border border-slate-200/70 text-[11px] text-slate-600 font-mono flex items-center justify-between">
+<div>
+<span class="font-bold text-slate-900">Unpriced brands:</span> Cool Oasis (19), Gulfstream (12), Petcom (6), First (5), E-Jam (2), Independent (7)
+</div>
+<span class="text-[10px] text-[#316bf3] font-bold cursor-pointer hover:underline">Request price crawl ›</span>
+</div></div>
+<!-- ROW A: 5 KPI CARDS -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5"><!-- KPI 1: Pump Median -->
+<div class="bg-surface-container-lowest p-3.5 rounded-xl shadow-sm border border-slate-200/80 relative flex flex-col justify-between overflow-hidden before:absolute before:top-0 before:left-0 before:right-0 before:h-1 before:bg-gradient-to-r before:from-[#316bf3] before:to-indigo-500">
+<div>
+<div class="flex items-center justify-between text-[10px] font-bold text-on-surface-variant tracking-wider uppercase">
+<span class="flex items-center gap-1.5 text-slate-700 font-semibold"><span class="w-1.5 h-1.5 rounded-full bg-[#316bf3]"></span>PUMP MEDIAN</span>
+<span class="px-1.5 py-0.5 rounded-md bg-amber-500/10 text-amber-700 border border-amber-500/20 text-[9px] font-semibold font-mono">Few reports</span>
+</div>
+<div class="mt-2 text-2xl font-bold font-mono text-[#316bf3] tracking-tight">J$225.40<span class="text-xs font-medium text-slate-400">/L</span></div>
+<div class="mt-1 flex items-center gap-1 text-[11px] font-medium text-error font-mono">
+<span class="inline-flex items-center px-1.5 py-0.2 rounded bg-error-container/20 text-error">▼ J$1.10</span>
+<span class="text-slate-400 text-[10px]">vs last week</span>
+</div>
+<div class="mt-2 text-[10px] text-on-surface-variant font-mono bg-slate-50 px-2 py-1 rounded border border-slate-100 flex items-center justify-between">
+<span>Sample</span>
+<span class="font-semibold text-slate-700">4 stns · 5 reps</span>
+</div>
+</div>
+<div class="mt-3 flex justify-end items-center">
+<svg class="w-24 h-7 text-[#316bf3] overflow-visible" fill="none" viewbox="0 0 80 24">
+<defs>
+<lineargradient id="kpi1Grad" x1="0%" x2="100%" y1="0%" y2="0%">
+<stop offset="0%" stop-color="#818cf8"></stop>
+<stop offset="100%" stop-color="#316bf3"></stop>
+</lineargradient>
+</defs>
+<path d="M 0 16 L 15 14 L 30 18 L 45 12 L 60 9 L 75 14" stroke="url(#kpi1Grad)" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2"></path>
+<circle cx="75" cy="14" fill="#316bf3" r="3.5" stroke="#ffffff" stroke-width="1.5"></circle>
+</svg>
+</div>
+</div>
+<!-- KPI 2: Petrojam Ex-Refinery -->
+<div class="bg-surface-container-lowest p-3.5 rounded-xl shadow-sm border border-slate-200/80 relative flex flex-col justify-between overflow-hidden before:absolute before:top-0 before:left-0 before:right-0 before:h-1 before:bg-gradient-to-r before:from-slate-700 before:to-slate-900">
+<div>
+<div class="flex items-center justify-between text-[10px] font-bold text-on-surface-variant tracking-wider uppercase">
+<span class="flex items-center gap-1.5 text-slate-700 font-semibold"><span class="w-1.5 h-1.5 rounded-full bg-slate-700"></span>PETROJAM EX-REFINERY</span>
+<span class="px-1.5 py-0.5 rounded-md bg-emerald-500/10 text-emerald-700 border border-emerald-500/20 text-[9px] font-semibold font-mono">Official</span>
+</div>
+<div class="mt-2 text-2xl font-bold font-mono text-slate-900 tracking-tight">J$201.81<span class="text-xs font-medium text-slate-400">/L</span></div>
+<div class="mt-1 flex items-center gap-1 text-[11px] font-medium text-error font-mono">
+<span class="inline-flex items-center px-1.5 py-0.2 rounded bg-error-container/20 text-error">▼ J$4.50</span>
+<span class="text-slate-400 text-[10px]">(-2.2%) WoW</span>
+</div>
+<div class="mt-2 text-[10px] text-tertiary font-mono bg-emerald-500/10 px-2 py-1 rounded border border-emerald-500/20 flex items-center justify-between">
+<span class="text-slate-600">vs LY</span>
+<span class="font-semibold text-emerald-700">▲ J$6.20 YoY</span>
+</div>
+</div>
+<div class="mt-3 flex justify-end items-center">
+<svg class="w-24 h-7 text-slate-600 overflow-visible" fill="none" viewbox="0 0 80 24">
+<path d="M 0 8 L 15 7 L 30 11 L 45 13 L 60 16 L 75 20" stroke="#475569" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2"></path>
+<circle cx="75" cy="20" fill="#334155" r="3.5" stroke="#ffffff" stroke-width="1.5"></circle>
+</svg>
+</div>
+</div>
+<!-- KPI 3: Gap Above Petrojam -->
+<div class="bg-surface-container-lowest p-3.5 rounded-xl shadow-sm border border-slate-200/80 relative flex flex-col justify-between overflow-hidden before:absolute before:top-0 before:left-0 before:right-0 before:h-1 before:bg-gradient-to-r before:from-amber-500 before:to-orange-500">
+<div>
+<div class="flex items-center justify-between text-[10px] font-bold text-on-surface-variant tracking-wider uppercase">
+<span class="flex items-center gap-1.5 text-slate-700 font-semibold"><span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>GAP ABOVE REFINERY</span>
+<span class="px-1.5 py-0.5 rounded-md bg-amber-500/15 text-amber-800 border border-amber-500/25 text-[9px] font-semibold font-mono">11.7% margin</span>
+</div>
+<div class="mt-2 text-2xl font-bold font-mono text-amber-700 tracking-tight">J$23.59<span class="text-xs font-medium text-slate-400">/L</span></div>
+<div class="mt-1 flex items-center gap-1 text-[11px] font-medium text-amber-700 font-mono">
+<span class="inline-flex items-center px-1.5 py-0.2 rounded bg-amber-500/15 text-amber-800 font-semibold">▲ J$3.40</span>
+<span class="text-slate-400 text-[10px]">vs last week</span>
+</div>
+<div class="mt-2 text-[10px] text-slate-600 font-mono bg-amber-500/5 px-2 py-1 rounded border border-amber-500/15 truncate">
+Taxes, distributor &amp; retail
+</div>
+</div>
+<div class="mt-3 flex justify-end items-center">
+<svg class="w-24 h-7 text-amber-600 overflow-visible" fill="none" viewbox="0 0 80 24">
+<path d="M 0 18 L 15 16 L 30 15 L 45 11 L 60 10 L 75 6" stroke="#d97706" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2"></path>
+<circle cx="75" cy="6" fill="#d97706" r="3.5" stroke="#ffffff" stroke-width="1.5"></circle>
+</svg>
+</div>
+</div>
+<!-- KPI 4: Price Range -->
+<div class="bg-surface-container-lowest p-3.5 rounded-xl shadow-sm border border-slate-200/80 relative flex flex-col justify-between overflow-hidden before:absolute before:top-0 before:left-0 before:right-0 before:h-1 before:bg-gradient-to-r before:from-teal-500 before:to-emerald-500">
+<div>
+<div class="flex items-center justify-between text-[10px] font-bold text-on-surface-variant tracking-wider uppercase">
+<span class="flex items-center gap-1.5 text-slate-700 font-semibold"><span class="w-1.5 h-1.5 rounded-full bg-teal-500"></span>PRICE RANGE</span>
+<span class="px-1.5 py-0.5 rounded-md bg-teal-500/10 text-teal-800 border border-teal-500/20 text-[9px] font-semibold font-mono">Spread 28.40</span>
+</div>
+<div class="mt-2 text-[17px] font-bold font-mono text-slate-900 tracking-tight truncate">J$221.66 – 250.06</div>
+<div class="mt-2 space-y-1 text-[10px] font-mono">
+<div class="flex items-center justify-between bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/15 text-emerald-800">
+<span class="font-sans font-semibold text-[9px]">LOW</span>
+<span class="truncate font-bold">FESCO J$221.66</span>
+</div>
+<div class="flex items-center justify-between bg-error-container/15 px-2 py-0.5 rounded border border-error-container/30 text-error">
+<span class="font-sans font-semibold text-[9px]">HIGH</span>
+<span class="truncate font-bold">Texaco J$250.06</span>
+</div>
+</div>
+</div>
+<div class="mt-3 flex justify-end items-center">
+<svg class="w-24 h-7 text-teal-600 overflow-visible" fill="none" viewbox="0 0 80 24">
+<path d="M 0 10 L 20 8 L 40 14 L 60 7 L 75 12" stroke="#0d9488" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2"></path>
+<circle cx="75" cy="12" fill="#0d9488" r="3.5" stroke="#ffffff" stroke-width="1.5"></circle>
+</svg>
+</div>
+</div>
+<!-- KPI 5: Stations Priced -->
+<div class="bg-surface-container-lowest p-3.5 rounded-xl shadow-sm border border-slate-200/80 relative flex flex-col justify-between overflow-hidden before:absolute before:top-0 before:left-0 before:right-0 before:h-1 before:bg-gradient-to-r before:from-blue-600 before:to-cyan-500">
+<div>
+<div class="flex items-center justify-between text-[10px] font-bold text-on-surface-variant tracking-wider uppercase">
+<span class="flex items-center gap-1.5 text-slate-700 font-semibold"><span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span>STATIONS PRICED</span>
+<span class="px-1.5 py-0.5 rounded-md bg-blue-500/10 text-blue-700 border border-blue-500/20 text-[9px] font-semibold font-mono">4.9% complete</span>
+</div>
+<div class="mt-2 text-2xl font-bold font-mono text-slate-900 tracking-tight">10 <span class="text-slate-400 text-sm font-normal">/ 204</span></div>
+<div class="w-full bg-slate-100 h-2 rounded-full mt-2 overflow-hidden border border-slate-200/60 p-0.5">
+<div class="bg-gradient-to-r from-[#316bf3] to-cyan-400 h-full rounded-full" style="width: 4.9%"></div>
+</div>
+<div class="mt-2 flex items-center justify-between text-[10px] font-mono text-on-surface-variant">
+<span class="inline-flex items-center gap-1 text-emerald-700 font-semibold"><span class="w-1 h-1 rounded-full bg-emerald-500"></span>▲ 2 vs last wk</span>
+<span class="font-medium bg-slate-100 px-1.5 py-0.5 rounded text-slate-600">Verified: 56</span>
+</div>
+</div>
+<div class="mt-3 flex justify-end items-center">
+<svg class="w-24 h-7 text-[#316bf3] overflow-visible" fill="none" viewbox="0 0 80 24">
+<path d="M 0 20 L 25 18 L 50 14 L 75 11" stroke="#316bf3" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2"></path>
+<circle cx="75" cy="11" fill="#316bf3" r="3.5" stroke="#ffffff" stroke-width="1.5"></circle>
+</svg>
+</div>
+</div></div>
+<!-- ROW B: ONE-SENTENCE SUMMARY STRIP -->
+<div class="bg-surface-container-low px-4 py-3 rounded-xl flex items-center gap-3 text-xs text-on-surface shadow-sm">
+<span class="material-symbols-outlined text-secondary text-[20px] shrink-0">info</span>
+<p class="leading-relaxed">
+      This week <span class="font-semibold">E10-87</span> is <span class="font-mono font-semibold text-secondary">J$225.40/L</span> at the pump (median of 4 stations, 1 reporter), <span class="font-mono font-semibold">J$23.59</span> above Petrojam's <span class="font-mono font-semibold">J$201.81</span>. Lowest: <span class="font-semibold">FESCO Beechwood</span> at <span class="font-mono text-tertiary font-semibold">J$221.66</span>. Few reports — treat as indicative.
+    </p>
+</div>
+<!-- ROW C: TWO CARDS SIDE BY SIDE (Wide left ~68%, narrow right ~32%) -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-5"><!-- LEFT CARD: PRICE TREND -->
+<div class="lg:col-span-8 bg-surface-container-lowest p-5 rounded-xl shadow-sm border border-slate-200/80 flex flex-col justify-between"><div>
+<div class="flex items-center justify-between mb-2">
+<div class="flex items-center gap-2">
+<span class="w-2.5 h-2.5 rounded-sm bg-cyan-600"></span>
+<h2 class="text-sm font-bold text-slate-900 tracking-tight">Geo-spatial coverage</h2>
+</div>
+<span class="text-[11px] font-mono text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200/60">14 Parishes</span>
+</div>
+<!-- Amber Warning Banner Across Top -->
+<div class="mb-3 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/25 text-amber-900 text-[11px] font-mono flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px] text-amber-600">warning</span>
+<span class="font-medium">Pins not yet verified: 204 of 204</span>
+</div>
+<span class="text-[10px] text-amber-700 font-bold underline cursor-pointer hover:text-amber-900">Batch check ›</span>
+</div>
+<!-- Jamaica Island SVG Map Container with high polish styling -->
+<div class="relative w-full h-64 bg-gradient-to-b from-[#0f172a] to-[#1e293b] rounded-xl p-2 overflow-hidden flex items-center justify-center border border-slate-800 shadow-inner">
+<!-- Stylized Jamaica Island Map -->
+<svg class="w-full h-full overflow-visible" fill="none" viewbox="0 0 600 300">
+<defs>
+<lineargradient id="landGrad" x1="0%" x2="100%" y1="0%" y2="100%">
+<stop offset="0%" stop-color="#1e293b"></stop>
+<stop offset="50%" stop-color="#334155"></stop>
+<stop offset="100%" stop-color="#1e293b"></stop>
+</lineargradient>
+<filter height="140%" id="glow" width="140%" x="-20%" y="-20%">
+<fegaussianblur result="blur" stddeviation="3"></fegaussianblur>
+<fecomposite in="SourceGraphic" in2="blur" operator="over"></fecomposite>
+</filter>
+</defs>
+<!-- Island landmass shadow & border glow -->
+<path d="M 40,140 C 60,110 110,95 180,95 C 240,85 300,90 380,95 C 440,100 520,130 570,165 C 560,195 500,210 440,215 C 380,220 320,210 260,225 C 190,230 110,210 60,190 C 35,170 30,150 40,140 Z" fill="url(#landGrad)" stroke="#475569" stroke-width="1.5"></path>
+<!-- Parish Internal Dividers -->
+<path d="M 120,105 L 140,205 M 210,92 L 225,225 M 310,92 L 315,215 M 400,97 L 395,218 M 470,115 L 450,215 M 140,155 L 470,155" opacity="0.6" stroke="#64748b" stroke-dasharray="3,3" stroke-width="1.2"></path>
+<!-- Parish labels subtle -->
+<text fill="#64748b" font-family="monospace" font-size="9" opacity="0.7" x="80" y="160">Westmoreland</text>
+<text fill="#64748b" font-family="monospace" font-size="9" opacity="0.7" x="240" y="145">St. Ann</text>
+<text fill="#94a3b8" font-family="monospace" font-size="9" font-weight="bold" x="420" y="140">St. Andrew</text>
+<!-- Unpriced hollow pins dotted island-wide with crisp styling -->
+<circle cx="85" cy="155" fill="#0f172a" r="2.5" stroke="#94a3b8" stroke-width="1.5"></circle>
+<circle cx="110" cy="130" fill="#0f172a" r="2.5" stroke="#94a3b8" stroke-width="1.5"></circle>
+<circle cx="170" cy="115" fill="#0f172a" r="2.5" stroke="#94a3b8" stroke-width="1.5"></circle>
+<circle cx="190" cy="170" fill="#0f172a" r="2.5" stroke="#94a3b8" stroke-width="1.5"></circle>
+<circle cx="250" cy="130" fill="#0f172a" r="2.5" stroke="#94a3b8" stroke-width="1.5"></circle>
+<circle cx="280" cy="180" fill="#0f172a" r="2.5" stroke="#94a3b8" stroke-width="1.5"></circle>
+<circle cx="350" cy="110" fill="#0f172a" r="2.5" stroke="#94a3b8" stroke-width="1.5"></circle>
+<circle cx="360" cy="165" fill="#0f172a" r="2.5" stroke="#94a3b8" stroke-width="1.5"></circle>
+<circle cx="490" cy="150" fill="#0f172a" r="2.5" stroke="#94a3b8" stroke-width="1.5"></circle>
+<circle cx="530" cy="175" fill="#0f172a" r="2.5" stroke="#94a3b8" stroke-width="1.5"></circle>
+<!-- Clustered Pins in Saint Andrew & Kingston -->
+<rect fill="#316bf3" height="6.5" rx="1.5" stroke="#ffffff" stroke-width="1" width="6.5" x="420" y="170"></rect>
+<rect fill="#0284c7" height="6.5" rx="1.5" stroke="#ffffff" stroke-width="1" width="6.5" x="432" y="180"></rect>
+<rect fill="#2563eb" height="6.5" rx="1.5" stroke="#ffffff" stroke-width="1" width="6.5" x="442" y="174"></rect>
+<circle cx="435" cy="168" fill="#f59e0b" r="3.5" stroke="#ffffff" stroke-width="1"></circle>
+<circle cx="448" cy="185" fill="#38bdf8" r="3.5" stroke="#0369a1" stroke-width="1"></circle>
+<!-- Outdated striped pin -->
+<circle cx="410" cy="188" fill="#78350f" r="4" stroke="#f59e0b" stroke-dasharray="2,1" stroke-width="1.5"></circle>
+<!-- Pulsing beacon for Active Popover (FESCO Beechwood) -->
+<circle class="animate-ping" cx="425" cy="175" fill="#316bf3" opacity="0.4" r="9"></circle>
+<circle cx="425" cy="175" fill="#10b981" filter="url(#glow)" r="5" stroke="#ffffff" stroke-width="1.5"></circle>
+</svg>
+<!-- Active Popover Anchored to Pin (FESCO Beechwood) with refined glass card -->
+<div class="absolute right-4 bottom-4 bg-[#0f172a]/95 backdrop-blur-md text-white p-3 rounded-xl shadow-2xl text-[10px] font-mono z-20 max-w-[220px] border border-slate-700/80">
+<div class="flex items-center justify-between pb-1 mb-1 border-b border-slate-700/80">
+<div class="font-bold text-white leading-tight flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-emerald-400"></span>FESCO Beechwood
+</div>
+<span class="px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-400 text-[9px] font-bold">Verified</span>
+</div>
+<div class="text-slate-300">FESCO · Saint Andrew</div>
+<div class="text-emerald-400 text-xs font-bold mt-1 bg-slate-800/80 px-2 py-0.5 rounded border border-slate-700/60 inline-block">J$221.66/L</div>
+<div class="text-slate-400 mt-1 flex items-center justify-between">
+<span>1 report</span>
+<span class="text-amber-400">7 days ago</span>
+</div>
+<a class="text-cyan-400 hover:text-cyan-300 mt-2 inline-flex items-center gap-1 font-semibold border-t border-slate-700/60 pt-1.5 w-full" href="#">
+Open station profile ›
+</a>
+</div>
+</div>
+</div>
+<!-- Legend at Bottom with crisp visual tags -->
+<div class="mt-4 pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between text-[10px] text-on-surface-variant font-mono gap-y-1.5">
+<div class="flex items-center gap-2">
+<span class="font-semibold text-slate-700">Quintile:</span>
+<span class="inline-flex items-center gap-1">
+<span class="inline-block w-2.5 h-2.5 rounded-xs bg-[#93c5fd]"></span>
+<span class="inline-block w-2.5 h-2.5 rounded-xs bg-[#316bf3]"></span>
+<span class="inline-block w-2.5 h-2.5 rounded-xs bg-[#1e40af]"></span>
+</span>
+</div>
+<div class="flex items-center gap-3">
+<span class="flex items-center gap-1"><span class="inline-block w-2 h-2 rounded-full border border-slate-400 bg-slate-800"></span> No price</span>
+<span class="flex items-center gap-1"><span class="inline-block w-2 h-2 rounded-full border border-amber-500 border-dashed bg-amber-500/20"></span> Outdated</span>
+<span class="flex items-center gap-1 font-semibold text-slate-700"><span class="text-[#316bf3]">■</span> Verif. / <span class="text-amber-500">●</span> Pend.</span>
+</div>
+</div></div>
+<!-- RIGHT CARD: DATA TRUST -->
+<div class="lg:col-span-4 bg-surface-container-lowest p-5 rounded-xl shadow-sm border border-slate-200/80 flex flex-col justify-between">
+<div>
+<div class="flex items-center justify-between pb-3 border-b border-slate-100">
+<div class="flex items-center gap-2">
+<span class="w-2.5 h-2.5 rounded-sm bg-emerald-500"></span>
+<h2 class="text-sm font-bold text-slate-900 tracking-tight">Data trust</h2>
+</div>
+<span class="inline-flex items-center gap-1.5 text-[11px] font-mono font-semibold text-emerald-700 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20">
+<span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+Synced
+</span>
+</div>
+<div class="space-y-3 pt-3 text-xs">
+<!-- Item 1 -->
+<div class="flex items-center justify-between pb-2.5 border-b border-slate-100/70">
+<div>
+<div class="font-semibold text-slate-900">Newest pump report</div>
+<div class="text-[10px] text-slate-500 font-mono">27 Oct 2026, 17:22</div>
+</div>
+<span class="font-mono text-xs font-bold text-slate-800 bg-slate-100 px-2 py-1 rounded border border-slate-200/60">2 days ago</span>
+</div>
+<!-- Item 2 -->
+<div class="flex items-center justify-between pb-2.5 border-b border-slate-100/70">
+<div>
+<div class="font-semibold text-slate-900">Reports this week</div>
+<a class="text-[10px] text-[#316bf3] font-semibold hover:underline inline-flex items-center gap-0.5" href="#">Review prices ›</a>
+</div>
+<div class="text-right font-mono text-[11px]">
+<span class="text-emerald-700 font-bold bg-emerald-500/10 px-1.5 py-0.5 rounded">5 accepted</span> · <span class="text-slate-500 font-medium">2 dup</span>
+<div class="text-[10px] text-slate-400 mt-0.5">0 rejected · 0 in review</div>
+</div>
+</div>
+<!-- Item 3 -->
+<div class="flex items-center justify-between pb-2.5 border-b border-slate-100/70">
+<div class="font-semibold text-slate-900">Reporters active</div>
+<div class="flex items-center gap-2">
+<span class="font-mono font-bold text-slate-900 text-sm">2</span>
+<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-800 border border-amber-500/25">Top reporter 100%</span>
+</div>
+</div>
+<!-- Item 4 -->
+<div class="flex items-center justify-between pb-2.5 border-b border-slate-100/70">
+<div class="font-semibold text-slate-900">Sources</div>
+<div class="flex items-center gap-1.5 font-mono text-[11px]">
+<span class="bg-blue-50 text-[#316bf3] font-bold px-2 py-0.5 rounded border border-blue-200/60">Fleet: 77</span>
+<span class="bg-slate-100 text-slate-600 font-medium px-2 py-0.5 rounded">Plug: 0</span>
+</div>
+</div>
+<!-- Item 5 -->
+<div class="pb-2.5 border-b border-slate-100/70">
+<div class="flex items-center justify-between mb-1.5">
+<span class="font-semibold text-slate-900">Prices that may be outdated</span>
+<span class="font-mono text-xs font-bold text-amber-700 bg-amber-500/15 px-2 py-0.5 rounded-full">7 of 11 (63%)</span>
+</div>
+<div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden border border-slate-200/60 p-0.5">
+<div class="bg-gradient-to-r from-amber-400 to-amber-600 h-full rounded-full" style="width: 63%"></div>
+</div>
+</div>
+<!-- Item 6 -->
+<div class="flex items-center justify-between pt-1">
+<div class="font-semibold text-slate-900">Petrojam last synced</div>
+<div class="flex items-center gap-1.5 font-mono text-xs font-bold text-slate-800 bg-slate-50 px-2 py-1 rounded border border-slate-200/80">
+<span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+22 Oct 2026
+</div>
+</div>
+</div>
+</div>
+<div class="mt-4 pt-3 bg-slate-50 border border-slate-200/80 p-2.5 rounded-xl text-[10px] text-slate-600 leading-relaxed flex items-start gap-2">
+<span class="material-symbols-outlined text-[16px] text-slate-400 shrink-0 mt-0.5">verified_user</span>
+<span>Petrojam benchmarks are official schedule releases. Pump data relies on volunteer and fleet reporting.</span>
+</div>
+</div></div>
+<!-- ROW D: TWO CARDS SIDE BY SIDE (Left ~55%, Right ~45%) -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+<!-- LEFT CARD: BY PARISH TABLE -->
+<div class="lg:col-span-7 bg-surface-container-lowest p-5 rounded-xl shadow-sm flex flex-col justify-between">
+<div>
+<div class="flex items-center justify-between mb-3">
+<div>
+<h2 class="text-sm font-bold text-on-surface">By parish</h2>
+<p class="text-[11px] text-on-surface-variant">Breakdown across all 14 Jamaican parishes</p>
+</div>
+<span class="text-[10px] font-mono text-on-surface-variant">14 administrative areas</span>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left text-xs">
+<thead>
+<tr class="text-[10px] font-semibold text-on-surface-variant uppercase tracking-wider bg-surface-container-low">
+<th class="py-2 px-2.5 rounded-l">Parish</th>
+<th class="py-2 px-2 text-right">Stations</th>
+<th class="py-2 px-2 text-right">Verif.</th>
+<th class="py-2 px-2 text-right">Priced</th>
+<th class="py-2 px-2 w-24">Coverage</th>
+<th class="py-2 px-2 text-right">Median</th>
+<th class="py-2 px-2 text-right">Gap</th>
+<th class="py-2 px-2.5 text-right rounded-r">vs Nat'l</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-transparent font-mono text-[11px]">
+<!-- Saint Andrew (Hovered/Active styling) -->
+<tr class="bg-secondary-container/40 transition-colors">
+<td class="py-2 px-2.5 font-sans font-semibold text-on-surface">Saint Andrew</td>
+<td class="py-2 px-2 text-right">61</td>
+<td class="py-2 px-2 text-right text-tertiary">22</td>
+<td class="py-2 px-2 text-right font-bold text-secondary">5</td>
+<td class="py-2 px-2">
+<div class="flex items-center gap-1.5">
+<div class="w-12 bg-surface-container-high h-1.5 rounded-full overflow-hidden">
+<div class="bg-secondary h-full rounded-full" style="width: 8.2%"></div>
+</div>
+<span class="text-[10px]">8.2%</span>
+</div>
+</td>
+<td class="py-2 px-2 text-right font-bold text-secondary">J$226.10</td>
+<td class="py-2 px-2 text-right">+24.29</td>
+<td class="py-2 px-2.5 text-right text-error font-medium">+0.70</td>
+</tr>
+<!-- Saint Catherine -->
+<tr class="hover:bg-surface-container-low transition-colors">
+<td class="py-2 px-2.5 font-sans font-medium text-on-surface">Saint Catherine</td>
+<td class="py-2 px-2 text-right">34</td>
+<td class="py-2 px-2 text-right text-tertiary">11</td>
+<td class="py-2 px-2 text-right font-bold text-secondary">4</td>
+<td class="py-2 px-2">
+<div class="flex items-center gap-1.5">
+<div class="w-12 bg-surface-container-high h-1.5 rounded-full overflow-hidden">
+<div class="bg-secondary h-full rounded-full" style="width: 11.7%"></div>
+</div>
+<span class="text-[10px]">11.7%</span>
+</div>
+</td>
+<td class="py-2 px-2 text-right font-bold text-secondary">J$225.40</td>
+<td class="py-2 px-2 text-right">+23.59</td>
+<td class="py-2 px-2.5 text-right text-on-surface-variant font-medium">0.00</td>
+</tr>
+<!-- Kingston -->
+<tr class="hover:bg-surface-container-low transition-colors">
+<td class="py-2 px-2.5 font-sans font-medium text-on-surface flex items-center gap-1.5">
+                  Kingston
+                  <span class="px-1 py-0.2 rounded bg-surface-container text-on-surface-variant text-[9px] font-sans">Few reports</span>
+</td>
+<td class="py-2 px-2 text-right">14</td>
+<td class="py-2 px-2 text-right text-tertiary">6</td>
+<td class="py-2 px-2 text-right font-bold text-secondary">1</td>
+<td class="py-2 px-2">
+<div class="flex items-center gap-1.5">
+<div class="w-12 bg-surface-container-high h-1.5 rounded-full overflow-hidden">
+<div class="bg-secondary h-full rounded-full" style="width: 7.1%"></div>
+</div>
+<span class="text-[10px]">7.1%</span>
+</div>
+</td>
+<td class="py-2 px-2 text-right font-bold text-secondary">J$225.80</td>
+<td class="py-2 px-2 text-right">+23.99</td>
+<td class="py-2 px-2.5 text-right text-error font-medium">+0.40</td>
+</tr>
+<!-- Clarendon -->
+<tr class="text-on-surface-variant hover:bg-surface-container-low transition-colors">
+<td class="py-1.5 px-2.5 font-sans">Clarendon</td>
+<td class="py-1.5 px-2 text-right">18</td>
+<td class="py-1.5 px-2 text-right">4</td>
+<td class="py-1.5 px-2 text-right">0</td>
+<td class="py-1.5 px-2"><span class="text-[10px] text-outline">0.0%</span></td>
+<td class="py-1.5 px-2 text-right text-outline">—</td>
+<td class="py-1.5 px-2 text-right text-outline">—</td>
+<td class="py-1.5 px-2.5 text-right text-outline">—</td>
+</tr>
+<!-- Hanover -->
+<tr class="text-on-surface-variant hover:bg-surface-container-low transition-colors">
+<td class="py-1.5 px-2.5 font-sans">Hanover</td>
+<td class="py-1.5 px-2 text-right">7</td>
+<td class="py-1.5 px-2 text-right">1</td>
+<td class="py-1.5 px-2 text-right">0</td>
+<td class="py-1.5 px-2"><span class="text-[10px] text-outline">0.0%</span></td>
+<td class="py-1.5 px-2 text-right text-outline">—</td>
+<td class="py-1.5 px-2 text-right text-outline">—</td>
+<td class="py-1.5 px-2.5 text-right text-outline">—</td>
+</tr>
+<!-- Manchester -->
+<tr class="text-on-surface-variant hover:bg-surface-container-low transition-colors">
+<td class="py-1.5 px-2.5 font-sans">Manchester</td>
+<td class="py-1.5 px-2 text-right">16</td>
+<td class="py-1.5 px-2 text-right">3</td>
+<td class="py-1.5 px-2 text-right">0</td>
+<td class="py-1.5 px-2"><span class="text-[10px] text-outline">0.0%</span></td>
+<td class="py-1.5 px-2 text-right text-outline">—</td>
+<td class="py-1.5 px-2 text-right text-outline">—</td>
+<td class="py-1.5 px-2.5 text-right text-outline">—</td>
+</tr>
+<!-- Portland -->
+<tr class="text-on-surface-variant hover:bg-surface-container-low transition-colors">
+<td class="py-1.5 px-2.5 font-sans">Portland</td>
+<td class="py-1.5 px-2 text-right">5</td>
+<td class="py-1.5 px-2 text-right">1</td>
+<td class="py-1.5 px-2 text-right">0</td>
+<td class="py-1.5 px-2"><span class="text-[10px] text-outline">0.0%</span></td>
+<td class="py-1.5 px-2 text-right text-outline">—</td>
+<td class="py-1.5 px-2 text-right text-outline">—</td>
+<td class="py-1.5 px-2.5 text-right text-outline">—</td>
+</tr>
+<!-- Saint Ann -->
+<tr class="text-on-surface-variant hover:bg-surface-container-low transition-colors">
+<td class="py-1.5 px-2.5 font-sans">Saint Ann</td>
+<td class="py-1.5 px-2 text-right">15</td>
+<td class="py-1.5 px-2 text-right">3</td>
+<td class="py-1.5 px-2 text-right">0</td>
+<td class="py-1.5 px-2"><span class="text-[10px] text-outline">0.0%</span></td>
+<td class="py-1.5 px-2 text-right text-outline">—</td>
+<td class="py-1.5 px-2 text-right text-outline">—</td>
+<td class="py-1.5 px-2.5 text-right text-outline">—</td>
+</tr>
+<!-- Saint Elizabeth -->
+<tr class="text-on-surface-variant hover:bg-surface-container-low transition-colors">
+<td class="py-1.5 px-2.5 font-sans">Saint Elizabeth</td>
+<td class="py-1.5 px-2 text-right">11</td>
+<td class="py-1.5 px-2 text-right">2</td>
+<td class="py-1.5 px-2 text-right">0</td>
+<td class="py-1.5 px-2"><span class="text-[10px] text-outline">0.0%</span></td>
+<td class="py-1.5 px-2 text-right text-outline">—</td>
+<td class="py-1.5 px-2 text-right text-outline">—</td>
+<td class="py-1.5 px-2.5 text-right text-outline">—</td>
+</tr>
+<!-- Saint James -->
+<tr class="text-on-surface-variant hover:bg-surface-container-low transition-colors">
+<td class="py-1.5 px-2.5 font-sans">Saint James</td>
+<td class="py-1.5 px-2 text-right">13</td>
+<td class="py-1.5 px-2 text-right">2</td>
+<td class="py-1.5 px-2 text-right">0</td>
+<td class="py-1.5 px-2"><span class="text-[10px] text-outline">0.0%</span></td>
+<td class="py-1.5 px-2 text-right text-outline">—</td>
+<td class="py-1.5 px-2 text-right text-outline">—</td>
+<td class="py-1.5 px-2.5 text-right text-outline">—</td>
+</tr>
+<!-- Saint Mary -->
+<tr class="text-on-surface-variant hover:bg-surface-container-low transition-colors">
+<td class="py-1.5 px-2.5 font-sans">Saint Mary</td>
+<td class="py-1.5 px-2 text-right">6</td>
+<td class="py-1.5 px-2 text-right">1</td>
+<td class="py-1.5 px-2 text-right">0</td>
+<td class="py-1.5 px-2"><span class="text-[10px] text-outline">0.0%</span></td>
+<td class="py-1.5 px-2 text-right text-outline">—</td>
+<td class="py-1.5 px-2 text-right text-outline">—</td>
+<td class="py-1.5 px-2.5 text-right text-outline">—</td>
+</tr>
+<!-- Saint Thomas -->
+<tr class="text-on-surface-variant hover:bg-surface-container-low transition-colors">
+<td class="py-1.5 px-2.5 font-sans">Saint Thomas</td>
+<td class="py-1.5 px-2 text-right">4</td>
+<td class="py-1.5 px-2 text-right">0</td>
+<td class="py-1.5 px-2 text-right">0</td>
+<td class="py-1.5 px-2"><span class="text-[10px] text-outline">0.0%</span></td>
+<td class="py-1.5 px-2 text-right text-outline">—</td>
+<td class="py-1.5 px-2 text-right text-outline">—</td>
+<td class="py-1.5 px-2.5 text-right text-outline">—</td>
+</tr>
+<!-- Trelawny -->
+<tr class="text-on-surface-variant hover:bg-surface-container-low transition-colors">
+<td class="py-1.5 px-2.5 font-sans">Trelawny</td>
+<td class="py-1.5 px-2 text-right">5</td>
+<td class="py-1.5 px-2 text-right">0</td>
+<td class="py-1.5 px-2 text-right">0</td>
+<td class="py-1.5 px-2"><span class="text-[10px] text-outline">0.0%</span></td>
+<td class="py-1.5 px-2 text-right text-outline">—</td>
+<td class="py-1.5 px-2 text-right text-outline">—</td>
+<td class="py-1.5 px-2.5 text-right text-outline">—</td>
+</tr>
+<!-- Westmoreland -->
+<tr class="text-on-surface-variant hover:bg-surface-container-low transition-colors">
+<td class="py-1.5 px-2.5 font-sans">Westmoreland</td>
+<td class="py-1.5 px-2 text-right">6</td>
+<td class="py-1.5 px-2 text-right">1</td>
+<td class="py-1.5 px-2 text-right">0</td>
+<td class="py-1.5 px-2"><span class="text-[10px] text-outline">0.0%</span></td>
+<td class="py-1.5 px-2 text-right text-outline">—</td>
+<td class="py-1.5 px-2 text-right text-outline">—</td>
+<td class="py-1.5 px-2.5 text-right text-outline">—</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<div class="mt-4 pt-3 flex items-center justify-between text-xs">
+<span class="text-on-surface-variant text-[11px]">11 parishes currently unpriced</span>
+<a class="font-semibold text-secondary hover:underline inline-flex items-center gap-1" href="#">
+          Coverage queue ›
+        </a>
+</div>
+</div>
+<!-- RIGHT CARD: MAP OF JAMAICA -->
+<div class="lg:col-span-5 bg-surface-container-lowest p-5 rounded-xl shadow-sm flex flex-col justify-between">
+<div>
+<div class="flex items-center justify-between mb-2">
+<h2 class="text-sm font-bold text-on-surface">Map</h2>
+<span class="text-[11px] font-mono text-on-surface-variant">Geo-spatial coverage</span>
+</div>
+<!-- Amber Warning Banner Across Top -->
+<div class="mb-3 px-3 py-2 rounded-lg bg-amber-500/10 text-amber-800 text-[11px] font-mono flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px] text-amber-600">warning</span>
+<span>Pins not yet checked: 204 of 204</span>
+</div>
+<!-- Jamaica Island SVG Map Container -->
+<div class="relative w-full h-64 bg-surface-container-low rounded-lg p-2 overflow-hidden flex items-center justify-center">
+<!-- Stylized Jamaica Island Map -->
+<svg class="w-full h-full text-surface-container-highest" fill="none" viewbox="0 0 600 300">
+<!-- Island landmass path -->
+<path class="text-surface-container-high" d="M 40,140 C 60,110 110,95 180,95 C 240,85 300,90 380,95 C 440,100 520,130 570,165 C 560,195 500,210 440,215 C 380,220 320,210 260,225 C 190,230 110,210 60,190 C 35,170 30,150 40,140 Z" fill="currentColor"></path>
+<!-- Parish Dividers -->
+<path d="M 120,105 L 140,205 M 210,92 L 225,225 M 310,92 L 315,215 M 400,97 L 395,218 M 470,115 L 450,215 M 140,155 L 470,155" stroke="rgba(255,255,255,0.6)" stroke-dasharray="3,2" stroke-width="1.5"></path>
+<!-- Unpriced hollow pins dotted island-wide -->
+<circle cx="85" cy="155" fill="none" r="2.5" stroke="#797a84" stroke-width="1.5"></circle>
+<circle cx="110" cy="130" fill="none" r="2.5" stroke="#797a84" stroke-width="1.5"></circle>
+<circle cx="170" cy="115" fill="none" r="2.5" stroke="#797a84" stroke-width="1.5"></circle>
+<circle cx="190" cy="170" fill="none" r="2.5" stroke="#797a84" stroke-width="1.5"></circle>
+<circle cx="250" cy="130" fill="none" r="2.5" stroke="#797a84" stroke-width="1.5"></circle>
+<circle cx="280" cy="180" fill="none" r="2.5" stroke="#797a84" stroke-width="1.5"></circle>
+<circle cx="350" cy="110" fill="none" r="2.5" stroke="#797a84" stroke-width="1.5"></circle>
+<circle cx="360" cy="165" fill="none" r="2.5" stroke="#797a84" stroke-width="1.5"></circle>
+<circle cx="490" cy="150" fill="none" r="2.5" stroke="#797a84" stroke-width="1.5"></circle>
+<circle cx="530" cy="175" fill="none" r="2.5" stroke="#797a84" stroke-width="1.5"></circle>
+<!-- Clustered Pins in Saint Andrew & Kingston -->
+<!-- Verified squares ■ -->
+<rect class="fill-secondary" height="6" width="6" x="420" y="170"></rect>
+<rect class="fill-secondary-dim" height="6" width="6" x="430" y="180"></rect>
+<rect class="fill-secondary" height="6" width="6" x="442" y="174"></rect>
+<!-- Pending small circles ● -->
+<circle class="fill-amber-600" cx="435" cy="168" r="3"></circle>
+<circle class="fill-secondary-fixed-dim stroke-secondary" cx="448" cy="185" r="3" stroke-width="1.5"></circle>
+<!-- Outdated striped pin -->
+<circle cx="410" cy="188" fill="none" r="3.5" stroke="#d97706" stroke-dasharray="2,1" stroke-width="1.5"></circle>
+<!-- Targeted Pin for Active Popover -->
+<circle class="fill-secondary/20 animate-ping" cx="425" cy="175" r="7"></circle>
+<circle class="fill-secondary" cx="425" cy="175" r="4.5"></circle>
+</svg>
+<!-- Active Popover Anchored to Pin (FESCO Beechwood) -->
+<div class="absolute right-4 bottom-4 bg-inverse-surface text-inverse-on-surface p-2.5 rounded-lg shadow-xl text-[10px] font-mono z-20 max-w-[210px]">
+<div class="font-bold text-white leading-tight">FESCO Beechwood</div>
+<div class="text-surface-dim">FESCO · Saint Andrew</div>
+<div class="text-secondary-fixed text-xs font-bold mt-1">J$221.66/L</div>
+<div class="text-outline-variant mt-0.5">1 report · 7 days ago</div>
+<a class="text-secondary-fixed-dim hover:text-white mt-1.5 inline-block font-semibold" href="#">Open station ›</a>
+</div>
+</div>
+</div>
+<!-- Legend at Bottom -->
+<div class="mt-4 pt-3 flex flex-wrap items-center justify-between text-[10px] text-on-surface-variant font-mono gap-y-1">
+<div class="flex items-center gap-2">
+<span>Quintile:</span>
+<span class="inline-block w-2.5 h-2.5 rounded-xs bg-secondary-fixed"></span>
+<span class="inline-block w-2.5 h-2.5 rounded-xs bg-secondary"></span>
+<span class="inline-block w-2.5 h-2.5 rounded-xs bg-secondary-dim"></span>
+</div>
+<div class="flex items-center gap-3">
+<span class="flex items-center gap-1"><span class="inline-block w-2 h-2 rounded-full border border-outline"></span> No price</span>
+<span class="flex items-center gap-1"><span class="inline-block w-2 h-2 rounded-full border border-amber-600 border-dashed"></span> Outdated</span>
+<span class="flex items-center gap-1">■ Verif. / ● Pend.</span>
+</div>
+</div>
+</div>
+</div>
+<!-- ROW E: FULL-WIDTH CARD "BY BRAND" -->
+<div class="bg-surface-container-lowest p-5 rounded-xl shadow-sm">
+<div class="flex items-center justify-between mb-4">
+<div>
+<h2 class="text-sm font-bold text-on-surface">By brand</h2>
+<p class="text-[11px] text-on-surface-variant">Median pump price by retail petroleum brand (Axis J$215–255)</p>
+</div>
+<div class="text-[11px] font-mono text-on-surface-variant">9 active categories</div>
+</div>
+<!-- Horizontal Bar Chart -->
+<div class="space-y-2.5">
+<!-- TotalEnergies -->
+<div class="flex items-center text-xs">
+<span class="w-28 font-medium text-on-surface truncate">TotalEnergies</span>
+<div class="flex-1 mx-3 h-5 bg-surface-container rounded-sm overflow-hidden flex items-center">
+<div class="bg-secondary h-full rounded-sm flex items-center justify-end px-2" style="width: 78%"></div>
+</div>
+<span class="w-20 font-mono font-bold text-right text-on-surface">J$246.20</span>
+<span class="w-16 font-mono text-[10px] text-on-surface-variant text-right">2 / 38</span>
+</div>
+<!-- Texaco -->
+<div class="flex items-center text-xs">
+<span class="w-28 font-medium text-on-surface truncate">Texaco</span>
+<div class="flex-1 mx-3 h-5 bg-surface-container rounded-sm overflow-hidden flex items-center">
+<div class="bg-secondary h-full rounded-sm" style="width: 87.5%"></div>
+</div>
+<span class="w-20 font-mono font-bold text-right text-on-surface">J$250.06</span>
+<span class="w-16 font-mono text-[10px] text-on-surface-variant text-right">1 / 44</span>
+</div>
+<!-- Rubis -->
+<div class="flex items-center text-xs">
+<span class="w-28 font-medium text-on-surface truncate">Rubis</span>
+<div class="flex-1 mx-3 h-5 bg-surface-container rounded-sm overflow-hidden flex items-center">
+<div class="bg-secondary h-full rounded-sm" style="width: 65%"></div>
+</div>
+<span class="w-20 font-mono font-bold text-right text-on-surface">J$241.00</span>
+<span class="w-16 font-mono text-[10px] text-on-surface-variant text-right">1 / 51</span>
+</div>
+<!-- FESCO -->
+<div class="flex items-center text-xs">
+<span class="w-28 font-medium text-on-surface truncate">FESCO</span>
+<div class="flex-1 mx-3 h-5 bg-surface-container rounded-sm overflow-hidden flex items-center">
+<div class="bg-secondary h-full rounded-sm" style="width: 16.6%"></div>
+</div>
+<span class="w-20 font-mono font-bold text-right text-tertiary">J$221.66</span>
+<span class="w-16 font-mono text-[10px] text-on-surface-variant text-right">2 / 21</span>
+</div>
+<!-- Unipet -->
+<div class="flex items-center text-xs">
+<span class="w-28 font-medium text-on-surface truncate">Unipet</span>
+<div class="flex-1 mx-3 h-5 bg-surface-container rounded-sm overflow-hidden flex items-center">
+<div class="bg-secondary h-full rounded-sm" style="width: 25%"></div>
+</div>
+<span class="w-20 font-mono font-bold text-right text-on-surface">J$225.00</span>
+<span class="w-16 font-mono text-[10px] text-on-surface-variant text-right">1 / 4</span>
+</div>
+<!-- Blaize -->
+<div class="flex items-center text-xs">
+<span class="w-28 font-medium text-on-surface truncate">Blaize</span>
+<div class="flex-1 mx-3 h-5 bg-surface-container rounded-sm overflow-hidden flex items-center">
+<div class="bg-secondary h-full rounded-sm" style="width: 26%"></div>
+</div>
+<span class="w-20 font-mono font-bold text-right text-on-surface">J$225.40</span>
+<span class="w-16 font-mono text-[10px] text-on-surface-variant text-right">1 / 2</span>
+</div>
+<!-- Jampet -->
+<div class="flex items-center text-xs">
+<span class="w-28 font-medium text-on-surface truncate">Jampet</span>
+<div class="flex-1 mx-3 h-5 bg-surface-container rounded-sm overflow-hidden flex items-center">
+<div class="bg-secondary h-full rounded-sm" style="width: 27.5%"></div>
+</div>
+<span class="w-20 font-mono font-bold text-right text-on-surface">J$226.00</span>
+<span class="w-16 font-mono text-[10px] text-on-surface-variant text-right">1 / 3</span>
+</div>
+<!-- Buds -->
+<div class="flex items-center text-xs">
+<span class="w-28 font-medium text-on-surface truncate">Buds</span>
+<div class="flex-1 mx-3 h-5 bg-surface-container rounded-sm overflow-hidden flex items-center">
+<div class="bg-secondary h-full rounded-sm" style="width: 27.5%"></div>
+</div>
+<span class="w-20 font-mono font-bold text-right text-on-surface">J$226.00</span>
+<span class="w-16 font-mono text-[10px] text-on-surface-variant text-right">1 / 1</span>
+</div>
+<!-- No brand set -->
+<div class="flex items-center text-xs">
+<span class="w-28 font-medium text-on-surface-variant italic truncate">No brand set</span>
+<div class="flex-1 mx-3 h-5 bg-surface-container rounded-sm overflow-hidden flex items-center">
+<div class="bg-outline h-full rounded-sm" style="width: 20%"></div>
+</div>
+<span class="w-20 font-mono font-bold text-right text-on-surface-variant">J$223.00</span>
+<span class="w-16 font-mono text-[10px] text-on-surface-variant text-right">0 / 65</span>
+</div>
+</div>
+<!-- Axis Scale Markers -->
+<div class="flex items-center text-[10px] font-mono text-outline-variant pt-2 mt-2">
+<span class="w-28"></span>
+<div class="flex-1 mx-3 flex justify-between">
+<span>J$215</span>
+<span>J$225</span>
+<span>J$235</span>
+<span>J$245</span>
+<span>J$255</span>
+</div>
+<span class="w-36"></span>
+</div>
+<!-- Sub-text at bottom -->
+<div class="mt-3 pt-3 text-[11px] text-on-surface-variant font-mono">
+<span class="font-semibold text-on-surface">No prices yet:</span> Cool Oasis (19), Gulfstream (12), Petcom (6), First (5), E-Jam (2), Independent (7)
+    </div>
+</div>
+<!-- ROW F: FULL-WIDTH CARD "STATIONS" -->
+<div class="bg-surface-container-lowest p-5 rounded-xl shadow-sm"><div class="p-4 flex items-center justify-between cursor-pointer bg-gradient-to-r from-amber-500/10 via-orange-500/5 to-transparent border-b border-amber-500/20 hover:from-amber-500/15 transition-colors">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-lg bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-700 shadow-xs">
+<span class="material-symbols-outlined text-[20px]">build_circle</span>
+</div>
+<div>
+<div class="flex items-center gap-2">
+<h2 class="text-sm font-bold text-slate-900 tracking-tight">Data integrity backlog</h2>
+<span class="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-500/20 text-amber-900 border border-amber-500/30">
+4 issues affecting 341 records
+</span>
+</div>
+<p class="text-[11px] text-slate-500 mt-0.5">Station spatial mismatches, unassigned brands, and pending geocodes</p>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<button class="text-xs font-semibold text-amber-800 bg-amber-500/15 hover:bg-amber-500/25 px-2.5 py-1 rounded-lg border border-amber-500/30 transition-colors">Auto-clean batch</button>
+<span class="material-symbols-outlined text-slate-400 text-[20px]">expand_less</span>
+</div>
+</div>
+<div class="p-4 space-y-2.5 bg-white">
+<!-- Issue 1 -->
+<div class="flex items-center justify-between p-3 rounded-xl bg-slate-50 hover:bg-blue-50/40 border border-slate-200/70 text-xs transition-colors group">
+<div class="flex items-center gap-3">
+<span class="font-mono font-bold text-amber-800 bg-amber-500/15 px-2.5 py-1 rounded-lg border border-amber-500/30 text-center min-w-[36px]">72</span>
+<div>
+<div class="font-semibold text-slate-900">Parish text disagrees with the station's map coordinates</div>
+<div class="text-[10px] text-slate-500">Station address specifies Kingston but pin falls in St. Andrew polygon</div>
+</div>
+</div>
+<a class="font-bold text-[#316bf3] hover:text-blue-800 inline-flex items-center gap-1 bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-xs group-hover:border-blue-300 transition-colors" href="#">
+Resolve in Station database ›
+</a>
+</div>
+<!-- Issue 2 -->
+<div class="flex items-center justify-between p-3 rounded-xl bg-slate-50 hover:bg-blue-50/40 border border-slate-200/70 text-xs transition-colors group">
+<div class="flex items-center gap-3">
+<span class="font-mono font-bold text-slate-700 bg-slate-200 px-2.5 py-1 rounded-lg border border-slate-300 text-center min-w-[36px]">65</span>
+<div>
+<div class="font-semibold text-slate-900">No retail brand assigned</div>
+<div class="text-[10px] text-slate-500">Stations recorded with general merchant license without petroleum brand tag</div>
+</div>
+</div>
+<a class="font-bold text-[#316bf3] hover:text-blue-800 inline-flex items-center gap-1 bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-xs group-hover:border-blue-300 transition-colors" href="#">
+Assign brands ›
+</a>
+</div>
+<!-- Issue 3 -->
+<div class="flex items-center justify-between p-3 rounded-xl bg-slate-50 hover:bg-blue-50/40 border border-slate-200/70 text-xs transition-colors group">
+<div class="flex items-center gap-3">
+<span class="font-mono font-bold text-amber-800 bg-amber-500/15 px-2.5 py-1 rounded-lg border border-amber-500/30 text-center min-w-[36px]">204</span>
+<div>
+<div class="font-semibold text-slate-900">Station GPS pins unverified</div>
+<div class="text-[10px] text-slate-500">All stations currently awaiting spatial bounding check against official parish registry</div>
+</div>
+</div>
+<a class="font-bold text-[#316bf3] hover:text-blue-800 inline-flex items-center gap-1 bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-xs group-hover:border-blue-300 transition-colors" href="#">
+Open Places review ›
+</a>
+</div>
+<!-- Issue 4 -->
+<div class="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-200/70 text-xs">
+<div class="flex items-center gap-3">
+<span class="font-mono font-bold text-slate-600 bg-slate-200 px-2.5 py-1 rounded-lg border border-slate-300 text-center min-w-[36px]">52</span>
+<div>
+<div class="font-semibold text-slate-800">Verified flag without recorded verification timestamp</div>
+<div class="text-[10px] text-slate-400">Automated sync will backfill using audit logs</div>
+</div>
+</div>
+<span class="text-[11px] text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200 font-mono font-medium flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>Auto-clearing</span>
+</div>
+<!-- Issue 5 -->
+<div class="flex items-center justify-between p-3 rounded-xl bg-emerald-50/50 border border-emerald-200/60 text-xs">
+<div class="flex items-center gap-3">
+<span class="font-mono font-bold text-emerald-800 bg-emerald-100 px-2.5 py-1 rounded-lg border border-emerald-300 text-center min-w-[36px]">0</span>
+<div>
+<div class="font-semibold text-emerald-900">Pending reports in Price Engine review queue</div>
+<div class="text-[10px] text-emerald-700">Ingestion pipeline clear; no stalled station price updates</div>
+</div>
+</div>
+<span class="text-[11px] text-emerald-800 font-bold flex items-center gap-1"><span class="material-symbols-outlined text-[16px]">check_circle</span> All clear</span>
+</div>
+</div></div>
+<!-- ROW G: COLLAPSIBLE CARD AT BOTTOM "DATA TO FIX" (EXPANDED) -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
+<div class="p-4 flex items-center justify-between cursor-pointer hover:bg-surface-container-low/40 transition-colors">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-amber-600 text-[20px]">build_circle</span>
+<h2 class="text-sm font-bold text-on-surface">Data to fix</h2>
+<span class="px-2 py-0.5 rounded-full text-[11px] font-mono font-semibold bg-amber-500/15 text-amber-800">
+          4 issues affecting 341 records
+        </span>
+</div>
+<span class="material-symbols-outlined text-outline text-[20px]">expand_less</span>
+</div>
+<div class="px-4 pb-4 space-y-2">
+<!-- Issue 1 -->
+<div class="flex items-center justify-between p-2.5 rounded-lg bg-surface-container-low text-xs">
+<div class="flex items-center gap-3">
+<span class="font-mono font-bold text-amber-700 w-8">72</span>
+<span class="text-on-surface">Parish text disagrees with the station's map location</span>
+</div>
+<a class="font-semibold text-secondary hover:underline inline-flex items-center gap-0.5" href="#">
+          Open in Station database ›
+        </a>
+</div>
+<!-- Issue 2 -->
+<div class="flex items-center justify-between p-2.5 rounded-lg bg-surface-container-low text-xs">
+<div class="flex items-center gap-3">
+<span class="font-mono font-bold text-on-surface-variant w-8">65</span>
+<span class="text-on-surface">No brand set</span>
+</div>
+<a class="font-semibold text-secondary hover:underline inline-flex items-center gap-0.5" href="#">
+          Open in Station database ›
+        </a>
+</div>
+<!-- Issue 3 -->
+<div class="flex items-center justify-between p-2.5 rounded-lg bg-surface-container-low text-xs">
+<div class="flex items-center gap-3">
+<span class="font-mono font-bold text-amber-700 w-8">204</span>
+<span class="text-on-surface">Pin not checked</span>
+</div>
+<a class="font-semibold text-secondary hover:underline inline-flex items-center gap-0.5" href="#">
+          Places review ›
+        </a>
+</div>
+<!-- Issue 4 -->
+<div class="flex items-center justify-between p-2.5 rounded-lg bg-surface-container-low text-xs">
+<div class="flex items-center gap-3">
+<span class="font-mono font-bold text-on-surface-variant w-8">52</span>
+<span class="text-on-surface">Verified but no verified date</span>
+</div>
+<span class="text-[11px] text-outline italic font-mono">(cleared automatically)</span>
+</div>
+<!-- Issue 5 -->
+<div class="flex items-center justify-between p-2.5 rounded-lg bg-surface-container-low text-xs">
+<div class="flex items-center gap-3">
+<span class="font-mono font-bold text-tertiary w-8">0</span>
+<span class="text-on-surface">Reports waiting in Price Engine review</span>
+</div>
+<a class="font-semibold text-secondary hover:underline inline-flex items-center gap-0.5" href="#">
+          Price Engine ›
+        </a>
+</div>
+</div>
+</div>
+<!-- APPENDIX / STATES SHOWCASE ACCORDION -->
+<div class="bg-surface-container-low p-4 rounded-xl shadow-xs">
+<div class="flex items-center justify-between mb-3 text-xs font-semibold text-on-surface-variant">
+<span class="flex items-center gap-1.5 uppercase font-mono tracking-wider text-[10px]">
+<span class="material-symbols-outlined text-[15px]">code_blocks</span>
+        Terminal System States &amp; Design Specs
+      </span>
+<span class="text-[11px] font-mono text-outline">Dominion Light UI Specification</span>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+<!-- State 1: Loading Skeleton -->
+<div class="bg-surface-container-lowest p-3.5 rounded-xl shadow-sm space-y-2.5">
+<div class="text-[10px] font-bold text-outline uppercase font-mono">1. KPI CARD LOADING SKELETON</div>
+<div class="animate-pulse space-y-2">
+<div class="h-2 bg-surface-container rounded w-1/3"></div>
+<div class="h-6 bg-surface-container-high rounded w-2/3"></div>
+<div class="h-2 bg-surface-container rounded w-1/2"></div>
+<div class="h-4 bg-surface-container rounded w-full mt-2"></div>
+</div>
+</div>
+<!-- State 2: Error State Card -->
+<div class="bg-surface-container-lowest p-3.5 rounded-xl shadow-sm flex flex-col justify-between">
+<div>
+<div class="text-[10px] font-bold text-error uppercase font-mono flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">error</span>
+            2. ERROR STATE
           </div>
-        </div>
-      </div>
-    </header>
-
-    <!-- Page Content Area -->
-    <main class="flex-1 p-8 max-w-6xl w-full">
-      <!-- Breadcrumb & Region Tag -->
-      <div class="flex items-center justify-between mb-4">
-        <nav class="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
-          <span class="hover:text-slate-800 cursor-pointer">Dominion</span>
-          <span>&gt;</span>
-          <span class="hover:text-slate-800 cursor-pointer">Master data</span>
-          <span>&gt;</span>
-          <span class="hover:text-slate-800 cursor-pointer">Fuel</span>
-          <span>&gt;</span>
-          <span class="text-slate-900 font-semibold">Station analytics</span>
-        </nav>
-        <div class="flex items-center gap-1.5 bg-slate-100 border border-slate-200 rounded-full px-2.5 py-0.5 text-[10px] font-mono text-slate-600">
-          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-          REGION: JM-KGN
-        </div>
-      </div>
-
-      <!-- Page Title & Lede -->
-      <div class="mb-8">
-        <h1 class="text-2xl font-bold tracking-tight text-slate-900 leading-tight">Station analytics</h1>
-        <p class="text-xs text-slate-500 mt-1 leading-normal">
-          How complete the station list is. Customer fuel spending stays in Fleet admin.
-        </p>
-      </div>
-
-      <!-- Exactly Four Stat Cards in a Row (White cards, 12px radius, hairline borders, each value is an em dash) -->
-      <div class="grid grid-cols-4 gap-4 mb-6">
-        <!-- Card 1: Stations -->
-        <div class="bg-white rounded-[12px] border border-slate-200/90 p-5 shadow-sm">
-          <div class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider font-mono mb-2">Stations</div>
-          <div class="text-2xl font-bold text-slate-900 font-mono tracking-tight leading-none">&mdash;</div>
-        </div>
-
-        <!-- Card 2: Verified -->
-        <div class="bg-white rounded-[12px] border border-slate-200/90 p-5 shadow-sm">
-          <div class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider font-mono mb-2">Verified</div>
-          <div class="text-2xl font-bold text-slate-900 font-mono tracking-tight leading-none">&mdash;</div>
-        </div>
-
-        <!-- Card 3: Not verified -->
-        <div class="bg-white rounded-[12px] border border-slate-200/90 p-5 shadow-sm">
-          <div class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider font-mono mb-2">Not verified</div>
-          <div class="text-2xl font-bold text-slate-900 font-mono tracking-tight leading-none">&mdash;</div>
-        </div>
-
-        <!-- Card 4: Quality -->
-        <div class="bg-white rounded-[12px] border border-slate-200/90 p-5 shadow-sm">
-          <div class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider font-mono mb-2">Quality</div>
-          <div class="text-2xl font-bold text-slate-900 font-mono tracking-tight leading-none">&mdash;</div>
-        </div>
-      </div>
-
-      <!-- Small Note Banner -->
-      <div class="bg-white rounded-lg border border-slate-200 px-4 py-3 flex items-center justify-between text-xs text-slate-500 shadow-sm">
-        <div class="flex items-center gap-2 text-slate-500 italic">
-          <span class="material-symbols-outlined text-slate-400 text-base not-italic">info</span>
-          <span>The data is not in yet.</span>
-        </div>
-        <div class="font-mono text-[10px] text-slate-400 uppercase tracking-wider">
-          LOC: KINGSTON / PARISH REGISTRY JMD
-        </div>
-      </div>
-    </main>
-  </div>
-
-</body>
-</html>
+<p class="text-xs text-on-surface mt-1.5 font-medium leading-tight">
+            Could not load station analytics. This is not the same as no data.
+          </p>
+</div>
+<div class="mt-2.5">
+<button class="px-2.5 py-1 rounded bg-error-container text-on-error-container text-[11px] font-semibold hover:bg-error-container/80 transition-colors">
+            Retry fetch
+          </button>
+</div>
+</div>
+<!-- State 3: Empty Range Trend -->
+<div class="bg-surface-container-lowest p-3.5 rounded-xl shadow-sm flex flex-col justify-between">
+<div>
+<div class="text-[10px] font-bold text-outline uppercase font-mono">3. EMPTY RANGE (PETROJAM ONLY)</div>
+<div class="mt-1 flex items-center justify-between text-[11px] font-mono">
+<span class="text-outline">Petrojam: J$201.81</span>
+<span class="text-amber-700 text-[10px]">No pump reports</span>
+</div>
+<div class="w-full h-8 bg-surface-container-low rounded mt-1.5 flex items-center justify-center text-[10px] text-on-surface-variant font-mono">
+            No pump reports in this range
+          </div>
+</div>
+<div class="text-[9px] text-outline font-mono mt-1">Refinery baseline persists independently.</div>
+</div>
+</div>
+<!-- Responsive & Token Notes -->
+<div class="mt-3 pt-2 text-[10px] text-on-surface-variant font-mono flex flex-wrap items-center justify-between gap-2">
+<div>Mobile 390px: Row A stacks vertically · Trend chart shifts to 12w · By Parish collapses to sticky parish and median price.</div>
+<div>Tokens: Navy (#1E293B) · Blue (#316BF3 / #0153DC) · JetBrains Mono for coordinates &amp; currency.</div>
+</div>
+</div>
+</div></main>
+</div>
+</body></html>

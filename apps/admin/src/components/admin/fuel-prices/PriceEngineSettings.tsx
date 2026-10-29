@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useBenchmarkName } from "../refineries/useRefineries";
 import { peFetch, type Settings, type Tab } from "./priceEngineApi";
 
 function Ms({ name, className = "" }: { name: string; className?: string }) {
@@ -61,6 +62,7 @@ export function PriceEngineSettingsTab({
   reviewCount?: number;
   petrojamWeek?: string;
 }) {
+  const benchmarkName = useBenchmarkName();
   const [settings, setSettings] = useState<Settings | null>(null);
   const [draft, setDraft] = useState<Settings | null>(null);
   const [busy, setBusy] = useState(false);
@@ -155,7 +157,7 @@ export function PriceEngineSettingsTab({
           </div>
           <div className="h-6 w-px bg-surface-variant/40" />
           <div className="leading-tight">
-            <span className="text-[10px] uppercase font-mono text-outline block">Petrojam week</span>
+            <span className="text-[10px] uppercase font-mono text-outline block">{benchmarkName} week</span>
             <span className="text-xs font-mono font-bold text-secondary">{petrojamWeek}</span>
           </div>
         </div>
@@ -205,12 +207,12 @@ export function PriceEngineSettingsTab({
           <div className="space-y-5">
             <div className="space-y-2">
               <label className="text-xs font-semibold text-on-surface block font-headline">
-                Baseline Petrojam Price Multipliers
+                Baseline {benchmarkName} price multipliers
               </label>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="bg-surface-container-low p-3 rounded-lg flex items-center justify-between">
                   <div>
-                    <span className="text-xs font-medium text-on-surface block">Below Petrojam ×</span>
+                    <span className="text-xs font-medium text-on-surface block">Below {benchmarkName} ×</span>
                     <span className="text-[11px] text-outline font-label">Underflow clamp trigger</span>
                   </div>
                   <div className="flex items-center gap-1.5 bg-surface-container-lowest px-3 py-1.5 rounded-md shadow-xs">
@@ -225,7 +227,7 @@ export function PriceEngineSettingsTab({
                 </div>
                 <div className="bg-surface-container-low p-3 rounded-lg flex items-center justify-between">
                   <div>
-                    <span className="text-xs font-medium text-on-surface block">Above Petrojam ×</span>
+                    <span className="text-xs font-medium text-on-surface block">Above {benchmarkName} ×</span>
                     <span className="text-[11px] text-outline font-label">Surge spike trigger</span>
                   </div>
                   <div className="flex items-center gap-1.5 bg-surface-container-lowest px-3 py-1.5 rounded-md shadow-xs">
@@ -243,7 +245,7 @@ export function PriceEngineSettingsTab({
                 <div className="bg-surface-container-high/60 rounded-lg p-3.5 flex items-start gap-3 mt-2">
                   <Ms name="lightbulb" className="text-[18px] text-on-secondary-container mt-0.5 shrink-0" />
                   <div className="text-xs leading-relaxed text-on-surface-variant">
-                    <span className="font-semibold text-on-surface">Example for E-10 87</span> (illustrative Petrojam baseline{" "}
+                    <span className="font-semibold text-on-surface">Example for E-10 87</span> (illustrative {benchmarkName} baseline{" "}
                     <span className="font-mono font-bold text-on-surface">J${exampleBounds.baseline.toFixed(2)}</span>): below{" "}
                     <span className="font-mono font-bold text-error">J${exampleBounds.low.toFixed(2)}</span> or above{" "}
                     <span className="font-mono font-bold text-error">J${exampleBounds.high.toFixed(2)}</span> routed to review.
@@ -321,7 +323,7 @@ export function PriceEngineSettingsTab({
             </div>
             <div className="space-y-4">
               <div className="bg-surface-container-low p-3.5 rounded-lg space-y-2">
-                <label className="text-xs font-semibold text-on-surface block font-headline">Petrojam Weekly Retention</label>
+                <label className="text-xs font-semibold text-on-surface block font-headline">{benchmarkName} weekly retention</label>
                 <div className="flex items-center justify-between bg-surface-container-lowest p-2 rounded-md shadow-xs">
                   <span className="text-xs text-on-surface-variant">Include reports up to:</span>
                   <div className="flex items-center gap-1.5">
@@ -355,7 +357,7 @@ export function PriceEngineSettingsTab({
           <div className="p-3 rounded-lg bg-surface-container text-[11px] text-on-surface-variant font-mono space-y-1">
             <div className="flex items-center gap-1.5 text-on-surface font-semibold">
               <span className="w-1.5 h-1.5 rounded-full bg-secondary" />
-              Current Cycle: Petrojam {petrojamWeek}
+              Current cycle: {benchmarkName} {petrojamWeek}
             </div>
             <div>Next recalculation: Wednesday 00:00 EST</div>
           </div>

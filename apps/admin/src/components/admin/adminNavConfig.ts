@@ -62,7 +62,7 @@ export const GLOBAL_SETTINGS_CHILDREN: NavChild[] = [
 export const FUEL_MANAGEMENT_CHILDREN: NavChild[] = [
   { id: 'fuel-jaa-cards', label: 'JAA Gas Cards', icon: CreditCard },
   { id: 'fuel-brain', label: 'Fuel Brain', icon: Brain },
-  { id: 'fuel-prices', label: 'Prices', icon: DollarSign },
+  { id: 'fuel-prices', label: 'Refineries', icon: DollarSign },
   { id: 'fuel-price-engine', label: 'Price Engine', icon: DollarSign },
   { id: 'fuel-stations', label: 'Station Database', icon: Database },
   { id: 'plug-places', label: 'Places Review', icon: MapPin },
@@ -247,6 +247,7 @@ export const MOVED_PAGES: Record<string, { title: string; appName?: string; href
 export const LEGACY_PAGE_REDIRECTS: Record<string, string> = {
   'fuel-cost-analytics': 'fuel-analytics',
   'fuel-evidence-bridge': 'fuel-analytics',
+  'fuel-refineries': 'fuel-prices',
   'parts-sourcing': 'parts-catalog',
   settings: 'global-settings-general',
   'settings-general': 'global-settings-general',

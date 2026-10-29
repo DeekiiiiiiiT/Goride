@@ -1,5 +1,7 @@
 import type { Hono } from "npm:hono@4.3.11";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
+import { requirePlatformAdmin } from "../_shared/platformAdmin.ts";
+import { attachStationAnalyticsRoute } from "./station_analytics_admin.ts";
 
 function places(sb: SupabaseClient) {
   return sb.schema("places");
@@ -186,5 +188,10 @@ export function registerPriceEngineAdmin(
     } catch (err) {
       return c.json({ error: err instanceof Error ? err.message : "Could not save settings" }, 400);
     }
+  });
+
+  attachStationAnalyticsRoute(app, {
+    admin: deps.admin,
+    requirePlatformAdmin,
   });
 }

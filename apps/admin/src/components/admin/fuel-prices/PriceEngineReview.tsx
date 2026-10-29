@@ -2,6 +2,7 @@
 // Stitch: dominion-redesign/7517e96d14c9411ba89ed96f0528fa5b (P3)
 // Source: Downloads/.../price_engine_review_queue/code.html + review_item_split_view/code.html
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useBenchmarkName } from "../refineries/useRefineries";
 import {
   gradeLabel,
   money,
@@ -39,12 +40,13 @@ function gradeBadgeClass(grade: string): string {
 }
 
 function DiffCell({ pct }: { pct: number | null }) {
+  const benchmarkName = useBenchmarkName();
   if (pct == null) return <span className="text-[11px] text-outline font-mono">—</span>;
   if (pct <= -15) {
     return (
       <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-error-container text-on-error-container font-mono font-semibold text-[11px]">
         <span>{pct.toFixed(0)}%</span>
-        <span className="text-[9px] font-label uppercase">vs Petrojam</span>
+        <span className="text-[9px] font-label uppercase">vs {benchmarkName}</span>
       </span>
     );
   }
@@ -52,7 +54,7 @@ function DiffCell({ pct }: { pct: number | null }) {
     return (
       <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-primary-container text-on-primary-container font-mono font-semibold text-[11px]">
         <span>+{pct.toFixed(1)}%</span>
-        <span className="text-[9px] font-label uppercase">vs Petrojam</span>
+        <span className="text-[9px] font-label uppercase">vs {benchmarkName}</span>
       </span>
     );
   }
@@ -65,7 +67,8 @@ function DiffCell({ pct }: { pct: number | null }) {
 }
 
 function ReasonChip({ code }: { code: string }) {
-  const label = reasonLabel(code);
+  const benchmarkName = useBenchmarkName();
+  const label = reasonLabel(code, benchmarkName);
   const hot = /OUT_OF_BOUNDS|BIG_CHANGE|MAD_OUTLIER|bounds|unusual/i.test(code);
   const gradeish = /GRADE|UNKNOWN/i.test(code);
   if (hot) {
@@ -106,6 +109,7 @@ export function PriceEngineReviewTab({
   onTab: (t: Tab) => void;
   reviewCount: number;
 }) {
+  const benchmarkName = useBenchmarkName();
   const [items, setItems] = useState<ReviewItem[]>([]);
   const [status, setStatus] = useState<QueueStatus>("review");
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
@@ -512,7 +516,7 @@ export function PriceEngineReviewTab({
               <option value="">Reason (All)</option>
               {reasonOptions.map((r) => (
                 <option key={r} value={r}>
-                  {reasonLabel(r)}
+                  {reasonLabel(r, benchmarkName)}
                 </option>
               ))}
             </select>
@@ -640,7 +644,7 @@ export function PriceEngineReviewTab({
                     <th className="py-3 px-3">Source</th>
                     <th className="py-3 px-4">Station &amp; Parish</th>
                     <th className="py-3 px-3">Grade</th>
-                    <th className="py-3 px-4">Reported Price &amp; Petrojam</th>
+                    <th className="py-3 px-4">Reported Price &amp; {benchmarkName}</th>
                     <th className="py-3 px-3">Difference</th>
                     <th className="py-3 px-3">Reason</th>
                     <th className="py-3 px-4">Reporter &amp; Trust</th>
@@ -715,7 +719,7 @@ export function PriceEngineReviewTab({
                             {price != null ? `${money(price)} / L` : "—"}
                           </div>
                           <div className="font-mono text-[11px] text-outline">
-                            {wholesale != null ? `Petrojam ${money(wholesale)}` : "Petrojam —"}
+                            {wholesale != null ? `${benchmarkName} ${money(wholesale)}` : `${benchmarkName} —`}
                           </div>
                         </td>
                         <td className="py-4 px-3">
@@ -897,6 +901,7 @@ function ReviewSplitView({
   onError: (message: string) => void;
   onChanged: () => void;
 }) {
+  const benchmarkName = useBenchmarkName();
   const [grade, setGrade] = useState(reportGrade(item));
   const [fixLitres, setFixLitres] = useState(item.litres != null ? String(item.litres) : "");
   const [fixAmount, setFixAmount] = useState(item.amount != null ? String(item.amount) : "");
@@ -953,7 +958,7 @@ function ReviewSplitView({
             </h1>
             {(item.reasons || [])[0] ? (
               <span className="px-2 py-0.5 rounded-full bg-error/10 text-error text-xs font-mono font-medium">
-                {reasonLabel(item.reasons[0])}
+                {reasonLabel(item.reasons[0], benchmarkName)}
               </span>
             ) : null}
           </div>
@@ -1045,7 +1050,7 @@ function ReviewSplitView({
             <Ms name="photo_camera" className="text-[32px] text-outline" />
             <p className="text-sm font-headline font-semibold text-on-surface">Pump photo not attached to this report</p>
             <p className="text-xs text-on-surface-variant max-w-md">
-              When capture is stored on the report, the dispenser image shows here. Live price and Petrojam baseline are below.
+              When capture is stored on the report, the dispenser image shows here. Live price and {benchmarkName} baseline are below.
             </p>
           </div>
 
@@ -1056,7 +1061,7 @@ function ReviewSplitView({
             <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-lg bg-surface-container-lowest shadow-sm font-mono">
               <span className="text-base font-bold text-on-surface">{price != null ? `${money(price)} / L` : "—"}</span>
               {wholesale != null ? (
-                <span className="text-[11px] text-outline">Petrojam wholesale {money(wholesale)}</span>
+                <span className="text-[11px] text-outline">{benchmarkName} ex-refinery {money(wholesale)}</span>
               ) : null}
             </div>
           </div>
@@ -1071,11 +1076,11 @@ function ReviewSplitView({
                   Review rule triggered
                 </div>
                 <div className="text-xs text-on-surface leading-relaxed">
-                  {(item.reasons || []).map(reasonLabel).join(" · ")}
+                  {(item.reasons || []).map((code) => reasonLabel(code, benchmarkName)).join(" · ")}
                   {wholesale != null && price != null ? (
                     <>
                       {" "}
-                      Reported (<strong className="font-mono text-error">{money(price)}</strong>) vs Petrojam (
+                      Reported (<strong className="font-mono text-error">{money(price)}</strong>) vs {benchmarkName} (
                       <strong className="font-mono">{money(wholesale)}</strong>).
                     </>
                   ) : null}
@@ -1100,7 +1105,7 @@ function ReviewSplitView({
                 <div className="flex items-center justify-between p-2.5 rounded-lg bg-surface-container-lowest">
                   <div className="flex items-center gap-2 text-on-surface-variant">
                     <span className="w-2 h-2 rounded-full bg-outline" />
-                    <span>Petrojam Wholesale Baseline</span>
+                    <span>{benchmarkName} baseline</span>
                   </div>
                   <span className="font-semibold text-on-surface">{money(wholesale)}</span>
                 </div>

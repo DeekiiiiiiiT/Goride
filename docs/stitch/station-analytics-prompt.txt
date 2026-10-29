@@ -1,0 +1,61 @@
+STITCH PROMPT — Dominion · Station Analytics (replaces S19)
+Project: Dominion Redesign (7083594865949473827) · Design system: Dominion
+Make two variants: Light and Dark. Desktop 1440 wide, plus a 390 wide phone version.
+
+------------------------------------------------------------------------------
+Design one desktop screen for "Station analytics" inside the existing Dominion admin shell (dark navy left sidebar, white top bar with search, "Fuel" selected in the sidebar). Use the Dominion design system: neutral greys for almost everything, one blue accent for pump prices, a muted slate for the Petrojam benchmark, amber and red only for things that need fixing. Numbers use the mono font already used on Dominion KPI cards. Cards have 12px corners, a 1px light border and a soft shadow. The look is calm and dense, like a professional market-data terminal, not a marketing dashboard.
+
+PURPOSE: a data owner checks what fuel costs at Jamaican pumps this week, how far above the Petrojam refinery price it is, how much of the island has a price, and whether the data can be trusted. There is no customer, fleet, driver or vehicle information anywhere on this screen.
+
+TOP OF PAGE
+- Breadcrumb: Dominion › Master data › Fuel › Station analytics
+- Title "Station analytics". Subtitle: "Pump prices against Petrojam, coverage and data trust by parish and brand."
+- Right side: secondary button "Export CSV".
+- Filter bar (one row): Grade dropdown "E10-87", Week dropdown "Petrojam week · 22 Oct 2026", Parish dropdown "All parishes", Brand dropdown "All brands", and a text link "Reset".
+- Thin freshness strip under the filters, small grey text with dot separators: "Petrojam week 22 Oct · Newest pump report 27 Oct, 17:22 · 2 reporters · Source: Fleet". Put a small amber chip at the end: "1 reporter supplies 100%".
+
+ROW A — five KPI cards in one row
+Each card has: small uppercase label, large mono value, one comparison line, one small grey sample line, and a tiny 12-week sparkline at the bottom right.
+1. PUMP MEDIAN — "J$225.40/L" — "▼ J$1.10 vs last week" — "n = 4 stations · 5 reports" — a small neutral chip "Few reports".
+2. PETROJAM EX-REFINERY — "J$201.81/L" — "▼ J$4.50 (−2.2%) week on week" — "▲ J$6.20 vs same week last year".
+3. GAP ABOVE PETROJAM — "J$23.59/L · 11.7%" — "▲ J$3.40 vs last week" — caption "Includes taxes, distributor and retailer margins".
+4. PRICE RANGE — "J$221.66 – J$250.06" — two small linked lines: "Low: FESCO Beechwood", "High: Trafalgar Rd Texaco".
+5. STATIONS PRICED — "10 / 204" with a thin progress bar at 4.9% — "▲ 2 vs last week" — "Verified stations: 56".
+
+ROW B — one sentence summary in a light grey strip with an info icon:
+"This week E10-87 is J$225.40/L at the pump (median of 4 stations, 1 reporter), J$23.59 above Petrojam's J$201.81. Lowest: FESCO Beechwood at J$221.66. Few reports — treat as indicative."
+
+ROW C — two cards side by side (wide left, narrow right)
+Left (about two thirds): "Price trend". Segmented control at top right: 12w · 26w (selected) · 52w · 5y. A weekly line chart, x axis Petrojam weeks from May to Oct 2026, y axis J$/L from 190 to 260. Three series: "Petrojam" as a solid muted slate line running the whole width; "Pump median" as a blue line with dots that appears only for the last 8 weeks (Sep–Oct), with clear gaps where there is no data; "Pump range" as a very light blue band behind the pump line. Show the legend above the chart, and one hover tooltip on the latest week reading: "22 Oct · Petrojam J$201.81 · Pump J$225.40 · Gap J$23.59 · 5 reports · 4 stations". Under the chart, small grey text: "Petrojam fell 2.2% this week and is up 3.1% on a year ago."
+Right (about one third): "Data trust". A vertical list of label/value rows separated by thin dividers, no chart:
+  - Newest pump report — "2 days ago" with "27 Oct 2026, 17:22" below
+  - Reports this week — "5 accepted · 2 duplicate · 0 rejected · 0 in review" with a link "Review prices ›"
+  - Reporters — "2" with an amber chip "Top reporter 100%"
+  - Sources — "Fleet 77 · Plug 0"
+  - Live prices that may be outdated — "7 of 11" with a small amber bar
+  - Petrojam last synced — "22 Oct 2026" with a green dot
+
+ROW D — two cards side by side (left a bit wider)
+Left: "By parish". A compact table with 14 rows (Clarendon, Hanover, Kingston, Manchester, Portland, Saint Andrew, Saint Ann, Saint Catherine, Saint Elizabeth, Saint James, Saint Mary, Saint Thomas, Trelawny, Westmoreland). Columns: Parish · Stations · Verified · Priced · Coverage (a thin inline bar plus %) · Median price · Gap above Petrojam · vs national. Most rows show "—" and a muted "no price" in the price columns. Saint Andrew (61 stations, 5 priced, J$226.10), Saint Catherine (34 stations, 4 priced, J$225.40) and Kingston (14 stations, 1 priced, J$225.80, with a "Few reports" chip) have values. Saint Andrew is highlighted as hovered. Footer link "Coverage queue ›".
+Right: "Map". A light map of Jamaica, with about 200 small dots clustered around Kingston and Saint Andrew and scattered across the island. Priced stations are filled in 5 shades from light to dark blue by price. Unpriced stations are hollow grey. Outdated prices are striped. Verified stations are small squares, pending ones small circles. Legend at the bottom left: "Price quintile (low → high) · No price · May be outdated · Verified ■ / Pending ●". An amber banner across the top of the map: "Pins not yet checked: 204 of 204". One open popover on a dot: "FESCO Beechwood · FESCO · Saint Andrew · J$221.66/L · 1 report · 7 days ago · Open station ›".
+
+ROW E — full-width card "By brand"
+Horizontal bars, one per brand that has a price: TotalEnergies, Rubis, FESCO, Unipet, Blaize, Texaco, Jampet, Buds, plus a row "No brand set". Each row: brand name, bar length = median price (axis J$215–255), value at the end, and grey text "3 / 42 priced". Under the bars, one muted line: "No prices yet: Cool Oasis (19), Gulfstream (12), Petcom (6), First (5) …"
+
+ROW F — full-width card "Stations"
+A search box "Search station or address" on the left. "Showing 1–50 of 204" and pagination on the right. Table columns: Station · Brand · Parish · Status · Price (E10-87) · Gap above Petrojam · vs parish median · Reports · Confidence · Newest report · Flags. Sortable column headers, with a sort arrow on Price. Show 8 rows: 6 priced (prices J$221.66 to J$250.06, confidence "Medium · 1 report", status pills "Verified" / "Pending") and 2 unpriced rows with a muted "no price". Flags are small chips: "May be outdated" (amber outline), "Few reports" (grey), "Pin unchecked" (grey), "Parish text mismatch" (amber), "No brand set" (grey). Rows have a hover state and a chevron at the end (opens the station drawer).
+
+ROW G — collapsible card at the bottom, shown expanded: "Data to fix" with the summary "4 issues affecting 341 records". A list of rows, each with a count, a description and a link on the right:
+  - 72 · Parish text disagrees with the station's map location · Open in Station database ›
+  - 65 · No brand set · Open in Station database ›
+  - 204 · Pin not checked · Places review ›
+  - 52 · Verified but no verified date · (cleared automatically)
+  - 0 · Reports waiting in Price Engine review · Price Engine ›
+
+STATES (make a small extra frame showing them): a KPI card loading skeleton; an error card "Could not load station analytics. This is not the same as no data." with a "Retry" button; and an empty Price trend with the Petrojam line only and the note "No pump reports in this range".
+
+PHONE VERSION (390 wide): filters collapse into one "Filters (0)" button that opens a bottom sheet. KPI cards stack one per row. The trend chart is full width with the 12w default. Data trust comes after the trend. The parish table shows Parish · Priced · Median only. The map is 240px tall below the parish list. The station table becomes cards (name, price, flags). No horizontal scrolling anywhere.
+
+DARK VARIANT: same layout on the Dominion dark tokens (near-black navy background, slightly lighter cards, grey text). The blue accent and amber stay readable, and the map uses a dark basemap.
+
+Do NOT include: customer names, fleet names, vehicles, drivers, spend totals, reporter names or ids, star ratings, trust scores, AI badges, fake live tickers, or decorative 3D charts.

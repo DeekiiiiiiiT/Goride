@@ -1,0 +1,74 @@
+STITCH PROMPT — Dominion · Station Database (replaces S17, adds S17b drawer)
+Project: Dominion Redesign (7083594865949473827) · Design system: Dominion
+Make: Screen 1 (list), Screen 2 (list with the record drawer open), each in Light and Dark, plus a 390-wide phone version of Screen 1.
+
+------------------------------------------------------------------------------
+SCREEN 1 — STATION LIST
+
+Design a desktop screen called "Station database" inside the existing Dominion admin shell. The left sidebar is dark navy with "Fuel" selected; the top bar is white with a search field and the owner avatar "DT · Owner". Use the Dominion design system: neutral greys for almost everything, one blue accent for links and selection, green for Verified, amber for Pending and for things to fix, grey for neutral states. Numbers and codes use the mono font already used on Dominion. Cards have 12px corners, a 1px light border and no heavy shadow. It should feel like a calm, dense, professional data workbench. Do NOT add a "REGION" badge, a "LOC:" footer, or any decorative status text.
+
+HEADER
+- Breadcrumb: Dominion / Master data / Fuel / Station database
+- Title "Station database". Subtitle: "The master list every Roam app matches fuel stations against."
+- Right side: secondary button "Export CSV" and primary blue button "+ Add station".
+
+SUMMARY STRIP (one slim card, a single row of linked counts separated by thin dividers, no big KPI tiles):
+"204 stations" · "56 verified" (green dot) · "148 pending" (amber dot) · "10 with a live price" · "5 issue types" with an amber chip and the link "View issues ›"
+
+TABS under the strip: "Stations 204" (selected) and "Resolution 7" (with a small count badge).
+
+SEARCH AND FILTERS (inside the list card, top):
+- Search field, wide: "Search name, alias, brand, address or plus code"
+- A row of compact dropdowns: Status: All · Parish: All parishes · Brand: All brands · Pin: All · Source: All · Issue: All, then a text link "Reset".
+- Below that, a row of toggle chips: "Verified", "Pending", "Possible duplicate 17", "No brand 65", "Parish text mismatch 72", "Pin unchecked 204". "Possible duplicate" is shown pressed (selected).
+
+TABLE (50 rows per page; show about 12). Columns:
+☐ | Station | Brand | Parish | Status | Pin | Geofence | Price (E10-87) | Fills | Issues | Updated | ›
+- Station cell: name in semibold with the address under it in small grey text.
+- Brand: e.g. "TotalEnergies", or "No brand set" in muted italic.
+- Parish: e.g. "Saint Andrew". On some rows add a small amber dot after the parish (tooltip: "Stored text says Kingston").
+- Status pills: "Verified" (green outline), "Pending" (amber outline), "Duplicate" (grey).
+- Pin pills: "Unchecked" (grey), "Confirmed" (green), "Offset" (amber).
+- Geofence: "150 m", "75 m", or "default" in muted text.
+- Price: "J$225.40" in mono, or "—". One price has a hollow dot (outdated).
+- Fills: "12 · 3d ago" in mono, or "—".
+- Issues: small chips, up to 3, e.g. "Possible duplicate", "No brand", "Pin unchecked", then "+1".
+- Updated: "2h ago".
+Use realistic Jamaican rows, for example:
+  TotalEnergies, New Kingston — 1 Knutsford Blvd — TotalEnergies — Saint Andrew — Verified — Unchecked — 150 m — J$225.80 — 9 · 2d ago — [Pin unchecked]
+  MZ HOLDINGS LTD. — Golden Grove — No brand set — Saint Thomas — Pending — Unchecked — default — — — — — [Possible duplicate] [Company name] [No brand]
+  MZ HOLDINGS LTD (COOL OASIS) — Golden Grove — Cool Oasis — Saint Thomas — Pending — Unchecked — default — — — [Possible duplicate] [Company name]
+  RUBiS Half Way Tree — 2 Constant Spring Rd — Rubis — Saint Andrew — Verified — Unchecked — 100 m — J$226.10 — 5 · 6d ago — [Possible duplicate] [Pin unchecked]
+  FESCO Beechwood — Beechwood Ave — FESCO — Saint Andrew — Verified — Unchecked — default — J$221.66 — 4 · 7d ago — [Pin unchecked]
+  Michaels Service Station — East St — No brand set — Kingston — Verified — Unchecked — default — J$225.80 (hollow dot) — 3 · 12d ago — [Same name nearby] [No brand]
+Rows with possible duplicates sit together and have a thin amber line on the left edge. Ticking rows shows a sticky BULK BAR at the bottom of the card: "3 selected · Set brand · Mark pin checked · Verify · Mark duplicate of… · Export selected · Clear".
+Footer: "Showing 1–50 of 204" with pagination ‹ 1 2 3 4 5 ›.
+
+------------------------------------------------------------------------------
+SCREEN 2 — SAME LIST WITH THE RECORD DRAWER OPEN (S17b)
+
+A right-side drawer about 560px wide over the dimmed list.
+Drawer header: "RUBiS Half Way Tree" with the pills "Verified" and "Pin unchecked", the address under it, and an X to close.
+Tabs: Details · Location (selected) · Prices · History.
+
+LOCATION TAB:
+- A map card (light street map, 260px tall) with the station pin and a translucent blue geofence circle, and a second grey pin 49 m away labelled "TotalEnergies, HWT Clock Tower".
+- Under the map: "Plus code 77JX+3C Kingston" (mono), a "Geofence" slider set to 100 m (range 10–2000 m), and a segmented control "Pin: Unchecked · Confirmed · Offset".
+- "GPS aliases (2)": a small list of coordinates with source and "Remove" links, plus "+ Add alias".
+- "Nearby stations": a list of 1 row — "TotalEnergies, HWT Clock Tower · Verified · 49 m" with a secondary button "Merge into this…" and the link "Not a duplicate".
+
+Also show small inset previews of the other tabs (or mention them in placeholder cards):
+- DETAILS: fields for Name, Brand (select), Address, Phone, Website, Status. Parish shows "Saint Andrew (from map pin)". Under it, an amber note: "Stored text: 'Kingston'" with a button "Use map parish". An Amenities chip picker (Restroom, Convenience store, ATM, Air pump, Car wash).
+- PRICES: a small table with one row per grade: "E10-87 · J$226.10/L · Gap above Petrojam J$24.29 · Medium · 1 report · 2 days ago" and "E10-90 · — · no price", plus a link "Open in Price Engine ›".
+- HISTORY: a timeline: "Geofence 150 → 100 m · Owner · 'Pump island is small' · 28 Oct", "Verified · Owner · 26 Oct", "Pin report from Plug · ±8 m · 25 Oct", and an anonymised line "Fills: 5 · last 6 days ago".
+
+Drawer footer (sticky): a reason field "Reason for change (required)", a secondary "Mark duplicate…", a secondary "Demote to pending", and the primary "Save changes" (disabled until something changes and a reason is entered).
+
+------------------------------------------------------------------------------
+STATES (one small extra frame): skeleton table rows; an error card "Could not load stations. Nothing was changed." with "Retry"; an empty state "No stations match these filters" with "Reset filters"; and a read-only banner for staff: "You can view stations. Only the owner can change them." with the edit buttons disabled.
+
+PHONE VERSION (390 wide): the summary strip scrolls sideways as chips; Search is full width; filters collapse into a "Filters (2)" button that opens a bottom sheet; each station is a card (name, brand · parish, status and pin pills, price, issue chips) and tapping opens the drawer as a full-screen sheet. No horizontal page scrolling.
+
+DARK VARIANT: same layout on Dominion dark tokens (near-black navy page, slightly lighter cards, grey text). Pills keep readable contrast, and the map uses a dark basemap.
+
+Do NOT include: customer names, fleets, vehicles, drivers, money spent, transaction lists, star ratings, "Preferred" stars, trust scores, AI badges, region badges, location footers, or decorative charts.

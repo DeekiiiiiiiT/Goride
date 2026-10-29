@@ -24,6 +24,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { fromKvStore } from "./fleet_sql_bridge.ts";
 import * as kv from "./kv_store.tsx";
 import { listStationRecords } from "./fleet_table_read_thru.ts";
+import { mergeStationPayload } from "./station_merge.ts";
 import * as cache from "./cache.ts";
 import * as memCache from "./memory_cache.ts";
 import * as fuelLogic from "./fuel_logic.ts";
@@ -6670,7 +6671,15 @@ app.post(`${BASE_PATH}/stations`, requirePermission("fuel.edit_entry"), async (c
         delete station._overrideDuplicate;
         delete station._overrideReason;
 
-        await kv.set(`station:${station.id}`, station);
+        // S1: a partial body must not wipe fields the caller did not send.
+        const existingStation = await kv.get(`station:${station.id}`);
+        const stationToSave = mergeStationPayload(
+          existingStation && typeof existingStation === "object" ? existingStation : null,
+          station,
+        );
+        stationToSave.id = station.id;
+        await kv.set(`station:${station.id}`, stationToSave);
+        Object.assign(station, stationToSave);
 
         // Phase 8.4: Optimistic locking ? post-save re-check for race conditions.
         // Skip if the user explicitly overrode the duplicate check.

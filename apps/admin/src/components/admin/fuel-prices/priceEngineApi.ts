@@ -122,7 +122,6 @@ export function gradeLabel(grade: string | undefined): string {
 }
 
 const REASON_LABELS: Record<string, string> = {
-  OUT_OF_BOUNDS: "Outside Petrojam band",
   BIG_CHANGE: "Big jump vs published",
   MAD_OUTLIER: "Unusual for station",
   UNKNOWN_GRADE: "Grade unknown",
@@ -130,7 +129,8 @@ const REASON_LABELS: Record<string, string> = {
   DUPLICATE: "Duplicate report",
 };
 
-export function reasonLabel(code: string): string {
+export function reasonLabel(code: string, benchmarkName = ""): string {
+  if (code === "OUT_OF_BOUNDS") return `Outside ${benchmarkName || "benchmark"} band`;
   return REASON_LABELS[code] || code.replace(/_/g, " ").toLowerCase();
 }
 

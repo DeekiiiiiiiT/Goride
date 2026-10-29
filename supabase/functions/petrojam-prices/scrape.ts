@@ -376,3 +376,35 @@ export async function fetchPetrojamPrices(
 
   return { rows, pagesFetched, mode: "all" };
 }
+
+export type RefineryPricePoint = {
+  product_code: string;
+  effective_date: string;
+  price_jmd: number;
+};
+
+const LONG_COLUMNS: Array<[keyof PetrojamPriceRow, string]> = [
+  ["gasolene87", "gasolene_87"],
+  ["gasolene90", "gasolene_90"],
+  ["autoDiesel", "auto_diesel"],
+  ["ulsd", "ulsd"],
+  ["kerosene", "kerosene"],
+  ["propane", "propane"],
+  ["butane", "butane"],
+  ["hfo", "hfo"],
+  ["asphalt", "asphalt"],
+];
+
+/** Wide Petrojam table row → one price per product. Null cells are skipped. */
+export function petrojamRowsToLong(rows: PetrojamPriceRow[]): RefineryPricePoint[] {
+  const out: RefineryPricePoint[] = [];
+  for (const row of rows) {
+    for (const [key, code] of LONG_COLUMNS) {
+      const value = row[key];
+      if (typeof value === "number" && Number.isFinite(value)) {
+        out.push({ product_code: code, effective_date: row.priceDate, price_jmd: value });
+      }
+    }
+  }
+  return out;
+}
