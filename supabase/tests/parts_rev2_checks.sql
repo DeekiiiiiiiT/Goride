@@ -24,6 +24,13 @@ INSERT INTO public.part_interchange_group (id, code, fit_scope)
 VALUES ('55555555-5555-4555-8555-555555555555', 'REV2-OIL', 'powertrain')
 ON CONFLICT (code) DO NOTHING;
 
+-- Schema-only CI has no seed rows; engine-family fit rules require an engine-level component.
+INSERT INTO public.maintenance_service_categories (id, code, name, kind, op_code, sort_order)
+SELECT 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1', 'rev2-eng-oil', 'Rev2 oil filter', 'component', 'ENG-OIL', 10
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.maintenance_service_categories WHERE op_code = 'ENG-OIL'
+);
+
 INSERT INTO public.part_master (id, category_id, name, oem_part_number, manufacturer, part_kind, interchange_group_id, maintenance_component_id)
 SELECT
   '66666666-6666-4666-8666-666666666666',
@@ -32,6 +39,18 @@ SELECT
   (SELECT id FROM public.part_interchange_group WHERE code = 'REV2-OIL'),
   (SELECT id FROM public.maintenance_service_categories WHERE op_code = 'ENG-OIL' LIMIT 1)
 WHERE NOT EXISTS (SELECT 1 FROM public.part_master WHERE id = '66666666-6666-4666-8666-666666666666');
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.part_master pm
+    JOIN public.maintenance_service_categories c ON c.id = pm.maintenance_component_id
+    WHERE pm.id = '66666666-6666-4666-8666-666666666666' AND c.op_code = 'ENG-OIL'
+  ) THEN
+    RAISE EXCEPTION 'Rev2 oil filter must be linked to ENG-OIL before the engine fit rule';
+  END IF;
+END $$;
 
 INSERT INTO public.interchange_fitment_rule (
   interchange_group_id, target_kind, engine_family_id, year_from, year_to, source
