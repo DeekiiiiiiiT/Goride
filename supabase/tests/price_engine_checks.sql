@@ -45,7 +45,7 @@ DECLARE
   confidence text;
   reports int;
 BEGIN
-  SELECT price_per_litre, confidence, report_count
+  SELECT price_per_litre, price_current.confidence, report_count
     INTO published, confidence, reports
   FROM places.price_current
   WHERE place_id = 'price-engine-station' AND grade = 'e10_87';
