@@ -8,7 +8,24 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = join(fileURLToPath(new URL('..', import.meta.url)));
 const routes = readFileSync(join(ROOT, 'supabase/functions/delivery/inHouse/routes.ts'), 'utf8');
-const migration = readFileSync(join(ROOT, 'supabase/migrations/20261011120000_in_house_procurement.sql'), 'utf8');
+// Migration was folded into baseline / archive; prefer live migrations, then archive.
+const migrationCandidates = [
+  join(ROOT, 'supabase/migrations/20261011120000_in_house_procurement.sql'),
+  join(ROOT, 'supabase/migrations_archive/20261011120000_in_house_procurement.sql'),
+];
+const migrationPath = migrationCandidates.find((path) => {
+  try {
+    readFileSync(path);
+    return true;
+  } catch {
+    return false;
+  }
+});
+if (!migrationPath) {
+  console.error('[check-procurement-event-column] procurement migration not found');
+  process.exit(1);
+}
+const migration = readFileSync(migrationPath, 'utf8');
 
 const lookups = [...routes.matchAll(/from\("procurement_events"\)[\s\S]{0,180}?\.select\("([^"]+)"\)/g)];
 const bad = lookups.filter((match) => match[1].split(',').map((part) => part.trim()).includes('created_at'));

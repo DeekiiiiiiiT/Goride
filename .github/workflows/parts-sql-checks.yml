@@ -95,10 +95,12 @@ jobs:
 
       - name: Apply migrations without seed data
         env:
+          # percent-encode @ in password if needed; password is "postgres"
           SUPABASE_DB_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
         run: |
           set -euo pipefail
-          supabase db reset --db-url "$SUPABASE_DB_URL" --no-seed
+          # db reset --db-url still wants a local supabase start; push applies files directly.
+          supabase db push --db-url "$SUPABASE_DB_URL" --include-all --yes
 
       - name: Parts sourcing SQL checks
         run: |
