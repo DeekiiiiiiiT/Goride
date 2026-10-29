@@ -27,6 +27,9 @@ on:
 jobs:
   parts-sql:
     runs-on: ubuntu-latest
+    env:
+      # ECR public anonymous pulls hit "Data limit exceeded" on shared runners. Pull every CLI image from Docker Hub.
+      SUPABASE_INTERNAL_IMAGE_REGISTRY: docker.io
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -40,44 +43,6 @@ jobs:
           curl -fsSL "$url" -o /tmp/supabase.tar.gz
           sudo tar -xzf /tmp/supabase.tar.gz -C /usr/local/bin
           supabase --version
-
-      # ECR anonymous pulls hit "Data limit exceeded". Prefetch + cache the images db start needs.
-      - name: Cache Supabase images
-        id: cache-images
-        uses: actions/cache@v4
-        with:
-          path: /tmp/supabase-images
-          key: supabase-db-start-images-17.6.1.106-realtime-v2.86.3
-
-      - name: Prefetch images for db start
-        run: |
-          set -euo pipefail
-          mkdir -p /tmp/supabase-images
-          pull_one() {
-            local ecr="$1"
-            local hub="$2"
-            local tar="/tmp/supabase-images/$(echo "$ecr" | tr '/:' '__').tar"
-            if [ -f "$tar" ]; then
-              docker load -i "$tar"
-              return 0
-            fi
-            local ok=0
-            for attempt in 1 2 3 4 5 6 7 8; do
-              if docker pull "$ecr" || docker pull "$hub"; then
-                ok=1
-                break
-              fi
-              echo "pull failed for $ecr (attempt ${attempt}); waiting"
-              sleep $((attempt * 25))
-            done
-            test "$ok" = 1
-            if ! docker image inspect "$ecr" >/dev/null 2>&1; then
-              docker tag "$hub" "$ecr"
-            fi
-            docker save "$ecr" -o "$tar"
-          }
-          pull_one public.ecr.aws/supabase/postgres:17.6.1.106 supabase/postgres:17.6.1.106
-          pull_one public.ecr.aws/supabase/realtime:v2.86.3 supabase/realtime:v2.86.3
 
       - name: Start the database
         run: |

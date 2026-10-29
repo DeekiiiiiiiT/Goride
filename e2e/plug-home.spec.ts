@@ -45,6 +45,8 @@ test('each place kind submits its details', async ({ page }) => {
   });
   for (const [label, kind] of KINDS) {
     // ChooseType remounts under auth/fill; do not click the grid. Set kind the same way a card tap does.
+    // sessionStorage only exists once the app origin is loaded (about:blank throws SecurityError).
+    await page.goto('/#/explore', { waitUntil: 'domcontentloaded' });
     await page.evaluate((k) => {
       sessionStorage.setItem('plug-place-kind', k);
     }, kind);
