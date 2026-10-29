@@ -41,16 +41,48 @@ jobs:
           sudo tar -xzf /tmp/supabase.tar.gz -C /usr/local/bin
           supabase --version
 
+      # ECR public anonymous pulls hit "Data limit exceeded" on busy days. Cache + Docker Hub fallback.
+      - name: Cache Supabase Postgres image
+        id: cache-pg
+        uses: actions/cache@v4
+        with:
+          path: /tmp/supabase-postgres-17.6.1.106.tar
+          key: supabase-postgres-17.6.1.106
+
+      - name: Prefetch Postgres image
+        env:
+          PG_IMAGE: public.ecr.aws/supabase/postgres:17.6.1.106
+          PG_FALLBACK: supabase/postgres:17.6.1.106
+        run: |
+          set -euo pipefail
+          if [ -f /tmp/supabase-postgres-17.6.1.106.tar ]; then
+            docker load -i /tmp/supabase-postgres-17.6.1.106.tar
+            exit 0
+          fi
+          pulled=0
+          for attempt in 1 2 3 4 5 6; do
+            if docker pull "$PG_IMAGE" || docker pull "$PG_FALLBACK"; then
+              pulled=1
+              break
+            fi
+            echo "image pull failed (attempt ${attempt}); waiting"
+            sleep $((attempt * 20))
+          done
+          test "$pulled" = 1
+          if ! docker image inspect "$PG_IMAGE" >/dev/null 2>&1; then
+            docker tag "$PG_FALLBACK" "$PG_IMAGE"
+          fi
+          docker save "$PG_IMAGE" -o /tmp/supabase-postgres-17.6.1.106.tar
+
       - name: Start the database
         run: |
           set -euo pipefail
-          # public.ecr.aws sometimes returns "Data limit exceeded"; retry a few times.
-          for attempt in 1 2 3 4 5; do
+          for attempt in 1 2 3; do
             if supabase db start; then
               exit 0
             fi
             echo "supabase db start failed (attempt ${attempt}); waiting before retry"
-            sleep $((attempt * 15))
+            sleep $((attempt * 10))
           done
           echo "supabase db start failed after retries"
           exit 1

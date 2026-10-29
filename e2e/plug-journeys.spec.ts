@@ -2,8 +2,21 @@ import { expect, test, type Page } from '@playwright/test';
 import { standIn } from './plug-stand-in';
 
 async function wayOut(page: Page) {
-  const hash = await page.evaluate(() => location.hash);
-  if (hash === '' || hash === '#' || hash === '#/') return;
+  // Sign-out and other actions navigate before this runs; entry screens have no tab/way-out chrome.
+  const path = await page.evaluate(() => {
+    const hash = location.hash.replace(/^#/, '') || '/';
+    return hash.startsWith('/') ? hash : `/${hash}`;
+  });
+  if (
+    path === '/'
+    || path === '/welcome'
+    || path.startsWith('/welcome')
+    || path === '/login'
+    || path === '/signup'
+    || path === '/otp'
+    || path === '/reset'
+    || path === '/how'
+  ) return;
   await expect(page.locator('[data-plug-tabs], [data-way-out="back"], [data-way-out="primary"]').first()).toBeVisible();
 }
 
