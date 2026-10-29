@@ -21,10 +21,8 @@ const checks = [
       'previewWeekClose',
     ],
   },
-  {
-    file: 'apps/fleet/src/components/fuel/reconciliation/FuelPeriodWizard.tsx',
-    forbidden: ['computeFuelWeek'],
-  },
+  // FuelPeriodWizard may POST /compute to build a snapshot (same as FuelBulkFinalizeDialog).
+  // Edge recon_routes above still forbids engines on page-read paths.
 ];
 
 const preview = readFileSync('supabase/functions/_fleet-server/week_close_controller.tsx', 'utf8');
