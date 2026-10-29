@@ -24,12 +24,13 @@ INSERT INTO public.part_interchange_group (id, code, fit_scope)
 VALUES ('55555555-5555-4555-8555-555555555555', 'REV2-OIL', 'powertrain')
 ON CONFLICT (code) DO NOTHING;
 
-INSERT INTO public.part_master (id, category_id, name, oem_part_number, manufacturer, part_kind, interchange_group_id)
+INSERT INTO public.part_master (id, category_id, name, oem_part_number, manufacturer, part_kind, interchange_group_id, maintenance_component_id)
 SELECT
   '66666666-6666-4666-8666-666666666666',
   (SELECT id FROM public.part_category WHERE slug = 'rev2-engine'),
   'Rev2 oil filter', 'REV2-OIL-1', 'Toyota', 'oem',
-  (SELECT id FROM public.part_interchange_group WHERE code = 'REV2-OIL')
+  (SELECT id FROM public.part_interchange_group WHERE code = 'REV2-OIL'),
+  (SELECT id FROM public.maintenance_service_categories WHERE op_code = 'ENG-OIL' LIMIT 1)
 WHERE NOT EXISTS (SELECT 1 FROM public.part_master WHERE id = '66666666-6666-4666-8666-666666666666');
 
 INSERT INTO public.interchange_fitment_rule (

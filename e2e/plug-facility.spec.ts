@@ -7,7 +7,7 @@ test.beforeEach(async ({ page }) => {
 
 test('restroom search opens the nearest place with that facility highlighted', async ({ page }) => {
   await page.goto('/#/explore');
-  await page.getByRole('button', { name: 'Restroom' }).click();
+  await page.locator('[data-act="service-category"][data-category="1.4"]').click();
   const near = page.getByRole('button', { name: /Near restroom/ });
   const far = page.getByRole('button', { name: /Far restroom/ });
   await expect(near).toBeVisible();

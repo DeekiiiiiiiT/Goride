@@ -45,7 +45,8 @@ test('each place kind submits its details', async ({ page }) => {
   });
   for (const [label, kind] of KINDS) {
     await page.goto('/#/map', { waitUntil: 'domcontentloaded' });
-    await page.getByRole('radio', { name: label, exact: true }).click();
+    await expect(page.locator('#categoryGrid [role="radio"]')).toHaveCount(8);
+    await page.locator(`[role="radio"][data-kind="${kind}"]`).evaluate((el) => (el as HTMLButtonElement).click());
     await expect(page).toHaveURL(/\/map\/pin$/);
     await page.locator('[data-act="confirm-pin-location"]').evaluate((el) => (el as HTMLButtonElement).click());
     await page.locator('#place-name').fill(`Test ${label}`);
