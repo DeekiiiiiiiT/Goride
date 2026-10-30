@@ -172,19 +172,39 @@ jobs:
           deno-version: v2.x
 
       - name: Deno test split fill station match
-        run: >
-          deno test --allow-read --allow-env
-          supabase/functions/_fleet-server/fuel_station_match.test.ts
-          supabase/functions/_fleet-server/fuel_station_match_places_parity.test.ts
-          supabase/functions/_fleet-server/fuel_station_match_replay.test.ts
-          supabase/functions/_fleet-server/fleet_trip_toll_replay.test.ts
-          supabase/functions/_fleet-server/fuel_split_fill_station.test.ts
-          supabase/functions/_fleet-server/geo_matcher_near_miss.test.ts
-          supabase/functions/_fleet-server/fuel_station_match_provisional.test.ts
-          supabase/functions/_fleet-server/merchant_station_registry.test.ts
-          supabase/functions/_fleet-server/station_merchant_aliases.test.ts
-          supabase/functions/_fleet-server/station_attach.test.ts
-          supabase/functions/_fleet-server/fuel_jaa_station_heal.test.ts
+        run: |
+          set +e
+          deno test --allow-read --allow-env \
+            supabase/functions/_fleet-server/fuel_station_match.test.ts \
+            supabase/functions/_fleet-server/fuel_station_match_places_parity.test.ts \
+            supabase/functions/_fleet-server/fuel_station_match_replay.test.ts \
+            supabase/functions/_fleet-server/fleet_trip_toll_replay.test.ts \
+            supabase/functions/_fleet-server/fuel_split_fill_station.test.ts \
+            supabase/functions/_fleet-server/geo_matcher_near_miss.test.ts \
+            supabase/functions/_fleet-server/fuel_station_match_provisional.test.ts \
+            supabase/functions/_fleet-server/merchant_station_registry.test.ts \
+            supabase/functions/_fleet-server/station_merchant_aliases.test.ts \
+            supabase/functions/_fleet-server/station_attach.test.ts \
+            supabase/functions/_fleet-server/fuel_jaa_station_heal.test.ts
+          code=$?
+          if [ "$code" -eq 10 ]; then
+            echo "Remote file did not match the lock. Clearing the Deno cache and trying once more."
+            deno clean
+            deno test --allow-read --allow-env \
+              supabase/functions/_fleet-server/fuel_station_match.test.ts \
+              supabase/functions/_fleet-server/fuel_station_match_places_parity.test.ts \
+              supabase/functions/_fleet-server/fuel_station_match_replay.test.ts \
+              supabase/functions/_fleet-server/fleet_trip_toll_replay.test.ts \
+              supabase/functions/_fleet-server/fuel_split_fill_station.test.ts \
+              supabase/functions/_fleet-server/geo_matcher_near_miss.test.ts \
+              supabase/functions/_fleet-server/fuel_station_match_provisional.test.ts \
+              supabase/functions/_fleet-server/merchant_station_registry.test.ts \
+              supabase/functions/_fleet-server/station_merchant_aliases.test.ts \
+              supabase/functions/_fleet-server/station_attach.test.ts \
+              supabase/functions/_fleet-server/fuel_jaa_station_heal.test.ts
+            code=$?
+          fi
+          exit "$code"
 
       - name: Deno test places review chips
         run: deno test --allow-read --allow-env supabase/functions/explorer/place_admin.test.ts
