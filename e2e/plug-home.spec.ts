@@ -59,6 +59,7 @@ test('each place kind submits its details', async ({ page }) => {
     await page.getByRole('button', { name: /Submit for Review/ }).click();
     await expect.poll(() => bodies.length).toBe(before + 1);
     await expect(page.getByRole('status')).toContainText('Sent for review');
+    await expect(page).toHaveURL(/\/map\/submitted-toast$/);
     expect(bodies.at(-1)?.kind).toBe(kind);
     expect(bodies.at(-1)?.name).toBe(`Test ${label}`);
     expect(bodies.at(-1)?.phone).toBe('8765550199');
