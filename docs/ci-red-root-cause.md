@@ -11,7 +11,7 @@ Rev 3. 2026-10-30. Cleared on `main` @ `e23d5f63`. All four workflows are green.
 
 Later commits did not change migrations, the Dominion test, or edge functions, so those three workflows were not asked to run again.
 
-Follow-ons, not blockers: the admin type check is still under its limit but not at zero. The fuel-station Deno step retries once if a download does not match the lock. `Deno check edge functions` is allowed to fail and still prints an error. Editing the migrations that already ran does not change the live database.
+Follow-ons, not blockers: the admin type check is still under its limit but not at zero. A helper file that kept changing on the download host is now loaded from the package instead. `Deno check edge functions` is allowed to fail and still prints an error. Editing the migrations that already ran does not change the live database.
 
 Rev 2. Checked 2026-10-30 against `main` @ `95c6e01f`. Rev 1 (Plug e2e test, ECR image limit) is fixed and verified: the Plug test passes, and the database now starts in CI.
 
