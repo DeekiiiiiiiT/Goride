@@ -1,0 +1,157 @@
+STITCH PROMPT — Dominion · Categories (S37) + Retire dialog (S37b)
+Project: Dominion Redesign (7083594865949473827) · Design system: Dominion
+
+Make:
+- Screen 1: the Categories page on the Tree tab, with "Gas station" selected.
+- Screen 2: the Brands tab.
+- Screen 3: the Retire dialog in two states (blocked and allowed).
+- Light and Dark versions of every screen.
+- A 390-wide phone version of Screen 1.
+- One small frame of states.
+
+------------------------------------------------------------------------------
+OVERALL LOOK — high fidelity, modern
+
+A modern taxonomy studio in the Dominion design system, like Linear's settings or Notion's database properties, made calm and precise.
+
+Surfaces and spacing:
+- Page background: a very light cool grey.
+- Cards: white, with a hairline 1px border, a 12–16px radius and a very soft shadow.
+- Spacing: a strict 8px grid with generous whitespace.
+
+Type:
+- The Dominion sans for text.
+- The Dominion mono with tabular figures for every code, slug, count and date.
+
+Colour is restrained:
+- Neutral greys almost everywhere.
+- Dominion blue for selection, links and primary actions.
+- Each group has a small 10px colour dot, using its own colour: peach #ffe6cc, mint #d5e8d4, butter #fff2cc, rose #f8cecc, lilac #e1d5e7. Group colours appear ONLY as these dots, never as row backgrounds.
+- Green is used only for "In use".
+- Amber is used only for "Not used yet" hints.
+- A muted red is used only for the danger "Retire" button.
+
+Micro-details: hairline dividers, small pill chips, focus rings, skeleton shimmer, a subtle hover tint, and smooth tree expand chevrons.
+
+Keep it real: no glassmorphism, no gradients, no 3D, no illustrations, no AI badges, no "REGION" badges or "LOC:" footers.
+
+Shell: the existing Dominion admin shell.
+- The left sidebar is dark navy, with "Places and Maps" selected.
+- The top bar is white, with the search field "Search entities, engines, routes…" and the avatar "DT · Deeki T · Owner".
+
+------------------------------------------------------------------------------
+SCREEN 1 — CATEGORIES (Tree tab, Gas station selected)
+
+HEADER
+- Breadcrumb: Dominion › Master data › Places and Maps › Categories
+- Title: "Categories"
+- Subtitle: "The groups, categories, place types, facilities and brands every app reads."
+- On the right: a primary split button "+ Add" with a caret. Show its open menu with: "Group", "Category", "Place type", "Facility type", "Brand".
+
+KPI STRIP (5 compact tiles, each with a mono number and a small grey "in use" line)
+- "Groups 5"
+- "Categories 16 · 11 in use"
+- "Place types 17 · 2 in use"
+- "Facility types 44 · 3 in use"
+- "Brands 17 · logos 0"
+
+TABS (underline style)
+"Tree" (selected) · "Brands" · "Retired 0" · "History"
+
+TWO PANES (about 5/12 and 7/12, both tall)
+
+LEFT — TREE CARD
+At the top: a small filter field, "Filter categories and types", and a quiet toggle, "Show facilities".
+
+Below it, the tree. Group rows have a colour dot, a semibold label and a mono count on the right. Category rows are indented, with a chevron. Place-type rows are indented further, with a small outline icon, the label, the mono slug in grey, a count chip and badges.
+
+1. ● Road & Automotive · "7 types"
+   ▾ Fuel & Energy
+       ⛽ Gas station · gas_station · chip "205" (green tint) · badge "In Plug" — this row is SELECTED (blue left bar, pale blue background)
+   ▸ Vehicle Maintenance · "4 types"
+   ▸ Roadside Emergency & Recovery · "1 type"
+   ▸ Driver Facilities · "1 type"
+2. ● Food, Drink & Social · "1 type"
+   ▸ Quick Bites · "1 type"
+   ▸ Dining · muted chip "No place types"
+   ▸ Social · muted chip "No place types"
+3. ● Retail & Daily Supplies · "3 types"
+4. ● Services & Emergency · "2 types"
+5. ● Travel, Infrastructure & Nature · "4 types"
+   ▾ Transit Hubs & Tolls
+       Bus terminal · bus_terminal · muted "Not used yet"
+       Toll plaza · toll_plaza · chip "12" · badge "In Plug"
+
+RIGHT — DETAIL CARD (Gas station)
+- Title row: a large icon tile, "Gas station", the mono slug "gas_station" and the chip "Place type".
+- Path in small grey links: "Road & Automotive › Fuel & Energy".
+- "Used by" row: three stat pills — "205 places", "In Plug", "Fuel matching".
+- Section "Settings", as a two-column key–value list in mono:
+  - "Geofence 150 m"
+  - "Match profile fuel", with a small lock icon and the tooltip "Set by the engines. Changed only by a release."
+  - "Icon local_gas_station"
+- Section "Default facilities": chips "Convenience store", "Restroom", "Air pump", "ATM".
+- Section "Fields this type stores": a compact read-only form preview with fields "Grades sold" (multi-select chips 87 · 90 · Diesel · ULSD), "Pay at pump" (switch), "Opening hours" (time range).
+- Section "Plug chip":
+  - On the left, a live preview of a rounded Plug chip: a fuel icon and "Gas".
+  - On the right, a key–value list: "Label Gas", "Map label Gas station", "Order 1", "Empty hint No stations nearby yet".
+- Section "Recent changes": 3 rows in small text — "28 Oct · Plug chip added · System", "24 Oct · Label set to Gas station · Deeki T", "20 Oct · Created · System".
+- Footer actions: a secondary button "Edit" on the left; a muted-red text button "Retire…" on the right.
+
+------------------------------------------------------------------------------
+SCREEN 2 — BRANDS TAB
+The same header, KPI strip and tabs, with "Brands" selected.
+
+A full-width table card.
+- Top right: the filter field "Search brands" and a secondary button "+ Brand".
+- Columns: Brand · Aliases · Used for · Places · (actions).
+- Each Brand cell has a square monogram tile (for example "TE" on a neutral tile), the name, and the mono slug.
+- Aliases are small grey chips.
+- "Used for" shows the chip "Gas station".
+- Places are right-aligned mono counts.
+- The actions are "Edit" and "Retire…" text buttons.
+
+Rows:
+TotalEnergies 42 · Rubis 20 · Cool Oasis 19 · Gulfstream 12 · FESCO 8 · Texaco 7 · Petcom 6 · Unipet 5 · First 5 · Jampet 2 · Blaize 2 (show 11 rows).
+
+Footer: "17 brands · 0 with a logo".
+
+------------------------------------------------------------------------------
+SCREEN 3 — S37b RETIRE DIALOG (centred over the dimmed page, 520px wide)
+
+State A — blocked (retiring "Gas station"):
+- Title: "Retire Gas station?"
+- A neutral info panel with an info icon: "You can't retire this while it's in use."
+- An impact list. Each row has an icon, a label, a mono count and a link:
+  - "Places using it · 205 · Open in register ›"
+  - "Plug home chip · 1 · Plug shows this chip today"
+  - "Types searching as this · 0"
+  - "Children · 0"
+- Footer: only a "Close" button. There is no Retire button.
+
+State B — allowed (retiring "Beach"):
+- Title: "Retire Beach?"
+- An impact list where every count is 0, each with a small green check.
+- A required "Reason" textarea, with the helper text "Kept in History. At least 10 characters."
+- A note: "Plug stops showing it right away. You can restore it from Retired."
+- Footer: "Cancel", then the danger button "Retire".
+
+------------------------------------------------------------------------------
+STATES (one small extra frame)
+- Loading: skeletons for the KPI strip, the tree rows and the detail panel.
+- Error card: "Could not load categories. Nothing was changed." with a "Retry" button.
+- Empty Retired tab: "Nothing is retired."
+- Read-only note for staff: "You can view categories. Only the owner can add, edit or retire."
+
+PHONE VERSION (390 wide)
+- The KPI strip becomes a horizontal chip scroll.
+- The tabs scroll sideways.
+- The tree is full width; tapping a type opens the detail as a full-height sheet with a back arrow.
+- No page-level horizontal scrolling.
+
+DARK VARIANT
+- Dominion dark tokens: a deep navy page, slightly raised surfaces and soft borders.
+- Group dots keep their colours.
+- The selection stays Dominion blue.
+
+Do NOT include: any place names, customers, drivers or orders; full-row coloured backgrounds; AI badges; region badges; location footers.

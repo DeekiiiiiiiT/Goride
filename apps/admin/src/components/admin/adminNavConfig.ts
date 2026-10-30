@@ -81,8 +81,8 @@ export const WORLD_MAPS_CHILDREN: NavChild[] = [
   { id: 'world-parishes', label: 'Parishes', icon: MapPin },
   { id: 'world-towns', label: 'Towns', icon: MapPin },
   { id: 'world-communities', label: 'Communities', icon: MapPin },
-  { id: 'world-places', label: 'Places & pins', icon: MapPin },
-  { id: 'world-imports', label: 'Imports & versions', icon: Layers },
+  { id: 'world-places', label: 'Places', icon: MapPin },
+  { id: 'world-imports', label: 'Imports', icon: Layers },
   { id: 'world-quality', label: 'Data quality', icon: ClipboardCheck },
   { id: 'places-register', label: 'Places register', icon: MapPin },
   { id: 'places-categories', label: 'Categories', icon: Layers },
@@ -91,10 +91,9 @@ export const WORLD_MAPS_CHILDREN: NavChild[] = [
 
 export const VEHICLE_DATABASE_CHILDREN: NavChild[] = [
   { id: 'motor-vehicles', label: 'Vehicle Catalog', icon: Car },
-  { id: 'platforms-engines', label: 'Platforms & Engines', icon: Layers },
   { id: 'pending-motor-vehicles', label: 'Pending catalog', icon: Inbox },
   { id: 'maintenance-templates', label: 'Maintenance templates', icon: Wrench },
-  { id: 'parts-catalog', label: 'Parts catalog', icon: ClipboardList },
+  { id: 'parts-catalog', label: 'Parts database', icon: ClipboardList },
   { id: 'suppliers-prices', label: 'Suppliers & prices', icon: Store },
   { id: 'catalog-quality', label: 'Data quality', icon: ClipboardCheck },
 ];
@@ -249,6 +248,7 @@ export const LEGACY_PAGE_REDIRECTS: Record<string, string> = {
   'fuel-evidence-bridge': 'fuel-analytics',
   'fuel-refineries': 'fuel-prices',
   'parts-sourcing': 'parts-catalog',
+  'platforms-engines': 'parts-catalog',
   settings: 'global-settings-general',
   'settings-general': 'global-settings-general',
   'settings-features': 'global-settings-general',

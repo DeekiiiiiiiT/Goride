@@ -30,9 +30,21 @@ export async function placesSend<T>(
   return body as T;
 }
 
+export function visibleTaxonomy(tree: Taxonomy): Taxonomy {
+  const keep = <T extends { active?: boolean }>(rows: T[] | undefined) => (rows || []).filter((row) => row.active !== false);
+  return {
+    ...tree,
+    groups: keep(tree.groups),
+    categories: keep(tree.categories),
+    placeTypes: keep(tree.placeTypes),
+    facilityTypes: keep(tree.facilityTypes),
+    brands: keep(tree.brands),
+  };
+}
+
 export type Taxonomy = {
-  groups: { code: string; label: string; colour: string; sort: number }[];
-  categories: { code: string; group_code: string; label: string; sort: number }[];
+  groups: { code: string; label: string; colour: string; sort: number; active?: boolean }[];
+  categories: { code: string; group_code: string; label: string; sort: number; active?: boolean }[];
   placeTypes: {
     slug: string;
     category_code: string;
@@ -41,6 +53,14 @@ export type Taxonomy = {
     default_facilities: string[];
     match_profile: string;
     attribute_schema: { properties?: Record<string, { type?: string; title?: string; items?: { type?: string } }> } | null;
+    active?: boolean;
+    icon?: string | null;
+    plug_chip?: string | null;
+    plug_label?: string | null;
+    plug_map_label?: string | null;
+    grid_icon?: string | null;
+    grid_sort?: number | null;
+    empty_hint?: string | null;
   }[];
   facilityTypes: {
     slug: string;
@@ -48,8 +68,9 @@ export type Taxonomy = {
     label: string;
     icon: string | null;
     attribute_schema: { properties?: Record<string, { type?: string; title?: string }> } | null;
+    active?: boolean;
   }[];
-  brands: { id: string; name: string; slug: string }[];
+  brands: { id: string; name: string; slug: string; active?: boolean; aliases?: string[]; logo_url?: string | null; place_types?: string[] }[];
   plugChips?: {
     chip: string;
     placeType: string;

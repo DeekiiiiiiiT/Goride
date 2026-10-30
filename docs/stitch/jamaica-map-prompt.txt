@@ -1,0 +1,148 @@
+STITCH PROMPT — Dominion · Jamaica map (S36) + Area inspector (S36b). Replaces S14 "World map viewer".
+Project: Dominion Redesign (7083594865949473827) · Design system: Dominion
+Make:
+- Screen 1: Jamaica map, nothing selected.
+- Screen 2: the same page with an area selected (S36b inspector).
+- Both screens in Light and Dark.
+- A 390-wide phone version of Screen 2.
+- One small frame of states.
+
+------------------------------------------------------------------------------
+OVERALL LOOK — high fidelity, modern
+
+A modern, calm GIS console in the Dominion design system. Think Mapbox Studio or Felt, made quiet and precise.
+
+- The map is the hero: large, edge-to-edge inside its card, with floating controls on white surfaces (soft shadow, 12px radius, hairline border).
+- Page background is a very light cool grey. Cards are white with a hairline border and a very soft shadow, 12–16px radius.
+- Strict 8px spacing grid.
+- Type: Dominion sans for text. Dominion mono with tabular figures for every code (JM06), count, area and date.
+
+Colours are restrained:
+- Neutral greys almost everywhere.
+- Dominion blue for selection, links and primary buttons.
+- Parish borders: a dark slate line (2px).
+- Town borders: a mid-grey line (1.25px).
+- Communities: a light grey dashed line (1px).
+- The selected area: a 2.5px Dominion-blue outline with a 10% blue fill. Its parent gets a faint grey fill.
+- Green only for a "Published" chip. Amber only for drafts or warnings.
+
+Micro-details: hairline dividers, small pill chips, focus rings, skeleton shimmer, subtle hover lift.
+
+Keep it real:
+- No glassmorphism, no gradients, no 3D terrain, no illustrations, no AI badges.
+- No "REGION" badge, no "PARTITION" label, no "LOC:" footer.
+- No delivery or market words.
+
+Shell: the existing Dominion admin shell. The left sidebar is dark navy with "Places and Maps" selected. The top bar is white, with the search field "Search entities, engines, routes…" and the avatar "DT · Deeki T · Owner".
+
+------------------------------------------------------------------------------
+SCREEN 1 — JAMAICA MAP (nothing selected)
+
+HEADER
+- Breadcrumb: Dominion › Master data › Places and Maps › Jamaica map
+- Title: "Jamaica map". Subtitle: "The official map of Jamaica, from the country down to communities."
+- Right side: a green chip "Published", then small grey mono text "Updated 24 Oct 2026".
+
+TABS (one row under the header)
+- A segmented control: "Country" (selected) · "Parishes" · "Towns" · "Communities".
+- Then a thin vertical divider, then two quieter text tabs: "Places" · "Imports".
+
+KPI STRIP — six compact stat tiles in one row. Each has a small label and a mono number:
+"Parishes 14" · "Towns 131" · "Communities 775" · "Drafts 0" · "Quality issues 0" · "Last change 24 Oct".
+
+MAIN — two columns (about 8/12 and 4/12), the same height (about 680px).
+
+LEFT — MAP CARD
+- A soft, muted light basemap of Jamaica: pale land, pale blue sea, minimal labels.
+- All 14 parish borders are drawn and labelled with small parish names: Kingston, Saint Andrew, Saint Thomas, Portland, Saint Mary, Saint Ann, Trelawny, Saint James, Hanover, Westmoreland, Saint Elizabeth, Manchester, Clarendon, Saint Catherine.
+- Floating top-left: a wide search field with a search icon and the placeholder "Search a parish, town, community or code". Below it, show an open dropdown with 4 results. Each result has the name, a small level chip and the grey parent:
+  - "Half Way Tree · Town · Saint Andrew · JM0601"
+  - "Half Way Tree · Community · Saint Andrew · JM060104"
+  - "Halse Hall · Community · Clarendon · JM130212"
+  - "Hanover · Parish · JM09"
+- Floating top-right: a small segmented control "Map · Satellite", and below it a vertical stack of round buttons: zoom in, zoom out, fit Jamaica, fullscreen.
+- Floating bottom-left, on a white panel titled "Layers":
+  - Checkboxes: "Parishes" (on), "Towns" (on, with the grey hint "zoom in"), "Communities" (off, with the hint "zoom in more"), "Pins" (off).
+  - Under them, a static legend with small line swatches: "Parish border", "Town border", "Community border", "Pin".
+- Bottom-right: tiny grey scale bar and attribution.
+
+RIGHT — AREA INSPECTOR (nothing selected)
+- Card title "Jamaica" with the mono code "JM" and the chip "Country".
+- A 3-stat row: "14 parishes" · "131 towns" · "775 communities".
+- A list titled "Parishes". There are 14 rows, each with:
+  - the parish name and its mono code (JM01…JM14);
+  - small grey text on the right, e.g. "12 towns · 64 communities";
+  - a chevron.
+  Use plausible counts that add up to 131 towns and 775 communities.
+- Rows have a hover tint. Hovering a row lightly highlights that parish on the map.
+- Footer text in grey: "Click an area on the map or search to see its details."
+
+BELOW (full width) — RECENT CHANGES
+- Card title "Recent changes", with a grey link "View all" on the right.
+- A table with the columns: Area · Level · Version · Source · When · By.
+- Rows:
+  - "Kingston · JM03 · Parish · v1 · COD-AB · 24 Oct 2026 · System"
+  - "Saint Andrew · JM06 · Parish · v1 · COD-AB · 24 Oct 2026 · System"
+  - "Saint Catherine · JM08 · Parish · v1 · COD-AB · 24 Oct 2026 · System"
+  - "Spanish Town · JM0807 · Town · v1 · COD-AB · 24 Oct 2026 · System"
+- Each Source cell is a small neutral chip. The When and By values are in mono.
+
+------------------------------------------------------------------------------
+SCREEN 2 — S36b AREA INSPECTOR (Half Way Tree selected)
+
+The page is the same. The map has zoomed to Saint Andrew:
+- Saint Andrew has a faint grey fill.
+- Its towns are outlined in mid-grey.
+- Half Way Tree has a 2.5px blue outline and a 10% blue fill, with a small label chip "Half Way Tree".
+
+The right inspector now shows:
+- A back link "‹ Jamaica".
+- The title "Half Way Tree", with the mono code "JM0601" and a "Town" chip.
+- A path: "Jamaica › Saint Andrew › Half Way Tree". Each part is a link.
+- A facts list in two columns, values in mono:
+  - "Area 6.42 km²"
+  - "Border points 1,284"
+  - "Centre 18.0123, −76.7987"
+  - "Communities 9"
+- A "Live border" block:
+  - a green chip "Live";
+  - the text "v1 · COD-AB · 24 Oct 2026";
+  - a small grey link "2 older versions".
+- A "Used by" block with three count rows, each with a small app icon and a mono number:
+  - "Dominion places 14"
+  - "Rush markets 1"
+  - "Map pins 0"
+  - Helper text below: "Counts only. Records stay in each app."
+- A "Communities" list: 9 rows with name, mono code and a chevron (for example Half Way Tree, Cross Roads, Liguanea…).
+- Footer actions:
+  - primary button "Open border editor";
+  - secondary icon button "Copy code" (shows a tooltip "Copied JM0601").
+- A note for staff without the permission, shown as a small grey line: "You can view this map. Only the owner can change borders."
+
+------------------------------------------------------------------------------
+STATES (one small extra frame)
+- Loading:
+  - skeleton shimmer for the KPI strip and the inspector;
+  - the map card shows a pale placeholder with a small spinner and "Loading the map…".
+- Error card: "Could not load the map. Nothing was changed." with a "Retry" button.
+- Empty search: "No area matches "xyz". Try a parish, town, community or code."
+- Zoom hint chip on the map: "Zoom in to see communities".
+
+PHONE VERSION (390 wide)
+- The map is full width, 420px tall.
+- Search and layer controls are compact. The Layers panel collapses to a single "Layers" button.
+- The inspector becomes a bottom sheet with a drag handle, showing Half Way Tree.
+- The KPI strip becomes a horizontal scroll of chips.
+- Tabs scroll sideways.
+- No page-level horizontal scrolling.
+
+DARK VARIANT
+- Dominion dark tokens: deep navy page, slightly raised surfaces, soft borders.
+- Dark basemap with muted land.
+- Parish lines become light slate. The selection stays Dominion blue with good contrast.
+
+Do NOT include:
+- delivery, market, cutout or coverage words, or any merchant, customer, driver or order data;
+- fake live tickers;
+- AI badges;
+- "REGION", "PARTITION" or "LOC" labels.

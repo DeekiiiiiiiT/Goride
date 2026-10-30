@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
 import { AdminLayout } from './AdminLayout';
-import { canWriteWorldMapsFromUser } from './world-maps/WorldMapsPage';
+import { canPublishMaps } from './world-maps/mapPermissions';
 
 const lazyNamed = (loader: () => Promise<Record<string, unknown>>, name: string) =>
   lazy(() => loader().then((mod) => ({ default: mod[name] as React.ComponentType<any> })));
@@ -16,9 +16,10 @@ const VehicleCatalogManager = lazyNamed(() => import('./vehicle-catalog/VehicleC
 const PendingVehicleCatalogManager = lazyNamed(() => import('./vehicle-catalog/PendingVehicleCatalogManager'), 'PendingVehicleCatalogManager');
 const MaintenanceTemplatesManager = lazyNamed(() => import('./maintenance-templates/MaintenanceTemplatesManager'), 'MaintenanceTemplatesManager');
 const PartsSourcingManager = lazyNamed(() => import('./parts-sourcing/PartsSourcingManager'), 'PartsSourcingManager');
+const PartsDatabasePage = lazyNamed(() => import('./parts-database/PartsDatabasePage'), 'PartsDatabasePage');
+const VehiclesHomePage = lazyNamed(() => import('./parts-database/VehiclesHomePage'), 'VehiclesHomePage');
 const CatalogQualityPage = lazyNamed(() => import('./parts-sourcing/CatalogQualityPage'), 'CatalogQualityPage');
 const WorldMapsPage = lazyNamed(() => import('./world-maps/WorldMapsPage'), 'WorldMapsPage');
-const PlatformsEnginesPage = lazyNamed(() => import('./parts-sourcing/PlatformsEnginesPage'), 'PlatformsEnginesPage');
 const AccountingCatalogManager = lazyNamed(() => import('./accounting/AccountingCatalogManager'), 'AccountingCatalogManager');
 const PendingVendorRequestsManager = lazyNamed(() => import('./accounting/PendingVendorRequestsManager'), 'PendingVendorRequestsManager');
 const GctEnginePage = lazyNamed(() => import('./gct/GctEnginePage'), 'GctEnginePage');
@@ -53,13 +54,11 @@ import { DominionMasterList } from './DominionMasterList';
 void DominionMasterList;
 const AppsDirectory = lazyNamed(() => import('./AppsDirectory'), 'AppsDirectory');
 const ChangeRequestInbox = lazyNamed(() => import('./ChangeRequestInbox'), 'ChangeRequestInbox');
-const FuelHome = lazyNamed(() => import('./DominionHomes'), 'FuelHome');
-const PlacesHome = lazyNamed(() => import('./DominionHomes'), 'PlacesHome');
+const FuelHomePage = lazyNamed(() => import('./fuel-home/FuelHomePage'), 'FuelHomePage');
+const PlacesHomePage = lazyNamed(() => import('./places-home/PlacesHomePage'), 'PlacesHomePage');
 const PlatformOpsHome = lazyNamed(() => import('./PlatformOpsHome'), 'PlatformOpsHome');
 const TaxVendorsHome = lazyNamed(() => import('./DominionHomes'), 'TaxVendorsHome');
 const TollsHome = lazyNamed(() => import('./DominionHomes'), 'TollsHome');
-const VehiclesHome = lazyNamed(() => import('./DominionHomes'), 'VehiclesHome');
-
 const TollSettingsPage = lazy(() =>
   import('../../pages/TollSettingsPage').then((m) => ({ default: m.TollSettingsPage })),
 );
@@ -104,6 +103,10 @@ export function AdminPortal() {
     };
     const url = new URL(window.location.href);
     const keep = new Set(allowed[page] || []);
+    if (page.startsWith('world-')) {
+      keep.add('area');
+      keep.add('drafts');
+    }
     const next = new URLSearchParams();
     next.set('page', page);
     for (const key of keep) {
@@ -194,9 +197,15 @@ export function AdminPortal() {
     <AdminLayout currentPage={currentPage} onNavigate={setCurrentPage}>
       <Suspense fallback={<DominionLoading />}>
       {currentPage === 'dashboard' && <AdminDashboard onNavigate={setCurrentPage} />}
-      {currentPage === 'vehicles-home' && <VehiclesHome onNavigate={setCurrentPage} />}
-      {currentPage === 'places-home' && <PlacesHome onNavigate={setCurrentPage} />}
-      {currentPage === 'fuel-home' && <FuelHome onNavigate={setCurrentPage} />}
+      {currentPage === 'vehicles-home' && <VehiclesHomePage onNavigate={setCurrentPage} />}
+      {currentPage === 'places-home' && (
+        <PlacesHomePage
+          onNavigate={setCurrentPage}
+          accessToken={accessToken || ''}
+          canWrite={role === 'platform_owner'}
+        />
+      )}
+      {currentPage === 'fuel-home' && <FuelHomePage onNavigate={setCurrentPage} />}
       {currentPage === 'tolls-home' && <TollsHome onNavigate={setCurrentPage} />}
       {currentPage === 'tax-vendors-home' && <TaxVendorsHome onNavigate={setCurrentPage} />}
       {currentPage === 'apps-directory' && <AppsDirectory />}
@@ -237,8 +246,8 @@ export function AdminPortal() {
         />
       )}
       {currentPage === 'plug-places' && <PlacesPage mode="review" chip="plug" />}
-      {currentPage === 'places-register' && <PlacesPage mode="register" />}
-      {currentPage === 'places-categories' && <PlacesPage mode="categories" />}
+      {currentPage === 'places-register' && <PlacesPage mode="register" canWrite={role === 'platform_owner'} />}
+      {currentPage === 'places-categories' && <PlacesPage mode="categories" canWrite={role === 'platform_owner'} />}
       {currentPage === 'places-review' && <PlacesPage mode="review" />}
       {currentPage === 'fuel-analytics' && <StationAnalyticsPage onNavigate={setCurrentPage} />}
       {currentPage === 'toll-brain' && <TollBrainPage onNavigate={setCurrentPage} />}
@@ -274,19 +283,10 @@ export function AdminPortal() {
           <MaintenanceTemplatesManager />
         </div>
       )}
-      {currentPage === 'parts-catalog' && (
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px] dark:bg-card">
-          <PartsSourcingManager mode="catalog" />
-        </div>
-      )}
+      {currentPage === 'parts-catalog' && <PartsDatabasePage />}
       {currentPage === 'suppliers-prices' && (
         <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px] dark:bg-card">
           <PartsSourcingManager mode="supply" />
-        </div>
-      )}
-      {currentPage === 'platforms-engines' && (
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px] dark:bg-card">
-          <PlatformsEnginesPage />
         </div>
       )}
       {currentPage === 'catalog-quality' && (
@@ -299,7 +299,8 @@ export function AdminPortal() {
           <WorldMapsPage
             page={currentPage}
             accessToken={accessToken}
-            canWrite={canWriteWorldMapsFromUser(user)}
+            canWrite={canPublishMaps(user)}
+            onNavigate={setCurrentPage}
           />
         </div>
       )}

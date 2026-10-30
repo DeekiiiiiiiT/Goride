@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"/><title>Jamaica map</title></head><body><main>
+<!-- SECTION 1: S36g Imports and Checks -->
+<div class="space-y-6">
+<div class="flex items-center justify-between">
+<div>
+<h2 class="text-base font-bold font-headline text-on-surface tracking-tight">S36g Imports &amp; Validation Engine</h2>
+<p class="text-xs text-on-surface-variant">GeoJSON spatial topology verifications and ingestion run pipelines.</p>
+</div>
+<span class="text-[11px] font-mono text-outline uppercase tracking-wider">Engine: GeoTopo-S36g</span>
+</div>
+<!-- Card 1: Import a map file -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm p-6 space-y-6">
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+<div>
+<h3 class="text-sm font-bold font-headline text-on-surface">Import a map file</h3>
+<p class="text-xs text-on-surface-variant mt-0.5">Parse, validate parity codes, and check geometry bounds.</p>
+</div>
+<!-- 3-step Stepper -->
+<div class="flex items-center gap-2 text-xs">
+<div class="flex items-center gap-1.5 text-tertiary font-medium">
+<span class="w-5 h-5 rounded-full bg-tertiary-container flex items-center justify-center text-[11px] font-bold">✓</span>
+<span>1 Choose file</span>
+</div>
+<span class="w-6 h-0.5 bg-secondary"></span>
+<div class="flex items-center gap-1.5 text-secondary font-semibold">
+<span class="w-5 h-5 rounded-full bg-secondary-container text-on-secondary-fixed flex items-center justify-center text-[11px]">2</span>
+<span>Check</span>
+</div>
+<span class="w-6 h-0.5 bg-surface-container-highest"></span>
+<div class="flex items-center gap-1.5 text-outline">
+<span class="w-5 h-5 rounded-full bg-surface-container flex items-center justify-center text-[11px]">3</span>
+<span>Save as drafts</span>
+</div>
+</div>
+</div>
+<!-- Selected file chip -->
+<div class="flex items-center justify-between bg-surface-container-low px-4 py-2.5 rounded-lg">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-secondary text-[20px]">description</span>
+<span class="text-xs font-mono font-medium text-on-surface">parishes-2026-10.geojson</span>
+<span class="text-outline-variant">·</span>
+<span class="text-xs text-on-surface-variant font-mono">14 areas</span>
+<span class="text-outline-variant">·</span>
+<span class="text-xs text-on-surface-variant font-mono">3.1 MB</span>
+</div>
+<span class="text-xs font-mono text-tertiary font-medium bg-tertiary-container/50 px-2 py-0.5 rounded">Topology parsed</span>
+</div>
+<!-- Results Table -->
+<div class="overflow-x-auto rounded-lg">
+<table class="w-full text-left text-xs">
+<thead>
+<tr class="bg-surface-container text-on-surface-variant font-label text-[11px] uppercase tracking-wider">
+<th class="py-2.5 px-3">Code</th>
+<th class="py-2.5 px-3">Name</th>
+<th class="py-2.5 px-3">Level</th>
+<th class="py-2.5 px-3">Match</th>
+<th class="py-2.5 px-3">Shape</th>
+<th class="py-2.5 px-3 text-right">Area change</th>
+<th class="py-2.5 px-3">Outside parent</th>
+<th class="py-2.5 px-3">Overlap</th>
+</tr>
+</thead>
+<tbody class="divide-y-0 text-on-surface font-mono text-[11px]">
+<!-- Row 1 Matched -->
+<tr class="bg-surface-container-lowest hover:bg-surface-container-low transition-colors">
+<td class="py-2.5 px-3 font-semibold">JM01</td>
+<td class="py-2.5 px-3 font-body font-medium">Kingston</td>
+<td class="py-2.5 px-3 font-body text-on-surface-variant">Parish</td>
+<td class="py-2.5 px-3">
+<span class="inline-flex items-center gap-1 text-tertiary font-body font-medium bg-tertiary-container/60 px-2 py-0.5 rounded-full">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span> Matched
+                </span>
+</td>
+<td class="py-2.5 px-3"><span class="text-tertiary font-body font-medium">Valid</span></td>
+<td class="py-2.5 px-3 text-right text-on-surface-variant">0.0%</td>
+<td class="py-2.5 px-3 text-on-surface-variant">No</td>
+<td class="py-2.5 px-3 text-on-surface-variant">None</td>
+</tr>
+<!-- Row 2 Matched -->
+<tr class="bg-surface-container-low hover:bg-surface-container transition-colors">
+<td class="py-2.5 px-3 font-semibold">JM02</td>
+<td class="py-2.5 px-3 font-body font-medium">St. Andrew</td>
+<td class="py-2.5 px-3 font-body text-on-surface-variant">Parish</td>
+<td class="py-2.5 px-3">
+<span class="inline-flex items-center gap-1 text-tertiary font-body font-medium bg-tertiary-container/60 px-2 py-0.5 rounded-full">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span> Matched
+                </span>
+</td>
+<td class="py-2.5 px-3"><span class="text-tertiary font-body font-medium">Valid</span></td>
+<td class="py-2.5 px-3 text-right text-on-surface-variant">+0.01%</td>
+<td class="py-2.5 px-3 text-on-surface-variant">No</td>
+<td class="py-2.5 px-3 text-on-surface-variant">None</td>
+</tr>
+<!-- Row 3 Matched -->
+<tr class="bg-surface-container-lowest hover:bg-surface-container-low transition-colors">
+<td class="py-2.5 px-3 font-semibold">JM03</td>
+<td class="py-2.5 px-3 font-body font-medium">St. Thomas</td>
+<td class="py-2.5 px-3 font-body text-on-surface-variant">Parish</td>
+<td class="py-2.5 px-3">
+<span class="inline-flex items-center gap-1 text-tertiary font-body font-medium bg-tertiary-container/60 px-2 py-0.5 rounded-full">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span> Matched
+                </span>
+</td>
+<td class="py-2.5 px-3"><span class="text-tertiary font-body font-medium">Valid</span></td>
+<td class="py-2.5 px-3 text-right text-on-surface-variant">0.0%</td>
+<td class="py-2.5 px-3 text-on-surface-variant">No</td>
+<td class="py-2.5 px-3 text-on-surface-variant">None</td>
+</tr>
+<!-- Row 4 Matched -->
+<tr class="bg-surface-container-low hover:bg-surface-container transition-colors">
+<td class="py-2.5 px-3 font-semibold">JM04</td>
+<td class="py-2.5 px-3 font-body font-medium">Portland</td>
+<td class="py-2.5 px-3 font-body text-on-surface-variant">Parish</td>
+<td class="py-2.5 px-3">
+<span class="inline-flex items-center gap-1 text-tertiary font-body font-medium bg-tertiary-container/60 px-2 py-0.5 rounded-full">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span> Matched
+                </span>
+</td>
+<td class="py-2.5 px-3"><span class="text-tertiary font-body font-medium">Valid</span></td>
+<td class="py-2.5 px-3 text-right text-on-surface-variant">-0.02%</td>
+<td class="py-2.5 px-3 text-on-surface-variant">No</td>
+<td class="py-2.5 px-3 text-on-surface-variant">None</td>
+</tr>
+<!-- Row 5 Amber Warning Unknown code -->
+<tr class="bg-amber-50 hover:bg-amber-100/60 transition-colors">
+<td class="py-2.5 px-3 font-semibold text-amber-900">JM15</td>
+<td class="py-2.5 px-3 font-body font-medium text-amber-900">Pedro Cays Outpost</td>
+<td class="py-2.5 px-3 font-body text-amber-800">Parish</td>
+<td class="py-2.5 px-3">
+<span class="inline-flex items-center gap-1 text-amber-800 font-body font-medium bg-amber-200/70 px-2 py-0.5 rounded-full">
+<span class="w-1.5 h-1.5 rounded-full bg-amber-600"></span> Unknown code JM15
+                </span>
+</td>
+<td class="py-2.5 px-3"><span class="text-amber-800 font-body font-medium">Valid</span></td>
+<td class="py-2.5 px-3 text-right text-amber-900">New polygon</td>
+<td class="py-2.5 px-3 text-amber-900">Yes (Offshore)</td>
+<td class="py-2.5 px-3 text-amber-800">None</td>
+</tr>
+<!-- Row 6 Muted Red Broken shape -->
+<tr class="bg-error-container/20 hover:bg-error-container/30 transition-colors">
+<td class="py-2.5 px-3 font-semibold text-error">JM08</td>
+<td class="py-2.5 px-3 font-body font-medium text-error">St. James</td>
+<td class="py-2.5 px-3 font-body text-on-surface-variant">Parish</td>
+<td class="py-2.5 px-3">
+<span class="inline-flex items-center gap-1 text-tertiary font-body font-medium bg-tertiary-container/60 px-2 py-0.5 rounded-full">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span> Matched
+                </span>
+</td>
+<td class="py-2.5 px-3">
+<span class="inline-flex items-center gap-1 text-error font-body font-semibold">
+<span class="material-symbols-outlined text-[15px]">report_problem</span>
+                  Broken: shape crosses itself
+                </span>
+</td>
+<td class="py-2.5 px-3 text-right text-error font-semibold">+1.84%</td>
+<td class="py-2.5 px-3 text-error">Yes (Trelawny border)</td>
+<td class="py-2.5 px-3 text-error">0.42 km² overlap</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Summary line & Actions -->
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-2">
+<div class="flex items-center gap-3 text-xs">
+<span class="font-semibold text-tertiary">12 matched</span>
+<span class="text-outline-variant">·</span>
+<span class="font-semibold text-amber-800">1 unknown</span>
+<span class="text-outline-variant">·</span>
+<span class="font-semibold text-error">1 broken</span>
+</div>
+<div class="flex items-center gap-3">
+<button class="px-3.5 py-1.5 text-xs font-semibold text-on-surface-variant hover:text-on-surface bg-surface-container hover:bg-surface-container-high rounded-lg transition-colors" type="button">
+            Choose another file
+          </button>
+<div class="flex items-center gap-2">
+<button class="px-4 py-1.5 text-xs font-semibold bg-surface-container-highest text-outline cursor-not-allowed rounded-lg shadow-none" disabled="" type="button">
+              Save as drafts
+            </button>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-1.5 text-xs text-error font-body">
+<span class="material-symbols-outlined text-[15px]">info</span>
+<span>Fix broken rows and check again to save drafts.</span>
+</div>
+</div>
+<!-- Split: Card 2 & Open Run Drawer -->
+<div class="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
+<!-- Card 2: Import History -->
+<div class="xl:col-span-7 bg-surface-container-lowest rounded-xl shadow-sm p-6 space-y-4">
+<div class="flex items-center justify-between">
+<div>
+<h3 class="text-sm font-bold font-headline text-on-surface">Import history</h3>
+<p class="text-xs text-on-surface-variant">Archived validation runs across boundary revisions.</p>
+</div>
+<span class="text-xs font-mono text-outline">3 total runs</span>
+</div>
+<div class="overflow-x-auto rounded-lg">
+<table class="w-full text-left text-xs">
+<thead>
+<tr class="bg-surface-container text-on-surface-variant font-label text-[11px] uppercase tracking-wider">
+<th class="py-2.5 px-3">File</th>
+<th class="py-2.5 px-3">When</th>
+<th class="py-2.5 px-3">By</th>
+<th class="py-2.5 px-3">Result</th>
+<th class="py-2.5 px-3 text-right">Action</th>
+</tr>
+</thead>
+<tbody class="divide-y-0 text-on-surface font-body text-xs">
+<tr class="bg-secondary-container/20 font-medium">
+<td class="py-2.5 px-3 font-mono text-[11px] text-secondary font-semibold">parishes-2026-10.geojson</td>
+<td class="py-2.5 px-3 font-mono text-[11px]">29 Oct 06:14</td>
+<td class="py-2.5 px-3 text-on-surface-variant">Deeki T</td>
+<td class="py-2.5 px-3">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-error-container text-on-error-container">
+                    1 broken
+                  </span>
+</td>
+<td class="py-2.5 px-3 text-right">
+<span class="text-secondary text-[11px] font-semibold underline cursor-pointer">Viewing drawer</span>
+</td>
+</tr>
+<tr class="bg-surface-container-lowest hover:bg-surface-container-low transition-colors">
+<td class="py-2.5 px-3 font-mono text-[11px]">kingston-communities-v4.geojson</td>
+<td class="py-2.5 px-3 font-mono text-[11px]">24 Oct 14:02</td>
+<td class="py-2.5 px-3 text-on-surface-variant">Deeki T</td>
+<td class="py-2.5 px-3">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-tertiary-container text-on-tertiary-container">
+                    All matched
+                  </span>
+</td>
+<td class="py-2.5 px-3 text-right">
+<button class="text-on-surface-variant hover:text-on-surface text-[11px] font-medium" type="button">Inspect</button>
+</td>
+</tr>
+<tr class="bg-surface-container-low hover:bg-surface-container transition-colors">
+<td class="py-2.5 px-3 font-mono text-[11px]">portland-coastal-draft.json</td>
+<td class="py-2.5 px-3 font-mono text-[11px]">18 Oct 09:30</td>
+<td class="py-2.5 px-3 text-on-surface-variant">Deeki T</td>
+<td class="py-2.5 px-3">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-200 text-amber-900">
+                    2 unknown
+                  </span>
+</td>
+<td class="py-2.5 px-3 text-right">
+<button class="text-on-surface-variant hover:text-on-surface text-[11px] font-medium" type="button">Inspect</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<!-- Slide-over Drawer Open -->
+<div class="xl:col-span-5 bg-surface-container-lowest rounded-xl shadow-md p-6 space-y-4 relative">
+<div class="flex items-start justify-between">
+<div>
+<div class="flex items-center gap-2">
+<span class="text-[10px] font-label font-bold uppercase tracking-wider text-secondary bg-secondary-container px-1.5 py-0.5 rounded">Run Drawer</span>
+<span class="text-xs font-mono text-outline">ID #RUN-8841</span>
+</div>
+<h4 class="text-sm font-bold font-headline text-on-surface mt-1">parishes-2026-10.geojson</h4>
+</div>
+<button class="text-on-surface-variant hover:text-on-surface p-1 rounded-md hover:bg-surface-container transition-colors" type="button">
+<span class="material-symbols-outlined text-[18px]">close</span>
+</button>
+</div>
+<!-- Drawer Tabs -->
+<div class="flex items-center gap-2 border-b-0">
+<button class="px-2.5 py-1 text-xs font-medium text-on-surface-variant hover:text-on-surface rounded bg-surface-container-low" type="button">
+            Matched 12
+          </button>
+<button class="px-2.5 py-1 text-xs font-medium text-amber-900 bg-amber-100 rounded" type="button">
+            Unknown 1
+          </button>
+<button class="px-2.5 py-1 text-xs font-bold text-on-error bg-error rounded shadow-sm" type="button">
+            Broken 1
+          </button>
+</div>
+<!-- Drawer Content Details -->
+<div class="space-y-3 bg-surface-container-low p-4 rounded-lg">
+<div class="flex items-start gap-2.5">
+<span class="material-symbols-outlined text-error text-[18px] shrink-0 mt-0.5">error</span>
+<div class="space-y-1">
+<div class="text-xs font-bold text-on-surface">Topology self-intersection detected</div>
+<p class="text-[11px] text-on-surface-variant leading-relaxed">
+                St. James parish multi-polygon node sequence crosses segment (18.4719, -77.9221) at vertex index 84.
+                The geometry cannot be committed to live tables without topological sanitization.
+              </p>
+</div>
+</div>
+<div class="bg-surface-container p-2.5 rounded font-mono text-[11px] text-on-surface-variant space-y-1">
+<div class="flex justify-between"><span>Geometry code:</span> <span class="font-semibold text-on-surface">JM08</span></div>
+<div class="flex justify-between"><span>Intersecting edge:</span> <span>[83, 84] × [112, 113]</span></div>
+<div class="flex justify-between"><span>Target:</span> <span>parishes_live</span></div>
+</div>
+</div>
+<!-- Drawer Action -->
+<div class="pt-2 flex items-center justify-between">
+<button class="text-xs text-on-surface-variant hover:text-on-surface font-medium underline" type="button">
+            Download error GeoJSON
+          </button>
+<button class="px-3.5 py-1.5 text-xs font-semibold bg-surface-container-highest text-outline cursor-not-allowed rounded-lg" disabled="" type="button">
+            Publish drafts from this import…
+          </button>
+</div>
+</div>
+</div>
+<!-- Card 3: Map checks -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm p-6 space-y-5">
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+<div>
+<h3 class="text-sm font-bold font-headline text-on-surface">Map checks</h3>
+<p class="text-xs text-on-surface-variant">Automated geometric consistency, orphan audits, and naming collisions.</p>
+</div>
+<div class="flex items-center gap-1.5 text-xs font-mono text-outline">
+<span class="material-symbols-outlined text-[15px]">verified</span>
+<span>7 rules evaluated</span>
+</div>
+</div>
+<!-- Filter Chips -->
+<div class="flex flex-wrap items-center gap-2">
+<button class="px-2.5 py-1 text-xs font-medium rounded-full bg-surface-container text-on-surface-variant hover:text-on-surface" type="button">
+          All 71
+        </button>
+<button class="px-2.5 py-1 text-xs font-medium rounded-full bg-surface-container text-on-surface-variant hover:text-on-surface" type="button">
+          Shape is broken 0
+        </button>
+<button class="px-2.5 py-1 text-xs font-medium rounded-full bg-surface-container text-on-surface-variant hover:text-on-surface" type="button">
+          Parent missing 0
+        </button>
+<button class="px-2.5 py-1 text-xs font-medium rounded-full bg-surface-container text-on-surface-variant hover:text-on-surface" type="button">
+          Too many points 0
+        </button>
+<button class="px-2.5 py-1 text-xs font-medium rounded-full bg-surface-container text-on-surface-variant hover:text-on-surface" type="button">
+          Sticks out of its parent 0
+        </button>
+<button class="px-2.5 py-1 text-xs font-medium rounded-full bg-surface-container text-on-surface-variant hover:text-on-surface" type="button">
+          Overlaps a neighbour 0
+        </button>
+<button class="px-2.5 py-1 text-xs font-semibold rounded-full bg-secondary text-on-secondary shadow-sm" type="button">
+          Same name as another area 71
+        </button>
+</div>
+<!-- Table: Area · Level · Issue · Severity · (Open ›) -->
+<div class="overflow-x-auto rounded-lg">
+<table class="w-full text-left text-xs">
+<thead>
+<tr class="bg-surface-container text-on-surface-variant font-label text-[11px] uppercase tracking-wider">
+<th class="py-2.5 px-3">Area</th>
+<th class="py-2.5 px-3">Level</th>
+<th class="py-2.5 px-3">Issue</th>
+<th class="py-2.5 px-3">Severity</th>
+<th class="py-2.5 px-3 text-right">Action</th>
+</tr>
+</thead>
+<tbody class="divide-y-0 text-on-surface font-body text-xs">
+<tr class="bg-surface-container-lowest hover:bg-surface-container-low transition-colors">
+<td class="py-2.5 px-3 font-semibold">Bellevue</td>
+<td class="py-2.5 px-3 text-on-surface-variant">Community</td>
+<td class="py-2.5 px-3">Same name as another area</td>
+<td class="py-2.5 px-3">
+<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-surface-container-highest text-on-surface-variant">
+                  Info
+                </span>
+</td>
+<td class="py-2.5 px-3 text-right">
+<a class="text-secondary font-semibold hover:underline" href="#">Open ›</a>
+</td>
+</tr>
+<tr class="bg-surface-container-low hover:bg-surface-container transition-colors">
+<td class="py-2.5 px-3 font-semibold">Mount Zion</td>
+<td class="py-2.5 px-3 text-on-surface-variant">Community</td>
+<td class="py-2.5 px-3">Same name as another area</td>
+<td class="py-2.5 px-3">
+<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-surface-container-highest text-on-surface-variant">
+                  Info
+                </span>
+</td>
+<td class="py-2.5 px-3 text-right">
+<a class="text-secondary font-semibold hover:underline" href="#">Open ›</a>
+</td>
+</tr>
+<tr class="bg-surface-container-lowest hover:bg-surface-container-low transition-colors">
+<td class="py-2.5 px-3 font-semibold">Hopewell</td>
+<td class="py-2.5 px-3 text-on-surface-variant">Community</td>
+<td class="py-2.5 px-3">Same name as another area</td>
+<td class="py-2.5 px-3">
+<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-surface-container-highest text-on-surface-variant">
+                  Info
+                </span>
+</td>
+<td class="py-2.5 px-3 text-right">
+<a class="text-secondary font-semibold hover:underline" href="#">Open ›</a>
+</td>
+</tr>
+<tr class="bg-surface-container-low hover:bg-surface-container transition-colors">
+<td class="py-2.5 px-3 font-semibold">Newstead</td>
+<td class="py-2.5 px-3 text-on-surface-variant">Community</td>
+<td class="py-2.5 px-3">Same name as another area</td>
+<td class="py-2.5 px-3">
+<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-surface-container-highest text-on-surface-variant">
+                  Info
+                </span>
+</td>
+<td class="py-2.5 px-3 text-right">
+<a class="text-secondary font-semibold hover:underline" href="#">Open ›</a>
+</td>
+</tr>
+<tr class="bg-surface-container-lowest hover:bg-surface-container-low transition-colors">
+<td class="py-2.5 px-3 font-semibold">Content</td>
+<td class="py-2.5 px-3 text-on-surface-variant">Community</td>
+<td class="py-2.5 px-3">Same name as another area</td>
+<td class="py-2.5 px-3">
+<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-surface-container-highest text-on-surface-variant">
+                  Info
+                </span>
+</td>
+<td class="py-2.5 px-3 text-right">
+<a class="text-secondary font-semibold hover:underline" href="#">Open ›</a>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Footer Info -->
+<div class="pt-2 text-xs font-mono text-outline flex items-center justify-between">
+<span>Checked nightly at 06:20 UTC and after every publish · last checked 29 Oct 06:20</span>
+<span class="text-[11px] text-on-surface-variant">Showing 5 of 71</span>
+</div>
+</div>
+</div>
+</main></body></html>

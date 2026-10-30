@@ -7376,6 +7376,7 @@
             "npm:leaflet.heat@0.2",
             "npm:leaflet@1.9.4",
             "npm:lucide-react@0.487",
+            "npm:papaparse@*",
             "npm:react-day-picker@^8.10.1",
             "npm:recharts@*",
             "npm:sonner@^2.0.3",

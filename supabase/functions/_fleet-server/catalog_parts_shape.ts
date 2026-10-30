@@ -46,9 +46,9 @@ export type CatalogPartItem = {
   fitScope?: string | null;
 };
 
-export function selectPartsMode(input: { killed: boolean; ready: boolean }): "tiered" | "legacy" {
+export function selectPartsMode(input: { killed: boolean; ready?: boolean }): "tiered" | "legacy" {
   if (input.killed) return "legacy";
-  return input.ready ? "tiered" : "legacy";
+  return "tiered";
 }
 
 export function referenceOffersOnly(offers: CatalogOffer[]): CatalogOffer[] {

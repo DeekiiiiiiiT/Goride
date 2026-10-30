@@ -1,0 +1,59 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Public+Sans:wght@500;600&family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap");
+
+.categories-stitch {
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+}
+.categories-stitch .font-mono {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+}
+.categories-stitch .font-label {
+  font-family: "Public Sans", ui-sans-serif, system-ui, sans-serif;
+}
+.categories-stitch .material-symbols-outlined {
+  font-family: "Material Symbols Outlined";
+  font-weight: normal;
+  font-style: normal;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  direction: ltr;
+  font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
+}
+
+/* Tailwind inlines these colours, so dark mode has to override the utilities. */
+.dark .categories-stitch {
+  background-color: #0b1220;
+  color: #e2e8f0;
+}
+.dark .categories-stitch .bg-surface { background-color: #0b1220; }
+.dark .categories-stitch .bg-surface-container-lowest { background-color: #111827; }
+.dark .categories-stitch .bg-surface-container-low,
+.dark .categories-stitch .bg-surface-container-low\/50,
+.dark .categories-stitch .bg-surface-container-low\/70 { background-color: #172033; }
+.dark .categories-stitch .bg-surface-container { background-color: #1e293b; }
+.dark .categories-stitch .bg-surface-container-high,
+.dark .categories-stitch .bg-surface-container-high\/60 { background-color: #243044; }
+.dark .categories-stitch .bg-surface-container-highest { background-color: #2a3650; }
+.dark .categories-stitch .bg-secondary { background-color: #5b8def; }
+.dark .categories-stitch .bg-secondary-container { background-color: #1e3a5f; }
+.dark .categories-stitch .bg-\[\#ebf2ff\] { background-color: #1e3a5f; }
+.dark .categories-stitch .text-on-surface { color: #e2e8f0; }
+.dark .categories-stitch .text-on-surface-variant { color: #cbd5e1; }
+.dark .categories-stitch .text-outline { color: #94a3b8; }
+.dark .categories-stitch .text-outline-variant { color: #64748b; }
+.dark .categories-stitch .text-secondary { color: #8eb4ff; }
+.dark .categories-stitch .text-error { color: #f87171; }
+.dark .categories-stitch .text-tertiary { color: #4ade80; }
+.dark .categories-stitch .text-on-secondary { color: #ffffff; }
+.dark .categories-stitch .text-on-primary-container { color: #dbeafe; }
+.dark .categories-stitch .divide-surface-container > :not(:last-child) { border-color: #1e293b; }
+.dark .categories-stitch .placeholder\:text-outline::placeholder { color: #94a3b8; }
+.dark .categories-stitch .hover\:bg-surface-container:hover,
+.dark .categories-stitch .hover\:bg-surface-container-low:hover { background-color: #172033; }
+.dark .categories-stitch .hover\:bg-secondary:hover { background-color: #5b8def; }
+.dark .categories-stitch .hover\:bg-secondary-dim:hover { background-color: #3b6fd4; }
+.dark .categories-stitch .hover\:text-on-surface:hover { color: #e2e8f0; }
+.dark .categories-stitch .group:hover .group-hover\:text-secondary { color: #8eb4ff; }
+.dark .categories-stitch .hover\:text-on-secondary:hover { color: #ffffff; }

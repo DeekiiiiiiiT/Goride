@@ -1,0 +1,269 @@
+ROAM DOMINION — PLACES REGISTER FULL DESIGN PROMPT (GOOGLE STITCH)
+
+
+
+
+Roam Dominion - Places Register (Desktop Admin, for the owner):
+
+Design high-fidelity desktop admin screens
+
+BRAND IDENTITY:
+- Match the existing Roam Dominion admin style:
+  - dark navy left sidebar
+  - white top bar with a search field and the owner avatar
+  - white cards and compact data tables
+- LIGHT MODE (default):
+  - Primary: Dominion Blue (#0153dc) — primary buttons, links, selected rows, active filters
+  - Primary container: Pale Blue (#dbe1ff) — selected chips, row selection tint
+  - Success / verified / on Plug: Green (#006e31)
+  - Warning / pending / issues: Amber (#d97706)
+  - Error / destructive: Muted Red (#a83836)
+  - Neutral: Slate (#797a84) — borders, muted text, icons
+  - Background: Cool off-white (#faf8fe)
+  - Surface cards: Pure white (#FFFFFF)
+  - Text primary: Charcoal (#30323b)
+  - Sidebar: Dark navy (#0f172a) with white text; the active item is a solid Dominion Blue pill
+- DARK MODE:
+  - Primary: #5b8def
+  - Primary container: #1e3a5f
+  - Success: #4ade80
+  - Warning: #f59e0b
+  - Error: #f87171
+  - Neutral: #94a3b8
+  - Background: Deep navy (#0b1220)
+  - Surface: #111a2e
+  - Text primary: #e2e8f0
+- Place type chips are neutral (white or grey with a small icon), never coloured by group
+- Status chips:
+  - Verified: green dot
+  - Pending: amber dot
+  - Learnt: blue dot
+  - Rejected: red dot
+  - Duplicate: slate dot
+  - Closed: slate outline
+  - Anomaly: amber outline
+- Issue chips: small amber outline pills ("Pin not checked", "No brand", "Parish text differs", "Outside Jamaica")
+- No gradients, glassmorphism or 3D. No AI badges, "REGION" badges or "LOC:" footers.
+- Typography: Inter. Codes, counts, coordinates and dates use the mono font with tabular numerals.
+- Brand name in the sidebar: "Dominion — Roam Admin Console"
+- Jamaica context everywhere:
+  - the 14 parishes, plus towns
+  - Plus Codes (e.g. "7795X2GP+6C9")
+  - +1 876 phone numbers
+  - local fuel brands (TotalEnergies, Rubis, Texaco, FESCO, Cool Oasis, Petcom, Unipet, Gulfstream)
+
+DESIGN PRINCIPLES:
+- Desktop-first (1440px wide), keyboard friendly; a phone version for the list and the drawer
+- The list never disappears: records open in a right-side drawer over the list, and closing it returns to the same scroll position
+- Every row shows what is missing (issue chips) so staff know what to fix
+- Every change shows a preview first and asks for a short reason, and every change is kept in History
+- Parish is never typed: it is worked out from where the pin sits on the map
+- A new place starts with NO pin; nothing can be saved until a pin is dropped
+- Gas stations open the existing Station drawer; this section's drawer is for every other place type
+- Light theme default, dark mode variant
+- Strict 8px spacing grid, 12–16px card corners, hairline borders, very soft shadows, skeleton loading
+
+---
+
+SCREEN 1: PLACES REGISTER — LIST
+- Sidebar: Overview | MASTER DATA: Vehicles, Places and Maps (active), Fuel, Tolls, Tax and Vendors | ENGINES … | DISTRIBUTION … | PLATFORM … | BACK OFFICE …
+- Breadcrumb: Dominion › Master data › Places and Maps › Places register
+- Header:
+  - Title: "Places register"
+  - Subtitle: "Every place every app can find, with its type, pin and facilities."
+  - Right: "Import" (secondary), "Export" (secondary), "+ Add a place" (primary)
+- KPI strip (6 compact tiles):
+  - "Places 217"
+  - "Verified 69"
+  - "Pending 148"
+  - "Pins checked 0 / 217" (amber)
+  - "On Plug 69"
+  - "Need attention 217"
+- Filter bar:
+  - Search: "Search name, brand, alias, plus code or address"
+  - Dropdown chips: Type (menu shows the tree Group › Category › Type) | Status | Brand | Parish | Pin | Source (Manual / Roam Fleet) | Issue
+  - Active filters as removable chips: "Parish: Saint Catherine ×"
+  - "Clear all" link
+- Table (sticky header, sortable columns, checkbox column):
+  - Place: name in title case, with the brand under it in grey ("Advance Service Station" / "Independent")
+  - Type: neutral chip with icon ("Gas station", "Toll plaza")
+  - Location: "Albion Boulevard · Albion · Saint Thomas" (truncated, tooltip shows the full address)
+  - Status: chip
+  - Issues: up to 3 chips, then "+2"
+  - Facilities: count ("3"), tooltip lists them
+  - Geofence: "150 m", or "50 m" with a tiny blue override dot
+  - Updated: "28 Oct"
+- Rows to show:
+  - Advance Service Station
+  - Aero Sales (2006) Ltd.
+  - Allen's Esso Service Centre
+  - Alpha and Omega Energy Co. Ltd
+  - AlphaOne Service Station
+  - Alwil Company Ltd (FESCO)
+  - Angel's Mart Limited
+  - Angels (Toll plaza, Spanish Town)
+  - Apex Energy Systems Ltd.
+  - Artie Phillips Rubis Service Station
+  - Blaize Gas Station
+  - Blaize Old Harbour Road
+- 3 rows ticked (shows the bulk bar from Screen 5)
+- Footer: "Showing 1–50 of 217" with pagination
+
+SCREEN 2: PLACE DRAWER — VIEW
+- Right-side drawer (560px) over the dimmed list, for the toll plaza "Angels"
+- Header:
+  - Place type icon tile, "Angels", chip "Toll plaza"
+  - Grey line: "Independent · Spanish Town › Saint Catherine"
+  - Green chip "On Plug", close X
+- Issue chips row: "Pin not checked" (amber)
+- Tabs: Overview | Facilities | Aliases | History
+- Overview tab:
+  - Map (220px tall) with the pin and a 200 m geofence circle, plus a small "Confirm pin" button on the map
+  - Two-column details, values in mono:
+    - Status: Verified
+    - Pin: Not checked
+    - Coordinates: 17.9961, −76.9547
+    - Plus code: 7795X2GP+6C9
+    - Area code: JM0807
+    - Parish: Saint Catherine (from the pin)
+    - Geofence: 200 m (override)
+    - Phone: —
+    - Website: —
+    - Source: Manual
+    - Verified: 24 Oct 2026
+    - Updated: 28 Oct 2026
+- Facilities tab (inset): chips "Toll booth", "T-Tag top-up"
+- History tab (inset): rows of date · who · action · reason ("28 Oct · Deeki T · Geofence set to 200 m · Plaza lanes are wide")
+- Sticky footer:
+  - "Edit" (secondary)
+  - "Verify" (primary), with the tooltip "Needs: Pin checked"
+
+SCREEN 3: PLACE DRAWER — EDIT
+- Same drawer in edit mode
+- Fields:
+  - Type (tree picker)
+  - Name
+  - Brand (only brands for this type)
+  - Address
+  - Phone (+1 876)
+  - Website
+  - Geofence (helper: "Blank uses the type default, 200 m")
+  - The type's own fields
+- Read-only line: "Parish: Saint Catherine (from the pin)"
+- Map with a draggable pin
+- Facilities:
+  - Suggested chips for this type first
+  - Then a collapsed "More facilities" section with a search box
+- Required field: "Reason for this change"
+- Footer: "Cancel" | "Save"
+
+SCREEN 4: ADD A PLACE (DIALOG, 880px, TWO COLUMNS)
+- Title: "Add a place"
+- Left column:
+  - Type tree picker with "Recent" chips on top
+  - Name
+  - Brand
+  - Address search: "Search an address or click the map"
+  - Phone
+  - Website
+  - Geofence
+  - The type's own fields
+  - Suggested facility chips
+- Right column:
+  - Map of Jamaica with NO pin, and a centred hint: "Click the map or search an address to drop the pin"
+  - "Possible duplicates" card: "Drop the pin to check for duplicates nearby."
+- Footer:
+  - Checklist: "Type ✓ · Name ✓ · Pin ✗ · Pin checked ✗"
+  - "Cancel"
+  - "Save as pending" (disabled until a pin exists)
+  - "Save and verify" (primary, disabled)
+
+SCREEN 5: BULK ACTION BAR + CONFIRM
+- A floating dark bar centred at the bottom of the table:
+  - "3 selected · Set brand · Confirm pins · Add facility · Remove facility · Set type · Verify · Mark duplicate · Clear"
+- Confirm dialog (520px), open for "Set brand":
+  - Title: "Set brand on 3 places"
+  - Brand picker set to "Rubis"
+  - Preview list: each place with "Independent → Rubis"
+  - Required "Reason" field
+  - Note: "Plug updates right away. Each change is kept in History."
+  - Footer: "Cancel" | "Apply to 3 places" (primary)
+- Inset variant, refused "Set type":
+  - Info panel: "Changing a gas station to another type moves it out of fuel matching. Change these one at a time."
+  - Only a "Close" button
+
+SCREEN 6: IMPORT PLACES (DIALOG, 760px)
+- Stepper: "1 Choose file ✓" — "2 Check" (active) — "3 Save"
+- File chip: "new-places.csv · 24 rows"
+- Results table:
+  - Columns: Row | Name | Type | Pin | Parish (from pin) | Duplicate | Result
+  - 4 rows: green "Ready"
+  - 1 row: amber "Possible duplicate: Texaco Constant Spring, 40 m"
+  - 1 row: red "Pin outside Jamaica"
+- Summary: "22 ready · 1 duplicate · 1 error"
+- "Save 22 places" (primary, disabled), with helper text: "Fix errors and check again to save."
+- Link: "Download a template CSV"
+
+SCREEN 7: MERGE DUPLICATE PLACES (DIALOG, 760px)
+- Title: "Merge duplicate places"
+- Two cards side by side, each with a "Keep this one" radio:
+  - Left (selected): "Blaize Gas Station · Verified · 69 m away · 2 aliases · 3 facilities · 4 prices"
+  - Right: "Blaize Old Harbour Road · Pending · 1 alias · 1 facility"
+- Middle note: "The other place becomes a duplicate. Its aliases and facilities move to the one you keep."
+- Required "Reason" field
+- Footer: "Cancel" | "Merge" (primary)
+
+SCREEN 8: LOADING, ERROR, EMPTY, READ-ONLY
+- Skeleton table rows and KPI tiles
+- Error card: "Could not load places. Nothing was changed." with "Retry"
+- Empty filter result: "No places match these filters." with "Clear filters"
+- Read-only note for staff: "You can view places. Only the owner can add, edit, verify or import."
+
+SCREEN 9: LIST AND DRAWER (390px)
+- List:
+  - Cards instead of table rows (name, brand, type chip, status, issue chips)
+  - Filters scroll sideways
+- Drawer becomes a full-screen sheet with a back arrow
+- No page-level horizontal scrolling
+
+---
+
+ADDITIONAL UI COMPONENTS:
+- KPI tile (label, mono number, optional amber state)
+- Filter dropdown chip and removable active-filter chip
+- Type tree picker (Group › Category › Type, with search and Recent)
+- Status chip (7 statuses)
+- Issue chip (amber outline)
+- Geofence value with override dot
+- Right-side record drawer with tabs and sticky footer
+- Map with draggable pin and geofence circle, plus "Confirm pin" control
+- Read-only "from the pin" field style
+- Verify checklist (✓ / ✗ steps)
+- Floating bulk action bar
+- Confirm dialog with before → after preview and reason field
+- Three-step import stepper with a results table
+- Side-by-side merge cards with "Keep this one" radio
+- Toasts: "Saved — kept in History", "3 places updated", "Merged"
+- Skeleton loaders, error card, empty state
+
+INTERACTIONS:
+- Clicking a row opens the drawer; Esc closes it and returns to the same scroll position
+- The URL keeps every filter and the open place (&place=<id>), so a view can be shared
+- Search waits until typing pauses
+- Ticking rows slides up the bulk bar; every bulk action opens its confirm dialog first
+- Dragging the pin updates the parish line and the duplicate check live
+- "Verify" stays disabled until every checklist step is ✓, and the tooltip lists what is missing
+- Import "Save" unlocks only after a check with zero errors
+- After save, a toast appears and the row updates in place without reloading the list
+- A gas station row opens the existing Station drawer instead of this drawer
+
+---
+
+Spec screens	Area
+1 Register list	List
+2–3 Place drawer (view, edit)	Record
+4 Add a place	Create
+5 Bulk bar + confirm	Bulk
+6 Import places	Import
+7 Merge duplicates	Merge
+8–9 States, phone	States / mobile

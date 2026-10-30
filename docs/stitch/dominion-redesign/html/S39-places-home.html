@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_dashboard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;family=Public+Sans:wght@500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        "colors": {
+          "on-tertiary-fixed-variant": "#006c30",
+          "secondary-fixed": "#dbe1ff",
+          "secondary": "#0153dc",
+          "surface-container-highest": "#e1e2ed",
+          "error-dim": "#67040d",
+          "inverse-surface": "#0d0e12",
+          "on-secondary-fixed": "#003798",
+          "primary-fixed-dim": "#cad5ed",
+          "on-primary-fixed-variant": "#515c70",
+          "outline-variant": "#b0b1bc",
+          "surface-container-lowest": "#ffffff",
+          "secondary-fixed-dim": "#c7d3ff",
+          "on-secondary-fixed-variant": "#0050d5",
+          "primary": "#545f74",
+          "tertiary": "#006e31",
+          "outline": "#797a84",
+          "tertiary-fixed": "#98fba9",
+          "inverse-primary": "#dae6fe",
+          "on-background": "#30323b",
+          "primary-container": "#d8e3fb",
+          "error": "#a83836",
+          "tertiary-fixed-dim": "#8aec9c",
+          "error-container": "#fa746f",
+          "on-error-container": "#6e0a12",
+          "surface-dim": "#d9d9e4",
+          "surface-container-high": "#e8e7f1",
+          "on-tertiary-container": "#00612a",
+          "on-tertiary-fixed": "#004c20",
+          "background": "#faf8fe",
+          "on-secondary-container": "#0047c0",
+          "primary-dim": "#485367",
+          "secondary-dim": "#0049c3",
+          "on-tertiary": "#e9ffe7",
+          "surface-bright": "#faf8fe",
+          "inverse-on-surface": "#9d9ca2",
+          "secondary-container": "#dbe1ff",
+          "on-primary-fixed": "#354053",
+          "on-secondary": "#faf8ff",
+          "on-surface": "#30323b",
+          "surface-variant": "#e1e2ed",
+          "primary-fixed": "#d8e3fb",
+          "on-surface-variant": "#5d5f68",
+          "on-primary": "#f8f8ff",
+          "surface-tint": "#545f74",
+          "tertiary-container": "#98fba9",
+          "surface": "#faf8fe",
+          "on-primary-container": "#475266",
+          "on-error": "#fff7f6",
+          "tertiary-dim": "#00612a",
+          "surface-container-low": "#f4f3fa",
+          "surface-container": "#eeedf6"
+        },
+        "borderRadius": {
+          "DEFAULT": "0.25rem",
+          "lg": "0.5rem",
+          "xl": "0.75rem",
+          "full": "9999px"
+        },
+        "spacing": {},
+        "fontFamily": {
+          "headline": [
+            "Inter"
+          ],
+          "display": [
+            "Inter"
+          ],
+          "body": [
+            "Inter"
+          ],
+          "label": [
+            "Public Sans"
+          ]
+        },
+        "fontSize": {}
+      },
+    },
+  }</script></head><body class="bg-surface font-body text-on-surface antialiased"><aside class="fixed left-0 top-0 h-full w-64 bg-[#1e293b] z-50 flex flex-col justify-between shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="flex flex-col flex-1 overflow-y-auto"><div class="h-16 px-6 flex items-center justify-between"><div class="flex items-center gap-2.5"><div class="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center"><span class="text-on-secondary font-headline font-bold text-sm tracking-wider">D</span></div><div class="flex flex-col"><span class="text-sm font-headline font-semibold text-slate-100 tracking-tight">DOMINION</span><span class="text-[10px] font-label uppercase tracking-widest text-slate-400">Jamaica Admin</span></div></div></div><nav class="px-3 py-4 space-y-6 flex-1 text-xs" data-active-classes="bg-secondary text-on-secondary font-medium rounded-lg"><div class="space-y-1"><div class="px-3 pb-1 text-[10px] font-label uppercase tracking-wider font-semibold text-slate-400">Core</div><a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all" data-path="overview" href="#"><span class="material-symbols-outlined text-[18px]">dashboard</span><span>Overview</span></a></div><div class="space-y-1"><div class="px-3 pb-1 text-[10px] font-label uppercase tracking-wider font-semibold text-slate-400">Master Data</div><a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all" data-path="places-and-maps" href="#"><span class="material-symbols-outlined text-[18px]">map</span><span>Places and Maps</span></a><a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all" data-path="fares-and-zones" href="#"><span class="material-symbols-outlined text-[18px]">payments</span><span>Fares and Zones (JMD)</span></a><a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all" data-path="terminal-registry" href="#"><span class="material-symbols-outlined text-[18px]">domain</span><span>Terminal Registry</span></a></div><div class="space-y-1"><div class="px-3 pb-1 text-[10px] font-label uppercase tracking-wider font-semibold text-slate-400">Engines</div><a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all" data-path="dispatch-engines" href="#"><span class="material-symbols-outlined text-[18px]">hub</span><span>Dispatch Engines</span></a><a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all" data-path="pricing-matrix" href="#"><span class="material-symbols-outlined text-[18px]">calculate</span><span>Pricing Matrix</span></a></div><div class="space-y-1"><div class="px-3 pb-1 text-[10px] font-label uppercase tracking-wider font-semibold text-slate-400">Distribution</div><a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all" data-path="parish-routes" href="#"><span class="material-symbols-outlined text-[18px]">alt_route</span><span>Parish Routes</span></a><a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all" data-path="depot-allocations" href="#"><span class="material-symbols-outlined text-[18px]">warehouse</span><span>Depot Allocations</span></a></div><div class="space-y-1"><div class="px-3 pb-1 text-[10px] font-label uppercase tracking-wider font-semibold text-slate-400">Platform</div><a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all" data-path="system-nodes" href="#"><span class="material-symbols-outlined text-[18px]">dns</span><span>System Nodes</span></a><a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all" data-path="back-office" href="#"><span class="material-symbols-outlined text-[18px]">admin_panel_settings</span><span>Back Office</span></a></div></nav></div><div class="px-4 py-3 bg-[#172033] flex items-center justify-between text-[11px] font-mono text-slate-400"><div class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span><span class="font-medium text-slate-300">KGN-DC-01</span></div><span class="tracking-tight text-[10px] bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded">JMD READY</span></div></aside><div class="pl-64 flex flex-col min-h-screen"><header class="fixed top-0 left-64 right-0 h-16 bg-surface-container-lowest/90 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-40 flex items-center justify-between px-8"><div class="relative w-96 flex items-center"><span class="material-symbols-outlined absolute left-3 text-outline text-[18px]">search</span><input class="w-full pl-9 pr-4 py-1.5 bg-surface-container text-on-surface placeholder:text-outline text-xs rounded-lg outline-none focus:bg-surface-container-low transition-colors font-body" placeholder="Search entities, engines, routes…" type="text"/></div><div class="flex items-center gap-4"><button class="w-8 h-8 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-surface-container transition-colors" title="Help and Documentation" type="button"><span class="material-symbols-outlined text-[18px]">help_outline</span></button><button class="w-8 h-8 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-surface-container transition-colors relative" title="Notifications" type="button"><span class="material-symbols-outlined text-[18px]">notifications</span><span class="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-secondary rounded-full"></span></button><div class="h-4 w-px bg-surface-container-highest"></div><div class="flex items-center gap-2.5 pl-1"><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div><div class="flex flex-col text-left"><span class="text-xs font-semibold text-on-surface font-headline leading-tight">Deeki T</span><span class="text-[10px] font-label text-on-surface-variant leading-tight">DT · Owner</span></div></div></div></header><main class="relative pt-16 flex-1 w-full px-8 pb-10 bg-surface"><div class="flex flex-col w-full">
+<!-- PAGE HEADER & BREADCRUMB -->
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-6">
+<div class="flex flex-col space-y-1.5">
+<div class="flex items-center gap-2 font-mono text-[11px] tracking-wider text-outline uppercase font-medium">
+<span>DOMINION</span>
+<span class="text-outline-variant">›</span>
+<span>MASTER DATA</span>
+<span class="text-outline-variant">›</span>
+<span class="text-on-surface font-semibold">PLACES AND MAPS</span>
+</div>
+<div class="flex items-baseline gap-3">
+<h1 class="text-2xl font-bold font-headline text-on-surface tracking-tight">Places and Maps</h1>
+<span class="text-xs text-on-surface-variant font-normal">Jamaica's map and every place the apps can find.</span>
+</div>
+</div>
+<!-- REFRESH & TIMESTAMP CHIP -->
+<div class="flex items-center gap-2.5 self-start md:self-auto">
+<div class="flex items-center gap-2 px-2.5 py-1 rounded bg-surface-container-high text-on-surface-variant font-mono text-xs shadow-sm">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse"></span>
+<span class="text-[11px] tracking-tight">Updated 21:05</span>
+</div>
+<button class="w-8 h-8 rounded flex items-center justify-center bg-surface-container-lowest text-on-surface-variant hover:text-secondary hover:bg-surface-container transition-colors shadow-sm" title="Refresh" type="button">
+<span class="material-symbols-outlined text-[17px]">refresh</span>
+</button>
+</div>
+</div>
+<!-- KPI SUMMARY ROW (4 TILES) -->
+<div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
+<!-- TILE 1: PLACES -->
+<div class="bg-surface-container-lowest p-5 rounded-xl shadow-sm flex flex-col justify-between">
+<div>
+<div class="flex items-center justify-between mb-2">
+<span class="text-[10px] font-label font-bold tracking-wider text-outline uppercase">Places</span>
+<span class="material-symbols-outlined text-[18px] text-outline">place</span>
+</div>
+<div class="text-4xl font-mono font-light text-on-surface tracking-tight leading-none mb-1">217</div>
+<div class="text-xs text-on-surface-variant">69 verified · 148 pending</div>
+</div>
+<div class="mt-4 pt-3 space-y-1.5 bg-surface-container-low/40 -mx-5 -mb-5 p-5 rounded-b-xl">
+<div class="w-full h-1.5 bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-secondary rounded-full" style="width: 32%;"></div>
+</div>
+<div class="flex items-center justify-between text-[11px] font-mono text-on-surface-variant">
+<span>32% verified</span>
+<span class="text-outline">69 / 217</span>
+</div>
+</div>
+</div>
+<!-- TILE 2: PLACES QUALITY -->
+<div class="bg-surface-container-lowest p-5 rounded-xl shadow-sm flex flex-col justify-between">
+<div>
+<div class="flex items-center justify-between mb-2">
+<span class="text-[10px] font-label font-bold tracking-wider text-outline uppercase">Places Quality</span>
+<span class="material-symbols-outlined text-[18px] text-amber-600">verified</span>
+</div>
+<div class="text-4xl font-mono font-light text-amber-600 tracking-tight leading-none mb-1">0%</div>
+<div class="flex items-center gap-1.5 text-xs text-amber-600 font-medium">
+<span class="w-1.5 h-1.5 rounded-full bg-amber-600"></span>
+<span>217 pins not checked</span>
+</div>
+</div>
+<div class="mt-4 pt-2 space-y-2 bg-surface-container-low/40 -mx-5 -mb-5 p-5 rounded-b-xl">
+<div class="space-y-1">
+<div class="flex justify-between text-[10px] font-mono text-on-surface-variant">
+<span>Pin checked 0 / 217</span>
+<span>0%</span>
+</div>
+<div class="w-full h-1 bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-outline rounded-full" style="width: 0%;"></div>
+</div>
+</div>
+<div class="space-y-1">
+<div class="flex justify-between text-[10px] font-mono text-on-surface-variant">
+<span>Area code 217 / 217</span>
+<span>100%</span>
+</div>
+<div class="w-full h-1 bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-tertiary rounded-full" style="width: 100%;"></div>
+</div>
+</div>
+<div class="space-y-1">
+<div class="flex justify-between text-[10px] font-mono text-on-surface-variant">
+<span>Brand set 140 / 205</span>
+<span>68%</span>
+</div>
+<div class="w-full h-1 bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-secondary rounded-full" style="width: 68%;"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- TILE 3: ON PLUG -->
+<div class="bg-surface-container-lowest p-5 rounded-xl shadow-sm flex flex-col justify-between">
+<div>
+<div class="flex items-center justify-between mb-2">
+<span class="text-[10px] font-label font-bold tracking-wider text-outline uppercase">On Plug</span>
+<span class="material-symbols-outlined text-[18px] text-tertiary">power</span>
+</div>
+<div class="text-4xl font-mono font-light text-tertiary tracking-tight leading-none mb-1">69</div>
+<div class="text-xs text-on-surface-variant">of 217 places show on Roam Plug</div>
+</div>
+<div class="mt-4 pt-3 space-y-1.5 bg-surface-container-low/40 -mx-5 -mb-5 p-5 rounded-b-xl">
+<div class="w-full h-1.5 bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-tertiary rounded-full" style="width: 32%;"></div>
+</div>
+<div class="flex items-center justify-between text-[11px]">
+<span class="font-mono text-tertiary font-medium">32%</span>
+<span class="text-[10px] text-outline font-body">Only verified places show on Plug</span>
+</div>
+</div>
+</div>
+<!-- TILE 4: MAP QUALITY -->
+<div class="bg-surface-container-lowest p-5 rounded-xl shadow-sm flex flex-col justify-between">
+<div>
+<div class="flex items-center justify-between mb-2">
+<span class="text-[10px] font-label font-bold tracking-wider text-outline uppercase">Map Quality</span>
+<span class="material-symbols-outlined text-[18px] text-tertiary">map</span>
+</div>
+<div class="text-4xl font-mono font-light text-tertiary tracking-tight leading-none mb-1">100%</div>
+<div class="flex items-center gap-1.5 text-xs text-tertiary font-medium">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span>
+<span>921 areas live</span>
+</div>
+</div>
+<div class="mt-4 pt-2 space-y-2 bg-surface-container-low/40 -mx-5 -mb-5 p-5 rounded-b-xl">
+<div class="space-y-1">
+<div class="flex justify-between text-[10px] font-mono text-on-surface-variant">
+<span>Borders published 921 / 921</span>
+<span>100%</span>
+</div>
+<div class="w-full h-1 bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-tertiary rounded-full" style="width: 100%;"></div>
+</div>
+</div>
+<div class="space-y-1">
+<div class="flex justify-between text-[10px] font-mono text-on-surface-variant">
+<span>Map pins complete 6 / 6</span>
+<span>100%</span>
+</div>
+<div class="w-full h-1 bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-tertiary rounded-full" style="width: 100%;"></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- MAIN TWO-COLUMN CONTENT GRID -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8">
+<!-- LEFT COLUMN: NEEDS YOU (8 of 12) -->
+<div class="lg:col-span-8 flex flex-col">
+<div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden flex flex-col h-full">
+<!-- CARD HEADER -->
+<div class="px-6 py-4 flex items-center justify-between bg-surface-container-low/30">
+<div class="flex items-center gap-2.5">
+<h2 class="text-base font-semibold font-headline text-on-surface">Needs you</h2>
+<span class="px-2 py-0.5 rounded-full bg-surface-container-highest text-on-surface-variant font-mono text-[11px] font-medium">5 items</span>
+</div>
+<span class="text-xs text-outline font-body">Places and map work</span>
+</div>
+<!-- ACTIONABLE LIST -->
+<div class="p-4 space-y-2.5 flex-1">
+<!-- ROW 1 -->
+<div class="p-3.5 rounded-lg bg-surface-container-low hover:bg-surface-container transition-colors flex items-center justify-between gap-4">
+<div class="flex items-center gap-3.5 min-w-0">
+<div class="w-10 h-10 rounded-lg bg-secondary-fixed flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-secondary text-[20px]">rate_review</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="text-sm font-semibold text-on-surface truncate font-headline">New places waiting for review</span>
+<span class="text-xs text-outline truncate font-body">Oldest from today, 09:12</span>
+</div>
+</div>
+<div class="flex items-center gap-3 shrink-0">
+<span class="px-2.5 py-0.5 rounded font-mono text-xs font-semibold bg-amber-100 text-amber-800">148</span>
+<button class="px-3.5 py-1.5 rounded-lg bg-secondary hover:bg-secondary-dim text-on-secondary text-xs font-semibold font-label shadow-sm transition-colors" type="button">
+                Review
+              </button>
+</div>
+</div>
+<!-- ROW 2 -->
+<div class="p-3.5 rounded-lg bg-surface-container-low hover:bg-surface-container transition-colors flex items-center justify-between gap-4">
+<div class="flex items-center gap-3.5 min-w-0">
+<div class="w-10 h-10 rounded-lg bg-secondary-fixed flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-secondary text-[20px]">location_searching</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="text-sm font-semibold text-on-surface truncate font-headline">Pins not checked on the map</span>
+<span class="text-xs text-outline truncate font-body">Coordinates need a person to confirm them</span>
+</div>
+</div>
+<div class="flex items-center gap-3 shrink-0">
+<span class="px-2.5 py-0.5 rounded font-mono text-xs font-medium bg-surface-container-highest text-on-surface-variant">217</span>
+<button class="px-3.5 py-1.5 rounded-lg bg-surface-container-lowest hover:bg-surface-container-highest text-on-surface text-xs font-semibold font-label shadow-sm transition-colors" type="button">
+                Open
+              </button>
+</div>
+</div>
+<!-- ROW 3 -->
+<div class="p-3.5 rounded-lg bg-surface-container-low hover:bg-surface-container transition-colors flex items-center justify-between gap-4">
+<div class="flex items-center gap-3.5 min-w-0">
+<div class="w-10 h-10 rounded-lg bg-secondary-fixed flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-secondary text-[20px]">notification_important</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="text-sm font-semibold text-on-surface truncate font-headline">Verified, but the pin was never checked</span>
+<span class="text-xs text-outline truncate font-body">These already show on Plug</span>
+</div>
+</div>
+<div class="flex items-center gap-3 shrink-0">
+<span class="px-2.5 py-0.5 rounded font-mono text-xs font-semibold bg-amber-100 text-amber-800">69</span>
+<button class="px-3.5 py-1.5 rounded-lg bg-surface-container-lowest hover:bg-surface-container-highest text-on-surface text-xs font-semibold font-label shadow-sm transition-colors" type="button">
+                Open
+              </button>
+</div>
+</div>
+<!-- ROW 4 -->
+<div class="p-3.5 rounded-lg bg-surface-container-low hover:bg-surface-container transition-colors flex items-center justify-between gap-4">
+<div class="flex items-center gap-3.5 min-w-0">
+<div class="w-10 h-10 rounded-lg bg-secondary-fixed flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-secondary text-[20px]">local_gas_station</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="text-sm font-semibold text-on-surface truncate font-headline">Stations without a brand</span>
+<span class="text-xs text-outline truncate font-body">Not linked to TotalEnergies, Rubis, Texaco or another brand</span>
+</div>
+</div>
+<div class="flex items-center gap-3 shrink-0">
+<span class="px-2.5 py-0.5 rounded font-mono text-xs font-medium bg-surface-container-highest text-on-surface-variant">65</span>
+<button class="px-3.5 py-1.5 rounded-lg bg-surface-container-lowest hover:bg-surface-container-highest text-on-surface text-xs font-semibold font-label shadow-sm transition-colors" type="button">
+                Open
+              </button>
+</div>
+</div>
+<!-- ROW 5 -->
+<div class="p-3.5 rounded-lg bg-surface-container-low hover:bg-surface-container transition-colors flex items-center justify-between gap-4">
+<div class="flex items-center gap-3.5 min-w-0">
+<div class="w-10 h-10 rounded-lg bg-secondary-fixed flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-secondary text-[20px]">signpost</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="text-sm font-semibold text-on-surface truncate font-headline">Tagged to a parish only</span>
+<span class="text-xs text-outline truncate font-body">No town or community set, so 'near this town' search can't find them</span>
+</div>
+</div>
+<div class="flex items-center gap-3 shrink-0">
+<span class="px-2.5 py-0.5 rounded font-mono text-xs font-medium bg-surface-container-highest text-on-surface-variant">217</span>
+<button class="px-3.5 py-1.5 rounded-lg bg-surface-container-lowest hover:bg-surface-container-highest text-on-surface text-xs font-semibold font-label shadow-sm transition-colors" type="button">
+                Open
+              </button>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- RIGHT COLUMN: JAMAICA MAP CARD (4 of 12) -->
+<div class="lg:col-span-4 flex flex-col">
+<div class="bg-surface-container-lowest rounded-xl shadow-sm p-5 flex flex-col h-full">
+<!-- HEADER -->
+<div class="mb-3">
+<h2 class="text-base font-semibold font-headline text-on-surface">Jamaica map</h2>
+<p class="text-xs text-on-surface-variant">The country borders every app reads.</p>
+</div>
+<!-- VECTOR MAP OF JAMAICA -->
+<div class="w-full bg-[#f8fafc] rounded-xl p-3 relative overflow-hidden flex items-center justify-center shadow-inner">
+<!-- Subtle Grid Lines -->
+<div class="absolute inset-0 bg-[linear-gradient(to_right,#e2e8f0_1px,transparent_1px),linear-gradient(to_bottom,#e2e8f0_1px,transparent_1px)] bg-[size:24px_24px] opacity-40"></div>
+<!-- Jamaica Parish Polygons Outline SVG -->
+<svg class="relative z-10 w-full h-36 text-slate-400 drop-shadow-sm" fill="none" viewbox="0 0 460 210" xmlns="http://www.w3.org/2000/svg">
+<!-- 14 Parish Polygons forming Jamaica Island -->
+<!-- Hanover -->
+<polygon class="fill-slate-100 hover:fill-blue-50 stroke-slate-300 stroke-1 transition-colors" points="18,52 48,42 64,55 58,74 24,70"></polygon>
+<!-- Westmoreland -->
+<polygon class="fill-slate-100 hover:fill-blue-50 stroke-slate-300 stroke-1 transition-colors" points="24,70 58,74 80,82 72,112 32,106 14,88"></polygon>
+<!-- St. James -->
+<polygon class="fill-slate-100 hover:fill-blue-50 stroke-slate-300 stroke-1 transition-colors" points="48,42 86,38 98,62 80,82 58,74 64,55"></polygon>
+<!-- Trelawny -->
+<polygon class="fill-slate-100 hover:fill-blue-50 stroke-slate-300 stroke-1 transition-colors" points="86,38 136,36 142,68 128,92 98,62"></polygon>
+<!-- St. Elizabeth -->
+<polygon class="fill-slate-100 hover:fill-blue-50 stroke-slate-300 stroke-1 transition-colors" points="80,82 128,92 136,128 92,138 72,112"></polygon>
+<!-- Manchester -->
+<polygon class="fill-slate-100 hover:fill-blue-50 stroke-slate-300 stroke-1 transition-colors" points="128,92 168,88 174,124 136,128"></polygon>
+<!-- St. Ann -->
+<polygon class="fill-slate-100 hover:fill-blue-50 stroke-slate-300 stroke-1 transition-colors" points="136,36 214,34 220,72 176,82 142,68"></polygon>
+<!-- Clarendon -->
+<polygon class="fill-slate-100 hover:fill-blue-50 stroke-slate-300 stroke-1 transition-colors" points="168,88 210,80 226,122 196,146 174,124"></polygon>
+<!-- St. Catherine -->
+<polygon class="fill-slate-100 hover:fill-blue-50 stroke-slate-300 stroke-1 transition-colors" points="214,34 256,48 268,96 238,124 210,80 220,72"></polygon>
+<!-- St. Mary -->
+<polygon class="fill-slate-100 hover:fill-blue-50 stroke-slate-300 stroke-1 transition-colors" points="256,48 312,50 318,80 268,96"></polygon>
+<!-- St. Andrew -->
+<polygon class="fill-slate-100 hover:fill-blue-50 stroke-slate-300 stroke-1 transition-colors" points="268,96 322,90 334,116 292,126 276,110"></polygon>
+<!-- Kingston -->
+<polygon class="fill-blue-100 hover:fill-blue-200 stroke-secondary stroke-1 transition-colors" points="292,126 312,122 316,134 296,136"></polygon>
+<!-- Portland -->
+<polygon class="fill-slate-100 hover:fill-blue-50 stroke-slate-300 stroke-1 transition-colors" points="312,50 382,78 392,104 334,116 318,80"></polygon>
+<!-- St. Thomas -->
+<polygon class="fill-slate-100 hover:fill-blue-50 stroke-slate-300 stroke-1 transition-colors" points="334,116 392,104 438,128 412,148 344,142 322,126"></polygon>
+<!-- Lat/Long corner markers -->
+<text class="font-mono text-[8px] fill-slate-400" x="8" y="196">18.0° N, 77.5° W</text>
+<text class="font-mono text-[8px] fill-slate-400" x="390" y="24">JAMAICA</text>
+</svg>
+</div>
+<!-- 2x2 STATS GRID -->
+<div class="grid grid-cols-2 gap-2 mt-4 font-mono text-xs">
+<div class="p-2.5 rounded-lg bg-surface-container-low flex justify-between items-baseline">
+<span class="text-outline text-[11px]">Country</span>
+<span class="text-on-surface font-semibold text-sm">1</span>
+</div>
+<div class="p-2.5 rounded-lg bg-surface-container-low flex justify-between items-baseline">
+<span class="text-outline text-[11px]">Parishes</span>
+<span class="text-on-surface font-semibold text-sm">14</span>
+</div>
+<div class="p-2.5 rounded-lg bg-surface-container-low flex justify-between items-baseline">
+<span class="text-outline text-[11px]">Towns</span>
+<span class="text-on-surface font-semibold text-sm">131</span>
+</div>
+<div class="p-2.5 rounded-lg bg-surface-container-low flex justify-between items-baseline">
+<span class="text-outline text-[11px]">Communities</span>
+<span class="text-on-surface font-semibold text-sm">775</span>
+</div>
+</div>
+<!-- METADATA ROWS -->
+<div class="mt-4 pt-3 border-t-0 space-y-2 text-xs">
+<div class="flex justify-between items-center">
+<span class="text-on-surface-variant">Last publish</span>
+<span class="font-mono text-on-surface font-medium">24 Oct</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="text-on-surface-variant">Drafts waiting</span>
+<span class="font-mono text-on-surface font-medium">0</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="text-on-surface-variant">Map checks open</span>
+<span class="font-mono text-on-surface font-medium">0</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="text-on-surface-variant">Imports</span>
+<span class="font-mono text-outline">None yet</span>
+</div>
+</div>
+<!-- RECENT ACTIVITY SECTION -->
+<div class="mt-5 pt-3 bg-surface-container-low/50 -mx-5 -mb-5 p-5 rounded-b-xl">
+<div class="text-[10px] font-label font-bold text-outline uppercase tracking-wider mb-2.5">Recent Activity</div>
+<div class="space-y-2 text-xs">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>
+<span class="text-on-surface">Place edited</span>
+</div>
+<span class="font-mono text-outline text-[11px]">21:01</span>
+</div>
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span>
+<span class="text-on-surface">Borders published</span>
+</div>
+<span class="font-mono text-outline text-[11px]">24 Oct</span>
+</div>
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="w-1.5 h-1.5 rounded-full bg-outline-variant"></span>
+<span class="text-on-surface-variant">Import run</span>
+</div>
+<span class="font-mono text-outline text-[11px]">—</span>
+</div>
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="w-1.5 h-1.5 rounded-full bg-outline-variant"></span>
+<span class="text-on-surface-variant">Review decision</span>
+</div>
+<span class="font-mono text-outline text-[11px]">—</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- SECTIONS BLOCK (FULL WIDTH, 6 CARDS IN 3 COLS) -->
+<div class="flex flex-col space-y-3">
+<div class="flex flex-col">
+<h2 class="text-lg font-bold font-headline text-on-surface tracking-tight">Sections</h2>
+<p class="text-xs text-on-surface-variant">Map and places master data.</p>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+<!-- SECTION CARD 1: JAMAICA MAP -->
+<a class="group p-5 bg-surface-container-lowest hover:bg-surface-container-low/60 rounded-xl shadow-sm transition-all flex flex-col justify-between" href="#">
+<div>
+<div class="w-10 h-10 rounded-lg bg-surface-container flex items-center justify-center mb-3 group-hover:bg-secondary-fixed transition-colors">
+<span class="material-symbols-outlined text-secondary text-[22px]">public</span>
+</div>
+<h3 class="text-sm font-bold font-headline text-secondary group-hover:text-secondary-dim transition-colors mb-1">Jamaica map</h3>
+<p class="text-xs text-on-surface-variant leading-relaxed mb-4">Country, parish, town and community borders.</p>
+</div>
+<div class="pt-3 border-t-0 flex items-center justify-between font-mono text-[11px] text-on-surface-variant group-hover:text-on-surface">
+<span class="truncate">921 areas · last publish 24 Oct · 0 drafts</span>
+<span class="material-symbols-outlined text-[16px] text-outline group-hover:translate-x-0.5 transition-transform shrink-0 ml-1">chevron_right</span>
+</div>
+</a>
+<!-- SECTION CARD 2: PLACES REGISTER -->
+<a class="group p-5 bg-surface-container-lowest hover:bg-surface-container-low/60 rounded-xl shadow-sm transition-all flex flex-col justify-between" href="#">
+<div>
+<div class="w-10 h-10 rounded-lg bg-surface-container flex items-center justify-center mb-3 group-hover:bg-secondary-fixed transition-colors">
+<span class="material-symbols-outlined text-secondary text-[22px]">format_list_bulleted</span>
+</div>
+<h3 class="text-sm font-bold font-headline text-secondary group-hover:text-secondary-dim transition-colors mb-1">Places register</h3>
+<p class="text-xs text-on-surface-variant leading-relaxed mb-4">Every place, with its type and facilities.</p>
+</div>
+<div class="pt-3 border-t-0 flex items-center justify-between font-mono text-[11px] text-on-surface-variant group-hover:text-on-surface">
+<span class="truncate">217 places · 148 pending · 0 pins checked</span>
+<span class="material-symbols-outlined text-[16px] text-outline group-hover:translate-x-0.5 transition-transform shrink-0 ml-1">chevron_right</span>
+</div>
+</a>
+<!-- SECTION CARD 3: CATEGORIES -->
+<a class="group p-5 bg-surface-container-lowest hover:bg-surface-container-low/60 rounded-xl shadow-sm transition-all flex flex-col justify-between" href="#">
+<div>
+<div class="w-10 h-10 rounded-lg bg-surface-container flex items-center justify-center mb-3 group-hover:bg-secondary-fixed transition-colors">
+<span class="material-symbols-outlined text-secondary text-[22px]">category</span>
+</div>
+<h3 class="text-sm font-bold font-headline text-secondary group-hover:text-secondary-dim transition-colors mb-1">Categories</h3>
+<p class="text-xs text-on-surface-variant leading-relaxed mb-4">Groups, types, facilities, and brands.</p>
+</div>
+<div class="pt-3 border-t-0 flex items-center justify-between font-mono text-[11px] text-on-surface-variant group-hover:text-on-surface">
+<span class="truncate">2 of 17 types in use · 65 stations without brand</span>
+<span class="material-symbols-outlined text-[16px] text-outline group-hover:translate-x-0.5 transition-transform shrink-0 ml-1">chevron_right</span>
+</div>
+</a>
+<!-- SECTION CARD 4: REVIEW -->
+<a class="group p-5 bg-surface-container-lowest hover:bg-surface-container-low/60 rounded-xl shadow-sm transition-all flex flex-col justify-between" href="#">
+<div>
+<div class="w-10 h-10 rounded-lg bg-surface-container flex items-center justify-center mb-3 group-hover:bg-secondary-fixed transition-colors">
+<span class="material-symbols-outlined text-secondary text-[22px]">fact_check</span>
+</div>
+<h3 class="text-sm font-bold font-headline text-secondary group-hover:text-secondary-dim transition-colors mb-1">Review</h3>
+<p class="text-xs text-on-surface-variant leading-relaxed mb-4">Pins and facility suggestions waiting for a decision.</p>
+</div>
+<div class="pt-3 border-t-0 flex items-center justify-between font-mono text-[11px] text-on-surface-variant group-hover:text-on-surface">
+<span class="truncate">148 waiting · oldest today</span>
+<span class="material-symbols-outlined text-[16px] text-outline group-hover:translate-x-0.5 transition-transform shrink-0 ml-1">chevron_right</span>
+</div>
+</a>
+<!-- SECTION CARD 5: MAP PINS -->
+<a class="group p-5 bg-surface-container-lowest hover:bg-surface-container-low/60 rounded-xl shadow-sm transition-all flex flex-col justify-between" href="#">
+<div>
+<div class="w-10 h-10 rounded-lg bg-surface-container flex items-center justify-center mb-3 group-hover:bg-secondary-fixed transition-colors">
+<span class="material-symbols-outlined text-secondary text-[22px]">push_pin</span>
+</div>
+<h3 class="text-sm font-bold font-headline text-secondary group-hover:text-secondary-dim transition-colors mb-1">Map pins</h3>
+<p class="text-xs text-on-surface-variant leading-relaxed mb-4">Landmarks pinned directly on the map.</p>
+</div>
+<div class="pt-3 border-t-0 flex items-center justify-between font-mono text-[11px] text-on-surface-variant group-hover:text-on-surface">
+<span class="truncate">6 pins</span>
+<span class="material-symbols-outlined text-[16px] text-outline group-hover:translate-x-0.5 transition-transform shrink-0 ml-1">chevron_right</span>
+</div>
+</a>
+<!-- SECTION CARD 6: IMPORTS AND CHECKS -->
+<a class="group p-5 bg-surface-container-lowest hover:bg-surface-container-low/60 rounded-xl shadow-sm transition-all flex flex-col justify-between" href="#">
+<div>
+<div class="w-10 h-10 rounded-lg bg-surface-container flex items-center justify-center mb-3 group-hover:bg-secondary-fixed transition-colors">
+<span class="material-symbols-outlined text-secondary text-[22px]">cloud_sync</span>
+</div>
+<h3 class="text-sm font-bold font-headline text-secondary group-hover:text-secondary-dim transition-colors mb-1">Imports and checks</h3>
+<p class="text-xs text-on-surface-variant leading-relaxed mb-4">Border files and map quality checks.</p>
+</div>
+<div class="pt-3 border-t-0 flex items-center justify-between font-mono text-[11px] text-on-surface-variant group-hover:text-on-surface">
+<span class="truncate">No imports yet · 0 checks open</span>
+<span class="material-symbols-outlined text-[16px] text-outline group-hover:translate-x-0.5 transition-transform shrink-0 ml-1">chevron_right</span>
+</div>
+</a>
+</div>
+</div>
+</div></main><footer class="w-full py-3 px-8 bg-surface-container-lowest shadow-[0_-1px_6px_rgba(0,0,0,0.02)] flex items-center justify-between text-xs text-on-surface-variant font-mono"><div class="flex items-center gap-2"><span class="text-[11px] font-semibold text-on-surface">DOMINION OPERATIONS</span><span class="text-outline-variant">·</span><span>KGN-DC-01</span><span class="text-outline-variant">·</span><span class="text-emerald-700 font-medium">JMD READY</span></div><div class="text-[11px] text-outline font-body">Parish Grid Active · Jamaica Time (UTC-5)</div></footer></div></body></html>

@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"/><title>Categories</title></head>
+<body>
+<main>
+<div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
+<div class="px-5 py-3.5 bg-surface-container-low flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+<div class="flex items-center gap-2">
+<span class="text-xs font-semibold font-headline text-on-surface">Registered Fuel Networks</span>
+<span class="text-[11px] font-mono text-on-surface-variant bg-surface-container px-2 py-0.5 rounded">Jamaica Commercial</span>
+</div>
+<div class="flex items-center gap-2.5">
+<div class="relative w-64">
+<span class="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-outline text-[16px]">search</span>
+<input class="w-full pl-8 pr-3 py-1 bg-surface-container-lowest text-on-surface placeholder:text-outline text-xs rounded-lg outline-none focus:bg-surface-bright transition-all font-body shadow-sm" id="brandFilterInput" oninput="filterBrandsTable()" placeholder="Search brands…" type="text"/>
+</div>
+<button class="inline-flex items-center gap-1 px-3 py-1 bg-surface-container-highest hover:bg-surface-container text-on-surface text-xs font-medium rounded-lg transition-colors shadow-sm" type="button">
+<span class="material-symbols-outlined text-[15px]">add</span>
+<span>Brand</span>
+</button>
+</div>
+</div>
+<div class="w-full overflow-x-auto">
+<table class="w-full text-left text-xs text-on-surface whitespace-nowrap">
+<thead>
+<tr class="bg-surface-container-low/70 text-[11px] font-label uppercase tracking-wider text-on-surface-variant">
+<th class="py-3 pl-5 pr-2 w-10" scope="col">
+<input class="rounded text-secondary focus:ring-0 cursor-pointer accent-secondary w-3.5 h-3.5" type="checkbox"/>
+</th>
+<th class="py-3 px-3 font-semibold" scope="col">Brand</th>
+<th class="py-3 px-3 font-semibold" scope="col">Aliases</th>
+<th class="py-3 px-3 font-semibold" scope="col">Used for</th>
+<th class="py-3 px-4 font-semibold text-right" scope="col">Places</th>
+<th class="py-3 pl-3 pr-5 font-semibold text-right" scope="col">Actions</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-surface-container" id="brandTableBody">
+<tr class="brand-row hover:bg-surface-container-low transition-colors group">
+<td class="py-3 pl-5 pr-2">
+<input class="rounded text-secondary focus:ring-0 cursor-pointer accent-secondary w-3.5 h-3.5" type="checkbox"/>
+</td>
+<td class="py-3 px-3">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-lg bg-surface-container-high text-on-surface-variant font-mono font-semibold text-xs flex items-center justify-center shrink-0">
+                    TE
+                  </div>
+<div class="flex flex-col">
+<span class="font-semibold text-on-surface group-hover:text-secondary transition-colors font-headline brand-name">TotalEnergies</span>
+<span class="font-mono text-[10px] text-outline">totalenergies</span>
+</div>
+</div>
+</td>
+<td class="py-3 px-3">
+<div class="flex items-center gap-1.5 flex-wrap">
+<span class="px-2 py-0.5 bg-surface-container text-on-surface-variant text-[10px] font-mono rounded">Total</span>
+<span class="px-2 py-0.5 bg-surface-container text-on-surface-variant text-[10px] font-mono rounded">Total Energies</span>
+</div>
+</td>
+<td class="py-3 px-3">
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 bg-surface-container-high text-on-primary-container text-[11px] font-medium rounded-full">
+<span class="material-symbols-outlined text-[13px] text-outline">local_gas_station</span>
+                  Gas station
+                </span>
+</td>
+<td class="py-3 px-4 text-right">
+<span class="font-mono font-bold text-on-surface text-xs">42</span>
+</td>
+<td class="py-3 pl-3 pr-5 text-right font-medium text-xs">
+<div class="flex items-center justify-end gap-3">
+<a class="text-secondary hover:underline" href="#">Edit</a>
+<button class="text-error hover:opacity-80 transition-opacity" type="button">Retire…</button>
+</div>
+</td>
+</tr>
+<tr class="brand-row hover:bg-surface-container-low transition-colors group">
+<td class="py-3 pl-5 pr-2">
+<input class="rounded text-secondary focus:ring-0 cursor-pointer accent-secondary w-3.5 h-3.5" type="checkbox"/>
+</td>
+<td class="py-3 px-3">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-lg bg-surface-container-high text-on-surface-variant font-mono font-semibold text-xs flex items-center justify-center shrink-0">
+                    RU
+                  </div>
+<div class="flex flex-col">
+<span class="font-semibold text-on-surface group-hover:text-secondary transition-colors font-headline brand-name">Rubis</span>
+<span class="font-mono text-[10px] text-outline">rubis</span>
+</div>
+</div>
+</td>
+<td class="py-3 px-3">
+<div class="flex items-center gap-1.5 flex-wrap">
+<span class="px-2 py-0.5 bg-surface-container text-on-surface-variant text-[10px] font-mono rounded">RUBiS</span>
+</div>
+</td>
+<td class="py-3 px-3">
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 bg-surface-container-high text-on-primary-container text-[11px] font-medium rounded-full">
+<span class="material-symbols-outlined text-[13px] text-outline">local_gas_station</span>
+                  Gas station
+                </span>
+</td>
+<td class="py-3 px-4 text-right">
+<span class="font-mono font-bold text-on-surface text-xs">20</span>
+</td>
+<td class="py-3 pl-3 pr-5 text-right font-medium text-xs">
+<div class="flex items-center justify-end gap-3">
+<a class="text-secondary hover:underline" href="#">Edit</a>
+<button class="text-error hover:opacity-80 transition-opacity" type="button">Retire…</button>
+</div>
+</td>
+</tr>
+<tr class="brand-row hover:bg-surface-container-low transition-colors group">
+<td class="py-3 pl-5 pr-2">
+<input class="rounded text-secondary focus:ring-0 cursor-pointer accent-secondary w-3.5 h-3.5" type="checkbox"/>
+</td>
+<td class="py-3 px-3">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-lg bg-surface-container-high text-on-surface-variant font-mono font-semibold text-xs flex items-center justify-center shrink-0">
+                    CO
+                  </div>
+<div class="flex flex-col">
+<span class="font-semibold text-on-surface group-hover:text-secondary transition-colors font-headline brand-name">Cool Oasis</span>
+<span class="font-mono text-[10px] text-outline">cool_oasis</span>
+</div>
+</div>
+</td>
+<td class="py-3 px-3">
+<div class="flex items-center gap-1.5 flex-wrap">
+<span class="px-2 py-0.5 bg-surface-container text-on-surface-variant text-[10px] font-mono rounded">CoolOasis</span>
+<span class="px-2 py-0.5 bg-surface-container text-on-surface-variant text-[10px] font-mono rounded">Oasis</span>
+</div>
+</td>
+<td class="py-3 px-3">
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 bg-surface-container-high text-on-primary-container text-[11px] font-medium rounded-full">
+<span class="material-symbols-outlined text-[13px] text-outline">local_gas_station</span>
+                  Gas station
+                </span>
+</td>
+<td class="py-3 px-4 text-right">
+<span class="font-mono font-bold text-on-surface text-xs">19</span>
+</td>
+<td class="py-3 pl-3 pr-5 text-right font-medium text-xs">
+<div class="flex items-center justify-end gap-3">
+<a class="text-secondary hover:underline" href="#">Edit</a>
+<button class="text-error hover:opacity-80 transition-opacity" type="button">Retire…</button>
+</div>
+</td>
+</tr>
+<tr class="brand-row hover:bg-surface-container-low transition-colors group">
+<td class="py-3 pl-5 pr-2">
+<input class="rounded text-secondary focus:ring-0 cursor-pointer accent-secondary w-3.5 h-3.5" type="checkbox"/>
+</td>
+<td class="py-3 px-3">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-lg bg-surface-container-high text-on-surface-variant font-mono font-semibold text-xs flex items-center justify-center shrink-0">
+                    GS
+                  </div>
+<div class="flex flex-col">
+<span class="font-semibold text-on-surface group-hover:text-secondary transition-colors font-headline brand-name">Gulfstream</span>
+<span class="font-mono text-[10px] text-outline">gulfstream</span>
+</div>
+</div>
+</td>
+<td class="py-3 px-3">
+<div class="flex items-center gap-1.5 flex-wrap">
+<span class="px-2 py-0.5 bg-surface-container text-on-surface-variant text-[10px] font-mono rounded">Gulf Stream</span>
+</div>
+</td>
+<td class="py-3 px-3">
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 bg-surface-container-high text-on-primary-container text-[11px] font-medium rounded-full">
+<span class="material-symbols-outlined text-[13px] text-outline">local_gas_station</span>
+                  Gas station
+                </span>
+</td>
+<td class="py-3 px-4 text-right">
+<span class="font-mono font-bold text-on-surface text-xs">12</span>
+</td>
+<td class="py-3 pl-3 pr-5 text-right font-medium text-xs">
+<div class="flex items-center justify-end gap-3">
+<a class="text-secondary hover:underline" href="#">Edit</a>
+<button class="text-error hover:opacity-80 transition-opacity" type="button">Retire…</button>
+</div>
+</td>
+</tr>
+<tr class="brand-row hover:bg-surface-container-low transition-colors group">
+<td class="py-3 pl-5 pr-2">
+<input class="rounded text-secondary focus:ring-0 cursor-pointer accent-secondary w-3.5 h-3.5" type="checkbox"/>
+</td>
+<td class="py-3 px-3">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-lg bg-surface-container-high text-on-surface-variant font-mono font-semibold text-xs flex items-center justify-center shrink-0">
+                    FE
+                  </div>
+<div class="flex flex-col">
+<span class="font-semibold text-on-surface group-hover:text-secondary transition-colors font-headline brand-name">FESCO</span>
+<span class="font-mono text-[10px] text-outline">fesco</span>
+</div>
+</div>
+</td>
+<td class="py-3 px-3">
+<div class="flex items-center gap-1.5 flex-wrap">
+<span class="px-2 py-0.5 bg-surface-container text-on-surface-variant text-[10px] font-mono rounded">Future Energy</span>
+</div>
+</td>
+<td class="py-3 px-3">
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 bg-surface-container-high text-on-primary-container text-[11px] font-medium rounded-full">
+<span class="material-symbols-outlined text-[13px] text-outline">local_gas_station</span>
+                  Gas station
+                </span>
+</td>
+<td class="py-3 px-4 text-right">
+<span class="font-mono font-bold text-on-surface text-xs">8</span>
+</td>
+<td class="py-3 pl-3 pr-5 text-right font-medium text-xs">
+<div class="flex items-center justify-end gap-3">
+<a class="text-secondary hover:underline" href="#">Edit</a>
+<button class="text-error hover:opacity-80 transition-opacity" type="button">Retire…</button>
+</div>
+</td>
+</tr>
+<tr class="brand-row hover:bg-surface-container-low transition-colors group">
+<td class="py-3 pl-5 pr-2">
+<input class="rounded text-secondary focus:ring-0 cursor-pointer accent-secondary w-3.5 h-3.5" type="checkbox"/>
+</td>
+<td class="py-3 px-3">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-lg bg-surface-container-high text-on-surface-variant font-mono font-semibold text-xs flex items-center justify-center shrink-0">
+                    TX
+                  </div>
+<div class="flex flex-col">
+<span class="font-semibold text-on-surface group-hover:text-secondary transition-colors font-headline brand-name">Texaco</span>
+<span class="font-mono text-[10px] text-outline">texaco</span>
+</div>
+</div>
+</td>
+<td class="py-3 px-3">
+<div class="flex items-center gap-1.5 flex-wrap">
+<span class="px-2 py-0.5 bg-surface-container text-on-surface-variant text-[10px] font-mono rounded">Star Mart</span>
+</div>
+</td>
+<td class="py-3 px-3">
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 bg-surface-container-high text-on-primary-container text-[11px] font-medium rounded-full">
+<span class="material-symbols-outlined text-[13px] text-outline">local_gas_station</span>
+                  Gas station
+                </span>
+</td>
+<td class="py-3 px-4 text-right">
+<span class="font-mono font-bold text-on-surface text-xs">7</span>
+</td>
+<td class="py-3 pl-3 pr-5 text-right font-medium text-xs">
+<div class="flex items-center justify-end gap-3">
+<a class="text-secondary hover:underline" href="#">Edit</a>
+<button class="text-error hover:opacity-80 transition-opacity" type="button">Retire…</button>
+</div>
+</td>
+</tr>
+<tr class="brand-row hover:bg-surface-container-low transition-colors group">
+<td class="py-3 pl-5 pr-2">
+<input class="rounded text-secondary focus:ring-0 cursor-pointer accent-secondary w-3.5 h-3.5" type="checkbox"/>
+</td>
+<td class="py-3 px-3">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-lg bg-surface-container-high text-on-surface-variant font-mono font-semibold text-xs flex items-center justify-center shrink-0">
+                    PC
+                  </div>
+<div class="flex flex-col">
+<span class="font-semibold text-on-surface group-hover:text-secondary transition-colors font-headline brand-name">Petcom</span>
+<span class="font-mono text-[10px] text-outline">petcom</span>
+</div>
+</div>
+</td>
+<td class="py-3 px-3">
+<div class="flex items-center gap-1.5 flex-wrap">
+<span class="px-2 py-0.5 bg-surface-container text-on-surface-variant text-[10px] font-mono rounded">Petroleum Co</span>
+</div>
+</td>
+<td class="py-3 px-3">
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 bg-surface-container-high text-on-primary-container text-[11px] font-medium rounded-full">
+<span class="material-symbols-outlined text-[13px] text-outline">local_gas_station</span>
+                  Gas station
+                </span>
+</td>
+<td class="py-3 px-4 text-right">
+<span class="font-mono font-bold text-on-surface text-xs">6</span>
+</td>
+<td class="py-3 pl-3 pr-5 text-right font-medium text-xs">
+<div class="flex items-center justify-end gap-3">
+<a class="text-secondary hover:underline" href="#">Edit</a>
+<button class="text-error hover:opacity-80 transition-opacity" type="button">Retire…</button>
+</div>
+</td>
+</tr>
+<tr class="brand-row hover:bg-surface-container-low transition-colors group">
+<td class="py-3 pl-5 pr-2">
+<input class="rounded text-secondary focus:ring-0 cursor-pointer accent-secondary w-3.5 h-3.5" type="checkbox"/>
+</td>
+<td class="py-3 px-3">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-lg bg-surface-container-high text-on-surface-variant font-mono font-semibold text-xs flex items-center justify-center shrink-0">
+                    UP
+                  </div>
+<div class="flex flex-col">
+<span class="font-semibold text-on-surface group-hover:text-secondary transition-colors font-headline brand-name">Unipet</span>
+<span class="font-mono text-[10px] text-outline">unipet</span>
+</div>
+</div>
+</td>
+<td class="py-3 px-3">
+<div class="flex items-center gap-1.5 flex-wrap">
+<span class="px-2 py-0.5 bg-surface-container text-on-surface-variant text-[10px] font-mono rounded">Universal</span>
+</div>
+</td>
+<td class="py-3 px-3">
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 bg-surface-container-high text-on-primary-container text-[11px] font-medium rounded-full">
+<span class="material-symbols-outlined text-[13px] text-outline">local_gas_station</span>
+                  Gas station
+                </span>
+</td>
+<td class="py-3 px-4 text-right">
+<span class="font-mono font-bold text-on-surface text-xs">5</span>
+</td>
+<td class="py-3 pl-3 pr-5 text-right font-medium text-xs">
+<div class="flex items-center justify-end gap-3">
+<a class="text-secondary hover:underline" href="#">Edit</a>
+<button class="text-error hover:opacity-80 transition-opacity" type="button">Retire…</button>
+</div>
+</td>
+</tr>
+<tr class="brand-row hover:bg-surface-container-low transition-colors group">
+<td class="py-3 pl-5 pr-2">
+<input class="rounded text-secondary focus:ring-0 cursor-pointer accent-secondary w-3.5 h-3.5" type="checkbox"/>
+</td>
+<td class="py-3 px-3">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-lg bg-surface-container-high text-on-surface-variant font-mono font-semibold text-xs flex items-center justify-center shrink-0">
+                    F1
+                  </div>
+<div class="flex flex-col">
+<span class="font-semibold text-on-surface group-hover:text-secondary transition-colors font-headline brand-name">First</span>
+<span class="font-mono text-[10px] text-outline">first</span>
+</div>
+</div>
+</td>
+<td class="py-3 px-3">
+<div class="flex items-center gap-1.5 flex-wrap">
+<span class="px-2 py-0.5 bg-surface-container text-on-surface-variant text-[10px] font-mono rounded">First Petroleum</span>
+</div>
+</td>
+<td class="py-3 px-3">
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 bg-surface-container-high text-on-primary-container text-[11px] font-medium rounded-full">
+<span class="material-symbols-outlined text-[13px] text-outline">local_gas_station</span>
+                  Gas station
+                </span>
+</td>
+<td class="py-3 px-4 text-right">
+<span class="font-mono font-bold text-on-surface text-xs">5</span>
+</td>
+<td class="py-3 pl-3 pr-5 text-right font-medium text-xs">
+<div class="flex items-center justify-end gap-3">
+<a class="text-secondary hover:underline" href="#">Edit</a>
+<button class="text-error hover:opacity-80 transition-opacity" type="button">Retire…</button>
+</div>
+</td>
+</tr>
+<tr class="brand-row hover:bg-surface-container-low transition-colors group">
+<td class="py-3 pl-5 pr-2">
+<input class="rounded text-secondary focus:ring-0 cursor-pointer accent-secondary w-3.5 h-3.5" type="checkbox"/>
+</td>
+<td class="py-3 px-3">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-lg bg-surface-container-high text-on-surface-variant font-mono font-semibold text-xs flex items-center justify-center shrink-0">
+                    JP
+                  </div>
+<div class="flex flex-col">
+<span class="font-semibold text-on-surface group-hover:text-secondary transition-colors font-headline brand-name">Jampet</span>
+<span class="font-mono text-[10px] text-outline">jampet</span>
+</div>
+</div>
+</td>
+<td class="py-3 px-3">
+<div class="flex items-center gap-1.5 flex-wrap">
+<span class="px-2 py-0.5 bg-surface-container text-on-surface-variant text-[10px] font-mono rounded">Jam Pet</span>
+</div>
+</td>
+<td class="py-3 px-3">
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 bg-surface-container-high text-on-primary-container text-[11px] font-medium rounded-full">
+<span class="material-symbols-outlined text-[13px] text-outline">local_gas_station</span>
+                  Gas station
+                </span>
+</td>
+<td class="py-3 px-4 text-right">
+<span class="font-mono font-bold text-on-surface text-xs">2</span>
+</td>
+<td class="py-3 pl-3 pr-5 text-right font-medium text-xs">
+<div class="flex items-center justify-end gap-3">
+<a class="text-secondary hover:underline" href="#">Edit</a>
+<button class="text-error hover:opacity-80 transition-opacity" type="button">Retire…</button>
+</div>
+</td>
+</tr>
+<tr class="brand-row hover:bg-surface-container-low transition-colors group">
+<td class="py-3 pl-5 pr-2">
+<input class="rounded text-secondary focus:ring-0 cursor-pointer accent-secondary w-3.5 h-3.5" type="checkbox"/>
+</td>
+<td class="py-3 px-3">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-lg bg-surface-container-high text-on-surface-variant font-mono font-semibold text-xs flex items-center justify-center shrink-0">
+                    BL
+                  </div>
+<div class="flex flex-col">
+<span class="font-semibold text-on-surface group-hover:text-secondary transition-colors font-headline brand-name">Blaize</span>
+<span class="font-mono text-[10px] text-outline">blaize</span>
+</div>
+</div>
+</td>
+<td class="py-3 px-3">
+<div class="flex items-center gap-1.5 flex-wrap">
+<span class="px-2 py-0.5 bg-surface-container text-on-surface-variant text-[10px] font-mono rounded">Blaize Gas</span>
+</div>
+</td>
+<td class="py-3 px-3">
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 bg-surface-container-high text-on-primary-container text-[11px] font-medium rounded-full">
+<span class="material-symbols-outlined text-[13px] text-outline">local_gas_station</span>
+                  Gas station
+                </span>
+</td>
+<td class="py-3 px-4 text-right">
+<span class="font-mono font-bold text-on-surface text-xs">2</span>
+</td>
+<td class="py-3 pl-3 pr-5 text-right font-medium text-xs">
+<div class="flex items-center justify-end gap-3">
+<a class="text-secondary hover:underline" href="#">Edit</a>
+<button class="text-error hover:opacity-80 transition-opacity" type="button">Retire…</button>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="px-5 py-3.5 bg-surface-container-low/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+<div class="flex items-center gap-2 text-on-surface-variant font-mono text-[11px]">
+<span class="font-semibold text-on-surface">17 brands</span>
+<span>·</span>
+<span>0 with a logo</span>
+</div>
+<div class="flex items-center gap-3 text-[11px] font-mono text-on-surface-variant">
+<span>Showing 1–11 of 17 brands</span>
+<div class="flex items-center gap-1">
+<button class="w-6 h-6 rounded flex items-center justify-center bg-surface-container text-outline opacity-50 cursor-not-allowed" disabled="" type="button">
+<span class="material-symbols-outlined text-xs">chevron_left</span>
+</button>
+<button class="w-6 h-6 rounded flex items-center justify-center bg-surface-container-highest text-on-surface hover:bg-secondary hover:text-on-secondary transition-colors" type="button">
+<span class="material-symbols-outlined text-xs">chevron_right</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</main>
+</body>
+</html>

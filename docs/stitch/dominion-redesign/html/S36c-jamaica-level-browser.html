@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"/><title>Jamaica map</title></head><body><main>
+<!-- PAGE HEADER & BREADCRUMB -->
+<div class="flex flex-col gap-4 mb-6">
+<div class="flex items-center gap-2 text-xs font-mono text-outline">
+<span class="hover:text-secondary cursor-pointer transition-colors">Dominion</span>
+<span>›</span>
+<span class="hover:text-secondary cursor-pointer transition-colors">Master data</span>
+<span>›</span>
+<span class="hover:text-secondary cursor-pointer transition-colors">Places and Maps</span>
+<span>›</span>
+<span class="text-on-surface font-medium">Jamaica map</span>
+</div>
+<div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+<div>
+<h1 class="text-2xl font-headline font-bold text-on-surface tracking-tight">Jamaica map</h1>
+<p class="text-xs text-on-surface-variant mt-0.5">The official map of Jamaica, from the country down to communities.</p>
+</div>
+<div class="flex items-center gap-3">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-label font-semibold bg-tertiary-container text-on-tertiary-container shadow-sm">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span>
+          Published
+        </span>
+<span class="text-xs font-mono text-on-surface-variant bg-surface-container px-2.5 py-1 rounded">
+          Updated 24 Oct 2026
+        </span>
+</div>
+</div>
+</div>
+<!-- TAB BAR & COORDINATE SYSTEM -->
+<div class="flex items-center justify-between bg-surface-container-lowest p-1.5 rounded-xl shadow-sm mb-6">
+<div class="flex items-center gap-1">
+<button class="px-3.5 py-1.5 rounded-lg text-xs font-medium text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors">Country</button>
+<button class="px-3.5 py-1.5 rounded-lg text-xs font-medium text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors">Parishes</button>
+<button class="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-secondary text-on-secondary shadow-sm">Towns</button>
+<button class="px-3.5 py-1.5 rounded-lg text-xs font-medium text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors">Communities</button>
+<div class="w-px h-4 bg-surface-container-highest mx-1.5"></div>
+<button class="px-3.5 py-1.5 rounded-lg text-xs font-medium text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors">Pins</button>
+<button class="px-3.5 py-1.5 rounded-lg text-xs font-medium text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors">Imports</button>
+</div>
+<div class="pr-3 text-[11px] font-mono text-outline">
+      EPSG:4326 · WGS84
+    </div>
+</div>
+<!-- KPI STRIP -->
+<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-8">
+<div class="bg-surface-container-lowest p-3.5 rounded-xl shadow-sm flex flex-col justify-between">
+<span class="text-[11px] font-label uppercase tracking-wider text-outline">Parishes</span>
+<span class="text-xl font-headline font-bold text-on-surface mt-1">14</span>
+</div>
+<div class="bg-surface-container-lowest p-3.5 rounded-xl shadow-sm flex flex-col justify-between">
+<span class="text-[11px] font-label uppercase tracking-wider text-outline">Towns</span>
+<span class="text-xl font-headline font-bold text-secondary mt-1">131</span>
+</div>
+<div class="bg-surface-container-lowest p-3.5 rounded-xl shadow-sm flex flex-col justify-between">
+<span class="text-[11px] font-label uppercase tracking-wider text-outline">Communities</span>
+<span class="text-xl font-headline font-bold text-on-surface mt-1">775</span>
+</div>
+<div class="bg-surface-container-lowest p-3.5 rounded-xl shadow-sm flex flex-col justify-between">
+<span class="text-[11px] font-label uppercase tracking-wider text-outline">Drafts</span>
+<span class="text-xl font-headline font-bold text-on-surface mt-1">1</span>
+</div>
+<div class="bg-surface-container-lowest p-3.5 rounded-xl shadow-sm flex flex-col justify-between">
+<span class="text-[11px] font-label uppercase tracking-wider text-outline">Quality issues</span>
+<span class="text-xl font-headline font-bold text-tertiary mt-1">0</span>
+</div>
+<div class="bg-surface-container-lowest p-3.5 rounded-xl shadow-sm flex flex-col justify-between">
+<span class="text-[11px] font-label uppercase tracking-wider text-outline">Last change</span>
+<span class="text-xs font-mono font-medium text-on-surface mt-2.5">24 Oct 2026</span>
+</div>
+</div>
+<!-- SECTION 1: S36c LEVEL BROWSER -->
+<div class="flex flex-col gap-4 mb-10">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="text-xs font-mono px-2 py-0.5 rounded bg-surface-container-highest text-on-surface-variant font-semibold">S36c</span>
+<h2 class="text-base font-headline font-bold text-on-surface tracking-tight">Level Browser</h2>
+</div>
+<span class="text-xs font-mono text-outline">Hierarchy Explorer</span>
+</div>
+<div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden flex flex-col">
+<!-- Toolbar -->
+<div class="p-3.5 bg-surface-container-low flex flex-wrap items-center justify-between gap-3">
+<div class="flex flex-wrap items-center gap-2">
+<div class="relative w-64">
+<span class="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-[16px] text-outline">search</span>
+<input class="w-full pl-8 pr-3 py-1.5 bg-surface-container-lowest text-xs rounded-lg outline-none font-body text-on-surface placeholder:text-outline shadow-sm" placeholder="Search by name or code" type="text" value="Half Way Tree"/>
+</div>
+<div class="flex items-center gap-1.5">
+<button class="flex items-center gap-1 px-2.5 py-1.5 bg-surface-container-lowest text-xs rounded-lg font-medium text-on-surface shadow-sm">
+<span class="text-outline">Parish:</span> Saint Andrew
+              <span class="material-symbols-outlined text-[14px] text-outline">expand_more</span>
+</button>
+<button class="flex items-center gap-1 px-2.5 py-1.5 bg-surface-container-lowest text-xs rounded-lg font-medium text-on-surface-variant shadow-sm">
+<span class="text-outline">Town:</span> All
+              <span class="material-symbols-outlined text-[14px] text-outline">expand_more</span>
+</button>
+</div>
+<div class="flex items-center gap-2 pl-2">
+<label class="flex items-center gap-1.5 text-xs text-on-surface-variant cursor-pointer select-none">
+<input checked="" class="rounded accent-secondary w-3.5 h-3.5" type="checkbox"/>
+<span>Has a draft</span>
+</label>
+<label class="flex items-center gap-1.5 text-xs text-on-surface-variant cursor-pointer select-none">
+<input class="rounded accent-secondary w-3.5 h-3.5" type="checkbox"/>
+<span>Same name</span>
+</label>
+</div>
+</div>
+<div class="text-xs font-mono text-on-surface-variant">
+<span class="font-semibold text-on-surface">131</span> towns
+        </div>
+</div>
+<!-- Table View -->
+<div class="overflow-x-auto max-h-[380px] overflow-y-auto">
+<table class="w-full text-left text-xs">
+<thead class="sticky top-0 bg-surface-container text-on-surface-variant text-[11px] font-label uppercase tracking-wider select-none z-10">
+<tr>
+<th class="py-2.5 px-4 font-semibold">Name</th>
+<th class="py-2.5 px-4 font-semibold">Code</th>
+<th class="py-2.5 px-4 font-semibold">Parent</th>
+<th class="py-2.5 px-4 font-semibold text-right">Area km²</th>
+<th class="py-2.5 px-4 font-semibold text-right">Points</th>
+<th class="py-2.5 px-4 font-semibold">Children</th>
+<th class="py-2.5 px-4 font-semibold">Live</th>
+<th class="py-2.5 px-4 font-semibold">Updated</th>
+<th class="py-2.5 px-4 w-8"></th>
+</tr>
+</thead>
+<tbody class="divide-y divide-surface-container">
+<!-- Row: Half Way Tree (Active/Selected) -->
+<tr class="bg-secondary-container/40 hover:bg-secondary-container/60 transition-colors cursor-pointer">
+<td class="py-3 px-4 font-semibold text-on-surface flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-secondary"></span>
+<span>Half Way Tree</span>
+<span class="px-1.5 py-0.5 rounded text-[10px] font-mono font-medium bg-amber-100 text-amber-900">Draft v2</span>
+</td>
+<td class="py-3 px-4 font-mono font-medium text-secondary">JM0601</td>
+<td class="py-3 px-4 text-on-surface-variant font-medium">Saint Andrew</td>
+<td class="py-3 px-4 font-mono text-right">6.42</td>
+<td class="py-3 px-4 font-mono text-right">1,284</td>
+<td class="py-3 px-4 font-mono text-on-surface-variant">9 communities</td>
+<td class="py-3 px-4">
+<span class="inline-flex items-center gap-1 font-mono text-[11px] text-tertiary font-medium">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span> v1
+                </span>
+</td>
+<td class="py-3 px-4 font-mono text-on-surface-variant">24 Oct 2026</td>
+<td class="py-3 px-4 text-right">
+<span class="material-symbols-outlined text-[16px] text-secondary">chevron_right</span>
+</td>
+</tr>
+<!-- Row: Cross Roads -->
+<tr class="hover:bg-surface-container-low transition-colors cursor-pointer">
+<td class="py-3 px-4 font-semibold text-on-surface">Cross Roads</td>
+<td class="py-3 px-4 font-mono font-medium text-secondary">JM0602</td>
+<td class="py-3 px-4 text-on-surface-variant">Saint Andrew</td>
+<td class="py-3 px-4 font-mono text-right">3.88</td>
+<td class="py-3 px-4 font-mono text-right">896</td>
+<td class="py-3 px-4 font-mono text-on-surface-variant">6 communities</td>
+<td class="py-3 px-4">
+<span class="inline-flex items-center gap-1 font-mono text-[11px] text-tertiary font-medium">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span> v1
+                </span>
+</td>
+<td class="py-3 px-4 font-mono text-on-surface-variant">24 Oct 2026</td>
+<td class="py-3 px-4 text-right">
+<span class="material-symbols-outlined text-[16px] text-outline">chevron_right</span>
+</td>
+</tr>
+<!-- Row: Constant Spring -->
+<tr class="hover:bg-surface-container-low transition-colors cursor-pointer">
+<td class="py-3 px-4 font-semibold text-on-surface">Constant Spring</td>
+<td class="py-3 px-4 font-mono font-medium text-secondary">JM0603</td>
+<td class="py-3 px-4 text-on-surface-variant">Saint Andrew</td>
+<td class="py-3 px-4 font-mono text-right">8.12</td>
+<td class="py-3 px-4 font-mono text-right">1,640</td>
+<td class="py-3 px-4 font-mono text-on-surface-variant">11 communities</td>
+<td class="py-3 px-4">
+<span class="inline-flex items-center gap-1 font-mono text-[11px] text-tertiary font-medium">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span> v1
+                </span>
+</td>
+<td class="py-3 px-4 font-mono text-on-surface-variant">24 Oct 2026</td>
+<td class="py-3 px-4 text-right">
+<span class="material-symbols-outlined text-[16px] text-outline">chevron_right</span>
+</td>
+</tr>
+<!-- Row: Liguanea -->
+<tr class="hover:bg-surface-container-low transition-colors cursor-pointer">
+<td class="py-3 px-4 font-semibold text-on-surface">Liguanea</td>
+<td class="py-3 px-4 font-mono font-medium text-secondary">JM0604</td>
+<td class="py-3 px-4 text-on-surface-variant">Saint Andrew</td>
+<td class="py-3 px-4 font-mono text-right">5.34</td>
+<td class="py-3 px-4 font-mono text-right">980</td>
+<td class="py-3 px-4 font-mono text-on-surface-variant">8 communities</td>
+<td class="py-3 px-4">
+<span class="inline-flex items-center gap-1 font-mono text-[11px] text-tertiary font-medium">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span> v1
+                </span>
+</td>
+<td class="py-3 px-4 font-mono text-on-surface-variant">24 Oct 2026</td>
+<td class="py-3 px-4 text-right">
+<span class="material-symbols-outlined text-[16px] text-outline">chevron_right</span>
+</td>
+</tr>
+<!-- Duplicate Name Cases (Community Preview Examples) -->
+<tr class="hover:bg-surface-container-low transition-colors cursor-pointer bg-surface-container/20">
+<td class="py-3 px-4 font-semibold text-on-surface flex items-center gap-2">
+<span>Bellevue</span>
+<span class="px-1.5 py-0.5 rounded text-[10px] font-label font-bold bg-amber-100 text-amber-900">Same name ×2</span>
+</td>
+<td class="py-3 px-4 font-mono font-medium text-secondary">JM0601-08</td>
+<td class="py-3 px-4 text-on-surface-variant">Half Way Tree › Saint Andrew</td>
+<td class="py-3 px-4 font-mono text-right">0.84</td>
+<td class="py-3 px-4 font-mono text-right">184</td>
+<td class="py-3 px-4 font-mono text-on-surface-variant">—</td>
+<td class="py-3 px-4">
+<span class="inline-flex items-center gap-1 font-mono text-[11px] text-tertiary font-medium">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span> v1
+                </span>
+</td>
+<td class="py-3 px-4 font-mono text-on-surface-variant">24 Oct 2026</td>
+<td class="py-3 px-4 text-right">
+<span class="material-symbols-outlined text-[16px] text-outline">chevron_right</span>
+</td>
+</tr>
+<tr class="hover:bg-surface-container-low transition-colors cursor-pointer bg-surface-container/20">
+<td class="py-3 px-4 font-semibold text-on-surface flex items-center gap-2">
+<span>Bellevue</span>
+<span class="px-1.5 py-0.5 rounded text-[10px] font-label font-bold bg-amber-100 text-amber-900">Same name ×2</span>
+</td>
+<td class="py-3 px-4 font-mono font-medium text-secondary">JM0605-02</td>
+<td class="py-3 px-4 text-on-surface-variant">Stony Hill › Saint Andrew</td>
+<td class="py-3 px-4 font-mono text-right">1.21</td>
+<td class="py-3 px-4 font-mono text-right">240</td>
+<td class="py-3 px-4 font-mono text-on-surface-variant">—</td>
+<td class="py-3 px-4">
+<span class="inline-flex items-center gap-1 font-mono text-[11px] text-tertiary font-medium">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span> v1
+                </span>
+</td>
+<td class="py-3 px-4 font-mono text-on-surface-variant">24 Oct 2026</td>
+<td class="py-3 px-4 text-right">
+<span class="material-symbols-outlined text-[16px] text-outline">chevron_right</span>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+</main></body></html>

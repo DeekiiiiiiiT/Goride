@@ -18,7 +18,7 @@ const DATASET_PAGE: Record<string, string> = {
   vendors: 'suppliers-prices',
   vehicles: 'motor-vehicles',
   maps: 'world-quality',
-  places: 'plug-places',
+  places: 'places-home',
   gct_rates: 'gct-rates',
 };
 
@@ -28,7 +28,7 @@ const DATASET_LABEL: Record<string, string> = {
   vendors: 'Vendors',
   vehicles: 'Vehicles',
   maps: 'Places',
-  places: 'Places',
+  places: 'Places quality',
   gct_rates: 'GCT rates',
 };
 

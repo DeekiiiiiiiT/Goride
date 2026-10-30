@@ -1,9 +1,6 @@
-import { useState } from "react";
-import { PlaceCategories } from "./PlaceCategories";
-import { PlaceEditor } from "./PlaceEditor";
-import { PlaceRecord } from "./PlaceRecord";
-import { PlacesRegister } from "./PlacesRegister";
+import { CategoriesPage } from "./categories/CategoriesPage";
 import { PlacesReview } from "./PlacesReview";
+import { RegisterPage } from "./register/RegisterPage";
 import type { PlacesStates } from "./placesApi";
 
 export function PlacesDesk({
@@ -11,8 +8,8 @@ export function PlacesDesk({
   getToken,
   states,
   mode,
-  chip,
-  fixedType,
+  canWrite = false,
+  onOpenStation,
 }: {
   apiBase: string;
   getToken: () => Promise<string | null>;
@@ -20,26 +17,22 @@ export function PlacesDesk({
   mode: "register" | "categories" | "review";
   chip?: string;
   fixedType?: string;
+  canWrite?: boolean;
+  onOpenStation?: (id: string) => void;
 }) {
-  const [view, setView] = useState<"list" | "edit" | "record">("list");
-  const [id, setId] = useState<string | null>(null);
-  if (view === "edit") {
-    return <PlaceEditor apiBase={apiBase} getToken={getToken} states={states} placeId={id} onDone={(saved) => { setId(saved); setView("record"); }} />;
+  if (mode === "categories") {
+    return <CategoriesPage apiBase={apiBase} getToken={getToken} canWrite={canWrite} />;
   }
-  if (view === "record" && id) {
-    return <PlaceRecord apiBase={apiBase} getToken={getToken} states={states} placeId={id} onEdit={() => setView("edit")} />;
-  }
-  if (mode === "categories") return <PlaceCategories apiBase={apiBase} getToken={getToken} states={states} />;
   if (mode === "review") {
     return <PlacesReview apiBase={apiBase} getToken={getToken} />;
   }
   return (
-    <PlacesRegister
+    <RegisterPage
       apiBase={apiBase}
       getToken={getToken}
       states={states}
-      fixedType={fixedType}
-      onOpen={(next) => { setId(next); setView(next ? "record" : "edit"); }}
+      canWrite={canWrite}
+      onOpenStation={onOpenStation}
     />
   );
 }

@@ -10,6 +10,7 @@ import {
   requireAnyProductAdmin,
   type ProductAdminUser,
 } from "../_shared/productAdmin.ts";
+import { draftDiscardStatus, outsideJamaica } from "./geoGuards.ts";
 
 function geoDb() {
   return createClient(
@@ -63,6 +64,15 @@ export function registerGeoRoutes(app: Hono) {
   app.get("/geo/boundaries", async (c) => {
     const level = c.req.query("level");
     const parent = c.req.query("parent");
+    if (c.req.query("with") === "metrics") {
+      const { data, error } = await geoDb().rpc("list_boundaries_admin", {
+        p_level: level != null && level !== "" ? Number(level) : null,
+        p_parent: parent || null,
+      });
+      if (error) return c.json({ error: error.message }, 500);
+      c.header("Cache-Control", STABLE_GET_CACHE);
+      return c.json({ boundaries: data ?? [] });
+    }
     let query = geoDb()
       .from("boundaries")
       .select("pcode, admin_level, parent_pcode, name, slug, status, center_lat, center_lng, current_version_id")
@@ -89,7 +99,7 @@ export function registerGeoRoutes(app: Hono) {
   app.get("/geo/boundaries/:pcode/versions", async (c) => {
     const { data, error } = await geoDb()
       .from("boundary_versions")
-      .select("id, pcode, version, source, source_version, valid_on, notes, status, created_at")
+      .select("id, pcode, version, source, source_version, valid_on, notes, status, created_at, checks")
       .eq("pcode", c.req.param("pcode"))
       .order("version", { ascending: false });
     if (error) return c.json({ error: error.message }, 500);
@@ -112,15 +122,68 @@ export function registerGeoRoutes(app: Hono) {
     const { data: ver } = await versionQuery.limit(1).maybeSingle();
     const { data: usedParishes } = await deliveryDb().from("service_parishes").select("id").eq("pcode", pcode);
     const { data: usedMarkets } = await deliveryDb().from("service_markets").select("id, is_active").eq("pcode", pcode);
+    const placesDb = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      { db: { schema: "places" } },
+    );
+    const [{ count: placeCount }, { count: pinCount }, { data: children }, { data: metrics }, { count: older }] = await Promise.all([
+      placesDb.from("place").select("id", { count: "exact", head: true }).like("pcode", `${pcode}%`),
+      geoDb().from("places").select("id", { count: "exact", head: true }).like("pcode", `${pcode}%`),
+      geoDb().from("boundaries").select("pcode, name, admin_level").eq("parent_pcode", pcode).eq("status", "active").order("name").limit(200),
+      geoDb().rpc("boundary_metrics", { p_pcode: pcode }),
+      geoDb().from("boundary_versions").select("id", { count: "exact", head: true }).eq("pcode", pcode).neq("status", "published"),
+    ]);
+    const path: Array<{ pcode: string; name: string; admin_level: number }> = [];
+    let cursor: string | null = pcode;
+    for (let step = 0; step < 6 && cursor; step++) {
+      const { data: node } = await geoDb()
+        .from("boundaries")
+        .select("pcode, name, admin_level, parent_pcode")
+        .eq("pcode", cursor)
+        .maybeSingle();
+      if (!node) break;
+      path.unshift({ pcode: node.pcode, name: node.name, admin_level: node.admin_level });
+      cursor = node.parent_pcode;
+    }
+    const childRows = children ?? [];
+    const childrenByLevel: Record<string, number> = {};
+    for (const child of childRows) {
+      const key = String(child.admin_level);
+      childrenByLevel[key] = (childrenByLevel[key] ?? 0) + 1;
+    }
     return c.json({
       place,
       version: ver,
+      metrics: metrics ?? null,
+      path,
+      children: childRows,
+      children_by_level: childrenByLevel,
+      older_versions: older ?? 0,
       used_by: {
         rush_parishes: usedParishes?.length ?? 0,
         rush_markets: usedMarkets?.length ?? 0,
         rush_live_markets: (usedMarkets ?? []).filter((m) => m.is_active).length,
+        places: placeCount ?? 0,
+        pins: pinCount ?? 0,
       },
     });
+  });
+
+  app.get("/geo/summary", async (c) => {
+    const { data, error } = await geoDb().rpc("map_summary");
+    if (error) return c.json({ error: error.message }, 500);
+    c.header("Cache-Control", STABLE_GET_CACHE);
+    return c.json(data ?? {});
+  });
+
+  app.get("/geo/search", async (c) => {
+    const q = (c.req.query("q") || "").trim();
+    if (q.length < 2) return c.json({ results: [] });
+    const { data, error } = await geoDb().rpc("search_areas", { p_query: q });
+    if (error) return c.json({ error: error.message }, 500);
+    c.header("Cache-Control", STABLE_GET_CACHE);
+    return c.json({ results: data ?? [] });
   });
 
   app.get("/geo/shapes", async (c) => {
@@ -128,7 +191,17 @@ export function registerGeoRoutes(app: Hono) {
       .split(",")
       .map((n) => Number(n.trim()))
       .filter((n) => Number.isFinite(n));
-    const { data, error } = await geoDb().rpc("list_shapes", { p_levels: levels });
+    const toleranceRaw = c.req.query("tolerance");
+    const bbox = (c.req.query("bbox") || "")
+      .split(",")
+      .map((n) => Number(n.trim()))
+      .filter((n) => Number.isFinite(n));
+    const args: Record<string, unknown> = { p_levels: levels };
+    if (toleranceRaw != null && toleranceRaw !== "" && Number.isFinite(Number(toleranceRaw))) {
+      args.p_tolerance = Number(toleranceRaw);
+    }
+    if (bbox.length === 4) args.p_bbox = bbox;
+    const { data, error } = await geoDb().rpc("list_shapes", args);
     if (error) return c.json({ error: error.message }, 500);
     c.header("Cache-Control", STABLE_GET_CACHE);
     return c.json({ shapes: data ?? [] });
@@ -149,7 +222,7 @@ export function registerGeoRoutes(app: Hono) {
   });
 
   app.get("/geo/quality", async (c) => {
-    const { data, error } = await geoDb().from("quality_issues").select("*").limit(200);
+    const { data, error } = await geoDb().from("quality_issues_mv").select("*").limit(2000);
     if (error) return c.json({ error: error.message }, 500);
     return c.json({ issues: data ?? [] });
   });
@@ -174,11 +247,22 @@ export function registerGeoRoutes(app: Hono) {
   app.get("/geo/imports", async (c) => {
     const { data, error } = await geoDb()
       .from("import_runs")
-      .select("id, kind, file_name, counts, dry_run, created_at")
+      .select("id, kind, file_name, counts, errors, dry_run, file_hash, created_at")
       .order("created_at", { ascending: false })
       .limit(50);
     if (error) return c.json({ error: error.message }, 500);
     return c.json({ runs: data ?? [] });
+  });
+
+  app.get("/geo/imports/:id", async (c) => {
+    const { data, error } = await geoDb()
+      .from("import_runs")
+      .select("id, kind, file_name, counts, errors, report, dry_run, file_hash, created_at")
+      .eq("id", c.req.param("id"))
+      .maybeSingle();
+    if (error) return c.json({ error: error.message }, 500);
+    if (!data) return c.json({ error: "Import not found" }, 404);
+    return c.json({ run: data });
   });
 
   app.post("/geo/import", async (c) => {
@@ -186,84 +270,56 @@ export function registerGeoRoutes(app: Hono) {
     const denied = denyWrite(admin);
     if (denied) return denied;
     const body = await c.req.json().catch(() => ({}));
-    const saveDrafts = body.save_drafts === true;
-    const dryRun = !saveDrafts && body.dry_run !== false;
     const features = Array.isArray(body.features) ? body.features : [];
     const db = geoDb();
+    const { data: checked, error: checkError } = await db.rpc("check_import", { p_features: features });
+    if (checkError) return c.json({ error: checkError.message }, 500);
+    const rows = Array.isArray(checked) ? checked : [];
     let matched = 0;
     let unknown = 0;
     let broken = 0;
-    let draftsSaved = 0;
     const errors: string[] = [];
-    const pending: Array<{ pcode: string; geometry: unknown; name: string }> = [];
-    for (const feature of features) {
-      const pcode = String(feature?.pcode ?? feature?.properties?.pcode ?? feature?.properties?.PCODE ?? "").trim();
-      const geometry = feature?.geometry ?? feature?.geojson ?? null;
-      if (!pcode) {
-        broken += 1;
-        errors.push("missing pcode");
-        continue;
-      }
-      const { data: existing } = await db.from("boundaries").select("pcode").eq("pcode", pcode).maybeSingle();
-      if (!existing) {
+    for (const row of rows) {
+      if (!row.matched) {
         unknown += 1;
-        errors.push(`${pcode}: unknown place`);
+        errors.push(`${row.pcode || "row"}: unknown place`);
         continue;
       }
       matched += 1;
-      if (saveDrafts) pending.push({ pcode, geometry, name: String(feature?.name ?? feature?.properties?.name ?? pcode) });
-    }
-    if (!dryRun && !saveDrafts) {
-      return c.json({
-        error: "geometry_required",
-        message: "Check the file, or save drafts from geometry. Import does not publish.",
-      }, 400);
-    }
-    if (saveDrafts) {
-      const missingGeometry = pending.filter((row) => !row.geometry);
-      if (missingGeometry.length === pending.length && pending.length > 0) {
-        return c.json({
-          error: "geometry_required",
-          message: "Saving drafts needs a geometry on each place. Nothing was written.",
-        }, 400);
-      }
-      for (const row of pending) {
-        if (!row.geometry) {
-          broken += 1;
-          errors.push(`${row.pcode}: no geometry`);
-          continue;
-        }
-        const { error } = await db.rpc("save_draft_border", {
-          p_pcode: row.pcode,
-          p_geojson: row.geometry,
-          p_notes: `Draft from ${body.file_name ?? "import"}`,
-          p_actor: admin.id,
-        });
-        if (error) {
-          broken += 1;
-          errors.push(`${row.pcode}: ${error.message}`);
-        } else {
-          draftsSaved += 1;
-        }
+      if (!row.valid) {
+        broken += 1;
+        errors.push(`${row.pcode}: This file has no area shape.`);
       }
     }
-    const report = {
-      matched,
-      unknown,
-      broken,
-      drafts_saved: draftsSaved,
-      dry_run: dryRun,
-      errors,
-    };
-    await db.from("import_runs").insert({
+    const counts = { matched, unknown, broken, drafts_saved: 0, dry_run: true };
+    const { data: inserted, error } = await db.from("import_runs").insert({
       kind: "boundaries",
       file_name: body.file_name ?? null,
-      counts: report,
+      counts,
       errors,
-      dry_run: dryRun,
+      report: rows,
+      features,
+      file_hash: body.file_hash ?? null,
+      dry_run: true,
       created_by: admin.id,
+    }).select("id").single();
+    if (error) return c.json({ error: error.message }, 500);
+    return c.json({ report: counts, run_id: inserted?.id, rows });
+  });
+
+  app.post("/geo/imports/:id/drafts", async (c) => {
+    const admin = c.get("geoUser") as ProductAdminUser;
+    const denied = denyWrite(admin);
+    if (denied) return denied;
+    const { data, error } = await geoDb().rpc("save_import_drafts", {
+      p_run_id: c.req.param("id"),
+      p_actor: admin.id,
     });
-    return c.json({ report });
+    if (error) {
+      const status = /broken|not_found/i.test(error.message) ? 400 : 500;
+      return c.json({ error: error.message }, status);
+    }
+    return c.json({ saved: data ?? [] });
   });
 
   app.post("/geo/boundaries/:pcode/versions", async (c) => {
@@ -281,6 +337,21 @@ export function registerGeoRoutes(app: Hono) {
     });
     if (error) return c.json({ error: error.message }, 400);
     return c.json({ version_id: data });
+  });
+
+  app.delete("/geo/boundaries/:pcode/versions/:id", async (c) => {
+    const admin = c.get("geoUser") as ProductAdminUser;
+    const denied = denyWrite(admin);
+    if (denied) return denied;
+    const { error } = await geoDb().rpc("discard_draft_border", {
+      p_pcode: c.req.param("pcode"),
+      p_version_id: c.req.param("id"),
+    });
+    if (error) {
+      const status = draftDiscardStatus(error.message);
+      return c.json({ error: error.message, message: error.message.includes("not_a_draft") ? "Only a draft can be discarded." : error.message }, status);
+    }
+    return c.json({ ok: true });
   });
 
   app.post("/geo/boundaries/:pcode/versions/:id/impact", async (c) => {
@@ -310,23 +381,71 @@ export function registerGeoRoutes(app: Hono) {
     return new Response(text || "{}", { status: res.status, headers: { "Content-Type": "application/json" } });
   });
 
+  app.post("/geo/places", async (c) => {
+    const admin = c.get("geoUser") as ProductAdminUser;
+    const denied = denyWrite(admin);
+    if (denied) return denied;
+    const body = await c.req.json().catch(() => ({}));
+    const reason = String(body.reason ?? "").trim();
+    if (!reason) return c.json({ error: "reason_required", message: "A reason is required." }, 400);
+    const lat = Number(body.lat);
+    const lng = Number(body.lng);
+    if (outsideJamaica(lat, lng)) {
+      return c.json({ error: "outside_jamaica", message: "That point is outside Jamaica." }, 400);
+    }
+    const kind = ["town_centre", "landmark", "junction"].includes(body.kind) ? body.kind : "landmark";
+    const { data, error } = await geoDb()
+      .from("places")
+      .insert({ name: String(body.name || "Pin"), kind, lat, lng, source: "manual", status: "active" })
+      .select("id, kind, name, lat, lng, pcode, source, status")
+      .single();
+    if (error) return c.json({ error: error.message, message: error.message }, 400);
+    await geoDb().from("pin_change").insert({
+      pin_id: data.id,
+      before: {},
+      after: data,
+      actor_id: admin.id,
+      reason,
+    });
+    return c.json({ place: data });
+  });
+
   app.put("/geo/places/:id", async (c) => {
     const admin = c.get("geoUser") as ProductAdminUser;
     const denied = denyWrite(admin);
     if (denied) return denied;
     const body = await c.req.json().catch(() => ({}));
+    const reason = String(body.reason ?? "").trim();
+    if (!reason) return c.json({ error: "reason_required", message: "A reason is required." }, 400);
+    const id = c.req.param("id");
+    const { data: before, error: loadError } = await geoDb().from("places").select("*").eq("id", id).maybeSingle();
+    if (loadError) return c.json({ error: loadError.message }, 500);
+    if (!before) return c.json({ error: "Pin not found" }, 404);
     const updates: Record<string, unknown> = {};
     if (body.name != null) updates.name = String(body.name);
+    if (body.kind === "town_centre" || body.kind === "landmark" || body.kind === "junction") updates.kind = body.kind;
     if (body.lat != null) updates.lat = Number(body.lat);
     if (body.lng != null) updates.lng = Number(body.lng);
     if (body.status === "active" || body.status === "retired") updates.status = body.status;
+    const lat = Number(updates.lat ?? before.lat);
+    const lng = Number(updates.lng ?? before.lng);
+    if (outsideJamaica(lat, lng)) {
+      return c.json({ error: "outside_jamaica", message: "That point is outside Jamaica." }, 400);
+    }
     const { data, error } = await geoDb()
       .from("places")
       .update(updates)
-      .eq("id", c.req.param("id"))
-      .select("id, name, lat, lng, status")
+      .eq("id", id)
+      .select("id, kind, name, lat, lng, pcode, source, status")
       .single();
-    if (error) return c.json({ error: error.message }, 400);
+    if (error) return c.json({ error: error.message, message: error.message }, 400);
+    await geoDb().from("pin_change").insert({
+      pin_id: id,
+      before,
+      after: data,
+      actor_id: admin.id,
+      reason,
+    });
     return c.json({ place: data });
   });
 }

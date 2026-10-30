@@ -1,5 +1,18 @@
 /** Tier labels and fit rules shared by the catalog function and tests. */
 
+/** The five match types. Stock is a badge, never a sixth type. */
+export const PART_MATCH_TIERS = [
+  { tier: 1, label: "Direct OEM Match", reason: "Factory part listed for {vehicle}." },
+  { tier: 2, label: "Sister Vehicle Match", reason: "Listed for {sisters}, the same car under another badge." },
+  { tier: 3, label: "Engine Compatible Match", reason: "Engine part listed for {source}, which uses the same engine." },
+  { tier: 4, label: "Aftermarket Cross-Reference", reason: "{brand} {number} replaces OEM {oem}." },
+  { tier: 5, label: "Universal Fleet Part", reason: "Fits by size: {spec}." },
+] as const;
+
+export function partMatchLabel(tier: number): string {
+  return PART_MATCH_TIERS.find((row) => row.tier === tier)?.label ?? "Direct OEM Match";
+}
+
 export type PartFitScope = "powertrain" | "chassis" | "body" | "electrical" | "universal";
 export type PartKind = "oem" | "oe_supplier" | "aftermarket" | "used" | "reman";
 export type FitTargetKind = "engine_family" | "platform" | "catalog_variant";
@@ -58,33 +71,31 @@ export function buildFitMessage(input: {
     };
   }
   if (input.tier === 1) {
-    return { tierLabel: "Factory part", matchReason: "Factory part for your vehicle.", confirmedFit };
+    return { tierLabel: partMatchLabel(1), matchReason: "Factory part listed for this vehicle.", confirmedFit };
   }
   if (input.tier === 2) {
     const sister = input.sisterNames?.trim() || "a sister vehicle";
     const body = input.fitScope === "body" || input.fitScope === "chassis";
-      const caution = body
-      ? "check trim, year and photos before ordering."
-      : "Expected direct fit.";
+    const caution = body ? " check trim, year and photos before ordering." : "";
     return {
-      tierLabel: "Same car, other badge",
-      matchReason: `Same car, other badge as ${sister}. ${caution}`,
+      tierLabel: partMatchLabel(2),
+      matchReason: `Listed for ${sister}, the same car under another badge.${caution}`,
       confirmedFit,
     };
   }
   if (input.tier === 3) {
-    const from = input.sourceMake?.trim() ? ` — from ${input.sourceMake.trim()}.` : ".";
+    const from = input.sourceMake?.trim() || "another car";
     return {
-      tierLabel: "Same engine",
-      matchReason: `Engine/powertrain compatible only${from}`,
+      tierLabel: partMatchLabel(3),
+      matchReason: `Engine part listed for ${from}, which uses the same engine.`,
       confirmedFit,
     };
   }
   const oem = input.referenceOem?.trim() || "part";
   const maker = input.manufacturer?.trim() || "aftermarket";
   return {
-    tierLabel: "Equivalent",
-    matchReason: `Equivalent to OEM ${oem} — ${maker}`,
+    tierLabel: partMatchLabel(4),
+    matchReason: `${maker} replaces OEM ${oem}.`,
     confirmedFit,
   };
 }

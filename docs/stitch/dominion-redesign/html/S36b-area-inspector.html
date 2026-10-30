@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"/><title>S36b Area inspector</title></head><body><main>
+<!-- Top Floating Controls Overlay -->
+<div class="absolute top-4 left-4 right-4 z-20 flex flex-wrap items-center justify-between gap-3 pointer-events-none">
+<!-- Search bar inside map -->
+<div class="pointer-events-auto flex items-center bg-surface-container-lowest/95 backdrop-blur-md rounded-xl shadow-md px-3 py-1.5 w-72 text-xs">
+<span class="material-symbols-outlined text-outline text-[18px] mr-2">search</span>
+<input aria-label="Search map locations" class="bg-transparent font-medium text-on-surface outline-none w-full font-body" type="text" value="Half Way Tree"/>
+<button class="text-outline hover:text-on-surface p-0.5" title="Clear search" type="button">
+<span class="material-symbols-outlined text-[16px]">close</span>
+</button>
+</div>
+<!-- Right Tool Group -->
+<div class="pointer-events-auto flex items-center gap-2">
+<!-- Style Switcher -->
+<div class="inline-flex bg-surface-container-lowest/95 backdrop-blur-md rounded-xl shadow-md p-1">
+<button class="px-2.5 py-1 text-xs font-semibold rounded-lg bg-surface-container text-on-surface" type="button">Map</button>
+<button class="px-2.5 py-1 text-xs font-medium rounded-lg text-on-surface-variant hover:text-on-surface" type="button">Satellite</button>
+</div>
+<!-- Vertical Navigation Buttons -->
+<div class="flex items-center bg-surface-container-lowest/95 backdrop-blur-md rounded-xl shadow-md p-1 gap-0.5">
+<button class="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-surface-container text-on-surface" title="Zoom in" type="button">
+<span class="material-symbols-outlined text-[18px]">add</span>
+</button>
+<button class="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-surface-container text-on-surface" title="Zoom out" type="button">
+<span class="material-symbols-outlined text-[18px]">remove</span>
+</button>
+<div class="h-3 w-px bg-surface-container-highest"></div>
+<button class="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-surface-container text-on-surface" title="Fit Saint Andrew" type="button">
+<span class="material-symbols-outlined text-[18px]">crop_free</span>
+</button>
+<button class="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-surface-container text-on-surface" title="Full screen" type="button">
+<span class="material-symbols-outlined text-[18px]">fullscreen</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Vector Map Stage: Saint Andrew Parish & Half Way Tree Highlight -->
+<div class="relative w-full h-full bg-[#f8fafc] overflow-hidden flex items-center justify-center">
+<!-- SVG Cartography Canvas -->
+<svg class="w-full h-full object-cover" fill="none" viewbox="0 0 1000 700" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<pattern height="40" id="grid-pattern" patternunits="userSpaceOnUse" width="40">
+<path d="M 40 0 L 0 0 0 40" fill="none" stroke="#f1f5f9" stroke-width="1"></path>
+</pattern>
+<filter height="120%" id="subtle-shadow" width="120%" x="-10%" y="-10%">
+<fedropshadow dx="0" dy="4" flood-color="#000000" flood-opacity="0.08" stddeviation="6"></fedropshadow>
+</filter>
+</defs>
+<!-- Light grid base -->
+<rect fill="url(#grid-pattern)" height="700" width="1000"></rect>
+<!-- Surrounding Parishes Outlines (Contextual background) -->
+<!-- Saint Catherine boundary -->
+<path d="M -50 120 C 50 180, 180 240, 240 380 C 260 420, 220 540, 160 620 L -60 620 Z" fill="#ffffff" stroke="#cbd5e1" stroke-dasharray="4 4" stroke-width="1.5"></path>
+<text fill="#94a3b8" font-family="Inter" font-size="12" font-weight="600" letter-spacing="2" x="90" y="320">ST. CATHERINE</text>
+<!-- Saint Mary (North border) -->
+<path d="M 280 -40 C 360 80, 520 120, 680 90 L 710 -40 Z" fill="#ffffff" stroke="#cbd5e1" stroke-dasharray="4 4" stroke-width="1.5"></path>
+<text fill="#94a3b8" font-family="Inter" font-size="12" font-weight="600" letter-spacing="2" x="480" y="60">ST. MARY</text>
+<!-- Portland (North East border) -->
+<path d="M 720 70 C 820 140, 880 260, 960 300 L 1050 200 Z" fill="#ffffff" stroke="#cbd5e1" stroke-dasharray="4 4" stroke-width="1.5"></path>
+<text fill="#94a3b8" font-family="Inter" font-size="12" font-weight="600" letter-spacing="2" x="820" y="210">PORTLAND</text>
+<!-- Kingston Parish (Enclave to the south) -->
+<path d="M 440 560 C 470 540, 530 545, 570 575 C 550 630, 480 645, 435 620 Z" fill="#f8fafc" stroke="#334155" stroke-width="2"></path>
+<text fill="#475569" font-family="Inter" font-size="11" font-weight="600" x="485" y="585">KINGSTON</text>
+<!-- SAINT ANDREW PARISH (Primary focused area, faint cool grey fill #f1f5f9) -->
+<path d="M 240 380 C 270 260, 340 160, 450 140 C 580 120, 680 150, 750 240 C 810 320, 770 460, 680 540 C 580 540, 560 520, 520 535 C 440 520, 390 530, 340 540 C 280 490, 250 430, 240 380 Z" fill="#f1f5f9" stroke="#1e293b" stroke-width="2.5"></path>
+<text fill="#64748b" font-family="Inter" font-size="16" font-weight="700" letter-spacing="4" opacity="0.6" x="590" y="260">SAINT ANDREW</text>
+<!-- Neighboring Towns inside Saint Andrew (Outlined in mid-grey 1.25px) -->
+<!-- Stony Hill -->
+<path d="M 430 200 C 480 190, 530 220, 520 270 C 470 280, 430 250, 430 200 Z" fill="#ffffff" opacity="0.9" stroke="#94a3b8" stroke-width="1.25"></path>
+<text fill="#64748b" font-family="Inter" font-size="10" font-weight="500" x="455" y="245">Stony Hill</text>
+<!-- Papine -->
+<path d="M 550 350 C 620 330, 670 380, 640 440 C 580 440, 560 400, 550 350 Z" fill="#ffffff" opacity="0.9" stroke="#94a3b8" stroke-width="1.25"></path>
+<text fill="#64748b" font-family="Inter" font-size="10" font-weight="500" x="585" y="395">Papine</text>
+<!-- Red Hills / Constant Spring -->
+<path d="M 330 290 C 400 270, 430 320, 400 370 C 350 380, 320 340, 330 290 Z" fill="#ffffff" opacity="0.9" stroke="#94a3b8" stroke-width="1.25"></path>
+<text fill="#64748b" font-family="Inter" font-size="10" font-weight="500" x="350" y="335">Constant Spring</text>
+<!-- Meadowbrook / Havendale -->
+<path d="M 320 385 C 380 375, 410 410, 385 450 C 340 455, 310 425, 320 385 Z" fill="#ffffff" opacity="0.9" stroke="#94a3b8" stroke-width="1.25"></path>
+<text fill="#64748b" font-family="Inter" font-size="10" font-weight="500" x="330" y="420">Havendale</text>
+<!-- SELECTED TOWN: HALF WAY TREE (2.5px Dominion blue outline, 10% translucent blue fill) -->
+<g filter="url(#subtle-shadow)">
+<path d="M 400 380 C 470 370, 530 390, 545 440 C 540 490, 480 520, 420 515 C 380 500, 370 450, 400 380 Z" fill="rgba(49, 107, 243, 0.12)" id="hwt-boundary" stroke="#316bf3" stroke-width="2.5"></path>
+<!-- Internal Community Nodes / Centroid Guide -->
+<circle cx="465" cy="450" fill="#316bf3" r="4"></circle>
+<circle cx="465" cy="450" r="10" stroke="#316bf3" stroke-dasharray="2 2" stroke-width="1.5"></circle>
+</g>
+<!-- Road Network Skeletal Accents -->
+<path d="M 465 450 L 585 395" stroke="#cbd5e1" stroke-linecap="round" stroke-width="1.5"></path>
+<path d="M 465 450 L 455 245" stroke="#cbd5e1" stroke-linecap="round" stroke-width="1.5"></path>
+<path d="M 465 450 L 485 585" stroke="#cbd5e1" stroke-linecap="round" stroke-width="2"></path>
+<path d="M 465 450 L 350 420" stroke="#cbd5e1" stroke-linecap="round" stroke-width="1.5"></path>
+</svg>
+<!-- Floating Centroid Label Pill for Half Way Tree -->
+<div class="absolute top-[44%] left-[45%] -translate-x-1/2 -translate-y-1/2 z-10 pointer-events-auto">
+<div class="bg-surface-container-lowest text-on-surface px-3 py-1.5 rounded-lg shadow-lg flex items-center gap-2" style="box-shadow: 0 0 0 1.5px #316bf3, 0 4px 12px rgba(49, 107, 243, 0.2);">
+<span class="w-2 h-2 rounded-full bg-secondary animate-pulse"></span>
+<span class="text-xs font-bold font-headline text-on-surface">Half Way Tree</span>
+<span class="text-[11px] font-mono px-1.5 py-0.5 rounded bg-surface-container text-secondary font-semibold">JM0601</span>
+</div>
+</div>
+<!-- Floating Bottom Layers Panel -->
+<div class="absolute bottom-4 left-4 z-20 bg-surface-container-lowest/95 backdrop-blur-md p-2.5 rounded-xl shadow-md flex items-center gap-3">
+<div class="flex items-center gap-1.5">
+<span class="w-2.5 h-2.5 rounded-full bg-slate-900"></span>
+<span class="text-[11px] font-medium text-on-surface">Parish</span>
+</div>
+<span class="text-outline-variant">•</span>
+<div class="flex items-center gap-1.5">
+<span class="w-2.5 h-2.5 rounded-full bg-secondary"></span>
+<span class="text-[11px] font-semibold text-secondary">Town (Active)</span>
+</div>
+<span class="text-outline-variant">•</span>
+<div class="flex items-center gap-1.5">
+<span class="w-2.5 h-2.5 rounded-full bg-outline-variant"></span>
+<span class="text-[11px] font-medium text-on-surface-variant">Communities (9)</span>
+</div>
+</div>
+<!-- Floating Zoom Hint Chip (Bottom Center) -->
+<div class="absolute bottom-4 right-4 z-20">
+<div class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface-container-highest/90 text-on-surface-variant text-[11px] font-medium shadow-sm backdrop-blur-sm">
+<span class="material-symbols-outlined text-[15px] text-outline">zoom_in</span>
+<span>Zoom in to see communities</span>
+</div>
+</div>
+</div>
+</div>
+<!-- RIGHT AREA INSPECTOR (4 COLUMNS) -->
+<div class="col-span-12 lg:col-span-4 bg-surface-container-lowest rounded-2xl shadow-sm flex flex-col justify-between h-[700px] overflow-hidden">
+<!-- Scrollable Content Pane -->
+<div class="p-6 overflow-y-auto space-y-6">
+<!-- Back Link & Header Entity Identity -->
+<div class="space-y-2">
+<a class="inline-flex items-center gap-1 text-xs font-semibold text-secondary hover:underline" href="#">
+<span>‹ Jamaica</span>
+</a>
+<div class="flex items-start justify-between gap-3 pt-1">
+<div>
+<div class="flex items-center gap-2">
+<h2 class="text-xl font-bold font-headline text-on-surface tracking-tight">Half Way Tree</h2>
+<span class="px-2 py-0.5 rounded-full bg-secondary-container text-on-secondary-container text-[11px] font-semibold">Town</span>
+</div>
+<div class="text-xs font-mono font-medium text-secondary mt-0.5">JM0601</div>
+</div>
+<button class="p-1.5 text-on-surface-variant hover:text-on-surface rounded-lg hover:bg-surface-container transition-colors" title="Bookmark or Pin" type="button">
+<span class="material-symbols-outlined text-[18px]">push_pin</span>
+</button>
+</div>
+<!-- Entity Hierarchy Breadcrumbs -->
+<div class="text-[11px] font-body text-on-surface-variant flex items-center gap-1">
+<span class="hover:text-secondary cursor-pointer">Jamaica</span>
+<span class="text-outline-variant">›</span>
+<span class="hover:text-secondary cursor-pointer">Saint Andrew</span>
+<span class="text-outline-variant">›</span>
+<span class="font-semibold text-on-surface">Half Way Tree</span>
+</div>
+</div>
+<!-- 2-Column Facts List -->
+<div class="grid grid-cols-2 gap-2 bg-surface-container-low p-3.5 rounded-xl">
+<div class="flex flex-col">
+<span class="text-[10px] font-label uppercase tracking-wider text-on-surface-variant">Area</span>
+<span class="text-xs font-mono font-semibold text-on-surface mt-0.5">6.42 km²</span>
+</div>
+<div class="flex flex-col">
+<span class="text-[10px] font-label uppercase tracking-wider text-on-surface-variant">Border points</span>
+<span class="text-xs font-mono font-semibold text-on-surface mt-0.5">1,284</span>
+</div>
+<div class="flex flex-col mt-2">
+<span class="text-[10px] font-label uppercase tracking-wider text-on-surface-variant">Centre</span>
+<span class="text-xs font-mono font-semibold text-on-surface mt-0.5 truncate" title="18.0123, -76.7987">18.0123, −76.7987</span>
+</div>
+<div class="flex flex-col mt-2">
+<span class="text-[10px] font-label uppercase tracking-wider text-on-surface-variant">Communities</span>
+<span class="text-xs font-mono font-semibold text-on-surface mt-0.5">9</span>
+</div>
+</div>
+<!-- Live Border Section -->
+<div class="space-y-2">
+<div class="text-xs font-label uppercase tracking-wider text-on-surface-variant font-semibold">Boundary status</div>
+<div class="flex items-center justify-between p-3 rounded-xl bg-surface-container">
+<div class="flex items-center gap-2.5">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-tertiary-container text-on-tertiary-container text-[11px] font-bold">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span>
+<span>Live</span>
+</span>
+<div class="flex flex-col">
+<span class="text-xs font-mono font-medium text-on-surface">v1 · COD-AB</span>
+<span class="text-[10px] text-outline font-mono">24 Oct 2026</span>
+</div>
+</div>
+<a class="text-xs text-secondary hover:underline font-medium" href="#">2 older versions</a>
+</div>
+</div>
+<!-- Used By Block -->
+<div class="space-y-2">
+<div class="flex items-center justify-between">
+<span class="text-xs font-label uppercase tracking-wider text-on-surface-variant font-semibold">Used by</span>
+<span class="text-[10px] font-mono text-outline">Counts only</span>
+</div>
+<div class="grid grid-cols-3 gap-2">
+<div class="p-2.5 rounded-lg bg-surface-container text-center flex flex-col items-center">
+<span class="material-symbols-outlined text-secondary text-[18px] mb-0.5">storefront</span>
+<span class="text-xs font-mono font-bold text-on-surface">14</span>
+<span class="text-[10px] text-on-surface-variant leading-none mt-1">Dominion</span>
+</div>
+<div class="p-2.5 rounded-lg bg-surface-container text-center flex flex-col items-center">
+<span class="material-symbols-outlined text-outline text-[18px] mb-0.5">local_convenience_store</span>
+<span class="text-xs font-mono font-bold text-on-surface">1</span>
+<span class="text-[10px] text-on-surface-variant leading-none mt-1">Rush</span>
+</div>
+<div class="p-2.5 rounded-lg bg-surface-container text-center flex flex-col items-center">
+<span class="material-symbols-outlined text-outline text-[18px] mb-0.5">pin_drop</span>
+<span class="text-xs font-mono font-bold text-on-surface">0</span>
+<span class="text-[10px] text-on-surface-variant leading-none mt-1">Map pins</span>
+</div>
+</div>
+<p class="text-[10px] text-outline font-body italic pt-0.5">Counts only. Records stay in each app.</p>
+</div>
+<!-- Communities List (9 items) -->
+<div class="space-y-2">
+<div class="flex items-center justify-between">
+<span class="text-xs font-label uppercase tracking-wider text-on-surface-variant font-semibold">Communities in Half Way Tree</span>
+<span class="text-xs font-mono text-on-surface-variant">9 total</span>
+</div>
+<div class="space-y-1">
+<!-- 1. Half Way Tree -->
+<div class="flex items-center justify-between p-2 rounded-lg bg-surface-container-low hover:bg-surface-container transition-colors cursor-pointer group">
+<div class="flex items-center gap-2 min-w-0">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>
+<span class="text-xs font-medium text-on-surface truncate">Half Way Tree</span>
+<span class="text-[10px] font-mono text-outline">JM060101</span>
+</div>
+<span class="material-symbols-outlined text-outline text-[16px] group-hover:text-secondary group-hover:translate-x-0.5 transition-all">chevron_right</span>
+</div>
+<!-- 2. Cross Roads -->
+<div class="flex items-center justify-between p-2 rounded-lg bg-surface-container-low hover:bg-surface-container transition-colors cursor-pointer group">
+<div class="flex items-center gap-2 min-w-0">
+<span class="w-1.5 h-1.5 rounded-full bg-outline-variant"></span>
+<span class="text-xs font-medium text-on-surface truncate">Cross Roads</span>
+<span class="text-[10px] font-mono text-outline">JM060102</span>
+</div>
+<span class="material-symbols-outlined text-outline text-[16px] group-hover:text-secondary group-hover:translate-x-0.5 transition-all">chevron_right</span>
+</div>
+<!-- 3. Liguanea -->
+<div class="flex items-center justify-between p-2 rounded-lg bg-surface-container-low hover:bg-surface-container transition-colors cursor-pointer group">
+<div class="flex items-center gap-2 min-w-0">
+<span class="w-1.5 h-1.5 rounded-full bg-outline-variant"></span>
+<span class="text-xs font-medium text-on-surface truncate">Liguanea</span>
+<span class="text-[10px] font-mono text-outline">JM060103</span>
+</div>
+<span class="material-symbols-outlined text-outline text-[16px] group-hover:text-secondary group-hover:translate-x-0.5 transition-all">chevron_right</span>
+</div>
+<!-- 4. New Kingston -->
+<div class="flex items-center justify-between p-2 rounded-lg bg-surface-container-low hover:bg-surface-container transition-colors cursor-pointer group">
+<div class="flex items-center gap-2 min-w-0">
+<span class="w-1.5 h-1.5 rounded-full bg-outline-variant"></span>
+<span class="text-xs font-medium text-on-surface truncate">New Kingston</span>
+<span class="text-[10px] font-mono text-outline">JM060104</span>
+</div>
+<span class="material-symbols-outlined text-outline text-[16px] group-hover:text-secondary group-hover:translate-x-0.5 transition-all">chevron_right</span>
+</div>
+<!-- 5. Eastwood Park -->
+<div class="flex items-center justify-between p-2 rounded-lg bg-surface-container-low hover:bg-surface-container transition-colors cursor-pointer group">
+<div class="flex items-center gap-2 min-w-0">
+<span class="w-1.5 h-1.5 rounded-full bg-outline-variant"></span>
+<span class="text-xs font-medium text-on-surface truncate">Eastwood Park</span>
+<span class="text-[10px] font-mono text-outline">JM060105</span>
+</div>
+<span class="material-symbols-outlined text-outline text-[16px] group-hover:text-secondary group-hover:translate-x-0.5 transition-all">chevron_right</span>
+</div>
+<!-- 6. Richmond Park -->
+<div class="flex items-center justify-between p-2 rounded-lg bg-surface-container-low hover:bg-surface-container transition-colors cursor-pointer group">
+<div class="flex items-center gap-2 min-w-0">
+<span class="w-1.5 h-1.5 rounded-full bg-outline-variant"></span>
+<span class="text-xs font-medium text-on-surface truncate">Richmond Park</span>
+<span class="text-[10px] font-mono text-outline">JM060106</span>
+</div>
+<span class="material-symbols-outlined text-outline text-[16px] group-hover:text-secondary group-hover:translate-x-0.5 transition-all">chevron_right</span>
+</div>
+<!-- 7. Molynes -->
+<div class="flex items-center justify-between p-2 rounded-lg bg-surface-container-low hover:bg-surface-container transition-colors cursor-pointer group">
+<div class="flex items-center gap-2 min-w-0">
+<span class="w-1.5 h-1.5 rounded-full bg-outline-variant"></span>
+<span class="text-xs font-medium text-on-surface truncate">Molynes</span>
+<span class="text-[10px] font-mono text-outline">JM060107</span>
+</div>
+<span class="material-symbols-outlined text-outline text-[16px] group-hover:text-secondary group-hover:translate-x-0.5 transition-all">chevron_right</span>
+</div>
+<!-- 8. Kencot -->
+<div class="flex items-center justify-between p-2 rounded-lg bg-surface-container-low hover:bg-surface-container transition-colors cursor-pointer group">
+<div class="flex items-center gap-2 min-w-0">
+<span class="w-1.5 h-1.5 rounded-full bg-outline-variant"></span>
+<span class="text-xs font-medium text-on-surface truncate">Kencot</span>
+<span class="text-[10px] font-mono text-outline">JM060108</span>
+</div>
+<span class="material-symbols-outlined text-outline text-[16px] group-hover:text-secondary group-hover:translate-x-0.5 transition-all">chevron_right</span>
+</div>
+<!-- 9. Maxfield -->
+<div class="flex items-center justify-between p-2 rounded-lg bg-surface-container-low hover:bg-surface-container transition-colors cursor-pointer group">
+<div class="flex items-center gap-2 min-w-0">
+<span class="w-1.5 h-1.5 rounded-full bg-outline-variant"></span>
+<span class="text-xs font-medium text-on-surface truncate">Maxfield</span>
+<span class="text-[10px] font-mono text-outline">JM060109</span>
+</div>
+<span class="material-symbols-outlined text-outline text-[16px] group-hover:text-secondary group-hover:translate-x-0.5 transition-all">chevron_right</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Sticky Inspector Footer Actions -->
+<div class="p-4 bg-surface-container-lowest shadow-[0_-4px_12px_rgba(0,0,0,0.03)] space-y-2">
+<div class="flex items-center gap-2">
+<!-- Primary Blue Button -->
+<button class="flex-1 py-2 px-3 rounded-lg bg-secondary text-on-secondary text-xs font-semibold hover:bg-secondary-dim transition-colors flex items-center justify-center gap-2 shadow-sm" type="button">
+<span class="material-symbols-outlined text-[16px]">edit</span>
+<span>Open border editor</span>
+</button>
+<!-- Copy Code Button with Tooltip -->
+<div class="relative group">
+<button class="p-2 rounded-lg bg-surface-container text-on-surface hover:bg-surface-container-high transition-colors flex items-center justify-center" id="copy-btn" title="Copy area code" type="button">
+<span class="material-symbols-outlined text-[18px]">content_copy</span>
+</button>
+<!-- Visible Tooltip -->
+<div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 rounded bg-inverse-surface text-surface text-[10px] font-mono whitespace-nowrap shadow-md pointer-events-none flex items-center gap-1">
+<span class="w-1 h-1 rounded-full bg-tertiary-fixed"></span>
+<span>Copied JM0601</span>
+</div>
+</div>
+</div>
+<!-- Staff Access Note -->
+<div class="flex items-center gap-1.5 justify-center text-[10px] text-outline font-body">
+<span class="material-symbols-outlined text-[13px]">lock</span>
+<span>You can view this map. Only the owner can change borders.</span>
+</div>
+</div>
+</div>
+</div>
+
+</main></body></html>

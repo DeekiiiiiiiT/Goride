@@ -76,7 +76,7 @@ export default defineConfig({
       VITE_SUPABASE_URL: 'https://ci-placeholder.supabase.co',
       VITE_SUPABASE_ANON_KEY: 'ci-placeholder-anon-key',
     },
-    include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+    include: ['src/**/*.test.ts', 'src/**/*.test.tsx', '../../packages/platform-ops-ui/src/places/categories/**/*.test.ts', '../../packages/platform-ops-ui/src/places/register/**/*.test.ts'],
     exclude: [
       /** Deno edge-function tests (Deno.test + https: imports) run via `deno test`, not Vitest. */
       '**/supabase/functions/**',

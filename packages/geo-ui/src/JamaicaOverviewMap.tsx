@@ -8,6 +8,20 @@ import { loadPartnerMapsApi } from '@roam/location';
 import type { DashOverviewCommunityShape, DashOverviewParishShape, DashOverviewTownShape, DashParishRow, DashZoneVertex } from '@roam/dash-admin-client';
 import { groupRingsForOutline, shapeIntersectsView, type LatLngBox } from './overviewViewport';
 
+export function legendForVariant(variant: 'delivery' | 'master'): string[] {
+  if (variant === 'master') {
+    return ['Parish border', 'Town border', 'Community border', 'Pin'];
+  }
+  return [
+    'Parish foundation',
+    'Active town delivery',
+    'Inactive town delivery',
+    'No-delivery cutout',
+    'Town / city pin',
+    'Community (reference)',
+  ];
+}
+
 type Props = {
   parishes: DashParishRow[];
   /** Simplified catalog rings. The full official border stays on the town editor. */
@@ -27,6 +41,16 @@ type Props = {
   presentation?: 'modal' | 'inline';
   /** Opens the place when a border is clicked. */
   onPick?: (pcode: string) => void;
+  /** delivery keeps Rush colours. master is Dominion's official borders. */
+  variant?: 'delivery' | 'master';
+  /** none hides the built-in toolbar so the page can draw its own. */
+  chrome?: 'builtin' | 'none';
+  /** When false, the map does not jump to fit every shape that arrives. */
+  autoFit?: boolean;
+  selectedPcode?: string | null;
+  parentPcode?: string | null;
+  hoverPcode?: string | null;
+  onMapReady?: (map: google.maps.Map) => void;
 };
 
 function foundationVerts(p: DashParishRow): DashZoneVertex[] {
@@ -83,7 +107,17 @@ export function JamaicaOverviewMap({
   onLoadCommunities,
   presentation = 'modal',
   onPick,
+  variant = 'delivery',
+  chrome = 'builtin',
+  autoFit,
+  selectedPcode = null,
+  parentPcode = null,
+  hoverPcode = null,
+  onMapReady,
 }: Props) {
+  const shouldFit = autoFit ?? variant !== 'master';
+  const onMapReadyRef = useRef(onMapReady);
+  onMapReadyRef.current = onMapReady;
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
   const overlaysRef = useRef<OverlayHandle[]>([]);
@@ -145,7 +179,8 @@ export function JamaicaOverviewMap({
       zoom: 9,
       mapTypeId: 'roadmap',
       streetViewControl: false,
-      fullscreenControl: true,
+      fullscreenControl: chrome !== 'none',
+      zoomControl: chrome !== 'none',
       mapTypeControl: false,
       gestureHandling: 'greedy',
       ...(mapId ? { mapId } : {}),
@@ -155,7 +190,8 @@ export function JamaicaOverviewMap({
       if (typeof z === 'number') setZoom(z);
     });
     setZoom(mapRef.current.getZoom() ?? 9);
-  }, [ready]);
+    onMapReadyRef.current?.(mapRef.current);
+  }, [ready, chrome]);
 
   useEffect(() => {
     mapRef.current?.setMapTypeId(mapType);
@@ -249,16 +285,19 @@ export function JamaicaOverviewMap({
           const display = parishShapes.find((s) => s.parish_id === parish.id);
           for (const foundation of parishRings(parish, display)) {
             if (!fitFromCenters) extend(foundation);
+            const picked = parish.pcode === selectedPcode;
+            const parent = parish.pcode === parentPcode || parish.pcode === hoverPcode;
+            const master = variant === 'master';
             const poly = new google.maps.Polygon({
               map,
               paths: foundation,
-              strokeColor: '#c084fc',
-              fillColor: '#9333ea',
-              fillOpacity: 0.08,
-              strokeWeight: 2.5,
+              strokeColor: master ? (picked ? '#316bf3' : '#1e293b') : '#c084fc',
+              fillColor: master ? (picked ? '#316bf3' : '#94a3b8') : '#9333ea',
+              fillOpacity: master ? (picked ? 0.12 : parent ? 0.18 : 0) : 0.08,
+              strokeWeight: picked ? 2.5 : 2.5,
               strokeOpacity: 0.95,
               clickable: Boolean(onPick),
-              zIndex: 10,
+              zIndex: picked ? 15 : 10,
             });
             if (onPick) {
               const pcode = parish.pcode || parish.id;
@@ -269,7 +308,7 @@ export function JamaicaOverviewMap({
         }
 
         const parishHasShapes = shapes.some((s) => s.parish_id === parish.id);
-        if (!parishHasShapes) {
+        if (variant !== 'master' && !parishHasShapes) {
           for (const pin of parish.town_pins ?? []) {
             if (!Number.isFinite(pin.lat) || !Number.isFinite(pin.lng)) continue;
             addDot(pin.lat, pin.lng, `${pin.name} · ${parish.name}`);
@@ -277,7 +316,7 @@ export function JamaicaOverviewMap({
         }
       }
 
-      for (const shape of shapes) {
+      for (const shape of variant === 'master' ? [] : shapes) {
         const title = shape.parish_name ? `${shape.name} · ${shape.parish_name}` : shape.name;
         const lat = Number(shape.center_lat);
         const lng = Number(shape.center_lng);
@@ -286,9 +325,9 @@ export function JamaicaOverviewMap({
 
       if (cancelled) return;
 
-      if (hasGeom) {
+      if (shouldFit && hasGeom) {
         map.fitBounds(bounds, 48);
-      } else {
+      } else if (shouldFit) {
         map.setCenter(JAMAICA_CENTER);
         map.setZoom(9);
       }
@@ -305,7 +344,7 @@ export function JamaicaOverviewMap({
       nameNodesRef.current = [];
       classicMarkersRef.current = [];
     };
-  }, [parishes, parishShapes, shapes, ready, layerParishes, layerTowns, onPick]);
+  }, [parishes, parishShapes, shapes, ready, layerParishes, layerTowns, onPick, variant, selectedPcode, parentPcode, hoverPcode, shouldFit]);
 
   // Town borders are created only after zooming in, and only for towns on screen.
   useEffect(() => {
@@ -331,23 +370,29 @@ export function JamaicaOverviewMap({
         const lng = Number(shape.center_lng);
         const center = Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;
         if (!shapeIntersectsView(shape.rings, center, view)) continue;
-        const active = Boolean(shape.is_active);
+        const active = variant === 'master' ? false : Boolean(shape.is_active);
+        const picked = variant === 'master' && shape.pcode === selectedPcode;
         for (const ring of shape.rings ?? []) {
           const path = (ring.polygon ?? []).filter(
             (v) => v && Number.isFinite(v.lat) && Number.isFinite(v.lng),
           );
           if (path.length < 3) continue;
           const cutout = ring.kind === 'exclude';
+          if (variant === 'master' && cutout) continue;
           const poly = new google.maps.Polygon({
             map,
             paths: path,
-            strokeColor: cutout ? '#f87171' : active ? '#34d399' : '#fbbf24',
-            fillColor: cutout ? '#ef4444' : active ? '#10b981' : '#f59e0b',
-            fillOpacity: cutout ? 0.28 : active ? 0.22 : 0.12,
-            strokeWeight: active && !cutout ? 2.5 : 2,
+            strokeColor: variant === 'master'
+              ? (picked ? '#316bf3' : '#94a3b8')
+              : cutout ? '#f87171' : active ? '#34d399' : '#fbbf24',
+            fillColor: variant === 'master'
+              ? '#316bf3'
+              : cutout ? '#ef4444' : active ? '#10b981' : '#f59e0b',
+            fillOpacity: variant === 'master' ? (picked ? 0.12 : 0) : cutout ? 0.28 : active ? 0.22 : 0.12,
+            strokeWeight: variant === 'master' ? (picked ? 2.5 : 1.25) : active && !cutout ? 2.5 : 2,
             strokeOpacity: cutout ? 0.9 : 1,
             clickable: Boolean(onPick && shape.pcode),
-            zIndex: cutout ? 40 : active ? 30 : 20,
+            zIndex: picked ? 35 : cutout ? 40 : active ? 30 : 20,
           });
           if (onPick && shape.pcode && !cutout) {
             poly.addListener('click', () => onPick(shape.pcode as string));
@@ -363,7 +408,7 @@ export function JamaicaOverviewMap({
       google.maps.event.removeListener(listener);
       clearTowns();
     };
-  }, [shapes, ready, layerTowns, onPick]);
+  }, [shapes, ready, layerTowns, onPick, variant, selectedPcode]);
 
   // Community lines are a reference layer: outline only, culled to the view, off until asked.
   useEffect(() => {
@@ -395,16 +440,21 @@ export function JamaicaOverviewMap({
         if (!shapeIntersectsView(shape.rings, center, view)) continue;
 
         for (const paths of groupRingsForOutline(shape.rings)) {
+          const picked = variant === 'master' && shape.pcode === selectedPcode;
           communityPolysRef.current.push(new google.maps.Polygon({
             map,
             paths,
-            strokeColor: '#94a3b8',
-            strokeOpacity: onSatellite ? 0.85 : 0.35,
-            strokeWeight: 1,
-            fillOpacity: 0,
+            strokeColor: picked ? '#316bf3' : variant === 'master' ? '#cbd5e1' : '#94a3b8',
+            strokeOpacity: picked ? 1 : variant === 'master' ? 0 : onSatellite ? 0.85 : 0.35,
+            strokeWeight: picked ? 2.5 : 1,
+            fillColor: '#316bf3',
+            fillOpacity: picked ? 0.12 : 0,
             clickable: Boolean(onPick),
-            zIndex: 1,
-          }));
+            zIndex: picked ? 25 : 1,
+            icons: variant === 'master' && !picked
+              ? [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 1, scale: 2 }, offset: '0', repeat: '10px' }]
+              : undefined,
+          } as google.maps.PolygonOptions));
           const communityPoly = communityPolysRef.current[communityPolysRef.current.length - 1];
           if (onPick && communityPoly) communityPoly.addListener('click', () => onPick(shape.pcode));
         }
@@ -438,7 +488,7 @@ export function JamaicaOverviewMap({
       google.maps.event.removeListener(listener);
       clearCommunities();
     };
-  }, [communityShapes, ready, layerCommunities, mapType, onPick]);
+  }, [communityShapes, ready, layerCommunities, mapType, onPick, variant, selectedPcode]);
 
   const enableCommunities = () => {
     setLayerCommunities(true);
@@ -452,6 +502,10 @@ export function JamaicaOverviewMap({
   };
 
   const modal = presentation === 'modal';
+  if (chrome === 'none') {
+    return <div ref={containerRef} className="h-full w-full" />;
+  }
+  const legend = legendForVariant(variant);
   return (
     <div className={modal ? 'fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6' : 'relative'}>
       {modal ? (
@@ -476,7 +530,9 @@ export function JamaicaOverviewMap({
               Jamaica · overview map
             </h3>
             <p className="text-xs text-slate-300">
-              Read-only view of every parish border, town delivery area, cutout, and town pin
+              {variant === 'master'
+                ? 'Official borders for parishes, towns, and communities'
+                : 'Read-only view of every parish border, town delivery area, cutout, and town pin'}
               {layerCommunities ? ' · community lines are a reference only' : ''}
               {zoom <= 9 ? ' · zoom in to show town borders and names' : ''}
               {layerCommunities && zoom < 12 ? ' · zoom in to show community lines' : ''}
@@ -539,30 +595,12 @@ export function JamaicaOverviewMap({
 
         <div className="overflow-y-auto p-4 space-y-3 flex flex-col">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] text-slate-200 px-0.5">
-            <span className="inline-flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-sm bg-violet-400/90 border border-violet-300/70" />
-              Parish foundation
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-sm bg-emerald-400/90 border border-emerald-300/70" />
-              Active town delivery
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-sm bg-amber-400/90 border border-amber-300/70" />
-              Inactive town delivery
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-sm bg-red-400/90 border border-red-300/70" />
-              No-delivery cutout
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-sky-400 border border-sky-900/60" />
-              Town / city pin
-            </span>
-            <span className="inline-flex items-center gap-1.5 border-l border-slate-700 pl-3">
-              <span className="w-2.5 h-2.5 rounded-sm border border-slate-400 bg-transparent" />
-              Community (reference)
-            </span>
+            {legend.map((label) => (
+              <span key={label} className="inline-flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-sm border border-slate-400 bg-transparent" />
+                {label}
+              </span>
+            ))}
           </div>
 
           {loadError ? (

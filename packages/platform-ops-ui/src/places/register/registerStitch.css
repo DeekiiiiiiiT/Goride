@@ -1,0 +1,49 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Public+Sans:wght@500;600&family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap");
+
+.register-stitch {
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  color: #30323b;
+  background: #faf8fe;
+}
+.register-stitch .font-headline { font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+.register-stitch .font-label { font-family: "Public Sans", ui-sans-serif, system-ui, sans-serif; }
+.register-stitch .font-mono { font-family: "JetBrains Mono", ui-monospace, monospace; }
+.register-stitch .material-symbols-outlined {
+  font-family: "Material Symbols Outlined";
+  font-weight: normal;
+  font-style: normal;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  direction: ltr;
+  font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
+}
+
+.dark .register-stitch {
+  background-color: #0b1220;
+  color: #e2e8f0;
+}
+.dark .register-stitch .bg-surface { background-color: #0b1220; }
+.dark .register-stitch .bg-surface-container-lowest { background-color: #111827; }
+.dark .register-stitch .bg-surface-container-low,
+.dark .register-stitch .bg-surface-container-low\/75 { background-color: #172033; }
+.dark .register-stitch .bg-surface-container { background-color: #1e293b; }
+.dark .register-stitch .bg-surface-container-high { background-color: #243044; }
+.dark .register-stitch .bg-surface-container-highest { background-color: #2a3650; }
+.dark .register-stitch .bg-secondary { background-color: #5b8def; }
+.dark .register-stitch .bg-secondary-container { background-color: #1e3a5f; }
+.dark .register-stitch .bg-inverse-surface\/40 { background-color: rgba(15, 23, 42, 0.72); }
+.dark .register-stitch .text-on-surface { color: #e2e8f0; }
+.dark .register-stitch .text-on-surface-variant { color: #cbd5e1; }
+.dark .register-stitch .text-outline { color: #94a3b8; }
+.dark .register-stitch .text-outline-variant { color: #64748b; }
+.dark .register-stitch .text-secondary { color: #8eb4ff; }
+.dark .register-stitch .text-error { color: #f87171; }
+.dark .register-stitch .text-tertiary { color: #4ade80; }
+.dark .register-stitch .text-on-secondary { color: #ffffff; }
+.dark .register-stitch .text-on-secondary-container { color: #dbeafe; }
+.dark .register-stitch .placeholder\:text-outline::placeholder { color: #94a3b8; }
+.dark .register-stitch .hover\:bg-surface-container:hover,
+.dark .register-stitch .hover\:bg-surface-container-low:hover { background-color: #172033; }

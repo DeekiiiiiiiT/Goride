@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_dashboard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;family=Public+Sans:wght@500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        "colors": {
+          "on-tertiary-fixed-variant": "#006c30",
+          "secondary-fixed": "#dbe1ff",
+          "secondary": "#0153dc",
+          "surface-container-highest": "#e1e2ed",
+          "error-dim": "#67040d",
+          "inverse-surface": "#0d0e12",
+          "on-secondary-fixed": "#003798",
+          "primary-fixed-dim": "#cad5ed",
+          "on-primary-fixed-variant": "#515c70",
+          "outline-variant": "#b0b1bc",
+          "surface-container-lowest": "#ffffff",
+          "secondary-fixed-dim": "#c7d3ff",
+          "on-secondary-fixed-variant": "#0050d5",
+          "primary": "#545f74",
+          "tertiary": "#006e31",
+          "outline": "#797a84",
+          "tertiary-fixed": "#98fba9",
+          "inverse-primary": "#dae6fe",
+          "on-background": "#30323b",
+          "primary-container": "#d8e3fb",
+          "error": "#a83836",
+          "tertiary-fixed-dim": "#8aec9c",
+          "error-container": "#fa746f",
+          "on-error-container": "#6e0a12",
+          "surface-dim": "#d9d9e4",
+          "surface-container-high": "#e8e7f1",
+          "on-tertiary-container": "#00612a",
+          "on-tertiary-fixed": "#004c20",
+          "background": "#faf8fe",
+          "on-secondary-container": "#0047c0",
+          "primary-dim": "#485367",
+          "secondary-dim": "#0049c3",
+          "on-tertiary": "#e9ffe7",
+          "surface-bright": "#faf8fe",
+          "inverse-on-surface": "#9d9ca2",
+          "secondary-container": "#dbe1ff",
+          "on-primary-fixed": "#354053",
+          "on-secondary": "#faf8ff",
+          "on-surface": "#30323b",
+          "surface-variant": "#e1e2ed",
+          "primary-fixed": "#d8e3fb",
+          "on-surface-variant": "#5d5f68",
+          "on-primary": "#f8f8ff",
+          "surface-tint": "#545f74",
+          "tertiary-container": "#98fba9",
+          "surface": "#faf8fe",
+          "on-primary-container": "#475266",
+          "on-error": "#fff7f6",
+          "tertiary-dim": "#00612a",
+          "surface-container-low": "#f4f3fa",
+          "surface-container": "#eeedf6"
+        },
+        "borderRadius": {
+          "DEFAULT": "0.25rem",
+          "lg": "0.5rem",
+          "xl": "0.75rem",
+          "full": "9999px"
+        },
+        "spacing": {},
+        "fontFamily": {
+          "headline": [
+            "Inter"
+          ],
+          "display": [
+            "Inter"
+          ],
+          "body": [
+            "Inter"
+          ],
+          "label": [
+            "Public Sans"
+          ]
+        },
+        "fontSize": {}
+      },
+    },
+  }</script></head><body class="bg-surface font-body text-on-surface antialiased"><aside class="fixed left-0 top-0 h-full w-64 bg-[#1e293b] z-50 flex flex-col justify-between shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="flex flex-col flex-1 overflow-y-auto"><div class="h-16 px-6 flex items-center justify-between"><div class="flex items-center gap-2.5"><div class="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center"><span class="text-on-secondary font-headline font-bold text-sm tracking-wider">D</span></div><div class="flex flex-col"><span class="text-sm font-headline font-semibold text-slate-100 tracking-tight">DOMINION</span><span class="text-[10px] font-label uppercase tracking-widest text-slate-400">Jamaica Admin</span></div></div></div><nav class="px-3 py-4 space-y-6 flex-1 text-xs" data-active-classes="bg-secondary text-on-secondary font-medium rounded-lg"><div class="space-y-1"><div class="px-3 pb-1 text-[10px] font-label uppercase tracking-wider font-semibold text-slate-400">Core</div><a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all" data-path="overview" href="#"><span class="material-symbols-outlined text-[18px]">dashboard</span><span>Overview</span></a></div><div class="space-y-1"><div class="px-3 pb-1 text-[10px] font-label uppercase tracking-wider font-semibold text-slate-400">Master Data</div><a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all" data-path="places-and-maps" href="#"><span class="material-symbols-outlined text-[18px]">map</span><span>Places and Maps</span></a><a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all" data-path="fares-and-zones" href="#"><span class="material-symbols-outlined text-[18px]">payments</span><span>Fares and Zones (JMD)</span></a><a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all" data-path="terminal-registry" href="#"><span class="material-symbols-outlined text-[18px]">domain</span><span>Terminal Registry</span></a></div><div class="space-y-1"><div class="px-3 pb-1 text-[10px] font-label uppercase tracking-wider font-semibold text-slate-400">Engines</div><a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all" data-path="dispatch-engines" href="#"><span class="material-symbols-outlined text-[18px]">hub</span><span>Dispatch Engines</span></a><a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all" data-path="pricing-matrix" href="#"><span class="material-symbols-outlined text-[18px]">calculate</span><span>Pricing Matrix</span></a></div><div class="space-y-1"><div class="px-3 pb-1 text-[10px] font-label uppercase tracking-wider font-semibold text-slate-400">Distribution</div><a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all" data-path="parish-routes" href="#"><span class="material-symbols-outlined text-[18px]">alt_route</span><span>Parish Routes</span></a><a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all" data-path="depot-allocations" href="#"><span class="material-symbols-outlined text-[18px]">warehouse</span><span>Depot Allocations</span></a></div><div class="space-y-1"><div class="px-3 pb-1 text-[10px] font-label uppercase tracking-wider font-semibold text-slate-400">Platform</div><a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all" data-path="system-nodes" href="#"><span class="material-symbols-outlined text-[18px]">dns</span><span>System Nodes</span></a><a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all" data-path="back-office" href="#"><span class="material-symbols-outlined text-[18px]">admin_panel_settings</span><span>Back Office</span></a></div></nav></div><div class="px-4 py-3 bg-[#172033] flex items-center justify-between text-[11px] font-mono text-slate-400"><div class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span><span class="font-medium text-slate-300">KGN-DC-01</span></div><span class="tracking-tight text-[10px] bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded">JMD READY</span></div></aside><div class="pl-64 flex flex-col min-h-screen"><header class="fixed top-0 left-64 right-0 h-16 bg-surface-container-lowest/90 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-40 flex items-center justify-between px-8"><div class="relative w-96 flex items-center"><span class="material-symbols-outlined absolute left-3 text-outline text-[18px]">search</span><input class="w-full pl-9 pr-4 py-1.5 bg-surface-container text-on-surface placeholder:text-outline text-xs rounded-lg outline-none focus:bg-surface-container-low transition-colors font-body" placeholder="Search entities, engines, routes…" type="text"/></div><div class="flex items-center gap-4"><button class="w-8 h-8 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-surface-container transition-colors" title="Help and Documentation" type="button"><span class="material-symbols-outlined text-[18px]">help_outline</span></button><button class="w-8 h-8 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-surface-container transition-colors relative" title="Notifications" type="button"><span class="material-symbols-outlined text-[18px]">notifications</span><span class="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-secondary rounded-full"></span></button><div class="h-4 w-px bg-surface-container-highest"></div><div class="flex items-center gap-2.5 pl-1"><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div><div class="flex flex-col text-left"><span class="text-xs font-semibold text-on-surface font-headline leading-tight">Deeki T</span><span class="text-[10px] font-label text-on-surface-variant leading-tight">DT · Owner</span></div></div></div></header><main class="relative pt-16 flex-1 w-full px-8 pb-10 bg-surface"><div class="flex flex-col w-full relative min-h-[calc(100vh-7rem)] overflow-hidden">
+<!-- Underlay: Blurred Places Register Table View -->
+<div class="w-full filter blur-[2px] opacity-40 pointer-events-none select-none transition-all">
+<div class="flex items-center justify-between pb-6">
+<div class="space-y-1">
+<div class="text-xs font-label uppercase tracking-widest text-on-surface-variant font-semibold">Master Data · Registry</div>
+<div class="text-2xl font-headline font-bold text-on-surface tracking-tight">Places &amp; Nodes</div>
+</div>
+<div class="flex items-center gap-3">
+<div class="h-9 px-4 rounded-lg bg-surface-container-high text-xs font-medium text-on-surface flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px]">filter_list</span>
+          Filter Parish: Saint Catherine
+        </div>
+<div class="h-9 px-4 rounded-lg bg-secondary text-on-secondary text-xs font-semibold flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px]">add</span>
+          Register Place
+        </div>
+</div>
+</div>
+<!-- Data Table Backdrop Sample -->
+<div class="w-full bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
+<div class="grid grid-cols-6 px-6 py-3 bg-surface-container text-[11px] font-label font-semibold text-on-surface-variant uppercase tracking-wider">
+<span class="col-span-2">Place Identifier &amp; Parish</span>
+<span>Type</span>
+<span>Geofence Status</span>
+<span>Coordinates</span>
+<span class="text-right">Audit Date</span>
+</div>
+<div class="divide-y divide-surface-container">
+<div class="grid grid-cols-6 px-6 py-4 items-center text-xs bg-surface-container-low">
+<div class="col-span-2 flex items-center gap-3">
+<div class="w-8 h-8 rounded-lg bg-primary-container text-on-primary-container flex items-center justify-center font-bold">A</div>
+<div>
+<div class="font-semibold text-on-surface">Angels</div>
+<div class="text-[11px] text-on-surface-variant">Spanish Town · Saint Catherine</div>
+</div>
+</div>
+<div><span class="px-2 py-0.5 rounded text-[11px] bg-surface-container-highest text-on-surface-variant">Toll plaza</span></div>
+<div><span class="text-amber-700 flex items-center gap-1 font-medium"><span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span> Pin check req</span></div>
+<div class="font-mono text-on-surface-variant text-[11px]">17.9961, −76.9547</div>
+<div class="font-mono text-right text-on-surface-variant text-[11px]">28 Oct 2026</div>
+</div>
+<div class="grid grid-cols-6 px-6 py-4 items-center text-xs">
+<div class="col-span-2 flex items-center gap-3">
+<div class="w-8 h-8 rounded-lg bg-surface-container-high text-on-surface-variant flex items-center justify-center font-bold">M</div>
+<div>
+<div class="font-semibold text-on-surface">May Pen Interchange</div>
+<div class="text-[11px] text-on-surface-variant">Clarendon Highway Corridor</div>
+</div>
+</div>
+<div><span class="px-2 py-0.5 rounded text-[11px] bg-surface-container-highest text-on-surface-variant">Toll plaza</span></div>
+<div><span class="text-tertiary flex items-center gap-1 font-medium"><span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span> Verified</span></div>
+<div class="font-mono text-on-surface-variant text-[11px]">17.9610, −77.2411</div>
+<div class="font-mono text-right text-on-surface-variant text-[11px]">20 Oct 2026</div>
+</div>
+<div class="grid grid-cols-6 px-6 py-4 items-center text-xs">
+<div class="col-span-2 flex items-center gap-3">
+<div class="w-8 h-8 rounded-lg bg-surface-container-high text-on-surface-variant flex items-center justify-center font-bold">V</div>
+<div>
+<div class="font-semibold text-on-surface">Vineyards Plaza</div>
+<div class="text-[11px] text-on-surface-variant">Old Harbour · Saint Catherine</div>
+</div>
+</div>
+<div><span class="px-2 py-0.5 rounded text-[11px] bg-surface-container-highest text-on-surface-variant">Toll plaza</span></div>
+<div><span class="text-tertiary flex items-center gap-1 font-medium"><span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span> Verified</span></div>
+<div class="font-mono text-on-surface-variant text-[11px]">17.9405, −77.0892</div>
+<div class="font-mono text-right text-on-surface-variant text-[11px]">15 Oct 2026</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Dimmer Layer -->
+<div class="fixed inset-0 bg-inverse-surface/20 backdrop-blur-[1px] z-30 transition-opacity"></div>
+<!-- Slide-over Right Drawer (560px Wide) -->
+<aside class="fixed right-0 top-16 bottom-0 w-[560px] bg-surface-container-lowest shadow-2xl z-40 flex flex-col justify-between overflow-hidden">
+<!-- Scrollable Drawer Interior -->
+<div class="flex-1 overflow-y-auto">
+<!-- 1. Drawer Header -->
+<div class="p-6 pb-4 bg-surface-container-lowest">
+<div class="flex items-start justify-between gap-4">
+<div class="flex items-start gap-3.5">
+<!-- Custom Toll Plaza Glyph Icon Tile -->
+<div class="w-12 h-12 rounded-xl bg-surface-container flex items-center justify-center text-on-surface flex-shrink-0 shadow-sm">
+<span class="material-symbols-outlined text-[26px]">toll</span>
+</div>
+<div class="space-y-1">
+<div class="flex items-center gap-2 flex-wrap">
+<h1 class="text-xl font-headline font-bold text-on-surface tracking-tight">Angels</h1>
+<!-- Entity Type Pill -->
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-label font-medium bg-surface-container text-on-surface-variant">
+<span class="material-symbols-outlined text-[13px]">toll</span>
+                  Toll plaza
+                </span>
+<!-- Plug Status -->
+<span class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-label font-semibold tracking-wide uppercase bg-[#006e31]/10 text-tertiary">
+                  On Plug
+                </span>
+</div>
+<p class="text-xs text-on-surface-variant">
+                Independent <span class="text-outline-variant">·</span> Spanish Town › Saint Catherine
+              </p>
+</div>
+</div>
+<!-- Close Action -->
+<button class="w-8 h-8 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-colors" title="Close drawer" type="button">
+<span class="material-symbols-outlined text-[20px]">close</span>
+</button>
+</div>
+<!-- 2. Issue Chips Row -->
+<div class="mt-4 pt-3 flex items-center gap-2">
+<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-800 shadow-sm">
+<span class="w-1.5 h-1.5 rounded-full bg-amber-600 animate-pulse"></span>
+<span>Pin not checked</span>
+</div>
+<span class="text-[11px] text-outline font-label">Requires manual spatial confirmation</span>
+</div>
+<!-- 3. Tabs Navigation Bar -->
+<div class="mt-5 flex items-center gap-6 text-xs font-label">
+<button class="pb-2.5 font-semibold text-secondary relative" type="button">
+            Overview
+            <span class="absolute bottom-0 left-0 right-0 h-0.5 bg-secondary rounded-full"></span>
+</button>
+<button class="pb-2.5 font-medium text-on-surface-variant hover:text-on-surface transition-colors" type="button">
+            Facilities
+          </button>
+<button class="pb-2.5 font-medium text-on-surface-variant hover:text-on-surface transition-colors" type="button">
+            Aliases
+          </button>
+<button class="pb-2.5 font-medium text-on-surface-variant hover:text-on-surface transition-colors" type="button">
+            History
+          </button>
+</div>
+</div>
+<div class="h-px bg-surface-container w-full"></div>
+<!-- 4. Overview Tab Body -->
+<div class="p-6 space-y-6 bg-surface-container-lowest">
+<!-- Cartographic Map Block (220px tall) -->
+<div class="w-full h-[220px] rounded-xl overflow-hidden relative shadow-inner bg-slate-100 flex flex-col justify-between p-3 select-none">
+<!-- Procedural Vector Map Canvas Representation -->
+<svg class="absolute inset-0 w-full h-full text-slate-300" fill="none" preserveaspectratio="xMidYMid slice" viewbox="0 0 500 220">
+<!-- Highway 2000 Corridor representation -->
+<path d="M-20 60 C 140 70, 260 140, 520 160" stroke="#cbd5e1" stroke-linecap="round" stroke-width="28"></path>
+<path d="M-20 60 C 140 70, 260 140, 520 160" stroke="#94a3b8" stroke-dasharray="6 6" stroke-width="2"></path>
+<!-- Secondary Arterials -->
+<path d="M210 -20 L 250 240" stroke="#e2e8f0" stroke-width="12"></path>
+<path d="M250 140 Q 320 60, 420 -10" stroke="#e2e8f0" stroke-width="8"></path>
+<path d="M80 230 L 220 130" stroke="#e2e8f0" stroke-width="8"></path>
+<!-- Angels Plaza Corridor Footprint -->
+<rect fill="#64748b" height="24" opacity="0.3" rx="4" transform="rotate(12 252 124)" width="64" x="220" y="112"></rect>
+<!-- 200m circular perimeter geofence buffer circle -->
+<circle cx="250" cy="120" fill="#0153dc" fill-opacity="0.08" r="76" stroke="#0153dc" stroke-dasharray="4 4" stroke-width="1.5"></circle>
+<!-- Center Accuracy Core -->
+<circle cx="250" cy="120" fill="#0153dc" r="4"></circle>
+</svg>
+<!-- Top Map Controls & Badge -->
+<div class="relative z-10 flex items-center justify-between w-full">
+<div class="px-2 py-1 rounded bg-surface-container-lowest/90 backdrop-blur shadow-sm text-[10px] font-mono text-on-surface flex items-center gap-1.5">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>
+              Highway 2000 Corridor · Saint Catherine
+            </div>
+<!-- Floating Button: Confirm Pin -->
+<button class="px-2.5 py-1.5 rounded-lg bg-surface-container-lowest shadow-md hover:bg-surface-container text-xs font-semibold text-on-surface flex items-center gap-1.5 transition-all" type="button">
+<span class="material-symbols-outlined text-[16px] text-secondary">pin_drop</span>
+<span>Confirm pin</span>
+</button>
+</div>
+<!-- Bottom Coordinates Overlay with Pin Glyph -->
+<div class="relative z-10 flex items-end justify-between">
+<div class="bg-surface-container-lowest/95 backdrop-blur px-2.5 py-1.5 rounded-lg shadow-sm">
+<div class="text-[9px] font-label uppercase tracking-widest text-outline">Recorded Anchor</div>
+<div class="text-xs font-mono font-medium text-on-surface">17.9961° N, 76.9547° W</div>
+</div>
+<div class="text-[10px] font-mono bg-surface-container-lowest/90 px-2 py-1 rounded text-on-surface-variant shadow-sm">
+              R = 200m buffer
+            </div>
+</div>
+</div>
+<!-- Two-column Key-Value Details Grid -->
+<div class="space-y-3">
+<div class="flex items-center justify-between">
+<span class="text-[11px] font-label uppercase tracking-wider font-semibold text-on-surface-variant">Registry Attributes</span>
+<span class="text-[10px] font-mono text-outline">JM-NAT-CORRIDOR-08</span>
+</div>
+<div class="bg-surface-container-low rounded-xl p-4 space-y-3">
+<div class="grid grid-cols-2 gap-y-3.5 gap-x-6 text-xs">
+<!-- Row 1 -->
+<div class="flex items-center justify-between">
+<span class="text-on-surface-variant">Status</span>
+<span class="inline-flex items-center gap-1.5 font-medium text-tertiary">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span>
+                  Verified
+                </span>
+</div>
+<div class="flex items-center justify-between">
+<span class="text-on-surface-variant">Pin</span>
+<span class="inline-flex items-center gap-1.5 font-medium text-amber-700">
+<span class="w-1.5 h-1.5 rounded-full bg-amber-600"></span>
+                  Not checked
+                </span>
+</div>
+<!-- Row 2 -->
+<div class="flex items-center justify-between">
+<span class="text-on-surface-variant">Coordinates</span>
+<span class="font-mono text-[11px] text-on-surface">17.9961, −76.9547</span>
+</div>
+<div class="flex items-center justify-between">
+<span class="text-on-surface-variant">Plus code</span>
+<span class="font-mono text-[11px] text-on-surface">7795X2GP+6C9</span>
+</div>
+<!-- Row 3 -->
+<div class="flex items-center justify-between">
+<span class="text-on-surface-variant">Area code</span>
+<span class="font-mono text-[11px] text-on-surface">JM0807</span>
+</div>
+<div class="flex items-center justify-between">
+<span class="text-on-surface-variant">Parish</span>
+<span class="font-body text-on-surface">Saint Catherine</span>
+</div>
+<!-- Row 4 -->
+<div class="flex items-center justify-between">
+<span class="text-on-surface-variant">Geofence</span>
+<span class="font-mono text-[11px] text-on-surface flex items-center gap-1">
+                  200 m <span class="text-secondary font-bold">override •</span>
+</span>
+</div>
+<div class="flex items-center justify-between">
+<span class="text-on-surface-variant">Source</span>
+<span class="font-body text-on-surface">Manual</span>
+</div>
+<!-- Row 5 (Empty fields standard) -->
+<div class="flex items-center justify-between">
+<span class="text-on-surface-variant">Phone</span>
+<span class="font-mono text-outline">—</span>
+</div>
+<div class="flex items-center justify-between">
+<span class="text-on-surface-variant">Website</span>
+<span class="font-mono text-outline">—</span>
+</div>
+<!-- Row 6 -->
+<div class="flex items-center justify-between">
+<span class="text-on-surface-variant">Verified</span>
+<span class="font-mono text-[11px] text-on-surface">24 Oct 2026</span>
+</div>
+<div class="flex items-center justify-between">
+<span class="text-on-surface-variant">Updated</span>
+<span class="font-mono text-[11px] text-on-surface">28 Oct 2026</span>
+</div>
+</div>
+</div>
+</div>
+<!-- 5. Inset Preview Sections -->
+<div class="space-y-4">
+<!-- Facilities Inset Preview -->
+<div class="bg-surface-container-low rounded-xl p-4 space-y-2.5">
+<div class="flex items-center justify-between">
+<span class="text-[11px] font-label uppercase tracking-wider font-semibold text-on-surface-variant">Active Facilities</span>
+<span class="text-[10px] font-label text-outline">Preview (3 items)</span>
+</div>
+<div class="flex flex-wrap items-center gap-2">
+<div class="px-2.5 py-1 rounded-lg bg-surface-container text-xs text-on-surface font-medium flex items-center gap-1.5 shadow-sm">
+<span class="material-symbols-outlined text-[14px] text-primary">credit_card</span>
+                Toll booth
+              </div>
+<div class="px-2.5 py-1 rounded-lg bg-surface-container text-xs text-on-surface font-medium flex items-center gap-1.5 shadow-sm">
+<span class="material-symbols-outlined text-[14px] text-primary">nfc</span>
+                T-Tag top-up
+              </div>
+<div class="px-2.5 py-1 rounded-lg bg-surface-container-highest/60 text-xs text-on-surface-variant font-medium flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[14px] text-outline">add_circle</span>
+                + Restroom (suggested)
+              </div>
+</div>
+</div>
+<!-- History Inset Preview -->
+<div class="bg-surface-container-low rounded-xl p-4 space-y-3">
+<div class="flex items-center justify-between">
+<span class="text-[11px] font-label uppercase tracking-wider font-semibold text-on-surface-variant">Audit Trail</span>
+<span class="text-[10px] font-mono text-outline">2 entries</span>
+</div>
+<div class="space-y-2 text-xs">
+<div class="flex items-start gap-2.5">
+<div class="w-1.5 h-1.5 rounded-full bg-secondary mt-1.5 flex-shrink-0"></div>
+<div class="space-y-0.5">
+<div class="text-on-surface leading-tight">
+<span class="font-mono text-[11px] text-on-surface-variant">28 Oct</span>
+<span class="text-outline-variant">·</span>
+<span class="font-semibold text-on-surface">Deeki T</span>
+<span class="text-outline-variant">·</span>
+                    Geofence set to 200 m
+                  </div>
+<div class="text-[11px] text-on-surface-variant font-mono">Plaza lanes are wide</div>
+</div>
+</div>
+<div class="flex items-start gap-2.5">
+<div class="w-1.5 h-1.5 rounded-full bg-outline-variant mt-1.5 flex-shrink-0"></div>
+<div class="space-y-0.5">
+<div class="text-on-surface leading-tight">
+<span class="font-mono text-[11px] text-on-surface-variant">24 Oct</span>
+<span class="text-outline-variant">·</span>
+<span class="font-semibold text-on-surface">Ingestion</span>
+<span class="text-outline-variant">·</span>
+                    Record created
+                  </div>
+<div class="text-[11px] text-on-surface-variant font-mono">Initial registration</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- 6. Sticky Drawer Footer -->
+<div class="p-4 px-6 bg-surface-container-lowest shadow-[0_-2px_8px_rgba(0,0,0,0.04)] flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px] text-outline">verified_user</span>
+<span class="text-[11px] font-mono text-on-surface-variant">NODE: ANG-STC-01</span>
+</div>
+<div class="flex items-center gap-3">
+<!-- Secondary Button: Edit -->
+<button class="px-4 py-2 rounded-lg bg-surface-container hover:bg-surface-container-high text-xs font-semibold text-on-surface transition-colors" type="button">
+          Edit
+        </button>
+<!-- Primary Button: Verify with Tooltip/Badge -->
+<div class="relative group">
+<button class="px-5 py-2 rounded-lg bg-secondary hover:bg-secondary-dim text-xs font-semibold text-on-secondary shadow-md flex items-center gap-2 transition-all" type="button">
+<span class="material-symbols-outlined text-[16px]">check_circle</span>
+            Verify
+          </button>
+<!-- Persistent Requirements Warning Pill -->
+<div class="absolute bottom-full right-0 mb-2 whitespace-nowrap bg-inverse-surface text-inverse-on-surface text-[10px] font-mono px-2.5 py-1 rounded shadow-lg pointer-events-none flex items-center gap-1.5">
+<span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+            Needs: Pin checked
+          </div>
+</div>
+</div>
+</div>
+</aside>
+</div></main><footer class="w-full py-3 px-8 bg-surface-container-lowest shadow-[0_-1px_6px_rgba(0,0,0,0.02)] flex items-center justify-between text-xs text-on-surface-variant font-mono"><div class="flex items-center gap-2"><span class="text-[11px] font-semibold text-on-surface">DOMINION OPERATIONS</span><span class="text-outline-variant">·</span><span>KGN-DC-01</span><span class="text-outline-variant">·</span><span class="text-emerald-700 font-medium">JMD READY</span></div><div class="text-[11px] text-outline font-body">Parish Grid Active · Jamaica Time (UTC-5)</div></footer></div></body></html>

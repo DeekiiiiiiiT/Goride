@@ -33,6 +33,7 @@
     "leaflet": "1.9.4",
     "leaflet.heat": "^0.2.0",
     "lucide-react": "^0.487.0",
+    "papaparse": "*",
     "react-day-picker": "^8.10.1",
     "recharts": "*",
     "sonner": "^2.0.3"

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { placesSend, type PlacesStates, type Taxonomy } from "./placesApi";
+import { placesSend, visibleTaxonomy, type PlacesStates, type Taxonomy } from "./placesApi";
 
 type Item = {
   id: string;
@@ -54,7 +54,7 @@ export function PlacesInbox({
       placesSend<Taxonomy>(apiBase, getToken, "/admin/taxonomy"),
       placesSend<{ items: Item[] }>(apiBase, getToken, `/admin/review${query}`),
     ]).then(([tree, body]) => {
-      setTaxonomy(tree);
+      setTaxonomy(visibleTaxonomy(tree));
       setItems(body.items || []);
       setCursor(0);
       setStatus("ready");

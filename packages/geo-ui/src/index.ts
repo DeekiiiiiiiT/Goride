@@ -1,7 +1,8 @@
 export { ProvenanceBadge, DominionEditLink } from './ProvenanceBadge';
 export { ZoneMapEditor } from './ZoneMapEditor';
 export type { ZoneMapUiMode, ZoneMapOverlay, ZoneMapContextTown, ZoneMapEditorProps } from './ZoneMapEditor';
-export { JamaicaOverviewMap } from './JamaicaOverviewMap';
+export { JamaicaOverviewMap, legendForVariant } from './JamaicaOverviewMap';
+export { JamaicaPinMap, type JamaicaPin } from './JamaicaPinMap';
 export { CoordinateEntryOverlay } from './CoordinateEntryOverlay';
 export type { NamedBorderPoint } from './CoordinateEntryOverlay';
 export { HexCellsMapOverlay } from './HexCellsMapOverlay';

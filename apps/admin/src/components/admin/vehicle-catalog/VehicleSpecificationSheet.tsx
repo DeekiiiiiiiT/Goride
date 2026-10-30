@@ -165,6 +165,21 @@ export function VehicleSpecificationSheet({
           </span>
           <button
             type="button"
+            className="rounded-md border border-slate-200 px-2.5 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-100"
+            onClick={() => {
+              const url = new URL(window.location.href);
+              url.searchParams.set("page", "parts-catalog");
+              url.searchParams.set("tab", "vehicle");
+              url.searchParams.set("variant", r.id);
+              window.history.pushState({ page: "parts-catalog" }, "", `${url.pathname}?${url.searchParams.toString()}`);
+              window.dispatchEvent(new PopStateEvent("popstate"));
+              onClose();
+            }}
+          >
+            Parts for this vehicle
+          </button>
+          <button
+            type="button"
             onClick={onClose}
             title="Close specification inspector"
             className="rounded-md p-1 text-slate-400 transition-colors hover:bg-slate-200/60 hover:text-slate-600"

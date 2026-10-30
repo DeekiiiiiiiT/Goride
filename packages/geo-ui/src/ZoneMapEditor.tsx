@@ -54,6 +54,8 @@ export type ZoneMapContextTown = {
   name: string;
   polygon: DashZoneVertex[];
   isActive: boolean;
+  /** parent draws a grey outline. sibling is the neighbour line. */
+  role?: 'parent' | 'sibling';
 };
 
 export type ZoneMapEditorProps = {
@@ -88,7 +90,11 @@ export type ZoneMapEditorProps = {
   /** Enter radius mode from parent when a place is already selected externally */
   onRequestRadiusMode?: () => void;
   /** Which foundation layer is being edited (copy + save labels). */
-  foundationScope?: 'town' | 'parish';
+  foundationScope?: 'town' | 'parish' | 'community';
+  /** Dominion border editor: Full, Medium, or Light detail. */
+  detail?: 'full' | 'medium' | 'light';
+  onDetailChange?: (next: 'full' | 'medium' | 'light') => void;
+  showDetailControl?: boolean;
   /** Reference town/city pins on parish map (Point GeoJSON import). */
   referenceTownPins?: Array<{ id: string; name: string; lat: number; lng: number }>;
   /** Open the lat/lng coordinate overlay immediately (e.g. from Edit coordinates). */
@@ -97,6 +103,9 @@ export type ZoneMapEditorProps = {
   hexCells?: Array<{ h3_cell: string; kind: string }>;
   /** Where to render Streets / Hex / Test pin controls (default next to search). */
   mapToolsPlacement?: 'inline' | 'none';
+  /** Map only. The parent draws the Stitch chrome (tabs, detail, legend). */
+  bare?: boolean;
+  onMapReady?: (map: google.maps.Map) => void;
   mapType?: 'roadmap' | 'hybrid';
   onMapTypeChange?: (next: 'roadmap' | 'hybrid') => void;
   showHexOverlay?: boolean;
@@ -333,10 +342,15 @@ export function ZoneMapEditor({
   mapHeight = 520,
   fillAvailableHeight = false,
   foundationScope = 'town',
+  detail = 'medium',
+  onDetailChange,
+  showDetailControl = false,
   referenceTownPins = [],
   autoOpenCoordinates = false,
   hexCells = [],
   mapToolsPlacement = 'inline',
+  bare = false,
+  onMapReady,
   mapType: mapTypeProp,
   onMapTypeChange,
   showHexOverlay: showHexOverlayProp,
@@ -344,11 +358,17 @@ export function ZoneMapEditor({
   testActive: testActiveProp,
   onTestActiveChange,
 }: ZoneMapEditorProps) {
-  const foundationNoun = foundationScope === 'parish' ? 'parish' : 'town';
+  const foundationNoun = foundationScope === 'parish' ? 'parish' : foundationScope === 'community' ? 'community' : 'town';
   const foundationTitle =
-    foundationScope === 'parish' ? 'parish foundation border' : 'town foundation border';
+    foundationScope === 'parish'
+      ? 'parish foundation border'
+      : foundationScope === 'community'
+        ? 'community foundation border'
+        : 'town foundation border';
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
+  const onMapReadyRef = useRef(onMapReady);
+  onMapReadyRef.current = onMapReady;
   const overlayPolysRef = useRef<google.maps.Polygon[]>([]);
   const contextPolysRef = useRef<google.maps.Polygon[]>([]);
   const customerPreviewPolysRef = useRef<google.maps.Polygon[]>([]);
@@ -546,7 +566,17 @@ export function ZoneMapEditor({
         map,
         editable: false,
         draggable: false,
-        ...styleForContextTown(town.isActive),
+        ...(town.role === 'parent'
+          ? {
+              strokeColor: '#545f74',
+              fillColor: '#545f74',
+              fillOpacity: 0,
+              strokeWeight: 1.75,
+              strokeOpacity: 0.7,
+              clickable: false,
+              zIndex: 4,
+            }
+          : styleForContextTown(town.isActive)),
       });
       contextPolysRef.current.push(poly);
     }
@@ -838,12 +868,13 @@ export function ZoneMapEditor({
       streetViewControl: false,
       fullscreenControl: false,
       mapTypeControl: false,
-      zoomControl: true,
+      zoomControl: !bare,
       scrollwheel: true,
       gestureHandling: 'greedy',
     });
     mapRef.current = map;
     setMapInstance(map);
+    onMapReadyRef.current?.(map);
 
     clickListenerRef.current = map.addListener('click', async (e: google.maps.MapMouseEvent) => {
       const latLng = e.latLng;
@@ -1353,7 +1384,9 @@ export function ZoneMapEditor({
               ? 'Drag white dots · click near a side to add · use Remove to delete a dot · then Save'
               : 'Trace on: click corners · Hand or hold Space to move the map · Freehand for denser edges · then Save'
             : `Drag the white dots to reshape. Use Remove to delete a point. Turn on “Trace” to add points along the ${foundationTitle}.`
-        : foundationScope === 'parish'
+        : showDetailControl
+          ? `Drag the white dots to reshape this ${foundationNoun}. Grey lines are the parent and neighbours.`
+          : foundationScope === 'parish'
           ? 'Violet outline = parish foundation (ops only). Sky pins = town/city reference. Amber polygons = town delivery borders (if set).'
           : hasServiceAreas
             ? 'Magenta = live service areas (click one to edit). Bright green = official town border (context only). Red = temporary no-delivery.'
@@ -1368,10 +1401,30 @@ export function ZoneMapEditor({
   }
 
   if (!ready) {
+    if (bare) return <div className="w-full h-full min-h-[540px] bg-slate-100" />;
     return (
       <div className="flex items-center justify-center gap-2 rounded-xl border border-slate-700 p-12 text-slate-400">
         <Loader2 className="w-5 h-5 animate-spin" />
         Loading map…
+      </div>
+    );
+  }
+
+  if (bare) {
+    return (
+      <div className="relative w-full h-full min-h-[540px]">
+        <div
+          ref={containerRef}
+          className="absolute inset-0"
+          onWheel={(event) => event.stopPropagation()}
+        />
+        <HexCellsMapOverlay map={mapInstance} cells={hexCells} visible={showHexOverlay} />
+        {drawing ? (
+          <div className="absolute bottom-16 right-4 z-30 flex items-center gap-2">
+            <button type="button" onClick={onCancel} className="px-3 py-1.5 rounded-lg bg-surface-container-lowest text-xs font-medium text-on-surface shadow-md">Cancel</button>
+            <button type="button" disabled={saving || vertexCount < 3} onClick={handleSavePolygon} className="px-3 py-1.5 rounded-lg bg-secondary text-on-secondary text-xs font-semibold shadow-md disabled:opacity-50">Save border</button>
+          </div>
+        ) : null}
       </div>
     );
   }
@@ -1482,6 +1535,24 @@ export function ZoneMapEditor({
           </div>
         ) : null}
       </div>
+
+      {showDetailControl ? (
+        <div className="pointer-events-auto bg-surface-container-lowest/95 backdrop-blur shadow-md p-1 rounded-lg flex items-center gap-1 text-xs w-max">
+          <span className="text-[11px] font-label text-outline px-2">Detail:</span>
+          {(['full', 'medium', 'light'] as const).map((level) => (
+            <button
+              key={level}
+              type="button"
+              className={level === detail
+                ? 'px-2.5 py-1 rounded bg-surface-container text-on-surface font-semibold capitalize'
+                : 'px-2.5 py-1 rounded text-on-surface-variant font-medium capitalize'}
+              onClick={() => onDetailChange?.(level)}
+            >
+              {level === 'full' ? 'Full' : level === 'medium' ? 'Medium' : 'Light'}
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       <p className="text-xs text-slate-200 flex items-center gap-1.5 shrink-0">
         {uiMode === 'cutout' || uiMode === 'radius' ? (

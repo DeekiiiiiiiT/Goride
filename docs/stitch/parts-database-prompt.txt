@@ -1,0 +1,151 @@
+ROAM DOMINION — PARTS DATABASE FULL DESIGN PROMPT (GOOGLE STITCH)
+
+
+
+
+Roam Dominion - Parts Database (Desktop Admin, for the owner):
+
+Design a high-fidelity desktop admin section called "Parts database" inside the Vehicles area of Roam Dominion, the master reference database for Jamaican fleet vehicles (mostly Japanese imports: Toyota Roomy, Honda Fit, Toyota Vitz, Nissan Note). The owner is not a mechanic. They search a car, for example "Toyota Roomy 2019", and see every part that fits it in exactly five match types: Direct OEM Match, Sister Vehicle Match, Engine Compatible Match, Aftermarket Cross-Reference and Universal Fleet Parts. They add a part once, on the car the source talks about, with a source link, and the system shows where else it fits. No customer fleets, vehicles or stock ever appear here. It is a calm, data-dense tool, not a marketing page, and it must feel like a sibling of the existing Fuel and Places homes.
+
+BRAND IDENTITY:
+- Match the existing Roam Dominion admin style:
+  - dark navy left sidebar
+  - white top bar with the search field "Search entities, engines, routes…" and the owner avatar "DT · Deeki T · Owner"
+  - white cards, hairline borders, compact rows
+- LIGHT MODE (default):
+  - Primary: Dominion Blue (#0153dc) — links, primary buttons, active tab, the active sidebar item
+  - Primary container: Pale Blue (#dbe1ff) — count pills, icon tiles
+  - Success / verified: Green (#006e31)
+  - Warning / needs checking: Amber (#d97706)
+  - Error: Muted Red (#a83836)
+  - Neutral: Slate (#797a84) — borders, muted text, icons
+  - Background: Cool off-white (#faf8fe)
+  - Surface cards: Pure white (#FFFFFF)
+  - Text primary: Charcoal (#30323b)
+  - Sidebar: Dark navy (#0f172a) with white text; the active item is a solid Dominion Blue pill
+- DARK MODE:
+  - Primary: #5b8def
+  - Primary container: #1e3a5f
+  - Success: #4ade80
+  - Warning: #f59e0b
+  - Error: #f87171
+  - Neutral: #94a3b8
+  - Background: Deep navy (#0b1220)
+  - Surface: #111a2e
+  - Text primary: #e2e8f0
+- Match-type colour tabs (a 4px left bar on each section header, never a full fill):
+  - 1 Direct OEM Match: Dominion Blue
+  - 2 Sister Vehicle Match: Teal (#0e7490)
+  - 3 Engine Compatible Match: Violet (#6d28d9)
+  - 4 Aftermarket Cross-Reference: Slate (#475569)
+  - 5 Universal Fleet Parts: Green (#006e31)
+- Status chips: "Verified" green outline chip; "Needs checking" amber outline chip; "Not on this car" grey chip
+- No gradients on data, no glassmorphism, no 3D, no illustrations. No AI badges, "REGION" badges or "LOC:" footers.
+- Typography: Inter for text. Part numbers, chassis codes, engine codes, years and counts use the mono font with tabular numerals.
+
+DESIGN PRINCIPLES:
+- Desktop-first (1440px wide), with a phone version of Find parts
+- The five match types always appear in the same order, even when empty
+- Every part row shows its source link; nothing looks verified without one
+- Plain words only: never "interchange group", "fit scope", "rule", "platform family", "catalog variant" or "op code"
+- One click from any car to its parts page, and from any part to the car it was listed for
+- Light theme default, dark mode variant
+- Strict 8px spacing grid, 12–16px card corners, very soft shadows, skeleton loading
+
+---
+
+SCREEN 1: VEHICLES HOME
+- Sidebar: Overview | MASTER DATA: Vehicles (active), Places and Maps, Fuel, Tolls, Tax and Vendors | ENGINES: Fuel Brain, Toll Brain, Matching Brain | DISTRIBUTION: Apps, Data API, Change requests | PLATFORM: Staff and roles, Activity log, Platform Ops, Global settings | BACK OFFICE: GCT registrations, Ledger, Remittance
+- Breadcrumb: DOMINION › MASTER DATA › VEHICLES
+- Title "Vehicles", subtitle "Makes, models, parts, and maintenance."
+- Four KPI cards: "Vehicles 356" · "Parts on file 0" · "Vehicles with parts 0 of 356" · "Waiting 0" with a small line under each ("variants in the catalog", "verified and needs checking", "at least one part", "vehicles and parts to check")
+- Link rows (title in blue, detail under it, chevron right):
+  - Vehicle catalog — "Makes, models, and the record you open with the eye button."
+  - Parts database — "Search any car and see its parts in five match types."
+  - Pending catalog — "Rows waiting for a person to approve."
+  - Maintenance templates — "Service schedules used by the apps."
+  - Suppliers and prices — "Who sells a part, and for how much."
+  - Data quality — "Catalog rows that fail a check."
+
+SCREEN 2: PARTS DATABASE — FIND PARTS
+- Breadcrumb: DOMINION › MASTER DATA › VEHICLES › PARTS DATABASE
+- Title "Parts database", subtitle "Every part that fits a car, in five match types."
+- Tab bar: Find parts (active) · Vehicle parts · Sister vehicles · Universal parts · Import — and a small "Advanced" text link at the far right
+- Search card: three pickers in one row — Make "Toyota", Model "Roomy", Year "2019" — and a primary button "Find parts"
+- Variant chips under the pickers, with the question "Which one?": "M900A · 2WD · 1KR-FE · 2016–2020" (selected) and "M910A · 4WD · 1KR-FE · 2016–2020"
+- Coverage strip: "Service essentials 6 of 10 · Specs 4 of 13 · Other parts 12" and a secondary button "Open this vehicle's parts page"
+- Five stacked section cards, each with the coloured left bar, a mono count pill and a one-line definition:
+  1. "Direct OEM Match" — "Exact factory part for this car." Rows: job/category, brand + part number (mono), position, source link icon, status chip. Sample: Oil filter · Toyota 00000-00000 · — · link · Verified
+  2. "Sister Vehicle Match" — "Same car under another badge: Toyota Tank, Daihatsu Thor, Subaru Justy." Each row adds a grey "Listed for Daihatsu Thor" line
+  3. "Engine Compatible Match" — "Engine parts from cars with the 1KR-FE: Vitz, Passo, Boon." Each row adds "Listed for Toyota Vitz KSP130"
+  4. "Aftermarket Cross-Reference" — "Other brands for the same part." Rows show brand + number and "Replaces OEM 00000-00000"
+  5. "Universal Fleet Parts" — "Bought by size: bulbs, fluids, wipers, battery." Rows: spec label, value (mono), unit, and matching brand items as small chips; sample "Wiper, driver side · 525 mm · U-hook"
+- An empty section shows "None on file yet" and a text button "Add for this vehicle"
+- All sample part numbers are obvious placeholders (zeros), never real-looking numbers
+
+SCREEN 3: VEHICLE PARTS PAGE
+- Header card: "Toyota Roomy" large, under it mono chips "M900A", "1KR-FE", "2WD", "2016–2020"; a "Sisters:" row of chips (Toyota Tank, Daihatsu Thor, Subaru Justy) and an "Engine:" chip (1KR-FE · 9 cars); buttons "Add any part" (primary) and "Back to Find parts"
+- Block "Service essentials" — grouped list: Engine service (Oil filter, Spark plugs, Air filter, Drive belt, Thermostat), Cabin (Cabin (A/C) filter), Brakes (Front pads, Front rotors, Rear shoes / pads), Visibility (Wiper driver / passenger / rear), Suspension (Shock front left / front right / rear). Each row: label, status chip, brand + number, buttons "Add" or "Edit", text buttons "Not on this car" and "Remove from this car"
+- Block "Other parts" — collapsible groups for the 9 categories (Engine components, Transmission and drivetrain, Suspension, Brake, Cooling, Electrical and computers, Lighting and mirrors, Body and door, HVAC), each with a count and rows like the checklist
+- Block "Specs" — table of 13 rows (Engine oil grade, Engine oil capacity with filter, Wiper driver / passenger / rear, Wiper connector, Battery size, Headlight low / high, Fog light bulb, Brake fluid, Coolant, Transmission fluid): value (mono), reach ("This vehicle" / "Sisters too"), source link, button "Set"
+- Block "Where these parts also show" — read-only sentence list: "Toyota Tank — Sister", "Daihatsu Thor — Sister", "Toyota Vitz KSP130 — Engine parts only"
+
+SCREEN 4: ADD A PART (4-STEP DIALOG)
+- Modal 640px wide, step indicator "1 Part · 2 Same source · 3 Source · 4 Review"
+- Step 1: "For Toyota Roomy M900A 2016–2020 · Oil filter". Repeating row: Brand, Part number (mono), Name, Kind select (Factory / Original supplier / Other brand). Text button "Add another brand for the same part". When opened from "Add any part", a Category select appears first
+- Step 2: question "Does the same source also list it for…?" with checkboxes for this car's other variants only ("Roomy M900A facelift 2020– · 1KR-FE", "Roomy M900A facelift turbo 2020– · 1KR-VET"). Under it, a read-only grey panel: "It will also show as Sister on 3 cars and as Engine compatible on 6 cars." with a "Show cars" link
+- Step 3: "Source link" (required, with helper "Maker's parts catalog, NGK / Denso table, or dealer page") and "Note (optional)"
+- Step 4: a review sentence: "Toyota 00000-00000 (Oil filter) + Other brand 00000 → listed for Toyota Roomy M900A 2016–2020. Source: example.com" and the five-type reach list with counts
+- Footer: Cancel · Back · Next / Save
+
+SCREEN 5: SISTER VEHICLES
+- Tab "Sister vehicles" active, with sub-tabs "Sister families" (active) and "Engines"
+- Left column list of families: "Roomy / Tank / Thor / Justy · 2WD (M900)" with a count of 4, "Roomy / Tank / Thor / Justy · 4WD (M910)", "Noah / Voxy / Esquire (ZRR80)", and at the bottom "Unassigned bodies 280"
+- Right panel: family title, source link, member table (Make, Model, Chassis, Drive, Engines, Years), buttons "Add body to family", "Remove from family", "New family"
+- Confirm drawer for every change: "Before: 2 cars → After: 4 cars" list and a required source link field
+- Engines sub-tab: table of engines (Engine, Size cc, Fuel, Cars using it) with the car names as chips
+
+SCREEN 6: UNIVERSAL PARTS
+- Table: Spec, Value (mono), Brand, Part number (mono), Name, Connector, Source, Actions
+- "Add universal part" form in a right-side drawer: Spec select showing label + unit, Value, Brand, Part number, Name, Connector (wipers only), Source link (required)
+- Empty state: "No universal parts yet. A size on the car is enough to buy the right one."
+
+SCREEN 7: IMPORT AND ADVANCED
+- Import tab: CSV paste box with the header line "vehicle, manufacturer, part_number, part_name, part_kind, category_slug, job, position, evidence_url", buttons "Check file", "Import", "Undo last import", and a result line "Imported 12 · 2 rows need a source"; note "Imported rows land in Data quality as Needs checking."
+- Advanced (opened from the small link): three read-only tables — Parts, Same-part brands, Listings — each row with an "Open on vehicle" button and no edit or delete buttons
+
+SCREEN 8: STATES
+- Loading skeletons for the five sections
+- No vehicle found: "No car matches Toyota Roomy 2019. Add it in Vehicle catalog."
+- All five sections empty with the coverage strip at 0
+- Error card with "Try again"
+
+SCREEN 9: PHONE — FIND PARTS
+- 390px wide; pickers stacked; variant chips scroll sideways; the five sections become accordions with count pills, the first non-empty one open
+
+ADDITIONAL UI COMPONENTS:
+- Match-type section header (left colour bar, title, count pill, one-line definition)
+- Status chips (Verified, Needs checking, Not on this car)
+- Mono code chips (chassis, engine, years, drive)
+- Source link icon button with tooltip showing the domain
+- Before → after car list drawer
+- Coverage strip
+
+INTERACTIONS:
+- Typing "Toyota Roomy 2019" in the Make picker fills Make, Model and Year
+- Clicking a variant chip reloads the five sections
+- Clicking "Listed for Daihatsu Thor" opens that car's parts page
+- "Add for this vehicle" in an empty section opens the Add a part dialog for that car
+- Saving a part refreshes all five sections and the coverage strip
+
+Spec screens / Area:
+| Screen | Area |
+| 1 | Vehicles home |
+| 2 | Parts database — Find parts |
+| 3 | Vehicle parts page |
+| 4 | Add a part dialog |
+| 5 | Sister vehicles + Engines |
+| 6 | Universal parts |
+| 7 | Import + Advanced |
+| 8 | States |
+| 9 | Phone — Find parts |

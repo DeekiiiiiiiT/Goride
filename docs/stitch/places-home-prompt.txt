@@ -1,0 +1,210 @@
+ROAM DOMINION — PLACES AND MAPS HOME FULL DESIGN PROMPT (GOOGLE STITCH)
+
+
+
+
+Roam Dominion - Places and Maps Home (Desktop Admin, for the owner):
+
+Design a high-fidelity desktop admin home page for "Places and Maps", the master-data section that holds Jamaica's map (country, parish, town and community borders) and every place the Roam apps can find (gas stations, toll plazas and more). The owner and data staff open this page to see in five seconds whether the map is healthy, how many places still need fixing, what the Roam Plug app can show right now, and what is waiting for a decision. It is a calm operations overview, not a marketing page. It must look and feel like the existing Fuel home in the same app: a KPI row, a "Needs you" list, a side card, and section cards.
+
+BRAND IDENTITY:
+- Match the existing Roam Dominion admin style:
+  - dark navy left sidebar
+  - white top bar with the search field "Search entities, engines, routes…" and the owner avatar "DT · Deeki T · Owner"
+  - white cards, hairline borders, compact rows
+- LIGHT MODE (default):
+  - Primary: Dominion Blue (#0153dc) — links, primary buttons, progress bars, the active sidebar item
+  - Primary container: Pale Blue (#dbe1ff) — count pills, icon tiles
+  - Success / healthy / on Plug: Green (#006e31)
+  - Warning / needs work: Amber (#d97706)
+  - Error / failed: Muted Red (#a83836)
+  - Neutral: Slate (#797a84) — borders, muted text, icons
+  - Background: Cool off-white (#faf8fe)
+  - Surface cards: Pure white (#FFFFFF)
+  - Text primary: Charcoal (#30323b)
+  - Sidebar: Dark navy (#0f172a) with white text; the active item is a solid Dominion Blue pill
+- DARK MODE:
+  - Primary: #5b8def
+  - Primary container: #1e3a5f
+  - Success: #4ade80
+  - Warning: #f59e0b
+  - Error: #f87171
+  - Neutral: #94a3b8
+  - Background: Deep navy (#0b1220)
+  - Surface: #111a2e
+  - Text primary: #e2e8f0
+- Count pills: small mono numbers in a pale pill; amber pill when the row is a warning
+- Warning lines: amber icon + amber-tinted strip, the number always stays visible
+- No gradients on data, no glassmorphism, no 3D, no illustrations. No AI badges, "REGION" badges or "LOC:" footers. No Rush delivery words ("Serviceable", "Paused", "Delivery zone").
+- Typography: Inter for text. Every number, count, date and time uses the mono font with tabular numerals. Big KPI numbers are large and light, not heavy.
+- Jamaica context: the 14 parishes, 131 towns, 775 communities; local fuel brands (TotalEnergies, Rubis, Texaco, FESCO); toll plazas on Highway 2000
+
+DESIGN PRINCIPLES:
+- Desktop-first (1440px wide), with a phone version
+- Answer "is anything wrong or waiting?" before anything else
+- Every number has a unit or an "of N" line, and every score shows its reason
+- Two separate scores: the map's borders, and the places — never one blended number
+- Warnings never hide numbers; they sit next to them
+- Every row and card leads somewhere with one click
+- Same structure as the Fuel home so the two pages feel like siblings
+- Light theme default, dark mode variant
+- Strict 8px spacing grid, 12–16px card corners, very soft shadows, subtle hover lift on cards, skeleton loading
+
+---
+
+SCREEN 1: PLACES AND MAPS HOME
+- Sidebar: Overview | MASTER DATA: Vehicles, Places and Maps (active), Fuel, Tolls, Tax and Vendors | ENGINES: Fuel Brain, Toll Brain, Matching Brain | DISTRIBUTION: Apps, Data API, Change requests | PLATFORM: Staff and roles, Activity log, Platform Ops, Global settings | BACK OFFICE: GCT registrations, Ledger, Remittance
+- Breadcrumb (small caps): DOMINION › MASTER DATA › PLACES AND MAPS
+- Header:
+  - Title: "Places and Maps"
+  - Subtitle: "Jamaica's map and every place the apps can find."
+  - Right: small grey mono chip "Updated 21:05" and a ghost refresh icon button (tooltip "Refresh")
+- KPI row (4 equal tiles, each with a small outline icon top-right):
+  - Tile 1 "PLACES":
+    - Big number "217"
+    - Line: "69 verified · 148 pending"
+    - Footer: thin blue progress bar, labels "32% verified" and "69 / 217"
+  - Tile 2 "PLACES QUALITY":
+    - Big number "0%"
+    - Red "!" with "217 pins not checked"
+    - Three mini bars with mono labels:
+      - "Pin checked 0 / 217"
+      - "Area code 217 / 217"
+      - "Brand set 140 / 205"
+  - Tile 3 "ON PLUG":
+    - Big number "69"
+    - Line: "of 217 places show on Roam Plug"
+    - Footer: green progress bar, "32%", and the grey note "Only verified places show on Plug"
+  - Tile 4 "MAP QUALITY":
+    - Big number "100%"
+    - Green dot "921 areas live"
+    - Two mini bars:
+      - "Borders published 921 / 921"
+      - "Map pins complete 6 / 6"
+- Left card, 8 of 12 columns, "Needs you" with a grey pill "5 items", right-aligned grey text "Places and map work":
+  - Each row: icon tile, bold title, grey sub-line, mono count pill, button
+  - Row 1:
+    - Title "New places waiting for review"
+    - Sub-line "Oldest from today, 09:12"
+    - Amber pill "148"
+    - Primary button "Review"
+  - Row 2:
+    - Title "Pins not checked on the map"
+    - Sub-line "Coordinates need a person to confirm them"
+    - Pill "217"
+    - Button "Open"
+  - Row 3:
+    - Title "Verified, but the pin was never checked"
+    - Sub-line "These already show on Plug"
+    - Amber pill "69"
+    - Button "Open"
+  - Row 4:
+    - Title "Stations without a brand"
+    - Sub-line "Not linked to TotalEnergies, Rubis, Texaco or another brand"
+    - Pill "65"
+    - Button "Open"
+  - Row 5:
+    - Title "Tagged to a parish only"
+    - Sub-line "No town or community set, so 'near this town' search can't find them"
+    - Pill "217"
+    - Button "Open"
+- Right card, 4 of 12 columns, "Jamaica map":
+  - Sub-line: "The country borders every app reads."
+  - A small static outline map of Jamaica with the 14 parish borders in thin slate lines on a pale surface, no pins, no legend
+  - Four mini stats in a 2×2 grid, mono:
+    - "Country 1"
+    - "Parishes 14"
+    - "Towns 131"
+    - "Communities 775"
+  - Rows (label left, mono value right):
+    - "Last publish" — "24 Oct"
+    - "Drafts waiting" — "0"
+    - "Map checks open" — "0"
+    - "Imports" — "None yet"
+  - Small heading "RECENT ACTIVITY", then 4 rows with a coloured dot, label, and mono time right:
+    - "Place edited" — "21:01"
+    - "Borders published" — "24 Oct"
+    - "Import run" — "—"
+    - "Review decision" — "—"
+- Section block:
+  - Heading "Sections"
+  - Sub-line "Map and places master data."
+  - Six cards in a 3-column grid. Each card has an icon tile, a blue title, a grey description, and a mono status line at the bottom with a chevron:
+    - "Jamaica map"
+      - "Country, parish, town and community borders."
+      - Status line: "921 areas · last publish 24 Oct · 0 drafts"
+    - "Places register"
+      - "Every place, with its type and facilities."
+      - Status line: "217 places · 148 pending · 0 pins checked"
+    - "Categories"
+      - "Groups, types, facilities, and brands."
+      - Status line: "2 of 17 types in use · 65 stations without brand"
+    - "Review"
+      - "Pins and facility suggestions waiting for a decision."
+      - Status line: "148 waiting · oldest today"
+    - "Map pins"
+      - "Landmarks pinned directly on the map."
+      - Status line: "6 pins"
+    - "Imports and checks"
+      - "Border files and map quality checks."
+      - Status line: "No imports yet · 0 checks open"
+
+SCREEN 2: LOADING, ERROR, EMPTY, STAFF VIEW
+- One frame showing four small panels side by side:
+  - Loading:
+    - skeleton KPI tiles with a shimmer
+    - skeleton "Needs you" rows
+    - a skeleton map card
+  - Error card:
+    - "Could not load Places and Maps. Nothing was changed."
+    - "Retry" button
+  - Empty "Needs you":
+    - a green check icon
+    - "Nothing waiting. Places and the map are up to date."
+  - Staff view:
+    - the same page, but the "Review" button reads "View"
+    - a small grey note: "You can view everything here. Only the owner can approve, edit or publish."
+
+SCREEN 3: PLACES AND MAPS HOME (390px PHONE)
+- Top bar with a menu icon, "Places and Maps", and the refresh icon
+- KPI tiles in a 2×2 grid; the mini bars collapse to a single reason line
+- "Needs you" as full-width rows: title, count pill, chevron; the sub-line stays
+- The Jamaica map card stacks below, with the map outline full width
+- Section cards in one column
+- No page-level horizontal scrolling
+
+---
+
+ADDITIONAL UI COMPONENTS:
+- KPI tile:
+  - label, big mono number, reason line, mini progress bars
+- "Needs you" row:
+  - icon tile, title, sub-line, count pill, button
+- Count pill, in neutral and amber variants
+- Map summary card:
+  - static parish outline
+  - 2×2 level stats
+  - label/value rows
+  - recent activity list with dots
+- Section card:
+  - icon tile, title, description, mono status line, chevron
+- "Updated" time chip and refresh icon button
+- Skeleton loaders, error card, empty state, staff note
+
+INTERACTIONS:
+- Clicking any "Needs you" row or button opens the matching page with its filter already applied:
+  - Review: the review list with the matching chip.
+  - Pins, brand and area rows: the Places register filtered to that issue.
+- Clicking the map card opens the Jamaica map
+- Clicking a section card opens that section
+- Refresh reloads all numbers and updates the "Updated" time; the numbers never jump to zero while loading
+- Rows with a count of zero are hidden; when every row is zero, the empty state shows
+- Hovering a KPI mini bar shows "pass / total" in a tooltip
+- Cards lift slightly on hover; every button has a visible focus ring for keyboard use
+
+---
+
+Spec screens	Area
+1 Places and Maps home	Home
+2 States (loading, error, empty, staff)	States
+3 Phone (390px)	Mobile

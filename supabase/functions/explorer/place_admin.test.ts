@@ -1,13 +1,19 @@
 import { assertEquals } from "jsr:@std/assert";
 import { Hono } from "npm:hono@4.3.11";
 import {
+  TYPE_PROFILE_CONFLICT,
+  csvField,
   evidenceTitle,
+  matchProfileConflict,
   parseStationListQuery,
+  pinOutsideMessage,
   PLACE_EVIDENCE_COLUMNS,
   PLACE_PRICE_COLUMNS,
   placePatchFromBody,
+  registerHttpStatus,
   registerPlaceAdmin,
   reviewChipForPlace,
+  staticMissing,
   summarizeStationFlags,
 } from "./place_admin.ts";
 
@@ -148,8 +154,140 @@ Deno.test("register route: staff can read, staff cannot patch, owner can patch, 
   assertEquals("attributes" in sent.p_patch, false);
 });
 
+Deno.test("T7 verify with an unchecked pin is missing Pin checked", () => {
+  const missing = staticMissing({
+    name: "Angels",
+    place_type: "toll_plaza",
+    lat: 18.01,
+    lng: -76.95,
+    pin_state: "unchecked",
+  });
+  assertEquals(missing.includes("Pin checked"), true);
+  assertEquals(missing.includes("Pin"), false);
+});
+
+Deno.test("T8 a pin at 0,0 is outside Jamaica", () => {
+  assertEquals(pinOutsideMessage(0, 0), "Pin outside Jamaica");
+  assertEquals(pinOutsideMessage("", ""), "Pin outside Jamaica");
+  assertEquals(registerHttpStatus("Pin outside Jamaica"), 400);
+  assertEquals(registerHttpStatus("Place not found"), 404);
+  assertEquals(registerHttpStatus(TYPE_PROFILE_CONFLICT), 409);
+});
+
+Deno.test("T2 bulk type across match profiles is refused", () => {
+  assertEquals(matchProfileConflict("fuel", "none"), TYPE_PROFILE_CONFLICT);
+  assertEquals(matchProfileConflict("fuel", "fuel"), null);
+  assertEquals(matchProfileConflict("toll", "none"), TYPE_PROFILE_CONFLICT);
+});
+
+Deno.test("T4 and T5 empty pins and quoted csv", () => {
+  assertEquals(pinOutsideMessage(null, -76.8), "Pin outside Jamaica");
+  assertEquals(csvField("6 Old Hope Rd, Kingston"), '"6 Old Hope Rd, Kingston"');
+  assertEquals(csvField("Angels"), "Angels");
+});
+
 Deno.test("evidence uses the note, or a plain title", () => {
   assertEquals(evidenceTitle("Photo of the pump"), "Photo of the pump");
   assertEquals(evidenceTitle("  "), "Evidence");
   assertEquals(evidenceTitle(null), "Evidence");
 });
+
+Deno.test("T8 match_profile is ignored on a taxonomy patch", async () => {
+  const { stripTaxonomyPatch, taxonomyKeyOk, registerTaxonomyRoutes } = await import("./taxonomy_admin.ts");
+  assertEquals(stripTaxonomyPatch({ label: "Beach", match_profile: "fuel", reason: "because" }), { label: "Beach" });
+  assertEquals(taxonomyKeyOk("place_type", "Beach"), false);
+  assertEquals(taxonomyKeyOk("place_type", "beach"), true);
+  assertEquals(taxonomyKeyOk("category", "2.2"), true);
+
+  const calls: { name: string; args: Record<string, unknown> }[] = [];
+  const app = new Hono();
+  registerTaxonomyRoutes(app, {
+    admin: () => ({
+      schema: () => ({
+        rpc: (name: string, args: Record<string, unknown>) => {
+          calls.push({ name, args });
+          return Promise.resolve({ data: { ok: true }, error: null });
+        },
+      }),
+    }) as never,
+    requireOwner: async () => ({ id: "owner-1" }),
+    requirePlatformAdmin: async () => ({ id: "owner-1", email: "", role: "platform_owner" }),
+  });
+  const res = await app.request("/admin/taxonomy/place_type/beach", {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ label: "Beach", match_profile: "fuel", reason: "renamed the unused type" }),
+  });
+  assertEquals(res.status, 200);
+  assertEquals(calls[0].name, "save_taxonomy");
+  assertEquals((calls[0].args.p_patch as Record<string, unknown>).match_profile, undefined);
+  assertEquals((calls[0].args.p_patch as Record<string, unknown>).label, "Beach");
+});
+
+Deno.test("T7 taxonomy writes use 403, 400 and 409", async () => {
+  const { registerTaxonomyRoutes } = await import("./taxonomy_admin.ts");
+  const refused = new Hono();
+  registerTaxonomyRoutes(refused, {
+    admin: () => { throw new Error("should not query"); },
+    requireOwner: async () => { throw new Error("Only the owner can review places"); },
+    requirePlatformAdmin: async () => ({ id: "staff", email: "", role: "platform_analyst" }),
+  });
+  const post = await refused.request("/admin/taxonomy/place_type", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ slug: "beach", label: "Beach", reason: "a long enough reason" }),
+  });
+  assertEquals(post.status, 403);
+  const patch = await refused.request("/admin/taxonomy/place_type/beach", {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ retire: true, reason: "a long enough reason" }),
+  });
+  assertEquals(patch.status, 403);
+
+  const bad = new Hono();
+  registerTaxonomyRoutes(bad, {
+    admin: () => { throw new Error("should not query"); },
+    requireOwner: async () => ({ id: "owner-1" }),
+    requirePlatformAdmin: async () => ({ id: "owner-1", email: "", role: "platform_owner" }),
+  });
+  const slug = await bad.request("/admin/taxonomy/place_type", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ slug: "Beach", label: "Beach", reason: "a long enough reason" }),
+  });
+  assertEquals(slug.status, 400);
+
+  const blocked = new Hono();
+  registerTaxonomyRoutes(blocked, {
+    admin: () => ({
+      schema: () => ({
+        rpc: () => Promise.resolve({
+          data: null,
+          error: Object.assign(new Error("in_use"), {
+            details: JSON.stringify({ places: 205, plug_chip: true, search_as: 0, children: 0, facilities: 0, default_facilities: 0 }),
+          }),
+        }),
+      }),
+    }) as never,
+    requireOwner: async () => ({ id: "owner-1" }),
+    requirePlatformAdmin: async () => ({ id: "owner-1", email: "", role: "platform_owner" }),
+  });
+  const retire = await blocked.request("/admin/taxonomy/place_type/gas_station", {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ retire: true, reason: "trying to retire gas station" }),
+  });
+  assertEquals(retire.status, 409);
+  const body = await retire.json();
+  assertEquals(body.blocked_by.places, 205);
+  assertEquals(body.blocked_by.plug_chip, true);
+});
+
+Deno.test("T9 the public taxonomy function is not replaced", async () => {
+  const sql = await Deno.readTextFile(new URL("../../migrations/20261029235000_places_taxonomy_admin.sql", import.meta.url));
+  assertEquals(/create or replace function places\.taxonomy\s*\(/i.test(sql), false);
+  const current = await Deno.readTextFile(new URL("../../migrations/20261028191804_places_plug_chips.sql", import.meta.url));
+  assertEquals(/where t\.active and t\.plug_chip is not null/.test(current), true);
+});
+

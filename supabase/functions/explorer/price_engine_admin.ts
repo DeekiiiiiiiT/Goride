@@ -1,6 +1,8 @@
 import type { Hono } from "npm:hono@4.3.11";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { requirePlatformAdmin } from "../_shared/platformAdmin.ts";
+import { attachFuelOverviewRoute } from "./fuel_overview_admin.ts";
+import { attachPlacesOverviewRoute } from "./places_overview_admin.ts";
 import { attachStationAnalyticsRoute } from "./station_analytics_admin.ts";
 
 function places(sb: SupabaseClient) {
@@ -191,6 +193,14 @@ export function registerPriceEngineAdmin(
   });
 
   attachStationAnalyticsRoute(app, {
+    admin: deps.admin,
+    requirePlatformAdmin,
+  });
+  attachFuelOverviewRoute(app, {
+    admin: deps.admin,
+    requirePlatformAdmin,
+  });
+  attachPlacesOverviewRoute(app, {
     admin: deps.admin,
     requirePlatformAdmin,
   });

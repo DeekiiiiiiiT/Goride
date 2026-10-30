@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"/><title>Jamaica map</title></head><body><main>
+<!-- SECTION 2: S36d BORDER EDITOR -->
+<div class="flex flex-col gap-4 mb-8">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="text-xs font-mono px-2 py-0.5 rounded bg-surface-container-highest text-on-surface-variant font-semibold">S36d</span>
+<h2 class="text-base font-headline font-bold text-on-surface tracking-tight">Border Editor — Half Way Tree</h2>
+<span class="text-xs font-mono text-secondary bg-secondary-container px-2 py-0.5 rounded font-medium">Draft active</span>
+</div>
+<div class="text-xs font-mono text-outline">Vector Geometry Workspace</div>
+</div>
+<!-- 8/12 and 4/12 Grid -->
+<div class="grid grid-cols-12 gap-6 items-start">
+<!-- MAP CARD (8 cols) -->
+<div class="col-span-12 xl:col-span-8 bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden flex flex-col relative">
+<!-- Floating Controls Top -->
+<div class="absolute top-4 left-4 right-4 z-20 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
+<!-- Segmented View -->
+<div class="pointer-events-auto bg-surface-container-lowest/95 backdrop-blur shadow-md p-1 rounded-lg flex items-center gap-1 text-xs">
+<button class="px-3 py-1 rounded text-on-surface-variant hover:text-on-surface transition-colors font-medium">Live</button>
+<button class="px-3 py-1 rounded text-on-surface-variant hover:text-on-surface transition-colors font-medium">Draft</button>
+<button class="px-3 py-1 rounded bg-secondary text-on-secondary font-semibold shadow-sm">Both</button>
+</div>
+<!-- Detail Level -->
+<div class="pointer-events-auto bg-surface-container-lowest/95 backdrop-blur shadow-md p-1 rounded-lg flex items-center gap-1 text-xs">
+<span class="text-[11px] font-label text-outline px-2">Detail:</span>
+<button class="px-2.5 py-1 rounded text-on-surface-variant font-medium">Full</button>
+<button class="px-2.5 py-1 rounded bg-surface-container text-on-surface font-semibold">Medium</button>
+<button class="px-2.5 py-1 rounded text-on-surface-variant font-medium">Light</button>
+</div>
+<!-- Zoom & Canvas Tools -->
+<div class="pointer-events-auto bg-surface-container-lowest/95 backdrop-blur shadow-md p-1 rounded-lg flex items-center gap-0.5 text-on-surface-variant">
+<button class="w-7 h-7 flex items-center justify-center hover:bg-surface-container rounded transition-colors" title="Zoom in">
+<span class="material-symbols-outlined text-[18px]">add</span>
+</button>
+<button class="w-7 h-7 flex items-center justify-center hover:bg-surface-container rounded transition-colors" title="Zoom out">
+<span class="material-symbols-outlined text-[18px]">remove</span>
+</button>
+<div class="w-px h-3.5 bg-surface-container-highest mx-0.5"></div>
+<button class="w-7 h-7 flex items-center justify-center hover:bg-surface-container rounded transition-colors" title="Fit extent">
+<span class="material-symbols-outlined text-[18px]">fit_screen</span>
+</button>
+<button class="w-7 h-7 flex items-center justify-center hover:bg-surface-container rounded transition-colors" title="Fullscreen">
+<span class="material-symbols-outlined text-[18px]">fullscreen</span>
+</button>
+</div>
+</div>
+<!-- Simulated Vector Basemap & Boundary Overlays -->
+<div class="relative w-full h-[540px] bg-slate-100 flex items-center justify-center overflow-hidden select-none">
+<!-- Static Basemap Container with coordinate locator -->
+<div class="absolute inset-0 w-full h-full bg-cover bg-center opacity-40 mix-blend-multiply" data-location="Half Way Tree, Kingston, Jamaica" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuBt-ZzEZo7KXovjRPdq4Rjqg_1qfXcQjrbR3t87v9Lk4V3_yujgMNtvEnlXV4ZC4yTQQPCH4oUtXQ-_egvmREDkIh194NMRYdjxAmoGYncklEiTGphaHVShOI0oeaLJNaklgzKhLuQ85Z9RLgJuy56Ahc-McRG1obXiOEV0zGV7xLU3aVm_i8FGHYUJr-psas5rtpdsfoQR5U6qfr-uFi6RiGJsEg-ERj4jVLy4arg')"></div>
+<!-- Muted SVG Canvas representing exact cartographic geometries -->
+<svg class="absolute inset-0 w-full h-full" fill="none" viewbox="0 0 800 540" xmlns="http://www.w3.org/2000/svg">
+<!-- Parent Saint Andrew Boundary (Dark Grey Outline) -->
+<path d="M 40 40 L 760 60 L 740 480 L 100 510 Z" fill="none" opacity="0.6" stroke="#545f74" stroke-dasharray="8 4" stroke-width="1.75"></path>
+<text fill="#545f74" font-family="JetBrains Mono" font-size="11" font-weight="600" opacity="0.8" x="60" y="75">SAINT ANDREW PARENT ENVELOPE</text>
+<!-- Neighbouring Towns (Thin grey with small labels) -->
+<!-- Cross Roads -->
+<path d="M 280 340 L 460 360 L 490 480 L 250 460 Z" fill="#f8fafc" fill-opacity="0.3" stroke="#94a3b8" stroke-width="1.2"></path>
+<text fill="#64748b" font-family="Inter" font-size="11" font-weight="500" x="340" y="420">Cross Roads</text>
+<!-- Constant Spring -->
+<path d="M 330 80 L 520 70 L 510 210 L 320 190 Z" fill="#f8fafc" fill-opacity="0.3" stroke="#94a3b8" stroke-width="1.2"></path>
+<text fill="#64748b" font-family="Inter" font-size="11" font-weight="500" x="380" y="140">Constant Spring</text>
+<!-- Papine -->
+<path d="M 520 180 L 710 160 L 700 320 L 530 330 Z" fill="#f8fafc" fill-opacity="0.3" stroke="#94a3b8" stroke-width="1.2"></path>
+<text fill="#64748b" font-family="Inter" font-size="11" font-weight="500" x="590" y="240">Papine</text>
+<!-- Liguanea -->
+<path d="M 470 200 L 560 210 L 550 360 L 460 340 Z" fill="#f8fafc" fill-opacity="0.3" stroke="#94a3b8" stroke-width="1.2"></path>
+<text fill="#64748b" font-family="Inter" font-size="11" font-weight="500" x="485" y="275">Liguanea</text>
+<!-- Half Way Tree - LIVE BORDER (Solid Blue 2.5px) -->
+<!-- Path coordinate sequence representing live polygon -->
+<polygon fill="#dbe1ff" fill-opacity="0.25" points="310,210 480,210 470,350 300,340" stroke="#0153dc" stroke-width="2.5"></polygon>
+<!-- Half Way Tree - DRAFT BORDER (Dashed Amber pushing slightly East) -->
+<!-- Notice east nodes bulging eastward toward 510 -->
+<polygon fill="#fef3c7" fill-opacity="0.2" points="310,210 515,225 505,365 300,340" stroke="#d97706" stroke-dasharray="6 4" stroke-width="2.5"></polygon>
+<!-- Center label for Target Area -->
+<circle cx="395" cy="275" fill="#0153dc" r="3"></circle>
+<text fill="#0153dc" font-family="Inter" font-size="13" font-weight="700" x="350" y="265">Half Way Tree</text>
+<text fill="#d97706" font-family="JetBrains Mono" font-size="10" font-weight="600" x="365" y="295">+3.1% EAST VARIANCE</text>
+</svg>
+<!-- Floating Legend (Bottom Left) -->
+<div class="absolute bottom-4 left-4 z-20 bg-surface-container-lowest/95 backdrop-blur shadow-md p-2.5 rounded-lg flex flex-col gap-1.5 text-[11px] font-mono">
+<div class="flex items-center gap-2">
+<span class="w-3 h-0.5 bg-secondary"></span>
+<span class="text-on-surface">Live border (v1)</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="w-3 h-0.5 border-b-2 border-dashed border-amber-600"></span>
+<span class="text-amber-900 font-semibold">Draft border (v2)</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="w-3 h-0.5 bg-slate-400"></span>
+<span class="text-on-surface-variant">Neighbours</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="w-3 h-0.5 border-b border-dashed border-primary"></span>
+<span class="text-on-surface-variant">Saint Andrew parent</span>
+</div>
+</div>
+<!-- Bottom Right Scale & Origin Tag -->
+<div class="absolute bottom-4 right-4 z-20 bg-surface-container-lowest/90 px-2 py-1 rounded text-[10px] font-mono text-outline shadow-sm">
+            18°00'44"N 76°47'55"W · 500m
+          </div>
+</div>
+</div>
+<!-- SIDE PANEL (4 cols) -->
+<div class="col-span-12 xl:col-span-4 bg-surface-container-lowest rounded-xl shadow-sm p-5 flex flex-col gap-5">
+<!-- Navigation & Identity -->
+<div class="flex flex-col gap-2">
+<a class="inline-flex items-center gap-1 text-xs font-semibold text-secondary hover:underline" href="#">
+<span class="material-symbols-outlined text-[14px]">arrow_back</span>
+            Towns
+          </a>
+<div class="flex items-start justify-between mt-1">
+<div>
+<div class="flex items-center gap-2">
+<h3 class="text-xl font-headline font-bold text-on-surface tracking-tight">Half Way Tree</h3>
+<span class="px-2 py-0.5 rounded text-[10px] font-label font-semibold bg-surface-container text-on-surface-variant">Town</span>
+</div>
+<div class="text-xs font-mono font-medium text-secondary mt-0.5">JM0601</div>
+</div>
+<button class="w-7 h-7 rounded flex items-center justify-center text-outline hover:bg-surface-container transition-colors">
+<span class="material-symbols-outlined text-[18px]">more_vert</span>
+</button>
+</div>
+<div class="text-xs text-on-surface-variant font-mono">
+            Jamaica › Saint Andrew
+          </div>
+</div>
+<!-- Versions Block -->
+<div class="flex flex-col gap-2">
+<span class="text-[11px] font-label uppercase tracking-wider text-outline font-semibold">Versions</span>
+<div class="flex flex-col gap-1.5">
+<!-- Draft v2 (Selected) -->
+<div class="p-3 rounded-lg bg-surface-container-low flex flex-col gap-1 shadow-sm">
+<div class="flex items-center justify-between">
+<span class="text-xs font-semibold text-amber-900 flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-amber-500"></span>
+                  Draft · v2
+                </span>
+<button class="text-[11px] text-error hover:underline font-medium">Discard draft</button>
+</div>
+<div class="flex items-center justify-between text-[11px] font-mono text-on-surface-variant">
+<span>Drawn in Dominion</span>
+<span>29 Oct 2026</span>
+</div>
+</div>
+<!-- Live v1 -->
+<div class="p-2.5 rounded-lg hover:bg-surface-container-low transition-colors flex items-center justify-between cursor-pointer">
+<div class="flex items-center gap-2">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span>
+<span class="text-xs font-medium text-on-surface">Live · v1</span>
+<span class="text-[11px] font-mono text-outline">COD-AB</span>
+</div>
+<span class="text-[11px] font-mono text-on-surface-variant">24 Oct 2026</span>
+</div>
+<!-- Old template v0 -->
+<div class="p-2.5 rounded-lg hover:bg-surface-container-low transition-colors flex items-center justify-between cursor-pointer opacity-70">
+<div class="flex items-center gap-2">
+<span class="w-1.5 h-1.5 rounded-full bg-outline"></span>
+<span class="text-xs font-medium text-on-surface-variant">Old template · v0</span>
+<span class="text-[11px] font-mono text-outline">manual</span>
+</div>
+<span class="text-[11px] font-mono text-on-surface-variant">27 Aug 2026</span>
+</div>
+</div>
+</div>
+<!-- Draft Checks Block -->
+<div class="flex flex-col gap-2">
+<span class="text-[11px] font-label uppercase tracking-wider text-outline font-semibold">Draft checks</span>
+<div class="bg-surface-container-low rounded-lg p-3 flex flex-col gap-2 text-xs">
+<div class="flex items-center justify-between text-tertiary font-medium">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[16px]">check_circle</span>
+<span>Valid shape</span>
+</div>
+<span class="font-mono text-[11px]">Pass</span>
+</div>
+<div class="flex items-center justify-between text-amber-700 font-medium">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[16px]">warning</span>
+<span>Outside parent</span>
+</div>
+<span class="font-mono text-[11px] font-semibold">0.4%</span>
+</div>
+<div class="flex items-center justify-between text-amber-700 font-medium">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[16px]">warning</span>
+<span>Overlaps Cross Roads</span>
+</div>
+<span class="font-mono text-[11px] font-semibold">1.6%</span>
+</div>
+<div class="h-px bg-surface-container-highest my-0.5"></div>
+<div class="flex items-center justify-between text-on-surface-variant font-mono text-[11px]">
+<span>Area change</span>
+<span class="text-on-surface font-semibold">+3.1%</span>
+</div>
+<div class="flex items-center justify-between text-on-surface-variant font-mono text-[11px]">
+<span>Points</span>
+<span class="text-on-surface font-semibold">412</span>
+</div>
+</div>
+</div>
+<!-- Action Buttons -->
+<div class="flex flex-col gap-2 pt-1">
+<button class="w-full py-2.5 px-4 rounded-lg bg-secondary text-on-secondary font-headline font-semibold text-xs shadow hover:bg-secondary-dim transition-colors flex items-center justify-center gap-2">
+<span>Preview and publish…</span>
+<span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+</button>
+<div class="grid grid-cols-2 gap-2">
+<button class="py-2 px-3 rounded-lg bg-surface-container text-on-surface font-medium text-xs hover:bg-surface-container-high transition-colors">
+              Draw replacement
+            </button>
+<button class="py-2 px-3 rounded-lg bg-surface-container text-on-surface font-medium text-xs hover:bg-surface-container-high transition-colors">
+              Upload GeoJSON
+            </button>
+</div>
+<p class="text-[11px] text-outline text-center mt-1">
+            One area per file. For more, use Imports.
+          </p>
+</div>
+</div>
+</div>
+</div>
+</main></body></html>

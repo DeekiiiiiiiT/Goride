@@ -1,0 +1,250 @@
+STITCH PROMPT — Dominion · Jamaica map, the other tabs (S36c–S36g)
+Project: Dominion Redesign (7083594865949473827) · Design system: Dominion
+These screens sit beside the finished S36 "Jamaica map" Country screen. They MUST reuse its exact header, tab bar, KPI strip, card style, map style and inspector style, so the section reads as one product.
+
+Make:
+- S36c Level browser, in three versions: Parishes, Towns and Communities.
+- S36d Border editor: Half Way Tree selected, a draft being compared to live.
+- S36e Publish dialog.
+- S36f Map pins.
+- S36g Imports and checks: a run drawer open, and the stepper at step 2.
+- Every screen in Light and Dark.
+- A 390-wide phone version of S36c (Communities) and of S36f.
+- One frame of states.
+
+------------------------------------------------------------------------------
+SHARED (copy from S36 exactly)
+
+Look:
+- The modern, calm GIS console of S36.
+- Cards: white, a hairline border, 12–16px radius and a very soft shadow, on a very light cool-grey page.
+- Spacing: a strict 8px grid.
+- Type: Dominion sans for text. Dominion mono with tabular figures for every code, count, area and date.
+
+Colour:
+- Neutral greys, plus Dominion blue for selection and primary actions.
+- Green only for "Live" / "All matched".
+- Amber only for drafts and warnings.
+- Muted red only for "broken" and danger.
+
+Map line styles, the same as S36:
+- Parish: dark slate, 2px.
+- Town: mid-grey, 1.25px.
+- Community: light grey dashed.
+- Selected area: 2.5px blue outline with a 10% blue fill.
+
+Shell: the Dominion admin shell, with the dark navy sidebar and "Places and Maps" selected.
+
+Header (every screen):
+- Breadcrumb "Dominion › Master data › Places and Maps › Jamaica map".
+- Title "Jamaica map", with the subtitle "The official map of Jamaica, from the country down to communities."
+- Right side: the green chip "Published" and the mono text "Updated 24 Oct 2026".
+
+Tab bar (every screen):
+- "Country · Parishes · Towns · Communities", then a divider, then "Pins · Imports".
+- The current tab is selected with the solid Dominion-blue pill.
+- Far right: the mono text "EPSG:4326 · WGS84".
+
+KPI strip (every screen): "Parishes 14 · Towns 131 · Communities 775 · Drafts 0 · Quality issues 0 · Last change 24 Oct".
+
+Keep it real:
+- No glassmorphism, gradients, 3D or AI badges.
+- No "REGION", "PARTITION" or "LOC" labels.
+- No delivery or market words, except inside the Publish dialog's "Rush" count row.
+
+------------------------------------------------------------------------------
+S36c — LEVEL BROWSER (draw 3 frames: Parishes, Towns, Communities)
+
+A full-width table card. Above the table is a toolbar.
+
+Toolbar:
+- A search field, "Search by name or code".
+- A "Parish" filter dropdown chip (on Communities, also a "Town" chip).
+- A toggle chip "Has a draft".
+- A toggle chip "Same name".
+- On the right, a grey count, e.g. "775 communities".
+
+Table: a sticky header, sortable columns with a small sort caret, and a soft hover tint on rows.
+
+Columns:
+- Name. Semibold, with an optional small amber chip "Same name ×2".
+- Code. Mono, blue.
+- Parent. Grey: "Saint Andrew" for towns; "Half Way Tree › Saint Andrew" for communities.
+- Area km². Mono, right-aligned.
+- Points. Mono, right-aligned.
+- Children. Mono, e.g. "9 communities".
+- Live. A green dot plus "v1".
+- Updated. Mono, e.g. "24 Oct 2026".
+- A chevron.
+
+Parishes frame (14 rows):
+- Kingston JM03 (22.0 km², 1,638 pts, 3 towns)
+- Saint Andrew JM06
+- Saint Thomas JM07
+- Portland JM05
+- Saint Mary JM10
+- Saint Ann JM11
+- Trelawny JM12
+- Saint James JM01
+- Hanover JM09
+- Westmoreland JM02
+- Saint Elizabeth JM13
+- Manchester JM04
+- Clarendon JM14
+- Saint Catherine JM08
+Use plausible areas and point counts between 1,638 and 4,627.
+
+Towns frame:
+- 10 visible rows, the first being "Half Way Tree · JM0601 · Saint Andrew · 6.42 · 1,284 · 9 communities".
+- Footer: "Showing 1–50 of 131".
+
+Communities frame:
+- The parish chip is set to "Saint Andrew".
+- 10 rows, including two "Bellevue" rows, each with the amber chip "Same name ×2" and different parents.
+- Footer: "Showing 1–50 of 212 in Saint Andrew".
+
+Clicking a row opens S36d.
+
+------------------------------------------------------------------------------
+S36d — BORDER EDITOR (Half Way Tree, a draft compared with live)
+
+Two columns: the map (8/12) and a side panel (4/12).
+
+Map card:
+- A muted basemap zoomed on Half Way Tree.
+- Neighbouring towns drawn thin grey with small labels: Cross Roads, Constant Spring, Papine, Liguanea.
+- The parent Saint Andrew is drawn in darker grey.
+- The live border is a solid blue line.
+- The draft border is a dashed amber line that pushes slightly east.
+
+Floating controls on the map:
+- A segmented control "Live · Draft · Both" (Both selected).
+- A small "Detail" control "Full · Medium · Light" (Medium selected).
+- Zoom buttons.
+
+Floating legend: "Live border", "Draft", "Neighbours", "Parent".
+
+Side panel, from top to bottom:
+- "‹ Towns" back link.
+- Title "Half Way Tree", with the mono "JM0601" and the chip "Town".
+- Path "Jamaica › Saint Andrew".
+
+"Versions" list. Each row has a status chip, the version, the source, a mono date and a small menu:
+- "Draft · v2 · Drawn in Dominion · 29 Oct 2026" — selected, with the menu item "Discard draft".
+- "Live · v1 · COD-AB · 24 Oct 2026".
+- "Old template · v0 · manual · 27 Aug 2026".
+
+"Draft checks" block. Each row has an icon, a label and a value:
+- ✓ "Valid shape"
+- ⚠ "Outside parent 0.4%"
+- ⚠ "Overlaps Cross Roads 1.6%"
+- "Area change +3.1%"
+- "Points 412"
+
+Buttons:
+- Primary "Preview and publish…".
+- Secondary "Draw a replacement".
+- Secondary "Upload GeoJSON".
+
+Small grey note: "One area per file. For more, use Imports."
+
+------------------------------------------------------------------------------
+S36e — PUBLISH DIALOG (centred, 600px, over the dimmed S36d)
+
+Title: "Publish Half Way Tree v2?"
+
+Subtitle: "This replaces the live border in every app."
+
+"What changes" list. Each row has an icon, a label, a mono count and detail text:
+- "Area change · +3.1%"
+- "Dominion places moving · 2 · Texaco Half Way Tree, Total Hope Road"
+- "Rush live markets · 1"
+- "Rush merchants moving · 0 of 14 checked"
+
+"Warnings to confirm" section, each with a checkbox:
+- ☐ "Overlaps Cross Roads by 1.6%"
+- ☐ "0.4% outside Saint Andrew"
+
+A typed-confirm field: "Type Half Way Tree to confirm".
+
+Footer:
+- "Cancel".
+- An amber primary button "Publish border". It is disabled until both boxes are ticked and the name is typed.
+
+------------------------------------------------------------------------------
+S36f — MAP PINS (tab label "Pins")
+
+Header block under the tabs:
+- Title "Map pins".
+- Subtitle: "Points on the map, such as town centres. Business places live in the Places register." The words "Places register" are a link.
+- Right side: primary "+ Add pin".
+
+Two columns: the table (6/12) and the map (6/12).
+
+Table:
+- Toolbar: a search field "Search pins", a "Kind" filter chip, and a "Status" filter chip.
+- Columns: Name · Kind · Area · Status · Coordinates.
+- 6 rows:
+  - Spanish Town · Town centre · Spanish Town › Saint Catherine · Active · 17.9961, −76.9547 (this row is selected)
+  - Portmore · Town centre · Portmore › Saint Catherine · Active · 17.9667, −76.8667
+  - Old Harbour · Town centre · Old Harbour › Saint Catherine · Active · 17.9333, −77.1167
+  - Linstead · Town centre · Linstead › Saint Catherine · Active · 18.1368, −77.0317
+  - Bog Walk · Town centre · Bog Walk › Saint Catherine · Active · 18.1156, −77.0003
+  - Ewarton · Town centre · Ewarton › Saint Catherine · Active · 18.1764, −77.0853
+
+Map card:
+- Saint Catherine with all 6 pins as small round blue markers with labels.
+- The selected Spanish Town pin is larger, with a white ring and the hint "Drag to move".
+
+Below the table, an open edit panel for Spanish Town (in the drawer style):
+- Name.
+- Kind (select).
+- Latitude and Longitude (mono inputs). The Longitude field shows a valid green tick.
+- Status (Active / Retired segmented control).
+- A required "Reason" field.
+- "Save pin".
+- An inline red-free error example under Latitude: "That point is outside Jamaica."
+
+------------------------------------------------------------------------------
+S36g — IMPORTS AND CHECKS
+
+Section 1, the card "Import a map file":
+- A 3-step horizontal stepper: "1 Choose file ✓" — "2 Check" (active) — "3 Save as drafts" (disabled).
+- The selected file chip: "parishes-2026-10.geojson · 14 areas · 3.1 MB".
+- A results table with columns Code · Name · Level · Match · Shape · Area change · Outside parent · Overlap. 6 rows are visible:
+  - 4 green "Matched" with "Valid".
+  - 1 amber "Unknown code JM15".
+  - 1 red "Broken: shape crosses itself".
+- A summary line: "12 matched · 1 unknown · 1 broken".
+- Primary "Save as drafts" is disabled, with the helper "Fix broken rows and check again to save drafts."
+- Secondary "Choose another file".
+
+Section 2, the card "Import history":
+- Columns: File · When · By · Result.
+- 4 rows. The result chips are green "All matched", amber "2 unknown" and red "1 broken".
+- A right-side drawer is open for one run. It has these tabs: "Matched 12", "Unknown 1" and "Broken 1". It lists error text, and has a button "Publish drafts from this import…".
+
+Section 3, the card "Map checks":
+- Filter chips: "All 71 · Shape is broken 0 · Parent missing 0 · Too many points 0 · Sticks out of its parent 0 · Overlaps a neighbour 0 · Same name as another area 71".
+- A table: Area · Level · Issue · Severity · (Open ›).
+- 5 "Same name as another area" rows, with the grey severity chip "Info", e.g. "Bellevue · Community · Same name as another area · Info · Open ›".
+- Footer: "Checked nightly at 06:20 UTC and after every publish · last checked 29 Oct 06:20".
+
+------------------------------------------------------------------------------
+STATES (one frame)
+- A skeleton table.
+- Error card: "Could not load the map. Nothing was changed." with "Retry".
+- Empty "Has a draft" filter: "No drafts. Every area is on its live border."
+- Empty import history: "No imports yet."
+- Read-only note: "You can view the map. Only the owner can change borders, pins or imports."
+
+PHONE (390 wide)
+- S36c Communities: the table becomes stacked cards (name, code, parent, chevron), and the filters become a horizontal chip scroll.
+- S36f: the map is on top (320px tall), with the pin list below as cards.
+- No page-level horizontal scrolling.
+
+DARK VARIANT
+- Dominion dark tokens.
+- Map lines and the amber draft line keep their contrast.
+
+Do NOT include: customer, driver, order or merchant names. The only exception is the counts inside S36e. Also no fake live tickers, AI badges or region badges.

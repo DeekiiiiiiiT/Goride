@@ -1,0 +1,112 @@
+STITCH PROMPT — Dominion · Fuel home (S35, replaces the S7 layout for Fuel only)
+Project: Dominion Redesign (7083594865949473827) · Design system: Dominion
+Make: one screen "Fuel home" in Light and Dark, plus a 390-wide phone version, plus one small frame of states.
+
+------------------------------------------------------------------------------
+OVERALL LOOK — high fidelity, modern
+
+A modern operations overview in the Dominion design system: calm, airy and confident, like Linear or Stripe's dashboard home. Use these surfaces and styles:
+- Page background: a very light cool grey.
+- Cards: white, with a hairline 1px border, a 12–16px radius and a very soft shadow.
+- Spacing: a strict 8px grid with generous whitespace.
+- Type: the Dominion sans for text, and the Dominion mono with tabular figures for every number, price, date and count.
+- Big KPI numbers: large and light-weight, not heavy blocks.
+
+Colour is restrained:
+- Neutral greys almost everywhere.
+- Dominion blue for links, primary buttons and progress.
+- Green only for "Current".
+- Amber for warnings and "Due".
+- Muted red only for "Stale".
+- Price differences use ▲ / ▼ with neutral text.
+
+Micro-details: hairline dividers, small pill chips, a subtle hover lift on cards, focus rings and skeleton shimmer.
+
+Keep it real: no glassmorphism, no gradients on data, no 3D, no illustrations, no AI badges, no "REGION" badges or "LOC:" footers.
+
+Shell: the existing Dominion admin shell. The left sidebar is dark navy with "Fuel" selected under MASTER DATA. The top bar is white with the search field "Search entities, engines, routes…" and the owner avatar "DT · Deeki T · Owner".
+
+------------------------------------------------------------------------------
+SCREEN — FUEL HOME
+
+HEADER
+- Breadcrumb: Dominion › Master data › Fuel
+- Title "Fuel". Subtitle: "Stations, pump prices, refineries and gas-card programs."
+- Right: small grey mono text "Updated 20:58" and a ghost icon button (refresh arrow) with the tooltip "Refresh".
+
+B — KPI ROW (4 equal tiles)
+Tile 1 "Stations"
+  - Big number "205".
+  - Sub-line "57 verified · 148 pending".
+  - A thin blue progress bar filled 28%, with the tiny label "28% verified".
+Tile 2 "Data quality"
+  - Big number "0%".
+  - An amber sub-line "205 pins not checked".
+  - Three tiny labelled bars underneath: "Pin checked 0 / 205" (empty bar), "Brand set 140 / 205" (68% filled), "Parish matches map 132 / 205" (64% filled).
+Tile 3 "Price coverage"
+  - Big number "2%".
+  - Sub-line "4 of 205 stations have a live price".
+  - A muted line "5 live prices · Gasolene 87 only".
+Tile 4 "Benchmark"
+  - A small "Petrojam" label with a "Benchmark" chip (blue tint).
+  - Big mono price "J$201.81" with the tiny label "Gasolene 87 · per litre".
+  - Sub-line "Week of 22 Oct 2026".
+  - A green chip "Current".
+
+Two columns below (about 8/12 and 4/12):
+
+C — NEEDS YOU (left)
+- Card title "Needs you". To the right, a small grey count "6 items".
+- A list of rows. Each row has a small round icon tile on the left (neutral grey, or amber for the first), a sentence, a mono count chip on the right, and a secondary text button.
+  1. (amber icon) "Price reports waiting for review" · "Oldest from today, 20:55" · chip "1" · button "Review"
+  2. "Stations waiting to be verified" · chip "148" · button "Open"
+  3. "Pins not checked on the map" · chip "205" · button "Open"
+  4. "Parish text disagrees with the map" · chip "73" · button "Open"
+  5. "Stations without a brand" · chip "65" · button "Open"
+  6. "Refinery sync runs" · "None logged yet" · chip "0" · button "Open"
+- Rows are separated by hairline dividers and get a soft hover tint.
+
+D — PUMP VS BENCHMARK (right)
+- Card title "Pump vs benchmark". Under it, a small grey line: "Average live pump price against Petrojam's ex-refinery price."
+- One feature row for "Gasolene 87":
+  - "Pump J$224.35" over "Benchmark J$201.81".
+  - A big delta "▲ J$22.54 · +11.2%".
+  - A slim horizontal comparison bar showing the two values.
+- A small grey line: "Based on 5 prices from 4 stations".
+- Three compact rows, "Gasolene 90", "Auto diesel" and "ULSD", each with the muted text "No live price yet".
+- Two amber note rows with a small warning icon: "One reporter sends 100% of reports" and "64% of published prices are outdated".
+- A divider, then a mini list titled "Recent activity" with 4 rows (small dot, text, mono time on the right):
+  "Price report received · 20:55" · "Prices published · 14:36" · "Refinery week added · 22 Oct" · "Station edited · 28 Oct"
+
+E — SECTIONS (full width, a 3-column grid of cards; 5 cards, the last row has 2)
+Each card has:
+- A small icon tile (outline icon in Dominion blue on a pale blue square).
+- The title in Dominion blue.
+- The existing description in grey.
+- A divider, then a live status line in small mono with a chevron on the right.
+
+The five cards:
+1. "Stations" — "The station list, including ones still in review." — status "148 pending · 205 pins unchecked"
+2. "Refineries" — "Refineries and their ex-refinery prices. Petrojam is the benchmark." — status "1 refinery · week 22 Oct · " followed by a green dot "Current"
+3. "Price Engine" — "The pump price Plug is allowed to show, and the ones waiting for you." — status "1 waiting · 5 live prices"
+4. "Station analytics" — "Pump prices against the benchmark, coverage and data trust by parish and brand." — status "Coverage 2% · +11.2% vs benchmark"
+5. "Gas-card programs" — "Programs and the master list. Customer cards are in Fleet admin." — status "1 program"
+
+------------------------------------------------------------------------------
+STATES (one small extra frame)
+- Loading: skeleton shimmer for the KPI tiles, the Needs you rows and the cards.
+- Error: a card "Could not load fuel overview. Nothing was changed." with a "Retry" button.
+- Empty Needs you: a check-circle icon and "Nothing waiting. Fuel data is up to date."
+- Benchmark chips: show the three variants side by side: "Current" (green), "Due" (amber), "Stale" (muted red).
+
+PHONE VERSION (390 wide)
+- KPI tiles become a 2×2 grid.
+- Needs you comes first, then Pump vs benchmark.
+- Section cards stack one per row.
+- No page-level horizontal scrolling.
+
+DARK VARIANT
+- Dominion dark tokens: a deep navy page, slightly raised card surfaces and soft borders.
+- The progress bars, chips and amber notes keep their contrast.
+
+Do NOT include: the word "wholesale", any customer, fleet, vehicle, driver or card-holder data, fake trends or live tickers, AI badges, region badges or location footers.

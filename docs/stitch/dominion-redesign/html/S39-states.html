@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_dashboard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;family=Public+Sans:wght@500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        "colors": {
+          "on-tertiary-fixed-variant": "#006c30",
+          "secondary-fixed": "#dbe1ff",
+          "secondary": "#0153dc",
+          "surface-container-highest": "#e1e2ed",
+          "error-dim": "#67040d",
+          "inverse-surface": "#0d0e12",
+          "on-secondary-fixed": "#003798",
+          "primary-fixed-dim": "#cad5ed",
+          "on-primary-fixed-variant": "#515c70",
+          "outline-variant": "#b0b1bc",
+          "surface-container-lowest": "#ffffff",
+          "secondary-fixed-dim": "#c7d3ff",
+          "on-secondary-fixed-variant": "#0050d5",
+          "primary": "#545f74",
+          "tertiary": "#006e31",
+          "outline": "#797a84",
+          "tertiary-fixed": "#98fba9",
+          "inverse-primary": "#dae6fe",
+          "on-background": "#30323b",
+          "primary-container": "#d8e3fb",
+          "error": "#a83836",
+          "tertiary-fixed-dim": "#8aec9c",
+          "error-container": "#fa746f",
+          "on-error-container": "#6e0a12",
+          "surface-dim": "#d9d9e4",
+          "surface-container-high": "#e8e7f1",
+          "on-tertiary-container": "#00612a",
+          "on-tertiary-fixed": "#004c20",
+          "background": "#faf8fe",
+          "on-secondary-container": "#0047c0",
+          "primary-dim": "#485367",
+          "secondary-dim": "#0049c3",
+          "on-tertiary": "#e9ffe7",
+          "surface-bright": "#faf8fe",
+          "inverse-on-surface": "#9d9ca2",
+          "secondary-container": "#dbe1ff",
+          "on-primary-fixed": "#354053",
+          "on-secondary": "#faf8ff",
+          "on-surface": "#30323b",
+          "surface-variant": "#e1e2ed",
+          "primary-fixed": "#d8e3fb",
+          "on-surface-variant": "#5d5f68",
+          "on-primary": "#f8f8ff",
+          "surface-tint": "#545f74",
+          "tertiary-container": "#98fba9",
+          "surface": "#faf8fe",
+          "on-primary-container": "#475266",
+          "on-error": "#fff7f6",
+          "tertiary-dim": "#00612a",
+          "surface-container-low": "#f4f3fa",
+          "surface-container": "#eeedf6"
+        },
+        "borderRadius": {
+          "DEFAULT": "0.25rem",
+          "lg": "0.5rem",
+          "xl": "0.75rem",
+          "full": "9999px"
+        },
+        "spacing": {},
+        "fontFamily": {
+          "headline": [
+            "Inter"
+          ],
+          "display": [
+            "Inter"
+          ],
+          "body": [
+            "Inter"
+          ],
+          "label": [
+            "Public Sans"
+          ]
+        },
+        "fontSize": {}
+      },
+    },
+  }</script></head><body class="bg-surface font-body text-on-surface antialiased"><aside class="fixed left-0 top-0 h-full w-64 bg-[#1e293b] z-50 flex flex-col justify-between shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="flex flex-col flex-1 overflow-y-auto"><div class="h-16 px-6 flex items-center justify-between"><div class="flex items-center gap-2.5"><div class="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center"><span class="text-on-secondary font-headline font-bold text-sm tracking-wider">D</span></div><div class="flex flex-col"><span class="text-sm font-headline font-semibold text-slate-100 tracking-tight">DOMINION</span><span class="text-[10px] font-label uppercase tracking-widest text-slate-400">Jamaica Admin</span></div></div></div><nav class="px-3 py-4 space-y-6 flex-1 text-xs" data-active-classes="bg-secondary text-on-secondary font-medium rounded-lg"><div class="space-y-1"><div class="px-3 pb-1 text-[10px] font-label uppercase tracking-wider font-semibold text-slate-400">Core</div><a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all" data-path="overview" href="#"><span class="material-symbols-outlined text-[18px]">dashboard</span><span>Overview</span></a></div><div class="space-y-1"><div class="px-3 pb-1 text-[10px] font-label uppercase tracking-wider font-semibold text-slate-400">Master Data</div><a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all" data-path="places-and-maps" href="#"><span class="material-symbols-outlined text-[18px]">map</span><span>Places and Maps</span></a><a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all" data-path="fares-and-zones" href="#"><span class="material-symbols-outlined text-[18px]">payments</span><span>Fares and Zones (JMD)</span></a><a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all" data-path="terminal-registry" href="#"><span class="material-symbols-outlined text-[18px]">domain</span><span>Terminal Registry</span></a></div><div class="space-y-1"><div class="px-3 pb-1 text-[10px] font-label uppercase tracking-wider font-semibold text-slate-400">Engines</div><a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all" data-path="dispatch-engines" href="#"><span class="material-symbols-outlined text-[18px]">hub</span><span>Dispatch Engines</span></a><a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all" data-path="pricing-matrix" href="#"><span class="material-symbols-outlined text-[18px]">calculate</span><span>Pricing Matrix</span></a></div><div class="space-y-1"><div class="px-3 pb-1 text-[10px] font-label uppercase tracking-wider font-semibold text-slate-400">Distribution</div><a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all" data-path="parish-routes" href="#"><span class="material-symbols-outlined text-[18px]">alt_route</span><span>Parish Routes</span></a><a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all" data-path="depot-allocations" href="#"><span class="material-symbols-outlined text-[18px]">warehouse</span><span>Depot Allocations</span></a></div><div class="space-y-1"><div class="px-3 pb-1 text-[10px] font-label uppercase tracking-wider font-semibold text-slate-400">Platform</div><a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all" data-path="system-nodes" href="#"><span class="material-symbols-outlined text-[18px]">dns</span><span>System Nodes</span></a><a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all" data-path="back-office" href="#"><span class="material-symbols-outlined text-[18px]">admin_panel_settings</span><span>Back Office</span></a></div></nav></div><div class="px-4 py-3 bg-[#172033] flex items-center justify-between text-[11px] font-mono text-slate-400"><div class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span><span class="font-medium text-slate-300">KGN-DC-01</span></div><span class="tracking-tight text-[10px] bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded">JMD READY</span></div></aside><div class="pl-64 flex flex-col min-h-screen"><header class="fixed top-0 left-64 right-0 h-16 bg-surface-container-lowest/90 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-40 flex items-center justify-between px-8"><div class="relative w-96 flex items-center"><span class="material-symbols-outlined absolute left-3 text-outline text-[18px]">search</span><input class="w-full pl-9 pr-4 py-1.5 bg-surface-container text-on-surface placeholder:text-outline text-xs rounded-lg outline-none focus:bg-surface-container-low transition-colors font-body" placeholder="Search entities, engines, routes…" type="text"/></div><div class="flex items-center gap-4"><button class="w-8 h-8 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-surface-container transition-colors" title="Help and Documentation" type="button"><span class="material-symbols-outlined text-[18px]">help_outline</span></button><button class="w-8 h-8 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-surface-container transition-colors relative" title="Notifications" type="button"><span class="material-symbols-outlined text-[18px]">notifications</span><span class="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-secondary rounded-full"></span></button><div class="h-4 w-px bg-surface-container-highest"></div><div class="flex items-center gap-2.5 pl-1"><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div><div class="flex flex-col text-left"><span class="text-xs font-semibold text-on-surface font-headline leading-tight">Deeki T</span><span class="text-[10px] font-label text-on-surface-variant leading-tight">DT · Owner</span></div></div></div></header><main class="relative pt-16 flex-1 w-full px-8 pb-10 bg-surface"><div class="flex flex-col w-full">
+<!-- PAGE HEADER & CONTEXT STRIP -->
+<section class="flex flex-col gap-6 pt-6 pb-8">
+<div class="flex flex-col xl:flex-row xl:items-end justify-between gap-6">
+<div class="flex flex-col gap-2">
+<div class="flex items-center gap-2 font-mono text-[11px] text-outline tracking-wider uppercase">
+<span>DOMINION</span>
+<span class="text-outline-variant">/</span>
+<span>MASTER DATA</span>
+<span class="text-outline-variant">/</span>
+<span>PLACES AND MAPS</span>
+<span class="text-outline-variant">/</span>
+<span class="text-secondary font-semibold">SYSTEM STATES</span>
+</div>
+<h1 class="text-2xl lg:text-3xl font-bold font-headline text-on-surface tracking-tight">
+          Places &amp; Maps · Lifecycle &amp; Access States
+        </h1>
+<p class="text-xs lg:text-sm text-on-surface-variant max-w-3xl leading-relaxed">
+          Formal UI state specifications for data synchronization, API connection failure, zero pending queue, and RBAC staff read-only restrictions across the Dominion Jamaica spatial registry.
+        </p>
+</div>
+<!-- State Selector Pills -->
+<div class="flex flex-wrap items-center gap-2 p-1.5 bg-surface-container rounded-xl">
+<a class="px-3 py-1.5 text-xs font-medium rounded-lg bg-surface-container-lowest text-on-surface shadow-sm hover:text-secondary transition-colors flex items-center gap-1.5" href="#state-loading">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse"></span>
+<span>Skeleton Shimmer</span>
+</a>
+<a class="px-3 py-1.5 text-xs font-medium rounded-lg text-on-surface-variant hover:text-error hover:bg-surface-container-lowest transition-colors flex items-center gap-1.5" href="#state-error">
+<span class="w-1.5 h-1.5 rounded-full bg-error"></span>
+<span>Error Recovery</span>
+</a>
+<a class="px-3 py-1.5 text-xs font-medium rounded-lg text-on-surface-variant hover:text-tertiary hover:bg-surface-container-lowest transition-colors flex items-center gap-1.5" href="#state-empty">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span>
+<span>Zero Backlog</span>
+</a>
+<a class="px-3 py-1.5 text-xs font-medium rounded-lg text-on-surface-variant hover:text-primary hover:bg-surface-container-lowest transition-colors flex items-center gap-1.5" href="#state-staff">
+<span class="material-symbols-outlined text-[14px]">lock</span>
+<span>Staff Guard</span>
+</a>
+</div>
+</div>
+<!-- Active Schema Bar -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-3 pt-2 font-mono text-[11px]">
+<div class="p-3 rounded-lg bg-surface-container-low flex flex-col gap-1">
+<span class="text-outline uppercase text-[10px] tracking-wider">Spatial Authority</span>
+<span class="text-on-surface font-medium truncate">DOMINION JAMAICA (KGN)</span>
+</div>
+<div class="p-3 rounded-lg bg-surface-container-low flex flex-col gap-1">
+<span class="text-outline uppercase text-[10px] tracking-wider">Currency Scope</span>
+<span class="text-tertiary font-medium">JMD · CANONICAL</span>
+</div>
+<div class="p-3 rounded-lg bg-surface-container-low flex flex-col gap-1">
+<span class="text-outline uppercase text-[10px] tracking-wider">Registry Shards</span>
+<span class="text-on-surface font-medium">14 PARISHES · ACTIVE</span>
+</div>
+<div class="p-3 rounded-lg bg-surface-container-low flex flex-col gap-1">
+<span class="text-outline uppercase text-[10px] tracking-wider">RBAC Policy</span>
+<span class="text-secondary font-medium truncate">OWNER_WRITE · STAFF_READ</span>
+</div>
+</div>
+</section>
+<!-- 4-PANEL ARCHITECTURAL MATRIX (2x2 GRID) -->
+<section class="grid grid-cols-1 xl:grid-cols-2 gap-8 pb-12">
+<!-- ========================================================================= -->
+<!-- PANEL 1: LOADING (SKELETON SHIMMER & KPI REHYDRATION) -->
+<!-- ========================================================================= -->
+<div class="flex flex-col bg-surface-container-lowest rounded-xl shadow-md overflow-hidden relative" id="state-loading">
+<!-- State Spec Header -->
+<div class="px-6 py-4 bg-surface-container flex items-center justify-between border-b border-surface-container-highest">
+<div class="flex items-center gap-3">
+<span class="font-mono text-[10px] tracking-widest uppercase bg-surface-container-highest px-2 py-0.5 rounded text-on-surface-variant font-semibold">
+            STATE 01
+          </span>
+<span class="font-headline font-semibold text-xs text-on-surface uppercase tracking-wide">
+            Loading · Skeleton Shimmer &amp; KPI Rehydration
+          </span>
+</div>
+<div class="flex items-center gap-2 font-mono text-[10px] text-secondary">
+<svg class="animate-spin h-3.5 w-3.5 text-secondary" fill="none" viewbox="0 0 24 24">
+<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+<path class="opacity-75" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" fill="currentColor"></path>
+</svg>
+<span class="tracking-tight">FETCHING: REGISTRY_POI_GEO</span>
+</div>
+</div>
+<!-- Preview Stage -->
+<div class="p-6 flex flex-col gap-6">
+<!-- Top Shimmer KPIs -->
+<div class="grid grid-cols-3 gap-3">
+<div class="p-4 bg-surface-container-low rounded-lg flex flex-col gap-3">
+<div class="h-3 w-16 bg-surface-container-highest rounded animate-pulse"></div>
+<div class="h-6 w-20 bg-surface-container-highest rounded animate-pulse"></div>
+<div class="h-2.5 w-24 bg-surface-container-highest rounded animate-pulse"></div>
+</div>
+<div class="p-4 bg-surface-container-low rounded-lg flex flex-col gap-3">
+<div class="h-3 w-20 bg-surface-container-highest rounded animate-pulse"></div>
+<div class="h-6 w-14 bg-surface-container-highest rounded animate-pulse"></div>
+<div class="h-2.5 w-28 bg-surface-container-highest rounded animate-pulse"></div>
+</div>
+<div class="p-4 bg-surface-container-low rounded-lg flex flex-col gap-3">
+<div class="h-3 w-24 bg-surface-container-highest rounded animate-pulse"></div>
+<div class="h-6 w-12 bg-surface-container-highest rounded animate-pulse"></div>
+<div class="h-2.5 w-16 bg-surface-container-highest rounded animate-pulse"></div>
+</div>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-12 gap-5">
+<!-- "Needs You" Skeleton Card -->
+<div class="md:col-span-7 p-4 bg-surface-container-low rounded-lg flex flex-col gap-3.5">
+<div class="flex items-center justify-between pb-1">
+<div class="h-3.5 w-24 bg-surface-container-highest rounded animate-pulse"></div>
+<div class="h-3.5 w-12 bg-surface-container-highest rounded-full animate-pulse"></div>
+</div>
+<!-- 4 Pulsing Rows -->
+<div class="flex items-center justify-between p-2.5 bg-surface-container-lowest rounded-lg">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded bg-surface-container-highest animate-pulse shrink-0"></div>
+<div class="flex flex-col gap-1.5">
+<div class="h-3 w-32 bg-surface-container-highest rounded animate-pulse"></div>
+<div class="h-2.5 w-20 bg-surface-container-highest rounded animate-pulse"></div>
+</div>
+</div>
+<div class="h-7 w-16 bg-surface-container-highest rounded animate-pulse"></div>
+</div>
+<div class="flex items-center justify-between p-2.5 bg-surface-container-lowest rounded-lg">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded bg-surface-container-highest animate-pulse shrink-0"></div>
+<div class="flex flex-col gap-1.5">
+<div class="h-3 w-28 bg-surface-container-highest rounded animate-pulse"></div>
+<div class="h-2.5 w-36 bg-surface-container-highest rounded animate-pulse"></div>
+</div>
+</div>
+<div class="h-7 w-16 bg-surface-container-highest rounded animate-pulse"></div>
+</div>
+<div class="flex items-center justify-between p-2.5 bg-surface-container-lowest rounded-lg">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded bg-surface-container-highest animate-pulse shrink-0"></div>
+<div class="flex flex-col gap-1.5">
+<div class="h-3 w-36 bg-surface-container-highest rounded animate-pulse"></div>
+<div class="h-2.5 w-24 bg-surface-container-highest rounded animate-pulse"></div>
+</div>
+</div>
+<div class="h-7 w-16 bg-surface-container-highest rounded animate-pulse"></div>
+</div>
+<div class="flex items-center justify-between p-2.5 bg-surface-container-lowest rounded-lg">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded bg-surface-container-highest animate-pulse shrink-0"></div>
+<div class="flex flex-col gap-1.5">
+<div class="h-3 w-24 bg-surface-container-highest rounded animate-pulse"></div>
+<div class="h-2.5 w-28 bg-surface-container-highest rounded animate-pulse"></div>
+</div>
+</div>
+<div class="h-7 w-16 bg-surface-container-highest rounded animate-pulse"></div>
+</div>
+</div>
+<!-- Jamaica Map Shimmer Wireframe -->
+<div class="md:col-span-5 p-4 bg-surface-container-low rounded-lg flex flex-col justify-between relative overflow-hidden min-h-[220px]">
+<div class="flex items-center justify-between z-10">
+<div class="h-3 w-28 bg-surface-container-highest rounded animate-pulse"></div>
+<span class="font-mono text-[9px] text-outline">LAT 18.1096° N</span>
+</div>
+<!-- Wireframe stylized Jamaica map shimmer SVG -->
+<div class="my-auto py-2 flex items-center justify-center opacity-70">
+<svg class="w-full max-h-28 text-surface-container-highest animate-pulse" fill="none" stroke="currentColor" stroke-width="1.5" viewbox="0 0 300 120">
+<path d="M 20 60 C 40 45, 80 40, 110 50 C 140 60, 170 45, 210 50 C 250 55, 275 65, 285 75 C 270 85, 240 85, 200 80 C 160 75, 120 85, 80 80 C 50 78, 30 70, 20 60 Z" fill="currentColor" fill-opacity="0.25" stroke-dasharray="4 3"></path>
+<circle class="text-secondary" cx="230" cy="70" fill="currentColor" r="3"></circle>
+<circle cx="65" cy="52" fill="currentColor" r="3"></circle>
+<circle cx="150" cy="62" fill="currentColor" r="3"></circle>
+<line stroke="currentColor" stroke-opacity="0.3" stroke-width="0.75" x1="20" x2="285" y1="60" y2="75"></line>
+</svg>
+</div>
+<div class="flex items-center justify-between z-10 pt-2 font-mono text-[10px] text-outline">
+<span class="flex items-center gap-1.5">
+<span class="w-1.5 h-1.5 rounded-full bg-outline animate-ping"></span>
+<span>Hydrating topology…</span>
+</span>
+<span>GEOJSON_V2</span>
+</div>
+</div>
+</div>
+</div>
+<!-- State Note Footer -->
+<div class="px-6 py-2.5 bg-surface-container-low text-[11px] text-on-surface-variant flex items-center justify-between font-mono">
+<span>UI_SPEC: SHIMMER_PULSE_900MS</span>
+<span class="text-outline">NO_STALE_CACHE_SHOWN</span>
+</div>
+</div>
+<!-- ========================================================================= -->
+<!-- PANEL 2: FAULT HANDLED (NETWORK / INGESTION TIMEOUT) -->
+<!-- ========================================================================= -->
+<div class="flex flex-col bg-surface-container-lowest rounded-xl shadow-md overflow-hidden relative" id="state-error">
+<!-- State Spec Header -->
+<div class="px-6 py-4 bg-surface-container flex items-center justify-between border-b border-surface-container-highest">
+<div class="flex items-center gap-3">
+<span class="font-mono text-[10px] tracking-widest uppercase bg-surface-container-highest px-2 py-0.5 rounded text-on-surface-variant font-semibold">
+            STATE 02
+          </span>
+<span class="font-headline font-semibold text-xs text-on-surface uppercase tracking-wide">
+            Fault Handled · Network / Ingestion Timeout
+          </span>
+</div>
+<span class="font-mono text-[10px] px-2 py-0.5 rounded font-semibold text-error bg-error-container/20">
+          ERR_GATEWAY_TIMEOUT · 504
+        </span>
+</div>
+<!-- Preview Stage -->
+<div class="p-6 flex flex-col justify-between flex-1 gap-6">
+<!-- Error Banner / Container with hair-line warning ring -->
+<div class="p-8 rounded-xl bg-surface-container-low flex flex-col md:flex-row items-start gap-6 relative overflow-hidden">
+<!-- Subtle red indicator pill -->
+<div class="w-12 h-12 rounded-full bg-error-container/30 flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-error text-2xl font-bold">priority_high</span>
+</div>
+<div class="flex flex-col gap-3 flex-1">
+<div class="flex flex-col gap-1">
+<span class="text-[11px] font-mono text-error font-semibold tracking-wider uppercase">INGESTION SHARD OFFLINE</span>
+<h3 class="text-lg font-bold font-headline text-on-surface tracking-tight">
+                Could not load Places and Maps. Nothing was changed.
+              </h3>
+</div>
+<p class="text-xs text-on-surface-variant leading-relaxed">
+              Connection to Dominion Jamaica spatial registry gateway timed out. Cache snapshot preserved at last known good checkpoint. No transactional modifications were applied to Kingston, St. Andrew, or regional polygon layers.
+            </p>
+<!-- Context Diagnostics Block -->
+<div class="p-3 rounded-lg bg-surface-container font-mono text-[11px] flex flex-col gap-1.5 text-on-surface-variant">
+<div class="flex items-center justify-between">
+<span>GATEWAY_ENDPOINT</span>
+<span class="text-on-surface">https://kgn-dc-01.dominion.internal/v1/spatial</span>
+</div>
+<div class="flex items-center justify-between">
+<span>LOCAL_SNAPSHOT</span>
+<span class="text-tertiary">SNAP_2025_02_28_KGN (STABLE)</span>
+</div>
+<div class="flex items-center justify-between">
+<span>FAILED_CALL</span>
+<span class="text-error font-medium">GET /parishes/all/status?timeout=8000ms</span>
+</div>
+</div>
+<!-- Recovery CTA group -->
+<div class="flex flex-wrap items-center gap-3 pt-2">
+<button class="px-4 py-2 bg-secondary text-on-secondary rounded-lg text-xs font-semibold hover:bg-secondary-dim transition-colors flex items-center gap-2 shadow-sm" type="button">
+<span class="material-symbols-outlined text-[16px]">refresh</span>
+<span>Retry Connection</span>
+</button>
+<button class="px-4 py-2 bg-surface-container-highest text-on-surface rounded-lg text-xs font-medium hover:bg-surface-dim transition-colors flex items-center gap-1.5" type="button">
+<span class="material-symbols-outlined text-[16px]">terminal</span>
+<span>Inspect Network Diagnostics</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Preserved Inactive Footer -->
+<div class="p-4 bg-surface-container-low rounded-lg flex items-center justify-between text-xs text-on-surface-variant">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-error"></span>
+<span class="font-mono text-[11px]">FALLBACK VIEW MODE ACTIVE</span>
+</div>
+<span class="font-mono text-[10px] text-outline">AUTOMATIC RETRY IN 24s</span>
+</div>
+</div>
+<!-- State Note Footer -->
+<div class="px-6 py-2.5 bg-surface-container-low text-[11px] text-on-surface-variant flex items-center justify-between font-mono">
+<span>FAIL_SAFE: IDEMPOTENT_READ_RETRY</span>
+<span class="text-error">ZERO_DATA_CORRUPTION</span>
+</div>
+</div>
+<!-- ========================================================================= -->
+<!-- PANEL 3: ZERO BACKLOG (EMPTY 'NEEDS YOU' QUEUE) -->
+<!-- ========================================================================= -->
+<div class="flex flex-col bg-surface-container-lowest rounded-xl shadow-md overflow-hidden relative" id="state-empty">
+<!-- State Spec Header -->
+<div class="px-6 py-4 bg-surface-container flex items-center justify-between border-b border-surface-container-highest">
+<div class="flex items-center gap-3">
+<span class="font-mono text-[10px] tracking-widest uppercase bg-surface-container-highest px-2 py-0.5 rounded text-on-surface-variant font-semibold">
+            STATE 03
+          </span>
+<span class="font-headline font-semibold text-xs text-on-surface uppercase tracking-wide">
+            Zero Backlog · Empty "Needs You" Queue
+          </span>
+</div>
+<span class="font-mono text-[10px] px-2.5 py-0.5 rounded-full font-bold text-tertiary bg-tertiary-container/30">
+          QUEUE EMPTY · 0 PENDING
+        </span>
+</div>
+<!-- Preview Stage -->
+<div class="p-6 flex flex-col justify-between flex-1 gap-6">
+<!-- Verified Metrics Bar -->
+<div class="grid grid-cols-2 md:grid-cols-3 gap-3">
+<div class="p-3.5 bg-surface-container-low rounded-lg flex flex-col">
+<span class="text-[10px] font-mono text-outline uppercase">Reviewed Places</span>
+<span class="text-lg font-bold font-headline text-on-surface">217 / 217</span>
+<span class="text-[10px] text-tertiary font-medium mt-0.5">100% Verified</span>
+</div>
+<div class="p-3.5 bg-surface-container-low rounded-lg flex flex-col">
+<span class="text-[10px] font-mono text-outline uppercase">Boundaries Published</span>
+<span class="text-lg font-bold font-headline text-on-surface">921 Polygons</span>
+<span class="text-[10px] text-tertiary font-medium mt-0.5">Parishes &amp; Communities</span>
+</div>
+<div class="col-span-2 md:col-span-1 p-3.5 bg-surface-container-low rounded-lg flex flex-col justify-center">
+<span class="text-[10px] font-mono text-outline uppercase">Pending Audit Tasks</span>
+<span class="text-lg font-bold font-headline text-tertiary">0 Requests</span>
+<span class="text-[10px] text-on-surface-variant mt-0.5">Sync is complete</span>
+</div>
+</div>
+<!-- Empty Illustration Hero Stage -->
+<div class="p-8 rounded-xl bg-surface-container-low flex flex-col items-center text-center justify-center gap-4 my-auto">
+<!-- Circular Success Icon -->
+<div class="w-14 h-14 rounded-full bg-tertiary-container/40 flex items-center justify-center text-tertiary shadow-sm">
+<span class="material-symbols-outlined text-3xl font-bold" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+<div class="flex flex-col gap-1 max-w-md">
+<h3 class="text-base font-bold font-headline text-on-surface tracking-tight">
+              Nothing waiting. Places and the map are up to date.
+            </h3>
+<p class="text-xs text-on-surface-variant leading-relaxed">
+              All 217 places are reviewed and verified. All 921 parish and community boundary polygons are published with no outstanding discrepancies.
+            </p>
+</div>
+<!-- Audit details pill -->
+<div class="flex items-center gap-4 px-4 py-2 rounded-lg bg-surface-container-lowest text-[11px] font-mono text-on-surface-variant">
+<span>AUDIT_CYCLE: #JA-2025-W09</span>
+<span>·</span>
+<span class="text-tertiary font-medium">LAST MERGE BY DEEKI T</span>
+</div>
+</div>
+<!-- Action / Guidance -->
+<div class="flex items-center justify-between p-3.5 bg-surface-container-low rounded-lg text-xs">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-outline text-[18px]">history</span>
+<span class="text-on-surface-variant font-medium">Ingestion feeds listening for new parish POIs</span>
+</div>
+<button class="text-secondary font-semibold text-xs hover:underline flex items-center gap-1 font-headline" type="button">
+<span>View historical audit log</span>
+<span class="material-symbols-outlined text-[14px]">arrow_forward</span>
+</button>
+</div>
+</div>
+<!-- State Note Footer -->
+<div class="px-6 py-2.5 bg-surface-container-low text-[11px] text-on-surface-variant flex items-center justify-between font-mono">
+<span>EMPTY_STATE: 100%_CLEAN_PIPELINE</span>
+<span class="text-tertiary">DATA_NOT_IN_YET: 0_AWAITING</span>
+</div>
+</div>
+<!-- ========================================================================= -->
+<!-- PANEL 4: RBAC ACCESS RESTRICTION (STAFF READ-ONLY VIEW) -->
+<!-- ========================================================================= -->
+<div class="flex flex-col bg-surface-container-lowest rounded-xl shadow-md overflow-hidden relative" id="state-staff">
+<!-- State Spec Header -->
+<div class="px-6 py-4 bg-surface-container flex items-center justify-between border-b border-surface-container-highest">
+<div class="flex items-center gap-3">
+<span class="font-mono text-[10px] tracking-widest uppercase bg-surface-container-highest px-2 py-0.5 rounded text-on-surface-variant font-semibold">
+            STATE 04
+          </span>
+<span class="font-headline font-semibold text-xs text-on-surface uppercase tracking-wide">
+            RBAC Access Restriction · Staff Read-Only View
+          </span>
+</div>
+<span class="font-mono text-[10px] px-2 py-0.5 rounded font-semibold text-on-surface-variant bg-surface-container-highest flex items-center gap-1">
+<span class="material-symbols-outlined text-[12px]">shield_person</span>
+<span>ROLE: DATA_STAFF (OPERATOR)</span>
+</span>
+</div>
+<!-- Preview Stage -->
+<div class="p-6 flex flex-col gap-5 flex-1">
+<!-- Staff Notice Banner -->
+<div class="p-3.5 bg-surface-container rounded-lg flex items-start gap-3">
+<span class="material-symbols-outlined text-outline text-[20px] shrink-0 mt-0.5">lock_clock</span>
+<div class="flex flex-col gap-1 flex-1">
+<span class="text-xs font-semibold text-on-surface font-headline leading-tight">
+              Read-only access: You are signed in as Data Staff (Operator).
+            </span>
+<p class="text-[11px] text-on-surface-variant leading-relaxed">
+              You can view everything here. Only the owner can approve, edit or publish changes to parish boundaries and spatial tariffs.
+            </p>
+</div>
+<button class="text-secondary font-semibold text-xs hover:underline whitespace-nowrap shrink-0 font-headline self-center" type="button">
+            Request elevation →
+          </button>
+</div>
+<!-- Restricted "Needs You" Table Row Demo -->
+<div class="flex flex-col gap-2">
+<div class="flex items-center justify-between text-xs text-on-surface font-semibold font-headline px-1">
+<span>Needs you (Restricted Actions)</span>
+<span class="text-outline text-[11px] font-mono">1 Item for Review</span>
+</div>
+<!-- Sample Item Row With Guarded Actions -->
+<div class="p-3.5 bg-surface-container-low rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+<div class="flex items-center gap-3">
+<div class="w-9 h-9 rounded-lg bg-surface-container-highest flex items-center justify-center text-on-surface-variant shrink-0">
+<span class="material-symbols-outlined text-[20px]">pin_drop</span>
+</div>
+<div class="flex flex-col">
+<div class="flex items-center gap-2">
+<span class="text-xs font-bold font-headline text-on-surface">Half-Way Tree Transport Centre</span>
+<span class="font-mono text-[9px] px-1.5 py-0.2 rounded bg-surface-container-highest text-on-surface-variant">ST-ANDREW</span>
+</div>
+<span class="text-[11px] text-on-surface-variant">Boundary expansion request · 18.0125° N, 76.7989° W</span>
+</div>
+</div>
+<!-- Guarded Action Buttons -->
+<div class="flex items-center gap-2 shrink-0">
+<button class="px-3 py-1.5 bg-surface-container-highest text-on-surface text-xs font-medium rounded-lg hover:bg-surface-dim transition-colors flex items-center gap-1.5" type="button">
+<span class="material-symbols-outlined text-[15px]">visibility</span>
+<span>View</span>
+</button>
+<div class="relative group">
+<button class="px-3 py-1.5 bg-surface-container text-outline text-xs font-medium rounded-lg cursor-not-allowed flex items-center gap-1 opacity-70" disabled="" type="button">
+<span class="material-symbols-outlined text-[14px]">lock</span>
+<span>Approve</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Card Tools With Padlocks -->
+<div class="grid grid-cols-2 gap-3 pt-1">
+<div class="p-3 bg-surface-container-low rounded-lg flex items-center justify-between">
+<div class="flex flex-col">
+<span class="text-[11px] font-bold font-headline text-on-surface">Parish Polygon Layer</span>
+<span class="text-[10px] text-on-surface-variant">Kingston Metropolitan Area</span>
+</div>
+<span class="inline-flex items-center gap-1 text-[11px] font-mono text-outline bg-surface-container px-2 py-1 rounded">
+<span class="material-symbols-outlined text-[13px]">lock</span>
+<span>LOCKED</span>
+</span>
+</div>
+<div class="p-3 bg-surface-container-low rounded-lg flex items-center justify-between">
+<div class="flex flex-col">
+<span class="text-[11px] font-bold font-headline text-on-surface">Base Fare Overrides</span>
+<span class="text-[10px] text-on-surface-variant">Zone A (Corporate Area)</span>
+</div>
+<span class="inline-flex items-center gap-1 text-[11px] font-mono text-outline bg-surface-container px-2 py-1 rounded">
+<span class="material-symbols-outlined text-[13px]">lock</span>
+<span>LOCKED</span>
+</span>
+</div>
+</div>
+</div>
+<!-- State Note Footer -->
+<div class="px-6 py-2.5 bg-surface-container-low text-[11px] text-on-surface-variant flex items-center justify-between font-mono">
+<span>SECURITY: RBAC_READ_ENFORCED</span>
+<span class="text-on-surface-variant">OWNER: DEEKI T (EXCLUSIVE_EDIT)</span>
+</div>
+</div>
+</section>
+<!-- STATE SPECIFICATION DOCUMENTATION SUMMARY -->
+<section class="mb-6 p-6 rounded-xl bg-surface-container-low flex flex-col md:flex-row items-center justify-between gap-6">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded-lg bg-surface-container-highest flex items-center justify-center text-on-surface">
+<span class="material-symbols-outlined text-xl">tune</span>
+</div>
+<div class="flex flex-col">
+<span class="text-xs font-bold font-headline text-on-surface">Design System Alignment · Screen 2 (Places &amp; Maps)</span>
+<span class="text-[11px] text-on-surface-variant">All states conform strictly to Dominion single-shell architecture, JMD native constraints, and zero mock heuristics.</span>
+</div>
+</div>
+<div class="flex items-center gap-2 shrink-0 font-mono text-[11px]">
+<span class="px-2.5 py-1 rounded bg-surface-container text-on-surface-variant">LATENCY &lt; 120ms</span>
+<span class="px-2.5 py-1 rounded bg-secondary-container text-on-secondary-container font-semibold">TOKEN_SET: V2.4_LIGHT</span>
+</div>
+</section>
+</div></main><footer class="w-full py-3 px-8 bg-surface-container-lowest shadow-[0_-1px_6px_rgba(0,0,0,0.02)] flex items-center justify-between text-xs text-on-surface-variant font-mono"><div class="flex items-center gap-2"><span class="text-[11px] font-semibold text-on-surface">DOMINION OPERATIONS</span><span class="text-outline-variant">·</span><span>KGN-DC-01</span><span class="text-outline-variant">·</span><span class="text-emerald-700 font-medium">JMD READY</span></div><div class="text-[11px] text-outline font-body">Parish Grid Active · Jamaica Time (UTC-5)</div></footer></div></body></html>

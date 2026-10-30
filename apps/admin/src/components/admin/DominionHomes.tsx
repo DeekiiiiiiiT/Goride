@@ -177,60 +177,6 @@ export function VehiclesHome({ onNavigate }: { onNavigate: (page: string) => voi
   );
 }
 
-export function PlacesHome({ onNavigate }: { onNavigate: (page: string) => void }) {
-  const stats = useMasterStats();
-  return (
-    <SectionHome
-      title="Places and Maps"
-      lede="Jamaica’s map, and the places still waiting for a review."
-      onNavigate={onNavigate}
-      cards={[
-        { label: 'Waiting', value: showCount(stats.places) },
-        { label: 'Quality', value: showCount(stats.scores.maps ?? null) },
-        { label: 'Records', value: '—' },
-        { label: 'Verified', value: '—' },
-      ]}
-      items={[
-        { id: 'world-jamaica', label: 'Jamaica map', detail: 'The shipped country map.' },
-        { id: 'world-parishes', label: 'Parishes', detail: 'Parish boundaries.' },
-        { id: 'world-towns', label: 'Towns', detail: 'Town boundaries.' },
-        { id: 'world-communities', label: 'Communities', detail: 'Community boundaries.' },
-        { id: 'world-places', label: 'Places and pins', detail: 'Named places and map pins.' },
-        { id: 'world-imports', label: 'Imports and versions', detail: 'Dry run, then publish.' },
-        { id: 'world-quality', label: 'Map quality', detail: 'Map rows that fail a check.' },
-        { id: 'places-register', label: 'Places register', detail: 'Every place, with its type and facilities.' },
-        { id: 'places-categories', label: 'Categories', detail: 'Groups, types, facilities, and brands.' },
-        { id: 'places-review', label: 'Review', detail: 'Pins and facility suggestions waiting for a decision.' },
-        { id: 'plug-places', label: 'Plug pins', detail: 'The same review, showing only Plug pins.' },
-      ]}
-    />
-  );
-}
-
-export function FuelHome({ onNavigate }: { onNavigate: (page: string) => void }) {
-  const stats = useMasterStats();
-  return (
-    <SectionHome
-      title="Fuel"
-      lede="Stations, pump prices, and the gas-card programs Dominion still owns."
-      onNavigate={onNavigate}
-      cards={[
-        { label: 'Stations', value: showCount(stats.stationTotal) },
-        { label: 'Verified', value: showCount(stats.stationVerified) },
-        { label: 'Quality', value: showCount(stats.scores.stations ?? null) },
-        { label: 'Waiting', value: '—' },
-      ]}
-      items={[
-        { id: 'fuel-stations', label: 'Stations', detail: 'The station list, including ones still in review.' },
-        { id: 'fuel-prices', label: 'Refineries', detail: 'Refineries and their ex-refinery prices. Petrojam is the benchmark.' },
-        { id: 'fuel-price-engine', label: 'Price Engine', detail: 'The pump price Plug is allowed to show, and the ones waiting for you.' },
-        { id: 'fuel-analytics', label: 'Station analytics', detail: 'Pump prices against Petrojam, coverage and data trust by parish and brand.' },
-        { id: 'fuel-jaa-cards', label: 'Gas-card programs', detail: 'Programs and the master list. Customer cards are in Fleet admin.' },
-      ]}
-    />
-  );
-}
-
 export function TollsHome({ onNavigate }: { onNavigate: (page: string) => void }) {
   const stats = useMasterStats();
   return (

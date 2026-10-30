@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_dashboard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;family=Public+Sans:wght@500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        "colors": {
+          "on-tertiary-fixed-variant": "#006c30",
+          "secondary-fixed": "#dbe1ff",
+          "secondary": "#0153dc",
+          "surface-container-highest": "#e1e2ed",
+          "error-dim": "#67040d",
+          "inverse-surface": "#0d0e12",
+          "on-secondary-fixed": "#003798",
+          "primary-fixed-dim": "#cad5ed",
+          "on-primary-fixed-variant": "#515c70",
+          "outline-variant": "#b0b1bc",
+          "surface-container-lowest": "#ffffff",
+          "secondary-fixed-dim": "#c7d3ff",
+          "on-secondary-fixed-variant": "#0050d5",
+          "primary": "#545f74",
+          "tertiary": "#006e31",
+          "outline": "#797a84",
+          "tertiary-fixed": "#98fba9",
+          "inverse-primary": "#dae6fe",
+          "on-background": "#30323b",
+          "primary-container": "#d8e3fb",
+          "error": "#a83836",
+          "tertiary-fixed-dim": "#8aec9c",
+          "error-container": "#fa746f",
+          "on-error-container": "#6e0a12",
+          "surface-dim": "#d9d9e4",
+          "surface-container-high": "#e8e7f1",
+          "on-tertiary-container": "#00612a",
+          "on-tertiary-fixed": "#004c20",
+          "background": "#faf8fe",
+          "on-secondary-container": "#0047c0",
+          "primary-dim": "#485367",
+          "secondary-dim": "#0049c3",
+          "on-tertiary": "#e9ffe7",
+          "surface-bright": "#faf8fe",
+          "inverse-on-surface": "#9d9ca2",
+          "secondary-container": "#dbe1ff",
+          "on-primary-fixed": "#354053",
+          "on-secondary": "#faf8ff",
+          "on-surface": "#30323b",
+          "surface-variant": "#e1e2ed",
+          "primary-fixed": "#d8e3fb",
+          "on-surface-variant": "#5d5f68",
+          "on-primary": "#f8f8ff",
+          "surface-tint": "#545f74",
+          "tertiary-container": "#98fba9",
+          "surface": "#faf8fe",
+          "on-primary-container": "#475266",
+          "on-error": "#fff7f6",
+          "tertiary-dim": "#00612a",
+          "surface-container-low": "#f4f3fa",
+          "surface-container": "#eeedf6"
+        },
+        "borderRadius": {
+          "DEFAULT": "0.25rem",
+          "lg": "0.5rem",
+          "xl": "0.75rem",
+          "full": "9999px"
+        },
+        "spacing": {},
+        "fontFamily": {
+          "headline": [
+            "Inter"
+          ],
+          "display": [
+            "Inter"
+          ],
+          "body": [
+            "Inter"
+          ],
+          "label": [
+            "Public Sans"
+          ]
+        },
+        "fontSize": {}
+      },
+    },
+  }</script></head><body class="bg-surface font-body text-on-surface antialiased"><aside class="fixed left-0 top-0 h-full w-64 bg-[#1e293b] z-50 flex flex-col justify-between shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="flex flex-col flex-1 overflow-y-auto"><div class="h-16 px-6 flex items-center justify-between"><div class="flex items-center gap-2.5"><div class="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center"><span class="text-on-secondary font-headline font-bold text-sm tracking-wider">D</span></div><div class="flex flex-col"><span class="text-sm font-headline font-semibold text-slate-100 tracking-tight">DOMINION</span><span class="text-[10px] font-label uppercase tracking-widest text-slate-400">Jamaica Admin</span></div></div></div><nav class="px-3 py-4 space-y-6 flex-1 text-xs" data-active-classes="bg-secondary text-on-secondary font-medium rounded-lg"><div class="space-y-1"><div class="px-3 pb-1 text-[10px] font-label uppercase tracking-wider font-semibold text-slate-400">Core</div><a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all" data-path="overview" href="#"><span class="material-symbols-outlined text-[18px]">dashboard</span><span>Overview</span></a></div><div class="space-y-1"><div class="px-3 pb-1 text-[10px] font-label uppercase tracking-wider font-semibold text-slate-400">Master Data</div><a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all" data-path="places-and-maps" href="#"><span class="material-symbols-outlined text-[18px]">map</span><span>Places and Maps</span></a><a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all" data-path="fares-and-zones" href="#"><span class="material-symbols-outlined text-[18px]">payments</span><span>Fares and Zones (JMD)</span></a><a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all" data-path="terminal-registry" href="#"><span class="material-symbols-outlined text-[18px]">domain</span><span>Terminal Registry</span></a></div><div class="space-y-1"><div class="px-3 pb-1 text-[10px] font-label uppercase tracking-wider font-semibold text-slate-400">Engines</div><a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all" data-path="dispatch-engines" href="#"><span class="material-symbols-outlined text-[18px]">hub</span><span>Dispatch Engines</span></a><a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all" data-path="pricing-matrix" href="#"><span class="material-symbols-outlined text-[18px]">calculate</span><span>Pricing Matrix</span></a></div><div class="space-y-1"><div class="px-3 pb-1 text-[10px] font-label uppercase tracking-wider font-semibold text-slate-400">Distribution</div><a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all" data-path="parish-routes" href="#"><span class="material-symbols-outlined text-[18px]">alt_route</span><span>Parish Routes</span></a><a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all" data-path="depot-allocations" href="#"><span class="material-symbols-outlined text-[18px]">warehouse</span><span>Depot Allocations</span></a></div><div class="space-y-1"><div class="px-3 pb-1 text-[10px] font-label uppercase tracking-wider font-semibold text-slate-400">Platform</div><a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all" data-path="system-nodes" href="#"><span class="material-symbols-outlined text-[18px]">dns</span><span>System Nodes</span></a><a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all" data-path="back-office" href="#"><span class="material-symbols-outlined text-[18px]">admin_panel_settings</span><span>Back Office</span></a></div></nav></div><div class="px-4 py-3 bg-[#172033] flex items-center justify-between text-[11px] font-mono text-slate-400"><div class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span><span class="font-medium text-slate-300">KGN-DC-01</span></div><span class="tracking-tight text-[10px] bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded">JMD READY</span></div></aside><div class="pl-64 flex flex-col min-h-screen"><header class="fixed top-0 left-64 right-0 h-16 bg-surface-container-lowest/90 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-40 flex items-center justify-between px-8"><div class="relative w-96 flex items-center"><span class="material-symbols-outlined absolute left-3 text-outline text-[18px]">search</span><input class="w-full pl-9 pr-4 py-1.5 bg-surface-container text-on-surface placeholder:text-outline text-xs rounded-lg outline-none focus:bg-surface-container-low transition-colors font-body" placeholder="Search entities, engines, routes…" type="text"/></div><div class="flex items-center gap-4"><button class="w-8 h-8 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-surface-container transition-colors" title="Help and Documentation" type="button"><span class="material-symbols-outlined text-[18px]">help_outline</span></button><button class="w-8 h-8 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-surface-container transition-colors relative" title="Notifications" type="button"><span class="material-symbols-outlined text-[18px]">notifications</span><span class="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-secondary rounded-full"></span></button><div class="h-4 w-px bg-surface-container-highest"></div><div class="flex items-center gap-2.5 pl-1"><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div><div class="flex flex-col text-left"><span class="text-xs font-semibold text-on-surface font-headline leading-tight">Deeki T</span><span class="text-[10px] font-label text-on-surface-variant leading-tight">DT · Owner</span></div></div></div></header><main class="relative pt-16 flex-1 w-full px-8 pb-10 bg-surface"><div class="flex flex-col w-full relative">
+<!-- Dimmed Background: Simulated Places Register Screen -->
+<div class="w-full opacity-35 filter blur-[2px] pointer-events-none select-none space-y-6">
+<div class="flex items-center justify-between">
+<div>
+<h1 class="text-xl font-headline font-bold text-on-surface">Places Register</h1>
+<p class="text-xs font-body text-on-surface-variant">Gazetteer terminals, waypoints, and parish dispatch junctions across Jamaica.</p>
+</div>
+<div class="flex items-center gap-3">
+<button class="px-3.5 py-1.5 bg-surface-container-high text-on-surface text-xs font-medium rounded-lg shadow-sm">Export Registry</button>
+<button class="px-3.5 py-1.5 bg-secondary text-on-secondary text-xs font-medium rounded-lg shadow-sm flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[16px]">file_upload</span>
+          Import Places
+        </button>
+</div>
+</div>
+<!-- Dummy Register Filter Row -->
+<div class="grid grid-cols-4 gap-4 p-4 bg-surface-container-lowest rounded-xl shadow-sm">
+<div class="h-9 bg-surface-container rounded-lg"></div>
+<div class="h-9 bg-surface-container rounded-lg"></div>
+<div class="h-9 bg-surface-container rounded-lg"></div>
+<div class="h-9 bg-surface-container rounded-lg"></div>
+</div>
+<!-- Dummy Table Layout in Background -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden p-4 space-y-3">
+<div class="h-8 bg-surface-container-low rounded-lg w-full"></div>
+<div class="h-10 bg-surface-container rounded-lg w-full"></div>
+<div class="h-10 bg-surface-container rounded-lg w-full"></div>
+<div class="h-10 bg-surface-container rounded-lg w-full"></div>
+<div class="h-10 bg-surface-container rounded-lg w-full"></div>
+<div class="h-10 bg-surface-container rounded-lg w-full"></div>
+</div>
+</div>
+<!-- Modal Backdrop Overlay -->
+<div class="fixed inset-0 top-16 left-64 bg-slate-900/40 backdrop-blur-[3px] z-50 flex items-center justify-center p-6">
+<!-- Centered Dialog (760px) -->
+<div class="w-full max-w-[760px] bg-surface-container-lowest rounded-xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+<!-- Modal Header -->
+<div class="px-6 pt-5 pb-4 flex items-start justify-between bg-surface-container-lowest">
+<div>
+<h2 class="text-base font-headline font-semibold text-on-surface tracking-tight">Import places</h2>
+<p class="text-xs font-body text-on-surface-variant mt-0.5">Batch ingest and spatial geocode verification for CSV gazetteer records.</p>
+</div>
+<button class="w-7 h-7 -mr-1 rounded-lg flex items-center justify-center text-outline hover:text-on-surface hover:bg-surface-container transition-colors" type="button">
+<span class="material-symbols-outlined text-[18px]">close</span>
+</button>
+</div>
+<!-- Stepper: 3-step Pipeline Bar -->
+<div class="px-6 py-2.5 bg-surface-container-low flex items-center justify-between text-xs">
+<div class="flex items-center gap-2">
+<!-- Step 1: Completed -->
+<div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-container-lowest text-tertiary shadow-sm font-medium">
+<span class="material-symbols-outlined text-[15px]" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span>1 Choose file</span>
+</div>
+<div class="w-6 h-0.5 bg-surface-container-highest"></div>
+<!-- Step 2: Active (Dominion Blue #0153dc) -->
+<div class="flex items-center gap-2 px-3 py-1 rounded-full bg-secondary text-on-secondary shadow-sm font-medium">
+<span class="relative flex h-2 w-2">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
+</span>
+<span>2 Check</span>
+</div>
+<div class="w-6 h-0.5 bg-surface-container-highest"></div>
+<!-- Step 3: Upcoming -->
+<div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-transparent text-outline font-medium">
+<span class="w-4 h-4 rounded-full bg-surface-container-highest flex items-center justify-center text-[10px] text-on-surface-variant">3</span>
+<span>Save</span>
+</div>
+</div>
+<!-- Ingested File Chip -->
+<div class="flex items-center gap-2 px-2.5 py-1 bg-surface-container-lowest rounded-lg shadow-sm">
+<span class="material-symbols-outlined text-[16px] text-secondary">description</span>
+<span class="font-mono text-[11px] text-on-surface font-medium">new-places.csv</span>
+<span class="text-outline-variant text-[11px]">·</span>
+<span class="font-mono text-[11px] text-on-surface-variant">24 rows</span>
+<span class="text-outline-variant text-[11px]">·</span>
+<span class="font-mono text-[11px] text-on-surface-variant">18.4 KB</span>
+<button class="ml-1 text-[11px] font-label font-semibold text-secondary hover:underline" type="button">Re-upload</button>
+</div>
+</div>
+<!-- Dialog Body: Results Table -->
+<div class="px-6 py-4 space-y-3">
+<div class="bg-surface-container-lowest rounded-lg shadow-sm overflow-hidden">
+<div class="max-h-[300px] overflow-y-auto">
+<table class="w-full text-left text-xs">
+<thead class="bg-surface-container sticky top-0 z-10 text-[11px] font-label text-on-surface-variant uppercase tracking-wider">
+<tr>
+<th class="py-2.5 pl-3 pr-2 w-12 font-medium">Row</th>
+<th class="py-2.5 px-2 font-medium">Name</th>
+<th class="py-2.5 px-2 font-medium">Type</th>
+<th class="py-2.5 px-2 font-medium">Pin</th>
+<th class="py-2.5 px-2 font-medium">Parish (from pin)</th>
+<th class="py-2.5 px-2 font-medium">Duplicate</th>
+<th class="py-2.5 pr-3 pl-2 text-right font-medium">Result</th>
+</tr>
+</thead>
+<tbody class="divide-y-0 text-on-surface">
+<!-- Row 01 -->
+<tr class="hover:bg-surface-container-low transition-colors">
+<td class="py-2.5 pl-3 pr-2 font-mono text-[11px] text-on-surface-variant">01</td>
+<td class="py-2.5 px-2 font-medium text-on-surface truncate max-w-[130px]">Texaco Mandeville Main</td>
+<td class="py-2.5 px-2 text-on-surface-variant">Gas station</td>
+<td class="py-2.5 px-2 font-mono text-[11px] text-on-surface-variant whitespace-nowrap">18.0412, -77.5061</td>
+<td class="py-2.5 px-2">Manchester</td>
+<td class="py-2.5 px-2 text-outline-variant font-mono text-[11px]">None</td>
+<td class="py-2.5 pr-3 pl-2 text-right">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-800">
+<span>Ready</span>
+<span class="text-[12px] leading-none">✓</span>
+</span>
+</td>
+</tr>
+<!-- Row 02 -->
+<tr class="hover:bg-surface-container-low transition-colors bg-surface-container-low/30">
+<td class="py-2.5 pl-3 pr-2 font-mono text-[11px] text-on-surface-variant">02</td>
+<td class="py-2.5 px-2 font-medium text-on-surface truncate max-w-[130px]">Rubis May Pen Bypass</td>
+<td class="py-2.5 px-2 text-on-surface-variant">Gas station</td>
+<td class="py-2.5 px-2 font-mono text-[11px] text-on-surface-variant whitespace-nowrap">17.9644, -77.2458</td>
+<td class="py-2.5 px-2">Clarendon</td>
+<td class="py-2.5 px-2 text-outline-variant font-mono text-[11px]">None</td>
+<td class="py-2.5 pr-3 pl-2 text-right">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-800">
+<span>Ready</span>
+<span class="text-[12px] leading-none">✓</span>
+</span>
+</td>
+</tr>
+<!-- Row 03 -->
+<tr class="hover:bg-surface-container-low transition-colors">
+<td class="py-2.5 pl-3 pr-2 font-mono text-[11px] text-on-surface-variant">03</td>
+<td class="py-2.5 px-2 font-medium text-on-surface truncate max-w-[130px]">FESCO Portmore Pines</td>
+<td class="py-2.5 px-2 text-on-surface-variant">Gas station</td>
+<td class="py-2.5 px-2 font-mono text-[11px] text-on-surface-variant whitespace-nowrap">17.9733, -76.8833</td>
+<td class="py-2.5 px-2">St. Catherine</td>
+<td class="py-2.5 px-2 text-outline-variant font-mono text-[11px]">None</td>
+<td class="py-2.5 pr-3 pl-2 text-right">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-800">
+<span>Ready</span>
+<span class="text-[12px] leading-none">✓</span>
+</span>
+</td>
+</tr>
+<!-- Row 04 -->
+<tr class="hover:bg-surface-container-low transition-colors bg-surface-container-low/30">
+<td class="py-2.5 pl-3 pr-2 font-mono text-[11px] text-on-surface-variant">04</td>
+<td class="py-2.5 px-2 font-medium text-on-surface truncate max-w-[130px]">TotalEnergies Fairview</td>
+<td class="py-2.5 px-2 text-on-surface-variant">Gas station</td>
+<td class="py-2.5 px-2 font-mono text-[11px] text-on-surface-variant whitespace-nowrap">18.4611, -77.9250</td>
+<td class="py-2.5 px-2">St. James</td>
+<td class="py-2.5 px-2 text-outline-variant font-mono text-[11px]">None</td>
+<td class="py-2.5 pr-3 pl-2 text-right">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-800">
+<span>Ready</span>
+<span class="text-[12px] leading-none">✓</span>
+</span>
+</td>
+</tr>
+<!-- Row 05 (Duplicate Warning) -->
+<tr class="hover:bg-amber-50/40 bg-amber-50/20 transition-colors">
+<td class="py-2.5 pl-3 pr-2 font-mono text-[11px] text-amber-700 font-semibold">05</td>
+<td class="py-2.5 px-2 font-medium text-on-surface truncate max-w-[130px]">Texaco Constant Spring</td>
+<td class="py-2.5 px-2 text-on-surface-variant">Gas station</td>
+<td class="py-2.5 px-2 font-mono text-[11px] text-on-surface-variant whitespace-nowrap">18.0531, -76.7902</td>
+<td class="py-2.5 px-2">St. Andrew</td>
+<td class="py-2.5 px-2 text-amber-800 text-[11px] leading-tight">
+<span class="font-medium">Texaco Constant Spring</span>, <span class="font-mono">40 m</span>
+</td>
+<td class="py-2.5 pr-3 pl-2 text-right">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-100 text-amber-800">
+<span>Duplicate flag</span>
+<span class="text-[11px]">⚠</span>
+</span>
+</td>
+</tr>
+<!-- Row 06 (Out of Bounds Error) -->
+<tr class="hover:bg-red-50/40 bg-red-50/20 transition-colors">
+<td class="py-2.5 pl-3 pr-2 font-mono text-[11px] text-red-700 font-semibold">06</td>
+<td class="py-2.5 px-2 font-medium text-on-surface truncate max-w-[130px]">Ocho Rios Marine Fuel</td>
+<td class="py-2.5 px-2 text-on-surface-variant">Marine depot</td>
+<td class="py-2.5 px-2 font-mono text-[11px] text-red-700 whitespace-nowrap">18.8920, -75.9210</td>
+<td class="py-2.5 px-2 text-red-700 font-medium">Out of bounds</td>
+<td class="py-2.5 px-2 text-outline-variant font-mono text-[11px]">None</td>
+<td class="py-2.5 pr-3 pl-2 text-right">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-red-100 text-red-700 whitespace-nowrap">
+<span>Pin outside Jamaica</span>
+<span class="text-[11px] font-bold">✕</span>
+</span>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<!-- Validation Summary Banner -->
+<div class="px-4 py-2.5 bg-surface-container rounded-lg flex items-center justify-between text-xs">
+<div class="flex items-center gap-4">
+<span class="text-on-surface-variant font-medium">Validation summary:</span>
+<div class="flex items-center gap-3 font-mono text-[11px]">
+<div class="flex items-center gap-1.5 text-emerald-800">
+<span class="w-2 h-2 rounded-full bg-emerald-600"></span>
+<span>22 ready</span>
+</div>
+<div class="flex items-center gap-1.5 text-amber-800">
+<span class="w-2 h-2 rounded-full bg-amber-500"></span>
+<span>1 duplicate</span>
+</div>
+<div class="flex items-center gap-1.5 text-red-700 font-semibold">
+<span class="w-2 h-2 rounded-full bg-red-600"></span>
+<span>1 error</span>
+</div>
+</div>
+</div>
+<span class="text-[11px] text-on-surface-variant font-body">Geocoding bounds: Parish Polygon Grid v4</span>
+</div>
+</div>
+<!-- Actions & Footer -->
+<div class="px-6 py-4 bg-surface-container-low flex items-center justify-between">
+<!-- Left Footer Action -->
+<a class="inline-flex items-center gap-1.5 text-xs text-secondary hover:underline font-medium" href="#">
+<span class="material-symbols-outlined text-[16px]">download</span>
+<span>Download a template CSV</span>
+</a>
+<!-- Right Footer Actions -->
+<div class="flex flex-col items-end gap-1.5">
+<div class="flex items-center gap-2">
+<button class="px-3.5 py-1.5 rounded-lg bg-surface-container-lowest hover:bg-surface-container text-on-surface text-xs font-medium shadow-sm transition-colors" type="button">
+              Cancel
+            </button>
+<button class="px-3.5 py-1.5 rounded-lg bg-surface-container-highest hover:bg-surface-dim text-on-surface text-xs font-medium transition-colors" type="button">
+              Re-validate file
+            </button>
+<button class="px-4 py-1.5 rounded-lg bg-slate-300 text-slate-500 cursor-not-allowed text-xs font-semibold shadow-none opacity-80 flex items-center gap-1.5" disabled="" type="button">
+<span>Save 22 places</span>
+</button>
+</div>
+<span class="text-[11px] font-body text-red-700 flex items-center gap-1">
+<span class="material-symbols-outlined text-[13px]">error</span>
+            Fix errors and check again to save.
+          </span>
+</div>
+</div>
+</div>
+</div>
+</div></main><footer class="w-full py-3 px-8 bg-surface-container-lowest shadow-[0_-1px_6px_rgba(0,0,0,0.02)] flex items-center justify-between text-xs text-on-surface-variant font-mono"><div class="flex items-center gap-2"><span class="text-[11px] font-semibold text-on-surface">DOMINION OPERATIONS</span><span class="text-outline-variant">·</span><span>KGN-DC-01</span><span class="text-outline-variant">·</span><span class="text-emerald-700 font-medium">JMD READY</span></div><div class="text-[11px] text-outline font-body">Parish Grid Active · Jamaica Time (UTC-5)</div></footer></div></body></html>

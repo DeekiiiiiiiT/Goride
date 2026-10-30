@@ -82,7 +82,7 @@ Deno.test("ready variants use tiered search unless the emergency stop is on", as
   const { selectPartsMode, findCustomerIdentityLeak, referenceOffersOnly } = await import("./catalog_parts_shape.ts");
   assertEquals(selectPartsMode({ killed: false, ready: true }), "tiered");
   assertEquals(selectPartsMode({ killed: true, ready: true }), "legacy");
-  assertEquals(selectPartsMode({ killed: false, ready: false }), "legacy");
+  assertEquals(selectPartsMode({ killed: false, ready: false }), "tiered");
   assertEquals(findCustomerIdentityLeak({ items: [{ organization_id: "x" }] }) != null, true);
   assertEquals(findCustomerIdentityLeak({ items: [{ id: "request" }] }), null);
   assertEquals(referenceOffersOnly([{ id: "a", supplier_id: "s", part_id: "p", supplier_sku: "1", unit_price: 1, currency: "JMD", organization_id: "org" }, { id: "b", supplier_id: "s", part_id: "p", supplier_sku: "2", unit_price: 2, currency: "JMD", organization_id: null }]).map((row) => row.id), ["b"]);

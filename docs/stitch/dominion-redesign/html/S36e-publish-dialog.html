@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"/><title>Jamaica map</title></head><body><main>
+<!-- Component 1: S36e Publish Dialog Modal -->
+<div class="fixed inset-0 z-50 bg-[#0d0e12]/60 flex items-center justify-center p-4" id="publish-modal-backdrop">
+<!-- Centred Modal (600px wide) -->
+<div class="w-full max-w-[600px] bg-surface-container-lowest rounded-xl shadow-2xl overflow-hidden flex flex-col transition-all">
+<!-- Modal Header -->
+<div class="p-6 pb-4 bg-surface-container-lowest">
+<div class="flex items-start justify-between">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-lg bg-secondary-container flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined text-[24px]">map_search</span>
+</div>
+<div>
+<h3 class="text-lg font-headline font-bold text-on-surface tracking-tight">Publish Half Way Tree v2?</h3>
+<p class="text-xs text-on-surface-variant mt-0.5">This replaces the live border in every app.</p>
+</div>
+</div>
+<button class="text-outline hover:text-on-surface transition-colors p-1" id="close-modal-x" type="button">
+<span class="material-symbols-outlined text-[20px]">close</span>
+</button>
+</div>
+</div>
+<!-- Modal Body Content -->
+<div class="px-6 py-2 flex flex-col gap-5 overflow-y-auto max-h-[716px]">
+<!-- What Changes List Block -->
+<div class="bg-surface-container-low rounded-lg p-4">
+<span class="text-[11px] font-label uppercase font-bold text-on-surface-variant tracking-wider block mb-3">
+            What changes
+          </span>
+<div class="space-y-2.5 text-xs">
+<div class="flex items-start justify-between">
+<span class="text-on-surface-variant">Area change</span>
+<span class="font-mono font-semibold text-on-surface bg-surface-container px-2 py-0.5 rounded text-[11px]">+3.1%</span>
+</div>
+<div class="flex items-start justify-between">
+<div class="flex flex-col">
+<span class="text-on-surface font-medium">Dominion places moving</span>
+<span class="text-[11px] text-on-surface-variant">Texaco Half Way Tree, Total Hope Road</span>
+</div>
+<span class="font-mono font-semibold text-on-surface bg-surface-container px-2 py-0.5 rounded text-[11px]">2</span>
+</div>
+<div class="flex items-start justify-between">
+<span class="text-on-surface-variant">Rush live markets</span>
+<span class="font-mono font-semibold text-on-surface bg-surface-container px-2 py-0.5 rounded text-[11px]">1</span>
+</div>
+<div class="flex items-start justify-between">
+<span class="text-on-surface-variant">Rush merchants moving</span>
+<span class="font-mono font-medium text-on-surface-variant bg-surface-container px-2 py-0.5 rounded text-[11px]">0 of 14 checked</span>
+</div>
+</div>
+</div>
+<!-- Warnings to Confirm with Checkboxes -->
+<div class="bg-surface-container-low rounded-lg p-4 flex flex-col gap-3">
+<div class="flex items-center gap-1.5 text-xs font-semibold text-on-surface">
+<span class="material-symbols-outlined text-[18px] text-[#d97706]">warning</span>
+<span>Warnings to confirm</span>
+</div>
+<div class="space-y-2.5 pt-1">
+<label class="flex items-start gap-2.5 cursor-pointer text-xs select-none">
+<input class="mt-0.5 w-4 h-4 rounded text-secondary focus:ring-0 cursor-pointer" id="warning-check-1" type="checkbox"/>
+<span class="text-on-surface leading-tight">Overlaps Cross Roads by 1.6%</span>
+</label>
+<label class="flex items-start gap-2.5 cursor-pointer text-xs select-none">
+<input class="mt-0.5 w-4 h-4 rounded text-secondary focus:ring-0 cursor-pointer" id="warning-check-2" type="checkbox"/>
+<span class="text-on-surface leading-tight">0.4% outside Saint Andrew</span>
+</label>
+</div>
+</div>
+<!-- Typed Confirmation Input -->
+<div class="flex flex-col gap-1.5">
+<label class="text-xs font-medium text-on-surface" for="confirmation-input">
+            Type <span class="font-bold text-on-surface">Half Way Tree</span> to confirm
+          </label>
+<input class="w-full px-3.5 py-2 bg-surface-container-low text-xs rounded-lg text-on-surface placeholder:text-outline font-body outline-none focus:bg-surface-container transition-colors" id="confirmation-input" placeholder="Half Way Tree" type="text"/>
+</div>
+</div>
+<!-- Modal Footer -->
+<div class="p-6 pt-4 bg-surface-container-lowest flex items-center justify-between mt-2">
+<button class="text-xs font-semibold text-on-surface-variant hover:text-on-surface transition-colors" id="cancel-publish-btn" type="button">
+          Cancel
+        </button>
+<button class="px-4 py-2 rounded-lg bg-[#d97706] text-white text-xs font-semibold shadow-sm transition-opacity opacity-50 cursor-not-allowed hover:bg-[#b45309]" disabled="" id="submit-publish-btn" type="button">
+          Publish border
+        </button>
+</div>
+</div>
+</div>
+</main></body></html>

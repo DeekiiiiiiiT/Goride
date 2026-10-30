@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"/><title>Categories</title></head>
+<body>
+<main>
+<!-- STATE A: BLOCKED ('Gas station')           -->
+<!-- ========================================== -->
+<div class="w-full max-w-[520px] bg-surface-container-lowest rounded-2xl shadow-xl flex flex-col overflow-hidden transition-all">
+<!-- Dialog Header -->
+<div class="px-6 py-5 flex items-center justify-between bg-surface-container-lowest">
+<div class="flex items-center gap-3">
+<div class="w-9 h-9 rounded-xl bg-error-container/20 flex items-center justify-center text-error">
+<span class="material-symbols-outlined text-[20px]">block</span>
+</div>
+<div>
+<span class="text-[10px] font-label uppercase tracking-widest text-outline font-bold">State A · Dependency Block</span>
+<h3 class="text-base font-headline font-semibold text-on-surface">Retire Gas station?</h3>
+</div>
+</div>
+<button class="w-8 h-8 rounded-lg flex items-center justify-center text-outline hover:bg-surface-container-low transition-colors" type="button">
+<span class="material-symbols-outlined text-[18px]">close</span>
+</button>
+</div>
+<!-- Dialog Body -->
+<div class="p-6 flex flex-col gap-5">
+<!-- Neutral info panel -->
+<div class="bg-surface-container-low p-4 rounded-xl flex items-start gap-3 text-xs text-on-surface">
+<span class="material-symbols-outlined text-outline text-[18px] shrink-0 mt-0.5">info</span>
+<div class="flex flex-col gap-0.5">
+<span class="font-medium text-on-surface">Active Reference Lockout</span>
+<span class="text-on-surface-variant leading-relaxed">You can't retire this while it's in use. Remove dependencies from all parish networks before retiring.</span>
+</div>
+</div>
+<!-- Impact List Header -->
+<div class="flex items-center justify-between text-[11px] font-label font-bold uppercase tracking-wider text-outline px-1">
+<span>System Dependency</span>
+<span>Binding Count</span>
+</div>
+<!-- Impact List Rows -->
+<div class="flex flex-col gap-2">
+<!-- Row 1 -->
+<div class="p-3.5 bg-surface-container-low hover:bg-surface-container rounded-xl flex items-center justify-between transition-colors">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-lg bg-surface-container-highest flex items-center justify-center text-on-surface-variant">
+<span class="material-symbols-outlined text-[18px]">pin_drop</span>
+</div>
+<div class="flex flex-col">
+<span class="text-xs font-semibold text-on-surface">Places using it</span>
+<a class="text-[11px] font-medium text-secondary hover:underline flex items-center gap-0.5 mt-0.5" href="#">
+                      Open in register
+                      <span class="material-symbols-outlined text-[12px]">chevron_right</span>
+</a>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<span class="font-mono text-sm font-bold text-error bg-error-container/20 px-2 py-0.5 rounded">205</span>
+</div>
+</div>
+<!-- Row 2 -->
+<div class="p-3.5 bg-surface-container-low hover:bg-surface-container rounded-xl flex items-center justify-between transition-colors">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-lg bg-surface-container-highest flex items-center justify-center text-on-surface-variant">
+<span class="material-symbols-outlined text-[18px]">cell_tower</span>
+</div>
+<div class="flex flex-col">
+<span class="text-xs font-semibold text-on-surface">Plug home chip</span>
+<span class="text-[11px] text-on-surface-variant">Plug shows this chip today</span>
+</div>
+</div>
+<span class="font-mono text-sm font-bold text-on-surface bg-surface-container-highest px-2 py-0.5 rounded">1</span>
+</div>
+<!-- Row 3 -->
+<div class="p-3.5 bg-surface-container-low hover:bg-surface-container rounded-xl flex items-center justify-between transition-colors">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-lg bg-surface-container-highest flex items-center justify-center text-on-surface-variant">
+<span class="material-symbols-outlined text-[18px]">manage_search</span>
+</div>
+<div class="flex flex-col">
+<span class="text-xs font-semibold text-on-surface">Types searching as this</span>
+<span class="text-[11px] text-outline">Search query fallbacks</span>
+</div>
+</div>
+<span class="font-mono text-sm font-semibold text-outline bg-surface-container px-2 py-0.5 rounded">0</span>
+</div>
+<!-- Row 4 -->
+<div class="p-3.5 bg-surface-container-low hover:bg-surface-container rounded-xl flex items-center justify-between transition-colors">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-lg bg-surface-container-highest flex items-center justify-center text-on-surface-variant">
+<span class="material-symbols-outlined text-[18px]">account_tree</span>
+</div>
+<div class="flex flex-col">
+<span class="text-xs font-semibold text-on-surface">Children</span>
+<span class="text-[11px] text-outline">Sub-category nodes</span>
+</div>
+</div>
+<span class="font-mono text-sm font-semibold text-outline bg-surface-container px-2 py-0.5 rounded">0</span>
+</div>
+</div>
+</div>
+<!-- Sticky Footer: Close Button ONLY -->
+<div class="px-6 py-4 bg-surface-container-low flex items-center justify-end">
+<button class="px-5 py-2.5 rounded-lg bg-surface-container text-on-surface text-xs font-semibold hover:bg-surface-container-high transition-colors shadow-sm" type="button">
+              Close
+            </button>
+</div>
+</div>
+<!-- ========================================== -->
+<!-- STATE B: ALLOWED ('Beach')                -->
+<!-- ========================================== -->
+<div class="w-full max-w-[520px] bg-surface-container-lowest rounded-2xl shadow-xl flex flex-col overflow-hidden transition-all">
+<!-- Dialog Header -->
+<div class="px-6 py-5 flex items-center justify-between bg-surface-container-lowest">
+<div class="flex items-center gap-3">
+<div class="w-9 h-9 rounded-xl bg-error/10 flex items-center justify-center text-error">
+<span class="material-symbols-outlined text-[20px]">archive</span>
+</div>
+<div>
+<span class="text-[10px] font-label uppercase tracking-widest text-tertiary font-bold">State B · Clearance Verified</span>
+<h3 class="text-base font-headline font-semibold text-on-surface">Retire Beach?</h3>
+</div>
+</div>
+<button class="w-8 h-8 rounded-lg flex items-center justify-center text-outline hover:bg-surface-container-low transition-colors" type="button">
+<span class="material-symbols-outlined text-[18px]">close</span>
+</button>
+</div>
+<!-- Dialog Body -->
+<div class="p-6 flex flex-col gap-5">
+<!-- Impact List Header -->
+<div class="flex items-center justify-between text-[11px] font-label font-bold uppercase tracking-wider text-outline px-1">
+<span>Binding Verification</span>
+<span>Audit Status</span>
+</div>
+<!-- Zero State Verified Rows -->
+<div class="grid grid-cols-2 gap-2.5">
+<div class="p-3 bg-surface-container-low rounded-xl flex items-center justify-between">
+<span class="text-xs font-medium text-on-surface">Places using it</span>
+<div class="flex items-center gap-1.5">
+<span class="font-mono text-xs font-semibold text-on-surface-variant">0</span>
+<span class="material-symbols-outlined text-[16px] text-tertiary" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+</div>
+<div class="p-3 bg-surface-container-low rounded-xl flex items-center justify-between">
+<span class="text-xs font-medium text-on-surface">Plug home chip</span>
+<div class="flex items-center gap-1.5">
+<span class="font-mono text-xs font-semibold text-on-surface-variant">0</span>
+<span class="material-symbols-outlined text-[16px] text-tertiary" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+</div>
+<div class="p-3 bg-surface-container-low rounded-xl flex items-center justify-between">
+<span class="text-xs font-medium text-on-surface">Types searching as this</span>
+<div class="flex items-center gap-1.5">
+<span class="font-mono text-xs font-semibold text-on-surface-variant">0</span>
+<span class="material-symbols-outlined text-[16px] text-tertiary" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+</div>
+<div class="p-3 bg-surface-container-low rounded-xl flex items-center justify-between">
+<span class="text-xs font-medium text-on-surface">Children</span>
+<div class="flex items-center gap-1.5">
+<span class="font-mono text-xs font-semibold text-on-surface-variant">0</span>
+<span class="material-symbols-outlined text-[16px] text-tertiary" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+</div>
+</div>
+<!-- Required Reason Textarea -->
+<div class="flex flex-col gap-1.5">
+<div class="flex items-center justify-between">
+<label class="text-xs font-headline font-semibold text-on-surface" for="retire-reason">
+                  Reason <span class="text-error">*</span>
+</label>
+<span class="text-[10px] font-mono text-outline" id="char-counter">0 / 10 min</span>
+</div>
+<textarea class="w-full p-3 bg-surface-container-low text-on-surface text-xs rounded-xl outline-none focus:bg-surface-container transition-all placeholder:text-outline font-body resize-none" id="retire-reason" oninput="document.getElementById('char-counter').textContent = this.value.length + ' / 10 min';" placeholder="Explain why this place type is being retired from the master registry..." rows="3"></textarea>
+<div class="flex items-center justify-between px-1">
+<span class="text-[11px] text-outline">Kept in History. At least 10 characters.</span>
+</div>
+</div>
+<!-- System Note Callout -->
+<div class="bg-surface-container-high/60 p-3.5 rounded-xl flex items-center gap-3 text-xs text-on-surface">
+<span class="material-symbols-outlined text-secondary text-[18px] shrink-0">published_with_changes</span>
+<p class="text-[11px] text-on-surface-variant leading-relaxed">
+                Plug stops showing it right away. You can restore it from <span class="font-semibold text-on-surface">Retired</span>.
+              </p>
+</div>
+</div>
+<!-- Sticky Footer: Cancel and Danger Retire Button -->
+<div class="px-6 py-4 bg-surface-container-low flex items-center justify-between">
+<button class="px-5 py-2.5 rounded-lg text-on-surface-variant text-xs font-semibold hover:bg-surface-container transition-colors" type="button">
+              Cancel
+            </button>
+<button class="px-5 py-2.5 rounded-lg bg-[#b91c1c] text-white text-xs font-semibold hover:opacity-90 transition-opacity shadow-sm flex items-center gap-1.5" type="button">
+<span class="material-symbols-outlined text-[16px]">archive</span>
+              Retire
+            </button>
+</div>
+</div>
+</div>
+</div>
+<!-- ========================================== -->
+</main>
+</body>
+</html>

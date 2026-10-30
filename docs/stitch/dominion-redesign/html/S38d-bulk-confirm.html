@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_dashboard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;family=Public+Sans:wght@500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        "colors": {
+          "on-tertiary-fixed-variant": "#006c30",
+          "secondary-fixed": "#dbe1ff",
+          "secondary": "#0153dc",
+          "surface-container-highest": "#e1e2ed",
+          "error-dim": "#67040d",
+          "inverse-surface": "#0d0e12",
+          "on-secondary-fixed": "#003798",
+          "primary-fixed-dim": "#cad5ed",
+          "on-primary-fixed-variant": "#515c70",
+          "outline-variant": "#b0b1bc",
+          "surface-container-lowest": "#ffffff",
+          "secondary-fixed-dim": "#c7d3ff",
+          "on-secondary-fixed-variant": "#0050d5",
+          "primary": "#545f74",
+          "tertiary": "#006e31",
+          "outline": "#797a84",
+          "tertiary-fixed": "#98fba9",
+          "inverse-primary": "#dae6fe",
+          "on-background": "#30323b",
+          "primary-container": "#d8e3fb",
+          "error": "#a83836",
+          "tertiary-fixed-dim": "#8aec9c",
+          "error-container": "#fa746f",
+          "on-error-container": "#6e0a12",
+          "surface-dim": "#d9d9e4",
+          "surface-container-high": "#e8e7f1",
+          "on-tertiary-container": "#00612a",
+          "on-tertiary-fixed": "#004c20",
+          "background": "#faf8fe",
+          "on-secondary-container": "#0047c0",
+          "primary-dim": "#485367",
+          "secondary-dim": "#0049c3",
+          "on-tertiary": "#e9ffe7",
+          "surface-bright": "#faf8fe",
+          "inverse-on-surface": "#9d9ca2",
+          "secondary-container": "#dbe1ff",
+          "on-primary-fixed": "#354053",
+          "on-secondary": "#faf8ff",
+          "on-surface": "#30323b",
+          "surface-variant": "#e1e2ed",
+          "primary-fixed": "#d8e3fb",
+          "on-surface-variant": "#5d5f68",
+          "on-primary": "#f8f8ff",
+          "surface-tint": "#545f74",
+          "tertiary-container": "#98fba9",
+          "surface": "#faf8fe",
+          "on-primary-container": "#475266",
+          "on-error": "#fff7f6",
+          "tertiary-dim": "#00612a",
+          "surface-container-low": "#f4f3fa",
+          "surface-container": "#eeedf6"
+        },
+        "borderRadius": {
+          "DEFAULT": "0.25rem",
+          "lg": "0.5rem",
+          "xl": "0.75rem",
+          "full": "9999px"
+        },
+        "spacing": {},
+        "fontFamily": {
+          "headline": [
+            "Inter"
+          ],
+          "display": [
+            "Inter"
+          ],
+          "body": [
+            "Inter"
+          ],
+          "label": [
+            "Public Sans"
+          ]
+        },
+        "fontSize": {}
+      },
+    },
+  }</script></head><body class="bg-surface font-body text-on-surface antialiased"><aside class="fixed left-0 top-0 h-full w-64 bg-[#1e293b] z-50 flex flex-col justify-between shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="flex flex-col flex-1 overflow-y-auto"><div class="h-16 px-6 flex items-center justify-between"><div class="flex items-center gap-2.5"><div class="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center"><span class="text-on-secondary font-headline font-bold text-sm tracking-wider">D</span></div><div class="flex flex-col"><span class="text-sm font-headline font-semibold text-slate-100 tracking-tight">DOMINION</span><span class="text-[10px] font-label uppercase tracking-widest text-slate-400">Jamaica Admin</span></div></div></div><nav class="px-3 py-4 space-y-6 flex-1 text-xs" data-active-classes="bg-secondary text-on-secondary font-medium rounded-lg"><div class="space-y-1"><div class="px-3 pb-1 text-[10px] font-label uppercase tracking-wider font-semibold text-slate-400">Core</div><a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all" data-path="overview" href="#"><span class="material-symbols-outlined text-[18px]">dashboard</span><span>Overview</span></a></div><div class="space-y-1"><div class="px-3 pb-1 text-[10px] font-label uppercase tracking-wider font-semibold text-slate-400">Master Data</div><a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all" data-path="places-and-maps" href="#"><span class="material-symbols-outlined text-[18px]">map</span><span>Places and Maps</span></a><a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all" data-path="fares-and-zones" href="#"><span class="material-symbols-outlined text-[18px]">payments</span><span>Fares and Zones (JMD)</span></a><a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all" data-path="terminal-registry" href="#"><span class="material-symbols-outlined text-[18px]">domain</span><span>Terminal Registry</span></a></div><div class="space-y-1"><div class="px-3 pb-1 text-[10px] font-label uppercase tracking-wider font-semibold text-slate-400">Engines</div><a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all" data-path="dispatch-engines" href="#"><span class="material-symbols-outlined text-[18px]">hub</span><span>Dispatch Engines</span></a><a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all" data-path="pricing-matrix" href="#"><span class="material-symbols-outlined text-[18px]">calculate</span><span>Pricing Matrix</span></a></div><div class="space-y-1"><div class="px-3 pb-1 text-[10px] font-label uppercase tracking-wider font-semibold text-slate-400">Distribution</div><a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all" data-path="parish-routes" href="#"><span class="material-symbols-outlined text-[18px]">alt_route</span><span>Parish Routes</span></a><a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all" data-path="depot-allocations" href="#"><span class="material-symbols-outlined text-[18px]">warehouse</span><span>Depot Allocations</span></a></div><div class="space-y-1"><div class="px-3 pb-1 text-[10px] font-label uppercase tracking-wider font-semibold text-slate-400">Platform</div><a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all" data-path="system-nodes" href="#"><span class="material-symbols-outlined text-[18px]">dns</span><span>System Nodes</span></a><a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all" data-path="back-office" href="#"><span class="material-symbols-outlined text-[18px]">admin_panel_settings</span><span>Back Office</span></a></div></nav></div><div class="px-4 py-3 bg-[#172033] flex items-center justify-between text-[11px] font-mono text-slate-400"><div class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span><span class="font-medium text-slate-300">KGN-DC-01</span></div><span class="tracking-tight text-[10px] bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded">JMD READY</span></div></aside><div class="pl-64 flex flex-col min-h-screen"><header class="fixed top-0 left-64 right-0 h-16 bg-surface-container-lowest/90 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-40 flex items-center justify-between px-8"><div class="relative w-96 flex items-center"><span class="material-symbols-outlined absolute left-3 text-outline text-[18px]">search</span><input class="w-full pl-9 pr-4 py-1.5 bg-surface-container text-on-surface placeholder:text-outline text-xs rounded-lg outline-none focus:bg-surface-container-low transition-colors font-body" placeholder="Search entities, engines, routes…" type="text"/></div><div class="flex items-center gap-4"><button class="w-8 h-8 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-surface-container transition-colors" title="Help and Documentation" type="button"><span class="material-symbols-outlined text-[18px]">help_outline</span></button><button class="w-8 h-8 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-surface-container transition-colors relative" title="Notifications" type="button"><span class="material-symbols-outlined text-[18px]">notifications</span><span class="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-secondary rounded-full"></span></button><div class="h-4 w-px bg-surface-container-highest"></div><div class="flex items-center gap-2.5 pl-1"><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div><div class="flex flex-col text-left"><span class="text-xs font-semibold text-on-surface font-headline leading-tight">Deeki T</span><span class="text-[10px] font-label text-on-surface-variant leading-tight">DT · Owner</span></div></div></div></header><main class="relative pt-16 flex-1 w-full px-8 pb-10 bg-surface"><div class="flex flex-col w-full relative">
+<!-- Underlay Register Context (Under modal backdrop) -->
+<div class="w-full space-y-5 select-none pointer-events-none opacity-40">
+<!-- Top Metadata Header Strip -->
+<div class="flex items-center justify-between">
+<div>
+<div class="flex items-center gap-2">
+<span class="text-[11px] font-label font-semibold text-primary uppercase tracking-wider">Master Data</span>
+<span class="text-outline-variant text-xs">/</span>
+<span class="text-[11px] font-label font-semibold text-on-surface-variant uppercase tracking-wider">Parish Node Catalog</span>
+</div>
+<h1 class="text-xl font-headline font-bold text-on-surface tracking-tight mt-0.5">Places Register</h1>
+</div>
+<div class="flex items-center gap-3">
+<span class="text-xs font-mono text-outline">12 active entities shown · Kingston &amp; St. Andrew Parish</span>
+<div class="h-8 px-3 rounded-lg bg-surface-container flex items-center gap-2 text-xs font-medium text-on-surface">
+<span class="material-symbols-outlined text-[16px] text-outline">filter_list</span>
+<span>Filter</span>
+</div>
+</div>
+</div>
+<!-- Data Table Container -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
+<div class="grid grid-cols-12 px-5 py-3 bg-surface-container-low text-[11px] font-label font-semibold text-on-surface-variant uppercase tracking-wider">
+<div class="col-span-1 flex items-center">
+<div class="w-4 h-4 rounded bg-secondary flex items-center justify-center text-on-secondary">
+<span class="material-symbols-outlined text-[14px]">remove</span>
+</div>
+</div>
+<div class="col-span-4">Place Name &amp; Legal Node</div>
+<div class="col-span-2">Parish &amp; Zone</div>
+<div class="col-span-2">Brand Affiliation</div>
+<div class="col-span-2">Primary Type</div>
+<div class="col-span-1 text-right">Status</div>
+</div>
+<!-- Ticked Row 1 -->
+<div class="grid grid-cols-12 px-5 py-3.5 bg-secondary-container/40 items-center text-xs">
+<div class="col-span-1 flex items-center">
+<div class="w-4 h-4 rounded bg-secondary flex items-center justify-center text-on-secondary">
+<span class="material-symbols-outlined text-[14px]">check</span>
+</div>
+</div>
+<div class="col-span-4">
+<div class="font-headline font-semibold text-on-surface">Advance Service Station</div>
+<div class="font-mono text-[11px] text-outline">DOM-KGN-04821 · Hagley Park Rd</div>
+</div>
+<div class="col-span-2">
+<span class="font-mono text-[11px] text-on-surface">St. Andrew</span>
+<div class="text-[10px] text-outline">Zone KGN-W</div>
+</div>
+<div class="col-span-2">
+<span class="px-2 py-0.5 rounded-full text-[10px] font-mono bg-surface-container-high text-on-surface-variant">Independent</span>
+</div>
+<div class="col-span-2 text-on-surface">Gas Station</div>
+<div class="col-span-1 text-right font-mono text-[11px] text-tertiary">VERIFIED</div>
+</div>
+<!-- Ticked Row 2 -->
+<div class="grid grid-cols-12 px-5 py-3.5 bg-secondary-container/40 items-center text-xs">
+<div class="col-span-1 flex items-center">
+<div class="w-4 h-4 rounded bg-secondary flex items-center justify-center text-on-secondary">
+<span class="material-symbols-outlined text-[14px]">check</span>
+</div>
+</div>
+<div class="col-span-4">
+<div class="font-headline font-semibold text-on-surface">Aero Sales (2006) Ltd.</div>
+<div class="font-mono text-[11px] text-outline">DOM-KGN-00319 · Marcus Garvey Dr</div>
+</div>
+<div class="col-span-2">
+<span class="font-mono text-[11px] text-on-surface">Kingston</span>
+<div class="text-[10px] text-outline">Zone KGN-PORT</div>
+</div>
+<div class="col-span-2">
+<span class="px-2 py-0.5 rounded-full text-[10px] font-mono bg-surface-container-high text-on-surface-variant">Independent</span>
+</div>
+<div class="col-span-2 text-on-surface">Gas Station</div>
+<div class="col-span-1 text-right font-mono text-[11px] text-tertiary">VERIFIED</div>
+</div>
+<!-- Ticked Row 3 -->
+<div class="grid grid-cols-12 px-5 py-3.5 bg-secondary-container/40 items-center text-xs">
+<div class="col-span-1 flex items-center">
+<div class="w-4 h-4 rounded bg-secondary flex items-center justify-center text-on-secondary">
+<span class="material-symbols-outlined text-[14px]">check</span>
+</div>
+</div>
+<div class="col-span-4">
+<div class="font-headline font-semibold text-on-surface">Allen's Esso Service Centre</div>
+<div class="font-mono text-[11px] text-outline">DOM-KGN-01994 · Constant Spring Rd</div>
+</div>
+<div class="col-span-2">
+<span class="font-mono text-[11px] text-on-surface">St. Andrew</span>
+<div class="text-[10px] text-outline">Zone KGN-N</div>
+</div>
+<div class="col-span-2">
+<span class="px-2 py-0.5 rounded-full text-[10px] font-mono bg-surface-container-high text-on-surface-variant">Esso</span>
+</div>
+<div class="col-span-2 text-on-surface">Gas Station</div>
+<div class="col-span-1 text-right font-mono text-[11px] text-tertiary">VERIFIED</div>
+</div>
+<!-- Unchecked Row 4 -->
+<div class="grid grid-cols-12 px-5 py-3.5 items-center text-xs bg-surface-container-lowest">
+<div class="col-span-1 flex items-center">
+<div class="w-4 h-4 rounded bg-surface-container-high"></div>
+</div>
+<div class="col-span-4">
+<div class="font-headline font-semibold text-on-surface">Boulevard Supercentre Rubis</div>
+<div class="font-mono text-[11px] text-outline">DOM-KGN-05510 · Washington Blvd</div>
+</div>
+<div class="col-span-2">
+<span class="font-mono text-[11px] text-on-surface">St. Andrew</span>
+<div class="text-[10px] text-outline">Zone KGN-NW</div>
+</div>
+<div class="col-span-2">
+<span class="px-2 py-0.5 rounded-full text-[10px] font-mono bg-surface-container text-on-surface-variant">Rubis</span>
+</div>
+<div class="col-span-2 text-on-surface">Gas Station</div>
+<div class="col-span-1 text-right font-mono text-[11px] text-tertiary">VERIFIED</div>
+</div>
+<!-- Unchecked Row 5 -->
+<div class="grid grid-cols-12 px-5 py-3.5 items-center text-xs bg-surface-container-low">
+<div class="col-span-1 flex items-center">
+<div class="w-4 h-4 rounded bg-surface-container-high"></div>
+</div>
+<div class="col-span-4">
+<div class="font-headline font-semibold text-on-surface">TotalEnergies Cross Roads</div>
+<div class="font-mono text-[11px] text-outline">DOM-KGN-07742 · Slipe Rd</div>
+</div>
+<div class="col-span-2">
+<span class="font-mono text-[11px] text-on-surface">Kingston</span>
+<div class="text-[10px] text-outline">Zone KGN-MID</div>
+</div>
+<div class="col-span-2">
+<span class="px-2 py-0.5 rounded-full text-[10px] font-mono bg-surface-container text-on-surface-variant">TotalEnergies</span>
+</div>
+<div class="col-span-2 text-on-surface">Gas Station</div>
+<div class="col-span-1 text-right font-mono text-[11px] text-tertiary">VERIFIED</div>
+</div>
+</div>
+</div>
+<!-- Modal Backdrop Layer -->
+<div class="fixed inset-0 left-64 top-16 bg-[#0f172a]/65 backdrop-blur-[2px] z-40 flex items-center justify-center p-6 overflow-y-auto">
+<div class="relative w-full max-w-5xl flex flex-col lg:flex-row items-center justify-center gap-6 my-auto">
+<!-- MAIN COMPONENT: 520px Confirmation Dialog -->
+<div class="w-full max-w-[520px] bg-surface-container-lowest rounded-2xl shadow-2xl overflow-hidden flex flex-col z-50">
+<!-- Header -->
+<div class="px-6 pt-5 pb-4 flex items-center justify-between bg-surface-container-lowest">
+<div class="flex items-center gap-3">
+<div class="w-9 h-9 rounded-xl bg-secondary-container flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined text-[20px]">loyalty</span>
+</div>
+<div>
+<h2 class="font-headline font-bold text-base text-on-surface leading-snug">Set brand on 3 places</h2>
+<p class="text-[11px] font-body text-on-surface-variant">Batch assign fuel network brand affiliation</p>
+</div>
+</div>
+<button aria-label="Close dialog" class="w-8 h-8 rounded-lg flex items-center justify-center text-outline hover:text-on-surface hover:bg-surface-container transition-colors" type="button">
+<span class="material-symbols-outlined text-[20px]">close</span>
+</button>
+</div>
+<!-- Dialog Body -->
+<div class="px-6 py-4 space-y-4 max-h-[716px] overflow-y-auto">
+<!-- Brand Selector Field -->
+<div class="space-y-1.5">
+<label class="block text-xs font-label font-semibold text-on-surface">
+              Select brand <span class="text-error">*</span>
+</label>
+<div class="relative">
+<div class="w-full px-3.5 py-2.5 bg-surface-container-low rounded-xl flex items-center justify-between text-xs font-medium text-on-surface shadow-sm cursor-pointer">
+<div class="flex items-center gap-2.5">
+<span class="w-2.5 h-2.5 rounded-full bg-secondary"></span>
+<span class="font-headline">Rubis (RUBIS Energy Jamaica)</span>
+</div>
+<span class="material-symbols-outlined text-[18px] text-outline">expand_more</span>
+</div>
+</div>
+<p class="text-[11px] text-outline font-body">Selected network will supersede previous brand tagging across all 3 nodes.</p>
+</div>
+<!-- Target Preview Card -->
+<div class="space-y-2">
+<div class="flex items-center justify-between">
+<span class="text-[11px] font-label font-semibold text-on-surface-variant uppercase tracking-wider">
+                Target preview (3 places will update)
+              </span>
+<span class="text-[10px] font-mono text-outline">KGN-GRID · 3 ROWS</span>
+</div>
+<div class="bg-surface-container-low rounded-xl p-3 space-y-2">
+<!-- Item 1 -->
+<div class="p-2.5 rounded-lg bg-surface-container-lowest shadow-sm flex items-center justify-between text-xs">
+<div class="min-w-0 pr-2">
+<div class="font-headline font-semibold text-on-surface truncate">Advance Service Station</div>
+<div class="font-mono text-[10px] text-outline">DOM-KGN-04821</div>
+</div>
+<div class="flex items-center gap-2 flex-shrink-0 font-mono text-[11px]">
+<span class="px-2 py-0.5 rounded bg-surface-container text-on-surface-variant">Independent</span>
+<span class="material-symbols-outlined text-[14px] text-outline">arrow_forward</span>
+<span class="px-2 py-0.5 rounded bg-secondary-container text-on-secondary-container font-semibold">Rubis</span>
+</div>
+</div>
+<!-- Item 2 -->
+<div class="p-2.5 rounded-lg bg-surface-container-lowest shadow-sm flex items-center justify-between text-xs">
+<div class="min-w-0 pr-2">
+<div class="font-headline font-semibold text-on-surface truncate">Aero Sales (2006) Ltd.</div>
+<div class="font-mono text-[10px] text-outline">DOM-KGN-00319</div>
+</div>
+<div class="flex items-center gap-2 flex-shrink-0 font-mono text-[11px]">
+<span class="px-2 py-0.5 rounded bg-surface-container text-on-surface-variant">Independent</span>
+<span class="material-symbols-outlined text-[14px] text-outline">arrow_forward</span>
+<span class="px-2 py-0.5 rounded bg-secondary-container text-on-secondary-container font-semibold">Rubis</span>
+</div>
+</div>
+<!-- Item 3 -->
+<div class="p-2.5 rounded-lg bg-surface-container-lowest shadow-sm flex items-center justify-between text-xs">
+<div class="min-w-0 pr-2">
+<div class="font-headline font-semibold text-on-surface truncate">Allen's Esso Service Centre</div>
+<div class="font-mono text-[10px] text-outline">DOM-KGN-01994</div>
+</div>
+<div class="flex items-center gap-2 flex-shrink-0 font-mono text-[11px]">
+<span class="px-2 py-0.5 rounded bg-surface-container text-on-surface-variant">Esso</span>
+<span class="material-symbols-outlined text-[14px] text-outline">arrow_forward</span>
+<span class="px-2 py-0.5 rounded bg-secondary-container text-on-secondary-container font-semibold">Rubis</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Audit Reason Textarea -->
+<div class="space-y-1.5">
+<div class="flex items-center justify-between">
+<label class="text-xs font-label font-semibold text-on-surface">
+                Audit reason <span class="text-error">*</span>
+</label>
+<span class="text-[10px] font-mono text-error font-medium">Required before save</span>
+</div>
+<textarea class="w-full p-3 bg-surface-container-low rounded-xl text-xs font-body text-on-surface placeholder:text-outline outline-none focus:bg-surface-container shadow-sm resize-none" placeholder="State reason for batch reassignment (e.g., Parish audit verification, dealer contract renewed)..." rows="2"></textarea>
+</div>
+<!-- Instant Sync Notice -->
+<div class="px-3.5 py-2.5 rounded-xl bg-secondary-container/50 flex items-start gap-2.5 text-xs text-on-secondary-container">
+<span class="material-symbols-outlined text-[18px] text-secondary flex-shrink-0 mt-0.5">bolt</span>
+<div class="leading-relaxed text-[11px]">
+<span class="font-semibold text-on-surface">Instant Sync:</span> Plug updates right away. Each change is kept in History.
+            </div>
+</div>
+</div>
+<!-- Footer -->
+<div class="px-6 py-4 bg-surface-container-low flex items-center justify-end gap-2.5">
+<button class="px-4 py-2 rounded-xl text-xs font-headline font-medium text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors" type="button">
+            Cancel
+          </button>
+<button class="px-5 py-2.5 rounded-xl bg-secondary hover:bg-secondary-dim text-on-secondary text-xs font-headline font-semibold shadow-md shadow-secondary/20 flex items-center gap-2 transition-all" type="button">
+<span class="material-symbols-outlined text-[16px]">done_all</span>
+<span>Apply to 3 places</span>
+</button>
+</div>
+</div>
+<!-- INSET VARIANT PANEL: Refused State for "Set type" -->
+<div class="w-full max-w-sm bg-surface-container-lowest rounded-2xl shadow-xl p-5 space-y-4 self-center lg:self-start lg:mt-6">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-amber-500"></span>
+<span class="text-[10px] font-mono uppercase tracking-wider font-semibold text-outline">Validation Guard</span>
+</div>
+<span class="text-[10px] font-mono text-outline">SEC-TYP-403</span>
+</div>
+<div>
+<h3 class="font-headline font-bold text-sm text-on-surface">Constraint Guard: Bulk "Set type" refused</h3>
+<p class="text-[11px] text-on-surface-variant mt-1 leading-normal">
+            Dominion guards prevent bulk detachment of active retail fuel nodes.
+          </p>
+</div>
+<!-- Amber Warning Box -->
+<div class="p-3.5 rounded-xl bg-amber-50 text-amber-900 flex items-start gap-2.5">
+<span class="material-symbols-outlined text-[20px] text-amber-600 flex-shrink-0 mt-0.5">warning</span>
+<div class="space-y-1">
+<div class="text-xs font-headline font-bold text-amber-950">Type modification constraint active</div>
+<p class="text-[11px] leading-relaxed text-amber-900/90 font-body">
+              Changing a gas station to another type moves it out of fuel matching. Change these one at a time.
+            </p>
+</div>
+</div>
+<div class="p-3 rounded-lg bg-surface-container-low text-[11px] font-mono text-on-surface-variant space-y-1">
+<div class="flex justify-between">
+<span class="text-outline">Impacted category:</span>
+<span class="font-semibold text-on-surface">Retail Fuel / Gas Station</span>
+</div>
+<div class="flex justify-between">
+<span class="text-outline">Node batch:</span>
+<span class="font-semibold text-on-surface">3 of 3 tagged as Fuel Node</span>
+</div>
+</div>
+<div class="flex items-center justify-end pt-1">
+<button class="px-4 py-1.5 rounded-lg bg-surface-container text-xs font-headline font-semibold text-on-surface hover:bg-surface-container-high transition-colors" type="button">
+            Close
+          </button>
+</div>
+</div>
+</div>
+</div>
+<!-- FLOATING BULK ACTION BAR (Anchored at bottom center) -->
+<div class="fixed bottom-8 left-64 right-0 z-50 pointer-events-none flex justify-center px-4">
+<div class="pointer-events-auto bg-[#1e293b] text-slate-100 rounded-xl shadow-[0_12px_32px_rgba(0,0,0,0.35)] px-4 py-2.5 flex items-center gap-3 text-xs max-w-full overflow-x-auto">
+<!-- Counter Badge -->
+<div class="flex items-center gap-2 pr-2">
+<span class="px-2 py-0.5 rounded-full bg-secondary text-on-secondary font-mono font-bold text-[11px]">3</span>
+<span class="font-headline font-semibold text-slate-200 whitespace-nowrap">selected</span>
+</div>
+<div class="h-4 w-px bg-slate-700"></div>
+<!-- Action Items -->
+<div class="flex items-center gap-1">
+<!-- Active/Pressed Item: Set brand -->
+<button class="px-3 py-1.5 rounded-lg bg-secondary text-on-secondary font-headline font-semibold flex items-center gap-1.5 shadow-sm transition-all whitespace-nowrap" type="button">
+<span class="material-symbols-outlined text-[16px]">loyalty</span>
+<span>Set brand</span>
+</button>
+<!-- Neutral Actions -->
+<button class="px-2.5 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 flex items-center gap-1.5 transition-colors whitespace-nowrap" type="button">
+<span class="material-symbols-outlined text-[16px]">pin_drop</span>
+<span>Confirm pins</span>
+</button>
+<button class="px-2.5 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 flex items-center gap-1.5 transition-colors whitespace-nowrap" type="button">
+<span class="material-symbols-outlined text-[16px]">add_circle</span>
+<span>Add facility</span>
+</button>
+<button class="px-2.5 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 flex items-center gap-1.5 transition-colors whitespace-nowrap" type="button">
+<span class="material-symbols-outlined text-[16px]">remove_circle</span>
+<span>Remove facility</span>
+</button>
+<button class="px-2.5 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 flex items-center gap-1.5 transition-colors whitespace-nowrap" type="button">
+<span class="material-symbols-outlined text-[16px]">category</span>
+<span>Set type</span>
+</button>
+<button class="px-2.5 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 flex items-center gap-1.5 transition-colors whitespace-nowrap" type="button">
+<span class="material-symbols-outlined text-[16px]">verified</span>
+<span>Verify</span>
+</button>
+<button class="px-2.5 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 flex items-center gap-1.5 transition-colors whitespace-nowrap" type="button">
+<span class="material-symbols-outlined text-[16px]">content_copy</span>
+<span>Mark duplicate</span>
+</button>
+</div>
+<div class="h-4 w-px bg-slate-700"></div>
+<!-- Clear Selection -->
+<button class="px-2 py-1 text-slate-400 hover:text-slate-200 text-[11px] font-body transition-colors whitespace-nowrap" type="button">
+        Clear
+      </button>
+</div>
+</div>
+</div></main><footer class="w-full py-3 px-8 bg-surface-container-lowest shadow-[0_-1px_6px_rgba(0,0,0,0.02)] flex items-center justify-between text-xs text-on-surface-variant font-mono"><div class="flex items-center gap-2"><span class="text-[11px] font-semibold text-on-surface">DOMINION OPERATIONS</span><span class="text-outline-variant">·</span><span>KGN-DC-01</span><span class="text-outline-variant">·</span><span class="text-emerald-700 font-medium">JMD READY</span></div><div class="text-[11px] text-outline font-body">Parish Grid Active · Jamaica Time (UTC-5)</div></footer></div></body></html>

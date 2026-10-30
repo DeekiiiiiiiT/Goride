@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"/><title>Categories</title></head>
+<body>
+<main>
+<!-- Top Context Header -->
+<div class="flex flex-col gap-4 mb-6">
+<!-- Breadcrumb -->
+<div class="flex items-center gap-1.5 text-xs text-on-surface-variant font-medium">
+<span class="hover:text-on-surface transition-colors cursor-pointer">Dominion</span>
+<span class="text-outline-variant text-[11px]">›</span>
+<span class="hover:text-on-surface transition-colors cursor-pointer">Master data</span>
+<span class="text-outline-variant text-[11px]">›</span>
+<span class="hover:text-on-surface transition-colors cursor-pointer">Places and Maps</span>
+<span class="text-outline-variant text-[11px]">›</span>
+<span class="text-on-surface font-semibold">Categories</span>
+</div>
+<!-- Title & Action Bar -->
+<div class="flex items-start justify-between relative">
+<div class="space-y-1">
+<h1 class="text-2xl font-bold font-headline tracking-tight text-on-surface">Categories</h1>
+<p class="text-xs text-on-surface-variant leading-relaxed">The groups, categories, place types, facilities and brands every app reads.</p>
+</div>
+<!-- Action Split Button with open dropdown -->
+<div class="relative inline-flex" id="add-dropdown-container">
+<div class="inline-flex rounded-lg shadow-sm bg-secondary text-on-secondary overflow-hidden">
+<button class="px-3.5 py-1.5 text-xs font-semibold hover:bg-secondary-dim transition-colors flex items-center gap-1.5" type="button">
+<span class="material-symbols-outlined text-[16px]">add</span>
+<span>Add</span>
+</button>
+<div class="w-px bg-white/20"></div>
+<button class="px-2 py-1.5 hover:bg-secondary-dim transition-colors flex items-center justify-center" id="toggle-dropdown-btn" type="button">
+<span class="material-symbols-outlined text-[16px]">arrow_drop_down</span>
+</button>
+</div>
+<!-- Open Dropdown Menu -->
+<div class="absolute right-0 top-full mt-1.5 w-44 bg-surface-container-lowest rounded-xl shadow-xl z-30 py-1.5 text-xs font-medium text-on-surface" id="add-menu">
+<a class="flex items-center gap-2.5 px-3 py-1.5 hover:bg-surface-container transition-colors" href="#">
+<span class="w-2 h-2 rounded-full bg-slate-400"></span>
+<span>Group</span>
+</a>
+<a class="flex items-center gap-2.5 px-3 py-1.5 hover:bg-surface-container transition-colors" href="#">
+<span class="material-symbols-outlined text-[15px] text-on-surface-variant">folder</span>
+<span>Category</span>
+</a>
+<a class="flex items-center gap-2.5 px-3 py-1.5 bg-secondary-container/40 text-on-secondary-container font-semibold transition-colors" href="#">
+<span class="material-symbols-outlined text-[15px] text-secondary">pin_drop</span>
+<span>Place type</span>
+</a>
+<a class="flex items-center gap-2.5 px-3 py-1.5 hover:bg-surface-container transition-colors" href="#">
+<span class="material-symbols-outlined text-[15px] text-on-surface-variant">check_box</span>
+<span>Facility type</span>
+</a>
+<div class="my-1 h-px bg-surface-container-highest"></div>
+<a class="flex items-center gap-2.5 px-3 py-1.5 hover:bg-surface-container transition-colors" href="#">
+<span class="material-symbols-outlined text-[15px] text-on-surface-variant">verified</span>
+<span>Brand</span>
+</a>
+</div>
+</div>
+</div>
+</div>
+<!-- KPI Strip -->
+<div class="grid grid-cols-5 gap-3.5 mb-6">
+<div class="bg-surface-container-lowest rounded-xl p-3.5 shadow-sm flex flex-col justify-between">
+<span class="text-[11px] font-label font-medium uppercase tracking-wider text-on-surface-variant">Groups</span>
+<div class="flex items-baseline gap-2 mt-1">
+<span class="text-xl font-bold font-mono tracking-tight text-on-surface">5</span>
+</div>
+</div>
+<div class="bg-surface-container-lowest rounded-xl p-3.5 shadow-sm flex flex-col justify-between">
+<span class="text-[11px] font-label font-medium uppercase tracking-wider text-on-surface-variant">Categories</span>
+<div class="flex items-baseline gap-2 mt-1">
+<span class="text-xl font-bold font-mono tracking-tight text-on-surface">16</span>
+<span class="text-[11px] font-mono text-tertiary font-medium">· 11 in use</span>
+</div>
+</div>
+<div class="bg-surface-container-lowest rounded-xl p-3.5 shadow-sm flex flex-col justify-between">
+<span class="text-[11px] font-label font-medium uppercase tracking-wider text-on-surface-variant">Place types</span>
+<div class="flex items-baseline gap-2 mt-1">
+<span class="text-xl font-bold font-mono tracking-tight text-on-surface">17</span>
+<span class="text-[11px] font-mono text-tertiary font-medium">· 2 in use</span>
+</div>
+</div>
+<div class="bg-surface-container-lowest rounded-xl p-3.5 shadow-sm flex flex-col justify-between">
+<span class="text-[11px] font-label font-medium uppercase tracking-wider text-on-surface-variant">Facility types</span>
+<div class="flex items-baseline gap-2 mt-1">
+<span class="text-xl font-bold font-mono tracking-tight text-on-surface">44</span>
+<span class="text-[11px] font-mono text-tertiary font-medium">· 3 in use</span>
+</div>
+</div>
+<div class="bg-surface-container-lowest rounded-xl p-3.5 shadow-sm flex flex-col justify-between">
+<span class="text-[11px] font-label font-medium uppercase tracking-wider text-on-surface-variant">Brands</span>
+<div class="flex items-baseline gap-2 mt-1">
+<span class="text-xl font-bold font-mono tracking-tight text-on-surface">17</span>
+<span class="text-[11px] font-mono text-outline font-medium">· logos 0</span>
+</div>
+</div>
+</div>
+<!-- Navigation Underline Tabs -->
+<div class="flex items-center gap-8 mb-6 bg-surface-container-lowest px-4 rounded-xl shadow-sm h-12">
+<button class="relative h-full flex items-center text-xs font-semibold text-secondary" type="button">
+<span>Tree</span>
+<div class="absolute bottom-0 left-0 right-0 h-0.5 bg-secondary rounded-full"></div>
+</button>
+<button class="relative h-full flex items-center text-xs font-medium text-on-surface-variant hover:text-on-surface transition-colors" type="button">
+<span>Brands</span>
+</button>
+<button class="relative h-full flex items-center text-xs font-medium text-on-surface-variant hover:text-on-surface transition-colors" type="button">
+<span>Retired 0</span>
+</button>
+<button class="relative h-full flex items-center text-xs font-medium text-on-surface-variant hover:text-on-surface transition-colors" type="button">
+<span>History</span>
+</button>
+</div>
+<!-- Master / Detail Two-Pane Grid -->
+<div class="grid grid-cols-12 gap-6 items-start mb-12">
+<!-- LEFT PANE: Tree Structure (5 cols) -->
+<div class="col-span-12 lg:col-span-5 bg-surface-container-lowest rounded-2xl shadow-sm p-4 flex flex-col min-h-[640px]">
+<!-- Filter and Options Bar -->
+<div class="flex items-center gap-3 pb-3 mb-2">
+<div class="relative flex-1">
+<span class="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-outline text-[16px]">filter_list</span>
+<input class="w-full pl-8 pr-3 py-1.5 bg-surface-container text-xs rounded-lg text-on-surface placeholder:text-outline outline-none focus:bg-surface-container-low transition-colors" placeholder="Filter categories and types" type="text"/>
+</div>
+<label class="flex items-center gap-2 cursor-pointer select-none">
+<input checked="" class="w-3.5 h-3.5 text-secondary rounded accent-secondary cursor-pointer" type="checkbox"/>
+<span class="text-[11px] font-medium text-on-surface-variant whitespace-nowrap">Show facilities</span>
+</label>
+</div>
+<!-- Tree Hierarchy List -->
+<div class="flex flex-col text-xs space-y-1 font-body">
+<!-- 1. Road & Automotive Group -->
+<div class="flex flex-col">
+<div class="flex items-center justify-between py-1.5 px-2 rounded-lg hover:bg-surface-container-low cursor-pointer group select-none">
+<div class="flex items-center gap-2">
+<span class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background-color: #ffe6cc;"></span>
+<span class="font-semibold text-on-surface text-xs">Road &amp; Automotive</span>
+</div>
+<span class="text-[11px] font-mono text-outline">7 types</span>
+</div>
+<!-- Category: Fuel & Energy (Open) -->
+<div class="ml-4 pl-2 flex flex-col space-y-0.5 mt-0.5">
+<div class="flex items-center gap-1.5 py-1 px-1.5 text-xs text-on-surface-variant font-medium select-none cursor-pointer">
+<span class="material-symbols-outlined text-[14px]">arrow_drop_down</span>
+<span>Fuel &amp; Energy</span>
+</div>
+<!-- Place Type: Gas Station (SELECTED ROW) -->
+<div class="relative ml-4 pl-3 pr-2 py-2 rounded-r-lg bg-[#ebf2ff] flex items-center justify-between cursor-pointer">
+<div class="absolute left-0 top-0 bottom-0 w-[3px] bg-secondary rounded-l"></div>
+<div class="flex items-center gap-2 min-w-0">
+<span class="text-[14px] flex-shrink-0">⛽</span>
+<span class="font-semibold text-on-surface truncate">Gas station</span>
+<span class="text-[10px] font-mono text-on-surface-variant bg-surface-container-highest/60 px-1 py-0.5 rounded">gas_station</span>
+</div>
+<div class="flex items-center gap-1.5 flex-shrink-0">
+<span class="px-1.5 py-0.5 rounded text-[10px] font-mono font-medium bg-[#e6f4ea] text-[#137333]">205</span>
+<span class="px-1.5 py-0.5 rounded text-[9px] font-label font-semibold uppercase tracking-wider bg-secondary text-on-secondary">In Plug</span>
+</div>
+</div>
+</div>
+<!-- Vehicle Maintenance (Collapsed) -->
+<div class="ml-4 pl-2 flex flex-col mt-0.5">
+<div class="flex items-center justify-between py-1 px-1.5 text-xs text-on-surface-variant hover:bg-surface-container-low rounded cursor-pointer select-none">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[14px]">arrow_right</span>
+<span>Vehicle Maintenance</span>
+</div>
+<span class="text-[11px] font-mono text-outline">4 types</span>
+</div>
+</div>
+<!-- Roadside Emergency & Recovery (Collapsed) -->
+<div class="ml-4 pl-2 flex flex-col mt-0.5">
+<div class="flex items-center justify-between py-1 px-1.5 text-xs text-on-surface-variant hover:bg-surface-container-low rounded cursor-pointer select-none">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[14px]">arrow_right</span>
+<span>Roadside Emergency &amp; Recovery</span>
+</div>
+<span class="text-[11px] font-mono text-outline">1 type</span>
+</div>
+</div>
+<!-- Driver Facilities (Collapsed) -->
+<div class="ml-4 pl-2 flex flex-col mt-0.5">
+<div class="flex items-center justify-between py-1 px-1.5 text-xs text-on-surface-variant hover:bg-surface-container-low rounded cursor-pointer select-none">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[14px]">arrow_right</span>
+<span>Driver Facilities</span>
+</div>
+<span class="text-[11px] font-mono text-outline">1 type</span>
+</div>
+</div>
+</div>
+<!-- 2. Food, Drink & Social Group -->
+<div class="flex flex-col pt-1">
+<div class="flex items-center justify-between py-1.5 px-2 rounded-lg hover:bg-surface-container-low cursor-pointer group select-none">
+<div class="flex items-center gap-2">
+<span class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background-color: #d5e8d4;"></span>
+<span class="font-semibold text-on-surface text-xs">Food, Drink &amp; Social</span>
+</div>
+<span class="text-[11px] font-mono text-outline">1 type</span>
+</div>
+<div class="ml-4 pl-2 flex flex-col space-y-0.5">
+<div class="flex items-center justify-between py-1 px-1.5 text-xs text-on-surface-variant hover:bg-surface-container-low rounded cursor-pointer select-none">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[14px]">arrow_right</span>
+<span>Quick Bites</span>
+</div>
+<span class="text-[11px] font-mono text-outline">1 type</span>
+</div>
+<div class="flex items-center justify-between py-1 px-1.5 text-xs text-on-surface-variant hover:bg-surface-container-low rounded cursor-pointer select-none">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[14px]">arrow_right</span>
+<span>Dining</span>
+</div>
+<span class="text-[10px] font-mono text-outline bg-surface-container px-1 py-0.5 rounded">No place types</span>
+</div>
+<div class="flex items-center justify-between py-1 px-1.5 text-xs text-on-surface-variant hover:bg-surface-container-low rounded cursor-pointer select-none">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[14px]">arrow_right</span>
+<span>Social</span>
+</div>
+<span class="text-[10px] font-mono text-outline bg-surface-container px-1 py-0.5 rounded">No place types</span>
+</div>
+</div>
+</div>
+<!-- 3. Retail & Daily Supplies Group -->
+<div class="flex flex-col pt-1">
+<div class="flex items-center justify-between py-1.5 px-2 rounded-lg hover:bg-surface-container-low cursor-pointer group select-none">
+<div class="flex items-center gap-2">
+<span class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background-color: #fff2cc;"></span>
+<span class="font-semibold text-on-surface text-xs">Retail &amp; Daily Supplies</span>
+</div>
+<span class="text-[11px] font-mono text-outline">3 types</span>
+</div>
+</div>
+<!-- 4. Services & Emergency Group -->
+<div class="flex flex-col pt-1">
+<div class="flex items-center justify-between py-1.5 px-2 rounded-lg hover:bg-surface-container-low cursor-pointer group select-none">
+<div class="flex items-center gap-2">
+<span class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background-color: #f8cecc;"></span>
+<span class="font-semibold text-on-surface text-xs">Services &amp; Emergency</span>
+</div>
+<span class="text-[11px] font-mono text-outline">2 types</span>
+</div>
+</div>
+<!-- 5. Travel, Infrastructure & Nature Group -->
+<div class="flex flex-col pt-1">
+<div class="flex items-center justify-between py-1.5 px-2 rounded-lg hover:bg-surface-container-low cursor-pointer group select-none">
+<div class="flex items-center gap-2">
+<span class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background-color: #e1d5e7;"></span>
+<span class="font-semibold text-on-surface text-xs">Travel, Infrastructure &amp; Nature</span>
+</div>
+<span class="text-[11px] font-mono text-outline">4 types</span>
+</div>
+<div class="ml-4 pl-2 flex flex-col space-y-0.5 mt-0.5">
+<div class="flex items-center gap-1.5 py-1 px-1.5 text-xs text-on-surface-variant font-medium select-none cursor-pointer">
+<span class="material-symbols-outlined text-[14px]">arrow_drop_down</span>
+<span>Transit Hubs &amp; Tolls</span>
+</div>
+<div class="ml-4 pl-2 flex items-center justify-between py-1 px-1.5 text-xs text-on-surface-variant hover:bg-surface-container-low rounded cursor-pointer">
+<div class="flex items-center gap-2">
+<span class="text-[13px]">🚏</span>
+<span>Bus terminal</span>
+<span class="text-[10px] font-mono text-outline">bus_terminal</span>
+</div>
+<span class="text-[10px] font-mono text-outline">Not used yet</span>
+</div>
+<div class="ml-4 pl-2 flex items-center justify-between py-1 px-1.5 text-xs text-on-surface-variant hover:bg-surface-container-low rounded cursor-pointer">
+<div class="flex items-center gap-2">
+<span class="text-[13px]">🚧</span>
+<span>Toll plaza</span>
+<span class="text-[10px] font-mono text-outline">toll_plaza</span>
+</div>
+<div class="flex items-center gap-1.5">
+<span class="px-1.5 py-0.5 rounded text-[10px] font-mono font-medium bg-[#e6f4ea] text-[#137333]">12</span>
+<span class="px-1.5 py-0.5 rounded text-[9px] font-label font-semibold uppercase tracking-wider bg-secondary text-on-secondary">In Plug</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- RIGHT PANE: Detail View for Selected 'Gas station' (7 cols) -->
+<div class="col-span-12 lg:col-span-7 bg-surface-container-lowest rounded-2xl shadow-sm p-6 flex flex-col min-h-[640px] justify-between">
+<div class="space-y-6">
+<!-- Title & Metadata Header -->
+<div class="flex items-start justify-between">
+<div class="flex items-center gap-3.5">
+<div class="w-12 h-12 rounded-xl bg-surface-container-high flex items-center justify-center text-2xl shadow-inner">
+              ⛽
+            </div>
+<div>
+<div class="flex items-center gap-2">
+<h2 class="text-lg font-bold font-headline text-on-surface">Gas station</h2>
+<span class="text-xs font-mono text-on-surface-variant bg-surface-container px-2 py-0.5 rounded">gas_station</span>
+<span class="text-[10px] font-label font-semibold uppercase tracking-wider bg-surface-container text-on-surface-variant px-2 py-0.5 rounded-full">Place type</span>
+</div>
+<div class="flex items-center gap-1.5 text-xs text-outline mt-1 font-body">
+<span class="hover:text-on-surface transition-colors cursor-pointer">Road &amp; Automotive</span>
+<span>›</span>
+<span class="hover:text-on-surface transition-colors cursor-pointer font-medium text-on-surface-variant">Fuel &amp; Energy</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Used By Stat Pills -->
+<div class="flex items-center gap-2">
+<span class="text-xs text-on-surface-variant font-medium mr-1">Used by:</span>
+<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-mono font-medium bg-[#e6f4ea] text-[#137333]">
+<span class="material-symbols-outlined text-[14px]">local_gas_station</span>
+<span>205 places</span>
+</span>
+<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-mono font-medium bg-secondary-container text-on-secondary-container">
+<span class="material-symbols-outlined text-[14px]">bolt</span>
+<span>In Plug</span>
+</span>
+<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-mono font-medium bg-surface-container text-on-surface">
+<span class="material-symbols-outlined text-[14px]">hub</span>
+<span>Fuel matching</span>
+</span>
+</div>
+<!-- Section: Settings -->
+<div class="space-y-2.5 pt-2">
+<h3 class="text-xs font-label uppercase tracking-wider font-semibold text-on-surface-variant">Settings</h3>
+<div class="grid grid-cols-2 gap-3 text-xs bg-surface-container-low p-3.5 rounded-xl font-mono">
+<div class="flex flex-col gap-1">
+<span class="text-[11px] font-sans text-outline">Geofence radius</span>
+<span class="font-medium text-on-surface">150 m</span>
+</div>
+<div class="flex flex-col gap-1">
+<div class="flex items-center gap-1 text-[11px] font-sans text-outline" title="Set by the engines. Changed only by a release.">
+<span>Match profile</span>
+<span class="material-symbols-outlined text-[12px]">lock</span>
+</div>
+<span class="font-medium text-on-surface">fuel</span>
+</div>
+<div class="flex flex-col gap-1 col-span-2 pt-1">
+<span class="text-[11px] font-sans text-outline">Engine Icon identifier</span>
+<div class="flex items-center gap-1.5 font-medium text-on-surface">
+<span class="material-symbols-outlined text-[15px] text-secondary">local_gas_station</span>
+<span>local_gas_station</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Section: Default Facilities -->
+<div class="space-y-2 pt-1">
+<h3 class="text-xs font-label uppercase tracking-wider font-semibold text-on-surface-variant">Default facilities</h3>
+<div class="flex flex-wrap gap-2">
+<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs bg-surface-container text-on-surface font-medium">
+<span class="material-symbols-outlined text-[14px] text-on-surface-variant">storefront</span>
+<span>Convenience store</span>
+</span>
+<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs bg-surface-container text-on-surface font-medium">
+<span class="material-symbols-outlined text-[14px] text-on-surface-variant">wc</span>
+<span>Restroom</span>
+</span>
+<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs bg-surface-container text-on-surface font-medium">
+<span class="material-symbols-outlined text-[14px] text-on-surface-variant">air</span>
+<span>Air pump</span>
+</span>
+<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs bg-surface-container text-on-surface font-medium">
+<span class="material-symbols-outlined text-[14px] text-on-surface-variant">atm</span>
+<span>ATM</span>
+</span>
+</div>
+</div>
+<!-- Section: Fields this type stores -->
+<div class="space-y-2 pt-1">
+<h3 class="text-xs font-label uppercase tracking-wider font-semibold text-on-surface-variant">Fields this type stores</h3>
+<div class="bg-surface-container-low p-3.5 rounded-xl space-y-3 text-xs">
+<div class="flex flex-col gap-1.5">
+<span class="text-[11px] font-medium text-outline">Grades sold</span>
+<div class="flex items-center gap-1.5 font-mono text-[11px]">
+<span class="px-2 py-0.5 rounded bg-surface-container-highest font-medium text-on-surface">87</span>
+<span class="px-2 py-0.5 rounded bg-surface-container-highest font-medium text-on-surface">90</span>
+<span class="px-2 py-0.5 rounded bg-surface-container-highest font-medium text-on-surface">Diesel</span>
+<span class="px-2 py-0.5 rounded bg-surface-container-highest font-medium text-on-surface">ULSD</span>
+</div>
+</div>
+<div class="flex items-center justify-between pt-1">
+<span class="text-[11px] font-medium text-outline">Pay at pump enabled</span>
+<div class="w-8 h-4 bg-tertiary rounded-full relative p-0.5 flex items-center justify-end">
+<div class="w-3 h-3 bg-white rounded-full shadow-sm"></div>
+</div>
+</div>
+<div class="flex items-center justify-between pt-1">
+<span class="text-[11px] font-medium text-outline">Opening hours standard</span>
+<span class="font-mono text-xs text-on-surface font-medium">06:00 – 23:00 / 24 hrs</span>
+</div>
+</div>
+</div>
+<!-- Section: Plug Chip Live Preview -->
+<div class="space-y-2 pt-1">
+<h3 class="text-xs font-label uppercase tracking-wider font-semibold text-on-surface-variant">Plug chip</h3>
+<div class="bg-surface-container-low p-4 rounded-xl flex items-center gap-6">
+<!-- Left Live chip preview -->
+<div class="flex flex-col items-center justify-center p-3 rounded-lg bg-surface-container-lowest shadow-sm w-36">
+<div class="px-3 py-1.5 rounded-full bg-secondary text-on-secondary text-xs font-semibold flex items-center gap-1.5 shadow-sm">
+<span class="material-symbols-outlined text-[14px]">local_gas_station</span>
+<span>Gas</span>
+</div>
+<span class="text-[10px] text-outline mt-2 font-mono">Live appearance</span>
+</div>
+<!-- Right key values -->
+<div class="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs flex-1 font-mono">
+<div class="flex flex-col">
+<span class="text-[11px] font-sans text-outline">Label</span>
+<span class="font-medium text-on-surface">Gas</span>
+</div>
+<div class="flex flex-col">
+<span class="text-[11px] font-sans text-outline">Map label</span>
+<span class="font-medium text-on-surface">Gas station</span>
+</div>
+<div class="flex flex-col">
+<span class="text-[11px] font-sans text-outline">Order weight</span>
+<span class="font-medium text-on-surface">1</span>
+</div>
+<div class="flex flex-col">
+<span class="text-[11px] font-sans text-outline">Empty hint</span>
+<span class="font-sans text-outline-variant italic text-[11px]">No stations nearby yet</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Section: Recent changes -->
+<div class="space-y-2 pt-1">
+<h3 class="text-xs font-label uppercase tracking-wider font-semibold text-on-surface-variant">Recent changes</h3>
+<div class="space-y-1 text-xs font-mono">
+<div class="flex items-center justify-between py-1 px-2.5 rounded bg-surface-container-low text-on-surface">
+<div class="flex items-center gap-2">
+<span class="text-outline text-[11px]">28 Oct</span>
+<span>Plug chip added</span>
+</div>
+<span class="text-outline text-[11px]">System</span>
+</div>
+<div class="flex items-center justify-between py-1 px-2.5 rounded bg-surface-container-low text-on-surface">
+<div class="flex items-center gap-2">
+<span class="text-outline text-[11px]">24 Oct</span>
+<span>Label set to Gas station</span>
+</div>
+<span class="text-outline text-[11px]">Deeki T</span>
+</div>
+<div class="flex items-center justify-between py-1 px-2.5 rounded bg-surface-container-low text-on-surface">
+<div class="flex items-center gap-2">
+<span class="text-outline text-[11px]">20 Oct</span>
+<span>Created</span>
+</div>
+<span class="text-outline text-[11px]">System</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Footer Actions -->
+<div class="flex items-center justify-between pt-6 mt-6 bg-surface-container-lowest">
+<button class="px-4 py-1.5 rounded-lg text-xs font-semibold bg-surface-container text-on-surface hover:bg-surface-container-high transition-colors flex items-center gap-1.5 shadow-sm" type="button">
+<span class="material-symbols-outlined text-[15px]">edit</span>
+<span>Edit</span>
+</button>
+<button class="px-3 py-1.5 rounded-lg text-xs font-semibold text-error hover:bg-error/5 transition-colors" type="button">
+          Retire…
+        </button>
+</div>
+</div>
+</div>
+</main>
+</body>
+</html>

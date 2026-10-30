@@ -39,6 +39,8 @@ type Impact = {
   merchants_moving: number;
   area_change_pct: number;
   needs_typed_name: boolean;
+  places_moving: number;
+  places_sample: string[];
   moves: Array<{ merchant_id: string; market_id: string }>;
   move_summaries: MoveSummary[];
   market_ids: string[];
@@ -205,6 +207,19 @@ export async function buildGeoImpact(
     }
   }
 
+  let placesMoving = 0;
+  let placesSample: string[] = [];
+  const { data: moving, error: movingError } = await geo.rpc("preview_places_moving", {
+    p_pcode: pcode,
+    p_version_id: versionId,
+  });
+  if (movingError) throw new Error(movingError.message);
+  if (moving && typeof moving === "object") {
+    placesMoving = Number((moving as { count?: number }).count ?? 0);
+    const sample = (moving as { sample?: unknown }).sample;
+    if (Array.isArray(sample)) placesSample = sample.map((name) => String(name));
+  }
+
   return {
     pcode,
     name: String(place?.name ?? pcode),
@@ -216,6 +231,8 @@ export async function buildGeoImpact(
     merchants_moving: moves.length,
     area_change_pct: Math.round(areaChange * 10) / 10,
     needs_typed_name: !alreadyLive && live > 0 && areaChange > 10,
+    places_moving: placesMoving,
+    places_sample: placesSample,
     moves,
     move_summaries: summaries,
     market_ids: marketIds,
@@ -394,6 +411,7 @@ async function applyGeoPublishLocked(
       p_impact: {
         live_markets: impact.live_markets,
         merchants_moving: impact.merchants_moving,
+        places_moving: impact.places_moving,
         area_change_pct: impact.area_change_pct,
       },
     });
