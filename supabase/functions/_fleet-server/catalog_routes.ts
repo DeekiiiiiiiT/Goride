@@ -7,6 +7,8 @@ import { requireAuth } from "./rbac_middleware.ts";
 import { assertPlatformStaffResponse } from "./rbac_middleware.ts";
 import { assertNoCustomerIdentity } from "./catalog_parts_shape.ts";
 import {
+  assembleMatchSections,
+  enrichFleetParts,
   getCatalogParts,
   getCatalogSchedule,
   getCatalogServiceKit,
@@ -234,10 +236,115 @@ export function registerCatalogRoutes(route: RouteApp, supabase: SupabaseClient)
   route.post("/make-server-37f42386/admin/catalog/seed-in-use", requireAuth(), async (c: Context) => {
     const denied = assertPlatformStaffResponse(c);
     if (denied) return denied;
+    return c.json({ error: "Parts are entered from a source, not seeded." }, 410);
+  });
+
+  route.get("/make-server-37f42386/admin/catalog/parts-overview", requireAuth(), async (c: Context) => {
+    const denied = assertPlatformStaffResponse(c);
+    if (denied) return denied;
     try {
-      const { data, error } = await supabase.rpc("seed_in_use_engine_parts");
+      const { data, error } = await supabase.rpc("admin_parts_overview");
       if (error) throw error;
-      return staffJson(c, { rulesAdded: data ?? 0 });
+      return staffJson(c, data ?? {});
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
+  route.get("/make-server-37f42386/admin/catalog/find-parts", requireAuth(), async (c: Context) => {
+    const denied = assertPlatformStaffResponse(c);
+    if (denied) return denied;
+    try {
+      const make = (c.req.query("make") ?? "").trim();
+      const model = (c.req.query("model") ?? "").trim();
+      const yearRaw = Number(c.req.query("year") ?? "");
+      const year = Number.isFinite(yearRaw) && yearRaw > 0 ? yearRaw : null;
+      const variantId = (c.req.query("variantId") ?? "").trim();
+      let query = supabase
+        .from("vehicle_catalog")
+        .select("id, make, model, chassis_code, engine_code, production_start_year, production_end_year, drivetrain");
+      if (variantId) {
+        query = query.eq("id", variantId);
+      } else if (make || model || year != null) {
+        if (make) query = query.ilike("make", make);
+        if (model) query = query.ilike("model", model);
+        if (year != null) {
+          query = query.lte("production_start_year", year).or(`production_end_year.is.null,production_end_year.gte.${year}`);
+        }
+        query = query.limit(40);
+      } else {
+        query = query.limit(0);
+      }
+      const { data: rows, error } = await query;
+      if (error) throw error;
+      const variants = (rows || []) as Array<Record<string, unknown>>;
+      const picked = variantId
+        ? variants.find((row) => String(row.id) === variantId) ?? null
+        : variants.length === 1 ? variants[0] : null;
+      if (!picked) {
+        return staffJson(c, { variants, sections: [], picked: null, coverage: null });
+      }
+      const pickedId = String(picked.id);
+      const parts = await getCatalogParts(supabase, pickedId, { vehicleYear: year });
+      const enriched = await enrichFleetParts(supabase, parts.mode, parts.items, null, 0);
+      const sections = assembleMatchSections(
+        parts.mode === "tiered" ? enriched as Array<{ tier?: number; sisterNames?: string | null }> : [],
+        parts.universal,
+      );
+      const [{ data: readyRow }, { data: specRows }, { data: listingRows }] = await Promise.all([
+        supabase.from("variant_parts_readiness").select("components_ready").eq("variant_id", pickedId).maybeSingle(),
+        supabase.from("catalog_spec_value").select("spec_key").eq("vehicle_catalog_id", pickedId),
+        supabase.from("part_listing").select("id").eq("vehicle_catalog_id", pickedId),
+      ]);
+      const essentials = Number((readyRow as { components_ready?: number } | null)?.components_ready ?? 0);
+      const specs = new Set((specRows || []).map((row) => String((row as { spec_key?: string }).spec_key ?? ""))).size;
+      const coverage = {
+        essentials,
+        essentialsTotal: 10,
+        specs,
+        specsTotal: 13,
+        otherParts: (listingRows || []).length,
+      };
+      assertNoCustomerIdentity(parts);
+      return staffJson(c, { variants, picked, sections, ready: parts.ready, coverage });
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
+  route.get("/make-server-37f42386/admin/catalog/body-families", requireAuth(), async (c: Context) => {
+    const denied = assertPlatformStaffResponse(c);
+    if (denied) return denied;
+    try {
+      const { data, error } = await supabase.rpc("admin_body_families");
+      if (error) throw error;
+      return staffJson(c, data ?? {});
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
+  route.post("/make-server-37f42386/admin/catalog/body-families", requireAuth(), async (c: Context) => {
+    const denied = assertPlatformStaffResponse(c);
+    if (denied) return denied;
+    try {
+      const body = await c.req.json();
+      const { data, error } = await supabase.rpc("admin_save_body_family", { p_input: body });
+      if (error) return c.json({ error: error.message }, 400);
+      return staffJson(c, data ?? {});
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
+  route.post("/make-server-37f42386/admin/catalog/parts/exclude", requireAuth(), async (c: Context) => {
+    const denied = assertPlatformStaffResponse(c);
+    if (denied) return denied;
+    try {
+      const body = await c.req.json();
+      const { data, error } = await supabase.rpc("admin_exclude_listing", { p_input: body });
+      if (error) return c.json({ error: error.message }, 400);
+      return staffJson(c, data ?? {});
     } catch (error) {
       return fail(c, error);
     }
@@ -398,6 +505,115 @@ export function registerCatalogRoutes(route: RouteApp, supabase: SupabaseClient)
         .order("manufacturer");
       if (error) throw error;
       return staffJson(c, { items: data || [] });
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
+  route.get("/make-server-37f42386/admin/catalog/vehicle-options", requireAuth(), async (c: Context) => {
+    const denied = assertPlatformStaffResponse(c);
+    if (denied) return denied;
+    try {
+      const make = (c.req.query("make") ?? "").trim();
+      const model = (c.req.query("model") ?? "").trim();
+      let query = supabase.from("vehicle_catalog").select("make, model, production_start_year, production_end_year");
+      if (make) query = query.ilike("make", make);
+      if (model) query = query.ilike("model", model);
+      const { data, error } = await query.limit(500);
+      if (error) throw error;
+      const rows = (data || []) as Array<{ make?: string; model?: string; production_start_year?: number; production_end_year?: number }>;
+      const makes = [...new Set(rows.map((row) => String(row.make ?? "")).filter(Boolean))].sort();
+      const models = [...new Set(rows.map((row) => String(row.model ?? "")).filter(Boolean))].sort();
+      const years = new Set<number>();
+      for (const row of rows) {
+        const from = Number(row.production_start_year ?? 0);
+        const to = Number(row.production_end_year ?? from);
+        if (!from) continue;
+        for (let year = from; year <= (to || from); year += 1) years.add(year);
+      }
+      return staffJson(c, { makes, models, years: [...years].sort((a, b) => b - a) });
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
+  route.get("/make-server-37f42386/admin/catalog/part-jobs", requireAuth(), async (c: Context) => {
+    const denied = assertPlatformStaffResponse(c);
+    if (denied) return denied;
+    try {
+      const { data, error } = await supabase.rpc("guided_part_jobs");
+      if (error) throw error;
+      return staffJson(c, { items: data || [] });
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
+  route.get("/make-server-37f42386/admin/catalog/part-categories", requireAuth(), async (c: Context) => {
+    const denied = assertPlatformStaffResponse(c);
+    if (denied) return denied;
+    try {
+      const { data, error } = await supabase.from("part_category").select("id, label, slug").order("sort_order");
+      if (error) throw error;
+      return staffJson(c, { items: data || [] });
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
+  route.get("/make-server-37f42386/admin/catalog/same-model", requireAuth(), async (c: Context) => {
+    const denied = assertPlatformStaffResponse(c);
+    if (denied) return denied;
+    try {
+      const variantId = (c.req.query("variantId") ?? "").trim();
+      const { data: mine, error } = await supabase.from("vehicle_catalog").select("make, model, production_start_year, production_end_year").eq("id", variantId).maybeSingle();
+      if (error) throw error;
+      if (!mine) return staffJson(c, { items: [] });
+      const row = mine as { make?: string; model?: string };
+      const { data, error: listError } = await supabase
+        .from("vehicle_catalog")
+        .select("id, make, model, chassis_code, production_start_year, production_end_year, drivetrain")
+        .ilike("make", String(row.make ?? ""))
+        .ilike("model", String(row.model ?? ""))
+        .limit(80);
+      if (listError) throw listError;
+      return staffJson(c, { items: data || [] });
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
+  route.post("/make-server-37f42386/admin/catalog/universal-parts/delete", requireAuth(), async (c: Context) => {
+    const denied = assertPlatformStaffResponse(c);
+    if (denied) return denied;
+    try {
+      const body = await c.req.json() as { id?: string };
+      if (!body.id) return c.json({ error: "Choose the universal part" }, 400);
+      const { error } = await supabase.from("universal_part").delete().eq("id", body.id);
+      if (error) throw error;
+      return staffJson(c, { ok: true });
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
+  route.get("/make-server-37f42386/admin/catalog/advanced-tables", requireAuth(), async (c: Context) => {
+    const denied = assertPlatformStaffResponse(c);
+    if (denied) return denied;
+    try {
+      const [parts, brands, listings] = await Promise.all([
+        supabase.from("part_master").select("id, name, oem_part_number, manufacturer, category_id").limit(50),
+        supabase.from("part_master").select("id, interchange_group_id, manufacturer, oem_part_number").not("interchange_group_id", "is", null).limit(50),
+        supabase.from("part_listing").select("id, vehicle_catalog_id, interchange_group_id, position, evidence_url").limit(50),
+      ]);
+      if (parts.error) throw parts.error;
+      if (brands.error) throw brands.error;
+      if (listings.error) throw listings.error;
+      return staffJson(c, {
+        parts: { count: (parts.data || []).length, rows: parts.data || [] },
+        brands: { count: (brands.data || []).length, rows: brands.data || [] },
+        listings: { count: (listings.data || []).length, rows: listings.data || [] },
+      });
     } catch (error) {
       return fail(c, error);
     }

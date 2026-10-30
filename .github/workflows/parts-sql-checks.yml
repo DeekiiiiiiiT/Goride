@@ -9,6 +9,7 @@ on:
     paths:
       - 'supabase/migrations/**'
       - 'supabase/tests/parts_rev2_checks.sql'
+      - 'supabase/tests/guided_parts_checks.sql'
       - 'supabase/tests/vehicle_database_rebuild_checks.sql'
       - 'supabase/tests/places_checks.sql'
       - 'supabase/tests/price_engine_checks.sql'
@@ -18,6 +19,7 @@ on:
     paths:
       - 'supabase/migrations/**'
       - 'supabase/tests/parts_rev2_checks.sql'
+      - 'supabase/tests/guided_parts_checks.sql'
       - 'supabase/tests/vehicle_database_rebuild_checks.sql'
       - 'supabase/tests/places_checks.sql'
       - 'supabase/tests/price_engine_checks.sql'
@@ -69,6 +71,8 @@ jobs:
           test -n "$db_container"
           docker cp supabase/tests/parts_rev2_checks.sql "$db_container":/tmp/parts_rev2_checks.sql
           docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/parts_rev2_checks.sql
+          docker cp supabase/tests/guided_parts_checks.sql "$db_container":/tmp/guided_parts_checks.sql
+          docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/guided_parts_checks.sql
           docker cp supabase/tests/vehicle_database_rebuild_checks.sql "$db_container":/tmp/vehicle_database_rebuild_checks.sql
           docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/vehicle_database_rebuild_checks.sql
           docker cp supabase/tests/places_checks.sql "$db_container":/tmp/places_checks.sql

@@ -20,6 +20,7 @@ export interface PartMasterRecord {
   part_kind?: string | null;
   maintenance_component_id?: string | null;
   interchange_group_id?: string | null;
+  catalog_decision?: string | null;
   created_at?: string;
   updated_at?: string;
   part_category?: { id: string; slug: string; label: string };
@@ -143,5 +144,6 @@ export interface CompatiblePartsResponse {
   message?: string;
   tiered?: boolean;
   universal?: UniversalSpecSection[];
+  sections?: Array<{ tier: number; label: string; sisterNames?: string; items?: CompatiblePartsItem[] }>;
   relatedSupplies?: RelatedSupply[];
 }

@@ -5,7 +5,7 @@ import { useAuth } from "../../auth/AuthContext";
 import { Button } from "../maintenance-templates/plainUi";
 import { partsEnterpriseApi, listSuppliers } from "../../../services/partSourcingService";
 import type { SupplierRecord } from "../../../types/partSourcing";
-import { GuidedPartDialog } from "./GuidedPartDialog";
+import { AddPartDialog } from "../parts-database/AddPartDialog";
 
 const CORE = [
   ["ENG-OIL", "Oil"],
@@ -362,17 +362,10 @@ export function CatalogQualityPage() {
       </div>
 
       {gap && token ? (
-        <GuidedPartDialog
-          open
-          token={token}
-          mode="create"
-          variant={{ id: gap.variantId, label: gap.label, yearFrom: gap.yearFrom, yearTo: gap.yearTo }}
-          job={{ opCode: gap.opCode, label: gap.opLabel }}
-          onClose={() => setGap(null)}
-          onSaved={() => {
-            setGap(null);
-            void load();
-          }}
+        <AddPartDialog
+          variantId={gap.variantId}
+          jobOpCode={gap.opCode}
+          onClose={() => { setGap(null); void load(); }}
         />
       ) : null}
 

@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_dashboard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;family=Public+Sans:wght@500;600&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;font-variant-numeric:tabular-nums;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "on-surface": "#30323b", "inverse-primary": "#dae6fe", "on-error": "#fff7f6", "secondary-fixed-dim": "#c7d3ff", "secondary-fixed": "#dbe1ff", "surface-bright": "#faf8fe", "on-tertiary-fixed": "#004c20", "primary-fixed-dim": "#cad5ed", "surface-dim": "#d9d9e4", "on-secondary-fixed": "#003798", "primary-fixed": "#d8e3fb", "secondary-dim": "#0049c3", "tertiary-fixed-dim": "#8aec9c", "surface-variant": "#e1e2ed", "error-container": "#fa746f", "surface": "#faf8fe", "primary-container": "#d8e3fb", "on-background": "#30323b", "tertiary-fixed": "#98fba9", "surface-tint": "#545f74", "on-secondary-container": "#0047c0", "error": "#a83836", "on-tertiary": "#e9ffe7", "tertiary-container": "#98fba9", "on-primary-fixed-variant": "#515c70", "surface-container-high": "#e8e7f1", "inverse-surface": "#0d0e12", "on-primary": "#f8f8ff", "outline-variant": "#b0b1bc", "on-error-container": "#6e0a12", "secondary-container": "#dbe1ff", "error-dim": "#67040d", "on-tertiary-container": "#00612a", "on-primary-container": "#475266", "surface-container-lowest": "#ffffff", "surface-container": "#eeedf6", "primary-dim": "#485367", "surface-container-highest": "#e1e2ed", "on-surface-variant": "#5d5f68", "primary": "#545f74", "outline": "#797a84", "secondary": "#0153dc", "on-secondary": "#faf8ff", "tertiary": "#006e31", "on-secondary-fixed-variant": "#0050d5", "surface-container-low": "#f4f3fa", "background": "#faf8fe", "tertiary-dim": "#00612a", "on-tertiary-fixed-variant": "#006c30", "inverse-on-surface": "#9d9ca2", "on-primary-fixed": "#354053" }, "borderRadius": { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, "spacing": {}, "fontFamily": { "headline": ["Inter"], "display": ["Inter"], "body": ["Inter"], "label": ["Public Sans"] }, "fontSize": {} } } }</script></head><body class="bg-surface font-body text-on-surface"><aside class="fixed left-0 top-0 h-full w-64 bg-inverse-surface border-r border-outline-variant/20 z-50 flex flex-col justify-between select-none"><div class="flex flex-col"><div class="h-16 px-6 flex items-center gap-3 border-b border-outline-variant/10"><div class="w-7 h-7 rounded bg-secondary flex items-center justify-center"><span class="material-symbols-outlined text-on-secondary text-[18px]">shield_with_house</span></div><span class="text-base font-headline font-bold tracking-tight text-surface-container-lowest">Dominion Admin</span></div><div class="px-4 py-5"><p class="px-3 text-[11px] font-label font-semibold uppercase tracking-wider text-inverse-on-surface mb-2">Navigation</p><nav class="flex flex-col gap-1" data-active-classes="bg-secondary text-on-secondary font-medium rounded-lg"><a class="flex items-center px-3 py-2 rounded-lg text-sm text-surface-variant hover:bg-surface-variant/10 hover:text-surface-container-lowest transition-colors" data-path="overview" href="#"><span class="material-symbols-outlined text-[20px] mr-3">dashboard</span>Overview</a><a class="flex items-center px-3 py-2 rounded-lg text-sm text-surface-variant hover:bg-surface-variant/10 hover:text-surface-container-lowest transition-colors" data-path="master-data" href="#"><span class="material-symbols-outlined text-[20px] mr-3">database</span>Master Data</a><a class="flex items-center px-3 py-2 rounded-lg text-sm text-surface-variant hover:bg-surface-variant/10 hover:text-surface-container-lowest transition-colors" data-path="engines" href="#"><span class="material-symbols-outlined text-[20px] mr-3">settings_suggest</span>Engines</a><a class="flex items-center px-3 py-2 rounded-lg text-sm text-surface-variant hover:bg-surface-variant/10 hover:text-surface-container-lowest transition-colors" data-path="distribution" href="#"><span class="material-symbols-outlined text-[20px] mr-3">hub</span>Distribution</a><a class="flex items-center px-3 py-2 rounded-lg text-sm text-surface-variant hover:bg-surface-variant/10 hover:text-surface-container-lowest transition-colors" data-path="platform" href="#"><span class="material-symbols-outlined text-[20px] mr-3">memory</span>Platform</a><a class="flex items-center px-3 py-2 rounded-lg text-sm text-surface-variant hover:bg-surface-variant/10 hover:text-surface-container-lowest transition-colors" data-path="back-office" href="#"><span class="material-symbols-outlined text-[20px] mr-3">corporate_fare</span>Back Office</a></nav></div></div><div class="p-4 border-t border-outline-variant/10"><div class="flex items-center gap-3 px-2 py-2 rounded-lg bg-surface-variant/5"><span class="material-symbols-outlined text-inverse-on-surface text-[18px]">verified</span><div class="flex flex-col"><span class="text-xs text-surface-container-lowest font-medium">Jamaica Cluster</span><span class="text-[11px] text-inverse-on-surface font-mono">JMD · Production</span></div></div></div></aside><div class="pl-64 flex flex-col min-h-screen"><header class="fixed top-0 left-64 right-0 h-16 bg-surface-container-lowest border-b border-outline-variant/20 z-40 flex items-center justify-between px-8"><div class="w-96 flex items-center gap-2 bg-surface-container-low px-3 py-2 rounded-lg border border-outline-variant/20"><span class="material-symbols-outlined text-on-surface-variant text-[20px]">search</span><input class="bg-transparent text-sm text-on-surface placeholder:text-on-surface-variant w-full focus:outline-none" placeholder="Search entities, engines, routes…" readonly="" type="text"/></div><div class="flex items-center gap-6"><div class="flex items-center gap-2 text-on-surface-variant"><span class="text-xs font-mono font-medium bg-surface-container px-2 py-1 rounded text-on-surface">1440px</span></div><div class="flex items-center gap-3 pl-4 border-l border-outline-variant/20"><div class="text-right"><p class="text-xs font-semibold text-on-surface leading-tight">DT · Deeki T</p><p class="text-[11px] text-on-surface-variant leading-tight">Owner</p></div><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="w-full pt-16 bg-surface min-h-screen"><div class="flex flex-col w-full">
+<!-- Interactive State Preview Controller & Breadcrumbs Strip -->
+<div class="px-8 pt-6 pb-4 bg-surface-container-lowest shadow-sm flex flex-col gap-4">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2 text-xs font-mono tracking-tight text-on-surface-variant">
+<span class="hover:text-secondary cursor-pointer transition-colors">DOMINION</span>
+<span>›</span>
+<span class="hover:text-secondary cursor-pointer transition-colors">MASTER DATA</span>
+<span>›</span>
+<span class="hover:text-secondary cursor-pointer transition-colors">VEHICLES</span>
+<span>›</span>
+<span class="text-on-surface font-semibold">PARTS DATABASE</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="text-[11px] font-mono uppercase text-on-surface-variant">Cluster Spec</span>
+<span class="text-xs font-mono font-medium px-2 py-0.5 rounded bg-surface-container text-on-surface">KGN-PRT-PROD-01</span>
+</div>
+</div>
+<!-- Quick Switcher for State Proofing -->
+<div class="flex items-center justify-between pt-2">
+<div class="flex items-baseline gap-3">
+<h1 class="text-xl font-headline font-bold text-on-surface tracking-tight">Parts Engine Lifecycle States</h1>
+<span class="text-xs font-mono text-on-surface-variant">Desktop Master Layout · Viewport 1440px</span>
+</div>
+<div class="flex items-center gap-1.5 p-1 bg-surface-container rounded-xl">
+<button class="px-3 py-1.5 rounded-lg text-xs font-label font-medium transition-all bg-surface-container-lowest text-on-surface shadow-sm" id="btn-state-1" onclick="switchState('state-1')">State 1: Loading Skeletons</button>
+<button class="px-3 py-1.5 rounded-lg text-xs font-label font-medium transition-all text-on-surface-variant hover:text-on-surface" id="btn-state-2" onclick="switchState('state-2')">State 2: No Vehicle Found</button>
+<button class="px-3 py-1.5 rounded-lg text-xs font-label font-medium transition-all text-on-surface-variant hover:text-on-surface" id="btn-state-3" onclick="switchState('state-3')">State 3: Zero Coverage (Empty)</button>
+<button class="px-3 py-1.5 rounded-lg text-xs font-label font-medium transition-all text-on-surface-variant hover:text-on-surface" id="btn-state-4" onclick="switchState('state-4')">State 4: Index Error</button>
+<div class="w-[1px] h-4 bg-outline-variant/30 mx-1"></div>
+<button class="px-3 py-1.5 rounded-lg text-xs font-label font-medium transition-all text-on-surface-variant hover:text-on-surface" id="btn-state-all" onclick="switchState('state-all')">View All Quadrants</button>
+</div>
+</div>
+</div>
+<!-- States Presentation Canvas -->
+<div class="p-8 flex flex-col gap-10">
+<!-- STATE 1: LOADING SKELETONS -->
+<section class="state-panel flex flex-col gap-5" id="state-1">
+<div class="flex items-center justify-between pb-1">
+<div class="flex items-center gap-2.5">
+<span class="flex items-center justify-center w-6 h-6 rounded-full bg-secondary-fixed text-on-secondary-fixed font-mono text-xs font-semibold">1</span>
+<span class="text-sm font-label font-semibold text-on-surface uppercase tracking-wide">State 1: Async Retrieval &amp; Shimmer Matrix</span>
+<span class="text-xs font-mono text-outline">Fetching JMD registry indexes</span>
+</div>
+<span class="text-xs font-mono bg-surface-container-high px-2 py-0.5 rounded text-on-surface-variant">Pulse Skeleton Active</span>
+</div>
+<!-- Shimmer Vehicle Search Bar -->
+<div class="bg-surface-container-lowest rounded-xl p-4 shadow-sm flex items-center gap-4">
+<div class="w-10 h-10 rounded-lg bg-surface-container-high animate-pulse flex items-center justify-center">
+<span class="material-symbols-outlined text-outline-variant text-[20px]">directions_car</span>
+</div>
+<div class="flex-1 flex flex-col gap-2">
+<div class="h-4 w-72 bg-surface-container-high rounded animate-pulse"></div>
+<div class="h-3 w-40 bg-surface-container rounded animate-pulse"></div>
+</div>
+<div class="flex items-center gap-3">
+<div class="h-9 w-28 bg-surface-container rounded-lg animate-pulse"></div>
+<div class="h-9 w-32 bg-secondary/20 rounded-lg animate-pulse"></div>
+</div>
+</div>
+<!-- Shimmer Coverage Summary Strip -->
+<div class="bg-surface-container-lowest rounded-xl p-4 shadow-sm flex items-center justify-between">
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded bg-surface-container-high animate-pulse"></div>
+<div class="flex flex-col gap-1.5">
+<div class="h-3 w-32 bg-surface-container-high rounded animate-pulse"></div>
+<div class="h-4 w-20 bg-surface-container rounded animate-pulse"></div>
+</div>
+</div>
+<div class="w-[1px] h-8 bg-surface-container"></div>
+<div class="flex flex-col gap-1.5">
+<div class="h-3 w-28 bg-surface-container-high rounded animate-pulse"></div>
+<div class="h-4 w-16 bg-surface-container rounded animate-pulse"></div>
+</div>
+<div class="w-[1px] h-8 bg-surface-container"></div>
+<div class="flex flex-col gap-1.5">
+<div class="h-3 w-24 bg-surface-container-high rounded animate-pulse"></div>
+<div class="h-4 w-12 bg-surface-container rounded animate-pulse"></div>
+</div>
+</div>
+<div class="h-2.5 w-64 bg-surface-container rounded-full animate-pulse"></div>
+</div>
+<!-- 5 Canonical Match Types: Shimmer Row Stack -->
+<div class="flex flex-col gap-3.5">
+<!-- 1. Direct OEM Match (Dominion Blue #0153dc) -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden flex">
+<div class="w-1 bg-[#0153dc] shrink-0"></div>
+<div class="p-5 flex-1 flex flex-col gap-3">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2.5">
+<span class="text-xs font-label font-bold text-on-surface uppercase tracking-wide">Direct OEM Match</span>
+<div class="h-5 w-16 bg-secondary-fixed rounded animate-pulse"></div>
+</div>
+<div class="h-4 w-24 bg-surface-container rounded animate-pulse"></div>
+</div>
+<div class="grid grid-cols-12 gap-4 items-center pt-2">
+<div class="col-span-3 h-4 bg-surface-container-high rounded animate-pulse"></div>
+<div class="col-span-3 h-4 bg-surface-container rounded font-mono animate-pulse"></div>
+<div class="col-span-2 h-4 bg-surface-container rounded animate-pulse"></div>
+<div class="col-span-2 h-4 bg-surface-container rounded font-mono animate-pulse"></div>
+<div class="col-span-2 flex justify-end"><div class="h-7 w-20 bg-surface-container rounded animate-pulse"></div></div>
+</div>
+</div>
+</div>
+<!-- 2. Sister Vehicle Match (Teal #0e7490) -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden flex">
+<div class="w-1 bg-[#0e7490] shrink-0"></div>
+<div class="p-5 flex-1 flex flex-col gap-3">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2.5">
+<span class="text-xs font-label font-bold text-on-surface uppercase tracking-wide">Sister Vehicle Match</span>
+<div class="h-5 w-20 bg-surface-container rounded animate-pulse"></div>
+</div>
+<div class="h-4 w-28 bg-surface-container rounded animate-pulse"></div>
+</div>
+<div class="grid grid-cols-12 gap-4 items-center pt-2">
+<div class="col-span-3 h-4 bg-surface-container-high rounded animate-pulse"></div>
+<div class="col-span-3 h-4 bg-surface-container rounded font-mono animate-pulse"></div>
+<div class="col-span-2 h-4 bg-surface-container rounded animate-pulse"></div>
+<div class="col-span-2 h-4 bg-surface-container rounded font-mono animate-pulse"></div>
+<div class="col-span-2 flex justify-end"><div class="h-7 w-20 bg-surface-container rounded animate-pulse"></div></div>
+</div>
+</div>
+</div>
+<!-- 3. Engine Compatible Match (Violet #6d28d9) -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden flex">
+<div class="w-1 bg-[#6d28d9] shrink-0"></div>
+<div class="p-5 flex-1 flex flex-col gap-3">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2.5">
+<span class="text-xs font-label font-bold text-on-surface uppercase tracking-wide">Engine Compatible Match</span>
+<div class="h-5 w-20 bg-surface-container rounded animate-pulse"></div>
+</div>
+<div class="h-4 w-24 bg-surface-container rounded animate-pulse"></div>
+</div>
+<div class="grid grid-cols-12 gap-4 items-center pt-2">
+<div class="col-span-3 h-4 bg-surface-container-high rounded animate-pulse"></div>
+<div class="col-span-3 h-4 bg-surface-container rounded font-mono animate-pulse"></div>
+<div class="col-span-2 h-4 bg-surface-container rounded animate-pulse"></div>
+<div class="col-span-2 h-4 bg-surface-container rounded font-mono animate-pulse"></div>
+<div class="col-span-2 flex justify-end"><div class="h-7 w-20 bg-surface-container rounded animate-pulse"></div></div>
+</div>
+</div>
+</div>
+<!-- 4. Aftermarket Cross-Reference (Slate #475569) -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden flex">
+<div class="w-1 bg-[#475569] shrink-0"></div>
+<div class="p-5 flex-1 flex flex-col gap-3">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2.5">
+<span class="text-xs font-label font-bold text-on-surface uppercase tracking-wide">Aftermarket Cross-Reference</span>
+<div class="h-5 w-24 bg-surface-container rounded animate-pulse"></div>
+</div>
+<div class="h-4 w-20 bg-surface-container rounded animate-pulse"></div>
+</div>
+<div class="grid grid-cols-12 gap-4 items-center pt-2">
+<div class="col-span-3 h-4 bg-surface-container-high rounded animate-pulse"></div>
+<div class="col-span-3 h-4 bg-surface-container rounded font-mono animate-pulse"></div>
+<div class="col-span-2 h-4 bg-surface-container rounded animate-pulse"></div>
+<div class="col-span-2 h-4 bg-surface-container rounded font-mono animate-pulse"></div>
+<div class="col-span-2 flex justify-end"><div class="h-7 w-20 bg-surface-container rounded animate-pulse"></div></div>
+</div>
+</div>
+</div>
+<!-- 5. Universal Fleet Parts (Green #006e31) -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden flex">
+<div class="w-1 bg-[#006e31] shrink-0"></div>
+<div class="p-5 flex-1 flex flex-col gap-3">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2.5">
+<span class="text-xs font-label font-bold text-on-surface uppercase tracking-wide">Universal Fleet Parts</span>
+<div class="h-5 w-16 bg-surface-container rounded animate-pulse"></div>
+</div>
+<div class="h-4 w-32 bg-surface-container rounded animate-pulse"></div>
+</div>
+<div class="grid grid-cols-12 gap-4 items-center pt-2">
+<div class="col-span-3 h-4 bg-surface-container-high rounded animate-pulse"></div>
+<div class="col-span-3 h-4 bg-surface-container rounded font-mono animate-pulse"></div>
+<div class="col-span-2 h-4 bg-surface-container rounded animate-pulse"></div>
+<div class="col-span-2 h-4 bg-surface-container rounded font-mono animate-pulse"></div>
+<div class="col-span-2 flex justify-end"><div class="h-7 w-20 bg-surface-container rounded animate-pulse"></div></div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- STATE 2: NO VEHICLE FOUND -->
+<section class="state-panel flex flex-col gap-5" id="state-2">
+<div class="flex items-center justify-between pb-1">
+<div class="flex items-center gap-2.5">
+<span class="flex items-center justify-center w-6 h-6 rounded-full bg-surface-container-high text-on-surface font-mono text-xs font-semibold">2</span>
+<span class="text-sm font-label font-semibold text-on-surface uppercase tracking-wide">State 2: Vehicle Query Miss</span>
+<span class="text-xs font-mono text-outline">Search query not present in Dominion index</span>
+</div>
+<span class="text-xs font-mono text-on-surface-variant">Lookup response: 0 results</span>
+</div>
+<!-- Active Search Form with Specified Query -->
+<div class="bg-surface-container-lowest rounded-xl p-4 shadow-sm flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-lg bg-surface-container flex items-center justify-center text-on-surface">
+<span class="material-symbols-outlined text-[20px]">search</span>
+</div>
+<div class="flex items-center gap-2">
+<div class="flex items-center gap-1.5 px-3 py-1.5 bg-surface-container rounded-lg font-mono text-xs text-on-surface">
+<span class="text-outline">Make:</span>
+<span class="font-semibold">Toyota</span>
+</div>
+<div class="flex items-center gap-1.5 px-3 py-1.5 bg-surface-container rounded-lg font-mono text-xs text-on-surface">
+<span class="text-outline">Model:</span>
+<span class="font-semibold">Roomy</span>
+</div>
+<div class="flex items-center gap-1.5 px-3 py-1.5 bg-surface-container rounded-lg font-mono text-xs text-on-surface">
+<span class="text-outline">Year:</span>
+<span class="font-semibold">2019</span>
+</div>
+</div>
+</div>
+<button class="px-3.5 py-1.5 rounded-lg text-xs font-label font-medium bg-surface-container text-on-surface hover:bg-surface-container-high transition-colors">Clear Filter</button>
+</div>
+<!-- Compact Clean Warning / Empty Card -->
+<div class="bg-surface-container-lowest rounded-xl p-10 shadow-sm flex flex-col items-center justify-center text-center">
+<div class="w-12 h-12 rounded-xl bg-surface-container-low flex items-center justify-center mb-4 text-[#d97706]">
+<span class="material-symbols-outlined text-[26px]">search_off</span>
+</div>
+<h3 class="text-base font-headline font-semibold text-on-surface mb-1">No car matches Toyota Roomy 2019. Add it in Vehicle catalog.</h3>
+<p class="text-xs text-on-surface-variant max-w-md mb-6">The database has no registry record or parts mapping for this variant in the Jamaica Cluster. You can provision this chassis in Master Data.</p>
+<div class="flex items-center gap-3">
+<a class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-secondary text-on-secondary text-xs font-label font-semibold shadow hover:bg-secondary-dim transition-colors" href="#">
+<span class="material-symbols-outlined text-[16px]">add_circle</span>
+            Add vehicle to catalog
+          </a>
+<a class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-surface-container text-on-surface text-xs font-label font-medium hover:bg-surface-container-high transition-colors" href="#">
+<span class="material-symbols-outlined text-[16px]">open_in_new</span>
+            Open Vehicle catalog
+          </a>
+</div>
+</div>
+</section>
+<!-- STATE 3: ALL FIVE SECTIONS EMPTY WITH COVERAGE STRIP AT 0 -->
+<section class="state-panel flex flex-col gap-5" id="state-3">
+<div class="flex items-center justify-between pb-1">
+<div class="flex items-center gap-2.5">
+<span class="flex items-center justify-center w-6 h-6 rounded-full bg-surface-container-high text-on-surface font-mono text-xs font-semibold">3</span>
+<span class="text-sm font-label font-semibold text-on-surface uppercase tracking-wide">State 3: Vehicle Indexed · Zero Parts Coverage</span>
+<span class="text-xs font-mono text-outline">Empty canonical sections with actionable controls</span>
+</div>
+<span class="text-xs font-mono bg-surface-container px-2 py-0.5 rounded text-on-surface">DR17V · Montego Bay Node</span>
+</div>
+<!-- Vehicle Context Bar -->
+<div class="bg-surface-container-lowest rounded-xl p-4 shadow-sm flex items-center justify-between">
+<div class="flex items-center gap-3.5">
+<div class="w-10 h-10 rounded-lg bg-secondary-fixed flex items-center justify-center text-on-secondary-fixed">
+<span class="material-symbols-outlined text-[20px]">commute</span>
+</div>
+<div class="flex flex-col">
+<div class="flex items-center gap-2">
+<span class="text-sm font-headline font-bold text-on-surface">Nissan Clipper 2021</span>
+<span class="px-2 py-0.5 rounded bg-surface-container font-mono text-[11px] font-semibold text-on-surface">DR17V</span>
+</div>
+<span class="text-xs font-label text-on-surface-variant">658cc R06A I3 · Kingston &amp; St. Andrew Delivery Specification</span>
+</div>
+</div>
+<button class="px-3.5 py-1.5 rounded-lg text-xs font-label font-medium bg-surface-container-low text-on-surface hover:bg-surface-container transition-colors">Switch Vehicle</button>
+</div>
+<!-- Exact Canonical Coverage Strip -->
+<div class="bg-surface-container-lowest rounded-xl p-4 shadow-sm flex items-center justify-between">
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-2 text-xs font-mono">
+<span class="w-2 h-2 rounded-full bg-outline-variant"></span>
+<span class="text-outline">Service essentials:</span>
+<span class="font-bold text-on-surface">0 of 10</span>
+</div>
+<div class="w-[1px] h-4 bg-surface-container"></div>
+<div class="flex items-center gap-2 text-xs font-mono">
+<span class="w-2 h-2 rounded-full bg-outline-variant"></span>
+<span class="text-outline">Specs:</span>
+<span class="font-bold text-on-surface">0 of 13</span>
+</div>
+<div class="w-[1px] h-4 bg-surface-container"></div>
+<div class="flex items-center gap-2 text-xs font-mono">
+<span class="w-2 h-2 rounded-full bg-outline-variant"></span>
+<span class="text-outline">Other parts:</span>
+<span class="font-bold text-on-surface">0</span>
+</div>
+</div>
+<div class="flex items-center gap-3">
+<div class="w-48 bg-surface-container h-2 rounded-full overflow-hidden">
+<div class="w-0 h-full bg-secondary"></div>
+</div>
+<span class="font-mono text-xs text-on-surface-variant font-medium">0% Indexed</span>
+</div>
+</div>
+<!-- All Five Match-Type Sections Visible in Canonical Order with Respective Colors -->
+<div class="flex flex-col gap-3.5">
+<!-- 1. Direct OEM Match (#0153dc) -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden flex">
+<div class="w-1 bg-[#0153dc] shrink-0"></div>
+<div class="p-4 flex-1 flex items-center justify-between">
+<div class="flex items-center gap-3">
+<span class="text-xs font-label font-bold text-on-surface uppercase tracking-wide">Direct OEM Match</span>
+<span class="text-xs font-mono text-outline">None on file yet</span>
+</div>
+<button class="inline-flex items-center gap-1.5 text-xs font-label font-semibold text-secondary hover:text-secondary-dim transition-colors">
+<span class="material-symbols-outlined text-[16px]">add</span>
+              Add for this vehicle
+            </button>
+</div>
+</div>
+<!-- 2. Sister Vehicle Match (#0e7490) -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden flex">
+<div class="w-1 bg-[#0e7490] shrink-0"></div>
+<div class="p-4 flex-1 flex items-center justify-between">
+<div class="flex items-center gap-3">
+<span class="text-xs font-label font-bold text-on-surface uppercase tracking-wide">Sister Vehicle Match</span>
+<span class="text-xs font-mono text-outline">None on file yet</span>
+</div>
+<button class="inline-flex items-center gap-1.5 text-xs font-label font-semibold text-[#0e7490] hover:opacity-80 transition-opacity">
+<span class="material-symbols-outlined text-[16px]">add</span>
+              Add for this vehicle
+            </button>
+</div>
+</div>
+<!-- 3. Engine Compatible Match (#6d28d9) -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden flex">
+<div class="w-1 bg-[#6d28d9] shrink-0"></div>
+<div class="p-4 flex-1 flex items-center justify-between">
+<div class="flex items-center gap-3">
+<span class="text-xs font-label font-bold text-on-surface uppercase tracking-wide">Engine Compatible Match</span>
+<span class="text-xs font-mono text-outline">None on file yet</span>
+</div>
+<button class="inline-flex items-center gap-1.5 text-xs font-label font-semibold text-[#6d28d9] hover:opacity-80 transition-opacity">
+<span class="material-symbols-outlined text-[16px]">add</span>
+              Add for this vehicle
+            </button>
+</div>
+</div>
+<!-- 4. Aftermarket Cross-Reference (#475569) -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden flex">
+<div class="w-1 bg-[#475569] shrink-0"></div>
+<div class="p-4 flex-1 flex items-center justify-between">
+<div class="flex items-center gap-3">
+<span class="text-xs font-label font-bold text-on-surface uppercase tracking-wide">Aftermarket Cross-Reference</span>
+<span class="text-xs font-mono text-outline">None on file yet</span>
+</div>
+<button class="inline-flex items-center gap-1.5 text-xs font-label font-semibold text-[#475569] hover:opacity-80 transition-opacity">
+<span class="material-symbols-outlined text-[16px]">add</span>
+              Add for this vehicle
+            </button>
+</div>
+</div>
+<!-- 5. Universal Fleet Parts (#006e31) -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden flex">
+<div class="w-1 bg-[#006e31] shrink-0"></div>
+<div class="p-4 flex-1 flex items-center justify-between">
+<div class="flex items-center gap-3">
+<span class="text-xs font-label font-bold text-on-surface uppercase tracking-wide">Universal Fleet Parts</span>
+<span class="text-xs font-mono text-outline">None on file yet</span>
+</div>
+<button class="inline-flex items-center gap-1.5 text-xs font-label font-semibold text-[#006e31] hover:opacity-80 transition-opacity">
+<span class="material-symbols-outlined text-[16px]">add</span>
+              Add for this vehicle
+            </button>
+</div>
+</div>
+</div>
+</section>
+<!-- STATE 4: ERROR CARD WITH "TRY AGAIN" -->
+<section class="state-panel flex flex-col gap-5" id="state-4">
+<div class="flex items-center justify-between pb-1">
+<div class="flex items-center gap-2.5">
+<span class="flex items-center justify-center w-6 h-6 rounded-full bg-error text-on-error font-mono text-xs font-semibold">4</span>
+<span class="text-sm font-label font-semibold text-on-surface uppercase tracking-wide">State 4: Gateway Fetch Timeout</span>
+<span class="text-xs font-mono text-error">HTTP 504 Node Unreachable</span>
+</div>
+<span class="text-xs font-mono bg-surface-container-high px-2 py-0.5 rounded text-on-surface-variant">Cluster Fault Isolation</span>
+</div>
+<!-- Muted Red Error Container Card -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm p-8 flex flex-col items-center justify-center text-center">
+<div class="w-12 h-12 rounded-xl bg-error/10 text-error flex items-center justify-center mb-4">
+<span class="material-symbols-outlined text-[26px]">cloud_off</span>
+</div>
+<h3 class="text-base font-headline font-bold text-on-surface mb-1">
+          Could not load parts for this vehicle. Nothing was changed.
+        </h3>
+<div class="mt-2 mb-6 px-3.5 py-1.5 rounded-lg bg-surface-container-low flex items-center gap-2">
+<span class="text-[11px] font-label text-outline uppercase tracking-wider">Diagnostic:</span>
+<span class="font-mono text-xs text-on-surface-variant">Connection to Parts Index Node KGN-CAT-01 timed out.</span>
+</div>
+<div class="flex items-center gap-3">
+<button class="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-error text-on-error text-xs font-label font-semibold shadow-sm hover:opacity-90 transition-opacity" onclick="simulateReload(this)">
+<span class="material-symbols-outlined text-[18px]">refresh</span>
+            Try again
+          </button>
+<button class="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-surface-container text-on-surface text-xs font-label font-medium hover:bg-surface-container-high transition-colors">
+<span class="material-symbols-outlined text-[16px]">terminal</span>
+            View Node Status
+          </button>
+</div>
+</div>
+</section>
+</div>
+</div>
+<script>
+  function switchState(stateId) {
+    const panels = document.querySelectorAll('.state-panel');
+    const buttons = document.querySelectorAll('[id^="btn-state-"]');
+
+    buttons.forEach(btn => {
+      btn.className = "px-3 py-1.5 rounded-lg text-xs font-label font-medium transition-all text-on-surface-variant hover:text-on-surface";
+    });
+
+    const activeBtn = document.getElementById('btn-' + stateId);
+    if (activeBtn) {
+      activeBtn.className = "px-3 py-1.5 rounded-lg text-xs font-label font-medium transition-all bg-surface-container-lowest text-on-surface shadow-sm";
+    }
+
+    if (stateId === 'state-all') {
+      panels.forEach(p => p.classList.remove('hidden'));
+    } else {
+      panels.forEach(p => {
+        if (p.id === stateId) {
+          p.classList.remove('hidden');
+        } else {
+          p.classList.add('hidden');
+        }
+      });
+    }
+  }
+
+  function simulateReload(btn) {
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<span class="material-symbols-outlined text-[18px] animate-spin">sync</span> Contacting KGN-CAT-01...';
+    btn.setAttribute('disabled', 'true');
+    setTimeout(() => {
+      btn.innerHTML = originalText;
+      btn.removeAttribute('disabled');
+    }, 1200);
+  }
+</script></main></div></body></html>

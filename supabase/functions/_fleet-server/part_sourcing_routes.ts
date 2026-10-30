@@ -11,7 +11,7 @@ import { resolveCatalogIdForKvVehicle } from "./vehicle_catalog_resolve.ts";
 import { registerPartsEnterpriseRoutes } from "./parts_enterprise_routes.ts";
 import { registerCatalogRoutes } from "./catalog_routes.ts";
 import { registerFleetAdminPartsRoutes } from "./fleet_admin_parts_routes.ts";
-import { enrichFleetParts, getCatalogParts, overlayUniversalStock } from "./catalog_api.ts";
+import { enrichFleetParts, getCatalogParts, overlayUniversalStock, assembleMatchSections } from "./catalog_api.ts";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -106,12 +106,14 @@ export function registerPartSourcingRoutes(
         });
         const items = await enrichFleetParts(supabase, catalog.mode, catalog.items, orgId || null, downtime);
         const universal = await overlayUniversalStock(supabase, catalog.universal, orgId || null);
+        const sections = assembleMatchSections(items, universal);
         const componentIds = new Set(items.map((item) => String(item.part?.maintenance_component_id ?? "")));
         const relatedSupplies = (catalog.relatedSupplies ?? []).filter((row) => componentIds.has(String(row.component_id ?? "")));
         return c.json({
           catalogMatched: true,
           catalogId,
           items,
+          sections,
           universal,
           relatedSupplies,
           count: items.length,
@@ -614,85 +616,19 @@ export function registerPartSourcingRoutes(
   route.post("/make-server-37f42386/admin/part-fitment", requireAuth(), async (c) => {
     const denied = assertPartSourcingPlatformAccess(c);
     if (denied) return denied;
-    try {
-      const body = (await c.req.json()) as Record<string, unknown>;
-      const part_id = String(body.part_id ?? "").trim();
-      const vehicle_catalog_id = String(body.vehicle_catalog_id ?? "").trim();
-      if (!isUuid(part_id) || !isUuid(vehicle_catalog_id)) {
-        return c.json({ error: "part_id and vehicle_catalog_id are required UUIDs" }, 400);
-      }
-      const row: Record<string, unknown> = {
-        part_id,
-        vehicle_catalog_id,
-        chassis_code: body.chassis_code != null && String(body.chassis_code).trim() !== ""
-          ? String(body.chassis_code).trim()
-          : null,
-        engine_code: body.engine_code != null && String(body.engine_code).trim() !== ""
-          ? String(body.engine_code).trim()
-          : null,
-        year_from: body.year_from != null && body.year_from !== "" ? Number(body.year_from) : null,
-        year_to: body.year_to != null && body.year_to !== "" ? Number(body.year_to) : null,
-        updated_at: new Date().toISOString(),
-      };
-      const { data, error } = await supabase.from("part_fitment").insert(row).select("*").single();
-      if (error) throw error;
-      return c.json({ item: data });
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      return c.json({ error: msg }, 500);
-    }
+    return c.json({ error: "Fitment is read-only. Add the part on the vehicle." }, 403);
   });
 
   route.patch("/make-server-37f42386/admin/part-fitment/:id", requireAuth(), async (c) => {
     const denied = assertPartSourcingPlatformAccess(c);
     if (denied) return denied;
-    try {
-      const id = c.req.param("id");
-      if (!isUuid(id)) return c.json({ error: "Invalid id" }, 400);
-      const body = (await c.req.json()) as Record<string, unknown>;
-      const row: Record<string, unknown> = { updated_at: new Date().toISOString() };
-      if (body.chassis_code !== undefined) {
-        row.chassis_code = body.chassis_code === null || body.chassis_code === ""
-          ? null
-          : String(body.chassis_code).trim();
-      }
-      if (body.engine_code !== undefined) {
-        row.engine_code = body.engine_code === null || body.engine_code === ""
-          ? null
-          : String(body.engine_code).trim();
-      }
-      if (body.year_from !== undefined) {
-        row.year_from = body.year_from === null || body.year_from === "" ? null : Number(body.year_from);
-      }
-      if (body.year_to !== undefined) {
-        row.year_to = body.year_to === null || body.year_to === "" ? null : Number(body.year_to);
-      }
-      const keys = Object.keys(row).filter((k) => k !== "updated_at");
-      if (keys.length === 0) return c.json({ error: "No fields to update" }, 400);
-      const { data, error } = await supabase.from("part_fitment").update(row).eq("id", id).select("*").single();
-      if (error) throw error;
-      if (!data) return c.json({ error: "Not found" }, 404);
-      return c.json({ item: data });
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      return c.json({ error: msg }, 500);
-    }
+    return c.json({ error: "Fitment is read-only. Add the part on the vehicle." }, 403);
   });
 
   route.delete("/make-server-37f42386/admin/part-fitment/:id", requireAuth(), async (c) => {
     const denied = assertPartSourcingPlatformAccess(c);
     if (denied) return denied;
-    try {
-      const id = c.req.param("id");
-      if (!isUuid(id)) return c.json({ error: "Invalid id" }, 400);
-      const { data, error } = await supabase.from("part_fitment").delete().eq("id", id).select("id");
-      if (error) throw error;
-      if (!data?.length) return c.json({ error: "Not found" }, 404);
-      return c.json({ success: true });
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      return c.json({ error: msg }, 500);
-    }
+    return c.json({ error: "Fitment is read-only. Add the part on the vehicle." }, 403);
   });
 
   route.get(

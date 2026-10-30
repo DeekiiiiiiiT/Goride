@@ -79,58 +79,6 @@ export function registerPartsEnterpriseRoutes(route: RouteApp, supabase: Supabas
     }
   });
 
-  route.post("/make-server-37f42386/admin/vehicle-platform-families", requireAuth(), async (c: Context) => {
-    const denied = staff(c);
-    if (denied) return denied;
-    try {
-      const body = await c.req.json() as { family?: string; chassisCodes?: string[]; shareBodyParts?: boolean };
-      const family = String(body.family ?? "").trim().toUpperCase();
-      const codes = (body.chassisCodes ?? []).map((code) => String(code).trim().toUpperCase()).filter(Boolean);
-      if (!family || !codes.length) return c.json({ error: "A family and its chassis codes are required." }, 400);
-      const { data: existingParent } = await supabase.from("vehicle_platform").select("id").eq("code", family).maybeSingle();
-      let parentId = (existingParent as { id?: string } | null)?.id ?? null;
-      if (!parentId) {
-        const { data: created, error: createErr } = await supabase.from("vehicle_platform").insert({ code: family, label: family }).select("id").single();
-        if (createErr) throw createErr;
-        parentId = (created as { id: string }).id;
-      }
-      for (const code of codes) {
-        const { data: child } = await supabase.from("vehicle_platform").select("id").eq("code", code).maybeSingle();
-        const childId = (child as { id?: string } | null)?.id;
-        if (!childId || childId === parentId) continue;
-        const { error } = await supabase.from("vehicle_platform").update({
-          parent_id: body.shareBodyParts ? parentId : null,
-        }).eq("id", childId);
-        if (error) throw error;
-      }
-      if (body.shareBodyParts === true || body.shareBodyParts === false) {
-        const { error: reviewErr } = await supabase
-          .from("platform_family_review")
-          .update({ share_body_parts: body.shareBodyParts === true })
-          .in("chassis_code", codes);
-        if (reviewErr) throw reviewErr;
-      }
-      return c.json({ ok: true, family, shareBodyParts: body.shareBodyParts === true });
-    } catch (e) {
-      return fail(c, e);
-    }
-  });
-
-  route.get("/make-server-37f42386/admin/platform-family-review", requireAuth(), async (c: Context) => {
-    const denied = staff(c);
-    if (denied) return denied;
-    try {
-      const { data, error } = await supabase
-        .from("platform_family_review")
-        .select("chassis_code, group_key, suggested_family, car_name, share_body_parts, notes")
-        .order("chassis_code");
-      if (error) throw error;
-      return c.json({ items: data || [] });
-    } catch (e) {
-      return fail(c, e);
-    }
-  });
-
   route.get("/make-server-37f42386/admin/part-catalog-review", requireAuth(), async (c: Context) => {
     const denied = staff(c);
     if (denied) return denied;

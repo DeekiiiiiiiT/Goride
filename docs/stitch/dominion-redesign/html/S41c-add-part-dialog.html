@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_dashboard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;family=Public+Sans:wght@500;600&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;font-variant-numeric:tabular-nums;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "on-surface": "#30323b", "inverse-primary": "#dae6fe", "on-error": "#fff7f6", "secondary-fixed-dim": "#c7d3ff", "secondary-fixed": "#dbe1ff", "surface-bright": "#faf8fe", "on-tertiary-fixed": "#004c20", "primary-fixed-dim": "#cad5ed", "surface-dim": "#d9d9e4", "on-secondary-fixed": "#003798", "primary-fixed": "#d8e3fb", "secondary-dim": "#0049c3", "tertiary-fixed-dim": "#8aec9c", "surface-variant": "#e1e2ed", "error-container": "#fa746f", "surface": "#faf8fe", "primary-container": "#d8e3fb", "on-background": "#30323b", "tertiary-fixed": "#98fba9", "surface-tint": "#545f74", "on-secondary-container": "#0047c0", "error": "#a83836", "on-tertiary": "#e9ffe7", "tertiary-container": "#98fba9", "on-primary-fixed-variant": "#515c70", "surface-container-high": "#e8e7f1", "inverse-surface": "#0d0e12", "on-primary": "#f8f8ff", "outline-variant": "#b0b1bc", "on-error-container": "#6e0a12", "secondary-container": "#dbe1ff", "error-dim": "#67040d", "on-tertiary-container": "#00612a", "on-primary-container": "#475266", "surface-container-lowest": "#ffffff", "surface-container": "#eeedf6", "primary-dim": "#485367", "surface-container-highest": "#e1e2ed", "on-surface-variant": "#5d5f68", "primary": "#545f74", "outline": "#797a84", "secondary": "#0153dc", "on-secondary": "#faf8ff", "tertiary": "#006e31", "on-secondary-fixed-variant": "#0050d5", "surface-container-low": "#f4f3fa", "background": "#faf8fe", "tertiary-dim": "#00612a", "on-tertiary-fixed-variant": "#006c30", "inverse-on-surface": "#9d9ca2", "on-primary-fixed": "#354053" }, "borderRadius": { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, "spacing": {}, "fontFamily": { "headline": ["Inter"], "display": ["Inter"], "body": ["Inter"], "label": ["Public Sans"] }, "fontSize": {} } } }</script></head><body class="bg-surface font-body text-on-surface"><aside class="fixed left-0 top-0 h-full w-64 bg-inverse-surface border-r border-outline-variant/20 z-50 flex flex-col justify-between select-none"><div class="flex flex-col"><div class="h-16 px-6 flex items-center gap-3 border-b border-outline-variant/10"><div class="w-7 h-7 rounded bg-secondary flex items-center justify-center"><span class="material-symbols-outlined text-on-secondary text-[18px]">shield_with_house</span></div><span class="text-base font-headline font-bold tracking-tight text-surface-container-lowest">Dominion Admin</span></div><div class="px-4 py-5"><p class="px-3 text-[11px] font-label font-semibold uppercase tracking-wider text-inverse-on-surface mb-2">Navigation</p><nav class="flex flex-col gap-1" data-active-classes="bg-secondary text-on-secondary font-medium rounded-lg"><a class="flex items-center px-3 py-2 rounded-lg text-sm text-surface-variant hover:bg-surface-variant/10 hover:text-surface-container-lowest transition-colors" data-path="overview" href="#"><span class="material-symbols-outlined text-[20px] mr-3">dashboard</span>Overview</a><a aria-current="page" class="flex items-center px-3 py-2 transition-colors bg-secondary text-on-secondary font-medium rounded-lg" data-path="master-data" href="#"><span class="material-symbols-outlined text-[20px] mr-3">database</span>Master Data</a><a class="flex items-center px-3 py-2 rounded-lg text-sm text-surface-variant hover:bg-surface-variant/10 hover:text-surface-container-lowest transition-colors" data-path="engines" href="#"><span class="material-symbols-outlined text-[20px] mr-3">settings_suggest</span>Engines</a><a class="flex items-center px-3 py-2 rounded-lg text-sm text-surface-variant hover:bg-surface-variant/10 hover:text-surface-container-lowest transition-colors" data-path="distribution" href="#"><span class="material-symbols-outlined text-[20px] mr-3">hub</span>Distribution</a><a class="flex items-center px-3 py-2 rounded-lg text-sm text-surface-variant hover:bg-surface-variant/10 hover:text-surface-container-lowest transition-colors" data-path="platform" href="#"><span class="material-symbols-outlined text-[20px] mr-3">memory</span>Platform</a><a class="flex items-center px-3 py-2 rounded-lg text-sm text-surface-variant hover:bg-surface-variant/10 hover:text-surface-container-lowest transition-colors" data-path="back-office" href="#"><span class="material-symbols-outlined text-[20px] mr-3">corporate_fare</span>Back Office</a></nav></div></div><div class="p-4 border-t border-outline-variant/10"><div class="flex items-center gap-3 px-2 py-2 rounded-lg bg-surface-variant/5"><span class="material-symbols-outlined text-inverse-on-surface text-[18px]">verified</span><div class="flex flex-col"><span class="text-xs text-surface-container-lowest font-medium">Jamaica Cluster</span><span class="text-[11px] text-inverse-on-surface font-mono">JMD · Production</span></div></div></div></aside><div class="pl-64 flex flex-col min-h-screen"><header class="fixed top-0 left-64 right-0 h-16 bg-surface-container-lowest border-b border-outline-variant/20 z-40 flex items-center justify-between px-8"><div class="w-96 flex items-center gap-2 bg-surface-container-low px-3 py-2 rounded-lg border border-outline-variant/20"><span class="material-symbols-outlined text-on-surface-variant text-[20px]">search</span><input class="bg-transparent text-sm text-on-surface placeholder:text-on-surface-variant w-full focus:outline-none" placeholder="Search entities, engines, routes…" readonly="" type="text"/></div><div class="flex items-center gap-6"><div class="flex items-center gap-2 text-on-surface-variant"><span class="text-xs font-mono font-medium bg-surface-container px-2 py-1 rounded text-on-surface">1440px</span></div><div class="flex items-center gap-3 pl-4 border-l border-outline-variant/20"><div class="text-right"><p class="text-xs font-semibold text-on-surface leading-tight">DT · Deeki T</p><p class="text-[11px] text-on-surface-variant leading-tight">Owner</p></div><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="w-full pt-16 bg-surface min-h-screen"><div class="flex flex-col w-full relative min-h-[calc(100vh-4rem)] items-center justify-center p-4 sm:p-6 lg:p-10 select-none">
+<!-- Backdrop scrim -->
+<div class="fixed inset-0 top-16 left-64 bg-inverse-surface/40 backdrop-blur-sm z-30 transition-opacity duration-300"></div>
+<!-- Background contextual preview (dimmed underlay representing Dominion Master Data inventory) -->
+<div class="absolute inset-0 pointer-events-none opacity-20 px-8 py-6 flex flex-col gap-6 overflow-hidden">
+<div class="flex items-center justify-between">
+<div class="flex flex-col gap-1">
+<span class="text-xs font-mono text-outline uppercase tracking-wider">Catalogue Registry · Kingston Depot #04</span>
+<h2 class="text-2xl font-bold font-headline text-on-surface">Parts &amp; Cross-Reference Ledger</h2>
+</div>
+<div class="h-9 px-4 rounded bg-surface-container-high text-xs font-medium text-on-surface-variant flex items-center gap-2">
+<span class="material-symbols-outlined text-base">filter_list</span> 4,821 SKUs tracked
+      </div>
+</div>
+<div class="grid grid-cols-4 gap-4">
+<div class="h-28 rounded-lg bg-surface-container-lowest p-4 shadow-sm"></div>
+<div class="h-28 rounded-lg bg-surface-container-lowest p-4 shadow-sm"></div>
+<div class="h-28 rounded-lg bg-surface-container-lowest p-4 shadow-sm"></div>
+<div class="h-28 rounded-lg bg-surface-container-lowest p-4 shadow-sm"></div>
+</div>
+</div>
+<!-- Wizard Modal Dialog (640px wide) -->
+<div class="relative z-40 w-full max-w-[640px] bg-surface-container-lowest rounded-xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+<!-- Modal Header -->
+<div class="px-7 pt-6 pb-4 bg-surface-container-lowest flex items-start justify-between">
+<div class="flex flex-col gap-1 min-w-0">
+<div class="flex items-center gap-2">
+<span class="px-2 py-0.5 rounded text-[11px] font-mono font-medium tracking-wide bg-surface-container text-on-surface-variant">CATALOG-ADD</span>
+<span class="text-[11px] font-mono text-outline">JMD PRICING ELIGIBLE</span>
+</div>
+<h1 class="text-xl font-bold font-headline text-on-surface tracking-tight mt-0.5">Add a part</h1>
+<p class="text-xs text-on-surface-variant truncate">
+          For <span class="font-medium text-on-surface">Toyota Roomy M900A 2016–2020</span> · Engine service › Oil filter
+        </p>
+</div>
+<button class="w-8 h-8 rounded-lg flex items-center justify-center text-outline hover:text-on-surface hover:bg-surface-container transition-colors" title="Close dialog" type="button">
+<span class="material-symbols-outlined text-[20px]">close</span>
+</button>
+</div>
+<!-- Stepper Indicator -->
+<div class="px-7 py-3 bg-surface-container-low flex items-center justify-between">
+<!-- Step 1 -->
+<button class="step-indicator group flex items-center gap-2 transition-colors text-tertiary" id="step-tab-1" onclick="setStep(1)" type="button">
+<span class="w-5 h-5 rounded-full bg-tertiary text-on-tertiary text-[11px] font-bold flex items-center justify-center font-mono">✓</span>
+<span class="text-xs font-medium">Part</span>
+</button>
+<span class="h-px w-6 bg-outline-variant/40"></span>
+<!-- Step 2 (Active Default) -->
+<button class="step-indicator group flex items-center gap-2 transition-colors text-secondary font-semibold" id="step-tab-2" onclick="setStep(2)" type="button">
+<span class="w-5 h-5 rounded-full bg-secondary text-on-secondary text-[11px] font-bold flex items-center justify-center font-mono">2</span>
+<span class="text-xs">Same source</span>
+</button>
+<span class="h-px w-6 bg-outline-variant/40"></span>
+<!-- Step 3 -->
+<button class="step-indicator group flex items-center gap-2 transition-colors text-on-surface-variant" id="step-tab-3" onclick="setStep(3)" type="button">
+<span class="w-5 h-5 rounded-full bg-surface-container-high text-on-surface-variant text-[11px] font-medium flex items-center justify-center font-mono">3</span>
+<span class="text-xs font-medium">Source</span>
+</button>
+<span class="h-px w-6 bg-outline-variant/40"></span>
+<!-- Step 4 -->
+<button class="step-indicator group flex items-center gap-2 transition-colors text-on-surface-variant" id="step-tab-4" onclick="setStep(4)" type="button">
+<span class="w-5 h-5 rounded-full bg-surface-container-high text-on-surface-variant text-[11px] font-medium flex items-center justify-center font-mono">4</span>
+<span class="text-xs font-medium">Review</span>
+</button>
+</div>
+<!-- Modal Form Body -->
+<div class="px-7 py-6 max-h-[696px] overflow-y-auto flex flex-col gap-6">
+<!-- STEP 1 CONTENT -->
+<div class="step-pane hidden flex-col gap-5" id="step-pane-1">
+<div class="flex flex-col gap-1.5">
+<label class="text-xs font-semibold text-on-surface font-label uppercase tracking-wider">Classification</label>
+<div class="relative">
+<select class="w-full h-10 px-3 pr-8 rounded-lg bg-surface-container-low text-xs text-on-surface appearance-none focus:outline-none focus:ring-1 focus:ring-secondary cursor-pointer">
+<option selected="">Engine service › Oil filter</option>
+<option>Engine service › Air filter element</option>
+<option>Braking system › Front disc pad set</option>
+<option>Ignition › Spark plug (Iridium tough)</option>
+<option>Suspension › Stabilizer link rod</option>
+</select>
+<span class="material-symbols-outlined pointer-events-none absolute right-2.5 top-2.5 text-outline text-[18px]">expand_more</span>
+</div>
+</div>
+<div class="flex flex-col gap-3">
+<div class="flex items-center justify-between">
+<span class="text-xs font-semibold text-on-surface font-label uppercase tracking-wider">Part Identification &amp; Brands</span>
+<span class="text-[11px] text-outline font-mono">PRIMARY + CROSS REF</span>
+</div>
+<!-- Repeating Row 1: Factory -->
+<div class="p-3.5 rounded-lg bg-surface-container-low flex flex-col gap-3">
+<div class="grid grid-cols-12 gap-3 items-center">
+<div class="col-span-3 flex flex-col gap-1">
+<span class="text-[10px] font-mono uppercase text-outline">Brand</span>
+<input class="h-8 px-2.5 rounded bg-surface-container-lowest text-xs text-on-surface font-medium focus:outline-none" type="text" value="Toyota"/>
+</div>
+<div class="col-span-4 flex flex-col gap-1">
+<span class="text-[10px] font-mono uppercase text-outline">Part Number</span>
+<input class="h-8 px-2.5 rounded bg-surface-container-lowest text-xs font-mono text-on-surface font-semibold focus:outline-none" type="text" value="04152-40060"/>
+</div>
+<div class="col-span-5 flex flex-col gap-1">
+<span class="text-[10px] font-mono uppercase text-outline">Kind</span>
+<div class="relative">
+<select class="w-full h-8 px-2.5 pr-6 rounded bg-surface-container-lowest text-xs text-on-surface appearance-none focus:outline-none cursor-pointer">
+<option selected="">Factory</option>
+<option>Original supplier</option>
+<option>Other brand</option>
+</select>
+<span class="material-symbols-outlined pointer-events-none absolute right-1.5 top-1.5 text-outline text-[16px]">expand_more</span>
+</div>
+</div>
+</div>
+<div class="flex flex-col gap-1">
+<span class="text-[10px] font-mono uppercase text-outline">Formal Part Title</span>
+<input class="h-8 px-2.5 rounded bg-surface-container-lowest text-xs text-on-surface focus:outline-none" type="text" value="Engine Oil Filter Element with O-Ring"/>
+</div>
+</div>
+<!-- Repeating Row 2: Secondary / Cross Brand -->
+<div class="p-3.5 rounded-lg bg-surface-container-low flex flex-col gap-3">
+<div class="grid grid-cols-12 gap-3 items-center">
+<div class="col-span-3 flex flex-col gap-1">
+<span class="text-[10px] font-mono uppercase text-outline">Brand</span>
+<input class="h-8 px-2.5 rounded bg-surface-container-lowest text-xs text-on-surface font-medium focus:outline-none" type="text" value="Denso"/>
+</div>
+<div class="col-span-4 flex flex-col gap-1">
+<span class="text-[10px] font-mono uppercase text-outline">Part Number</span>
+<input class="h-8 px-2.5 rounded bg-surface-container-lowest text-xs font-mono text-on-surface font-semibold focus:outline-none" type="text" value="DL-04152-4006"/>
+</div>
+<div class="col-span-5 flex flex-col gap-1">
+<span class="text-[10px] font-mono uppercase text-outline">Kind</span>
+<div class="relative">
+<select class="w-full h-8 px-2.5 pr-6 rounded bg-surface-container-lowest text-xs text-on-surface appearance-none focus:outline-none cursor-pointer">
+<option>Factory</option>
+<option selected="">Original supplier</option>
+<option>Other brand</option>
+</select>
+<span class="material-symbols-outlined pointer-events-none absolute right-1.5 top-1.5 text-outline text-[16px]">expand_more</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Add Brand Link Button -->
+<button class="self-start inline-flex items-center gap-1.5 text-xs font-semibold text-secondary hover:text-on-secondary-container transition-colors py-1" type="button">
+<span class="material-symbols-outlined text-[16px]">add_circle</span>
+            + Add another brand for the same part
+          </button>
+</div>
+</div>
+<!-- STEP 2 CONTENT (Active in standard view) -->
+<div class="step-pane flex flex-col gap-5" id="step-pane-2">
+<div class="flex flex-col gap-2">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-secondary text-[20px]">alt_route</span>
+<h3 class="text-sm font-semibold font-headline text-on-surface">Does the same source also list it for…?</h3>
+</div>
+<p class="text-xs text-on-surface-variant leading-relaxed">
+            Verify variant matches cataloged under this single OEM specification sheet to maintain clean relational links across the Jamaica cluster.
+          </p>
+</div>
+<!-- Variants Checkbox Card -->
+<div class="rounded-lg bg-surface-container-low p-3.5 flex flex-col gap-2.5">
+<span class="text-[11px] font-mono uppercase font-semibold text-outline tracking-wider">Toyota Roomy M900 Series Variants</span>
+<label class="flex items-start gap-3 p-2 rounded bg-surface-container-lowest hover:bg-surface-bright cursor-pointer transition-colors">
+<input checked="" class="mt-0.5 w-4 h-4 rounded text-secondary accent-secondary focus:ring-0 cursor-pointer" type="checkbox"/>
+<div class="flex flex-col min-w-0">
+<span class="text-xs font-medium text-on-surface">Roomy M900A facelift 2020– · 1KR-FE</span>
+<span class="text-[11px] text-on-surface-variant font-mono">Naturally Aspirated · 996cc · DBA-M900A / 5BA-M900A</span>
+</div>
+</label>
+<label class="flex items-start gap-3 p-2 rounded bg-surface-container-lowest hover:bg-surface-bright cursor-pointer transition-colors">
+<input class="mt-0.5 w-4 h-4 rounded text-secondary accent-secondary focus:ring-0 cursor-pointer" type="checkbox"/>
+<div class="flex flex-col min-w-0">
+<span class="text-xs font-medium text-on-surface">Roomy M900A facelift turbo 2020– · 1KR-VET</span>
+<span class="text-[11px] text-on-surface-variant font-mono">Intercooled Turbocharged · 996cc · 4BA-M900A</span>
+</div>
+</label>
+<label class="flex items-start gap-3 p-2 rounded bg-surface-container-lowest opacity-75 hover:bg-surface-bright cursor-pointer transition-colors">
+<input class="mt-0.5 w-4 h-4 rounded text-secondary accent-secondary focus:ring-0 cursor-pointer" type="checkbox"/>
+<div class="flex flex-col min-w-0">
+<span class="text-xs font-medium text-on-surface">Roomy M910A 4WD 2016–2020 · 1KR-FE</span>
+<span class="text-[11px] text-on-surface-variant font-mono">AWD Configuration · 996cc · DBA-M910A</span>
+</div>
+</label>
+</div>
+<!-- Read-only Relational Projection Grey Panel -->
+<div class="p-3.5 rounded-lg bg-surface-container flex items-start gap-3">
+<span class="material-symbols-outlined text-on-surface-variant text-[20px] mt-0.5 shrink-0">schema</span>
+<div class="flex flex-col gap-1 min-w-0">
+<p class="text-xs text-on-surface leading-normal">
+              It will also show as <span class="font-semibold text-on-surface">Sister on 3 cars</span> and as <span class="font-semibold text-on-surface">Engine compatible on 6 cars</span>.
+            </p>
+<div class="flex items-center gap-2 mt-0.5">
+<button class="text-xs font-semibold text-secondary hover:underline inline-flex items-center gap-1" onclick="toggleSisterCarsModal()" type="button">
+                Show cars
+                <span class="material-symbols-outlined text-[14px]">open_in_new</span>
+</button>
+<span class="text-outline text-xs">·</span>
+<span class="text-[11px] font-mono text-on-surface-variant">Automatic linkage enabled</span>
+</div>
+</div>
+</div>
+<!-- Expandable details card for sister cars (interactive micro-interaction) -->
+<div class="hidden rounded-lg bg-surface-container-low p-3 text-xs flex flex-col gap-2" id="sister-cars-expansion">
+<span class="text-[11px] font-mono uppercase text-outline">Connected Sister &amp; Engine Equivalents (Jamaica Fleet)</span>
+<div class="grid grid-cols-2 gap-2 text-[11px] font-mono">
+<div class="bg-surface-container-lowest p-2 rounded">
+<p class="font-semibold text-on-surface">Daihatsu Thor (M900S)</p>
+<p class="text-on-surface-variant">Sister chassis · 1KR-FE</p>
+</div>
+<div class="bg-surface-container-lowest p-2 rounded">
+<p class="font-semibold text-on-surface">Subaru Justy (M900F)</p>
+<p class="text-on-surface-variant">Sister rebadge · 1KR-FE</p>
+</div>
+<div class="bg-surface-container-lowest p-2 rounded">
+<p class="font-semibold text-on-surface">Toyota Tank (M900A)</p>
+<p class="text-on-surface-variant">Sister twin · 1KR-FE</p>
+</div>
+<div class="bg-surface-container-lowest p-2 rounded">
+<p class="font-semibold text-on-surface">Toyota Vitz / Yaris (KSP130)</p>
+<p class="text-on-surface-variant">Engine compatible · 1KR-FE</p>
+</div>
+</div>
+</div>
+</div>
+<!-- STEP 3 CONTENT -->
+<div class="step-pane hidden flex-col gap-4" id="step-pane-3">
+<div class="flex flex-col gap-1.5">
+<div class="flex items-center justify-between">
+<label class="text-xs font-semibold text-on-surface font-label uppercase tracking-wider">
+              Source link <span class="text-error">*</span>
+</label>
+<span class="text-[11px] text-tertiary font-mono flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">lock</span> SSL Verified
+            </span>
+</div>
+<input class="w-full h-10 px-3 rounded-lg bg-surface-container-low text-xs font-mono text-on-surface focus:outline-none focus:ring-1 focus:ring-secondary" type="url" value="https://parts.toyota.jp/cat/0415240060"/>
+<p class="text-[11px] text-on-surface-variant">
+            Maker's parts catalog, NGK / Denso table, or verified dealer parts book page.
+          </p>
+</div>
+<div class="flex flex-col gap-1.5">
+<label class="text-xs font-semibold text-on-surface font-label uppercase tracking-wider">Note (optional)</label>
+<textarea class="w-full p-3 rounded-lg bg-surface-container-low text-xs text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:ring-1 focus:ring-secondary resize-none" placeholder="Add specific fitting remarks, e.g., includes O-ring and drain adapter pipe for 1KR series." rows="3">Standard cartridge filter element. Fits all 1.0L non-hybrid configurations across Montego Bay &amp; Kingston import stocks.</textarea>
+</div>
+<div class="p-3 rounded-lg bg-surface-container-low flex items-center gap-3">
+<span class="material-symbols-outlined text-outline text-[18px]">verified_user</span>
+<span class="text-[11px] text-on-surface-variant">
+            All submitted URLs are cached in Dominion Platform cold-storage for provenance validation.
+          </span>
+</div>
+</div>
+<!-- STEP 4 CONTENT -->
+<div class="step-pane hidden flex-col gap-5" id="step-pane-4">
+<!-- Review Summary Sentence Box -->
+<div class="p-3.5 rounded-lg bg-surface-container flex flex-col gap-1.5">
+<span class="text-[10px] font-mono uppercase tracking-wider text-outline">Submission Directive</span>
+<p class="text-xs text-on-surface font-medium leading-relaxed">
+<span class="font-semibold text-secondary">Toyota 04152-40060</span> (Oil filter) + <span class="font-semibold text-on-surface">Denso DL-04152-4006</span> → listed for <span class="font-semibold text-on-surface">Toyota Roomy M900A 2016–2020</span>.
+          </p>
+<div class="flex items-center gap-1.5 pt-1 text-[11px] font-mono text-outline">
+<span class="material-symbols-outlined text-[14px]">link</span>
+<span>Source: <a class="text-secondary hover:underline truncate" href="#">parts.toyota.jp/cat/0415240060</a></span>
+</div>
+</div>
+<!-- Five-Type Reach Summary List with Counts -->
+<div class="flex flex-col gap-2">
+<div class="flex items-center justify-between">
+<span class="text-xs font-semibold text-on-surface font-label uppercase tracking-wider">Five-Type Reach Projection</span>
+<span class="text-[11px] font-mono text-tertiary font-medium">9 Connected Vehicles</span>
+</div>
+<div class="rounded-lg bg-surface-container-low overflow-hidden divide-y divide-surface-container-high/30">
+<!-- Item 1 -->
+<div class="px-3.5 py-2.5 flex items-center justify-between">
+<div class="flex items-center gap-2.5">
+<span class="w-2 h-2 rounded-full bg-secondary"></span>
+<span class="text-xs font-medium text-on-surface">Direct OEM Match</span>
+</div>
+<span class="text-xs font-mono font-semibold text-on-surface">2 variants</span>
+</div>
+<!-- Item 2 -->
+<div class="px-3.5 py-2.5 flex items-center justify-between">
+<div class="flex items-center gap-2.5">
+<span class="w-2 h-2 rounded-full bg-secondary-fixed-dim"></span>
+<span class="text-xs font-medium text-on-surface">Sister Vehicle Match</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="text-xs font-mono font-semibold text-on-surface">3 vehicles</span>
+<span class="text-[11px] text-outline font-mono">(Tank, Thor, Justy)</span>
+</div>
+</div>
+<!-- Item 3 -->
+<div class="px-3.5 py-2.5 flex items-center justify-between">
+<div class="flex items-center gap-2.5">
+<span class="w-2 h-2 rounded-full bg-tertiary"></span>
+<span class="text-xs font-medium text-on-surface">Engine Compatible Match</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="text-xs font-mono font-semibold text-on-surface">6 vehicles</span>
+<span class="text-[11px] text-outline font-mono">(Vitz, Passo, Boon)</span>
+</div>
+</div>
+<!-- Item 4 -->
+<div class="px-3.5 py-2.5 flex items-center justify-between">
+<div class="flex items-center gap-2.5">
+<span class="w-2 h-2 rounded-full bg-surface-tint"></span>
+<span class="text-xs font-medium text-on-surface">Aftermarket Cross-Reference</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="text-xs font-mono font-semibold text-on-surface">1 brand</span>
+<span class="text-[11px] text-outline font-mono">(Denso)</span>
+</div>
+</div>
+<!-- Item 5 -->
+<div class="px-3.5 py-2.5 flex items-center justify-between">
+<div class="flex items-center gap-2.5">
+<span class="w-2 h-2 rounded-full bg-outline-variant"></span>
+<span class="text-xs font-medium text-on-surface">Universal Fleet Parts</span>
+</div>
+<span class="text-xs font-mono text-outline">—</span>
+</div>
+</div>
+</div>
+<!-- Safe Status Pill & Pricing Note -->
+<div class="px-3 py-2 rounded bg-surface-container flex items-center justify-between text-[11px]">
+<span class="text-on-surface-variant font-mono">Estimated Local Stock Level (Kingston &amp; MoBay)</span>
+<span class="text-on-surface font-semibold font-mono">JMD $1,450 – $2,200 avg retail</span>
+</div>
+</div>
+</div>
+<!-- Modal Footer Actions -->
+<div class="px-7 py-4 bg-surface-container-low flex items-center justify-between">
+<button class="px-4 py-2 rounded-lg text-xs font-medium text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors" type="button">
+        Cancel
+      </button>
+<div class="flex items-center gap-2">
+<button class="px-4 py-2 rounded-lg text-xs font-medium text-on-surface bg-surface-container-lowest hover:bg-surface-container transition-colors shadow-sm" id="prev-btn" onclick="prevStep()" type="button">
+          Back
+        </button>
+<button class="px-5 py-2 rounded-lg text-xs font-semibold text-on-secondary bg-secondary hover:bg-secondary-dim transition-colors shadow-sm inline-flex items-center gap-1.5" id="next-btn" onclick="nextStep()" type="button">
+<span id="next-btn-text">Next: Source</span>
+<span class="material-symbols-outlined text-[16px]" id="next-btn-icon">arrow_forward</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<script>
+  let currentStep = 2;
+
+  function setStep(step) {
+    currentStep = step;
+    
+    // Toggle pane visibility
+    for (let i = 1; i <= 4; i++) {
+      const pane = document.getElementById(`step-pane-${i}`);
+      const tab = document.getElementById(`step-tab-${i}`);
+      
+      if (i === currentStep) {
+        pane.classList.remove('hidden');
+        pane.classList.add('flex');
+        
+        tab.className = 'step-indicator group flex items-center gap-2 transition-colors text-secondary font-semibold';
+        tab.querySelector('span:first-child').className = 'w-5 h-5 rounded-full bg-secondary text-on-secondary text-[11px] font-bold flex items-center justify-center font-mono';
+        if (i < 4 && i !== 1) {
+          tab.querySelector('span:first-child').textContent = i;
+        }
+      } else {
+        pane.classList.add('hidden');
+        pane.classList.remove('flex');
+        
+        if (i < currentStep) {
+          tab.className = 'step-indicator group flex items-center gap-2 transition-colors text-tertiary';
+          tab.querySelector('span:first-child').className = 'w-5 h-5 rounded-full bg-tertiary text-on-tertiary text-[11px] font-bold flex items-center justify-center font-mono';
+          tab.querySelector('span:first-child').textContent = '✓';
+        } else {
+          tab.className = 'step-indicator group flex items-center gap-2 transition-colors text-on-surface-variant';
+          tab.querySelector('span:first-child').className = 'w-5 h-5 rounded-full bg-surface-container-high text-on-surface-variant text-[11px] font-medium flex items-center justify-center font-mono';
+          tab.querySelector('span:first-child').textContent = i;
+        }
+      }
+    }
+
+    // Update buttons
+    const prevBtn = document.getElementById('prev-btn');
+    const nextBtnText = document.getElementById('next-btn-text');
+    const nextBtnIcon = document.getElementById('next-btn-icon');
+
+    if (currentStep === 1) {
+      prevBtn.classList.add('opacity-40', 'pointer-events-none');
+    } else {
+      prevBtn.classList.remove('opacity-40', 'pointer-events-none');
+    }
+
+    if (currentStep === 1) {
+      nextBtnText.textContent = 'Next: Same source';
+      nextBtnIcon.textContent = 'arrow_forward';
+    } else if (currentStep === 2) {
+      nextBtnText.textContent = 'Next: Source';
+      nextBtnIcon.textContent = 'arrow_forward';
+    } else if (currentStep === 3) {
+      nextBtnText.textContent = 'Next: Review';
+      nextBtnIcon.textContent = 'arrow_forward';
+    } else if (currentStep === 4) {
+      nextBtnText.textContent = 'Save Part';
+      nextBtnIcon.textContent = 'check';
+    }
+  }
+
+  function nextStep() {
+    if (currentStep < 4) {
+      setStep(currentStep + 1);
+    } else {
+      // Save notification micro-interaction
+      const nextBtnText = document.getElementById('next-btn-text');
+      nextBtnText.textContent = 'Saved to Registry';
+      setTimeout(() => {
+        setStep(1);
+      }, 1000);
+    }
+  }
+
+  function prevStep() {
+    if (currentStep > 1) {
+      setStep(currentStep - 1);
+    }
+  }
+
+  function toggleSisterCarsModal() {
+    const el = document.getElementById('sister-cars-expansion');
+    if (el) {
+      el.classList.toggle('hidden');
+    }
+  }
+
+  // Initialize
+  setStep(2);
+</script></main></div></body></html>

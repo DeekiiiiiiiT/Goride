@@ -23,8 +23,8 @@ BEGIN
     RAISE EXCEPTION 'guided parts checks need the oil, air, and parts category rows';
   END IF;
 
-  INSERT INTO public.vehicle_platform (id, code, label)
-  VALUES ('dddddddd-dddd-4ddd-8ddd-dddddddddd01', 'GDTEST-BODY', 'Guided test body');
+  INSERT INTO public.vehicle_platform (id, code, label, maker)
+  VALUES ('dddddddd-dddd-4ddd-8ddd-dddddddddd01', 'GDTEST-BODY', 'Guided test body', 'Guided');
   INSERT INTO public.engine_family (id, code)
   VALUES
     ('dddddddd-dddd-4ddd-8ddd-dddddddddd02', 'GDTEST-FE'),
@@ -43,17 +43,17 @@ BEGIN
   BEGIN
     PERFORM public.save_guided_part(jsonb_build_object(
       'variantId', 'dddddddd-dddd-4ddd-8ddd-dddddddddd11',
-      'componentOpCode', 'FILT-AIR',
-      'fit', 'engine_family',
       'evidenceUrl', 'https://example.com/air',
       'parts', jsonb_build_array(
-        jsonb_build_object('manufacturer', 'TestCo', 'partNumber', 'GD-ATOMIC-1', 'name', 'Air filter', 'kind', 'oem'),
-        jsonb_build_object('manufacturer', 'TestCo', 'partNumber', 'GD-ATOMIC-2', 'name', 'Air filter', 'kind', 'oem')
+        jsonb_build_object('manufacturer', 'TestCo', 'partNumber', 'GD-ATOMIC-1', 'name', 'Air filter', 'kind', 'oem')
       )
     ));
     RAISE EXCEPTION 'a broken save should have failed';
   EXCEPTION WHEN OTHERS THEN
     IF SQLERRM = 'a broken save should have failed' THEN
+      RAISE;
+    END IF;
+    IF SQLERRM NOT ILIKE '%job or a category%' THEN
       RAISE;
     END IF;
   END;
@@ -82,26 +82,30 @@ BEGIN
   IF EXISTS (
     SELECT 1 FROM public.parts_for_vehicle('dddddddd-dddd-4ddd-8ddd-dddddddddd12', v_oil, NULL)
     WHERE oem_part_number = 'GD-OIL-1'
-  ) OR EXISTS (
-    SELECT 1 FROM public.parts_for_vehicle('dddddddd-dddd-4ddd-8ddd-dddddddddd13', v_oil, NULL)
-    WHERE oem_part_number = 'GD-OIL-1'
   ) THEN
-    RAISE EXCEPTION 'a this-vehicle oil filter reached the turbo or the sister';
+    RAISE EXCEPTION 'a powertrain listing reached the turbo with a different engine';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.parts_for_vehicle('dddddddd-dddd-4ddd-8ddd-dddddddddd13', v_oil, NULL)
+    WHERE oem_part_number = 'GD-OIL-1' AND tier = 3
+  ) THEN
+    RAISE EXCEPTION 'the same engine should see this oil filter as engine compatible';
   END IF;
 
   BEGIN
     PERFORM public.save_guided_part(jsonb_build_object(
       'variantId', 'dddddddd-dddd-4ddd-8ddd-dddddddddd11',
-      'componentOpCode', 'FILT-AIR',
-      'fit', 'engine_family',
       'evidenceUrl', 'https://example.com/air',
       'parts', jsonb_build_array(
         jsonb_build_object('manufacturer', 'TestCo', 'partNumber', 'GD-AIR-1', 'name', 'Air filter', 'kind', 'oem')
       )
     ));
-    RAISE EXCEPTION 'engine fit should have been rejected';
+    RAISE EXCEPTION 'a part with no job or category should have been rejected';
   EXCEPTION WHEN OTHERS THEN
-    IF SQLERRM = 'engine fit should have been rejected' THEN
+    IF SQLERRM = 'a part with no job or category should have been rejected' THEN
+      RAISE;
+    END IF;
+    IF SQLERRM NOT ILIKE '%job or a category%' THEN
       RAISE;
     END IF;
   END;
@@ -218,6 +222,166 @@ BEGIN
   IF v_match <> 0 THEN
     RAISE EXCEPTION 'bayonet blade matched a U-hook car';
   END IF;
+END $$;
+
+-- Five-category assertions: sister, engine, year, exclusion, both positions, mixed maker.
+DO $$
+DECLARE
+  v_tier int;
+  v_count int;
+BEGIN
+  INSERT INTO public.vehicle_platform (id, code, maker, label) VALUES
+    ('eeeeeeee-eeee-4eee-8eee-eeeeeeeeee01', 'EE-M900', 'Toyota', 'M900'),
+    ('eeeeeeee-eeee-4eee-8eee-eeeeeeeeee02', 'EE-M900', 'Daihatsu', 'M900 Thor'),
+    ('eeeeeeee-eeee-4eee-8eee-eeeeeeeeee03', 'EE-M910', 'Toyota', 'M910'),
+    ('eeeeeeee-eeee-4eee-8eee-eeeeeeeeee05', 'EE-VITZ', 'Toyota', 'Vitz'),
+    ('eeeeeeee-eeee-4eee-8eee-eeeeeeeeee09', 'EE-M900-FAMILY', 'family', 'Roomy / Tank / Thor / Justy · 2WD (M900)');
+  UPDATE public.vehicle_platform
+  SET parent_id = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeee09',
+      family_evidence_url = 'https://toyota-club.net/files/techdata/ttx/tank.htm'
+  WHERE id IN (
+    'eeeeeeee-eeee-4eee-8eee-eeeeeeeeee01',
+    'eeeeeeee-eeee-4eee-8eee-eeeeeeeeee02'
+  );
+  INSERT INTO public.engine_family (id, code) VALUES
+    ('eeeeeeee-eeee-4eee-8eee-eeeeeeeeee04', 'EE-1KR-FE');
+  INSERT INTO public.vehicle_catalog (
+    id, make, model, year, chassis_code, engine_code, platform_id, engine_family_id, production_start_year, production_end_year
+  ) VALUES
+    ('eeeeeeee-eeee-4eee-8eee-eeeeeeeeee11', 'Toyota', 'Roomy', 2016, 'M900A', '1KR-FE',
+      'eeeeeeee-eeee-4eee-8eee-eeeeeeeeee01', 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeee04', 2016, 2020),
+    ('eeeeeeee-eeee-4eee-8eee-eeeeeeeeee12', 'Toyota', 'Tank', 2016, 'M900A', '1KR-FE',
+      'eeeeeeee-eeee-4eee-8eee-eeeeeeeeee02', 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeee04', 2016, 2020),
+    ('eeeeeeee-eeee-4eee-8eee-eeeeeeeeee13', 'Toyota', 'Vitz', 2016, 'KSP130', '1KR-FE',
+      'eeeeeeee-eeee-4eee-8eee-eeeeeeeeee05', 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeee04', 2016, 2020),
+    ('eeeeeeee-eeee-4eee-8eee-eeeeeeeeee14', 'Toyota', 'Roomy', 2016, 'M910A', '1KR-FE',
+      'eeeeeeee-eeee-4eee-8eee-eeeeeeeeee03', 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeee04', 2016, 2020);
+
+  PERFORM public.save_guided_part(jsonb_build_object(
+    'variantId', 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeee11',
+    'componentOpCode', 'FILT-AIR',
+    'yearFrom', 2018,
+    'evidenceUrl', 'https://example.com/ee-air',
+    'parts', jsonb_build_array(
+      jsonb_build_object('manufacturer', 'Toyota', 'partNumber', 'EE-AIR-1', 'name', 'Air filter', 'kind', 'oem')
+    )
+  ));
+  SELECT p.tier INTO v_tier
+  FROM public.parts_for_vehicle('eeeeeeee-eeee-4eee-8eee-eeeeeeeeee12', NULL, 2019) p
+  WHERE p.oem_part_number = 'EE-AIR-1';
+  IF v_tier IS DISTINCT FROM 2 THEN
+    RAISE EXCEPTION 'Tank should be a sister match (2), got %', v_tier;
+  END IF;
+
+  PERFORM public.save_guided_part(jsonb_build_object(
+    'variantId', 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeee11',
+    'componentOpCode', 'ENG-OIL',
+    'evidenceUrl', 'https://example.com/ee-oil',
+    'parts', jsonb_build_array(
+      jsonb_build_object('manufacturer', 'Toyota', 'partNumber', 'EE-OIL-1', 'name', 'Oil filter', 'kind', 'oem'),
+      jsonb_build_object('manufacturer', 'Drivejoy', 'partNumber', 'EE-OIL-AM', 'name', 'Oil filter', 'kind', 'aftermarket')
+    )
+  ));
+  SELECT p.tier INTO v_tier
+  FROM public.parts_for_vehicle('eeeeeeee-eeee-4eee-8eee-eeeeeeeeee13', NULL, 2019) p
+  WHERE p.oem_part_number = 'EE-OIL-1';
+  IF v_tier IS DISTINCT FROM 3 THEN
+    RAISE EXCEPTION 'Vitz should be engine compatible (3), got %', v_tier;
+  END IF;
+  SELECT p.tier INTO v_tier
+  FROM public.parts_for_vehicle('eeeeeeee-eeee-4eee-8eee-eeeeeeeeee14', NULL, 2019) p
+  WHERE p.oem_part_number = 'EE-OIL-1';
+  IF v_tier IS DISTINCT FROM 3 THEN
+    RAISE EXCEPTION 'M910 should be engine compatible (3), got %', v_tier;
+  END IF;
+  SELECT p.tier INTO v_tier
+  FROM public.parts_for_vehicle('eeeeeeee-eeee-4eee-8eee-eeeeeeeeee11', NULL, 2019) p
+  WHERE p.oem_part_number = 'EE-AIR-1';
+  IF v_tier IS DISTINCT FROM 1 THEN
+    RAISE EXCEPTION 'A body part on its own car should be tier 1, got %', v_tier;
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM public.parts_for_vehicle('eeeeeeee-eeee-4eee-8eee-eeeeeeeeee11', NULL, 2016) p
+    WHERE p.oem_part_number = 'EE-AIR-1'
+  ) THEN
+    RAISE EXCEPTION 'Year cut-off must hide a 2018 listing from a 2016 car';
+  END IF;
+  SELECT p.tier INTO v_tier
+  FROM public.parts_for_vehicle('eeeeeeee-eeee-4eee-8eee-eeeeeeeeee11', NULL, 2019) p
+  WHERE p.oem_part_number = 'EE-OIL-AM';
+  IF v_tier IS DISTINCT FROM 4 THEN
+    RAISE EXCEPTION 'Aftermarket should be tier 4 where the OEM listing reaches, got %', v_tier;
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM public.parts_for_vehicle('eeeeeeee-eeee-4eee-8eee-eeeeeeeeee13', NULL, 2019) p
+    WHERE p.oem_part_number = 'EE-OIL-AM' AND p.tier <> 4
+  ) THEN
+    RAISE EXCEPTION 'Aftermarket must stay tier 4 on an engine match';
+  END IF;
+
+  PERFORM public.save_guided_part(jsonb_build_object(
+    'variantId', 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeee11',
+    'componentOpCode', 'BRK-PADS',
+    'position', 'rear',
+    'evidenceUrl', 'https://example.com/ee-pads',
+    'parts', jsonb_build_array(
+      jsonb_build_object('manufacturer', 'Toyota', 'partNumber', 'EE-PAD-1', 'name', 'Pads', 'kind', 'oem')
+    )
+  ));
+  PERFORM public.save_guided_part(jsonb_build_object(
+    'variantId', 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeee11',
+    'componentOpCode', 'BRK-PADS',
+    'position', 'front',
+    'groupId', (
+      SELECT interchange_group_id FROM public.part_master WHERE oem_part_number = 'EE-PAD-1' LIMIT 1
+    ),
+    'evidenceUrl', 'https://example.com/ee-pads',
+    'parts', jsonb_build_array(
+      jsonb_build_object('manufacturer', 'Toyota', 'partNumber', 'EE-PAD-1', 'name', 'Pads', 'kind', 'oem')
+    )
+  ));
+  SELECT count(DISTINCT p.position) INTO v_count
+  FROM public.parts_for_vehicle('eeeeeeee-eeee-4eee-8eee-eeeeeeeeee11', NULL, 2019) p
+  WHERE p.oem_part_number = 'EE-PAD-1';
+  IF v_count IS DISTINCT FROM 2 THEN
+    RAISE EXCEPTION 'Front and rear must both come back, got %', v_count;
+  END IF;
+
+  PERFORM public.admin_exclude_listing(jsonb_build_object(
+    'groupId', (SELECT interchange_group_id FROM public.part_master WHERE oem_part_number = 'EE-OIL-1' LIMIT 1),
+    'variantId', 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeee12',
+    'reason', 'Not this Tank',
+    'evidenceUrl', 'https://example.com/ee-exclude'
+  ));
+  IF EXISTS (
+    SELECT 1 FROM public.parts_for_vehicle('eeeeeeee-eeee-4eee-8eee-eeeeeeeeee12', NULL, 2019) p
+    WHERE p.oem_part_number = 'EE-OIL-1'
+  ) THEN
+    RAISE EXCEPTION 'Exclusion should remove the Tank';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.parts_for_vehicle('eeeeeeee-eeee-4eee-8eee-eeeeeeeeee11', NULL, 2019) p
+    WHERE p.oem_part_number = 'EE-OIL-1'
+  ) THEN
+    RAISE EXCEPTION 'Exclusion must leave the listed car';
+  END IF;
+
+  BEGIN
+    INSERT INTO public.vehicle_catalog (
+      id, make, model, year, chassis_code, platform_id, production_start_year
+    ) VALUES (
+      'eeeeeeee-eeee-4eee-8eee-eeeeeeeeee15', 'Daihatsu', 'Thor', 2016, 'M900S',
+      'eeeeeeee-eeee-4eee-8eee-eeeeeeeeee01', 2016
+    );
+    RAISE EXCEPTION 'mixed-maker trigger should have raised';
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM ILIKE '%mixed-maker trigger should have raised%' THEN
+      RAISE;
+    END IF;
+    IF SQLERRM NOT ILIKE '%two makers%' THEN
+      RAISE;
+    END IF;
+  END;
 END $$;
 
 ROLLBACK;

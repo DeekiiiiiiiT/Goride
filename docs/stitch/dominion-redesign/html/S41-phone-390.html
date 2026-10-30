@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport"/>
+<title>Screen 9: Phone — Find Parts | Roam Dominion</title>
+<!-- Material Symbols & Fonts -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600;700&amp;family=Public+Sans:wght@500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "error": "#a83836",
+            "on-secondary-fixed": "#003798",
+            "inverse-surface": "#0d0e12",
+            "primary-fixed": "#d8e3fb",
+            "on-secondary-container": "#0047c0",
+            "surface-container-high": "#e8e7f1",
+            "secondary": "#0153dc",
+            "tertiary": "#006e31",
+            "secondary-fixed-dim": "#c7d3ff",
+            "surface-variant": "#e1e2ed",
+            "surface": "#faf8fe",
+            "tertiary-fixed": "#98fba9",
+            "on-surface-variant": "#5d5f68",
+            "outline": "#797a84",
+            "surface-container-highest": "#e1e2ed",
+            "outline-variant": "#b0b1bc",
+            "on-primary-container": "#475266",
+            "surface-bright": "#faf8fe",
+            "error-container": "#fa746f",
+            "on-surface": "#30323b",
+            "on-primary-fixed": "#354053",
+            "on-tertiary-fixed-variant": "#006c30",
+            "error-dim": "#67040d",
+            "on-tertiary-fixed": "#004c20",
+            "on-error-container": "#6e0a12",
+            "on-primary-fixed-variant": "#515c70",
+            "primary-container": "#d8e3fb",
+            "secondary-fixed": "#dbe1ff",
+            "surface-dim": "#d9d9e4",
+            "surface-container-lowest": "#ffffff",
+            "on-background": "#30323b",
+            "primary": "#545f74",
+            "surface-container": "#eeedf6",
+            "on-secondary-fixed-variant": "#0050d5",
+            "on-secondary": "#faf8ff",
+            "primary-dim": "#485367",
+            "secondary-dim": "#0049c3",
+            "background": "#faf8fe",
+            "surface-container-low": "#f4f3fa",
+            "surface-tint": "#545f74",
+            "inverse-primary": "#dae6fe",
+            "tertiary-fixed-dim": "#8aec9c",
+            "on-tertiary-container": "#00612a",
+            "on-error": "#fff7f6",
+            "tertiary-container": "#98fba9",
+            "tertiary-dim": "#00612a",
+            "on-primary": "#f8f8ff",
+            "inverse-on-surface": "#9d9ca2",
+            "secondary-container": "#dbe1ff",
+            "primary-fixed-dim": "#cad5ed",
+            "on-tertiary": "#e9ffe7"
+          },
+          fontFamily: {
+            headline: ["Inter", "sans-serif"],
+            display: ["Inter", "sans-serif"],
+            body: ["Inter", "sans-serif"],
+            label: ["Public Sans", "sans-serif"],
+            mono: ["JetBrains Mono", "monospace"]
+          }
+        }
+      }
+    };
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-family: 'Material Symbols Outlined';
+      font-weight: normal;
+      font-style: normal;
+      font-size: 20px;
+      line-height: 1;
+      letter-spacing: normal;
+      text-transform: none;
+      display: inline-block;
+      white-space: nowrap;
+      word-wrap: normal;
+      direction: ltr;
+      -webkit-font-feature-settings: 'liga';
+      -webkit-font-smoothing: antialiased;
+    }
+    /* Hide scrollbars for clean carousel feel */
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-[#111318] text-on-surface antialiased flex justify-center min-h-screen">
+<!-- 390px Mobile Viewport Container -->
+<div class="w-full max-w-[390px] min-h-screen bg-background flex flex-col relative shadow-2xl overflow-x-hidden border-x border-outline-variant/30">
+<!-- Top Status / Mobile Header -->
+<header class="sticky top-0 z-30 bg-surface/95 backdrop-blur-md border-b border-surface-container-high px-4 py-3 flex items-center justify-between">
+<div class="flex items-center gap-2.5">
+<!-- Dominion Emblem -->
+<div class="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center text-on-secondary shadow-sm">
+<span class="material-symbols-outlined text-[18px]">shield</span>
+</div>
+<div>
+<div class="flex items-center gap-1.5 leading-none">
+<span class="text-[11px] font-label font-bold tracking-wider text-secondary uppercase">Dominion Fleet</span>
+<span class="text-[10px] text-outline font-mono">v4.8</span>
+</div>
+<h1 class="text-base font-bold text-on-surface tracking-tight leading-snug">Parts database</h1>
+</div>
+</div>
+<!-- Quick Action / Status indicator -->
+<div class="flex items-center gap-2">
+<div class="flex items-center gap-1 bg-surface-container px-2 py-1 rounded-full border border-outline-variant/40">
+<span class="w-2 h-2 rounded-full bg-tertiary animate-pulse"></span>
+<span class="text-[11px] font-mono font-medium text-on-surface-variant">ONLINE</span>
+</div>
+</div>
+</header>
+<!-- Main Content Area -->
+<main class="flex-1 pb-20">
+<!-- SECTION 1: SEARCH PICKERS STACKED -->
+<section class="p-4 bg-surface-container-low border-b border-surface-container-high space-y-3">
+<div class="space-y-1">
+<label class="text-[12px] font-label font-semibold text-on-surface-variant uppercase tracking-wider block">Make</label>
+<div class="relative">
+<select class="w-full h-11 bg-surface border border-outline-variant rounded-lg px-3 pr-9 text-sm font-medium text-on-surface appearance-none focus:outline-none focus:border-secondary focus:ring-1 focus:ring-secondary transition-colors">
+<option selected="" value="toyota">Toyota</option>
+<option value="daihatsu">Daihatsu</option>
+<option value="subaru">Subaru</option>
+<option value="nissan">Nissan</option>
+</select>
+<div class="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-on-surface-variant flex items-center">
+<span class="material-symbols-outlined text-[18px]">expand_more</span>
+</div>
+</div>
+</div>
+<div class="space-y-1">
+<label class="text-[12px] font-label font-semibold text-on-surface-variant uppercase tracking-wider block">Model</label>
+<div class="relative">
+<select class="w-full h-11 bg-surface border border-outline-variant rounded-lg px-3 pr-9 text-sm font-medium text-on-surface appearance-none focus:outline-none focus:border-secondary focus:ring-1 focus:ring-secondary transition-colors">
+<option selected="" value="roomy">Roomy</option>
+<option value="tank">Tank</option>
+<option value="yaris">Yaris / Vitz</option>
+<option value="passo">Passo</option>
+</select>
+<div class="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-on-surface-variant flex items-center">
+<span class="material-symbols-outlined text-[18px]">expand_more</span>
+</div>
+</div>
+</div>
+<div class="space-y-1">
+<label class="text-[12px] font-label font-semibold text-on-surface-variant uppercase tracking-wider block">Year</label>
+<div class="relative">
+<select class="w-full h-11 bg-surface border border-outline-variant rounded-lg px-3 pr-9 text-sm font-medium text-on-surface appearance-none focus:outline-none focus:border-secondary focus:ring-1 focus:ring-secondary transition-colors">
+<option selected="" value="2019">2019</option>
+<option value="2018">2018</option>
+<option value="2017">2017</option>
+<option value="2016">2016</option>
+</select>
+<div class="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-on-surface-variant flex items-center">
+<span class="material-symbols-outlined text-[18px]">expand_more</span>
+</div>
+</div>
+</div>
+<!-- Primary CTA Button -->
+<button class="w-full h-11 bg-secondary hover:bg-secondary-dim active:scale-[0.99] text-on-secondary font-bold text-sm rounded-lg flex items-center justify-center gap-2 shadow-sm transition-all mt-2">
+<span class="material-symbols-outlined text-[18px]">search</span>
+<span>Find parts</span>
+</button>
+</section>
+<!-- SECTION 2: VARIANT CHIPS OVERFLOW -->
+<section class="py-3 px-4 bg-surface border-b border-surface-container-high">
+<div class="flex items-center justify-between mb-2">
+<span class="text-xs font-label font-bold text-on-surface-variant tracking-wide">Which one?</span>
+<span class="text-[11px] font-mono text-outline">3 configurations</span>
+</div>
+<div class="flex gap-2 overflow-x-auto no-scrollbar -mx-4 px-4 py-1">
+<!-- Active Chip -->
+<button class="shrink-0 h-9 px-3.5 rounded-full border-2 border-secondary bg-secondary-container/50 text-secondary flex items-center gap-1.5 shadow-sm">
+<span class="w-2 h-2 rounded-full bg-secondary"></span>
+<span class="text-xs font-mono font-semibold tracking-tight">M900A · 2WD · 1KR-FE · 2016–2020</span>
+</button>
+<!-- Inactive Chip 1 -->
+<button class="shrink-0 h-9 px-3.5 rounded-full border border-outline-variant bg-surface-container-low text-on-surface-variant hover:border-outline flex items-center transition-colors">
+<span class="text-xs font-mono font-medium tracking-tight">M910A · 4WD · 1KR-FE · 2016–2020</span>
+</button>
+<!-- Inactive Chip 2 -->
+<button class="shrink-0 h-9 px-3.5 rounded-full border border-outline-variant bg-surface-container-low text-on-surface-variant hover:border-outline flex items-center transition-colors">
+<span class="text-xs font-mono font-medium tracking-tight">M900A Facelift · 2WD · 1KR-VET</span>
+</button>
+</div>
+</section>
+<!-- SECTION 3: COVERAGE STRIP COMPACT -->
+<section class="bg-surface-container px-4 py-2.5 flex items-center justify-between border-b border-surface-container-high gap-2">
+<div class="text-[11px] font-mono text-on-surface-variant truncate">
+<span class="font-medium text-on-surface">Service 6/10</span> · Specs 4/13 · Other 12
+        </div>
+<button class="shrink-0 text-xs font-label font-bold text-secondary flex items-center gap-0.5 hover:underline active:opacity-75">
+<span>Vehicle parts</span>
+<span class="material-symbols-outlined text-[14px]">arrow_forward</span>
+</button>
+</section>
+<!-- SECTION 4: THE FIVE MATCH-TYPE ACCORDIONS -->
+<div class="p-3 space-y-2.5">
+<!-- 1. Direct OEM Match (OPEN) -->
+<div class="bg-surface-container-lowest rounded-xl border border-surface-container-high shadow-xs overflow-hidden">
+<div class="border-l-[4px] border-[#0153dc]">
+<button class="w-full text-left p-3.5 flex items-start justify-between gap-2 cursor-pointer bg-surface-container-low/30 select-none">
+<div>
+<div class="flex items-center gap-2">
+<h2 class="text-sm font-bold text-on-surface">Direct OEM Match</h2>
+<span class="px-2 py-0.5 rounded-full bg-secondary text-on-secondary text-[11px] font-mono font-bold leading-none">4</span>
+</div>
+<p class="text-xs text-on-surface-variant mt-0.5">Exact factory part for this car.</p>
+</div>
+<span class="material-symbols-outlined text-outline mt-0.5 transform rotate-180 transition-transform">expand_more</span>
+</button>
+<!-- Cards inside OPEN Direct OEM Match -->
+<div class="p-3 pt-0 space-y-2 border-t border-surface-container-high/60">
+<!-- OEM Card 1 -->
+<div class="p-2.5 rounded-lg bg-surface border border-surface-container-high flex flex-col gap-1.5">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-1.5">
+<span class="text-xs font-bold text-on-surface">Oil filter</span>
+<span class="text-[10px] font-mono text-outline-variant">•</span>
+<span class="text-[11px] font-mono text-on-surface-variant font-medium">Toyota 90915-10009</span>
+</div>
+<button class="w-6 h-6 flex items-center justify-center text-outline hover:text-secondary rounded" title="Source link">
+<span class="material-symbols-outlined text-[16px]">open_in_new</span>
+</button>
+</div>
+<div class="flex items-center justify-between">
+<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-tertiary/10 text-tertiary text-[10px] font-semibold tracking-wide">
+<span class="material-symbols-outlined text-[12px]" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+                    Verified OEM
+                  </span>
+<span class="text-[11px] font-mono text-outline">Fits 1KR-FE Gen 2</span>
+</div>
+</div>
+<!-- OEM Card 2 -->
+<div class="p-2.5 rounded-lg bg-surface border border-surface-container-high flex flex-col gap-1.5">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-1.5">
+<span class="text-xs font-bold text-on-surface">Spark plugs</span>
+<span class="text-[10px] font-mono text-outline-variant">•</span>
+<span class="text-[11px] font-mono text-on-surface-variant font-medium">Denso SC16HR11</span>
+</div>
+<button class="w-6 h-6 flex items-center justify-center text-outline hover:text-secondary rounded" title="Source link">
+<span class="material-symbols-outlined text-[16px]">open_in_new</span>
+</button>
+</div>
+<div class="flex items-center justify-between">
+<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-tertiary/10 text-tertiary text-[10px] font-semibold tracking-wide">
+<span class="material-symbols-outlined text-[12px]" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+                    Verified OEM
+                  </span>
+<span class="text-[11px] font-mono text-outline">Iridium Twin-Tip</span>
+</div>
+</div>
+<!-- OEM Card 3 -->
+<div class="p-2.5 rounded-lg bg-surface border border-surface-container-high flex flex-col gap-1.5">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-1.5">
+<span class="text-xs font-bold text-on-surface">Front Brake Pads</span>
+<span class="text-[10px] font-mono text-outline-variant">•</span>
+<span class="text-[11px] font-mono text-on-surface-variant font-medium">Advics 04465-B1400</span>
+</div>
+<button class="w-6 h-6 flex items-center justify-center text-outline hover:text-secondary rounded" title="Source link">
+<span class="material-symbols-outlined text-[16px]">open_in_new</span>
+</button>
+</div>
+<div class="flex items-center justify-between">
+<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-tertiary/10 text-tertiary text-[10px] font-semibold tracking-wide">
+<span class="material-symbols-outlined text-[12px]" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+                    Verified OEM
+                  </span>
+<span class="text-[11px] font-mono text-outline">Standard Rotor Kit</span>
+</div>
+</div>
+<!-- OEM Card 4 -->
+<div class="p-2.5 rounded-lg bg-surface border border-surface-container-high flex flex-col gap-1.5">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-1.5">
+<span class="text-xs font-bold text-on-surface">Engine Air Filter</span>
+<span class="text-[10px] font-mono text-outline-variant">•</span>
+<span class="text-[11px] font-mono text-on-surface-variant font-medium">Toyota 17801-B1010</span>
+</div>
+<button class="w-6 h-6 flex items-center justify-center text-outline hover:text-secondary rounded" title="Source link">
+<span class="material-symbols-outlined text-[16px]">open_in_new</span>
+</button>
+</div>
+<div class="flex items-center justify-between">
+<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-tertiary/10 text-tertiary text-[10px] font-semibold tracking-wide">
+<span class="material-symbols-outlined text-[12px]" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+                    Verified OEM
+                  </span>
+<span class="text-[11px] font-mono text-outline">Paper Pleated</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- 2. Sister Vehicle Match (COLLAPSED) -->
+<div class="bg-surface-container-lowest rounded-xl border border-surface-container-high shadow-xs overflow-hidden">
+<div class="border-l-[4px] border-[#0e7490]">
+<button class="w-full text-left p-3.5 flex items-start justify-between gap-2 cursor-pointer hover:bg-surface-container-low/50 select-none">
+<div>
+<div class="flex items-center gap-2">
+<h2 class="text-sm font-bold text-on-surface">Sister Vehicle Match</h2>
+<span class="px-2 py-0.5 rounded-full bg-[#0e7490] text-white text-[11px] font-mono font-bold leading-none">2</span>
+</div>
+<p class="text-xs text-on-surface-variant mt-0.5">Same car under another badge: Tank, Thor, Justy</p>
+</div>
+<span class="material-symbols-outlined text-outline mt-0.5">expand_more</span>
+</button>
+</div>
+</div>
+<!-- 3. Engine Compatible Match (COLLAPSED) -->
+<div class="bg-surface-container-lowest rounded-xl border border-surface-container-high shadow-xs overflow-hidden">
+<div class="border-l-[4px] border-[#6d28d9]">
+<button class="w-full text-left p-3.5 flex items-start justify-between gap-2 cursor-pointer hover:bg-surface-container-low/50 select-none">
+<div>
+<div class="flex items-center gap-2">
+<h2 class="text-sm font-bold text-on-surface">Engine Compatible Match</h2>
+<span class="px-2 py-0.5 rounded-full bg-[#6d28d9] text-white text-[11px] font-mono font-bold leading-none">3</span>
+</div>
+<p class="text-xs text-on-surface-variant mt-0.5">From cars with 1KR-FE: Vitz, Passo, Boon</p>
+</div>
+<span class="material-symbols-outlined text-outline mt-0.5">expand_more</span>
+</button>
+</div>
+</div>
+<!-- 4. Aftermarket Cross-Reference (COLLAPSED) -->
+<div class="bg-surface-container-lowest rounded-xl border border-surface-container-high shadow-xs overflow-hidden">
+<div class="border-l-[4px] border-[#475569]">
+<button class="w-full text-left p-3.5 flex items-start justify-between gap-2 cursor-pointer hover:bg-surface-container-low/50 select-none">
+<div>
+<div class="flex items-center gap-2">
+<h2 class="text-sm font-bold text-on-surface">Aftermarket Cross-Reference</h2>
+<span class="px-2 py-0.5 rounded-full bg-[#475569] text-white text-[11px] font-mono font-bold leading-none">3</span>
+</div>
+<p class="text-xs text-on-surface-variant mt-0.5">Other brands for the same part</p>
+</div>
+<span class="material-symbols-outlined text-outline mt-0.5">expand_more</span>
+</button>
+</div>
+</div>
+<!-- 5. Universal Fleet Parts (COLLAPSED) -->
+<div class="bg-surface-container-lowest rounded-xl border border-surface-container-high shadow-xs overflow-hidden">
+<div class="border-l-[4px] border-[#006e31]">
+<button class="w-full text-left p-3.5 flex items-start justify-between gap-2 cursor-pointer hover:bg-surface-container-low/50 select-none">
+<div>
+<div class="flex items-center gap-2">
+<h2 class="text-sm font-bold text-on-surface">Universal Fleet Parts</h2>
+<span class="px-2 py-0.5 rounded-full bg-[#006e31] text-white text-[11px] font-mono font-bold leading-none">4</span>
+</div>
+<p class="text-xs text-on-surface-variant mt-0.5">Bought by size: wipers, bulbs, fluids</p>
+</div>
+<span class="material-symbols-outlined text-outline mt-0.5">expand_more</span>
+</button>
+</div>
+</div>
+</div>
+</main>
+<!-- Fixed Bottom Bar for Mobile Shell Navigation (Strict Anchor reproduction) -->
+<div class="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[390px] z-40 bg-surface/95 backdrop-blur-md border-t border-surface-container-high">
+<div class="flex items-center justify-around px-2 py-1.5">
+<a class="flex flex-1 flex-col items-center justify-center py-1 text-on-surface" href="#">
+<div class="flex h-7 items-center justify-center text-secondary">
+<span class="material-symbols-outlined text-[22px]" style="font-variation-settings: 'FILL' 1;">search</span>
+</div>
+<p class="text-[11px] font-medium leading-tight text-secondary">Search</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center py-1 text-on-surface-variant" href="#">
+<div class="flex h-7 items-center justify-center text-outline">
+<span class="material-symbols-outlined text-[22px]">directions_car</span>
+</div>
+<p class="text-[11px] font-medium leading-tight text-on-surface-variant">Vehicles</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center py-1 text-on-surface-variant" href="#">
+<div class="flex h-7 items-center justify-center text-outline">
+<span class="material-symbols-outlined text-[22px]">bookmark</span>
+</div>
+<p class="text-[11px] font-medium leading-tight text-on-surface-variant">Saved</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center py-1 text-on-surface-variant" href="#">
+<div class="flex h-7 items-center justify-center text-outline">
+<span class="material-symbols-outlined text-[22px]">settings</span>
+</div>
+<p class="text-[11px] font-medium leading-tight text-on-surface-variant">Settings</p>
+</a>
+</div>
+</div>
+</div>
+</body></html>

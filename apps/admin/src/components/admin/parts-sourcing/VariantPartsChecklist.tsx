@@ -3,8 +3,21 @@ import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
 import { Label } from "../../ui/label";
 import { partsEnterpriseApi } from "../../../services/partSourcingService";
-import { GuidedPartDialog, type GuidedJob, type GuidedVariant } from "./GuidedPartDialog";
 import { toast } from "sonner";
+import { AddPartDialog } from "../parts-database/AddPartDialog";
+
+export type GuidedVariant = {
+  id: string;
+  label: string;
+  yearFrom?: number | null;
+  yearTo?: number | null;
+};
+
+export type GuidedJob = {
+  opCode: string;
+  label: string;
+  position?: string | null;
+};
 
 type JobRow = {
   section: string;
@@ -114,21 +127,17 @@ export function VariantPartsChecklist({
         }}>Add supply</Button>
       </div>
       {dialog ? (
-        <GuidedPartDialog
-          open
-          token={token}
-          variant={variant}
-          job={dialog.job}
-          mode={dialog.mode}
+        <AddPartDialog
+          variantId={variant.id}
+          jobOpCode={dialog.job.opCode}
           groupId={dialog.groupId}
           initialParts={dialog.parts?.map((part) => ({
             manufacturer: part.manufacturer ?? "",
             partNumber: part.partNumber ?? "",
             name: part.name ?? dialog.job.label,
-            kind: part.kind || "oem",
+            kind: part.kind || "factory",
           }))}
-          onClose={() => setDialog(null)}
-          onSaved={load}
+          onClose={() => { setDialog(null); load(); }}
         />
       ) : null}
       {naJob ? (

@@ -1,4 +1,4 @@
-import { buildFitMessage } from '@roam/types/partsResolution';
+import { buildFitMessage, PART_MATCH_TIERS } from '@roam/types/partsResolution';
 import { signInProviderLabel, supabasePlugApp } from '../authClient';
 import { plugSend, publicGet } from '../api';
 import { readQueue, readStationCache, writeStationCache } from '../offline';
@@ -1186,18 +1186,26 @@ function fillResults(root: HTMLElement, parts: CatalogPart[]) {
   const groups = new Map<number, CatalogPart[]>();
   rows.forEach((part) => {
     const tier = Number(part.tier) || 4;
+    if (tier < 1 || tier > 5) return;
     const bucket = groups.get(tier) || [];
     bucket.push(part);
     groups.set(tier, bucket);
   });
-  [...groups.keys()].sort((a, b) => a - b).forEach((tier) => {
+  PART_MATCH_TIERS.forEach((row) => {
+    const tier = row.tier;
     const group = document.createElement('section');
     group.className = 'space-y-space-sm';
     const title = document.createElement('h3');
     title.className = 'font-headline-sm text-headline-sm text-on-surface';
-    title.textContent = fitFor(groups.get(tier)![0]).tierLabel;
+    const bucket = groups.get(tier) || [];
+    title.textContent = `${row.label} (${bucket.length})`;
     group.appendChild(title);
-    groups.get(tier)!.forEach((part) => {
+    if (!bucket.length) {
+      const emptyLine = document.createElement('p');
+      emptyLine.textContent = 'None on file yet.';
+      group.appendChild(emptyLine);
+    }
+    bucket.forEach((part) => {
       const card = template.cloneNode(true) as HTMLElement;
       card.classList.remove('hidden');
       card.style.display = 'flex';

@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_dashboard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;family=Public+Sans:wght@500;600&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;font-variant-numeric:tabular-nums;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "on-surface": "#30323b", "inverse-primary": "#dae6fe", "on-error": "#fff7f6", "secondary-fixed-dim": "#c7d3ff", "secondary-fixed": "#dbe1ff", "surface-bright": "#faf8fe", "on-tertiary-fixed": "#004c20", "primary-fixed-dim": "#cad5ed", "surface-dim": "#d9d9e4", "on-secondary-fixed": "#003798", "primary-fixed": "#d8e3fb", "secondary-dim": "#0049c3", "tertiary-fixed-dim": "#8aec9c", "surface-variant": "#e1e2ed", "error-container": "#fa746f", "surface": "#faf8fe", "primary-container": "#d8e3fb", "on-background": "#30323b", "tertiary-fixed": "#98fba9", "surface-tint": "#545f74", "on-secondary-container": "#0047c0", "error": "#a83836", "on-tertiary": "#e9ffe7", "tertiary-container": "#98fba9", "on-primary-fixed-variant": "#515c70", "surface-container-high": "#e8e7f1", "inverse-surface": "#0d0e12", "on-primary": "#f8f8ff", "outline-variant": "#b0b1bc", "on-error-container": "#6e0a12", "secondary-container": "#dbe1ff", "error-dim": "#67040d", "on-tertiary-container": "#00612a", "on-primary-container": "#475266", "surface-container-lowest": "#ffffff", "surface-container": "#eeedf6", "primary-dim": "#485367", "surface-container-highest": "#e1e2ed", "on-surface-variant": "#5d5f68", "primary": "#545f74", "outline": "#797a84", "secondary": "#0153dc", "on-secondary": "#faf8ff", "tertiary": "#006e31", "on-secondary-fixed-variant": "#0050d5", "surface-container-low": "#f4f3fa", "background": "#faf8fe", "tertiary-dim": "#00612a", "on-tertiary-fixed-variant": "#006c30", "inverse-on-surface": "#9d9ca2", "on-primary-fixed": "#354053" }, "borderRadius": { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, "spacing": {}, "fontFamily": { "headline": ["Inter"], "display": ["Inter"], "body": ["Inter"], "label": ["Public Sans"] }, "fontSize": {} } } }</script></head><body class="bg-surface font-body text-on-surface"><aside class="fixed left-0 top-0 h-full w-64 bg-inverse-surface border-r border-outline-variant/20 z-50 flex flex-col justify-between select-none"><div class="flex flex-col"><div class="h-16 px-6 flex items-center gap-3 border-b border-outline-variant/10"><div class="w-7 h-7 rounded bg-secondary flex items-center justify-center"><span class="material-symbols-outlined text-on-secondary text-[18px]">shield_with_house</span></div><span class="text-base font-headline font-bold tracking-tight text-surface-container-lowest">Dominion Admin</span></div><div class="px-4 py-5"><p class="px-3 text-[11px] font-label font-semibold uppercase tracking-wider text-inverse-on-surface mb-2">Navigation</p><nav class="flex flex-col gap-1" data-active-classes="bg-secondary text-on-secondary font-medium rounded-lg"><a class="flex items-center px-3 py-2 rounded-lg text-sm text-surface-variant hover:bg-surface-variant/10 hover:text-surface-container-lowest transition-colors" data-path="overview" href="#"><span class="material-symbols-outlined text-[20px] mr-3">dashboard</span>Overview</a><a aria-current="page" class="flex items-center px-3 py-2 transition-colors bg-secondary text-on-secondary font-medium rounded-lg" data-path="master-data" href="#"><span class="material-symbols-outlined text-[20px] mr-3">database</span>Master Data</a><a class="flex items-center px-3 py-2 rounded-lg text-sm text-surface-variant hover:bg-surface-variant/10 hover:text-surface-container-lowest transition-colors" data-path="engines" href="#"><span class="material-symbols-outlined text-[20px] mr-3">settings_suggest</span>Engines</a><a class="flex items-center px-3 py-2 rounded-lg text-sm text-surface-variant hover:bg-surface-variant/10 hover:text-surface-container-lowest transition-colors" data-path="distribution" href="#"><span class="material-symbols-outlined text-[20px] mr-3">hub</span>Distribution</a><a class="flex items-center px-3 py-2 rounded-lg text-sm text-surface-variant hover:bg-surface-variant/10 hover:text-surface-container-lowest transition-colors" data-path="platform" href="#"><span class="material-symbols-outlined text-[20px] mr-3">memory</span>Platform</a><a class="flex items-center px-3 py-2 rounded-lg text-sm text-surface-variant hover:bg-surface-variant/10 hover:text-surface-container-lowest transition-colors" data-path="back-office" href="#"><span class="material-symbols-outlined text-[20px] mr-3">corporate_fare</span>Back Office</a></nav></div></div><div class="p-4 border-t border-outline-variant/10"><div class="flex items-center gap-3 px-2 py-2 rounded-lg bg-surface-variant/5"><span class="material-symbols-outlined text-inverse-on-surface text-[18px]">verified</span><div class="flex flex-col"><span class="text-xs text-surface-container-lowest font-medium">Jamaica Cluster</span><span class="text-[11px] text-inverse-on-surface font-mono">JMD · Production</span></div></div></div></aside><div class="pl-64 flex flex-col min-h-screen"><header class="fixed top-0 left-64 right-0 h-16 bg-surface-container-lowest border-b border-outline-variant/20 z-40 flex items-center justify-between px-8"><div class="w-96 flex items-center gap-2 bg-surface-container-low px-3 py-2 rounded-lg border border-outline-variant/20"><span class="material-symbols-outlined text-on-surface-variant text-[20px]">search</span><input class="bg-transparent text-sm text-on-surface placeholder:text-on-surface-variant w-full focus:outline-none" placeholder="Search entities, engines, routes…" readonly="" type="text"/></div><div class="flex items-center gap-6"><div class="flex items-center gap-2 text-on-surface-variant"><span class="text-xs font-mono font-medium bg-surface-container px-2 py-1 rounded text-on-surface">1440px</span></div><div class="flex items-center gap-3 pl-4 border-l border-outline-variant/20"><div class="text-right"><p class="text-xs font-semibold text-on-surface leading-tight">DT · Deeki T</p><p class="text-[11px] text-on-surface-variant leading-tight">Owner</p></div><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="w-full pt-16 bg-surface min-h-screen"><div class="flex flex-col w-full">
+<div class="p-8 max-w-[1440px] w-full mx-auto space-y-6">
+<!-- Breadcrumb & Top Context -->
+<div class="flex items-center justify-between">
+<nav class="flex items-center gap-2 text-xs font-mono text-on-surface-variant font-medium tracking-wide">
+<span class="hover:text-secondary cursor-pointer transition-colors">DOMINION</span>
+<span class="text-outline-variant text-[10px]">›</span>
+<span class="hover:text-secondary cursor-pointer transition-colors">MASTER DATA</span>
+<span class="text-outline-variant text-[10px]">›</span>
+<span class="hover:text-secondary cursor-pointer transition-colors">VEHICLES</span>
+<span class="text-outline-variant text-[10px]">›</span>
+<span class="hover:text-secondary cursor-pointer transition-colors">PARTS DATABASE</span>
+<span class="text-outline-variant text-[10px]">›</span>
+<span class="text-secondary font-semibold">TOYOTA ROOMY</span>
+</nav>
+<div class="flex items-center gap-2">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-surface-container text-[11px] font-mono text-on-surface-variant">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span>
+          Cluster: Kingston Central DB
+        </span>
+</div>
+</div>
+<!-- Header Card -->
+<section class="bg-surface-container-lowest p-6 rounded-xl shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
+<div class="space-y-4">
+<div>
+<div class="flex items-baseline gap-3">
+<h1 class="text-2xl font-headline font-bold text-on-surface tracking-tight">Toyota Roomy</h1>
+<span class="text-xs text-on-surface-variant">Subcompact Minivan · JDM</span>
+</div>
+<div class="flex flex-wrap items-center gap-2 mt-2">
+<span class="px-2.5 py-0.5 rounded bg-surface-container font-mono text-xs font-medium text-on-surface">M900A</span>
+<span class="px-2.5 py-0.5 rounded bg-surface-container font-mono text-xs font-medium text-on-surface">1KR-FE</span>
+<span class="px-2.5 py-0.5 rounded bg-surface-container font-mono text-xs font-medium text-on-surface">2WD</span>
+<span class="px-2.5 py-0.5 rounded bg-surface-container font-mono text-xs font-medium text-on-surface">2016–2020</span>
+</div>
+</div>
+<div class="flex flex-wrap items-center gap-4 text-xs pt-1">
+<div class="flex items-center gap-1.5">
+<span class="text-on-surface-variant font-medium">Sisters:</span>
+<div class="flex items-center gap-1.5">
+<span class="px-2 py-0.5 rounded bg-surface-container-low font-mono text-[11px] text-on-surface hover:bg-surface-container cursor-pointer transition-colors">Toyota Tank</span>
+<span class="px-2 py-0.5 rounded bg-surface-container-low font-mono text-[11px] text-on-surface hover:bg-surface-container cursor-pointer transition-colors">Daihatsu Thor</span>
+<span class="px-2 py-0.5 rounded bg-surface-container-low font-mono text-[11px] text-on-surface hover:bg-surface-container cursor-pointer transition-colors">Subaru Justy</span>
+</div>
+</div>
+<span class="text-outline-variant">|</span>
+<div class="flex items-center gap-1.5">
+<span class="text-on-surface-variant font-medium">Engine:</span>
+<span class="px-2 py-0.5 rounded bg-secondary-fixed text-on-secondary-fixed font-mono text-[11px] font-medium flex items-center gap-1">
+<span class="material-symbols-outlined text-[13px]">tune</span>
+              1KR-FE · 9 cars
+            </span>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-3 shrink-0 self-start md:self-center">
+<button class="px-3.5 py-2 rounded-lg bg-surface-container-low hover:bg-surface-container text-xs font-medium text-on-surface transition-colors flex items-center gap-1.5" type="button">
+<span class="material-symbols-outlined text-[16px]">arrow_back</span>
+          Back to Find parts
+        </button>
+<button class="px-4 py-2 rounded-lg bg-secondary hover:bg-secondary-dim text-xs font-medium text-on-secondary shadow-sm transition-all flex items-center gap-1.5" type="button">
+<span class="material-symbols-outlined text-[16px]">add</span>
+          Add any part
+        </button>
+</div>
+</section>
+<!-- Main Grid Layout -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+<!-- Left Column: Service Essentials & Other Parts (8 cols) -->
+<div class="lg:col-span-8 space-y-6">
+<!-- BLOCK 1: Service Essentials -->
+<section class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
+<div class="p-5 flex items-center justify-between bg-surface-container-lowest">
+<div>
+<h2 class="text-base font-semibold text-on-surface">Service essentials</h2>
+<p class="text-xs text-on-surface-variant mt-0.5">High-cadence maintenance checklist &amp; cross-verified fitments</p>
+</div>
+<div class="flex items-center gap-2">
+<span class="text-xs font-mono text-tertiary font-medium bg-tertiary-fixed/30 px-2 py-1 rounded">12/15 Verified</span>
+</div>
+</div>
+<div class="divide-y-0 space-y-4 p-5 pt-0">
+<!-- Group: Engine service -->
+<div class="space-y-1.5">
+<div class="text-[11px] font-label font-bold uppercase tracking-wider text-on-surface-variant/80 px-2 py-1 bg-surface-container-low rounded">
+                Engine service
+              </div>
+<div class="space-y-1">
+<!-- Oil filter -->
+<div class="flex items-center justify-between p-2.5 rounded-lg hover:bg-surface-container-low transition-colors text-xs">
+<div class="w-36 font-medium text-on-surface">Oil filter</div>
+<div class="w-32">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-tertiary/10 text-tertiary">Verified</span>
+</div>
+<div class="flex-1 font-mono text-on-surface">Toyota 04152-40060</div>
+<div class="flex items-center gap-2">
+<button class="px-2.5 py-1 rounded bg-surface-container-low hover:bg-surface-container text-on-surface font-medium text-[11px] transition-colors">Edit</button>
+<button class="text-on-surface-variant hover:text-error text-[11px] transition-colors">Not on this car</button>
+<button class="text-on-surface-variant hover:text-error text-[11px] transition-colors">Remove</button>
+</div>
+</div>
+<!-- Spark plugs -->
+<div class="flex items-center justify-between p-2.5 rounded-lg hover:bg-surface-container-low transition-colors text-xs">
+<div class="w-36 font-medium text-on-surface">Spark plugs</div>
+<div class="w-32">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-tertiary/10 text-tertiary">Verified</span>
+</div>
+<div class="flex-1 font-mono text-on-surface">Denso SC16HR11</div>
+<div class="flex items-center gap-2">
+<button class="px-2.5 py-1 rounded bg-surface-container-low hover:bg-surface-container text-on-surface font-medium text-[11px] transition-colors">Edit</button>
+<button class="text-on-surface-variant hover:text-error text-[11px] transition-colors">Not on this car</button>
+<button class="text-on-surface-variant hover:text-error text-[11px] transition-colors">Remove</button>
+</div>
+</div>
+<!-- Air filter -->
+<div class="flex items-center justify-between p-2.5 rounded-lg hover:bg-surface-container-low transition-colors text-xs">
+<div class="w-36 font-medium text-on-surface">Air filter</div>
+<div class="w-32">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-amber-500/10 text-amber-700">Needs checking</span>
+</div>
+<div class="flex-1 font-mono text-on-surface">Toyota 17801-21060</div>
+<div class="flex items-center gap-2">
+<button class="px-2.5 py-1 rounded bg-surface-container-low hover:bg-surface-container text-on-surface font-medium text-[11px] transition-colors">Edit</button>
+<button class="text-on-surface-variant hover:text-error text-[11px] transition-colors">Not on this car</button>
+<button class="text-on-surface-variant hover:text-error text-[11px] transition-colors">Remove</button>
+</div>
+</div>
+<!-- Drive belt -->
+<div class="flex items-center justify-between p-2.5 rounded-lg hover:bg-surface-container-low transition-colors text-xs">
+<div class="w-36 font-medium text-on-surface">Drive belt</div>
+<div class="w-32">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-tertiary/10 text-tertiary">Verified</span>
+</div>
+<div class="flex-1 font-mono text-on-surface">Mitsuboshi 4PK715</div>
+<div class="flex items-center gap-2">
+<button class="px-2.5 py-1 rounded bg-surface-container-low hover:bg-surface-container text-on-surface font-medium text-[11px] transition-colors">Edit</button>
+<button class="text-on-surface-variant hover:text-error text-[11px] transition-colors">Not on this car</button>
+<button class="text-on-surface-variant hover:text-error text-[11px] transition-colors">Remove</button>
+</div>
+</div>
+<!-- Thermostat -->
+<div class="flex items-center justify-between p-2.5 rounded-lg hover:bg-surface-container-low transition-colors text-xs">
+<div class="w-36 font-medium text-on-surface">Thermostat</div>
+<div class="w-32">
+<span class="text-[11px] text-on-surface-variant italic">Data not in yet</span>
+</div>
+<div class="flex-1 font-mono text-on-surface-variant">—</div>
+<div class="flex items-center gap-2">
+<button class="px-2.5 py-1 rounded bg-secondary hover:bg-secondary-dim text-on-secondary font-medium text-[11px] transition-colors">Add</button>
+<button class="text-on-surface-variant hover:text-error text-[11px] transition-colors">Not on this car</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Group: Cabin -->
+<div class="space-y-1.5 pt-2">
+<div class="text-[11px] font-label font-bold uppercase tracking-wider text-on-surface-variant/80 px-2 py-1 bg-surface-container-low rounded">
+                Cabin
+              </div>
+<div class="space-y-1">
+<div class="flex items-center justify-between p-2.5 rounded-lg hover:bg-surface-container-low transition-colors text-xs">
+<div class="w-36 font-medium text-on-surface">Cabin (A/C) filter</div>
+<div class="w-32">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-tertiary/10 text-tertiary">Verified</span>
+</div>
+<div class="flex-1 font-mono text-on-surface">Toyota 87139-52040</div>
+<div class="flex items-center gap-2">
+<button class="px-2.5 py-1 rounded bg-surface-container-low hover:bg-surface-container text-on-surface font-medium text-[11px] transition-colors">Edit</button>
+<button class="text-on-surface-variant hover:text-error text-[11px] transition-colors">Not on this car</button>
+<button class="text-on-surface-variant hover:text-error text-[11px] transition-colors">Remove</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Group: Brakes -->
+<div class="space-y-1.5 pt-2">
+<div class="text-[11px] font-label font-bold uppercase tracking-wider text-on-surface-variant/80 px-2 py-1 bg-surface-container-low rounded">
+                Brakes
+              </div>
+<div class="space-y-1">
+<div class="flex items-center justify-between p-2.5 rounded-lg hover:bg-surface-container-low transition-colors text-xs">
+<div class="w-36 font-medium text-on-surface">Front pads</div>
+<div class="w-32">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-tertiary/10 text-tertiary">Verified</span>
+</div>
+<div class="flex-1 font-mono text-on-surface">Akebono AN-608WK</div>
+<div class="flex items-center gap-2">
+<button class="px-2.5 py-1 rounded bg-surface-container-low hover:bg-surface-container text-on-surface font-medium text-[11px] transition-colors">Edit</button>
+<button class="text-on-surface-variant hover:text-error text-[11px] transition-colors">Not on this car</button>
+<button class="text-on-surface-variant hover:text-error text-[11px] transition-colors">Remove</button>
+</div>
+</div>
+<div class="flex items-center justify-between p-2.5 rounded-lg hover:bg-surface-container-low transition-colors text-xs">
+<div class="w-36 font-medium text-on-surface">Front rotors</div>
+<div class="w-32">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-amber-500/10 text-amber-700">Needs checking</span>
+</div>
+<div class="flex-1 font-mono text-on-surface">Dixcel 3818047S</div>
+<div class="flex items-center gap-2">
+<button class="px-2.5 py-1 rounded bg-surface-container-low hover:bg-surface-container text-on-surface font-medium text-[11px] transition-colors">Edit</button>
+<button class="text-on-surface-variant hover:text-error text-[11px] transition-colors">Not on this car</button>
+<button class="text-on-surface-variant hover:text-error text-[11px] transition-colors">Remove</button>
+</div>
+</div>
+<div class="flex items-center justify-between p-2.5 rounded-lg hover:bg-surface-container-low transition-colors text-xs">
+<div class="w-36 font-medium text-on-surface">Rear shoes / pads</div>
+<div class="w-32">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-tertiary/10 text-tertiary">Verified</span>
+</div>
+<div class="flex-1 font-mono text-on-surface">Toyota 04495-B1010</div>
+<div class="flex items-center gap-2">
+<button class="px-2.5 py-1 rounded bg-surface-container-low hover:bg-surface-container text-on-surface font-medium text-[11px] transition-colors">Edit</button>
+<button class="text-on-surface-variant hover:text-error text-[11px] transition-colors">Not on this car</button>
+<button class="text-on-surface-variant hover:text-error text-[11px] transition-colors">Remove</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Group: Visibility -->
+<div class="space-y-1.5 pt-2">
+<div class="text-[11px] font-label font-bold uppercase tracking-wider text-on-surface-variant/80 px-2 py-1 bg-surface-container-low rounded">
+                Visibility
+              </div>
+<div class="space-y-1">
+<div class="flex items-center justify-between p-2.5 rounded-lg hover:bg-surface-container-low transition-colors text-xs">
+<div class="w-36 font-medium text-on-surface">Wiper driver</div>
+<div class="w-32">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-tertiary/10 text-tertiary">Verified</span>
+</div>
+<div class="flex-1 font-mono text-on-surface">NWB 525mm (D53)</div>
+<div class="flex items-center gap-2">
+<button class="px-2.5 py-1 rounded bg-surface-container-low hover:bg-surface-container text-on-surface font-medium text-[11px] transition-colors">Edit</button>
+<button class="text-on-surface-variant hover:text-error text-[11px] transition-colors">Not on this car</button>
+<button class="text-on-surface-variant hover:text-error text-[11px] transition-colors">Remove</button>
+</div>
+</div>
+<div class="flex items-center justify-between p-2.5 rounded-lg hover:bg-surface-container-low transition-colors text-xs">
+<div class="w-36 font-medium text-on-surface">Wiper passenger</div>
+<div class="w-32">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-tertiary/10 text-tertiary">Verified</span>
+</div>
+<div class="flex-1 font-mono text-on-surface">NWB 475mm (D48)</div>
+<div class="flex items-center gap-2">
+<button class="px-2.5 py-1 rounded bg-surface-container-low hover:bg-surface-container text-on-surface font-medium text-[11px] transition-colors">Edit</button>
+<button class="text-on-surface-variant hover:text-error text-[11px] transition-colors">Not on this car</button>
+<button class="text-on-surface-variant hover:text-error text-[11px] transition-colors">Remove</button>
+</div>
+</div>
+<div class="flex items-center justify-between p-2.5 rounded-lg hover:bg-surface-container-low transition-colors text-xs">
+<div class="w-36 font-medium text-on-surface">Wiper rear</div>
+<div class="w-32">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-tertiary/10 text-tertiary">Verified</span>
+</div>
+<div class="flex-1 font-mono text-on-surface">NWB 350mm (GRA35)</div>
+<div class="flex items-center gap-2">
+<button class="px-2.5 py-1 rounded bg-surface-container-low hover:bg-surface-container text-on-surface font-medium text-[11px] transition-colors">Edit</button>
+<button class="text-on-surface-variant hover:text-error text-[11px] transition-colors">Not on this car</button>
+<button class="text-on-surface-variant hover:text-error text-[11px] transition-colors">Remove</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Group: Suspension -->
+<div class="space-y-1.5 pt-2">
+<div class="text-[11px] font-label font-bold uppercase tracking-wider text-on-surface-variant/80 px-2 py-1 bg-surface-container-low rounded">
+                Suspension
+              </div>
+<div class="space-y-1">
+<div class="flex items-center justify-between p-2.5 rounded-lg hover:bg-surface-container-low transition-colors text-xs">
+<div class="w-36 font-medium text-on-surface">Shock front left</div>
+<div class="w-32">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-tertiary/10 text-tertiary">Verified</span>
+</div>
+<div class="flex-1 font-mono text-on-surface">KYB NST5700L</div>
+<div class="flex items-center gap-2">
+<button class="px-2.5 py-1 rounded bg-surface-container-low hover:bg-surface-container text-on-surface font-medium text-[11px] transition-colors">Edit</button>
+<button class="text-on-surface-variant hover:text-error text-[11px] transition-colors">Not on this car</button>
+<button class="text-on-surface-variant hover:text-error text-[11px] transition-colors">Remove</button>
+</div>
+</div>
+<div class="flex items-center justify-between p-2.5 rounded-lg hover:bg-surface-container-low transition-colors text-xs">
+<div class="w-36 font-medium text-on-surface">Shock front right</div>
+<div class="w-32">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-tertiary/10 text-tertiary">Verified</span>
+</div>
+<div class="flex-1 font-mono text-on-surface">KYB NST5700R</div>
+<div class="flex items-center gap-2">
+<button class="px-2.5 py-1 rounded bg-surface-container-low hover:bg-surface-container text-on-surface font-medium text-[11px] transition-colors">Edit</button>
+<button class="text-on-surface-variant hover:text-error text-[11px] transition-colors">Not on this car</button>
+<button class="text-on-surface-variant hover:text-error text-[11px] transition-colors">Remove</button>
+</div>
+</div>
+<div class="flex items-center justify-between p-2.5 rounded-lg hover:bg-surface-container-low transition-colors text-xs">
+<div class="w-36 font-medium text-on-surface">Shock rear</div>
+<div class="w-32">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-tertiary/10 text-tertiary">Verified</span>
+</div>
+<div class="flex-1 font-mono text-on-surface">KYB NSF1352</div>
+<div class="flex items-center gap-2">
+<button class="px-2.5 py-1 rounded bg-surface-container-low hover:bg-surface-container text-on-surface font-medium text-[11px] transition-colors">Edit</button>
+<button class="text-on-surface-variant hover:text-error text-[11px] transition-colors">Not on this car</button>
+<button class="text-on-surface-variant hover:text-error text-[11px] transition-colors">Remove</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- BLOCK 2: Other parts (Collapsible categories) -->
+<section class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden p-5">
+<div class="flex items-center justify-between mb-4">
+<div>
+<h2 class="text-base font-semibold text-on-surface">Other parts</h2>
+<p class="text-xs text-on-surface-variant mt-0.5">Extended mechanical &amp; body catalogue categories</p>
+</div>
+</div>
+<div class="space-y-2">
+<!-- Category 1: Engine components (Expanded) -->
+<details class="group bg-surface-container-low rounded-lg transition-all" open="">
+<summary class="flex items-center justify-between p-3 cursor-pointer select-none">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px] text-on-surface-variant transition-transform group-open:rotate-90">chevron_right</span>
+<span class="text-xs font-semibold text-on-surface">Engine components</span>
+</div>
+<span class="px-2 py-0.5 rounded-full bg-surface-container text-[11px] font-mono text-on-surface-variant">4 parts</span>
+</summary>
+<div class="px-4 pb-3 pt-1 space-y-1.5">
+<div class="flex items-center justify-between p-2 rounded bg-surface-container-lowest text-xs">
+<div class="w-36 font-medium text-on-surface">Water pump</div>
+<div class="w-28"><span class="px-2 py-0.5 rounded text-[11px] font-medium bg-tertiary/10 text-tertiary">Verified</span></div>
+<div class="flex-1 font-mono text-on-surface">Aisin WPT-190</div>
+<div class="flex items-center gap-2">
+<button class="px-2 py-0.5 rounded bg-surface-container text-on-surface text-[11px]">Edit</button>
+<button class="text-on-surface-variant hover:text-error text-[11px]">Remove</button>
+</div>
+</div>
+<div class="flex items-center justify-between p-2 rounded bg-surface-container-lowest text-xs">
+<div class="w-36 font-medium text-on-surface">Alternator 12V 80A</div>
+<div class="w-28"><span class="px-2 py-0.5 rounded text-[11px] font-medium bg-tertiary/10 text-tertiary">Verified</span></div>
+<div class="flex-1 font-mono text-on-surface">Denso 27060-B1170</div>
+<div class="flex items-center gap-2">
+<button class="px-2 py-0.5 rounded bg-surface-container text-on-surface text-[11px]">Edit</button>
+<button class="text-on-surface-variant hover:text-error text-[11px]">Remove</button>
+</div>
+</div>
+<div class="flex items-center justify-between p-2 rounded bg-surface-container-lowest text-xs">
+<div class="w-36 font-medium text-on-surface">Starter motor</div>
+<div class="w-28"><span class="px-2 py-0.5 rounded text-[11px] font-medium bg-amber-500/10 text-amber-700">Needs checking</span></div>
+<div class="flex-1 font-mono text-on-surface">Denso 28100-B1080</div>
+<div class="flex items-center gap-2">
+<button class="px-2 py-0.5 rounded bg-surface-container text-on-surface text-[11px]">Edit</button>
+<button class="text-on-surface-variant hover:text-error text-[11px]">Remove</button>
+</div>
+</div>
+<div class="flex items-center justify-between p-2 rounded bg-surface-container-lowest text-xs">
+<div class="w-36 font-medium text-on-surface">Valve cover gasket</div>
+<div class="w-28"><span class="px-2 py-0.5 rounded text-[11px] font-medium bg-tertiary/10 text-tertiary">Verified</span></div>
+<div class="flex-1 font-mono text-on-surface">Toyota 11213-B1040</div>
+<div class="flex items-center gap-2">
+<button class="px-2 py-0.5 rounded bg-surface-container text-on-surface text-[11px]">Edit</button>
+<button class="text-on-surface-variant hover:text-error text-[11px]">Remove</button>
+</div>
+</div>
+</div>
+</details>
+<!-- Category 2: Transmission & drivetrain -->
+<details class="group bg-surface-container-low rounded-lg transition-all">
+<summary class="flex items-center justify-between p-3 cursor-pointer select-none">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px] text-on-surface-variant transition-transform group-open:rotate-90">chevron_right</span>
+<span class="text-xs font-semibold text-on-surface">Transmission and drivetrain</span>
+</div>
+<span class="px-2 py-0.5 rounded-full bg-surface-container text-[11px] font-mono text-on-surface-variant">2 parts</span>
+</summary>
+<div class="px-4 pb-3 pt-1 space-y-1.5">
+<div class="flex items-center justify-between p-2 rounded bg-surface-container-lowest text-xs">
+<div class="w-36 font-medium text-on-surface">CV Axle Front L</div>
+<div class="w-28"><span class="px-2 py-0.5 rounded text-[11px] font-medium bg-tertiary/10 text-tertiary">Verified</span></div>
+<div class="flex-1 font-mono text-on-surface">HDK DS-DA-33</div>
+<div class="flex items-center gap-2"><button class="px-2 py-0.5 rounded bg-surface-container text-on-surface text-[11px]">Edit</button></div>
+</div>
+<div class="flex items-center justify-between p-2 rounded bg-surface-container-lowest text-xs">
+<div class="w-36 font-medium text-on-surface">CV Axle Front R</div>
+<div class="w-28"><span class="px-2 py-0.5 rounded text-[11px] font-medium bg-tertiary/10 text-tertiary">Verified</span></div>
+<div class="flex-1 font-mono text-on-surface">HDK DS-DA-34</div>
+<div class="flex items-center gap-2"><button class="px-2 py-0.5 rounded bg-surface-container text-on-surface text-[11px]">Edit</button></div>
+</div>
+</div>
+</details>
+<!-- Category 3: Suspension -->
+<details class="group bg-surface-container-low rounded-lg transition-all">
+<summary class="flex items-center justify-between p-3 cursor-pointer select-none">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px] text-on-surface-variant transition-transform group-open:rotate-90">chevron_right</span>
+<span class="text-xs font-semibold text-on-surface">Suspension</span>
+</div>
+<span class="px-2 py-0.5 rounded-full bg-surface-container text-[11px] font-mono text-on-surface-variant">1 part</span>
+</summary>
+<div class="px-4 pb-3 pt-1 space-y-1.5">
+<div class="flex items-center justify-between p-2 rounded bg-surface-container-lowest text-xs">
+<div class="w-36 font-medium text-on-surface">Front sway link</div>
+<div class="w-28"><span class="px-2 py-0.5 rounded text-[11px] font-medium bg-tertiary/10 text-tertiary">Verified</span></div>
+<div class="flex-1 font-mono text-on-surface">555 SL-3340-M</div>
+<div class="flex items-center gap-2"><button class="px-2 py-0.5 rounded bg-surface-container text-on-surface text-[11px]">Edit</button></div>
+</div>
+</div>
+</details>
+<!-- Category 4: Brake -->
+<div class="flex items-center justify-between p-3 rounded-lg bg-surface-container-low text-xs select-none">
+<div class="flex items-center gap-2 text-on-surface-variant">
+<span class="material-symbols-outlined text-[18px]">radio_button_unchecked</span>
+<span>Brake</span>
+</div>
+<span class="text-[11px] italic text-on-surface-variant">The data is not in yet (0)</span>
+</div>
+<!-- Category 5: Cooling -->
+<details class="group bg-surface-container-low rounded-lg transition-all">
+<summary class="flex items-center justify-between p-3 cursor-pointer select-none">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px] text-on-surface-variant transition-transform group-open:rotate-90">chevron_right</span>
+<span class="text-xs font-semibold text-on-surface">Cooling</span>
+</div>
+<span class="px-2 py-0.5 rounded-full bg-surface-container text-[11px] font-mono text-on-surface-variant">2 parts</span>
+</summary>
+<div class="px-4 pb-3 pt-1 space-y-1.5">
+<div class="flex items-center justify-between p-2 rounded bg-surface-container-lowest text-xs">
+<div class="w-36 font-medium text-on-surface">Radiator core</div>
+<div class="w-28"><span class="px-2 py-0.5 rounded text-[11px] font-medium bg-tertiary/10 text-tertiary">Verified</span></div>
+<div class="flex-1 font-mono text-on-surface">Koyo PL012356</div>
+<div class="flex items-center gap-2"><button class="px-2 py-0.5 rounded bg-surface-container text-on-surface text-[11px]">Edit</button></div>
+</div>
+<div class="flex items-center justify-between p-2 rounded bg-surface-container-lowest text-xs">
+<div class="w-36 font-medium text-on-surface">Radiator cap 108kPa</div>
+<div class="w-28"><span class="px-2 py-0.5 rounded text-[11px] font-medium bg-tertiary/10 text-tertiary">Verified</span></div>
+<div class="flex-1 font-mono text-on-surface">Toyota 16401-20353</div>
+<div class="flex items-center gap-2"><button class="px-2 py-0.5 rounded bg-surface-container text-on-surface text-[11px]">Edit</button></div>
+</div>
+</div>
+</details>
+<!-- Category 6: Electrical and computers -->
+<details class="group bg-surface-container-low rounded-lg transition-all">
+<summary class="flex items-center justify-between p-3 cursor-pointer select-none">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px] text-on-surface-variant transition-transform group-open:rotate-90">chevron_right</span>
+<span class="text-xs font-semibold text-on-surface">Electrical and computers</span>
+</div>
+<span class="px-2 py-0.5 rounded-full bg-surface-container text-[11px] font-mono text-on-surface-variant">1 part</span>
+</summary>
+<div class="px-4 pb-3 pt-1 space-y-1.5">
+<div class="flex items-center justify-between p-2 rounded bg-surface-container-lowest text-xs">
+<div class="w-36 font-medium text-on-surface">O2 Sensor upstream</div>
+<div class="w-28"><span class="px-2 py-0.5 rounded text-[11px] font-medium bg-tertiary/10 text-tertiary">Verified</span></div>
+<div class="flex-1 font-mono text-on-surface">Denso DOX-0109</div>
+<div class="flex items-center gap-2"><button class="px-2 py-0.5 rounded bg-surface-container text-on-surface text-[11px]">Edit</button></div>
+</div>
+</div>
+</details>
+<!-- Category 7: Lighting and mirrors -->
+<details class="group bg-surface-container-low rounded-lg transition-all">
+<summary class="flex items-center justify-between p-3 cursor-pointer select-none">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px] text-on-surface-variant transition-transform group-open:rotate-90">chevron_right</span>
+<span class="text-xs font-semibold text-on-surface">Lighting and mirrors</span>
+</div>
+<span class="px-2 py-0.5 rounded-full bg-surface-container text-[11px] font-mono text-on-surface-variant">2 parts</span>
+</summary>
+<div class="px-4 pb-3 pt-1 space-y-1.5">
+<div class="flex items-center justify-between p-2 rounded bg-surface-container-lowest text-xs">
+<div class="w-36 font-medium text-on-surface">Headlamp RH (Halogen)</div>
+<div class="w-28"><span class="px-2 py-0.5 rounded text-[11px] font-medium bg-tertiary/10 text-tertiary">Verified</span></div>
+<div class="flex-1 font-mono text-on-surface">Koito 100-69022</div>
+<div class="flex items-center gap-2"><button class="px-2 py-0.5 rounded bg-surface-container text-on-surface text-[11px]">Edit</button></div>
+</div>
+<div class="flex items-center justify-between p-2 rounded bg-surface-container-lowest text-xs">
+<div class="w-36 font-medium text-on-surface">Headlamp LH (Halogen)</div>
+<div class="w-28"><span class="px-2 py-0.5 rounded text-[11px] font-medium bg-tertiary/10 text-tertiary">Verified</span></div>
+<div class="flex-1 font-mono text-on-surface">Koito 100-69023</div>
+<div class="flex items-center gap-2"><button class="px-2 py-0.5 rounded bg-surface-container text-on-surface text-[11px]">Edit</button></div>
+</div>
+</div>
+</details>
+<!-- Category 8: Body and door -->
+<div class="flex items-center justify-between p-3 rounded-lg bg-surface-container-low text-xs select-none">
+<div class="flex items-center gap-2 text-on-surface-variant">
+<span class="material-symbols-outlined text-[18px]">radio_button_unchecked</span>
+<span>Body and door</span>
+</div>
+<span class="text-[11px] italic text-on-surface-variant">The data is not in yet (0)</span>
+</div>
+<!-- Category 9: HVAC -->
+<div class="flex items-center justify-between p-3 rounded-lg bg-surface-container-low text-xs select-none">
+<div class="flex items-center gap-2 text-on-surface-variant">
+<span class="material-symbols-outlined text-[18px]">radio_button_unchecked</span>
+<span>HVAC</span>
+</div>
+<span class="text-[11px] italic text-on-surface-variant">The data is not in yet (0)</span>
+</div>
+</div>
+</section>
+</div>
+<!-- Right Column: Specs & Sister Compatibility (4 cols) -->
+<div class="lg:col-span-4 space-y-6">
+<!-- BLOCK 3: Specs Table (13 rows) -->
+<section class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden p-5">
+<div class="flex items-center justify-between mb-3">
+<div>
+<h2 class="text-base font-semibold text-on-surface">Specs</h2>
+<p class="text-xs text-on-surface-variant mt-0.5">Fluid capacities &amp; component metrics</p>
+</div>
+<span class="material-symbols-outlined text-outline-variant text-[20px]">straighten</span>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left text-xs">
+<thead>
+<tr class="text-[11px] font-label uppercase text-on-surface-variant/80 border-b-0">
+<th class="py-2 pr-2 font-medium">Spec</th>
+<th class="py-2 px-2 font-medium">Value</th>
+<th class="py-2 px-2 font-medium">Reach</th>
+<th class="py-2 pl-2 text-right font-medium">Action</th>
+</tr>
+</thead>
+<tbody class="divide-y-0 space-y-0 text-on-surface">
+<tr class="hover:bg-surface-container-low transition-colors">
+<td class="py-2 pr-2 font-medium">Engine oil grade</td>
+<td class="py-2 px-2 font-mono font-medium text-secondary">0W-20</td>
+<td class="py-2 px-2"><span class="text-[10px] px-1.5 py-0.5 rounded bg-surface-container font-mono">Sisters too</span></td>
+<td class="py-2 pl-2 text-right">
+<div class="flex items-center justify-end gap-1">
+<span class="material-symbols-outlined text-[15px] text-outline-variant hover:text-on-surface cursor-pointer">open_in_new</span>
+<button class="px-1.5 py-0.5 rounded bg-surface-container hover:bg-surface-container-high text-[11px] font-medium">Set</button>
+</div>
+</td>
+</tr>
+<tr class="hover:bg-surface-container-low transition-colors">
+<td class="py-2 pr-2 font-medium">Oil capacity (filter)</td>
+<td class="py-2 px-2 font-mono font-medium">3.1 L</td>
+<td class="py-2 px-2"><span class="text-[10px] px-1.5 py-0.5 rounded bg-surface-container font-mono">Sisters too</span></td>
+<td class="py-2 pl-2 text-right">
+<div class="flex items-center justify-end gap-1">
+<span class="material-symbols-outlined text-[15px] text-outline-variant hover:text-on-surface cursor-pointer">open_in_new</span>
+<button class="px-1.5 py-0.5 rounded bg-surface-container hover:bg-surface-container-high text-[11px] font-medium">Set</button>
+</div>
+</td>
+</tr>
+<tr class="hover:bg-surface-container-low transition-colors">
+<td class="py-2 pr-2 font-medium">Wiper driver</td>
+<td class="py-2 px-2 font-mono font-medium">525 mm</td>
+<td class="py-2 px-2"><span class="text-[10px] px-1.5 py-0.5 rounded bg-surface-container-low font-mono text-on-surface-variant">This vehicle</span></td>
+<td class="py-2 pl-2 text-right">
+<div class="flex items-center justify-end gap-1">
+<span class="material-symbols-outlined text-[15px] text-outline-variant hover:text-on-surface cursor-pointer">open_in_new</span>
+<button class="px-1.5 py-0.5 rounded bg-surface-container hover:bg-surface-container-high text-[11px] font-medium">Set</button>
+</div>
+</td>
+</tr>
+<tr class="hover:bg-surface-container-low transition-colors">
+<td class="py-2 pr-2 font-medium">Wiper passenger</td>
+<td class="py-2 px-2 font-mono font-medium">475 mm</td>
+<td class="py-2 px-2"><span class="text-[10px] px-1.5 py-0.5 rounded bg-surface-container-low font-mono text-on-surface-variant">This vehicle</span></td>
+<td class="py-2 pl-2 text-right">
+<div class="flex items-center justify-end gap-1">
+<span class="material-symbols-outlined text-[15px] text-outline-variant hover:text-on-surface cursor-pointer">open_in_new</span>
+<button class="px-1.5 py-0.5 rounded bg-surface-container hover:bg-surface-container-high text-[11px] font-medium">Set</button>
+</div>
+</td>
+</tr>
+<tr class="hover:bg-surface-container-low transition-colors">
+<td class="py-2 pr-2 font-medium">Wiper rear</td>
+<td class="py-2 px-2 font-mono font-medium">350 mm</td>
+<td class="py-2 px-2"><span class="text-[10px] px-1.5 py-0.5 rounded bg-surface-container-low font-mono text-on-surface-variant">This vehicle</span></td>
+<td class="py-2 pl-2 text-right">
+<div class="flex items-center justify-end gap-1">
+<span class="material-symbols-outlined text-[15px] text-outline-variant hover:text-on-surface cursor-pointer">open_in_new</span>
+<button class="px-1.5 py-0.5 rounded bg-surface-container hover:bg-surface-container-high text-[11px] font-medium">Set</button>
+</div>
+</td>
+</tr>
+<tr class="hover:bg-surface-container-low transition-colors">
+<td class="py-2 pr-2 font-medium">Wiper connector</td>
+<td class="py-2 px-2 font-mono font-medium">U-hook</td>
+<td class="py-2 px-2"><span class="text-[10px] px-1.5 py-0.5 rounded bg-surface-container font-mono">Sisters too</span></td>
+<td class="py-2 pl-2 text-right">
+<div class="flex items-center justify-end gap-1">
+<span class="material-symbols-outlined text-[15px] text-outline-variant hover:text-on-surface cursor-pointer">open_in_new</span>
+<button class="px-1.5 py-0.5 rounded bg-surface-container hover:bg-surface-container-high text-[11px] font-medium">Set</button>
+</div>
+</td>
+</tr>
+<tr class="hover:bg-surface-container-low transition-colors">
+<td class="py-2 pr-2 font-medium">Battery size</td>
+<td class="py-2 px-2 font-mono font-medium">34B19L</td>
+<td class="py-2 px-2"><span class="text-[10px] px-1.5 py-0.5 rounded bg-surface-container font-mono">Sisters too</span></td>
+<td class="py-2 pl-2 text-right">
+<div class="flex items-center justify-end gap-1">
+<span class="material-symbols-outlined text-[15px] text-outline-variant hover:text-on-surface cursor-pointer">open_in_new</span>
+<button class="px-1.5 py-0.5 rounded bg-surface-container hover:bg-surface-container-high text-[11px] font-medium">Set</button>
+</div>
+</td>
+</tr>
+<tr class="hover:bg-surface-container-low transition-colors">
+<td class="py-2 pr-2 font-medium">Headlight low</td>
+<td class="py-2 px-2 font-mono font-medium">H4 / LED</td>
+<td class="py-2 px-2"><span class="text-[10px] px-1.5 py-0.5 rounded bg-surface-container-low font-mono text-on-surface-variant">This vehicle</span></td>
+<td class="py-2 pl-2 text-right">
+<div class="flex items-center justify-end gap-1">
+<span class="material-symbols-outlined text-[15px] text-outline-variant hover:text-on-surface cursor-pointer">open_in_new</span>
+<button class="px-1.5 py-0.5 rounded bg-surface-container hover:bg-surface-container-high text-[11px] font-medium">Set</button>
+</div>
+</td>
+</tr>
+<tr class="hover:bg-surface-container-low transition-colors">
+<td class="py-2 pr-2 font-medium">Headlight high</td>
+<td class="py-2 px-2 font-mono font-medium">H4</td>
+<td class="py-2 px-2"><span class="text-[10px] px-1.5 py-0.5 rounded bg-surface-container-low font-mono text-on-surface-variant">This vehicle</span></td>
+<td class="py-2 pl-2 text-right">
+<div class="flex items-center justify-end gap-1">
+<span class="material-symbols-outlined text-[15px] text-outline-variant hover:text-on-surface cursor-pointer">open_in_new</span>
+<button class="px-1.5 py-0.5 rounded bg-surface-container hover:bg-surface-container-high text-[11px] font-medium">Set</button>
+</div>
+</td>
+</tr>
+<tr class="hover:bg-surface-container-low transition-colors">
+<td class="py-2 pr-2 font-medium">Fog light bulb</td>
+<td class="py-2 px-2 font-mono font-medium">H16</td>
+<td class="py-2 px-2"><span class="text-[10px] px-1.5 py-0.5 rounded bg-surface-container font-mono">Sisters too</span></td>
+<td class="py-2 pl-2 text-right">
+<div class="flex items-center justify-end gap-1">
+<span class="material-symbols-outlined text-[15px] text-outline-variant hover:text-on-surface cursor-pointer">open_in_new</span>
+<button class="px-1.5 py-0.5 rounded bg-surface-container hover:bg-surface-container-high text-[11px] font-medium">Set</button>
+</div>
+</td>
+</tr>
+<tr class="hover:bg-surface-container-low transition-colors">
+<td class="py-2 pr-2 font-medium">Brake fluid</td>
+<td class="py-2 px-2 font-mono font-medium">DOT 4</td>
+<td class="py-2 px-2"><span class="text-[10px] px-1.5 py-0.5 rounded bg-surface-container font-mono">Sisters too</span></td>
+<td class="py-2 pl-2 text-right">
+<div class="flex items-center justify-end gap-1">
+<span class="material-symbols-outlined text-[15px] text-outline-variant hover:text-on-surface cursor-pointer">open_in_new</span>
+<button class="px-1.5 py-0.5 rounded bg-surface-container hover:bg-surface-container-high text-[11px] font-medium">Set</button>
+</div>
+</td>
+</tr>
+<tr class="hover:bg-surface-container-low transition-colors">
+<td class="py-2 pr-2 font-medium">Coolant</td>
+<td class="py-2 px-2 font-mono font-medium">S-LLC Pink</td>
+<td class="py-2 px-2"><span class="text-[10px] px-1.5 py-0.5 rounded bg-surface-container font-mono">Sisters too</span></td>
+<td class="py-2 pl-2 text-right">
+<div class="flex items-center justify-end gap-1">
+<span class="material-symbols-outlined text-[15px] text-outline-variant hover:text-on-surface cursor-pointer">open_in_new</span>
+<button class="px-1.5 py-0.5 rounded bg-surface-container hover:bg-surface-container-high text-[11px] font-medium">Set</button>
+</div>
+</td>
+</tr>
+<tr class="hover:bg-surface-container-low transition-colors">
+<td class="py-2 pr-2 font-medium">Transmission fluid</td>
+<td class="py-2 px-2 font-mono font-medium">CVTF FE</td>
+<td class="py-2 px-2"><span class="text-[10px] px-1.5 py-0.5 rounded bg-surface-container font-mono">Sisters too</span></td>
+<td class="py-2 pl-2 text-right">
+<div class="flex items-center justify-end gap-1">
+<span class="material-symbols-outlined text-[15px] text-outline-variant hover:text-on-surface cursor-pointer">open_in_new</span>
+<button class="px-1.5 py-0.5 rounded bg-surface-container hover:bg-surface-container-high text-[11px] font-medium">Set</button>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<!-- BLOCK 4: Where these parts also show -->
+<section class="bg-surface-container-lowest rounded-xl shadow-sm p-5 space-y-3">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px] text-secondary">hub</span>
+<h2 class="text-base font-semibold text-on-surface">Where these parts also show</h2>
+</div>
+<p class="text-xs text-on-surface-variant leading-relaxed">
+            Database cross-references showing where components mapped to this chassis share direct interchangeability:
+          </p>
+<div class="space-y-2 pt-1 font-mono text-xs">
+<div class="flex items-center gap-2.5 p-2 rounded-lg bg-surface-container-low">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>
+<span class="text-on-surface font-medium">Toyota Tank — Sister</span>
+</div>
+<div class="flex items-center gap-2.5 p-2 rounded-lg bg-surface-container-low">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>
+<span class="text-on-surface font-medium">Daihatsu Thor — Sister</span>
+</div>
+<div class="flex items-center gap-2.5 p-2 rounded-lg bg-surface-container-low">
+<span class="w-1.5 h-1.5 rounded-full bg-outline"></span>
+<span class="text-on-surface font-medium">Toyota Vitz KSP130 — Engine parts only</span>
+</div>
+</div>
+<div class="pt-3 border-t-0 flex items-center justify-between text-[11px] text-on-surface-variant">
+<span>Last catalog sweep</span>
+<span class="font-mono">Kingston UTC-5 · Clean</span>
+</div>
+</section>
+</div>
+</div>
+</div>
+</div></main></div></body></html>

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Loader2, ListChecks, Package, Plus, Wrench, Car, History, Eye } from "lucide-react";
+import { PART_MATCH_TIERS } from "@roam/types/partsResolution";
 import { api } from "../../services/api";
 import { Button } from "../ui/button";
 import {
@@ -753,7 +754,41 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
               </div>
             ) : null}
           </div>
-          <div className="min-h-0 flex-1 overflow-auto rounded-lg border border-slate-200 dark:border-slate-700">
+          <div className="min-h-0 flex-1 overflow-auto space-y-4">
+            {((partsData?.sections?.length ? partsData.sections : PART_MATCH_TIERS) as Array<{ tier: number; label: string; items?: Array<Record<string, unknown>> }>).map((section) => {
+              const rows = section.tier === 5
+                ? []
+                : (section.items?.length
+                  ? section.items as typeof partsData.items
+                  : (partsData?.items ?? []).filter((row) => Number(row.tier) === section.tier));
+              return (
+                <div key={section.tier} className="rounded-lg border border-slate-200 dark:border-slate-700">
+                  <div className="px-3 py-2 border-b border-slate-200 dark:border-slate-700">
+                    <p className="font-medium">{section.label} ({section.tier === 5 ? (partsData?.universal?.length ?? 0) : rows.length})</p>
+                  </div>
+                  {section.tier === 5 ? (
+                    <div className="p-3 text-sm space-y-3">
+                      {partsData?.universal?.length ? partsData.universal.map((block) => (
+                        <div key={String(block.specKey ?? block.label)}>
+                          <p className="font-medium">{block.label}: {block.value}{block.unit ? ` ${block.unit}` : ""}</p>
+                          {(block.items ?? []).map((item) => (
+                            <div key={String(item.id)} className="flex items-center justify-between gap-2 py-1">
+                              <span>{item.manufacturer} {item.partNumber} {item.name}</span>
+                              {item.inYourStock || Number(item.stockQty) > 0 ? (
+                                <span>In your stock — {item.stockQty}</span>
+                              ) : (
+                                <Button type="button" size="sm" variant="outline" onClick={() => {
+                                  void api.setOrgPartStock({ universalPartId: String(item.id), qty: 1 }).then(() => handleLoadCompatibleParts());
+                                }}>Add 1 to stock</Button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )) : <p className="text-slate-500">None on file yet.</p>}
+                    </div>
+                  ) : !rows.length ? (
+                    <p className="px-3 py-4 text-sm text-slate-500">None on file yet.</p>
+                  ) : (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -764,14 +799,7 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {!partsData?.items?.length ? (
-                  <TableRow>
-                    <TableCell colSpan={4} className="text-center text-slate-500 py-8">
-                      {partsData?.catalogMatched ? "No matching parts in catalog." : "Choose a vehicle and tap Load."}
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  partsData.items.map((row) => {
+                  {rows.map((row) => {
                     const cat = row.part?.part_category?.label ?? "—";
                     const offers = row.offers ?? [];
                     const offerLine = offers.length
@@ -808,33 +836,14 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
                         </TableCell>
                       </TableRow>
                     );
-                  })
-                )}
+                  })}
               </TableBody>
             </Table>
-          </div>
-          {partsData?.universal?.length ? (
-            <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-3 space-y-2 text-sm">
-              <p className="font-medium">By size / spec</p>
-              {partsData.universal.map((section) => (
-                <div key={section.specKey}>
-                  <p>{section.label}: {section.value}{section.unit ? ` ${section.unit}` : ""}</p>
-                  {section.items.length === 0 ? (
-                    <p className="text-xs text-slate-500">No brand item on file. This size is enough to buy the right one.</p>
-                  ) : section.items.map((item) => (
-                    <div key={item.id} className="flex flex-wrap items-center gap-2 text-xs">
-                      <span>{item.manufacturer} {item.partNumber} · {item.name}</span>
-                      {item.stockQty ? <span>In your stock — {item.stockQty} on the shelf.</span> : (
-                        <Button type="button" size="sm" variant="ghost" className="h-7 px-2" onClick={() => {
-                          void api.setOrgPartStock({ universalPartId: item.id, qty: 1 }).then(() => handleLoadCompatibleParts()).catch((err) => toast.error(err instanceof Error ? err.message : "Could not add stock"));
-                        }}>Add 1 to stock</Button>
-                      )}
-                    </div>
-                  ))}
+                  )}
                 </div>
-              ))}
-            </div>
-          ) : null}
+              );
+            })}
+          </div>
           {partsData?.relatedSupplies?.length ? (
             <div className="text-sm">
               <p className="font-medium">You may also need</p>

@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_dashboard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;family=Public+Sans:wght@500;600&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;font-variant-numeric:tabular-nums;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "on-surface": "#30323b", "inverse-primary": "#dae6fe", "on-error": "#fff7f6", "secondary-fixed-dim": "#c7d3ff", "secondary-fixed": "#dbe1ff", "surface-bright": "#faf8fe", "on-tertiary-fixed": "#004c20", "primary-fixed-dim": "#cad5ed", "surface-dim": "#d9d9e4", "on-secondary-fixed": "#003798", "primary-fixed": "#d8e3fb", "secondary-dim": "#0049c3", "tertiary-fixed-dim": "#8aec9c", "surface-variant": "#e1e2ed", "error-container": "#fa746f", "surface": "#faf8fe", "primary-container": "#d8e3fb", "on-background": "#30323b", "tertiary-fixed": "#98fba9", "surface-tint": "#545f74", "on-secondary-container": "#0047c0", "error": "#a83836", "on-tertiary": "#e9ffe7", "tertiary-container": "#98fba9", "on-primary-fixed-variant": "#515c70", "surface-container-high": "#e8e7f1", "inverse-surface": "#0d0e12", "on-primary": "#f8f8ff", "outline-variant": "#b0b1bc", "on-error-container": "#6e0a12", "secondary-container": "#dbe1ff", "error-dim": "#67040d", "on-tertiary-container": "#00612a", "on-primary-container": "#475266", "surface-container-lowest": "#ffffff", "surface-container": "#eeedf6", "primary-dim": "#485367", "surface-container-highest": "#e1e2ed", "on-surface-variant": "#5d5f68", "primary": "#545f74", "outline": "#797a84", "secondary": "#0153dc", "on-secondary": "#faf8ff", "tertiary": "#006e31", "on-secondary-fixed-variant": "#0050d5", "surface-container-low": "#f4f3fa", "background": "#faf8fe", "tertiary-dim": "#00612a", "on-tertiary-fixed-variant": "#006c30", "inverse-on-surface": "#9d9ca2", "on-primary-fixed": "#354053" }, "borderRadius": { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, "spacing": {}, "fontFamily": { "headline": ["Inter"], "display": ["Inter"], "body": ["Inter"], "label": ["Public Sans"] }, "fontSize": {} } } }</script></head><body class="bg-surface font-body text-on-surface"><aside class="fixed left-0 top-0 h-full w-64 bg-inverse-surface border-r border-outline-variant/20 z-50 flex flex-col justify-between select-none"><div class="flex flex-col"><div class="h-16 px-6 flex items-center gap-3 border-b border-outline-variant/10"><div class="w-7 h-7 rounded bg-secondary flex items-center justify-center"><span class="material-symbols-outlined text-on-secondary text-[18px]">shield_with_house</span></div><span class="text-base font-headline font-bold tracking-tight text-surface-container-lowest">Dominion Admin</span></div><div class="px-4 py-5"><p class="px-3 text-[11px] font-label font-semibold uppercase tracking-wider text-inverse-on-surface mb-2">Navigation</p><nav class="flex flex-col gap-1" data-active-classes="bg-secondary text-on-secondary font-medium rounded-lg"><a class="flex items-center px-3 py-2 rounded-lg text-sm text-surface-variant hover:bg-surface-variant/10 hover:text-surface-container-lowest transition-colors" data-path="overview" href="#"><span class="material-symbols-outlined text-[20px] mr-3">dashboard</span>Overview</a><a aria-current="page" class="flex items-center px-3 py-2 transition-colors bg-secondary text-on-secondary font-medium rounded-lg" data-path="master-data" href="#"><span class="material-symbols-outlined text-[20px] mr-3">database</span>Master Data</a><a class="flex items-center px-3 py-2 rounded-lg text-sm text-surface-variant hover:bg-surface-variant/10 hover:text-surface-container-lowest transition-colors" data-path="engines" href="#"><span class="material-symbols-outlined text-[20px] mr-3">settings_suggest</span>Engines</a><a class="flex items-center px-3 py-2 rounded-lg text-sm text-surface-variant hover:bg-surface-variant/10 hover:text-surface-container-lowest transition-colors" data-path="distribution" href="#"><span class="material-symbols-outlined text-[20px] mr-3">hub</span>Distribution</a><a class="flex items-center px-3 py-2 rounded-lg text-sm text-surface-variant hover:bg-surface-variant/10 hover:text-surface-container-lowest transition-colors" data-path="platform" href="#"><span class="material-symbols-outlined text-[20px] mr-3">memory</span>Platform</a><a class="flex items-center px-3 py-2 rounded-lg text-sm text-surface-variant hover:bg-surface-variant/10 hover:text-surface-container-lowest transition-colors" data-path="back-office" href="#"><span class="material-symbols-outlined text-[20px] mr-3">corporate_fare</span>Back Office</a></nav></div></div><div class="p-4 border-t border-outline-variant/10"><div class="flex items-center gap-3 px-2 py-2 rounded-lg bg-surface-variant/5"><span class="material-symbols-outlined text-inverse-on-surface text-[18px]">verified</span><div class="flex flex-col"><span class="text-xs text-surface-container-lowest font-medium">Jamaica Cluster</span><span class="text-[11px] text-inverse-on-surface font-mono">JMD · Production</span></div></div></div></aside><div class="pl-64 flex flex-col min-h-screen"><header class="fixed top-0 left-64 right-0 h-16 bg-surface-container-lowest border-b border-outline-variant/20 z-40 flex items-center justify-between px-8"><div class="w-96 flex items-center gap-2 bg-surface-container-low px-3 py-2 rounded-lg border border-outline-variant/20"><span class="material-symbols-outlined text-on-surface-variant text-[20px]">search</span><input class="bg-transparent text-sm text-on-surface placeholder:text-on-surface-variant w-full focus:outline-none" placeholder="Search entities, engines, routes…" readonly="" type="text"/></div><div class="flex items-center gap-6"><div class="flex items-center gap-2 text-on-surface-variant"><span class="text-xs font-mono font-medium bg-surface-container px-2 py-1 rounded text-on-surface">1440px</span></div><div class="flex items-center gap-3 pl-4 border-l border-outline-variant/20"><div class="text-right"><p class="text-xs font-semibold text-on-surface leading-tight">DT · Deeki T</p><p class="text-[11px] text-on-surface-variant leading-tight">Owner</p></div><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="w-full pt-16 bg-surface min-h-screen"><div class="flex flex-col w-full">
+<div class="px-8 py-6 space-y-6">
+<nav class="flex items-center gap-2 text-xs font-mono uppercase tracking-wider text-on-surface-variant select-none">
+<span class="hover:text-on-surface transition-colors cursor-pointer">Dominion</span>
+<span class="text-outline-variant font-sans text-[10px]">›</span>
+<span class="hover:text-on-surface transition-colors cursor-pointer">Master Data</span>
+<span class="text-outline-variant font-sans text-[10px]">›</span>
+<span class="hover:text-on-surface transition-colors cursor-pointer">Vehicles</span>
+<span class="text-outline-variant font-sans text-[10px]">›</span>
+<span class="text-secondary font-semibold">Parts Database</span>
+</nav>
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
+<div>
+<h1 class="text-2xl font-headline font-bold text-on-surface tracking-tight">Parts database</h1>
+<p class="text-sm text-on-surface-variant mt-1 font-body">Every part that fits a car, in five match types.</p>
+</div>
+<div class="flex items-center gap-3">
+<span class="text-xs font-mono bg-surface-container px-2.5 py-1 rounded text-on-surface-variant font-medium">JMD CATALOG · KINGSTON HUB</span>
+</div>
+</div>
+<div class="flex items-center justify-between border-b border-outline-variant/20 pt-1">
+<div class="flex items-center gap-8 -mb-px">
+<button class="relative pb-3 text-sm font-semibold text-secondary flex items-center gap-2">
+<span>Find parts</span>
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>
+<div class="absolute bottom-0 left-0 right-0 h-0.5 bg-secondary rounded-t"></div>
+</button>
+<button class="pb-3 text-sm font-medium text-on-surface-variant hover:text-on-surface transition-colors">
+          Vehicle parts
+        </button>
+<button class="pb-3 text-sm font-medium text-on-surface-variant hover:text-on-surface transition-colors">
+          Sister vehicles
+        </button>
+<button class="pb-3 text-sm font-medium text-on-surface-variant hover:text-on-surface transition-colors">
+          Universal parts
+        </button>
+<button class="pb-3 text-sm font-medium text-on-surface-variant hover:text-on-surface transition-colors">
+          Import
+        </button>
+</div>
+<button class="text-xs font-medium text-secondary hover:underline pb-3 transition-all flex items-center gap-1">
+<span>Advanced</span>
+<span class="material-symbols-outlined text-[14px]">tune</span>
+</button>
+</div>
+<div class="bg-surface-container-lowest rounded-xl shadow-sm p-6 space-y-5">
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+<div>
+<label class="block text-xs font-label font-semibold uppercase tracking-wider text-on-surface-variant mb-1.5">Make</label>
+<div class="relative">
+<select class="w-full appearance-none bg-surface-container-low text-sm font-medium text-on-surface rounded-lg px-3 py-2.5 pr-8 focus:outline-none focus:ring-1 focus:ring-secondary cursor-pointer">
+<option selected="">Toyota</option>
+<option>Nissan</option>
+<option>Honda</option>
+<option>Suzuki</option>
+</select>
+<span class="material-symbols-outlined pointer-events-none absolute right-2.5 top-2.5 text-on-surface-variant text-[20px]">expand_more</span>
+</div>
+</div>
+<div>
+<label class="block text-xs font-label font-semibold uppercase tracking-wider text-on-surface-variant mb-1.5">Model</label>
+<div class="relative">
+<select class="w-full appearance-none bg-surface-container-low text-sm font-medium text-on-surface rounded-lg px-3 py-2.5 pr-8 focus:outline-none focus:ring-1 focus:ring-secondary cursor-pointer">
+<option selected="">Roomy</option>
+<option>Tank</option>
+<option>Vitz</option>
+<option>Probox</option>
+<option>Axio</option>
+</select>
+<span class="material-symbols-outlined pointer-events-none absolute right-2.5 top-2.5 text-on-surface-variant text-[20px]">expand_more</span>
+</div>
+</div>
+<div>
+<label class="block text-xs font-label font-semibold uppercase tracking-wider text-on-surface-variant mb-1.5">Year</label>
+<div class="relative">
+<select class="w-full appearance-none bg-surface-container-low text-sm font-medium text-on-surface rounded-lg px-3 py-2.5 pr-8 focus:outline-none focus:ring-1 focus:ring-secondary cursor-pointer">
+<option selected="">2019</option>
+<option>2018</option>
+<option>2017</option>
+<option>2016</option>
+</select>
+<span class="material-symbols-outlined pointer-events-none absolute right-2.5 top-2.5 text-on-surface-variant text-[20px]">expand_more</span>
+</div>
+</div>
+<div>
+<button class="w-full bg-secondary hover:bg-secondary-dim text-on-secondary py-2.5 px-4 rounded-lg font-medium text-sm transition-colors flex items-center justify-center gap-2 shadow-sm">
+<span class="material-symbols-outlined text-[18px]">search</span>
+<span>Find parts</span>
+</button>
+</div>
+</div>
+<div class="pt-2 flex flex-col sm:flex-row sm:items-center gap-3">
+<span class="text-xs font-label font-semibold text-on-surface-variant uppercase tracking-wider">Which one?</span>
+<div class="flex flex-wrap items-center gap-2.5">
+<button class="bg-secondary-container text-on-secondary-container px-3.5 py-1.5 rounded-lg text-xs font-mono font-medium flex items-center gap-2 ring-1 ring-secondary/40 shadow-xs">
+<span class="material-symbols-outlined text-[16px] text-secondary">check_circle</span>
+<span>M900A · 2WD · 1KR-FE · 2016–2020</span>
+</button>
+<button class="bg-surface-container-low text-on-surface-variant hover:text-on-surface hover:bg-surface-container px-3.5 py-1.5 rounded-lg text-xs font-mono font-medium transition-colors">
+<span>M910A · 4WD · 1KR-FE · 2016–2020</span>
+</button>
+</div>
+</div>
+</div>
+<div class="bg-surface-container-lowest rounded-xl p-4 px-6 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
+<div class="flex items-center gap-3 text-xs sm:text-sm text-on-surface">
+<div class="w-2 h-2 rounded-full bg-tertiary"></div>
+<div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+<span class="font-medium">Service essentials <strong class="font-mono text-on-surface">6 of 10</strong></span>
+<span class="text-outline-variant font-mono">·</span>
+<span class="font-medium">Specs <strong class="font-mono text-on-surface">4 of 13</strong></span>
+<span class="text-outline-variant font-mono">·</span>
+<span class="font-medium">Other parts <strong class="font-mono text-on-surface">12</strong></span>
+</div>
+</div>
+<button class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium text-secondary hover:bg-secondary-container/40 transition-colors self-start md:self-auto bg-surface-container-low">
+<span>Open this vehicle's parts page</span>
+<span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+</button>
+</div>
+<div class="space-y-4">
+<div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden flex">
+<div class="w-1 bg-[#0153dc] shrink-0"></div>
+<div class="p-5 w-full flex flex-col gap-4">
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2">
+<div class="flex items-center gap-3">
+<span class="font-headline font-semibold text-sm text-on-surface">Direct OEM Match</span>
+<span class="text-xs font-mono bg-secondary-container text-on-secondary-container px-2 py-0.5 rounded font-semibold">4</span>
+</div>
+<p class="text-xs text-on-surface-variant font-body">Exact factory part for this car.</p>
+</div>
+<div class="divide-y divide-outline-variant/10 text-xs">
+<div class="py-2.5 flex items-center justify-between gap-4 hover:bg-surface-container-low/50 px-2 rounded -mx-2 transition-colors">
+<div class="w-1/4 font-medium text-on-surface">Oil filter</div>
+<div class="w-1/3 font-mono font-medium text-on-surface tracking-tight">Toyota 00000-00000</div>
+<div class="w-16 text-center text-outline font-mono">—</div>
+<div class="w-8 flex justify-center text-on-surface-variant hover:text-secondary cursor-pointer">
+<span class="material-symbols-outlined text-[18px]">launch</span>
+</div>
+<div class="w-24 text-right">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-tertiary-container/40 text-on-tertiary-container">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span>
+                  Verified
+                </span>
+</div>
+</div>
+<div class="py-2.5 flex items-center justify-between gap-4 hover:bg-surface-container-low/50 px-2 rounded -mx-2 transition-colors">
+<div class="w-1/4 font-medium text-on-surface">Spark plugs</div>
+<div class="w-1/3 font-mono font-medium text-on-surface tracking-tight">Denso 00000-00000</div>
+<div class="w-16 text-center text-outline font-mono">—</div>
+<div class="w-8 flex justify-center text-on-surface-variant hover:text-secondary cursor-pointer">
+<span class="material-symbols-outlined text-[18px]">launch</span>
+</div>
+<div class="w-24 text-right">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-tertiary-container/40 text-on-tertiary-container">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span>
+                  Verified
+                </span>
+</div>
+</div>
+<div class="py-2.5 flex items-center justify-between gap-4 hover:bg-surface-container-low/50 px-2 rounded -mx-2 transition-colors">
+<div class="w-1/4 font-medium text-on-surface">Front Brake Pads</div>
+<div class="w-1/3 font-mono font-medium text-on-surface tracking-tight">Advics 00000-00000</div>
+<div class="w-16 text-center text-outline font-mono">—</div>
+<div class="w-8 flex justify-center text-on-surface-variant hover:text-secondary cursor-pointer">
+<span class="material-symbols-outlined text-[18px]">launch</span>
+</div>
+<div class="w-24 text-right">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-tertiary-container/40 text-on-tertiary-container">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span>
+                  Verified
+                </span>
+</div>
+</div>
+<div class="py-2.5 flex items-center justify-between gap-4 hover:bg-surface-container-low/50 px-2 rounded -mx-2 transition-colors">
+<div class="w-1/4 font-medium text-on-surface">Engine Air Filter</div>
+<div class="w-1/3 font-mono font-medium text-on-surface tracking-tight">Toyota 00000-00000</div>
+<div class="w-16 text-center text-outline font-mono">—</div>
+<div class="w-8 flex justify-center text-on-surface-variant hover:text-secondary cursor-pointer">
+<span class="material-symbols-outlined text-[18px]">launch</span>
+</div>
+<div class="w-24 text-right">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-tertiary-container/40 text-on-tertiary-container">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span>
+                  Verified
+                </span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden flex">
+<div class="w-1 bg-[#0e7490] shrink-0"></div>
+<div class="p-5 w-full flex flex-col gap-4">
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2">
+<div class="flex items-center gap-3">
+<span class="font-headline font-semibold text-sm text-on-surface">Sister Vehicle Match</span>
+<span class="text-xs font-mono bg-surface-container px-2 py-0.5 rounded font-semibold text-on-surface">2</span>
+</div>
+<p class="text-xs text-on-surface-variant font-body">Same car under another badge: Toyota Tank, Daihatsu Thor, Subaru Justy.</p>
+</div>
+<div class="divide-y divide-outline-variant/10 text-xs">
+<div class="py-2.5 flex items-center justify-between gap-4 hover:bg-surface-container-low/50 px-2 rounded -mx-2 transition-colors">
+<div class="w-1/3">
+<p class="font-medium text-on-surface">Rear Wheel Bearing Assembly</p>
+<p class="text-[11px] text-on-surface-variant">Listed for Daihatsu Thor</p>
+</div>
+<div class="w-1/3 font-mono font-medium text-on-surface tracking-tight">Daihatsu 00000-00000</div>
+<div class="w-8 flex justify-center text-on-surface-variant hover:text-secondary cursor-pointer">
+<span class="material-symbols-outlined text-[18px]">launch</span>
+</div>
+<div class="w-24 text-right">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-tertiary-container/40 text-on-tertiary-container">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span>
+                  Verified
+                </span>
+</div>
+</div>
+<div class="py-2.5 flex items-center justify-between gap-4 hover:bg-surface-container-low/50 px-2 rounded -mx-2 transition-colors">
+<div class="w-1/3">
+<p class="font-medium text-on-surface">Cabin Pollen Filter</p>
+<p class="text-[11px] text-on-surface-variant">Listed for Subaru Justy M900F</p>
+</div>
+<div class="w-1/3 font-mono font-medium text-on-surface tracking-tight">Subaru 00000-00000</div>
+<div class="w-8 flex justify-center text-on-surface-variant hover:text-secondary cursor-pointer">
+<span class="material-symbols-outlined text-[18px]">launch</span>
+</div>
+<div class="w-24 text-right">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-tertiary-container/40 text-on-tertiary-container">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span>
+                  Verified
+                </span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden flex">
+<div class="w-1 bg-[#6d28d9] shrink-0"></div>
+<div class="p-5 w-full flex flex-col gap-4">
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2">
+<div class="flex items-center gap-3">
+<span class="font-headline font-semibold text-sm text-on-surface">Engine Compatible Match</span>
+<span class="text-xs font-mono bg-surface-container px-2 py-0.5 rounded font-semibold text-on-surface">3</span>
+</div>
+<p class="text-xs text-on-surface-variant font-body">Engine parts from cars with the 1KR-FE: Vitz, Passo, Boon.</p>
+</div>
+<div class="divide-y divide-outline-variant/10 text-xs">
+<div class="py-2.5 flex items-center justify-between gap-4 hover:bg-surface-container-low/50 px-2 rounded -mx-2 transition-colors">
+<div class="w-1/3">
+<p class="font-medium text-on-surface">Alternator V-Ribbed Belt</p>
+<p class="text-[11px] text-on-surface-variant">Listed for Toyota Vitz KSP130</p>
+</div>
+<div class="w-1/3 font-mono font-medium text-on-surface tracking-tight">Bando 00000-00000</div>
+<div class="w-8 flex justify-center text-on-surface-variant hover:text-secondary cursor-pointer">
+<span class="material-symbols-outlined text-[18px]">launch</span>
+</div>
+<div class="w-28 text-right">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-amber-500/15 text-amber-800">
+<span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                  Needs checking
+                </span>
+</div>
+</div>
+<div class="py-2.5 flex items-center justify-between gap-4 hover:bg-surface-container-low/50 px-2 rounded -mx-2 transition-colors">
+<div class="w-1/3">
+<p class="font-medium text-on-surface">Thermostat (82°C)</p>
+<p class="text-[11px] text-on-surface-variant">Listed for Toyota Passo KGC30</p>
+</div>
+<div class="w-1/3 font-mono font-medium text-on-surface tracking-tight">Tama 00000-00000</div>
+<div class="w-8 flex justify-center text-on-surface-variant hover:text-secondary cursor-pointer">
+<span class="material-symbols-outlined text-[18px]">launch</span>
+</div>
+<div class="w-28 text-right">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-amber-500/15 text-amber-800">
+<span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                  Needs checking
+                </span>
+</div>
+</div>
+<div class="py-2.5 flex items-center justify-between gap-4 hover:bg-surface-container-low/50 px-2 rounded -mx-2 transition-colors">
+<div class="w-1/3">
+<p class="font-medium text-on-surface">Ignition Coil Unit</p>
+<p class="text-[11px] text-on-surface-variant">Listed for Daihatsu Boon M700S</p>
+</div>
+<div class="w-1/3 font-mono font-medium text-on-surface tracking-tight">Diamond 00000-00000</div>
+<div class="w-8 flex justify-center text-on-surface-variant hover:text-secondary cursor-pointer">
+<span class="material-symbols-outlined text-[18px]">launch</span>
+</div>
+<div class="w-28 text-right">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-amber-500/15 text-amber-800">
+<span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                  Needs checking
+                </span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden flex">
+<div class="w-1 bg-[#475569] shrink-0"></div>
+<div class="p-5 w-full flex flex-col gap-4">
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2">
+<div class="flex items-center gap-3">
+<span class="font-headline font-semibold text-sm text-on-surface">Aftermarket Cross-Reference</span>
+<span class="text-xs font-mono bg-surface-container px-2 py-0.5 rounded font-semibold text-on-surface">3</span>
+</div>
+<p class="text-xs text-on-surface-variant font-body">Other brands for the same part.</p>
+</div>
+<div class="divide-y divide-outline-variant/10 text-xs">
+<div class="py-2.5 flex items-center justify-between gap-4 hover:bg-surface-container-low/50 px-2 rounded -mx-2 transition-colors">
+<div class="w-1/4 font-medium text-on-surface">Oil Filter</div>
+<div class="w-1/3 font-mono font-medium text-on-surface tracking-tight">VIC C-110</div>
+<div class="w-1/4 text-xs font-mono text-on-surface-variant">Replaces OEM 00000-00000</div>
+<div class="w-24 text-right">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-tertiary-container/40 text-on-tertiary-container">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span>
+                  Verified
+                </span>
+</div>
+</div>
+<div class="py-2.5 flex items-center justify-between gap-4 hover:bg-surface-container-low/50 px-2 rounded -mx-2 transition-colors">
+<div class="w-1/4 font-medium text-on-surface">Spark Plug Iridium</div>
+<div class="w-1/3 font-mono font-medium text-on-surface tracking-tight">NGK ILKR6F11</div>
+<div class="w-1/4 text-xs font-mono text-on-surface-variant">Replaces OEM 00000-00000</div>
+<div class="w-24 text-right">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-tertiary-container/40 text-on-tertiary-container">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span>
+                  Verified
+                </span>
+</div>
+</div>
+<div class="py-2.5 flex items-center justify-between gap-4 hover:bg-surface-container-low/50 px-2 rounded -mx-2 transition-colors">
+<div class="w-1/4 font-medium text-on-surface">Air Filter Element</div>
+<div class="w-1/3 font-mono font-medium text-on-surface tracking-tight">JS Asakashi A-1024</div>
+<div class="w-1/4 text-xs font-mono text-on-surface-variant">Replaces OEM 00000-00000</div>
+<div class="w-24 text-right">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-tertiary-container/40 text-on-tertiary-container">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span>
+                  Verified
+                </span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden flex">
+<div class="w-1 bg-[#006e31] shrink-0"></div>
+<div class="p-5 w-full flex flex-col gap-4">
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2">
+<div class="flex items-center gap-3">
+<span class="font-headline font-semibold text-sm text-on-surface">Universal Fleet Parts</span>
+<span class="text-xs font-mono bg-tertiary-container/40 text-on-tertiary-container px-2 py-0.5 rounded font-semibold">4</span>
+</div>
+<p class="text-xs text-on-surface-variant font-body">Bought by size: bulbs, fluids, wipers, battery.</p>
+</div>
+<div class="divide-y divide-outline-variant/10 text-xs">
+<div class="py-2.5 flex items-center justify-between gap-4 hover:bg-surface-container-low/50 px-2 rounded -mx-2 transition-colors">
+<div class="w-1/4 font-medium text-on-surface">Wiper, driver side</div>
+<div class="w-1/4 font-mono font-semibold text-on-surface">525 mm</div>
+<div class="w-1/4 text-on-surface-variant">U-hook mount</div>
+<div class="w-1/4 text-right flex justify-end gap-1.5">
+<span class="px-2 py-0.5 rounded bg-surface-container text-on-surface-variant font-mono text-[11px]">Denso Standard</span>
+<span class="px-2 py-0.5 rounded bg-surface-container text-on-surface-variant font-mono text-[11px]">Bosch Eco</span>
+</div>
+</div>
+<div class="py-2.5 flex items-center justify-between gap-4 hover:bg-surface-container-low/50 px-2 rounded -mx-2 transition-colors">
+<div class="w-1/4 font-medium text-on-surface">Wiper, passenger side</div>
+<div class="w-1/4 font-mono font-semibold text-on-surface">475 mm</div>
+<div class="w-1/4 text-on-surface-variant">U-hook mount</div>
+<div class="w-1/4 text-right flex justify-end gap-1.5">
+<span class="px-2 py-0.5 rounded bg-surface-container text-on-surface-variant font-mono text-[11px]">Denso Standard</span>
+</div>
+</div>
+<div class="py-2.5 flex items-center justify-between gap-4 hover:bg-surface-container-low/50 px-2 rounded -mx-2 transition-colors">
+<div class="w-1/4 font-medium text-on-surface">Engine oil</div>
+<div class="w-1/4 font-mono font-semibold text-on-surface">0W-20</div>
+<div class="w-1/4 text-on-surface-variant">Capacity: 3.1 L (dry)</div>
+<div class="w-1/4 text-right flex justify-end gap-1.5">
+<span class="px-2 py-0.5 rounded bg-surface-container text-on-surface-variant font-mono text-[11px]">Total Quartz</span>
+<span class="px-2 py-0.5 rounded bg-surface-container text-on-surface-variant font-mono text-[11px]">Castrol Edge</span>
+</div>
+</div>
+<div class="py-2.5 flex items-center justify-between gap-4 hover:bg-surface-container-low/50 px-2 rounded -mx-2 transition-colors">
+<div class="w-1/4 font-medium text-on-surface">12V Starter Battery</div>
+<div class="w-1/4 font-mono font-semibold text-on-surface">M-42 (ISS)</div>
+<div class="w-1/4 text-on-surface-variant">Idle-Stop compatible</div>
+<div class="w-1/4 text-right flex justify-end gap-1.5">
+<span class="px-2 py-0.5 rounded bg-surface-container text-on-surface-variant font-mono text-[11px]">Panasonic Caos</span>
+<span class="px-2 py-0.5 rounded bg-surface-container text-on-surface-variant font-mono text-[11px]">GS Yuasa</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="bg-surface-container-low/60 rounded-xl p-4 flex items-center justify-between gap-4">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-outline text-[20px]">info</span>
+<span class="text-xs text-on-surface-variant font-body">Brake rotors cross-reference specs: <span class="text-on-surface italic">None on file yet</span>. The data is not in yet.</span>
+</div>
+<button class="text-xs font-semibold text-secondary hover:underline transition-colors shrink-0">
+          Add for this vehicle
+        </button>
+</div>
+</div>
+</div>
+</div></main></div></body></html>

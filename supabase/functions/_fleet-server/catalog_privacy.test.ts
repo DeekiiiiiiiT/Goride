@@ -84,7 +84,9 @@ Deno.test("Dominion vehicle-database routes hide customer rows", async () => {
       || row.path.includes("/admin/part-rule-reviews")
       || row.path.includes("/admin/part-rule-proposals")
       || row.path.includes("/admin/part-catalog-review")
-      || row.path.includes("/admin/platform-family-review")
+      || row.path.includes("/admin/catalog/find-parts")
+      || row.path.includes("/admin/catalog/parts-overview")
+      || row.path.includes("/admin/catalog/body-families")
       || row.path.includes("/admin/vehicle-platforms")
       || row.path.includes("/admin/engine-families")
       || row.path.includes("/admin/service-components")
@@ -100,6 +102,15 @@ Deno.test("Dominion vehicle-database routes hide customer rows", async () => {
     const error = (result?.body as { error?: string } | undefined)?.error ?? "";
     if (error.includes("customer field")) throw new Error(`${row.path} tried to return a customer`);
   }
+
+  for (const needle of ["/find-parts", "/parts-overview", "/body-families", "/parts/exclude"]) {
+    if (!paths.some((path) => path.includes(needle))) throw new Error(`missing ${needle}`);
+  }
+  const find = registered.find((row) => row.path.includes("/find-parts"));
+  if (!find) throw new Error("find-parts missing");
+  const found = await find.handler(fakeContext(find.path)) as { body?: { sections?: Array<{ tier?: number }>; error?: string } };
+  const tiers = (found.body?.sections ?? []).map((section) => section.tier);
+  if (tiers.join(",") !== "1,2,3,4,5") throw new Error(`find-parts sections ${tiers.join(",")}`);
 });
 
 function fakeContext(path: string) {
@@ -107,7 +118,9 @@ function fakeContext(path: string) {
   return {
     req: {
       path,
-      header: () => null,
+      header: (name?: string) => name === "Authorization"
+        ? `Bearer ${btoa(JSON.stringify({ alg: "none" }))}.${btoa(JSON.stringify({ aal: "aal2", sub: "staff" }))}.sig`
+        : null,
       param: () => id,
       query: (key: string) => {
         if (key === "q") return "toyota";
@@ -149,8 +162,12 @@ function query(table: string, columns: string) {
   const builder: Record<string, unknown> = {
     select: (cols: string) => query(table, cols),
     eq: () => builder,
+    ilike: () => builder,
+    lte: () => builder,
+    gte: () => builder,
     neq: () => builder,
     in: () => builder,
+    not: () => builder,
     or: () => builder,
     is: () => builder,
     order: () => builder,

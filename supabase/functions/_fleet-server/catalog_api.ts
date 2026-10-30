@@ -4,7 +4,7 @@
  */
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { decodeFrameNumber } from "../../../packages/types/src/frameNumberDecode.ts";
-import { buildFitMessage, landedCostJmd, priceIsStale, totalImpactJmd } from "../../../packages/types/src/partsResolution.ts";
+import { buildFitMessage, landedCostJmd, PART_MATCH_TIERS, priceIsStale, totalImpactJmd } from "../../../packages/types/src/partsResolution.ts";
 import { resolveVehicleCatalogIdFromMakeModelYear } from "./vehicle_catalog_resolve.ts";
 import { FEATURE_FLAGS, getFeatureFlag } from "./feature_flags.ts";
 import {
@@ -252,7 +252,7 @@ export async function getCatalogParts(
   const categoryId = input.categoryId && isUuid(input.categoryId) ? input.categoryId : null;
   const ready = await variantIsReady(supabase, catalogId);
   const killed = input.killed ?? await tieredSearchKilled();
-  const mode = selectPartsMode({ killed, ready });
+  const mode = selectPartsMode({ killed });
   const items = mode === "tiered"
     ? await loadTieredReferenceParts(supabase, catalogId, componentId, input.vehicleYear ?? null)
     : await loadLegacyReferenceParts(
@@ -269,7 +269,44 @@ export async function getCatalogParts(
     : items;
   const universal = await loadUniversalSection(supabase, catalogId, input.vehicleYear ?? null);
   const relatedSupplies = await loadRelatedSupplies(supabase);
-  return { mode, ready, items: filtered, universal, relatedSupplies };
+  const sections = PART_MATCH_TIERS.map((row) => ({
+    tier: row.tier,
+    label: row.label,
+    items: row.tier === 5
+      ? universal
+      : filtered.filter((item) => item.tier === row.tier),
+  }));
+  return { mode, ready, items: filtered, universal, relatedSupplies, sections };
+}
+
+/** Five sections, built after fleet stock and fit text are attached. */
+export function assembleMatchSections(
+  items: Array<{ tier?: number; sisterNames?: string | null }>,
+  universal: unknown,
+) {
+  const universalRows = Array.isArray(universal) ? universal as Array<Record<string, unknown>> : [];
+  return PART_MATCH_TIERS.map((row) => {
+    if (row.tier === 5) {
+      return {
+        tier: 5,
+        label: row.label,
+        sisterNames: null as string | null,
+        items: universalRows.map((spec) => ({
+          spec: spec.label ?? spec.spec ?? spec.specKey,
+          value: spec.value,
+          unit: spec.unit ?? null,
+          items: Array.isArray(spec.items) ? spec.items : [],
+          specKey: spec.specKey ?? null,
+          label: spec.label ?? null,
+        })),
+      };
+    }
+    const tierItems = items.filter((item) => Number(item.tier) === row.tier);
+    const sisterNames = row.tier === 2
+      ? [...new Set(tierItems.map((item) => String(item.sisterNames ?? "").trim()).filter(Boolean))].join(", ")
+      : null;
+    return { tier: row.tier, label: row.label, sisterNames, items: tierItems };
+  });
 }
 
 async function loadUniversalSection(supabase: SupabaseClient, catalogId: string, vehicleYear: number | null) {
@@ -341,7 +378,7 @@ export async function enrichFleetParts(
   const shaped = items.map((item) => {
     const pid = String(item.part.id ?? "");
     const stockQty = stockByPart[pid] ?? 0;
-    const tier = stockQty > 0 ? 0 : (item.tier ?? 4);
+    const tier = item.tier ?? 4;
     const message = buildFitMessage({
       tier,
       fitScope: item.fitScope ?? null,
@@ -365,6 +402,7 @@ export async function enrichFleetParts(
       position: item.position ?? null,
       ruleSource: item.ruleSource ?? null,
       alsoKnownAs: item.alsoKnownAs ?? [],
+      sisterNames: item.sisterNames ?? null,
       stockQty,
       catalogDecision: item.catalogDecision ?? null,
       part: item.part,

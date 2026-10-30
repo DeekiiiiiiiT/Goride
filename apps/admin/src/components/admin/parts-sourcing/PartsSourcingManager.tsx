@@ -1,6 +1,6 @@
 // Stitch: dominion-redesign/b61515e096084a9a998447bd94b1438d
 import React, { useCallback, useEffect, useState } from "react";
-import { Loader2, Package, Plus, RefreshCw, Tags, Truck, Link2, ShoppingCart, Trash2, ChevronDown, ChevronRight, Info } from "lucide-react";
+import { Loader2, Package, Plus, RefreshCw, Tags, Truck, Link2, ShoppingCart, Trash2, Info } from "lucide-react";
 import { useAuth } from "../../auth/AuthContext";
 import { listVehicleCatalog } from "../../../services/vehicleCatalogService";
 import type { VehicleCatalogRecord } from "../../../types/vehicleCatalog";
@@ -24,7 +24,6 @@ import {
   partsEnterpriseApi,
 } from "../../../services/partSourcingService";
 import { PartsGroupsPanel, PartsImportPanel } from "./PartsEnterprisePanels";
-import { PartsCatalogHome } from "./PartsCatalogHome";
 import type {
   PartCategoryRecord,
   PartFitmentRecord,
@@ -101,7 +100,6 @@ export function PartsSourcingManager({ mode = "catalog" }: { mode?: "catalog" | 
 
   const [area, setArea] = useState<Area>(mode);
   const [mainTab, setMainTab] = useState<MainTab>(mode === "supply" ? "suppliers" : "parts");
-  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const [categories, setCategories] = useState<PartCategoryRecord[]>([]);
@@ -465,7 +463,7 @@ export function PartsSourcingManager({ mode = "catalog" }: { mode?: "catalog" | 
         <div className="flex items-center gap-2">
           <div className="inline-flex items-center gap-1.5 rounded border border-slate-200 bg-slate-100 px-2.5 py-1 font-mono text-xs font-medium text-slate-700">
             <span className="h-2 w-2 rounded-full bg-blue-600" />
-            <span>REGION: JM-KGN</span>
+            <span>Staff</span>
           </div>
           <Button type="button" variant="outline" size="sm" onClick={() => void refreshTab()} disabled={busy} className="gap-2">
             {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
@@ -476,21 +474,6 @@ export function PartsSourcingManager({ mode = "catalog" }: { mode?: "catalog" | 
 
       <div className="flex items-center gap-8 border-b border-slate-200">
         {/* Stitch: Parts catalog 04 · Suppliers and prices 02 */}
-        <a
-          href="?page=parts-catalog"
-          className={`flex items-center gap-2 pb-3 text-sm ${
-            mode === "catalog"
-              ? "border-b-2 border-blue-600 font-semibold text-blue-600"
-              : "font-medium text-slate-500 hover:text-slate-800"
-          }`}
-        >
-          <span>Parts catalog</span>
-          <span
-            className={`rounded px-1.5 font-mono text-[11px] ${mode === "catalog" ? "bg-blue-50 text-blue-600" : "bg-slate-100 text-slate-500"}`}
-          >
-            {String(parts.length).padStart(2, "0")}
-          </span>
-        </a>
         <a
           href="?page=suppliers-prices"
           className={`flex items-center gap-2 pb-3 text-sm ${
@@ -508,14 +491,6 @@ export function PartsSourcingManager({ mode = "catalog" }: { mode?: "catalog" | 
         </a>
       </div>
 
-      {mode === "catalog" && token ? <PartsCatalogHome token={token} /> : null}
-      {mode === "catalog" ? (
-        <button type="button" className="flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-sm" onClick={() => setAdvancedOpen((open) => !open)}>
-          {advancedOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-          Advanced
-        </button>
-      ) : null}
-      {(mode !== "catalog" || advancedOpen) && (
       <Tabs value={mainTab} onValueChange={(v) => setMainTab(v as MainTab)} className="w-full">
         <TabsList className="flex flex-wrap h-auto gap-1 bg-slate-100 dark:bg-slate-900/70 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
           <TabsTrigger value="groups" className={area === "catalog" ? "gap-1.5 data-[state=active]:bg-amber-500/20" : "hidden"}>
@@ -650,8 +625,8 @@ export function PartsSourcingManager({ mode = "catalog" }: { mode?: "catalog" | 
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="inline-flex items-center gap-2">
-                        <span className="inline-flex items-center gap-1 rounded border border-emerald-200 bg-emerald-50 px-2 py-0.5 font-mono text-xs text-emerald-700">
-                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Active fit
+                        <span className="inline-flex items-center gap-1 rounded border border-slate-200 bg-slate-50 px-2 py-0.5 font-mono text-xs text-slate-700">
+                          {p.catalog_decision === "confirmed" ? "Verified" : "Needs checking"}
                         </span>
                         <Button
                           type="button"
@@ -663,6 +638,10 @@ export function PartsSourcingManager({ mode = "catalog" }: { mode?: "catalog" | 
                             setPartName(p.name);
                             setPartOem(p.oem_part_number ?? "");
                             setPartDesc(p.description ?? "");
+                            setPartMaker(p.manufacturer ?? "");
+                            setPartKind(p.part_kind ?? "");
+                            setPartGroup(p.interchange_group_id ?? "");
+                            setPartComponent(p.maintenance_component_id ?? "");
                             setPartOpen(true);
                             void loadPartPickers();
                           }}
@@ -848,7 +827,7 @@ export function PartsSourcingManager({ mode = "catalog" }: { mode?: "catalog" | 
                   <TableHead className="text-slate-900 dark:text-slate-100">Supplier</TableHead>
                   <TableHead className="text-slate-900 dark:text-slate-100">Part</TableHead>
                   <TableHead className="text-right text-slate-900 dark:text-slate-100">
-                    Price in JMD
+                    Price
                   </TableHead>
                   <TableHead className="text-right text-slate-900 dark:text-slate-100">Status</TableHead>
                   <TableHead className="text-slate-900 dark:text-slate-100">SKU</TableHead>
@@ -861,11 +840,12 @@ export function PartsSourcingManager({ mode = "catalog" }: { mode?: "catalog" | 
                     <TableCell className="text-slate-800 dark:text-slate-200">{o.supplier?.name ?? o.supplier_id}</TableCell>
                     <TableCell className="font-medium text-slate-900 dark:text-slate-100">{o.part_master?.name ?? o.part_id}</TableCell>
                     <TableCell className="text-right font-mono text-slate-900">
-                      JMD ${Number(o.unit_price).toFixed(2)}
+                      {o.currency || "USD"} {Number(o.unit_price).toFixed(2)}
+                      {o.fx_rate_to_jmd ? ` · JMD ${(Number(o.unit_price) * Number(o.fx_rate_to_jmd)).toFixed(2)}` : ""}
                     </TableCell>
                     <TableCell className="text-right">
                       <span className="inline-flex items-center gap-1 rounded border border-emerald-200 bg-emerald-50 px-2 py-0.5 font-mono text-xs text-emerald-700">
-                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Active contract
+                        {o.price_observed_at ? `Price from ${String(o.price_observed_at).slice(0, 10)}` : "Needs checking"}
                       </span>
                     </TableCell>
                     <TableCell className="font-mono text-sm text-slate-800 dark:text-slate-200">{o.supplier_sku}</TableCell>
@@ -903,7 +883,6 @@ export function PartsSourcingManager({ mode = "catalog" }: { mode?: "catalog" | 
           {token ? <PartsImportPanel token={token} /> : null}
         </TabsContent>
       </Tabs>
-      )}
 
       <Dialog open={catOpen} onOpenChange={setCatOpen}>
         <DialogContent>
@@ -979,7 +958,11 @@ export function PartsSourcingManager({ mode = "catalog" }: { mode?: "catalog" | 
             </div>
             <div>
               <Label className={adminLabel} htmlFor="pkind">Kind</Label>
-              <Input id="pkind" value={partKind} onChange={(e) => setPartKind(e.target.value)} placeholder="oem" />
+              <select id="pkind" className="w-full rounded-md border px-2 py-2 text-sm" value={partKind} onChange={(e) => setPartKind(e.target.value)}>
+                <option value="oem">Factory</option>
+                <option value="oe_supplier">Original supplier</option>
+                <option value="aftermarket">Other brand</option>
+              </select>
             </div>
             <div>
               <Label className={adminLabel}>Interchange group</Label>
@@ -1262,12 +1245,12 @@ export function PartsSourcingManager({ mode = "catalog" }: { mode?: "catalog" | 
           <div className="flex items-center gap-2">
             <span className="text-xs font-medium text-slate-600">Additional vendor quotes:</span>
             <span className="rounded border border-slate-200 bg-white px-2 py-0.5 font-mono text-xs font-semibold text-slate-700">
-              The data is not in yet
+              None on file yet
             </span>
           </div>
         </div>
         <div className="font-mono text-[11px] tracking-wider text-slate-400">
-          LOC: KINGSTON / PARISH REGISTRY JMD
+          Suppliers and prices
         </div>
       </div>
     </div>

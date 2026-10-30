@@ -5,9 +5,9 @@ INSERT INTO public.engine_family (id, code) VALUES
   ('11111111-1111-4111-8111-111111111111', 'REV2-1NZ-FE')
 ON CONFLICT (code) DO NOTHING;
 
-INSERT INTO public.vehicle_platform (id, code) VALUES
-  ('22222222-2222-4222-8222-222222222222', 'REV2-ZRR80G')
-ON CONFLICT (code) DO NOTHING;
+INSERT INTO public.vehicle_platform (id, code, maker) VALUES
+  ('22222222-2222-4222-8222-222222222222', 'REV2-ZRR80G', 'Toyota')
+ON CONFLICT (maker, code) DO NOTHING;
 
 INSERT INTO public.vehicle_catalog (id, make, model, chassis_code, engine_code, production_start_year, production_end_year, platform_id, engine_family_id)
 SELECT
@@ -66,17 +66,18 @@ BEGIN
   END IF;
 END $$;
 
-INSERT INTO public.interchange_fitment_rule (
-  interchange_group_id, target_kind, engine_family_id, year_from, year_to, source
+INSERT INTO public.part_listing (
+  interchange_group_id, vehicle_catalog_id, year_from, evidence_url
 )
 SELECT
   (SELECT id FROM public.part_interchange_group WHERE code = 'REV2-OIL'),
-  'engine_family',
-  (SELECT id FROM public.engine_family WHERE code = 'REV2-1NZ-FE'),
-  2015, NULL, 'manual'
+  '33333333-3333-4333-8333-333333333333',
+  2015,
+  'https://example.com/rev2-oil'
 WHERE NOT EXISTS (
-  SELECT 1 FROM public.interchange_fitment_rule
-  WHERE interchange_group_id = (SELECT id FROM public.part_interchange_group WHERE code = 'REV2-OIL')
+  SELECT 1 FROM public.part_listing
+  WHERE vehicle_catalog_id = '33333333-3333-4333-8333-333333333333'
+    AND interchange_group_id = (SELECT id FROM public.part_interchange_group WHERE code = 'REV2-OIL')
 );
 
 DO $$
@@ -129,23 +130,31 @@ DECLARE
 BEGIN
   SELECT public.import_parts_catalog_rows(
     jsonb_build_array(jsonb_build_object(
-      'interchangeCode', 'REV2-IMPORT',
-      'label', 'Rev2 import',
       'manufacturer', 'Toyota',
-      'partNumber', 'REV2-IMP-1',
-      'partName', 'Imported filter',
-      'partKind', 'oem',
-      'fitScope', 'powertrain',
-      'targetKind', 'engine_family',
-      'targetCode', 'REV2-1NZ-FE',
-      'categorySlug', 'rev2-engine',
-      'componentOpCode', 'ENG-OIL'
+      'part_number', 'REV2-IMP-1',
+      'part_name', 'Imported filter',
+      'part_kind', 'oem',
+      'category_slug', 'rev2-engine',
+      'job', 'ENG-OIL',
+      'vehicle', '33333333-3333-4333-8333-333333333333',
+      'evidence_url', 'https://example.com/rev2-import',
+      'year_from', 2015
     )),
     '77777777-7777-4777-8777-777777777777'
   ) INTO result;
   applied := (result->>'applied')::int;
   IF applied IS DISTINCT FROM 1 THEN
     RAISE EXCEPTION 'Import should apply 1 row, got % errors %', applied, result->>'errors';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.part_listing pl
+    JOIN public.part_master pm ON pm.interchange_group_id = pl.interchange_group_id
+    WHERE pm.oem_part_number = 'REV2-IMP-1'
+      AND pm.catalog_decision = 'pending'
+      AND pl.vehicle_catalog_id = '33333333-3333-4333-8333-333333333333'
+  ) THEN
+    RAISE EXCEPTION 'Import must write a pending listing';
   END IF;
 
   INSERT INTO public.org_part_stock (organization_id, part_id, qty)
