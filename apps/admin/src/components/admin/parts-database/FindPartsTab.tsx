@@ -125,11 +125,6 @@ export function FindPartsTab({
             </button>
           </div>
         </div>
-        <div className="flex flex-wrap gap-2 text-xs font-mono">
-          <span>M900A · 2WD · 1KR-FE · 2016–2020</span>
-          <span>M910A · 4WD · 1KR-FE · 2016–2020</span>
-          <span>M900A Facelift · 2WD · 1KR-VET</span>
-        </div>
         <label className="block text-xs text-on-surface-variant">Or type make, model and year
           <input className="mt-1 w-full bg-surface-container-low text-sm rounded-lg px-3 py-2" value={quick} onChange={(event) => setQuick(event.target.value)} placeholder="Toyota Roomy 2019" />
         </label>
@@ -171,7 +166,7 @@ export function FindPartsTab({
               <span className="text-outline-variant font-mono">·</span>
               <span className="font-medium">Other parts <strong className="font-mono">{coverage?.otherParts ?? 0}</strong></span>
             </div>
-            <button type="button" title="Vehicle parts arrow_forward" className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium text-secondary bg-surface-container-low" onClick={() => onOpenVehicle(picked.id)}>
+            <button type="button" className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium text-secondary bg-surface-container-low" onClick={() => onOpenVehicle(picked.id)}>
               Open this vehicle's parts page
               <span className="material-symbols-outlined text-[16px]">open_in_new</span>
             </button>
@@ -214,6 +209,9 @@ export function FindPartsTab({
                               <span>{itemStatus(row)}</span>
                             </div>
                             <p className="text-on-surface-variant">{String(row.matchReason ?? "")}</p>
+                            {row.evidenceUrl ? (
+                              <a className="text-secondary" href={String(row.evidenceUrl)} target="_blank" rel="noreferrer">Source ↗</a>
+                            ) : null}
                           </div>
                         );
                       })}

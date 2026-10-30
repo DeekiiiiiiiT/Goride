@@ -1,7 +1,7 @@
 // Stitch: dominion-redesign/5ba99edc175b45389a9500476ceb87cd
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { fetchAdvancedTables } from "./partsDatabaseApi";
+import { fetchAdvancedTables, fetchImportBatches } from "./partsDatabaseApi";
 import { partsEnterpriseApi } from "../../../services/partSourcingService";
 import { supabase } from "../../../utils/supabase/client";
 
@@ -20,7 +20,9 @@ export function ImportAdvancedTab({ advanced, onOpenVehicle }: { advanced: boole
   const [csv, setCsv] = useState("vehicle,manufacturer,part_number,part_name,part_kind,category_slug,job,position,year_from,year_to,evidence_url");
   const [note, setNote] = useState("");
   const [batchId, setBatchId] = useState("");
-  const tables = useQuery({ queryKey: ["advanced-tables"], queryFn: fetchAdvancedTables, enabled: advanced });
+  const [offset, setOffset] = useState(0);
+  const tables = useQuery({ queryKey: ["advanced-tables", offset], queryFn: () => fetchAdvancedTables(offset), enabled: advanced });
+  const batches = useQuery({ queryKey: ["import-batches"], queryFn: fetchImportBatches });
 
   async function token() {
     return (await supabase.auth.getSession()).data.session?.access_token ?? "";
@@ -44,7 +46,6 @@ export function ImportAdvancedTab({ advanced, onOpenVehicle }: { advanced: boole
 
   return (
     <div className="space-y-6">
-      <p className="text-xs text-on-surface-variant">Parts database · Parts (4,821) · Same-part brands (1,240) · Listings (14,200)</p>
       <section className="bg-surface-container-lowest rounded-xl p-5 shadow-sm space-y-3">
         <h2 className="text-sm font-semibold">Batch CSV import</h2>
         <p className="text-xs text-on-surface-variant">Paste CSV text with column headers:</p>
@@ -59,7 +60,15 @@ export function ImportAdvancedTab({ advanced, onOpenVehicle }: { advanced: boole
           </label>
           <button type="button" className="bg-secondary text-on-secondary px-3 py-1.5 rounded-lg" onClick={() => { void run(false); }}>Import</button>
           <button type="button" onClick={() => { void run(true); }}>Check file</button>
-          <button type="button" onClick={() => { void (async () => { if (!batchId) return; await partsEnterpriseApi.undoImport(await token(), batchId); setNote("Last import undone."); })(); }}>Undo last import</button>
+          <button type="button" onClick={() => { void (async () => { if (!batchId) return; await partsEnterpriseApi.undoImport(await token(), batchId); setNote("Last import undone."); await batches.refetch(); })(); }}>Undo last import</button>
+        </div>
+        <div className="space-y-1">
+          {(batches.data?.items ?? []).map((batch) => (
+            <div key={batch.import_batch_id} className="flex items-center justify-between text-xs">
+              <span>{new Date(batch.imported_at).toLocaleString()} · {batch.row_count} rows</span>
+              <button type="button" className="text-secondary" onClick={() => { void (async () => { await partsEnterpriseApi.undoImport(await token(), batch.import_batch_id); setNote("Import undone."); await batches.refetch(); })(); }}>Undo</button>
+            </div>
+          ))}
         </div>
         {note ? <p className="text-xs">{note}</p> : null}
       </section>
@@ -108,6 +117,14 @@ export function ImportAdvancedTab({ advanced, onOpenVehicle }: { advanced: boole
               <button type="button" className="text-secondary text-left" onClick={() => onOpenVehicle?.(String(row.vehicle_catalog_id ?? ""))}>Open on vehicle</button>
             </div>
           ))}
+          <div className="flex gap-3 text-xs pt-3">
+            <button type="button" disabled={offset === 0} onClick={() => setOffset((value) => Math.max(0, value - 50))}>Previous</button>
+            <button
+              type="button"
+              disabled={!tables.data || offset + 50 >= Math.max(tables.data.parts.count, tables.data.brands.count, tables.data.listings.count)}
+              onClick={() => setOffset((value) => value + 50)}
+            >Next</button>
+          </div>
         </section>
       ) : null}
     </div>

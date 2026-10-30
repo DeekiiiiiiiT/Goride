@@ -2,7 +2,8 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { VariantPartsChecklist } from "../parts-sourcing/VariantPartsChecklist";
-import { fetchChecklist, saveSpec } from "./partsDatabaseApi";
+import { AddPartDialog } from "./AddPartDialog";
+import { excludeListing, fetchChecklist, removeGuidedPart, saveSpec } from "./partsDatabaseApi";
 import { PartsError, PartsLoading } from "./PartsDatabaseStates";
 import { supabase } from "../../../utils/supabase/client";
 
@@ -21,6 +22,14 @@ export function VehiclePartsTab({
   const [value, setValue] = useState("");
   const [reach, setReach] = useState("variant");
   const [source, setSource] = useState("");
+  const [yearFrom, setYearFrom] = useState("");
+  const [yearTo, setYearTo] = useState("");
+  const [specError, setSpecError] = useState("");
+  const [editGroup, setEditGroup] = useState("");
+  const [excludeFor, setExcludeFor] = useState("");
+  const [excludeReason, setExcludeReason] = useState("");
+  const [excludeSource, setExcludeSource] = useState("");
+  const [rowError, setRowError] = useState("");
   const query = useQuery({
     queryKey: ["variant-checklist", variantId],
     queryFn: () => fetchChecklist(variantId),
@@ -68,13 +77,42 @@ export function VehiclePartsTab({
       </section>
       <section className="bg-surface-container-lowest rounded-xl p-5 shadow-sm">
         <h2 className="text-sm font-semibold text-on-surface">Other parts</h2>
-        <p className="text-xs text-on-surface-variant">Not on this car · Remove</p>
+        {rowError ? <p className="text-xs text-red-700 mt-2">{rowError}</p> : null}
         {other.length === 0 ? <p className="text-xs text-on-surface-variant mt-2">None on file yet</p> : other.map((group) => (
           <div key={String(group.category)} className="mt-3">
             <h3 className="text-xs font-semibold">{String(group.category)}</h3>
-            {(Array.isArray(group.parts) ? group.parts as Array<Record<string, unknown>> : []).map((part) => (
-              <p key={String(part.partId)} className="text-sm py-1">{String(part.manufacturer ?? "")} {String(part.partNumber ?? "")} {String(part.position ?? "")}</p>
-            ))}
+            {(Array.isArray(group.parts) ? group.parts as Array<Record<string, unknown>> : []).map((part) => {
+              const groupId = String(part.groupId ?? "");
+              return (
+                <div key={String(part.partId)} className="py-1">
+                  <p className="text-sm">{String(part.manufacturer ?? "")} {String(part.partNumber ?? "")} {String(part.position ?? "")}</p>
+                  <div className="flex flex-wrap gap-3 text-xs">
+                    <button type="button" className="text-secondary" onClick={() => setEditGroup(groupId)}>Edit</button>
+                    <button type="button" className="text-secondary" onClick={() => { setExcludeFor(groupId); setExcludeReason(""); setExcludeSource(""); }}>Not on this car</button>
+                    <button type="button" onClick={() => {
+                      setRowError("");
+                      void removeGuidedPart({ groupId, variantId }).then(() => {
+                        void client.invalidateQueries({ queryKey: ["variant-checklist", variantId] });
+                      }).catch((err) => setRowError(err instanceof Error ? err.message : "Could not remove"));
+                    }}>Remove</button>
+                  </div>
+                  {excludeFor === groupId ? (
+                    <form className="mt-2 space-y-2" onSubmit={(event) => {
+                      event.preventDefault();
+                      setRowError("");
+                      void excludeListing({ groupId, variantId, reason: excludeReason, evidenceUrl: excludeSource }).then(() => {
+                        setExcludeFor("");
+                        void client.invalidateQueries({ queryKey: ["variant-checklist", variantId] });
+                      }).catch((err) => setRowError(err instanceof Error ? err.message : "Could not exclude"));
+                    }}>
+                      <input className="w-full bg-surface-container-low rounded-lg px-3 py-2 text-sm" value={excludeReason} onChange={(event) => setExcludeReason(event.target.value)} placeholder="Reason" required />
+                      <input className="w-full bg-surface-container-low rounded-lg px-3 py-2 text-sm" value={excludeSource} onChange={(event) => setExcludeSource(event.target.value)} placeholder="Source link" required />
+                      <button type="submit" className="text-sm bg-secondary text-on-secondary px-3 py-1.5 rounded-lg">Save exclusion</button>
+                    </form>
+                  ) : null}
+                </div>
+              );
+            })}
           </div>
         ))}
       </section>
@@ -88,30 +126,38 @@ export function VehiclePartsTab({
             <span>{String(spec.label ?? spec.specKey)}</span>
             <span>{String(spec.value ?? "—")} {String(spec.unit ?? "")}</span>
             <span>{String(spec.reach ?? "this vehicle")}</span>
-            <button type="button" className="text-secondary text-xs text-left" onClick={() => { setEditing(String(spec.specKey)); setValue(String(spec.value ?? "")); setSource(String(spec.source ?? "")); }}>Set</button>
+            <button type="button" className="text-secondary text-xs text-left" onClick={() => { setEditing(String(spec.specKey)); setValue(String(spec.value ?? "")); setSource(String(spec.source ?? "")); setReach(String(spec.reach ?? "variant") === "engine_family" ? "engine_family" : String(spec.reach ?? "variant") === "platform" ? "platform" : "variant"); setYearFrom(""); setYearTo(""); setSpecError(""); }}>Set</button>
           </div>
         ))}
         {editing ? (
           <form className="mt-3 space-y-2" onSubmit={(event) => {
             event.preventDefault();
+            setSpecError("");
             void saveSpec({
               variantId,
               specKey: editing,
               value,
               scope: reach,
               evidenceUrl: source,
+              yearFrom: yearFrom || undefined,
+              yearTo: yearTo || undefined,
             }).then(() => {
               setEditing("");
               void client.invalidateQueries({ queryKey: ["variant-checklist", variantId] });
-            });
+            }).catch((err) => setSpecError(err instanceof Error ? err.message : "Could not save the spec"));
           }}>
             <input className="w-full bg-surface-container-low rounded-lg px-3 py-2 text-sm" value={value} onChange={(event) => setValue(event.target.value)} placeholder="Value" />
             <select className="w-full bg-surface-container-low rounded-lg px-3 py-2 text-sm" value={reach} onChange={(event) => setReach(event.target.value)}>
               <option value="variant">This vehicle</option>
               <option value="platform">Sisters</option>
-              <option value="engine_family">Engine</option>
+              {editing.startsWith("engine_oil_") ? <option value="engine_family">Engine</option> : null}
             </select>
+            <div className="grid grid-cols-2 gap-2">
+              <input className="bg-surface-container-low rounded-lg px-3 py-2 text-sm" value={yearFrom} onChange={(event) => setYearFrom(event.target.value)} placeholder="Year from" />
+              <input className="bg-surface-container-low rounded-lg px-3 py-2 text-sm" value={yearTo} onChange={(event) => setYearTo(event.target.value)} placeholder="Year to" />
+            </div>
             <input className="w-full bg-surface-container-low rounded-lg px-3 py-2 text-sm" value={source} onChange={(event) => setSource(event.target.value)} placeholder="Source link" required />
+            {specError ? <p className="text-xs text-red-700">{specError}</p> : null}
             <button type="submit" className="text-sm bg-secondary text-on-secondary px-3 py-1.5 rounded-lg">Save spec</button>
           </form>
         ) : null}
@@ -122,6 +168,9 @@ export function VehiclePartsTab({
           Sisters: {(reachInfo.sisters ?? []).join(", ") || "None on file yet"}. Engine cars: {(reachInfo.engineCars ?? []).join(", ") || "None on file yet"}.
         </p>
       </section>
+      {editGroup ? (
+        <AddPartDialog variantId={variantId} groupId={editGroup} onClose={() => setEditGroup("")} />
+      ) : null}
     </div>
   );
 }

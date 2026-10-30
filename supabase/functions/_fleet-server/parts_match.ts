@@ -27,6 +27,7 @@ export type TierRow = {
   also_known_as: string[] | null;
   confirmed_installs: number | null;
   description: string | null;
+  evidence_url?: string | null;
 };
 
 type OfferRow = {
@@ -147,6 +148,7 @@ export async function loadTieredCompatibleParts(
       position: row.position,
       ruleSource: row.rule_source,
       alsoKnownAs: row.also_known_as ?? [],
+      evidenceUrl: row.evidence_url ?? null,
       stockQty,
       part: {
         id: row.part_id,

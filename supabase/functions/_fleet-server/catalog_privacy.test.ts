@@ -103,7 +103,7 @@ Deno.test("Dominion vehicle-database routes hide customer rows", async () => {
     if (error.includes("customer field")) throw new Error(`${row.path} tried to return a customer`);
   }
 
-  for (const needle of ["/find-parts", "/parts-overview", "/body-families", "/parts/exclude"]) {
+  for (const needle of ["/find-parts", "/parts-overview", "/body-families", "/parts/exclude", "/parts/reach-preview", "/parts/group"]) {
     if (!paths.some((path) => path.includes(needle))) throw new Error(`missing ${needle}`);
   }
   const find = registered.find((row) => row.path.includes("/find-parts"));
@@ -172,6 +172,7 @@ function query(table: string, columns: string) {
     is: () => builder,
     order: () => builder,
     limit: () => builder,
+    range: () => builder,
     maybeSingle: () => Promise.resolve(one()),
     single: () => Promise.resolve(one()),
     then: (resolve: (value: unknown) => unknown, reject?: (reason: unknown) => unknown) =>

@@ -276,6 +276,8 @@ BEGIN
   PERFORM public.save_guided_part(jsonb_build_object(
     'variantId', 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeee11',
     'componentOpCode', 'ENG-OIL',
+    'yearFrom', 2016,
+    'yearTo', 2022,
     'evidenceUrl', 'https://example.com/ee-oil',
     'parts', jsonb_build_array(
       jsonb_build_object('manufacturer', 'Toyota', 'partNumber', 'EE-OIL-1', 'name', 'Oil filter', 'kind', 'oem'),
@@ -287,6 +289,12 @@ BEGIN
   WHERE p.oem_part_number = 'EE-OIL-1';
   IF v_tier IS DISTINCT FROM 3 THEN
     RAISE EXCEPTION 'Vitz should be engine compatible (3), got %', v_tier;
+  END IF;
+  SELECT p.tier INTO v_tier
+  FROM public.parts_for_vehicle('eeeeeeee-eeee-4eee-8eee-eeeeeeeeee13', NULL, 2012) p
+  WHERE p.oem_part_number = 'EE-OIL-1';
+  IF v_tier IS DISTINCT FROM 3 THEN
+    RAISE EXCEPTION 'Vitz KSP130 (2012) should be engine compatible (3), got %', v_tier;
   END IF;
   SELECT p.tier INTO v_tier
   FROM public.parts_for_vehicle('eeeeeeee-eeee-4eee-8eee-eeeeeeeeee14', NULL, 2019) p
@@ -382,6 +390,70 @@ BEGIN
       RAISE;
     END IF;
   END;
+
+  PERFORM public.save_guided_part(jsonb_build_object(
+    'variantId', 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeee11',
+    'groupId', (SELECT interchange_group_id FROM public.part_master WHERE oem_part_number = 'EE-AIR-1' LIMIT 1),
+    'componentOpCode', 'FILT-AIR',
+    'yearFrom', 2018,
+    'evidenceUrl', 'https://example.com/ee-air',
+    'tickedVariantIds', jsonb_build_array('eeeeeeee-eeee-4eee-8eee-eeeeeeeeee14'),
+    'parts', jsonb_build_array(
+      jsonb_build_object('manufacturer', 'Toyota', 'partNumber', 'EE-AIR-1', 'name', 'Air filter', 'kind', 'oem')
+    )
+  ));
+  IF NOT EXISTS (
+    SELECT 1 FROM public.part_listing
+    WHERE vehicle_catalog_id = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeee14'
+      AND interchange_group_id = (SELECT interchange_group_id FROM public.part_master WHERE oem_part_number = 'EE-AIR-1' LIMIT 1)
+  ) THEN
+    RAISE EXCEPTION 'Ticking a car should list it';
+  END IF;
+  PERFORM public.save_guided_part(jsonb_build_object(
+    'variantId', 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeee11',
+    'groupId', (SELECT interchange_group_id FROM public.part_master WHERE oem_part_number = 'EE-AIR-1' LIMIT 1),
+    'componentOpCode', 'FILT-AIR',
+    'yearFrom', 2018,
+    'evidenceUrl', 'https://example.com/ee-air',
+    'tickedVariantIds', '[]'::jsonb,
+    'parts', jsonb_build_array(
+      jsonb_build_object('manufacturer', 'Toyota', 'partNumber', 'EE-AIR-1', 'name', 'Air filter', 'kind', 'oem')
+    )
+  ));
+  IF EXISTS (
+    SELECT 1 FROM public.part_listing
+    WHERE vehicle_catalog_id = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeee14'
+      AND interchange_group_id = (SELECT interchange_group_id FROM public.part_master WHERE oem_part_number = 'EE-AIR-1' LIMIT 1)
+  ) THEN
+    RAISE EXCEPTION 'Unticking a car should remove its listing';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.parts_for_vehicle('eeeeeeee-eeee-4eee-8eee-eeeeeeeeee11', NULL, 2019) p
+    WHERE p.oem_part_number = 'EE-AIR-1'
+  ) THEN
+    RAISE EXCEPTION 'Untick must leave the car you are editing';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM public.part_master
+    WHERE upper(btrim(coalesce(manufacturer, ''))) = 'OEM SPEC'
+  ) THEN
+    RAISE EXCEPTION 'OEM spec must not be a manufacturer';
+  END IF;
+
+  IF (
+    SELECT p.tier
+    FROM public.vehicle_catalog vc,
+    LATERAL public.parts_for_vehicle(vc.id, NULL, 2019) p
+    WHERE lower(vc.make) = 'toyota'
+      AND lower(vc.model) = 'tank'
+      AND upper(coalesce(vc.chassis_code, '')) = 'M910A'
+      AND p.oem_part_number = '04152-40060'
+      AND p.part_kind = 'oem'
+    LIMIT 1
+  ) IS DISTINCT FROM 3 THEN
+    RAISE EXCEPTION 'Tank M910A oil filter should be tier 3';
+  END IF;
 END $$;
 
 ROLLBACK;

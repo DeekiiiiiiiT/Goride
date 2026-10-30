@@ -1,0 +1,28 @@
+{
+  "S41e": [
+    "All specs 34",
+    "Batteries 3",
+    "Bulbs 4",
+    "Engine oil 8",
+    "Transmission fluid 5",
+    "Universal parts 34",
+    "Wipers 14"
+  ],
+  "S41-states": [
+    "Clear filter",
+    "Parts engine lifecycle states",
+    "State 1: Loading skeletons",
+    "State 2: No vehicle found",
+    "State 3: Zero coverage (empty)",
+    "State 4: Index error",
+    "Switch vehicle",
+    "View all quadrants",
+    "View node status"
+  ],
+  "S41-phone": [
+    "M900A facelift · 2WD · 1KR-VET",
+    "M900A · 2WD · 1KR-FE · 2016–2020",
+    "M910A · 4WD · 1KR-FE · 2016–2020",
+    "Vehicle parts arrow_forward"
+  ]
+}

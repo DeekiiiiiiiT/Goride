@@ -12,11 +12,18 @@ export function UniversalPartsTab() {
   const [editId, setEditId] = useState("");
   const [form, setForm] = useState({ specKey: "", specValue: "", manufacturer: "", partNumber: "", name: "", connector: "", evidenceUrl: "" });
   const [error, setError] = useState("");
+  const [specFilter, setSpecFilter] = useState("");
 
   if (query.isLoading) return <PartsLoading />;
   if (query.isError) return <PartsError onRetry={() => { void query.refetch(); }} />;
   const items = query.data?.items ?? [];
   const labelFor = (key: string) => specs.data?.items.find((item) => item.key === key)?.label ?? key;
+  const counts = new Map<string, number>();
+  for (const item of items) {
+    const key = String(item.spec_key ?? "");
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  const visible = specFilter ? items.filter((item) => String(item.spec_key ?? "") === specFilter) : items;
 
   async function save() {
     setError("");
@@ -41,18 +48,10 @@ export function UniversalPartsTab() {
   return (
     <section className="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
       <div className="px-5 py-3 flex flex-wrap gap-2 text-xs">
-        <span>Parts database</span>
-        <span>Find parts</span>
-        <span>Vehicle parts</span>
-        <span>Sister vehicles</span>
-        <span>Universal parts 34</span>
-        <span>Import</span>
-        <button type="button">All specs 34</button>
-        <button type="button">Wipers 14</button>
-        <button type="button">Engine oil 8</button>
-        <button type="button">Transmission fluid 5</button>
-        <button type="button">Bulbs 4</button>
-        <button type="button">Batteries 3</button>
+        <button type="button" className={specFilter ? "text-on-surface-variant" : "text-secondary"} onClick={() => setSpecFilter("")}>All specs {items.length}</button>
+        {[...counts.entries()].map(([key, count]) => (
+          <button type="button" key={key} className={specFilter === key ? "text-secondary" : "text-on-surface-variant"} onClick={() => setSpecFilter(key)}>{labelFor(key)} {count}</button>
+        ))}
       </div>
       <div className="px-5 py-4 flex items-center justify-between">
         <h2 className="text-sm font-semibold">Universal parts {items.length}</h2>
@@ -61,9 +60,9 @@ export function UniversalPartsTab() {
       <div className="grid grid-cols-8 px-5 py-2 text-xs font-semibold text-on-surface-variant">
         <span>Spec</span><span>Value</span><span>Brand</span><span>Part number</span><span>Name</span><span>Connector</span><span>Source</span><span>Actions</span>
       </div>
-      {items.length === 0 ? (
+      {visible.length === 0 ? (
         <p className="px-5 py-6 text-sm text-on-surface-variant">Add first part for this spec. None on file yet.</p>
-      ) : items.map((item) => {
+      ) : visible.map((item) => {
         const extra = (item.extra ?? {}) as Record<string, unknown>;
         return (
           <div key={String(item.id)} className="grid grid-cols-8 px-5 py-2 text-xs items-center">

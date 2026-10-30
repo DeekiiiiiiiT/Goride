@@ -105,6 +105,38 @@ export function saveGuidedPart(payload: Record<string, unknown>) {
   return postJson("parts/guided", payload);
 }
 
+export function fetchPartGroup(groupId: string, variantId: string) {
+  return getJson<{
+    groupId?: string;
+    componentOpCode?: string | null;
+    categoryId?: string | null;
+    position?: string | null;
+    yearFrom?: number | null;
+    yearTo?: number | null;
+    evidenceUrl?: string | null;
+    note?: string | null;
+    productionStartYear?: number | null;
+    productionEndYear?: number | null;
+    brands?: Array<{ manufacturer?: string; partNumber?: string; name?: string; kind?: string }>;
+    listedVariantIds?: string[];
+  }>(`parts/group/${groupId}?variantId=${encodeURIComponent(variantId)}`);
+}
+
+export function previewPartReach(payload: {
+  variantId: string;
+  tickedVariantIds: string[];
+  componentOpCode?: string;
+  groupId?: string;
+  yearFrom?: string;
+  yearTo?: string;
+}) {
+  return postJson<{ sister?: string[]; engine?: string[] }>("parts/reach-preview", payload);
+}
+
+export function excludeListing(payload: { groupId: string; variantId: string; reason: string; evidenceUrl: string }) {
+  return postJson("parts/exclude", payload);
+}
+
 export function removeGuidedPart(payload: { groupId: string; variantId: string }) {
   return postJson("parts/remove", payload);
 }
@@ -148,12 +180,18 @@ export function deleteUniversalPart(id: string) {
   return postJson("universal-parts/delete", { id });
 }
 
-export function fetchAdvancedTables() {
+export function fetchAdvancedTables(offset = 0) {
   return getJson<{
+    offset: number;
+    page: number;
     parts: { count: number; rows: Array<Record<string, unknown>> };
     brands: { count: number; rows: Array<Record<string, unknown>> };
     listings: { count: number; rows: Array<Record<string, unknown>> };
-  }>("advanced-tables");
+  }>(`advanced-tables?offset=${offset}`);
+}
+
+export function fetchImportBatches() {
+  return getJson<{ items: Array<{ import_batch_id: string; row_count: number; imported_at: string }> }>("import-batches");
 }
 
 export function fetchSpecKeys() {

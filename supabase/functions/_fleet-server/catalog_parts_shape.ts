@@ -44,6 +44,7 @@ export type CatalogPartItem = {
   referenceOem?: string | null;
   confirmedInstalls?: number;
   fitScope?: string | null;
+  evidenceUrl?: string | null;
 };
 
 export function selectPartsMode(input: { killed: boolean; ready?: boolean }): "tiered" | "legacy" {

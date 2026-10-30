@@ -31,6 +31,13 @@ function fail(c: Context, error: unknown) {
   return c.json({ error: message }, 500);
 }
 
+function optionalYear(value: unknown): number | null | false {
+  if (value == null || value === "") return null;
+  const year = Number(value);
+  if (!Number.isInteger(year) || year < 1900 || year > 2100) return false;
+  return year;
+}
+
 function staffJson(c: Context, body: unknown) {
   assertNoCustomerIdentity(body);
   return c.json(body as Record<string, unknown>);
@@ -337,6 +344,55 @@ export function registerCatalogRoutes(route: RouteApp, supabase: SupabaseClient)
     }
   });
 
+  route.post("/make-server-37f42386/admin/catalog/parts/reach-preview", requireAuth(), async (c: Context) => {
+    const denied = assertPlatformStaffResponse(c);
+    if (denied) return denied;
+    try {
+      const body = await c.req.json() as {
+        variantId?: string;
+        tickedVariantIds?: string[];
+        componentOpCode?: string;
+        groupId?: string;
+        yearFrom?: number | string | null;
+        yearTo?: number | string | null;
+      };
+      if (!UUID_RE.test(String(body.variantId ?? ""))) return c.json({ error: "Choose a vehicle" }, 400);
+      const groupRaw = String(body.groupId ?? "").trim();
+      if (groupRaw && !UUID_RE.test(groupRaw)) return c.json({ error: "Choose the part" }, 400);
+      const yearFrom = optionalYear(body.yearFrom);
+      const yearTo = optionalYear(body.yearTo);
+      if (yearFrom === false || yearTo === false) return c.json({ error: "Enter a real year" }, 400);
+      const ticked = Array.isArray(body.tickedVariantIds) ? body.tickedVariantIds.filter((id) => UUID_RE.test(id)) : [];
+      const { data, error } = await supabase.rpc("listing_reach_preview", {
+        p_variant: body.variantId,
+        p_ticked: ticked,
+        p_op: String(body.componentOpCode ?? "").trim(),
+        p_group: groupRaw || null,
+        p_year_from: yearFrom,
+        p_year_to: yearTo,
+      });
+      if (error) return c.json({ error: error.message }, 400);
+      return staffJson(c, data ?? { sister: [], engine: [] });
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
+  route.get("/make-server-37f42386/admin/catalog/parts/group/:groupId", requireAuth(), async (c: Context) => {
+    const denied = assertPlatformStaffResponse(c);
+    if (denied) return denied;
+    try {
+      const groupId = c.req.param("groupId");
+      const variantId = (c.req.query("variantId") ?? "").trim();
+      if (!UUID_RE.test(groupId) || !UUID_RE.test(variantId)) return c.json({ error: "Choose the part and the vehicle" }, 400);
+      const { data, error } = await supabase.rpc("guided_part_group", { p_group: groupId, p_variant: variantId });
+      if (error) return c.json({ error: error.message }, 400);
+      return staffJson(c, data ?? {});
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
   route.post("/make-server-37f42386/admin/catalog/parts/exclude", requireAuth(), async (c: Context) => {
     const denied = assertPlatformStaffResponse(c);
     if (denied) return denied;
@@ -597,22 +653,46 @@ export function registerCatalogRoutes(route: RouteApp, supabase: SupabaseClient)
     }
   });
 
+  route.get("/make-server-37f42386/admin/catalog/import-batches", requireAuth(), async (c: Context) => {
+    const denied = assertPlatformStaffResponse(c);
+    if (denied) return denied;
+    try {
+      const { data, error } = await supabase.rpc("admin_recent_import_batches");
+      if (error) throw error;
+      const items = Array.isArray(data) ? data : [];
+      return staffJson(c, { items });
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
   route.get("/make-server-37f42386/admin/catalog/advanced-tables", requireAuth(), async (c: Context) => {
     const denied = assertPlatformStaffResponse(c);
     if (denied) return denied;
     try {
-      const [parts, brands, listings] = await Promise.all([
-        supabase.from("part_master").select("id, name, oem_part_number, manufacturer, category_id").limit(50),
-        supabase.from("part_master").select("id, interchange_group_id, manufacturer, oem_part_number").not("interchange_group_id", "is", null).limit(50),
-        supabase.from("part_listing").select("id, vehicle_catalog_id, interchange_group_id, position, evidence_url").limit(50),
+      const offset = Math.max(0, Number(c.req.query("offset") ?? 0) || 0);
+      const page = 50;
+      const end = offset + page - 1;
+      const [partsCount, brandsCount, listingsCount, parts, brands, listings] = await Promise.all([
+        supabase.from("part_master").select("id", { count: "exact", head: true }),
+        supabase.from("part_master").select("id", { count: "exact", head: true }).not("interchange_group_id", "is", null),
+        supabase.from("part_listing").select("id", { count: "exact", head: true }),
+        supabase.from("part_master").select("id, name, oem_part_number, manufacturer, category_id").order("id").range(offset, end),
+        supabase.from("part_master").select("id, interchange_group_id, manufacturer, oem_part_number").not("interchange_group_id", "is", null).order("id").range(offset, end),
+        supabase.from("part_listing").select("id, vehicle_catalog_id, interchange_group_id, position, evidence_url").order("id").range(offset, end),
       ]);
+      if (partsCount.error) throw partsCount.error;
+      if (brandsCount.error) throw brandsCount.error;
+      if (listingsCount.error) throw listingsCount.error;
       if (parts.error) throw parts.error;
       if (brands.error) throw brands.error;
       if (listings.error) throw listings.error;
       return staffJson(c, {
-        parts: { count: (parts.data || []).length, rows: parts.data || [] },
-        brands: { count: (brands.data || []).length, rows: brands.data || [] },
-        listings: { count: (listings.data || []).length, rows: listings.data || [] },
+        offset,
+        page,
+        parts: { count: partsCount.count ?? 0, rows: parts.data || [] },
+        brands: { count: brandsCount.count ?? 0, rows: brands.data || [] },
+        listings: { count: listingsCount.count ?? 0, rows: listings.data || [] },
       });
     } catch (error) {
       return fail(c, error);

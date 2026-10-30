@@ -117,6 +117,7 @@ type TierRow = {
   also_known_as: string[] | null;
   confirmed_installs: number | null;
   description: string | null;
+  evidence_url?: string | null;
 };
 
 async function decisionsFor(supabase: SupabaseClient, partIds: string[]): Promise<Map<string, string>> {
@@ -162,6 +163,7 @@ async function loadTieredReferenceParts(
     referenceOem: row.reference_oem,
     confirmedInstalls: row.confirmed_installs ?? 0,
     fitScope: row.fit_scope,
+    evidenceUrl: row.evidence_url ?? null,
     part: {
       id: row.part_id,
       category_id: row.category_id,
@@ -403,6 +405,7 @@ export async function enrichFleetParts(
       ruleSource: item.ruleSource ?? null,
       alsoKnownAs: item.alsoKnownAs ?? [],
       sisterNames: item.sisterNames ?? null,
+      evidenceUrl: item.evidenceUrl ?? null,
       stockQty,
       catalogDecision: item.catalogDecision ?? null,
       part: item.part,

@@ -68,12 +68,6 @@ export function VehiclesHomePage({ onNavigate }: { onNavigate: (page: string) =>
             </button>
           ))}
         </div>
-        <div className="bg-surface-container-low rounded-xl p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-          <div>
-            <p className="text-xs font-semibold text-on-surface">Verification State</p>
-            <p className="text-xs text-on-surface-variant">None on file yet</p>
-          </div>
-        </div>
       </div>
     </div>
   );
