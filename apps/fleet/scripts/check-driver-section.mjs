@@ -88,20 +88,24 @@ if (failures.length) {
   process.exit(1);
 }
 
-// Phase F: roster + operational-periods SQL migrations must exist in repo.
-const migRoot = path.resolve(__dirname, '../../../supabase/migrations');
-const requiredMigs = [
-  'fleet_driver_roster_sql_aggregates',
-  'driver_operational_periods',
+// Operational-periods SQL stays in the repo (live migrations or the archive).
+// The driver list is aggregated in the edge function, not a separate migration.
+const migRoots = [
+  path.resolve(__dirname, '../../../supabase/migrations'),
+  path.resolve(__dirname, '../../../supabase/migrations_archive'),
 ];
-if (fs.existsSync(migRoot)) {
-  const migNames = fs.readdirSync(migRoot).join('\n');
-  for (const needle of requiredMigs) {
-    if (!migNames.includes(needle)) {
-      console.error(`Driver section check FAILED: missing migration matching ${needle}`);
-      process.exit(1);
-    }
-  }
+const migNames = migRoots
+  .filter((dir) => fs.existsSync(dir))
+  .flatMap((dir) => fs.readdirSync(dir))
+  .join('\n');
+if (!migNames.includes('driver_operational_periods')) {
+  console.error('Driver section check FAILED: missing migration matching driver_operational_periods');
+  process.exit(1);
+}
+const roster = path.resolve(__dirname, '../../../supabase/functions/_fleet-server/drivers_roster.ts');
+if (!fs.existsSync(roster)) {
+  console.error('Driver section check FAILED: missing drivers_roster.ts');
+  process.exit(1);
 }
 
 // R4-2: driver-spine tsc must stay clean (would have caught Awaiting Tolls crash).
