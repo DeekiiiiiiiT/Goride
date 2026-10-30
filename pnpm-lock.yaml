@@ -2361,6 +2361,9 @@ importers:
       '@types/leaflet':
         specifier: '*'
         version: 1.9.21
+      '@types/papaparse':
+        specifier: ^5.5.2
+        version: 5.5.2
       '@types/react':
         specifier: ^18.3.0
         version: 18.3.28
