@@ -50,13 +50,15 @@ BEGIN
         ('transmission_fluid', 'CVT Fluid FE', 'http://www.toyota-club.net/files/techdata/ttx/tank.htm', 'platform')
     ) AS seed(spec_key, value, evidence_url, scope)
   LOOP
-    PERFORM public.save_catalog_spec(jsonb_build_object(
-      'variantId', v_roomy,
-      'specKey', v_row.spec_key,
-      'value', v_row.value,
-      'scope', v_row.scope,
-      'evidenceUrl', v_row.evidence_url
-    ));
+    IF EXISTS (SELECT 1 FROM public.spec_key WHERE key = v_row.spec_key) THEN
+      PERFORM public.save_catalog_spec(jsonb_build_object(
+        'variantId', v_roomy,
+        'specKey', v_row.spec_key,
+        'value', v_row.value,
+        'scope', v_row.scope,
+        'evidenceUrl', v_row.evidence_url
+      ));
+    END IF;
   END LOOP;
 
   DELETE FROM public.catalog_spec_value s
@@ -1174,3 +1176,6 @@ $$;
 
 REVOKE ALL ON FUNCTION public.admin_recent_import_batches() FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.admin_recent_import_batches() TO service_role;
+
+REVOKE ALL ON FUNCTION public.admin_body_families() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.admin_save_body_family(jsonb) FROM PUBLIC, anon, authenticated;

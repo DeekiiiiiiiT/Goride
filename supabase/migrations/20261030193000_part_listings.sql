@@ -87,6 +87,8 @@ BEGIN
 END;
 $$;
 
+REVOKE ALL ON FUNCTION public.sync_part_listing_rule() FROM PUBLIC, anon, authenticated;
+
 DROP TRIGGER IF EXISTS part_listing_sync_rule ON public.part_listing;
 CREATE TRIGGER part_listing_sync_rule
   AFTER INSERT OR UPDATE OR DELETE ON public.part_listing
@@ -190,6 +192,8 @@ BEGIN
   RETURN NEW;
 END;
 $$;
+
+REVOKE ALL ON FUNCTION public.reject_mixed_maker_platform() FROM PUBLIC, anon, authenticated;
 
 DROP TRIGGER IF EXISTS vehicle_catalog_one_maker_per_platform ON public.vehicle_catalog;
 CREATE TRIGGER vehicle_catalog_one_maker_per_platform

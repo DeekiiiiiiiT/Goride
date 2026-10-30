@@ -84,6 +84,8 @@ BEGIN
 END;
 $$;
 
+REVOKE ALL ON FUNCTION public.roomy_seed_vehicle(text, text, text, uuid, uuid, integer, integer) FROM PUBLIC, anon, authenticated;
+
 DO $$
 DECLARE
   v_engine uuid;
@@ -141,7 +143,8 @@ BEGIN
   WHERE lower(make) = 'daihatsu' AND lower(model) = 'thor' AND upper(chassis_code) = 'M900S'
   LIMIT 1;
 
-  IF NOT EXISTS (
+  IF EXISTS (SELECT 1 FROM public.maintenance_service_categories WHERE op_code = 'ENG-OIL')
+     AND NOT EXISTS (
     SELECT 1
     FROM public.part_master pm
     JOIN public.part_listing pl ON pl.interchange_group_id = pm.interchange_group_id
@@ -161,7 +164,9 @@ BEGIN
     ));
   END IF;
 
-  IF v_thor IS NOT NULL AND NOT EXISTS (
+  IF v_thor IS NOT NULL
+     AND EXISTS (SELECT 1 FROM public.maintenance_service_categories WHERE op_code = 'LGT-WIPER')
+     AND NOT EXISTS (
     SELECT 1
     FROM public.part_master pm
     JOIN public.part_listing pl ON pl.interchange_group_id = pm.interchange_group_id
@@ -181,46 +186,57 @@ BEGIN
     ));
   END IF;
 
-  PERFORM public.save_catalog_spec(jsonb_build_object(
-    'variantId', v_roomy, 'specKey', 'engine_oil_grade', 'value', '0W-20', 'scope', 'variant',
-    'evidenceUrl', 'http://www.toyota-club.net/files/techdata/ttx/tank.htm'
-  ));
-  PERFORM public.save_catalog_spec(jsonb_build_object(
-    'variantId', v_roomy, 'specKey', 'engine_oil_capacity_with_filter_l', 'value', '3.1', 'scope', 'variant',
-    'evidenceUrl', 'http://www.toyota-club.net/files/techdata/ttx/tank.htm'
-  ));
-  PERFORM public.save_catalog_spec(jsonb_build_object(
-    'variantId', v_roomy, 'specKey', 'wiper_driver_mm', 'value', '525', 'scope', 'variant',
-    'evidenceUrl', 'https://wiper-wiper.com/2023/07/14/roomy/'
-  ));
-  PERFORM public.save_catalog_spec(jsonb_build_object(
-    'variantId', v_roomy, 'specKey', 'wiper_passenger_mm', 'value', '475', 'scope', 'variant',
-    'evidenceUrl', 'https://wiper-wiper.com/2023/07/14/roomy/'
-  ));
-  PERFORM public.save_catalog_spec(jsonb_build_object(
-    'variantId', v_roomy, 'specKey', 'wiper_rear_mm', 'value', '350', 'scope', 'variant',
-    'evidenceUrl', 'https://wiper-wiper.com/2023/07/14/roomy/'
-  ));
-  PERFORM public.save_catalog_spec(jsonb_build_object(
-    'variantId', v_roomy, 'specKey', 'transmission_fluid', 'value', 'CVT Fluid FE', 'scope', 'variant',
-    'evidenceUrl', 'http://www.toyota-club.net/files/techdata/ttx/tank.htm'
-  ));
-
-  PERFORM public.save_universal_part(jsonb_build_object(
-    'specKey', 'engine_oil_grade', 'specValue', '0W-20',
-    'manufacturer', 'Toyota', 'partNumber', '0W-20', 'name', 'Engine oil 0W-20',
-    'evidenceUrl', 'http://www.toyota-club.net/files/techdata/ttx/tank.htm'
-  ));
-  PERFORM public.save_universal_part(jsonb_build_object(
-    'specKey', 'wiper_driver_mm', 'specValue', '525',
-    'manufacturer', 'OEM spec', 'partNumber', '525', 'name', 'Driver wiper 525 mm',
-    'evidenceUrl', 'https://wiper-wiper.com/2023/07/14/roomy/'
-  ));
-  PERFORM public.save_universal_part(jsonb_build_object(
-    'specKey', 'transmission_fluid', 'specValue', 'CVT Fluid FE',
-    'manufacturer', 'Toyota', 'partNumber', 'CVT-FE', 'name', 'CVT Fluid FE',
-    'evidenceUrl', 'http://www.toyota-club.net/files/techdata/ttx/tank.htm'
-  ));
+  IF EXISTS (SELECT 1 FROM public.spec_key WHERE key = 'engine_oil_grade') THEN
+    PERFORM public.save_catalog_spec(jsonb_build_object(
+      'variantId', v_roomy, 'specKey', 'engine_oil_grade', 'value', '0W-20', 'scope', 'variant',
+      'evidenceUrl', 'http://www.toyota-club.net/files/techdata/ttx/tank.htm'
+    ));
+    PERFORM public.save_universal_part(jsonb_build_object(
+      'specKey', 'engine_oil_grade', 'specValue', '0W-20',
+      'manufacturer', 'Toyota', 'partNumber', '0W-20', 'name', 'Engine oil 0W-20',
+      'evidenceUrl', 'http://www.toyota-club.net/files/techdata/ttx/tank.htm'
+    ));
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.spec_key WHERE key = 'engine_oil_capacity_with_filter_l') THEN
+    PERFORM public.save_catalog_spec(jsonb_build_object(
+      'variantId', v_roomy, 'specKey', 'engine_oil_capacity_with_filter_l', 'value', '3.1', 'scope', 'variant',
+      'evidenceUrl', 'http://www.toyota-club.net/files/techdata/ttx/tank.htm'
+    ));
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.spec_key WHERE key = 'wiper_driver_mm') THEN
+    PERFORM public.save_catalog_spec(jsonb_build_object(
+      'variantId', v_roomy, 'specKey', 'wiper_driver_mm', 'value', '525', 'scope', 'variant',
+      'evidenceUrl', 'https://wiper-wiper.com/2023/07/14/roomy/'
+    ));
+    PERFORM public.save_universal_part(jsonb_build_object(
+      'specKey', 'wiper_driver_mm', 'specValue', '525',
+      'manufacturer', 'OEM spec', 'partNumber', '525', 'name', 'Driver wiper 525 mm',
+      'evidenceUrl', 'https://wiper-wiper.com/2023/07/14/roomy/'
+    ));
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.spec_key WHERE key = 'wiper_passenger_mm') THEN
+    PERFORM public.save_catalog_spec(jsonb_build_object(
+      'variantId', v_roomy, 'specKey', 'wiper_passenger_mm', 'value', '475', 'scope', 'variant',
+      'evidenceUrl', 'https://wiper-wiper.com/2023/07/14/roomy/'
+    ));
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.spec_key WHERE key = 'wiper_rear_mm') THEN
+    PERFORM public.save_catalog_spec(jsonb_build_object(
+      'variantId', v_roomy, 'specKey', 'wiper_rear_mm', 'value', '350', 'scope', 'variant',
+      'evidenceUrl', 'https://wiper-wiper.com/2023/07/14/roomy/'
+    ));
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.spec_key WHERE key = 'transmission_fluid') THEN
+    PERFORM public.save_catalog_spec(jsonb_build_object(
+      'variantId', v_roomy, 'specKey', 'transmission_fluid', 'value', 'CVT Fluid FE', 'scope', 'variant',
+      'evidenceUrl', 'http://www.toyota-club.net/files/techdata/ttx/tank.htm'
+    ));
+    PERFORM public.save_universal_part(jsonb_build_object(
+      'specKey', 'transmission_fluid', 'specValue', 'CVT Fluid FE',
+      'manufacturer', 'Toyota', 'partNumber', 'CVT-FE', 'name', 'CVT Fluid FE',
+      'evidenceUrl', 'http://www.toyota-club.net/files/techdata/ttx/tank.htm'
+    ));
+  END IF;
 END $$;
 
 DROP FUNCTION public.roomy_seed_vehicle(text, text, text, uuid, uuid, integer, integer);

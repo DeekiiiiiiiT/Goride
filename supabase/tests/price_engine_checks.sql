@@ -1,13 +1,18 @@
 -- Fuel price engine. Rolls back. Run after migrations.
 BEGIN;
 
-INSERT INTO fuel.petrojam_prices (price_date, gasolene_87, gasolene_90, auto_diesel, ulsd)
-VALUES (date '2026-10-22', 201.81, 205.00, 190.00, 195.00)
-ON CONFLICT (price_date) DO UPDATE
-SET gasolene_87 = excluded.gasolene_87,
-    gasolene_90 = excluded.gasolene_90,
-    auto_diesel = excluded.auto_diesel,
-    ulsd = excluded.ulsd;
+INSERT INTO fuel.refinery_price (refinery_id, product_code, effective_date, price_jmd, source)
+SELECT r.id, v.code, date '2026-10-22', v.price, 'manual'
+FROM fuel.refinery r
+CROSS JOIN (VALUES
+  ('gasolene_87', 201.81),
+  ('gasolene_90', 205.00),
+  ('auto_diesel', 190.00),
+  ('ulsd', 195.00)
+) AS v(code, price)
+WHERE r.slug = 'petrojam'
+ON CONFLICT (refinery_id, product_code, effective_date) WHERE superseded_at IS NULL
+DO UPDATE SET price_jmd = excluded.price_jmd;
 
 INSERT INTO places.place (id, place_type, name, lat, lng, status, pin_state)
 VALUES ('price-engine-station', 'gas_station', 'Engine check', 18.02, -76.80, 'verified', 'confirmed');

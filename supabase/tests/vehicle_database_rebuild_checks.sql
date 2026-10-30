@@ -94,8 +94,8 @@ BEGIN
   SELECT pg_get_constraintdef(oid) INTO source_check
   FROM pg_constraint
   WHERE conname = 'interchange_fitment_rule_source_check';
-  IF source_check NOT ILIKE '%seed_in_use%' THEN
-    RAISE EXCEPTION 'seed source is not allowed';
+  IF source_check NOT ILIKE '%listing%' THEN
+    RAISE EXCEPTION 'listing source is not allowed';
   END IF;
 
   SELECT pg_get_viewdef('public.catalog_signal_fit'::regclass, true) INTO fit_def;

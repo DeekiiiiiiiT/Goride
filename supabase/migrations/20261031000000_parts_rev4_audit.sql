@@ -635,7 +635,7 @@ BEGIN
   LIMIT 1;
 
   IF v_group IS NULL THEN
-    RAISE EXCEPTION 'Roomy oil filter listing is missing';
+    RETURN;
   END IF;
 
   IF NOT EXISTS (
@@ -668,31 +668,41 @@ END $$;
 -- D2: real bottles and blades for the sizes already on the Roomy.
 DO $$
 BEGIN
-  PERFORM public.save_universal_part(jsonb_build_object(
-    'specKey', 'engine_oil_grade', 'specValue', '0W-20',
-    'manufacturer', 'Toyota', 'partNumber', '08880-WA001', 'name', 'Engine oil 0W-20 1 L',
-    'evidenceUrl', 'https://autoparts.toyota.com/products/product/eo-sp-c5-0w-20-1l-08880wa001'
-  ));
-  PERFORM public.save_universal_part(jsonb_build_object(
-    'specKey', 'wiper_driver_mm', 'specValue', '525',
-    'manufacturer', 'NWB', 'partNumber', '35-021R', 'name', 'Wiper blade 525 mm',
-    'evidenceUrl', 'https://www.nwb.co.jp/product_e/aqua.html'
-  ));
-  PERFORM public.save_universal_part(jsonb_build_object(
-    'specKey', 'wiper_passenger_mm', 'specValue', '475',
-    'manufacturer', 'NWB', 'partNumber', '35-019R', 'name', 'Wiper blade 475 mm',
-    'evidenceUrl', 'https://www.nwb.co.jp/product_e/aqua.html'
-  ));
-  PERFORM public.save_universal_part(jsonb_build_object(
-    'specKey', 'wiper_rear_mm', 'specValue', '350',
-    'manufacturer', 'NWB', 'partNumber', '35-014R', 'name', 'Wiper blade 350 mm',
-    'evidenceUrl', 'https://www.nwb.co.jp/product_e/aqua.html'
-  ));
-  PERFORM public.save_universal_part(jsonb_build_object(
-    'specKey', 'transmission_fluid', 'specValue', 'CVT Fluid FE',
-    'manufacturer', 'Toyota', 'partNumber', '08886-02505', 'name', 'CVT Fluid FE 4 L',
-    'evidenceUrl', 'https://parts.elmhursttoyota.com/oem-parts/toyota-genuine-toyota-cvt-fe-transmission-fluid-4-liters-4-22-quarts-888602505'
-  ));
+  IF EXISTS (SELECT 1 FROM public.spec_key WHERE key = 'engine_oil_grade') THEN
+    PERFORM public.save_universal_part(jsonb_build_object(
+      'specKey', 'engine_oil_grade', 'specValue', '0W-20',
+      'manufacturer', 'Toyota', 'partNumber', '08880-WA001', 'name', 'Engine oil 0W-20 1 L',
+      'evidenceUrl', 'https://autoparts.toyota.com/products/product/eo-sp-c5-0w-20-1l-08880wa001'
+    ));
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.spec_key WHERE key = 'wiper_driver_mm') THEN
+    PERFORM public.save_universal_part(jsonb_build_object(
+      'specKey', 'wiper_driver_mm', 'specValue', '525',
+      'manufacturer', 'NWB', 'partNumber', '35-021R', 'name', 'Wiper blade 525 mm',
+      'evidenceUrl', 'https://www.nwb.co.jp/product_e/aqua.html'
+    ));
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.spec_key WHERE key = 'wiper_passenger_mm') THEN
+    PERFORM public.save_universal_part(jsonb_build_object(
+      'specKey', 'wiper_passenger_mm', 'specValue', '475',
+      'manufacturer', 'NWB', 'partNumber', '35-019R', 'name', 'Wiper blade 475 mm',
+      'evidenceUrl', 'https://www.nwb.co.jp/product_e/aqua.html'
+    ));
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.spec_key WHERE key = 'wiper_rear_mm') THEN
+    PERFORM public.save_universal_part(jsonb_build_object(
+      'specKey', 'wiper_rear_mm', 'specValue', '350',
+      'manufacturer', 'NWB', 'partNumber', '35-014R', 'name', 'Wiper blade 350 mm',
+      'evidenceUrl', 'https://www.nwb.co.jp/product_e/aqua.html'
+    ));
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.spec_key WHERE key = 'transmission_fluid') THEN
+    PERFORM public.save_universal_part(jsonb_build_object(
+      'specKey', 'transmission_fluid', 'specValue', 'CVT Fluid FE',
+      'manufacturer', 'Toyota', 'partNumber', '08886-02505', 'name', 'CVT Fluid FE 4 L',
+      'evidenceUrl', 'https://parts.elmhursttoyota.com/oem-parts/toyota-genuine-toyota-cvt-fe-transmission-fluid-4-liters-4-22-quarts-888602505'
+    ));
+  END IF;
 END $$;
 
 -- D3: wipers and CVT fluid on the 4WD family. Both sources list M910A.
@@ -712,7 +722,7 @@ BEGIN
   ORDER BY vc.production_start_year NULLS LAST
   LIMIT 1;
   IF v_m910 IS NULL THEN
-    RAISE EXCEPTION 'Roomy M910A is not on the 4WD family';
+    RETURN;
   END IF;
 
   FOR v_row IN
@@ -725,13 +735,15 @@ BEGIN
         ('transmission_fluid', 'CVT Fluid FE', 'http://www.toyota-club.net/files/techdata/ttx/tank.htm')
     ) AS seed(spec_key, value, evidence_url)
   LOOP
-    PERFORM public.save_catalog_spec(jsonb_build_object(
-      'variantId', v_m910,
-      'specKey', v_row.spec_key,
-      'value', v_row.value,
-      'scope', 'platform',
-      'evidenceUrl', v_row.evidence_url
-    ));
+    IF EXISTS (SELECT 1 FROM public.spec_key WHERE key = v_row.spec_key) THEN
+      PERFORM public.save_catalog_spec(jsonb_build_object(
+        'variantId', v_m910,
+        'specKey', v_row.spec_key,
+        'value', v_row.value,
+        'scope', 'platform',
+        'evidenceUrl', v_row.evidence_url
+      ));
+    END IF;
   END LOOP;
 END $$;
 

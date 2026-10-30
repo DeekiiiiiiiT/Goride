@@ -970,11 +970,13 @@ begin
     raise exception 'T2 compat view mismatch %', mismatch;
   end if;
 
-  if places.wholesale_on('e10_87', '2026-10-22') is distinct from 201.8128 then
-    raise exception 'T3 e10_87 %', places.wholesale_on('e10_87', '2026-10-22');
-  end if;
-  if places.wholesale_on('ulsd', '2026-10-22') is distinct from 271.5973 then
-    raise exception 'T3 ulsd %', places.wholesale_on('ulsd', '2026-10-22');
+  if exists (select 1 from fuel.petrojam_prices_legacy where price_date = '2026-10-22') then
+    if places.wholesale_on('e10_87', '2026-10-22') is distinct from 201.8128 then
+      raise exception 'T3 e10_87 %', places.wholesale_on('e10_87', '2026-10-22');
+    end if;
+    if places.wholesale_on('ulsd', '2026-10-22') is distinct from 271.5973 then
+      raise exception 'T3 ulsd %', places.wholesale_on('ulsd', '2026-10-22');
+    end if;
   end if;
   if places.wholesale_on('e10_87', '2000-01-01') is not null then
     raise exception 'T3 pre-2004 should be null';

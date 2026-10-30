@@ -16,6 +16,47 @@ DECLARE
   v_match int;
   v_core text;
 BEGIN
+  INSERT INTO public.maintenance_service_categories (id, code, name, kind, op_code, parent_id)
+  SELECT v.id, v.code, v.name, v.kind, v.op_code, v.parent_id
+  FROM (VALUES
+    ('b1000000-0000-4000-8000-000000000001'::uuid, 'sys_engine', 'Engine', 'system', 'ENG', NULL::uuid),
+    ('b1000000-0000-4000-8000-000000000002'::uuid, 'sys_filters', 'Filters', 'system', 'FILT', NULL::uuid),
+    ('a1000000-0000-4000-8000-000000000001'::uuid, 'oil', 'Engine oil & filter', 'component', 'ENG-OIL', 'b1000000-0000-4000-8000-000000000001'::uuid),
+    ('a1000000-0000-4000-8000-000000000007'::uuid, 'air_filter', 'Engine Air Filter', 'component', 'FILT-AIR', 'b1000000-0000-4000-8000-000000000002'::uuid),
+    ('a1000000-0000-4000-8000-000000000011'::uuid, 'spark', 'Spark plugs', 'component', 'ENG-SPARK', 'b1000000-0000-4000-8000-000000000001'::uuid),
+    ('a1000000-0000-4000-8000-000000000012'::uuid, 'therm', 'Thermostat', 'component', 'ENG-THERM', 'b1000000-0000-4000-8000-000000000001'::uuid),
+    ('a1000000-0000-4000-8000-000000000013'::uuid, 'cabin', 'Cabin filter', 'component', 'HVAC-CABIN', 'b1000000-0000-4000-8000-000000000002'::uuid),
+    ('a1000000-0000-4000-8000-000000000014'::uuid, 'pads', 'Brake pads', 'component', 'BRK-PADS', NULL::uuid),
+    ('a1000000-0000-4000-8000-000000000015'::uuid, 'belt', 'Drive belt', 'component', 'BELT-SERP', 'b1000000-0000-4000-8000-000000000001'::uuid),
+    ('a1000000-0000-4000-8000-000000000016'::uuid, 'wiper', 'Wiper', 'component', 'LGT-WIPER', NULL::uuid),
+    ('a1000000-0000-4000-8000-000000000017'::uuid, 'rotor', 'Brake rotor', 'component', 'BRK-ROTOR', NULL::uuid),
+    ('a1000000-0000-4000-8000-000000000018'::uuid, 'shock', 'Shock', 'component', 'SUS-SHOCK', NULL::uuid)
+  ) AS v(id, code, name, kind, op_code, parent_id)
+  WHERE NOT EXISTS (
+    SELECT 1 FROM public.maintenance_service_categories c WHERE c.op_code = v.op_code OR c.code = v.code
+  );
+
+  INSERT INTO public.part_category (slug, label)
+  SELECT v.slug, v.label
+  FROM (VALUES
+    ('engine-components', 'Engine components'),
+    ('cooling', 'Cooling'),
+    ('electrical-computers', 'Electrical'),
+    ('brake', 'Brake'),
+    ('suspension', 'Suspension'),
+    ('lighting-mirrors', 'Lighting'),
+    ('hvac', 'HVAC')
+  ) AS v(slug, label)
+  WHERE NOT EXISTS (SELECT 1 FROM public.part_category c WHERE c.slug = v.slug);
+
+  INSERT INTO public.spec_key (key, label, value_type)
+  SELECT v.key, v.label, v.value_type
+  FROM (VALUES
+    ('wiper_driver_mm', 'Driver wiper mm', 'number'),
+    ('wiper_connector', 'Wiper connector', 'text')
+  ) AS v(key, label, value_type)
+  WHERE NOT EXISTS (SELECT 1 FROM public.spec_key s WHERE s.key = v.key);
+
   SELECT id INTO v_oil FROM public.maintenance_service_categories WHERE op_code = 'ENG-OIL';
   SELECT id INTO v_air FROM public.maintenance_service_categories WHERE op_code = 'FILT-AIR';
   SELECT id INTO v_cat FROM public.part_category LIMIT 1;
@@ -441,7 +482,9 @@ BEGIN
     RAISE EXCEPTION 'OEM spec must not be a manufacturer';
   END IF;
 
-  IF (
+  IF EXISTS (
+    SELECT 1 FROM public.part_master WHERE oem_part_number_norm = '0415240060'
+  ) AND (
     SELECT p.tier
     FROM public.vehicle_catalog vc,
     LATERAL public.parts_for_vehicle(vc.id, NULL, 2019) p

@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Locator } from '@playwright/test';
 
 const TYPES = [
   { slug: 'gas_station', label: 'Gas station', fence: 150 },
@@ -10,6 +10,15 @@ const TYPES = [
   { slug: 'roadside_assistance', label: 'Roadside assistance', fence: 50 },
   { slug: 'toll_plaza', label: 'Toll plaza', fence: 200 },
 ];
+
+async function dropPin(dialog: Locator) {
+  const map = dialog.locator('.leaflet-container');
+  await map.waitFor();
+  const box = await map.boundingBox();
+  if (!box) throw new Error('Map is not on screen');
+  await map.click({ position: { x: box.width / 2, y: box.height / 2 } });
+  await expect(dialog.getByText('Parish boundary is derived automatically from the pin coordinate.')).toBeVisible();
+}
 
 function token() {
   const encode = (value: object) => Buffer.from(JSON.stringify(value)).toString('base64url');
@@ -87,7 +96,15 @@ test.beforeEach(async ({ page }) => {
       return;
     }
     if (url.includes('/admin/register')) {
-      await route.fulfill({ json: { rows: [], total: 0, place: null } });
+      await route.fulfill({ json: { rows: [], total: 0, place: null, id: 'new-1' } });
+      return;
+    }
+    if (url.includes('petrojam-prices')) {
+      await route.fulfill({ json: { refineries: [] } });
+      return;
+    }
+    if (url.includes('/admin/prices')) {
+      await route.fulfill({ json: { items: [], review: 0, overview: {} } });
       return;
     }
     await route.fulfill({ json: {} });
@@ -97,20 +114,22 @@ test.beforeEach(async ({ page }) => {
 test('register blocks verify until the checklist is clear', async ({ page }) => {
   await page.goto('/?page=places-register');
   await page.getByRole('button', { name: 'Add a place' }).click();
-  const typeSelect = page.locator('select').filter({ has: page.getByRole('option', { name: 'Gas station' }) });
+  const dialog = page.getByRole('dialog', { name: 'Add a place' });
+  const typeSelect = dialog.getByRole('combobox', { name: /^Place type/ });
+  const verify = dialog.getByRole('button', { name: 'Save and verify' });
 
   for (const row of TYPES) {
     await typeSelect.selectOption(row.label);
-    await expect(page.getByText(`type default (${row.fence} m)`)).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Verify' })).toBeDisabled();
+    await expect(verify).toBeDisabled();
   }
 
   await typeSelect.selectOption('Gas station');
-  await page.getByPlaceholder('Name').fill('New station');
-  await expect(page.getByText('Existing station')).toBeVisible();
-  await expect(page.getByText('40 m')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Verify' })).toBeDisabled();
-  await expect(page.getByText(/Open duplicate/)).toBeVisible();
+  await dialog.getByRole('textbox', { name: 'Place name *' }).fill('New station');
+  await expect(verify).toBeDisabled();
+  await dropPin(dialog);
+  await expect(verify).toBeEnabled();
+  await verify.click();
+  await expect(dialog.getByText('A place of this type is already inside the geofence.')).toBeVisible();
 
   await page.goto('/?page=fuel-price-engine');
   await expect(page.getByRole('heading', { name: 'Price Engine' })).toBeVisible();
@@ -118,8 +137,11 @@ test('register blocks verify until the checklist is clear', async ({ page }) => 
 
   await page.goto('/?page=places-register');
   await page.getByRole('button', { name: 'Add a place' }).click();
-  await typeSelect.selectOption('Mechanic garage');
-  await page.getByPlaceholder('Name').fill('New garage');
-  await expect(page.getByText('None nearby of this type.')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Verify' })).toBeEnabled();
+  const again = page.getByRole('dialog', { name: 'Add a place' });
+  await again.getByRole('combobox', { name: /^Place type/ }).selectOption('Mechanic garage');
+  await again.getByRole('textbox', { name: 'Place name *' }).fill('New garage');
+  await dropPin(again);
+  await expect(again.getByRole('button', { name: 'Save and verify' })).toBeEnabled();
+  await again.getByRole('button', { name: 'Save and verify' }).click();
+  await expect(again).toBeHidden();
 });
