@@ -34,7 +34,7 @@ export interface VehicleCatalogPendingRequest {
   /** Fuel type hint (e.g. Gasoline, Diesel, Hybrid, EV) - hybrid matcher disambiguator. */
   proposed_fuel_type?: string | null;
   proposed_body_type: string | null;
-  source: "scan" | "manual";
+  source: "scan" | "manual" | "find_parts";
   ocr_snapshot: Record<string, unknown> | null;
   status: VehicleCatalogPendingStatus;
   resolved_vehicle_catalog_id: string | null;

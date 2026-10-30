@@ -227,6 +227,14 @@ jobs:
           supabase/functions/_fleet-server/parts_resolution.test.ts
           supabase/functions/_fleet-server/catalog_privacy.test.ts
 
+      - name: Deno test find parts
+        run: >
+          deno test --no-check
+          supabase/functions/_fleet-server/parts_finder.test.ts
+          supabase/functions/_fleet-server/parts_catalog_read.test.ts
+          supabase/functions/_fleet-server/vehicleVariantLabel.test.ts
+          supabase/functions/_fleet-server/fleet_find_parts_routes.test.ts
+
       - name: Deno test ledger read API parity
         run: >
           deno test --allow-read --allow-env

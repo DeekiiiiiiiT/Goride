@@ -4,6 +4,7 @@
   "packageManager": "pnpm@11.1.0",
   "scripts": {
     "test:e2e:toll": "node scripts/e2e/toll-reconciliation-smoke.mjs",
+    "stitch:render:s42": "node scripts/stitch-render.mjs",
     "test:e2e:fleet:fuel-soak": "node node_modules/@playwright/test/cli.js test --project=fleet e2e/fuel-recon-shadow-soak.spec.ts",
     "test:e2e:fleet": "node node_modules/@playwright/test/cli.js test --project=fleet",
     "test:e2e:rush": "playwright test",

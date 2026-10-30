@@ -36,7 +36,7 @@ async function authHeaders(): Promise<HeadersInit> {
   };
 }
 
-async function getJson<T>(path: string): Promise<T> {
+export async function getJson<T>(path: string): Promise<T> {
   const response = await fetch(`${API_ENDPOINTS.admin}/admin/catalog/${path}`, {
     headers: await authHeaders(),
   });
@@ -45,7 +45,7 @@ async function getJson<T>(path: string): Promise<T> {
   return body as T;
 }
 
-async function postJson<T>(path: string, payload: unknown): Promise<T> {
+export async function postJson<T>(path: string, payload: unknown): Promise<T> {
   const headers = new Headers(await authHeaders());
   headers.set("Content-Type", "application/json");
   const response = await fetch(`${API_ENDPOINTS.admin}/admin/catalog/${path}`, {
@@ -62,18 +62,96 @@ export function fetchPartsOverview() {
   return getJson<PartsOverview>("parts-overview");
 }
 
-export function fetchFindParts(query: { make?: string; model?: string; year?: string; variantId?: string }) {
+export type FindPartsCandidate = {
+  id: string;
+  plainLabel: string;
+  codeLine: string;
+};
+
+export type FoundPartRow = {
+  partId: string;
+  name: string;
+  brand: string;
+  number: string;
+  tier: number;
+  reason: string;
+  status: "verified" | "needs_checking";
+  fitsVariantIds: string[];
+  alsoKnownAs?: string[];
+};
+
+export type PlainSection = {
+  tier: number;
+  plainLabel: string;
+  tag: string;
+  plainReason: string;
+  items: FoundPartRow[];
+};
+
+export type FindPartsResult = {
+  mode?: "tiered" | "legacy";
+  car?: { make: string; model: string; year: number | null; label: string } | null;
+  candidates?: FindPartsCandidate[];
+  askVariant?: boolean;
+  pickedVariantId?: string | null;
+  variants: CatalogVariantPick[];
+  picked: CatalogVariantPick | null;
+  sections: PartSection[];
+  plainSections?: PlainSection[];
+  emptyTiers?: number[];
+  bestPick?: FoundPartRow | null;
+  coverage?: { essentials: number; essentialsTotal: number; specs: number; specsTotal: number; otherParts: number } | null;
+};
+
+export function fetchFindParts(query: {
+  make?: string;
+  model?: string;
+  year?: string;
+  variantId?: string;
+  componentId?: string;
+  position?: string;
+  side?: string;
+}) {
   const params = new URLSearchParams();
   if (query.make) params.set("make", query.make);
   if (query.model) params.set("model", query.model);
   if (query.year) params.set("year", query.year);
   if (query.variantId) params.set("variantId", query.variantId);
+  if (query.componentId) params.set("componentId", query.componentId);
+  if (query.position) params.set("position", query.position);
+  if (query.side) params.set("side", query.side);
+  return getJson<FindPartsResult>(`find-parts?${params.toString()}`);
+}
+
+export function fetchFindPartsCoverage(variantId: string) {
+  return getJson<{ variantId: string; areas: Array<{ id: string; count: number }> }>(
+    `find-parts/coverage?variantId=${encodeURIComponent(variantId)}`,
+  );
+}
+
+export function fetchPartsBrowse() {
   return getJson<{
-    variants: CatalogVariantPick[];
-    picked: CatalogVariantPick | null;
-    sections: PartSection[];
-    coverage?: { essentials: number; essentialsTotal: number; specs: number; specsTotal: number; otherParts: number } | null;
-  }>(`find-parts?${params.toString()}`);
+    systems: Array<{
+      id: string;
+      plainName: string;
+      icon: string | null;
+      components: Array<{ id: string; plainName: string; positionAware: boolean }>;
+    }>;
+    common: Array<{ id: string; plainName: string }>;
+  }>("parts/browse");
+}
+
+export function fetchPartTerm(q: string) {
+  return getJson<{
+    components: Array<{ id?: string; plainName?: string }>;
+    synonyms: Array<{ term?: string; componentId?: string; plainName?: string }>;
+    parts: Array<{ id?: string; name?: string; number?: string }>;
+    hits?: Array<{ kind: "part" | "synonym" | "name"; id: string; plainName: string; number?: string | null; componentId?: string | null }>;
+  }>(`parts/term?q=${encodeURIComponent(q)}`);
+}
+
+export function fetchSymptomSummary() {
+  return getJson<{ problems: number; live: number }>("symptoms/summary");
 }
 
 export function fetchBodyFamilies() {

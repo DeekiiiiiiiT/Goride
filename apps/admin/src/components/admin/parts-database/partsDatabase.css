@@ -80,3 +80,67 @@
 .dark .parts-database-stitch .bg-amber-600 { background-color: #f59e0b; }
 .dark .parts-database-stitch .places-map-well { background-color: #172033; }
 
+.parts-database-stitch .find-parts-flow .text-secondary,
+.parts-database-stitch .find-parts-flow .font-body-sm.text-secondary,
+.parts-database-stitch .find-parts-flow .font-body-md.text-secondary { color: #5c6470; }
+.dark .parts-database-stitch .find-parts-flow .text-secondary,
+.dark .parts-database-stitch .find-parts-flow .font-body-sm.text-secondary,
+.dark .parts-database-stitch .find-parts-flow .font-body-md.text-secondary { color: #b0b6bf; }
+.find-parts-flow .find-parts-stepbar,
+.find-parts-flow .find-parts-trail { overflow-x: auto; }
+@media (max-width: 420px) {
+  .find-parts-flow .find-parts-columns { display: flex; flex-direction: column; }
+  .find-parts-sheet { width: 100%; max-width: none; }
+}
+.parts-database-stitch .find-parts-flow .font-headline-xl,
+.parts-database-stitch .find-parts-flow .font-headline-lg,
+.parts-database-stitch .find-parts-flow .font-headline-md,
+.parts-database-stitch .find-parts-flow .font-body-md,
+.parts-database-stitch .find-parts-flow .font-body-sm,
+.parts-database-stitch .find-parts-flow .font-label-md,
+.parts-database-stitch .find-parts-flow .font-label-xs { font-family: Inter, sans-serif; }
+.parts-database-stitch .find-parts-flow .font-mono-lg,
+.parts-database-stitch .find-parts-flow .font-mono-md,
+.parts-database-stitch .find-parts-flow .font-mono-sm,
+.parts-database-stitch .find-parts-flow .font-mono-xs { font-family: "JetBrains Mono", ui-monospace, monospace; }
+.parts-database-stitch .find-parts-flow .text-headline-xl { font-size: 24px; line-height: 32px; letter-spacing: -0.02em; font-weight: 600; }
+.parts-database-stitch .find-parts-flow .text-headline-lg { font-size: 20px; line-height: 28px; letter-spacing: -0.015em; font-weight: 600; }
+.parts-database-stitch .find-parts-flow .text-headline-md { font-size: 16px; line-height: 24px; letter-spacing: -0.01em; font-weight: 600; }
+.parts-database-stitch .find-parts-flow .text-body-md { font-size: 14px; line-height: 20px; font-weight: 400; }
+.parts-database-stitch .find-parts-flow .text-body-sm { font-size: 13px; line-height: 18px; font-weight: 400; }
+.parts-database-stitch .find-parts-flow .text-label-md { font-size: 12px; line-height: 16px; letter-spacing: 0.01em; font-weight: 500; }
+.parts-database-stitch .find-parts-flow .text-label-xs { font-size: 11px; line-height: 14px; letter-spacing: 0.04em; font-weight: 600; }
+.parts-database-stitch .find-parts-flow .text-mono-lg { font-size: 14px; line-height: 20px; letter-spacing: -0.01em; font-weight: 500; }
+.parts-database-stitch .find-parts-flow .text-mono-md { font-size: 12px; line-height: 16px; font-weight: 500; }
+.parts-database-stitch .find-parts-flow .text-mono-sm { font-size: 11px; line-height: 14px; letter-spacing: 0.02em; font-weight: 400; }
+.parts-database-stitch .find-parts-flow .text-mono-xs { font-size: 10px; line-height: 14px; letter-spacing: 0.04em; font-weight: 400; }
+.parts-database-stitch .find-parts-flow .gap-space-xs { gap: 0.25rem; }
+.parts-database-stitch .find-parts-flow .gap-space-sm { gap: 0.5rem; }
+.parts-database-stitch .find-parts-flow .gap-space-md { gap: 0.75rem; }
+.parts-database-stitch .find-parts-flow .gap-space-lg { gap: 1rem; }
+.parts-database-stitch .find-parts-flow .gap-space-xl { gap: 1.5rem; }
+.parts-database-stitch .find-parts-flow .p-space-sm { padding: 0.5rem; }
+.parts-database-stitch .find-parts-flow .p-space-md { padding: 0.75rem; }
+.parts-database-stitch .find-parts-flow .p-space-lg { padding: 1rem; }
+.parts-database-stitch .find-parts-flow .p-space-xl { padding: 1.5rem; }
+.parts-database-stitch .find-parts-flow .px-space-sm { padding-left: 0.5rem; padding-right: 0.5rem; }
+.parts-database-stitch .find-parts-flow .px-space-md { padding-left: 0.75rem; padding-right: 0.75rem; }
+.parts-database-stitch .find-parts-flow .px-space-lg { padding-left: 1rem; padding-right: 1rem; }
+.parts-database-stitch .find-parts-flow .py-space-sm { padding-top: 0.5rem; padding-bottom: 0.5rem; }
+.parts-database-stitch .find-parts-flow .py-space-md { padding-top: 0.75rem; padding-bottom: 0.75rem; }
+.parts-database-stitch .find-parts-flow .pt-space-md { padding-top: 0.75rem; }
+.parts-database-stitch .find-parts-flow .pt-space-xs { padding-top: 0.25rem; }
+.parts-database-stitch .find-parts-flow .mb-space-xl { margin-bottom: 1.5rem; }
+.parts-database-stitch .find-parts-flow .mt-space-sm { margin-top: 0.5rem; }
+.parts-database-stitch .find-parts-flow .space-y-space-sm > :not([hidden]) ~ :not([hidden]) { margin-top: 0.5rem; }
+.parts-database-stitch .find-parts-flow .space-y-space-md > :not([hidden]) ~ :not([hidden]) { margin-top: 0.75rem; }
+.parts-database-stitch .find-parts-flow .bg-primary-container { background-color: #0153dc; }
+.parts-database-stitch .find-parts-flow .text-on-primary { color: #ffffff; }
+.parts-database-stitch .find-parts-flow .text-primary { color: #003ea9; }
+.parts-database-stitch .find-parts-flow .hover\:bg-primary:hover { background-color: #003ea9; }
+.parts-database-stitch .find-parts-flow .bg-on-primary\/20 { background-color: rgb(255 255 255 / 0.2); }
+.parts-database-stitch .find-parts-flow .placeholder\:text-outline::placeholder { color: #737686; }
+.dark .parts-database-stitch .find-parts-flow .bg-primary-container { background-color: #5b8def; }
+.dark .parts-database-stitch .find-parts-flow .text-primary { color: #8eb4ff; }
+.dark .parts-database-stitch .find-parts-flow .hover\:bg-primary:hover { background-color: #3b6fd4; }
+

@@ -24,5 +24,108 @@
     "M900A · 2WD · 1KR-FE · 2016–2020",
     "M910A · 4WD · 1KR-FE · 2016–2020",
     "Vehicle parts arrow_forward"
+  ],
+  "S42": [
+    "honda fit 2018",
+    "nissan note 2017",
+    "suzuki swift 2020",
+    "toyota probox 2016",
+    "toyota roomy 2019"
+  ],
+  "S42b": [
+    "1.3 petrol",
+    "1.5 hybrid",
+    "1.5 petrol",
+    "2018 honda fit edit",
+    "audit fitment log",
+    "which 2018 honda fit is it?",
+    "✓ 1 car honda fit 2018"
+  ],
+  "S42c": [
+    "1 car check",
+    "1.5 hybrid (leb-h1) edit",
+    "2 version check 1.5 hybrid",
+    "2018 honda fit edit",
+    "a/c 19 parts chevron_right",
+    "abs sensor",
+    "air filter intake",
+    "battery 12v aux",
+    "brake caliper",
+    "brake fluid",
+    "brake hose",
+    "brake pads 3 variants",
+    "brake pads high demand",
+    "brake pads — most likely",
+    "brake rotor",
+    "cabin a/c filter hvac",
+    "cooling 22 parts chevron_right",
+    "engine 142 parts chevron_right",
+    "filters 18 parts chevron_right",
+    "headlight bulb led / halogen",
+    "oil filter engine",
+    "spark plugs iridium",
+    "transmission 31 parts chevron_right",
+    "tyres & wheels 12 parts chevron_right",
+    "wiper blades front & rear"
+  ],
+  "S42d": [
+    "1.5 hybrid (gp5 / dohc i-vtec) ✎",
+    "2018 honda fit ✎",
+    "audit fit matrix",
+    "brake pads ✎",
+    "which brakes?"
+  ],
+  "S42e": [
+    "1.5 hybrid edit",
+    "2018 honda fit edit",
+    "audit fit matrix",
+    "oil filter edit",
+    "toyota 04152-40060 — oil filter"
+  ],
+  "S42f": [
+    "oil filter"
+  ],
+  "S42g": [
+    "1.5 hybrid edit",
+    "2018 honda fit edit",
+    "audit fit matrix",
+    "brake pads edit",
+    "clean telemetry",
+    "commit & ingest part",
+    "fleet notification directive",
+    "front edit",
+    "ingestion sla",
+    "sister platform search"
+  ],
+  "S42h": [
+    "add a part to brakes",
+    "add component",
+    "add filter",
+    "atmospheric & cabin elements",
+    "brakes",
+    "filters",
+    "vehicle parts 14",
+    "view queue priority"
+  ],
+  "S42i": [
+    "likely parts (ranked priority) 2",
+    "revert to baseline"
+  ],
+  "S42j": [
+    "reset live previews",
+    "retry engine query",
+    "turn match types on"
+  ],
+  "S42k": [
+    "1.5 hybrid ✎",
+    "2018 honda fit ✎",
+    "active match",
+    "front (n/a)",
+    "oil filter for 2018 honda fit 1.5 hybrid",
+    "oil filter · toyota 04152-40060",
+    "oil filter ✎",
+    "select rev",
+    "toyota 04152-40060 — oil filter",
+    "view part details sheet preview"
   ]
 }

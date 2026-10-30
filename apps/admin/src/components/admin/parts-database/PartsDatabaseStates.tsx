@@ -9,10 +9,11 @@ export function PartsLoading() {
   );
 }
 
-export function PartsError({ onRetry }: { onRetry: () => void }) {
+export function PartsError({ onRetry, message }: { onRetry: () => void; message?: string }) {
   return (
     <div className="parts-database-stitch px-8 py-10">
-      <h2 className="text-lg font-semibold text-on-surface">Could not load. Try again</h2>
+      <h2 className="text-lg font-semibold text-on-surface">{message || "Could not load. Try again"}</h2>
+      <p className="text-sm text-on-surface-variant mt-1">Nothing was changed.</p>
       <button type="button" className="mt-4 text-sm font-medium text-secondary" onClick={onRetry}>Try again</button>
     </div>
   );

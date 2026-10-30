@@ -9,6 +9,7 @@ import { dominionCan } from "../../../packages/auth-client/src/dominionPermissio
 import { filterByOrg, getOrgId } from "./org_scope.ts";
 import { resolveCatalogIdForKvVehicle } from "./vehicle_catalog_resolve.ts";
 import { registerPartsEnterpriseRoutes } from "./parts_enterprise_routes.ts";
+import { registerFleetFindPartsRoutes } from "./fleet_find_parts_routes.ts";
 import { registerCatalogRoutes } from "./catalog_routes.ts";
 import { registerFleetAdminPartsRoutes } from "./fleet_admin_parts_routes.ts";
 import { enrichFleetParts, getCatalogParts, overlayUniversalStock, assembleMatchSections } from "./catalog_api.ts";
@@ -681,21 +682,32 @@ export function registerPartSourcingRoutes(
         const body = (await c.req.json()) as Record<string, unknown>;
         const vehicleId = String(body.vehicleId ?? "").trim();
         const needText = String(body.needText ?? "").trim();
-        if (!vehicleId || !needText) {
-          return c.json({ error: "vehicleId and needText are required" }, 400);
+        if (!needText) {
+          return c.json({ error: "needText is required" }, 400);
         }
-        const vehicle = await getVehicleFromKv(c, vehicleId);
-        if (!vehicle) return c.json({ error: "Vehicle not found" }, 404);
-        const orgId = String(
-          (vehicle as { organizationId?: string }).organizationId || getOrgId(c) || "",
-        ).trim();
+        let orgId = String(getOrgId(c) || "").trim();
+        if (vehicleId) {
+          const vehicle = await getVehicleFromKv(c, vehicleId);
+          if (!vehicle) return c.json({ error: "Vehicle not found" }, 404);
+          orgId = String(
+            (vehicle as { organizationId?: string }).organizationId || orgId,
+          ).trim();
+        }
         if (!orgId) return c.json({ error: "Organization required" }, 400);
+        const urgency = body.urgency ? String(body.urgency) : null;
+        if (urgency && !["low", "normal", "urgent"].includes(urgency)) {
+          return c.json({ error: "Urgency must be low, normal, or urgent" }, 400);
+        }
+        const qty = body.qty != null && body.qty !== "" ? Number(body.qty) : null;
+        if (qty != null && (!Number.isFinite(qty) || qty <= 0)) {
+          return c.json({ error: "Quantity must be at least 1" }, 400);
+        }
         const rbacUser = c.get("rbacUser") as { id?: string } | undefined;
         const { data, error } = await supabase
           .from("parts_sourcing_requests")
           .insert({
             organization_id: orgId,
-            vehicle_id: vehicleId,
+            vehicle_id: vehicleId || null,
             need_text: needText.slice(0, 2000),
             status: "open",
             created_by: rbacUser?.id ?? null,
@@ -704,8 +716,8 @@ export function registerPartSourcingRoutes(
               : null,
             platform_id: body.platformId && isUuid(String(body.platformId)) ? String(body.platformId) : null,
             engine_family_id: body.engineFamilyId && isUuid(String(body.engineFamilyId)) ? String(body.engineFamilyId) : null,
-            urgency: body.urgency ? String(body.urgency) : null,
-            qty: body.qty != null && body.qty !== "" ? Number(body.qty) : null,
+            urgency,
+            qty,
             photo_url: body.photoUrl ? String(body.photoUrl).slice(0, 2000) : null,
           })
           .select("*")
@@ -718,6 +730,7 @@ export function registerPartSourcingRoutes(
     },
   );
 
+  registerFleetFindPartsRoutes(route, supabase);
   registerCatalogRoutes(route, supabase);
   registerFleetAdminPartsRoutes(route, supabase);
   registerPartsEnterpriseRoutes(route, supabase);

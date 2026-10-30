@@ -397,16 +397,24 @@ export function registerPartsEnterpriseRoutes(route: RouteApp, supabase: Supabas
       const orgId = getOrgId(c);
       if (!orgId) return c.json({ error: "Organization required" }, 400);
       const body = await c.req.json() as Record<string, unknown>;
+      const qty = body.qty != null && body.qty !== "" ? Number(body.qty) : 1;
+      if (!Number.isFinite(qty) || qty <= 0) return c.json({ error: "Quantity must be at least 1" }, 400);
+      const urgency = body.urgency ? String(body.urgency) : null;
+      if (urgency && !["low", "normal", "urgent"].includes(urgency)) {
+        return c.json({ error: "Urgency must be low, normal, or urgent" }, 400);
+      }
       const supplierIds = Array.isArray(body.supplierIds) ? body.supplierIds.map(String).slice(0, 3) : [];
       const { data, error } = await supabase.from("part_quote_request").insert({
         organization_id: orgId,
         vehicle_id: body.vehicleId ? String(body.vehicleId) : null,
         part_id: body.partId ? String(body.partId) : null,
         part_number: body.partNumber ? String(body.partNumber) : null,
-        qty: body.qty != null ? Number(body.qty) : 1,
+        qty,
         needed_by: body.neededBy ? String(body.neededBy) : null,
         supplier_ids: supplierIds,
-        note: body.note ? String(body.note).slice(0, 2000) : null,
+        note: body.note ? String(body.note).slice(0, 140) : null,
+        urgency,
+        maintenance_component_id: body.componentId ? String(body.componentId) : null,
         status: "open",
       }).select("*").single();
       if (error) throw error;

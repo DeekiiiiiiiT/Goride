@@ -2,12 +2,33 @@
 
 /** The five match types. Stock is a badge, never a sixth type. */
 export const PART_MATCH_TIERS = [
-  { tier: 1, label: "Direct OEM Match", reason: "Factory part listed for {vehicle}." },
-  { tier: 2, label: "Sister Vehicle Match", reason: "Listed for {sisters}, the same car under another badge." },
-  { tier: 3, label: "Engine Compatible Match", reason: "Engine part listed for {source}, which uses the same engine." },
-  { tier: 4, label: "Aftermarket Cross-Reference", reason: "{brand} {number} replaces OEM {oem}." },
-  { tier: 5, label: "Universal Fleet Part", reason: "Fits by size: {spec}." },
+  { tier: 1, label: "Direct OEM Match", reason: "Factory part listed for {vehicle}.", plainLabel: "Made for your car", tag: "OEM", plainReason: "The factory part for this car." },
+  { tier: 2, label: "Sister Vehicle Match", reason: "Listed for {sisters}, the same car under another badge.", plainLabel: "Same car, different badge", tag: "Sister", plainReason: "Listed for {sisters}, which is the same car sold under another name." },
+  { tier: 3, label: "Engine Compatible Match", reason: "Engine part listed for {source}, which uses the same engine.", plainLabel: "Fits your engine", tag: "Engine", plainReason: "From {source}, which uses the same engine." },
+  { tier: 4, label: "Aftermarket Cross-Reference", reason: "{brand} {number} replaces OEM {oem}.", plainLabel: "Other brands that replace it", tag: "Aftermarket", plainReason: "{brand} {number} replaces the factory part {oem}." },
+  { tier: 5, label: "Universal Fleet Part", reason: "Fits by size: {spec}.", plainLabel: "Fits by size", tag: "Universal", plainReason: "Any brand in this size fits: {spec}." },
 ] as const;
+
+/** Fills the plain one-liner. Missing pieces stay blank. */
+export function fillPlainReason(
+  tier: number,
+  vars: { sisters?: string; source?: string; brand?: string; number?: string; oem?: string; spec?: string } = {},
+): string {
+  const row = PART_MATCH_TIERS.find((item) => item.tier === tier);
+  if (!row) return "";
+  if (tier === 4 && !vars.brand?.trim() && !vars.number?.trim() && !vars.oem?.trim()) {
+    return "Another brand's part replaces the factory part.";
+  }
+  return row.plainReason
+    .replace(/\{sisters\}/g, vars.sisters?.trim() || "a sister car")
+    .replace(/\{source\}/g, vars.source?.trim() || "another car")
+    .replace(/\{brand\}/g, vars.brand?.trim() || "This part")
+    .replace(/\{number\}/g, vars.number?.trim() || "")
+    .replace(/\{oem\}/g, vars.oem?.trim() || "the factory part")
+    .replace(/\{spec\}/g, vars.spec?.trim() || "this size")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
 export function partMatchLabel(tier: number): string {
   return PART_MATCH_TIERS.find((row) => row.tier === tier)?.label ?? "Direct OEM Match";

@@ -1,5 +1,7 @@
 // Stitch: dominion-redesign/5ba99edc175b45389a9500476ceb87cd
 import { useQuery } from "@tanstack/react-query";
+import { ProblemsEditor } from "./find-parts/ProblemsEditor";
+import { useAuth } from "../../auth/AuthContext";
 import { useState } from "react";
 import { fetchAdvancedTables, fetchImportBatches } from "./partsDatabaseApi";
 import { partsEnterpriseApi } from "../../../services/partSourcingService";
@@ -17,6 +19,7 @@ function parseCsv(text: string) {
 }
 
 export function ImportAdvancedTab({ advanced, onOpenVehicle }: { advanced: boolean; onOpenVehicle?: (id: string) => void }) {
+  const { role } = useAuth();
   const [csv, setCsv] = useState("vehicle,manufacturer,part_number,part_name,part_kind,category_slug,job,position,year_from,year_to,evidence_url");
   const [note, setNote] = useState("");
   const [batchId, setBatchId] = useState("");
@@ -72,6 +75,7 @@ export function ImportAdvancedTab({ advanced, onOpenVehicle }: { advanced: boole
         </div>
         {note ? <p className="text-xs">{note}</p> : null}
       </section>
+      {advanced ? <ProblemsEditor owner={role === "platform_owner"} /> : null}
       {advanced ? (
         <section className="bg-surface-container-lowest rounded-xl p-5 shadow-sm space-y-3">
           <h2 className="text-sm font-semibold">Advanced: raw catalog tables (read-only)</h2>

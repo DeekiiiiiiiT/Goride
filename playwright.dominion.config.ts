@@ -4,7 +4,7 @@ const port = 3018;
 
 export default defineConfig({
   testDir: './e2e',
-  testMatch: /dominion-places\.spec\.ts/,
+  testMatch: /dominion-(places|find-parts-visual)\.spec\.ts/,
   fullyParallel: false,
   workers: 1,
   timeout: 180_000,

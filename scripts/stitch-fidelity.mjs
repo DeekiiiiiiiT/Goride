@@ -4,6 +4,8 @@
  * - at least 80% of the Stitch screen's headings, column names, labels and buttons appear in the React file;
  * - the React file no longer imports the old components/ui kit.
  * D-rows (Roam Plug screens) and S1, S7, S8 are final and skipped.
+ * Rows marked "Superseded by … do not build" are skipped.
+ * Rows marked "Not started" are reported as unchecked and their React files are not read.
  * Sample Stitch notes in sample-labels.json are dropped before the score.
  * Run: node scripts/stitch-fidelity.mjs [--report]
  */
@@ -26,7 +28,13 @@ let failed = false;
 for (const row of readme.split('\n').filter((l) => /^\| S\d/.test(l))) {
   const cells = row.split('|').map((c) => c.trim().replace(/^`|`$/g, ''));
   const [num, , , html, , react, status = ''] = cells.slice(1);
-  if (SKIP.has(num) || !html || html === '—' || !react || react === '—') continue;
+  if (SKIP.has(num)) continue;
+  if (/superseded by\s+\S+.*do not build/i.test(status)) continue;
+  if (/^Not started\b/.test(status)) {
+    if (report) console.log(`unchecked ${num}`);
+    continue;
+  }
+  if (!html || html === '—' || !react || react === '—') continue;
   const checked = /^(Ported|Built)/.test(status);
   const page = readFileSync(join(dir, html), 'utf8').replace(/<(script|style)[\s\S]*?<\/\1>/g, '');
   const body = (page.match(/<main[\s\S]*<\/main>/) || [page])[0];
@@ -74,3 +82,38 @@ for (const row of readme.split('\n').filter((l) => /^\| S\d/.test(l))) {
 
 if (failed) process.exit(1);
 console.log('OK — Dominion Stitch fidelity');
+
+const fleetDir = join(repo, 'docs', 'stitch', 'roam-fleet-app');
+const fleetReadme = readFileSync(join(fleetDir, 'README.md'), 'utf8');
+const fleetSamplePath = join(fleetDir, 'sample-labels.json');
+const fleetSamples = existsSync(fleetSamplePath) ? JSON.parse(readFileSync(fleetSamplePath, 'utf8')) : {};
+let fleetFailed = false;
+for (const row of fleetReadme.split('\n').filter((l) => /^\| FP\d/.test(l))) {
+  const cells = row.split('|').map((c) => c.trim().replace(/^`|`$/g, ''));
+  const [num, , , html, , react, status = ''] = cells.slice(1);
+  if (/^Not started\b/.test(status)) {
+    if (report) console.log(`unchecked ${num}`);
+    continue;
+  }
+  if (!html || html === '—' || !react || react === '—') continue;
+  const checked = /^(Ported|Built)/.test(status);
+  const page = readFileSync(join(fleetDir, html), 'utf8').replace(/<(script|style)[\s\S]*?<\/\1>/g, '');
+  const body = (page.match(/<main[\s\S]*<\/main>/) || [page])[0];
+  const labels = new Set();
+  for (const m of body.matchAll(/<(h1|h2|h3|h4|th|button|label)[^>]*>([\s\S]*?)<\/\1>/g)) {
+    const t = strip(m[2]).replace(/^[a-z_]+ /, '').toLowerCase();
+    if (t.length >= 4 && t.length <= 40 && /[a-z]/.test(t)) labels.add(t);
+  }
+  const ignore = new Set((Array.isArray(fleetSamples[num]) ? fleetSamples[num] : []).map((label) => String(label).trim().toLowerCase()).filter(Boolean));
+  for (const label of [...labels]) if (ignore.has(label)) labels.delete(label);
+  const reactFiles = react.split(/\s*\+\s*/).map((f) => f.trim()).filter(Boolean);
+  const sources = reactFiles.map((f) => readFileSync(join(repo, f), 'utf8'));
+  const lower = sources.join('\n').toLowerCase();
+  const hit = [...labels].filter((l) => lower.includes(l)).length;
+  const pct = labels.size ? Math.round((100 * hit) / labels.size) : 100;
+  const bad = pct < MIN;
+  if (report || (checked && bad)) console.log(`${bad ? 'FAIL' : 'ok  '} ${num} ${pct}% labels — ${react}`);
+  if (checked && bad) fleetFailed = true;
+}
+if (fleetFailed) process.exit(1);
+console.log('OK — Fleet Stitch fidelity');

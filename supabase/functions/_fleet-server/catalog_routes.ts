@@ -3,12 +3,10 @@
  */
 import type { Context } from "npm:hono@4.3.11";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
-import { requireAuth } from "./rbac_middleware.ts";
-import { assertPlatformStaffResponse } from "./rbac_middleware.ts";
+import { assertPlatformStaffResponse, hasPlatformOwnerAccess, requireAuth } from "./rbac_middleware.ts";
+import type { RbacUser } from "./rbac_middleware.ts";
 import { assertNoCustomerIdentity } from "./catalog_parts_shape.ts";
 import {
-  assembleMatchSections,
-  enrichFleetParts,
   getCatalogParts,
   getCatalogSchedule,
   getCatalogServiceKit,
@@ -17,6 +15,8 @@ import {
   tieredSearchKilled,
 } from "./catalog_api.ts";
 import { FEATURE_FLAGS, setFeatureFlag } from "./feature_flags.ts";
+import { findParts } from "./parts_finder.ts";
+import { readFindPartsCoverage, readPartTerm, readPartsBrowse, readSymptoms } from "./parts_catalog_read.ts";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -262,58 +262,187 @@ export function registerCatalogRoutes(route: RouteApp, supabase: SupabaseClient)
     const denied = assertPlatformStaffResponse(c);
     if (denied) return denied;
     try {
-      const make = (c.req.query("make") ?? "").trim();
-      const model = (c.req.query("model") ?? "").trim();
       const yearRaw = Number(c.req.query("year") ?? "");
       const year = Number.isFinite(yearRaw) && yearRaw > 0 ? yearRaw : null;
+      const body = await findParts(supabase, {
+        make: c.req.query("make"),
+        model: c.req.query("model"),
+        year,
+        variantId: c.req.query("variantId"),
+        componentId: c.req.query("componentId"),
+        position: c.req.query("pos") || c.req.query("position"),
+        side: c.req.query("side"),
+        orgId: null,
+      });
+      return staffJson(c, body);
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
+  route.get("/make-server-37f42386/admin/catalog/find-parts/coverage", requireAuth(), async (c: Context) => {
+    const denied = assertPlatformStaffResponse(c);
+    if (denied) return denied;
+    try {
       const variantId = (c.req.query("variantId") ?? "").trim();
-      let query = supabase
-        .from("vehicle_catalog")
-        .select("id, make, model, chassis_code, engine_code, production_start_year, production_end_year, drivetrain");
-      if (variantId) {
-        query = query.eq("id", variantId);
-      } else if (make || model || year != null) {
-        if (make) query = query.ilike("make", make);
-        if (model) query = query.ilike("model", model);
-        if (year != null) {
-          query = query.lte("production_start_year", year).or(`production_end_year.is.null,production_end_year.gte.${year}`);
-        }
-        query = query.limit(40);
-      } else {
-        query = query.limit(0);
-      }
-      const { data: rows, error } = await query;
-      if (error) throw error;
-      const variants = (rows || []) as Array<Record<string, unknown>>;
-      const picked = variantId
-        ? variants.find((row) => String(row.id) === variantId) ?? null
-        : variants.length === 1 ? variants[0] : null;
-      if (!picked) {
-        return staffJson(c, { variants, sections: [], picked: null, coverage: null });
-      }
-      const pickedId = String(picked.id);
-      const parts = await getCatalogParts(supabase, pickedId, { vehicleYear: year });
-      const enriched = await enrichFleetParts(supabase, parts.mode, parts.items, null, 0);
-      const sections = assembleMatchSections(
-        parts.mode === "tiered" ? enriched as Array<{ tier?: number; sisterNames?: string | null }> : [],
-        parts.universal,
-      );
-      const [{ data: readyRow }, { data: specRows }, { data: listingRows }] = await Promise.all([
-        supabase.from("variant_parts_readiness").select("components_ready").eq("variant_id", pickedId).maybeSingle(),
-        supabase.from("catalog_spec_value").select("spec_key").eq("vehicle_catalog_id", pickedId),
-        supabase.from("part_listing").select("id").eq("vehicle_catalog_id", pickedId),
-      ]);
-      const essentials = Number((readyRow as { components_ready?: number } | null)?.components_ready ?? 0);
-      const specs = new Set((specRows || []).map((row) => String((row as { spec_key?: string }).spec_key ?? ""))).size;
-      const coverage = {
-        essentials,
-        essentialsTotal: 10,
-        specs,
-        specsTotal: 13,
-        otherParts: (listingRows || []).length,
+      if (!UUID_RE.test(variantId)) return c.json({ error: "Choose a vehicle" }, 400);
+      return staffJson(c, await readFindPartsCoverage(supabase, variantId));
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
+  route.get("/make-server-37f42386/admin/catalog/parts/browse", requireAuth(), async (c: Context) => {
+    const denied = assertPlatformStaffResponse(c);
+    if (denied) return denied;
+    try {
+      return staffJson(c, await readPartsBrowse(supabase));
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
+  route.get("/make-server-37f42386/admin/catalog/parts/term", requireAuth(), async (c: Context) => {
+    const denied = assertPlatformStaffResponse(c);
+    if (denied) return denied;
+    try {
+      const q = (c.req.query("q") ?? "").trim();
+      return staffJson(c, await readPartTerm(supabase, q));
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
+  route.get("/make-server-37f42386/admin/catalog/symptoms", requireAuth(), async (c: Context) => {
+    const denied = assertPlatformStaffResponse(c);
+    if (denied) return denied;
+    try {
+      return staffJson(c, await readSymptoms(supabase, { includeInactive: true }));
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
+  route.post("/make-server-37f42386/admin/catalog/symptoms", requireAuth(), async (c: Context) => {
+    const denied = assertPlatformStaffResponse(c);
+    if (denied) return denied;
+    const user = c.get("rbacUser") as RbacUser | undefined;
+    if (!user || !hasPlatformOwnerAccess(user)) {
+      return c.json({ error: "Only the owner can change parts." }, 403);
+    }
+    try {
+      const body = await c.req.json() as {
+        id?: string;
+        label?: string;
+        hint?: string | null;
+        sortOrder?: number;
+        active?: boolean;
+        reason?: string;
+        components?: Array<{ componentId?: string; rank?: number }>;
       };
-      assertNoCustomerIdentity(parts);
-      return staffJson(c, { variants, picked, sections, ready: parts.ready, coverage });
+      const reason = String(body.reason ?? "").trim();
+      if (!reason) return c.json({ error: "A reason is required." }, 400);
+      const label = String(body.label ?? "").trim();
+      if (!label) return c.json({ error: "A problem needs a name." }, 400);
+      const id = body.id && UUID_RE.test(body.id) ? body.id : crypto.randomUUID();
+      const row = {
+        id,
+        label,
+        hint: body.hint ? String(body.hint) : null,
+        sort_order: Number.isFinite(Number(body.sortOrder)) ? Number(body.sortOrder) : 100,
+        active: body.active !== false,
+        updated_at: new Date().toISOString(),
+        updated_by: user.userId,
+      };
+      const { data: before } = await supabase.from("part_symptom").select("*").eq("id", id).maybeSingle();
+      const { error } = await supabase.from("part_symptom").upsert(row);
+      if (error) throw error;
+      if (Array.isArray(body.components)) {
+        const { error: clearError } = await supabase.from("part_symptom_component").delete().eq("symptom_id", id);
+        if (clearError) throw clearError;
+        const links = body.components
+          .filter((item) => item.componentId && UUID_RE.test(String(item.componentId)))
+          .map((item, index) => ({
+            symptom_id: id,
+            component_id: String(item.componentId),
+            rank: Number.isFinite(Number(item.rank)) ? Number(item.rank) : index + 1,
+          }));
+        if (links.length) {
+          const { error: linkError } = await supabase.from("part_symptom_component").insert(links);
+          if (linkError) throw linkError;
+        }
+      }
+      const { error: logError } = await supabase.schema("fleet").from("master_change_log").insert({
+        dataset: "part_symptom",
+        record_id: id,
+        action: before ? "update" : "insert",
+        before_json: before ?? null,
+        after_json: row,
+        actor: user.userId,
+        reason,
+      });
+      if (logError) throw logError;
+      return staffJson(c, { id });
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
+  route.post("/make-server-37f42386/admin/catalog/parts/alias", requireAuth(), async (c: Context) => {
+    const denied = assertPlatformStaffResponse(c);
+    if (denied) return denied;
+    const user = c.get("rbacUser") as RbacUser | undefined;
+    if (!user || !hasPlatformOwnerAccess(user)) {
+      return c.json({ error: "Only the owner can change parts." }, 403);
+    }
+    try {
+      const body = await c.req.json() as { term?: string; componentId?: string; reason?: string };
+      const term = String(body.term ?? "").trim().toLowerCase();
+      const reason = String(body.reason ?? "").trim();
+      if (!term || !reason) return c.json({ error: "A word and a reason are required." }, 400);
+      if (!body.componentId || !UUID_RE.test(body.componentId)) return c.json({ error: "Choose a part." }, 400);
+      const { data: component, error: componentError } = await supabase
+        .from("maintenance_service_categories")
+        .select("name, plain_name")
+        .eq("id", body.componentId)
+        .maybeSingle();
+      if (componentError) throw componentError;
+      const canonical = String((component as { plain_name?: string; name?: string } | null)?.plain_name
+        || (component as { name?: string } | null)?.name
+        || term);
+      const { error } = await supabase.from("part_term_synonym").upsert({
+        term,
+        maintenance_component_id: body.componentId,
+        canonical,
+      });
+      if (error) throw error;
+      const { error: logError } = await supabase.schema("fleet").from("master_change_log").insert({
+        dataset: "part_term_synonym",
+        record_id: term,
+        action: "upsert",
+        before_json: null,
+        after_json: { term, componentId: body.componentId },
+        actor: user.userId,
+        reason,
+      });
+      if (logError) throw logError;
+      return staffJson(c, { ok: true });
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
+  route.get("/make-server-37f42386/admin/catalog/symptoms/summary", requireAuth(), async (c: Context) => {
+    const denied = assertPlatformStaffResponse(c);
+    if (denied) return denied;
+    try {
+      const { data, error } = await supabase.from("part_symptom").select("id, active");
+      if (error) throw error;
+      const rows = data || [];
+      return staffJson(c, {
+        problems: rows.length,
+        live: rows.filter((row) => (row as { active?: boolean }).active !== false).length,
+      });
     } catch (error) {
       return fail(c, error);
     }

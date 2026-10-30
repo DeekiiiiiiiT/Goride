@@ -269,7 +269,7 @@ export async function getCatalogParts(
   const filtered = categoryId && mode === "tiered"
     ? items.filter((item) => String(item.part.category_id ?? "") === categoryId)
     : items;
-  const universal = await loadUniversalSection(supabase, catalogId, input.vehicleYear ?? null);
+  const universal = await loadUniversalSection(supabase, catalogId, input.vehicleYear ?? null, componentId);
   const relatedSupplies = await loadRelatedSupplies(supabase);
   const sections = PART_MATCH_TIERS.map((row) => ({
     tier: row.tier,
@@ -311,11 +311,18 @@ export function assembleMatchSections(
   });
 }
 
-async function loadUniversalSection(supabase: SupabaseClient, catalogId: string, vehicleYear: number | null) {
-  const { data, error } = await supabase.rpc("universal_section_for_variant", {
+async function loadUniversalSection(
+  supabase: SupabaseClient,
+  catalogId: string,
+  vehicleYear: number | null,
+  componentId: string | null,
+) {
+  const args: Record<string, unknown> = {
     p_catalog_id: catalogId,
     p_vehicle_year: vehicleYear,
-  });
+  };
+  if (componentId) args.p_component_id = componentId;
+  const { data, error } = await supabase.rpc("universal_section_for_variant", args);
   if (error) throw error;
   return Array.isArray(data) ? data : [];
 }

@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport"/>
+<title>Dominion Enterprise OS — Find Parts Results</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "secondary-fixed": "#dae2fd",
+            "secondary-container": "#dae2fd",
+            "on-primary": "#ffffff",
+            "on-error": "#ffffff",
+            "on-primary-fixed": "#00174b",
+            "on-tertiary": "#ffffff",
+            "on-surface": "#191b24",
+            "surface-container": "#ededf9",
+            "surface-variant": "#e1e1ed",
+            "on-error-container": "#93000a",
+            "on-secondary-container": "#5c647a",
+            "surface-container-high": "#e7e7f3",
+            "on-surface-variant": "#434655",
+            "inverse-surface": "#2e3039",
+            "tertiary": "#40465e",
+            "background": "#faf8ff",
+            "on-background": "#191b24",
+            "outline": "#737686",
+            "on-tertiary-fixed-variant": "#3f465e",
+            "tertiary-fixed": "#dbe1ff",
+            "tertiary-container": "#575e77",
+            "on-secondary-fixed": "#131b2e",
+            "surface-container-lowest": "#ffffff",
+            "secondary": "#565e74",
+            "outline-variant": "#c3c6d7",
+            "on-secondary-fixed-variant": "#3f465c",
+            "surface-container-low": "#f3f3ff",
+            "on-secondary": "#ffffff",
+            "tertiary-fixed-dim": "#bfc5e2",
+            "primary": "#003ea9",
+            "primary-fixed-dim": "#b4c5ff",
+            "error": "#ba1a1a",
+            "primary-fixed": "#dbe1ff",
+            "inverse-on-surface": "#f0f0fc",
+            "surface-tint": "#0053db",
+            "primary-container": "#0153dc",
+            "surface": "#faf8ff",
+            "surface-dim": "#d9d9e5",
+            "surface-container-highest": "#e1e1ed",
+            "on-tertiary-fixed": "#141b30",
+            "inverse-primary": "#b4c5ff",
+            "secondary-fixed-dim": "#bec6e0",
+            "on-tertiary-container": "#d2d8f6",
+            "surface-bright": "#faf8ff",
+            "on-primary-container": "#ced8ff",
+            "error-container": "#ffdad6",
+            "on-primary-fixed-variant": "#003ea8"
+          },
+          borderRadius: {
+            "DEFAULT": "0.125rem",
+            "lg": "0.25rem",
+            "xl": "0.5rem",
+            "full": "0.75rem"
+          },
+          fontFamily: {
+            "headline-xl": ["Inter"],
+            "headline-lg": ["Inter"],
+            "headline-md": ["Inter"],
+            "mono-sm": ["JetBrains Mono"],
+            "label-xs": ["Inter"],
+            "label-md": ["Inter"],
+            "body-md": ["Inter"],
+            "mono-md": ["JetBrains Mono"],
+            "mono-lg": ["JetBrains Mono"],
+            "body-sm": ["Inter"]
+          }
+        },
+      },
+    }
+  </script>
+<style>
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-surface min-h-screen flex justify-center selection:bg-secondary-container selection:text-primary">
+<!-- Mobile Viewport Container strictly capped at 390px -->
+<main class="w-full max-w-[390px] min-h-screen bg-background relative flex flex-col pb-28 border-x border-outline-variant shadow-xl overflow-x-hidden font-body-md">
+<!-- Top System & Enterprise Header -->
+<header class="sticky top-0 z-30 bg-surface-bright/95 backdrop-blur-md border-b border-outline-variant/60">
+<div class="px-3.5 py-2.5 flex items-center justify-between gap-2">
+<div class="flex items-center gap-2">
+<div class="size-7 rounded bg-primary-container flex items-center justify-center text-on-primary">
+<svg fill="currentColor" height="16px" viewbox="0 0 256 256" width="16px" xmlns="http://www.w3.org/2000/svg">
+<path d="M136,108a28,28,0,1,0-28,28A28,28,0,0,0,136,108Zm-28,12a12,12,0,1,1,12-12A12,12,0,0,1,108,120Zm68-8a16,16,0,1,1-16,16A16,16,0,0,1,176,112Zm-32,64a16,16,0,1,1-16-16A16,16,0,0,1,144,176Zm96-56H223.66a95.52,95.52,0,0,0-22.39-53.95l12.39-12.39a8,8,0,0,0-11.32-11.32L190,54.73A95.52,95.52,0,0,0,136,32.34V16a8,8,0,0,0-16,0V32.34A95.52,95.52,0,0,0,66.05,54.73L53.66,42.34A8,8,0,0,0,42.34,53.66L54.73,66.05a95.52,95.52,0,0,0-22.39,54H16a8,8,0,0,0,0,16H32.34A95.52,95.52,0,0,0,54.73,190L42.34,202.34a8,8,0,0,0,11.32,11.32l12.39-12.39a95.52,95.52,0,0,0,54,22.39V240a8,8,0,0,0,16,0V223.66A95.52,95.52,0,0,0,190,201.27l12.39,12.39a8,8,0,0,0,11.32-11.32L201.27,190A95.52,95.52,0,0,0,223.66,136H240a8,8,0,0,0,0-16ZM128,208a80,80,0,1,1,80-80A80.09,80.09,0,0,1,128,208Z"></path>
+</svg>
+</div>
+<span class="font-headline-md text-on-surface tracking-tight text-[15px]">Dominion OS</span>
+</div>
+<div class="flex items-center gap-1.5">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono-sm uppercase bg-surface-container text-primary font-medium tracking-wide">
+<span class="size-1.5 rounded-full bg-primary-container animate-pulse"></span>
+            NODE: OK
+          </span>
+<div class="size-7 rounded bg-tertiary text-on-tertiary flex items-center justify-center text-xs font-semibold tracking-wider font-mono-sm">
+            DT
+          </div>
+</div>
+</div>
+<!-- Context Bar & Step Indicator -->
+<div class="px-3.5 pb-2 pt-0.5 flex items-center justify-between border-t border-outline-variant/40">
+<p class="text-[11px] font-mono-sm font-semibold tracking-wide text-primary">PARTS DATABASE / FIND PARTS</p>
+<span class="text-[11px] font-label-xs text-on-surface-variant font-medium">Step 5 of 5 · Results</span>
+</div>
+<!-- Horizontal Choice Trail Chips -->
+<div class="flex gap-1.5 px-3.5 pb-2.5 overflow-x-auto no-scrollbar whitespace-nowrap">
+<button class="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-surface-container-high text-on-surface text-[12px] font-medium border border-outline-variant/50 hover:bg-surface-variant transition-colors" type="button">
+<span>2018 Honda Fit</span>
+<span class="text-primary text-[10px]">✎</span>
+</button>
+<button class="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-surface-container-high text-on-surface text-[12px] font-medium border border-outline-variant/50 hover:bg-surface-variant transition-colors" type="button">
+<span>1.5 hybrid</span>
+<span class="text-primary text-[10px]">✎</span>
+</button>
+<button class="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-surface-container-high text-on-surface text-[12px] font-medium border border-outline-variant/50 hover:bg-surface-variant transition-colors" type="button">
+<span>Oil filter</span>
+<span class="text-primary text-[10px]">✎</span>
+</button>
+<button class="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-surface-container-low text-on-surface-variant text-[12px] font-medium border border-outline-variant/40" type="button">
+<span>Front (N/A)</span>
+</button>
+</div>
+</header>
+<!-- Main Content Stream -->
+<div class="px-3.5 py-4 flex flex-col gap-4">
+<!-- Query Summary Card -->
+<section class="bg-surface-container-lowest p-3.5 rounded border border-outline-variant/60 shadow-sm">
+<div class="flex items-start justify-between gap-2 mb-1.5">
+<h1 class="text-[17px] font-headline-lg leading-snug text-on-surface font-semibold">
+            Oil filter for 2018 Honda Fit 1.5 hybrid
+          </h1>
+</div>
+<div class="flex items-center gap-2 pt-1 border-t border-surface-container-high">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-secondary-container text-on-secondary-fixed text-[11px] font-label-xs font-semibold">
+<span class="material-symbols-outlined text-[13px] leading-none" style="font-variation-settings: 'FILL' 1;">verified</span>
+            2 of 10 verified
+          </span>
+<span class="text-[11px] text-on-surface-variant font-mono-sm">Index: v4.88-live</span>
+</div>
+</section>
+<!-- Featured "Best match" Section -->
+<section class="bg-surface-container-lowest rounded border-2 border-primary-container p-3.5 shadow-sm relative overflow-hidden">
+<div class="absolute top-0 right-0 bg-primary-container text-on-primary text-[10px] font-label-xs tracking-wider uppercase px-2.5 py-0.5 rounded-bl font-semibold">
+          Best match
+        </div>
+<div class="flex items-center gap-1.5 mb-2">
+<span class="text-[11px] font-label-xs uppercase tracking-wider font-semibold text-primary">Made for your car · OEM</span>
+<span class="size-1 rounded-full bg-outline"></span>
+<span class="inline-flex items-center gap-0.5 text-[11px] font-semibold text-on-surface">
+<span class="size-1.5 rounded-full bg-emerald-600"></span> Verified
+          </span>
+</div>
+<div class="mb-2.5">
+<h2 class="text-[15px] font-headline-md text-on-surface font-semibold leading-tight">
+            Toyota 04152-40060 — Oil filter
+          </h2>
+<p class="text-[12px] font-mono-md text-secondary mt-0.5">OEM Ref: 04152-YZZA6 / 15400-PLM-A02</p>
+</div>
+<p class="text-[12px] text-on-surface-variant mb-3 leading-relaxed">
+          Factory cartridge filter matched to Honda L15B Earth Dreams hybrid block. Includes pre-lubricated O-ring.
+        </p>
+<div class="flex items-center justify-between gap-2 pt-2 border-t border-surface-container">
+<span class="text-[11px] font-mono-sm text-on-surface-variant">Tier 1: Direct OEM</span>
+<button class="inline-flex items-center gap-1 px-3 py-1.5 rounded bg-primary text-on-primary text-[12px] font-medium tracking-tight shadow-sm active:scale-95 transition-transform" onclick="toggleSheet(true)" type="button">
+<span>View details</span>
+<span class="material-symbols-outlined text-[15px]">arrow_forward</span>
+</button>
+</div>
+</section>
+<!-- Match Type Stack (with 4px accent borders) -->
+<div class="flex flex-col gap-3">
+<!-- Match Type 1: Made for your car -->
+<section class="bg-surface-container-lowest rounded border border-outline-variant/60 border-l-4 border-l-[#0153dc] p-3 shadow-sm">
+<div class="flex items-center justify-between mb-2">
+<div class="flex items-center gap-1.5">
+<span class="text-[13px] font-semibold text-on-surface">Made for your car</span>
+<span class="px-1.5 py-0.2 rounded bg-primary-fixed text-primary text-[10px] font-label-xs font-bold uppercase">OEM</span>
+</div>
+<span class="text-[11px] font-mono-sm font-semibold text-on-surface-variant">1 item</span>
+</div>
+<div class="bg-surface-container-low rounded p-2.5 border border-outline-variant/40">
+<div class="flex items-start justify-between gap-2">
+<div>
+<p class="text-[13px] font-semibold text-on-surface leading-tight">Oil filter</p>
+<p class="font-mono-md text-[13px] text-primary font-semibold mt-0.5">Toyota 04152-40060</p>
+</div>
+<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-800">
+<span class="size-1.5 rounded-full bg-emerald-600"></span> Verified
+              </span>
+</div>
+<div class="flex items-center justify-between mt-2 pt-2 border-t border-outline-variant/30">
+<span class="text-[11px] font-label-xs px-1.5 py-0.5 rounded bg-surface-container text-on-surface-variant">Tier 1: Direct OEM</span>
+<span class="text-[11px] font-body-sm text-on-surface-variant italic">Only the 1.5 hybrid</span>
+</div>
+</div>
+</section>
+<!-- Match Type 2: Other brands that replace it -->
+<section class="bg-surface-container-lowest rounded border border-outline-variant/60 border-l-4 border-l-[#7c3aed] p-3 shadow-sm">
+<div class="flex items-center justify-between mb-2">
+<div class="flex items-center gap-1.5">
+<span class="text-[13px] font-semibold text-on-surface">Other brands that replace it</span>
+<span class="px-1.5 py-0.2 rounded bg-purple-100 text-purple-900 text-[10px] font-label-xs font-bold uppercase">Aftermarket</span>
+</div>
+<span class="text-[11px] font-mono-sm font-semibold text-on-surface-variant">1 item</span>
+</div>
+<div class="bg-surface-container-low rounded p-2.5 border border-outline-variant/40">
+<div class="flex items-start justify-between gap-2">
+<div>
+<p class="text-[13px] font-semibold text-on-surface leading-tight">Oil filter</p>
+<p class="font-mono-md text-[13px] text-purple-900 font-semibold mt-0.5">MANN-FILTER HU 6006 z</p>
+</div>
+<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-800">
+<span class="size-1.5 rounded-full bg-emerald-600"></span> Verified
+              </span>
+</div>
+<div class="flex items-center justify-between mt-2 pt-2 border-t border-outline-variant/30">
+<span class="text-[11px] font-label-xs px-1.5 py-0.5 rounded bg-surface-container text-on-surface-variant">Tier 4: Cross-brand</span>
+<span class="text-[11px] font-body-sm text-on-surface-variant">Replaces factory 04152-40060</span>
+</div>
+</div>
+</section>
+<!-- Match Type 3: Fits by size -->
+<section class="bg-surface-container-lowest rounded border border-outline-variant/60 border-l-4 border-l-[#006e31] p-3 shadow-sm">
+<div class="flex items-center justify-between mb-2">
+<div class="flex items-center gap-1.5">
+<span class="text-[13px] font-semibold text-on-surface">Fits by size</span>
+<span class="px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-900 text-[10px] font-label-xs font-bold uppercase">Universal</span>
+</div>
+<span class="text-[11px] font-mono-sm font-semibold text-on-surface-variant">1 item</span>
+</div>
+<div class="bg-surface-container-low rounded p-2.5 border border-outline-variant/40">
+<div class="flex items-start justify-between gap-2">
+<div>
+<p class="text-[13px] font-semibold text-on-surface leading-tight">Engine oil 0W-20, 1 L</p>
+<p class="font-mono-md text-[13px] text-emerald-900 font-semibold mt-0.5">Toyota 08880-WA001</p>
+</div>
+<span class="text-[11px] font-label-xs px-1.5 py-0.5 rounded bg-surface-container text-on-surface-variant">Tier 5: Universal</span>
+</div>
+<div class="flex items-center justify-between mt-2 pt-2 border-t border-outline-variant/30">
+<span class="text-[11px] text-on-surface-variant">Viscosity: SAE 0W-20 API SP</span>
+<span class="text-[11px] font-body-sm font-mono-sm text-on-surface-variant">3.4 L with filter</span>
+</div>
+</div>
+</section>
+<!-- Compact Folded Strip: Nothing on file -->
+<section class="bg-surface-container-high/60 rounded border border-dashed border-outline p-2.5 flex items-center justify-between text-[11px]">
+<div class="flex items-center gap-1.5 text-on-surface-variant">
+<span class="material-symbols-outlined text-[14px]">info</span>
+<span>Nothing on file for: Same car, different badge · Fits your engine</span>
+</div>
+<button class="text-primary font-semibold whitespace-nowrap hover:underline pl-1" type="button">
+            + Add part
+          </button>
+</section>
+</div>
+<!-- 2-Column Touch Grid: Version & Sub-assembly Quick Grid -->
+<section class="pt-1">
+<div class="flex items-center justify-between mb-2">
+<span class="text-[12px] font-label-xs tracking-wider uppercase font-semibold text-on-surface-variant">
+            Assembly Versions (2-Col Touch Grid)
+          </span>
+<span class="text-[11px] font-mono-sm text-secondary">2 Available</span>
+</div>
+<div class="grid grid-cols-2 gap-2">
+<div class="bg-surface-container-lowest p-2.5 rounded border border-outline-variant/70 flex flex-col justify-between">
+<div>
+<span class="text-[10px] font-mono-sm uppercase text-primary font-bold">Rev A · JDM</span>
+<p class="text-[12px] font-semibold text-on-surface mt-0.5">Spin-on metal</p>
+<p class="text-[11px] font-mono-sm text-secondary mt-0.5">15400-RTA-003</p>
+</div>
+<button class="mt-2 w-full py-1 text-[11px] font-medium rounded bg-surface-container text-on-surface border border-outline-variant hover:bg-surface-variant" type="button">
+              Select rev
+            </button>
+</div>
+<div class="bg-surface-container-lowest p-2.5 rounded border border-outline-variant/70 flex flex-col justify-between">
+<div>
+<span class="text-[10px] font-mono-sm uppercase text-emerald-800 font-bold">Rev B · Hybrid Global</span>
+<p class="text-[12px] font-semibold text-on-surface mt-0.5">Cartridge element</p>
+<p class="text-[11px] font-mono-sm text-secondary mt-0.5">04152-40060</p>
+</div>
+<button class="mt-2 w-full py-1 text-[11px] font-medium rounded bg-primary-fixed text-primary border border-primary-fixed-dim font-semibold" type="button">
+              Active match
+            </button>
+</div>
+</div>
+</section>
+<!-- Sheet Trigger Button Explicit -->
+<button class="w-full py-2 px-3 rounded bg-surface-container-high border border-outline-variant text-[12px] font-semibold text-on-surface flex items-center justify-center gap-1.5 hover:bg-surface-variant transition-colors" onclick="toggleSheet(true)" type="button">
+<span class="material-symbols-outlined text-[16px]">visibility</span>
+<span>View Part Details Sheet Preview</span>
+</button>
+</div>
+<!-- Fixed Bottom Action Bar -->
+<footer class="fixed bottom-0 w-full max-w-[390px] z-20 bg-surface-bright/95 backdrop-blur-md border-t border-outline-variant p-2.5 flex flex-col gap-1.5">
+<div class="flex items-center justify-between text-[11px] px-1 font-mono-sm">
+<span class="text-on-surface-variant">Staff action shortcut:</span>
+<button class="text-primary font-semibold hover:underline" type="button">
+          + Add missing fitment (Add now)
+        </button>
+</div>
+<div class="grid grid-cols-2 gap-2">
+<button class="py-2.5 px-3 rounded bg-surface-container-high border border-outline-variant text-on-surface text-[13px] font-medium text-center active:bg-surface-variant" type="button">
+          Back to parts
+        </button>
+<button class="py-2.5 px-3 rounded bg-primary-container text-on-primary text-[13px] font-semibold text-center shadow-sm active:opacity-95" type="button">
+          Save to car manifest
+        </button>
+</div>
+</footer>
+<!-- Interactive Slide-Up / Slide-Over Part Details Sheet (Mobile overlay) -->
+<div class="fixed inset-0 z-40 bg-black/40 backdrop-blur-[1px] hidden flex-col justify-end transition-opacity duration-300" id="partSheet">
+<div class="bg-surface-container-lowest w-full max-w-[390px] mx-auto rounded-t-xl max-h-[777px] flex flex-col shadow-2xl border-t border-outline-variant overflow-hidden animate-in slide-in-from-bottom duration-200">
+<!-- Sheet Handle & Minimal Navigation -->
+<div class="px-4 pt-3 pb-2 border-b border-outline-variant/60 flex items-center justify-between bg-surface-bright">
+<button class="flex items-center gap-1 text-[13px] font-semibold text-primary py-1 px-1 -ml-1" onclick="toggleSheet(false)" type="button">
+<span class="material-symbols-outlined text-[18px]">arrow_back</span>
+<span>Back</span>
+</button>
+<span class="text-[11px] font-mono-sm text-on-surface-variant uppercase font-medium tracking-wide">
+            Part Verification Sheet
+          </span>
+<button class="size-7 rounded flex items-center justify-center text-on-surface-variant hover:bg-surface-container" onclick="toggleSheet(false)" type="button">
+<span class="material-symbols-outlined text-[18px]">close</span>
+</button>
+</div>
+<!-- Sheet Scrollable Content -->
+<div class="p-4 overflow-y-auto no-scrollbar flex flex-col gap-3.5">
+<div>
+<div class="flex items-center gap-1.5 mb-1">
+<span class="px-1.5 py-0.2 rounded bg-primary-fixed text-primary text-[10px] font-label-xs font-bold uppercase">Tier 1 OEM</span>
+<span class="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700">
+<span class="size-1.5 rounded-full bg-emerald-600"></span> Verified Fitment
+              </span>
+</div>
+<h3 class="text-[17px] font-headline-lg font-semibold text-on-surface">Oil filter · Toyota 04152-40060</h3>
+<p class="text-[12px] font-mono-md text-on-secondary-container mt-0.5">OEM EAN: 4957973000624</p>
+</div>
+<!-- Why it fits section -->
+<div class="bg-surface-container-low p-3 rounded border border-outline-variant/60">
+<h4 class="text-[12px] font-label-xs uppercase font-semibold text-primary mb-1 tracking-wide">Why it fits</h4>
+<p class="text-[12px] text-on-surface leading-relaxed">
+              Designed specifically for the Atkinson cycle hybrid powertrain in 2018 Honda Fit (GP5 chassis code). Thread depth, bypass valve pressure (14 PSI), and bypass gasket dimensions match factory engineering specifications precisely.
+            </p>
+</div>
+<!-- Versions Checklist -->
+<div>
+<h4 class="text-[12px] font-label-xs uppercase font-semibold text-on-surface-variant mb-2 tracking-wide">
+              Applicable Trim &amp; Engine Versions
+            </h4>
+<div class="space-y-1.5">
+<label class="flex items-start gap-2.5 p-2 rounded bg-surface-container-lowest border border-outline-variant/60 text-[12px]">
+<input checked="" class="mt-0.5 rounded text-primary focus:ring-primary border-outline" type="checkbox"/>
+<div class="flex-1">
+<span class="font-medium text-on-surface">2018 Fit 1.5 Hybrid FWD (GP5)</span>
+<p class="text-[11px] text-on-surface-variant font-mono-sm">Engine code: LEB-H1</p>
+</div>
+</label>
+<label class="flex items-start gap-2.5 p-2 rounded bg-surface-container-lowest border border-outline-variant/60 text-[12px]">
+<input checked="" class="mt-0.5 rounded text-primary focus:ring-primary border-outline" type="checkbox"/>
+<div class="flex-1">
+<span class="font-medium text-on-surface">2018 Fit 1.5 Hybrid 4WD (GP6)</span>
+<p class="text-[11px] text-on-surface-variant font-mono-sm">Engine code: LEB-H1</p>
+</div>
+</label>
+<label class="flex items-start gap-2.5 p-2 rounded bg-surface-container-lowest border border-outline-variant/60 text-[12px] opacity-60">
+<input class="mt-0.5 rounded text-outline border-outline" disabled="" type="checkbox"/>
+<div class="flex-1">
+<span class="font-medium text-on-surface">2018 Fit 1.3 Petrol (GK3)</span>
+<p class="text-[11px] text-on-surface-variant font-mono-sm">Incompatible: Uses spin-on 15400</p>
+</div>
+</label>
+</div>
+</div>
+<!-- Compatibility Matrix Note -->
+<div class="p-2.5 rounded bg-surface-container text-[11px] text-on-secondary-container">
+<span class="font-semibold">Operator Note:</span> Service intervals recommend replacement every 10,000 km or 12 months with synthetic 0W-20 engine oil.
+          </div>
+</div>
+<!-- Sticky Bottom Sheet Action Buttons -->
+<div class="p-3 bg-surface-bright border-t border-outline-variant grid grid-cols-3 gap-2">
+<button class="py-2 px-2 rounded bg-surface-container text-error text-[12px] font-semibold border border-error-container hover:bg-error-container/30 transition-colors" onclick="toggleSheet(false)" type="button">
+            Exclude
+          </button>
+<button class="py-2 px-2 rounded bg-surface-container text-on-surface text-[12px] font-semibold border border-outline-variant hover:bg-surface-variant transition-colors" onclick="toggleSheet(false)" type="button">
+            Edit
+          </button>
+<button class="py-2 px-2 rounded bg-primary-container text-on-primary text-[12px] font-semibold shadow-sm active:scale-95 transition-transform" onclick="toggleSheet(false)" type="button">
+            Already verified
+          </button>
+</div>
+</div>
+</div>
+</main>
+<script>
+    function toggleSheet(open) {
+      const sheet = document.getElementById('partSheet');
+      if (open) {
+        sheet.classList.remove('hidden');
+        sheet.classList.add('flex');
+      } else {
+        sheet.classList.add('hidden');
+        sheet.classList.remove('flex');
+      }
+    }
+  </script>
+</body></html>

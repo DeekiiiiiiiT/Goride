@@ -34,7 +34,7 @@ export async function upsertPendingFromKvVehicle(
     organizationId: string;
     fleetVehicleId: string;
     vehicle: Record<string, unknown>;
-    source: "scan" | "manual";
+    source: "scan" | "manual" | "find_parts";
   },
 ): Promise<void> {
   const proposed_make = String(args.vehicle.make ?? "").trim() || "Unknown";
