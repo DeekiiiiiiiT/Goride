@@ -43,6 +43,13 @@ Checked: the code (uncommitted working tree), production database, fleet-core lo
 
 **Severity:** Critical = broken in production now · High = wrong answer or blocks the goal · Medium = missing piece · Low = tidy-up.
 
+#### R2-00 — High · The build followed rules that removed parts of the design
+- The port plan §4 told the builder to remove or hide about 60 things that are in the Stitch pictures: status chips, counts, panels, buttons without a feature yet, part photos, and some wording (rules G1, G5, G6, G7, G8 and every "Remove" row).
+- `sample-labels.json` then drops those labels, so the word checker reaches 100% while the screens still look different.
+- This is why "everything was implemented" and the screens still do not look like the designs.
+
+**Fix:** apply the §0 rule. For every screen, open its `html/S42*.html` and build every element in `<main>`. Every "Remove" row in plan §4 becomes "Build it with a real source". Delete every S42 entry in `sample-labels.json` that is not a real sample value (car names, part numbers), then re-run the checker and the side-by-side pictures.
+
 #### R2-01 — Critical · The search box fails on every call
 - `GET /admin/catalog/parts/term` reads `part_term_synonym.component_id`. That column does not exist; the real one is `maintenance_component_id`.
 - Live logs, 30 Oct: **13 of 13** calls returned 500.
@@ -199,15 +206,18 @@ Checked: the code (uncommitted working tree), production database, fleet-core lo
 | Layout, spacing, order, colours, icons, wording, state text | **Stitch HTML** |
 | Which data, how it is matched, permissions, links, rules | **This audit** |
 
-**Porting rules**
-- Keep the same element structure and classes as the Stitch export.
-- Copy labels word for word.
-- Swap only the sample values.
-- Add nothing and remove nothing.
+**The rule: the literal, exact design.** (Owner, 30 Oct 2026. This replaces every "Remove", "Hide" and "Replace the text" decision in the port plan §4.)
+- Each screen must look exactly like its Stitch picture: same layout, boxes, order, spacing, colours, icons, chips, buttons, panels and wording.
+- Keep the same element structure and classes as the Stitch export. Copy every label word for word.
+- **Nothing in the picture is removed, hidden, shortened or merged.**
+- **If the picture shows something the app does not have yet, build it.** That means the real feature, the route, the table or column, and the data behind it. Examples: a button gets a working action; a count gets a real query; a panel gets the real records; a part photo gets a part-photo field and upload; a status chip gets a real status check.
+- The only thing swapped is sample values. A sample name or number is replaced by the live value from what was built for it. It is never deleted, and it is never hard-coded.
+- **One limit, from the owner's own Dominion rule:** Dominion holds no customer records. Where a picture shows a customer's name, plate or bay, the element stays exactly as drawn and shows the live count or the non-customer value in that spot.
+- When two screens name the same match type differently, use the name on the Results screen (S42e) everywhere.
 
-**Proof**
-- `node scripts/stitch-fidelity.mjs --report` shows **100%** for every row below.
-- Side-by-side screenshots in light, dark and 390 px phone.
+**Proof (both are required)**
+- `node scripts/stitch-fidelity.mjs --report` shows **100%** for every row below, **with no S42 entries in `sample-labels.json`** except real sample values (car names, part numbers). Dropping a label so the score reaches 100% is not allowed.
+- Side-by-side pictures (Stitch | built) in light, dark and 390 px phone, where every box, chip, button and panel in the Stitch picture is also in the built picture, in the same place. The word score alone is not proof.
 
 **Stitch screen numbers → README ids** (the prompt uses plain numbers only). S40 and S41 are already used, so the new ids are S42–S42k. **Build plan and screen-by-screen port decisions:** [dominion-find-parts-port-plan.md](dominion-find-parts-port-plan.md).
 
@@ -387,9 +397,8 @@ The part stays optional, as the owner asked.
 ---
 
 ## 4. What the screens must not show
-- Customer data: fleet names, plates, org stock, org quotes, org requests, drivers.
-- Prices. Dominion has no offers today, and supplier offers are org-scoped. Price belongs to Fleet.
-- AI badges, fake confidence percentages, "REGION" badges or "LOC:" footers.
+- Customer identity only: fleet names, plates, bays, drivers, org stock, org quotes, org requests. The element stays in place and shows a count or the non-customer value (§0 rule).
+- Everything else the Stitch picture shows is built and shown, including prices, badges, percentages and status chips. Each one gets a real source; none is hard-coded. (Rev 1 banned some of these; that is replaced by the §0 rule.)
 
 ---
 

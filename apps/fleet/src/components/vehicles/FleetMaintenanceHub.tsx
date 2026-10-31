@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Loader2, ListChecks, Package, Plus, Wrench, Car, History, Eye } from "lucide-react";
-import { PART_MATCH_TIERS } from "@roam/types/partsResolution";
 import { api } from "../../services/api";
 import { Button } from "../ui/button";
 import {
@@ -36,8 +35,9 @@ import type {
   VehicleMaintenanceScheduleRowApi,
 } from "../../types/maintenance";
 import { toast } from "sonner";
-import type { CompatiblePartsResponse } from "../../types/partSourcing";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
+import { FindPartsTab } from "./find-parts/FindPartsTab";
+import { usePermissions } from "../../hooks/usePermissions";
 
 export interface FleetMaintenanceHubProps {
   onNavigate?: (page: string) => void;
@@ -98,6 +98,8 @@ function vehicleLabel(row: {
 }
 
 export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
+  const { can } = usePermissions();
+  const canViewParts = can("vehicles.view");
   const [loading, setLoading] = useState(true);
   const [fleetBootstrapping, setFleetBootstrapping] = useState(false);
   const [fleetMessage, setFleetMessage] = useState<string | null>(null);
@@ -118,20 +120,10 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
   const [driverRequests, setDriverRequests] = useState<DriverRequestRow[]>([]);
   const [requestsLoading, setRequestsLoading] = useState(false);
 
-  const [partsDialogOpen, setPartsDialogOpen] = useState(false);
-  const [partsVehicleId, setPartsVehicleId] = useState<string>("");
-  const [partsLoading, setPartsLoading] = useState(false);
-  const [partsData, setPartsData] = useState<CompatiblePartsResponse | null>(null);
-  const [partsNeedText, setPartsNeedText] = useState("");
-  const [partsUrgency, setPartsUrgency] = useState("normal");
-  const [partsQty, setPartsQty] = useState("1");
-  const [myRequests, setMyRequests] = useState<Array<Record<string, unknown>>>([]);
-  const [myRequestsError, setMyRequestsError] = useState("");
-  const [coreSummary, setCoreSummary] = useState("");
-  const [repeatAlerts, setRepeatAlerts] = useState<Array<Record<string, unknown>>>([]);
-  const [warrantyClaims, setWarrantyClaims] = useState<Array<Record<string, unknown>>>([]);
-  const [partsRequestBusy, setPartsRequestBusy] = useState(false);
-  const [hubTab, setHubTab] = useState<"by-vehicle" | "service-ledger">("by-vehicle");
+  const [hubTab, setHubTab] = useState<"by-vehicle" | "service-ledger" | "find-parts">(() => {
+    const tab = new URLSearchParams(window.location.search).get("tab");
+    return tab === "find-parts" ? "find-parts" : tab === "service-ledger" ? "service-ledger" : "by-vehicle";
+  });
 
   const loadRequests = useCallback(async () => {
     setRequestsLoading(true);
@@ -269,73 +261,6 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
     void load();
   }, [load]);
 
-  const handleOpenPartsDialog = useCallback(() => {
-    setPartsVehicleId(items[0]?.vehicleId ?? "");
-    setPartsData(null);
-    setPartsDialogOpen(true);
-    setMyRequestsError("");
-    void api.listPartCores().then((res) => {
-      setCoreSummary(`J$ ${Number(res.pendingAmount || 0).toFixed(2)} in pending core returns · ${res.overdueCount || 0} overdue`);
-    }).catch(() => setCoreSummary(""));
-    void api.listPartRepeatAlerts().then((res) => setRepeatAlerts(res.items || [])).catch(() => setRepeatAlerts([]));
-    void api.listWarrantyClaims().then((res) => setWarrantyClaims(res.items || [])).catch(() => setWarrantyClaims([]));
-    void api.listMyPartsRequests().then((res) => setMyRequests(res.items || [])).catch((err) => {
-      setMyRequests([]);
-      setMyRequestsError(err instanceof Error ? err.message : "Could not load your requests");
-    });
-  }, [items]);
-
-  const handleLoadCompatibleParts = useCallback(async () => {
-    if (!partsVehicleId) {
-      toast.error("Select a vehicle");
-      return;
-    }
-    setPartsLoading(true);
-    try {
-      const res = await api.getCompatibleParts(partsVehicleId);
-      setPartsData(res);
-      if (!res.catalogMatched && res.message) {
-        toast.info(res.message);
-      }
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "Failed to load parts");
-      setPartsData(null);
-    } finally {
-      setPartsLoading(false);
-    }
-  }, [partsVehicleId]);
-
-  const handleRequestMissingPart = useCallback(async () => {
-    if (!partsVehicleId) {
-      toast.error("Select a vehicle");
-      return;
-    }
-    const need = partsNeedText.trim();
-    if (!need) {
-      toast.error("Describe the part you need");
-      return;
-    }
-    setPartsRequestBusy(true);
-    try {
-      await api.requestPartsSourcing(partsVehicleId, need, {
-        urgency: partsUrgency,
-        qty: Number(partsQty) || 1,
-      });
-      toast.success("Request sent to Dominion Parts Sourcing");
-      setPartsNeedText("");
-      try {
-        const mine = await api.listMyPartsRequests();
-        setMyRequests(mine.items || []);
-      } catch {
-        /* list refresh is best-effort after a successful send */
-      }
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "Failed to submit request");
-    } finally {
-      setPartsRequestBusy(false);
-    }
-  }, [partsVehicleId, partsNeedText, partsUrgency, partsQty]);
-
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -378,7 +303,12 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
           <Button
             type="button"
             variant="outline"
-            onClick={handleOpenPartsDialog}
+            onClick={() => {
+              setHubTab("find-parts");
+              const url = new URL(window.location.href);
+              url.searchParams.set("tab", "find-parts");
+              window.history.replaceState(null, "", url);
+            }}
             disabled={loading || items.length === 0}
             className="shrink-0 gap-2"
             title="Parts from Super Admin catalog (requires motor catalog link on the vehicle)"
@@ -403,7 +333,14 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
 
       <Tabs
         value={hubTab}
-        onValueChange={(v) => setHubTab(v as "by-vehicle" | "service-ledger")}
+        onValueChange={(v) => {
+          const next = v as "by-vehicle" | "service-ledger" | "find-parts";
+          setHubTab(next);
+          const url = new URL(window.location.href);
+          if (next === "by-vehicle") url.searchParams.delete("tab");
+          else url.searchParams.set("tab", next);
+          window.history.replaceState(null, "", url);
+        }}
         className="space-y-4"
       >
         <TabsList className="h-10 bg-slate-100 dark:bg-slate-800/80 p-1">
@@ -415,10 +352,31 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
             <History className="w-4 h-4" />
             Service ledger
           </TabsTrigger>
+          {canViewParts ? (
+            <TabsTrigger value="find-parts" className="gap-1.5 px-4">
+              <Package className="w-4 h-4" />
+              Find parts
+            </TabsTrigger>
+          ) : null}
         </TabsList>
 
         <TabsContent value="service-ledger" className="mt-0 space-y-4">
           <MaintenanceServiceLedgerPanel vehicles={items} />
+        </TabsContent>
+
+        <TabsContent value="find-parts" className="mt-0">
+          {canViewParts ? (
+            <FindPartsTab
+              cars={items}
+              canView={canViewParts}
+              onUseInService={(id, componentId, partName) => {
+                void prepareLogForVehicle(id, {
+                  vehicleId: id,
+                  lines: [{ categoryId: componentId, categoryCode: "", categoryName: partName }],
+                });
+              }}
+            />
+          ) : null}
         </TabsContent>
 
         <TabsContent value="by-vehicle" className="mt-0 space-y-4">
@@ -637,6 +595,22 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
             ))}
           </ul>
           <DialogFooter className="gap-2 sm:gap-2">
+            {servicesDueView && canViewParts ? (
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => {
+                  const url = new URL(window.location.href);
+                  url.searchParams.set("tab", "find-parts");
+                  url.searchParams.set("vehicle", servicesDueView.vehicleId);
+                  window.history.replaceState(null, "", url);
+                  setHubTab("find-parts");
+                  setServicesDueView(null);
+                }}
+              >
+                Find parts for this
+              </Button>
+            ) : null}
             <Button type="button" variant="outline" onClick={() => setServicesDueView(null)}>
               Close
             </Button>
@@ -684,207 +658,6 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
             </Button>
             <Button type="button" onClick={() => void handleContinueFromPicker()} disabled={!pickerVehicleId || scheduleLoading}>
               {scheduleLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Continue"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={partsDialogOpen} onOpenChange={setPartsDialogOpen}>
-        <DialogContent className="sm:max-w-3xl max-h-[85vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>Compatible parts</DialogTitle>
-            <DialogDescription>
-              Lists parts configured in Super Admin that fit this fleet vehicle’s linked motor catalog row (and optional
-              chassis/engine gates).
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3 py-2 shrink-0">
-            <div className="flex flex-wrap gap-2 items-end">
-              <div className="space-y-1 flex-1 min-w-[200px]">
-                <Label htmlFor="parts-veh">Vehicle</Label>
-                <Select value={partsVehicleId} onValueChange={setPartsVehicleId}>
-                  <SelectTrigger id="parts-veh">
-                    <SelectValue placeholder="Select vehicle" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {items.map((row) => (
-                      <SelectItem key={row.vehicleId} value={row.vehicleId}>
-                        {vehicleLabel(row)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <Button type="button" onClick={() => void handleLoadCompatibleParts()} disabled={!partsVehicleId || partsLoading}>
-                {partsLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Load"}
-              </Button>
-            </div>
-            {partsData && !partsData.catalogMatched && (
-              <p className="text-sm text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">
-                {partsData.message ?? "This vehicle is not linked to the motor catalog yet."}
-              </p>
-            )}
-            {(partsData?.catalogMatched && !(partsData.items?.length > 0)) ||
-            (partsData && !partsData.catalogMatched) ? (
-              <div className="space-y-2 rounded-lg border border-slate-200 dark:border-slate-700 p-3">
-                <Label htmlFor="parts-need">Request a missing part from Dominion</Label>
-                <textarea
-                  id="parts-need"
-                  className="w-full min-h-[72px] rounded-md border border-slate-200 dark:border-slate-700 bg-transparent px-3 py-2 text-sm"
-                  placeholder="e.g. Front brake pads for 2019 Toyota Probox — OEM if possible"
-                  value={partsNeedText}
-                  onChange={(e) => setPartsNeedText(e.target.value)}
-                />
-                <div className="flex gap-2">
-                  <select className="h-9 rounded-md border px-2 text-sm" value={partsUrgency} onChange={(e) => setPartsUrgency(e.target.value)}>
-                    <option value="low">Low</option>
-                    <option value="normal">Normal</option>
-                    <option value="urgent">Urgent</option>
-                  </select>
-                  <input className="h-9 w-20 rounded-md border px-2 text-sm" value={partsQty} onChange={(e) => setPartsQty(e.target.value)} inputMode="decimal" aria-label="Quantity" />
-                </div>
-                <Button
-                  type="button"
-                  size="sm"
-                  disabled={partsRequestBusy || !partsVehicleId}
-                  onClick={() => void handleRequestMissingPart()}
-                >
-                  {partsRequestBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : "Send request"}
-                </Button>
-              </div>
-            ) : null}
-          </div>
-          <div className="min-h-0 flex-1 overflow-auto space-y-4">
-            {((partsData?.sections?.length ? partsData.sections : PART_MATCH_TIERS) as Array<{ tier: number; label: string; items?: Array<Record<string, unknown>> }>).map((section) => {
-              const rows = section.tier === 5
-                ? []
-                : (section.items?.length
-                  ? section.items as typeof partsData.items
-                  : (partsData?.items ?? []).filter((row) => Number(row.tier) === section.tier));
-              return (
-                <div key={section.tier} className="rounded-lg border border-slate-200 dark:border-slate-700">
-                  <div className="px-3 py-2 border-b border-slate-200 dark:border-slate-700">
-                    <p className="font-medium">{section.label} ({section.tier === 5 ? (partsData?.universal?.length ?? 0) : rows.length})</p>
-                  </div>
-                  {section.tier === 5 ? (
-                    <div className="p-3 text-sm space-y-3">
-                      {partsData?.universal?.length ? partsData.universal.map((block) => (
-                        <div key={String(block.specKey ?? block.label)}>
-                          <p className="font-medium">{block.label}: {block.value}{block.unit ? ` ${block.unit}` : ""}</p>
-                          {(block.items ?? []).map((item) => (
-                            <div key={String(item.id)} className="flex items-center justify-between gap-2 py-1">
-                              <span>{item.manufacturer} {item.partNumber} {item.name}</span>
-                              {item.inYourStock || Number(item.stockQty) > 0 ? (
-                                <span>In your stock — {item.stockQty}</span>
-                              ) : (
-                                <Button type="button" size="sm" variant="outline" onClick={() => {
-                                  void api.setOrgPartStock({ universalPartId: String(item.id), qty: 1 }).then(() => handleLoadCompatibleParts());
-                                }}>Add 1 to stock</Button>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      )) : <p className="text-slate-500">None on file yet.</p>}
-                    </div>
-                  ) : !rows.length ? (
-                    <p className="px-3 py-4 text-sm text-slate-500">None on file yet.</p>
-                  ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Part</TableHead>
-                  <TableHead>Category</TableHead>
-                  <TableHead>OEM</TableHead>
-                  <TableHead>Suppliers / price</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                  {rows.map((row) => {
-                    const cat = row.part?.part_category?.label ?? "—";
-                    const offers = row.offers ?? [];
-                    const offerLine = offers.length
-                      ? offers
-                          .map((o: { supplier?: { name?: string }; unit_price?: number; currency?: string }) =>
-                            `${o.supplier?.name ?? "?"}: ${o.currency ?? ""} ${Number(o.unit_price ?? 0).toFixed(2)}`,
-                          )
-                          .join(" · ")
-                      : "—";
-                    const best = offers[0] as { landedCostJmd?: number; totalImpactJmd?: number; priceStale?: boolean; lead_time_days?: number | null; core_charge?: number | null } | undefined;
-                    return (
-                      <TableRow key={row.fitmentId}>
-                        <TableCell className="font-medium">
-                          <div>{row.tierLabel ? `${row.tierLabel}: ` : ""}{row.part?.name ?? "—"}</div>
-                          {row.matchReason ? <p className="text-xs text-slate-500">{row.matchReason}</p> : null}
-                          {row.confirmedFit ? <p className="text-xs text-emerald-700">Confirmed on {row.confirmedInstalls} installs</p> : null}
-                          {row.alsoKnownAs?.length ? <p className="text-xs text-slate-500">Also known as {row.alsoKnownAs.join(", ")}</p> : null}
-                          {row.stockQty ? <p className="text-xs">In your stock — {row.stockQty} on the shelf.</p> : null}
-                        </TableCell>
-                        <TableCell className="text-sm text-slate-600 dark:text-slate-400">{cat}</TableCell>
-                        <TableCell className="text-sm font-mono">{row.part?.oem_part_number ?? "—"}</TableCell>
-                        <TableCell className="text-sm max-w-md">
-                          <div className={best?.priceStale ? "text-slate-400" : ""}>{offerLine}</div>
-                          {best?.totalImpactJmd != null ? <p className="text-xs">Total impact J$ {best.totalImpactJmd.toFixed(2)}{best.priceStale ? " · price is old" : ""}</p> : null}
-                          {best?.core_charge ? <p className="text-xs">Core charge {best.core_charge}</p> : null}
-                          <Button type="button" size="sm" variant="ghost" className="h-7 px-2 mt-1" onClick={async () => {
-                            try {
-                              await api.requestPartQuote({ vehicleId: partsVehicleId, partId: row.part?.id, partNumber: row.part?.oem_part_number, qty: 1 });
-                              toast.success("Quote requested");
-                            } catch (err) {
-                              toast.error(err instanceof Error ? err.message : "Quote failed");
-                            }
-                          }}>Request quote</Button>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-              </TableBody>
-            </Table>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-          {partsData?.relatedSupplies?.length ? (
-            <div className="text-sm">
-              <p className="font-medium">You may also need</p>
-              {partsData.relatedSupplies.map((supply) => (
-                <p key={supply.id} className="text-slate-600">{supply.supply_name}{supply.note ? ` — ${supply.note}` : ""}</p>
-              ))}
-            </div>
-          ) : null}
-          <div className="text-sm space-y-1">
-            {coreSummary ? <p className="text-slate-600">{coreSummary}</p> : null}
-            <p className="font-medium">Repeat part alerts</p>
-            {repeatAlerts.length === 0 ? <p className="text-slate-500">None open.</p> : repeatAlerts.slice(0, 8).map((alert) => (
-              <p key={String(alert.id)} className="text-slate-600 flex items-center justify-between gap-2">
-                <span>{String(alert.detail || "Same part failed again")}</span>
-                <Button type="button" size="sm" variant="ghost" className="h-7" onClick={async () => {
-                  try {
-                    await api.dismissPartRepeatAlert(String(alert.id));
-                    setRepeatAlerts((rows) => rows.filter((row) => row.id !== alert.id));
-                  } catch (err) {
-                    toast.error(err instanceof Error ? err.message : "Could not dismiss");
-                  }
-                }}>Dismiss</Button>
-              </p>
-            ))}
-            <p className="font-medium">Warranty claims</p>
-            {warrantyClaims.length === 0 ? <p className="text-slate-500">None open. Crediting a claim is done in Dominion.</p> : warrantyClaims.slice(0, 8).map((claim) => (
-              <p key={String(claim.id)} className="text-slate-600">{String(claim.status)} — {String(claim.notes || claim.part_id || "Claim")}</p>
-            ))}
-            <p className="font-medium">My requests</p>
-            {myRequestsError ? <p className="text-red-600">{myRequestsError}</p> : null}
-            {myRequests.length === 0 && !myRequestsError ? <p className="text-slate-500">No parts requests yet.</p> : null}
-            {myRequests.slice(0, 8).map((r) => (
-              <p key={String(r.id)} className="text-slate-600">
-                {String(r.status)} — {String(r.need_text)}
-                {(r.part_master as { name?: string } | null)?.name ? ` · ${String((r.part_master as { name?: string }).name)}` : ""}
-              </p>
-            ))}
-          </div>
-          <DialogFooter className="shrink-0">
-            <Button type="button" variant="outline" onClick={() => setPartsDialogOpen(false)}>
-              Close
             </Button>
           </DialogFooter>
         </DialogContent>

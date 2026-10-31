@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/><meta content="mobile_tab" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=JetBrains+Mono:wght@100..900&display=swap" rel="stylesheet"/><style>@layer base{html,body{width:100vw;margin:0;padding:0;background-color:#f7f9fb;}body{overscroll-behavior:none;-webkit-tap-highlight-color:transparent;}::-webkit-scrollbar{display:none;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { colors: { "error-container": "#ffdad6", "on-tertiary-fixed-variant": "#783200", "surface-variant": "#e0e3e5", "outline": "#78767d", "on-tertiary-fixed": "#341100", "on-secondary-container": "#616172", "on-primary-fixed-variant": "#46445b", "inverse-on-surface": "#eff1f3", "secondary-fixed": "#e2e1f4", "surface-container-high": "#e6e8ea", "error": "#ba1a1a", "on-secondary": "#ffffff", "secondary-fixed-dim": "#c6c5d8", "on-error": "#ffffff", "on-tertiary-container": "#d95f00", "inverse-surface": "#2d3133", "primary-container": "#1b192e", "on-primary-container": "#84819a", "outline-variant": "#c9c5cd", "secondary-container": "#dfdef1", "background": "#f7f9fb", "on-primary-fixed": "#1b192e", "tertiary-fixed": "#ffdbca", "on-surface": "#191c1e", "surface-container-highest": "#e0e3e5", "on-background": "#191c1e", "surface-bright": "#f7f9fb", "surface": "#f7f9fb", "surface-tint": "#5e5c74", "on-error-container": "#93000a", "secondary": "#5d5d6d", "primary-fixed-dim": "#c8c3df", "on-tertiary": "#ffffff", "tertiary": "#000000", "tertiary-container": "#341100", "on-surface-variant": "#47464c", "on-secondary-fixed-variant": "#454555", "surface-container": "#eceef0", "surface-container-low": "#f2f4f6", "surface-dim": "#d8dadc", "surface-container-lowest": "#ffffff", "primary-fixed": "#e4dffc", "primary": "#000000", "inverse-primary": "#c8c3df", "on-primary": "#ffffff", "on-secondary-fixed": "#1a1a28", "tertiary-fixed-dim": "#ffb690" }, borderRadius: { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, spacing: { "space-xs": "0.25rem", "gutter-desktop": "1.5rem", "space-lg": "1rem", "gutter": "1rem", "space-sm": "0.5rem", "margin": "1rem", "space-xl": "1.5rem", "space-md": "0.75rem", "margin-desktop": "2rem" }, fontFamily: { "headline-xl": ["Inter"], "caption": ["Inter"], "label-code": ["JetBrains Mono"], "headline-sm": ["Inter"], "label-plate": ["JetBrains Mono"], "body-sm": ["Inter"], "label-price": ["JetBrains Mono"], "body-md": ["Inter"], "body-lg": ["Inter"], "headline-lg": ["Inter"] }, fontSize: { "headline-xl": ["30px", { "lineHeight": "38px", "letterSpacing": "-0.02em", "fontWeight": "600" }], "caption": ["11px", { "lineHeight": "14px", "letterSpacing": "0.02em", "fontWeight": "500" }], "label-code": ["13px", { "lineHeight": "18px", "letterSpacing": "-0.01em", "fontWeight": "500" }], "headline-sm": ["18px", { "lineHeight": "26px", "letterSpacing": "-0.01em", "fontWeight": "600" }], "label-plate": ["14px", { "lineHeight": "18px", "letterSpacing": "0.08em", "fontWeight": "700" }], "body-sm": ["13px", { "lineHeight": "18px", "letterSpacing": "0em", "fontWeight": "400" }], "label-price": ["14px", { "lineHeight": "20px", "letterSpacing": "-0.02em", "fontWeight": "600" }], "body-md": ["14px", { "lineHeight": "20px", "letterSpacing": "0em", "fontWeight": "400" }], "body-lg": ["16px", { "lineHeight": "24px", "letterSpacing": "-0.005em", "fontWeight": "400" }], "headline-lg": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.015em", "fontWeight": "600" }] } } } };</script><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head><body class="bg-surface font-body-md text-on-surface antialiased"><header class="fixed top-0 w-full z-50 pt-safe bg-surface/90 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="h-28 flex flex-col justify-between"><div class="h-14 px-margin bg-primary flex items-center justify-between"><div class="flex items-center gap-space-sm"><div class="flex items-center justify-center bg-surface-container-lowest text-primary px-space-sm py-space-xs rounded-lg font-label-code text-caption font-bold tracking-wider">ROAM FLEET</div><span class="font-label-code text-caption text-surface-container-high/80">Kingston Hub #01</span></div><div class="flex items-center gap-space-xs"><button aria-label="Search" class="w-11 h-11 flex items-center justify-center text-on-primary hover:text-surface-variant transition-colors"><span class="material-symbols-outlined text-[20px]">search</span></button><button aria-label="Notifications" class="w-11 h-11 flex items-center justify-center text-on-primary hover:text-surface-variant transition-colors relative"><span class="material-symbols-outlined text-[20px]">notifications</span><span class="absolute top-2.5 right-2.5 w-1.5 h-1.5 rounded-full bg-error"></span></button><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center ml-space-xs"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div><div class="h-14 px-margin bg-surface-container-lowest/80 backdrop-blur-md flex items-center justify-between"><div class="flex items-center gap-space-sm"><div class="w-7 h-7 rounded-lg bg-tertiary-fixed flex items-center justify-center"><span class="material-symbols-outlined text-on-tertiary-container text-[18px]">build</span></div><h1 class="font-headline-sm text-headline-sm text-on-surface leading-tight">Fleet Maintenance</h1></div><div class="flex items-center"><button aria-label="Filter Options" class="w-11 h-11 flex items-center justify-center text-on-surface-variant hover:text-on-surface transition-colors"><span class="material-symbols-outlined text-[20px]">tune</span></button></div></div></div></header><main class="flex flex-col relative w-full pt-28 pb-24 bg-surface min-h-screen"><div class="flex flex-col w-full pb-28">
+<!-- Horizontal Sub-Tabs -->
+<div class="px-margin pt-space-xs pb-space-sm overflow-x-auto [scrollbar-width:none] flex items-center gap-space-xs bg-surface-container-low/80 backdrop-blur-md sticky top-0 z-20">
+<button class="flex items-center gap-space-xs px-space-md py-space-xs rounded-xl bg-surface-container-lowest text-on-surface-variant hover:text-on-surface whitespace-nowrap shadow-sm text-body-sm font-body-sm transition-colors">
+<span class="material-symbols-outlined text-[18px]">directions_car</span>
+<span>By vehicle</span>
+</button>
+<button class="flex items-center gap-space-xs px-space-md py-space-xs rounded-xl bg-surface-container-lowest text-on-surface-variant hover:text-on-surface whitespace-nowrap shadow-sm text-body-sm font-body-sm transition-colors">
+<span class="material-symbols-outlined text-[18px]">history_edu</span>
+<span>Service ledger</span>
+</button>
+<button class="flex items-center gap-space-xs px-space-md py-space-xs rounded-xl bg-primary text-on-primary whitespace-nowrap shadow-sm text-body-sm font-body-sm font-medium">
+<span class="material-symbols-outlined text-[18px]">inventory_2</span>
+<span>Find parts</span>
+</button>
+</div>
+<!-- Sticky Choice Trail -->
+<section class="px-margin py-space-xs overflow-x-auto [scrollbar-width:none] flex items-center gap-space-xs bg-surface-container-lowest shadow-sm z-10">
+<button class="flex items-center gap-1 px-2.5 py-1 rounded-full bg-secondary-container text-on-secondary-fixed text-caption font-caption whitespace-nowrap active:scale-95 transition-transform">
+<span class="font-label-plate text-caption tracking-wider">1505LM</span>
+<span class="text-on-secondary-container truncate max-w-[110px]">Fit 2018</span>
+<span class="material-symbols-outlined text-[12px] opacity-70">edit</span>
+</button>
+<span class="text-on-surface-variant/40 text-caption">/</span>
+<span class="px-2.5 py-1 rounded-full bg-surface-container text-on-surface-variant text-caption font-caption whitespace-nowrap">
+      1.5 hybrid (GP5)
+    </span>
+<span class="text-on-surface-variant/40 text-caption">/</span>
+<span class="px-2.5 py-1 rounded-full bg-surface-container text-on-surface-variant text-caption font-caption whitespace-nowrap">
+      Oil & Filters
+    </span>
+<span class="text-on-surface-variant/40 text-caption">/</span>
+<span class="px-2.5 py-1 rounded-full bg-primary-fixed text-on-primary-fixed text-caption font-caption font-semibold whitespace-nowrap">
+      Cartridge Filter
+    </span>
+</section>
+<!-- Step Header -->
+<header class="px-margin pt-space-lg pb-space-sm flex flex-col gap-1">
+<div class="flex items-center justify-between">
+<h2 class="font-headline-sm text-headline-sm text-on-surface">Oil filter for Honda Fit 2018</h2>
+<span class="material-symbols-outlined text-on-surface-variant text-[20px]">tune</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="inline-flex items-center gap-1 font-caption text-caption text-on-surface-variant">
+<span class="w-1.5 h-1.5 rounded-full bg-on-tertiary-container"></span>
+        1.5 hybrid (GP5)
+      </span>
+<span class="text-on-surface-variant/40 text-caption">•</span>
+<span class="font-label-code text-caption text-on-surface-variant flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">warehouse</span>
+        Kingston Hub #01 stock
+      </span>
+</div>
+</header>
+<!-- Best Match Hero Card -->
+<section class="px-margin my-space-sm">
+<div class="relative bg-primary text-on-primary rounded-xl p-space-lg shadow-md overflow-hidden flex flex-col gap-space-md">
+<!-- Decorative radial shine -->
+<div class="absolute -top-12 -right-12 w-40 h-40 bg-surface-container-lowest/5 rounded-full blur-2xl pointer-events-none"></div>
+<!-- Top Row: Badge & Action -->
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-surface-container-lowest/15 text-primary-fixed text-caption font-caption tracking-wide uppercase">
+<span class="material-symbols-outlined text-[14px]">stars</span>
+<span>Best Fitment Match</span>
+</div>
+<button aria-label="Favorite part" class="text-on-primary/70 hover:text-on-primary">
+<span class="material-symbols-outlined text-[20px]">bookmark_border</span>
+</button>
+</div>
+<!-- Product Meta -->
+<div class="flex flex-col gap-1">
+<div class="font-label-code text-caption text-secondary-fixed tracking-wider">GENUINE OEM SPEC</div>
+<h3 class="font-headline-sm text-headline-sm text-on-primary leading-snug">Toyota 04152-40060</h3>
+<p class="font-body-sm text-body-sm text-surface-container-high/90">Premium Pleated Cartridge Oil Filter with O-Ring Seal</p>
+</div>
+<!-- Pill Badges -->
+<div class="flex flex-wrap items-center gap-1.5">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-secondary-fixed text-on-secondary-fixed font-caption text-caption font-semibold">
+<span class="material-symbols-outlined text-[13px]">verified</span>
+          Verified Fit
+        </span>
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-tertiary-fixed text-on-tertiary-fixed font-caption text-caption font-medium">
+<span class="w-1.5 h-1.5 rounded-full bg-on-tertiary-container animate-pulse"></span>
+          Shelf: 2 on hand
+        </span>
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-surface-container-highest/20 text-on-primary font-caption text-caption">
+          Hub #01 Bay 4C
+        </span>
+</div>
+<!-- Price & Location Line -->
+<div class="pt-space-xs flex flex-col gap-1">
+<div class="flex items-baseline justify-between">
+<span class="font-label-price text-headline-sm text-on-primary">J$ 1,850 <span class="font-body-sm text-caption text-surface-container-high font-normal">landed</span></span>
+<span class="font-caption text-caption text-tertiary-fixed flex items-center gap-0.5">
+<span class="material-symbols-outlined text-[14px]">local_shipping</span>
+            Ready today
+          </span>
+</div>
+<span class="font-caption text-caption text-surface-container-high/80">Kingston Auto Parts Depot • Bin #09-A</span>
+</div>
+<!-- Stacked Buttons -->
+<div class="flex flex-col gap-2 pt-space-xs">
+<button class="w-full h-11 bg-surface-container-lowest text-primary rounded-lg font-body-sm text-body-sm font-semibold flex items-center justify-center gap-2 hover:bg-surface-container active:scale-[0.99] transition-transform shadow-sm" id="use-service-btn">
+<span class="material-symbols-outlined text-[18px]">build_circle</span>
+<span>Use in service log</span>
+</button>
+<div class="grid grid-cols-2 gap-2">
+<button class="h-10 bg-surface-container-highest/20 text-on-primary rounded-lg font-body-sm text-body-sm flex items-center justify-center gap-1.5 hover:bg-surface-container-highest/30 active:scale-[0.99] transition-transform" id="open-quote-drawer">
+<span class="material-symbols-outlined text-[16px]">request_quote</span>
+<span>Request quote</span>
+</button>
+<button class="h-10 bg-surface-container-highest/20 text-on-primary rounded-lg font-body-sm text-body-sm flex items-center justify-center gap-1.5 hover:bg-surface-container-highest/30 active:scale-[0.99] transition-transform" id="view-spec-details">
+<span class="material-symbols-outlined text-[16px]">info</span>
+<span>Fitment spec</span>
+</button>
+</div>
+</div>
+</div>
+</section>
+<!-- Match Type Result Cards List -->
+<section class="px-margin flex flex-col gap-space-md mt-space-sm">
+<div class="flex items-center justify-between">
+<span class="font-caption text-caption uppercase tracking-wider text-on-surface-variant font-semibold">Tier Compatibility</span>
+<span class="font-label-code text-caption text-on-surface-variant">3 results sorted</span>
+</div>
+<!-- Tier 1: OEM Made For Your Car -->
+<div class="flex flex-col gap-1.5">
+<div class="flex items-center gap-1.5 text-caption font-caption text-on-surface font-semibold">
+<span class="w-2 h-2 rounded-full bg-primary"></span>
+<span>Made for your car (OEM) • 1 option</span>
+</div>
+<div class="relative bg-surface-container-lowest rounded-xl p-space-md shadow-sm overflow-hidden flex items-center justify-between active:bg-surface-container-low transition-colors cursor-pointer">
+<!-- 4px accent line left -->
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-primary"></div>
+<div class="flex flex-col gap-1 pl-2">
+<div class="flex items-center gap-1.5">
+<span class="font-body-md text-body-md font-semibold text-on-surface">Oil Filter</span>
+<span class="font-label-code text-caption text-on-surface-variant">04152-40060</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="font-label-price text-body-md text-on-surface">J$ 1,850 <span class="text-caption text-on-surface-variant font-normal">landed</span></span>
+<span class="px-1.5 py-0.5 rounded bg-tertiary-fixed text-on-tertiary-fixed text-caption font-caption font-medium">On shelf: 2</span>
+</div>
+<div class="flex items-center gap-1 font-caption text-caption text-on-surface-variant">
+<span class="material-symbols-outlined text-[14px] text-primary">verified</span>
+<span>Factory matched</span>
+</div>
+</div>
+<div class="flex items-center text-on-surface-variant">
+<span class="material-symbols-outlined text-[20px]">chevron_right</span>
+</div>
+</div>
+</div>
+<!-- Tier 2: Aftermarket Replacement -->
+<div class="flex flex-col gap-1.5">
+<div class="flex items-center gap-1.5 text-caption font-caption text-on-surface font-semibold">
+<span class="w-2 h-2 rounded-full bg-secondary"></span>
+<span>Other brands that replace it (Aftermarket) • 1 option</span>
+</div>
+<div class="relative bg-surface-container-lowest rounded-xl p-space-md shadow-sm overflow-hidden flex items-center justify-between active:bg-surface-container-low transition-colors cursor-pointer">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-secondary"></div>
+<div class="flex flex-col gap-1 pl-2">
+<div class="flex items-center gap-1.5">
+<span class="font-body-md text-body-md font-semibold text-on-surface">MANN-FILTER</span>
+<span class="font-label-code text-caption text-on-surface-variant">HU 6006 z</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="font-label-price text-body-md text-on-surface">J$ 1,420 <span class="text-caption text-on-surface-variant font-normal">landed</span></span>
+<span class="font-caption text-caption text-on-surface-variant">• 3 days dispatch</span>
+</div>
+<div class="flex items-center gap-1 font-caption text-caption text-on-tertiary-container">
+<span class="material-symbols-outlined text-[14px]">warning</span>
+<span>Supplier price may be old (3w ago)</span>
+</div>
+</div>
+<div class="flex items-center text-on-surface-variant">
+<span class="material-symbols-outlined text-[20px]">chevron_right</span>
+</div>
+</div>
+</div>
+<!-- Tier 3: Universal Size -->
+<div class="flex flex-col gap-1.5">
+<div class="flex items-center gap-1.5 text-caption font-caption text-on-surface font-semibold">
+<span class="w-2 h-2 rounded-full bg-surface-tint"></span>
+<span>Fits by size (Universal Fluid/Part) • 1 option</span>
+</div>
+<div class="relative bg-surface-container-lowest rounded-xl p-space-md shadow-sm overflow-hidden flex items-center justify-between active:bg-surface-container-low transition-colors cursor-pointer">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-surface-tint"></div>
+<div class="flex flex-col gap-1 pl-2">
+<div class="flex items-center gap-1.5">
+<span class="font-body-md text-body-md font-semibold text-on-surface">Engine Oil Synthetic 0W-20</span>
+<span class="font-label-code text-caption text-on-surface-variant">1 Litre Bottle</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="font-caption text-caption text-on-surface-variant">No price quoted yet</span>
+<span class="px-1.5 py-0.5 rounded bg-surface-container-high text-on-surface text-caption font-caption">Universal</span>
+</div>
+<div class="flex items-center gap-1 font-caption text-caption text-primary font-medium">
+<span class="material-symbols-outlined text-[14px]">add_circle</span>
+<span>Add to requisition wishlist</span>
+</div>
+</div>
+<div class="flex items-center text-on-surface-variant">
+<span class="material-symbols-outlined text-[20px]">chevron_right</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Collapsible Section: Parts Activity & Hub Alerts -->
+<section class="px-margin my-space-md">
+<div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
+<button class="w-full p-space-md flex items-center justify-between text-left hover:bg-surface-container-low transition-colors" id="toggle-activity">
+<div class="flex items-center gap-space-sm">
+<div class="w-8 h-8 rounded-lg bg-secondary-container flex items-center justify-center text-on-secondary-fixed">
+<span class="material-symbols-outlined text-[18px]">receipt_long</span>
+</div>
+<div class="flex flex-col">
+<span class="font-body-md text-body-md font-semibold text-on-surface">Your Parts Activity</span>
+<span class="font-caption text-caption text-on-surface-variant">1 open request • 1 alert • Core J$ 0</span>
+</div>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant transition-transform" id="activity-icon">expand_more</span>
+</button>
+<!-- Expandable Activity Body -->
+<div class="hidden px-space-md pb-space-md flex flex-col gap-2 pt-space-xs" id="activity-content">
+<div class="p-2.5 rounded-lg bg-surface-container-low flex items-center justify-between">
+<div class="flex flex-col">
+<span class="font-caption text-caption font-medium text-on-surface">RFQ #KGN-8842 • Front Discs</span>
+<span class="font-caption text-caption text-on-surface-variant">Awaiting response from Spanish Town Depot</span>
+</div>
+<span class="px-2 py-0.5 rounded bg-surface-container-highest text-on-surface-variant text-caption font-caption">Pending</span>
+</div>
+<div class="p-2.5 rounded-lg bg-tertiary-fixed/30 flex items-center justify-between">
+<div class="flex flex-col">
+<span class="font-caption text-caption font-semibold text-on-tertiary-container">Repeat Part Notice</span>
+<span class="font-caption text-caption text-on-surface-variant">Replaced 32 days ago on 1505LM (GP5)</span>
+</div>
+<span class="material-symbols-outlined text-[18px] text-on-tertiary-container">info</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Part Categories Tile Grid -->
+<section class="px-margin mb-space-lg flex flex-col gap-space-sm">
+<div class="flex items-center justify-between">
+<span class="font-caption text-caption uppercase tracking-wider text-on-surface-variant font-semibold">Explore System Categories</span>
+<span class="font-caption text-caption text-primary cursor-pointer">View schematic</span>
+</div>
+<div class="grid grid-cols-2 gap-space-sm">
+<!-- Tile 1 -->
+<div class="p-space-md bg-surface-container-lowest rounded-xl shadow-sm flex items-center gap-space-sm active:bg-surface-container-low transition-colors cursor-pointer">
+<div class="w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center text-on-surface">
+<span class="material-symbols-outlined text-[20px]">engineering</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-body-md text-body-md font-semibold text-on-surface truncate">Engine</span>
+<span class="font-caption text-caption text-on-surface-variant">14 components</span>
+</div>
+</div>
+<!-- Tile 2 -->
+<div class="p-space-md bg-surface-container-lowest rounded-xl shadow-sm flex items-center gap-space-sm active:bg-surface-container-low transition-colors cursor-pointer">
+<div class="w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center text-on-surface">
+<span class="material-symbols-outlined text-[20px]">filter_alt</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-body-md text-body-md font-semibold text-on-surface truncate">Filters</span>
+<span class="font-caption text-caption text-on-surface-variant">3 in stock</span>
+</div>
+</div>
+<!-- Tile 3 -->
+<div class="p-space-md bg-surface-container-lowest rounded-xl shadow-sm flex items-center gap-space-sm active:bg-surface-container-low transition-colors cursor-pointer">
+<div class="w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center text-on-surface">
+<span class="material-symbols-outlined text-[20px]">car_crash</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-body-md text-body-md font-semibold text-on-surface truncate">Brakes</span>
+<span class="font-caption text-caption text-on-surface-variant">Pads, Rotors</span>
+</div>
+</div>
+<!-- Tile 4 -->
+<div class="p-space-md bg-surface-container-lowest rounded-xl shadow-sm flex items-center gap-space-sm active:bg-surface-container-low transition-colors cursor-pointer">
+<div class="w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center text-on-surface">
+<span class="material-symbols-outlined text-[20px]">airline_seat_recline_extra</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-body-md text-body-md font-semibold text-on-surface truncate">Suspension</span>
+<span class="font-caption text-caption text-on-surface-variant">Bushings, Struts</span>
+</div>
+</div>
+<!-- Tile 5 -->
+<div class="p-space-md bg-surface-container-lowest rounded-xl shadow-sm flex items-center gap-space-sm active:bg-surface-container-low transition-colors cursor-pointer">
+<div class="w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center text-on-surface">
+<span class="material-symbols-outlined text-[20px]">bolt</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-body-md text-body-md font-semibold text-on-surface truncate">Electrical</span>
+<span class="font-caption text-caption text-on-surface-variant">12V & HV Relays</span>
+</div>
+</div>
+<!-- Tile 6 -->
+<div class="p-space-md bg-surface-container-lowest rounded-xl shadow-sm flex items-center gap-space-sm active:bg-surface-container-low transition-colors cursor-pointer">
+<div class="w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center text-on-surface">
+<span class="material-symbols-outlined text-[20px]">ac_unit</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-body-md text-body-md font-semibold text-on-surface truncate">A/C Cabin</span>
+<span class="font-caption text-caption text-on-surface-variant">Dryers & Condensers</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Quick RFQ Preview Overlay Sheet (Toggled via JS) -->
+<div class="fixed inset-x-0 bottom-0 z-50 transform translate-y-full transition-transform duration-300 ease-out max-w-md mx-auto" id="quote-drawer-sheet">
+<div class="bg-surface-container-lowest rounded-t-2xl shadow-2xl p-space-lg flex flex-col gap-space-md pb-safe">
+<div class="w-12 h-1.5 bg-surface-container-highest rounded-full mx-auto"></div>
+<div class="flex items-center justify-between pb-space-xs">
+<div class="flex items-center gap-2">
+<button class="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center text-on-surface" id="close-quote-drawer">
+<span class="material-symbols-outlined text-[18px]">close</span>
+</button>
+<h4 class="font-headline-sm text-headline-sm text-on-surface">Quick RFQ Inquiry</h4>
+</div>
+<span class="font-label-code text-caption text-on-surface-variant">Kingston Depot</span>
+</div>
+<div class="p-space-sm rounded-lg bg-surface-container-low flex flex-col gap-1">
+<span class="font-body-sm text-body-sm font-semibold text-on-surface">Part item requested:</span>
+<span class="font-label-code text-body-sm text-on-surface-variant">Toyota 04152-40060 (Oil Filter Cartridge)</span>
+<span class="font-caption text-caption text-secondary">Target delivery: Kingston Hub #01 (Within 24h)</span>
+</div>
+<div class="flex flex-col gap-1">
+<label class="font-caption text-caption text-on-surface-variant font-medium">Quantity needed:</label>
+<div class="flex items-center gap-3">
+<button class="w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center text-on-surface font-bold">-</button>
+<span class="font-label-code text-body-lg font-semibold text-on-surface">2</span>
+<button class="w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center text-on-surface font-bold">+</button>
+</div>
+</div>
+<button class="w-full h-11 bg-primary text-on-primary rounded-lg font-body-sm text-body-sm font-semibold flex items-center justify-center gap-2 shadow-sm">
+<span class="material-symbols-outlined text-[18px]">send</span>
+<span>Broadcast RFQ to 3 Suppliers</span>
+</button>
+</div>
+</div>
+<!-- Sheet Backdrop -->
+<div class="fixed inset-0 bg-primary/40 backdrop-blur-xs z-40 hidden opacity-0 transition-opacity duration-300" id="drawer-backdrop"></div>
+<!-- Sticky Bottom Button Bar -->
+<aside class="fixed bottom-16 inset-x-0 z-30 bg-surface-container-lowest/95 backdrop-blur-md px-margin py-space-sm shadow-md">
+<div class="max-w-md mx-auto flex items-center justify-between gap-space-sm">
+<button class="h-11 px-4 rounded-lg bg-surface-container text-on-surface font-body-sm text-body-sm font-medium flex items-center gap-1 active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-[18px]">arrow_back</span>
+<span>Back</span>
+</button>
+<button class="flex-1 h-11 px-4 rounded-lg bg-primary text-on-primary font-body-sm text-body-sm font-semibold flex items-center justify-between active:scale-[0.98] transition-transform shadow-sm" id="confirm-list-btn">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[18px]">check_circle</span>
+<span>Confirm parts list (1)</span>
+</div>
+<span class="font-label-price text-body-sm text-surface-container-lowest">J$ 1,850</span>
+</button>
+</div>
+</aside>
+</div>
+<script>
+  // Simple interactive accordion and modal bottom-sheet toggle
+  const toggleBtn = document.getElementById('toggle-activity');
+  const activityContent = document.getElementById('activity-content');
+  const activityIcon = document.getElementById('activity-icon');
+
+  if (toggleBtn && activityContent && activityIcon) {
+    toggleBtn.addEventListener('click', () => {
+      const isHidden = activityContent.classList.contains('hidden');
+      if (isHidden) {
+        activityContent.classList.remove('hidden');
+        activityIcon.style.transform = 'rotate(180deg)';
+      } else {
+        activityContent.classList.add('hidden');
+        activityIcon.style.transform = 'rotate(0deg)';
+      }
+    });
+  }
+
+  // Quote Drawer Modal Sheet
+  const openDrawerBtn = document.getElementById('open-quote-drawer');
+  const closeDrawerBtn = document.getElementById('close-quote-drawer');
+  const drawerSheet = document.getElementById('quote-drawer-sheet');
+  const drawerBackdrop = document.getElementById('drawer-backdrop');
+
+  function openSheet() {
+    drawerBackdrop.classList.remove('hidden');
+    setTimeout(() => {
+      drawerBackdrop.classList.remove('opacity-0');
+      drawerSheet.classList.remove('translate-y-full');
+    }, 10);
+  }
+
+  function closeSheet() {
+    drawerSheet.classList.add('translate-y-full');
+    drawerBackdrop.classList.add('opacity-0');
+    setTimeout(() => {
+      drawerBackdrop.classList.add('hidden');
+    }, 300);
+  }
+
+  if (openDrawerBtn) openDrawerBtn.addEventListener('click', openSheet);
+  if (closeDrawerBtn) closeDrawerBtn.addEventListener('click', closeSheet);
+  if (drawerBackdrop) drawerBackdrop.addEventListener('click', closeSheet);
+
+  // Micro feedback on bottom primary action
+  const confirmBtn = document.getElementById('confirm-list-btn');
+  if (confirmBtn) {
+    confirmBtn.addEventListener('click', () => {
+      confirmBtn.classList.add('bg-on-tertiary-container');
+      setTimeout(() => {
+        confirmBtn.classList.remove('bg-on-tertiary-container');
+      }, 400);
+    });
+  }
+</script></main><nav class="fixed bottom-0 w-full z-50 pb-safe bg-surface-container-lowest/90 backdrop-blur-xl shadow-[0_-1px_8px_rgba(0,0,0,0.04)]" data-active-classes="text-primary font-bold"><div class="flex justify-around items-center h-16 px-space-xs"><a aria-current="page" class="flex flex-col items-center justify-center gap-space-xs w-16 h-12 transition-colors text-primary font-bold" data-path="fleet-maintenance" href="#"><span class="material-symbols-outlined text-[22px]">build_circle</span><span class="font-caption text-caption">Maint</span></a><a class="flex flex-col items-center justify-center gap-space-xs w-16 h-12 text-on-surface-variant hover:text-on-surface transition-colors" data-path="vehicles-registry" href="#"><span class="material-symbols-outlined text-[22px]">local_shipping</span><span class="font-caption text-caption">Vehicles</span></a><a class="flex flex-col items-center justify-center gap-space-xs w-16 h-12 text-on-surface-variant hover:text-on-surface transition-colors" data-path="driver-ops" href="#"><span class="material-symbols-outlined text-[22px]">badge</span><span class="font-caption text-caption">Drivers</span></a><a class="flex flex-col items-center justify-center gap-space-xs w-16 h-12 text-on-surface-variant hover:text-on-surface transition-colors" data-path="fleet-reports" href="#"><span class="material-symbols-outlined text-[22px]">monitoring</span><span class="font-caption text-caption">Reports</span></a></div></nav></body></html>

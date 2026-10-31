@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_standard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&amp;family=JetBrains+Mono:wght@100..900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{colors:{"surface-bright":"#f7f9fb","tertiary":"#000000","on-secondary":"#ffffff","secondary-fixed":"#e2e1f4","error-container":"#ffdad6","background":"#f7f9fb","tertiary-fixed-dim":"#ffb690","on-primary-fixed-variant":"#46445b","surface-tint":"#5e5c74","on-secondary-fixed-variant":"#454555","secondary-container":"#dfdef1","on-secondary-container":"#616172","on-surface-variant":"#47464c","primary-fixed-dim":"#c8c3df","on-surface":"#191c1e","on-primary":"#ffffff","surface-dim":"#d8dadc","on-tertiary-container":"#d95f00","surface-container-high":"#e6e8ea","outline":"#78767d","on-tertiary-fixed-variant":"#783200","surface-container":"#eceef0","primary":"#000000","on-background":"#191c1e","error":"#ba1a1a","primary-fixed":"#e4dffc","on-tertiary-fixed":"#341100","inverse-surface":"#2d3133","on-error-container":"#93000a","on-error":"#ffffff","on-secondary-fixed":"#1a1a28","on-primary-fixed":"#1b192e","on-primary-container":"#84819a","primary-container":"#1b192e","inverse-on-surface":"#eff1f3","tertiary-fixed":"#ffdbca","inverse-primary":"#c8c3df","tertiary-container":"#341100","surface-container-low":"#f2f4f6","on-tertiary":"#ffffff","secondary-fixed-dim":"#c6c5d8","surface":"#f7f9fb","surface-container-lowest":"#ffffff","outline-variant":"#c9c5cd","surface-container-highest":"#e0e3e5","secondary":"#5d5d6d","surface-variant":"#e0e3e5"},borderRadius:{DEFAULT:"0.25rem",lg:"0.5rem",xl:"0.75rem",full:"9999px"},spacing:{"gutter":"1rem","gutter-desktop":"1.5rem","margin":"1rem","space-xl":"1.5rem","space-xs":"0.25rem","space-md":"0.75rem","space-lg":"1rem","margin-desktop":"2rem","space-sm":"0.5rem"},fontFamily:{"headline-sm":["Inter"],"body-md":["Inter"],"headline-xl":["Inter"],"label-plate":["JetBrains Mono"],"body-lg":["Inter"],"label-price":["JetBrains Mono"],"headline-lg":["Inter"],"caption":["Inter"],"label-code":["JetBrains Mono"],"body-sm":["Inter"]},fontSize:{"headline-sm":["18px",{lineHeight:"26px",letterSpacing:"-0.01em",fontWeight:"600"}],"body-md":["14px",{lineHeight:"20px",letterSpacing:"0em",fontWeight:"400"}],"headline-xl":["30px",{lineHeight:"38px",letterSpacing:"-0.02em",fontWeight:"600"}],"label-plate":["14px",{lineHeight:"18px",letterSpacing:"0.08em",fontWeight:"700"}],"body-lg":["16px",{lineHeight:"24px",letterSpacing:"-0.005em",fontWeight:"400"}],"label-price":["14px",{lineHeight:"20px",letterSpacing:"-0.02em",fontWeight:"600"}],"headline-lg":["24px",{lineHeight:"32px",letterSpacing:"-0.015em",fontWeight:"600"}],"caption":["11px",{lineHeight:"14px",letterSpacing:"0.02em",fontWeight:"500"}],"label-code":["13px",{lineHeight:"18px",letterSpacing:"-0.01em",fontWeight:"500"}],"body-sm":["13px",{lineHeight:"18px",letterSpacing:"0em",fontWeight:"400"}]}}}};</script></head><body class="bg-surface font-body-md text-on-surface antialiased"><header class="fixed top-0 left-0 right-0 z-50 flex flex-col"><div class="h-14 bg-primary text-on-primary px-margin-desktop flex items-center justify-between shadow-[0_1px_8px_rgba(0,0,0,0.12)]"><div class="flex items-center gap-space-lg"><div class="flex items-center gap-space-sm"><div class="w-7 h-7 rounded bg-surface-container-highest flex items-center justify-center text-primary"><span class="material-symbols-outlined text-[18px]">local_shipping</span></div><span class="font-headline-sm text-headline-sm tracking-tight text-on-primary">Roam Fleet</span></div><span class="px-space-sm py-0.5 rounded-full bg-surface-variant/20 text-surface-bright font-caption text-caption uppercase tracking-wider border border-surface-variant/30">Kingston Hub</span><div class="hidden lg:flex items-center gap-space-xs text-on-surface-variant font-body-sm text-body-sm bg-surface-container-high/10 px-space-md py-1 rounded cursor-pointer hover:bg-surface-container-high/20 transition-colors"><span class="material-symbols-outlined text-[16px]">search</span><span class="text-surface-dim font-label-code text-label-code">Switch vehicle or search hub...</span></div></div><div class="flex items-center gap-space-xl"><div class="hidden md:flex items-center gap-space-xs font-label-code text-label-code text-surface-dim"><span class="w-2 h-2 rounded-full bg-secondary-fixed"></span><span>JM (JMD)</span></div><div class="relative flex items-center cursor-pointer text-on-primary"><span class="material-symbols-outlined text-[20px]">notifications</span><span class="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-tertiary-fixed-dim ring-2 ring-primary"></span></div><div class="flex items-center gap-space-sm pl-space-md border-l border-surface-variant/20"><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div><div class="hidden xl:flex flex-col text-left"><span class="font-label-code text-label-code leading-none text-on-primary">JD (Fleet Lead)</span><span class="font-caption text-caption text-surface-dim leading-tight">Operations</span></div><span class="material-symbols-outlined text-[16px] text-surface-dim">arrow_drop_down</span></div></div></div><div class="h-12 bg-surface-container-lowest border-b border-surface-container-high px-margin-desktop flex items-center justify-between"><nav class="flex items-center gap-space-lg h-full overflow-x-auto" data-active-classes="font-headline-sm text-headline-sm text-on-surface border-b-2 border-primary"><a class="text-on-surface-variant font-body-md text-body-md h-full flex items-center hover:text-on-surface transition-colors whitespace-nowrap" data-path="dashboard" href="#">Dashboard</a><a class="text-on-surface-variant font-body-md text-body-md h-full flex items-center hover:text-on-surface transition-colors whitespace-nowrap" data-path="fleet-operations" href="#">Fleet Operations</a><a class="text-on-surface-variant font-body-md text-body-md h-full flex items-center hover:text-on-surface transition-colors whitespace-nowrap" data-path="driver-operations" href="#">Driver Operations</a><a class="text-on-surface-variant font-body-md text-body-md h-full flex items-center hover:text-on-surface transition-colors whitespace-nowrap" data-path="money" href="#">Money</a><a class="text-on-surface-variant font-body-md text-body-md h-full flex items-center hover:text-on-surface transition-colors whitespace-nowrap" data-path="vehicle-operations" href="#">Vehicle Operations</a><a class="text-on-surface-variant font-body-md text-body-md h-full flex items-center hover:text-on-surface transition-colors whitespace-nowrap" data-path="delivery-operations" href="#">Delivery Operations</a><a class="text-on-surface-variant font-body-md text-body-md h-full flex items-center hover:text-on-surface transition-colors whitespace-nowrap" data-path="analytics" href="#">Analytics</a><a class="text-on-surface-variant font-body-md text-body-md h-full flex items-center hover:text-on-surface transition-colors whitespace-nowrap" data-path="reports" href="#">Reports</a><a class="text-on-surface-variant font-body-md text-body-md h-full flex items-center hover:text-on-surface transition-colors whitespace-nowrap" data-path="business-finance" href="#">Business Finance</a></nav><div class="hidden md:flex items-center gap-space-lg"><div class="flex items-center gap-space-xs font-label-code text-label-code text-on-surface-variant"><span class="material-symbols-outlined text-[16px]">schedule</span><span>EST / UTC-5</span></div><div class="flex items-center gap-1 font-label-code text-label-code text-on-surface-variant bg-surface-container px-2 py-0.5 rounded border border-outline-variant/40"><kbd>⌘</kbd><kbd>K</kbd></div></div></div></header><main class="w-full pt-26 bg-surface min-h-[calc(100vh-80px)]"><div class="flex flex-col w-full">
+<!-- Interactive & State Logic Script -->
+<script>
+    function selectAxle(position) {
+      // Toggle card visuals
+      const cards = ['front', 'rear', 'both'];
+      cards.forEach(pos => {
+        const card = document.getElementById('card-' + pos);
+        const radio = document.getElementById('radio-' + pos);
+        const icon = document.getElementById('icon-' + pos);
+        if (pos === position) {
+          card.classList.remove('bg-surface-container-lowest', 'text-on-surface');
+          card.classList.add('bg-surface-container-high', 'text-on-surface');
+          radio.classList.remove('bg-surface-container-high', 'text-transparent');
+          radio.classList.add('bg-primary', 'text-on-primary');
+          icon.textContent = 'check';
+        } else {
+          card.classList.remove('bg-surface-container-high');
+          card.classList.add('bg-surface-container-lowest');
+          radio.classList.remove('bg-primary', 'text-on-primary');
+          radio.classList.add('bg-surface-container-high', 'text-transparent');
+          icon.textContent = '';
+        }
+      });
+
+      // Update chassis diagram markers
+      const frontZone = document.getElementById('diagram-front-axle');
+      const rearZone = document.getElementById('diagram-rear-axle');
+      const frontPill = document.getElementById('diagram-front-pill');
+      const rearPill = document.getElementById('diagram-rear-pill');
+      const partsCounter = document.getElementById('parts-available-count');
+
+      if (position === 'front') {
+        frontZone.setAttribute('opacity', '1');
+        rearZone.setAttribute('opacity', '0.2');
+        frontPill.className = 'px-space-sm py-0.5 rounded font-caption text-caption uppercase tracking-wider bg-primary text-on-primary shadow-sm flex items-center gap-1';
+        rearPill.className = 'px-space-sm py-0.5 rounded font-caption text-caption uppercase tracking-wider bg-surface-container-highest text-on-surface-variant flex items-center gap-1';
+        partsCounter.textContent = '(6 matching parts available)';
+      } else if (position === 'rear') {
+        frontZone.setAttribute('opacity', '0.2');
+        rearZone.setAttribute('opacity', '1');
+        frontPill.className = 'px-space-sm py-0.5 rounded font-caption text-caption uppercase tracking-wider bg-surface-container-highest text-on-surface-variant flex items-center gap-1';
+        rearPill.className = 'px-space-sm py-0.5 rounded font-caption text-caption uppercase tracking-wider bg-primary text-on-primary shadow-sm flex items-center gap-1';
+        partsCounter.textContent = '(4 matching parts available)';
+      } else {
+        frontZone.setAttribute('opacity', '1');
+        rearZone.setAttribute('opacity', '1');
+        frontPill.className = 'px-space-sm py-0.5 rounded font-caption text-caption uppercase tracking-wider bg-primary text-on-primary shadow-sm flex items-center gap-1';
+        rearPill.className = 'px-space-sm py-0.5 rounded font-caption text-caption uppercase tracking-wider bg-primary text-on-primary shadow-sm flex items-center gap-1';
+        partsCounter.textContent = '(10 matching parts available)';
+      }
+    }
+  </script>
+<!-- Sticky Choice Trail & Progress Stepper Bar -->
+<section class="w-full bg-surface-container-lowest shadow-sm z-30">
+<div class="max-w-[1400px] mx-auto px-gutter md:px-margin-desktop py-space-md flex flex-col lg:flex-row lg:items-center lg:justify-between gap-space-md">
+<!-- Stepper / Breadcrumbs -->
+<nav aria-label="Step progress" class="flex items-center gap-space-xs overflow-x-auto text-body-sm font-body-sm">
+<a class="flex items-center gap-1.5 text-on-surface-variant hover:text-on-surface whitespace-nowrap group" href="#">
+<span class="w-5 h-5 rounded-full bg-surface-container-highest text-on-surface flex items-center justify-center font-caption text-caption">
+<span class="material-symbols-outlined text-[13px]">check</span>
+</span>
+<span class="font-medium">1. Pick vehicle</span>
+</a>
+<span class="text-surface-dim font-label-code text-label-code">/</span>
+<a class="flex items-center gap-1.5 text-on-surface-variant hover:text-on-surface whitespace-nowrap group" href="#">
+<span class="w-5 h-5 rounded-full bg-surface-container-highest text-on-surface flex items-center justify-center font-caption text-caption">
+<span class="material-symbols-outlined text-[13px]">check</span>
+</span>
+<span class="font-medium">2. Trim &amp; Year</span>
+</a>
+<span class="text-surface-dim font-label-code text-label-code">/</span>
+<a class="flex items-center gap-1.5 text-on-surface-variant hover:text-on-surface whitespace-nowrap group" href="#">
+<span class="w-5 h-5 rounded-full bg-surface-container-highest text-on-surface flex items-center justify-center font-caption text-caption">
+<span class="material-symbols-outlined text-[13px]">check</span>
+</span>
+<span class="font-medium">3. Category</span>
+</a>
+<span class="text-surface-dim font-label-code text-label-code">/</span>
+<div class="flex items-center gap-1.5 text-on-surface whitespace-nowrap font-semibold">
+<span class="w-5 h-5 rounded-full bg-primary text-on-primary flex items-center justify-center font-caption text-caption">4</span>
+<span class="bg-surface-container px-space-xs py-0.5 rounded">4. Position &amp; Fit</span>
+</div>
+</nav>
+<!-- Sticky Context Trail & Metadata Chips -->
+<div class="flex items-center flex-wrap gap-space-sm bg-surface-container-low px-space-md py-1.5 rounded-lg shadow-sm">
+<div class="flex items-center gap-1.5 font-label-code text-label-code text-on-surface">
+<span class="font-bold">Honda Fit 2018</span>
+<span class="text-outline">›</span>
+<a class="flex items-center gap-0.5 text-primary hover:underline group" href="#">
+<span class="font-medium">Brake pads</span>
+<span class="material-symbols-outlined text-[14px]">edit</span>
+</a>
+</div>
+<span class="text-surface-dim">|</span>
+<!-- Plate & Engine Specs -->
+<div class="flex items-center gap-space-xs">
+<span class="font-label-plate text-label-plate bg-primary text-on-primary px-space-xs py-0.5 rounded shadow-sm">1505LM</span>
+<span class="font-caption text-caption bg-surface-container-highest text-on-surface-variant px-space-sm py-0.5 rounded">1.5 Hybrid · GP5</span>
+<span class="font-caption text-caption bg-secondary-fixed text-on-secondary-fixed px-space-sm py-0.5 rounded hidden sm:inline-block">Kingston Fleet Unit</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Main Content Workspace -->
+<div class="max-w-[1400px] w-full mx-auto px-gutter md:px-margin-desktop py-space-xl flex flex-col gap-space-xl">
+<!-- Title and Orientation Banner -->
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-space-md">
+<div class="space-y-1">
+<span class="font-caption text-caption uppercase tracking-wider text-on-surface-variant font-semibold">Axle Position Disambiguation</span>
+<h1 class="font-headline-xl text-headline-xl text-on-surface tracking-tight">Which brakes?</h1>
+<p class="font-body-md text-body-md text-on-surface-variant max-w-2xl">
+          Front and back brake pads are different parts on the GP5 chassis. Select the axle needing replacement to load correct caliper fitments.
+        </p>
+</div>
+<!-- Quick KPI or Fleet Telemetry -->
+<div class="bg-surface-container-lowest p-space-md rounded-xl shadow-sm flex items-center gap-space-lg">
+<div class="flex flex-col">
+<span class="font-caption text-caption text-on-surface-variant uppercase">Current ODO</span>
+<span class="font-label-code text-label-code font-bold text-on-surface">64,280 km</span>
+</div>
+<div class="w-px h-8 bg-surface-container"></div>
+<div class="flex flex-col">
+<span class="font-caption text-caption text-on-surface-variant uppercase">Last Brake Service</span>
+<span class="font-label-code text-label-code text-on-surface">18,400 km ago</span>
+</div>
+</div>
+</div>
+<!-- Two-Column Interactive Layout -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-space-xl items-start">
+<!-- LEFT SIDE: Interactive Top-down Vehicle Chassis & Axle Diagram (5 Columns) -->
+<div class="lg:col-span-5 bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col gap-space-md">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-xs font-label-code text-label-code font-bold text-on-surface">
+<span class="material-symbols-outlined text-[18px]">build_circle</span>
+<span>CHASSIS VISUAL INSPECTION</span>
+</div>
+<span class="font-caption text-caption bg-surface-container-high text-on-surface-variant px-space-sm py-0.5 rounded">GP5 · FWD</span>
+</div>
+<!-- Directional indicator -->
+<div class="flex items-center justify-center gap-1.5 py-1 bg-surface-container-low rounded text-on-surface-variant font-caption text-caption uppercase font-semibold tracking-wider">
+<span class="material-symbols-outlined text-[14px]">arrow_upward</span>
+<span>▲ Front of vehicle (Direction of Travel)</span>
+</div>
+<!-- Vector Chassis Blueprint Container -->
+<div class="relative w-full h-[460px] bg-surface-container-low rounded-xl flex items-center justify-center p-space-md overflow-hidden">
+<!-- Subtle Blueprint Grid Pattern -->
+<div class="absolute inset-0 opacity-20 pointer-events-none" style="background-image: radial-gradient(circle, #78767d 1px, transparent 1px); background-size: 20px 20px;"></div>
+<!-- SVG Vehicle Schematic -->
+<svg class="w-full h-full max-w-[280px]" fill="none" viewbox="0 0 260 420" xmlns="http://www.w3.org/2000/svg">
+<!-- Centerline -->
+<line stroke="#c9c5cd" stroke-dasharray="4 4" stroke-width="1" x1="130" x2="130" y1="20" y2="400"></line>
+<!-- Car Body Silhouette (Hatchback GP5) -->
+<path d="M 60 70 C 60 40, 80 25, 130 25 C 180 25, 200 40, 200 70 L 205 110 C 210 160, 210 280, 204 350 C 202 385, 175 395, 130 395 C 85 395, 58 385, 56 350 C 50 280, 50 160, 55 110 Z" fill="#eceef0"></path>
+<path d="M 68 85 C 80 50, 180 50, 192 85 L 188 140 C 180 144, 80 144, 72 140 Z" fill="#ffffff" opacity="0.8"></path>
+<!-- Rear Window -->
+<path d="M 75 320 L 185 320 C 180 345, 160 360, 130 360 C 100 360, 80 345, 75 320 Z" fill="#ffffff" opacity="0.8"></path>
+<!-- Roof Outline -->
+<rect fill="#e0e3e5" height="155" rx="8" width="112" x="74" y="152"></rect>
+<!-- FRONT AXLE INTERACTIVE GROUP -->
+<g class="cursor-pointer transition-opacity duration-300" id="diagram-front-axle" onclick="selectAxle('front')">
+<!-- Axle Rod -->
+<line stroke="#191c1e" stroke-linecap="round" stroke-width="4" x1="32" x2="228" y1="112" y2="112"></line>
+<!-- Front Left Wheel & Disc -->
+<rect fill="#191c1e" height="52" rx="4" width="22" x="22" y="86"></rect>
+<rect fill="#5d5d6d" height="32" rx="2" width="6" x="42" y="96"></rect>
+<!-- Front Right Wheel & Disc -->
+<rect fill="#191c1e" height="52" rx="4" width="22" x="216" y="86"></rect>
+<rect fill="#5d5d6d" height="32" rx="2" width="6" x="212" y="96"></rect>
+<!-- Visual Indicator Rings around Front Calipers -->
+<circle cx="45" cy="112" fill="#000000" fill-opacity="0.1" r="14"></circle>
+<circle cx="215" cy="112" fill="#000000" fill-opacity="0.1" r="14"></circle>
+<!-- Caliper Icons -->
+<circle cx="45" cy="112" fill="#000000" r="5"></circle>
+<circle cx="215" cy="112" fill="#000000" r="5"></circle>
+</g>
+<!-- REAR AXLE INTERACTIVE GROUP -->
+<g class="cursor-pointer transition-opacity duration-300 opacity-25" id="diagram-rear-axle" onclick="selectAxle('rear')">
+<!-- Rear Axle Rod -->
+<line stroke="#191c1e" stroke-linecap="round" stroke-width="4" x1="32" x2="228" y1="324" y2="324"></line>
+<!-- Rear Left Wheel & Solid Disc -->
+<rect fill="#191c1e" height="48" rx="4" width="22" x="22" y="300"></rect>
+<rect fill="#5d5d6d" height="32" rx="2" width="5" x="42" y="308"></rect>
+<!-- Rear Right Wheel & Solid Disc -->
+<rect fill="#191c1e" height="48" rx="4" width="22" x="216" y="300"></rect>
+<rect fill="#5d5d6d" height="32" rx="2" width="5" x="213" y="308"></rect>
+<!-- Caliper dots -->
+<circle cx="44" cy="324" fill="#000000" r="4"></circle>
+<circle cx="216" cy="324" fill="#000000" r="4"></circle>
+</g>
+</svg>
+<!-- Interactive Overlay Overlay Tags -->
+<div class="absolute top-20 left-4">
+<button class="px-space-sm py-0.5 rounded font-caption text-caption uppercase tracking-wider bg-primary text-on-primary shadow-sm flex items-center gap-1 transition-all" id="diagram-front-pill" onclick="selectAxle('front')">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary-fixed"></span>
+<span>Front Axle (Selected)</span>
+</button>
+</div>
+<div class="absolute bottom-24 left-4">
+<button class="px-space-sm py-0.5 rounded font-caption text-caption uppercase tracking-wider bg-surface-container-highest text-on-surface-variant flex items-center gap-1 transition-all" id="diagram-rear-pill" onclick="selectAxle('rear')">
+<span>Rear Axle</span>
+</button>
+</div>
+</div>
+<!-- Technical Axle Specifications Bar -->
+<div class="grid grid-cols-2 gap-space-sm">
+<div class="p-space-sm bg-surface-container-low rounded-lg flex flex-col gap-0.5">
+<span class="font-caption text-caption uppercase text-on-surface-variant font-bold">Front Rotor Spec</span>
+<span class="font-body-sm text-body-sm font-semibold text-on-surface">Disc (Vented, 262mm)</span>
+<span class="font-caption text-caption text-on-surface-variant">Floating single-piston</span>
+</div>
+<div class="p-space-sm bg-surface-container-low rounded-lg flex flex-col gap-0.5">
+<span class="font-caption text-caption uppercase text-on-surface-variant font-bold">Rear Rotor Spec</span>
+<span class="font-body-sm text-body-sm font-semibold text-on-surface">Disc (Solid, 239mm)</span>
+<span class="font-caption text-caption text-on-surface-variant">Mechanical handbrake integrated</span>
+</div>
+</div>
+</div>
+<!-- RIGHT SIDE: Choice Selection Cards (7 Columns) -->
+<div class="lg:col-span-7 flex flex-col gap-space-md">
+<!-- CARD 1: FRONT (SELECTED) -->
+<div class="cursor-pointer bg-surface-container-high rounded-xl p-space-lg shadow-sm transition-all flex flex-col gap-space-md" id="card-front" onclick="selectAxle('front')">
+<div class="flex items-start justify-between gap-space-md">
+<div class="flex items-start gap-space-md">
+<div class="w-6 h-6 rounded-full bg-primary text-on-primary flex items-center justify-center flex-shrink-0 mt-0.5 shadow-sm" id="radio-front">
+<span class="material-symbols-outlined text-[16px]" id="icon-front">check</span>
+</div>
+<div class="space-y-1">
+<div class="flex items-center gap-space-sm">
+<h3 class="font-headline-sm text-headline-sm text-on-surface font-bold">Front</h3>
+<span class="font-caption text-caption uppercase bg-primary text-on-primary px-space-xs py-0.5 rounded font-semibold tracking-wider">70% Wear Load</span>
+</div>
+<p class="font-body-md text-body-md text-on-surface font-medium">Front axle brake pad set (4 pads · Left &amp; Right wheels)</p>
+</div>
+</div>
+<div class="text-right flex-shrink-0">
+<span class="font-caption text-caption uppercase text-on-surface-variant block">Est. Replacement Time</span>
+<span class="font-label-code text-label-code font-bold text-on-surface">45 mins</span>
+</div>
+</div>
+<div class="bg-surface-container-lowest p-space-sm rounded-lg flex items-center gap-space-sm text-on-surface-variant font-body-sm text-body-sm">
+<span class="material-symbols-outlined text-[18px] text-on-surface">info</span>
+<span>Most common wear item (~70% of braking force). Fits GP5 disc brake calipers.</span>
+</div>
+<!-- Inventory Availability Chip -->
+<div class="flex flex-wrap items-center justify-between gap-space-sm pt-space-xs">
+<div class="flex items-center gap-2">
+<span class="w-2.5 h-2.5 rounded-full bg-primary animate-pulse"></span>
+<span class="font-label-code text-label-code font-bold text-on-surface">On your shelf: 2 sets available at Kingston Hub #01</span>
+</div>
+<span class="font-caption text-caption bg-surface-container text-on-surface-variant px-space-sm py-0.5 rounded">Bins: KH-B4-09</span>
+</div>
+</div>
+<!-- CARD 2: BACK / REAR (UNSELECTED) -->
+<div class="cursor-pointer bg-surface-container-lowest hover:bg-surface-container-low rounded-xl p-space-lg shadow-sm transition-all flex flex-col gap-space-md" id="card-rear" onclick="selectAxle('rear')">
+<div class="flex items-start justify-between gap-space-md">
+<div class="flex items-start gap-space-md">
+<div class="w-6 h-6 rounded-full bg-surface-container-high text-transparent flex items-center justify-center flex-shrink-0 mt-0.5" id="radio-rear">
+<span class="material-symbols-outlined text-[16px]" id="icon-rear"></span>
+</div>
+<div class="space-y-1">
+<div class="flex items-center gap-space-sm">
+<h3 class="font-headline-sm text-headline-sm text-on-surface font-bold">Back (Rear)</h3>
+<span class="font-caption text-caption bg-surface-container-high text-on-surface-variant px-space-xs py-0.5 rounded">Secondary Wear</span>
+</div>
+<p class="font-body-md text-body-md text-on-surface font-medium">Rear axle brake pad set (4 pads · Left &amp; Right wheels)</p>
+</div>
+</div>
+<div class="text-right flex-shrink-0">
+<span class="font-caption text-caption uppercase text-on-surface-variant block">Est. Replacement Time</span>
+<span class="font-label-code text-label-code font-bold text-on-surface">50 mins</span>
+</div>
+</div>
+<div class="bg-surface-container-low p-space-sm rounded-lg flex items-center gap-space-sm text-on-surface-variant font-body-sm text-body-sm">
+<span class="material-symbols-outlined text-[18px]">engineering</span>
+<span>Less frequent wear. Specific to JDM GP5 disc brake rear setup with integrated handbrake piston.</span>
+</div>
+<!-- Inventory Availability Chip -->
+<div class="flex flex-wrap items-center justify-between gap-space-sm pt-space-xs">
+<div class="flex items-center gap-2">
+<span class="w-2.5 h-2.5 rounded-full bg-secondary"></span>
+<span class="font-label-code text-label-code text-on-surface-variant">Supplier stock only (Kingston Auto Parts, Hagley Park Rd)</span>
+</div>
+<span class="font-caption text-caption text-on-surface-variant">Same-day courier dispatch</span>
+</div>
+</div>
+<!-- CARD 3: BOTH (FRONT & BACK) -->
+<div class="cursor-pointer bg-surface-container-lowest hover:bg-surface-container-low rounded-xl p-space-lg shadow-sm transition-all flex flex-col gap-space-md" id="card-both" onclick="selectAxle('both')">
+<div class="flex items-start justify-between gap-space-md">
+<div class="flex items-start gap-space-md">
+<div class="w-6 h-6 rounded-full bg-surface-container-high text-transparent flex items-center justify-center flex-shrink-0 mt-0.5" id="radio-both">
+<span class="material-symbols-outlined text-[16px]" id="icon-both"></span>
+</div>
+<div class="space-y-1">
+<div class="flex items-center gap-space-sm">
+<h3 class="font-headline-sm text-headline-sm text-on-surface font-bold">Both (Front &amp; Back)</h3>
+<span class="font-caption text-caption bg-secondary-fixed text-on-secondary-fixed px-space-xs py-0.5 rounded font-semibold">Recommended Package</span>
+</div>
+<p class="font-body-md text-body-md text-on-surface font-medium">Complete 8-pad replacement package for all four wheels</p>
+</div>
+</div>
+<div class="text-right flex-shrink-0">
+<span class="font-caption text-caption uppercase text-on-surface-variant block">Combined Job</span>
+<span class="font-label-code text-label-code font-bold text-on-surface">1 hr 25 mins</span>
+</div>
+</div>
+<div class="bg-surface-container-low p-space-sm rounded-lg flex items-center gap-space-sm text-on-surface-variant font-body-sm text-body-sm">
+<span class="material-symbols-outlined text-[18px]">verified</span>
+<span>Ideal for comprehensive 50,000 km brake overhaul or scheduled pre-COF fleet certifications.</span>
+</div>
+<div class="flex items-center gap-2 bg-surface-container-lowest p-space-sm rounded text-on-surface font-body-sm text-body-sm shadow-sm">
+<span class="material-symbols-outlined text-[16px] text-tertiary-fixed-dim">local_shipping</span>
+<span class="font-medium">Combined supplier order eligible for free courier delivery to Kingston Hub.</span>
+</div>
+</div>
+<!-- Helpful Inspection Note Callout -->
+<div class="bg-surface-container-low rounded-xl p-space-md shadow-sm flex items-start gap-space-md">
+<div class="w-8 h-8 rounded-full bg-surface-container-highest flex items-center justify-center flex-shrink-0 text-on-surface">
+<span class="material-symbols-outlined text-[18px]">lightbulb</span>
+</div>
+<div class="space-y-1">
+<h4 class="font-body-md text-body-md font-bold text-on-surface">Fleet Maintenance Tip</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant leading-relaxed">
+              If the driver reported squealing while applying normal pedal pressure on Red Hills Road routes, inspect the Front pads first. Kingston city driving causes front wear at roughly twice the rate of rear solid discs.
+            </p>
+</div>
+</div>
+</div>
+</div>
+<!-- Sticky Bottom Navigation Action Bar -->
+<div class="w-full bg-surface-container-lowest p-space-md rounded-xl shadow-sm flex items-center justify-between gap-space-md">
+<a class="px-space-lg py-2.5 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-body-md text-body-md font-medium transition-colors flex items-center gap-space-xs" href="#">
+<span class="material-symbols-outlined text-[18px]">arrow_back</span>
+<span>Back to Categories</span>
+</a>
+<div class="flex items-center gap-space-md">
+<div class="hidden sm:flex flex-col text-right">
+<span class="font-caption text-caption text-on-surface-variant uppercase">Filtered Catalog</span>
+<span class="font-label-code text-label-code text-on-surface font-bold">Front Fitment Verified</span>
+</div>
+<button class="px-space-xl py-2.5 rounded-lg bg-primary text-on-primary hover:bg-inverse-surface font-body-md text-body-md font-semibold transition-transform active:scale-95 flex items-center gap-space-sm shadow-md" onclick="window.location.hash = 'parts-list'">
+<span>Show parts</span>
+<span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+<span class="font-caption text-caption bg-surface-container-highest/30 px-space-xs py-0.5 rounded text-on-primary font-normal" id="parts-available-count">
+            (6 matching parts available)
+          </span>
+</button>
+</div>
+</div>
+</div>
+</div></main><footer class="w-full bg-surface-container-lowest border-t border-surface-container-high py-space-lg"><div class="max-w-[1400px] mx-auto px-margin-desktop flex flex-col md:flex-row items-center justify-between text-on-surface-variant font-caption text-caption gap-space-sm"><div>© 2025 Roam Fleet Operations (Kingston Hub #01, Jamaica). High-Reliability Telemetry &amp; Fitment Engine.</div><div class="flex items-center gap-space-lg"><span class="font-label-code text-label-code">LATENCY: 24ms (KIN)</span><span class="font-label-code text-label-code">STATUS: ALL SYSTEMS NOMINAL</span></div></div></footer></body></html>

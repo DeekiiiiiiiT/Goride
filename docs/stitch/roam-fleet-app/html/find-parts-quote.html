@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_standard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={"darkMode":"class","theme":{"extend":{"colors":{"inverse-surface":"#2d3133","secondary-container":"#dfdef1","on-tertiary-container":"#d95f00","on-error-container":"#93000a","on-tertiary":"#ffffff","inverse-primary":"#c8c3df","tertiary-container":"#341100","secondary-fixed-dim":"#c6c5d8","surface-variant":"#e0e3e5","surface":"#f7f9fb","surface-container":"#eceef0","on-surface":"#191c1e","primary-fixed":"#e4dffc","outline-variant":"#c9c5cd","inverse-on-surface":"#eff1f3","on-tertiary-fixed":"#341100","on-secondary":"#ffffff","primary-fixed-dim":"#c8c3df","secondary-fixed":"#e2e1f4","primary":"#000000","error":"#ba1a1a","on-primary-container":"#84819a","on-secondary-fixed-variant":"#454555","surface-container-lowest":"#ffffff","secondary":"#5d5d6d","on-tertiary-fixed-variant":"#783200","on-primary":"#ffffff","on-error":"#ffffff","outline":"#78767d","surface-dim":"#d8dadc","on-secondary-fixed":"#1a1a28","on-primary-fixed-variant":"#46445b","surface-tint":"#5e5c74","surface-bright":"#f7f9fb","on-surface-variant":"#47464c","surface-container-low":"#f2f4f6","primary-container":"#1b192e","error-container":"#ffdad6","tertiary-fixed":"#ffdbca","on-primary-fixed":"#1b192e","on-secondary-container":"#616172","background":"#f7f9fb","tertiary-fixed-dim":"#ffb690","tertiary":"#000000","surface-container-highest":"#e0e3e5","on-background":"#191c1e","surface-container-high":"#e6e8ea"},"borderRadius":{"DEFAULT":"0.25rem","lg":"0.5rem","xl":"0.75rem","full":"9999px"},"spacing":{"space-xs":"0.25rem","margin-desktop":"2rem","space-md":"0.75rem","space-lg":"1rem","gutter-desktop":"1.5rem","space-sm":"0.5rem","margin":"1rem","space-xl":"1.5rem","gutter":"1rem"},"fontFamily":{"body-md":["Inter"],"body-lg":["Inter"],"label-code":["JetBrains Mono"],"caption":["Inter"],"body-sm":["Inter"],"label-price":["JetBrains Mono"],"label-plate":["JetBrains Mono"],"headline-xl":["Inter"],"headline-sm":["Inter"],"headline-lg":["Inter"]},"fontSize":{"body-md":["14px",{"lineHeight":"20px","letterSpacing":"0em","fontWeight":"400"}],"body-lg":["16px",{"lineHeight":"24px","letterSpacing":"-0.005em","fontWeight":"400"}],"label-code":["13px",{"lineHeight":"18px","letterSpacing":"-0.01em","fontWeight":"500"}],"caption":["11px",{"lineHeight":"14px","letterSpacing":"0.02em","fontWeight":"500"}],"body-sm":["13px",{"lineHeight":"18px","letterSpacing":"0em","fontWeight":"400"}],"label-price":["14px",{"lineHeight":"20px","letterSpacing":"-0.02em","fontWeight":"600"}],"label-plate":["14px",{"lineHeight":"18px","letterSpacing":"0.08em","fontWeight":"700"}],"headline-xl":["30px",{"lineHeight":"38px","letterSpacing":"-0.02em","fontWeight":"600"}],"headline-sm":["18px",{"lineHeight":"26px","letterSpacing":"-0.01em","fontWeight":"600"}],"headline-lg":["24px",{"lineHeight":"32px","letterSpacing":"-0.015em","fontWeight":"600"}]}}}};</script></head><body class="bg-surface font-body-md text-on-surface antialiased"><header class="fixed top-0 left-0 right-0 z-50 shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="bg-primary-container h-12 w-full"><div class="max-w-[1440px] mx-auto px-margin-desktop h-full flex items-center justify-between text-on-primary"><div class="flex items-center gap-space-lg"><div class="flex items-center gap-space-sm"><span class="material-symbols-outlined text-primary-fixed">local_shipping</span><span class="font-headline-sm text-headline-sm tracking-tight text-on-primary">ROAM FLEET</span></div><div class="flex items-center gap-space-xs px-space-sm py-0.5 rounded bg-surface-container-highest/20 font-label-code text-caption text-primary-fixed"><span class="w-1.5 h-1.5 rounded-full bg-on-tertiary-container"></span><span>Kingston Hub #01</span></div></div><div class="flex items-center gap-space-lg"><div class="hidden md:flex items-center gap-space-xs px-space-md py-1 rounded bg-surface-container-highest/15 text-primary-fixed font-label-code text-caption"><span class="material-symbols-outlined text-[15px]">search</span><span>Search telemetry &amp; fleet...</span><kbd class="px-1 py-0.2 rounded bg-surface-container-highest/30 text-on-primary text-[10px]">⌘K</kbd></div><div class="flex items-center gap-space-sm font-label-code text-caption text-primary-fixed"><span class="material-symbols-outlined text-[16px]">schedule</span><span>14:32:08 EST</span></div><div class="flex items-center gap-space-sm pl-space-sm"><div class="text-right hidden sm:block"><div class="font-label-code text-caption font-semibold leading-tight text-on-primary">JD (Fleet Lead)</div><div class="font-caption text-caption text-on-primary-container">Dispatch Node 04</div></div><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></div></div><div class="bg-surface-container-lowest h-11 w-full border-b border-surface-container-high"><div class="max-w-[1440px] mx-auto px-margin-desktop h-full flex items-center justify-between"><nav class="flex items-center gap-space-lg h-full overflow-x-auto" data-active-classes="text-primary font-semibold border-b-2 border-primary"><a class="h-full flex items-center font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors whitespace-nowrap" data-path="dashboard" href="#">Dashboard</a><a class="h-full flex items-center font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors whitespace-nowrap" data-path="fleet-operations" href="#">Fleet Operations</a><a class="h-full flex items-center font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors whitespace-nowrap" data-path="driver-operations" href="#">Driver Operations</a><a class="h-full flex items-center font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors whitespace-nowrap" data-path="money" href="#">Money</a><a aria-current="page" class="h-full flex items-center transition-colors whitespace-nowrap text-primary font-semibold border-b-2 border-primary" data-path="vehicle-operations" href="#">Vehicle Operations</a><a class="h-full flex items-center font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors whitespace-nowrap" data-path="delivery-operations" href="#">Delivery Operations</a><a class="h-full flex items-center font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors whitespace-nowrap" data-path="analytics" href="#">Analytics</a><a class="h-full flex items-center font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors whitespace-nowrap" data-path="reports" href="#">Reports</a><a class="h-full flex items-center font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors whitespace-nowrap" data-path="business-finance" href="#">Business Finance</a></nav><div class="hidden xl:flex items-center gap-space-md text-on-surface-variant font-label-code text-caption"><div class="flex items-center gap-1"><kbd class="px-1.5 py-0.5 rounded bg-surface-container font-semibold text-[11px]">G</kbd><kbd class="px-1.5 py-0.5 rounded bg-surface-container font-semibold text-[11px]">V</kbd><span class="text-on-surface-variant ml-1">Vehicles</span></div><div class="w-1 h-1 rounded-full bg-outline-variant"></div><div class="flex items-center gap-1"><kbd class="px-1.5 py-0.5 rounded bg-surface-container font-semibold text-[11px]">?</kbd><span class="text-on-surface-variant ml-1">Shortcuts</span></div></div></div></div></header><main class="w-full pt-[92px] bg-surface min-h-[calc(100vh-80px)]"><div class="max-w-[1440px] mx-auto px-margin-desktop py-space-xl"><div class="flex flex-col w-full relative">
+<!-- BACKGROUND LAYER: Fleet Maintenance Parts Results Screen -->
+<div class="w-full flex flex-col gap-space-lg select-none opacity-40 pointer-events-none filter blur-[1.5px] transition-all">
+<!-- Breadcrumb & Control Bar -->
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-space-md">
+<div class="flex items-center gap-space-sm font-label-code text-caption text-on-surface-variant">
+<span>FLEET OPS</span>
+<span>/</span>
+<span>VEHICLE OPERATIONS</span>
+<span>/</span>
+<span class="text-on-surface font-semibold">PARTS CATALOGUE</span>
+<span>/</span>
+<span class="px-space-xs py-0.5 rounded bg-surface-container-high text-on-surface font-label-plate text-caption">1505LM</span>
+</div>
+<div class="flex items-center gap-space-sm">
+<div class="px-space-md py-1.5 rounded-lg bg-surface-container-low text-on-surface font-body-sm flex items-center gap-space-sm">
+<span class="material-symbols-outlined text-[18px] text-on-surface-variant">search</span>
+<span>Oil filter cartridge Toyota 04152-40060</span>
+</div>
+<div class="px-space-md py-1.5 rounded-lg bg-primary text-on-primary font-body-sm flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-[18px]">add</span>
+<span>New Requisition</span>
+</div>
+</div>
+</div>
+<!-- Telemetry & Inventory Quick Stats Bar -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-space-md">
+<div class="p-space-lg rounded-xl bg-surface-container-lowest shadow-sm flex items-center justify-between">
+<div>
+<div class="font-caption text-caption text-on-surface-variant uppercase tracking-wider">Active Inventory</div>
+<div class="font-headline-lg text-headline-lg font-semibold mt-1">1,408</div>
+<div class="font-label-code text-caption text-on-surface-variant mt-0.5">Kingston Hub Central</div>
+</div>
+<div class="w-10 h-10 rounded-lg bg-surface-container flex items-center justify-center text-on-surface">
+<span class="material-symbols-outlined">inventory_2</span>
+</div>
+</div>
+<div class="p-space-lg rounded-xl bg-surface-container-lowest shadow-sm flex items-center justify-between">
+<div>
+<div class="font-caption text-caption text-on-surface-variant uppercase tracking-wider">Stock Deficits</div>
+<div class="font-headline-lg text-headline-lg font-semibold text-error mt-1">14</div>
+<div class="font-label-code text-caption text-on-surface-variant mt-0.5">Critical replacements</div>
+</div>
+<div class="w-10 h-10 rounded-lg bg-error-container flex items-center justify-center text-on-error-container">
+<span class="material-symbols-outlined">warning</span>
+</div>
+</div>
+<div class="p-space-lg rounded-xl bg-surface-container-lowest shadow-sm flex items-center justify-between">
+<div>
+<div class="font-caption text-caption text-on-surface-variant uppercase tracking-wider">Open RFQs</div>
+<div class="font-headline-lg text-headline-lg font-semibold mt-1">7</div>
+<div class="font-label-code text-caption text-on-surface-variant mt-0.5">3 pending supplier replies</div>
+</div>
+<div class="w-10 h-10 rounded-lg bg-surface-container flex items-center justify-center text-on-surface">
+<span class="material-symbols-outlined">request_quote</span>
+</div>
+</div>
+<div class="p-space-lg rounded-xl bg-surface-container-lowest shadow-sm flex items-center justify-between">
+<div>
+<div class="font-caption text-caption text-on-surface-variant uppercase tracking-wider">Avg Lead Time</div>
+<div class="font-headline-lg text-headline-lg font-semibold mt-1">18 hrs</div>
+<div class="font-label-code text-caption text-on-surface-variant mt-0.5">Urban Corridor delivery</div>
+</div>
+<div class="w-10 h-10 rounded-lg bg-surface-container flex items-center justify-center text-on-surface">
+<span class="material-symbols-outlined">bolt</span>
+</div>
+</div>
+</div>
+<!-- Search Matches Section -->
+<div class="flex flex-col gap-space-md">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-sm">
+<span class="font-headline-sm text-headline-sm">Search Results</span>
+<span class="px-space-sm py-0.5 rounded-full bg-surface-container-high font-label-code text-caption">3 matching suppliers</span>
+</div>
+<div class="flex items-center gap-space-sm text-on-surface-variant font-body-sm">
+<span>Sort: Proximity &amp; landed cost</span>
+<span class="material-symbols-outlined text-[16px]">expand_more</span>
+</div>
+</div>
+<!-- Parts Results List -->
+<div class="grid grid-cols-1 gap-space-sm">
+<!-- Item 1 -->
+<div class="p-space-lg rounded-xl bg-surface-container-lowest shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-space-md relative overflow-hidden">
+<div class="absolute left-0 top-0 bottom-0 w-1.5 bg-primary"></div>
+<div class="flex items-center gap-space-lg pl-space-xs">
+<div class="w-16 h-16 rounded-lg bg-surface-container flex items-center justify-center overflow-hidden shrink-0">
+<img class="w-full h-full object-cover" data-alt="High-detail studio photograph of a certified automotive paper oil filter cartridge and rubber O-ring seal on clean neutral gray background, technical industrial product lighting." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBv62Lz9ceidIfIN32iIRidP7RL_6HnJ7aYIBEmMEMoarK44uwidnvoVBZ9J9gMM1LQcJUJTWQJeNEQf5IWZNvejnQ796cKkOolPdJd6Erw7l3TFpCphuQwS_aDhP5fhtEibGUR7ObyWLySHxQnhDnswXeMuFn9NiIqkmTwscLahoW8E6BByWyjRae6VFpQA0yRpRMjZ3-UBZi2443STOOOVTEOMnu_wU-eFrp5Ut8"/>
+</div>
+<div>
+<div class="flex items-center gap-space-sm">
+<span class="font-label-code text-body-sm font-semibold text-primary">TOYOTA OEM 04152-40060</span>
+<span class="px-2 py-0.5 rounded bg-secondary-container font-caption text-caption text-on-secondary-container">Exact Fit (Tier 1)</span>
+</div>
+<div class="font-headline-sm text-body-lg font-medium text-on-surface mt-0.5">High Efficiency Oil Filter Cartridge w/ O-Rings</div>
+<div class="font-body-sm text-on-surface-variant mt-1 flex items-center gap-space-md">
+<span>Direct compatibility: Honda Fit 2018 (1505LM)</span>
+<span>•</span>
+<span>Vendor: Kingston Auto Parts Ltd</span>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-space-xl">
+<div class="text-right">
+<div class="font-label-price text-headline-sm text-on-surface">J$ 3,850</div>
+<div class="font-caption text-caption text-on-surface-variant">Landed inc. GCT</div>
+</div>
+<button class="px-space-lg py-2 rounded-lg bg-primary text-on-primary font-body-sm font-medium">Request Quote</button>
+</div>
+</div>
+<!-- Item 2 -->
+<div class="p-space-lg rounded-xl bg-surface-container-lowest shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-space-md relative overflow-hidden">
+<div class="absolute left-0 top-0 bottom-0 w-1.5 bg-secondary"></div>
+<div class="flex items-center gap-space-lg pl-space-xs">
+<div class="w-16 h-16 rounded-lg bg-surface-container flex items-center justify-center overflow-hidden shrink-0">
+<img class="w-full h-full object-cover" data-alt="Technical product shot of an aftermarket automotive spin-on canister oil filter in deep metallic gray with laser engraved specifications on industrial matte surface." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBLlraW9sqlR7zbG7hI-TnSAkQRPxDITZDGk1VIDn0sUGEtfiB49ehontsJHRqAl_7tMQzfo_yGQz1Car1fSnocr04bA_e7fJeqLqXB_24avS3HGBJWOWKLG-XM4SdkNSYIS6MCzfr3eVZIPq206rlS-3WLAe1aKsoInaWGwtZIGGaCDBhWSZDmvnexsD9ECBarzakz8P4OBAH1OJQMKtaJ-_clDjideWtEIwFVdx0"/>
+</div>
+<div>
+<div class="flex items-center gap-space-sm">
+<span class="font-label-code text-body-sm font-semibold text-primary">BOSCH PREMIUM 3300-FIL</span>
+<span class="px-2 py-0.5 rounded bg-surface-container-high font-caption text-caption text-on-surface-variant">Cross-Spec Approved</span>
+</div>
+<div class="font-headline-sm text-body-lg font-medium text-on-surface mt-0.5">Synthetic Media Engine Protection Element</div>
+<div class="font-body-sm text-on-surface-variant mt-1 flex items-center gap-space-md">
+<span>Universal hybrid manifold fit</span>
+<span>•</span>
+<span>Vendor: Mandeville Motor Spares</span>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-space-xl">
+<div class="text-right">
+<div class="font-label-price text-headline-sm text-on-surface">J$ 4,120</div>
+<div class="font-caption text-caption text-on-surface-variant">Landed inc. GCT</div>
+</div>
+<button class="px-space-lg py-2 rounded-lg bg-primary text-on-primary font-body-sm font-medium">Request Quote</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- MODAL OVERLAY BACKDROP (rgba(0,0,0,0.5)) -->
+<div class="fixed inset-0 z-40 bg-black/50 backdrop-blur-[2px] transition-opacity"></div>
+<!-- FLOATING DIALOG MODAL CONTAINER (Max 520px) -->
+<div class="fixed inset-0 z-50 flex items-center justify-center p-space-md sm:p-space-lg overflow-y-auto pointer-events-auto">
+<div class="w-full max-w-[520px] rounded-xl bg-surface-container-lowest shadow-2xl p-space-lg sm:p-6 my-auto flex flex-col gap-space-lg relative transition-all duration-200" id="quoteModalWrapper">
+<!-- 1. MODAL HEADER -->
+<div class="flex items-start justify-between gap-space-md">
+<div class="flex flex-col">
+<div class="flex items-center gap-space-xs font-label-code text-caption text-on-surface-variant uppercase tracking-wider mb-1">
+<span class="material-symbols-outlined text-[15px]">send_time_extension</span>
+<span>RFQ DISPATCH · PO-2024-884</span>
+</div>
+<h2 class="font-headline-lg text-headline-lg font-bold text-on-surface tracking-tight">Request a quote</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1 leading-snug">
+            Suppliers will be notified immediately. Quotes appear in Your parts activity.
+          </p>
+</div>
+<button aria-label="Close dialog" class="w-8 h-8 rounded-lg bg-surface-container hover:bg-surface-container-high transition-colors flex items-center justify-center text-on-surface shrink-0" id="modalCloseBtn" type="button">
+<span class="material-symbols-outlined text-[20px]">close</span>
+</button>
+</div>
+<!-- 2. READ-ONLY SUMMARY CARD -->
+<div class="rounded-lg bg-surface-container-low p-space-md flex items-start gap-space-md">
+<div class="w-10 h-10 rounded-lg bg-surface-container-lowest flex items-center justify-center shadow-sm shrink-0">
+<span class="material-symbols-outlined text-[22px] text-primary">filter_alt</span>
+</div>
+<div class="flex flex-col min-w-0 flex-1">
+<div class="flex items-center gap-space-xs flex-wrap">
+<span class="font-label-code text-body-sm font-semibold text-on-surface">Toyota 04152-40060</span>
+<span class="text-on-surface-variant">•</span>
+<span class="font-body-sm text-body-sm font-medium text-on-surface">Oil filter</span>
+</div>
+<div class="font-body-sm text-body-sm text-on-surface-variant mt-0.5 flex items-center gap-1.5 flex-wrap">
+<span>For Honda Fit 2018</span>
+<span>·</span>
+<span class="font-label-plate text-caption px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface font-bold tracking-wider">1505LM</span>
+<span>(1.5 hybrid)</span>
+</div>
+<div class="font-caption text-caption text-on-surface-variant mt-1.5 flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">storefront</span>
+<span class="truncate">Supplier target: Kingston Auto Parts &amp; Mandeville Motor Spares</span>
+</div>
+</div>
+</div>
+<!-- 3. FORM FIELDS -->
+<form class="flex flex-col gap-space-md" id="quoteRequestForm" onsubmit="event.preventDefault();">
+<!-- Field 1: Quantity -->
+<div class="flex flex-col gap-1.5">
+<label class="font-body-sm text-body-sm font-semibold text-on-surface flex items-center justify-between">
+<span>Quantity needed</span>
+<span class="font-label-code text-caption text-on-surface-variant">MIN: 1 · MAX: 24</span>
+</label>
+<div class="flex items-center gap-space-md">
+<div class="inline-flex items-center bg-surface-container-low rounded-lg p-1">
+<button aria-label="Decrease quantity" class="w-8 h-8 rounded-md bg-surface-container-lowest hover:bg-surface-variant text-on-surface font-label-code text-body-md font-bold flex items-center justify-center transition-colors shadow-sm active:scale-95" id="qtyDecBtn" type="button">
+<span class="material-symbols-outlined text-[18px]">remove</span>
+</button>
+<input class="w-14 text-center bg-transparent font-label-code text-body-lg font-bold text-on-surface focus:outline-none" id="qtyInput" readonly="" type="text" value="2"/>
+<button aria-label="Increase quantity" class="w-8 h-8 rounded-md bg-surface-container-lowest hover:bg-surface-variant text-on-surface font-label-code text-body-md font-bold flex items-center justify-center transition-colors shadow-sm active:scale-95" id="qtyIncBtn" type="button">
+<span class="material-symbols-outlined text-[18px]">add</span>
+</button>
+</div>
+<div class="flex items-center gap-1.5 font-caption text-caption text-on-surface-variant">
+<span class="material-symbols-outlined text-[15px] text-primary">warehouse</span>
+<span>Current shelf balance: <strong class="font-semibold text-on-surface font-label-code">2 units</strong> in Kingston Hub.</span>
+</div>
+</div>
+</div>
+<!-- Field 2: Urgency -->
+<div class="flex flex-col gap-1.5">
+<label class="font-body-sm text-body-sm font-semibold text-on-surface">Urgency level</label>
+<div class="grid grid-cols-3 gap-space-xs p-1 rounded-lg bg-surface-container-low font-body-sm text-body-sm">
+<button class="urgency-pill py-2 px-space-xs rounded-md text-center text-on-surface-variant hover:text-on-surface font-medium transition-all" onclick="setUrgency(this, 'Low')" type="button">
+              Low
+            </button>
+<button class="urgency-pill py-2 px-space-xs rounded-md text-center bg-surface-container-lowest text-on-surface font-semibold shadow-sm transition-all" onclick="setUrgency(this, 'Normal')" type="button">
+              Normal
+            </button>
+<button class="urgency-pill py-2 px-space-xs rounded-md text-center text-on-surface-variant hover:text-on-surface font-medium transition-all relative flex items-center justify-center gap-1" onclick="setUrgency(this, 'Urgent')" type="button">
+<span>Urgent</span>
+<span class="px-1.5 py-0.2 rounded-full bg-tertiary-fixed text-on-tertiary-fixed-variant font-caption text-[10px] font-bold">24h</span>
+</button>
+</div>
+<div class="font-caption text-caption text-on-surface-variant flex items-center gap-1" id="urgencyNotice">
+<span class="material-symbols-outlined text-[14px]">schedule</span>
+<span>Standard dispatch window (24–48 hours reply target)</span>
+</div>
+</div>
+<!-- Field 3: For vehicle -->
+<div class="flex flex-col gap-1.5">
+<label class="font-body-sm text-body-sm font-semibold text-on-surface flex items-center justify-between" for="vehicleSelect">
+<span>Assign to vehicle</span>
+<span class="font-caption text-caption text-on-surface-variant">Linked work-order #WO-992</span>
+</label>
+<div class="relative">
+<select class="w-full h-10 px-space-md pr-10 rounded-lg bg-surface-container-low text-on-surface font-body-sm appearance-none focus:outline-none focus:bg-surface-container transition-colors cursor-pointer" id="vehicleSelect">
+<option selected="" value="1505LM">Honda Fit 2018 · 1505LM</option>
+<option value="5179KZ">Toyota Roomy 2019 · 5179KZ</option>
+<option value="STOCK">Not for a specific car (Fleet stock order)</option>
+</select>
+<span class="material-symbols-outlined absolute right-3 top-2.5 text-on-surface-variant pointer-events-none text-[20px]">unfold_more</span>
+</div>
+</div>
+<!-- Field 4: Note (optional) -->
+<div class="flex flex-col gap-1.5">
+<label class="font-body-sm text-body-sm font-semibold text-on-surface flex items-center justify-between" for="orderNote">
+<span>Note <span class="font-caption text-caption text-on-surface-variant font-normal">(optional)</span></span>
+<span class="font-label-code text-caption text-on-surface-variant" id="charCount">28/140</span>
+</label>
+<textarea class="w-full p-space-md rounded-lg bg-surface-container-low text-on-surface font-body-sm resize-none focus:outline-none focus:bg-surface-container transition-colors leading-relaxed" id="orderNote" maxlength="140" oninput="document.getElementById('charCount').textContent = this.value.length + '/140'" placeholder="e.g. Need before Friday's service, or specify preferred brand." rows="2">Need before Friday's service</textarea>
+</div>
+<!-- 4. ACTION FOOTER -->
+<div class="flex items-center justify-between gap-space-md pt-space-xs mt-space-xs">
+<button class="px-space-lg py-2.5 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface font-body-sm font-medium transition-colors" id="cancelBtn" type="button">
+            Cancel
+          </button>
+<button class="px-space-xl py-2.5 rounded-lg bg-primary hover:bg-surface-tint active:scale-95 text-on-primary font-body-sm font-semibold transition-all shadow-md flex items-center gap-space-sm" id="sendQuoteBtn" type="button">
+<span>Send request</span>
+<span class="material-symbols-outlined text-[18px]">send</span>
+</button>
+</div>
+</form>
+<!-- 5. SUCCESS CONFIRMATION MODAL / INSET STATE -->
+<div class="hidden absolute inset-0 bg-surface-container-lowest rounded-xl p-space-xl flex-col items-center justify-center text-center gap-space-md z-20 transition-all" id="successPanel">
+<div class="w-16 h-16 rounded-full bg-surface-container flex items-center justify-center text-on-surface shadow-sm">
+<span class="material-symbols-outlined text-[36px]" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+<div class="flex flex-col gap-1 max-w-sm">
+<div class="font-label-code text-caption text-on-surface-variant uppercase tracking-wider">STATUS: TRANSMITTED</div>
+<h3 class="font-headline-lg text-headline-lg font-bold text-on-surface">Quote requested</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1 leading-snug">
+            We'll show the supplier replies in <span class="font-semibold text-on-surface">Your parts activity</span>. Notifications routed to Kingston Hub #01.
+          </p>
+</div>
+<div class="w-full max-w-xs p-space-md rounded-lg bg-surface-container-low text-left font-label-code text-caption flex flex-col gap-1 my-1">
+<div class="flex justify-between text-on-surface-variant">
+<span>REQUISITION:</span>
+<span class="text-on-surface font-semibold">RFQ-88402</span>
+</div>
+<div class="flex justify-between text-on-surface-variant">
+<span>QUANTITY:</span>
+<span class="text-on-surface font-semibold" id="confirmedQty">2 units</span>
+</div>
+<div class="flex justify-between text-on-surface-variant">
+<span>ASSIGNED TO:</span>
+<span class="text-on-surface font-semibold" id="confirmedVehicle">1505LM</span>
+</div>
+</div>
+<div class="flex items-center gap-space-md w-full max-w-xs mt-2">
+<button class="flex-1 py-2.5 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface font-body-sm font-semibold transition-colors" id="doneBtn" type="button">
+            Done
+          </button>
+<button class="flex-1 py-2.5 rounded-lg bg-primary text-on-primary font-body-sm font-semibold transition-colors flex items-center justify-center gap-1 shadow-sm" id="viewActivityBtn" type="button">
+<span>Activity</span>
+<span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+<script>
+  (function initQuoteModal() {
+    let currentQty = 2;
+    const minQty = 1;
+    const maxQty = 24;
+
+    const qtyInput = document.getElementById('qtyInput');
+    const qtyIncBtn = document.getElementById('qtyIncBtn');
+    const qtyDecBtn = document.getElementById('qtyDecBtn');
+    const sendQuoteBtn = document.getElementById('sendQuoteBtn');
+    const successPanel = document.getElementById('successPanel');
+    const modalWrapper = document.getElementById('quoteModalWrapper');
+    const closeBtn = document.getElementById('modalCloseBtn');
+    const cancelBtn = document.getElementById('cancelBtn');
+    const doneBtn = document.getElementById('doneBtn');
+    const viewActivityBtn = document.getElementById('viewActivityBtn');
+    const vehicleSelect = document.getElementById('vehicleSelect');
+    const confirmedQty = document.getElementById('confirmedQty');
+    const confirmedVehicle = document.getElementById('confirmedVehicle');
+
+    if (qtyIncBtn && qtyDecBtn && qtyInput) {
+      qtyIncBtn.addEventListener('click', function () {
+        if (currentQty < maxQty) {
+          currentQty++;
+          qtyInput.value = currentQty;
+        }
+      });
+
+      qtyDecBtn.addEventListener('click', function () {
+        if (currentQty > minQty) {
+          currentQty--;
+          qtyInput.value = currentQty;
+        }
+      });
+    }
+
+    window.setUrgency = function(btn, level) {
+      const allPills = document.querySelectorAll('.urgency-pill');
+      allPills.forEach(p => {
+        p.classList.remove('bg-surface-container-lowest', 'font-semibold', 'shadow-sm', 'text-on-surface');
+        p.classList.add('text-on-surface-variant', 'font-medium');
+      });
+      btn.classList.remove('text-on-surface-variant', 'font-medium');
+      btn.classList.add('bg-surface-container-lowest', 'font-semibold', 'shadow-sm', 'text-on-surface');
+
+      const notice = document.getElementById('urgencyNotice');
+      if (notice) {
+        if (level === 'Urgent') {
+          notice.innerHTML = '<span class="material-symbols-outlined text-[14px] text-tertiary">priority_high</span><span class="text-tertiary font-semibold">Priority broadcast dispatched: Vendors requested to answer under 4 hours.</span>';
+        } else if (level === 'Low') {
+          notice.innerHTML = '<span class="material-symbols-outlined text-[14px]">schedule</span><span>Economy consolidation mode (3–5 business day delivery window)</span>';
+        } else {
+          notice.innerHTML = '<span class="material-symbols-outlined text-[14px]">schedule</span><span>Standard dispatch window (24–48 hours reply target)</span>';
+        }
+      }
+    };
+
+    if (sendQuoteBtn && successPanel) {
+      sendQuoteBtn.addEventListener('click', function () {
+        if (confirmedQty) confirmedQty.textContent = currentQty + ' units';
+        if (confirmedVehicle && vehicleSelect) {
+          const opt = vehicleSelect.options[vehicleSelect.selectedIndex].text;
+          confirmedVehicle.textContent = opt.split('·')[1]?.trim() || opt;
+        }
+        successPanel.classList.remove('hidden');
+        successPanel.classList.add('flex');
+      });
+    }
+
+    function dismissDialog() {
+      if (modalWrapper) {
+        modalWrapper.classList.add('scale-95', 'opacity-0');
+        setTimeout(() => {
+          modalWrapper.parentElement.classList.add('pointer-events-none');
+          const backdrop = document.querySelector('.bg-black\\/50');
+          if (backdrop) backdrop.classList.add('opacity-0');
+        }, 150);
+      }
+    }
+
+    if (closeBtn) closeBtn.addEventListener('click', dismissDialog);
+    if (cancelBtn) cancelBtn.addEventListener('click', dismissDialog);
+    if (doneBtn) doneBtn.addEventListener('click', dismissDialog);
+    if (viewActivityBtn) viewActivityBtn.addEventListener('click', dismissDialog);
+  })();
+</script></div></main><footer class="w-full bg-surface-container-lowest border-t border-surface-container-high py-space-lg"><div class="max-w-[1440px] mx-auto px-margin-desktop flex flex-col sm:flex-row items-center justify-between gap-space-sm text-on-surface-variant font-caption text-caption"><div>© 2024 Roam Fleet Systems Ltd. All rights reserved. Registered Kingston Hub #01 (JM).</div><div class="flex items-center gap-space-lg font-label-code"><span>SYS LATENCY: 24ms</span><span>SECURE ENDPOINT TLS 1.3</span><span>BUILD v4.19.2</span></div></div></footer></body></html>

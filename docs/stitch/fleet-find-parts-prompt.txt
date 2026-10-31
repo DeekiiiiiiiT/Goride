@@ -1,0 +1,303 @@
+ROAM FLEET — FIND PARTS FULL DESIGN PROMPT (GOOGLE STITCH)
+
+
+
+
+Roam Fleet - Find Parts (Desktop Web App, for fleet managers and their staff):
+
+Design high-fidelity desktop screens for a new "Find parts" tab inside Fleet maintenance in the Roam Fleet app. It sits next to the existing "By vehicle" and "Service ledger" tabs. A fleet manager, or a staff member who knows nothing about cars, picks one of their vehicles (or any make, model and year), optionally picks the part they need, and sees every part that fits, grouped into five match types, with supplier prices, what is already on their shelf, and a one-tap way to get a quote. If the part isn't on file yet, they ask Roam to find it with a request that is already filled in for them. The tone is calm, plain and helpful: a self-serve parts counter, not a mechanic's catalogue.
+
+BRAND IDENTITY:
+- Match the existing Roam Fleet web app:
+  - black top bar with the "Roam Fleet" app tile, then a white nav row: Dashboard, Fleet Operations, Driver Operations, Money, Vehicle Operations (active, underlined), Delivery Operations, Analytics, Reports, Business Finance, and the avatar "JD"
+  - white page, centred content (max ~1400px), shadcn-style components
+  - page title "Fleet maintenance" with an orange wrench icon
+- LIGHT MODE (default):
+  - Primary: Near-black (#030213) — primary buttons, the active tab, the selected choice outline
+  - Background: White (#FFFFFF); page wash: Slate 50 (#f8fafc)
+  - Surface cards: White, with a 1px border rgba(0,0,0,0.1)
+  - Muted text: #717182
+  - Text primary: #0a0a0a
+  - Success / healthy / in stock / verified: Emerald (#059669)
+  - Warning / needs checking / old price: Amber (#d97706)
+  - Error / overdue: Red (#d4183d)
+  - Accent: Orange (#f97316), used only for the page icon
+  - Muted fill for tabs and chips: Slate 100 (#f1f5f9)
+- DARK MODE:
+  - Background: #252525
+  - Surface: #2e2e2e
+  - Border: #444444
+  - Text primary: #fafafa
+  - Muted text: #b4b4b4
+  - Primary: #fafafa (buttons become light with dark text)
+  - Success: #34d399
+  - Warning: #f59e0b
+  - Error: #f87171
+- Five match-type accent bars (thin 4px left edge on each result section):
+  - 1 Made for your car: #2563eb
+  - 2 Same car, different badge: #0e7490
+  - 3 Fits your engine: #b45309
+  - 4 Other brands that replace it: #7c3aed
+  - 5 Fits by size: #059669
+- Chips:
+  - "Verified": green dot
+  - "Needs checking": amber outline
+  - "On your shelf — 2": emerald fill
+  - "Price may be old": grey
+  - Small grey tag for the technical match name ("OEM", "Sister", "Engine", "Aftermarket", "Universal")
+- Money is Jamaican dollars: "J$ 4,250"; "landed" means delivered to Jamaica, including freight and duty
+- No gradients, glassmorphism or 3D. No AI badges, no confidence percentages.
+- Typography: Inter. Part numbers, plates, prices, counts and years use a mono font with tabular numerals.
+- Jamaica context:
+  - fleet cars: "Honda Fit 2018 · 1505LM", "Toyota Roomy 2019 · 5179KZ"
+  - suppliers: "Kingston Auto Parts", "Mandeville Motor Spares", "JDM Direct (Japan)"
+  - brands: Toyota, MANN-FILTER, NGK, Denso, NWB
+
+DESIGN PRINCIPLES:
+- Desktop-first (1440px wide), with a phone version
+- The fastest path is one tap on "My vehicles"; "Another car" is always one click away
+- One question per step, with big tappable cards, not dense forms
+- Ask "Which one is yours?" and "Front or back?" only when the answer changes the result
+- Plain words first and the trade word second: "Made for your car" with a small "OEM" tag
+- The part is optional: the person can always skip to "Show everything for this car"
+- A sticky trail of choices ("Honda Fit 2018 › 1.5 hybrid › Brake pads › Front") lets the person jump back to any step
+- The best answer comes first: one "Best match" card with price, stock and delivery time
+- Every action asks for confirmation first (quantity, urgency); nothing is sent by a single accidental click
+- A missing part is never a dead end: "Ask Roam to find it" is pre-filled
+- Light theme default, dark mode variant
+- 8px spacing grid, 12px card corners, hairline borders, soft shadows, skeleton loading
+
+---
+
+SCREEN 1: FIND PARTS TAB — PICK THE CAR
+- Page header:
+  - Orange wrench icon + "Fleet maintenance"
+  - Sub-line: "By vehicle status, the service ledger, and parts for your cars."
+  - Right buttons: "+ Log new service" (black), "Bootstrap schedules", "Refresh", "Compatible parts" (this one now opens this tab)
+- Tab switcher (pill style, slate background): "By vehicle" | "Service ledger" | "Find parts" (active, white pill with a box icon)
+- Two columns:
+  - LEFT (8/12) — card "Which car is it?":
+    - Section "My vehicles": two large cards, each with a car icon, name and plate in mono
+      - "Honda Fit 2018" / "1505LM" / grey "1.5 hybrid"
+      - "Toyota Roomy 2019" / "5179KZ" / grey "1.0 petrol · 2WD"
+    - A divider with the text "or another car"
+    - Three selects in a row: Make "Toyota", Model "Probox", Year "2016"
+    - Under them: "Or type it:" with an input "Toyota Probox 2016"
+    - Black button "Continue" (disabled note: "Pick a make, model and year")
+  - RIGHT (4/12) — card "Your parts activity" (see Screen 10 for the full version):
+    - 4 compact rows with counts:
+      - "Requests 1 open"
+      - "Repeat-part alerts 0"
+      - "Warranty claims 0"
+      - "Core returns J$ 0 pending"
+    - Link "See all"
+
+SCREEN 2: WHICH ONE IS YOURS?
+- Shown for "Another car", or for a fleet car with no version set
+- Sticky choice trail: "2018 Honda Fit ✎"
+- Title: "Which 2018 Honda Fit is it?"
+- Sub-line: "These versions take different parts. Pick the one on your papers, or choose Not sure."
+- Four large cards:
+  - Card 1 (selected): "1.5 hybrid" / grey mono "GP5 · LEB · 7-speed DCT"
+  - Card 2: "1.5 petrol" / mono "GK5 · L15B · CVT"
+  - Card 3: "1.3 petrol" / mono "GK3 · L13B · CVT"
+  - Card 4 (dashed): "Not sure" / "We'll show what fits each one"
+- Help line: "It's the model code on your registration or on the sticker in the door frame."
+- Footer: "Back" | "Continue" (black)
+
+SCREEN 3: WHAT PART? (GUIDED BROWSER)
+- Choice trail: "Honda Fit 2018 · 1505LM ✎"
+- Title: "What part do you need?"
+- Sub-line: "Search, pick from a list, or tell us what's wrong. You can also skip this."
+- Large search input: "Try 'brake pads', 'o2 sensor' or a part number"
+  - Suggestion dropdown: "Oxygen sensor — also called o2 sensor" · "Brake pads" · "Brake rotor"
+- "Common parts":
+  - 8 tiles with simple line icons: Oil filter, Air filter, Brake pads, Wiper blades, Battery, Spark plugs, Cabin A/C filter, Headlight bulb
+- "By area":
+  - 10 tiles: Engine, Filters, Brakes, Suspension & steering, Lights & visibility, Cooling, Battery & electrical, A/C, Transmission, Tyres & wheels
+  - "Brakes" is expanded below, with chips "Brake pads", "Brake rotor", "Brake fluid"
+- "What's wrong with the car?":
+  - Rows with chevrons:
+    - "Squeaks or grinds when I brake"
+    - "Car won't start, or clicks"
+    - "Engine light is on"
+    - "Engine running hot"
+    - "A/C smells or blows weak"
+    - "A light is out"
+  - One row is expanded: hint "Usually worn brake pads.", plus cards "Brake pads — most likely" and "Brake rotor"
+- A bar under "Services due" for this car:
+  - "This car has 2 services due: Engine oil & filter, Air filter"
+  - Each service is a chip that jumps straight to its parts
+- Bottom: secondary button "Skip — show everything for this car"
+
+SCREEN 4: FRONT OR BACK?
+- Choice trail: "Honda Fit 2018" › "Brake pads ✎"
+- Title: "Which brakes?"
+- Sub-line: "Front and back brake pads are different parts."
+- A simple top-down car outline with the front axle highlighted
+- Large cards: "Front" (selected), "Back", "Both"
+- Footer: "Back" | "Show parts" (black)
+
+SCREEN 5: RESULTS IN FIVE MATCH TYPES
+- Choice trail: "Honda Fit 2018 · 1505LM" › "Oil filter"
+- Title: "Oil filter for your Honda Fit 2018 (1.5 hybrid)"
+- "Best match" card (larger, black outline):
+  - "Toyota 04152-40060 — Oil filter"
+  - Chips: "Made for your car" + tag "OEM", green "Verified", emerald "On your shelf — 2"
+  - Price line, in mono: "J$ 1,850 landed · Kingston Auto Parts · ready today"
+  - Buttons: "Use in a service log" (black) | "Request a quote" | "View details"
+- Result sections (white cards with a 4px coloured left bar, plain title, count pill, grey tag, one-line explanation). Each row shows the name, the mono brand and number, a status chip, the best price or "No price yet · Get a price", a stock chip, and a chevron:
+  - "Made for your car" (OEM) — 1
+    - "Oil filter" | "Toyota 04152-40060" | Verified | "J$ 1,850 landed · today" | "On your shelf — 2"
+  - "Other brands that replace it" (Aftermarket) — 1
+    - "Oil filter" | "MANN-FILTER HU 6006 z" | Verified | "J$ 1,420 landed · 3 days" + grey chip "Price may be old"
+    - Grey line: "MANN-FILTER HU 6006 z replaces the factory part 04152-40060."
+  - "Fits by size" (Universal) — 1
+    - "Engine oil 0W-20, 1 L" | "Toyota 08880-WA001" | "No price yet · Get a price" | button "Add to stock"
+    - Grey line: "Any brand in this size fits: oil grade 0W-20, 3.4 L with filter."
+- Folded strip: "Nothing on file for: Same car, different badge · Fits your engine." with the text button "Ask Roam to find another option"
+- Inset variant, "Not sure": each row has a chip "Fits all 3" or "Only the 1.5 hybrid"
+
+SCREEN 6: PART DETAIL DRAWER
+- Right-side drawer (520px) over the dimmed results
+- Header:
+  - "Oil filter"
+  - mono "Toyota 04152-40060"
+  - chips "Made for your car · OEM", "Verified", "On your shelf — 2"
+  - close X
+- Sections:
+  - "Why it fits":
+    - "The factory part listed for this car."
+    - "Confirmed on 4 installs"
+  - "Prices from suppliers" (small table): Supplier | Price | Landed in J$ | Delivery | Warranty
+    - "Kingston Auto Parts" | "J$ 1,600" | "J$ 1,850" | "Today" | "3 months"
+    - "JDM Direct (Japan)" | "US$ 6.20" | "J$ 1,610" | "12 days" | "—" (grey row: "Price may be old · 41 days")
+  - "Fits these versions": "1.5 hybrid ✓", "1.5 petrol ✓", "1.3 petrol —"
+  - "Same part, other numbers": "MANN-FILTER HU 6006 z", "Denso 150-2040"
+  - "You may also need": "Engine oil 0W-20 · 3.4 L", "Drain plug washer"
+- Sticky footer:
+  - "Add to stock" (secondary, with a qty stepper)
+  - "Request a quote" (secondary)
+  - "Use in a service log" (black)
+
+SCREEN 7: REQUEST A QUOTE (DIALOG, 520px)
+- Title: "Request a quote"
+- Read-only summary card: "Toyota 04152-40060 · Oil filter · for Honda Fit 2018 · 1505LM"
+- Fields:
+  - Quantity: stepper set to "2"
+  - Urgency: segmented "Low | Normal | Urgent"
+  - For vehicle: select "Honda Fit 2018 · 1505LM" (with the option "Not for a specific car")
+  - Note (optional): "Need before Friday's service"
+- Footer: "Cancel" | "Send request" (black)
+- Inset, after sending: a green check, "Quote requested. We'll show the reply in Your parts activity.", and the button "Done"
+
+SCREEN 8: NOT FOUND → ASK ROAM TO FIND IT
+- Choice trail: "Honda Fit 2018" › "1.5 hybrid" › "Brake pads" › "Front"
+- Calm empty card with a box-and-magnifier line icon:
+  - Title: "We don't have front brake pads for this car on file yet."
+  - Sub-line: "Send a request and the Roam parts team will find the right part and a price."
+- Pre-filled request card:
+  - Read-only chips: "Honda Fit 2018 (GP5, 1.5 hybrid)" · "Brake pads" · "Front" · "1505LM"
+  - Quantity stepper "1"
+  - Urgency segmented "Low | Normal | Urgent"
+  - Note (optional)
+  - "Add a photo" drop zone: "A photo of the old part helps"
+  - Black button "Ask Roam to find it"
+- Secondary link: "Search a different part"
+- Inset after sending: "Request sent. You'll see updates in Your parts activity."
+
+SCREEN 9: CAR NOT LINKED YET
+- Shown when a fleet vehicle has no catalog version
+- Card with an amber info icon:
+  - Title: "We need to know exactly which Toyota Probox this is"
+  - Sub-line: "Link it once and every parts search for this car is instant."
+  - Primary: "Link it now" (opens the existing version picker)
+  - Secondary: "Search by make, model and year instead"
+  - Staff without edit rights see: "Ask your fleet admin to link this car." in place of "Link it now"
+
+SCREEN 10: YOUR PARTS ACTIVITY
+- A full panel; on desktop it is the right column of Screen 1, expanded
+- Four small sections, each listing its 5 newest items plus "See all":
+  - "Requests":
+    - "Front brake pads · Honda Fit 2018" with an amber chip "Looking"
+    - "Oil filter · Toyota Roomy 2019" with a green chip "Found"
+  - "Quotes":
+    - "Toyota 04152-40060 × 2" with a chip "Waiting for price"
+  - "Repeat-part alerts":
+    - "Same brake pads replaced twice in 60 days · Toyota Roomy 2019" with a "Dismiss" button
+  - "Warranty claims":
+    - "None open. Crediting a claim is done by Roam."
+  - "Core returns":
+    - "J$ 0 pending · 0 overdue"
+
+SCREEN 11: LOADING, ERROR, NO PERMISSION
+- Skeleton step cards and result sections with a shimmer
+- Error card: "Could not load parts. Nothing was changed." with "Retry"
+- Car not in the list: "We don't have the 1998 Toyota Probox in our car list yet." with "Ask Roam to add it"
+- No permission: "You don't have access to vehicle parts. Ask your fleet admin."
+
+SCREEN 12: FIND PARTS (390px PHONE)
+- The top bar collapses to the app tile, the page title and a menu
+- The three tabs scroll sideways
+- One step per screen, with a sticky bottom button bar ("Back" | "Continue")
+- "My vehicles" cards stack full width; the choice trail scrolls sideways
+- Part tiles and area tiles sit in 2 columns
+- The Best match card is full width; each result row becomes a card (name, number, price, chips)
+- The detail drawer and dialogs become full-screen sheets with a back arrow
+- "Your parts activity" becomes a collapsible section under step 1
+- No page-level horizontal scrolling
+
+---
+
+ADDITIONAL UI COMPONENTS:
+- Pill tab switcher with three tabs
+- "My vehicles" card (car icon, name, mono plate, version line)
+- Large choice card (title, mono code line, selected state)
+- Sticky choice trail with edit chips
+- Search input with a suggestions dropdown ("also called …")
+- Part tile and area tile (icon, label)
+- Problem row that expands into likely-part cards
+- "Services due" chip bar
+- Car outline diagram with front/back highlight
+- "Best match" card with price, stock and actions
+- Result section with a coloured left bar, plain title, count pill, technical tag and explanation
+- Price line (J$ landed · supplier · delivery) and "No price yet · Get a price" link
+- Chips: Verified, Needs checking, On your shelf, Price may be old, Fits all 3
+- Supplier price table
+- Quantity stepper and urgency segmented control
+- Photo drop zone
+- Activity list with status chips
+- Right-side drawer, dialogs, full-screen phone sheets
+- Skeleton loaders, error card, empty and no-permission states
+- Toasts: "Quote requested", "Request sent", "Added 2 to stock"
+
+INTERACTIONS:
+- Tapping a "My vehicles" card skips straight to "What part?" (the version is already known)
+- For "Another car", choosing make, model and year moves to "Which one is yours?" only when the versions give different answers
+- "Not sure" shows merged results with a version chip on every row
+- Search waits until typing pauses, then suggests; picking a suggestion skips to results (or to the side question)
+- Area tiles and problem rows expand inline; a "Services due" chip jumps straight to that part's results
+- "Front or back?" appears only for parts that come in front and back versions
+- Every chip in the trail reopens its step
+- The URL keeps the tab, vehicle, part and side, so the Vehicles page and "Services due" can link straight to results
+- "Request a quote", "Add to stock" and "Ask Roam to find it" always open a confirmation step with quantity and urgency first
+- "Use in a service log" opens the existing Log service dialog with the vehicle and part already chosen
+- After any send, a toast appears and the item shows up in "Your parts activity" without reloading
+- The "Compatible parts" header button switches to this tab
+- The "By vehicle" and "Service ledger" tabs are unchanged
+
+---
+
+Spec screens	Area
+1 Pick the car (+ activity panel)	Car
+2 Which one is yours?	Version
+3 What part? (guided browser)	Part
+4 Front or back?	Side
+5 Results in five match types	Results
+6 Part detail drawer	Detail
+7 Request a quote	Quote
+8 Ask Roam to find it	Request
+9 Car not linked yet	Link
+10 Your parts activity	Activity
+11 Loading, error, no permission	States
+12 Phone (390px)	Mobile

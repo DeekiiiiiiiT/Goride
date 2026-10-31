@@ -67,7 +67,7 @@ SCREEN 1: FIND PARTS — PICK THE CAR
 - Header:
   - Title: "Parts database"
   - Subtitle: "Every part that fits a car, in five match types."
-- Tabs: Find parts (active) | Vehicle parts | Sister vehicles | Universal parts | Import, plus a right-aligned link "Advanced tune"
+- Tabs: Find parts (active) | Full database | Import, plus a right-aligned button "Advanced tune" (the same header and tabs on every screen)
 - Step header:
   - Small step pills across the top: "1 Car" (active), then "2 Version", "3 Part", "4 Side", "5 Results"
   - Steps 2 and 4 are shown in dashed outline with the note "only if needed"
@@ -229,6 +229,54 @@ SCREEN 11: FIND PARTS (390px PHONE)
 - The detail drawer becomes a full-screen sheet with a back arrow
 - No page-level horizontal scrolling
 
+SCREEN 12: FULL DATABASE (SECOND TAB)
+- Header: the same Parts database header as the other screens in this section (breadcrumb, title, Advanced tune and the tab row with Full database active).
+- Purpose: the place to view everything in the parts database. It opens with nothing selected and shows the whole database. It is not the wizard: no steps, and nothing is carried over from Find parts.
+- Layout: a filter panel on the left (280px, white card, stays in view while scrolling) and one table on the right. Above the table, right-aligned: "Import CSV" (secondary), "Export CSV" (secondary), "Add a part" (primary).
+- 12A — Left filter panel, top to bottom:
+  - Search input: "Search part name, number or brand"
+  - Group "CAR" (small caps label): Make select "All makes", Model select "All models" (enabled after a make), Year select "All years" (enabled after a model)
+  - Group "MATCH TYPE": a radio list, each row with its colour dot, plain name, small grey tag and a count:
+    - "All" 18 (selected)
+    - "Made for the car" OEM 5
+    - "Same car, different badge" Sister 2
+    - "Fits the engine" Engine 0 (muted)
+    - "Other brands" Aftermarket 6
+    - "Fits by size" Universal 5
+  - Group "AREA": rows with an icon, name and count pill: "All areas" 11, "Brakes" 9, "Engine" 2; the areas with no parts (Filters, Lights & visibility, Suspension & steering, Cooling, Battery & electrical, A/C, Transmission, Tyres & wheels) are listed in muted grey with 0
+  - Group "BRAND": checkboxes with counts: Toyota 3, Daihatsu 1, Subaru 1, NiBK 1, SB Nagamochi 1, Akebono 1, Brembo 1, Blue Print 1, MANN-FILTER 1
+  - Group "STATUS": radio rows "All" 11, "Verified" 2, "Needs checking" 9
+  - Text button "Reset filters"
+- 12B — The table (one table, split into groups):
+  - Above it: "Whole database · 18 records" and, when filters are set, removable chips such as "Toyota" "Roomy" "Brakes"
+  - With "All" selected the table has one group per match type, in this order, each starting with a full-width group header row: colour dot, plain name, grey tag, count, and a collapse arrow
+  - Group "Made for the car" · OEM · 5
+    - Columns: Part | Number (mono) | Brand | Area | Cars it fits | Status | Actions
+    - "Front brake pad set" | "04465-B1190" | "Toyota" | "Brakes" | "Toyota Roomy, Toyota Tank · 7 versions" | amber "Needs checking" | view, edit, delete icons
+    - "Rear brake shoe kit (drum)" | "04495-B2400" | "Toyota" | "Brakes" | "Toyota Roomy · 3 versions" | amber "Needs checking" | icons
+    - "Oil filter" | "04152-40060" | "Toyota" | "Engine" | "Toyota Roomy · 1 version" | green "Verified" | icons
+  - Group "Same car, different badge" · Sister · 2 families (owner button "New family" at the right of the group header)
+    - Columns: Family | Chassis codes (mono) | Cars | Actions
+    - "Roomy / Tank / Thor / Justy · 2WD (M900)" | "M900A · M900S · M900F" | chips "Toyota Roomy" "Toyota Tank" "Daihatsu Thor" "Subaru Justy" | view, "Add a car", "Remove a car"
+    - "Roomy / Tank / Thor / Justy · 4WD (M910)" | "M910A · M910S · M910F" | same chips | same actions
+  - Group "Other brands" · Aftermarket · 6
+    - Same columns as OEM
+    - "Front brake pad set" | "PN5562" | "NiBK" | "Brakes" | "Toyota Roomy · 5 versions" | amber "Needs checking" | icons
+    - "Front brake pad set" | "AN-754WK" | "Akebono" | "Brakes" | "Toyota Roomy · 5 versions" | amber "Needs checking" | icons
+    - "Oil filter" | "HU 6006 z" | "MANN-FILTER" | "Engine" | "Toyota Roomy · 1 version" | green "Verified" | icons
+  - Group "Fits by size" · Universal · 5 (owner button "Add size-based part" at the right of the group header)
+    - Columns: Name | Number (mono) | Brand | Fits cars with | Source | Actions
+    - "Engine oil 0W-20 1 L" | "08880-WA001" | "Toyota" | "Engine oil grade 0W-20" | "autoparts.toyota.com ↗" | icons
+    - "Wiper blade 525 mm" | "35-021R" | "NWB" | "Driver wiper 525 mm" | "nwb.co.jp ↗" | icons
+  - Groups with nothing on file are not drawn as groups; one light strip at the bottom says "Nothing on file for: Fits the engine."
+  - Picking one match type in the left panel shows only that group
+  - Footer: "Showing 18 of 18" with page arrows
+- Clicking the view icon on a part opens the Screen 6 drawer, with an extra "Cars it fits" list (make, model, chassis code, years, side), "+ Add a car" and "Confirm fit" for parts that need checking
+- Empty search: calm card "Nothing matches 'xyz'." with "Reset filters" and "Add a part"
+- Staff (not owner): "Add a part", "Import CSV", "New family", "Add size-based part", "Add a car", "Remove a car", "Confirm fit", edit and delete are disabled with the note "Only the owner can change parts."
+- Dark mode version of the whole screen
+- 390px phone version: the filter panel becomes a "Filters (3)" button that opens a bottom sheet; group headers stay; each row becomes a card (name, number, brand, status chip, actions)
+
 ---
 
 ADDITIONAL UI COMPONENTS:
@@ -277,3 +325,4 @@ Spec screens	Area
 9 Problems list	Advanced
 10 Loading, error, switched off	States
 11 Phone (390px)	Mobile
+12 Full database (parts, sister families, size-based parts)	Full database

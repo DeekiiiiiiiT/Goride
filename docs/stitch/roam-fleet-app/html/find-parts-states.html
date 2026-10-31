@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_standard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={"darkMode":"class","theme":{"extend":{"colors":{"inverse-surface":"#2d3133","secondary-container":"#dfdef1","on-tertiary-container":"#d95f00","on-error-container":"#93000a","on-tertiary":"#ffffff","inverse-primary":"#c8c3df","tertiary-container":"#341100","secondary-fixed-dim":"#c6c5d8","surface-variant":"#e0e3e5","surface":"#f7f9fb","surface-container":"#eceef0","on-surface":"#191c1e","primary-fixed":"#e4dffc","outline-variant":"#c9c5cd","inverse-on-surface":"#eff1f3","on-tertiary-fixed":"#341100","on-secondary":"#ffffff","primary-fixed-dim":"#c8c3df","secondary-fixed":"#e2e1f4","primary":"#000000","error":"#ba1a1a","on-primary-container":"#84819a","on-secondary-fixed-variant":"#454555","surface-container-lowest":"#ffffff","secondary":"#5d5d6d","on-tertiary-fixed-variant":"#783200","on-primary":"#ffffff","on-error":"#ffffff","outline":"#78767d","surface-dim":"#d8dadc","on-secondary-fixed":"#1a1a28","on-primary-fixed-variant":"#46445b","surface-tint":"#5e5c74","surface-bright":"#f7f9fb","on-surface-variant":"#47464c","surface-container-low":"#f2f4f6","primary-container":"#1b192e","error-container":"#ffdad6","tertiary-fixed":"#ffdbca","on-primary-fixed":"#1b192e","on-secondary-container":"#616172","background":"#f7f9fb","tertiary-fixed-dim":"#ffb690","tertiary":"#000000","surface-container-highest":"#e0e3e5","on-background":"#191c1e","surface-container-high":"#e6e8ea"},"borderRadius":{"DEFAULT":"0.25rem","lg":"0.5rem","xl":"0.75rem","full":"9999px"},"spacing":{"space-xs":"0.25rem","margin-desktop":"2rem","space-md":"0.75rem","space-lg":"1rem","gutter-desktop":"1.5rem","space-sm":"0.5rem","margin":"1rem","space-xl":"1.5rem","gutter":"1rem"},"fontFamily":{"body-md":["Inter"],"body-lg":["Inter"],"label-code":["JetBrains Mono"],"caption":["Inter"],"body-sm":["Inter"],"label-price":["JetBrains Mono"],"label-plate":["JetBrains Mono"],"headline-xl":["Inter"],"headline-sm":["Inter"],"headline-lg":["Inter"]},"fontSize":{"body-md":["14px",{"lineHeight":"20px","letterSpacing":"0em","fontWeight":"400"}],"body-lg":["16px",{"lineHeight":"24px","letterSpacing":"-0.005em","fontWeight":"400"}],"label-code":["13px",{"lineHeight":"18px","letterSpacing":"-0.01em","fontWeight":"500"}],"caption":["11px",{"lineHeight":"14px","letterSpacing":"0.02em","fontWeight":"500"}],"body-sm":["13px",{"lineHeight":"18px","letterSpacing":"0em","fontWeight":"400"}],"label-price":["14px",{"lineHeight":"20px","letterSpacing":"-0.02em","fontWeight":"600"}],"label-plate":["14px",{"lineHeight":"18px","letterSpacing":"0.08em","fontWeight":"700"}],"headline-xl":["30px",{"lineHeight":"38px","letterSpacing":"-0.02em","fontWeight":"600"}],"headline-sm":["18px",{"lineHeight":"26px","letterSpacing":"-0.01em","fontWeight":"600"}],"headline-lg":["24px",{"lineHeight":"32px","letterSpacing":"-0.015em","fontWeight":"600"}]}}}};</script></head><body class="bg-surface font-body-md text-on-surface antialiased"><header class="fixed top-0 left-0 right-0 z-50 shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="bg-primary-container h-12 w-full"><div class="max-w-[1440px] mx-auto px-margin-desktop h-full flex items-center justify-between text-on-primary"><div class="flex items-center gap-space-lg"><div class="flex items-center gap-space-sm"><span class="material-symbols-outlined text-primary-fixed">local_shipping</span><span class="font-headline-sm text-headline-sm tracking-tight text-on-primary">ROAM FLEET</span></div><div class="flex items-center gap-space-xs px-space-sm py-0.5 rounded bg-surface-container-highest/20 font-label-code text-caption text-primary-fixed"><span class="w-1.5 h-1.5 rounded-full bg-on-tertiary-container"></span><span>Kingston Hub #01</span></div></div><div class="flex items-center gap-space-lg"><div class="hidden md:flex items-center gap-space-xs px-space-md py-1 rounded bg-surface-container-highest/15 text-primary-fixed font-label-code text-caption"><span class="material-symbols-outlined text-[15px]">search</span><span>Search telemetry &amp; fleet...</span><kbd class="px-1 py-0.2 rounded bg-surface-container-highest/30 text-on-primary text-[10px]">⌘K</kbd></div><div class="flex items-center gap-space-sm font-label-code text-caption text-primary-fixed"><span class="material-symbols-outlined text-[16px]">schedule</span><span>14:32:08 EST</span></div><div class="flex items-center gap-space-sm pl-space-sm"><div class="text-right hidden sm:block"><div class="font-label-code text-caption font-semibold leading-tight text-on-primary">JD (Fleet Lead)</div><div class="font-caption text-caption text-on-primary-container">Dispatch Node 04</div></div><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></div></div><div class="bg-surface-container-lowest h-11 w-full border-b border-surface-container-high"><div class="max-w-[1440px] mx-auto px-margin-desktop h-full flex items-center justify-between"><nav class="flex items-center gap-space-lg h-full overflow-x-auto" data-active-classes="text-primary font-semibold border-b-2 border-primary"><a class="h-full flex items-center font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors whitespace-nowrap" data-path="dashboard" href="#">Dashboard</a><a class="h-full flex items-center font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors whitespace-nowrap" data-path="fleet-operations" href="#">Fleet Operations</a><a class="h-full flex items-center font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors whitespace-nowrap" data-path="driver-operations" href="#">Driver Operations</a><a class="h-full flex items-center font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors whitespace-nowrap" data-path="money" href="#">Money</a><a class="h-full flex items-center font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors whitespace-nowrap" data-path="vehicle-operations" href="#">Vehicle Operations</a><a class="h-full flex items-center font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors whitespace-nowrap" data-path="delivery-operations" href="#">Delivery Operations</a><a class="h-full flex items-center font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors whitespace-nowrap" data-path="analytics" href="#">Analytics</a><a class="h-full flex items-center font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors whitespace-nowrap" data-path="reports" href="#">Reports</a><a class="h-full flex items-center font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors whitespace-nowrap" data-path="business-finance" href="#">Business Finance</a></nav><div class="hidden xl:flex items-center gap-space-md text-on-surface-variant font-label-code text-caption"><div class="flex items-center gap-1"><kbd class="px-1.5 py-0.5 rounded bg-surface-container font-semibold text-[11px]">G</kbd><kbd class="px-1.5 py-0.5 rounded bg-surface-container font-semibold text-[11px]">V</kbd><span class="text-on-surface-variant ml-1">Vehicles</span></div><div class="w-1 h-1 rounded-full bg-outline-variant"></div><div class="flex items-center gap-1"><kbd class="px-1.5 py-0.5 rounded bg-surface-container font-semibold text-[11px]">?</kbd><span class="text-on-surface-variant ml-1">Shortcuts</span></div></div></div></div></header><main class="w-full pt-[92px] bg-surface min-h-[calc(100vh-80px)]"><div class="flex flex-col w-full">
+<!-- Operational Breadcrumbs & Context Strip -->
+<div class="w-full bg-surface-container-low py-space-sm px-margin-desktop">
+<div class="max-w-[1440px] mx-auto flex flex-col md:flex-row md:items-center justify-between gap-space-sm">
+<div class="flex items-center gap-space-xs font-label-code text-caption text-on-surface-variant">
+<span>FLEET OPS</span>
+<span>/</span>
+<span>MAINTENANCE</span>
+<span>/</span>
+<span class="text-on-surface font-semibold">FIND PARTS SYSTEM STATES</span>
+<span class="ml-space-sm px-1.5 py-0.5 rounded bg-surface-container text-on-surface font-label-code text-[11px]">DEV PREVIEW // NODE KIN-01</span>
+</div>
+<div class="flex items-center gap-space-md text-on-surface-variant font-label-code text-caption">
+<span class="flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-on-tertiary-container animate-pulse"></span>
+<span>TELEMETRY SYNC: ACTIVE</span>
+</span>
+<span class="text-outline-variant">|</span>
+<span>HUB STATUS: 99.98% UP</span>
+</div>
+</div>
+</div>
+<!-- Header Area & Interactive State Switcher -->
+<div class="w-full bg-surface-container-lowest shadow-sm py-space-xl px-margin-desktop">
+<div class="max-w-[1440px] mx-auto flex flex-col gap-space-lg">
+<div class="flex flex-col lg:flex-row lg:items-end justify-between gap-space-md">
+<div>
+<div class="font-label-code text-caption uppercase text-on-surface-variant tracking-wider">Exception &amp; Lifecycle Framework</div>
+<h1 class="font-headline-xl text-headline-xl text-on-surface mt-1 tracking-tight">Parts Catalog State Diagnostics</h1>
+<p class="font-body-md text-body-md text-on-surface-variant max-w-2xl mt-1">
+            Simulated edge-states for parts requisitioning, chassis cross-referencing, and permission gates across Kingston Hub #01 depot terminals.
+          </p>
+</div>
+<div class="flex items-center gap-space-sm bg-surface-container-low p-1 rounded-lg self-start lg:self-auto overflow-x-auto max-w-full">
+<button class="state-tab-btn flex items-center gap-1.5 px-space-md py-1.5 rounded font-label-code text-caption bg-surface-container-lowest text-primary shadow-sm font-semibold transition-all" id="btn-tab-all" onclick="switchView('all')">
+<span class="material-symbols-outlined text-[15px]">grid_view</span>
+<span>All States Overview</span>
+</button>
+<button class="state-tab-btn flex items-center gap-1.5 px-space-md py-1.5 rounded font-label-code text-caption text-on-surface-variant hover:text-on-surface transition-all" id="btn-tab-loading" onclick="switchView('loading')">
+<span class="material-symbols-outlined text-[15px]">hourglass_top</span>
+<span>Skeleton &amp; Loading</span>
+</button>
+<button class="state-tab-btn flex items-center gap-1.5 px-space-md py-1.5 rounded font-label-code text-caption text-on-surface-variant hover:text-on-surface transition-all" id="btn-tab-error" onclick="switchView('error')">
+<span class="material-symbols-outlined text-[15px]">cloud_off</span>
+<span>Network / Error</span>
+</button>
+<button class="state-tab-btn flex items-center gap-1.5 px-space-md py-1.5 rounded font-label-code text-caption text-on-surface-variant hover:text-on-surface transition-all" id="btn-tab-unlisted" onclick="switchView('unlisted')">
+<span class="material-symbols-outlined text-[15px]">directions_car</span>
+<span>Missing Model</span>
+</button>
+<button class="state-tab-btn flex items-center gap-1.5 px-space-md py-1.5 rounded font-label-code text-caption text-on-surface-variant hover:text-on-surface transition-all" id="btn-tab-noperm" onclick="switchView('noperm')">
+<span class="material-symbols-outlined text-[15px]">lock</span>
+<span>No Permission</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Content Presentation Shell -->
+<div class="w-full px-margin-desktop py-space-xl">
+<div class="max-w-[1440px] mx-auto flex flex-col gap-space-xl">
+<!-- SECTION 1: SKELETON / LOADING STATE -->
+<section class="state-section flex flex-col gap-space-md" id="state-section-loading">
+<div class="flex items-center justify-between pb-space-xs">
+<div class="flex items-center gap-space-sm">
+<span class="px-2 py-0.5 rounded bg-surface-container-high font-label-code text-caption text-on-surface font-semibold">STATE 01</span>
+<h2 class="font-headline-sm text-headline-sm text-on-surface">Skeleton &amp; Fitment Matching Stream</h2>
+</div>
+<div class="flex items-center gap-space-xs text-on-surface-variant font-label-code text-caption">
+<span class="w-2 h-2 rounded-full bg-primary-fixed-dim animate-ping"></span>
+<span>DISPATCH RESOLVER: RUNNING</span>
+</div>
+</div>
+<!-- Simulated Search Context Banner -->
+<div class="bg-surface-container-lowest p-space-lg rounded-xl shadow-sm flex flex-col gap-space-lg">
+<!-- Query & Breadcrumb Skeleton -->
+<div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-space-md pb-space-md">
+<div class="flex items-center gap-space-sm flex-wrap">
+<div class="h-6 w-28 bg-surface-container rounded animate-pulse"></div>
+<span class="text-outline-variant font-label-code text-caption">/</span>
+<div class="h-6 w-36 bg-surface-container rounded animate-pulse"></div>
+<span class="text-outline-variant font-label-code text-caption">/</span>
+<div class="h-6 w-44 bg-surface-container-high rounded animate-pulse"></div>
+</div>
+<div class="flex items-center gap-2 px-space-md py-1.5 rounded-lg bg-surface-container-low font-body-sm text-body-sm text-on-surface-variant">
+<span class="material-symbols-outlined text-[16px] text-on-tertiary-container animate-spin">sync</span>
+<span>Matching fitment against 14,200 Kingston Hub catalog items...</span>
+</div>
+</div>
+<!-- Hero Best Match Skeleton Card -->
+<div class="relative overflow-hidden bg-surface-container-low rounded-xl p-space-lg flex flex-col lg:flex-row items-stretch justify-between gap-space-lg">
+<!-- Left status bar accent -->
+<div class="absolute left-0 top-0 bottom-0 w-1.5 bg-primary"></div>
+<div class="flex flex-col gap-space-md pl-space-sm flex-1">
+<div class="flex items-center gap-space-sm">
+<div class="h-5 w-24 bg-surface-container-highest rounded animate-pulse"></div>
+<div class="h-5 w-32 bg-surface-container rounded animate-pulse"></div>
+</div>
+<div>
+<div class="h-7 w-3/4 bg-surface-container-highest rounded animate-pulse"></div>
+<div class="h-4 w-1/2 bg-surface-container mt-2 rounded animate-pulse"></div>
+</div>
+<div class="flex items-center gap-space-md pt-space-xs">
+<div class="h-4 w-28 bg-surface-container rounded animate-pulse"></div>
+<div class="h-4 w-32 bg-surface-container rounded animate-pulse"></div>
+<div class="h-4 w-20 bg-surface-container rounded animate-pulse"></div>
+</div>
+</div>
+<!-- Right Pricing / Requisition Block -->
+<div class="lg:w-72 bg-surface-container-lowest p-space-md rounded-lg flex flex-col justify-between gap-space-md">
+<div>
+<div class="h-3 w-20 bg-surface-container rounded animate-pulse"></div>
+<div class="h-8 w-36 bg-surface-container-high rounded mt-1.5 animate-pulse"></div>
+<div class="h-3 w-28 bg-surface-container rounded mt-1.5 animate-pulse"></div>
+</div>
+<div class="flex items-center gap-space-sm pt-space-xs">
+<div class="h-9 flex-1 bg-surface-container-highest rounded animate-pulse"></div>
+<div class="h-9 w-10 bg-surface-container rounded animate-pulse"></div>
+</div>
+</div>
+</div>
+<!-- 3 Categorized Results Columns -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-space-md">
+<!-- Category Card 1: OEM Made For Your Car -->
+<div class="bg-surface-container-low rounded-xl p-space-md flex flex-col gap-space-md">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-primary"></span>
+<div class="h-4 w-24 bg-surface-container-highest rounded animate-pulse"></div>
+</div>
+<div class="h-4 w-12 bg-surface-container rounded animate-pulse"></div>
+</div>
+<!-- Item Row 1 -->
+<div class="bg-surface-container-lowest p-space-sm rounded-lg flex flex-col gap-space-xs">
+<div class="flex items-center justify-between">
+<div class="h-4 w-36 bg-surface-container-highest rounded animate-pulse"></div>
+<div class="h-4 w-16 bg-surface-container-high rounded animate-pulse"></div>
+</div>
+<div class="h-3 w-48 bg-surface-container rounded animate-pulse"></div>
+<div class="flex items-center justify-between pt-1">
+<div class="h-3 w-20 bg-surface-container rounded animate-pulse"></div>
+<div class="h-6 w-14 bg-surface-container-highest rounded animate-pulse"></div>
+</div>
+</div>
+<!-- Item Row 2 -->
+<div class="bg-surface-container-lowest p-space-sm rounded-lg flex flex-col gap-space-xs">
+<div class="flex items-center justify-between">
+<div class="h-4 w-40 bg-surface-container-highest rounded animate-pulse"></div>
+<div class="h-4 w-14 bg-surface-container-high rounded animate-pulse"></div>
+</div>
+<div class="h-3 w-32 bg-surface-container rounded animate-pulse"></div>
+<div class="flex items-center justify-between pt-1">
+<div class="h-3 w-20 bg-surface-container rounded animate-pulse"></div>
+<div class="h-6 w-14 bg-surface-container-highest rounded animate-pulse"></div>
+</div>
+</div>
+</div>
+<!-- Category Card 2: Aftermarket Verified -->
+<div class="bg-surface-container-low rounded-xl p-space-md flex flex-col gap-space-md">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-secondary"></span>
+<div class="h-4 w-28 bg-surface-container-highest rounded animate-pulse"></div>
+</div>
+<div class="h-4 w-12 bg-surface-container rounded animate-pulse"></div>
+</div>
+<div class="bg-surface-container-lowest p-space-sm rounded-lg flex flex-col gap-space-xs">
+<div class="flex items-center justify-between">
+<div class="h-4 w-32 bg-surface-container-highest rounded animate-pulse"></div>
+<div class="h-4 w-16 bg-surface-container-high rounded animate-pulse"></div>
+</div>
+<div class="h-3 w-40 bg-surface-container rounded animate-pulse"></div>
+<div class="flex items-center justify-between pt-1">
+<div class="h-3 w-24 bg-surface-container rounded animate-pulse"></div>
+<div class="h-6 w-14 bg-surface-container-highest rounded animate-pulse"></div>
+</div>
+</div>
+<div class="bg-surface-container-lowest p-space-sm rounded-lg flex flex-col gap-space-xs">
+<div class="flex items-center justify-between">
+<div class="h-4 w-28 bg-surface-container-highest rounded animate-pulse"></div>
+<div class="h-4 w-16 bg-surface-container-high rounded animate-pulse"></div>
+</div>
+<div class="h-3 w-36 bg-surface-container rounded animate-pulse"></div>
+<div class="flex items-center justify-between pt-1">
+<div class="h-3 w-20 bg-surface-container rounded animate-pulse"></div>
+<div class="h-6 w-14 bg-surface-container-highest rounded animate-pulse"></div>
+</div>
+</div>
+</div>
+<!-- Category Card 3: Cross-Compatible Interchange -->
+<div class="bg-surface-container-low rounded-xl p-space-md flex flex-col gap-space-md">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-outline"></span>
+<div class="h-4 w-32 bg-surface-container-highest rounded animate-pulse"></div>
+</div>
+<div class="h-4 w-12 bg-surface-container rounded animate-pulse"></div>
+</div>
+<div class="bg-surface-container-lowest p-space-sm rounded-lg flex flex-col gap-space-xs">
+<div class="flex items-center justify-between">
+<div class="h-4 w-36 bg-surface-container-highest rounded animate-pulse"></div>
+<div class="h-4 w-14 bg-surface-container-high rounded animate-pulse"></div>
+</div>
+<div class="h-3 w-44 bg-surface-container rounded animate-pulse"></div>
+<div class="flex items-center justify-between pt-1">
+<div class="h-3 w-16 bg-surface-container rounded animate-pulse"></div>
+<div class="h-6 w-14 bg-surface-container-highest rounded animate-pulse"></div>
+</div>
+</div>
+<div class="bg-surface-container-lowest p-space-sm rounded-lg flex flex-col gap-space-xs">
+<div class="flex items-center justify-between">
+<div class="h-4 w-30 bg-surface-container-highest rounded animate-pulse"></div>
+<div class="h-4 w-16 bg-surface-container-high rounded animate-pulse"></div>
+</div>
+<div class="h-3 w-32 bg-surface-container rounded animate-pulse"></div>
+<div class="flex items-center justify-between pt-1">
+<div class="h-3 w-24 bg-surface-container rounded animate-pulse"></div>
+<div class="h-6 w-14 bg-surface-container-highest rounded animate-pulse"></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- SECTION 2: NETWORK & SERVICE ERROR -->
+<section class="state-section flex flex-col gap-space-md" id="state-section-error">
+<div class="flex items-center justify-between pb-space-xs">
+<div class="flex items-center gap-space-sm">
+<span class="px-2 py-0.5 rounded bg-error-container font-label-code text-caption text-on-error-container font-semibold">STATE 02</span>
+<h2 class="font-headline-sm text-headline-sm text-on-surface">Network / Service Disruption</h2>
+</div>
+<span class="font-label-code text-caption text-error font-medium">HTTP 504 GATEWAY_TIMEOUT</span>
+</div>
+<!-- Error Card Component -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
+<div class="bg-error-container/40 p-space-xl flex flex-col lg:flex-row items-start justify-between gap-space-lg">
+<div class="flex items-start gap-space-md">
+<div class="w-12 h-12 rounded-xl bg-error-container flex items-center justify-center text-error shrink-0">
+<span class="material-symbols-outlined text-[28px]">error</span>
+</div>
+<div class="flex flex-col gap-1 max-w-2xl">
+<div class="font-headline-lg text-headline-lg text-on-surface font-semibold tracking-tight">
+                  Could not load parts. Nothing was changed.
+                </div>
+<p class="font-body-md text-body-md text-on-surface-variant">
+                  The parts database or Kingston Hub inventory feed did not respond in time. Your vehicle selection and entered notes are preserved.
+                </p>
+<!-- Preserved Snapshot Pill Bar -->
+<div class="mt-space-md flex flex-wrap items-center gap-space-xs font-label-code text-caption text-on-surface-variant">
+<span class="px-2 py-1 bg-surface-container rounded text-on-surface">VEHICLE: 2017 Nissan NV200 [JM-KGN-4819]</span>
+<span class="px-2 py-1 bg-surface-container rounded text-on-surface">SECTION: Front Brake Assembly</span>
+<span class="px-2 py-1 bg-surface-container rounded text-on-surface">REQUISITION ID: #RQ-8841-TEMP</span>
+</div>
+</div>
+</div>
+<!-- Quick Action Triggers -->
+<div class="flex flex-col sm:flex-row lg:flex-col items-stretch lg:items-end gap-space-sm shrink-0 w-full sm:w-auto">
+<button class="bg-primary text-on-primary hover:bg-surface-tint active:scale-[0.98] transition-all px-space-xl py-2 rounded-lg font-body-sm text-body-sm font-semibold flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-[18px]">refresh</span>
+<span>Retry</span>
+</button>
+<a class="font-label-code text-caption text-on-surface-variant hover:text-on-surface text-center lg:text-right underline flex items-center justify-center lg:justify-end gap-1 pt-1" href="#">
+<span>Check connection status (24ms KIN)</span>
+<span class="material-symbols-outlined text-[14px]">open_in_new</span>
+</a>
+</div>
+</div>
+<!-- Diagnostic Footnote Strip -->
+<div class="bg-surface-container-low px-space-xl py-space-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-space-xs font-label-code text-caption text-on-surface-variant">
+<div class="flex items-center gap-2">
+<span class="w-1.5 h-1.5 rounded-full bg-error"></span>
+<span>FEED NODE: kin-parts-sync-cluster.internal:9080</span>
+</div>
+<div class="flex items-center gap-space-md">
+<span>LOCAL CACHE: PRESERVED</span>
+<span>ATTEMPT: 1 OF 3</span>
+</div>
+</div>
+</div>
+</section>
+<!-- SECTION 3: UNLISTED VEHICLE / MODEL MISSING -->
+<section class="state-section flex flex-col gap-space-md" id="state-section-unlisted">
+<div class="flex items-center justify-between pb-space-xs">
+<div class="flex items-center gap-space-sm">
+<span class="px-2 py-0.5 rounded bg-surface-container-high font-label-code text-caption text-on-surface font-semibold">STATE 03</span>
+<h2 class="font-headline-sm text-headline-sm text-on-surface">Unlisted Vehicle / Model Missing</h2>
+</div>
+<span class="font-label-code text-caption text-on-tertiary-container font-medium">JDM MANUAL FITMENT TIER</span>
+</div>
+<div class="bg-surface-container-lowest rounded-xl shadow-sm p-space-xl flex flex-col lg:flex-row items-center justify-between gap-space-xl">
+<div class="flex flex-col sm:flex-row items-start gap-space-lg max-w-3xl">
+<!-- Illustrated Car Outline Badge -->
+<div class="w-16 h-16 rounded-2xl bg-surface-container-low flex items-center justify-center relative shrink-0">
+<span class="material-symbols-outlined text-[36px] text-on-surface-variant">directions_car</span>
+<div class="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-primary text-on-primary flex items-center justify-center font-label-code text-caption font-bold">
+                ?
+              </div>
+</div>
+<div class="flex flex-col gap-space-xs">
+<div class="flex items-center gap-space-sm flex-wrap">
+<h3 class="font-headline-lg text-headline-lg text-on-surface font-semibold tracking-tight">
+                  We don't have the 1998 Toyota Probox in our car list yet.
+                </h3>
+</div>
+<p class="font-body-md text-body-md text-on-surface-variant mt-1">
+                Pre-2002 Japanese domestic market models require custom manual cataloging for chassis fitment (NCP50 series).
+              </p>
+<!-- Turnaround Time Badge -->
+<div class="mt-space-md self-start inline-flex items-center gap-2 px-space-md py-1.5 rounded-full bg-tertiary-fixed text-on-tertiary-fixed font-caption text-caption">
+<span class="material-symbols-outlined text-[16px]">schedule</span>
+<span class="font-semibold">Takes 2–4 hours for Jamaican parts desk verification</span>
+</div>
+</div>
+</div>
+<!-- Action Stack -->
+<div class="flex flex-col sm:flex-row lg:flex-col items-stretch lg:items-end gap-space-sm w-full lg:w-auto shrink-0">
+<button class="bg-primary text-on-primary hover:bg-surface-tint active:scale-[0.98] transition-all px-space-xl py-2.5 rounded-lg font-body-sm text-body-sm font-semibold flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-[18px]">add_circle</span>
+<span>Ask Roam to add it</span>
+</button>
+<button class="bg-surface-container-low text-on-surface hover:bg-surface-container-high transition-all px-space-lg py-2 rounded-lg font-body-sm text-body-sm text-center">
+              Select another vehicle
+            </button>
+<span class="font-label-code text-[11px] text-on-surface-variant text-center lg:text-right mt-1">
+              Pre-fills: Year 1998 · Make Toyota · Model Probox
+            </span>
+</div>
+</div>
+</section>
+<!-- SECTION 4: NO PERMISSION / ACCESS RESTRICTED -->
+<section class="state-section flex flex-col gap-space-md" id="state-section-noperm">
+<div class="flex items-center justify-between pb-space-xs">
+<div class="flex items-center gap-space-sm">
+<span class="px-2 py-0.5 rounded bg-surface-container-high font-label-code text-caption text-on-surface font-semibold">STATE 04</span>
+<h2 class="font-headline-sm text-headline-sm text-on-surface">Role Authorization Gate</h2>
+</div>
+<span class="font-label-code text-caption text-on-surface-variant">POLICY: RBAC-MAINT-403</span>
+</div>
+<div class="bg-surface-container-lowest rounded-xl shadow-sm p-space-xl flex flex-col gap-space-xl">
+<div class="flex flex-col lg:flex-row items-start justify-between gap-space-xl">
+<!-- Left Info Block -->
+<div class="flex flex-col sm:flex-row items-start gap-space-lg max-w-3xl">
+<div class="w-16 h-16 rounded-2xl bg-secondary-container flex items-center justify-center relative shrink-0">
+<span class="material-symbols-outlined text-[34px] text-primary">lock</span>
+<div class="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-primary text-on-primary flex items-center justify-center">
+<span class="material-symbols-outlined text-[14px]">shield</span>
+</div>
+</div>
+<div class="flex flex-col gap-space-xs">
+<h3 class="font-headline-lg text-headline-lg text-on-surface font-semibold tracking-tight">
+                  You don't have access to vehicle parts. Ask your fleet admin.
+                </h3>
+<p class="font-body-md text-body-md text-on-surface-variant mt-1">
+                  Your role (<strong class="text-on-surface font-semibold">Driver / Dispatch Staff</strong>) allows viewing schedules and reporting issues, but parts requisitioning and quoting require <strong class="text-on-surface font-semibold">'Fleet Manager'</strong> or <strong class="text-on-surface font-semibold">'Purchasing'</strong> permissions.
+                </p>
+<div class="mt-space-md flex flex-wrap items-center gap-space-md text-body-sm text-on-surface-variant">
+<div class="flex items-center gap-1.5 font-label-code text-caption">
+<span class="material-symbols-outlined text-[16px] text-primary">verified_user</span>
+<span>ACTIVE PROFILE: John Doe (Driver Operator #210)</span>
+</div>
+<div class="flex items-center gap-1.5 font-label-code text-caption">
+<span class="material-symbols-outlined text-[16px] text-outline">location_on</span>
+<span>DEPOT: Kingston Hub #01</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Right Action Stack -->
+<div class="flex flex-col sm:flex-row lg:flex-col items-stretch lg:items-end gap-space-sm w-full lg:w-auto shrink-0">
+<button class="bg-primary text-on-primary hover:bg-surface-tint active:scale-[0.98] transition-all px-space-xl py-2.5 rounded-lg font-body-sm text-body-sm font-semibold flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-[18px]">key</span>
+<span>Request access from JD (Fleet Lead)</span>
+</button>
+<button class="bg-surface-container-low text-on-surface hover:bg-surface-container-high transition-all px-space-lg py-2 rounded-lg font-body-sm text-body-sm text-center">
+                Back to Fleet maintenance
+              </button>
+</div>
+</div>
+<!-- Bottom Depot Admin Callout Box -->
+<div class="bg-surface-container-low rounded-lg p-space-md flex flex-col md:flex-row items-start md:items-center justify-between gap-space-md font-body-sm text-body-sm">
+<div class="flex items-center gap-space-md">
+<div class="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center font-label-code text-caption font-bold text-on-surface shrink-0">
+                JD
+              </div>
+<div>
+<span class="font-semibold text-on-surface">Kingston Hub #01 Administrator:</span>
+<span class="text-on-surface-variant"> Julian Douglas (Lead Dispatcher) · Extension #401 · Desk 3B</span>
+</div>
+</div>
+<div class="flex items-center gap-2 text-on-surface-variant font-label-code text-caption">
+<span class="material-symbols-outlined text-[16px]">schedule</span>
+<span>Avg. authorization response: ~12 minutes</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Technical Specifications & Spec Matrix Footer Table -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm p-space-lg">
+<div class="flex items-center justify-between pb-space-md">
+<div>
+<h4 class="font-headline-sm text-headline-sm text-on-surface">Design System Matrix &amp; Implementation Tokens</h4>
+<p class="font-caption text-caption text-on-surface-variant">Validation checklist for Roam Fleet technical guidelines.</p>
+</div>
+<span class="px-2 py-0.5 rounded bg-surface-container font-label-code text-caption text-on-surface">ROAM-DS-v4</span>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left font-body-sm text-body-sm">
+<thead>
+<tr class="text-on-surface-variant font-caption text-caption uppercase bg-surface-container-low">
+<th class="py-space-sm px-space-md font-semibold">State Key</th>
+<th class="py-space-sm px-space-md font-semibold">Primary Trigger</th>
+<th class="py-space-sm px-space-md font-semibold">Fallback Mechanism</th>
+<th class="py-space-sm px-space-md font-semibold">Allowed Action</th>
+<th class="py-space-sm px-space-md font-semibold">Recovery SLA</th>
+</tr>
+</thead>
+<tbody class="divide-none font-label-code text-caption">
+<tr class="hover:bg-surface-container-low/60 transition-colors">
+<td class="py-space-sm px-space-md font-semibold text-on-surface">01_LOADING</td>
+<td class="py-space-sm px-space-md text-on-surface-variant">Async chassis fitment resolution</td>
+<td class="py-space-sm px-space-md text-on-surface-variant">Tier-by-tier lazy hydration</td>
+<td class="py-space-sm px-space-md text-on-surface">Abort / Breadcrumb back</td>
+<td class="py-space-sm px-space-md text-on-surface-variant">&lt; 1,400ms</td>
+</tr>
+<tr class="hover:bg-surface-container-low/60 transition-colors bg-surface-container-low/30">
+<td class="py-space-sm px-space-md font-semibold text-error">02_TIMEOUT_ERR</td>
+<td class="py-space-sm px-space-md text-on-surface-variant">Hub network packet drop / timeout</td>
+<td class="py-space-sm px-space-md text-on-surface-variant">Local storage draft snapshot preservation</td>
+<td class="py-space-sm px-space-md text-on-surface">Retry idempotent sync</td>
+<td class="py-space-sm px-space-md text-on-surface-variant">Instant local resume</td>
+</tr>
+<tr class="hover:bg-surface-container-low/60 transition-colors">
+<td class="py-space-sm px-space-md font-semibold text-on-surface">03_MODEL_MISSING</td>
+<td class="py-space-sm px-space-md text-on-surface-variant">VIN uncatalogued / pre-2002 JDM vehicle</td>
+<td class="py-space-sm px-space-md text-on-surface-variant">Desk manual verification ticket</td>
+<td class="py-space-sm px-space-md text-on-surface">Submit custom vehicle form</td>
+<td class="py-space-sm px-space-md text-on-surface-variant">2–4 hours (Desk KIN)</td>
+</tr>
+<tr class="hover:bg-surface-container-low/60 transition-colors bg-surface-container-low/30">
+<td class="py-space-sm px-space-md font-semibold text-primary">04_AUTH_403</td>
+<td class="py-space-sm px-space-md text-on-surface-variant">Driver / Dispatch RBAC mismatch</td>
+<td class="py-space-sm px-space-md text-on-surface-variant">Elevated manager ping via webhook</td>
+<td class="py-space-sm px-space-md text-on-surface">Request Hub lead grant</td>
+<td class="py-space-sm px-space-md text-on-surface-variant">~12 minutes SLA</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+</div>
+<!-- Interactive State Switching Controller -->
+<script>
+    function switchView(selectedState) {
+      const sections = {
+        loading: document.getElementById('state-section-loading'),
+        error: document.getElementById('state-section-error'),
+        unlisted: document.getElementById('state-section-unlisted'),
+        noperm: document.getElementById('state-section-noperm')
+      };
+
+      const buttons = {
+        all: document.getElementById('btn-tab-all'),
+        loading: document.getElementById('btn-tab-loading'),
+        error: document.getElementById('btn-tab-error'),
+        unlisted: document.getElementById('btn-tab-unlisted'),
+        noperm: document.getElementById('btn-tab-noperm')
+      };
+
+      // Reset all buttons styling
+      Object.keys(buttons).forEach(key => {
+        const btn = buttons[key];
+        btn.classList.remove('bg-surface-container-lowest', 'text-primary', 'shadow-sm', 'font-semibold');
+        btn.classList.add('text-on-surface-variant');
+      });
+
+      // Highlight active button
+      if (buttons[selectedState]) {
+        buttons[selectedState].classList.add('bg-surface-container-lowest', 'text-primary', 'shadow-sm', 'font-semibold');
+        buttons[selectedState].classList.remove('text-on-surface-variant');
+      }
+
+      // Show/Hide sections
+      if (selectedState === 'all') {
+        Object.values(sections).forEach(sec => sec.classList.remove('hidden'));
+      } else {
+        Object.keys(sections).forEach(key => {
+          if (key === selectedState) {
+            sections[key].classList.remove('hidden');
+          } else {
+            sections[key].classList.add('hidden');
+          }
+        });
+      }
+    }
+  </script>
+</div></main><footer class="w-full bg-surface-container-lowest border-t border-surface-container-high py-space-lg"><div class="max-w-[1440px] mx-auto px-margin-desktop flex flex-col sm:flex-row items-center justify-between gap-space-sm text-on-surface-variant font-caption text-caption"><div>© 2024 Roam Fleet Systems Ltd. All rights reserved. Registered Kingston Hub #01 (JM).</div><div class="flex items-center gap-space-lg font-label-code"><span>SYS LATENCY: 24ms</span><span>SECURE ENDPOINT TLS 1.3</span><span>BUILD v4.19.2</span></div></div></footer></body></html>

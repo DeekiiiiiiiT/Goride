@@ -1,5 +1,7 @@
 # Dominion · Find parts — build and port plan (Rev 1, 30 Oct 2026)
 
+> **Superseded for looks (30 Oct 2026).** The owner wants the literal, exact Stitch design. Every "Remove", "Hide" and "Replace the text" decision in §4 (G1, G5, G6, G7, G8 and the per-screen rows) is replaced: **build it with a real source instead.** The rule and the open list live in [dominion-find-parts-audit.md](dominion-find-parts-audit.md) §0 and §R2. Work from the audit; use this file only to look up which Stitch file is which screen.
+
 Goal: build the new Find parts tab in Dominion → Parts database. The audit decides the data and rules: [dominion-find-parts-audit.md](dominion-find-parts-audit.md). The Stitch export decides the looks: `C:\Users\deeki\Downloads\stitch_dominion_parts_matcher_admin\stitch_dominion_parts_matcher_admin`.
 
 This plan was written from the real export files and the repo on 30 Oct 2026. No code was changed.

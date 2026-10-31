@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_standard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&amp;family=JetBrains+Mono:wght@100..900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{colors:{"surface-bright":"#f7f9fb","tertiary":"#000000","on-secondary":"#ffffff","secondary-fixed":"#e2e1f4","error-container":"#ffdad6","background":"#f7f9fb","tertiary-fixed-dim":"#ffb690","on-primary-fixed-variant":"#46445b","surface-tint":"#5e5c74","on-secondary-fixed-variant":"#454555","secondary-container":"#dfdef1","on-secondary-container":"#616172","on-surface-variant":"#47464c","primary-fixed-dim":"#c8c3df","on-surface":"#191c1e","on-primary":"#ffffff","surface-dim":"#d8dadc","on-tertiary-container":"#d95f00","surface-container-high":"#e6e8ea","outline":"#78767d","on-tertiary-fixed-variant":"#783200","surface-container":"#eceef0","primary":"#000000","on-background":"#191c1e","error":"#ba1a1a","primary-fixed":"#e4dffc","on-tertiary-fixed":"#341100","inverse-surface":"#2d3133","on-error-container":"#93000a","on-error":"#ffffff","on-secondary-fixed":"#1a1a28","on-primary-fixed":"#1b192e","on-primary-container":"#84819a","primary-container":"#1b192e","inverse-on-surface":"#eff1f3","tertiary-fixed":"#ffdbca","inverse-primary":"#c8c3df","tertiary-container":"#341100","surface-container-low":"#f2f4f6","on-tertiary":"#ffffff","secondary-fixed-dim":"#c6c5d8","surface":"#f7f9fb","surface-container-lowest":"#ffffff","outline-variant":"#c9c5cd","surface-container-highest":"#e0e3e5","secondary":"#5d5d6d","surface-variant":"#e0e3e5"},borderRadius:{DEFAULT:"0.25rem",lg:"0.5rem",xl:"0.75rem",full:"9999px"},spacing:{"gutter":"1rem","gutter-desktop":"1.5rem","margin":"1rem","space-xl":"1.5rem","space-xs":"0.25rem","space-md":"0.75rem","space-lg":"1rem","margin-desktop":"2rem","space-sm":"0.5rem"},fontFamily:{"headline-sm":["Inter"],"body-md":["Inter"],"headline-xl":["Inter"],"label-plate":["JetBrains Mono"],"body-lg":["Inter"],"label-price":["JetBrains Mono"],"headline-lg":["Inter"],"caption":["Inter"],"label-code":["JetBrains Mono"],"body-sm":["Inter"]},fontSize:{"headline-sm":["18px",{lineHeight:"26px",letterSpacing:"-0.01em",fontWeight:"600"}],"body-md":["14px",{lineHeight:"20px",letterSpacing:"0em",fontWeight:"400"}],"headline-xl":["30px",{lineHeight:"38px",letterSpacing:"-0.02em",fontWeight:"600"}],"label-plate":["14px",{lineHeight:"18px",letterSpacing:"0.08em",fontWeight:"700"}],"body-lg":["16px",{lineHeight:"24px",letterSpacing:"-0.005em",fontWeight:"400"}],"label-price":["14px",{lineHeight:"20px",letterSpacing:"-0.02em",fontWeight:"600"}],"headline-lg":["24px",{lineHeight:"32px",letterSpacing:"-0.015em",fontWeight:"600"}],"caption":["11px",{lineHeight:"14px",letterSpacing:"0.02em",fontWeight:"500"}],"label-code":["13px",{lineHeight:"18px",letterSpacing:"-0.01em",fontWeight:"500"}],"body-sm":["13px",{lineHeight:"18px",letterSpacing:"0em",fontWeight:"400"}]}}}};</script></head><body class="bg-surface font-body-md text-on-surface antialiased"><header class="fixed top-0 left-0 right-0 z-50 flex flex-col"><div class="h-14 bg-primary text-on-primary px-margin-desktop flex items-center justify-between shadow-[0_1px_8px_rgba(0,0,0,0.12)]"><div class="flex items-center gap-space-lg"><div class="flex items-center gap-space-sm"><div class="w-7 h-7 rounded bg-surface-container-highest flex items-center justify-center text-primary"><span class="material-symbols-outlined text-[18px]">local_shipping</span></div><span class="font-headline-sm text-headline-sm tracking-tight text-on-primary">Roam Fleet</span></div><span class="px-space-sm py-0.5 rounded-full bg-surface-variant/20 text-surface-bright font-caption text-caption uppercase tracking-wider border border-surface-variant/30">Kingston Hub</span><div class="hidden lg:flex items-center gap-space-xs text-on-surface-variant font-body-sm text-body-sm bg-surface-container-high/10 px-space-md py-1 rounded cursor-pointer hover:bg-surface-container-high/20 transition-colors"><span class="material-symbols-outlined text-[16px]">search</span><span class="text-surface-dim font-label-code text-label-code">Switch vehicle or search hub...</span></div></div><div class="flex items-center gap-space-xl"><div class="hidden md:flex items-center gap-space-xs font-label-code text-label-code text-surface-dim"><span class="w-2 h-2 rounded-full bg-secondary-fixed"></span><span>JM (JMD)</span></div><div class="relative flex items-center cursor-pointer text-on-primary"><span class="material-symbols-outlined text-[20px]">notifications</span><span class="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-tertiary-fixed-dim ring-2 ring-primary"></span></div><div class="flex items-center gap-space-sm pl-space-md border-l border-surface-variant/20"><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div><div class="hidden xl:flex flex-col text-left"><span class="font-label-code text-label-code leading-none text-on-primary">JD (Fleet Lead)</span><span class="font-caption text-caption text-surface-dim leading-tight">Operations</span></div><span class="material-symbols-outlined text-[16px] text-surface-dim">arrow_drop_down</span></div></div></div><div class="h-12 bg-surface-container-lowest border-b border-surface-container-high px-margin-desktop flex items-center justify-between"><nav class="flex items-center gap-space-lg h-full overflow-x-auto" data-active-classes="font-headline-sm text-headline-sm text-on-surface border-b-2 border-primary"><a class="text-on-surface-variant font-body-md text-body-md h-full flex items-center hover:text-on-surface transition-colors whitespace-nowrap" data-path="dashboard" href="#">Dashboard</a><a class="text-on-surface-variant font-body-md text-body-md h-full flex items-center hover:text-on-surface transition-colors whitespace-nowrap" data-path="fleet-operations" href="#">Fleet Operations</a><a class="text-on-surface-variant font-body-md text-body-md h-full flex items-center hover:text-on-surface transition-colors whitespace-nowrap" data-path="driver-operations" href="#">Driver Operations</a><a class="text-on-surface-variant font-body-md text-body-md h-full flex items-center hover:text-on-surface transition-colors whitespace-nowrap" data-path="money" href="#">Money</a><a class="text-on-surface-variant font-body-md text-body-md h-full flex items-center hover:text-on-surface transition-colors whitespace-nowrap" data-path="vehicle-operations" href="#">Vehicle Operations</a><a class="text-on-surface-variant font-body-md text-body-md h-full flex items-center hover:text-on-surface transition-colors whitespace-nowrap" data-path="delivery-operations" href="#">Delivery Operations</a><a class="text-on-surface-variant font-body-md text-body-md h-full flex items-center hover:text-on-surface transition-colors whitespace-nowrap" data-path="analytics" href="#">Analytics</a><a class="text-on-surface-variant font-body-md text-body-md h-full flex items-center hover:text-on-surface transition-colors whitespace-nowrap" data-path="reports" href="#">Reports</a><a class="text-on-surface-variant font-body-md text-body-md h-full flex items-center hover:text-on-surface transition-colors whitespace-nowrap" data-path="business-finance" href="#">Business Finance</a></nav><div class="hidden md:flex items-center gap-space-lg"><div class="flex items-center gap-space-xs font-label-code text-label-code text-on-surface-variant"><span class="material-symbols-outlined text-[16px]">schedule</span><span>EST / UTC-5</span></div><div class="flex items-center gap-1 font-label-code text-label-code text-on-surface-variant bg-surface-container px-2 py-0.5 rounded border border-outline-variant/40"><kbd>⌘</kbd><kbd>K</kbd></div></div></div></header><main class="w-full pt-26 bg-surface min-h-[calc(100vh-80px)]"><div class="flex flex-col w-full">
+<!-- Sub-Navigation Extension Bar -->
+<div class="bg-surface-container-lowest shadow-sm">
+<div class="max-w-[1400px] mx-auto px-margin md:px-margin-desktop py-space-sm flex items-center justify-between">
+<div class="flex items-center gap-space-lg">
+<a class="font-body-md text-body-md text-on-surface-variant hover:text-on-surface flex items-center gap-1 transition-colors" href="#">
+<span class="material-symbols-outlined text-[18px]">directions_car</span>
+<span>By vehicle</span>
+</a>
+<a class="font-body-md text-body-md text-on-surface-variant hover:text-on-surface flex items-center gap-1 transition-colors" href="#">
+<span class="material-symbols-outlined text-[18px]">receipt_long</span>
+<span>Service ledger</span>
+</a>
+<a class="font-headline-sm text-headline-sm text-on-surface flex items-center gap-1 border-b-2 border-primary pb-1" href="#">
+<span class="material-symbols-outlined text-[18px]">search_insights</span>
+<span>Find parts</span>
+</a>
+</div>
+<div class="hidden sm:flex items-center gap-space-md text-on-surface-variant font-label-code text-caption">
+<span class="inline-flex items-center gap-1 bg-surface-container px-2 py-0.5 rounded">
+<span class="w-1.5 h-1.5 rounded-full bg-on-tertiary-container"></span>
+<span>CATALOG v4.88 · JM SPEC</span>
+</span>
+</div>
+</div>
+</div>
+<!-- Stepper Breadcrumb Track -->
+<div class="bg-surface-container-low">
+<div class="max-w-[1400px] mx-auto px-margin md:px-margin-desktop py-space-md">
+<div class="flex items-center justify-between flex-wrap gap-y-space-sm">
+<ol class="flex items-center gap-space-md sm:gap-space-xl flex-wrap">
+<!-- Step 1: Pick a car (Complete) -->
+<li class="flex items-center gap-space-xs text-on-surface cursor-pointer group">
+<span class="w-5 h-5 rounded-full bg-primary text-on-primary flex items-center justify-center font-caption text-[11px]">
+<span class="material-symbols-outlined text-[14px]">check</span>
+</span>
+<span class="font-body-sm text-body-sm font-semibold text-on-surface group-hover:underline">1. Vehicle</span>
+<span class="material-symbols-outlined text-outline text-[16px] ml-space-xs">chevron_right</span>
+</li>
+<!-- Step 2: Version & Trim (Active) -->
+<li class="flex items-center gap-space-xs text-on-surface">
+<span class="w-5 h-5 rounded-full bg-primary text-on-primary flex items-center justify-center font-label-code text-[11px] font-bold">2</span>
+<span class="font-headline-sm text-body-md font-bold text-on-surface">Version &amp; Trim</span>
+<span class="material-symbols-outlined text-outline text-[16px] ml-space-xs">chevron_right</span>
+</li>
+<!-- Step 3: Part Category -->
+<li class="flex items-center gap-space-xs text-on-surface-variant opacity-60">
+<span class="w-5 h-5 rounded-full bg-surface-container-high text-on-surface-variant flex items-center justify-center font-label-code text-[11px]">3</span>
+<span class="font-body-sm text-body-sm">Part Category</span>
+<span class="material-symbols-outlined text-outline text-[16px] ml-space-xs">chevron_right</span>
+</li>
+<!-- Step 4: Position & Fit -->
+<li class="flex items-center gap-space-xs text-on-surface-variant opacity-60">
+<span class="w-5 h-5 rounded-full bg-surface-container-high text-on-surface-variant flex items-center justify-center font-label-code text-[11px]">4</span>
+<span class="font-body-sm text-body-sm">Position &amp; Fit</span>
+</li>
+</ol>
+<div class="hidden lg:flex items-center gap-2 font-label-code text-caption text-on-surface-variant">
+<span class="material-symbols-outlined text-[16px]">verified</span>
+<span>DISAMBIGUATION ENGINE · 100% FIT SPEC</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Sticky Choice Trail Banner -->
+<div class="sticky top-26 z-40 bg-surface-container-lowest/95 backdrop-blur-md shadow-sm">
+<div class="max-w-[1400px] mx-auto px-margin md:px-margin-desktop py-2.5 flex items-center justify-between">
+<div class="flex items-center gap-space-md">
+<div class="w-8 h-8 rounded bg-surface-container flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[20px]">directions_car</span>
+</div>
+<div class="flex flex-col sm:flex-row sm:items-center sm:gap-space-md">
+<div class="flex items-center gap-2">
+<span class="font-headline-sm text-headline-sm text-on-surface">2018 Honda Fit</span>
+<span class="px-2 py-0.5 rounded bg-surface-container text-on-surface-variant font-label-code text-caption">JDM / GK-GP SERIES</span>
+</div>
+<span class="hidden sm:inline text-surface-dim font-label-code">/</span>
+<span class="font-caption text-caption text-on-surface-variant">Awaiting chassis &amp; drivetrain specification confirmation</span>
+</div>
+</div>
+<button class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm font-medium transition-all shadow-sm">
+<span class="material-symbols-outlined text-[15px]">edit</span>
+<span>Change car</span>
+</button>
+</div>
+</div>
+<!-- Main Content Layout (8/12 + 4/12) -->
+<div class="max-w-[1400px] mx-auto w-full px-margin md:px-margin-desktop py-space-xl">
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-space-xl items-start">
+<!-- LEFT COLUMN: Selection Engine (8/12) -->
+<section class="lg:col-span-8 flex flex-col gap-space-lg">
+<!-- Header block inside card container -->
+<div class="bg-surface-container-lowest p-space-lg sm:p-space-xl rounded-xl shadow-sm">
+<div class="flex flex-col gap-1 mb-space-lg">
+<div class="flex items-center justify-between">
+<span class="font-label-code text-caption uppercase tracking-wider text-secondary">Step 02 Disambiguation</span>
+<span class="font-label-code text-caption text-on-tertiary-container bg-tertiary-fixed/30 px-2 py-0.5 rounded">FITMENT SENSITIVE</span>
+</div>
+<h1 class="font-headline-lg text-headline-lg text-on-surface">Which 2018 Honda Fit is it?</h1>
+<p class="font-body-md text-body-md text-on-surface-variant mt-1">
+              These versions take different filters, brakes, fluids, and suspension mounts. Pick the exact powertrain on your fitness certificate or chassis plate.
+            </p>
+</div>
+<!-- 2x2 Grid Selection Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-space-md" id="trim-selector">
+<!-- Card 1: 1.5 Hybrid (SELECTED) -->
+<label class="relative flex flex-col justify-between p-space-lg rounded-xl bg-surface-container-lowest shadow-md ring-2 ring-primary cursor-pointer transition-all duration-150 hover:shadow-lg">
+<input checked="" class="sr-only" name="trim_choice" type="radio" value="hybrid"/>
+<div>
+<div class="flex items-start justify-between gap-2 mb-space-sm">
+<div class="flex flex-col">
+<span class="font-headline-sm text-headline-sm text-on-surface flex items-center gap-1.5">
+                      1.5 hybrid
+                    </span>
+<span class="font-label-code text-caption text-secondary mt-0.5">GP5 · LEB · 7-speed DCT</span>
+</div>
+<span class="w-5 h-5 rounded-full bg-primary text-on-primary flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[14px]">check</span>
+</span>
+</div>
+<div class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-primary-fixed text-on-primary-fixed font-caption text-caption mb-space-md font-semibold">
+<span class="material-symbols-outlined text-[13px]">verified</span>
+<span>Most common in fleet (Kingston)</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-space-md">
+                  Takes 0W-20 hybrid synthetic oil, dedicated dual-clutch fluid (DW-1/ATF-TYPE 2.0 equivalent), and electronic servo brake booster units.
+                </p>
+</div>
+<div class="pt-space-sm bg-surface-container-low -mx-space-lg -mb-space-lg p-space-md rounded-b-xl flex items-center justify-between font-label-code text-caption text-on-surface">
+<span class="text-secondary">Chassis match:</span>
+<span class="font-bold">GP5-1000001+</span>
+</div>
+</label>
+<!-- Card 2: 1.5 Petrol -->
+<label class="relative flex flex-col justify-between p-space-lg rounded-xl bg-surface-container-lowest shadow-sm hover:shadow-md cursor-pointer transition-all duration-150">
+<input class="sr-only" name="trim_choice" type="radio" value="petrol_15"/>
+<div>
+<div class="flex items-start justify-between gap-2 mb-space-sm">
+<div class="flex flex-col">
+<span class="font-headline-sm text-headline-sm text-on-surface">
+                      1.5 petrol
+                    </span>
+<span class="font-label-code text-caption text-secondary mt-0.5">GK5 · L15B · CVT</span>
+</div>
+<span class="w-5 h-5 rounded-full bg-surface-container-high text-transparent flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[14px]">check</span>
+</span>
+</div>
+<div class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-surface-container text-on-surface-variant font-caption text-caption mb-space-md">
+<span>Standard i-VTEC Sport / RS</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-space-md">
+                  Naturally aspirated direct-injection engine with HCF-2 transmission fluid requirements and mechanical vacuum brake boosters.
+                </p>
+</div>
+<div class="pt-space-sm bg-surface-container-low -mx-space-lg -mb-space-lg p-space-md rounded-b-xl flex items-center justify-between font-label-code text-caption text-on-surface">
+<span class="text-secondary">Chassis match:</span>
+<span class="font-bold">GK5-1200001+</span>
+</div>
+</label>
+<!-- Card 3: 1.3 Petrol -->
+<label class="relative flex flex-col justify-between p-space-lg rounded-xl bg-surface-container-lowest shadow-sm hover:shadow-md cursor-pointer transition-all duration-150">
+<input class="sr-only" name="trim_choice" type="radio" value="petrol_13"/>
+<div>
+<div class="flex items-start justify-between gap-2 mb-space-sm">
+<div class="flex flex-col">
+<span class="font-headline-sm text-headline-sm text-on-surface">
+                      1.3 petrol
+                    </span>
+<span class="font-label-code text-caption text-secondary mt-0.5">GK3 · L13B · CVT</span>
+</div>
+<span class="w-5 h-5 rounded-full bg-surface-container-high text-transparent flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[14px]">check</span>
+</span>
+</div>
+<div class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-surface-container text-on-surface-variant font-caption text-caption mb-space-md">
+<span>Entry JDM petrol engine</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-space-md">
+                  Atkinson cycle L13B Atkinson powertrain with smaller front disc calipers (240mm rotor) and alternate alternator clutch assembly.
+                </p>
+</div>
+<div class="pt-space-sm bg-surface-container-low -mx-space-lg -mb-space-lg p-space-md rounded-b-xl flex items-center justify-between font-label-code text-caption text-on-surface">
+<span class="text-secondary">Chassis match:</span>
+<span class="font-bold">GK3-1200001+</span>
+</div>
+</label>
+<!-- Card 4: Not Sure -->
+<label class="relative flex flex-col justify-between p-space-lg rounded-xl bg-surface-container-low shadow-sm hover:shadow-md cursor-pointer transition-all duration-150">
+<input class="sr-only" name="trim_choice" type="radio" value="unsure"/>
+<div>
+<div class="flex items-start justify-between gap-2 mb-space-sm">
+<div class="flex flex-col">
+<span class="font-headline-sm text-headline-sm text-on-surface flex items-center gap-1.5">
+<span>Not sure</span>
+<span class="material-symbols-outlined text-[18px] text-secondary">help_outline</span>
+</span>
+<span class="font-label-code text-caption text-secondary mt-0.5">Universal Catalog Mode</span>
+</div>
+<span class="w-5 h-5 rounded-full bg-surface-container-high text-transparent flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[14px]">check</span>
+</span>
+</div>
+<div class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-surface-container-highest text-on-surface font-caption text-caption mb-space-md font-semibold">
+<span>Shows all matching options</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-space-md">
+                  We'll present items that fit each variant and flag parts with a color-coded version chip so technicians never install incompatible spares.
+                </p>
+</div>
+<div class="pt-space-sm bg-surface-container -mx-space-lg -mb-space-lg p-space-md rounded-b-xl flex items-center justify-between font-label-code text-caption text-on-surface">
+<span class="text-secondary">Filter mode:</span>
+<span class="font-bold text-on-tertiary-container">Annotated Comparison</span>
+</div>
+</label>
+</div>
+<!-- Jamaican Docs Reference Callout -->
+<div class="mt-space-lg p-space-md rounded-lg bg-surface-container flex items-start gap-space-md shadow-sm">
+<div class="w-7 h-7 rounded bg-surface-container-highest flex items-center justify-center text-primary shrink-0 mt-0.5">
+<span class="material-symbols-outlined text-[18px]">info</span>
+</div>
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between w-full gap-space-sm">
+<p class="font-body-sm text-body-sm text-on-surface">
+                It's the <strong class="font-semibold text-primary">Model Code</strong> on your fitness certificate or the aluminum stamped plate riveted to the driver's door B-pillar.
+              </p>
+<div class="shrink-0 font-label-code text-caption bg-surface-container-lowest px-2.5 py-1 rounded text-primary font-bold shadow-sm">
+                e.g. GP5-3204918
+              </div>
+</div>
+</div>
+<!-- Bottom Visual Breakdown Mini-Module -->
+<div class="mt-space-lg pt-space-md flex flex-col gap-space-sm bg-surface-container-low p-space-md rounded-lg">
+<div class="flex items-center justify-between text-on-surface font-label-code text-caption">
+<span class="font-bold">PARTS FIT COMPATIBILITY RADAR</span>
+<span class="text-secondary">GP5 HYBRID SELECTION</span>
+</div>
+<div class="grid grid-cols-3 gap-2">
+<div class="p-2 rounded bg-surface-container-lowest">
+<span class="font-caption text-caption text-secondary block">Powertrain</span>
+<span class="font-label-code text-caption font-semibold text-on-surface">1,496 cc DOHC</span>
+</div>
+<div class="p-2 rounded bg-surface-container-lowest">
+<span class="font-caption text-caption text-secondary block">Transmission</span>
+<span class="font-label-code text-caption font-semibold text-on-surface">7-Spd Dual Clutch</span>
+</div>
+<div class="p-2 rounded bg-surface-container-lowest">
+<span class="font-caption text-caption text-secondary block">Front Brake Rotor</span>
+<span class="font-label-code text-caption font-semibold text-on-surface">262mm Vented Disc</span>
+</div>
+</div>
+</div>
+<!-- Footer Actions Row -->
+<div class="mt-space-xl pt-space-lg flex items-center justify-between">
+<button class="px-space-lg py-2 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm font-semibold flex items-center gap-1.5 transition-all">
+<span class="material-symbols-outlined text-[16px]">arrow_back</span>
+<span>Back</span>
+</button>
+<button class="px-space-xl py-2.5 rounded-lg bg-primary hover:bg-primary-container text-on-primary font-body-md text-body-md font-semibold flex items-center gap-2 transition-all shadow-md active:scale-95">
+<span>Continue to Categories</span>
+<span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+</button>
+</div>
+</div>
+</section>
+<!-- RIGHT COLUMN: Vehicle Context & Jamaica Field Intelligence (4/12) -->
+<aside class="lg:col-span-4 flex flex-col gap-space-lg">
+<!-- Vehicle Hero Overview Card -->
+<div class="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm">
+<div class="flex items-center justify-between mb-space-md">
+<span class="font-label-code text-caption text-secondary">ACTIVE VEHICLE CONTEXT</span>
+<span class="w-2 h-2 rounded-full bg-on-tertiary-container animate-pulse"></span>
+</div>
+<div class="relative rounded-lg overflow-hidden mb-space-md bg-surface-container">
+<img class="w-full h-36 object-cover object-center" data-alt="Modern Japanese white hatchback parked cleanly under bright morning Caribbean sunlight with crisp road reflection, precision side-angle showcase in a modern fleet bay with concrete floor and minimal technical equipment in Kingston." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBC94boDsO6smYsCV8uBJPN5CZzAazM8yHv0CMvqPh-Psz7E0bn9Wyv0XVU3HVK3PDFirfBXkTBzjAuLhhcyhCsU5zgXcQzPSvgqZjrG9x285Icgeu5_TD7J6XKmwnQwPGrflwH2EPDb5uGTGqk0DH2hJ4KRuMOHMFE45rqQBk7k5X9pVOwbp1JXilY2ubk9sTCLrZeYOZ6jRvxurpz64Vns7j7oAbImPHJDD8eHYw"/>
+<div class="absolute bottom-2 left-2 px-2 py-0.5 rounded bg-primary/80 backdrop-blur-md text-on-primary font-label-plate text-[12px]">
+              2018 HONDA FIT
+            </div>
+</div>
+<div class="flex flex-col gap-2 font-body-sm text-body-sm">
+<div class="flex items-center justify-between py-1 bg-surface-container-low px-2 rounded">
+<span class="text-on-surface-variant font-caption text-caption">Generation:</span>
+<span class="font-label-code font-bold text-on-surface">3rd Gen (GK/GP Facelift)</span>
+</div>
+<div class="flex items-center justify-between py-1 bg-surface-container-low px-2 rounded">
+<span class="text-on-surface-variant font-caption text-caption">Drive Layout:</span>
+<span class="font-label-code font-bold text-on-surface">FF (Front-Wheel Drive)</span>
+</div>
+<div class="flex items-center justify-between py-1 bg-surface-container-low px-2 rounded">
+<span class="text-on-surface-variant font-caption text-caption">Body Style:</span>
+<span class="font-label-code font-bold text-on-surface">5-Door Hatchback</span>
+</div>
+</div>
+</div>
+<!-- Kingston Hub Active Fleet Stats Card -->
+<div class="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm">
+<div class="flex items-center gap-2 mb-space-sm text-primary">
+<span class="material-symbols-outlined text-[20px]">hub</span>
+<h3 class="font-headline-sm text-body-md font-bold text-on-surface">Kingston Hub Fleet Telemetry</h3>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-space-md">
+            There are <strong class="font-semibold text-primary">2 Honda Fits</strong> registered in the local Kingston Roam fleet inventory.
+          </p>
+<div class="flex flex-col gap-space-sm">
+<div class="p-space-sm rounded-lg bg-surface-container-low flex items-center justify-between">
+<div class="flex items-center gap-space-sm">
+<span class="w-7 h-7 rounded bg-surface-container-highest flex items-center justify-center font-label-code text-caption font-bold">#04</span>
+<div class="flex flex-col">
+<span class="font-label-code text-caption font-semibold">2781-KM (Fit Hybrid)</span>
+<span class="font-caption text-caption text-secondary">Active Dispatch · Kingston</span>
+</div>
+</div>
+<span class="font-label-code text-caption font-bold px-2 py-0.5 rounded bg-surface-container-highest">GP5</span>
+</div>
+<div class="p-space-sm rounded-lg bg-surface-container-low flex items-center justify-between">
+<div class="flex items-center gap-space-sm">
+<span class="w-7 h-7 rounded bg-surface-container-highest flex items-center justify-center font-label-code text-caption font-bold">#19</span>
+<div class="flex flex-col">
+<span class="font-label-code text-caption font-semibold">8943-JX (Fit Hybrid)</span>
+<span class="font-caption text-caption text-secondary">In Depot · St. Andrew East</span>
+</div>
+</div>
+<span class="font-label-code text-caption font-bold px-2 py-0.5 rounded bg-surface-container-highest">GP5</span>
+</div>
+</div>
+<div class="mt-space-md p-space-sm rounded bg-surface-container text-on-surface font-caption text-caption flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[16px] text-secondary">insights</span>
+<span>100% of Roam fleet fits are 1.5 Hybrid GP5 variants.</span>
+</div>
+</div>
+<!-- Jamaican Registration Guide Snippet -->
+<div class="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm">
+<div class="flex items-center gap-2 mb-space-sm text-primary">
+<span class="material-symbols-outlined text-[20px]">description</span>
+<h3 class="font-headline-sm text-body-md font-bold text-on-surface">Jamaica MV-99 Paper Guide</h3>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-space-md">
+            Look for these fields on your Tax Administration Jamaica (TAJ) Fitness Certificate or Certificate of Title:
+          </p>
+<div class="space-y-space-sm">
+<div class="p-2 rounded-lg bg-surface-container-low flex items-start gap-2">
+<span class="material-symbols-outlined text-secondary text-[16px] mt-0.5">pin</span>
+<div class="flex flex-col">
+<span class="font-label-code text-caption font-semibold">CHASSIS / FRAME NO.</span>
+<span class="font-caption text-caption text-on-surface-variant">The prefix characters before the hyphen (e.g. <span class="font-bold text-on-surface">GP5</span>-3012948) dictate the powertrain.</span>
+</div>
+</div>
+<div class="p-2 rounded-lg bg-surface-container-low flex items-start gap-2">
+<span class="material-symbols-outlined text-secondary text-[16px] mt-0.5">speed</span>
+<div class="flex flex-col">
+<span class="font-label-code text-caption font-semibold">ENGINE NUMBER / CC</span>
+<span class="font-caption text-caption text-on-surface-variant"><span class="font-bold text-on-surface">LEB-H1</span> indicates 1.5 Hybrid; <span class="font-bold text-on-surface">L15B</span> indicates 1.5 Petrol non-hybrid.</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Zero-Fitment Error Guarantee Reassurance Card -->
+<div class="bg-primary text-on-primary rounded-xl p-space-lg shadow-md">
+<div class="flex items-center gap-space-sm mb-space-sm">
+<div class="w-8 h-8 rounded-full bg-surface-container-lowest/10 flex items-center justify-center">
+<span class="material-symbols-outlined text-[18px]">verified_user</span>
+</div>
+<div>
+<h4 class="font-headline-sm text-body-md font-bold">Zero-Fitment Guarantee</h4>
+<span class="font-label-code text-caption opacity-80">PROTECTION PROTOCOL</span>
+</div>
+</div>
+<p class="font-body-sm text-body-sm opacity-90 mb-space-md">
+            Orders placed via verified trim matching include free dispatch exchange if parts fail mechanical fit verification during Kingston depot install.
+          </p>
+<div class="flex items-center justify-between text-caption font-label-code opacity-75">
+<span>AUDIT ID: KIN-VER-2025</span>
+<span class="flex items-center gap-1">
+<span class="material-symbols-outlined text-[13px]">lock</span>
+<span>LOCKED FIT SPEC</span>
+</span>
+</div>
+</div>
+<!-- Parts Desk Support Contact Widget -->
+<div class="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm">
+<div class="flex items-center justify-between mb-space-sm">
+<span class="font-label-code text-caption text-secondary">PARTS DESK HELP</span>
+<span class="font-caption text-caption text-on-tertiary-container bg-surface-container px-1.5 py-0.5 rounded">24/7 ROAM LEAD</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-space-md">
+            Unsure of the chassis serial? Send your MV registration plate number or photo to our certified Jamaican parts dispatch team.
+          </p>
+<button class="w-full py-2 px-space-md rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm font-semibold flex items-center justify-center gap-2 transition-all">
+<span class="material-symbols-outlined text-[18px]">support_agent</span>
+<span>Lookup Chassis for Me</span>
+</button>
+</div>
+</aside>
+</div>
+</div>
+</div>
+<script>
+  // Simple card selection micro-interaction
+  document.addEventListener('DOMContentLoaded', () => {
+    const selectorContainer = document.getElementById('trim-selector');
+    if (!selectorContainer) return;
+
+    const cards = selectorContainer.querySelectorAll('label');
+
+    cards.forEach(card => {
+      card.addEventListener('click', () => {
+        cards.forEach(c => {
+          c.classList.remove('ring-2', 'ring-primary', 'shadow-md');
+          c.classList.add('shadow-sm');
+          const checkIcon = c.querySelector('div > div > span.w-5');
+          if (checkIcon) {
+            checkIcon.classList.remove('bg-primary', 'text-on-primary');
+            checkIcon.classList.add('bg-surface-container-high', 'text-transparent');
+          }
+        });
+
+        card.classList.add('ring-2', 'ring-primary', 'shadow-md');
+        card.classList.remove('shadow-sm');
+        const activeCheck = card.querySelector('div > div > span.w-5');
+        if (activeCheck) {
+          activeCheck.classList.remove('bg-surface-container-high', 'text-transparent');
+          activeCheck.classList.add('bg-primary', 'text-on-primary');
+        }
+      });
+    });
+  });
+</script></main><footer class="w-full bg-surface-container-lowest border-t border-surface-container-high py-space-lg"><div class="max-w-[1400px] mx-auto px-margin-desktop flex flex-col md:flex-row items-center justify-between text-on-surface-variant font-caption text-caption gap-space-sm"><div>© 2025 Roam Fleet Operations (Kingston Hub #01, Jamaica). High-Reliability Telemetry &amp; Fitment Engine.</div><div class="flex items-center gap-space-lg"><span class="font-label-code text-label-code">LATENCY: 24ms (KIN)</span><span class="font-label-code text-label-code">STATUS: ALL SYSTEMS NOMINAL</span></div></div></footer></body></html>

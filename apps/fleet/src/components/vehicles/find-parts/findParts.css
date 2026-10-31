@@ -1,0 +1,498 @@
+/* Scoped to Find parts. Other Fleet tabs do not use these names. */
+.fleet-find-parts-stitch { font-family: Inter, sans-serif; color: #191c1e; background: #f7f9fb; }
+.fleet-find-parts-stitch .material-symbols-outlined { font-family: "Material Symbols Outlined"; font-weight: normal; font-style: normal; line-height: 1; display: inline-block; white-space: nowrap; font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24; }
+.fleet-find-parts-stitch .font-label-plate,
+.fleet-find-parts-stitch .font-label-code,
+.fleet-find-parts-stitch .font-label-price { font-family: "JetBrains Mono", ui-monospace, monospace; }
+.fleet-find-parts-stitch .text-headline-sm { font-size: 18px; line-height: 26px; letter-spacing: -0.01em; font-weight: 600; }
+.fleet-find-parts-stitch .text-body-md { font-size: 14px; line-height: 20px; letter-spacing: 0em; font-weight: 400; }
+.fleet-find-parts-stitch .text-headline-xl { font-size: 30px; line-height: 38px; letter-spacing: -0.02em; font-weight: 600; }
+.fleet-find-parts-stitch .text-label-plate { font-size: 14px; line-height: 18px; letter-spacing: 0.08em; font-weight: 700; }
+.fleet-find-parts-stitch .text-body-lg { font-size: 16px; line-height: 24px; letter-spacing: -0.005em; font-weight: 400; }
+.fleet-find-parts-stitch .text-label-price { font-size: 14px; line-height: 20px; letter-spacing: -0.02em; font-weight: 600; }
+.fleet-find-parts-stitch .text-headline-lg { font-size: 24px; line-height: 32px; letter-spacing: -0.015em; font-weight: 600; }
+.fleet-find-parts-stitch .text-caption { font-size: 11px; line-height: 14px; letter-spacing: 0.02em; font-weight: 500; }
+.fleet-find-parts-stitch .text-label-code { font-size: 13px; line-height: 18px; letter-spacing: -0.01em; font-weight: 500; }
+.fleet-find-parts-stitch .text-body-sm { font-size: 13px; line-height: 18px; letter-spacing: 0em; font-weight: 400; }
+.fleet-find-parts-stitch .bg-surface-bright { background-color: #f7f9fb; }
+.fleet-find-parts-stitch .text-surface-bright { color: #f7f9fb; }
+.fleet-find-parts-stitch .border-surface-bright { border-color: #f7f9fb; }
+.fleet-find-parts-stitch .hover\:bg-surface-bright:hover { background-color: #f7f9fb; }
+.fleet-find-parts-stitch .hover\:text-surface-bright:hover { color: #f7f9fb; }
+.fleet-find-parts-stitch .group:hover .group-hover\:bg-surface-bright { background-color: #f7f9fb; }
+.fleet-find-parts-stitch .group:hover .group-hover\:text-surface-bright { color: #f7f9fb; }
+.fleet-find-parts-stitch .bg-tertiary { background-color: #000000; }
+.fleet-find-parts-stitch .text-tertiary { color: #000000; }
+.fleet-find-parts-stitch .border-tertiary { border-color: #000000; }
+.fleet-find-parts-stitch .hover\:bg-tertiary:hover { background-color: #000000; }
+.fleet-find-parts-stitch .hover\:text-tertiary:hover { color: #000000; }
+.fleet-find-parts-stitch .group:hover .group-hover\:bg-tertiary { background-color: #000000; }
+.fleet-find-parts-stitch .group:hover .group-hover\:text-tertiary { color: #000000; }
+.fleet-find-parts-stitch .bg-on-secondary { background-color: #ffffff; }
+.fleet-find-parts-stitch .text-on-secondary { color: #ffffff; }
+.fleet-find-parts-stitch .border-on-secondary { border-color: #ffffff; }
+.fleet-find-parts-stitch .hover\:bg-on-secondary:hover { background-color: #ffffff; }
+.fleet-find-parts-stitch .hover\:text-on-secondary:hover { color: #ffffff; }
+.fleet-find-parts-stitch .group:hover .group-hover\:bg-on-secondary { background-color: #ffffff; }
+.fleet-find-parts-stitch .group:hover .group-hover\:text-on-secondary { color: #ffffff; }
+.fleet-find-parts-stitch .bg-secondary-fixed { background-color: #e2e1f4; }
+.fleet-find-parts-stitch .text-secondary-fixed { color: #e2e1f4; }
+.fleet-find-parts-stitch .border-secondary-fixed { border-color: #e2e1f4; }
+.fleet-find-parts-stitch .hover\:bg-secondary-fixed:hover { background-color: #e2e1f4; }
+.fleet-find-parts-stitch .hover\:text-secondary-fixed:hover { color: #e2e1f4; }
+.fleet-find-parts-stitch .group:hover .group-hover\:bg-secondary-fixed { background-color: #e2e1f4; }
+.fleet-find-parts-stitch .group:hover .group-hover\:text-secondary-fixed { color: #e2e1f4; }
+.fleet-find-parts-stitch .bg-error-container { background-color: #ffdad6; }
+.fleet-find-parts-stitch .text-error-container { color: #ffdad6; }
+.fleet-find-parts-stitch .border-error-container { border-color: #ffdad6; }
+.fleet-find-parts-stitch .hover\:bg-error-container:hover { background-color: #ffdad6; }
+.fleet-find-parts-stitch .hover\:text-error-container:hover { color: #ffdad6; }
+.fleet-find-parts-stitch .group:hover .group-hover\:bg-error-container { background-color: #ffdad6; }
+.fleet-find-parts-stitch .group:hover .group-hover\:text-error-container { color: #ffdad6; }
+.fleet-find-parts-stitch .bg-background { background-color: #f7f9fb; }
+.fleet-find-parts-stitch .text-background { color: #f7f9fb; }
+.fleet-find-parts-stitch .border-background { border-color: #f7f9fb; }
+.fleet-find-parts-stitch .hover\:bg-background:hover { background-color: #f7f9fb; }
+.fleet-find-parts-stitch .hover\:text-background:hover { color: #f7f9fb; }
+.fleet-find-parts-stitch .group:hover .group-hover\:bg-background { background-color: #f7f9fb; }
+.fleet-find-parts-stitch .group:hover .group-hover\:text-background { color: #f7f9fb; }
+.fleet-find-parts-stitch .bg-tertiary-fixed-dim { background-color: #ffb690; }
+.fleet-find-parts-stitch .text-tertiary-fixed-dim { color: #ffb690; }
+.fleet-find-parts-stitch .border-tertiary-fixed-dim { border-color: #ffb690; }
+.fleet-find-parts-stitch .hover\:bg-tertiary-fixed-dim:hover { background-color: #ffb690; }
+.fleet-find-parts-stitch .hover\:text-tertiary-fixed-dim:hover { color: #ffb690; }
+.fleet-find-parts-stitch .group:hover .group-hover\:bg-tertiary-fixed-dim { background-color: #ffb690; }
+.fleet-find-parts-stitch .group:hover .group-hover\:text-tertiary-fixed-dim { color: #ffb690; }
+.fleet-find-parts-stitch .bg-on-primary-fixed-variant { background-color: #46445b; }
+.fleet-find-parts-stitch .text-on-primary-fixed-variant { color: #46445b; }
+.fleet-find-parts-stitch .border-on-primary-fixed-variant { border-color: #46445b; }
+.fleet-find-parts-stitch .hover\:bg-on-primary-fixed-variant:hover { background-color: #46445b; }
+.fleet-find-parts-stitch .hover\:text-on-primary-fixed-variant:hover { color: #46445b; }
+.fleet-find-parts-stitch .group:hover .group-hover\:bg-on-primary-fixed-variant { background-color: #46445b; }
+.fleet-find-parts-stitch .group:hover .group-hover\:text-on-primary-fixed-variant { color: #46445b; }
+.fleet-find-parts-stitch .bg-surface-tint { background-color: #5e5c74; }
+.fleet-find-parts-stitch .text-surface-tint { color: #5e5c74; }
+.fleet-find-parts-stitch .border-surface-tint { border-color: #5e5c74; }
+.fleet-find-parts-stitch .hover\:bg-surface-tint:hover { background-color: #5e5c74; }
+.fleet-find-parts-stitch .hover\:text-surface-tint:hover { color: #5e5c74; }
+.fleet-find-parts-stitch .group:hover .group-hover\:bg-surface-tint { background-color: #5e5c74; }
+.fleet-find-parts-stitch .group:hover .group-hover\:text-surface-tint { color: #5e5c74; }
+.fleet-find-parts-stitch .bg-on-secondary-fixed-variant { background-color: #454555; }
+.fleet-find-parts-stitch .text-on-secondary-fixed-variant { color: #454555; }
+.fleet-find-parts-stitch .border-on-secondary-fixed-variant { border-color: #454555; }
+.fleet-find-parts-stitch .hover\:bg-on-secondary-fixed-variant:hover { background-color: #454555; }
+.fleet-find-parts-stitch .hover\:text-on-secondary-fixed-variant:hover { color: #454555; }
+.fleet-find-parts-stitch .group:hover .group-hover\:bg-on-secondary-fixed-variant { background-color: #454555; }
+.fleet-find-parts-stitch .group:hover .group-hover\:text-on-secondary-fixed-variant { color: #454555; }
+.fleet-find-parts-stitch .bg-secondary-container { background-color: #dfdef1; }
+.fleet-find-parts-stitch .text-secondary-container { color: #dfdef1; }
+.fleet-find-parts-stitch .border-secondary-container { border-color: #dfdef1; }
+.fleet-find-parts-stitch .hover\:bg-secondary-container:hover { background-color: #dfdef1; }
+.fleet-find-parts-stitch .hover\:text-secondary-container:hover { color: #dfdef1; }
+.fleet-find-parts-stitch .group:hover .group-hover\:bg-secondary-container { background-color: #dfdef1; }
+.fleet-find-parts-stitch .group:hover .group-hover\:text-secondary-container { color: #dfdef1; }
+.fleet-find-parts-stitch .bg-on-secondary-container { background-color: #616172; }
+.fleet-find-parts-stitch .text-on-secondary-container { color: #616172; }
+.fleet-find-parts-stitch .border-on-secondary-container { border-color: #616172; }
+.fleet-find-parts-stitch .hover\:bg-on-secondary-container:hover { background-color: #616172; }
+.fleet-find-parts-stitch .hover\:text-on-secondary-container:hover { color: #616172; }
+.fleet-find-parts-stitch .group:hover .group-hover\:bg-on-secondary-container { background-color: #616172; }
+.fleet-find-parts-stitch .group:hover .group-hover\:text-on-secondary-container { color: #616172; }
+.fleet-find-parts-stitch .bg-on-surface-variant { background-color: #47464c; }
+.fleet-find-parts-stitch .text-on-surface-variant { color: #47464c; }
+.fleet-find-parts-stitch .border-on-surface-variant { border-color: #47464c; }
+.fleet-find-parts-stitch .hover\:bg-on-surface-variant:hover { background-color: #47464c; }
+.fleet-find-parts-stitch .hover\:text-on-surface-variant:hover { color: #47464c; }
+.fleet-find-parts-stitch .group:hover .group-hover\:bg-on-surface-variant { background-color: #47464c; }
+.fleet-find-parts-stitch .group:hover .group-hover\:text-on-surface-variant { color: #47464c; }
+.fleet-find-parts-stitch .bg-primary-fixed-dim { background-color: #c8c3df; }
+.fleet-find-parts-stitch .text-primary-fixed-dim { color: #c8c3df; }
+.fleet-find-parts-stitch .border-primary-fixed-dim { border-color: #c8c3df; }
+.fleet-find-parts-stitch .hover\:bg-primary-fixed-dim:hover { background-color: #c8c3df; }
+.fleet-find-parts-stitch .hover\:text-primary-fixed-dim:hover { color: #c8c3df; }
+.fleet-find-parts-stitch .group:hover .group-hover\:bg-primary-fixed-dim { background-color: #c8c3df; }
+.fleet-find-parts-stitch .group:hover .group-hover\:text-primary-fixed-dim { color: #c8c3df; }
+.fleet-find-parts-stitch .bg-on-surface { background-color: #191c1e; }
+.fleet-find-parts-stitch .text-on-surface { color: #191c1e; }
+.fleet-find-parts-stitch .border-on-surface { border-color: #191c1e; }
+.fleet-find-parts-stitch .hover\:bg-on-surface:hover { background-color: #191c1e; }
+.fleet-find-parts-stitch .hover\:text-on-surface:hover { color: #191c1e; }
+.fleet-find-parts-stitch .group:hover .group-hover\:bg-on-surface { background-color: #191c1e; }
+.fleet-find-parts-stitch .group:hover .group-hover\:text-on-surface { color: #191c1e; }
+.fleet-find-parts-stitch .bg-on-primary { background-color: #ffffff; }
+.fleet-find-parts-stitch .text-on-primary { color: #ffffff; }
+.fleet-find-parts-stitch .border-on-primary { border-color: #ffffff; }
+.fleet-find-parts-stitch .hover\:bg-on-primary:hover { background-color: #ffffff; }
+.fleet-find-parts-stitch .hover\:text-on-primary:hover { color: #ffffff; }
+.fleet-find-parts-stitch .group:hover .group-hover\:bg-on-primary { background-color: #ffffff; }
+.fleet-find-parts-stitch .group:hover .group-hover\:text-on-primary { color: #ffffff; }
+.fleet-find-parts-stitch .bg-surface-dim { background-color: #d8dadc; }
+.fleet-find-parts-stitch .text-surface-dim { color: #d8dadc; }
+.fleet-find-parts-stitch .border-surface-dim { border-color: #d8dadc; }
+.fleet-find-parts-stitch .hover\:bg-surface-dim:hover { background-color: #d8dadc; }
+.fleet-find-parts-stitch .hover\:text-surface-dim:hover { color: #d8dadc; }
+.fleet-find-parts-stitch .group:hover .group-hover\:bg-surface-dim { background-color: #d8dadc; }
+.fleet-find-parts-stitch .group:hover .group-hover\:text-surface-dim { color: #d8dadc; }
+.fleet-find-parts-stitch .bg-on-tertiary-container { background-color: #d95f00; }
+.fleet-find-parts-stitch .text-on-tertiary-container { color: #d95f00; }
+.fleet-find-parts-stitch .border-on-tertiary-container { border-color: #d95f00; }
+.fleet-find-parts-stitch .hover\:bg-on-tertiary-container:hover { background-color: #d95f00; }
+.fleet-find-parts-stitch .hover\:text-on-tertiary-container:hover { color: #d95f00; }
+.fleet-find-parts-stitch .group:hover .group-hover\:bg-on-tertiary-container { background-color: #d95f00; }
+.fleet-find-parts-stitch .group:hover .group-hover\:text-on-tertiary-container { color: #d95f00; }
+.fleet-find-parts-stitch .bg-surface-container-high { background-color: #e6e8ea; }
+.fleet-find-parts-stitch .text-surface-container-high { color: #e6e8ea; }
+.fleet-find-parts-stitch .border-surface-container-high { border-color: #e6e8ea; }
+.fleet-find-parts-stitch .hover\:bg-surface-container-high:hover { background-color: #e6e8ea; }
+.fleet-find-parts-stitch .hover\:text-surface-container-high:hover { color: #e6e8ea; }
+.fleet-find-parts-stitch .group:hover .group-hover\:bg-surface-container-high { background-color: #e6e8ea; }
+.fleet-find-parts-stitch .group:hover .group-hover\:text-surface-container-high { color: #e6e8ea; }
+.fleet-find-parts-stitch .bg-outline { background-color: #78767d; }
+.fleet-find-parts-stitch .text-outline { color: #78767d; }
+.fleet-find-parts-stitch .border-outline { border-color: #78767d; }
+.fleet-find-parts-stitch .hover\:bg-outline:hover { background-color: #78767d; }
+.fleet-find-parts-stitch .hover\:text-outline:hover { color: #78767d; }
+.fleet-find-parts-stitch .group:hover .group-hover\:bg-outline { background-color: #78767d; }
+.fleet-find-parts-stitch .group:hover .group-hover\:text-outline { color: #78767d; }
+.fleet-find-parts-stitch .bg-on-tertiary-fixed-variant { background-color: #783200; }
+.fleet-find-parts-stitch .text-on-tertiary-fixed-variant { color: #783200; }
+.fleet-find-parts-stitch .border-on-tertiary-fixed-variant { border-color: #783200; }
+.fleet-find-parts-stitch .hover\:bg-on-tertiary-fixed-variant:hover { background-color: #783200; }
+.fleet-find-parts-stitch .hover\:text-on-tertiary-fixed-variant:hover { color: #783200; }
+.fleet-find-parts-stitch .group:hover .group-hover\:bg-on-tertiary-fixed-variant { background-color: #783200; }
+.fleet-find-parts-stitch .group:hover .group-hover\:text-on-tertiary-fixed-variant { color: #783200; }
+.fleet-find-parts-stitch .bg-surface-container { background-color: #eceef0; }
+.fleet-find-parts-stitch .text-surface-container { color: #eceef0; }
+.fleet-find-parts-stitch .border-surface-container { border-color: #eceef0; }
+.fleet-find-parts-stitch .hover\:bg-surface-container:hover { background-color: #eceef0; }
+.fleet-find-parts-stitch .hover\:text-surface-container:hover { color: #eceef0; }
+.fleet-find-parts-stitch .group:hover .group-hover\:bg-surface-container { background-color: #eceef0; }
+.fleet-find-parts-stitch .group:hover .group-hover\:text-surface-container { color: #eceef0; }
+.fleet-find-parts-stitch .bg-primary { background-color: #000000; }
+.fleet-find-parts-stitch .text-primary { color: #000000; }
+.fleet-find-parts-stitch .border-primary { border-color: #000000; }
+.fleet-find-parts-stitch .hover\:bg-primary:hover { background-color: #000000; }
+.fleet-find-parts-stitch .hover\:text-primary:hover { color: #000000; }
+.fleet-find-parts-stitch .group:hover .group-hover\:bg-primary { background-color: #000000; }
+.fleet-find-parts-stitch .group:hover .group-hover\:text-primary { color: #000000; }
+.fleet-find-parts-stitch .bg-on-background { background-color: #191c1e; }
+.fleet-find-parts-stitch .text-on-background { color: #191c1e; }
+.fleet-find-parts-stitch .border-on-background { border-color: #191c1e; }
+.fleet-find-parts-stitch .hover\:bg-on-background:hover { background-color: #191c1e; }
+.fleet-find-parts-stitch .hover\:text-on-background:hover { color: #191c1e; }
+.fleet-find-parts-stitch .group:hover .group-hover\:bg-on-background { background-color: #191c1e; }
+.fleet-find-parts-stitch .group:hover .group-hover\:text-on-background { color: #191c1e; }
+.fleet-find-parts-stitch .bg-error { background-color: #ba1a1a; }
+.fleet-find-parts-stitch .text-error { color: #ba1a1a; }
+.fleet-find-parts-stitch .border-error { border-color: #ba1a1a; }
+.fleet-find-parts-stitch .hover\:bg-error:hover { background-color: #ba1a1a; }
+.fleet-find-parts-stitch .hover\:text-error:hover { color: #ba1a1a; }
+.fleet-find-parts-stitch .group:hover .group-hover\:bg-error { background-color: #ba1a1a; }
+.fleet-find-parts-stitch .group:hover .group-hover\:text-error { color: #ba1a1a; }
+.fleet-find-parts-stitch .bg-primary-fixed { background-color: #e4dffc; }
+.fleet-find-parts-stitch .text-primary-fixed { color: #e4dffc; }
+.fleet-find-parts-stitch .border-primary-fixed { border-color: #e4dffc; }
+.fleet-find-parts-stitch .hover\:bg-primary-fixed:hover { background-color: #e4dffc; }
+.fleet-find-parts-stitch .hover\:text-primary-fixed:hover { color: #e4dffc; }
+.fleet-find-parts-stitch .group:hover .group-hover\:bg-primary-fixed { background-color: #e4dffc; }
+.fleet-find-parts-stitch .group:hover .group-hover\:text-primary-fixed { color: #e4dffc; }
+.fleet-find-parts-stitch .bg-on-tertiary-fixed { background-color: #341100; }
+.fleet-find-parts-stitch .text-on-tertiary-fixed { color: #341100; }
+.fleet-find-parts-stitch .border-on-tertiary-fixed { border-color: #341100; }
+.fleet-find-parts-stitch .hover\:bg-on-tertiary-fixed:hover { background-color: #341100; }
+.fleet-find-parts-stitch .hover\:text-on-tertiary-fixed:hover { color: #341100; }
+.fleet-find-parts-stitch .group:hover .group-hover\:bg-on-tertiary-fixed { background-color: #341100; }
+.fleet-find-parts-stitch .group:hover .group-hover\:text-on-tertiary-fixed { color: #341100; }
+.fleet-find-parts-stitch .bg-inverse-surface { background-color: #2d3133; }
+.fleet-find-parts-stitch .text-inverse-surface { color: #2d3133; }
+.fleet-find-parts-stitch .border-inverse-surface { border-color: #2d3133; }
+.fleet-find-parts-stitch .hover\:bg-inverse-surface:hover { background-color: #2d3133; }
+.fleet-find-parts-stitch .hover\:text-inverse-surface:hover { color: #2d3133; }
+.fleet-find-parts-stitch .group:hover .group-hover\:bg-inverse-surface { background-color: #2d3133; }
+.fleet-find-parts-stitch .group:hover .group-hover\:text-inverse-surface { color: #2d3133; }
+.fleet-find-parts-stitch .bg-on-error-container { background-color: #93000a; }
+.fleet-find-parts-stitch .text-on-error-container { color: #93000a; }
+.fleet-find-parts-stitch .border-on-error-container { border-color: #93000a; }
+.fleet-find-parts-stitch .hover\:bg-on-error-container:hover { background-color: #93000a; }
+.fleet-find-parts-stitch .hover\:text-on-error-container:hover { color: #93000a; }
+.fleet-find-parts-stitch .group:hover .group-hover\:bg-on-error-container { background-color: #93000a; }
+.fleet-find-parts-stitch .group:hover .group-hover\:text-on-error-container { color: #93000a; }
+.fleet-find-parts-stitch .bg-on-error { background-color: #ffffff; }
+.fleet-find-parts-stitch .text-on-error { color: #ffffff; }
+.fleet-find-parts-stitch .border-on-error { border-color: #ffffff; }
+.fleet-find-parts-stitch .hover\:bg-on-error:hover { background-color: #ffffff; }
+.fleet-find-parts-stitch .hover\:text-on-error:hover { color: #ffffff; }
+.fleet-find-parts-stitch .group:hover .group-hover\:bg-on-error { background-color: #ffffff; }
+.fleet-find-parts-stitch .group:hover .group-hover\:text-on-error { color: #ffffff; }
+.fleet-find-parts-stitch .bg-on-secondary-fixed { background-color: #1a1a28; }
+.fleet-find-parts-stitch .text-on-secondary-fixed { color: #1a1a28; }
+.fleet-find-parts-stitch .border-on-secondary-fixed { border-color: #1a1a28; }
+.fleet-find-parts-stitch .hover\:bg-on-secondary-fixed:hover { background-color: #1a1a28; }
+.fleet-find-parts-stitch .hover\:text-on-secondary-fixed:hover { color: #1a1a28; }
+.fleet-find-parts-stitch .group:hover .group-hover\:bg-on-secondary-fixed { background-color: #1a1a28; }
+.fleet-find-parts-stitch .group:hover .group-hover\:text-on-secondary-fixed { color: #1a1a28; }
+.fleet-find-parts-stitch .bg-on-primary-fixed { background-color: #1b192e; }
+.fleet-find-parts-stitch .text-on-primary-fixed { color: #1b192e; }
+.fleet-find-parts-stitch .border-on-primary-fixed { border-color: #1b192e; }
+.fleet-find-parts-stitch .hover\:bg-on-primary-fixed:hover { background-color: #1b192e; }
+.fleet-find-parts-stitch .hover\:text-on-primary-fixed:hover { color: #1b192e; }
+.fleet-find-parts-stitch .group:hover .group-hover\:bg-on-primary-fixed { background-color: #1b192e; }
+.fleet-find-parts-stitch .group:hover .group-hover\:text-on-primary-fixed { color: #1b192e; }
+.fleet-find-parts-stitch .bg-on-primary-container { background-color: #84819a; }
+.fleet-find-parts-stitch .text-on-primary-container { color: #84819a; }
+.fleet-find-parts-stitch .border-on-primary-container { border-color: #84819a; }
+.fleet-find-parts-stitch .hover\:bg-on-primary-container:hover { background-color: #84819a; }
+.fleet-find-parts-stitch .hover\:text-on-primary-container:hover { color: #84819a; }
+.fleet-find-parts-stitch .group:hover .group-hover\:bg-on-primary-container { background-color: #84819a; }
+.fleet-find-parts-stitch .group:hover .group-hover\:text-on-primary-container { color: #84819a; }
+.fleet-find-parts-stitch .bg-primary-container { background-color: #1b192e; }
+.fleet-find-parts-stitch .text-primary-container { color: #1b192e; }
+.fleet-find-parts-stitch .border-primary-container { border-color: #1b192e; }
+.fleet-find-parts-stitch .hover\:bg-primary-container:hover { background-color: #1b192e; }
+.fleet-find-parts-stitch .hover\:text-primary-container:hover { color: #1b192e; }
+.fleet-find-parts-stitch .group:hover .group-hover\:bg-primary-container { background-color: #1b192e; }
+.fleet-find-parts-stitch .group:hover .group-hover\:text-primary-container { color: #1b192e; }
+.fleet-find-parts-stitch .bg-inverse-on-surface { background-color: #eff1f3; }
+.fleet-find-parts-stitch .text-inverse-on-surface { color: #eff1f3; }
+.fleet-find-parts-stitch .border-inverse-on-surface { border-color: #eff1f3; }
+.fleet-find-parts-stitch .hover\:bg-inverse-on-surface:hover { background-color: #eff1f3; }
+.fleet-find-parts-stitch .hover\:text-inverse-on-surface:hover { color: #eff1f3; }
+.fleet-find-parts-stitch .group:hover .group-hover\:bg-inverse-on-surface { background-color: #eff1f3; }
+.fleet-find-parts-stitch .group:hover .group-hover\:text-inverse-on-surface { color: #eff1f3; }
+.fleet-find-parts-stitch .bg-tertiary-fixed { background-color: #ffdbca; }
+.fleet-find-parts-stitch .text-tertiary-fixed { color: #ffdbca; }
+.fleet-find-parts-stitch .border-tertiary-fixed { border-color: #ffdbca; }
+.fleet-find-parts-stitch .hover\:bg-tertiary-fixed:hover { background-color: #ffdbca; }
+.fleet-find-parts-stitch .hover\:text-tertiary-fixed:hover { color: #ffdbca; }
+.fleet-find-parts-stitch .group:hover .group-hover\:bg-tertiary-fixed { background-color: #ffdbca; }
+.fleet-find-parts-stitch .group:hover .group-hover\:text-tertiary-fixed { color: #ffdbca; }
+.fleet-find-parts-stitch .bg-inverse-primary { background-color: #c8c3df; }
+.fleet-find-parts-stitch .text-inverse-primary { color: #c8c3df; }
+.fleet-find-parts-stitch .border-inverse-primary { border-color: #c8c3df; }
+.fleet-find-parts-stitch .hover\:bg-inverse-primary:hover { background-color: #c8c3df; }
+.fleet-find-parts-stitch .hover\:text-inverse-primary:hover { color: #c8c3df; }
+.fleet-find-parts-stitch .group:hover .group-hover\:bg-inverse-primary { background-color: #c8c3df; }
+.fleet-find-parts-stitch .group:hover .group-hover\:text-inverse-primary { color: #c8c3df; }
+.fleet-find-parts-stitch .bg-tertiary-container { background-color: #341100; }
+.fleet-find-parts-stitch .text-tertiary-container { color: #341100; }
+.fleet-find-parts-stitch .border-tertiary-container { border-color: #341100; }
+.fleet-find-parts-stitch .hover\:bg-tertiary-container:hover { background-color: #341100; }
+.fleet-find-parts-stitch .hover\:text-tertiary-container:hover { color: #341100; }
+.fleet-find-parts-stitch .group:hover .group-hover\:bg-tertiary-container { background-color: #341100; }
+.fleet-find-parts-stitch .group:hover .group-hover\:text-tertiary-container { color: #341100; }
+.fleet-find-parts-stitch .bg-surface-container-low { background-color: #f2f4f6; }
+.fleet-find-parts-stitch .text-surface-container-low { color: #f2f4f6; }
+.fleet-find-parts-stitch .border-surface-container-low { border-color: #f2f4f6; }
+.fleet-find-parts-stitch .hover\:bg-surface-container-low:hover { background-color: #f2f4f6; }
+.fleet-find-parts-stitch .hover\:text-surface-container-low:hover { color: #f2f4f6; }
+.fleet-find-parts-stitch .group:hover .group-hover\:bg-surface-container-low { background-color: #f2f4f6; }
+.fleet-find-parts-stitch .group:hover .group-hover\:text-surface-container-low { color: #f2f4f6; }
+.fleet-find-parts-stitch .bg-on-tertiary { background-color: #ffffff; }
+.fleet-find-parts-stitch .text-on-tertiary { color: #ffffff; }
+.fleet-find-parts-stitch .border-on-tertiary { border-color: #ffffff; }
+.fleet-find-parts-stitch .hover\:bg-on-tertiary:hover { background-color: #ffffff; }
+.fleet-find-parts-stitch .hover\:text-on-tertiary:hover { color: #ffffff; }
+.fleet-find-parts-stitch .group:hover .group-hover\:bg-on-tertiary { background-color: #ffffff; }
+.fleet-find-parts-stitch .group:hover .group-hover\:text-on-tertiary { color: #ffffff; }
+.fleet-find-parts-stitch .bg-secondary-fixed-dim { background-color: #c6c5d8; }
+.fleet-find-parts-stitch .text-secondary-fixed-dim { color: #c6c5d8; }
+.fleet-find-parts-stitch .border-secondary-fixed-dim { border-color: #c6c5d8; }
+.fleet-find-parts-stitch .hover\:bg-secondary-fixed-dim:hover { background-color: #c6c5d8; }
+.fleet-find-parts-stitch .hover\:text-secondary-fixed-dim:hover { color: #c6c5d8; }
+.fleet-find-parts-stitch .group:hover .group-hover\:bg-secondary-fixed-dim { background-color: #c6c5d8; }
+.fleet-find-parts-stitch .group:hover .group-hover\:text-secondary-fixed-dim { color: #c6c5d8; }
+.fleet-find-parts-stitch .bg-surface { background-color: #f7f9fb; }
+.fleet-find-parts-stitch .text-surface { color: #f7f9fb; }
+.fleet-find-parts-stitch .border-surface { border-color: #f7f9fb; }
+.fleet-find-parts-stitch .hover\:bg-surface:hover { background-color: #f7f9fb; }
+.fleet-find-parts-stitch .hover\:text-surface:hover { color: #f7f9fb; }
+.fleet-find-parts-stitch .group:hover .group-hover\:bg-surface { background-color: #f7f9fb; }
+.fleet-find-parts-stitch .group:hover .group-hover\:text-surface { color: #f7f9fb; }
+.fleet-find-parts-stitch .bg-surface-container-lowest { background-color: #ffffff; }
+.fleet-find-parts-stitch .text-surface-container-lowest { color: #ffffff; }
+.fleet-find-parts-stitch .border-surface-container-lowest { border-color: #ffffff; }
+.fleet-find-parts-stitch .hover\:bg-surface-container-lowest:hover { background-color: #ffffff; }
+.fleet-find-parts-stitch .hover\:text-surface-container-lowest:hover { color: #ffffff; }
+.fleet-find-parts-stitch .group:hover .group-hover\:bg-surface-container-lowest { background-color: #ffffff; }
+.fleet-find-parts-stitch .group:hover .group-hover\:text-surface-container-lowest { color: #ffffff; }
+.fleet-find-parts-stitch .bg-outline-variant { background-color: #c9c5cd; }
+.fleet-find-parts-stitch .text-outline-variant { color: #c9c5cd; }
+.fleet-find-parts-stitch .border-outline-variant { border-color: #c9c5cd; }
+.fleet-find-parts-stitch .hover\:bg-outline-variant:hover { background-color: #c9c5cd; }
+.fleet-find-parts-stitch .hover\:text-outline-variant:hover { color: #c9c5cd; }
+.fleet-find-parts-stitch .group:hover .group-hover\:bg-outline-variant { background-color: #c9c5cd; }
+.fleet-find-parts-stitch .group:hover .group-hover\:text-outline-variant { color: #c9c5cd; }
+.fleet-find-parts-stitch .bg-surface-container-highest { background-color: #e0e3e5; }
+.fleet-find-parts-stitch .text-surface-container-highest { color: #e0e3e5; }
+.fleet-find-parts-stitch .border-surface-container-highest { border-color: #e0e3e5; }
+.fleet-find-parts-stitch .hover\:bg-surface-container-highest:hover { background-color: #e0e3e5; }
+.fleet-find-parts-stitch .hover\:text-surface-container-highest:hover { color: #e0e3e5; }
+.fleet-find-parts-stitch .group:hover .group-hover\:bg-surface-container-highest { background-color: #e0e3e5; }
+.fleet-find-parts-stitch .group:hover .group-hover\:text-surface-container-highest { color: #e0e3e5; }
+.fleet-find-parts-stitch .bg-secondary { background-color: #5d5d6d; }
+.fleet-find-parts-stitch .text-secondary { color: #5d5d6d; }
+.fleet-find-parts-stitch .border-secondary { border-color: #5d5d6d; }
+.fleet-find-parts-stitch .hover\:bg-secondary:hover { background-color: #5d5d6d; }
+.fleet-find-parts-stitch .hover\:text-secondary:hover { color: #5d5d6d; }
+.fleet-find-parts-stitch .group:hover .group-hover\:bg-secondary { background-color: #5d5d6d; }
+.fleet-find-parts-stitch .group:hover .group-hover\:text-secondary { color: #5d5d6d; }
+.fleet-find-parts-stitch .bg-surface-variant { background-color: #e0e3e5; }
+.fleet-find-parts-stitch .text-surface-variant { color: #e0e3e5; }
+.fleet-find-parts-stitch .border-surface-variant { border-color: #e0e3e5; }
+.fleet-find-parts-stitch .hover\:bg-surface-variant:hover { background-color: #e0e3e5; }
+.fleet-find-parts-stitch .hover\:text-surface-variant:hover { color: #e0e3e5; }
+.fleet-find-parts-stitch .group:hover .group-hover\:bg-surface-variant { background-color: #e0e3e5; }
+.fleet-find-parts-stitch .group:hover .group-hover\:text-surface-variant { color: #e0e3e5; }
+.fleet-find-parts-stitch .p-gutter { padding: 1rem; }
+.fleet-find-parts-stitch .px-gutter { padding-left: 1rem; padding-right: 1rem; }
+.fleet-find-parts-stitch .py-gutter { padding-top: 1rem; padding-bottom: 1rem; }
+.fleet-find-parts-stitch .pt-gutter { padding-top: 1rem; }
+.fleet-find-parts-stitch .pb-gutter { padding-bottom: 1rem; }
+.fleet-find-parts-stitch .m-gutter { margin: 1rem; }
+.fleet-find-parts-stitch .mt-gutter { margin-top: 1rem; }
+.fleet-find-parts-stitch .mb-gutter { margin-bottom: 1rem; }
+.fleet-find-parts-stitch .my-gutter { margin-top: 1rem; margin-bottom: 1rem; }
+.fleet-find-parts-stitch .gap-gutter { gap: 1rem; }
+.fleet-find-parts-stitch .p-gutter-desktop { padding: 1.5rem; }
+.fleet-find-parts-stitch .px-gutter-desktop { padding-left: 1.5rem; padding-right: 1.5rem; }
+.fleet-find-parts-stitch .py-gutter-desktop { padding-top: 1.5rem; padding-bottom: 1.5rem; }
+.fleet-find-parts-stitch .pt-gutter-desktop { padding-top: 1.5rem; }
+.fleet-find-parts-stitch .pb-gutter-desktop { padding-bottom: 1.5rem; }
+.fleet-find-parts-stitch .m-gutter-desktop { margin: 1.5rem; }
+.fleet-find-parts-stitch .mt-gutter-desktop { margin-top: 1.5rem; }
+.fleet-find-parts-stitch .mb-gutter-desktop { margin-bottom: 1.5rem; }
+.fleet-find-parts-stitch .my-gutter-desktop { margin-top: 1.5rem; margin-bottom: 1.5rem; }
+.fleet-find-parts-stitch .gap-gutter-desktop { gap: 1.5rem; }
+.fleet-find-parts-stitch .p-margin { padding: 1rem; }
+.fleet-find-parts-stitch .px-margin { padding-left: 1rem; padding-right: 1rem; }
+.fleet-find-parts-stitch .py-margin { padding-top: 1rem; padding-bottom: 1rem; }
+.fleet-find-parts-stitch .pt-margin { padding-top: 1rem; }
+.fleet-find-parts-stitch .pb-margin { padding-bottom: 1rem; }
+.fleet-find-parts-stitch .m-margin { margin: 1rem; }
+.fleet-find-parts-stitch .mt-margin { margin-top: 1rem; }
+.fleet-find-parts-stitch .mb-margin { margin-bottom: 1rem; }
+.fleet-find-parts-stitch .my-margin { margin-top: 1rem; margin-bottom: 1rem; }
+.fleet-find-parts-stitch .gap-margin { gap: 1rem; }
+.fleet-find-parts-stitch .p-space-xl { padding: 1.5rem; }
+.fleet-find-parts-stitch .px-space-xl { padding-left: 1.5rem; padding-right: 1.5rem; }
+.fleet-find-parts-stitch .py-space-xl { padding-top: 1.5rem; padding-bottom: 1.5rem; }
+.fleet-find-parts-stitch .pt-space-xl { padding-top: 1.5rem; }
+.fleet-find-parts-stitch .pb-space-xl { padding-bottom: 1.5rem; }
+.fleet-find-parts-stitch .m-space-xl { margin: 1.5rem; }
+.fleet-find-parts-stitch .mt-space-xl { margin-top: 1.5rem; }
+.fleet-find-parts-stitch .mb-space-xl { margin-bottom: 1.5rem; }
+.fleet-find-parts-stitch .my-space-xl { margin-top: 1.5rem; margin-bottom: 1.5rem; }
+.fleet-find-parts-stitch .gap-space-xl { gap: 1.5rem; }
+.fleet-find-parts-stitch .p-space-xs { padding: 0.25rem; }
+.fleet-find-parts-stitch .px-space-xs { padding-left: 0.25rem; padding-right: 0.25rem; }
+.fleet-find-parts-stitch .py-space-xs { padding-top: 0.25rem; padding-bottom: 0.25rem; }
+.fleet-find-parts-stitch .pt-space-xs { padding-top: 0.25rem; }
+.fleet-find-parts-stitch .pb-space-xs { padding-bottom: 0.25rem; }
+.fleet-find-parts-stitch .m-space-xs { margin: 0.25rem; }
+.fleet-find-parts-stitch .mt-space-xs { margin-top: 0.25rem; }
+.fleet-find-parts-stitch .mb-space-xs { margin-bottom: 0.25rem; }
+.fleet-find-parts-stitch .my-space-xs { margin-top: 0.25rem; margin-bottom: 0.25rem; }
+.fleet-find-parts-stitch .gap-space-xs { gap: 0.25rem; }
+.fleet-find-parts-stitch .p-space-md { padding: 0.75rem; }
+.fleet-find-parts-stitch .px-space-md { padding-left: 0.75rem; padding-right: 0.75rem; }
+.fleet-find-parts-stitch .py-space-md { padding-top: 0.75rem; padding-bottom: 0.75rem; }
+.fleet-find-parts-stitch .pt-space-md { padding-top: 0.75rem; }
+.fleet-find-parts-stitch .pb-space-md { padding-bottom: 0.75rem; }
+.fleet-find-parts-stitch .m-space-md { margin: 0.75rem; }
+.fleet-find-parts-stitch .mt-space-md { margin-top: 0.75rem; }
+.fleet-find-parts-stitch .mb-space-md { margin-bottom: 0.75rem; }
+.fleet-find-parts-stitch .my-space-md { margin-top: 0.75rem; margin-bottom: 0.75rem; }
+.fleet-find-parts-stitch .gap-space-md { gap: 0.75rem; }
+.fleet-find-parts-stitch .p-space-lg { padding: 1rem; }
+.fleet-find-parts-stitch .px-space-lg { padding-left: 1rem; padding-right: 1rem; }
+.fleet-find-parts-stitch .py-space-lg { padding-top: 1rem; padding-bottom: 1rem; }
+.fleet-find-parts-stitch .pt-space-lg { padding-top: 1rem; }
+.fleet-find-parts-stitch .pb-space-lg { padding-bottom: 1rem; }
+.fleet-find-parts-stitch .m-space-lg { margin: 1rem; }
+.fleet-find-parts-stitch .mt-space-lg { margin-top: 1rem; }
+.fleet-find-parts-stitch .mb-space-lg { margin-bottom: 1rem; }
+.fleet-find-parts-stitch .my-space-lg { margin-top: 1rem; margin-bottom: 1rem; }
+.fleet-find-parts-stitch .gap-space-lg { gap: 1rem; }
+.fleet-find-parts-stitch .p-margin-desktop { padding: 2rem; }
+.fleet-find-parts-stitch .px-margin-desktop { padding-left: 2rem; padding-right: 2rem; }
+.fleet-find-parts-stitch .py-margin-desktop { padding-top: 2rem; padding-bottom: 2rem; }
+.fleet-find-parts-stitch .pt-margin-desktop { padding-top: 2rem; }
+.fleet-find-parts-stitch .pb-margin-desktop { padding-bottom: 2rem; }
+.fleet-find-parts-stitch .m-margin-desktop { margin: 2rem; }
+.fleet-find-parts-stitch .mt-margin-desktop { margin-top: 2rem; }
+.fleet-find-parts-stitch .mb-margin-desktop { margin-bottom: 2rem; }
+.fleet-find-parts-stitch .my-margin-desktop { margin-top: 2rem; margin-bottom: 2rem; }
+.fleet-find-parts-stitch .gap-margin-desktop { gap: 2rem; }
+.fleet-find-parts-stitch .p-space-sm { padding: 0.5rem; }
+.fleet-find-parts-stitch .px-space-sm { padding-left: 0.5rem; padding-right: 0.5rem; }
+.fleet-find-parts-stitch .py-space-sm { padding-top: 0.5rem; padding-bottom: 0.5rem; }
+.fleet-find-parts-stitch .pt-space-sm { padding-top: 0.5rem; }
+.fleet-find-parts-stitch .pb-space-sm { padding-bottom: 0.5rem; }
+.fleet-find-parts-stitch .m-space-sm { margin: 0.5rem; }
+.fleet-find-parts-stitch .mt-space-sm { margin-top: 0.5rem; }
+.fleet-find-parts-stitch .mb-space-sm { margin-bottom: 0.5rem; }
+.fleet-find-parts-stitch .my-space-sm { margin-top: 0.5rem; margin-bottom: 0.5rem; }
+.fleet-find-parts-stitch .gap-space-sm { gap: 0.5rem; }
+.dark .fleet-find-parts-stitch { background: #252525; color: #fafafa; }
+.dark .fleet-find-parts-stitch .bg-surface { background-color: #2e2e2e; }
+.dark .fleet-find-parts-stitch .text-surface { color: #2e2e2e; }
+.dark .fleet-find-parts-stitch .border-surface { border-color: #2e2e2e; }
+.dark .fleet-find-parts-stitch .bg-surface-container-lowest { background-color: #2e2e2e; }
+.dark .fleet-find-parts-stitch .text-surface-container-lowest { color: #2e2e2e; }
+.dark .fleet-find-parts-stitch .border-surface-container-lowest { border-color: #2e2e2e; }
+.dark .fleet-find-parts-stitch .bg-surface-container-low { background-color: #333333; }
+.dark .fleet-find-parts-stitch .text-surface-container-low { color: #333333; }
+.dark .fleet-find-parts-stitch .border-surface-container-low { border-color: #333333; }
+.dark .fleet-find-parts-stitch .bg-surface-container { background-color: #383838; }
+.dark .fleet-find-parts-stitch .text-surface-container { color: #383838; }
+.dark .fleet-find-parts-stitch .border-surface-container { border-color: #383838; }
+.dark .fleet-find-parts-stitch .bg-surface-container-high { background-color: #3d3d3d; }
+.dark .fleet-find-parts-stitch .text-surface-container-high { color: #3d3d3d; }
+.dark .fleet-find-parts-stitch .border-surface-container-high { border-color: #3d3d3d; }
+.dark .fleet-find-parts-stitch .bg-surface-container-highest { background-color: #444444; }
+.dark .fleet-find-parts-stitch .text-surface-container-highest { color: #444444; }
+.dark .fleet-find-parts-stitch .border-surface-container-highest { border-color: #444444; }
+.dark .fleet-find-parts-stitch .bg-background { background-color: #252525; }
+.dark .fleet-find-parts-stitch .text-background { color: #252525; }
+.dark .fleet-find-parts-stitch .border-background { border-color: #252525; }
+.dark .fleet-find-parts-stitch .bg-on-surface { background-color: #fafafa; }
+.dark .fleet-find-parts-stitch .text-on-surface { color: #fafafa; }
+.dark .fleet-find-parts-stitch .border-on-surface { border-color: #fafafa; }
+.dark .fleet-find-parts-stitch .bg-on-surface-variant { background-color: #b4b4b4; }
+.dark .fleet-find-parts-stitch .text-on-surface-variant { color: #b4b4b4; }
+.dark .fleet-find-parts-stitch .border-on-surface-variant { border-color: #b4b4b4; }
+.dark .fleet-find-parts-stitch .bg-on-background { background-color: #fafafa; }
+.dark .fleet-find-parts-stitch .text-on-background { color: #fafafa; }
+.dark .fleet-find-parts-stitch .border-on-background { border-color: #fafafa; }
+.dark .fleet-find-parts-stitch .bg-outline { background-color: #444444; }
+.dark .fleet-find-parts-stitch .text-outline { color: #444444; }
+.dark .fleet-find-parts-stitch .border-outline { border-color: #444444; }
+.dark .fleet-find-parts-stitch .bg-outline-variant { background-color: #444444; }
+.dark .fleet-find-parts-stitch .text-outline-variant { color: #444444; }
+.dark .fleet-find-parts-stitch .border-outline-variant { border-color: #444444; }
+.dark .fleet-find-parts-stitch .bg-primary { background-color: #fafafa; }
+.dark .fleet-find-parts-stitch .text-primary { color: #fafafa; }
+.dark .fleet-find-parts-stitch .border-primary { border-color: #fafafa; }
+.dark .fleet-find-parts-stitch .bg-on-primary { background-color: #252525; }
+.dark .fleet-find-parts-stitch .text-on-primary { color: #252525; }
+.dark .fleet-find-parts-stitch .border-on-primary { border-color: #252525; }
+.dark .fleet-find-parts-stitch .bg-secondary { background-color: #34d399; }
+.dark .fleet-find-parts-stitch .text-secondary { color: #34d399; }
+.dark .fleet-find-parts-stitch .border-secondary { border-color: #34d399; }
+.dark .fleet-find-parts-stitch .bg-error { background-color: #f87171; }
+.dark .fleet-find-parts-stitch .text-error { color: #f87171; }
+.dark .fleet-find-parts-stitch .border-error { border-color: #f87171; }
+.dark .fleet-find-parts-stitch .bg-surface-bright { background-color: #2e2e2e; }
+.dark .fleet-find-parts-stitch .text-surface-bright { color: #2e2e2e; }
+.dark .fleet-find-parts-stitch .border-surface-bright { border-color: #2e2e2e; }
+.dark .fleet-find-parts-stitch .bg-surface-dim { background-color: #b4b4b4; }
+.dark .fleet-find-parts-stitch .text-surface-dim { color: #b4b4b4; }
+.dark .fleet-find-parts-stitch .border-surface-dim { border-color: #b4b4b4; }
+.fleet-find-parts-stitch .find-parts-stepbar, .fleet-find-parts-stitch .find-parts-trail { overflow-x: auto; }
+.fleet-find-parts-stitch .divide-y > :not([hidden]) ~ :not([hidden]) { border-top-width: 1px; border-top-style: solid; }
+.fleet-find-parts-stitch .divide-surface-container-high > :not([hidden]) ~ :not([hidden]) { border-color: #e6e8ea; }
+.dark .fleet-find-parts-stitch .divide-surface-container-high > :not([hidden]) ~ :not([hidden]) { border-color: #444444; }
+@media (max-width: 420px) {
+  .fleet-find-parts-stitch .find-parts-sheet { position: fixed; inset: 0; max-width: none; border-radius: 0; }
+}
+@media (max-width: 420px) { .fleet-find-parts-stitch .find-parts-columns { display: flex; flex-direction: column; } }

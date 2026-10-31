@@ -2889,6 +2889,98 @@ export const api = {
       return response.json();
   },
 
+  async findParts(query: Record<string, string>) {
+      const params = new URLSearchParams(query);
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/find?${params}`, { headers: await getHeaders(null) });
+      if (!response.ok) throw new Error((await response.json().catch(() => ({})) as { error?: string }).error || "Could not find parts");
+      return response.json();
+  },
+
+  async partsBrowse() {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/browse`, { headers: await getHeaders(null) });
+      if (!response.ok) throw new Error("Could not load parts");
+      return response.json();
+  },
+
+  async partsTerm(q: string) {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/term?q=${encodeURIComponent(q)}`, { headers: await getHeaders(null) });
+      if (!response.ok) throw new Error("Could not search parts");
+      return response.json();
+  },
+
+  async partsSymptoms() {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/symptoms`, { headers: await getHeaders(null) });
+      if (!response.ok) throw new Error("Could not load problems");
+      return response.json();
+  },
+
+  async partsActivity() {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/activity`, { headers: await getHeaders(null) });
+      if (!response.ok) throw new Error("Could not load parts activity");
+      return response.json();
+  },
+
+  async partsVehicleContext(vehicleId: string, componentId?: string) {
+      const q = new URLSearchParams({ vehicleId });
+      if (componentId) q.set("componentId", componentId);
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/vehicle-context?${q}`, { headers: await getHeaders(null) });
+      if (!response.ok) throw new Error("Could not load the car");
+      return response.json();
+  },
+
+  async partsVehicleOptions(query: { make?: string; model?: string }) {
+      const q = new URLSearchParams();
+      if (query.make) q.set("make", query.make);
+      if (query.model) q.set("model", query.model);
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/vehicle-options?${q}`, { headers: await getHeaders(null) });
+      if (!response.ok) throw new Error("Could not load cars");
+      return response.json() as Promise<{ makes: string[]; models: string[]; years: number[] }>;
+  },
+
+  async requestPartQuoteV2(body: Record<string, unknown>) {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/quote`, {
+        method: "POST",
+        headers: await getHeaders(),
+        body: JSON.stringify(body),
+      });
+      if (!response.ok) throw new Error((await response.json().catch(() => ({})) as { error?: string }).error || "Could not request a quote");
+      return response.json();
+  },
+
+  async requestFindPart(body: Record<string, unknown>) {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/request`, {
+        method: "POST",
+        headers: await getHeaders(),
+        body: JSON.stringify(body),
+      });
+      if (!response.ok) throw new Error((await response.json().catch(() => ({})) as { error?: string }).error || "Could not send the request");
+      return response.json();
+  },
+
+  async requestCatalogAddition(body: { make: string; model: string; year: number; vehicleId?: string | null }) {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/catalog-request`, {
+        method: "POST",
+        headers: await getHeaders(),
+        body: JSON.stringify(body),
+      });
+      if (!response.ok) throw new Error((await response.json().catch(() => ({})) as { error?: string }).error || "Could not ask Roam to add this car");
+      return response.json();
+  },
+
+  async uploadPartRequestPhoto(file: File) {
+      const body = new FormData();
+      body.append("file", file);
+      const headers = await getHeaders(null);
+      delete (headers as Record<string, string>)["Content-Type"];
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/request-photo`, {
+        method: "POST",
+        headers,
+        body,
+      });
+      if (!response.ok) throw new Error("Could not upload the photo");
+      return response.json() as Promise<{ photo_url: string }>;
+  },
+
   async requestPartQuote(body: Record<string, unknown>) {
       const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/part-quotes`, {
         method: "POST",
