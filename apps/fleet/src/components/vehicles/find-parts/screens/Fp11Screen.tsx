@@ -1,4 +1,16 @@
-<main className="w-full pt-[92px] bg-surface min-h-[calc(100vh-80px)]"><div className="flex flex-col w-full">
+import type { ReactNode } from "react";
+import type { FindPartsScreenData } from "../findPartsScreenData";
+
+export type Fp11Actions = {
+  onButton: (label: string) => void;
+  onVehicleCard?: (vehicleId: string) => void;
+  children?: ReactNode;
+};
+
+export function Fp11Screen({ actions, data }: { actions: Fp11Actions; data: FindPartsScreenData }) {
+  return (
+    <div className="find-parts-screen-root">
+<div className="fp-screen-root"><div className="flex flex-col w-full">
 
 <div className="w-full bg-surface-container-low py-space-sm px-margin-desktop">
 <div className="max-w-[1440px] mx-auto flex flex-col md:flex-row md:items-center justify-between gap-space-sm">
@@ -28,7 +40,7 @@
 <div className="font-label-code text-caption uppercase text-on-surface-variant tracking-wider">Exception &amp; Lifecycle Framework</div>
 <h1 className="font-headline-xl text-headline-xl text-on-surface mt-1 tracking-tight">Parts Catalog State Diagnostics</h1>
 <p className="font-body-md text-body-md text-on-surface-variant max-w-2xl mt-1">
-            Simulated edge-states for parts requisitioning, chassis cross-referencing, and permission gates across Kingston Hub #01 depot terminals.
+            Simulated edge-states for parts requisitioning, chassis cross-referencing, and permission gates across {data.hubLabel} Hub #01 depot terminals.
           </p>
 </div>
 <div className="flex items-center gap-space-sm bg-surface-container-low p-1 rounded-lg self-start lg:self-auto overflow-x-auto max-w-full">
@@ -84,7 +96,7 @@
 </div>
 <div className="flex items-center gap-2 px-space-md py-1.5 rounded-lg bg-surface-container-low font-body-sm text-body-sm text-on-surface-variant">
 <span className="material-symbols-outlined text-[16px] text-on-tertiary-container animate-spin">sync</span>
-<span>Matching fitment against 14,200 Kingston Hub catalog items...</span>
+<span>Matching fitment against 14,200 {data.hubLabel} Hub catalog items...</span>
 </div>
 </div>
 
@@ -243,7 +255,7 @@
                   Could not load parts. Nothing was changed.
                 </div>
 <p className="font-body-md text-body-md text-on-surface-variant">
-                  The parts database or Kingston Hub inventory feed did not respond in time. Your vehicle selection and entered notes are preserved.
+                  The parts database or {data.hubLabel} Hub inventory feed did not respond in time. Your vehicle selection and entered notes are preserved.
                 </p>
 
 <div className="mt-space-md flex flex-wrap items-center gap-space-xs font-label-code text-caption text-on-surface-variant">
@@ -360,7 +372,7 @@
 </div>
 <div className="flex items-center gap-1.5 font-label-code text-caption">
 <span className="material-symbols-outlined text-[16px] text-outline">location_on</span>
-<span>DEPOT: Kingston Hub #01</span>
+<span>DEPOT: {data.hubLabel} Hub #01</span>
 </div>
 </div>
 </div>
@@ -383,7 +395,7 @@
                 JD
               </div>
 <div>
-<span className="font-semibold text-on-surface">Kingston Hub #01 Administrator:</span>
+<span className="font-semibold text-on-surface">{data.hubLabel} Hub #01 Administrator:</span>
 <span className="text-on-surface-variant"> Julian Douglas (Lead Dispatcher) · Extension #401 · Desk 3B</span>
 </div>
 </div>
@@ -451,4 +463,7 @@
 </div>
 
 
-</div></main>
+</div></div>
+    </div>
+  );
+}

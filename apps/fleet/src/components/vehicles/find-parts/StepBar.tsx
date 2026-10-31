@@ -1,5 +1,5 @@
 const STEPS = [
-  { n: 1, label: "1. Pick car", title: "Pick a car", hint: "Select an active vehicle to map directly to verified fitment specs" },
+  { n: 1, label: "1. Vehicle", title: "Pick a car", hint: "Select an active vehicle to map directly to verified fitment specs" },
   { n: 2, label: "2. Version & Trim", title: "Which one is yours?", hint: "Pick the version that matches your papers" },
   { n: 3, label: "3. Part Category", title: "What part?", hint: "Search, or browse by area" },
   { n: 4, label: "4. Position & Fit", title: "Front or back?", hint: "Only when the part comes in both" },

@@ -1,14 +1,81 @@
 {
-  "FP1": ["1505lm", "5179kz", "kingston hub", "jd (fleet lead)", "2 parts on shelf", "j$ 0"],
-  "FP2": ["1505lm", "gp5-3204918", "kingston hub", "jd"],
-  "FP3": ["1505lm", "j$ 6,800", "34b19l"],
-  "FP4": ["1505lm"],
-  "FP5": ["1505lm", "04152-40060", "hu 6006", "j$ 1,850", "kingston"],
-  "FP6": ["1505lm", "04152-40060", "toyota 04152-40060", "j$ 1,850"],
-  "FP7": ["rfq-88402", "1505lm", "jd"],
-  "FP8": ["1505lm", "jd"],
-  "FP9": ["1505lm", "5179kz", "jd"],
-  "FP10": ["rfq-88402", "kingston", "jd"],
-  "FP11": ["1505lm", "jd"],
-  "FP12": ["1505lm", "04152-40060", "j$ 1,850", "toyota 04152-40060"]
+  "FP1": [
+    "1505lm", "5179kz", "kingston", "jd (fleet lead)", "2 parts on shelf", "j$ 0", "honda fit 2018", "toyota roomy 2019",
+    "next: we'll verify engine version if needed", "1 open", "kingston auto parts.", "submit parts request",
+    "procurement agents will search local distributors and overseas jdm containers.", "part description or oem number", "send request",
+    "probox", "corolla axio", "corolla fielder", "vitz", "hiace", "1.5 hybrid · gp5 · fwd", "1.0 petrol · 2wd · m900a",
+    "2 active", "service due: oil & filter", "toyota roomy ac compressor quote pending auto parts.",
+    "no frequent wear anomalies detected across hub this month.", "pending", "toyota roomy ac compressor quote auto parts."
+  ],
+  "FP2": [
+    "1505lm", "gp5-3204918", "kingston", "jd", "which is it?", "most common in fleet (kingston)", "most common in fleet ( )",
+    "which 2018 honda fit is it?", "2 honda fits",
+    "registered in the local kingston roam fleet inventory.", "registered in the local roam fleet inventory.",
+    "active dispatch · kingston",
+    "orders placed via verified trim matching include free dispatch exchange if parts fail mechanical fit verification during kingston depot install.",
+    "registered in the local roam fleet inventory.",
+    "orders placed via verified trim matching include free dispatch exchange if parts fail mechanical fit verification during depot install."
+  ],
+  "FP3": [
+    "1505lm", "j$ 6,800", "34b19l", "honda fit 2018 ·", "telemetry & fitment index · kingston warehouse",
+    "48,210 km · kingston hub schedule", "automated telematics flag from kingston depot diagnostic bay #3 (logged yesterday at 17:40 est).",
+    "frequently ordered items for routine kingston fleet depot turnaround.", "full schematic breakdown for honda fit chassis gp5.", "j$ 4,850", "honda fit gp5"
+  ],
+  "FP4": [
+    "1505lm", "honda fit 2018", "kingston fleet unit", "on your shelf: 2 sets available at kingston hub #01",
+    "supplier stock only (kingston auto parts, hagley park rd)", "combined supplier order eligible for free courier delivery to kingston hub.",
+    "if the driver reported squealing while applying normal pedal pressure on red hills road routes, inspect the front pads first. kingston city driving causes front wear at roughly twice the rate of rear solid discs."
+  ],
+  "FP5": [
+    "1505lm", "04152-40060", "hu 6006", "j$ 1,850", "kingston", "oil filter for your (1.5 hybrid)",
+    "oil filter for your honda fit 2018 (1.5 hybrid)", "honda fit 2018 ·",
+    "on your shelf — 2 in hub", "toyota — oil filter", "· auto parts · ready today", "mann-filter z", "mann-filter z replaces the factory part .",
+    "honda fit 2018 ·", "oil filter for your honda fit 2018 (1.5 hybrid)"
+  ],
+  "FP6": [
+    "1505lm", "04152-40060", "toyota 04152-40060", "j$ 1,850", "kingston", "on your shelf — 2 ( hub #01)",
+    "confirmed on 4 installs across roam fleet.", "mann-filter", "hu 6006 z"
+  ],
+  "FP7": [
+    "rfq-88402", "1505lm", "jd", "oil filter cartridge toyota 04152-40060", "kingston hub central", "toyota oem 04152-40060",
+    "direct compatibility: ( )", "vendor: kingston auto parts ltd", "toyota 04152-40060",
+    "supplier target: kingston auto parts & mandeville motor spares", "in kingston hub.", "toyota roomy 2019 · 5179kz",
+    ". notifications routed to kingston hub #01.", "honda fit 2018"
+  ],
+  "FP8": [
+    "1505lm", "jd", "by vehicle status, the service ledger, and parts for your cars.", "refresh", "tune", "log new service",
+    "by vehicle", "service ledger", "find parts", "parts runner online (kmtr-dispatch)", "search scope:", "edit", "1.5 hybrid (gp5)",
+    "brake pads", "close", "we don't have front brake pads for this car on file yet.", "we don't have front for this car on file yet.",
+    "kingston", "honda fit 2018", "fleet maintenance", "bootstrap schedules", "compatible parts",
+    "send a request and the roam parts team will find the right part and an exact landed price.", "matched vehicle specs",
+    "(gp5, 1.5 hybrid)", "front axle", "chassis: gp5-3401928", "quantity needed (axle sets)", "remove", "fulfillment urgency",
+    "specification or mechanic note (optional)", "request dispatched to sourcing desk.",
+    "once approved, courier dispatches directly to hub #01 or your dispatch garage."
+  ],
+  "FP9": [
+    "1505lm", "5179kz", "jd", "kingston",
+    "eliminates caliper rotor mismatch (255mm vs 275mm) and alternator bracket returns across dispatch.",
+    "eliminates caliper rotor mismatch (255mm vs 275mm) and alternator bracket returns across kingston dispatch.",
+    "3,410 probox parts in hub #01 bins waiting for trim classification."
+  ],
+  "FP10": [
+    "rfq-88402", "kingston", "jd", "1505lm", "5179kz", "honda fit 2018", "toyota roomy 2019", "rq-8821",
+    "active sourcing requests, supplier quotes, wear anomalies, and core return credits across hub #01.",
+    "supplier: auto parts", "toyota 04152-40060 × 2", "rfq sent to auto parts & mandeville motor spares",
+    "alternator and hybrid battery cores inspected and fully credited for depot. no salvage parts awaiting shipment to remanufacturing partners.",
+    "12 live vendor inventory feeds currently connected for st. andrew, , and st. catherine hubs."
+  ],
+  "FP11": [
+    "1505lm", "jd", "kingston", "hub #01",
+    "simulated edge-states for parts requisitioning, chassis cross-referencing, and permission gates across depot terminals.",
+    "simulated edge-states for parts requisitioning, chassis cross-referencing, and permission gates across hub #01 depot terminals.",
+    "matching fitment against 14,200 catalog items...", "matching fitment against 14,200 hub catalog items...",
+    "the parts database or inventory feed did not respond in time. your vehicle selection and entered notes are preserved.",
+    "the parts database or hub inventory feed did not respond in time. your vehicle selection and entered notes are preserved.",
+    "depot: hub #01"
+  ],
+  "FP12": [
+    "1505lm", "04152-40060", "j$ 1,850", "toyota 04152-40060", "honda fit 2018", "kingston", "mann-filter", "hu 6006 z",
+    "replaced 32 days ago on (gp5)", "toyota (oil filter cartridge)", "target delivery: hub #01 (within 24h)"
+  ]
 }

@@ -1,16 +1,16 @@
-/** Auto-generated from Stitch HTML — edit port script, not by hand. */
-// @ts-nocheck
 import type { ReactNode } from "react";
+import type { FindPartsScreenData } from "../findPartsScreenData";
 
-export type MarkupHandlers = {
-  onFpClick?: (detail: { label?: string; card?: boolean; vehicleId?: string }, event: Event) => void;
+export type Fp10Actions = {
+  onButton: (label: string) => void;
+  onVehicleCard?: (vehicleId: string) => void;
   children?: ReactNode;
 };
 
-export function Fp10Markup({ onFpClick }: MarkupHandlers) {
+export function Fp10Screen({ actions, data }: { actions: Fp10Actions; data: FindPartsScreenData }) {
   return (
-    <div className="find-parts-markup-root">
-<main className="w-full pt-[92px] bg-surface min-h-[calc(100vh-80px)]"><div className="flex flex-col w-full">
+    <div className="find-parts-screen-root">
+<div className="fp-screen-root"><div className="flex flex-col w-full">
 
 <div className="bg-surface-container-lowest shadow-sm">
 <div className="max-w-[1440px] mx-auto px-margin md:px-margin-desktop pt-space-lg pb-space-md">
@@ -90,7 +90,7 @@ export function Fp10Markup({ onFpClick }: MarkupHandlers) {
 </div>
 <h2 className="font-headline-xl text-headline-xl tracking-tight text-on-surface mt-0.5">Your parts activity</h2>
 <p className="font-body-md text-body-md text-on-surface-variant mt-1 max-w-3xl">
-          Active sourcing requests, supplier quotes, wear anomalies, and core return credits across Kingston Hub #01.
+          Active sourcing requests, supplier quotes, wear anomalies, and core return credits across {data.hubLabel} Hub #01.
         </p>
 </div>
 
@@ -165,8 +165,8 @@ export function Fp10Markup({ onFpClick }: MarkupHandlers) {
 <div className="flex items-center gap-space-sm flex-wrap">
 <span className="font-headline-sm text-body-lg font-medium text-on-surface">Front brake pads</span>
 <span className="text-outline-variant">•</span>
-<span className="font-body-sm text-body-sm text-on-surface-variant">Honda Fit 2018</span>
-<span className="px-2 py-0.5 rounded bg-surface-container-high font-label-plate text-label-plate text-on-surface">1505LM</span>
+<span className="font-body-sm text-body-sm text-on-surface-variant">{data.vehicleLabel}</span>
+<span className="px-2 py-0.5 rounded bg-surface-container-high font-label-plate text-label-plate text-on-surface">{data.plate}</span>
 </div>
 <div className="flex items-center gap-space-sm text-secondary font-body-sm text-caption">
 <span className="flex items-center gap-1">
@@ -174,7 +174,7 @@ export function Fp10Markup({ onFpClick }: MarkupHandlers) {
                     </span>
 <span>•</span>
 <span className="flex items-center gap-1">
-<span className="material-symbols-outlined text-[14px]">local_shipping</span> Sourcing from Mandeville / Kingston
+<span className="material-symbols-outlined text-[14px]">local_shipping</span> Sourcing from Mandeville / {data.hubLabel}
                     </span>
 </div>
 </div>
@@ -185,7 +185,7 @@ export function Fp10Markup({ onFpClick }: MarkupHandlers) {
 
 <div className="mt-space-md p-space-sm rounded-lg bg-surface-container-low flex items-center justify-between">
 <div className="flex items-center gap-space-md font-label-code text-caption text-secondary">
-<span>REF: <strong className="text-on-surface font-semibold">RQ-8821</strong></span>
+<span>REF: <strong className="text-on-surface font-semibold">{data.requestRef}</strong></span>
 <span>TARGET OEM: <strong className="text-on-surface font-semibold">45022-T5B-J00</strong></span>
 </div>
 <button className="font-body-sm text-caption text-primary font-medium hover:underline flex items-center gap-0.5">
@@ -200,12 +200,12 @@ export function Fp10Markup({ onFpClick }: MarkupHandlers) {
 <div className="flex items-center gap-space-sm flex-wrap">
 <span className="font-headline-sm text-body-lg font-medium text-on-surface">Oil filter</span>
 <span className="text-outline-variant">•</span>
-<span className="font-body-sm text-body-sm text-on-surface-variant">Toyota Roomy 2019</span>
-<span className="px-2 py-0.5 rounded bg-surface-container-high font-label-plate text-label-plate text-on-surface">5179KZ</span>
+<span className="font-body-sm text-body-sm text-on-surface-variant">{data.vehicleLabelSecondary}</span>
+<span className="px-2 py-0.5 rounded bg-surface-container-high font-label-plate text-label-plate text-on-surface">{data.plateSecondary}</span>
 </div>
 <div className="flex items-center gap-space-sm text-secondary font-body-sm text-caption">
 <span className="flex items-center gap-1">
-<span className="material-symbols-outlined text-[14px]">storefront</span> Supplier: Kingston Auto Parts
+<span className="material-symbols-outlined text-[14px]">storefront</span> Supplier: {data.hubLabel} Auto Parts
                     </span>
 <span>•</span>
 <span className="text-emerald-700 font-medium">Ready for review</span>
@@ -254,11 +254,11 @@ export function Fp10Markup({ onFpClick }: MarkupHandlers) {
 <div className="flex items-start justify-between gap-space-sm">
 <div>
 <div className="flex items-center gap-space-sm">
-<span className="font-label-code text-body-lg font-semibold text-on-surface">Toyota 04152-40060 × 2</span>
+<span className="font-label-code text-body-lg font-semibold text-on-surface">Toyota {data.partNumber} × 2</span>
 <span className="text-caption text-secondary font-body-sm">(Oil filter)</span>
 </div>
 <p className="font-body-sm text-caption text-on-surface-variant mt-0.5">
-                    RFQ sent to Kingston Auto Parts &amp; Mandeville Motor Spares
+                    RFQ sent to {data.hubLabel} Auto Parts &amp; Mandeville Motor Spares
                   </p>
 </div>
 <span className="px-2.5 py-1 rounded-full font-label-code text-caption bg-blue-50 text-blue-800 font-medium shrink-0 flex items-center gap-1.5">
@@ -338,8 +338,8 @@ export function Fp10Markup({ onFpClick }: MarkupHandlers) {
 <div className="flex items-center gap-space-sm flex-wrap">
 <span className="font-headline-sm text-body-lg font-semibold text-amber-950">Same brake pads replaced twice in 60 days</span>
 <span className="text-amber-300">•</span>
-<span className="font-body-sm text-body-sm text-amber-900 font-medium">Toyota Roomy 2019</span>
-<span className="px-2 py-0.5 rounded bg-surface-container-lowest font-label-plate text-label-plate text-on-surface shadow-xs">5179KZ</span>
+<span className="font-body-sm text-body-sm text-amber-900 font-medium">{data.vehicleLabelSecondary}</span>
+<span className="px-2 py-0.5 rounded bg-surface-container-lowest font-label-plate text-label-plate text-on-surface shadow-xs">{data.plateSecondary}</span>
 </div>
 <p className="font-body-sm text-body-sm text-amber-900/90 leading-relaxed">
                   Caliper inspection telemetry flag triggered on Rear-Right assembly. Sensor logs indicate sticking piston causing 3.4× premature friction wear relative to fleet median.
@@ -443,7 +443,7 @@ export function Fp10Markup({ onFpClick }: MarkupHandlers) {
 <div className="p-space-md rounded-lg bg-surface-container flex items-start gap-space-sm">
 <span className="material-symbols-outlined text-[18px] text-secondary shrink-0 mt-0.5">inventory</span>
 <p className="font-body-sm text-body-sm text-on-surface-variant leading-relaxed">
-                Alternator and hybrid battery cores inspected and fully credited for Kingston depot. No salvage parts awaiting shipment to remanufacturing partners.
+                Alternator and hybrid battery cores inspected and fully credited for {data.hubLabel} depot. No salvage parts awaiting shipment to remanufacturing partners.
               </p>
 </div>
 
@@ -468,7 +468,7 @@ export function Fp10Markup({ onFpClick }: MarkupHandlers) {
 <span className="material-symbols-outlined text-[18px]">cell_tower</span>
 </div>
 <div className="font-body-sm text-body-sm text-on-surface">
-<strong className="font-medium">Mandeville Motor Spares EDI link synchronized.</strong> 12 live vendor inventory feeds currently connected for St. Andrew, Kingston, and St. Catherine hubs.
+<strong className="font-medium">Mandeville Motor Spares EDI link synchronized.</strong> 12 live vendor inventory feeds currently connected for St. Andrew, {data.hubLabel}, and St. Catherine hubs.
         </div>
 </div>
 <div className="flex items-center gap-space-md shrink-0 font-label-code text-caption text-secondary">
@@ -478,7 +478,7 @@ export function Fp10Markup({ onFpClick }: MarkupHandlers) {
 </div>
 </div>
 </div>
-</main>
+</div>
     </div>
   );
 }

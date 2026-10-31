@@ -1,61 +1,22 @@
-<main className="w-full pt-[92px] bg-surface min-h-[calc(100vh-80px)]"><div className="flex flex-col w-full">
+import type { ReactNode } from "react";
+import type { FindPartsScreenData } from "../findPartsScreenData";
+
+export type Fp8Actions = {
+  onButton: (label: string) => void;
+  onVehicleCard?: (vehicleId: string) => void;
+  children?: ReactNode;
+};
+
+export function Fp8Screen({ actions, data }: { actions: Fp8Actions; data: FindPartsScreenData }) {
+  return (
+    <div className="find-parts-screen-root">
+<div className="fp-screen-root"><div className="flex flex-col w-full">
 <div className="w-full max-w-[1440px] mx-auto px-margin-desktop py-space-xl flex flex-col gap-space-xl">
-
-<div className="flex flex-col lg:flex-row lg:items-center justify-between gap-space-lg">
-<div className="flex flex-col gap-space-xs">
-<div className="flex items-center gap-space-sm">
-<div className="w-7 h-7 rounded-lg bg-surface-container flex items-center justify-center">
-<span className="material-symbols-outlined text-[18px] text-[#f97316]">build</span>
-</div>
-<h1 className="font-headline-lg text-headline-lg tracking-tight text-on-surface">Fleet maintenance</h1>
-</div>
-<p className="font-body-md text-body-md text-on-surface-variant">
-          By vehicle status, the service ledger, and parts for your cars.
-        </p>
-</div>
-<div className="flex flex-wrap items-center gap-space-sm">
-<button className="inline-flex items-center gap-space-xs px-space-md py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-high transition-colors font-body-sm text-body-sm text-on-surface" type="button">
-<span className="material-symbols-outlined text-[16px]">sync</span>
-<span>Refresh</span>
-</button>
-<button className="inline-flex items-center gap-space-xs px-space-md py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-high transition-colors font-body-sm text-body-sm text-on-surface" type="button">
-<span className="material-symbols-outlined text-[16px]">tune</span>
-<span>Bootstrap schedules</span>
-</button>
-<button className="inline-flex items-center gap-space-xs px-space-md py-1.5 rounded-lg bg-surface-container-high font-body-sm text-body-sm text-on-surface font-semibold" type="button">
-<span className="material-symbols-outlined text-[16px]">verified</span>
-<span>Compatible parts</span>
-</button>
-<button className="inline-flex items-center gap-space-xs px-space-lg py-1.5 rounded-lg bg-primary hover:bg-inverse-surface transition-all text-on-primary font-body-sm text-body-sm shadow-sm active:scale-[0.98]" type="button">
-<span className="material-symbols-outlined text-[18px]">add</span>
-<span>Log new service</span>
-</button>
-</div>
-</div>
-
-<div className="flex items-center justify-between">
-<div className="inline-flex items-center p-1 rounded-xl bg-surface-container">
-<button className="px-space-lg py-1.5 rounded-lg font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors" type="button">
-          By vehicle
-        </button>
-<button className="px-space-lg py-1.5 rounded-lg font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors" type="button">
-          Service ledger
-        </button>
-<button className="inline-flex items-center gap-space-xs px-space-lg py-1.5 rounded-lg bg-surface-container-lowest text-on-surface font-semibold shadow-sm transition-all" type="button">
-<span className="material-symbols-outlined text-[16px]">inventory_2</span>
-<span>Find parts</span>
-</button>
-</div>
-<div className="hidden md:flex items-center gap-space-sm font-label-code text-caption text-on-surface-variant">
-<span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-<span>PARTS RUNNER ONLINE (KMTR-DISPATCH)</span>
-</div>
-</div>
 
 <div className="w-full bg-surface-container-low rounded-xl px-space-lg py-space-sm flex flex-wrap items-center gap-space-sm">
 <span className="font-caption text-caption text-on-surface-variant uppercase tracking-wider">Search Scope:</span>
 <div className="inline-flex items-center gap-1.5 px-space-md py-1 rounded-lg bg-surface-container-lowest text-on-surface font-label-code text-caption shadow-sm">
-<span>Honda Fit 2018</span>
+<span>{data.vehicleLabel}</span>
 <span className="material-symbols-outlined text-[14px] text-on-surface-variant hover:text-on-surface cursor-pointer">edit</span>
 </div>
 <span className="material-symbols-outlined text-outline text-[16px]">chevron_right</span>
@@ -73,7 +34,7 @@
 <span className="font-semibold">Front</span>
 <span className="material-symbols-outlined text-[14px] text-on-surface cursor-pointer">close</span>
 </div>
-<button className="ml-auto font-caption text-caption text-on-surface-variant hover:text-on-surface underline underline-offset-2" type="button">
+<button className="ml-auto font-caption text-caption text-on-surface-variant hover:text-on-surface underline underline-offset-2" type="button" onClick={(e) => actions.onButton((e.currentTarget.textContent || "").replace(/\s+/g, " ").trim())}>
         Reset filters
       </button>
 </div>
@@ -100,10 +61,10 @@
 <div className="p-space-md rounded-xl bg-surface-container-low flex flex-col gap-space-xs">
 <span className="font-caption text-caption uppercase text-on-surface-variant tracking-wider font-semibold">Matched Vehicle Specs</span>
 <div className="flex flex-wrap items-center gap-space-xs">
-<span className="px-space-md py-1 rounded-md bg-surface-container-lowest text-on-surface font-label-code text-caption shadow-xs">Honda Fit 2018 (GP5, 1.5 hybrid)</span>
+<span className="px-space-md py-1 rounded-md bg-surface-container-lowest text-on-surface font-label-code text-caption shadow-xs">{data.vehicleLabel} (GP5, 1.5 hybrid)</span>
 <span className="px-space-md py-1 rounded-md bg-surface-container-lowest text-on-surface font-label-code text-caption shadow-xs">Brake pads</span>
 <span className="px-space-md py-1 rounded-md bg-surface-container-lowest text-on-surface font-label-code text-caption shadow-xs">Front Axle</span>
-<span className="px-space-md py-1 rounded-md bg-surface-container-highest text-on-surface font-label-plate text-caption">1505LM</span>
+<span className="px-space-md py-1 rounded-md bg-surface-container-highest text-on-surface font-label-plate text-caption">{data.plate}</span>
 <span className="px-space-md py-1 rounded-md bg-surface-container text-on-secondary-container font-label-code text-caption">Chassis: GP5-3401928</span>
 </div>
 </div>
@@ -114,11 +75,11 @@
 <div className="flex flex-col gap-space-xs">
 <label className="font-caption text-caption text-on-surface uppercase tracking-wider font-semibold" htmlFor="quantity-counter">Quantity needed (axle sets)</label>
 <div className="flex items-center h-10 w-fit rounded-lg bg-surface-container-low p-1">
-<button className="w-8 h-8 rounded-md bg-surface-container-lowest text-on-surface font-bold flex items-center justify-center hover:bg-surface-container transition-colors shadow-xs" type="button">
+<button className="w-8 h-8 rounded-md bg-surface-container-lowest text-on-surface font-bold flex items-center justify-center hover:bg-surface-container transition-colors shadow-xs" type="button" onClick={(e) => actions.onButton((e.currentTarget.textContent || "").replace(/\s+/g, " ").trim())}>
 <span className="material-symbols-outlined text-[16px]">remove</span>
 </button>
 <span className="w-12 text-center font-label-code text-body-md text-on-surface" id="qty">1</span>
-<button className="w-8 h-8 rounded-md bg-surface-container-lowest text-on-surface font-bold flex items-center justify-center hover:bg-surface-container transition-colors shadow-xs" type="button">
+<button className="w-8 h-8 rounded-md bg-surface-container-lowest text-on-surface font-bold flex items-center justify-center hover:bg-surface-container transition-colors shadow-xs" type="button" onClick={(e) => actions.onButton((e.currentTarget.textContent || "").replace(/\s+/g, " ").trim())}>
 <span className="material-symbols-outlined text-[16px]">add</span>
 </button>
 </div>
@@ -127,13 +88,13 @@
 <div className="flex flex-col gap-space-xs">
 <span className="font-caption text-caption text-on-surface uppercase tracking-wider font-semibold">Fulfillment urgency</span>
 <div className="grid grid-cols-3 gap-1 p-1 rounded-lg bg-surface-container-low h-10">
-<button className="urgency-btn rounded-md font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors py-1 text-center" type="button">
+<button className="urgency-btn rounded-md font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors py-1 text-center" type="button" onClick={(e) => actions.onButton((e.currentTarget.textContent || "").replace(/\s+/g, " ").trim())}>
                     Low
                   </button>
-<button className="urgency-btn rounded-md font-body-sm text-body-sm bg-surface-container-lowest text-on-surface font-semibold shadow-xs py-1 text-center" type="button">
+<button className="urgency-btn rounded-md font-body-sm text-body-sm bg-surface-container-lowest text-on-surface font-semibold shadow-xs py-1 text-center" type="button" onClick={(e) => actions.onButton((e.currentTarget.textContent || "").replace(/\s+/g, " ").trim())}>
                     Normal
                   </button>
-<button className="urgency-btn rounded-md font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors py-1 text-center flex items-center justify-center gap-1" type="button">
+<button className="urgency-btn rounded-md font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors py-1 text-center flex items-center justify-center gap-1" type="button" onClick={(e) => actions.onButton((e.currentTarget.textContent || "").replace(/\s+/g, " ").trim())}>
 <span>Urgent</span>
 <span className="text-[10px] px-1 py-0.5 rounded bg-error-container text-on-error-container font-label-code font-bold leading-none">24h</span>
 </button>
@@ -163,7 +124,7 @@
 </div>
 
 <div className="flex flex-col sm:flex-row items-center justify-between gap-space-md pt-space-sm">
-<button className="w-full sm:w-auto font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors py-2" type="button">
+<button className="w-full sm:w-auto font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors py-2" type="button" onClick={(e) => actions.onButton((e.currentTarget.textContent || "").replace(/\s+/g, " ").trim())}>
                 ← Search a different part or return to categories
               </button>
 <button className="w-full sm:w-auto inline-flex items-center justify-center gap-space-sm px-space-xl py-2.5 rounded-lg bg-primary hover:bg-inverse-surface text-on-primary font-body-md text-body-md font-semibold transition-all shadow-md active:scale-[0.98]" type="submit">
@@ -180,7 +141,7 @@
 <span className="material-symbols-outlined text-[18px]">check</span>
 </div>
 <div className="flex flex-col">
-<span className="font-body-md text-body-md font-semibold text-emerald-900">Request dispatched to Kingston Sourcing Desk.</span>
+<span className="font-body-md text-body-md font-semibold text-emerald-900">Request dispatched to {data.hubLabel} Sourcing Desk.</span>
 <span className="font-caption text-caption text-emerald-700">Ticket #REQ-8849 logged. Average quote time is currently 18 minutes.</span>
 </div>
 </div>
@@ -195,15 +156,15 @@
 <div className="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col gap-space-md">
 <div className="flex items-center justify-between">
 <span className="font-caption text-caption text-on-surface-variant uppercase tracking-wider font-semibold">Active Fleet Target</span>
-<span className="font-label-plate text-label-plate px-2 py-0.5 rounded bg-surface-container text-on-surface">1505LM</span>
+<span className="font-label-plate text-label-plate px-2 py-0.5 rounded bg-surface-container text-on-surface">{data.plate}</span>
 </div>
 <div className="flex items-center gap-space-md">
 <div className="w-16 h-12 rounded-lg bg-surface-container overflow-hidden shrink-0">
-<img className="w-full h-full object-cover" data-alt="Compact white Japanese hatchback Honda Fit GP5 2018 model parked neatly in a modern clean fleet maintenance depot with professional daylight balanced lighting and crisp shadow detail." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDJxJOy9SusfkJckQrtXIcAKAL54B2I27bgGHFgz1-ooVThzao_g3ZAqYH4l68xSeeY1Qj6CwlZAavSZHYrQTrJmjmWhVD2YycnpKQKlvVrEgcgO0Y1m2KbQ3EIhtm4rs9rMQAf5p9Itjacemz-KTeE4AEh7lszoj1n4Ralx8mqo9ICmi4J4gb_8tM3jk1PZFp1o5HtjNuCK8Lh1eZtrhxKiz1p8eAeSPB33qzeE24" />
+<img className="w-full h-full object-cover" data-alt="Fleet vehicle in depot" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDJxJOy9SusfkJckQrtXIcAKAL54B2I27bgGHFgz1-ooVThzao_g3ZAqYH4l68xSeeY1Qj6CwlZAavSZHYrQTrJmjmWhVD2YycnpKQKlvVrEgcgO0Y1m2KbQ3EIhtm4rs9rMQAf5p9Itjacemz-KTeE4AEh7lszoj1n4Ralx8mqo9ICmi4J4gb_8tM3jk1PZFp1o5HtjNuCK8Lh1eZtrhxKiz1p8eAeSPB33qzeE24" />
 </div>
 <div className="flex flex-col min-w-0">
-<span className="font-body-md text-body-md font-semibold text-on-surface truncate">Honda Fit 2018 Hybrid</span>
-<span className="font-caption text-caption text-on-surface-variant">Kingston Route Cluster 03</span>
+<span className="font-body-md text-body-md font-semibold text-on-surface truncate">{data.vehicleLabel} Hybrid</span>
+<span className="font-caption text-caption text-on-surface-variant">{data.hubLabel} Route Cluster 03</span>
 </div>
 </div>
 <div className="grid grid-cols-2 gap-space-sm pt-space-xs font-label-code text-caption">
@@ -234,7 +195,7 @@
 </li>
 <li className="flex items-start gap-space-sm">
 <span className="material-symbols-outlined text-[18px] text-on-surface shrink-0 mt-0.5">local_shipping</span>
-<span><strong>Hub Delivery:</strong> Once approved, courier dispatches directly to Kingston Hub #01 or your dispatch garage.</span>
+<span><strong>Hub Delivery:</strong> Once approved, courier dispatches directly to {data.hubLabel} Hub #01 or your dispatch garage.</span>
 </li>
 </ul>
 <div className="p-space-md rounded-xl bg-surface-container-low flex items-center justify-between font-label-code text-caption">
@@ -286,4 +247,7 @@
 </div>
 </div>
 
-</div></main>
+</div></div>
+    </div>
+  );
+}

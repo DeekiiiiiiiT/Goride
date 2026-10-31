@@ -1,16 +1,16 @@
-/** Auto-generated from Stitch HTML — edit port script, not by hand. */
-// @ts-nocheck
 import type { ReactNode } from "react";
+import type { FindPartsScreenData } from "../findPartsScreenData";
 
-export type MarkupHandlers = {
-  onFpClick?: (detail: { label?: string; card?: boolean; vehicleId?: string }, event: Event) => void;
+export type Fp4Actions = {
+  onButton: (label: string) => void;
+  onVehicleCard?: (vehicleId: string) => void;
   children?: ReactNode;
 };
 
-export function Fp4Markup({ onFpClick }: MarkupHandlers) {
+export function Fp4Screen({ actions, data }: { actions: Fp4Actions; data: FindPartsScreenData }) {
   return (
-    <div className="find-parts-markup-root">
-<main className="w-full pt-26 bg-surface min-h-[calc(100vh-80px)]"><div className="flex flex-col w-full">
+    <div className="find-parts-screen-root">
+<div className="fp-screen-root"><div className="flex flex-col w-full">
 
 
 
@@ -47,7 +47,7 @@ export function Fp4Markup({ onFpClick }: MarkupHandlers) {
 
 <div className="flex items-center flex-wrap gap-space-sm bg-surface-container-low px-space-md py-1.5 rounded-lg shadow-sm">
 <div className="flex items-center gap-1.5 font-label-code text-label-code text-on-surface">
-<span className="font-bold">Honda Fit 2018</span>
+<span className="font-bold">{data.vehicleLabel}</span>
 <span className="text-outline">›</span>
 <a className="flex items-center gap-0.5 text-primary hover:underline group" href="#">
 <span className="font-medium">Brake pads</span>
@@ -57,9 +57,9 @@ export function Fp4Markup({ onFpClick }: MarkupHandlers) {
 <span className="text-surface-dim">|</span>
 
 <div className="flex items-center gap-space-xs">
-<span className="font-label-plate text-label-plate bg-primary text-on-primary px-space-xs py-0.5 rounded shadow-sm">1505LM</span>
+<span className="font-label-plate text-label-plate bg-primary text-on-primary px-space-xs py-0.5 rounded shadow-sm">{data.plate}</span>
 <span className="font-caption text-caption bg-surface-container-highest text-on-surface-variant px-space-sm py-0.5 rounded">1.5 Hybrid · GP5</span>
-<span className="font-caption text-caption bg-secondary-fixed text-on-secondary-fixed px-space-sm py-0.5 rounded hidden sm:inline-block">Kingston Fleet Unit</span>
+<span className="font-caption text-caption bg-secondary-fixed text-on-secondary-fixed px-space-sm py-0.5 rounded hidden sm:inline-block">{data.hubLabel} Fleet Unit</span>
 </div>
 </div>
 </div>
@@ -208,7 +208,7 @@ export function Fp4Markup({ onFpClick }: MarkupHandlers) {
 <div className="flex flex-wrap items-center justify-between gap-space-sm pt-space-xs">
 <div className="flex items-center gap-2">
 <span className="w-2.5 h-2.5 rounded-full bg-primary animate-pulse"></span>
-<span className="font-label-code text-label-code font-bold text-on-surface">On your shelf: 2 sets available at Kingston Hub #01</span>
+<span className="font-label-code text-label-code font-bold text-on-surface">On your shelf: 2 sets available at {data.hubLabel} Hub #01</span>
 </div>
 <span className="font-caption text-caption bg-surface-container text-on-surface-variant px-space-sm py-0.5 rounded">Bins: KH-B4-09</span>
 </div>
@@ -241,7 +241,7 @@ export function Fp4Markup({ onFpClick }: MarkupHandlers) {
 <div className="flex flex-wrap items-center justify-between gap-space-sm pt-space-xs">
 <div className="flex items-center gap-2">
 <span className="w-2.5 h-2.5 rounded-full bg-secondary"></span>
-<span className="font-label-code text-label-code text-on-surface-variant">Supplier stock only (Kingston Auto Parts, Hagley Park Rd)</span>
+<span className="font-label-code text-label-code text-on-surface-variant">Supplier stock only ({data.hubLabel} Auto Parts, Hagley Park Rd)</span>
 </div>
 <span className="font-caption text-caption text-on-surface-variant">Same-day courier dispatch</span>
 </div>
@@ -272,7 +272,7 @@ export function Fp4Markup({ onFpClick }: MarkupHandlers) {
 </div>
 <div className="flex items-center gap-2 bg-surface-container-lowest p-space-sm rounded text-on-surface font-body-sm text-body-sm shadow-sm">
 <span className="material-symbols-outlined text-[16px] text-tertiary-fixed-dim">local_shipping</span>
-<span className="font-medium">Combined supplier order eligible for free courier delivery to Kingston Hub.</span>
+<span className="font-medium">Combined supplier order eligible for free courier delivery to {data.hubLabel} Hub.</span>
 </div>
 </div>
 
@@ -283,7 +283,7 @@ export function Fp4Markup({ onFpClick }: MarkupHandlers) {
 <div className="space-y-1">
 <h4 className="font-body-md text-body-md font-bold text-on-surface">Fleet Maintenance Tip</h4>
 <p className="font-body-sm text-body-sm text-on-surface-variant leading-relaxed">
-              If the driver reported squealing while applying normal pedal pressure on Red Hills Road routes, inspect the Front pads first. Kingston city driving causes front wear at roughly twice the rate of rear solid discs.
+              If the driver reported squealing while applying normal pedal pressure on Red Hills Road routes, inspect the Front pads first. {data.hubLabel} city driving causes front wear at roughly twice the rate of rear solid discs.
             </p>
 </div>
 </div>
@@ -310,7 +310,7 @@ export function Fp4Markup({ onFpClick }: MarkupHandlers) {
 </div>
 </div>
 </div>
-</div></main>
+</div></div>
     </div>
   );
 }

@@ -13,9 +13,10 @@ import { RequestPartPanel } from "./RequestPartPanel";
 import { ResultsView } from "./ResultsView";
 import type { PartItem } from "./PartDetailDrawer";
 import { VariantStep } from "./VariantStep";
-import { Fp11Markup } from "./markup/Fp11Markup";
 import { ActivityView } from "./ActivityView";
 import { usePartsActivity } from "./findPartsQueries";
+import { Fp11Screen } from "./screens/Fp11Screen";
+import { emptyFindPartsScreenData } from "./findPartsScreenData";
 import "./findParts.css";
 
 type Step = "car" | "version" | "part" | "position" | "results" | "request" | "link" | "missing";
@@ -94,7 +95,7 @@ export function FindPartsTab({
         <p>You don&apos;t have access to vehicle parts. Ask your fleet admin.</p>
         <p className="font-body-sm text-body-sm">Signed in as {user?.email || "unknown"} · role {role || "unknown"}</p>
         <button type="button" onClick={() => { window.location.search = ""; }}>Back to Fleet maintenance</button>
-        <Fp11Markup />
+        <Fp11Screen actions={{ onButton: () => undefined }} data={emptyFindPartsScreenData} />
       </div>
     );
   }
@@ -113,7 +114,7 @@ export function FindPartsTab({
               void search.refetch();
             }
           }}>Retry</button>
-          <Fp11Markup />
+          <Fp11Screen actions={{ onButton: () => { setError(""); void search.refetch(); } }} data={emptyFindPartsScreenData} />
         </div>
       ) : null}
       {view === "activity" ? (

@@ -1,16 +1,16 @@
-/** Auto-generated from Stitch HTML — edit port script, not by hand. */
-// @ts-nocheck
 import type { ReactNode } from "react";
+import type { FindPartsScreenData } from "../findPartsScreenData";
 
-export type MarkupHandlers = {
-  onFpClick?: (detail: { label?: string; card?: boolean; vehicleId?: string }, event: Event) => void;
+export type Fp5Actions = {
+  onButton: (label: string) => void;
+  onVehicleCard?: (vehicleId: string) => void;
   children?: ReactNode;
 };
 
-export function Fp5Markup({ onFpClick }: MarkupHandlers) {
+export function Fp5Screen({ actions, data }: { actions: Fp5Actions; data: FindPartsScreenData }) {
   return (
-    <div className="find-parts-markup-root">
-<main className="w-full pt-[92px] bg-surface min-h-[calc(100vh-80px)]"><div className="max-w-[1440px] mx-auto px-margin-desktop py-space-xl"><div className="flex flex-col w-full">
+    <div className="find-parts-screen-root">
+<div className="fp-screen-root"><div className="max-w-[1440px] mx-auto px-margin-desktop py-space-xl"><div className="flex flex-col w-full">
 
 <div className="sticky top-[92px] z-40 bg-surface-container-lowest shadow-sm rounded-lg mb-space-lg px-space-lg py-space-sm flex flex-wrap items-center justify-between gap-space-md">
 <div className="flex items-center flex-wrap gap-space-sm font-label-code text-caption text-on-surface-variant">
@@ -22,7 +22,7 @@ export function Fp5Markup({ onFpClick }: MarkupHandlers) {
 
 <div className="inline-flex items-center gap-space-xs bg-surface-container-low px-space-sm py-1 rounded text-on-surface font-label-plate text-body-sm shadow-sm group cursor-pointer hover:bg-surface-container transition-colors">
 <span className="material-symbols-outlined text-secondary text-[16px]">directions_car</span>
-<span>Honda Fit 2018 · 1505LM</span>
+<span>{data.vehicleLabel} · {data.plate}</span>
 <span className="material-symbols-outlined text-outline text-[14px] group-hover:text-primary transition-colors ml-0.5">edit</span>
 </div>
 <span className="text-outline-variant">›</span>
@@ -41,7 +41,7 @@ export function Fp5Markup({ onFpClick }: MarkupHandlers) {
 <div className="flex items-center gap-space-md">
 <div className="flex items-center gap-1.5 font-label-code text-caption text-on-surface-variant">
 <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse"></span>
-<span>Kingston Depot Hub #01 Linked</span>
+<span>{data.hubLabel} Depot Hub #01 Linked</span>
 </div>
 <button className="flex items-center gap-1 text-on-surface-variant hover:text-primary font-body-sm text-caption px-space-sm py-1 rounded bg-surface-container transition-colors">
 <span className="material-symbols-outlined text-[15px]">bookmark_border</span>
@@ -57,7 +57,7 @@ export function Fp5Markup({ onFpClick }: MarkupHandlers) {
 <span className="text-on-surface-variant font-caption text-caption">Catalog Synced 09m ago</span>
 </div>
 <h1 className="font-headline-xl text-headline-xl text-on-surface tracking-tight leading-tight">
-        Oil filter for your Honda Fit 2018 (1.5 hybrid)
+        Oil filter for your {data.vehicleLabel} (1.5 hybrid)
       </h1>
 <p className="font-body-md text-body-md text-on-surface-variant">
         Viewing verified compatible parts cataloged for chassis GP5. Prices include Jamaican landed import duties, GCT, and bonded port handling charges.
@@ -130,13 +130,13 @@ export function Fp5Markup({ onFpClick }: MarkupHandlers) {
           </span>
 <span className="inline-flex items-center gap-1.5 bg-emerald-100 text-emerald-950 font-label-code text-caption px-2.5 py-1 rounded font-semibold shadow-sm">
 <span className="material-symbols-outlined text-[14px] text-emerald-800">shelves</span>
-            On your shelf — 2 in Kingston Hub
+            On your shelf — 2 in {data.hubLabel} Hub
           </span>
 </div>
 
 <div>
 <div className="font-label-code text-headline-sm md:text-headline-lg font-bold text-on-surface tracking-tight">
-            Toyota 04152-40060 — Oil filter
+            Toyota {data.partNumber} — Oil filter
           </div>
 <div className="font-caption text-caption text-secondary font-label-code mt-0.5">
             GTIN: 04902530182412 · OEM SPEC 11400-GP5 · DENSO REV C
@@ -147,7 +147,7 @@ export function Fp5Markup({ onFpClick }: MarkupHandlers) {
 <div className="flex flex-col gap-0.5">
 <span className="font-caption text-caption uppercase text-on-surface-variant">Landed Commercial Matrix</span>
 <span className="font-label-price text-body-lg font-bold text-on-surface">
-              J$ 1,850 landed <span className="text-on-surface-variant font-normal text-body-sm">· Kingston Auto Parts · Ready today</span>
+              {data.priceLabel} landed <span className="text-on-surface-variant font-normal text-body-sm">· {data.hubLabel} Auto Parts · Ready today</span>
 </span>
 </div>
 <div className="flex items-center gap-1 text-emerald-800 font-body-sm text-caption bg-surface-container-lowest px-2.5 py-1.5 rounded shadow-sm self-start sm:self-center">
@@ -219,7 +219,7 @@ export function Fp5Markup({ onFpClick }: MarkupHandlers) {
 <div className="flex flex-col gap-1 min-w-0">
 <div className="flex items-center flex-wrap gap-space-sm">
 <span className="font-headline-sm text-body-lg font-bold text-on-surface">Oil filter</span>
-<span className="font-label-code text-body-md font-semibold text-primary">Toyota 04152-40060</span>
+<span className="font-label-code text-body-md font-semibold text-primary">Toyota {data.partNumber}</span>
 <span className="inline-flex items-center gap-1 text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded font-caption text-caption font-semibold">
 <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
                 Verified
@@ -238,8 +238,8 @@ export function Fp5Markup({ onFpClick }: MarkupHandlers) {
 
 <div className="flex items-center justify-between lg:justify-end gap-space-lg shrink-0">
 <div className="flex flex-col lg:text-right">
-<span className="font-label-price text-body-lg font-bold text-on-surface">J$ 1,850 landed</span>
-<span className="font-caption text-caption text-on-surface-variant">Kingston Auto Parts · today</span>
+<span className="font-label-price text-body-lg font-bold text-on-surface">{data.priceLabel} landed</span>
+<span className="font-caption text-caption text-on-surface-variant">{data.hubLabel} Auto Parts · today</span>
 </div>
 <div className="flex items-center gap-space-md">
 <span className="inline-flex items-center gap-1 font-label-code text-caption font-semibold px-2.5 py-1 rounded bg-emerald-100 text-emerald-950">
@@ -288,7 +288,7 @@ export function Fp5Markup({ onFpClick }: MarkupHandlers) {
 <div className="flex flex-col gap-1 min-w-0">
 <div className="flex items-center flex-wrap gap-space-sm">
 <span className="font-headline-sm text-body-lg font-bold text-on-surface">Oil filter</span>
-<span className="font-label-code text-body-md font-semibold text-primary">MANN-FILTER HU 6006 z</span>
+<span className="font-label-code text-body-md font-semibold text-primary">{data.partBrand} {data.partNumberAlt} z</span>
 <span className="inline-flex items-center gap-1 text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded font-caption text-caption font-semibold">
 <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
                 Verified
@@ -302,7 +302,7 @@ export function Fp5Markup({ onFpClick }: MarkupHandlers) {
               </span>
 </div>
 <p className="font-body-sm text-body-sm text-secondary">
-              MANN-FILTER HU 6006 z replaces the factory part 04152-40060.
+              {data.partBrand} {data.partNumberAlt} z replaces the factory part {data.partNumber}.
             </p>
 </div>
 </div>
@@ -431,7 +431,7 @@ export function Fp5Markup({ onFpClick }: MarkupHandlers) {
 <div className="flex items-center gap-space-sm p-space-sm">
 <span className="material-symbols-outlined text-secondary text-[24px]">speed</span>
 <div className="flex flex-col">
-<span className="font-body-sm text-body-sm font-semibold text-on-surface">Kingston Hub Transit Time</span>
+<span className="font-body-sm text-body-sm font-semibold text-on-surface">{data.hubLabel} Hub Transit Time</span>
 <span className="font-label-code text-caption text-on-surface-variant">Same-day courier dispatch guaranteed &lt; 2h</span>
 </div>
 </div>
@@ -461,7 +461,7 @@ export function Fp5Markup({ onFpClick }: MarkupHandlers) {
 </div>
 </div>
 </div>
-</div></main>
+</div></div>
     </div>
   );
 }

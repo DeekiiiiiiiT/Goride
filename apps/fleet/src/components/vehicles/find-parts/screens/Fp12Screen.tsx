@@ -1,4 +1,16 @@
-<main className="flex flex-col relative w-full pt-28 pb-24 bg-surface min-h-screen"><div className="flex flex-col w-full pb-28">
+import type { ReactNode } from "react";
+import type { FindPartsScreenData } from "../findPartsScreenData";
+
+export type Fp12Actions = {
+  onButton: (label: string) => void;
+  onVehicleCard?: (vehicleId: string) => void;
+  children?: ReactNode;
+};
+
+export function Fp12Screen({ actions, data }: { actions: Fp12Actions; data: FindPartsScreenData }) {
+  return (
+    <div className="find-parts-screen-root">
+<div className="fp-screen-root"><div className="flex flex-col w-full pb-28">
 
 <div className="px-margin pt-space-xs pb-space-sm overflow-x-auto [scrollbar-width:none] flex items-center gap-space-xs bg-surface-container-low/80 backdrop-blur-md sticky top-0 z-20">
 <button className="flex items-center gap-space-xs px-space-md py-space-xs rounded-xl bg-surface-container-lowest text-on-surface-variant hover:text-on-surface whitespace-nowrap shadow-sm text-body-sm font-body-sm transition-colors">
@@ -17,7 +29,7 @@
 
 <section className="px-margin py-space-xs overflow-x-auto [scrollbar-width:none] flex items-center gap-space-xs bg-surface-container-lowest shadow-sm z-10">
 <button className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-secondary-container text-on-secondary-fixed text-caption font-caption whitespace-nowrap active:scale-95 transition-transform">
-<span className="font-label-plate text-caption tracking-wider">1505LM</span>
+<span className="font-label-plate text-caption tracking-wider">{data.plate}</span>
 <span className="text-on-secondary-container truncate max-w-[110px]">Fit 2018</span>
 <span className="material-symbols-outlined text-[12px] opacity-70">edit</span>
 </button>
@@ -37,7 +49,7 @@
 
 <header className="px-margin pt-space-lg pb-space-sm flex flex-col gap-1">
 <div className="flex items-center justify-between">
-<h2 className="font-headline-sm text-headline-sm text-on-surface">Oil filter for Honda Fit 2018</h2>
+<h2 className="font-headline-sm text-headline-sm text-on-surface">Oil filter for {data.vehicleLabel}</h2>
 <span className="material-symbols-outlined text-on-surface-variant text-[20px]">tune</span>
 </div>
 <div className="flex items-center gap-2">
@@ -48,7 +60,7 @@
 <span className="text-on-surface-variant/40 text-caption">•</span>
 <span className="font-label-code text-caption text-on-surface-variant flex items-center gap-1">
 <span className="material-symbols-outlined text-[14px]">warehouse</span>
-        Kingston Hub #01 stock
+        {data.hubLabel} Hub #01 stock
       </span>
 </div>
 </header>
@@ -70,7 +82,7 @@
 
 <div className="flex flex-col gap-1">
 <div className="font-label-code text-caption text-secondary-fixed tracking-wider">GENUINE OEM SPEC</div>
-<h3 className="font-headline-sm text-headline-sm text-on-primary leading-snug">Toyota 04152-40060</h3>
+<h3 className="font-headline-sm text-headline-sm text-on-primary leading-snug">Toyota {data.partNumber}</h3>
 <p className="font-body-sm text-body-sm text-surface-container-high/90">Premium Pleated Cartridge Oil Filter with O-Ring Seal</p>
 </div>
 
@@ -90,13 +102,13 @@
 
 <div className="pt-space-xs flex flex-col gap-1">
 <div className="flex items-baseline justify-between">
-<span className="font-label-price text-headline-sm text-on-primary">J$ 1,850 <span className="font-body-sm text-caption text-surface-container-high font-normal">landed</span></span>
+<span className="font-label-price text-headline-sm text-on-primary">{data.priceLabel} <span className="font-body-sm text-caption text-surface-container-high font-normal">landed</span></span>
 <span className="font-caption text-caption text-tertiary-fixed flex items-center gap-0.5">
 <span className="material-symbols-outlined text-[14px]">local_shipping</span>
             Ready today
           </span>
 </div>
-<span className="font-caption text-caption text-surface-container-high/80">Kingston Auto Parts Depot • Bin #09-A</span>
+<span className="font-caption text-caption text-surface-container-high/80">{data.hubLabel} Auto Parts Depot • Bin #09-A</span>
 </div>
 
 <div className="flex flex-col gap-2 pt-space-xs">
@@ -135,10 +147,10 @@
 <div className="flex flex-col gap-1 pl-2">
 <div className="flex items-center gap-1.5">
 <span className="font-body-md text-body-md font-semibold text-on-surface">Oil Filter</span>
-<span className="font-label-code text-caption text-on-surface-variant">04152-40060</span>
+<span className="font-label-code text-caption text-on-surface-variant">{data.partNumber}</span>
 </div>
 <div className="flex items-center gap-2">
-<span className="font-label-price text-body-md text-on-surface">J$ 1,850 <span className="text-caption text-on-surface-variant font-normal">landed</span></span>
+<span className="font-label-price text-body-md text-on-surface">{data.priceLabel} <span className="text-caption text-on-surface-variant font-normal">landed</span></span>
 <span className="px-1.5 py-0.5 rounded bg-tertiary-fixed text-on-tertiary-fixed text-caption font-caption font-medium">On shelf: 2</span>
 </div>
 <div className="flex items-center gap-1 font-caption text-caption text-on-surface-variant">
@@ -161,8 +173,8 @@
 <div className="absolute left-0 top-0 bottom-0 w-1 bg-secondary"></div>
 <div className="flex flex-col gap-1 pl-2">
 <div className="flex items-center gap-1.5">
-<span className="font-body-md text-body-md font-semibold text-on-surface">MANN-FILTER</span>
-<span className="font-label-code text-caption text-on-surface-variant">HU 6006 z</span>
+<span className="font-body-md text-body-md font-semibold text-on-surface">{data.partBrand}</span>
+<span className="font-label-code text-caption text-on-surface-variant">{data.partNumberAlt} z</span>
 </div>
 <div className="flex items-center gap-2">
 <span className="font-label-price text-body-md text-on-surface">J$ 1,420 <span className="text-caption text-on-surface-variant font-normal">landed</span></span>
@@ -233,7 +245,7 @@
 <div className="p-2.5 rounded-lg bg-tertiary-fixed/30 flex items-center justify-between">
 <div className="flex flex-col">
 <span className="font-caption text-caption font-semibold text-on-tertiary-container">Repeat Part Notice</span>
-<span className="font-caption text-caption text-on-surface-variant">Replaced 32 days ago on 1505LM (GP5)</span>
+<span className="font-caption text-caption text-on-surface-variant">Replaced 32 days ago on {data.plate} (GP5)</span>
 </div>
 <span className="material-symbols-outlined text-[18px] text-on-tertiary-container">info</span>
 </div>
@@ -320,12 +332,12 @@
 </button>
 <h4 className="font-headline-sm text-headline-sm text-on-surface">Quick RFQ Inquiry</h4>
 </div>
-<span className="font-label-code text-caption text-on-surface-variant">Kingston Depot</span>
+<span className="font-label-code text-caption text-on-surface-variant">{data.hubLabel} Depot</span>
 </div>
 <div className="p-space-sm rounded-lg bg-surface-container-low flex flex-col gap-1">
 <span className="font-body-sm text-body-sm font-semibold text-on-surface">Part item requested:</span>
-<span className="font-label-code text-body-sm text-on-surface-variant">Toyota 04152-40060 (Oil Filter Cartridge)</span>
-<span className="font-caption text-caption text-secondary">Target delivery: Kingston Hub #01 (Within 24h)</span>
+<span className="font-label-code text-body-sm text-on-surface-variant">Toyota {data.partNumber} (Oil Filter Cartridge)</span>
+<span className="font-caption text-caption text-secondary">Target delivery: {data.hubLabel} Hub #01 (Within 24h)</span>
 </div>
 <div className="flex flex-col gap-1">
 <label className="font-caption text-caption text-on-surface-variant font-medium">Quantity needed:</label>
@@ -355,9 +367,12 @@
 <span className="material-symbols-outlined text-[18px]">check_circle</span>
 <span>Confirm parts list (1)</span>
 </div>
-<span className="font-label-price text-body-sm text-surface-container-lowest">J$ 1,850</span>
+<span className="font-label-price text-body-sm text-surface-container-lowest">{data.priceLabel}</span>
 </button>
 </div>
 </aside>
 </div>
-</main>
+</div>
+    </div>
+  );
+}

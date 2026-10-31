@@ -1,16 +1,16 @@
-/** Auto-generated from Stitch HTML — edit port script, not by hand. */
-// @ts-nocheck
 import type { ReactNode } from "react";
+import type { FindPartsScreenData } from "../findPartsScreenData";
 
-export type MarkupHandlers = {
-  onFpClick?: (detail: { label?: string; card?: boolean; vehicleId?: string }, event: Event) => void;
+export type Fp9Actions = {
+  onButton: (label: string) => void;
+  onVehicleCard?: (vehicleId: string) => void;
   children?: ReactNode;
 };
 
-export function Fp9Markup({ onFpClick }: MarkupHandlers) {
+export function Fp9Screen({ actions, data }: { actions: Fp9Actions; data: FindPartsScreenData }) {
   return (
-    <div className="find-parts-markup-root">
-<main className="w-full pt-[92px] bg-surface min-h-[calc(100vh-80px)]"><div className="flex flex-col w-full">
+    <div className="find-parts-screen-root">
+<div className="fp-screen-root"><div className="flex flex-col w-full">
 
 <section className="w-full bg-surface-container-low px-margin-desktop py-space-xl">
 <div className="max-w-[1400px] mx-auto flex flex-col gap-space-lg">
@@ -81,7 +81,7 @@ export function Fp9Markup({ onFpClick }: MarkupHandlers) {
 <span className="material-symbols-outlined text-[14px] text-secondary">pin</span>
 <span className="font-label-plate text-label-plate text-on-surface">8943-JX</span>
 </div>
-<span className="font-body-sm text-body-sm text-secondary">Kingston Fleet Unit #14</span>
+<span className="font-body-sm text-body-sm text-secondary">{data.hubLabel} Fleet Unit #14</span>
 </div>
 </div>
 <div className="flex items-center gap-space-sm self-start sm:self-auto">
@@ -132,7 +132,7 @@ export function Fp9Markup({ onFpClick }: MarkupHandlers) {
 <span className="font-body-sm text-body-sm font-semibold">Zero Wrong Orders</span>
 </div>
 <p className="font-caption text-caption text-on-surface-variant">
-                  Eliminates caliper rotor mismatch (255mm vs 275mm) and alternator bracket returns across Kingston dispatch.
+                  Eliminates caliper rotor mismatch (255mm vs 275mm) and alternator bracket returns across {data.hubLabel} dispatch.
                 </p>
 </div>
 <div className="bg-surface-container-low rounded-lg p-space-md flex flex-col gap-space-xs">
@@ -304,7 +304,7 @@ export function Fp9Markup({ onFpClick }: MarkupHandlers) {
 </div>
 <div className="flex flex-col">
 <div className="font-body-sm text-body-sm font-semibold text-on-surface">Depot Stock Linked</div>
-<div className="font-caption text-caption text-secondary">3,410 Probox parts in Kingston Hub #01 bins waiting for trim classification.</div>
+<div className="font-caption text-caption text-secondary">3,410 Probox parts in {data.hubLabel} Hub #01 bins waiting for trim classification.</div>
 </div>
 </div>
 </div>
@@ -378,7 +378,7 @@ export function Fp9Markup({ onFpClick }: MarkupHandlers) {
 </div>
 </div>
 
-</div></main>
+</div></div>
     </div>
   );
 }

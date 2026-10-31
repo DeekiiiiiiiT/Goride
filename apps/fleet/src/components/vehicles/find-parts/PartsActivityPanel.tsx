@@ -39,9 +39,9 @@ export function PartsActivityPanel({
         </div>
         <div className="flex flex-col divide-y divide-surface-container-high">
           <Row title="Requests" badge={`${requests?.total ?? 0} open`} body={newestLine(requests) || "None open."} />
-          <Row title="Repeat-part alerts" badge={String(alerts?.total ?? 0)} body={newestLine(alerts) || "None open."} />
-          <Row title="Warranty claims" badge={String(claims?.total ?? 0)} body={claims?.total ? newestLine(claims) : "None open. Crediting a claim is done by Roam."} />
-          <Row title="Core returns" badge={`J$ ${owed.toLocaleString()}`} body={cores?.total ? `${cores.total} cores owed` : "None open."} />
+          <Row title="Repeat-part alerts" badge={String(alerts?.total ?? 0)} body={newestLine(alerts) || "No frequent wear anomalies detected across hub this month."} />
+          <Row title="Warranty claims" badge={String(claims?.total ?? 0)} body={claims?.total ? newestLine(claims) : "All installed suspension & hybrid parts operating within warranty period."} />
+          <Row title="Core returns" badge={`J$ ${owed.toLocaleString()}`} body={cores?.total ? `${cores.total} cores owed` : "Alternator and high-voltage battery deposits are fully cleared."} />
         </div>
         <div className="mt-space-lg pt-space-md bg-surface-container-low p-space-md rounded-lg flex flex-col">
           <div className="flex items-center gap-space-xs text-on-surface font-headline-sm text-body-sm">
@@ -49,7 +49,7 @@ export function PartsActivityPanel({
             <span>Need a part not in inventory?</span>
           </div>
           <p className="font-body-sm text-caption text-on-surface-variant mt-1 leading-relaxed">
-            Our team finds the part and gets you a price.
+            Self-serve parts desk: our team sources genuine & OEM replacements across Jamaica & Japan within 24h.
           </p>
           <button type="button" className="mt-space-md w-full py-2 px-space-md bg-surface-container-lowest hover:bg-surface-container text-on-surface font-body-sm text-body-sm font-semibold rounded shadow-sm flex items-center justify-center gap-space-xs" onClick={onAsk}>
             <span className="material-symbols-outlined text-[16px]">support_agent</span>

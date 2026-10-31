@@ -1,4 +1,16 @@
-<main className="w-full pt-26 bg-surface min-h-[calc(100vh-80px)]"><div className="flex flex-col w-full">
+import type { ReactNode } from "react";
+import type { FindPartsScreenData } from "../findPartsScreenData";
+
+export type Fp2Actions = {
+  onButton: (label: string) => void;
+  onVehicleCard?: (vehicleId: string) => void;
+  children?: ReactNode;
+};
+
+export function Fp2Screen({ actions, data }: { actions: Fp2Actions; data: FindPartsScreenData }) {
+  return (
+    <div className="find-parts-screen-root">
+<div className="fp-screen-root"><div className="flex flex-col w-full">
 
 <div className="bg-surface-container-lowest shadow-sm">
 <div className="max-w-[1400px] mx-auto px-margin md:px-margin-desktop py-space-sm flex items-center justify-between">
@@ -71,7 +83,7 @@
 </div>
 <div className="flex flex-col sm:flex-row sm:items-center sm:gap-space-md">
 <div className="flex items-center gap-2">
-<span className="font-headline-sm text-headline-sm text-on-surface">2018 Honda Fit</span>
+<span className="font-headline-sm text-headline-sm text-on-surface">{data.vehicleLabel}</span>
 <span className="px-2 py-0.5 rounded bg-surface-container text-on-surface-variant font-label-code text-caption">JDM / GK-GP SERIES</span>
 </div>
 <span className="hidden sm:inline text-surface-dim font-label-code">/</span>
@@ -96,7 +108,7 @@
 <span className="font-label-code text-caption uppercase tracking-wider text-secondary">Step 02 Disambiguation</span>
 <span className="font-label-code text-caption text-on-tertiary-container bg-tertiary-fixed/30 px-2 py-0.5 rounded">FITMENT SENSITIVE</span>
 </div>
-<h1 className="font-headline-lg text-headline-lg text-on-surface">Which 2018 Honda Fit is it?</h1>
+<h1 className="font-headline-lg text-headline-lg text-on-surface">Which {data.vehicleLabel} is it?</h1>
 <p className="font-body-md text-body-md text-on-surface-variant mt-1">
               These versions take different filters, brakes, fluids, and suspension mounts. Pick the exact powertrain on your fitness certificate or chassis plate.
             </p>
@@ -120,7 +132,7 @@
 </div>
 <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-primary-fixed text-on-primary-fixed font-caption text-caption mb-space-md font-semibold">
 <span className="material-symbols-outlined text-[13px]">verified</span>
-<span>Most common in fleet (Kingston)</span>
+<span>Most common in fleet ({data.hubLabel})</span>
 </div>
 <p className="font-body-sm text-body-sm text-on-surface-variant mb-space-md">
                   Takes 0W-20 hybrid synthetic oil, dedicated dual-clutch fluid (DW-1/ATF-TYPE 2.0 equivalent), and electronic servo brake booster units.
@@ -271,7 +283,7 @@
 <span className="w-2 h-2 rounded-full bg-on-tertiary-container animate-pulse"></span>
 </div>
 <div className="relative rounded-lg overflow-hidden mb-space-md bg-surface-container">
-<img className="w-full h-36 object-cover object-center" data-alt="Modern Japanese white hatchback parked cleanly under bright morning Caribbean sunlight with crisp road reflection, precision side-angle showcase in a modern fleet bay with concrete floor and minimal technical equipment in Kingston." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBC94boDsO6smYsCV8uBJPN5CZzAazM8yHv0CMvqPh-Psz7E0bn9Wyv0XVU3HVK3PDFirfBXkTBzjAuLhhcyhCsU5zgXcQzPSvgqZjrG9x285Icgeu5_TD7J6XKmwnQwPGrflwH2EPDb5uGTGqk0DH2hJ4KRuMOHMFE45rqQBk7k5X9pVOwbp1JXilY2ubk9sTCLrZeYOZ6jRvxurpz64Vns7j7oAbImPHJDD8eHYw" />
+<img className="w-full h-36 object-cover object-center" data-alt="Modern Japanese white hatchback parked cleanly under bright morning Caribbean sunlight with crisp road reflection, precision side-angle showcase in a modern fleet bay with concrete floor and minimal technical equipment in {data.hubLabel}." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBC94boDsO6smYsCV8uBJPN5CZzAazM8yHv0CMvqPh-Psz7E0bn9Wyv0XVU3HVK3PDFirfBXkTBzjAuLhhcyhCsU5zgXcQzPSvgqZjrG9x285Icgeu5_TD7J6XKmwnQwPGrflwH2EPDb5uGTGqk0DH2hJ4KRuMOHMFE45rqQBk7k5X9pVOwbp1JXilY2ubk9sTCLrZeYOZ6jRvxurpz64Vns7j7oAbImPHJDD8eHYw" />
 <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded bg-primary/80 backdrop-blur-md text-on-primary font-label-plate text-[12px]">
               2018 HONDA FIT
             </div>
@@ -295,10 +307,10 @@
 <div className="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm">
 <div className="flex items-center gap-2 mb-space-sm text-primary">
 <span className="material-symbols-outlined text-[20px]">hub</span>
-<h3 className="font-headline-sm text-body-md font-bold text-on-surface">Kingston Hub Fleet Telemetry</h3>
+<h3 className="font-headline-sm text-body-md font-bold text-on-surface">{data.hubLabel} Hub Fleet Telemetry</h3>
 </div>
 <p className="font-body-sm text-body-sm text-on-surface-variant mb-space-md">
-            There are <strong className="font-semibold text-primary">2 Honda Fits</strong> registered in the local Kingston Roam fleet inventory.
+            There are <strong className="font-semibold text-primary">2 fleet units</strong> registered in the local {data.hubLabel} Roam fleet inventory.
           </p>
 <div className="flex flex-col gap-space-sm">
 <div className="p-space-sm rounded-lg bg-surface-container-low flex items-center justify-between">
@@ -306,7 +318,7 @@
 <span className="w-7 h-7 rounded bg-surface-container-highest flex items-center justify-center font-label-code text-caption font-bold">#04</span>
 <div className="flex flex-col">
 <span className="font-label-code text-caption font-semibold">2781-KM (Fit Hybrid)</span>
-<span className="font-caption text-caption text-secondary">Active Dispatch · Kingston</span>
+<span className="font-caption text-caption text-secondary">Active Dispatch · {data.hubLabel}</span>
 </div>
 </div>
 <span className="font-label-code text-caption font-bold px-2 py-0.5 rounded bg-surface-container-highest">GP5</span>
@@ -365,7 +377,7 @@
 </div>
 </div>
 <p className="font-body-sm text-body-sm opacity-90 mb-space-md">
-            Orders placed via verified trim matching include free dispatch exchange if parts fail mechanical fit verification during Kingston depot install.
+            Orders placed via verified trim matching include free dispatch exchange if parts fail mechanical fit verification during {data.hubLabel} depot install.
           </p>
 <div className="flex items-center justify-between text-caption font-label-code opacity-75">
 <span>AUDIT ID: KIN-VER-2025</span>
@@ -393,4 +405,7 @@
 </div>
 </div>
 </div>
-</main>
+</div>
+    </div>
+  );
+}

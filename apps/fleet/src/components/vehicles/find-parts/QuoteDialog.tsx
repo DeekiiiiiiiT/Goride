@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { api } from "../../../services/api";
-import { Fp7Markup } from "./markup/Fp7Markup";
-import { labelFromFpClick } from "./findPartsDomFill";
+import { Fp7Screen } from "./screens/Fp7Screen";
+import { fpButtonIs } from "./findPartsButton";
+import { buildFindPartsScreenData } from "./findPartsScreenData";
 import type { FleetCar } from "./CarStep";
 
 export function QuoteDialog({
@@ -15,7 +16,6 @@ export function QuoteDialog({
   cars: FleetCar[];
   onClose: () => void;
 }) {
-  const rootRef = useRef<HTMLDivElement>(null);
   const [qty, setQty] = useState(1);
   const [urgency, setUrgency] = useState("normal");
   const [note, setNote] = useState("");
@@ -24,40 +24,17 @@ export function QuoteDialog({
   const [targetPrice, setTargetPrice] = useState("");
   const [sent, setSent] = useState("");
   const [error, setError] = useState("");
+  const qtyInputId = useId();
+  const car = cars.find((row) => row.vehicleId === vehicle);
+  const data = buildFindPartsScreenData({
+    plate: car?.licensePlate || "—",
+    vehicleLabel: car ? [car.year, car.make, car.model].filter(Boolean).join(" ") : "Vehicle",
+    quoteRef: sent || "—",
+  });
 
   useEffect(() => {
-    const root = rootRef.current;
-    if (!root) return;
-    const qtyInput = root.querySelector("#qtyInput") as HTMLInputElement | null;
-    if (qtyInput) {
-      qtyInput.readOnly = false;
-      qtyInput.type = "number";
-      qtyInput.min = "1";
-      qtyInput.max = "24";
-      qtyInput.value = String(qty);
-      const onInput = () => setQty(Number(qtyInput.value) || 1);
-      qtyInput.addEventListener("input", onInput);
-      return () => qtyInput.removeEventListener("input", onInput);
-    }
-    return undefined;
-  }, [qty]);
-
-  useEffect(() => {
-    const root = rootRef.current;
-    if (!root) return;
-    root.querySelectorAll("textarea").forEach((el) => {
-      const area = el as HTMLTextAreaElement;
-      area.value = note;
-      area.oninput = () => setNote(area.value);
-    });
-    root.querySelectorAll("select").forEach((el, index) => {
-      const sel = el as HTMLSelectElement;
-      if (index === 0) {
-        sel.value = vehicle;
-        sel.onchange = () => setVehicle(sel.value);
-      }
-    });
-  }, [note, vehicle, cars.length]);
+    if (!vehicleId && cars[0]) setVehicle(cars[0].vehicleId);
+  }, [vehicleId, cars]);
 
   async function send() {
     setError("");
@@ -80,29 +57,44 @@ export function QuoteDialog({
     }
   }
 
-  function handleFpClick(detail: { label?: string }) {
-    const label = labelFromFpClick(detail);
-    if (label.includes("cancel") || label.includes("close") || label.includes("done")) {
+  function onButton(label: string) {
+    if (fpButtonIs(label, "cancel", "close", "done")) {
       onClose();
       return;
     }
-    if (label.includes("24h")) setUrgency("within_24h");
-    else if (label.includes("urgent")) setUrgency("urgent");
-    else if (label.includes("low")) setUrgency("low");
-    else if (label.includes("normal")) setUrgency("normal");
-    else if (label.includes("decrease quantity")) setQty((value) => Math.max(1, value - 1));
-    else if (label.includes("increase quantity")) setQty((value) => Math.min(24, value + 1));
-    else if (label.includes("send") || label.includes("broadcast")) void send();
+    if (fpButtonIs(label, "24h", "within 24")) setUrgency("within_24h");
+    else if (fpButtonIs(label, "urgent")) setUrgency("urgent");
+    else if (fpButtonIs(label, "low")) setUrgency("low");
+    else if (fpButtonIs(label, "normal")) setUrgency("normal");
+    else if (fpButtonIs(label, "decrease quantity")) setQty((value) => Math.max(1, value - 1));
+    else if (fpButtonIs(label, "increase quantity")) setQty((value) => Math.min(24, value + 1));
+    else if (fpButtonIs(label, "send", "broadcast")) void send();
   }
 
   return (
     <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-inverse-surface/30 p-space-md">
-      <div ref={rootRef} className="w-full max-w-4xl">
+      <div className="w-full max-w-4xl">
         {error ? <p className="text-error mb-space-sm">{error}</p> : null}
         {sent ? <p className="mb-space-sm">Reference {sent}</p> : null}
-        <Fp7Markup onFpClick={handleFpClick} />
-        <input type="hidden" value={workOrder} onChange={(e) => setWorkOrder(e.target.value)} aria-label="Work order" />
-        <input type="hidden" value={targetPrice} onChange={(e) => setTargetPrice(e.target.value)} aria-label="Target price" />
+        <label className="sr-only" htmlFor={qtyInputId}>Quantity</label>
+        <input
+          id="qtyInput"
+          className="sr-only"
+          type="number"
+          min={1}
+          max={24}
+          value={qty}
+          onChange={(e) => setQty(Number(e.target.value) || 1)}
+        />
+        <textarea className="sr-only" value={note} onChange={(e) => setNote(e.target.value)} aria-label="Note" />
+        <select className="sr-only" value={vehicle} onChange={(e) => setVehicle(e.target.value)} aria-label="Vehicle">
+          {cars.map((row) => (
+            <option key={row.vehicleId} value={row.vehicleId}>{row.licensePlate || row.vehicleId}</option>
+          ))}
+        </select>
+        <input type="text" className="sr-only" value={workOrder} onChange={(e) => setWorkOrder(e.target.value)} aria-label="Work order" />
+        <input type="text" className="sr-only" value={targetPrice} onChange={(e) => setTargetPrice(e.target.value)} aria-label="Target price" />
+        <Fp7Screen actions={{ onButton }} data={data} />
       </div>
     </div>
   );

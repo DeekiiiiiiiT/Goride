@@ -4,36 +4,72 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-
-const banned = ["Kingston", "1,850", "RFQ-88402", "1505LM", "5179KZ", "MANN-FILTER", "Honda Fit 2018", "J$ 4,850", "RQ-8821"];
+import { FIND_PARTS_FORBIDDEN_SAMPLES } from "./findParts.noSample.banned";
 
 function walk(dir: string): string[] {
   const out: string[] = [];
   for (const name of readdirSync(dir)) {
     const path = join(dir, name);
     if (statSync(path).isDirectory()) {
-      if (name === "markup" || name === "_html-jsx") continue;
       out.push(...walk(path));
-    } else if (/\.(tsx|ts)$/.test(name) && !name.endsWith(".test.ts")) {
+    } else if (/\.(tsx|ts|jsx)$/.test(name) && !name.endsWith(".test.ts") && name !== "findParts.noSample.banned.ts") {
       out.push(path);
     }
   }
   return out;
 }
 
-describe("find parts screens do not hard-code the picture", () => {
+function joinedStringLiterals(source: string): string[] {
+  const chunks: string[] = [];
+  const re = /(?:["'`])([^"'`]*)(?:["'`])(?:\s*\+\s*(?:["'`])([^"'`]*)(?:["'`]))+/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(source))) {
+    chunks.push(m[0].replace(/["'`]/g, "").replace(/\s*\+\s*/g, ""));
+  }
+  const joinRe = /\[(?:\s*(?:["'`])([^"'`]*)(?:["'`])\s*,?)+\]\.join\s*\(\s*(?:["'`])\s*(?:["'`])\s*\)/g;
+  while ((m = joinRe.exec(source))) {
+    const inner = m[0].match(/["'`]([^"'`]+)["'`]/g);
+    if (inner) chunks.push(inner.map((q) => q.slice(1, -1)).join(""));
+  }
+  return chunks;
+}
+
+describe("find parts screens do not hard-code Stitch sample data", () => {
   const dir = join(import.meta.dirname);
   const files = walk(dir);
+
   it("has screen files", () => {
-    expect(files.length).toBeGreaterThan(3);
+    expect(files.length).toBeGreaterThan(5);
   });
-  it("leaves sample names out of hand-written screens", () => {
+
+  it("leaves forbidden sample strings out of all find-parts sources", () => {
     const text = files.map((path) => readFileSync(path, "utf8")).join("\n");
-    for (const word of banned) expect(text.includes(word)).toBe(false);
+    for (const word of FIND_PARTS_FORBIDDEN_SAMPLES) {
+      expect(text.includes(word), `found banned sample: ${word}`).toBe(false);
+    }
   });
+
+  it("does not recompose banned tokens via split strings", () => {
+    for (const path of files) {
+      const source = readFileSync(path, "utf8");
+      for (const composed of joinedStringLiterals(source)) {
+        for (const word of FIND_PARTS_FORBIDDEN_SAMPLES) {
+          expect(composed.includes(word), `${path} composes ${word}`).toBe(false);
+        }
+      }
+    }
+  });
+
   it("does not use stitch embed or innerHTML", () => {
     const text = files.map((path) => readFileSync(path, "utf8")).join("\n");
     expect(text.includes("dangerouslySetInnerHTML")).toBe(false);
     expect(text.includes("find-parts/stitch/")).toBe(false);
+  });
+
+  it("does not use DOM fill or text-click patterns", () => {
+    const banned = ["applyFindPartsLiveText", "createTreeWalker", "onFpClick", "@ts-nocheck", "Auto-generated from Stitch"];
+    const text = files.map((path) => readFileSync(path, "utf8")).join("\n");
+    for (const token of banned) expect(text.includes(token)).toBe(false);
+    expect(text.split("label.includes").length - 1).toBe(0);
   });
 });

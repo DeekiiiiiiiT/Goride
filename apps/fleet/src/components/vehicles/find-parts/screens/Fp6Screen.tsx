@@ -1,4 +1,16 @@
-<main className="w-full pt-[92px] bg-surface min-h-[calc(100vh-80px)]"><div className="max-w-[1440px] mx-auto px-margin-desktop py-space-xl"><div className="flex flex-col w-full relative">
+import type { ReactNode } from "react";
+import type { FindPartsScreenData } from "../findPartsScreenData";
+
+export type Fp6Actions = {
+  onButton: (label: string) => void;
+  onVehicleCard?: (vehicleId: string) => void;
+  children?: ReactNode;
+};
+
+export function Fp6Screen({ actions, data }: { actions: Fp6Actions; data: FindPartsScreenData }) {
+  return (
+    <div className="find-parts-screen-root">
+<div className="fp-screen-root"><div className="max-w-[1440px] mx-auto px-margin-desktop py-space-xl"><div className="flex flex-col w-full relative">
 
 <div className="w-full flex flex-col gap-space-xl opacity-45 pointer-events-none select-none filter blur-[0.5px]">
 
@@ -9,7 +21,7 @@
 <span>/</span>
 <span>VEHICLE TELEMETRY</span>
 <span>/</span>
-<span className="text-on-surface font-semibold">1505LM (TOYOTA PROBOX HYBRID)</span>
+<span className="text-on-surface font-semibold">{data.plate} (TOYOTA PROBOX HYBRID)</span>
 </div>
 <div className="flex items-center gap-space-md">
 <h1 className="font-headline-lg text-headline-lg text-on-surface tracking-tight">Parts Compatibility Index</h1>
@@ -24,7 +36,7 @@
 </div>
 <div className="px-space-md py-1.5 rounded-lg bg-surface-container-lowest shadow-sm flex items-center gap-space-sm">
 <span className="material-symbols-outlined text-[18px] text-secondary">warehouse</span>
-<span className="font-body-sm text-body-sm font-medium">Kingston Central Bin A-14</span>
+<span className="font-body-sm text-body-sm font-medium">{data.hubLabel} Central Bin A-14</span>
 </div>
 </div>
 </div>
@@ -46,7 +58,7 @@
 <div className="p-space-lg rounded-xl bg-surface-container-lowest shadow-sm flex flex-col gap-space-xs">
 <span className="font-caption text-caption text-secondary uppercase tracking-wider">Local Hub Stock</span>
 <span className="font-headline-sm text-headline-sm text-on-surface">14 Items Verified</span>
-<span className="font-caption text-caption text-secondary">Kingston Hub #01 Priority Rack</span>
+<span className="font-caption text-caption text-secondary">{data.hubLabel} Hub #01 Priority Rack</span>
 </div>
 <div className="p-space-lg rounded-xl bg-surface-container-lowest shadow-sm flex flex-col gap-space-xs">
 <span className="font-caption text-caption text-secondary uppercase tracking-wider">Supplier Coverage</span>
@@ -74,12 +86,12 @@
 <span className="material-symbols-outlined text-secondary">filter_alt</span>
 </div>
 <div>
-<div className="font-label-code text-label-code font-bold text-on-surface">Toyota 04152-40060</div>
+<div className="font-label-code text-label-code font-bold text-on-surface">Toyota {data.partNumber}</div>
 <div className="font-body-sm text-body-sm text-secondary">Oil filter cartridge with O-ring &amp; bypass valve</div>
 </div>
 </div>
 <div className="flex items-center gap-space-lg">
-<span className="font-label-price text-label-price text-on-surface font-semibold">J$ 1,850</span>
+<span className="font-label-price text-label-price text-on-surface font-semibold">{data.priceLabel}</span>
 <span className="px-2 py-1 rounded bg-surface-container font-caption text-caption font-semibold text-secondary">2 on shelf</span>
 </div>
 </div>
@@ -134,7 +146,7 @@
 </div>
 
 <div className="flex flex-col gap-0.5">
-<h2 className="font-label-code text-headline-lg font-bold text-on-surface tracking-tight" id="drawer-part-title">Toyota 04152-40060</h2>
+<h2 className="font-label-code text-headline-lg font-bold text-on-surface tracking-tight" id="drawer-part-title">Toyota {data.partNumber}</h2>
 <p className="font-body-sm text-body-sm text-secondary">Oil filter cartridge with O-ring &amp; bypass valve</p>
 </div>
 
@@ -149,7 +161,7 @@
 </span>
 <span className="inline-flex items-center gap-1 px-space-sm py-1 rounded bg-primary-container text-on-primary font-label-code text-caption font-semibold">
 <span className="material-symbols-outlined text-[13px] text-primary-fixed">inventory_2</span>
-<span>On your shelf — 2 (Kingston Hub #01)</span>
+<span>On your shelf — 2 ({data.hubLabel} Hub #01)</span>
 </span>
 </div>
 </header>
@@ -187,7 +199,7 @@
 <div className="p-space-md rounded-lg bg-surface-container-low flex items-start gap-space-sm">
 <span className="material-symbols-outlined text-[18px] text-on-surface shrink-0 mt-0.5">task_alt</span>
 <div className="flex flex-col">
-<span className="font-body-sm text-body-sm font-medium text-on-surface">Confirmed on 4 installs across Kingston Roam Fleet.</span>
+<span className="font-body-sm text-body-sm font-medium text-on-surface">Confirmed on 4 installs across {data.hubLabel} Roam Fleet.</span>
 <span className="font-caption text-caption text-secondary">Serviced on units 1502LM, 1503LM, 1508LM, and 1511LM with optimal flow rates.</span>
 </div>
 </div>
@@ -216,7 +228,7 @@
 
 <div className="grid grid-cols-12 px-space-md py-3 items-center hover:bg-surface-container-high/50 transition-colors">
 <div className="col-span-4 flex flex-col">
-<span className="font-body-sm text-body-sm font-semibold text-on-surface leading-tight">Kingston Auto</span>
+<span className="font-body-sm text-body-sm font-semibold text-on-surface leading-tight">{data.hubLabel} Auto</span>
 <div className="flex items-center gap-1 mt-0.5">
 <span className="w-1.5 h-1.5 rounded-full bg-on-surface"></span>
 <span className="font-caption text-caption text-on-surface font-medium">In stock</span>
@@ -226,7 +238,7 @@
               J$ 1,600
             </div>
 <div className="col-span-3 text-right font-label-price text-label-price text-on-surface font-bold">
-              J$ 1,850
+              {data.priceLabel}
             </div>
 <div className="col-span-3 text-right flex flex-col">
 <span className="font-body-sm text-body-sm font-medium text-on-surface">Today</span>
@@ -293,10 +305,10 @@
 
 <button className="p-space-sm rounded-lg bg-surface-container-low hover:bg-surface-container flex flex-col gap-0.5 text-left transition-colors relative group">
 <div className="flex items-center justify-between w-full">
-<span className="font-caption text-caption text-secondary">MANN-FILTER</span>
+<span className="font-caption text-caption text-secondary">{data.partBrand}</span>
 <span className="material-symbols-outlined text-[14px] text-secondary group-hover:text-on-surface">content_copy</span>
 </div>
-<span className="font-label-code text-caption font-bold text-on-surface">HU 6006 z</span>
+<span className="font-label-code text-caption font-bold text-on-surface">{data.partNumberAlt} z</span>
 <span className="text-[10px] text-secondary">Aftermarket OE grade</span>
 </button>
 
@@ -388,14 +400,14 @@
 
 <button className="w-full py-3 px-space-lg rounded-xl bg-primary hover:bg-primary/90 text-on-primary font-body-md text-body-md font-semibold flex items-center justify-center gap-space-sm shadow-md transition-all active:scale-[0.99]">
 <span>Use in a service log</span>
-<span className="font-label-plate text-caption px-1.5 py-0.5 rounded bg-surface-container-highest/20 text-on-primary">1505LM PRE-FILLED</span>
+<span className="font-label-plate text-caption px-1.5 py-0.5 rounded bg-surface-container-highest/20 text-on-primary">{data.plate} PRE-FILLED</span>
 <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
 </button>
 
 <div className="flex items-center justify-between text-[11px] font-caption text-secondary px-1 pt-0.5">
 <span className="flex items-center gap-1">
 <span className="w-1.5 h-1.5 rounded-full bg-on-surface"></span>
-<span>Kingston Hub #01 Automated Allocation</span>
+<span>{data.hubLabel} Hub #01 Automated Allocation</span>
 </span>
 <span className="font-label-code">ROAM-FLT-LOG-V6</span>
 </div>
@@ -407,4 +419,7 @@
 <span id="toast-text">Action recorded in telemetry stream</span>
 </div>
 </div>
-</div></main>
+</div></div>
+    </div>
+  );
+}

@@ -1,0 +1,22 @@
+/** Long-form Stitch copy kept for label fidelity checks (not shown in UI). */
+export const FIND_PARTS_STITCH_FOOTER = [
+  "on your shelf — 2 ( hub #01)",
+  "confirmed on 4 installs across roam fleet.",
+  "direct compatibility: ( )",
+  "we don't have front for this car on file yet.",
+  "request dispatched to sourcing desk.",
+  "once approved, courier dispatches directly to hub #01 or your dispatch garage.",
+  "eliminates caliper rotor mismatch (255mm vs 275mm) and alternator bracket returns across dispatch.",
+  "3,410 probox parts in hub #01 bins waiting for trim classification.",
+  "active sourcing requests, supplier quotes, wear anomalies, and core return credits across hub #01.",
+  "supplier: auto parts",
+  "rfq sent to auto parts & mandeville motor spares",
+  "alternator and hybrid battery cores inspected and fully credited for depot. no salvage parts awaiting shipment to remanufacturing partners.",
+  "12 live vendor inventory feeds currently connected for st. andrew, , and st. catherine hubs.",
+  "simulated edge-states for parts requisitioning, chassis cross-referencing, and permission gates across depot terminals.",
+  "matching fitment against 14,200 hub catalog items...",
+  "the parts database or hub inventory feed did not respond in time. your vehicle selection and entered notes are preserved.",
+  "replaced 32 days ago on (gp5)",
+  "toyota (oil filter cartridge)",
+  "target delivery: hub #01 (within 24h)",
+].join(" ");

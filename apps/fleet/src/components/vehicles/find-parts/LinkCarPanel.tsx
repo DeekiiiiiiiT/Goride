@@ -1,7 +1,7 @@
-import { useEffect, useRef } from "react";
 import { api } from "../../../services/api";
-import { Fp9Markup } from "./markup/Fp9Markup";
-import { labelFromFpClick } from "./findPartsDomFill";
+import { Fp9Screen } from "./screens/Fp9Screen";
+import { fpButtonIs } from "./findPartsButton";
+import { buildFindPartsScreenData } from "./findPartsScreenData";
 import { usePartsVehicleOptions } from "./findPartsQueries";
 
 export function LinkCarPanel({
@@ -23,16 +23,11 @@ export function LinkCarPanel({
   year: string;
   plate: string;
 }) {
-  const rootRef = useRef<HTMLDivElement>(null);
   const options = usePartsVehicleOptions(make, model);
-
-  useEffect(() => {
-    const root = rootRef.current;
-    if (!root) return;
-    const title = [year, make, model].filter(Boolean).join(" ");
-    if (title) root.querySelectorAll("h2").forEach((el) => { el.textContent = title; });
-    if (plate) root.querySelectorAll(".font-label-plate").forEach((el) => { el.textContent = plate; });
-  }, [make, model, year, plate]);
+  const data = buildFindPartsScreenData({
+    plate,
+    vehicleLabel: [year, make, model].filter(Boolean).join(" ") || "Vehicle",
+  });
 
   async function linkVariant(variantId: string) {
     if (!canEdit || !vehicleId) return;
@@ -40,25 +35,24 @@ export function LinkCarPanel({
     onLinked();
   }
 
-  function handleFpClick(detail: { label?: string }) {
-    const label = labelFromFpClick(detail);
-    if (label.includes("switch unit") || label.includes("back")) {
+  function onButton(label: string) {
+    if (fpButtonIs(label, "switch unit", "back")) {
       onBack();
       return;
     }
-    if (label.includes("send notification")) {
+    if (fpButtonIs(label, "send notification")) {
       void api.notifyPartsAdmin({ kind: "link_vehicle", body: `Link ${make} ${model} ${year} (${plate})` }).catch(() => undefined);
       return;
     }
-    if (label.includes("confirm & map")) {
+    if (fpButtonIs(label, "confirm & map", "select")) {
       const versions = (options.data as { versions?: Array<{ id: string }> } | undefined)?.versions;
       void linkVariant(versions?.[0]?.id || "").catch(() => undefined);
     }
   }
 
   return (
-    <div ref={rootRef}>
-      <Fp9Markup onFpClick={handleFpClick} />
+    <div>
+      <Fp9Screen actions={{ onButton }} data={data} />
     </div>
   );
 }

@@ -1,16 +1,16 @@
-/** Auto-generated from Stitch HTML — edit port script, not by hand. */
-// @ts-nocheck
 import type { ReactNode } from "react";
+import type { FindPartsScreenData } from "../findPartsScreenData";
 
-export type MarkupHandlers = {
-  onFpClick?: (detail: { label?: string; card?: boolean; vehicleId?: string }, event: Event) => void;
+export type Fp3Actions = {
+  onButton: (label: string) => void;
+  onVehicleCard?: (vehicleId: string) => void;
   children?: ReactNode;
 };
 
-export function Fp3Markup({ onFpClick }: MarkupHandlers) {
+export function Fp3Screen({ actions, data }: { actions: Fp3Actions; data: FindPartsScreenData }) {
   return (
-    <div className="find-parts-markup-root">
-<main className="w-full pt-26 bg-surface min-h-[calc(100vh-80px)]"><div className="flex flex-col w-full">
+    <div className="find-parts-screen-root">
+<div className="fp-screen-root"><div className="flex flex-col w-full">
 
 <div className="sticky top-26 z-30 w-full bg-surface-container-lowest shadow-sm">
 <div className="max-w-[1440px] mx-auto px-4 md:px-8 py-3 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
@@ -43,7 +43,7 @@ export function Fp3Markup({ onFpClick }: MarkupHandlers) {
 
 <div className="flex items-center gap-3 shrink-0 self-start lg:self-center bg-surface-container-low px-3 py-1.5 rounded-lg">
 <div className="flex items-center gap-1.5 cursor-pointer hover:text-primary transition-colors">
-<span className="font-headline-sm text-[14px] text-on-surface font-semibold tracking-tight">Honda Fit 2018 · 1505LM</span>
+<span className="font-headline-sm text-[14px] text-on-surface font-semibold tracking-tight">{data.vehicleLabel} · {data.plate}</span>
 <span className="material-symbols-outlined text-[16px] text-on-surface-variant">edit</span>
 </div>
 <span className="w-1 h-3 bg-surface-container-high rounded-full"></span>
@@ -63,7 +63,7 @@ export function Fp3Markup({ onFpClick }: MarkupHandlers) {
 <div>
 <div className="font-caption text-caption text-secondary uppercase tracking-widest mb-1 flex items-center gap-1.5">
 <span className="material-symbols-outlined text-[14px]">precision_manufacturing</span>
-          Telemetry &amp; Fitment Index · Kingston Warehouse
+          Telemetry &amp; Fitment Index · {data.hubLabel} Warehouse
         </div>
 <h1 className="font-headline-xl text-headline-xl text-on-surface tracking-tight">What part do you need?</h1>
 <p className="font-body-lg text-body-lg text-on-surface-variant mt-1">
@@ -87,10 +87,10 @@ export function Fp3Markup({ onFpClick }: MarkupHandlers) {
 <span className="font-caption text-caption uppercase tracking-wider font-bold text-on-tertiary-fixed-variant bg-surface-container-lowest/80 px-2 py-0.5 rounded">
                 Scheduled Maintenance Active
               </span>
-<span className="font-label-code text-caption text-on-surface-variant">48,210 km · Kingston Hub Schedule</span>
+<span className="font-label-code text-caption text-on-surface-variant">48,210 km · {data.hubLabel} Hub Schedule</span>
 </div>
 <h2 className="font-headline-sm text-headline-sm text-on-surface">This car has 2 services due: Engine oil &amp; filter, Air filter</h2>
-<p className="font-body-sm text-body-sm text-on-surface-variant mt-0.5">Automated telematics flag from Kingston Depot Diagnostic bay #3 (Logged yesterday at 17:40 EST).</p>
+<p className="font-body-sm text-body-sm text-on-surface-variant mt-0.5">Automated telematics flag from {data.hubLabel} Depot Diagnostic bay #3 (Logged yesterday at 17:40 EST).</p>
 </div>
 </div>
 
@@ -123,7 +123,7 @@ export function Fp3Markup({ onFpClick }: MarkupHandlers) {
 
 <div className="absolute top-16 left-0 right-0 z-20 bg-surface-container-lowest rounded-xl shadow-xl overflow-hidden mt-1">
 <div className="px-4 py-2 bg-surface-container-low flex items-center justify-between font-caption text-caption text-secondary uppercase tracking-wider font-semibold">
-<span>Direct Match Suggestions for Honda Fit GP5</span>
+<span>Direct Match Suggestions for {data.vehicleLabel}</span>
 <span>Index DB: 2025.04-KIN</span>
 </div>
 <div className="divide-y divide-surface-container-low">
@@ -180,7 +180,7 @@ export function Fp3Markup({ onFpClick }: MarkupHandlers) {
 <div className="flex items-center justify-between">
 <div>
 <h2 className="font-headline-sm text-headline-sm text-on-surface">Common parts</h2>
-<p className="font-body-sm text-body-sm text-on-surface-variant">Frequently ordered items for routine Kingston fleet depot turnaround.</p>
+<p className="font-body-sm text-body-sm text-on-surface-variant">Frequently ordered items for routine {data.hubLabel} fleet depot turnaround.</p>
 </div>
 <span className="font-label-code text-caption text-secondary uppercase">Rapid Pick</span>
 </div>
@@ -280,7 +280,7 @@ export function Fp3Markup({ onFpClick }: MarkupHandlers) {
 <div className="flex items-center justify-between">
 <div>
 <h2 className="font-headline-sm text-headline-sm text-on-surface">By area</h2>
-<p className="font-body-sm text-body-sm text-on-surface-variant">Full schematic breakdown for Honda Fit chassis GP5.</p>
+<p className="font-body-sm text-body-sm text-on-surface-variant">Full schematic breakdown for {data.vehicleLabel} chassis.</p>
 </div>
 <span className="font-label-code text-caption text-on-surface-variant font-medium">10 Categories Total</span>
 </div>
@@ -407,7 +407,7 @@ export function Fp3Markup({ onFpClick }: MarkupHandlers) {
 
 <button className="flex items-center gap-2 px-3.5 py-1.5 rounded bg-surface-container-lowest hover:bg-surface-container text-on-surface font-body-sm text-body-sm transition-colors shadow-xs">
 <span>Brake rotor</span>
-<span className="font-label-code text-caption text-on-surface-variant">J$ 6,800</span>
+<span className="font-label-code text-caption text-on-surface-variant">{data.priceAltLabel}</span>
 </button>
 
 <button className="flex items-center gap-2 px-3.5 py-1.5 rounded bg-surface-container-lowest hover:bg-surface-container text-on-surface font-body-sm text-body-sm transition-colors shadow-xs">
@@ -481,7 +481,7 @@ export function Fp3Markup({ onFpClick }: MarkupHandlers) {
                   </p>
 </div>
 <div className="flex items-center justify-between pt-2">
-<div className="font-label-price text-label-price text-on-surface">J$ 4,850 <span className="font-body-sm text-caption text-on-surface-variant font-normal">landed</span></div>
+<div className="font-label-price text-label-price text-on-surface">{data.priceAltLabel} <span className="font-body-sm text-caption text-on-surface-variant font-normal">landed</span></div>
 <button className="px-3.5 py-1.5 rounded-lg bg-primary text-on-primary hover:opacity-90 font-body-sm text-body-sm font-medium flex items-center gap-1 transition-opacity">
 <span>Select Brake pads</span>
 <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
@@ -501,7 +501,7 @@ export function Fp3Markup({ onFpClick }: MarkupHandlers) {
                   </p>
 </div>
 <div className="flex items-center justify-between pt-2">
-<div className="font-label-price text-label-price text-on-surface">J$ 6,800 <span className="font-body-sm text-caption text-on-surface-variant font-normal">pair</span></div>
+<div className="font-label-price text-label-price text-on-surface">{data.priceAltLabel} <span className="font-body-sm text-caption text-on-surface-variant font-normal">pair</span></div>
 <button className="px-3.5 py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm font-medium flex items-center gap-1 transition-colors">
 <span>Add Rotor to check</span>
 <span className="material-symbols-outlined text-[16px]">add</span>
@@ -590,7 +590,7 @@ export function Fp3Markup({ onFpClick }: MarkupHandlers) {
 </div>
 </div>
 </div>
-</div></main>
+</div></div>
     </div>
   );
 }

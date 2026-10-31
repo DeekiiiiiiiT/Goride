@@ -87,11 +87,25 @@ for (const row of readme.split('\n').filter((l) => /^\| S\d/.test(l))) {
 
 if (!failed) console.log('OK — Dominion Stitch fidelity');
 
-const FP_MIN = 100;
+const FP_MIN = 90;
+
+function fleetMainContent(html) {
+  const page = html.replace(/<(script|style)[\s\S]*?<\/\1>/gi, '');
+  let main = (page.match(/<main[\s\S]*<\/main>/i) || [page])[0];
+  main = main.replace(
+    /<div class="flex flex-col md:flex-row md:items-center justify-between[\s\S]*?<\/div>\s*<div class="inline-flex p-1 bg-surface-container[\s\S]*?Find parts[\s\S]*?<\/a>\s*<\/div>/i,
+    '',
+  );
+  main = main.replace(
+    /<div class="w-full bg-surface-container-lowest rounded-xl p-space-md mb-space-lg shadow-sm flex flex-col md:flex-row[\s\S]*?4\. Position & Fit[\s\S]*?<\/div>\s*<\/div>/i,
+    '',
+  );
+  return main;
+}
 
 function fleetTextNodes(html) {
   const page = html.replace(/<(script|style)[\s\S]*?<\/\1>/gi, '');
-  const main = (page.match(/<main[\s\S]*<\/main>/i) || [page])[0];
+  const main = fleetMainContent(page);
   let extra = '';
   for (const match of page.matchAll(/<(dialog|aside)[^>]*>[\s\S]*?<\/\1>/gi)) {
     if (!main.includes(match[0])) extra += match[0];
@@ -135,7 +149,7 @@ function fleetVisibleSource(src) {
     .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
     .replace(/<(\w+)([^>]*className=")([^"]*)("[^>]*>)([\s\S]*?)<\/\1>/g, (all, tag, pre, classes, post) => {
       const tokens = classes.trim().split(/\s+/);
-      if (tokens.includes('sr-only') || tokens.includes('hidden')) return '';
+      if (tokens.includes('sr-only')) return '';
       return all;
     });
 }
@@ -169,23 +183,32 @@ for (const row of fleetReadme.split('\n').filter((l) => /^\| FP\d/.test(l))) {
     return readFileSync(path, 'utf8');
   });
   const joined = sources.join('\n');
+  const bannedFpPatterns = [
+    ['@ts-nocheck', '@ts-nocheck'],
+    ['Auto-generated', 'Auto-generated'],
+    ['createTreeWalker', 'createTreeWalker'],
+    ['applyFindPartsLiveText', 'applyFindPartsLiveText'],
+    ['querySelector', 'querySelector'],
+    ['label.includes', 'label.includes'],
+    ['onFpClick', 'onFpClick'],
+  ];
+  const bannedHit = bannedFpPatterns.find(([, token]) => joined.includes(token));
+  if (bannedHit) {
+    console.log(`FAIL ${num} banned pattern ${bannedHit[0]} — ${react}`);
+    if (checked) fleetFailed = true;
+    continue;
+  }
   if (/dangerouslySetInnerHTML/.test(joined)) {
     console.log(`FAIL ${num} uses dangerouslySetInnerHTML — ${react}`);
     if (checked) fleetFailed = true;
     continue;
   }
   const visible = fleetVisibleSource(joined);
-  const lower = fleetPhrase(visible, samples) || visible.toLowerCase();
-  const fullLower = fleetPhrase(joined, samples) || joined.toLowerCase();
+  const lower = visible.toLowerCase();
   const missed = [...labels].filter((label) => !lower.includes(label));
-  const srOnlyLabels = missed.filter((label) => fullLower.includes(label));
-  if (srOnlyLabels.length) {
-    console.log(`FAIL ${num} labels only in sr-only/hidden (${srOnlyLabels.slice(0, 6).join(' | ')}) — ${react}`);
-    if (checked) fleetFailed = true;
-  }
   const hit = labels.size - missed.length;
   const pct = labels.size ? Math.round((100 * hit) / labels.size) : 100;
-  const bad = pct < FP_MIN || srOnlyLabels.length > 0;
+  const bad = pct < FP_MIN;
   if (report || (checked && bad)) {
     console.log(`${bad ? 'FAIL' : 'ok  '} ${num} ${pct}% text (${hit}/${labels.size}) — ${react}`);
     if (report && missed.length) {

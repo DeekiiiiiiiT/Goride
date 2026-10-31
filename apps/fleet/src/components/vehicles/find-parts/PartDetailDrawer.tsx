@@ -1,7 +1,7 @@
-import { useEffect, useRef } from "react";
 import { api } from "../../../services/api";
-import { Fp6Markup } from "./markup/Fp6Markup";
-import { labelFromFpClick } from "./findPartsDomFill";
+import { Fp6Screen } from "./screens/Fp6Screen";
+import { fpButtonIs } from "./findPartsButton";
+import { buildFindPartsScreenData } from "./findPartsScreenData";
 import { usePartsVehicleContext, useWrongFitCount } from "./findPartsQueries";
 
 type Offer = {
@@ -43,42 +43,36 @@ export function PartDetailDrawer({
   canLog: boolean;
   vehicleId?: string;
 }) {
-  const rootRef = useRef<HTMLDivElement>(null);
   usePartsVehicleContext(vehicleId || "", item.part?.maintenance_component_id);
   useWrongFitCount();
+  const offer = item.bestOffer || item.offers?.[0];
+  const data = buildFindPartsScreenData({
+    partNumber: String(item.part?.oem_part_number || item.part?.name || "—"),
+    priceJmd: offer?.landedCostJmd ?? null,
+    vehicleLabel: String(item.part?.name || "Part"),
+  });
 
-  useEffect(() => {
-    const root = rootRef.current;
-    if (!root) return;
-    const name = String(item.part?.name || item.part?.oem_part_number || "Part");
-    root.querySelectorAll(".font-headline-lg, h2").forEach((el) => {
-      const oemSample = ["04152", "-40060"].join("");
-      if (el.textContent?.includes(oemSample)) el.textContent = name;
-    });
-  }, [item]);
-
-  function handleFpClick(detail: { label?: string }) {
-    const label = labelFromFpClick(detail);
-    if (label.includes("close")) {
+  function onButton(label: string) {
+    if (fpButtonIs(label, "close")) {
       onClose();
       return;
     }
-    if (label.includes("quote") || label.includes("rfq")) {
+    if (fpButtonIs(label, "quote", "rfq", "ping rfq")) {
       onQuote();
       return;
     }
-    if (label.includes("use in") && canLog) {
+    if (fpButtonIs(label, "use in") && canLog) {
       onUseInService();
       return;
     }
-    if (label.includes("add to order")) {
+    if (fpButtonIs(label, "add to order")) {
       void api.addToPartsList({ label: item.part?.name || "Part", partId: item.part?.id, componentId: item.part?.maintenance_component_id });
     }
   }
 
   return (
-    <div ref={rootRef} className="fixed inset-0 z-40">
-      <Fp6Markup onFpClick={handleFpClick} />
+    <div className="fixed inset-0 z-40">
+      <Fp6Screen actions={{ onButton }} data={data} />
     </div>
   );
 }

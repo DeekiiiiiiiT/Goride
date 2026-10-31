@@ -1,9 +1,10 @@
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { api } from "../../../services/api";
 import { PartDetailDrawer, type PartItem } from "./PartDetailDrawer";
-import { Fp5Markup } from "./markup/Fp5Markup";
-import { Fp12Markup } from "./markup/Fp12Markup";
-import { labelFromFpClick } from "./findPartsDomFill";
+import { Fp5Screen } from "./screens/Fp5Screen";
+import { Fp12Screen } from "./screens/Fp12Screen";
+import { fpButtonIs } from "./findPartsButton";
+import { buildFindPartsScreenData } from "./findPartsScreenData";
 import { usePartsList, usePartsSavedSearches } from "./findPartsQueries";
 
 type Result = {
@@ -36,7 +37,6 @@ export function ResultsView({
   onUseInService: (item: PartItem) => void;
   canLog: boolean;
 }) {
-  const rootRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState<PartItem | null>(null);
   const phone = typeof window !== "undefined" && window.matchMedia("(max-width: 768px)").matches;
   usePartsList();
@@ -44,6 +44,12 @@ export function ResultsView({
   const sections = result?.sections || [];
   const allItems = useMemo(() => sections.flatMap((section) => section.items || []), [sections]);
   const best = allItems.find((item) => item.part?.id === bestId) || allItems[0];
+  const offer = (best?.offers?.[0] as { landedCostJmd?: number; supplier_name?: string } | undefined);
+  const data = buildFindPartsScreenData({
+    vehicleLabel: result?.car?.label || "Vehicle",
+    priceJmd: offer?.landedCostJmd ?? null,
+    partNumber: String(best?.part?.oem_part_number || best?.part?.name || "—"),
+  });
 
   if (loading) return <p className="p-space-lg">DISPATCH RESOLVER: RUNNING</p>;
   if (error) {
@@ -55,49 +61,50 @@ export function ResultsView({
     );
   }
 
-  async function handleFpClick(detail: { label?: string }) {
-    const label = labelFromFpClick(detail);
-    if (label.includes("ask roam") || label.includes("find another")) {
+  async function onButton(label: string) {
+    if (fpButtonIs(label, "ask roam", "find another")) {
       onAsk();
       return;
     }
-    if (label.includes("download")) {
+    if (fpButtonIs(label, "download")) {
       const params = new URLSearchParams(window.location.search);
       await api.downloadFitmentReport(Object.fromEntries(params.entries()));
       return;
     }
-    if (label.includes("save query")) {
+    if (fpButtonIs(label, "save query")) {
       await api.savePartsSearch({ name: result?.car?.label || "Saved search", url: window.location.search });
       return;
     }
-    if (label.includes("quote") || label.includes("get a price")) {
+    if (fpButtonIs(label, "quote", "get a price")) {
       if (best) onQuote((best.part || {}) as Record<string, unknown>);
       return;
     }
-    if ((label.includes("use in") || label.includes("service log") || label.includes("allocate")) && best && canLog) {
+    if (fpButtonIs(label, "use in", "service log", "allocate") && best && canLog) {
       onUseInService(best);
       return;
     }
-    if (label.includes("details") || label.includes("photo") || label.includes("top recommended")) {
+    if (fpButtonIs(label, "details", "photo", "top recommended")) {
       if (best) setOpen(best);
       return;
     }
-    if (label.includes("confirm parts list")) {
+    if (fpButtonIs(label, "confirm parts list")) {
       await api.addToPartsList({ label: best?.part?.name || "Part", partId: best?.part?.id });
       return;
     }
-    if (label.includes("add to")) {
+    if (fpButtonIs(label, "add to")) {
       await api.addToPartsList({ label: best?.part?.name || "Part", partId: best?.part?.id });
     }
   }
 
+  const Screen = phone ? Fp12Screen : Fp5Screen;
+
   return (
-    <div ref={rootRef}>
+    <div>
       {unsure ? <p>Fits the versions you left open</p> : null}
       <p className="font-body-sm text-body-sm text-on-surface-variant mb-space-sm">
         chassis gp5-300 · click any row to reveal fitment specs &amp; depot storage bins · inner core diameter: 28.2 mm · height: 56.5 mm · interchange: wix wl10023, bosch f026407142, k&amp;n ps-7023 · factory spec: api sp / resource conserving, full synthetic.
       </p>
-      {phone ? <Fp12Markup onFpClick={handleFpClick} /> : <Fp5Markup onFpClick={handleFpClick} />}
+      <Screen actions={{ onButton }} data={data} />
       {open ? (
         <PartDetailDrawer
           item={open}
