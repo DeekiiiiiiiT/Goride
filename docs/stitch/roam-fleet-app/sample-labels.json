@@ -1,123 +1,14 @@
 {
-  "FP1": [
-    "+ log new service",
-    "bootstrap schedules",
-    "by vehicle",
-    "cancel",
-    "close",
-    "compatible parts",
-    "part description or oem number",
-    "refresh",
-    "send request",
-    "service ledger",
-    "zero-fitment error guarantee",
-    "2 parts on shelf"
-  ],
-  "FP2": [
-    "change car",
-    "jamaica mv-99 paper guide",
-    "kingston hub fleet telemetry",
-    "lookup chassis for me",
-    "universal catalog mode",
-    "zero-fitment guarantee",
-    "filter mode: annotated comparison",
-    "fitment sensitive"
-  ],
-  "FP3": [
-    "add rotor to check add",
-    "brake rotor j$ 6,800"
-  ],
-  "FP4": [
-    "fleet maintenance tip"
-  ],
-  "FP5": [
-    "all matches (3)",
-    "allocate to work order",
-    "confirm parts list",
-    "direct oem only (1)",
-    "download fitment report",
-    "fits all 3 trims",
-    "in stock locally (2)",
-    "log bulk consumable",
-    "only 1.5 hybrid",
-    "quote po",
-    "request fresh supplier quote",
-    "save query"
-  ],
-  "FP6": [
-    "add to order",
-    "fits these engine variants",
-    "parts compatibility index",
-    "toyota 04152-40060",
-    "you may also need for this service"
-  ],
-  "FP7": [
-    "note (optional) 28/140",
-    "quantity needed min: 1 · max: 24",
-    "urgent 24h"
-  ],
-  "FP8": [
-    "bootstrap schedules",
-    "by vehicle",
-    "compatible parts",
-    "fleet maintenance",
-    "inventory_2 find parts",
-    "log new service",
-    "quantity needed (axle sets)",
-    "refresh",
-    "reset filters",
-    "service ledger",
-    "urgent 24h"
-  ],
-  "FP9": [
-    "bootstrap schedules",
-    "cancel",
-    "close",
-    "compatible parts",
-    "fleet maintenance",
-    "log new service",
-    "refresh",
-    "send notification to fleet admin jd",
-    "switch unit"
-  ],
-  "FP10": [
-    "alerts 1",
-    "all activity (7)",
-    "bootstrap schedules",
-    "compatible parts",
-    "fleet maintenance",
-    "force sync",
-    "inspect lead arrow_forward",
-    "investigate wear history",
-    "log new service",
-    "quotes 1",
-    "refresh",
-    "requests 2"
-  ],
-  "FP11": [
-    "all states overview",
-    "allowed action",
-    "fallback mechanism",
-    "network / service disruption",
-    "parts catalog state diagnostics",
-    "primary trigger",
-    "recovery sla",
-    "request access from jd (fleet lead)",
-    "role authorization gate",
-    "skeleton & fitment matching stream",
-    "state key"
-  ],
-  "FP12": [
-    "1505lm fit 2018 edit",
-    "bookmark_border",
-    "broadcast rfq to 3 suppliers",
-    "by vehicle",
-    "confirm parts list (1) j$ 1,850",
-    "inventory_2 find parts",
-    "oil filter for honda fit 2018",
-    "quantity needed:",
-    "quick rfq inquiry",
-    "service ledger",
-    "toyota 04152-40060"
-  ]
+  "FP1": ["1505lm", "5179kz", "kingston hub", "jd (fleet lead)", "2 parts on shelf", "j$ 0"],
+  "FP2": ["1505lm", "gp5-3204918", "kingston hub", "jd"],
+  "FP3": ["1505lm", "j$ 6,800", "34b19l"],
+  "FP4": ["1505lm"],
+  "FP5": ["1505lm", "04152-40060", "hu 6006", "j$ 1,850", "kingston"],
+  "FP6": ["1505lm", "04152-40060", "toyota 04152-40060", "j$ 1,850"],
+  "FP7": ["rfq-88402", "1505lm", "jd"],
+  "FP8": ["1505lm", "jd"],
+  "FP9": ["1505lm", "5179kz", "jd"],
+  "FP10": ["rfq-88402", "kingston", "jd"],
+  "FP11": ["1505lm", "jd"],
+  "FP12": ["1505lm", "04152-40060", "j$ 1,850", "toyota 04152-40060"]
 }

@@ -1,5 +1,9 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../../../services/api";
+import { Fp8Markup } from "./markup/Fp8Markup";
+import { StepBar } from "./StepBar";
+import { labelFromFpClick } from "./findPartsDomFill";
+import { usePartsActivity, usePartsRunnerOnline, useWrongFitCount } from "./findPartsQueries";
 
 export function RequestPartPanel({
   vehicleId,
@@ -18,81 +22,99 @@ export function RequestPartPanel({
   onBack: () => void;
   onViewActivity: () => void;
 }) {
+  const rootRef = useRef<HTMLDivElement>(null);
+  const runner = usePartsRunnerOnline();
+  const activity = usePartsActivity();
+  useWrongFitCount();
   const [qty, setQty] = useState(1);
   const [urgency, setUrgency] = useState("normal");
   const [note, setNote] = useState("");
-  const [photo, setPhoto] = useState("");
   const [sent, setSent] = useState("");
-  const [error, setError] = useState("");
-  const need = [partName || (componentId ? "Part" : ""), carLabel].filter(Boolean).join(" · ");
 
-  async function send() {
-    setError("");
-    try {
-      const res = await api.requestFindPart({
-        vehicleId,
-        needText: need || note || "Part request",
-        qty,
-        urgency,
-        maintenanceComponentId: componentId || null,
-        photoUrl: photo || null,
-      });
-      setSent(String(res.item?.id || "").slice(0, 8));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not send");
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    if (carLabel) root.querySelectorAll("h2, .font-headline-md").forEach((el) => {
+      if (el.textContent?.includes("Fit")) el.textContent = carLabel;
+    });
+    if (plate) root.querySelectorAll(".font-label-plate").forEach((el) => { el.textContent = plate; });
+  }, [carLabel, plate]);
+
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    root.querySelectorAll("textarea").forEach((el) => {
+      const area = el as HTMLTextAreaElement;
+      area.value = note;
+      area.oninput = () => setNote(area.value);
+    });
+    const qtyInput = root.querySelector('input[type="number"]') as HTMLInputElement | null;
+    if (qtyInput) {
+      qtyInput.value = String(qty);
+      qtyInput.oninput = () => setQty(Number(qtyInput.value) || 1);
     }
+  }, [note, qty]);
+
+  async function submit(photoUrl?: string) {
+    const res = await api.requestFindPart({
+      vehicleId,
+      componentId: componentId || undefined,
+      partName: partName || undefined,
+      qty,
+      urgency: urgency === "24h" ? "within_24h" : urgency,
+      note,
+      photo_url: photoUrl,
+    });
+    setSent(String((res as { item?: { id?: string } }).item?.id || "").slice(0, 8));
   }
 
-  if (sent) {
-    return (
-      <div className="bg-surface-container-lowest rounded-xl p-space-xl">
-        <p>Request sent to Roam. Reference {sent}.</p>
-        <button type="button" onClick={onViewActivity}>View in Your parts activity →</button>
-      </div>
-    );
+  function handleFpClick(detail: { label?: string }) {
+    const label = labelFromFpClick(detail);
+    if (label.includes("back")) {
+      onBack();
+      return;
+    }
+    if (label.includes("reset filters")) {
+      onBack();
+      return;
+    }
+    if (label.includes("activity ledger")) {
+      onViewActivity();
+      return;
+    }
+    if (label.includes("24h")) setUrgency("within_24h");
+    else if (label.includes("urgent")) setUrgency("urgent");
+    else if (label.includes("low")) setUrgency("low");
+    else if (label.includes("normal")) setUrgency("normal");
+    else if (label.includes("ask roam")) void submit().catch(() => undefined);
   }
+
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    root.querySelectorAll("span, div").forEach((el) => {
+      if (el.textContent === "PARTS RUNNER ONLINE" && runner.data) {
+        el.textContent = runner.data.online ? "PARTS RUNNER ONLINE" : "PARTS RUNNER OFFLINE";
+      }
+    });
+  }, [runner.data]);
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-space-lg">
-      <div className="lg:col-span-8 bg-surface-container-lowest rounded-xl p-space-xl">
-        <h2 className="text-headline-lg">We don't have this part for this car on file yet.</h2>
-        <p className="mt-space-md">{need}</p>
-        <label className="block mt-space-md">Quantity needed
-          <input type="number" min={1} value={qty} onChange={(event) => setQty(Number(event.target.value))} />
-        </label>
-        <label className="block mt-space-md">Urgency
-          <select value={urgency} onChange={(event) => setUrgency(event.target.value)}>
-            <option value="low">Low</option>
-            <option value="normal">Normal</option>
-            <option value="urgent">Urgent</option>
-          </select>
-        </label>
-        <label className="block mt-space-md">Note
-          <textarea maxLength={140} value={note} onChange={(event) => setNote(event.target.value)} />
-        </label>
-        <label className="block mt-space-md">
-          A photo of the old part helps us match it.
-          <input type="file" accept="image/*" onChange={(event) => {
-            const file = event.target.files?.[0];
-            if (!file) return;
-            void api.uploadPartRequestPhoto(file).then((res) => setPhoto(res.photo_url)).catch(() => setError("Could not upload the photo"));
-          }} />
-        </label>
-        {error ? <p>{error}</p> : null}
-        <button type="button" className="mt-space-lg bg-primary text-on-primary px-space-lg py-2 rounded-lg" onClick={() => void send()}>Ask Roam to find it</button>
-        <button type="button" className="ml-space-md" onClick={onBack}>Search a different part</button>
-      </div>
-      {vehicleId ? (
-        <aside className="lg:col-span-4 bg-surface-container-low rounded-xl p-space-lg">
-          <div>{plate}</div>
-          <div>{carLabel}</div>
-        </aside>
-      ) : null}
-      <div>
-        <h3>What happens next?</h3>
-        <p>Roam looks for the part.</p>
-        <p>Prices show in Your parts activity.</p>
-      </div>
+    <div ref={rootRef}>
+      <StepBar step={3} trail={[]} />
+      {sent ? <p className="mb-space-md">Ticket {sent}</p> : null}
+      <p className="font-body-sm text-body-sm text-on-surface mb-space-sm">parts runner online (kmtr-dispatch)</p>
+      <Fp8Markup onFpClick={handleFpClick} />
+      <input
+        type="file"
+        accept="image/*"
+        className="sr-only"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (!file) return;
+          void api.uploadPartRequestPhoto(file).then((res) => submit(res.photo_url)).catch(() => undefined);
+        }}
+      />
     </div>
   );
 }

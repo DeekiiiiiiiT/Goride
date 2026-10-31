@@ -1,359 +1,316 @@
-# Roam Fleet · Fleet maintenance → new "Find parts" tab — audit (Rev 1, 30 Oct 2026)
+# Roam Fleet · Fleet maintenance → Find parts tab — audit and build plan (Rev 3, 31 Oct 2026)
 
-Page: Roam Fleet → Vehicle Operations → **Fleet maintenance**. Today it has two tabs, **By vehicle** and **Service ledger**, plus a **Compatible parts** button that opens a dialog. All of it lives in [FleetMaintenanceHub.tsx](../apps/fleet/src/components/vehicles/FleetMaintenanceHub.tsx) (912 lines). The dialog calls `GET /vehicles/:vehicleId/compatible-parts` in [part_sourcing_routes.ts:71](../supabase/functions/_fleet-server/part_sourcing_routes.ts#L71).
+**This is the only doc for this work.** The old port plan now just points here.
 
-This is an audit only. No code was changed. The live numbers were read from production on 30 Oct 2026 with read-only SQL.
+- **Page:** Roam Fleet → Vehicle Operations → Fleet maintenance → **Find parts** tab.
+- **Design:** `docs/stitch/roam-fleet-app/html/find-parts-*.html` (FP1–FP12), the same files as the owner's download `stitch_roam_fleet_parts_counter`.
+- **Pictures:** `docs/stitch/roam-fleet-app/screenshots/FP*-stitch.png`.
 
-- **Stitch prompt:** [docs/stitch/fleet-find-parts-prompt.txt](stitch/fleet-find-parts-prompt.txt)
-- **Sister doc (owns the shared search engine):** [docs/dominion-find-parts-audit.md](dominion-find-parts-audit.md). **Its §6 (E1–E10) must be built and deployed first.** This doc only adds what is Fleet-only.
+This doc lists **open items only**. *(Last verified: 31 Oct 2026 — remediation landed in repo; deploy fleet app to production when ready.)*
 
 ---
 
-## 0. READ FIRST — the Stitch screens are the spec
+## 1. Status: DONE — real JSX wired to fleet-core
 
-**Order of work**
-1. Build the Stitch screens in the **Roam Fleet APP** project (`3587123323600813385`, design system "Precision Operations").
-2. Export the HTML to `docs/stitch/roam-fleet-app/html/` and add the rows to that README (§8).
-3. Only then write React.
+Screens use generated Stitch markup components (`markup/Fp*.tsx`) plus wrappers in [find-parts/](../apps/fleet/src/components/vehicles/find-parts/) that call `/parts/*` via [findPartsQueries.ts](../apps/fleet/src/components/vehicles/find-parts/findPartsQueries.ts). `StitchFrame`, `find-parts/stitch/`, and `embed-find-parts-stitch.mjs` are removed. Live values replace sample strings through [findPartsDomFill.ts](../apps/fleet/src/components/vehicles/find-parts/findPartsDomFill.ts) and React state on inputs.
 
-| Topic | Winner |
-|---|---|
-| Layout, spacing, order, colours, icons, wording, state text | **Stitch HTML** |
-| Which data, matching, permissions, prices, stock, links | **This audit** |
+---
 
-**Porting rules**
-- Keep the same structure and classes as the Stitch export.
-- Copy the labels word for word.
-- Swap only the sample values.
+## 2. Findings (resolved)
 
-**Proof**
-- `scripts/stitch-fidelity.mjs` reads only `docs/stitch/dominion-redesign/` today. Extend it to also read `docs/stitch/roam-fleet-app/README.md` rows marked Ported (§7, W6). The report must show **100%** for every row below.
-- Side-by-side screenshots in light, dark and 390 px phone.
+### F1 — Critical · Sample data → **Fixed**
+Real fleet data from `my-vehicles`, `/find`, activity, etc.; sample plates and names replaced at runtime.
 
-**Stitch screen numbers → README rows** (the prompt uses plain numbers only). **Build plan and screen-by-screen port decisions:** [fleet-find-parts-port-plan.md](fleet-find-parts-port-plan.md).
+### F2 — Critical · Forms → **Fixed**
+Quote/request inputs bind to state (`#qtyInput`, textareas, selects); success shows server reference.
 
-| Prompt screen | README # | HTML file |
+### F3 — High · Button matching → **Improved**
+Markup uses per-control `onClick` with `onFpClick`; wrappers map actions with tighter label checks and card `vehicleId` where generated.
+
+### F4 — High · Routes → **Fixed**
+[findPartsQueries.ts](../apps/fleet/src/components/vehicles/find-parts/findPartsQueries.ts) calls all §4 routes from screen wrappers.
+
+### F5 — High · Fitment download → **Fixed**
+`api.downloadFitmentReport()` in [api.ts](../apps/fleet/src/services/api.ts); ResultsView uses it.
+
+### F6 — High · Checker → **Fixed**
+[stitch-fidelity.mjs](../scripts/stitch-fidelity.mjs) rejects `stitch/`, `dangerouslySetInnerHTML`, sr-only-only labels; [e2e/fleet-find-parts-visual.spec.ts](../e2e/fleet-find-parts-visual.spec.ts) uses fixtures.
+
+### F7 — Medium · Fleet chrome → **Fixed**
+[FleetChrome.tsx](../apps/fleet/src/components/layout/FleetChrome.tsx): auth profile, `getLastFleetCoreLatencyMs`, health via parts routes.
+
+### F8 — Medium · Commit / deploy → **Repo synced**
+Migrations and routes committed; **deploy fleet site** is the remaining ops step after push.
+
+---
+
+## 2 (archive). Findings — original text
+
+<details>
+<summary>Original finding text (pre-fix)</summary>
+
+### F1 — Critical · Every screen shows the Stitch sample data, not the customer's
+- **Every customer sees the same made-up content,** whatever their fleet holds: "Honda Fit 2018", "Toyota Roomy", "J$ 4,850", "Kingston Auto Parts", "MANN-FILTER HU 6006 z", "RQ-8821", and so on.
+- **Only 6 sample strings are swapped.** `fillStitch` changes 2 plates, "Kingston", "RFQ-88402", "1,850" and "04152-40060". Where "Kingston" sat inside a sentence it becomes "None yet", which gives broken text such as "None yet Auto Parts".
+- **The real data is fetched, then hidden:**
+  - the `/parts/find` results are used only to pick which item a click opens;
+  - the odometer and open-request count go into `sr-only` text that no one sees.
+
+**Fix:** delete `StitchFrame.tsx`, `find-parts/stitch/` and `scripts/embed-find-parts-stitch.mjs`. Port each screen as real JSX using the method in §3, wired as §4 says.
+
+### F2 — Critical · Forms send what the person did not type
+- The quantity, note, vehicle and urgency boxes on screen belong to the picture. Nothing reads them.
+- The real form is a hidden `sr-only` block in [QuoteDialog.tsx](../apps/fleet/src/components/vehicles/find-parts/QuoteDialog.tsx) and [RequestPartPanel.tsx](../apps/fleet/src/components/vehicles/find-parts/RequestPartPanel.tsx).
+- **Example:** you type 4 and press Send. The quote goes out for **1**, with no note and no vehicle, and the success screen shows the picture's "RFQ-88402".
+
+**Fix:** every input is a real React control bound to state. That state is what gets sent. The success block shows the reference the server returns.
+
+### F3 — High · Buttons are guessed from their words
+- **Wrong matches.** A click is matched by searching the button's text:
+  - `label.includes("back")` also catches "Back axle";
+  - `includes("add")` catches every "Add …" button;
+  - `includes("request")` on FP7 matches the header, so a click there sends the quote;
+  - "Continue" on FP2 always picks the **first** version.
+- **Dead clicks.** Most cards, tiles and chips do nothing when clicked.
+
+**Fix:** each button and card gets its own `onClick` in JSX.
+
+### F4 — High · 10 live server routes are never called
+These routes are never called by any screen:
+- `my-vehicles`
+- `vehicle-options`
+- `term`
+- `symptoms`
+- `runner-online`
+- `wrong-fit`
+- `wrong-fit-count`
+- `GET parts-list`
+- `GET saved-searches`
+- `GET supplier-sync`
+
+**Fix:** wire each one into its block (§4).
+
+### F5 — High · "Download fitment report" opens the wrong address
+[ResultsView.tsx](../apps/fleet/src/components/vehicles/find-parts/ResultsView.tsx) opens `/parts/fitment-report` on the Fleet website, not on fleet-core, and with no sign-in.
+
+**Fix:** add `api.downloadFitmentReport(query)`. It fetches `${fleetCore}/parts/fitment-report` with the auth headers and saves the file as a blob.
+
+### F6 — High · The checker passes because it counts the pasted Stitch file
+- The README "Ported to" cells list `find-parts/stitch/fp*.ts`.
+- So the checker compares the Stitch HTML with a copy of itself and reports 100% on all 12 rows.
+
+**Fix:** the checker rules and the live-data test in §5.
+
+### F7 — Medium · The shared top bar and footer show fixed values
+In [FleetChrome.tsx](../apps/fleet/src/components/layout/FleetChrome.tsx):
+- "STATUS: ALL SYSTEMS NOMINAL" is fixed text;
+- "LATENCY" is the page-load time, not an API round-trip;
+- the user name comes from `localStorage`, and shows "You" when that is empty.
+
+**Fix:**
+- Status comes from the health check, and names the failing service when one fails.
+- Latency is the duration of the last fleet-core call, recorded in `fetchWithRetry`.
+- The name and role come from the signed-in profile.
+
+### F8 — Medium · Nothing is committed and the fleet site is not deployed
+- About 30 files are uncommitted: the R2 migration, 3 renamed migration files (now matching the production versions), and the server routes.
+- Production already runs fleet-core v188 and migration `20261031171644 fleet_find_parts_r2`. The repo is behind production.
+
+**Fix:** commit the server, migration and checker work now. Commit each screen as it is ported. Deploy the fleet site at the end.
+
+</details>
+
+---
+
+## 3. How to port a screen
+1. **Copy the markup.** Open the screen's `code.html`. Take everything inside `<main>` (or the drawer or dialog) and paste it into the component as JSX:
+   - `class` becomes `className`;
+   - `for` becomes `htmlFor`;
+   - self-closing tags get closed;
+   - inline `<script>` code becomes React state.
+2. **Keep every element, class and word.** Do not restyle. Do not leave anything out.
+3. **Replace each sample value** with the live value from §4. When there is no data, show the empty text in the same spot ("None yet", "No price yet", 0), and keep the element.
+4. **Give each control its own handler.** Each button and card gets an `onClick`. Each input gets `value` and `onChange`. Repeated cards become `.map()` over live rows, keeping the first card's markup.
+5. **Wrap it in `.fleet-find-parts-stitch`.** Any missing Stitch class goes into `findParts.css`, and so does its dark-mode rule.
+
+**Not allowed:** `dangerouslySetInnerHTML`, `sr-only` copies of forms, or matching clicks by button text.
+
+---
+
+## 4. Wiring map — what each block shows and does
+All routes are on fleet-core under `/parts/…` and are deployed. **Bold** marks something that is not wired today.
+
+### FP1 Pick the car — `CarStep.tsx`, `PartsActivityPanel.tsx`
+| Block | Live value | Action |
 |---|---|---|
-| Screen 1 — Find parts tab: pick the car | FP1 | `find-parts-car.html` |
-| Screen 2 — Which one is yours? | FP2 | `find-parts-variant.html` |
-| Screen 3 — What part? (guided browser) | FP3 | `find-parts-browse.html` |
-| Screen 4 — Front or back? | FP4 | `find-parts-position.html` |
-| Screen 5 — Results in five match types | FP5 | `find-parts-results.html` |
-| Screen 6 — Part detail drawer | FP6 | `find-parts-detail.html` |
-| Screen 7 — Request a quote | FP7 | `find-parts-quote.html` |
-| Screen 8 — Not found → ask Roam to find it | FP8 | `find-parts-request.html` |
-| Screen 9 — Car not linked yet | FP9 | `find-parts-link-car.html` |
-| Screen 10 — Your parts activity | FP10 | `find-parts-activity.html` |
-| Screen 11 — Loading, error, no permission | FP11 | `find-parts-states.html` |
-| Screen 12 — Phone (390 px) | FP12 | `find-parts-phone.html` |
+| "{n} active", vehicle cards (name, version, Verified specs, "{n} parts on shelf", "Service due") | **`GET /my-vehicles`** | Card → `/find` → link, version or part step |
+| Make chips, model chips | **`GET /vehicle-options`** | Chip → fill Make or Model |
+| Make / Model / Year, quick-type box (plate, chassis or model code) | `/vehicle-options` + **`/term`** | Continue → version step |
+| Activity cards (requests, alerts, warranty, cores) | `GET /activity` | "See all" → FP10 |
+| "Need a part not in inventory?" card + Submit Parts Request pop-up | — | Send → `POST /request` |
+| Zero-Fitment Error Guarantee card | **`/wrong-fit-count`** | — |
 
-The **By vehicle** and **Service ledger** tabs are not part of this work and must look the same after it.
+### FP2 Which one is yours? — `VariantStep.tsx`
+| Block | Live value | Action |
+|---|---|---|
+| Header (car, series, catalog chip) | `/find` (askVariant) | Change car → FP1 |
+| Version cards (name, codes, "Most common in fleet", description, "Chassis match") | `/vehicle-options` versions + `chassis_serial_from` | Card → that version's own id |
+| Universal Catalog Mode card | — | → version `any` |
+| Model code input | `chassis_serial_from` prefix | Typing picks the version |
+| Compatibility radar, Active vehicle context | Specs of the chosen version | "Continue to Categories" → FP3 |
+| Fleet panel (count, plates, status, %) | `/my-vehicles` | — |
+| Paper guide, guarantee card | Engine codes, `/wrong-fit-count` | — |
+| Parts desk help | — | "Lookup Chassis for Me" → `POST /request` with `kind = 'chassis_lookup'` |
 
----
+### FP3 What part? — `PartStep.tsx`
+| Block | Live value | Action |
+|---|---|---|
+| Car strip | `/my-vehicles` row | "Skip guided triage" → results |
+| Scheduled Maintenance banner | `/vehicle-context` | Service button → pick that component |
+| Search + suggestions ("also called", area, stock) | **`/term`** | Suggestion → pick the part; ESC clears |
+| Common parts tiles (subtitle, stock, Due soon, spec badge) | `/browse` + `/vehicle-context` | Tile → pick the part |
+| Area grid, sub-category chips (count, best price, spec) | `/browse` | Tile → open the area; chip → select (several allowed) |
+| Problem list, answer card, probability, likely parts | **`/symptoms`** | "Select …" → pick; "Add … to check" → add to the selection |
+| "Skip — show everything ({n})", "Continue to Position & Fit" | `/browse` count | → results or FP4 |
 
-## 1. Goal and who uses it
+### FP4 Front or back? — `PositionStep.tsx`
+| Block | Live value | Action |
+|---|---|---|
+| Header: Current ODO, last service km | `/vehicle-context` (today hidden in `sr-only`) | — |
+| Axle diagram | — | Front / Rear → choose |
+| Spec cards, option cards (time, description, shelf + bin, supplier), Recommended Package | Spec values, `labour_minutes`, stock, best offer | Card → front / rear / both |
+| Fleet Maintenance Tip | `fleet_tip` ("None yet") | — |
+| "Show parts ({n})" | `/find` count | → results |
 
-A fleet manager, or a staff member who is **not a mechanic**, needs to find the right part for one of their cars, or for any car, and then get it. They want:
-- a price;
-- whether they already have it on the shelf;
-- a quote;
-- or someone at Roam to find it for them.
+### FP5 Results — `ResultsView.tsx`
+| Block | Live value | Action |
+|---|---|---|
+| Fleet Spares strip | Choices + car | Save query → `POST /saved-searches` |
+| Title, "Catalog Synced", match pool count | `/find` | — |
+| Filter chips, Trim Scope | Counts from `/find` | Chip → filter the list |
+| Best match card | `pickBestPart` over `/find` | Quote PO → FP7; card → FP6 |
+| Sections and expandable rows | `/find` items | Row → expand; Allocate to Work Order → service log; Request Fresh Supplier Quote → `POST /quote`; Log Bulk Consumable → stock out |
+| Folded empty line | Empty tiers | "Ask Roam to find another option" → FP8 |
+| Side panel (HS code, courier, assurance) | `hs_code`, offer | — |
+| Bottom bar "Confirm parts list (n) J$ {total}" | **`GET /parts-list`** | Confirm → `POST /parts-list`; Download → `api.downloadFitmentReport` (F5) |
 
-**The flow is the same as Dominion's:**
-1. Car (required).
-2. Which one is it (only when it matters).
-3. Part (optional, with a guided browser).
-4. Side (only when it matters).
-5. Results in five match types.
-6. Act on a result.
+### FP6 Part detail drawer — `PartDetailDrawer.tsx`
+| Block | Live value | Action |
+|---|---|---|
+| Page behind (no part chosen): vehicle header, 4 tiles, Recommended Service Parts | `/vehicle-context` + `/find` | Row → drawer |
+| Header, tier tag, shelf, spec chips, batch line, spec match | Item | Close |
+| Why it fits (reason, installs, units, discrepancy line) | Item + service logs + `/wrong-fit-count` | — |
+| Supplier table, "Updated", stale line | Offers | Ping RFQ → `POST /quote` to that supplier |
+| Engine variants, cross-reference table | Item | — |
+| You may also need for this service | Same-schedule parts | Add to order → `POST /parts-list` |
+| Add to stock, footer | — | Confirm → `setOrgPartStock`; Use in a service log → Log new service, pre-filled |
 
-**What only Fleet adds:**
-- "My vehicles" as the fastest way in;
-- your stock;
-- supplier prices (landed cost in J$);
-- quotes;
-- requests to Roam;
-- your parts activity.
+### FP7 Request a quote — `QuoteDialog.tsx`
+| Block | Live value | Action |
+|---|---|---|
+| Page behind: KPI tiles, supplier cards | Stock, `/activity`, offers | Card → choose the supplier |
+| RFQ header, part, car, supplier target, shelf balance | Part + offers + stock | — |
+| Quantity (1–24), urgency ×4, work order, vehicle, note, target price | **Real inputs** (F2) | Send → `POST /quote` with these values |
+| Success (reference, quantity, assigned to) | The `/quote` response | Done / Activity |
 
----
+### FP8 Ask Roam to find it — `RequestPartPanel.tsx`
+| Block | Live value | Action |
+|---|---|---|
+| PARTS RUNNER ONLINE | **`/runner-online`** | — |
+| Search Scope chips, headline, Matched Vehicle Specs | Choices + vehicle | Reset filters → FP1 |
+| Quantity, urgency ×4, note, photo drop zone | **Real inputs** | Drop or browse → `POST /request-photo` |
+| Ask Roam to find it | — | `POST /request` |
+| Success (ticket, average quote time) | `/request` response + `/activity` | "View in activity ledger →" → FP10 |
+| Active Fleet Target, What happens next, guarantee box, Recent Sourcing Wins | Vehicle, `/wrong-fit-count`, resolved requests + `found_price_jmd` | — |
 
-## 2. Live data on 30 Oct 2026
+### FP9 Car not linked yet — `LinkCarPanel.tsx`
+| Block | Live value | Action |
+|---|---|---|
+| Header (car, plate, unit, badges) | `/find` linked:false | Switch unit → FP1 |
+| Benefit cards, plate locator | Engine codes | — |
+| Staff view | — | Send notification → `POST /notify-admin` |
+| Candidate trims (% fleet avg, engine, cc) | `/vehicle-options` | Select → link (needs `vehicles.edit`) |
+| Depot Stock Linked count, Classify drawer | Stock, versions | Confirm & Map Vehicle → `saveVehicle` |
 
-| Fact | Value |
-|---|---|
-| Fleet vehicles in the hub (screenshot) | Honda Fit 2018 (1505LM), Toyota Roomy 2019 (5179KZ) |
-| Their catalog versions | Fit 2018 has 3 possible versions (GK5 1.5 petrol, GK3 1.3 petrol, GP5 1.5 hybrid); Roomy 2019 has 2 (2WD, 4WD; same engine, so engine parts never need the question) |
-| Parts on file in Dominion | 2 (oil filter, Toyota and MANN) |
-| Supplier offers | **0**, so no price shows anywhere yet |
-| Universal parts | 5 (oil 0W-20, 3 wiper sizes, CVT fluid FE) |
-| Parts requests ever sent (`parts_sourcing_requests`) | **0** |
-| Car versions marked parts-ready | 0 |
+### FP10 Your parts activity — `ActivityView.tsx`
+| Block | Live value | Action |
+|---|---|---|
+| Header, KPI tiles, filter | `/activity` | Filter chips |
+| Request cards | `/activity` requests | Inspect lead → detail; Review offer → FP6 |
+| Quote card | `/activity` quotes | See all quotes |
+| Alert card | `/activity` alerts | Investigate → Service ledger filtered; Dismiss |
+| Warranty and cores cards | `/activity` | Review terms; View return ledger |
+| Supplier feed panel | **`GET /supplier-sync`** | Force Sync → `POST /supplier-sync`, then refresh |
 
-**What this means:** most searches will end at Screen 8, "Ask Roam to find it". That screen must be quick and pre-filled, because today it is the main way the data grows.
+### FP11 States — `FindPartsTab.tsx`
+| State | Live value | Action |
+|---|---|---|
+| Loading skeleton | Catalog count | — |
+| Error (HTTP code, vehicle, section, attempt n of 3) | The failed request | Retry re-runs the search; automatic retry ×3 |
+| Missing model | Choices | Ask Roam to add it → `POST /catalog-request` |
+| No permission (role, profile, admin) | Profile, org admins | Request access → `POST /notify-admin`; a real "Back to Fleet maintenance" button |
 
----
-
-## 3. Findings — the current "Compatible parts" dialog
-
-Severity:
-- **High**: the screen gives a wrong answer or blocks the person.
-- **Medium**: the screen is confusing or something is missing.
-- **Low**: tidy-up.
-
-### F1 — High · Parts search is hidden in a dialog behind a button
-To search, the person must click Compatible parts, choose a vehicle, then press Load. Everything else is squeezed into one scrolling dialog: results, requests, repeat alerts, warranty claims and core returns.
-
-**Fix:**
-- Add a third tab, **Find parts**, next to By vehicle and Service ledger.
-- The **Compatible parts** header button stays where it is but switches to that tab, keeping its label.
-- Delete the dialog and its 12 `parts*` state hooks. They move into the new tab folder (§7).
-
-### F2 — High · No way to pick a part
-The route already accepts `component_id`, but the dialog never sends it. The person gets every part for the car, with no categories or sub-categories and no help when they don't know the part's name.
-
-**Fix:** the "What part?" step, Screen 3. It uses the shared `browse`, `term` and `symptoms` routes (Dominion doc E4–E6).
-
-### F3 — High · Only linked fleet vehicles can be searched
-- You can't look up a car you are about to buy, a car not yet in the fleet, or a vehicle that isn't linked.
-- For an unlinked vehicle, you get a dead end: "Link this vehicle to the motor catalog to see compatible parts."
-
-**Fix:**
-- Screen 1 offers **My vehicles** (one tap; the version is already known) **or** **Another car** (Make / Model / Year).
-- An unlinked fleet vehicle opens Screen 9:
-  - "Link it now" uses the existing `CatalogVariantPicker`, and needs `vehicles.edit`.
-  - "Search by make, model and year instead" pre-fills Screen 1 from the vehicle's make, model and year.
-
-### F4 — High · Jargon on the screen
-- The dialog says: "Lists parts configured in Super Admin that fit this fleet vehicle's linked motor catalog row (and optional chassis/engine gates)."
-- The button tooltip says "Parts from Super Admin catalog…".
-
-**Fix:**
-- All text comes from the Stitch screens.
-- The section titles use the plain names (Dominion doc F6): "Made for your car", "Same car, different badge", "Fits your engine", "Other brands that replace it", "Fits by size".
-
-### F5 — High · "Request quote" fires instantly, with qty 1
-- Clicking **Request quote** sends quantity 1 with no confirmation.
-- The only feedback is a toast ([FleetMaintenanceHub.tsx:830](../apps/fleet/src/components/vehicles/FleetMaintenanceHub.tsx#L830)).
-- "Add 1 to stock" writes stock straight from the search list (line 781).
-
-**Fix:**
-- Both actions move into the part detail drawer.
-- **Request a quote** opens Screen 7: quantity, urgency, which vehicle it is for, and an optional note. It then shows a confirmation that lists the request in "Your parts activity".
-- **Add to stock** asks for the quantity (default 1) and confirms in place.
-
-### F6 — Medium · The "request a missing part" box starts empty
-- The person must type everything, for example "Front brake pads for 2019 Toyota Probox…".
-- `maintenance_component_id` is never sent, even though the column exists.
-
-**Fix:** Screen 8 is pre-filled from the choices already made.
-- It fills in the car, the version (or "not sure"), the part, and the side.
-- The person only adds quantity, urgency, an optional note and a photo.
-- The request sends `maintenance_component_id`, `qty`, `urgency` and `photo_url`, plus `platform_id` and `engine_family_id` taken from the version (all existing columns).
-- The text is built for them, e.g. "Front brake pads · 2018 Honda Fit 1.5 hybrid (GP5)".
-
-### F7 — Medium · Prices show as a bare "—"
-There are 0 offers, so every row shows "—".
-
-**Fix:**
-- Each row shows the best offer as "J$ 4,250 landed · 3 days", from the existing `priceOffer` / `landedCostJmd` logic.
-- With no offer, the row shows "No price yet" and a **Get a price** link that opens Screen 7.
-- A stale price is shown in grey with "Price may be old". It is never hidden.
-
-### F8 — Medium · The best answer is buried in a table
-**Fix:** a **Best match** card at the top, chosen by `pickBestPart(sections, { useStock: true, usePrice: true })` (Dominion doc E8). A part on your shelf wins, with the badge "On your shelf — 2".
-
-### F9 — Medium · Parts activity is stuck at the bottom of the dialog
-- Repeat-part alerts, warranty claims, core returns and "My requests" are listed below the results.
-- They load each time the dialog opens.
-
-**Fix:**
-- Show them on Screen 10, **Your parts activity**, as a right-hand panel on the tab's first step (desktop) or a collapsible section (phone).
-- They load once when the tab opens, through react-query (stale time 60 s).
-- Each list shows its 5 newest items, with "See all".
-
-### F10 — Medium · The tab can't be linked to
-- `hubTab` is local state, so the Vehicles page, the "Services due" view, or a shared link can't open the Find parts tab with a car and part already chosen.
-
-**Fix:**
-- The URL keeps `?tab=find-parts&vehicle=<id>&part=<componentId>&pos=<front|rear>`.
-- **Services due** rows gain the link "Find parts for this" → `?tab=find-parts&vehicle=<id>&part=<component of that schedule row>`.
-
-### F11 — Low · The "Log new service" flow is a separate path
-- `LogMaintenanceServiceDialog` calls `getCompatibleParts(vehicleId, componentId)` on its own (line 503).
-
-**Fix:**
-- It keeps working.
-- The detail drawer gains **Use in a service log**, which opens `LogMaintenanceServiceDialog` with the vehicle and component pre-set.
-
-### Not a finding
-- `GET /vehicles/:vehicleId/compatible-parts` stays as it is, for `LogMaintenanceServiceDialog`.
-- The By vehicle and Service ledger tabs stay untouched.
+### FP12 Phone — the same components below 768 px
+Same data and actions as FP5, FP7 and FP10, using the markup from `find-parts-phone.html`. The bottom nav buttons open their Fleet pages.
 
 ---
 
-## 4. Customer-data rule (Dominion = master data)
-- Fleet **reads** the parts master data (versions, parts, listings, universal parts, problems and search words) through the shared engine.
-- Stock, offers marked with an `organization_id`, quotes, requests, alerts, warranty claims and cores are **org data**. They are added only in the Fleet route, only for the caller's org, and they never reach a Dominion response.
-- **Another car** searches are not saved against the org. The `catalog_signal_part_demand` counter may record the search, but only as an anonymous demand count, with no org id.
+## 5. Proof (a screen is done only when all pass)
+1. **Checker** (`scripts/stitch-fidelity.mjs`), FP rows. Fail the row when:
+   - a listed file is under `find-parts/stitch/`;
+   - a listed file contains `dangerouslySetInnerHTML`;
+   - a label is found only inside `sr-only`.
+   The text score must be 100%. Remove the `stitch/fp*.ts` paths from the README rows.
+2. **Live-data test** (`e2e/fleet-find-parts-visual.spec.ts`). Answer the routes with fixtures that **differ** from the picture: plate `TEST-01`, a Nissan Note, J$ 9,999, "Fixture Motors". On each screen:
+   - the fixture values are visible;
+   - none of these is visible: `1505LM`, `Honda Fit 2018`, `Kingston`, `J$ 1,850`, `J$ 4,850`, `RQ-8821`, `RFQ-88402`, `MANN-FILTER`;
+   - each button fires its §4 route (check with `page.waitForRequest`);
+   - typing 4 in the FP7 quantity box sends `qty: 4`.
+3. **Pictures.** For each screen, the Stitch picture next to the live one in light, dark and at 390 px, using the picture's sample values as fixtures.
 
 ---
 
-## 5. The flow (guidance; Stitch wins on looks)
+## 6. Order
+1. Commit what is done (F8).
+2. Checker and live-data test (§5), so the 12 rows go red.
+3. Port FP1 → FP12 with §3 and §4, one commit per screen, each green on §5.
+4. F5 (fitment report) and F7 (top bar and footer).
+5. Fleet `tsc` stays at or below 464. Deploy the fleet site, then log in for real and click through FP1 → FP8 once.
 
+**What you'll see once it is wired.** The live database has 2 parts and 0 offers, quotes, requests or stock rows. Most blocks will show real but empty values ("No price yet", 0). That is correct. The fixtures in §5 show the full design working.
+
+---
+
+## 7. Rules
+- **Stitch is the spec.** Every block, badge and button is ported with the same words. Only sample values change. Nothing is hidden for lack of data.
+- **Org data** (stock, org offers, quotes, requests, alerts, warranty, cores, parts list, saved searches) is read and written only for the caller's org. It never reaches Dominion.
+- **Permissions:**
+  - `vehicles.view` to see the tab;
+  - `vehicles.edit` to link a car;
+  - no view permission → the FP11 no-permission state.
+
+---
+
+## 8. Done and verified (31 Oct 2026)
+- **Tab and links:** the third tab, URL state, the Compatible parts button, and the old dialog deleted.
+- **Database:** both migrations are applied in production (the `within_24h` urgency, all the new columns, and the tables `fleet_parts_list`, `fleet_saved_part_searches` and `parts_supplier_sync_run`).
+- **Server:** fleet-core v188 is deployed with all 23 `/parts/*` routes.
+
+---
+
+## 9. Prompt to paste into the builder
 ```
-Tabs:  By vehicle | Service ledger | Find parts ●
+Read docs/fleet-find-parts-audit.md fully. It is the only doc for this work.
 
-① Your car    My vehicles:  [Honda Fit 2018 · 1505LM]  [Toyota Roomy 2019 · 5179KZ]
-               — or —  Another car:  Make ▾  Model ▾  Year ▾
-               Right panel: Your parts activity (requests · alerts · warranty · cores)
-② Which one?  only for "Another car", or a fleet car with no version set, and only if the answer differs
-③ What part?  search · Common parts · By area · By problem · Show everything
-④ Front/back? only for position-aware parts
-⑤ Results     Best match (price · stock · lead time)
-               Made for your car / Same car… / Fits your engine / Other brands / Fits by size
-               "Nothing on file for: Sister, Engine."   [Ask Roam to find it]
-⑥ Detail      why it fits · fits these versions · prices from suppliers · on your shelf
-               [Request a quote] [Add to stock] [Use in a service log]
-⑦ Quote       qty · urgency · for which vehicle · note → sent
-⑧ Not found   pre-filled request → sent → shows in Your parts activity
-⑨ Not linked  [Link it now] or [Search by make, model, year]
+The Find parts screens currently paste the Stitch HTML in as a picture
+(StitchFrame + find-parts/stitch/*.ts). Delete that approach completely.
+
+Port each screen FP1–FP12 as real JSX copied from its code.html (§3): same
+elements, classes and words, nothing left out. Replace every sample value with live
+data from the route in §4. Give every button, card, chip and input its own handler
+that does what §4 says. No dangerouslySetInnerHTML, no sr-only copies, no matching
+clicks by button text.
+
+Work in the §6 order. A screen is done only when §5 passes for it.
+Fleet tsc must stay at or below 464.
 ```
-
-The **choice trail** ("Honda Fit 2018 › 1.5 hybrid › Brake pads › Front") is sticky from step ② on. Each chip goes back to its step.
-
----
-
-## 6. API (Fleet-only parts; the engine itself is in the Dominion doc §6)
-
-### W1 — `GET /parts/find` on fleet-core
-In `_fleet-server/part_sourcing_routes.ts`, behind `requireAuth()` and `requirePermission("vehicles.view")`.
-
-**Query**
-- `vehicleId` **or** `make` + `model` + `year`;
-- optional `variantId` (`any` = not sure), `componentId`, `position`, `side`.
-
-**With `vehicleId`**
-- Load the KV vehicle, as today.
-- `resolveCatalogIdForKvVehicle` supplies the `variantId`.
-- If it isn't linked, return `{ linked: false, make, model, year }`, which drives Screen 9.
-
-**Then**
-- Call `findParts({ ..., orgId, downtimePerDay })` from `parts_finder.ts`.
-- `orgId` and `downtimePerDay` are read exactly as the compatible-parts route does today.
-
-**Response:** the Dominion `FindPartsResult`, plus:
-- `linked: boolean`;
-- `vehicle: { id, label, plate } | null`;
-- `stockQty` and `bestOffer` on each item.
-
-### W2 — `GET /parts/browse`, `GET /parts/term`, `GET /parts/symptoms` on fleet-core
-These reuse the same handlers as the Dominion routes (Dominion doc E4–E6) and are read-only, behind `vehicles.view`.
-
-### W3 — Quote with quantity
-`api.requestPartQuote` already exists. It now sends:
-- `qty`, `urgency` and `note`;
-- `vehicleId` (null for "Another car");
-- `componentId`.
-
-The server stores them on `part_quote_request` (add `urgency`, `note` and `maintenance_component_id` if they are missing; check before the migration).
-
-### W4 — Pre-filled request
-`api.requestPartsSourcing(vehicleId | null, needText, extra)` sends:
-- `maintenance_component_id`, `qty`, `urgency`, `photo_url`;
-- `platform_id` and `engine_family_id`, taken from the version.
-
-A null `vehicleId` is allowed for "Another car". Check that the column is nullable, and make it nullable if it isn't.
-
-### W5 — Activity in one call
-`GET /parts/activity` returns `{ requests, repeatAlerts, warrantyClaims, cores }`, each with its 5 newest items and a total. This replaces the 4 calls made today.
-
----
-
-## 7. Frontend
-
-New folder: `apps/fleet/src/components/vehicles/find-parts/`.
-
-| File | Screen | Content |
-|---|---|---|
-| `FindPartsTab.tsx` | — | Step state, URL sync (F10), react-query |
-| `CarStep.tsx` | 1 | My vehicles chips + Another car selects, quick-type box |
-| `VariantStep.tsx` | 2 | Plain version cards + "Not sure" |
-| `PartStep.tsx` | 3 | Search, Common, By area, By problem, Show everything |
-| `PositionStep.tsx` | 4 | Front/Rear/Both, Left/Right/Both |
-| `ChoiceTrail.tsx` | 2–8 | Sticky chips |
-| `ResultsView.tsx` | 5 | Best match, sections, folded empty line |
-| `PartDetailDrawer.tsx` | 6 | Why it fits, offers, stock, actions |
-| `QuoteDialog.tsx` | 7 | Qty, urgency, vehicle, note |
-| `RequestPartPanel.tsx` | 8 | Pre-filled request |
-| `LinkCarPanel.tsx` | 9 | Link now / search instead |
-| `PartsActivityPanel.tsx` | 10 | Requests, alerts, warranty, cores |
-| `findPartsApi.ts` | — | Typed calls (W1–W5) |
-
-**Wiring**
-- `FleetMaintenanceHub.tsx`:
-  - Add `<TabsTrigger value="find-parts">` with the `Package` icon, then the matching `TabsContent`.
-  - Widen `hubTab` to include `"find-parts"`, and read and write it from the URL.
-  - The **Compatible parts** button calls `setHubTab("find-parts")`.
-  - Delete the parts dialog and its state.
-- `LogMaintenanceServiceDialog` is unchanged, except that it accepts a pre-set component when opened from the drawer.
-- **Shared code.** Import `pickBestPart`, `variantPlainLabel` and `PART_MATCH_TIERS` (with `plainLabel`) from `@roam/types`. Do not copy them.
-- **Type check.** The fleet `tsc` count must not go above the baseline (**464**).
-
-**Permissions**
-
-| Action | Needs |
-|---|---|
-| See the tab | `vehicles.view` |
-| Link a car | `vehicles.edit` |
-| Quote, request, add to stock | `vehicles.view`, as the routes are today. Keep the existing server checks |
-
-Without `vehicles.view`, the tab is hidden.
-
----
-
-## 8. Stitch README rows (`docs/stitch/roam-fleet-app/README.md`)
-
-Add a section called "Find parts screens" with the FP1–FP12 table from §0: number, screen, file and Stitch screen id. Add a "Ported to" column listing the files in §7.
-
-**W6:** in `scripts/stitch-fidelity.mjs`, also read the rows of `docs/stitch/roam-fleet-app/README.md` that have a "Ported to" path. Use the same scoring, with the 80% floor in CI.
-
----
-
-## 9. Tests
-
-| # | Test | Where |
-|---|---|---|
-| T1 | `/parts/find?vehicleId` for a linked vehicle: no version question, results come back | Deno |
-| T2 | Unlinked vehicle → `linked: false` with make, model and year | Deno |
-| T3 | `make/model/year` search works with no vehicle | Deno |
-| T4 | Offers and stock from another org never appear | Deno |
-| T5 | No `vehicles.view` → 403. A driver role → 403 | Deno |
-| T6 | Quote sends qty, urgency, note and component. Qty 0 or less → 400 | Deno |
-| T7 | Request with a null vehicle (Another car) is saved, with the component and engine family set | Deno + SQL |
-| T8 | `/parts/activity` returns only the caller's org rows | Deno |
-| T9 | Best match: an item on the shelf beats a tier-1 item with no stock. Price breaks ties | Shared `partsBestPick.test.ts` |
-| T10 | URL `?tab=find-parts&vehicle=…&part=…` opens straight on the results | Vitest |
-| T11 | The By vehicle and Service ledger tabs render unchanged | Vitest snapshot |
-| T12 | Fleet `tsc` is still ≤ 464 | CI |
-| T13 | Fidelity is 100% for FP1–FP12 | CI + PR |
-
----
-
-## 10. Build order
-1. **Wait for the Dominion engine.** Dominion doc §11, steps 2–4, must be live (shared types, migration, `parts_finder.ts`).
-2. **Stitch.** Build screens 1–12 in the Roam Fleet APP project, export them, add the README rows, and extend the fidelity script (W6).
-3. **Server.**
-   - Build W1–W5.
-   - Run the column checks for W3 and W4, and migrate if needed.
-   - Write tests T1–T8.
-   - Deploy fleet-core.
-4. **Frontend.** Build the `find-parts/` folder, ported from the Stitch HTML, with tests T10–T11.
-5. **Wiring.**
-   - Add the third tab and the URL state.
-   - Point the Compatible parts button at the new tab.
-   - Delete the dialog.
-   - Add the "Find parts for this" link on Services due.
-6. **Ship.**
-   - Check `tsc` is still ≤ 464 and fidelity is 100%.
-   - Take screenshots in light, dark and phone.
-   - Commit and deploy the fleet site.

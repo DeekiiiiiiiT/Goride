@@ -1,6 +1,7 @@
 -- Full database: one answer with match-type groups, live counts, and make/model/year.
 
 DROP FUNCTION IF EXISTS public.admin_catalog_master_search(text, text, text, text, uuid, text, integer, integer);
+DROP FUNCTION IF EXISTS public.admin_catalog_master_search(text, text, text, text, uuid, text, integer, integer, text, text, integer);
 
 CREATE FUNCTION public.admin_catalog_master_search(
   p_q text DEFAULT '',
@@ -437,8 +438,9 @@ BEGIN
       SELECT jsonb_agg(jsonb_build_object('name', assembly, 'count', n) ORDER BY n DESC, assembly)
       FROM (SELECT assembly, count(*)::integer AS n FROM tmp_parts WHERE assembly <> '' GROUP BY assembly) a
     ), '[]'::jsonb),
+    -- Parts only. Sister families and size-based parts have no status, so they must not inflate All.
     'statusCounts', jsonb_build_object(
-      'all', (SELECT count(*) FROM tmp_master) + v_sister + v_universal,
+      'all', (SELECT count(*) FROM tmp_master),
       'verified', (SELECT count(*) FROM tmp_master WHERE status = 'verified'),
       'needs_checking', (SELECT count(*) FROM tmp_master WHERE status = 'needs_checking')
     ),

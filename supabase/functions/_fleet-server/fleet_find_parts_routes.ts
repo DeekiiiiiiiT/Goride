@@ -15,14 +15,48 @@ import { upsertPendingFromKvVehicle } from "./vehicle_catalog_pending_queries.ts
 
 const PREFIX = "/make-server-37f42386/parts";
 const PHOTO_BUCKET = "parts-request-photos";
-const URGENCY = new Set(["low", "normal", "urgent"]);
+const URGENCY = new Set(["low", "normal", "urgent", "within_24h"]);
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/** Hours until a supplier reply is due. 24h urgency is stored as within_24h. */
+export function replyDueAt(urgency: string, from = Date.now()): string {
+  const hours = urgency === "within_24h" ? 24 : urgency === "urgent" ? 8 : urgency === "low" ? 72 : 48;
+  return new Date(from + hours * 3_600_000).toISOString();
+}
+
+export function scopedToOrg<T extends { organization_id?: string | null }>(rows: T[], orgId: string): T[] {
+  return rows.filter((row) => row.organization_id === orgId);
+}
+
+export function myVehicleCard(input: {
+  make?: string;
+  model?: string;
+  year?: string | number | null;
+  versionLine?: string | null;
+  verified?: boolean;
+  shelfCount?: number;
+  serviceDue?: string | null;
+}) {
+  return {
+    name: [input.make, input.model, input.year].filter(Boolean).join(" "),
+    versionLine: input.versionLine || "None yet",
+    verified: Boolean(input.verified),
+    shelfCount: input.shelfCount ?? 0,
+    serviceDue: input.serviceDue || "None yet",
+  };
+}
+
+/** Km since the last service of this part, divided by the interval. 0 when unknown. */
+export function wearPercent(kmSince: number | null, intervalKm: number | null): number | null {
+  if (kmSince == null || !intervalKm || intervalKm <= 0) return null;
+  return Math.max(0, Math.min(100, Math.round((1 - kmSince / intervalKm) * 100)));
+}
 
 export function quoteInputError(body: Record<string, unknown>): string | null {
   const qty = body.qty != null && body.qty !== "" ? Number(body.qty) : 1;
   if (!Number.isFinite(qty) || qty <= 0) return "Quantity must be at least 1";
   const urgency = body.urgency ? String(body.urgency) : "";
-  if (urgency && !URGENCY.has(urgency)) return "Urgency must be low, normal, or urgent";
+  if (urgency && !URGENCY.has(urgency)) return "Urgency must be low, normal, urgent, or within_24h";
   const note = body.note ? String(body.note) : "";
   if (note.length > 140) return "Note is limited to 140 characters";
   return null;
@@ -227,6 +261,9 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
         qty,
         note: body.note ? String(body.note).slice(0, 140) : null,
         urgency: body.urgency ? String(body.urgency) : "normal",
+        reply_due_at: replyDueAt(body.urgency ? String(body.urgency) : "normal"),
+        target_price_jmd: body.targetPriceJmd != null && body.targetPriceJmd !== "" ? Number(body.targetPriceJmd) : null,
+        linked_service_id: body.linkedServiceId ? String(body.linkedServiceId).slice(0, 80) : null,
         maintenance_component_id: body.componentId && UUID_RE.test(String(body.componentId)) ? String(body.componentId) : null,
         supplier_ids: Array.isArray(body.supplierIds) ? body.supplierIds.map(String).slice(0, 8) : [],
         status: "open",
@@ -246,7 +283,7 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
       const needText = String(body.needText ?? "").trim();
       if (!needText) return c.json({ error: "needText is required" }, 400);
       const urgency = body.urgency ? String(body.urgency) : null;
-      if (urgency && !URGENCY.has(urgency)) return c.json({ error: "Urgency must be low, normal, or urgent" }, 400);
+      if (urgency && !URGENCY.has(urgency)) return c.json({ error: "Urgency must be low, normal, urgent, or within_24h" }, 400);
       const qty = body.qty != null && body.qty !== "" ? Number(body.qty) : null;
       if (qty != null && (!Number.isFinite(qty) || qty <= 0)) return c.json({ error: "Quantity must be at least 1" }, 400);
       const vehicleId = String(body.vehicleId ?? "").trim();
@@ -267,6 +304,8 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
         platform_id: body.platformId && UUID_RE.test(String(body.platformId)) ? String(body.platformId) : null,
         engine_family_id: body.engineFamilyId && UUID_RE.test(String(body.engineFamilyId)) ? String(body.engineFamilyId) : null,
         urgency,
+        reply_due_at: urgency ? replyDueAt(urgency) : null,
+        kind: body.kind ? String(body.kind).slice(0, 40) : null,
         qty,
         photo_url: body.photoUrl ? String(body.photoUrl).slice(0, 2000) : null,
       }).select("*").single();
@@ -446,5 +485,214 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
     } catch (error) {
       return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
     }
+  });
+
+  app.get(`${PREFIX}/my-vehicles`, ...view, async (c: Context) => {
+    try {
+      const orgId = String(getOrgId(c) || "");
+      const raw = await kv.getByPrefix("vehicle:");
+      const cars = filterByOrg(Array.isArray(raw) ? raw as Record<string, unknown>[] : [], c).slice(0, 40);
+      const items = cars.map((car) => myVehicleCard({
+        make: String(car.make ?? ""),
+        model: String(car.model ?? ""),
+        year: car.year as string | number | null,
+        versionLine: String(car.catalogVersionLabel ?? car.trim ?? "") || null,
+        verified: Boolean(car.catalogId || car.vehicleCatalogId),
+        shelfCount: Number(car.shelfCount ?? 0) || 0,
+        serviceDue: String(car.serviceDue ?? "") || null,
+      }));
+      return c.json({ items, organizationId: orgId });
+    } catch (error) {
+      return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+    }
+  });
+
+  app.get(`${PREFIX}/saved-searches`, ...view, async (c: Context) => {
+    try {
+      const orgId = String(getOrgId(c) || "");
+      const { data, error } = await supabase.from("fleet_saved_part_searches").select("id, name, url, created_at, organization_id").eq("organization_id", orgId).order("created_at", { ascending: false }).limit(20);
+      if (error) throw error;
+      return c.json({ items: scopedToOrg(data || [], orgId) });
+    } catch (error) {
+      return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+    }
+  });
+
+  app.post(`${PREFIX}/saved-searches`, ...view, async (c: Context) => {
+    try {
+      const orgId = String(getOrgId(c) || "");
+      const user = c.get("rbacUser") as { userId?: string } | undefined;
+      const body = await c.req.json() as { name?: string; url?: string };
+      const name = String(body.name ?? "").trim().slice(0, 80);
+      const url = String(body.url ?? "").trim().slice(0, 500);
+      if (!name || !url) return c.json({ error: "Name and url are required" }, 400);
+      const { data, error } = await supabase.from("fleet_saved_part_searches").insert({
+        organization_id: orgId,
+        user_id: user?.userId ?? null,
+        name,
+        url,
+      }).select("id, name, url").single();
+      if (error) throw error;
+      return c.json({ item: data });
+    } catch (error) {
+      return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+    }
+  });
+
+  app.get(`${PREFIX}/parts-list`, ...view, async (c: Context) => {
+    try {
+      const orgId = String(getOrgId(c) || "");
+      const user = c.get("rbacUser") as { userId?: string } | undefined;
+      const { data: list, error } = await supabase.from("fleet_parts_list").select("id, status").eq("organization_id", orgId).eq("user_id", user?.userId ?? "").eq("status", "open").maybeSingle();
+      if (error) throw error;
+      if (!list) return c.json({ list: null, lines: [] });
+      const { data: lines, error: lineError } = await supabase.from("fleet_parts_list_line").select("id, label, qty, part_id, supplier_id, organization_id").eq("list_id", (list as { id: string }).id).eq("organization_id", orgId);
+      if (lineError) throw lineError;
+      return c.json({ list, lines: scopedToOrg(lines || [], orgId) });
+    } catch (error) {
+      return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+    }
+  });
+
+  app.post(`${PREFIX}/parts-list`, ...view, async (c: Context) => {
+    try {
+      const orgId = String(getOrgId(c) || "");
+      const user = c.get("rbacUser") as { userId?: string } | undefined;
+      const body = await c.req.json() as { label?: string; qty?: number; partId?: string; supplierId?: string; componentId?: string };
+      const label = String(body.label ?? "").trim().slice(0, 160);
+      if (!label) return c.json({ error: "Label is required" }, 400);
+      let listId = "";
+      const { data: existing } = await supabase.from("fleet_parts_list").select("id").eq("organization_id", orgId).eq("user_id", user?.userId ?? "").eq("status", "open").maybeSingle();
+      if (existing && (existing as { id?: string }).id) listId = String((existing as { id: string }).id);
+      else {
+        const { data: created, error } = await supabase.from("fleet_parts_list").insert({
+          organization_id: orgId,
+          user_id: user?.userId ?? null,
+          status: "open",
+        }).select("id").single();
+        if (error) throw error;
+        listId = String((created as { id: string }).id);
+      }
+      const { error: lineError } = await supabase.from("fleet_parts_list_line").insert({
+        list_id: listId,
+        organization_id: orgId,
+        label,
+        qty: Number(body.qty) > 0 ? Number(body.qty) : 1,
+        part_id: body.partId && UUID_RE.test(body.partId) ? body.partId : null,
+        supplier_id: body.supplierId && UUID_RE.test(body.supplierId) ? body.supplierId : null,
+        component_id: body.componentId && UUID_RE.test(body.componentId) ? body.componentId : null,
+      });
+      if (lineError) throw lineError;
+      return c.json({ ok: true, listId });
+    } catch (error) {
+      return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+    }
+  });
+
+  app.post(`${PREFIX}/wrong-fit`, ...view, async (c: Context) => {
+    try {
+      const orgId = String(getOrgId(c) || "");
+      const body = await c.req.json() as { table?: string; id?: string };
+      const table = body.table === "part_quote_request" ? "part_quote_request" : "parts_sourcing_requests";
+      const id = String(body.id ?? "");
+      if (!UUID_RE.test(id)) return c.json({ error: "id required" }, 400);
+      const { data: row, error: readError } = await supabase.from(table).select("id, organization_id").eq("id", id).maybeSingle();
+      if (readError) throw readError;
+      if (!row || (row as { organization_id?: string }).organization_id !== orgId) return c.json({ error: "Not found" }, 404);
+      const { error } = await supabase.from(table).update({ wrong_fit_reported_at: new Date().toISOString() }).eq("id", id).eq("organization_id", orgId);
+      if (error) throw error;
+      return c.json({ ok: true });
+    } catch (error) {
+      return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+    }
+  });
+
+  app.get(`${PREFIX}/wrong-fit-count`, ...view, async (c: Context) => {
+    try {
+      const orgId = String(getOrgId(c) || "");
+      const since = new Date(Date.now() - 90 * 86_400_000).toISOString();
+      const countTable = async (table: string) => {
+        const { count, error } = await supabase.from(table).select("id", { count: "exact", head: true }).eq("organization_id", orgId).gte("wrong_fit_reported_at", since);
+        if (error) throw error;
+        return count ?? 0;
+      };
+      const [requests, quotes] = await Promise.all([countTable("parts_sourcing_requests"), countTable("part_quote_request")]);
+      return c.json({ count: requests + quotes, days: 90 });
+    } catch (error) {
+      return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+    }
+  });
+
+  app.post(`${PREFIX}/notify-admin`, ...view, async (c: Context) => {
+    try {
+      const orgId = String(getOrgId(c) || "");
+      const body = await c.req.json() as { kind?: string; title?: string; body?: string };
+      const title = String(body.title ?? "Parts desk").trim().slice(0, 120);
+      const message = String(body.body ?? "").trim().slice(0, 500);
+      if (!message) return c.json({ error: "Message is required" }, 400);
+      const { error } = await supabase.from("fleet_parts_notices").insert({
+        organization_id: orgId,
+        kind: String(body.kind ?? "admin").slice(0, 40),
+        title,
+        body: message,
+      });
+      if (error) throw error;
+      return c.json({ ok: true });
+    } catch (error) {
+      return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+    }
+  });
+
+  app.get(`${PREFIX}/supplier-sync`, ...view, async (c: Context) => {
+    try {
+      const orgId = String(getOrgId(c) || "");
+      const { data, error } = await supabase.from("parts_supplier_sync_run").select("id, status, message, started_at, finished_at, organization_id").eq("organization_id", orgId).order("started_at", { ascending: false }).limit(1).maybeSingle();
+      if (error) throw error;
+      const row = data && (data as { organization_id?: string }).organization_id === orgId ? data : null;
+      return c.json({ last: row, online: false });
+    } catch (error) {
+      return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+    }
+  });
+
+  app.post(`${PREFIX}/supplier-sync`, ...view, async (c: Context) => {
+    try {
+      const orgId = String(getOrgId(c) || "");
+      const { error } = await supabase.from("parts_supplier_sync_run").insert({
+        organization_id: orgId,
+        status: "ok",
+        message: "Cache-only adapter. No live vendor feed is connected yet.",
+        finished_at: new Date().toISOString(),
+      });
+      if (error) throw error;
+      return c.json({ ok: true, message: "Cache-only adapter. No live vendor feed is connected yet." });
+    } catch (error) {
+      return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+    }
+  });
+
+  app.get(`${PREFIX}/fitment-report`, ...view, async (c: Context) => {
+    try {
+      const orgId = String(getOrgId(c) || "");
+      const vehicleId = c.req.query("vehicleId")?.trim() || "";
+      if (vehicleId) {
+        const access = await ownVehicle(c, vehicleId);
+        if (access.status !== 200) return c.json({ error: "Vehicle not found" }, access.status === 403 ? 403 : 404);
+      }
+      const header = "section,part,qty_on_shelf,offer\n";
+      return new Response(header, {
+        headers: {
+          "content-type": "text/csv; charset=utf-8",
+          "content-disposition": "attachment; filename=fitment-report.csv",
+          "x-organization-id": orgId,
+        },
+      });
+    } catch (error) {
+      return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+    }
+  });
+
+  app.get(`${PREFIX}/runner-online`, ...view, async (c: Context) => {
+    return c.json({ online: false, windowMinutes: 15 });
   });
 }

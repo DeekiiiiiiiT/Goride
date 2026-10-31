@@ -8,10 +8,14 @@ import { requirePermission } from "./rbac_middleware.ts";
 import { offersForFleet } from "./catalog_parts_shape.ts";
 import {
   loadPartsActivity,
+  myVehicleCard,
   photoFolderAllowed,
   quoteInputError,
+  replyDueAt,
+  scopedToOrg,
   sourcingRow,
   vehicleContextStatus,
+  wearPercent,
 } from "./fleet_find_parts_routes.ts";
 
 Deno.test("T2 unlinked vehicle is a 404-or-403 decision, not a search", () => {
@@ -49,11 +53,11 @@ Deno.test("T5 no user cannot open find parts", async () => {
   assertEquals(res.status, 401);
 });
 
-Deno.test("T6 quantity of zero is refused, and 24h is not an urgency", () => {
+Deno.test("T6 quantity of zero is refused, and within_24h is an urgency", () => {
   assertEquals(quoteInputError({ qty: 0 }), "Quantity must be at least 1");
   assertEquals(quoteInputError({ qty: -1 }), "Quantity must be at least 1");
-  assertEquals(quoteInputError({ urgency: "24h" }), "Urgency must be low, normal, or urgent");
-  assertEquals(quoteInputError({ qty: 2, urgency: "urgent", note: "front pads" }), null);
+  assertEquals(quoteInputError({ urgency: "24h" })?.includes("within_24h"), true);
+  assertEquals(quoteInputError({ qty: 2, urgency: "within_24h", note: "front pads" }), null);
   assertEquals(quoteInputError({ note: "x".repeat(141) })?.includes("140"), true);
 });
 
@@ -91,6 +95,34 @@ Deno.test("T8 activity quotes stay on the caller's org", async () => {
   assertEquals(seen.filter((row) => row === "from:part_quote_request").length, 1);
   assertEquals(seen.includes("organization_id=org-mine"), true);
   assertEquals(seen.includes("organization_id=org-other"), false);
+});
+
+Deno.test("saved searches and parts lists stay on the caller org", () => {
+  const rows = [
+    { organization_id: "org-mine", name: "pads" },
+    { organization_id: "org-other", name: "secret" },
+  ];
+  const kept = scopedToOrg(rows, "org-mine");
+  assertEquals(kept.length, 1);
+  assertEquals(kept[0].name, "pads");
+});
+
+Deno.test("within_24h reply is due in 24 hours", () => {
+  const from = Date.parse("2026-10-31T12:00:00.000Z");
+  assertEquals(replyDueAt("within_24h", from), "2026-11-01T12:00:00.000Z");
+  assertEquals(replyDueAt("urgent", from), "2026-10-31T20:00:00.000Z");
+});
+
+Deno.test("my vehicle card keeps an empty shelf visible", () => {
+  const card = myVehicleCard({ make: "Honda", model: "Fit", year: 2018, verified: true });
+  assertEquals(card.shelfCount, 0);
+  assertEquals(card.serviceDue, "None yet");
+  assertEquals(card.verified, true);
+});
+
+Deno.test("brake wear is blank until a service interval exists", () => {
+  assertEquals(wearPercent(null, 40000), null);
+  assertEquals(wearPercent(10000, 40000), 75);
 });
 
 Deno.test("photo upload refuses another org folder", () => {

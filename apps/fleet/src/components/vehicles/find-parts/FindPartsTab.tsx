@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { pickBestPart } from "@roam/types/partsBestPick";
 import { api } from "../../../services/api";
 import { usePermissions } from "../../../hooks/usePermissions";
+import { useAuth } from "../../auth/AuthContext";
 import { CarStep, type FleetCar } from "./CarStep";
 import { LinkCarPanel } from "./LinkCarPanel";
 import { PartStep } from "./PartStep";
@@ -11,10 +12,10 @@ import { QuoteDialog } from "./QuoteDialog";
 import { RequestPartPanel } from "./RequestPartPanel";
 import { ResultsView } from "./ResultsView";
 import type { PartItem } from "./PartDetailDrawer";
-import { StepBar } from "./StepBar";
 import { VariantStep } from "./VariantStep";
+import { Fp11Markup } from "./markup/Fp11Markup";
 import { ActivityView } from "./ActivityView";
-import type { PartsActivity } from "./PartsActivityPanel";
+import { usePartsActivity } from "./findPartsQueries";
 import "./findParts.css";
 
 type Step = "car" | "version" | "part" | "position" | "results" | "request" | "link" | "missing";
@@ -29,6 +30,7 @@ export function FindPartsTab({
   onUseInService?: (vehicleId: string, componentId: string, partName: string) => void;
 }) {
   const { can } = usePermissions();
+  const { user, role } = useAuth();
   const params = new URLSearchParams(window.location.search);
   const [step, setStep] = useState<Step>(() => {
     if (params.get("view") === "activity") return "car";
@@ -46,15 +48,11 @@ export function FindPartsTab({
   const [partName, setPartName] = useState("");
   const [position, setPosition] = useState(params.get("pos") || "");
   const [error, setError] = useState("");
+  const [attempts, setAttempts] = useState(0);
   const [quotePart, setQuotePart] = useState<Record<string, unknown> | null>(null);
   const [linkMeta, setLinkMeta] = useState({ make: "", model: "", year: "", plate: "" });
 
-  const activity = useQuery({
-    queryKey: ["parts-activity"],
-    queryFn: () => api.partsActivity() as Promise<PartsActivity>,
-    enabled: canView,
-    staleTime: 60_000,
-  });
+  const activity = usePartsActivity(canView);
 
   const search = useQuery({
     queryKey: ["parts-find", vehicleId, make, model, year, variantId, componentId, position],
@@ -92,30 +90,36 @@ export function FindPartsTab({
   if (!canView) {
     return (
       <div className="fleet-find-parts-stitch p-space-xl">
-        <h2 className="text-headline-lg">You don't have access to vehicle parts. Ask your fleet admin.</h2>
-        <p>Back to Fleet maintenance</p>
+        <h2 className="text-headline-lg">Role Authorization Gate</h2>
+        <p>You don&apos;t have access to vehicle parts. Ask your fleet admin.</p>
+        <p className="font-body-sm text-body-sm">Signed in as {user?.email || "unknown"} · role {role || "unknown"}</p>
+        <button type="button" onClick={() => { window.location.search = ""; }}>Back to Fleet maintenance</button>
+        <Fp11Markup />
       </div>
     );
   }
 
   return (
-    <div className="fleet-find-parts-stitch">
+    <div className="fleet-find-parts-stitch find-parts-nested-markup" data-step={stepNumber} data-trail={trail.map((chip) => chip.label).join(" › ")}>
       {error ? (
         <div className="mb-space-md">
-          <p>Could not load parts. Nothing was changed.</p>
-          <button type="button" onClick={() => setError("")}>Retry</button>
+          <p>Could not load parts. Nothing was changed. ATTEMPT: {attempts} OF 3</p>
+          <button type="button" onClick={() => {
+            const next = attempts + 1;
+            setAttempts(next);
+            if (next <= 3) {
+              sessionStorage.setItem("find-parts-trail", JSON.stringify({ vehicleId, componentId, position }));
+              setError("");
+              void search.refetch();
+            }
+          }}>Retry</button>
+          <Fp11Markup />
         </div>
       ) : null}
       {view === "activity" ? (
         <ActivityView activity={activity.data ?? null} onBack={() => { setView("search"); writeUrl({}); }} />
       ) : (
         <>
-          <StepBar
-            step={stepNumber}
-            trail={step === "car" ? [] : trail}
-            title={step === "results" ? `Parts for ${car ? [car.year, car.make, car.model].filter(Boolean).join(" ") : "this car"}` : undefined}
-            hint={step === "results" ? (partName || "Matches for this car") : undefined}
-          />
           {step === "car" ? (
             <CarStep
               cars={cars}

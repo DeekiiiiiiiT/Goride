@@ -267,11 +267,10 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
         <div className="hidden md:block">
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
             <Wrench className="w-7 h-7 text-amber-600" />
-            Fleet maintenance
+            Fleet Maintenance
           </h1>
           <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-            By vehicle status and the service ledger for what’s due vs done. Log services here or from{" "}
-            <strong>Vehicles</strong>.
+            By vehicle status, the service ledger, and parts for your cars.
           </p>
         </div>
         <div className="flex flex-wrap gap-2 justify-end">
@@ -284,7 +283,7 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
             title={items.length === 0 ? "No vehicles in fleet" : undefined}
           >
             <Plus className="w-4 h-4" />
-            Log new service
+            + Log new service
           </Button>
           <Button
             type="button"

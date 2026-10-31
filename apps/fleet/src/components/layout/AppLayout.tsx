@@ -6,6 +6,7 @@ import { useIsMobile } from '../ui/use-mobile';
 import { AnnouncementBanner } from './AnnouncementBanner';
 import { AppSidebar } from './AppSidebar';
 import { AppTopNav } from './AppTopNav';
+import { FleetFooter, FleetPhoneNav, FleetStatusStrip } from './FleetChrome';
 import { resolveNavPageTitle } from './fleetNavModel';
 import { useFleetNavModel } from './useFleetNavModel';
 
@@ -70,9 +71,12 @@ export function AppLayout({ children, currentPage, onNavigate, onLogout }: AppLa
             </h1>
           </header>
 
+          <FleetStatusStrip onNavigate={onNavigate} />
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain py-4 pl-[max(1rem,env(safe-area-inset-left,0px))] pr-[max(1rem,env(safe-area-inset-right,0px))] pb-[max(1.5rem,env(safe-area-inset-bottom,0px))] md:p-8">
             <div className="w-full min-w-0 md:mx-auto md:max-w-[1400px]">{children}</div>
           </div>
+          <FleetFooter />
+          {isMobile ? <FleetPhoneNav currentPage={currentPage} onNavigate={onNavigate} /> : null}
         </main>
       </div>
       <Toaster

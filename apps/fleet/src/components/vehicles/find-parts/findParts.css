@@ -1,4 +1,8 @@
 /* Scoped to Find parts. Other Fleet tabs do not use these names. */
+.fleet-find-parts-stitch.find-parts-nested-markup .find-parts-markup-root > main > div > div:first-child,
+.fleet-find-parts-stitch.find-parts-nested-markup .find-parts-markup-root > main > div > div:nth-child(2) {
+  display: none;
+}
 .fleet-find-parts-stitch { font-family: Inter, sans-serif; color: #191c1e; background: #f7f9fb; }
 .fleet-find-parts-stitch .material-symbols-outlined { font-family: "Material Symbols Outlined"; font-weight: normal; font-style: normal; line-height: 1; display: inline-block; white-space: nowrap; font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24; }
 .fleet-find-parts-stitch .font-label-plate,

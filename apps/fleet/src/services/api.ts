@@ -131,16 +131,33 @@ export function requestMayAutoRetry(options: RequestInit = {}): boolean {
 
 // Performance optimization: Reduced to 1 retry (2 total attempts)
 // Server already retries 2x, so total attempts = 2 server × 2 frontend = 4
+let lastFleetCoreLatencyMs: number | null = null;
+
+export function getLastFleetCoreLatencyMs() {
+  return lastFleetCoreLatencyMs;
+}
+
 export async function fetchWithRetry(url: string, options: RequestInit = {}, retries = 1, backoff = 500): Promise<Response> {
   const attempts = requestMayAutoRetry(options) ? retries : 0;
+  const fleetCorePrefix = typeof API_ENDPOINTS !== "undefined" ? API_ENDPOINTS.fleetCore : "";
+  const trackLatency = Boolean(fleetCorePrefix && url.startsWith(fleetCorePrefix));
+  const started = trackLatency ? performance.now() : 0;
   try {
     const response = await fetch(url, options);
+    if (trackLatency) {
+      lastFleetCoreLatencyMs = Math.round(performance.now() - started);
+      window.dispatchEvent(new CustomEvent("fleet-core-latency", { detail: lastFleetCoreLatencyMs }));
+    }
     // If 5xx error, retry
     if (response.status >= 500 && attempts > 0) {
         throw new Error(`Server error: ${response.status}`);
     }
     return response;
   } catch (err: any) {
+    if (trackLatency) {
+      lastFleetCoreLatencyMs = Math.round(performance.now() - started);
+      window.dispatchEvent(new CustomEvent("fleet-core-latency", { detail: lastFleetCoreLatencyMs }));
+    }
     if (err?.name === 'AbortError') throw err;
     if (attempts > 0) {
       // Wait before retrying
@@ -2957,6 +2974,91 @@ export const api = {
       return response.json();
   },
 
+  async partsMyVehicles() {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/my-vehicles`, { headers: await getHeaders(null) });
+      if (!response.ok) throw new Error("Could not load your vehicles");
+      return response.json() as Promise<{ items: Array<Record<string, unknown>> }>;
+  },
+
+  async partsSavedSearches() {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/saved-searches`, { headers: await getHeaders(null) });
+      if (!response.ok) throw new Error("Could not load saved searches");
+      return response.json();
+  },
+
+  async savePartsSearch(body: { name: string; url: string }) {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/saved-searches`, {
+        method: "POST",
+        headers: await getHeaders(),
+        body: JSON.stringify(body),
+      });
+      if (!response.ok) throw new Error("Could not save this search");
+      return response.json();
+  },
+
+  async partsList() {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/parts-list`, { headers: await getHeaders(null) });
+      if (!response.ok) throw new Error("Could not load the parts list");
+      return response.json();
+  },
+
+  async addToPartsList(body: { label: string; qty?: number; partId?: string; supplierId?: string; componentId?: string }) {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/parts-list`, {
+        method: "POST",
+        headers: await getHeaders(),
+        body: JSON.stringify(body),
+      });
+      if (!response.ok) throw new Error("Could not add that part");
+      return response.json();
+  },
+
+  async reportWrongFit(body: { id: string; table?: "parts_sourcing_requests" | "part_quote_request" }) {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/wrong-fit`, {
+        method: "POST",
+        headers: await getHeaders(),
+        body: JSON.stringify(body),
+      });
+      if (!response.ok) throw new Error("Could not report the wrong part");
+      return response.json();
+  },
+
+  async wrongFitCount() {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/wrong-fit-count`, { headers: await getHeaders(null) });
+      if (!response.ok) throw new Error("Could not load the fitment count");
+      return response.json() as Promise<{ count: number; days: number }>;
+  },
+
+  async notifyPartsAdmin(body: { kind?: string; title?: string; body: string }) {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/notify-admin`, {
+        method: "POST",
+        headers: await getHeaders(),
+        body: JSON.stringify(body),
+      });
+      if (!response.ok) throw new Error("Could not send that notice");
+      return response.json();
+  },
+
+  async partsSupplierSync() {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/supplier-sync`, { headers: await getHeaders(null) });
+      if (!response.ok) throw new Error("Could not load supplier sync");
+      return response.json();
+  },
+
+  async forcePartsSupplierSync() {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/supplier-sync`, {
+        method: "POST",
+        headers: await getHeaders(),
+      });
+      if (!response.ok) throw new Error("Could not start a sync");
+      return response.json();
+  },
+
+  async partsRunnerOnline() {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/runner-online`, { headers: await getHeaders(null) });
+      if (!response.ok) throw new Error("Could not check the parts desk");
+      return response.json() as Promise<{ online: boolean }>;
+  },
+
   async requestCatalogAddition(body: { make: string; model: string; year: number; vehicleId?: string | null }) {
       const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/catalog-request`, {
         method: "POST",
@@ -2979,6 +3081,22 @@ export const api = {
       });
       if (!response.ok) throw new Error("Could not upload the photo");
       return response.json() as Promise<{ photo_url: string }>;
+  },
+
+  async downloadFitmentReport(query: Record<string, string>) {
+      const params = new URLSearchParams(query).toString();
+      const response = await fetchWithRetry(
+        `${API_ENDPOINTS.fleetCore}/parts/fitment-report?${params}`,
+        { headers: await getHeaders(null) },
+      );
+      if (!response.ok) throw new Error("Could not download fitment report");
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = "fitment-report.csv";
+      anchor.click();
+      URL.revokeObjectURL(url);
   },
 
   async requestPartQuote(body: Record<string, unknown>) {
