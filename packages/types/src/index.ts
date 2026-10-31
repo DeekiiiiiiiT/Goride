@@ -35,6 +35,7 @@ export * from './partsBestPick';
 export * from './findPartsParse';
 export * from './frameNumberDecode';
 export * from './partsCatalogCsvImport';
+export * from './partsDatabaseImportCsv';
 export * from './repeatPartFailure';
 export * from './performance';
 export * from './station';

@@ -32,6 +32,7 @@ Deno.test("front keeps front and blank, and drops rear", () => {
 Deno.test("legacy mode lists the parts in the first type only", () => {
   const item: FoundPart = {
     partId: "oil",
+    componentId: null,
     name: "Oil filter",
     brand: "Toyota",
     number: "04152",

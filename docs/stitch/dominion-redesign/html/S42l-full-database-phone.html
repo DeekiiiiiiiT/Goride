@@ -1,0 +1,867 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/>
+<meta content="mobile_screen" name="shell-type"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "surface": "#faf8ff",
+            "on-surface": "#191b24",
+            "surface-container-high": "#e7e7f3",
+            "primary-container": "#0153dc",
+            "on-secondary-fixed-variant": "#3f465c",
+            "tertiary-fixed": "#dbe1ff",
+            "surface-container-lowest": "#ffffff",
+            "surface-container-low": "#f3f3ff",
+            "surface-variant": "#e1e1ed",
+            "surface-dim": "#d9d9e5",
+            "on-tertiary": "#ffffff",
+            "primary": "#003ea9",
+            "on-secondary-container": "#5c647a",
+            "background": "#faf8ff",
+            "secondary-fixed-dim": "#bec6e0",
+            "surface-bright": "#faf8ff",
+            "secondary-fixed": "#dae2fd",
+            "on-tertiary-fixed": "#141b30",
+            "surface-tint": "#0053db",
+            "secondary-container": "#dae2fd",
+            "outline-variant": "#e2e1ec",
+            "secondary": "#565e74",
+            "on-tertiary-container": "#d2d8f6",
+            "on-background": "#191b24",
+            "on-primary-fixed": "#00174b",
+            "error": "#ba1a1a",
+            "surface-container-highest": "#e1e1ed",
+            "surface-container": "#ededf9",
+            "on-secondary-fixed": "#131b2e",
+            "primary-fixed-dim": "#b4c5ff",
+            "inverse-primary": "#b4c5ff",
+            "on-error": "#ffffff",
+            "on-primary": "#ffffff",
+            "on-surface-variant": "#434655",
+            "tertiary-container": "#575e77",
+            "inverse-on-surface": "#f0f0fc",
+            "on-error-container": "#93000a",
+            "tertiary": "#40465e",
+            "on-tertiary-fixed-variant": "#3f465e",
+            "on-primary-container": "#ced8ff",
+            "error-container": "#ffdad6",
+            "primary-fixed": "#dbe1ff",
+            "on-secondary": "#ffffff",
+            "on-primary-fixed-variant": "#003ea8",
+            "inverse-surface": "#2e3039",
+            "tertiary-fixed-dim": "#bfc5e2",
+            "outline": "#737686"
+          },
+          borderRadius: {
+            "DEFAULT": "0.125rem",
+            "lg": "0.25rem",
+            "xl": "0.5rem",
+            "full": "0.75rem"
+          },
+          fontFamily: {
+            "mono-sm": ["JetBrains Mono", "monospace"],
+            "body-sm": ["Inter", "sans-serif"],
+            "body-md": ["Inter", "sans-serif"],
+            "mono-md": ["JetBrains Mono", "monospace"],
+            "headline-xl": ["Inter", "sans-serif"],
+            "headline-md": ["Inter", "sans-serif"],
+            "mono-lg": ["JetBrains Mono", "monospace"],
+            "label-xs": ["Inter", "sans-serif"],
+            "label-md": ["Inter", "sans-serif"],
+            "headline-lg": ["Inter", "sans-serif"]
+          }
+        }
+      }
+    }
+  </script>
+<style>
+    body {
+      -webkit-font-smoothing: antialiased;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+    .hide-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .hide-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+  </style>
+</head>
+<body class="bg-[#0f172a] text-[#191c20] flex justify-center min-h-screen">
+<!-- Mobile Portrait Container (390px) -->
+<div class="w-[390px] min-h-screen bg-[#faf8ff] flex flex-col relative shadow-2xl border-x border-[#1e293b]/20">
+<!-- iOS Status Bar Simulation -->
+<div class="h-11 bg-[#0f172a] text-[#ffffff] px-5 flex items-center justify-between shrink-0 select-none pt-1">
+<span class="font-mono-sm text-[12px] font-semibold tracking-tight">9:41</span>
+<div class="flex items-center gap-1.5 text-[14px]">
+<span class="material-symbols-outlined text-[15px]">signal_cellular_alt</span>
+<span class="material-symbols-outlined text-[15px]">wifi</span>
+<span class="material-symbols-outlined text-[18px]">battery_full</span>
+</div>
+</div>
+<!-- Mobile App Header: DOMINION BRANDING -->
+<header class="bg-[#0f172a] border-b border-[#1e293b] px-4 py-3 shrink-0 text-[#ffffff]">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded-md bg-[#0153dc] flex items-center justify-center">
+<span class="material-symbols-outlined text-[#ffffff] text-[15px]">token</span>
+</div>
+<div class="flex flex-col">
+<div class="flex items-center gap-1.5">
+<span class="font-headline-md text-[13px] tracking-[0.14em] uppercase font-bold text-white leading-none">DOMINION</span>
+<span class="w-1.5 h-1.5 rounded-full bg-[#10b981]"></span>
+</div>
+<span class="font-mono-sm text-[9px] text-[#64748b] tracking-wider leading-none mt-0.5">ENTERPRISE OS · LIVE</span>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<div class="flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#1e293b] border border-[#334155]">
+<span class="font-mono-sm text-[10px] font-bold text-[#b4c5ff]">DT</span>
+<span class="text-[#64748b] text-[10px]">·</span>
+<span class="font-mono-sm text-[9px] text-[#94a3b8] uppercase font-semibold">OWNER</span>
+</div>
+<button class="w-7 h-7 rounded-md bg-[#1e293b] text-[#94a3b8] flex items-center justify-center relative">
+<span class="material-symbols-outlined text-[16px]">notifications</span>
+<span class="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-[#ba1a1a]"></span>
+</button>
+</div>
+</div>
+<!-- Compact Breadcrumbs & Schema -->
+<div class="flex items-center justify-between mt-2.5 pt-2 border-t border-[#1e293b]/70">
+<div class="font-mono-sm text-[10px] text-[#94a3b8] flex items-center gap-1 overflow-hidden">
+<span class="text-[#64748b]">PARTS</span>
+<span class="text-[#475569]">/</span>
+<span class="text-[#ffffff] font-semibold truncate">FULL DATABASE</span>
+</div>
+<span class="font-mono-sm text-[9px] px-1.5 py-0.2 rounded bg-[#1e293b] text-[#38bdf8] font-semibold">
+          1.48M FITMENTS
+        </span>
+</div>
+</header>
+<!-- Navigation Tabs Strip -->
+<div class="bg-[#ffffff] border-b border-[#e2e1ec] px-4 flex items-center justify-between text-body-sm shrink-0">
+<div class="flex items-center gap-4">
+<button class="py-2.5 font-medium text-[#565e74] text-[13px]">Find parts</button>
+<button class="py-2.5 font-bold text-[#0153dc] text-[13px] border-b-2 border-[#0153dc] -mb-[1px] flex items-center gap-1.5">
+<span>Full database</span>
+<span class="px-1.5 py-0.2 rounded-full bg-[#f3f3ff] text-[#0153dc] font-mono-sm text-[10px] font-bold">18</span>
+</button>
+<button class="py-2.5 font-medium text-[#565e74] text-[13px] flex items-center gap-1">
+<span>Import</span>
+<span class="px-1 py-0.2 rounded bg-[#e2e1ec] text-[#565e74] font-mono-sm text-[9px]">CSV</span>
+</button>
+</div>
+<button class="p-1 text-[#565e74] hover:text-[#0153dc]" title="Advanced Tune">
+<span class="material-symbols-outlined text-[18px]">tune</span>
+</button>
+</div>
+<!-- Top Action Bar (Search + Quick Action & Filters) -->
+<div class="bg-[#ffffff] px-3.5 py-2.5 border-b border-[#e2e1ec] shrink-0 flex flex-col gap-2">
+<!-- Search Field -->
+<div class="relative w-full">
+<span class="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-[#737686] text-[17px]">search</span>
+<input class="w-full h-8 pl-8 pr-7 rounded-lg bg-[#faf8ff] border border-[#e2e1ec] font-body-sm text-[12px] text-[#191c20] placeholder:text-[#737686] focus:outline-none focus:border-[#0153dc] focus:bg-[#ffffff] transition-all" placeholder="Search part name, number or brand" type="text"/>
+<span class="material-symbols-outlined absolute right-2.5 top-1/2 -translate-y-1/2 text-[#737686] text-[15px]">mic</span>
+</div>
+<!-- Action Row: Active Filter Pill & Add Part -->
+<div class="flex items-center justify-between gap-2">
+<!-- Active Filter Trigger -->
+<button class="flex items-center gap-1.5 px-2.5 h-7 rounded-lg bg-[#f3f3ff] border border-[#0153dc]/30 text-[#0153dc] font-body-sm text-[11px] font-semibold active:bg-[#e2e1ec] transition-colors">
+<span class="material-symbols-outlined text-[14px]">filter_list</span>
+<span>Filters (3 active)</span>
+<span class="w-1.5 h-1.5 rounded-full bg-[#0153dc]"></span>
+</button>
+<div class="flex items-center gap-1.5">
+<button class="flex items-center gap-1 px-2 h-7 rounded-lg bg-[#faf8ff] border border-[#e2e1ec] text-[#565e74] font-body-sm text-[11px] font-medium" title="Export CSV">
+<span class="material-symbols-outlined text-[14px]">download</span>
+<span>CSV</span>
+</button>
+<button class="flex items-center gap-1 px-2.5 h-7 rounded-lg bg-[#0153dc] text-[#ffffff] font-body-sm text-[11px] font-semibold shadow-xs active:bg-[#003ea9]">
+<span class="material-symbols-outlined text-[14px]">add</span>
+<span>+ Add part</span>
+</button>
+</div>
+</div>
+<!-- Active Filter Tags (Toyota, Roomy, Brakes) -->
+<div class="flex items-center gap-1.5 overflow-x-auto hide-scrollbar pt-0.5">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#faf8ff] border border-[#e2e1ec] text-[10px] text-[#191c20] shrink-0 font-medium">
+<span>Make: Toyota</span>
+<span class="text-[#737686] hover:text-[#ba1a1a] cursor-pointer text-[11px]">✕</span>
+</span>
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#faf8ff] border border-[#e2e1ec] text-[10px] text-[#191c20] shrink-0 font-medium">
+<span>Model: Roomy</span>
+<span class="text-[#737686] hover:text-[#ba1a1a] cursor-pointer text-[11px]">✕</span>
+</span>
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#faf8ff] border border-[#e2e1ec] text-[10px] text-[#191c20] shrink-0 font-medium">
+<span>Area: Brakes</span>
+<span class="text-[#737686] hover:text-[#ba1a1a] cursor-pointer text-[11px]">✕</span>
+</span>
+<button class="text-[10px] text-[#565e74] hover:text-[#0153dc] underline shrink-0 pl-1 font-medium">Clear</button>
+</div>
+</div>
+<!-- Sticky Horizontal Filter Chips Bar -->
+<div class="sticky top-0 bg-[#ffffff] border-b border-[#e2e1ec] py-2 px-3 z-30 shrink-0 shadow-xs">
+<div class="flex items-center gap-1.5 overflow-x-auto hide-scrollbar">
+<!-- All (18) -->
+<button class="flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#0153dc] text-[#ffffff] font-body-sm text-[11px] font-semibold shrink-0 shadow-xs">
+<span>All</span>
+<span class="px-1 py-0.2 rounded-full bg-[#ffffff]/20 font-mono-sm text-[10px]">18</span>
+</button>
+<!-- Made for the car · OEM (5) -->
+<button class="flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#faf8ff] border border-[#e2e1ec] text-[#191c20] font-body-sm text-[11px] font-medium shrink-0 hover:bg-[#f3f3ff]">
+<span class="w-1.5 h-1.5 rounded-full bg-[#0153dc]"></span>
+<span>Made for car</span>
+<span class="px-1 py-0.2 rounded bg-[#e2e1ec] text-[#565e74] font-mono-sm text-[9px]">OEM · 5</span>
+</button>
+<!-- Same car, diff badge · Sister (2) -->
+<button class="flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#faf8ff] border border-[#e2e1ec] text-[#191c20] font-body-sm text-[11px] font-medium shrink-0 hover:bg-[#f3f3ff]">
+<span class="w-1.5 h-1.5 rounded-full bg-[#0e7490]"></span>
+<span>Sister car</span>
+<span class="px-1 py-0.2 rounded bg-[#e2e1ec] text-[#565e74] font-mono-sm text-[9px]">2</span>
+</button>
+<!-- Other brands · Aftermarket (6) -->
+<button class="flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#faf8ff] border border-[#e2e1ec] text-[#191c20] font-body-sm text-[11px] font-medium shrink-0 hover:bg-[#f3f3ff]">
+<span class="w-1.5 h-1.5 rounded-full bg-[#7c3aed]"></span>
+<span>Other brands</span>
+<span class="px-1 py-0.2 rounded bg-[#e2e1ec] text-[#565e74] font-mono-sm text-[9px]">6</span>
+</button>
+<!-- Fits by size · Universal (5) -->
+<button class="flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#faf8ff] border border-[#e2e1ec] text-[#191c20] font-body-sm text-[11px] font-medium shrink-0 hover:bg-[#f3f3ff]">
+<span class="w-1.5 h-1.5 rounded-full bg-[#006e31]"></span>
+<span>Fits by size</span>
+<span class="px-1 py-0.2 rounded bg-[#e2e1ec] text-[#565e74] font-mono-sm text-[9px]">5</span>
+</button>
+<!-- Fits the engine · Engine (0) -->
+<button class="flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#faf8ff] border border-[#e2e1ec] text-[#94a3b8] font-body-sm text-[11px] font-medium shrink-0 opacity-60">
+<span class="w-1.5 h-1.5 rounded-full bg-[#b45309]"></span>
+<span>Engine fitment</span>
+<span class="px-1 py-0.2 rounded bg-[#e2e1ec] text-[#94a3b8] font-mono-sm text-[9px]">0</span>
+</button>
+</div>
+</div>
+<!-- Main Scrollable Feed of Mobile Cards -->
+<main class="flex-1 overflow-y-auto px-3.5 py-3 space-y-4 pb-24">
+<!-- ========================================== -->
+<!-- GROUP 1: Made for the car · OEM (5 records) -->
+<!-- ========================================== -->
+<section class="space-y-2.5">
+<!-- Single-line Group Header + Actions underneath -->
+<div class="bg-[#ffffff] p-2.5 rounded-xl border border-[#e2e1ec] shadow-xs">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2 truncate">
+<span class="w-2.5 h-2.5 rounded-full bg-[#0153dc] shrink-0"></span>
+<span class="font-headline-md text-[14px] font-bold text-[#191c20] truncate">Made for the car</span>
+<span class="px-1.5 py-0.2 rounded bg-[#e2e1ec] text-[#565e74] font-mono-sm text-[10px] font-bold">OEM</span>
+</div>
+<button class="text-[#737686] hover:text-[#191c20] p-0.5" title="Collapse">
+<span class="material-symbols-outlined text-[17px]">expand_less</span>
+</button>
+</div>
+<!-- Underneath sub-row: count and action -->
+<div class="flex items-center justify-between mt-1 pt-1 border-t border-[#f3f3ff]">
+<span class="font-mono-sm text-[11px] text-[#565e74]">5 records in file</span>
+<button class="text-[#0153dc] font-body-sm text-[11px] font-semibold flex items-center gap-0.5 hover:underline">
+<span class="material-symbols-outlined text-[13px]">add</span> + Add a part
+            </button>
+</div>
+</div>
+<!-- Cards List for OEM -->
+<div class="space-y-2">
+<!-- OEM Card 1: Front brake pad set (Active Item) -->
+<div class="p-3 rounded-xl bg-[#ffffff] border-l-4 border-l-[#0153dc] border-y border-r border-[#e2e1ec] shadow-xs active:bg-[#f3f3ff] transition-all">
+<div class="flex items-start justify-between gap-2">
+<div>
+<span class="font-body-md text-[13px] font-bold text-[#191c20] block">Front brake pad set</span>
+<span class="font-mono-md text-[12px] font-bold text-[#0153dc] tracking-tight">04465-B1190</span>
+</div>
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-600/20 text-amber-700 font-label-xs text-[10px] font-semibold shrink-0">
+<span class="w-1.5 h-1.5 rounded-full bg-amber-600 animate-pulse"></span>
+                Needs checking
+              </span>
+</div>
+<!-- Meta details row -->
+<div class="flex items-center gap-2 mt-2 font-body-sm text-[11px] text-[#565e74]">
+<span class="px-1.5 py-0.5 rounded bg-[#ededf9] text-[#191c20] font-medium">Toyota</span>
+<span class="px-1.5 py-0.5 rounded bg-[#f3f3ff] text-[#565e74]">Brakes</span>
+<span class="text-[#94a3b8]">·</span>
+<span class="font-mono-sm text-[10px] text-[#434655] truncate">Toyota Roomy, Tank (7 vers.)</span>
+</div>
+<!-- Action buttons -->
+<div class="flex items-center justify-between mt-2.5 pt-2 border-t border-[#f3f3ff]">
+<span class="font-mono-sm text-[9px] text-[#94a3b8]">DIRECT FITMENT</span>
+<div class="flex items-center gap-2">
+<button class="px-2 py-1 rounded-md text-[#565e74] hover:text-[#0153dc] font-body-sm text-[11px] font-medium flex items-center gap-1">
+<span class="material-symbols-outlined text-[13px]">edit</span> Edit
+                </button>
+<button class="px-2.5 py-1 rounded-md bg-[#f3f3ff] text-[#0153dc] hover:bg-[#e2e1ec] font-body-sm text-[11px] font-bold flex items-center gap-1">
+<span class="material-symbols-outlined text-[13px]">visibility</span> View details
+                </button>
+</div>
+</div>
+</div>
+<!-- OEM Card 2: Rear brake shoe kit -->
+<div class="p-3 rounded-xl bg-[#ffffff] border border-[#e2e1ec] shadow-xs active:bg-[#faf8ff] transition-all">
+<div class="flex items-start justify-between gap-2">
+<div>
+<span class="font-body-md text-[13px] font-semibold text-[#191c20] block">Rear brake shoe kit (drum)</span>
+<span class="font-mono-md text-[12px] font-semibold text-[#191c20] tracking-tight">04495-B2400</span>
+</div>
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-600/20 text-amber-700 font-label-xs text-[10px] font-semibold shrink-0">
+<span class="w-1.5 h-1.5 rounded-full bg-amber-600"></span>
+                Needs checking
+              </span>
+</div>
+<div class="flex items-center gap-2 mt-2 font-body-sm text-[11px] text-[#565e74]">
+<span class="px-1.5 py-0.5 rounded bg-[#ededf9] text-[#191c20] font-medium">Toyota</span>
+<span class="px-1.5 py-0.5 rounded bg-[#f3f3ff] text-[#565e74]">Brakes</span>
+<span class="text-[#94a3b8]">·</span>
+<span class="font-mono-sm text-[10px] text-[#434655]">Toyota Roomy · 3 vers.</span>
+</div>
+<div class="flex items-center justify-end gap-2 mt-2 pt-2 border-t border-[#f3f3ff]">
+<button class="p-1 text-[#565e74] hover:text-[#0153dc]"><span class="material-symbols-outlined text-[15px]">edit</span></button>
+<button class="p-1 text-[#565e74] hover:text-[#ba1a1a]"><span class="material-symbols-outlined text-[15px]">delete</span></button>
+<button class="text-[#0153dc] font-body-sm text-[11px] font-semibold px-2 py-0.5 rounded hover:bg-[#f3f3ff]">View</button>
+</div>
+</div>
+<!-- OEM Card 3: Oil filter (Verified) -->
+<div class="p-3 rounded-xl bg-[#ffffff] border border-[#e2e1ec] shadow-xs active:bg-[#faf8ff] transition-all">
+<div class="flex items-start justify-between gap-2">
+<div>
+<span class="font-body-md text-[13px] font-semibold text-[#191c20] block">Oil filter</span>
+<span class="font-mono-md text-[12px] font-semibold text-[#191c20] tracking-tight">04152-40060</span>
+</div>
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-600/20 text-emerald-700 font-label-xs text-[10px] font-semibold shrink-0">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+                Verified
+              </span>
+</div>
+<div class="flex items-center gap-2 mt-2 font-body-sm text-[11px] text-[#565e74]">
+<span class="px-1.5 py-0.5 rounded bg-[#ededf9] text-[#191c20] font-medium">Toyota</span>
+<span class="px-1.5 py-0.5 rounded bg-[#f3f3ff] text-[#565e74]">Engine</span>
+<span class="text-[#94a3b8]">·</span>
+<span class="font-mono-sm text-[10px] text-[#434655]">Toyota Roomy · 1 version</span>
+</div>
+<div class="flex items-center justify-end gap-2 mt-2 pt-2 border-t border-[#f3f3ff]">
+<button class="p-1 text-[#565e74] hover:text-[#0153dc]"><span class="material-symbols-outlined text-[15px]">edit</span></button>
+<button class="p-1 text-[#565e74] hover:text-[#ba1a1a]"><span class="material-symbols-outlined text-[15px]">delete</span></button>
+<button class="text-[#0153dc] font-body-sm text-[11px] font-semibold px-2 py-0.5 rounded hover:bg-[#f3f3ff]">View</button>
+</div>
+</div>
+<!-- OEM Card 4: Front brake rotor disc -->
+<div class="p-3 rounded-xl bg-[#ffffff] border border-[#e2e1ec] shadow-xs active:bg-[#faf8ff] transition-all">
+<div class="flex items-start justify-between gap-2">
+<div>
+<span class="font-body-md text-[13px] font-semibold text-[#191c20] block">Front brake rotor disc</span>
+<span class="font-mono-md text-[12px] font-semibold text-[#191c20] tracking-tight">43512-B1050</span>
+</div>
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-600/20 text-amber-700 font-label-xs text-[10px] font-semibold shrink-0">
+<span class="w-1.5 h-1.5 rounded-full bg-amber-600"></span>
+                Needs checking
+              </span>
+</div>
+<div class="flex items-center gap-2 mt-2 font-body-sm text-[11px] text-[#565e74]">
+<span class="px-1.5 py-0.5 rounded bg-[#ededf9] text-[#191c20] font-medium">Toyota</span>
+<span class="px-1.5 py-0.5 rounded bg-[#f3f3ff] text-[#565e74]">Brakes</span>
+<span class="text-[#94a3b8]">·</span>
+<span class="font-mono-sm text-[10px] text-[#434655]">Toyota Roomy · 5 versions</span>
+</div>
+<div class="flex items-center justify-end gap-2 mt-2 pt-2 border-t border-[#f3f3ff]">
+<button class="p-1 text-[#565e74] hover:text-[#0153dc]"><span class="material-symbols-outlined text-[15px]">edit</span></button>
+<button class="p-1 text-[#565e74] hover:text-[#ba1a1a]"><span class="material-symbols-outlined text-[15px]">delete</span></button>
+<button class="text-[#0153dc] font-body-sm text-[11px] font-semibold px-2 py-0.5 rounded hover:bg-[#f3f3ff]">View</button>
+</div>
+</div>
+<!-- OEM Card 5: Cabin air filter -->
+<div class="p-3 rounded-xl bg-[#ffffff] border border-[#e2e1ec] shadow-xs active:bg-[#faf8ff] transition-all">
+<div class="flex items-start justify-between gap-2">
+<div>
+<span class="font-body-md text-[13px] font-semibold text-[#191c20] block">Cabin air filter</span>
+<span class="font-mono-md text-[12px] font-semibold text-[#191c20] tracking-tight">87139-52040</span>
+</div>
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-600/20 text-emerald-700 font-label-xs text-[10px] font-semibold shrink-0">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+                Verified
+              </span>
+</div>
+<div class="flex items-center gap-2 mt-2 font-body-sm text-[11px] text-[#565e74]">
+<span class="px-1.5 py-0.5 rounded bg-[#ededf9] text-[#191c20] font-medium">Toyota</span>
+<span class="px-1.5 py-0.5 rounded bg-[#f3f3ff] text-[#565e74]">Filters</span>
+<span class="text-[#94a3b8]">·</span>
+<span class="font-mono-sm text-[10px] text-[#434655]">Toyota Roomy, Tank · 3 vers.</span>
+</div>
+<div class="flex items-center justify-end gap-2 mt-2 pt-2 border-t border-[#f3f3ff]">
+<button class="p-1 text-[#565e74] hover:text-[#0153dc]"><span class="material-symbols-outlined text-[15px]">edit</span></button>
+<button class="p-1 text-[#565e74] hover:text-[#ba1a1a]"><span class="material-symbols-outlined text-[15px]">delete</span></button>
+<button class="text-[#0153dc] font-body-sm text-[11px] font-semibold px-2 py-0.5 rounded hover:bg-[#f3f3ff]">View</button>
+</div>
+</div>
+</div>
+</section>
+<!-- ========================================== -->
+<!-- GROUP 2: Same car, diff badge · Sister (2) -->
+<!-- ========================================== -->
+<section class="space-y-2.5">
+<div class="bg-[#ffffff] p-2.5 rounded-xl border border-[#e2e1ec] shadow-xs">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2 truncate">
+<span class="w-2.5 h-2.5 rounded-full bg-[#0e7490] shrink-0"></span>
+<span class="font-headline-md text-[14px] font-bold text-[#191c20] truncate">Same car, diff. badge</span>
+<span class="px-1.5 py-0.2 rounded bg-[#e2e1ec] text-[#565e74] font-mono-sm text-[10px] font-bold">Sister</span>
+</div>
+<button class="text-[#737686] hover:text-[#191c20] p-0.5" title="Collapse">
+<span class="material-symbols-outlined text-[17px]">expand_less</span>
+</button>
+</div>
+<!-- Underneath sub-row: count and action -->
+<div class="flex items-center justify-between mt-1 pt-1 border-t border-[#f3f3ff]">
+<span class="font-mono-sm text-[11px] text-[#565e74]">2 families on file</span>
+<button class="text-[#0e7490] font-body-sm text-[11px] font-semibold flex items-center gap-0.5 hover:underline">
+<span class="material-symbols-outlined text-[13px]">add</span> + New family
+            </button>
+</div>
+</div>
+<!-- Sister Family Cards -->
+<div class="space-y-2">
+<!-- Sister Card 1: 2WD -->
+<div class="p-3 rounded-xl bg-[#ffffff] border border-[#e2e1ec] shadow-xs space-y-2">
+<div>
+<span class="font-body-md text-[13px] font-bold text-[#191c20] leading-tight block">Roomy / Tank / Thor / Justy · 2WD (M900)</span>
+<span class="font-mono-sm text-[11px] text-[#0e7490] font-bold block mt-0.5">M900A · M900S · M900F</span>
+</div>
+<!-- Badges for cars -->
+<div class="flex flex-wrap gap-1 pt-1">
+<span class="px-2 py-0.5 rounded-md bg-[#faf8ff] border border-[#e2e1ec] text-[#191c20] font-mono-sm text-[10px]">Toyota Roomy</span>
+<span class="px-2 py-0.5 rounded-md bg-[#faf8ff] border border-[#e2e1ec] text-[#191c20] font-mono-sm text-[10px]">Toyota Tank</span>
+<span class="px-2 py-0.5 rounded-md bg-[#faf8ff] border border-[#e2e1ec] text-[#191c20] font-mono-sm text-[10px]">Daihatsu Thor</span>
+<span class="px-2 py-0.5 rounded-md bg-[#faf8ff] border border-[#e2e1ec] text-[#191c20] font-mono-sm text-[10px]">Subaru Justy</span>
+</div>
+<!-- Family actions -->
+<div class="flex items-center justify-between pt-2 border-t border-[#f3f3ff]">
+<button class="text-[#565e74] hover:text-[#ba1a1a] text-[11px] font-medium">Remove a car</button>
+<div class="flex items-center gap-2">
+<button class="text-[#0153dc] hover:underline font-semibold text-[11px]">+ Add a car</button>
+<button class="px-2 py-0.5 rounded bg-[#f3f3ff] text-[#0153dc] font-body-sm text-[11px] font-semibold">View</button>
+</div>
+</div>
+</div>
+<!-- Sister Card 2: 4WD -->
+<div class="p-3 rounded-xl bg-[#ffffff] border border-[#e2e1ec] shadow-xs space-y-2">
+<div>
+<span class="font-body-md text-[13px] font-bold text-[#191c20] leading-tight block">Roomy / Tank / Thor / Justy · 4WD (M910)</span>
+<span class="font-mono-sm text-[11px] text-[#0e7490] font-bold block mt-0.5">M910A · M910S · M910F</span>
+</div>
+<div class="flex flex-wrap gap-1 pt-1">
+<span class="px-2 py-0.5 rounded-md bg-[#faf8ff] border border-[#e2e1ec] text-[#191c20] font-mono-sm text-[10px]">Toyota Roomy</span>
+<span class="px-2 py-0.5 rounded-md bg-[#faf8ff] border border-[#e2e1ec] text-[#191c20] font-mono-sm text-[10px]">Toyota Tank</span>
+<span class="px-2 py-0.5 rounded-md bg-[#faf8ff] border border-[#e2e1ec] text-[#191c20] font-mono-sm text-[10px]">Daihatsu Thor</span>
+<span class="px-2 py-0.5 rounded-md bg-[#faf8ff] border border-[#e2e1ec] text-[#191c20] font-mono-sm text-[10px]">Subaru Justy</span>
+</div>
+<div class="flex items-center justify-between pt-2 border-t border-[#f3f3ff]">
+<button class="text-[#565e74] hover:text-[#ba1a1a] text-[11px] font-medium">Remove a car</button>
+<div class="flex items-center gap-2">
+<button class="text-[#0153dc] hover:underline font-semibold text-[11px]">+ Add a car</button>
+<button class="px-2 py-0.5 rounded bg-[#f3f3ff] text-[#0153dc] font-body-sm text-[11px] font-semibold">View</button>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- ========================================== -->
+<!-- GROUP 3: Other brands · Aftermarket (6)   -->
+<!-- ========================================== -->
+<section class="space-y-2.5">
+<div class="bg-[#ffffff] p-2.5 rounded-xl border border-[#e2e1ec] shadow-xs">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2 truncate">
+<span class="w-2.5 h-2.5 rounded-full bg-[#7c3aed] shrink-0"></span>
+<span class="font-headline-md text-[14px] font-bold text-[#191c20] truncate">Other brands</span>
+<span class="px-1.5 py-0.2 rounded bg-[#e2e1ec] text-[#565e74] font-mono-sm text-[10px] font-bold">Aftermarket</span>
+</div>
+<button class="text-[#737686] hover:text-[#191c20] p-0.5" title="Collapse">
+<span class="material-symbols-outlined text-[17px]">expand_less</span>
+</button>
+</div>
+<!-- Underneath sub-row: count and action -->
+<div class="flex items-center justify-between mt-1 pt-1 border-t border-[#f3f3ff]">
+<span class="font-mono-sm text-[11px] text-[#565e74]">6 records in file</span>
+<button class="text-[#7c3aed] font-body-sm text-[11px] font-semibold flex items-center gap-0.5 hover:underline">
+<span class="material-symbols-outlined text-[13px]">add</span> + Add aftermarket
+            </button>
+</div>
+</div>
+<div class="space-y-2">
+<!-- Aftermarket 1: NiBK -->
+<div class="p-3 rounded-xl bg-[#ffffff] border border-[#e2e1ec] shadow-xs">
+<div class="flex items-start justify-between gap-2">
+<div>
+<span class="font-body-md text-[13px] font-semibold text-[#191c20]">Front brake pad set</span>
+<span class="font-mono-md text-[12px] font-semibold text-[#191c20] block">PN5562</span>
+</div>
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-600/20 text-amber-700 font-label-xs text-[10px] font-semibold">
+<span class="w-1.5 h-1.5 rounded-full bg-amber-600"></span> Needs checking
+              </span>
+</div>
+<div class="flex items-center gap-2 mt-2 font-body-sm text-[11px] text-[#565e74]">
+<span class="px-1.5 py-0.5 rounded bg-[#ededf9] text-[#191c20] font-medium">NiBK</span>
+<span class="px-1.5 py-0.5 rounded bg-[#f3f3ff]">Brakes</span>
+<span class="text-[#94a3b8]">·</span>
+<span class="font-mono-sm text-[10px] text-[#434655]">Toyota Roomy · 5 versions</span>
+</div>
+<div class="flex items-center justify-end gap-2 mt-2 pt-2 border-t border-[#f3f3ff]">
+<button class="p-1 text-[#565e74] hover:text-[#0153dc]"><span class="material-symbols-outlined text-[15px]">edit</span></button>
+<button class="p-1 text-[#565e74] hover:text-[#ba1a1a]"><span class="material-symbols-outlined text-[15px]">delete</span></button>
+<button class="text-[#0153dc] font-body-sm text-[11px] font-semibold px-2 py-0.5 rounded hover:bg-[#f3f3ff]">View</button>
+</div>
+</div>
+<!-- Aftermarket 2: Akebono -->
+<div class="p-3 rounded-xl bg-[#ffffff] border border-[#e2e1ec] shadow-xs">
+<div class="flex items-start justify-between gap-2">
+<div>
+<span class="font-body-md text-[13px] font-semibold text-[#191c20]">Front brake pad set</span>
+<span class="font-mono-md text-[12px] font-semibold text-[#191c20] block">AN-754WK</span>
+</div>
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-600/20 text-amber-700 font-label-xs text-[10px] font-semibold">
+<span class="w-1.5 h-1.5 rounded-full bg-amber-600"></span> Needs checking
+              </span>
+</div>
+<div class="flex items-center gap-2 mt-2 font-body-sm text-[11px] text-[#565e74]">
+<span class="px-1.5 py-0.5 rounded bg-[#ededf9] text-[#191c20] font-medium">Akebono</span>
+<span class="px-1.5 py-0.5 rounded bg-[#f3f3ff]">Brakes</span>
+<span class="text-[#94a3b8]">·</span>
+<span class="font-mono-sm text-[10px] text-[#434655]">Toyota Roomy · 5 versions</span>
+</div>
+<div class="flex items-center justify-end gap-2 mt-2 pt-2 border-t border-[#f3f3ff]">
+<button class="p-1 text-[#565e74] hover:text-[#0153dc]"><span class="material-symbols-outlined text-[15px]">edit</span></button>
+<button class="p-1 text-[#565e74] hover:text-[#ba1a1a]"><span class="material-symbols-outlined text-[15px]">delete</span></button>
+<button class="text-[#0153dc] font-body-sm text-[11px] font-semibold px-2 py-0.5 rounded hover:bg-[#f3f3ff]">View</button>
+</div>
+</div>
+<!-- Aftermarket 3: MANN-FILTER (Verified) -->
+<div class="p-3 rounded-xl bg-[#ffffff] border border-[#e2e1ec] shadow-xs">
+<div class="flex items-start justify-between gap-2">
+<div>
+<span class="font-body-md text-[13px] font-semibold text-[#191c20]">Oil filter</span>
+<span class="font-mono-md text-[12px] font-semibold text-[#191c20] block">HU 6006 z</span>
+</div>
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-600/20 text-emerald-700 font-label-xs text-[10px] font-semibold">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span> Verified
+              </span>
+</div>
+<div class="flex items-center gap-2 mt-2 font-body-sm text-[11px] text-[#565e74]">
+<span class="px-1.5 py-0.5 rounded bg-[#ededf9] text-[#191c20] font-medium">MANN-FILTER</span>
+<span class="px-1.5 py-0.5 rounded bg-[#f3f3ff]">Engine</span>
+<span class="text-[#94a3b8]">·</span>
+<span class="font-mono-sm text-[10px] text-[#434655]">Toyota Roomy · 1 version</span>
+</div>
+<div class="flex items-center justify-end gap-2 mt-2 pt-2 border-t border-[#f3f3ff]">
+<button class="p-1 text-[#565e74] hover:text-[#0153dc]"><span class="material-symbols-outlined text-[15px]">edit</span></button>
+<button class="p-1 text-[#565e74] hover:text-[#ba1a1a]"><span class="material-symbols-outlined text-[15px]">delete</span></button>
+<button class="text-[#0153dc] font-body-sm text-[11px] font-semibold px-2 py-0.5 rounded hover:bg-[#f3f3ff]">View</button>
+</div>
+</div>
+<!-- Aftermarket 4: Brembo -->
+<div class="p-3 rounded-xl bg-[#ffffff] border border-[#e2e1ec] shadow-xs">
+<div class="flex items-start justify-between gap-2">
+<div>
+<span class="font-body-md text-[13px] font-semibold text-[#191c20]">Front brake disc rotor prime</span>
+<span class="font-mono-md text-[12px] font-semibold text-[#191c20] block">09.A236.11</span>
+</div>
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-600/20 text-amber-700 font-label-xs text-[10px] font-semibold">
+<span class="w-1.5 h-1.5 rounded-full bg-amber-600"></span> Needs checking
+              </span>
+</div>
+<div class="flex items-center gap-2 mt-2 font-body-sm text-[11px] text-[#565e74]">
+<span class="px-1.5 py-0.5 rounded bg-[#ededf9] text-[#191c20] font-medium">Brembo</span>
+<span class="px-1.5 py-0.5 rounded bg-[#f3f3ff]">Brakes</span>
+<span class="text-[#94a3b8]">·</span>
+<span class="font-mono-sm text-[10px] text-[#434655]">Toyota Roomy · 5 versions</span>
+</div>
+<div class="flex items-center justify-end gap-2 mt-2 pt-2 border-t border-[#f3f3ff]">
+<button class="p-1 text-[#565e74] hover:text-[#0153dc]"><span class="material-symbols-outlined text-[15px]">edit</span></button>
+<button class="p-1 text-[#565e74] hover:text-[#ba1a1a]"><span class="material-symbols-outlined text-[15px]">delete</span></button>
+<button class="text-[#0153dc] font-body-sm text-[11px] font-semibold px-2 py-0.5 rounded hover:bg-[#f3f3ff]">View</button>
+</div>
+</div>
+<!-- Aftermarket 5: Blue Print -->
+<div class="p-3 rounded-xl bg-[#ffffff] border border-[#e2e1ec] shadow-xs">
+<div class="flex items-start justify-between gap-2">
+<div>
+<span class="font-body-md text-[13px] font-semibold text-[#191c20]">Brake pad set rear axle</span>
+<span class="font-mono-md text-[12px] font-semibold text-[#191c20] block">ADT342197</span>
+</div>
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-600/20 text-amber-700 font-label-xs text-[10px] font-semibold">
+<span class="w-1.5 h-1.5 rounded-full bg-amber-600"></span> Needs checking
+              </span>
+</div>
+<div class="flex items-center gap-2 mt-2 font-body-sm text-[11px] text-[#565e74]">
+<span class="px-1.5 py-0.5 rounded bg-[#ededf9] text-[#191c20] font-medium">Blue Print</span>
+<span class="px-1.5 py-0.5 rounded bg-[#f3f3ff]">Brakes</span>
+<span class="text-[#94a3b8]">·</span>
+<span class="font-mono-sm text-[10px] text-[#434655]">Toyota Roomy · 3 versions</span>
+</div>
+<div class="flex items-center justify-end gap-2 mt-2 pt-2 border-t border-[#f3f3ff]">
+<button class="p-1 text-[#565e74] hover:text-[#0153dc]"><span class="material-symbols-outlined text-[15px]">edit</span></button>
+<button class="p-1 text-[#565e74] hover:text-[#ba1a1a]"><span class="material-symbols-outlined text-[15px]">delete</span></button>
+<button class="text-[#0153dc] font-body-sm text-[11px] font-semibold px-2 py-0.5 rounded hover:bg-[#f3f3ff]">View</button>
+</div>
+</div>
+<!-- Aftermarket 6: SB Nagamochi -->
+<div class="p-3 rounded-xl bg-[#ffffff] border border-[#e2e1ec] shadow-xs">
+<div class="flex items-start justify-between gap-2">
+<div>
+<span class="font-body-md text-[13px] font-semibold text-[#191c20]">Ceramic front brake pad</span>
+<span class="font-mono-md text-[12px] font-semibold text-[#191c20] block">BP-1209</span>
+</div>
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-600/20 text-amber-700 font-label-xs text-[10px] font-semibold">
+<span class="w-1.5 h-1.5 rounded-full bg-amber-600"></span> Needs checking
+              </span>
+</div>
+<div class="flex items-center gap-2 mt-2 font-body-sm text-[11px] text-[#565e74]">
+<span class="px-1.5 py-0.5 rounded bg-[#ededf9] text-[#191c20] font-medium">SB Nagamochi</span>
+<span class="px-1.5 py-0.5 rounded bg-[#f3f3ff]">Brakes</span>
+<span class="text-[#94a3b8]">·</span>
+<span class="font-mono-sm text-[10px] text-[#434655]">Toyota Roomy · 5 versions</span>
+</div>
+<div class="flex items-center justify-end gap-2 mt-2 pt-2 border-t border-[#f3f3ff]">
+<button class="p-1 text-[#565e74] hover:text-[#0153dc]"><span class="material-symbols-outlined text-[15px]">edit</span></button>
+<button class="p-1 text-[#565e74] hover:text-[#ba1a1a]"><span class="material-symbols-outlined text-[15px]">delete</span></button>
+<button class="text-[#0153dc] font-body-sm text-[11px] font-semibold px-2 py-0.5 rounded hover:bg-[#f3f3ff]">View</button>
+</div>
+</div>
+</div>
+</section>
+<!-- ========================================== -->
+<!-- GROUP 4: Fits by size · Universal (5)     -->
+<!-- ========================================== -->
+<section class="space-y-2.5">
+<div class="bg-[#ffffff] p-2.5 rounded-xl border border-[#e2e1ec] shadow-xs">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2 truncate">
+<span class="w-2.5 h-2.5 rounded-full bg-[#006e31] shrink-0"></span>
+<span class="font-headline-md text-[14px] font-bold text-[#191c20] truncate">Fits by size</span>
+<span class="px-1.5 py-0.2 rounded bg-[#e2e1ec] text-[#565e74] font-mono-sm text-[10px] font-bold">Universal</span>
+</div>
+<button class="text-[#737686] hover:text-[#191c20] p-0.5" title="Collapse">
+<span class="material-symbols-outlined text-[17px]">expand_less</span>
+</button>
+</div>
+<!-- Underneath sub-row: count and action -->
+<div class="flex items-center justify-between mt-1 pt-1 border-t border-[#f3f3ff]">
+<span class="font-mono-sm text-[11px] text-[#565e74]">5 records in file</span>
+<button class="text-[#006e31] font-body-sm text-[11px] font-semibold flex items-center gap-0.5 hover:underline">
+<span class="material-symbols-outlined text-[13px]">add</span> + Add size-based part
+            </button>
+</div>
+</div>
+<div class="space-y-2">
+<!-- Universal 1: Engine Oil -->
+<div class="p-3 rounded-xl bg-[#ffffff] border border-[#e2e1ec] shadow-xs space-y-2">
+<div class="flex items-start justify-between">
+<div>
+<span class="font-body-md text-[13px] font-semibold text-[#191c20] block">Engine oil 0W-20 1 L</span>
+<span class="font-mono-md text-[12px] font-semibold text-[#191c20]">08880-WA001</span>
+</div>
+<span class="px-1.5 py-0.5 rounded bg-[#ededf9] text-[#191c20] font-mono-sm text-[10px] font-medium">Toyota</span>
+</div>
+<div class="flex flex-col gap-1 text-[11px]">
+<div class="flex items-center gap-1.5">
+<span class="text-[#565e74]">Fits cars with:</span>
+<span class="px-2 py-0.5 rounded bg-primary-fixed/30 text-[#0153dc] font-mono-sm text-[10px] font-bold">Engine oil grade 0W-20</span>
+</div>
+<div class="flex items-center gap-1 text-[#565e74]">
+<span>Source:</span>
+<a class="text-[#0153dc] hover:underline inline-flex items-center gap-0.5 font-mono-sm text-[11px]" href="#">
+                  autoparts.toyota.com <span class="material-symbols-outlined text-[12px]">north_east</span>
+</a>
+</div>
+</div>
+<div class="flex items-center justify-end gap-2 pt-2 border-t border-[#f3f3ff]">
+<button class="p-1 text-[#565e74] hover:text-[#0153dc]"><span class="material-symbols-outlined text-[15px]">edit</span></button>
+<button class="p-1 text-[#565e74] hover:text-[#ba1a1a]"><span class="material-symbols-outlined text-[15px]">delete</span></button>
+<button class="text-[#0153dc] font-body-sm text-[11px] font-semibold px-2 py-0.5 rounded hover:bg-[#f3f3ff]">View</button>
+</div>
+</div>
+<!-- Universal 2: Wiper Blade 525mm -->
+<div class="p-3 rounded-xl bg-[#ffffff] border border-[#e2e1ec] shadow-xs space-y-2">
+<div class="flex items-start justify-between">
+<div>
+<span class="font-body-md text-[13px] font-semibold text-[#191c20] block">Wiper blade 525 mm</span>
+<span class="font-mono-md text-[12px] font-semibold text-[#191c20]">35-021R</span>
+</div>
+<span class="px-1.5 py-0.5 rounded bg-[#ededf9] text-[#191c20] font-mono-sm text-[10px] font-medium">NWB</span>
+</div>
+<div class="flex flex-col gap-1 text-[11px]">
+<div class="flex items-center gap-1.5">
+<span class="text-[#565e74]">Fits cars with:</span>
+<span class="px-2 py-0.5 rounded bg-primary-fixed/30 text-[#0153dc] font-mono-sm text-[10px] font-bold">Driver wiper 525 mm</span>
+</div>
+<div class="flex items-center gap-1 text-[#565e74]">
+<span>Source:</span>
+<a class="text-[#0153dc] hover:underline inline-flex items-center gap-0.5 font-mono-sm text-[11px]" href="#">
+                  nwb.co.jp <span class="material-symbols-outlined text-[12px]">north_east</span>
+</a>
+</div>
+</div>
+<div class="flex items-center justify-end gap-2 pt-2 border-t border-[#f3f3ff]">
+<button class="p-1 text-[#565e74] hover:text-[#0153dc]"><span class="material-symbols-outlined text-[15px]">edit</span></button>
+<button class="p-1 text-[#565e74] hover:text-[#ba1a1a]"><span class="material-symbols-outlined text-[15px]">delete</span></button>
+<button class="text-[#0153dc] font-body-sm text-[11px] font-semibold px-2 py-0.5 rounded hover:bg-[#f3f3ff]">View</button>
+</div>
+</div>
+<!-- Universal 3: CVT Fluid -->
+<div class="p-3 rounded-xl bg-[#ffffff] border border-[#e2e1ec] shadow-xs space-y-2">
+<div class="flex items-start justify-between">
+<div>
+<span class="font-body-md text-[13px] font-semibold text-[#191c20] block">Transmission fluid CVT FE 4L</span>
+<span class="font-mono-md text-[12px] font-semibold text-[#191c20]">08886-02505</span>
+</div>
+<span class="px-1.5 py-0.5 rounded bg-[#ededf9] text-[#191c20] font-mono-sm text-[10px] font-medium">Toyota</span>
+</div>
+<div class="flex flex-col gap-1 text-[11px]">
+<div class="flex items-center gap-1.5">
+<span class="text-[#565e74]">Fits cars with:</span>
+<span class="px-2 py-0.5 rounded bg-primary-fixed/30 text-[#0153dc] font-mono-sm text-[10px] font-bold">CVT Fluid FE spec</span>
+</div>
+<div class="flex items-center gap-1 text-[#565e74]">
+<span>Source:</span>
+<a class="text-[#0153dc] hover:underline inline-flex items-center gap-0.5 font-mono-sm text-[11px]" href="#">
+                  toyota-parts.com <span class="material-symbols-outlined text-[12px]">north_east</span>
+</a>
+</div>
+</div>
+<div class="flex items-center justify-end gap-2 pt-2 border-t border-[#f3f3ff]">
+<button class="p-1 text-[#565e74] hover:text-[#0153dc]"><span class="material-symbols-outlined text-[15px]">edit</span></button>
+<button class="p-1 text-[#565e74] hover:text-[#ba1a1a]"><span class="material-symbols-outlined text-[15px]">delete</span></button>
+<button class="text-[#0153dc] font-body-sm text-[11px] font-semibold px-2 py-0.5 rounded hover:bg-[#f3f3ff]">View</button>
+</div>
+</div>
+<!-- Universal 4: Brake Fluid -->
+<div class="p-3 rounded-xl bg-[#ffffff] border border-[#e2e1ec] shadow-xs space-y-2">
+<div class="flex items-start justify-between">
+<div>
+<span class="font-body-md text-[13px] font-semibold text-[#191c20] block">Response DOT 4 Brake Fluid 1 L</span>
+<span class="font-mono-md text-[12px] font-semibold text-[#191c20]">12502-BF</span>
+</div>
+<span class="px-1.5 py-0.5 rounded bg-[#ededf9] text-[#191c20] font-mono-sm text-[10px] font-medium">Castrol</span>
+</div>
+<div class="flex flex-col gap-1 text-[11px]">
+<div class="flex items-center gap-1.5">
+<span class="text-[#565e74]">Fits cars with:</span>
+<span class="px-2 py-0.5 rounded bg-primary-fixed/30 text-[#0153dc] font-mono-sm text-[10px] font-bold">DOT 4 Fluid</span>
+</div>
+<div class="flex items-center gap-1 text-[#565e74]">
+<span>Source:</span>
+<a class="text-[#0153dc] hover:underline inline-flex items-center gap-0.5 font-mono-sm text-[11px]" href="#">
+                  castrol.com <span class="material-symbols-outlined text-[12px]">north_east</span>
+</a>
+</div>
+</div>
+<div class="flex items-center justify-end gap-2 pt-2 border-t border-[#f3f3ff]">
+<button class="p-1 text-[#565e74] hover:text-[#0153dc]"><span class="material-symbols-outlined text-[15px]">edit</span></button>
+<button class="p-1 text-[#565e74] hover:text-[#ba1a1a]"><span class="material-symbols-outlined text-[15px]">delete</span></button>
+<button class="text-[#0153dc] font-body-sm text-[11px] font-semibold px-2 py-0.5 rounded hover:bg-[#f3f3ff]">View</button>
+</div>
+</div>
+<!-- Universal 5: Passenger Wiper -->
+<div class="p-3 rounded-xl bg-[#ffffff] border border-[#e2e1ec] shadow-xs space-y-2">
+<div class="flex items-start justify-between">
+<div>
+<span class="font-body-md text-[13px] font-semibold text-[#191c20] block">Wiper blade passenger 475 mm</span>
+<span class="font-mono-md text-[12px] font-semibold text-[#191c20]">35-019R</span>
+</div>
+<span class="px-1.5 py-0.5 rounded bg-[#ededf9] text-[#191c20] font-mono-sm text-[10px] font-medium">NWB</span>
+</div>
+<div class="flex flex-col gap-1 text-[11px]">
+<div class="flex items-center gap-1.5">
+<span class="text-[#565e74]">Fits cars with:</span>
+<span class="px-2 py-0.5 rounded bg-primary-fixed/30 text-[#0153dc] font-mono-sm text-[10px] font-bold">Passenger wiper 475 mm</span>
+</div>
+<div class="flex items-center gap-1 text-[#565e74]">
+<span>Source:</span>
+<a class="text-[#0153dc] hover:underline inline-flex items-center gap-0.5 font-mono-sm text-[11px]" href="#">
+                  nwb.co.jp <span class="material-symbols-outlined text-[12px]">north_east</span>
+</a>
+</div>
+</div>
+<div class="flex items-center justify-end gap-2 pt-2 border-t border-[#f3f3ff]">
+<button class="p-1 text-[#565e74] hover:text-[#0153dc]"><span class="material-symbols-outlined text-[15px]">edit</span></button>
+<button class="p-1 text-[#565e74] hover:text-[#ba1a1a]"><span class="material-symbols-outlined text-[15px]">delete</span></button>
+<button class="text-[#0153dc] font-body-sm text-[11px] font-semibold px-2 py-0.5 rounded hover:bg-[#f3f3ff]">View</button>
+</div>
+</div>
+</div>
+</section>
+<!-- ========================================== -->
+<!-- GROUP: Fits the engine (Muted Notification)-->
+<!-- ========================================== -->
+<section class="p-3 rounded-xl bg-[#f1f5f9] border border-[#e2e1ec] flex flex-col gap-2">
+<div class="flex items-start gap-2">
+<span class="w-2 h-2 rounded-full bg-[#b45309]/50 mt-1 shrink-0"></span>
+<div>
+<span class="font-body-md text-[12px] font-semibold text-[#565e74] block">Nothing on file for: Fits the engine.</span>
+<span class="font-mono-sm text-[10px] text-[#737686]">0 records matched for current filter</span>
+</div>
+</div>
+<button class="self-start text-[#0153dc] font-body-sm text-[11px] font-semibold hover:underline flex items-center gap-1">
+<span class="material-symbols-outlined text-[13px]">add</span> + Add an engine fitment
+        </button>
+</section>
+<!-- Security Notice Card -->
+<div class="p-2.5 rounded-xl bg-[#ffffff] border border-[#e2e1ec] text-[11px] text-[#565e74] flex items-center gap-2">
+<span class="material-symbols-outlined text-[#0153dc] text-[18px] shrink-0">verified_user</span>
+<p class="leading-tight">
+<strong class="text-[#191c20] font-semibold">Catalog notice:</strong> Master catalog dataset is stripped of customer pricing and sensitive trade terms. Zero PII.
+        </p>
+</div>
+<!-- Mobile Pagination -->
+<div class="py-2 flex items-center justify-between text-body-sm text-[#565e74]">
+<span class="font-body-sm text-[11px]">Showing <strong class="text-[#191c20]">18 of 18</strong> records</span>
+<div class="flex items-center gap-1.5">
+<button class="px-2.5 h-7 rounded-md bg-[#ffffff] border border-[#e2e1ec] text-[#565e74] text-[11px] disabled:opacity-40" disabled="">Prev</button>
+<span class="w-6 h-7 flex items-center justify-center rounded-md bg-[#0153dc] text-[#ffffff] font-mono-sm text-[11px] font-bold">1</span>
+<button class="px-2.5 h-7 rounded-md bg-[#ffffff] border border-[#e2e1ec] text-[#565e74] text-[11px] disabled:opacity-40" disabled="">Next</button>
+</div>
+</div>
+</main>
+<!-- Sticky Mobile Bottom Bar (iOS Native Style) -->
+<nav class="fixed bottom-0 w-[390px] bg-[#ffffff] border-t border-[#e2e1ec] px-4 py-2 flex items-center justify-between z-40 shadow-[0_-2px_10px_rgba(0,0,0,0.04)]">
+<button class="flex flex-col items-center gap-0.5 text-[#0153dc]">
+<span class="material-symbols-outlined text-[20px]">directions_car</span>
+<span class="text-[10px] font-semibold">Vehicles</span>
+</button>
+<button class="flex flex-col items-center gap-0.5 text-[#565e74] hover:text-[#191c20]">
+<span class="material-symbols-outlined text-[20px]">map</span>
+<span class="text-[10px] font-medium">Places</span>
+</button>
+<button class="flex flex-col items-center gap-0.5 text-[#565e74] hover:text-[#191c20]">
+<span class="material-symbols-outlined text-[20px]">neurology</span>
+<span class="text-[10px] font-medium">Engines</span>
+</button>
+<button class="flex flex-col items-center gap-0.5 text-[#565e74] hover:text-[#191c20]">
+<span class="material-symbols-outlined text-[20px]">receipt_long</span>
+<span class="text-[10px] font-medium">Ledger</span>
+</button>
+<button class="flex flex-col items-center gap-0.5 text-[#565e74] hover:text-[#191c20]">
+<span class="material-symbols-outlined text-[20px]">settings</span>
+<span class="text-[10px] font-medium">Settings</span>
+</button>
+</nav>
+<!-- Bottom Home Indicator safe area -->
+<div class="fixed bottom-0 w-[390px] h-1 pointer-events-none flex justify-center z-50">
+<div class="w-32 h-1 bg-[#191c20]/25 rounded-full mb-1"></div>
+</div>
+</div>
+</body></html>

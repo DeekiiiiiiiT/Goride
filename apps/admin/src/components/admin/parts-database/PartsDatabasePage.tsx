@@ -1,100 +1,133 @@
-// Stitch: dominion-redesign/ef01fa01e52f4c06b14c3f26887a3b07
-// Stitch: dominion-redesign/86d7d8868d684085b4c831f9c0ece4cb
+// Stitch: dominion-redesign/S42l
 import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { useAuth } from "../../auth/AuthContext";
 import { AddPartDialog } from "./AddPartDialog";
 import { FindPartsTab } from "./FindPartsTab";
+import { FindPartsChrome } from "./find-parts/FindPartsChrome";
+import { FullDatabaseTab } from "./full-database/FullDatabaseTab";
 import { ImportAdvancedTab } from "./ImportAdvancedTab";
-import { SisterVehiclesTab } from "./SisterVehiclesTab";
-import { UniversalPartsTab } from "./UniversalPartsTab";
-import { VehiclePartsTab } from "./VehiclePartsTab";
+import { exportMasterCsv, fetchPartsOverview } from "./partsDatabaseApi";
+import {
+  goDominionPage,
+  readCatalogFilters,
+  readCatalogTab,
+  writeCatalogSearch,
+  type CatalogSectionTab,
+  type CatalogTab,
+} from "./partsCatalogUrl";
 import "./partsDatabase.css";
 
-const TABS = ["Find parts", "Vehicle parts", "Sister vehicles", "Universal parts", "Import"] as const;
-type Tab = (typeof TABS)[number] | "Advanced";
-
-function tabFromQuery(): Tab {
-  const value = new URLSearchParams(window.location.search).get("tab");
-  if (value === "vehicle") return "Vehicle parts";
-  if (value === "sisters") return "Sister vehicles";
-  if (value === "universal") return "Universal parts";
-  if (value === "import") return "Import";
-  if (value === "advanced") return "Advanced";
-  return "Find parts";
-}
-
 export function PartsDatabasePage() {
-  const [tab, setTab] = useState<Tab>(tabFromQuery);
+  const { role } = useAuth();
+  const owner = role === "platform_owner";
+  const [tab, setTab] = useState<CatalogTab>(readCatalogTab);
   const [variantId, setVariantId] = useState(() => new URLSearchParams(window.location.search).get("variant") ?? "");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogMode, setDialogMode] = useState<"job" | "any">("job");
+  const [editGroup, setEditGroup] = useState<string | null>(null);
+  const [problemsOpen, setProblemsOpen] = useState(false);
+  const overview = useQuery({ queryKey: ["parts-overview"], queryFn: fetchPartsOverview, retry: false });
 
   useEffect(() => {
     function sync() {
-      setTab(tabFromQuery());
+      const params = new URLSearchParams(window.location.search);
+      const raw = params.get("tab");
+      if (raw === "vehicle" || raw === "sisters" || raw === "universal") {
+        writeCatalogSearch({ tab: "Full database" }, "replace");
+      }
+      if (raw === "verify") {
+        writeCatalogSearch({ tab: "Full database", status: "needs_checking" }, "replace");
+      }
+      setTab(readCatalogTab());
       setVariantId(new URLSearchParams(window.location.search).get("variant") ?? "");
     }
+    sync();
     window.addEventListener("popstate", sync);
     return () => window.removeEventListener("popstate", sync);
   }, []);
 
-  function openVehicle(id: string) {
-    setVariantId(id);
-    setTab("Vehicle parts");
+  function selectTab(next: CatalogTab) {
+    setTab(next);
+    if (next !== "Advanced") setProblemsOpen(false);
+    writeCatalogSearch({
+      tab: next,
+      ...(next === "Full database" ? { variant: null, make: null, model: null, year: null } : {}),
+    }, "push");
   }
+
+  async function exportCsv() {
+    const filters = readCatalogFilters();
+    try {
+      const { csv } = await exportMasterCsv(filters);
+      const blob = new Blob([csv], { type: "text/csv" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "parts-database.csv";
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not export");
+    }
+  }
+
+  function openDatabase(id: string) {
+    setVariantId(id);
+    setTab("Full database");
+    setProblemsOpen(false);
+    writeCatalogSearch({ tab: "Full database", variant: id, make: null, model: null, year: null }, "push");
+  }
+
+  const sectionTab: CatalogSectionTab | null = tab === "Advanced" ? null : tab;
+  const matchTypesLabel = typeof overview.data?.matchTypesOff === "boolean"
+    ? (overview.data.matchTypesOff ? "Match types off" : "Match types on")
+    : "—";
+  const breadcrumbSuffix: Array<"ADVANCED TUNE" | "PROBLEMS"> = tab === "Advanced"
+    ? (problemsOpen ? ["ADVANCED TUNE", "PROBLEMS"] : ["ADVANCED TUNE"])
+    : [];
 
   return (
     <div className="parts-database-stitch flex flex-col w-full">
-      <div className="px-8 py-6 space-y-6">
-        <nav className="flex items-center gap-2 text-xs font-mono uppercase tracking-wider text-on-surface-variant">
-          <span>Dominion</span>
-          <span className="text-outline-variant">›</span>
-          <span>Master Data</span>
-          <span className="text-outline-variant">›</span>
-          <span>Vehicles</span>
-          <span className="text-outline-variant">›</span>
-          <span className="text-secondary font-semibold">Parts Database</span>
-        </nav>
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-headline font-bold text-on-surface tracking-tight">Parts database</h1>
-            <p className="text-sm text-on-surface-variant mt-1">Every part that fits a car, in five match types.</p>
-          </div>
-        </div>
-        <div className="flex items-center justify-between border-b border-outline-variant/20 pt-1">
-          <div className="flex items-center gap-8 -mb-px overflow-x-auto">
-            {TABS.map((name) => (
-              <button
-                key={name}
-                type="button"
-                className={tab === name
-                  ? "relative pb-3 text-sm font-semibold text-secondary"
-                  : "pb-3 text-sm font-medium text-on-surface-variant"}
-                onClick={() => setTab(name)}
-              >
-                {name}
-              </button>
-            ))}
-          </div>
-          <button type="button" className="text-xs font-medium text-secondary pb-3 flex items-center gap-1" onClick={() => setTab("Advanced")}>
-            Advanced tune
-          </button>
-        </div>
+      <FindPartsChrome
+        fitmentCount={overview.data?.fitmentsOnFile ?? null}
+        matchTypesLabel={matchTypesLabel}
+        activeTab={sectionTab}
+        advancedActive={tab === "Advanced"}
+        breadcrumbSuffix={breadcrumbSuffix}
+        onTab={selectTab}
+        onAdvanced={() => selectTab("Advanced")}
+        onAddPart={() => { setEditGroup(null); setDialogMode(variantId ? "job" : "any"); setDialogOpen(true); }}
+        onImport={() => selectTab("Import")}
+        onExport={() => { void exportCsv(); }}
+        owner={owner}
+        onNavigateDominion={() => goDominionPage("dashboard")}
+        onNavigateVehicles={() => goDominionPage("vehicles-home")}
+      >
         {tab === "Find parts" ? (
           <FindPartsTab
             initialVariantId={variantId}
-            onOpenVehicle={openVehicle}
+            onOpenVehicle={openDatabase}
             onAdd={(id) => { setVariantId(id); setDialogMode("job"); setDialogOpen(true); }}
           />
         ) : null}
-        {tab === "Vehicle parts" ? (
-          <VehiclePartsTab variantId={variantId} onAdd={() => { setDialogMode("any"); setDialogOpen(true); }} onBack={() => setTab("Find parts")} />
+        {tab === "Full database" ? (
+          <FullDatabaseTab
+            onAddPart={() => { setEditGroup(null); setDialogMode("any"); setDialogOpen(true); }}
+            onEditPart={(groupId) => { setEditGroup(groupId); setDialogMode("any"); setDialogOpen(true); }}
+          />
         ) : null}
-        {tab === "Sister vehicles" ? <SisterVehiclesTab /> : null}
-        {tab === "Universal parts" ? <UniversalPartsTab /> : null}
-        {tab === "Import" || tab === "Advanced" ? <ImportAdvancedTab advanced={tab === "Advanced"} onOpenVehicle={openVehicle} /> : null}
-      </div>
+        {tab === "Import" || tab === "Advanced" ? (
+          <ImportAdvancedTab
+            advanced={tab === "Advanced"}
+            onOpenVehicle={openDatabase}
+            onProblemsOpenChange={setProblemsOpen}
+          />
+        ) : null}
+      </FindPartsChrome>
       {dialogOpen ? (
-        <AddPartDialog variantId={variantId} categoryMode={dialogMode === "any"} onClose={() => setDialogOpen(false)} />
+        <AddPartDialog variantId={variantId} categoryMode={dialogMode === "any"} groupId={editGroup} onClose={() => { setDialogOpen(false); setEditGroup(null); }} />
       ) : null}
     </div>
   );

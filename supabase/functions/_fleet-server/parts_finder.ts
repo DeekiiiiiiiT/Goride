@@ -16,6 +16,7 @@ export type PartSide = "left" | "right" | "both" | null;
 
 export type FoundPart = {
   partId: string;
+  componentId: string | null;
   name: string;
   brand: string;
   number: string;
@@ -101,6 +102,7 @@ export function universalsToFound(universal: unknown, variantId: string): FoundP
     if (!items.length) {
       found.push({
         partId: `universal:${spec.specKey || spec.label || "size"}`,
+        componentId: null,
         name: String(spec.label || "Fits by size"),
         brand: "",
         number: "",
@@ -118,6 +120,7 @@ export function universalsToFound(universal: unknown, variantId: string): FoundP
     for (const item of items) {
       found.push({
         partId: String(item.id || `universal:${spec.specKey}:${item.partNumber || item.name}`),
+        componentId: null,
         name: String(item.name || spec.label || "Fits by size"),
         brand: String(item.manufacturer || ""),
         number: String(item.partNumber || ""),
@@ -142,6 +145,7 @@ function toFound(item: LoosePart, variantId: string): FoundPart {
   const tierRow = PART_MATCH_TIERS.find((row) => row.tier === tier);
   return {
     partId: String(part.id ?? item.fitmentId ?? ""),
+    componentId: part.maintenance_component_id ? String(part.maintenance_component_id) : null,
     name: String(part.name ?? ""),
     brand: String(part.manufacturer ?? ""),
     number: String(part.oem_part_number ?? ""),

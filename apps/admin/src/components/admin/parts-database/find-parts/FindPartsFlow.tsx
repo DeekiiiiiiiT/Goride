@@ -4,7 +4,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "../../../auth/AuthContext";
 import { parseQuickCar } from "../../../../../../../packages/types/src/findPartsParse";
 import { fetchVehicleOptions } from "../partsDatabaseApi";
-import { PartsError, PartsLoading } from "../PartsDatabaseStates";
+import { writeCatalogSearch } from "../partsCatalogUrl";
+import { CarNotInCatalog, PartsError, PartsLoading } from "../PartsDatabaseStates";
 import { AllPartsView } from "./AllPartsView";
 import { CarStep, type RecentSearch } from "./CarStep";
 import { ChoiceTrail, type TrailChip } from "./ChoiceTrail";
@@ -66,26 +67,55 @@ function sectionCount(result: FindPartsResult) {
   return (result.sections ?? []).reduce((sum, section) => sum + (section.items?.length ?? 0), 0);
 }
 
+function initialFindPartsSearch(initialVariantId?: string) {
+  const params = new URLSearchParams(window.location.search);
+  const car = params.get("car") || "";
+  let make = "";
+  let model = "";
+  let year = "";
+  let variantId = initialVariantId ?? "";
+  if (car.includes(",")) {
+    const [carMake, carModel, carYear] = car.split(",");
+    make = carMake || "";
+    model = carModel || "";
+    year = carYear || "";
+  } else if (car) {
+    variantId = car;
+  }
+  return {
+    make,
+    model,
+    year,
+    variantId,
+    componentId: params.get("part") || "",
+    position: params.get("pos") || "",
+    side: params.get("side") || "",
+  };
+}
+
 export function FindPartsFlow({
   initialVariantId,
+  onOpenVehicle,
   onAdd,
 }: {
   initialVariantId?: string;
+  onOpenVehicle?: (variantId: string) => void;
   onAdd: (variantId: string) => void;
 }) {
   const { role } = useAuth();
   const owner = role === "platform_owner";
+  const seeded = useState(() => initialFindPartsSearch(initialVariantId))[0];
   const [step, setStep] = useState<Step>("car");
-  const [make, setMake] = useState("");
-  const [model, setModel] = useState("");
-  const [year, setYear] = useState("");
+  const [make, setMake] = useState(seeded.make);
+  const [model, setModel] = useState(seeded.model);
+  const [year, setYear] = useState(seeded.year);
   const [quick, setQuick] = useState("");
-  const [variantId, setVariantId] = useState(initialVariantId ?? "");
-  const [componentId, setComponentId] = useState("");
+  const [variantId, setVariantId] = useState(seeded.variantId);
+  const [componentId, setComponentId] = useState(seeded.componentId);
   const [partName, setPartName] = useState("");
   const [positionAware, setPositionAware] = useState(false);
-  const [position, setPosition] = useState("");
-  const [side, setSide] = useState("");
+  const [position, setPosition] = useState(seeded.position);
+  const [side, setSide] = useState(seeded.side);
   const [recent, setRecent] = useState<RecentSearch[]>(loadRecent);
   const [detail, setDetail] = useState<FoundPartRow | null>(null);
   const [partQuery, setPartQuery] = useState("");
@@ -117,20 +147,13 @@ export function FindPartsFlow({
   }, []);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
     const car = variantId && variantId !== "any" ? variantId : (make && model && year ? `${make},${model},${year}` : "");
-    if (car) params.set("car", car);
-    else params.delete("car");
-    if (componentId) params.set("part", componentId);
-    else params.delete("part");
-    if (position) params.set("pos", position);
-    else params.delete("pos");
-    if (side) params.set("side", side);
-    else params.delete("side");
-    const next = `${window.location.pathname}?${params.toString()}`;
-    if (next !== `${window.location.pathname}${window.location.search}`) {
-      window.history.replaceState({}, "", next);
-    }
+    writeCatalogSearch({
+      car: car || null,
+      part: componentId || null,
+      pos: position || null,
+      side: side || null,
+    }, "replace");
   }, [make, model, year, variantId, componentId, position, side]);
 
   const options = useQuery({
@@ -145,12 +168,6 @@ export function FindPartsFlow({
   });
 
   const chosenId = variantId && variantId !== "any" ? variantId : "";
-
-  const coverage = useQuery({
-    queryKey: ["find-parts-coverage", chosenId],
-    queryFn: () => fetchFindPartsCoverage(chosenId),
-    enabled: Boolean(chosenId),
-  });
 
   const browse = useQuery({
     queryKey: ["parts-browse"],
@@ -185,6 +202,12 @@ export function FindPartsFlow({
   });
 
   const variants = preview.data?.variants ?? [];
+  const coverageVariantId = chosenId || variants[0]?.id || "";
+  const coverage = useQuery({
+    queryKey: ["find-parts-coverage", coverageVariantId],
+    queryFn: () => fetchFindPartsCoverage(coverageVariantId),
+    enabled: Boolean(coverageVariantId) && (step === "part" || step === "position" || step === "all"),
+  });
   const candidates = useMemo(() => {
     if (preview.data?.candidates?.length) return preview.data.candidates;
     return variants.map((row) => ({
@@ -197,8 +220,17 @@ export function FindPartsFlow({
   const versionLabel = variantId === "any" ? `Fits every ${[year, make, model].filter(Boolean).join(" ")}` : (picked?.plainLabel || "");
   const codes = picked?.codeLine ? [picked.codeLine] : [];
   const years = options.data?.years ?? [];
-  const yearSpan = years.length > 0 ? `Series: ${Math.min(...years)}–${Math.max(...years)}` : "";
-  const partCount = coverage.data ? coverage.data.areas.reduce((sum, row) => sum + row.count, 0) : null;
+  const spanYears = variants.flatMap((row) => [row.production_start_year, row.production_end_year].filter((value): value is number => typeof value === "number"));
+  const yearSpan = spanYears.length > 0 ? `${Math.min(...spanYears)}–${Math.max(...spanYears)}` : "";
+  const carCoverage = useQuery({
+    queryKey: ["find-parts-coverage-sum", variants.map((row) => row.id)],
+    queryFn: async () => {
+      const rows = await Promise.all(variants.map((row) => fetchFindPartsCoverage(row.id)));
+      return rows.reduce((sum, row) => sum + row.areas.reduce((areaSum, area) => areaSum + area.count, 0), 0);
+    },
+    enabled: variants.length > 0,
+  });
+  const partCount = carCoverage.data ?? null;
 
   function remember() {
     if (!make || !model || !year) return;
@@ -208,15 +240,11 @@ export function FindPartsFlow({
   }
 
   function continueCar() {
+    if (!make || !model || !year || preview.isLoading || variants.length === 0) return;
     remember();
-    if (preview.data?.askVariant) {
+    if (preview.data?.askVariant || (preview.data?.candidates?.length || variants.length) > 1) {
       setVariantId("");
       setStep("version");
-      return;
-    }
-    if ((preview.data?.candidates?.length || variants.length) > 1) {
-      setVariantId("any");
-      setStep("part");
       return;
     }
     setVariantId(preview.data?.pickedVariantId || variants[0]?.id || "");
@@ -256,12 +284,22 @@ export function FindPartsFlow({
     const match = areas.flatMap((area) => area.components).find((item) => item.id === row.id);
     return { ...row, positionAware: match?.positionAware ?? false };
   });
-  const hits = (terms.data?.hits ?? []).map((row) => ({
-    id: row.id,
-    plainName: row.plainName,
-    kind: row.kind,
-    note: row.kind === "synonym" ? "search word" : undefined,
-  })).filter((row) => row.id && row.plainName);
+  const hits = (terms.data?.hits ?? []).map((row) => {
+    const componentId = row.componentId ?? (row.kind !== "part" ? row.id : null);
+    const matchArea = componentId
+      ? areas.find((area) => area.components.some((item) => item.id === componentId))
+      : undefined;
+    const synonymTerm = row.kind === "synonym"
+      ? terms.data?.synonyms?.find((syn) => syn.componentId === componentId)?.term
+      : undefined;
+    return {
+      id: row.id,
+      plainName: row.plainName,
+      kind: row.kind,
+      note: synonymTerm,
+      tag: matchArea?.plainName,
+    };
+  }).filter((row) => row.id && row.plainName);
   const problems = (symptoms.data?.symptoms ?? []).map((row) => ({
     id: row.id,
     label: row.label,
@@ -275,6 +313,11 @@ export function FindPartsFlow({
   const sideLabel = side === "left" ? "Left" : side === "right" ? "Right" : position === "front" ? "Front" : position === "rear" ? "Back" : position === "both" ? "Both" : "";
   const active = step === "car" ? 1 : step === "version" ? 2 : step === "part" ? 3 : step === "position" ? 4 : 5;
   const result = search.data;
+  const drawerCrossRefs = useMemo(() => {
+    if (!detail) return [];
+    const rows = (result?.plainSections ?? []).flatMap((section) => section.items);
+    return rows.filter((row) => row.tier === 4 && row.partId !== detail.partId).slice(0, 8);
+  }, [detail, result?.plainSections]);
   const emptyResult = result ? sectionCount(result) === 0 : false;
   const title = partName
     ? `${partName} for the ${carLabel}${versionLabel && variantId !== "any" ? ` ${versionLabel}` : ""}${sideLabel ? ` · ${sideLabel}` : ""}`
@@ -286,14 +329,25 @@ export function FindPartsFlow({
     ...(sideLabel ? [{ label: sideLabel, step: "position" as const }] : []),
   ];
 
+  const engines = [...new Set(variants.map((row) => row.engine_code).filter((code): code is string => Boolean(code)))];
   return (
     <div className="find-parts-flow">
       <StepBar
+        kind={step === "version" ? "pills" : step === "part" ? "route" : step === "position" ? "axle" : step === "results" || step === "missing" || step === "all" ? "progress" : "boxes"}
+        partLabel={partName}
         active={active}
+        carLabel={carLabel}
         versionAnswer={step !== "car" && step !== "version" ? versionLabel : ""}
         sideAnswer={step === "results" || step === "missing" || step === "all" ? sideLabel : ""}
+        resultsOnFile={step === "results" && result && emptyResult ? 0 : step === "results" && result ? sectionCount(result) : undefined}
+        onOpen={(next) => {
+          const name = next === 1 ? "car" : next === 2 ? "version" : next === 3 ? "part" : next === 4 ? "position" : "results";
+          setStep(name);
+        }}
       />
-      {step !== "car" ? <ChoiceTrail chips={trail} onOpen={(next) => setStep(next)} /> : null}
+      {step === "results" || step === "missing" ? (
+        <ChoiceTrail chips={trail} gapDetected={Boolean(result && emptyResult)} onOpen={(next) => setStep(next)} />
+      ) : null}
       {step === "car" && options.isLoading ? <PartsLoading /> : null}
       {step === "car" && options.isError ? (
         <PartsError message="Could not load parts. Nothing was changed." onRetry={() => { void options.refetch(); }} />
@@ -309,6 +363,7 @@ export function FindPartsFlow({
             year={year}
             quick={quick}
             codes={variants.map((row) => row.chassis_code).filter((code): code is string => Boolean(code))}
+            engines={engines}
             yearSpan={model ? yearSpan : ""}
             partCount={partCount}
             ready={Boolean(make && model && year && variants.length > 0 && !preview.isLoading)}
@@ -331,12 +386,14 @@ export function FindPartsFlow({
             onClearRecent={() => { setRecent([]); clearStoredRecent(); }}
           />
           {make && model && year && preview.isSuccess && variants.length === 0 ? (
-            <div className="max-w-4xl mx-auto mt-4 rounded-xl bg-surface-container-lowest p-space-md">
-              <h2 className="font-headline-md text-headline-md font-bold text-on-surface">This car is not in the catalog.</h2>
-              <div className="flex flex-wrap gap-3 mt-3">
-                <button type="button" className="h-12 px-4 rounded-xl bg-primary-container text-on-primary" onClick={() => { window.location.search = "?page=motor-vehicles"; }}>+ Add this car</button>
-                <button type="button" className="h-12 px-4 rounded-xl bg-surface-container-low" aria-label="Browse all Honda models" onClick={() => { setModel(""); setYear(""); }}>Browse all {make || "Honda"} models</button>
-              </div>
+            <div className="max-w-4xl mx-auto mt-4">
+              <CarNotInCatalog
+                carLabel={carLabel}
+                make={make}
+                modelYearHint={yearSpan ? `Known catalog span for ${make} ${model}: ${yearSpan}. Your year (${year}) may fall outside that range.` : undefined}
+                onAddCar={() => { window.location.search = "?page=motor-vehicles"; }}
+                onBrowseMake={() => { setModel(""); setYear(""); }}
+              />
             </div>
           ) : null}
         </>
@@ -370,17 +427,26 @@ export function FindPartsFlow({
           partTotal={[...counts.values()].reduce((sum, count) => sum + count, 0)}
           hits={hits}
           problems={problems}
+          carLabel={carLabel}
           onQuery={setPartQuery}
           onPick={pickPart}
           onPartHit={openPartHit}
           onSkip={() => { setComponentId(""); setPartName(""); setPosition(""); setSide(""); setStep("all"); }}
-          onBack={() => setStep(preview.data?.askVariant ? "version" : "car")}
+          onBack={() => setStep((preview.data?.candidates?.length || variants.length) > 1 ? "version" : "car")}
         />
       ) : null}
       {step === "position" ? (
         <PositionStep
           partName={partName}
           partCount={counts.get(componentId) ?? null}
+          geometryTitle={[
+            make,
+            model,
+            (() => {
+              const chassis = picked?.codeLine?.split(" · ")[0]?.trim();
+              return chassis ? `(${chassis})` : picked?.plainLabel ? `(${picked.plainLabel})` : "";
+            })(),
+          ].filter(Boolean).join(" ")}
           onChoose={(nextPosition, nextSide) => {
             setPosition(nextPosition === "both" ? "" : nextPosition);
             setSide(nextSide === "both" ? "" : nextSide);
@@ -404,15 +470,39 @@ export function FindPartsFlow({
           onAdd={requestAdd}
           onBack={() => setStep(positionAware ? "position" : "part")}
           onOpen={setDetail}
+          onOpenDatabase={() => { if (chosenId) onOpenVehicle?.(chosenId); }}
         />
       ) : null}
       {step === "all" && result ? (
-        <AllPartsView areas={areas} result={result} owner={owner} onAdd={requestAdd} onOpen={setDetail} onBack={() => setStep("part")} />
+        <AllPartsView
+          carLabel={carLabel}
+          versionLabel={variantId !== "any" ? (picked?.plainLabel || versionLabel) : versionLabel}
+          chassisCode={String(variants.find((row) => row.id === (chosenId || variants[0]?.id))?.chassis_code ?? "").trim()}
+          engineCode={String(variants.find((row) => row.id === (chosenId || variants[0]?.id))?.engine_code ?? "").trim()}
+          areas={areas}
+          result={result}
+          owner={owner}
+          onAdd={requestAdd}
+          onOpen={setDetail}
+          onBack={() => setStep("part")}
+          onOpenStep={(next) => setStep(next)}
+          onOpenDatabase={() => {
+            const id = chosenId || variants[0]?.id || "";
+            if (id) onOpenVehicle?.(id);
+          }}
+        />
       ) : null}
       {(step === "missing" || (step === "results" && result && emptyResult)) && result ? (
         <MissingPart
+          headline={`We don't have ${sideLabel ? `${sideLabel.toLowerCase()} ` : position ? `${position === "rear" ? "rear" : "front"} ` : ""}${partName.toLowerCase()} for the ${carLabel}${versionLabel && variantId !== "any" ? ` ${versionLabel}` : ""} yet.`}
           partName={partName}
-          carLabel={`${carLabel}${versionLabel && variantId !== "any" ? ` ${versionLabel}` : ""}`}
+          carLabel={carLabel}
+          versionLabel={variantId !== "any" ? versionLabel : ""}
+          sideLabel={sideLabel}
+          position={position}
+          side={side}
+          vehicleChip={[make, model, picked?.codeLine?.split(" · ")[0]].filter(Boolean).join(" ")}
+          chassisLabel={picked?.codeLine?.split(" · ")[0] ?? ""}
           variantId={chosenId}
           componentId={componentId}
           owner={owner}
@@ -420,7 +510,6 @@ export function FindPartsFlow({
           onSearch={() => setStep("part")}
         />
       ) : null}
-      <p className="font-body-sm text-body-sm text-secondary px-1">Ingestion rules & aliases</p>
       {detail ? (
         <PartDetailDrawer
           part={detail}
@@ -429,6 +518,8 @@ export function FindPartsFlow({
           componentId={componentId}
           onClose={() => setDetail(null)}
           onEdit={requestAdd}
+          onConfirmed={() => { void search.refetch(); }}
+          crossReferences={drawerCrossRefs}
         />
       ) : null}
     </div>

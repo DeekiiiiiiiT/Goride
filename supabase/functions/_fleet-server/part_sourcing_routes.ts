@@ -47,9 +47,9 @@ export function registerPartSourcingRoutes(
   supabase: SupabaseClient,
 ) {
   const gate = app as {
-    use: (path: string, handler: (c: Context, next: () => Promise<void>) => Promise<unknown>) => void;
+    use: (path: string, ...handlers: unknown[]) => void;
   };
-  gate.use("/make-server-37f42386/admin/*", async (c, next) => {
+  gate.use("/make-server-37f42386/admin/*", requireAuth(), async (c, next) => {
     if (!c.req.path.includes("/admin/part-")) return next();
     if (c.req.method === "GET" || c.req.method === "HEAD") return next();
     const denied = assertPartSourcingPlatformAccess(c);

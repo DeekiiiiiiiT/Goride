@@ -11,6 +11,7 @@ export function CarStep({
   year,
   quick,
   codes,
+  engines,
   yearSpan,
   partCount,
   ready,
@@ -33,6 +34,7 @@ export function CarStep({
   year: string;
   quick: string;
   codes: string[];
+  engines: string[];
   yearSpan: string;
   partCount: number | null;
   ready: boolean;
@@ -56,17 +58,21 @@ export function CarStep({
             <h2 className="font-headline-xl text-headline-xl text-on-surface font-bold tracking-tight">Which car is it?</h2>
             <p className="font-body-md text-body-md text-secondary mt-1">Pick the make, model, and year from official registration or export inspection documents.</p>
           </div>
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-surface-container-low rounded-full self-start">
+            <span className="w-2 h-2 rounded-full bg-primary-container" />
+            <span className="font-mono-sm text-mono-sm text-primary font-semibold uppercase">ISO-3779 match active</span>
+          </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-space-lg">
-          <Field label="Make" count="01/03" stitch="Make 01/03" icon="directions_car" value={make} options={makes} onChange={onMake} hint={yearSpan ? "" : ""} />
-          <Field label="Model" count="02/03" stitch="Model 02/03" icon="category" value={model} options={models} onChange={onModel} disabled={!make} />
-          <Field label="Model Year" count="03/03" stitch="Model Year 03/03" icon="calendar_today" value={year} options={years.map(String)} onChange={onYear} mono disabled={!model} hint={yearSpan} />
+          <Field label="Make" count="01/03" stitch="Make 01/03" icon="directions_car" value={make} options={makes} onChange={onMake} />
+          <Field label="Model" count="02/03" stitch="Model 02/03" icon="category" value={model} options={models} onChange={onModel} disabled={!make} hint={codes.length ? `Chassis: ${codes.join(" / ")}` : ""} />
+          <Field label="Model Year" count="03/03" stitch="Model Year 03/03" icon="calendar_today" value={year} options={years.map(String)} onChange={onYear} mono disabled={!model} hint={yearSpan ? `Series: ${yearSpan.replace(/^Series:\s*/, "")}` : ""} />
         </div>
         <div className="relative py-2 flex items-center justify-center">
           <div className="absolute inset-0 flex items-center">
             <div className="w-full h-px bg-surface-container-high" />
           </div>
-          <span className="relative px-4 bg-surface-container-lowest font-mono-sm text-mono-sm uppercase tracking-wider text-secondary">or type it</span>
+          <span className="relative px-4 bg-surface-container-lowest font-mono-sm text-mono-sm uppercase tracking-wider text-secondary">or type query string directly</span>
         </div>
         <div className="flex flex-col gap-1.5">
           <div className="relative flex items-center bg-surface-container-low rounded-xl shadow-inner focus-within:bg-surface-container-lowest focus-within:shadow transition-all">
@@ -84,7 +90,7 @@ export function CarStep({
             </button>
           </div>
           <div className="flex items-center justify-between text-secondary px-1 font-body-sm text-body-sm">
-            <span>Type make, model and year, e.g. 2018 Honda Fit</span>
+            <span>Accepts combined strings, Japanese auction grades, or VIN codes</span>
             {codes.length > 0 ? <span className="font-mono-sm text-mono-sm text-primary">Resolved: [{codes.join(" / ")}]</span> : null}
           </div>
         </div>
@@ -97,15 +103,14 @@ export function CarStep({
               <div className="flex flex-col">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-headline-md text-headline-md font-bold text-on-surface">{carName}</span>
-                  {codes.slice(0, 4).map((code) => (
-                    <span key={code} className="px-2 py-0.5 rounded-full font-mono-sm text-mono-sm font-semibold bg-surface-container-highest text-primary">{code}</span>
-                  ))}
+                  {codes[0] ? <span className="px-2 py-0.5 rounded-full font-mono-sm text-mono-sm font-semibold bg-surface-container-highest text-primary">{codes[0]}</span> : null}
                 </div>
+                {engines.length > 0 ? <p className="font-body-sm text-body-sm text-secondary">{engines.join(" · ")}</p> : null}
               </div>
             </div>
             <div className="flex sm:flex-col items-end gap-1 shrink-0">
               <span className="font-mono-sm text-mono-sm text-secondary uppercase">Known components</span>
-              {partCount != null ? <span className="font-mono-md text-mono-md font-bold text-primary">{partCount.toLocaleString()} parts</span> : null}
+              {partCount != null ? <span className="font-mono-md text-mono-md font-bold text-primary">{partCount.toLocaleString()} Verified Parts</span> : null}
             </div>
           </div>
         ) : null}
@@ -123,6 +128,7 @@ export function CarStep({
           <button
             className="inline-flex items-center justify-center gap-2 px-6 h-12 rounded-xl bg-primary-container text-on-primary font-headline-md text-headline-md font-semibold hover:bg-primary transition-all shadow-md active:scale-[0.99] disabled:opacity-40"
             type="button"
+            disabled={!ready}
             aria-label="Continue to version arrow_forward"
             onClick={onContinue}
           >
@@ -133,7 +139,7 @@ export function CarStep({
       </div>
       <div className="flex flex-col gap-space-sm px-1">
         <div className="flex items-center justify-between">
-          <span className="font-label-xs text-label-xs uppercase tracking-wider text-secondary font-bold">Recent searches</span>
+          <span className="font-label-xs text-label-xs uppercase tracking-wider text-secondary font-bold">Recent searches & Active bays</span>
           {recent.length > 0 ? (
             <button className="font-mono-sm text-mono-sm text-primary hover:underline" type="button" onClick={onClearRecent}>Clear history</button>
           ) : null}
@@ -151,16 +157,25 @@ export function CarStep({
           })}
         </div>
       </div>
-      <MatchTypeStrip />
-      <div className="p-space-md rounded-xl bg-surface-container-lowest shadow-sm flex items-center gap-3">
-        <div className="w-8 h-8 rounded-lg bg-surface-container-high flex items-center justify-center shrink-0 text-secondary">
-          <span className="material-symbols-outlined text-[18px]">verified_user</span>
+      <MatchTypeStrip engine={engines[0]} />
+      <div className="p-space-md rounded-xl bg-surface-container-lowest shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-space-md">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-surface-container-high flex items-center justify-center shrink-0 text-secondary">
+            <span className="material-symbols-outlined text-[18px]">verified_user</span>
+          </div>
+          <div className="font-body-sm text-body-sm text-on-surface">
+            <span className="font-semibold text-on-surface">Staff note:</span>{" "}
+            You are viewing customer-facing match logic. Customer identity profiles and pricing metrics are stripped.             Any missing fitment can be added directly via{" "}
+            {owner ? (
+              <button type="button" className="text-primary font-semibold hover:underline" onClick={onContinue}>Add it now</button>
+            ) : (
+              <span className="text-primary font-semibold">Add it now</span>
+            )}.
+          </div>
         </div>
-        <div className="font-body-sm text-body-sm text-on-surface">
-          <span className="font-semibold text-on-surface">Staff note:</span>{" "}
-          {owner
-            ? "Any missing part can be added here with Add it now."
-            : "You can search everything here. Only the owner can change parts."}
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="font-mono-sm text-mono-sm text-secondary">Cluster Node: SYNCED</span>
+          <span className="w-2 h-2 rounded-full bg-[#10b981]" />
         </div>
       </div>
     </div>

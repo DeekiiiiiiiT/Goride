@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
 import { AdminLayout } from './AdminLayout';
+import { repairCatalogAddress } from './parts-database/partsCatalogUrl';
 import { canPublishMaps } from './world-maps/mapPermissions';
 
 const lazyNamed = (loader: () => Promise<Record<string, unknown>>, name: string) =>
@@ -75,6 +76,7 @@ export function AdminPortal() {
   const [mfaNeeded, setMfaNeeded] = useState(true);
   const [currentPageRaw, setCurrentPageRaw] = useState(() => {
     if (typeof window !== 'undefined') {
+      repairCatalogAddress();
       const page = new URLSearchParams(window.location.search).get('page');
       if (page) return normalizePortalPage(page);
     }
@@ -143,6 +145,7 @@ export function AdminPortal() {
 
   useEffect(() => {
     const onPop = () => {
+      repairCatalogAddress();
       const page = new URLSearchParams(window.location.search).get('page') || 'dashboard';
       setCurrentPageRaw(normalizePortalPage(page));
     };

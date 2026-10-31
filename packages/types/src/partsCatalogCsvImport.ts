@@ -124,7 +124,7 @@ export function buildPartsCatalogRow(
   };
 }
 
-function splitCsvLine(line: string): string[] {
+export function splitCsvLine(line: string): string[] {
   const out: string[] = [];
   let cur = "";
   let quoted = false;

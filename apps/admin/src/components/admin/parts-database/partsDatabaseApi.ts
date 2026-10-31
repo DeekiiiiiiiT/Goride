@@ -6,8 +6,13 @@ import { supabase } from "../../../utils/supabase/client";
 export type PartsOverview = {
   vehicles: number;
   partsOnFile: number;
+  fitmentsOnFile: number;
   vehiclesWithParts: number;
   waiting: number;
+  /** True when the parts_tiered_search kill switch is on. */
+  matchTypesOff: boolean;
+  /** Newest part edit or fitment confirmation, when the database knows it. */
+  lastCatalogChangeAt?: string | null;
 };
 
 export type CatalogVariantPick = {
@@ -70,6 +75,7 @@ export type FindPartsCandidate = {
 
 export type FoundPartRow = {
   partId: string;
+  componentId?: string | null;
   name: string;
   brand: string;
   number: string;
@@ -78,6 +84,7 @@ export type FoundPartRow = {
   status: "verified" | "needs_checking";
   fitsVariantIds: string[];
   alsoKnownAs?: string[];
+  evidenceUrl?: string | null;
 };
 
 export type PlainSection = {
@@ -274,4 +281,133 @@ export function fetchImportBatches() {
 
 export function fetchSpecKeys() {
   return getJson<{ items: Array<{ key: string; label: string; unit: string | null }> }>("spec-keys");
+}
+
+export type MasterPartRow = {
+  partId: string;
+  groupId: string | null;
+  name: string;
+  number: string;
+  brand: string;
+  tier: number;
+  assembly: string;
+  fittedCars: string;
+  versionCount: number;
+  status: "verified" | "needs_checking";
+  updatedAt: string | null;
+};
+
+export type SisterFamilyRow = {
+  id: string;
+  label: string;
+  chassisCodes: string;
+  cars: string[];
+};
+
+export type UniversalCatalogRow = {
+  id: string;
+  name: string;
+  number: string;
+  brand: string;
+  fits: string;
+  source: string;
+};
+
+export type MasterSearchResult = {
+  rows: MasterPartRow[];
+  total: number;
+  chips: { all: number; oem: number; sister: number; engine: number; aftermarket: number; universal: number };
+  groups?: {
+    oem: MasterPartRow[];
+    engine: MasterPartRow[];
+    aftermarket: MasterPartRow[];
+    sister: SisterFamilyRow[];
+    universal: UniversalCatalogRow[];
+  };
+  emptyTiers?: string[];
+  facets: {
+    brands: string[];
+    assemblies: string[];
+    cars: Array<{ id: string; label: string }>;
+    brandCounts?: Array<{ name: string; count: number }>;
+    areaCounts?: Array<{ name: string; count: number }>;
+    statusCounts?: { all: number; verified: number; needs_checking: number };
+  };
+};
+
+export type MasterFit = {
+  variantId: string;
+  make: string;
+  model: string;
+  chassis: string;
+  years: string;
+  position: string;
+  linkType: "DIRECT" | "PLATFORM TWIN";
+};
+
+export type MasterPartDetail = {
+  partId: string;
+  groupId: string | null;
+  name: string;
+  number: string;
+  brand: string;
+  tier: number;
+  status: "verified" | "needs_checking";
+  evidenceUrl: string | null;
+  note: string;
+  fits: MasterFit[];
+};
+
+export function fetchMasterSearch(query: {
+  q?: string;
+  match?: string;
+  brand?: string;
+  assembly?: string;
+  variantId?: string;
+  status?: string;
+  make?: string;
+  model?: string;
+  year?: string;
+  limit?: number;
+  offset?: number;
+}) {
+  const params = new URLSearchParams();
+  if (query.q) params.set("q", query.q);
+  if (query.match) params.set("match", query.match);
+  if (query.brand) params.set("brand", query.brand);
+  if (query.assembly) params.set("assembly", query.assembly);
+  if (query.variantId) params.set("variantId", query.variantId);
+  if (query.status) params.set("status", query.status);
+  if (query.make) params.set("make", query.make);
+  if (query.model) params.set("model", query.model);
+  if (query.year) params.set("year", query.year);
+  params.set("limit", String(query.limit ?? 25));
+  params.set("offset", String(query.offset ?? 0));
+  return getJson<MasterSearchResult>(`parts/master?${params.toString()}`);
+}
+
+export function exportMasterCsv(query: {
+  q?: string;
+  match?: string;
+  brand?: string;
+  assembly?: string;
+  status?: string;
+  make?: string;
+  model?: string;
+  year?: string;
+}) {
+  const params = new URLSearchParams();
+  if (query.q) params.set("q", query.q);
+  if (query.match && query.match !== "all") params.set("match", query.match);
+  if (query.brand) params.set("brand", query.brand);
+  if (query.assembly) params.set("assembly", query.assembly);
+  if (query.status) params.set("status", query.status);
+  if (query.make) params.set("make", query.make);
+  if (query.model) params.set("model", query.model);
+  if (query.year) params.set("year", query.year);
+  return getJson<{ csv: string }>(`parts/master/export?${params.toString()}`);
+}
+
+export function fetchMasterPart(partId: string) {
+  return getJson<MasterPartDetail>(`parts/master/${encodeURIComponent(partId)}`);
 }

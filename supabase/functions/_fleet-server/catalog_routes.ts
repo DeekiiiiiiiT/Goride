@@ -246,13 +246,122 @@ export function registerCatalogRoutes(route: RouteApp, supabase: SupabaseClient)
     return c.json({ error: "Parts are entered from a source, not seeded." }, 410);
   });
 
+  route.get("/make-server-37f42386/admin/catalog/parts/master", requireAuth(), async (c: Context) => {
+    const denied = assertPlatformStaffResponse(c);
+    if (denied) return denied;
+    try {
+      const variant = (c.req.query("variantId") ?? "").trim();
+      if (variant && !UUID_RE.test(variant)) return c.json({ error: "Choose a vehicle" }, 400);
+      const limit = Number(c.req.query("limit") ?? "25");
+      const offset = Number(c.req.query("offset") ?? "0");
+      const yearRaw = Number(c.req.query("year") ?? "");
+      const year = Number.isFinite(yearRaw) && yearRaw > 0 ? yearRaw : null;
+      const { data, error } = await supabase.rpc("admin_catalog_master_search", {
+        p_q: c.req.query("q") ?? "",
+        p_match: c.req.query("match") ?? "all",
+        p_brand: c.req.query("brand") ?? "",
+        p_assembly: c.req.query("assembly") ?? "",
+        p_variant_id: variant || null,
+        p_status: c.req.query("status") ?? "",
+        p_limit: Number.isFinite(limit) ? limit : 25,
+        p_offset: Number.isFinite(offset) ? offset : 0,
+        p_make: c.req.query("make") ?? "",
+        p_model: c.req.query("model") ?? "",
+        p_year: year,
+      });
+      if (error) throw error;
+      return staffJson(c, data ?? { rows: [], total: 0, chips: {}, facets: {} });
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
+  route.get("/make-server-37f42386/admin/catalog/parts/master/export", requireAuth(), async (c: Context) => {
+    const denied = assertPlatformStaffResponse(c);
+    if (denied) return denied;
+    try {
+      const variant = (c.req.query("variantId") ?? "").trim();
+      if (variant && !UUID_RE.test(variant)) return c.json({ error: "Choose a vehicle" }, 400);
+      const yearRaw = Number(c.req.query("year") ?? "");
+      const year = Number.isFinite(yearRaw) && yearRaw > 0 ? yearRaw : null;
+      const { data, error } = await supabase.rpc("admin_catalog_master_search", {
+        p_q: c.req.query("q") ?? "",
+        p_match: c.req.query("match") ?? "all",
+        p_brand: c.req.query("brand") ?? "",
+        p_assembly: c.req.query("assembly") ?? "",
+        p_variant_id: variant || null,
+        p_status: c.req.query("status") ?? "",
+        p_limit: 50,
+        p_offset: 0,
+        p_make: c.req.query("make") ?? "",
+        p_model: c.req.query("model") ?? "",
+        p_year: year,
+      });
+      if (error) throw error;
+      const body = (data && typeof data === "object" ? data : {}) as {
+        groups?: {
+          oem?: Array<Record<string, string>>;
+          engine?: Array<Record<string, string>>;
+          aftermarket?: Array<Record<string, string>>;
+          universal?: Array<Record<string, string>>;
+        };
+      };
+      const header = "vehicle,manufacturer,part_number,part_name,part_kind,category_slug,job,position,year_from,year_to,evidence_url";
+      const cell = (value: string) => {
+        const text = String(value ?? "").replaceAll('"', '""');
+        return /[",\n]/.test(text) ? `"${text}"` : text;
+      };
+      const line = (row: Record<string, string>, kind: string) => [
+        row.fittedCars || row.fits || "",
+        row.brand || "",
+        row.number || "",
+        row.name || "",
+        kind,
+        row.assembly || "",
+        "",
+        "",
+        "",
+        "",
+        row.source || "",
+      ].map(cell).join(",");
+      const groups = body.groups ?? {};
+      const lines = [
+        ...(groups.oem ?? []).map((row) => line(row, "factory")),
+        ...(groups.engine ?? []).map((row) => line(row, "factory")),
+        ...(groups.aftermarket ?? []).map((row) => line(row, "aftermarket")),
+        ...(groups.universal ?? []).map((row) => line(row, "universal")),
+      ];
+      return staffJson(c, { csv: [header, ...lines].join("\n") });
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
+  route.get("/make-server-37f42386/admin/catalog/parts/master/:partId", requireAuth(), async (c: Context) => {
+    const denied = assertPlatformStaffResponse(c);
+    if (denied) return denied;
+    try {
+      const partId = c.req.param("partId");
+      if (!UUID_RE.test(partId)) return c.json({ error: "Choose a part" }, 400);
+      const { data, error } = await supabase.rpc("admin_catalog_master_part", { p_part_id: partId });
+      if (error) throw error;
+      const body = (data && typeof data === "object" ? data : {}) as { error?: string };
+      if (body.error) return c.json({ error: body.error }, 404);
+      return staffJson(c, data ?? {});
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
   route.get("/make-server-37f42386/admin/catalog/parts-overview", requireAuth(), async (c: Context) => {
     const denied = assertPlatformStaffResponse(c);
     if (denied) return denied;
     try {
       const { data, error } = await supabase.rpc("admin_parts_overview");
       if (error) throw error;
-      return staffJson(c, data ?? {});
+      const body = (data && typeof data === "object" ? data : {}) as Record<string, unknown>;
+      body.matchTypesOff = await tieredSearchKilled();
+      return staffJson(c, body);
     } catch (error) {
       return fail(c, error);
     }

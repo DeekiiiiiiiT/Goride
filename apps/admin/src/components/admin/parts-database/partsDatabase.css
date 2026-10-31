@@ -80,67 +80,142 @@
 .dark .parts-database-stitch .bg-amber-600 { background-color: #f59e0b; }
 .dark .parts-database-stitch .places-map-well { background-color: #172033; }
 
-.parts-database-stitch .find-parts-flow .text-secondary,
-.parts-database-stitch .find-parts-flow .font-body-sm.text-secondary,
-.parts-database-stitch .find-parts-flow .font-body-md.text-secondary { color: #5c6470; }
-.dark .parts-database-stitch .find-parts-flow .text-secondary,
-.dark .parts-database-stitch .find-parts-flow .font-body-sm.text-secondary,
-.dark .parts-database-stitch .find-parts-flow .font-body-md.text-secondary { color: #b0b6bf; }
+.parts-database-stitch .find-parts-header .text-secondary, .parts-database-stitch .find-parts-flow .text-secondary, .parts-database-stitch .full-database .text-secondary,
+.parts-database-stitch .find-parts-header .font-body-sm.text-secondary, .parts-database-stitch .find-parts-flow .font-body-sm.text-secondary, .parts-database-stitch .full-database .font-body-sm.text-secondary,
+.parts-database-stitch .find-parts-header .font-body-md.text-secondary , .parts-database-stitch .find-parts-flow .font-body-md.text-secondary , .parts-database-stitch .full-database .font-body-md.text-secondary { color: #5c6470; }
+.dark .parts-database-stitch .find-parts-header .text-secondary, .dark .parts-database-stitch .find-parts-flow .text-secondary, .dark .parts-database-stitch .full-database .text-secondary,
+.dark .parts-database-stitch .find-parts-header .font-body-sm.text-secondary, .dark .parts-database-stitch .find-parts-flow .font-body-sm.text-secondary, .dark .parts-database-stitch .full-database .font-body-sm.text-secondary,
+.dark .parts-database-stitch .find-parts-header .font-body-md.text-secondary, .dark .parts-database-stitch .find-parts-flow .font-body-md.text-secondary, .dark .parts-database-stitch .full-database .font-body-md.text-secondary { color: #b0b6bf; }
 .find-parts-flow .find-parts-stepbar,
 .find-parts-flow .find-parts-trail { overflow-x: auto; }
 @media (max-width: 420px) {
   .find-parts-flow .find-parts-columns { display: flex; flex-direction: column; }
   .find-parts-sheet { width: 100%; max-width: none; }
 }
-.parts-database-stitch .find-parts-flow .font-headline-xl,
-.parts-database-stitch .find-parts-flow .font-headline-lg,
-.parts-database-stitch .find-parts-flow .font-headline-md,
-.parts-database-stitch .find-parts-flow .font-body-md,
-.parts-database-stitch .find-parts-flow .font-body-sm,
-.parts-database-stitch .find-parts-flow .font-label-md,
-.parts-database-stitch .find-parts-flow .font-label-xs { font-family: Inter, sans-serif; }
-.parts-database-stitch .find-parts-flow .font-mono-lg,
-.parts-database-stitch .find-parts-flow .font-mono-md,
-.parts-database-stitch .find-parts-flow .font-mono-sm,
-.parts-database-stitch .find-parts-flow .font-mono-xs { font-family: "JetBrains Mono", ui-monospace, monospace; }
-.parts-database-stitch .find-parts-flow .text-headline-xl { font-size: 24px; line-height: 32px; letter-spacing: -0.02em; font-weight: 600; }
-.parts-database-stitch .find-parts-flow .text-headline-lg { font-size: 20px; line-height: 28px; letter-spacing: -0.015em; font-weight: 600; }
-.parts-database-stitch .find-parts-flow .text-headline-md { font-size: 16px; line-height: 24px; letter-spacing: -0.01em; font-weight: 600; }
-.parts-database-stitch .find-parts-flow .text-body-md { font-size: 14px; line-height: 20px; font-weight: 400; }
-.parts-database-stitch .find-parts-flow .text-body-sm { font-size: 13px; line-height: 18px; font-weight: 400; }
-.parts-database-stitch .find-parts-flow .text-label-md { font-size: 12px; line-height: 16px; letter-spacing: 0.01em; font-weight: 500; }
-.parts-database-stitch .find-parts-flow .text-label-xs { font-size: 11px; line-height: 14px; letter-spacing: 0.04em; font-weight: 600; }
-.parts-database-stitch .find-parts-flow .text-mono-lg { font-size: 14px; line-height: 20px; letter-spacing: -0.01em; font-weight: 500; }
-.parts-database-stitch .find-parts-flow .text-mono-md { font-size: 12px; line-height: 16px; font-weight: 500; }
-.parts-database-stitch .find-parts-flow .text-mono-sm { font-size: 11px; line-height: 14px; letter-spacing: 0.02em; font-weight: 400; }
-.parts-database-stitch .find-parts-flow .text-mono-xs { font-size: 10px; line-height: 14px; letter-spacing: 0.04em; font-weight: 400; }
-.parts-database-stitch .find-parts-flow .gap-space-xs { gap: 0.25rem; }
-.parts-database-stitch .find-parts-flow .gap-space-sm { gap: 0.5rem; }
-.parts-database-stitch .find-parts-flow .gap-space-md { gap: 0.75rem; }
-.parts-database-stitch .find-parts-flow .gap-space-lg { gap: 1rem; }
-.parts-database-stitch .find-parts-flow .gap-space-xl { gap: 1.5rem; }
-.parts-database-stitch .find-parts-flow .p-space-sm { padding: 0.5rem; }
-.parts-database-stitch .find-parts-flow .p-space-md { padding: 0.75rem; }
-.parts-database-stitch .find-parts-flow .p-space-lg { padding: 1rem; }
-.parts-database-stitch .find-parts-flow .p-space-xl { padding: 1.5rem; }
-.parts-database-stitch .find-parts-flow .px-space-sm { padding-left: 0.5rem; padding-right: 0.5rem; }
-.parts-database-stitch .find-parts-flow .px-space-md { padding-left: 0.75rem; padding-right: 0.75rem; }
-.parts-database-stitch .find-parts-flow .px-space-lg { padding-left: 1rem; padding-right: 1rem; }
-.parts-database-stitch .find-parts-flow .py-space-sm { padding-top: 0.5rem; padding-bottom: 0.5rem; }
-.parts-database-stitch .find-parts-flow .py-space-md { padding-top: 0.75rem; padding-bottom: 0.75rem; }
-.parts-database-stitch .find-parts-flow .pt-space-md { padding-top: 0.75rem; }
-.parts-database-stitch .find-parts-flow .pt-space-xs { padding-top: 0.25rem; }
-.parts-database-stitch .find-parts-flow .mb-space-xl { margin-bottom: 1.5rem; }
-.parts-database-stitch .find-parts-flow .mt-space-sm { margin-top: 0.5rem; }
-.parts-database-stitch .find-parts-flow .space-y-space-sm > :not([hidden]) ~ :not([hidden]) { margin-top: 0.5rem; }
-.parts-database-stitch .find-parts-flow .space-y-space-md > :not([hidden]) ~ :not([hidden]) { margin-top: 0.75rem; }
-.parts-database-stitch .find-parts-flow .bg-primary-container { background-color: #0153dc; }
-.parts-database-stitch .find-parts-flow .text-on-primary { color: #ffffff; }
-.parts-database-stitch .find-parts-flow .text-primary { color: #003ea9; }
-.parts-database-stitch .find-parts-flow .hover\:bg-primary:hover { background-color: #003ea9; }
-.parts-database-stitch .find-parts-flow .bg-on-primary\/20 { background-color: rgb(255 255 255 / 0.2); }
-.parts-database-stitch .find-parts-flow .placeholder\:text-outline::placeholder { color: #737686; }
-.dark .parts-database-stitch .find-parts-flow .bg-primary-container { background-color: #5b8def; }
-.dark .parts-database-stitch .find-parts-flow .text-primary { color: #8eb4ff; }
-.dark .parts-database-stitch .find-parts-flow .hover\:bg-primary:hover { background-color: #3b6fd4; }
+
+@media (min-width: 768px) {
+  .find-parts-sheet {
+    max-width: 520px;
+  }
+}
+.parts-database-stitch .find-parts-header .font-headline-xl, .parts-database-stitch .find-parts-flow .font-headline-xl, .parts-database-stitch .full-database .font-headline-xl,
+.parts-database-stitch .find-parts-header .font-headline-lg, .parts-database-stitch .find-parts-flow .font-headline-lg, .parts-database-stitch .full-database .font-headline-lg,
+.parts-database-stitch .find-parts-header .font-headline-md, .parts-database-stitch .find-parts-flow .font-headline-md, .parts-database-stitch .full-database .font-headline-md,
+.parts-database-stitch .find-parts-header .font-body-md, .parts-database-stitch .find-parts-flow .font-body-md, .parts-database-stitch .full-database .font-body-md,
+.parts-database-stitch .find-parts-header .font-body-sm, .parts-database-stitch .find-parts-flow .font-body-sm, .parts-database-stitch .full-database .font-body-sm,
+.parts-database-stitch .find-parts-header .font-label-md, .parts-database-stitch .find-parts-flow .font-label-md, .parts-database-stitch .full-database .font-label-md,
+.parts-database-stitch .find-parts-header .font-label-xs , .parts-database-stitch .find-parts-flow .font-label-xs , .parts-database-stitch .full-database .font-label-xs { font-family: Inter, sans-serif; }
+.parts-database-stitch .find-parts-header .font-mono-lg, .parts-database-stitch .find-parts-flow .font-mono-lg, .parts-database-stitch .full-database .font-mono-lg,
+.parts-database-stitch .find-parts-header .font-mono-md, .parts-database-stitch .find-parts-flow .font-mono-md, .parts-database-stitch .full-database .font-mono-md,
+.parts-database-stitch .find-parts-header .font-mono-sm, .parts-database-stitch .find-parts-flow .font-mono-sm, .parts-database-stitch .full-database .font-mono-sm,
+.parts-database-stitch .find-parts-header .font-mono-xs , .parts-database-stitch .find-parts-flow .font-mono-xs , .parts-database-stitch .full-database .font-mono-xs { font-family: "JetBrains Mono", ui-monospace, monospace; }
+.parts-database-stitch .find-parts-header .text-headline-xl , .parts-database-stitch .find-parts-flow .text-headline-xl , .parts-database-stitch .full-database .text-headline-xl { font-size: 24px; line-height: 32px; letter-spacing: -0.02em; font-weight: 600; }
+.parts-database-stitch .find-parts-header .text-headline-lg , .parts-database-stitch .find-parts-flow .text-headline-lg , .parts-database-stitch .full-database .text-headline-lg { font-size: 20px; line-height: 28px; letter-spacing: -0.015em; font-weight: 600; }
+.parts-database-stitch .find-parts-header .text-headline-md , .parts-database-stitch .find-parts-flow .text-headline-md , .parts-database-stitch .full-database .text-headline-md { font-size: 16px; line-height: 24px; letter-spacing: -0.01em; font-weight: 600; }
+.parts-database-stitch .find-parts-header .text-body-md , .parts-database-stitch .find-parts-flow .text-body-md , .parts-database-stitch .full-database .text-body-md { font-size: 14px; line-height: 20px; font-weight: 400; }
+.parts-database-stitch .find-parts-header .text-body-sm , .parts-database-stitch .find-parts-flow .text-body-sm , .parts-database-stitch .full-database .text-body-sm { font-size: 13px; line-height: 18px; font-weight: 400; }
+.parts-database-stitch .find-parts-header .text-label-md , .parts-database-stitch .find-parts-flow .text-label-md , .parts-database-stitch .full-database .text-label-md { font-size: 12px; line-height: 16px; letter-spacing: 0.01em; font-weight: 500; }
+.parts-database-stitch .find-parts-header .text-label-xs , .parts-database-stitch .find-parts-flow .text-label-xs , .parts-database-stitch .full-database .text-label-xs { font-size: 11px; line-height: 14px; letter-spacing: 0.04em; font-weight: 600; }
+.parts-database-stitch .find-parts-header .text-mono-lg , .parts-database-stitch .find-parts-flow .text-mono-lg , .parts-database-stitch .full-database .text-mono-lg { font-size: 14px; line-height: 20px; letter-spacing: -0.01em; font-weight: 500; }
+.parts-database-stitch .find-parts-header .text-mono-md , .parts-database-stitch .find-parts-flow .text-mono-md , .parts-database-stitch .full-database .text-mono-md { font-size: 12px; line-height: 16px; font-weight: 500; }
+.parts-database-stitch .find-parts-header .text-mono-sm , .parts-database-stitch .find-parts-flow .text-mono-sm , .parts-database-stitch .full-database .text-mono-sm { font-size: 11px; line-height: 14px; letter-spacing: 0.02em; font-weight: 400; }
+.parts-database-stitch .find-parts-header .text-mono-xs , .parts-database-stitch .find-parts-flow .text-mono-xs , .parts-database-stitch .full-database .text-mono-xs { font-size: 10px; line-height: 14px; letter-spacing: 0.04em; font-weight: 400; }
+.parts-database-stitch .find-parts-header .gap-space-xs , .parts-database-stitch .find-parts-flow .gap-space-xs , .parts-database-stitch .full-database .gap-space-xs { gap: 0.25rem; }
+.parts-database-stitch .find-parts-header .gap-space-sm , .parts-database-stitch .find-parts-flow .gap-space-sm , .parts-database-stitch .full-database .gap-space-sm { gap: 0.5rem; }
+.parts-database-stitch .find-parts-header .gap-space-md , .parts-database-stitch .find-parts-flow .gap-space-md , .parts-database-stitch .full-database .gap-space-md { gap: 0.75rem; }
+.parts-database-stitch .find-parts-header .gap-space-lg , .parts-database-stitch .find-parts-flow .gap-space-lg , .parts-database-stitch .full-database .gap-space-lg { gap: 1rem; }
+.parts-database-stitch .find-parts-header .gap-space-xl , .parts-database-stitch .find-parts-flow .gap-space-xl , .parts-database-stitch .full-database .gap-space-xl { gap: 1.5rem; }
+.parts-database-stitch .find-parts-header .p-space-sm , .parts-database-stitch .find-parts-flow .p-space-sm , .parts-database-stitch .full-database .p-space-sm { padding: 0.5rem; }
+.parts-database-stitch .find-parts-header .p-space-md , .parts-database-stitch .find-parts-flow .p-space-md , .parts-database-stitch .full-database .p-space-md { padding: 0.75rem; }
+.parts-database-stitch .find-parts-header .p-space-lg , .parts-database-stitch .find-parts-flow .p-space-lg , .parts-database-stitch .full-database .p-space-lg { padding: 1rem; }
+.parts-database-stitch .find-parts-header .p-space-xl , .parts-database-stitch .find-parts-flow .p-space-xl , .parts-database-stitch .full-database .p-space-xl { padding: 1.5rem; }
+.parts-database-stitch .find-parts-header .px-space-sm , .parts-database-stitch .find-parts-flow .px-space-sm , .parts-database-stitch .full-database .px-space-sm { padding-left: 0.5rem; padding-right: 0.5rem; }
+.parts-database-stitch .find-parts-header .px-space-md , .parts-database-stitch .find-parts-flow .px-space-md , .parts-database-stitch .full-database .px-space-md { padding-left: 0.75rem; padding-right: 0.75rem; }
+.parts-database-stitch .find-parts-header .px-space-lg , .parts-database-stitch .find-parts-flow .px-space-lg , .parts-database-stitch .full-database .px-space-lg { padding-left: 1rem; padding-right: 1rem; }
+.parts-database-stitch .find-parts-header .py-space-sm , .parts-database-stitch .find-parts-flow .py-space-sm , .parts-database-stitch .full-database .py-space-sm { padding-top: 0.5rem; padding-bottom: 0.5rem; }
+.parts-database-stitch .find-parts-header .py-space-md , .parts-database-stitch .find-parts-flow .py-space-md , .parts-database-stitch .full-database .py-space-md { padding-top: 0.75rem; padding-bottom: 0.75rem; }
+.parts-database-stitch .find-parts-header .pt-space-md , .parts-database-stitch .find-parts-flow .pt-space-md , .parts-database-stitch .full-database .pt-space-md { padding-top: 0.75rem; }
+.parts-database-stitch .find-parts-header .pt-space-xs , .parts-database-stitch .find-parts-flow .pt-space-xs , .parts-database-stitch .full-database .pt-space-xs { padding-top: 0.25rem; }
+.parts-database-stitch .find-parts-header .mb-space-xl , .parts-database-stitch .find-parts-flow .mb-space-xl , .parts-database-stitch .full-database .mb-space-xl { margin-bottom: 1.5rem; }
+.parts-database-stitch .find-parts-header .mt-space-sm , .parts-database-stitch .find-parts-flow .mt-space-sm , .parts-database-stitch .full-database .mt-space-sm { margin-top: 0.5rem; }
+.parts-database-stitch .find-parts-header .space-y-space-sm > :not([hidden]) ~ :not([hidden]) , .parts-database-stitch .find-parts-flow .space-y-space-sm > :not([hidden]) ~ :not([hidden]) , .parts-database-stitch .full-database .space-y-space-sm > :not([hidden]) ~ :not([hidden]) { margin-top: 0.5rem; }
+.parts-database-stitch .find-parts-header .space-y-space-md > :not([hidden]) ~ :not([hidden]) , .parts-database-stitch .find-parts-flow .space-y-space-md > :not([hidden]) ~ :not([hidden]) , .parts-database-stitch .full-database .space-y-space-md > :not([hidden]) ~ :not([hidden]) { margin-top: 0.75rem; }
+.parts-database-stitch .find-parts-header .bg-primary-container , .parts-database-stitch .find-parts-flow .bg-primary-container , .parts-database-stitch .full-database .bg-primary-container { background-color: #0153dc; }
+.parts-database-stitch .find-parts-header .text-on-primary , .parts-database-stitch .find-parts-flow .text-on-primary , .parts-database-stitch .full-database .text-on-primary { color: #ffffff; }
+.parts-database-stitch .find-parts-header .text-primary , .parts-database-stitch .find-parts-flow .text-primary , .parts-database-stitch .full-database .text-primary { color: #003ea9; }
+.parts-database-stitch .find-parts-header .hover\:bg-primary:hover , .parts-database-stitch .find-parts-flow .hover\:bg-primary:hover , .parts-database-stitch .full-database .hover\:bg-primary:hover { background-color: #003ea9; }
+.parts-database-stitch .find-parts-header .bg-on-primary\/20 , .parts-database-stitch .find-parts-flow .bg-on-primary\/20 , .parts-database-stitch .full-database .bg-on-primary\/20 { background-color: rgb(255 255 255 / 0.2); }
+.parts-database-stitch .find-parts-header .placeholder\:text-outline::placeholder , .parts-database-stitch .find-parts-flow .placeholder\:text-outline::placeholder , .parts-database-stitch .full-database .placeholder\:text-outline::placeholder { color: #737686; }
+.dark .parts-database-stitch .find-parts-header .bg-primary-container, .dark .parts-database-stitch .find-parts-flow .bg-primary-container, .dark .parts-database-stitch .full-database .bg-primary-container { background-color: #5b8def; }
+.dark .parts-database-stitch .find-parts-header .text-primary, .dark .parts-database-stitch .find-parts-flow .text-primary, .dark .parts-database-stitch .full-database .text-primary { color: #8eb4ff; }
+.dark .parts-database-stitch .find-parts-header .hover\:bg-primary:hover, .dark .parts-database-stitch .find-parts-flow .hover\:bg-primary:hover, .dark .parts-database-stitch .full-database .hover\:bg-primary:hover { background-color: #3b6fd4; }
+
+/* Light colours from the Stitch page. Without these the class names do nothing. */
+.parts-database-stitch .find-parts-header , .parts-database-stitch .find-parts-flow , .parts-database-stitch .full-database { background: #faf8ff; color: #191b24; }
+.parts-database-stitch .find-parts-header .bg-surface , .parts-database-stitch .find-parts-flow .bg-surface , .parts-database-stitch .full-database .bg-surface { background-color: #faf8ff; }
+.dark .parts-database-stitch .find-parts-header .bg-surface, .dark .parts-database-stitch .find-parts-flow .bg-surface, .dark .parts-database-stitch .full-database .bg-surface { background-color: #0b1220; }
+.parts-database-stitch .find-parts-header .bg-surface-container-lowest , .parts-database-stitch .find-parts-flow .bg-surface-container-lowest , .parts-database-stitch .full-database .bg-surface-container-lowest { background-color: #ffffff; }
+.parts-database-stitch .find-parts-header .bg-surface-container-low , .parts-database-stitch .find-parts-flow .bg-surface-container-low , .parts-database-stitch .full-database .bg-surface-container-low { background-color: #f3f3ff; }
+.parts-database-stitch .find-parts-header .bg-surface-container , .parts-database-stitch .find-parts-flow .bg-surface-container , .parts-database-stitch .full-database .bg-surface-container { background-color: #ededf9; }
+.parts-database-stitch .find-parts-header .bg-surface-container-high , .parts-database-stitch .find-parts-flow .bg-surface-container-high , .parts-database-stitch .full-database .bg-surface-container-high { background-color: #e7e7f3; }
+.parts-database-stitch .find-parts-header .bg-surface-container-highest , .parts-database-stitch .find-parts-flow .bg-surface-container-highest , .parts-database-stitch .full-database .bg-surface-container-highest { background-color: #e1e1ed; }
+.parts-database-stitch .find-parts-header .text-on-surface , .parts-database-stitch .find-parts-flow .text-on-surface , .parts-database-stitch .full-database .text-on-surface { color: #191b24; }
+.parts-database-stitch .find-parts-header .text-on-surface-variant , .parts-database-stitch .find-parts-flow .text-on-surface-variant , .parts-database-stitch .full-database .text-on-surface-variant { color: #434655; }
+.parts-database-stitch .find-parts-header .text-outline , .parts-database-stitch .find-parts-flow .text-outline , .parts-database-stitch .full-database .text-outline { color: #737686; }
+.parts-database-stitch .find-parts-header .text-outline-variant , .parts-database-stitch .find-parts-flow .text-outline-variant , .parts-database-stitch .full-database .text-outline-variant { color: #c3c6d7; }
+.parts-database-stitch .find-parts-header .bg-primary , .parts-database-stitch .find-parts-flow .bg-primary , .parts-database-stitch .full-database .bg-primary { background-color: #003ea9; }
+.parts-database-stitch .find-parts-header .border-outline-variant\/40 , .parts-database-stitch .find-parts-flow .border-outline-variant\/40 , .parts-database-stitch .full-database .border-outline-variant\/40 { border-color: rgb(195 198 215 / 0.4); }
+.parts-database-stitch .find-parts-header .shadow-inner , .parts-database-stitch .find-parts-flow .shadow-inner , .parts-database-stitch .full-database .shadow-inner { box-shadow: inset 0 2px 4px rgb(15 23 42 / 0.06); }
+.parts-database-stitch .find-parts-header .parts-db-title { font-size: 26px; line-height: 32px; font-weight: 700; letter-spacing: -0.02em; }
+.dark .parts-database-stitch .find-parts-header,
+.dark .parts-database-stitch .find-parts-flow,
+.dark .parts-database-stitch .full-database { background: #0b1220; color: #e2e8f0; }
+.dark .parts-database-stitch .find-parts-header .bg-surface,
+.dark .parts-database-stitch .find-parts-flow .bg-surface,
+.dark .parts-database-stitch .full-database .bg-surface { background-color: #0b1220; }
+.dark .parts-database-stitch .find-parts-header .bg-surface-container-lowest,
+.dark .parts-database-stitch .find-parts-flow .bg-surface-container-lowest,
+.dark .parts-database-stitch .full-database .bg-surface-container-lowest { background-color: #111827; }
+.dark .parts-database-stitch .find-parts-header .bg-surface-container-low,
+.dark .parts-database-stitch .find-parts-flow .bg-surface-container-low,
+.dark .parts-database-stitch .full-database .bg-surface-container-low { background-color: #172033; }
+.dark .parts-database-stitch .find-parts-header .bg-surface-container,
+.dark .parts-database-stitch .find-parts-flow .bg-surface-container,
+.dark .parts-database-stitch .full-database .bg-surface-container { background-color: #1e293b; }
+.dark .parts-database-stitch .find-parts-header .bg-surface-container-high,
+.dark .parts-database-stitch .find-parts-flow .bg-surface-container-high,
+.dark .parts-database-stitch .full-database .bg-surface-container-high { background-color: #243044; }
+.dark .parts-database-stitch .find-parts-header .bg-surface-container-highest,
+.dark .parts-database-stitch .find-parts-flow .bg-surface-container-highest,
+.dark .parts-database-stitch .full-database .bg-surface-container-highest { background-color: #2a3650; }
+.dark .parts-database-stitch .find-parts-header .text-on-surface,
+.dark .parts-database-stitch .find-parts-flow .text-on-surface,
+.dark .parts-database-stitch .full-database .text-on-surface { color: #e2e8f0; }
+.dark .parts-database-stitch .find-parts-header .text-on-surface-variant,
+.dark .parts-database-stitch .find-parts-flow .text-on-surface-variant,
+.dark .parts-database-stitch .full-database .text-on-surface-variant { color: #cbd5e1; }
+.dark .parts-database-stitch .find-parts-header .text-outline,
+.dark .parts-database-stitch .find-parts-flow .text-outline,
+.dark .parts-database-stitch .full-database .text-outline { color: #94a3b8; }
+.dark .parts-database-stitch .find-parts-header .border-outline-variant\/40,
+.dark .parts-database-stitch .find-parts-flow .border-outline-variant\/40,
+.dark .parts-database-stitch .full-database .border-outline-variant\/40 { border-color: rgb(100 116 139 / 0.4); }
+.dark .parts-database-stitch .full-database input[type="radio"],
+.dark .parts-database-stitch .full-database input[type="checkbox"] { accent-color: #8eb4ff; }
+.parts-database-stitch .find-parts-phone-header { display: none; }
+@media (max-width: 480px) {
+  .parts-database-stitch .find-parts-phone-header { display: block; }
+  .parts-database-stitch .full-database .master-table { display: none; }
+  .parts-database-stitch .full-database .master-cards { display: flex; }
+  .parts-database-stitch .full-database .group-head { flex-direction: column; align-items: flex-start; }
+  .parts-database-stitch .full-database .group-title { white-space: nowrap; }
+  .parts-database-stitch .full-database .group-inline-meta { display: none; }
+  .parts-database-stitch .full-database .group-phone-meta { display: inline; }
+  .parts-database-stitch .full-database .group-meta { width: 100%; padding-left: 1.25rem; }
+}
+.parts-database-stitch .full-database .match-chips { overflow-x: auto; }
+.parts-database-stitch .full-database .group-phone-meta { display: none; }
+@media (min-width: 481px) {
+  .parts-database-stitch .full-database .master-cards { display: none; }
+}
 

@@ -1,0 +1,57 @@
+{
+  "rows": [],
+  "total": 4,
+  "chips": { "all": 4, "oem": 1, "sister": 1, "engine": 0, "aftermarket": 1, "universal": 1 },
+  "emptyTiers": ["Fits the engine"],
+  "groups": {
+    "oem": [{
+      "partId": "oem-1",
+      "groupId": "group-1",
+      "name": "Front brake pad set",
+      "number": "04465-B1190",
+      "brand": "Toyota",
+      "tier": 1,
+      "assembly": "Brakes",
+      "fittedCars": "Toyota Roomy, Toyota Tank",
+      "versionCount": 7,
+      "status": "needs_checking",
+      "updatedAt": "2026-10-30T00:00:00Z"
+    }],
+    "engine": [],
+    "aftermarket": [{
+      "partId": "am-1",
+      "groupId": "group-2",
+      "name": "Front brake pad set",
+      "number": "PN5562",
+      "brand": "NiBK",
+      "tier": 4,
+      "assembly": "Brakes",
+      "fittedCars": "Toyota Roomy",
+      "versionCount": 5,
+      "status": "needs_checking",
+      "updatedAt": "2026-10-30T00:00:00Z"
+    }],
+    "sister": [{
+      "id": "fam-1",
+      "label": "Roomy / Tank / Thor / Justy",
+      "chassisCodes": "M900A · M900S",
+      "cars": ["Toyota Roomy", "Toyota Tank"]
+    }],
+    "universal": [{
+      "id": "uni-1",
+      "name": "Engine oil 0W-20 1 L",
+      "number": "08880-WA001",
+      "brand": "Toyota",
+      "fits": "Engine oil grade 0W-20",
+      "source": "https://autoparts.toyota.com"
+    }]
+  },
+  "facets": {
+    "brands": ["Toyota", "NiBK"],
+    "assemblies": ["Brakes"],
+    "cars": [],
+    "brandCounts": [{ "name": "Toyota", "count": 2 }, { "name": "NiBK", "count": 1 }],
+    "areaCounts": [{ "name": "Brakes", "count": 2 }],
+    "statusCounts": { "all": 4, "verified": 0, "needs_checking": 2 }
+  }
+}

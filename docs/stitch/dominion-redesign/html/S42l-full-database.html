@@ -1,0 +1,1069 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_dashboard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{width:6px;height:6px;}::-webkit-scrollbar-track{background:transparent;}::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px;}::-webkit-scrollbar-thumb:hover{background:#94a3b8;}</style><script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script><script id="tailwind-config">tailwind.config={"darkMode":"class","theme":{"extend":{"colors":{"surface-container-low":"#f3f3ff","inverse-surface":"#2e3039","surface-tint":"#0053db","secondary-container":"#dae2fd","secondary-fixed-dim":"#bec6e0","secondary-fixed":"#dae2fd","primary-container":"#0153dc","background":"#faf8ff","inverse-on-surface":"#f0f0fc","surface-bright":"#faf8ff","on-surface-variant":"#434655","on-secondary-fixed":"#131b2e","primary-fixed":"#dbe1ff","inverse-primary":"#b4c5ff","on-surface":"#191c20","tertiary-fixed":"#dbe1ff","surface-container-lowest":"#ffffff","tertiary-fixed-dim":"#bfc5e2","secondary":"#565e74","on-primary-container":"#ced8ff","on-tertiary-fixed":"#141b30","on-tertiary":"#ffffff","surface-dim":"#d9d9e5","primary":"#0153dc","tertiary-container":"#575e77","error-container":"#ffdad6","surface":"#faf8ff","tertiary":"#40465e","on-background":"#191b24","on-primary-fixed":"#00174b","on-secondary-fixed-variant":"#3f465c","surface-container-highest":"#e1e1ed","on-tertiary-fixed-variant":"#3f465e","on-error-container":"#93000a","outline-variant":"#e2e1ec","on-tertiary-container":"#d2d8f6","surface-container":"#ededf9","on-error":"#ffffff","surface-container-high":"#e7e7f3","on-secondary":"#ffffff","on-secondary-container":"#5c647a","outline":"#737686","error":"#ba1a1a","surface-variant":"#e1e1ed","primary-fixed-dim":"#b4c5ff","on-primary":"#ffffff","on-primary-fixed-variant":"#003ea8"},"borderRadius":{"DEFAULT":"0.125rem","lg":"0.25rem","xl":"0.5rem","full":"0.75rem"},"spacing":{"space-sm":"0.5rem","gutter-dense":"0.5rem","margin":"1.5rem","space-xs":"0.25rem","space-lg":"1rem","gutter":"1rem","margin-panel":"1rem","space-xl":"1.5rem","space-md":"0.75rem"},"fontFamily":{"body-md":["Inter","sans-serif"],"headline-lg":["Inter","sans-serif"],"mono-lg":["JetBrains Mono","monospace"],"body-sm":["Inter","sans-serif"],"mono-md":["JetBrains Mono","monospace"],"label-xs":["Inter","sans-serif"],"headline-xl":["Inter","sans-serif"],"label-md":["Inter","sans-serif"],"mono-sm":["JetBrains Mono","monospace"],"headline-md":["Inter","sans-serif"]},"fontSize":{"body-md":["14px",{"lineHeight":"20px","letterSpacing":"0","fontWeight":"400"}],"headline-lg":["20px",{"lineHeight":"28px","letterSpacing":"-0.015em","fontWeight":"600"}],"mono-lg":["14px",{"lineHeight":"20px","letterSpacing":"-0.01em","fontWeight":"500"}],"body-sm":["13px",{"lineHeight":"18px","letterSpacing":"0","fontWeight":"400"}],"mono-md":["12px",{"lineHeight":"16px","letterSpacing":"0","fontWeight":"500"}],"label-xs":["11px",{"lineHeight":"14px","letterSpacing":"0.04em","fontWeight":"600"}],"headline-xl":["24px",{"lineHeight":"32px","letterSpacing":"-0.02em","fontWeight":"600"}],"label-md":["12px",{"lineHeight":"16px","letterSpacing":"0.01em","fontWeight":"500"}],"mono-sm":["11px",{"lineHeight":"14px","letterSpacing":"0.02em","fontWeight":"400"}],"headline-md":["16px",{"lineHeight":"24px","letterSpacing":"-0.01em","fontWeight":"600"}]}}}}</script></head><body class="bg-[#faf8ff] font-body-md text-[#191c20] antialiased selection:bg-primary-fixed selection:text-on-primary-fixed"><aside class="fixed left-0 top-0 bottom-0 w-[260px] bg-[#0f172a] z-50 flex flex-col border-r border-[#1e293b]"><div class="h-16 px-space-lg flex items-center justify-between border-b border-[#1e293b] shrink-0"><div class="flex items-center gap-space-sm"><div class="w-7 h-7 rounded-xl bg-primary-container flex items-center justify-center shadow-sm"><span class="material-symbols-outlined text-[#ffffff] text-[18px]">token</span></div><div class="flex flex-col"><span class="font-headline-md text-headline-md tracking-[0.14em] uppercase text-[#ffffff] font-bold leading-none">DOMINION</span><span class="font-mono-sm text-mono-sm text-[#64748b] leading-tight tracking-wider mt-0.5">ENTERPRISE OS</span></div></div><div class="w-2 h-2 rounded-full bg-[#10b981] ring-2 ring-[#0f172a]" title="System Online"></div></div><div class="flex-1 overflow-y-auto px-space-sm py-space-md space-y-space-lg"><nav class="space-y-space-lg"><div class="space-y-1"><div class="px-space-sm pb-1 font-label-xs text-label-xs uppercase tracking-wider text-[#64748b]">Overview</div><a class="flex items-center gap-space-sm px-space-sm h-9 rounded-xl text-[#94a3b8] hover:bg-[#1e293b] hover:text-[#f8fafc] transition-colors" href="#"><span class="material-symbols-outlined text-[18px]">dashboard</span><span class="font-body-md text-body-md">Overview</span></a></div><div class="space-y-1"><div class="px-space-sm pb-1 font-label-xs text-label-xs uppercase tracking-wider text-[#64748b]">Master Data</div><a class="flex items-center gap-space-sm px-space-sm h-9 rounded-xl bg-primary-container text-[#ffffff] font-semibold transition-colors" href="#"><span class="material-symbols-outlined text-[18px]">directions_car</span><span class="font-body-md text-body-md">Vehicles</span></a><a class="flex items-center gap-space-sm px-space-sm h-9 rounded-xl text-[#94a3b8] hover:bg-[#1e293b] hover:text-[#f8fafc] transition-colors" href="#"><span class="material-symbols-outlined text-[18px]">map</span><span class="font-body-md text-body-md">Places and Maps</span></a><a class="flex items-center gap-space-sm px-space-sm h-9 rounded-xl text-[#94a3b8] hover:bg-[#1e293b] hover:text-[#f8fafc] transition-colors" href="#"><span class="material-symbols-outlined text-[18px]">local_gas_station</span><span class="font-body-md text-body-md">Fuel</span></a><a class="flex items-center gap-space-sm px-space-sm h-9 rounded-xl text-[#94a3b8] hover:bg-[#1e293b] hover:text-[#f8fafc] transition-colors" href="#"><span class="material-symbols-outlined text-[18px]">toll</span><span class="font-body-md text-body-md">Tolls</span></a><a class="flex items-center gap-space-sm px-space-sm h-9 rounded-xl text-[#94a3b8] hover:bg-[#1e293b] hover:text-[#f8fafc] transition-colors" href="#"><span class="material-symbols-outlined text-[18px]">receipt_long</span><span class="font-body-md text-body-md">Tax and Vendors</span></a></div><div class="space-y-1"><div class="px-space-sm pb-1 font-label-xs text-label-xs uppercase tracking-wider text-[#64748b]">Engines</div><a class="flex items-center gap-space-sm px-space-sm h-9 rounded-xl text-[#94a3b8] hover:bg-[#1e293b] hover:text-[#f8fafc] transition-colors" href="#"><span class="material-symbols-outlined text-[18px]">neurology</span><span class="font-body-md text-body-md">Fuel Brain</span></a><a class="flex items-center gap-space-sm px-space-sm h-9 rounded-xl text-[#94a3b8] hover:bg-[#1e293b] hover:text-[#f8fafc] transition-colors" href="#"><span class="material-symbols-outlined text-[18px]">memory</span><span class="font-body-md text-body-md">Toll Brain</span></a><a class="flex items-center gap-space-sm px-space-sm h-9 rounded-xl text-[#94a3b8] hover:bg-[#1e293b] hover:text-[#f8fafc] transition-colors" href="#"><span class="material-symbols-outlined text-[18px]">hub</span><span class="font-body-md text-body-md">Matching Brain</span></a></div><div class="space-y-1"><div class="px-space-sm pb-1 font-label-xs text-label-xs uppercase tracking-wider text-[#64748b]">Distribution</div><a class="flex items-center gap-space-sm px-space-sm h-9 rounded-xl text-[#94a3b8] hover:bg-[#1e293b] hover:text-[#f8fafc] transition-colors" href="#"><span class="material-symbols-outlined text-[18px]">apps</span><span class="font-body-md text-body-md">Apps</span></a><a class="flex items-center gap-space-sm px-space-sm h-9 rounded-xl text-[#94a3b8] hover:bg-[#1e293b] hover:text-[#f8fafc] transition-colors" href="#"><span class="material-symbols-outlined text-[18px]">api</span><span class="font-body-md text-body-md">Data API</span></a><a class="flex items-center gap-space-sm px-space-sm h-9 rounded-xl text-[#94a3b8] hover:bg-[#1e293b] hover:text-[#f8fafc] transition-colors" href="#"><span class="material-symbols-outlined text-[18px]">pending_actions</span><span class="font-body-md text-body-md">Change requests</span></a></div><div class="space-y-1"><div class="px-space-sm pb-1 font-label-xs text-label-xs uppercase tracking-wider text-[#64748b]">Platform</div><a class="flex items-center gap-space-sm px-space-sm h-9 rounded-xl text-[#94a3b8] hover:bg-[#1e293b] hover:text-[#f8fafc] transition-colors" href="#"><span class="material-symbols-outlined text-[18px]">badge</span><span class="font-body-md text-body-md">Staff and roles</span></a><a class="flex items-center gap-space-sm px-space-sm h-9 rounded-xl text-[#94a3b8] hover:bg-[#1e293b] hover:text-[#f8fafc] transition-colors" href="#"><span class="material-symbols-outlined text-[18px]">history</span><span class="font-body-md text-body-md">Activity log</span></a><a class="flex items-center gap-space-sm px-space-sm h-9 rounded-xl text-[#94a3b8] hover:bg-[#1e293b] hover:text-[#f8fafc] transition-colors" href="#"><span class="material-symbols-outlined text-[18px]">terminal</span><span class="font-body-md text-body-md">Platform Ops</span></a><a class="flex items-center gap-space-sm px-space-sm h-9 rounded-xl text-[#94a3b8] hover:bg-[#1e293b] hover:text-[#f8fafc] transition-colors" href="#"><span class="material-symbols-outlined text-[18px]">settings</span><span class="font-body-md text-body-md">Global settings</span></a></div><div class="space-y-1"><div class="px-space-sm pb-1 font-label-xs text-label-xs uppercase tracking-wider text-[#64748b]">Back Office</div><a class="flex items-center gap-space-sm px-space-sm h-9 rounded-xl text-[#94a3b8] hover:bg-[#1e293b] hover:text-[#f8fafc] transition-colors" href="#"><span class="material-symbols-outlined text-[18px]">domain</span><span class="font-body-md text-body-md">GCT registrations</span></a><a class="flex items-center gap-space-sm px-space-sm h-9 rounded-xl text-[#94a3b8] hover:bg-[#1e293b] hover:text-[#f8fafc] transition-colors" href="#"><span class="material-symbols-outlined text-[18px]">account_balance_wallet</span><span class="font-body-md text-body-md">Ledger</span></a><a class="flex items-center gap-space-sm px-space-sm h-9 rounded-xl text-[#94a3b8] hover:bg-[#1e293b] hover:text-[#f8fafc] transition-colors" href="#"><span class="material-symbols-outlined text-[18px]">payments</span><span class="font-body-md text-body-md">Remittance</span></a></div></nav></div><div class="p-space-md border-t border-[#1e293b] bg-[#0b1120]"><div class="flex items-center justify-between text-[#64748b]"><span class="font-mono-sm text-mono-sm">CORE CLUSTER 04</span><span class="font-mono-sm text-mono-sm px-1.5 py-0.5 rounded bg-[#1e293b] text-[#94a3b8]">v4.18.2</span></div></div></aside><div class="pl-[260px]"><header class="fixed top-0 left-[260px] right-0 h-16 bg-[#ffffff] border-b border-[#e2e1ec] z-40 flex items-center justify-between px-space-xl shadow-[0_1px_4px_rgba(0,0,0,0.02)]"><div class="flex items-center gap-space-md"><div class="relative w-[380px]"><span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-[18px]">search</span><input class="w-full h-9 pl-9 pr-12 rounded-xl bg-[#faf8ff] border border-[#e2e1ec] font-body-sm text-body-sm text-[#191c20] placeholder:text-outline focus:outline-none focus:border-[#0153dc] focus:bg-[#ffffff] transition-all" placeholder="Search entities, engines, routes…" type="text"/><kbd class="absolute right-space-sm top-1/2 -translate-y-1/2 font-mono-sm text-mono-sm bg-surface-container border border-outline-variant/60 text-on-surface-variant px-1.5 py-0.5 rounded">⌘K</kbd></div></div><div class="flex items-center gap-space-md"><div class="flex items-center gap-space-xs"><button class="w-9 h-9 flex items-center justify-center rounded-xl text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-colors relative" title="Notifications" type="button"><span class="material-symbols-outlined text-[20px]">notifications</span><span class="absolute top-2 right-2 w-2 h-2 rounded-full bg-error ring-2 ring-surface-container-lowest"></span></button><div class="flex items-center gap-1.5 px-space-sm py-1 rounded-xl bg-[#f3f3ff] border border-[#e2e1ec]"><span class="w-2 h-2 rounded-full bg-[#10b981]"></span><span class="font-mono-sm text-mono-sm text-[#191c20] font-semibold tracking-wider">NODE: OK</span></div></div><div class="h-6 w-[1px] bg-[#e2e1ec]"></div><div class="flex items-center gap-space-sm pl-1"><div class="flex items-center gap-space-sm px-space-sm py-1 rounded-xl bg-[#ededf9] border border-[#e2e1ec]"><span class="font-mono-md text-mono-md font-bold text-[#0153dc] px-1.5 py-0.5 rounded bg-[#ffffff] shadow-xs">DT</span><span class="font-body-sm text-body-sm font-semibold text-[#191c20]">Deeki T</span><span class="text-[#94a3b8] text-body-sm">·</span><span class="font-label-xs text-label-xs uppercase tracking-wider text-[#565e74] font-bold">OWNER</span></div><div class="w-8 h-8 rounded-full bg-[#0153dc] flex items-center justify-center shadow-sm"><span class="material-symbols-outlined text-[#ffffff] text-[18px]">person</span></div></div></div></header><main class="relative pt-16 bg-[#faf8ff] min-h-screen"><div class="flex flex-col w-full">
+<!-- Top Context Header & Metas -->
+<div class="px-margin pt-space-md pb-0 bg-[#ffffff] border-b border-[#e2e1ec] shadow-xs flex flex-col gap-space-sm">
+<!-- Breadcrumb & Schema Tag -->
+<div class="flex items-center justify-between pb-1">
+<nav aria-label="Breadcrumb" class="flex items-center gap-1.5 font-mono-sm text-mono-sm text-[#565e74]">
+<span class="text-[#434655] font-semibold hover:text-[#0153dc] transition-colors cursor-pointer">DOMINION</span>
+<span class="text-outline/40">›</span>
+<span class="text-[#434655] font-semibold">MASTER DATA</span>
+<span class="text-outline/40">›</span>
+<span class="text-[#434655] font-semibold">VEHICLES</span>
+<span class="text-outline/40">›</span>
+<span class="text-[#0153dc] font-bold tracking-wide">PARTS DATABASE</span>
+</nav>
+<div class="flex items-center gap-2">
+<span class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#f3f3ff] border border-[#e2e1ec] text-[#191c20] font-mono-sm text-mono-sm font-semibold shadow-xs">
+<span class="w-1.5 h-1.5 rounded-full bg-[#0153dc] ring-2 ring-[#0153dc]/20"></span>
+<span>INDEX: 1,489,202 FITMENTS</span>
+</span>
+<span class="px-2 py-0.5 rounded-full bg-[#ededf9] border border-[#e2e1ec] text-[#565e74] font-mono-sm text-[10px] uppercase font-bold">
+        SCHEMA V2.4
+      </span>
+</div>
+</div>
+<!-- Title & Subtitle + Top Action Buttons -->
+<div class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-space-md pt-1 pb-2">
+<div>
+<div class="flex items-center gap-3">
+<h1 class="font-headline-xl text-[26px] text-[#191c20] font-bold tracking-tight">Parts database</h1>
+<span class="px-2.5 py-0.5 rounded-full bg-[#0153dc]/10 text-[#0153dc] border border-[#0153dc]/25 font-mono-sm text-mono-sm font-bold">LIVE CLUSTER</span>
+</div>
+<p class="font-body-md text-body-md text-[#565e74] mt-1">Every part, car family and size-based part on file, in one searchable place. Direct catalog overview.</p>
+</div>
+<!-- TOP ACTIONS -->
+<div class="flex items-center gap-2.5 shrink-0">
+<button class="flex items-center gap-1.5 px-3.5 h-9 rounded-xl bg-[#ffffff] border border-[#e2e1ec] hover:bg-[#ededf9] text-[#191c20] font-body-sm text-body-sm font-medium transition-all shadow-xs" title="Import CSV batch">
+<span class="material-symbols-outlined text-[18px] text-[#565e74]">upload_file</span>
+<span>Import CSV</span>
+</button>
+<button class="flex items-center gap-1.5 px-3.5 h-9 rounded-xl bg-[#ffffff] border border-[#e2e1ec] hover:bg-[#ededf9] text-[#191c20] font-body-sm text-body-sm font-medium transition-all shadow-xs" title="Export current catalog">
+<span class="material-symbols-outlined text-[18px] text-[#565e74]">download</span>
+<span>Export CSV</span>
+</button>
+<button class="flex items-center gap-1.5 px-4 h-9 rounded-xl bg-[#0153dc] hover:bg-[#003ea9] text-[#ffffff] font-body-sm text-body-sm font-semibold shadow-xs transition-all" id="add-part-btn">
+<span class="material-symbols-outlined text-[18px]">add</span>
+<span>+ Add a part</span>
+</button>
+</div>
+</div>
+<!-- Navigation Tab Bar -->
+<div class="flex items-center justify-between mt-1 border-t border-[#e2e1ec]">
+<div class="flex items-center gap-space-lg">
+<a class="py-2.5 font-body-md text-body-md text-[#565e74] hover:text-[#191c20] font-medium transition-colors" href="#">Find parts</a>
+<a class="py-2.5 font-body-md text-body-md text-[#0153dc] font-bold border-b-2 border-[#0153dc] -mb-[1px]" href="#">Full database</a>
+<a class="py-2.5 font-body-md text-body-md text-[#565e74] hover:text-[#191c20] font-medium transition-colors flex items-center gap-1.5" href="#">
+<span>Import</span>
+<span class="px-1.5 py-0.2 rounded-full bg-[#e2e1ec] text-[#565e74] text-[10px] font-mono-sm font-bold">CSV</span>
+</a>
+</div>
+<div class="flex items-center gap-3">
+<button class="flex items-center gap-1 py-1 px-2.5 rounded-lg text-[#565e74] hover:text-[#0153dc] hover:bg-[#f3f3ff] transition-colors font-body-sm text-body-sm font-medium">
+<span class="material-symbols-outlined text-[16px]">tune</span>
+<span>Advanced tune</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Main Operational Layout: 12A Left Filter Panel + 12B Table Area -->
+<div class="p-margin flex items-start gap-space-lg">
+<!-- 12A — LEFT FILTER PANEL (280px sticky white card) -->
+<aside class="w-[280px] shrink-0 sticky top-20 rounded-xl bg-[#ffffff] border border-[#e2e1ec] shadow-xs p-space-md flex flex-col gap-4 max-h-[calc(100vh-6rem)] overflow-y-auto">
+<!-- Search Input -->
+<div class="relative">
+<span class="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-outline text-[18px]">search</span>
+<input class="w-full h-8 pl-8 pr-2.5 rounded-lg bg-[#faf8ff] border border-[#e2e1ec] font-body-sm text-body-sm text-[#191c20] placeholder:text-outline focus:outline-none focus:border-[#0153dc] focus:bg-[#ffffff] transition-all" placeholder="Search part name, number or brand" type="text"/>
+</div>
+<!-- CAR GROUP -->
+<div class="flex flex-col gap-2 pt-2 border-t border-[#e2e1ec]">
+<div class="flex items-center justify-between">
+<span class="font-mono-sm text-[11px] uppercase tracking-wider text-[#565e74] font-bold">CAR</span>
+<span class="text-[11px] text-outline">Filter vehicle</span>
+</div>
+<div class="space-y-1.5">
+<div class="relative">
+<select class="w-full appearance-none h-7 pl-2.5 pr-6 rounded-lg bg-[#faf8ff] border border-[#e2e1ec] font-body-sm text-[12px] text-[#191c20] focus:outline-none focus:border-[#0153dc]">
+<option>All makes</option>
+<option selected="">Toyota</option>
+<option>Daihatsu</option>
+<option>Subaru</option>
+<option>Honda</option>
+</select>
+<span class="material-symbols-outlined pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-outline text-[16px]">arrow_drop_down</span>
+</div>
+<div class="relative">
+<select class="w-full appearance-none h-7 pl-2.5 pr-6 rounded-lg bg-[#faf8ff] border border-[#e2e1ec] font-body-sm text-[12px] text-[#191c20] focus:outline-none focus:border-[#0153dc]">
+<option>All models</option>
+<option selected="">Roomy (M900A)</option>
+<option>Tank (M900A)</option>
+<option>Thor (M900S)</option>
+</select>
+<span class="material-symbols-outlined pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-outline text-[16px]">arrow_drop_down</span>
+</div>
+<div class="relative">
+<select class="w-full appearance-none h-7 pl-2.5 pr-6 rounded-lg bg-[#faf8ff] border border-[#e2e1ec] font-body-sm text-[12px] text-[#191c20] focus:outline-none focus:border-[#0153dc]">
+<option>All years</option>
+<option>2016–2020</option>
+<option>2020–present</option>
+</select>
+<span class="material-symbols-outlined pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-outline text-[16px]">arrow_drop_down</span>
+</div>
+</div>
+</div>
+<!-- MATCH TYPE GROUP -->
+<div class="flex flex-col gap-2 pt-2 border-t border-[#e2e1ec]">
+<div class="flex items-center justify-between">
+<span class="font-mono-sm text-[11px] uppercase tracking-wider text-[#565e74] font-bold">MATCH TYPE</span>
+</div>
+<div class="flex flex-col gap-1 font-body-sm text-[12px]">
+<!-- All -->
+<label class="flex items-center justify-between px-2 py-1 rounded-md hover:bg-[#f3f3ff] cursor-pointer group bg-[#f3f3ff]">
+<div class="flex items-center gap-2">
+<input checked="" class="w-3.5 h-3.5 text-[#0153dc] border-outline focus:ring-0" name="match_type_radio" type="radio"/>
+<span class="font-semibold text-[#191c20]">All</span>
+</div>
+<span class="px-1.5 py-0.2 rounded-full bg-[#ededf9] text-[#565e74] font-mono-sm text-[10px] font-bold">18</span>
+</label>
+<!-- OEM -->
+<label class="flex items-center justify-between px-2 py-1 rounded-md hover:bg-[#f3f3ff] cursor-pointer group">
+<div class="flex items-center gap-2">
+<input class="w-3.5 h-3.5 text-[#0153dc] border-outline focus:ring-0" name="match_type_radio" type="radio"/>
+<span class="w-2 h-2 rounded-full bg-[#0153dc]"></span>
+<span class="text-[#191c20]">Made for the car</span>
+<span class="px-1 py-0.2 rounded bg-[#e2e1ec] text-[#565e74] text-[9px] font-mono-sm font-semibold">OEM</span>
+</div>
+<span class="px-1.5 py-0.2 rounded-full bg-[#ededf9] text-[#565e74] font-mono-sm text-[10px]">5</span>
+</label>
+<!-- Sister -->
+<label class="flex items-center justify-between px-2 py-1 rounded-md hover:bg-[#f3f3ff] cursor-pointer group">
+<div class="flex items-center gap-2">
+<input class="w-3.5 h-3.5 text-[#0153dc] border-outline focus:ring-0" name="match_type_radio" type="radio"/>
+<span class="w-2 h-2 rounded-full bg-[#0e7490]"></span>
+<span class="text-[#191c20]">Same car, diff. badge</span>
+<span class="px-1 py-0.2 rounded bg-[#e2e1ec] text-[#565e74] text-[9px] font-mono-sm font-semibold">Sister</span>
+</div>
+<span class="px-1.5 py-0.2 rounded-full bg-[#ededf9] text-[#565e74] font-mono-sm text-[10px]">2</span>
+</label>
+<!-- Engine (Muted) -->
+<label class="flex items-center justify-between px-2 py-1 rounded-md opacity-45 cursor-not-allowed">
+<div class="flex items-center gap-2">
+<input class="w-3.5 h-3.5 text-[#0153dc] border-outline focus:ring-0" disabled="" name="match_type_radio" type="radio"/>
+<span class="w-2 h-2 rounded-full bg-[#b45309]"></span>
+<span class="text-[#565e74]">Fits the engine</span>
+<span class="px-1 py-0.2 rounded bg-[#e2e1ec] text-[#565e74] text-[9px] font-mono-sm font-semibold">Engine</span>
+</div>
+<span class="px-1.5 py-0.2 rounded-full bg-[#ededf9] text-[#565e74] font-mono-sm text-[10px]">0</span>
+</label>
+<!-- Aftermarket -->
+<label class="flex items-center justify-between px-2 py-1 rounded-md hover:bg-[#f3f3ff] cursor-pointer group">
+<div class="flex items-center gap-2">
+<input class="w-3.5 h-3.5 text-[#0153dc] border-outline focus:ring-0" name="match_type_radio" type="radio"/>
+<span class="w-2 h-2 rounded-full bg-[#7c3aed]"></span>
+<span class="text-[#191c20]">Other brands</span>
+<span class="px-1 py-0.2 rounded bg-[#e2e1ec] text-[#565e74] text-[9px] font-mono-sm font-semibold">Aftermarket</span>
+</div>
+<span class="px-1.5 py-0.2 rounded-full bg-[#ededf9] text-[#565e74] font-mono-sm text-[10px]">6</span>
+</label>
+<!-- Universal -->
+<label class="flex items-center justify-between px-2 py-1 rounded-md hover:bg-[#f3f3ff] cursor-pointer group">
+<div class="flex items-center gap-2">
+<input class="w-3.5 h-3.5 text-[#0153dc] border-outline focus:ring-0" name="match_type_radio" type="radio"/>
+<span class="w-2 h-2 rounded-full bg-[#006e31]"></span>
+<span class="text-[#191c20]">Fits by size</span>
+<span class="px-1 py-0.2 rounded bg-[#e2e1ec] text-[#565e74] text-[9px] font-mono-sm font-semibold">Universal</span>
+</div>
+<span class="px-1.5 py-0.2 rounded-full bg-[#ededf9] text-[#565e74] font-mono-sm text-[10px]">5</span>
+</label>
+</div>
+</div>
+<!-- AREA GROUP -->
+<div class="flex flex-col gap-2 pt-2 border-t border-[#e2e1ec]">
+<div class="flex items-center justify-between">
+<span class="font-mono-sm text-[11px] uppercase tracking-wider text-[#565e74] font-bold">AREA</span>
+</div>
+<div class="flex flex-col gap-1 font-body-sm text-[12px]">
+<div class="flex items-center justify-between px-2 py-1 rounded-md bg-[#f3f3ff] text-[#0153dc] font-bold cursor-pointer">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[15px]">apps</span>
+<span>All areas</span>
+</div>
+<span class="px-1.5 py-0.2 rounded-full bg-[#ffffff] border border-[#e2e1ec] text-[#0153dc] font-mono-sm text-[10px]">11</span>
+</div>
+<div class="flex items-center justify-between px-2 py-1 rounded-md hover:bg-[#faf8ff] text-[#191c20] cursor-pointer">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[15px] text-[#565e74]">album</span>
+<span>Brakes</span>
+</div>
+<span class="px-1.5 py-0.2 rounded-full bg-[#ededf9] text-[#565e74] font-mono-sm text-[10px]">9</span>
+</div>
+<div class="flex items-center justify-between px-2 py-1 rounded-md hover:bg-[#faf8ff] text-[#191c20] cursor-pointer">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[15px] text-[#565e74]">settings_suggest</span>
+<span>Engine</span>
+</div>
+<span class="px-1.5 py-0.2 rounded-full bg-[#ededf9] text-[#565e74] font-mono-sm text-[10px]">2</span>
+</div>
+<!-- Muted Areas -->
+<div class="flex items-center justify-between px-2 py-0.5 text-outline/60 text-[11px]">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[14px]">filter_alt</span>
+<span>Filters</span>
+</div>
+<span class="font-mono-sm">0</span>
+</div>
+<div class="flex items-center justify-between px-2 py-0.5 text-outline/60 text-[11px]">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[14px]">lightbulb</span>
+<span>Lights &amp; visibility</span>
+</div>
+<span class="font-mono-sm">0</span>
+</div>
+<div class="flex items-center justify-between px-2 py-0.5 text-outline/60 text-[11px]">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[14px]">swap_driving_apps</span>
+<span>Suspension &amp; steering</span>
+</div>
+<span class="font-mono-sm">0</span>
+</div>
+<div class="flex items-center justify-between px-2 py-0.5 text-outline/60 text-[11px]">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[14px]">ac_unit</span>
+<span>Cooling</span>
+</div>
+<span class="font-mono-sm">0</span>
+</div>
+<div class="flex items-center justify-between px-2 py-0.5 text-outline/60 text-[11px]">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[14px]">battery_charging_full</span>
+<span>Battery &amp; electrical</span>
+</div>
+<span class="font-mono-sm">0</span>
+</div>
+<div class="flex items-center justify-between px-2 py-0.5 text-outline/60 text-[11px]">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[14px]">air</span>
+<span>A/C</span>
+</div>
+<span class="font-mono-sm">0</span>
+</div>
+<div class="flex items-center justify-between px-2 py-0.5 text-outline/60 text-[11px]">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[14px]">motion_sensor_active</span>
+<span>Transmission</span>
+</div>
+<span class="font-mono-sm">0</span>
+</div>
+<div class="flex items-center justify-between px-2 py-0.5 text-outline/60 text-[11px]">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[14px]">tire_repair</span>
+<span>Tyres &amp; wheels</span>
+</div>
+<span class="font-mono-sm">0</span>
+</div>
+</div>
+</div>
+<!-- BRAND GROUP -->
+<div class="flex flex-col gap-2 pt-2 border-t border-[#e2e1ec]">
+<div class="flex items-center justify-between">
+<span class="font-mono-sm text-[11px] uppercase tracking-wider text-[#565e74] font-bold">BRAND</span>
+</div>
+<div class="flex flex-col gap-1 font-body-sm text-[12px]">
+<label class="flex items-center justify-between px-1 py-0.5 cursor-pointer">
+<div class="flex items-center gap-2">
+<input checked="" class="rounded border-[#e2e1ec] text-[#0153dc] focus:ring-0 w-3.5 h-3.5" type="checkbox"/>
+<span class="text-[#191c20] font-medium">Toyota</span>
+</div>
+<span class="font-mono-sm text-outline text-[11px]">3</span>
+</label>
+<label class="flex items-center justify-between px-1 py-0.5 cursor-pointer">
+<div class="flex items-center gap-2">
+<input class="rounded border-[#e2e1ec] text-[#0153dc] focus:ring-0 w-3.5 h-3.5" type="checkbox"/>
+<span class="text-[#191c20]">Daihatsu</span>
+</div>
+<span class="font-mono-sm text-outline text-[11px]">1</span>
+</label>
+<label class="flex items-center justify-between px-1 py-0.5 cursor-pointer">
+<div class="flex items-center gap-2">
+<input class="rounded border-[#e2e1ec] text-[#0153dc] focus:ring-0 w-3.5 h-3.5" type="checkbox"/>
+<span class="text-[#191c20]">Subaru</span>
+</div>
+<span class="font-mono-sm text-outline text-[11px]">1</span>
+</label>
+<label class="flex items-center justify-between px-1 py-0.5 cursor-pointer">
+<div class="flex items-center gap-2">
+<input class="rounded border-[#e2e1ec] text-[#0153dc] focus:ring-0 w-3.5 h-3.5" type="checkbox"/>
+<span class="text-[#191c20]">NiBK</span>
+</div>
+<span class="font-mono-sm text-outline text-[11px]">1</span>
+</label>
+<label class="flex items-center justify-between px-1 py-0.5 cursor-pointer">
+<div class="flex items-center gap-2">
+<input class="rounded border-[#e2e1ec] text-[#0153dc] focus:ring-0 w-3.5 h-3.5" type="checkbox"/>
+<span class="text-[#191c20]">SB Nagamochi</span>
+</div>
+<span class="font-mono-sm text-outline text-[11px]">1</span>
+</label>
+<label class="flex items-center justify-between px-1 py-0.5 cursor-pointer">
+<div class="flex items-center gap-2">
+<input class="rounded border-[#e2e1ec] text-[#0153dc] focus:ring-0 w-3.5 h-3.5" type="checkbox"/>
+<span class="text-[#191c20]">Akebono</span>
+</div>
+<span class="font-mono-sm text-outline text-[11px]">1</span>
+</label>
+<label class="flex items-center justify-between px-1 py-0.5 cursor-pointer">
+<div class="flex items-center gap-2">
+<input class="rounded border-[#e2e1ec] text-[#0153dc] focus:ring-0 w-3.5 h-3.5" type="checkbox"/>
+<span class="text-[#191c20]">Brembo</span>
+</div>
+<span class="font-mono-sm text-outline text-[11px]">1</span>
+</label>
+<label class="flex items-center justify-between px-1 py-0.5 cursor-pointer">
+<div class="flex items-center gap-2">
+<input class="rounded border-[#e2e1ec] text-[#0153dc] focus:ring-0 w-3.5 h-3.5" type="checkbox"/>
+<span class="text-[#191c20]">Blue Print</span>
+</div>
+<span class="font-mono-sm text-outline text-[11px]">1</span>
+</label>
+<label class="flex items-center justify-between px-1 py-0.5 cursor-pointer">
+<div class="flex items-center gap-2">
+<input class="rounded border-[#e2e1ec] text-[#0153dc] focus:ring-0 w-3.5 h-3.5" type="checkbox"/>
+<span class="text-[#191c20]">MANN-FILTER</span>
+</div>
+<span class="font-mono-sm text-outline text-[11px]">1</span>
+</label>
+</div>
+</div>
+<!-- STATUS GROUP -->
+<div class="flex flex-col gap-2 pt-2 border-t border-[#e2e1ec]">
+<div class="flex items-center justify-between">
+<span class="font-mono-sm text-[11px] uppercase tracking-wider text-[#565e74] font-bold">STATUS</span>
+</div>
+<div class="flex flex-col gap-1 font-body-sm text-[12px]">
+<label class="flex items-center justify-between px-2 py-1 rounded-md hover:bg-[#faf8ff] cursor-pointer">
+<div class="flex items-center gap-2">
+<input checked="" class="w-3.5 h-3.5 text-[#0153dc] border-outline focus:ring-0" name="status_radio" type="radio"/>
+<span class="text-[#191c20] font-medium">All</span>
+</div>
+<span class="font-mono-sm text-outline text-[11px]">11</span>
+</label>
+<label class="flex items-center justify-between px-2 py-1 rounded-md hover:bg-[#faf8ff] cursor-pointer">
+<div class="flex items-center gap-2">
+<input class="w-3.5 h-3.5 text-[#0153dc] border-outline focus:ring-0" name="status_radio" type="radio"/>
+<span class="text-[#191c20]">Verified</span>
+</div>
+<span class="font-mono-sm text-emerald-700 text-[11px] font-semibold">2</span>
+</label>
+<label class="flex items-center justify-between px-2 py-1 rounded-md hover:bg-[#faf8ff] cursor-pointer">
+<div class="flex items-center gap-2">
+<input class="w-3.5 h-3.5 text-[#0153dc] border-outline focus:ring-0" name="status_radio" type="radio"/>
+<span class="text-[#191c20]">Needs checking</span>
+</div>
+<span class="font-mono-sm text-amber-700 text-[11px] font-semibold">9</span>
+</label>
+</div>
+</div>
+<!-- Reset filters text button -->
+<div class="pt-2 border-t border-[#e2e1ec]">
+<button class="w-full text-center text-body-sm text-[#565e74] hover:text-[#0153dc] py-1 font-medium transition-colors" type="button">
+        Reset filters
+      </button>
+</div>
+</aside>
+<!-- 12B — THE TABLE AREA (Split into Match-Type Groups) -->
+<div class="flex-1 flex flex-col gap-space-md min-w-0">
+<!-- Top Summary Bar with Active Filters -->
+<div class="p-space-md rounded-xl bg-[#ffffff] border border-[#e2e1ec] shadow-xs flex flex-wrap items-center justify-between gap-3">
+<div class="flex flex-wrap items-center gap-2">
+<span class="font-headline-md text-headline-md font-bold text-[#191c20]">Whole database</span>
+<span class="px-2 py-0.5 rounded-full bg-[#f3f3ff] border border-[#e2e1ec] text-[#0153dc] font-mono-sm text-mono-sm font-bold">18 records</span>
+<div class="h-4 w-[1px] bg-[#e2e1ec] mx-1"></div>
+<!-- Removable filter chips -->
+<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-[#faf8ff] border border-[#e2e1ec] font-body-sm text-body-sm text-[#191c20]">
+<span>Toyota</span>
+<button class="hover:text-error text-outline transition-colors text-[13px] leading-none" title="Remove filter">✕</button>
+</span>
+<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-[#faf8ff] border border-[#e2e1ec] font-body-sm text-body-sm text-[#191c20]">
+<span>Roomy</span>
+<button class="hover:text-error text-outline transition-colors text-[13px] leading-none" title="Remove filter">✕</button>
+</span>
+<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-[#faf8ff] border border-[#e2e1ec] font-body-sm text-body-sm text-[#191c20]">
+<span>Brakes</span>
+<button class="hover:text-error text-outline transition-colors text-[13px] leading-none" title="Remove filter">✕</button>
+</span>
+</div>
+<div class="flex items-center gap-2 text-outline font-mono-sm text-[11px]">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+<span>INDEX UP-TO-DATE · 4MS LATENCY</span>
+</div>
+</div>
+<!-- MAIN TABLE CONTAINER -->
+<div class="w-full rounded-xl bg-[#ffffff] border border-[#e2e1ec] shadow-xs overflow-hidden flex flex-col">
+<!-- GROUP 1: Made for the car · OEM · 5 -->
+<div class="border-b border-[#e2e1ec]">
+<!-- Full-width Group Header -->
+<div class="px-space-md py-2.5 bg-[#f8fafc] border-b border-[#e2e1ec] flex items-center justify-between">
+<div class="flex items-center gap-2.5">
+<span class="w-2.5 h-2.5 rounded-full bg-[#0153dc]"></span>
+<span class="font-headline-md text-headline-md font-bold text-[#191c20]">Made for the car</span>
+<span class="px-2 py-0.2 rounded bg-[#e2e1ec] text-[#565e74] font-mono-sm text-[11px] font-bold">OEM</span>
+<span class="text-secondary font-mono-sm text-mono-sm">· 5 records</span>
+</div>
+<button class="text-outline hover:text-[#191c20] transition-colors p-1" title="Collapse group">
+<span class="material-symbols-outlined text-[18px]">expand_less</span>
+</button>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-[#faf8ff] border-b border-[#e2e1ec] font-mono-sm text-[11px] uppercase text-[#565e74] tracking-wider h-9">
+<th class="px-space-md font-semibold">Part</th>
+<th class="px-space-md font-semibold">Number</th>
+<th class="px-space-md font-semibold">Brand</th>
+<th class="px-space-md font-semibold">Area</th>
+<th class="px-space-md font-semibold">Cars it fits</th>
+<th class="px-space-md font-semibold">Status</th>
+<th class="px-space-md text-right font-semibold">Actions</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-[#e2e1ec] font-body-sm text-body-sm text-[#191c20]">
+<!-- Row 1: Active Demo Row (Front brake pad set) -->
+<tr class="h-11 bg-primary-fixed/20 hover:bg-primary-fixed/30 cursor-pointer transition-colors border-l-4 border-l-[#0153dc]" id="row-oem-1">
+<td class="px-space-md font-semibold text-[#191c20] flex items-center gap-2 py-2.5">
+<span class="w-1.5 h-1.5 rounded-full bg-[#0153dc] shrink-0"></span>
+<span>Front brake pad set</span>
+</td>
+<td class="px-space-md font-mono-sm text-mono-sm font-bold text-[#0153dc]">04465-B1190</td>
+<td class="px-space-md font-medium">Toyota</td>
+<td class="px-space-md text-[#565e74]">Brakes</td>
+<td class="px-space-md font-mono-sm text-mono-sm text-[#434655]">Toyota Roomy, Toyota Tank · <span class="text-[#565e74]">7 versions</span></td>
+<td class="px-space-md">
+<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-600/20 text-amber-700 font-label-xs text-label-xs font-semibold">
+<span class="w-1.5 h-1.5 rounded-full bg-amber-600 animate-pulse"></span>
+                    Needs checking
+                  </span>
+</td>
+<td class="px-space-md text-right">
+<div class="flex items-center justify-end gap-1 text-[#565e74]">
+<button class="p-1 hover:text-[#0153dc] rounded hover:bg-[#ffffff] transition-colors" title="View details"><span class="material-symbols-outlined text-[17px]">visibility</span></button>
+<button class="p-1 hover:text-[#0153dc] rounded hover:bg-[#ffffff] transition-colors" title="Edit part"><span class="material-symbols-outlined text-[17px]">edit</span></button>
+<button class="p-1 hover:text-error rounded hover:bg-[#ffffff] transition-colors" title="Delete part"><span class="material-symbols-outlined text-[17px]">delete</span></button>
+</div>
+</td>
+</tr>
+<!-- Row 2: Rear brake shoe kit -->
+<tr class="h-11 hover:bg-[#faf8ff] transition-colors">
+<td class="px-space-md font-medium text-[#191c20]">Rear brake shoe kit (drum)</td>
+<td class="px-space-md font-mono-sm text-mono-sm font-semibold text-[#191c20]">04495-B2400</td>
+<td class="px-space-md font-medium">Toyota</td>
+<td class="px-space-md text-[#565e74]">Brakes</td>
+<td class="px-space-md font-mono-sm text-mono-sm text-[#434655]">Toyota Roomy · <span class="text-[#565e74]">3 versions</span></td>
+<td class="px-space-md">
+<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-600/20 text-amber-700 font-label-xs text-label-xs font-semibold">
+<span class="w-1.5 h-1.5 rounded-full bg-amber-600"></span>
+                    Needs checking
+                  </span>
+</td>
+<td class="px-space-md text-right">
+<div class="flex items-center justify-end gap-1 text-[#565e74]">
+<button class="p-1 hover:text-[#0153dc] rounded hover:bg-[#ffffff] transition-colors" title="View"><span class="material-symbols-outlined text-[17px]">visibility</span></button>
+<button class="p-1 hover:text-[#0153dc] rounded hover:bg-[#ffffff] transition-colors" title="Edit"><span class="material-symbols-outlined text-[17px]">edit</span></button>
+<button class="p-1 hover:text-error rounded hover:bg-[#ffffff] transition-colors" title="Delete"><span class="material-symbols-outlined text-[17px]">delete</span></button>
+</div>
+</td>
+</tr>
+<!-- Row 3: Oil filter -->
+<tr class="h-11 hover:bg-[#faf8ff] transition-colors">
+<td class="px-space-md font-medium text-[#191c20]">Oil filter</td>
+<td class="px-space-md font-mono-sm text-mono-sm font-semibold text-[#191c20]">04152-40060</td>
+<td class="px-space-md font-medium">Toyota</td>
+<td class="px-space-md text-[#565e74]">Engine</td>
+<td class="px-space-md font-mono-sm text-mono-sm text-[#434655]">Toyota Roomy · <span class="text-[#565e74]">1 version</span></td>
+<td class="px-space-md">
+<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-600/20 text-emerald-700 font-label-xs text-label-xs font-semibold">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+                    Verified
+                  </span>
+</td>
+<td class="px-space-md text-right">
+<div class="flex items-center justify-end gap-1 text-[#565e74]">
+<button class="p-1 hover:text-[#0153dc] rounded hover:bg-[#ffffff] transition-colors" title="View"><span class="material-symbols-outlined text-[17px]">visibility</span></button>
+<button class="p-1 hover:text-[#0153dc] rounded hover:bg-[#ffffff] transition-colors" title="Edit"><span class="material-symbols-outlined text-[17px]">edit</span></button>
+<button class="p-1 hover:text-error rounded hover:bg-[#ffffff] transition-colors" title="Delete"><span class="material-symbols-outlined text-[17px]">delete</span></button>
+</div>
+</td>
+</tr>
+<!-- Row 4: Front brake rotor disc -->
+<tr class="h-11 hover:bg-[#faf8ff] transition-colors">
+<td class="px-space-md font-medium text-[#191c20]">Front brake rotor disc</td>
+<td class="px-space-md font-mono-sm text-mono-sm font-semibold text-[#191c20]">43512-B1050</td>
+<td class="px-space-md font-medium">Toyota</td>
+<td class="px-space-md text-[#565e74]">Brakes</td>
+<td class="px-space-md font-mono-sm text-mono-sm text-[#434655]">Toyota Roomy · <span class="text-[#565e74]">5 versions</span></td>
+<td class="px-space-md">
+<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-600/20 text-amber-700 font-label-xs text-label-xs font-semibold">
+<span class="w-1.5 h-1.5 rounded-full bg-amber-600"></span>
+                    Needs checking
+                  </span>
+</td>
+<td class="px-space-md text-right">
+<div class="flex items-center justify-end gap-1 text-[#565e74]">
+<button class="p-1 hover:text-[#0153dc] rounded hover:bg-[#ffffff] transition-colors" title="View"><span class="material-symbols-outlined text-[17px]">visibility</span></button>
+<button class="p-1 hover:text-[#0153dc] rounded hover:bg-[#ffffff] transition-colors" title="Edit"><span class="material-symbols-outlined text-[17px]">edit</span></button>
+<button class="p-1 hover:text-error rounded hover:bg-[#ffffff] transition-colors" title="Delete"><span class="material-symbols-outlined text-[17px]">delete</span></button>
+</div>
+</td>
+</tr>
+<!-- Row 5: Cabin air filter -->
+<tr class="h-11 hover:bg-[#faf8ff] transition-colors">
+<td class="px-space-md font-medium text-[#191c20]">Cabin air filter</td>
+<td class="px-space-md font-mono-sm text-mono-sm font-semibold text-[#191c20]">87139-52040</td>
+<td class="px-space-md font-medium">Toyota</td>
+<td class="px-space-md text-[#565e74]">Filters</td>
+<td class="px-space-md font-mono-sm text-mono-sm text-[#434655]">Toyota Roomy, Tank · <span class="text-[#565e74]">3 versions</span></td>
+<td class="px-space-md">
+<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-600/20 text-emerald-700 font-label-xs text-label-xs font-semibold">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+                    Verified
+                  </span>
+</td>
+<td class="px-space-md text-right">
+<div class="flex items-center justify-end gap-1 text-[#565e74]">
+<button class="p-1 hover:text-[#0153dc] rounded hover:bg-[#ffffff] transition-colors" title="View"><span class="material-symbols-outlined text-[17px]">visibility</span></button>
+<button class="p-1 hover:text-[#0153dc] rounded hover:bg-[#ffffff] transition-colors" title="Edit"><span class="material-symbols-outlined text-[17px]">edit</span></button>
+<button class="p-1 hover:text-error rounded hover:bg-[#ffffff] transition-colors" title="Delete"><span class="material-symbols-outlined text-[17px]">delete</span></button>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<!-- GROUP 2: Same car, different badge · Sister · 2 families -->
+<div class="border-b border-[#e2e1ec]">
+<!-- Full-width Group Header with Owner Button -->
+<div class="px-space-md py-2.5 bg-[#f8fafc] border-b border-[#e2e1ec] flex items-center justify-between">
+<div class="flex items-center gap-2.5">
+<span class="w-2.5 h-2.5 rounded-full bg-[#0e7490]"></span>
+<span class="font-headline-md text-headline-md font-bold text-[#191c20]">Same car, different badge</span>
+<span class="px-2 py-0.2 rounded bg-[#e2e1ec] text-[#565e74] font-mono-sm text-[11px] font-bold">Sister</span>
+<span class="text-secondary font-mono-sm text-mono-sm">· 2 families</span>
+</div>
+<div class="flex items-center gap-2">
+<button class="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#ffffff] border border-[#e2e1ec] hover:bg-[#ededf9] text-[#191c20] font-body-sm text-[12px] font-semibold transition-colors shadow-xs">
+<span class="material-symbols-outlined text-[16px] text-[#0e7490]">add</span>
+<span>+ New family</span>
+</button>
+<button class="text-outline hover:text-[#191c20] transition-colors p-1" title="Collapse group">
+<span class="material-symbols-outlined text-[18px]">expand_less</span>
+</button>
+</div>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-[#faf8ff] border-b border-[#e2e1ec] font-mono-sm text-[11px] uppercase text-[#565e74] tracking-wider h-9">
+<th class="px-space-md font-semibold">Family</th>
+<th class="px-space-md font-semibold">Chassis codes</th>
+<th class="px-space-md font-semibold">Cars</th>
+<th class="px-space-md text-right font-semibold">Actions</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-[#e2e1ec] font-body-sm text-body-sm text-[#191c20]">
+<!-- Row 1: 2WD -->
+<tr class="h-12 hover:bg-[#faf8ff] transition-colors">
+<td class="px-space-md font-bold text-[#191c20]">Roomy / Tank / Thor / Justy · 2WD (M900)</td>
+<td class="px-space-md font-mono-sm text-mono-sm text-[#0e7490] font-bold">M900A · M900S · M900F</td>
+<td class="px-space-md py-2">
+<div class="flex flex-wrap gap-1.5">
+<span class="px-2 py-0.5 rounded-md bg-[#faf8ff] border border-[#e2e1ec] text-[#191c20] font-mono-sm text-[11px]">Toyota Roomy</span>
+<span class="px-2 py-0.5 rounded-md bg-[#faf8ff] border border-[#e2e1ec] text-[#191c20] font-mono-sm text-[11px]">Toyota Tank</span>
+<span class="px-2 py-0.5 rounded-md bg-[#faf8ff] border border-[#e2e1ec] text-[#191c20] font-mono-sm text-[11px]">Daihatsu Thor</span>
+<span class="px-2 py-0.5 rounded-md bg-[#faf8ff] border border-[#e2e1ec] text-[#191c20] font-mono-sm text-[11px]">Subaru Justy</span>
+</div>
+</td>
+<td class="px-space-md text-right">
+<div class="flex items-center justify-end gap-2 text-body-sm">
+<button class="p-1 hover:text-[#0153dc] text-[#565e74] rounded transition-colors" title="View details"><span class="material-symbols-outlined text-[17px]">visibility</span></button>
+<button class="text-[#0153dc] hover:underline font-semibold text-[12px]">+ Add a car</button>
+<span class="text-outline/40">·</span>
+<button class="text-[#565e74] hover:text-error text-[12px] transition-colors">Remove a car</button>
+</div>
+</td>
+</tr>
+<!-- Row 2: 4WD -->
+<tr class="h-12 hover:bg-[#faf8ff] transition-colors">
+<td class="px-space-md font-bold text-[#191c20]">Roomy / Tank / Thor / Justy · 4WD (M910)</td>
+<td class="px-space-md font-mono-sm text-mono-sm text-[#0e7490] font-bold">M910A · M910S · M910F</td>
+<td class="px-space-md py-2">
+<div class="flex flex-wrap gap-1.5">
+<span class="px-2 py-0.5 rounded-md bg-[#faf8ff] border border-[#e2e1ec] text-[#191c20] font-mono-sm text-[11px]">Toyota Roomy</span>
+<span class="px-2 py-0.5 rounded-md bg-[#faf8ff] border border-[#e2e1ec] text-[#191c20] font-mono-sm text-[11px]">Toyota Tank</span>
+<span class="px-2 py-0.5 rounded-md bg-[#faf8ff] border border-[#e2e1ec] text-[#191c20] font-mono-sm text-[11px]">Daihatsu Thor</span>
+<span class="px-2 py-0.5 rounded-md bg-[#faf8ff] border border-[#e2e1ec] text-[#191c20] font-mono-sm text-[11px]">Subaru Justy</span>
+</div>
+</td>
+<td class="px-space-md text-right">
+<div class="flex items-center justify-end gap-2 text-body-sm">
+<button class="p-1 hover:text-[#0153dc] text-[#565e74] rounded transition-colors" title="View details"><span class="material-symbols-outlined text-[17px]">visibility</span></button>
+<button class="text-[#0153dc] hover:underline font-semibold text-[12px]">+ Add a car</button>
+<span class="text-outline/40">·</span>
+<button class="text-[#565e74] hover:text-error text-[12px] transition-colors">Remove a car</button>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<!-- GROUP 3: Other brands · Aftermarket · 6 -->
+<div class="border-b border-[#e2e1ec]">
+<!-- Full-width Group Header -->
+<div class="px-space-md py-2.5 bg-[#f8fafc] border-b border-[#e2e1ec] flex items-center justify-between">
+<div class="flex items-center gap-2.5">
+<span class="w-2.5 h-2.5 rounded-full bg-[#7c3aed]"></span>
+<span class="font-headline-md text-headline-md font-bold text-[#191c20]">Other brands</span>
+<span class="px-2 py-0.2 rounded bg-[#e2e1ec] text-[#565e74] font-mono-sm text-[11px] font-bold">Aftermarket</span>
+<span class="text-secondary font-mono-sm text-mono-sm">· 6 records</span>
+</div>
+<button class="text-outline hover:text-[#191c20] transition-colors p-1" title="Collapse group">
+<span class="material-symbols-outlined text-[18px]">expand_less</span>
+</button>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-[#faf8ff] border-b border-[#e2e1ec] font-mono-sm text-[11px] uppercase text-[#565e74] tracking-wider h-9">
+<th class="px-space-md font-semibold">Part</th>
+<th class="px-space-md font-semibold">Number</th>
+<th class="px-space-md font-semibold">Brand</th>
+<th class="px-space-md font-semibold">Area</th>
+<th class="px-space-md font-semibold">Cars it fits</th>
+<th class="px-space-md font-semibold">Status</th>
+<th class="px-space-md text-right font-semibold">Actions</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-[#e2e1ec] font-body-sm text-body-sm text-[#191c20]">
+<!-- Row 1: NiBK -->
+<tr class="h-11 hover:bg-[#faf8ff] transition-colors">
+<td class="px-space-md font-medium text-[#191c20]">Front brake pad set</td>
+<td class="px-space-md font-mono-sm text-mono-sm font-semibold text-[#191c20]">PN5562</td>
+<td class="px-space-md font-medium">NiBK</td>
+<td class="px-space-md text-[#565e74]">Brakes</td>
+<td class="px-space-md font-mono-sm text-mono-sm text-[#434655]">Toyota Roomy · <span class="text-[#565e74]">5 versions</span></td>
+<td class="px-space-md">
+<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-600/20 text-amber-700 font-label-xs text-label-xs font-semibold">
+<span class="w-1.5 h-1.5 rounded-full bg-amber-600"></span>
+                    Needs checking
+                  </span>
+</td>
+<td class="px-space-md text-right">
+<div class="flex items-center justify-end gap-1 text-[#565e74]">
+<button class="p-1 hover:text-[#0153dc] rounded hover:bg-[#ffffff] transition-colors" title="View"><span class="material-symbols-outlined text-[17px]">visibility</span></button>
+<button class="p-1 hover:text-[#0153dc] rounded hover:bg-[#ffffff] transition-colors" title="Edit"><span class="material-symbols-outlined text-[17px]">edit</span></button>
+<button class="p-1 hover:text-error rounded hover:bg-[#ffffff] transition-colors" title="Delete"><span class="material-symbols-outlined text-[17px]">delete</span></button>
+</div>
+</td>
+</tr>
+<!-- Row 2: Akebono -->
+<tr class="h-11 hover:bg-[#faf8ff] transition-colors">
+<td class="px-space-md font-medium text-[#191c20]">Front brake pad set</td>
+<td class="px-space-md font-mono-sm text-mono-sm font-semibold text-[#191c20]">AN-754WK</td>
+<td class="px-space-md font-medium">Akebono</td>
+<td class="px-space-md text-[#565e74]">Brakes</td>
+<td class="px-space-md font-mono-sm text-mono-sm text-[#434655]">Toyota Roomy · <span class="text-[#565e74]">5 versions</span></td>
+<td class="px-space-md">
+<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-600/20 text-amber-700 font-label-xs text-label-xs font-semibold">
+<span class="w-1.5 h-1.5 rounded-full bg-amber-600"></span>
+                    Needs checking
+                  </span>
+</td>
+<td class="px-space-md text-right">
+<div class="flex items-center justify-end gap-1 text-[#565e74]">
+<button class="p-1 hover:text-[#0153dc] rounded hover:bg-[#ffffff] transition-colors" title="View"><span class="material-symbols-outlined text-[17px]">visibility</span></button>
+<button class="p-1 hover:text-[#0153dc] rounded hover:bg-[#ffffff] transition-colors" title="Edit"><span class="material-symbols-outlined text-[17px]">edit</span></button>
+<button class="p-1 hover:text-error rounded hover:bg-[#ffffff] transition-colors" title="Delete"><span class="material-symbols-outlined text-[17px]">delete</span></button>
+</div>
+</td>
+</tr>
+<!-- Row 3: MANN-FILTER -->
+<tr class="h-11 hover:bg-[#faf8ff] transition-colors">
+<td class="px-space-md font-medium text-[#191c20]">Oil filter</td>
+<td class="px-space-md font-mono-sm text-mono-sm font-semibold text-[#191c20]">HU 6006 z</td>
+<td class="px-space-md font-medium">MANN-FILTER</td>
+<td class="px-space-md text-[#565e74]">Engine</td>
+<td class="px-space-md font-mono-sm text-mono-sm text-[#434655]">Toyota Roomy · <span class="text-[#565e74]">1 version</span></td>
+<td class="px-space-md">
+<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-600/20 text-emerald-700 font-label-xs text-label-xs font-semibold">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+                    Verified
+                  </span>
+</td>
+<td class="px-space-md text-right">
+<div class="flex items-center justify-end gap-1 text-[#565e74]">
+<button class="p-1 hover:text-[#0153dc] rounded hover:bg-[#ffffff] transition-colors" title="View"><span class="material-symbols-outlined text-[17px]">visibility</span></button>
+<button class="p-1 hover:text-[#0153dc] rounded hover:bg-[#ffffff] transition-colors" title="Edit"><span class="material-symbols-outlined text-[17px]">edit</span></button>
+<button class="p-1 hover:text-error rounded hover:bg-[#ffffff] transition-colors" title="Delete"><span class="material-symbols-outlined text-[17px]">delete</span></button>
+</div>
+</td>
+</tr>
+<!-- Row 4: Brembo -->
+<tr class="h-11 hover:bg-[#faf8ff] transition-colors">
+<td class="px-space-md font-medium text-[#191c20]">Front brake disc rotor prime</td>
+<td class="px-space-md font-mono-sm text-mono-sm font-semibold text-[#191c20]">09.A236.11</td>
+<td class="px-space-md font-medium">Brembo</td>
+<td class="px-space-md text-[#565e74]">Brakes</td>
+<td class="px-space-md font-mono-sm text-mono-sm text-[#434655]">Toyota Roomy · <span class="text-[#565e74]">5 versions</span></td>
+<td class="px-space-md">
+<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-600/20 text-amber-700 font-label-xs text-label-xs font-semibold">
+<span class="w-1.5 h-1.5 rounded-full bg-amber-600"></span>
+                    Needs checking
+                  </span>
+</td>
+<td class="px-space-md text-right">
+<div class="flex items-center justify-end gap-1 text-[#565e74]">
+<button class="p-1 hover:text-[#0153dc] rounded hover:bg-[#ffffff] transition-colors" title="View"><span class="material-symbols-outlined text-[17px]">visibility</span></button>
+<button class="p-1 hover:text-[#0153dc] rounded hover:bg-[#ffffff] transition-colors" title="Edit"><span class="material-symbols-outlined text-[17px]">edit</span></button>
+<button class="p-1 hover:text-error rounded hover:bg-[#ffffff] transition-colors" title="Delete"><span class="material-symbols-outlined text-[17px]">delete</span></button>
+</div>
+</td>
+</tr>
+<!-- Row 5: Blue Print -->
+<tr class="h-11 hover:bg-[#faf8ff] transition-colors">
+<td class="px-space-md font-medium text-[#191c20]">Brake pad set rear axle</td>
+<td class="px-space-md font-mono-sm text-mono-sm font-semibold text-[#191c20]">ADT342197</td>
+<td class="px-space-md font-medium">Blue Print</td>
+<td class="px-space-md text-[#565e74]">Brakes</td>
+<td class="px-space-md font-mono-sm text-mono-sm text-[#434655]">Toyota Roomy · <span class="text-[#565e74]">3 versions</span></td>
+<td class="px-space-md">
+<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-600/20 text-amber-700 font-label-xs text-label-xs font-semibold">
+<span class="w-1.5 h-1.5 rounded-full bg-amber-600"></span>
+                    Needs checking
+                  </span>
+</td>
+<td class="px-space-md text-right">
+<div class="flex items-center justify-end gap-1 text-[#565e74]">
+<button class="p-1 hover:text-[#0153dc] rounded hover:bg-[#ffffff] transition-colors" title="View"><span class="material-symbols-outlined text-[17px]">visibility</span></button>
+<button class="p-1 hover:text-[#0153dc] rounded hover:bg-[#ffffff] transition-colors" title="Edit"><span class="material-symbols-outlined text-[17px]">edit</span></button>
+<button class="p-1 hover:text-error rounded hover:bg-[#ffffff] transition-colors" title="Delete"><span class="material-symbols-outlined text-[17px]">delete</span></button>
+</div>
+</td>
+</tr>
+<!-- Row 6: SB Nagamochi -->
+<tr class="h-11 hover:bg-[#faf8ff] transition-colors">
+<td class="px-space-md font-medium text-[#191c20]">Ceramic front brake pad</td>
+<td class="px-space-md font-mono-sm text-mono-sm font-semibold text-[#191c20]">BP-1209</td>
+<td class="px-space-md font-medium">SB Nagamochi</td>
+<td class="px-space-md text-[#565e74]">Brakes</td>
+<td class="px-space-md font-mono-sm text-mono-sm text-[#434655]">Toyota Roomy · <span class="text-[#565e74]">5 versions</span></td>
+<td class="px-space-md">
+<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-600/20 text-amber-700 font-label-xs text-label-xs font-semibold">
+<span class="w-1.5 h-1.5 rounded-full bg-amber-600"></span>
+                    Needs checking
+                  </span>
+</td>
+<td class="px-space-md text-right">
+<div class="flex items-center justify-end gap-1 text-[#565e74]">
+<button class="p-1 hover:text-[#0153dc] rounded hover:bg-[#ffffff] transition-colors" title="View"><span class="material-symbols-outlined text-[17px]">visibility</span></button>
+<button class="p-1 hover:text-[#0153dc] rounded hover:bg-[#ffffff] transition-colors" title="Edit"><span class="material-symbols-outlined text-[17px]">edit</span></button>
+<button class="p-1 hover:text-error rounded hover:bg-[#ffffff] transition-colors" title="Delete"><span class="material-symbols-outlined text-[17px]">delete</span></button>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<!-- GROUP 4: Fits by size · Universal · 5 -->
+<div class="border-b border-[#e2e1ec]">
+<!-- Full-width Group Header with Owner Button -->
+<div class="px-space-md py-2.5 bg-[#f8fafc] border-b border-[#e2e1ec] flex items-center justify-between">
+<div class="flex items-center gap-2.5">
+<span class="w-2.5 h-2.5 rounded-full bg-[#006e31]"></span>
+<span class="font-headline-md text-headline-md font-bold text-[#191c20]">Fits by size</span>
+<span class="px-2 py-0.2 rounded bg-[#e2e1ec] text-[#565e74] font-mono-sm text-[11px] font-bold">Universal</span>
+<span class="text-secondary font-mono-sm text-mono-sm">· 5 records</span>
+</div>
+<div class="flex items-center gap-2">
+<button class="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#ffffff] border border-[#e2e1ec] hover:bg-[#ededf9] text-[#191c20] font-body-sm text-[12px] font-semibold transition-colors shadow-xs">
+<span class="material-symbols-outlined text-[16px] text-[#006e31]">add</span>
+<span>+ Add size-based part</span>
+</button>
+<button class="text-outline hover:text-[#191c20] transition-colors p-1" title="Collapse group">
+<span class="material-symbols-outlined text-[18px]">expand_less</span>
+</button>
+</div>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-[#faf8ff] border-b border-[#e2e1ec] font-mono-sm text-[11px] uppercase text-[#565e74] tracking-wider h-9">
+<th class="px-space-md font-semibold">Name</th>
+<th class="px-space-md font-semibold">Number</th>
+<th class="px-space-md font-semibold">Brand</th>
+<th class="px-space-md font-semibold">Fits cars with</th>
+<th class="px-space-md font-semibold">Source</th>
+<th class="px-space-md text-right font-semibold">Actions</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-[#e2e1ec] font-body-sm text-body-sm text-[#191c20]">
+<!-- Row 1: Engine oil -->
+<tr class="h-11 hover:bg-[#faf8ff] transition-colors">
+<td class="px-space-md font-medium text-[#191c20]">Engine oil 0W-20 1 L</td>
+<td class="px-space-md font-mono-sm text-mono-sm font-semibold text-[#191c20]">08880-WA001</td>
+<td class="px-space-md font-medium">Toyota</td>
+<td class="px-space-md"><span class="px-2 py-0.5 rounded bg-primary-fixed/30 text-[#0153dc] font-mono-sm text-[11px] font-bold">Engine oil grade 0W-20</span></td>
+<td class="px-space-md font-mono-sm text-mono-sm">
+<a class="text-[#0153dc] hover:underline inline-flex items-center gap-1 font-medium" href="#">
+                    autoparts.toyota.com <span class="material-symbols-outlined text-[13px]">north_east</span>
+</a>
+</td>
+<td class="px-space-md text-right">
+<div class="flex items-center justify-end gap-1 text-[#565e74]">
+<button class="p-1 hover:text-[#0153dc] rounded hover:bg-[#ffffff] transition-colors" title="View"><span class="material-symbols-outlined text-[17px]">visibility</span></button>
+<button class="p-1 hover:text-[#0153dc] rounded hover:bg-[#ffffff] transition-colors" title="Edit"><span class="material-symbols-outlined text-[17px]">edit</span></button>
+<button class="p-1 hover:text-error rounded hover:bg-[#ffffff] transition-colors" title="Delete"><span class="material-symbols-outlined text-[17px]">delete</span></button>
+</div>
+</td>
+</tr>
+<!-- Row 2: Wiper blade -->
+<tr class="h-11 hover:bg-[#faf8ff] transition-colors">
+<td class="px-space-md font-medium text-[#191c20]">Wiper blade 525 mm</td>
+<td class="px-space-md font-mono-sm text-mono-sm font-semibold text-[#191c20]">35-021R</td>
+<td class="px-space-md font-medium">NWB</td>
+<td class="px-space-md"><span class="px-2 py-0.5 rounded bg-primary-fixed/30 text-[#0153dc] font-mono-sm text-[11px] font-bold">Driver wiper 525 mm</span></td>
+<td class="px-space-md font-mono-sm text-mono-sm">
+<a class="text-[#0153dc] hover:underline inline-flex items-center gap-1 font-medium" href="#">
+                    nwb.co.jp <span class="material-symbols-outlined text-[13px]">north_east</span>
+</a>
+</td>
+<td class="px-space-md text-right">
+<div class="flex items-center justify-end gap-1 text-[#565e74]">
+<button class="p-1 hover:text-[#0153dc] rounded hover:bg-[#ffffff] transition-colors" title="View"><span class="material-symbols-outlined text-[17px]">visibility</span></button>
+<button class="p-1 hover:text-[#0153dc] rounded hover:bg-[#ffffff] transition-colors" title="Edit"><span class="material-symbols-outlined text-[17px]">edit</span></button>
+<button class="p-1 hover:text-error rounded hover:bg-[#ffffff] transition-colors" title="Delete"><span class="material-symbols-outlined text-[17px]">delete</span></button>
+</div>
+</td>
+</tr>
+<!-- Row 3: CVT Fluid -->
+<tr class="h-11 hover:bg-[#faf8ff] transition-colors">
+<td class="px-space-md font-medium text-[#191c20]">Transmission fluid CVT FE 4L</td>
+<td class="px-space-md font-mono-sm text-mono-sm font-semibold text-[#191c20]">08886-02505</td>
+<td class="px-space-md font-medium">Toyota</td>
+<td class="px-space-md"><span class="px-2 py-0.5 rounded bg-primary-fixed/30 text-[#0153dc] font-mono-sm text-[11px] font-bold">CVT Fluid FE spec</span></td>
+<td class="px-space-md font-mono-sm text-mono-sm">
+<a class="text-[#0153dc] hover:underline inline-flex items-center gap-1 font-medium" href="#">
+                    toyota-parts.com <span class="material-symbols-outlined text-[13px]">north_east</span>
+</a>
+</td>
+<td class="px-space-md text-right">
+<div class="flex items-center justify-end gap-1 text-[#565e74]">
+<button class="p-1 hover:text-[#0153dc] rounded hover:bg-[#ffffff] transition-colors" title="View"><span class="material-symbols-outlined text-[17px]">visibility</span></button>
+<button class="p-1 hover:text-[#0153dc] rounded hover:bg-[#ffffff] transition-colors" title="Edit"><span class="material-symbols-outlined text-[17px]">edit</span></button>
+<button class="p-1 hover:text-error rounded hover:bg-[#ffffff] transition-colors" title="Delete"><span class="material-symbols-outlined text-[17px]">delete</span></button>
+</div>
+</td>
+</tr>
+<!-- Row 4: Brake fluid -->
+<tr class="h-11 hover:bg-[#faf8ff] transition-colors">
+<td class="px-space-md font-medium text-[#191c20]">Response DOT 4 Brake Fluid 1 L</td>
+<td class="px-space-md font-mono-sm text-mono-sm font-semibold text-[#191c20]">12502-BF</td>
+<td class="px-space-md font-medium">Castrol</td>
+<td class="px-space-md"><span class="px-2 py-0.5 rounded bg-primary-fixed/30 text-[#0153dc] font-mono-sm text-[11px] font-bold">DOT 4 Fluid</span></td>
+<td class="px-space-md font-mono-sm text-mono-sm">
+<a class="text-[#0153dc] hover:underline inline-flex items-center gap-1 font-medium" href="#">
+                    castrol.com <span class="material-symbols-outlined text-[13px]">north_east</span>
+</a>
+</td>
+<td class="px-space-md text-right">
+<div class="flex items-center justify-end gap-1 text-[#565e74]">
+<button class="p-1 hover:text-[#0153dc] rounded hover:bg-[#ffffff] transition-colors" title="View"><span class="material-symbols-outlined text-[17px]">visibility</span></button>
+<button class="p-1 hover:text-[#0153dc] rounded hover:bg-[#ffffff] transition-colors" title="Edit"><span class="material-symbols-outlined text-[17px]">edit</span></button>
+<button class="p-1 hover:text-error rounded hover:bg-[#ffffff] transition-colors" title="Delete"><span class="material-symbols-outlined text-[17px]">delete</span></button>
+</div>
+</td>
+</tr>
+<!-- Row 5: Passenger Wiper -->
+<tr class="h-11 hover:bg-[#faf8ff] transition-colors">
+<td class="px-space-md font-medium text-[#191c20]">Wiper blade passenger 475 mm</td>
+<td class="px-space-md font-mono-sm text-mono-sm font-semibold text-[#191c20]">35-019R</td>
+<td class="px-space-md font-medium">NWB</td>
+<td class="px-space-md"><span class="px-2 py-0.5 rounded bg-primary-fixed/30 text-[#0153dc] font-mono-sm text-[11px] font-bold">Passenger wiper 475 mm</span></td>
+<td class="px-space-md font-mono-sm text-mono-sm">
+<a class="text-[#0153dc] hover:underline inline-flex items-center gap-1 font-medium" href="#">
+                    nwb.co.jp <span class="material-symbols-outlined text-[13px]">north_east</span>
+</a>
+</td>
+<td class="px-space-md text-right">
+<div class="flex items-center justify-end gap-1 text-[#565e74]">
+<button class="p-1 hover:text-[#0153dc] rounded hover:bg-[#ffffff] transition-colors" title="View"><span class="material-symbols-outlined text-[17px]">visibility</span></button>
+<button class="p-1 hover:text-[#0153dc] rounded hover:bg-[#ffffff] transition-colors" title="Edit"><span class="material-symbols-outlined text-[17px]">edit</span></button>
+<button class="p-1 hover:text-error rounded hover:bg-[#ffffff] transition-colors" title="Delete"><span class="material-symbols-outlined text-[17px]">delete</span></button>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<!-- Folded Strip at bottom of table: Fits the engine -->
+<div class="px-space-md py-2.5 bg-[#f1f5f9] border-b border-[#e2e1ec] flex items-center justify-between text-outline text-[12px]">
+<div class="flex items-center gap-2 font-mono-sm text-mono-sm">
+<span class="w-2 h-2 rounded-full bg-[#b45309]/50"></span>
+<span class="text-[#565e74] font-medium">Nothing on file for: Fits the engine.</span>
+<span class="text-outline">· 0 records matched for current filter</span>
+</div>
+<button class="font-body-sm text-[12px] text-[#0153dc] hover:underline font-semibold">+ Add an engine fitment</button>
+</div>
+<!-- Table Footer: Pagination & Record Count -->
+<div class="px-space-md py-2.5 bg-[#faf8ff] flex items-center justify-between">
+<span class="font-body-sm text-body-sm text-[#565e74]">Showing <strong class="font-bold text-[#191c20]">18 of 18</strong> records</span>
+<div class="flex items-center gap-2 font-body-sm text-body-sm">
+<button class="px-3 h-8 rounded-lg bg-[#ffffff] border border-[#e2e1ec] text-[#565e74] disabled:opacity-40 shadow-xs" disabled="">Previous</button>
+<span class="w-8 h-8 flex items-center justify-center rounded-lg bg-[#0153dc] text-[#ffffff] font-mono-sm text-mono-sm font-bold shadow-xs">1</span>
+<button class="px-3 h-8 rounded-lg bg-[#ffffff] border border-[#e2e1ec] text-[#565e74] disabled:opacity-40 shadow-xs" disabled="">Next</button>
+</div>
+</div>
+</div>
+<!-- Staff Security Notice Bar -->
+<div class="w-full p-space-md rounded-xl bg-[#ffffff] border border-[#e2e1ec] flex items-center justify-between gap-space-md shadow-xs">
+<div class="flex items-center gap-space-sm text-[#565e74] font-body-sm text-body-sm">
+<span class="material-symbols-outlined text-[#0153dc] text-[20px]">verified_user</span>
+<span><strong class="font-semibold text-[#191c20]">Catalog notice:</strong> Master catalog dataset is stripped of customer pricing and sensitive trade terms. Zero PII stored.</span>
+</div>
+<div class="flex items-center gap-2 font-mono-sm text-mono-sm shrink-0">
+<span class="text-[#565e74]">SYSTEM ROLE:</span>
+<span class="px-2 py-0.5 rounded bg-[#ededf9] font-bold text-[#0153dc]">OWNER_RW</span>
+</div>
+</div>
+</div>
+</div>
+<!-- 5. PART DETAIL DRAWER OVERLAY (Screen 6 Part Detail Drawer on the right previewing 04465-B1190) -->
+<div class="fixed top-0 bottom-0 right-0 w-[490px] max-w-[90vw] bg-[#ffffff] shadow-2xl z-50 flex flex-col border-l border-[#e2e1ec] transition-transform duration-300" id="part-detail-drawer">
+<!-- Drawer Header -->
+<div class="px-space-lg py-4 bg-[#ffffff] border-b border-[#e2e1ec] flex items-start justify-between">
+<div class="flex flex-col gap-1">
+<div class="flex items-center gap-2">
+<span class="font-mono-lg text-[18px] font-bold text-[#0153dc] tracking-tight">04465-B1190</span>
+<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-600/30 text-amber-700 font-label-xs text-label-xs font-semibold">
+<span class="w-1.5 h-1.5 rounded-full bg-amber-600"></span>
+          Needs checking
+        </span>
+</div>
+<h2 class="font-headline-lg text-[22px] font-bold text-[#191c20] leading-snug">Front brake pad set</h2>
+<div class="flex items-center gap-2 mt-0.5">
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#0153dc]/10 border border-[#0153dc]/20 text-[#0153dc] font-mono-sm text-mono-sm font-semibold">
+<span class="w-1.5 h-1.5 rounded-full bg-[#0153dc]"></span>
+          Made for the car · OEM
+        </span>
+<span class="text-[#565e74] font-mono-sm text-mono-sm font-medium">· Toyota Genuine Parts</span>
+</div>
+</div>
+<button class="w-8 h-8 rounded-lg hover:bg-[#ededf9] flex items-center justify-center text-[#565e74] hover:text-[#191c20] transition-colors" id="close-drawer-btn" title="Close drawer">
+<span class="material-symbols-outlined text-[20px]">close</span>
+</button>
+</div>
+<!-- Drawer Body -->
+<div class="flex-1 overflow-y-auto p-space-lg flex flex-col gap-space-lg">
+<!-- CARS IT FITS SECTION -->
+<div class="flex flex-col gap-2">
+<div class="flex items-center justify-between">
+<span class="font-mono-sm text-mono-sm uppercase tracking-wider text-[#565e74] font-bold">CARS IT FITS (3 MATCHED)</span>
+<button class="font-mono-sm text-mono-sm text-[#0153dc] hover:underline font-bold flex items-center gap-0.5">
+<span class="material-symbols-outlined text-[15px]">add</span> Add a car
+        </button>
+</div>
+<div class="flex flex-col gap-2">
+<!-- Car 1 -->
+<div class="p-3 rounded-xl bg-[#faf8ff] border border-[#e2e1ec] flex items-center justify-between">
+<div class="flex flex-col">
+<span class="font-body-md text-body-md font-bold text-[#191c20]">Toyota Roomy</span>
+<span class="font-mono-sm text-mono-sm text-[#565e74] mt-0.5">M900A · 2016–2020 · Front axle</span>
+</div>
+<span class="px-2 py-0.5 rounded bg-[#ffffff] border border-[#e2e1ec] font-mono-sm text-mono-sm text-[#565e74] font-bold">DIRECT</span>
+</div>
+<!-- Car 2 -->
+<div class="p-3 rounded-xl bg-[#faf8ff] border border-[#e2e1ec] flex items-center justify-between">
+<div class="flex flex-col">
+<span class="font-body-md text-body-md font-bold text-[#191c20]">Toyota Tank</span>
+<span class="font-mono-sm text-mono-sm text-[#565e74] mt-0.5">M900A · 2016–2020 · Front axle</span>
+</div>
+<span class="px-2 py-0.5 rounded bg-[#ffffff] border border-[#e2e1ec] font-mono-sm text-mono-sm text-[#565e74] font-bold">DIRECT</span>
+</div>
+<!-- Car 3 -->
+<div class="p-3 rounded-xl bg-[#faf8ff] border border-[#e2e1ec] flex items-center justify-between">
+<div class="flex flex-col">
+<span class="font-body-md text-body-md font-bold text-[#191c20]">Daihatsu Thor</span>
+<span class="font-mono-sm text-mono-sm text-[#565e74] mt-0.5">M900S · 2016–present · Front axle</span>
+</div>
+<span class="px-2 py-0.5 rounded bg-[#0e7490]/10 border border-[#0e7490]/30 font-mono-sm text-mono-sm text-[#0e7490] font-bold">PLATFORM TWIN</span>
+</div>
+</div>
+</div>
+<!-- WHY IT FITS SECTION -->
+<div class="flex flex-col gap-1.5">
+<span class="font-mono-sm text-mono-sm uppercase tracking-wider text-[#565e74] font-bold">WHY IT FITS / CATALOGUE PROVENANCE</span>
+<div class="p-3.5 rounded-xl bg-[#faf8ff] border border-[#e2e1ec] flex flex-col gap-2 font-body-sm text-body-sm">
+<div class="flex items-center justify-between border-b border-[#e2e1ec] pb-2">
+<span class="font-semibold text-[#191c20]">Source authority:</span>
+<span class="font-mono-sm text-mono-sm font-bold text-[#0153dc]">Toyota EPC 2024.1 Q3</span>
+</div>
+<p class="text-[#565e74] text-[13px] leading-relaxed">
+          Directly cross-indexed against Toyota Motor Corp parts bulletin 2016-09. Standard pad thickness: 15.5mm. Disc rotor diameter: 246mm ventilated.
+        </p>
+</div>
+</div>
+<!-- Staff Security Banner -->
+<div class="p-3.5 rounded-xl bg-[#f3f3ff] border border-[#0153dc]/25 flex items-start gap-2.5">
+<span class="material-symbols-outlined text-[#0153dc] text-[20px] shrink-0 mt-0.5">admin_panel_settings</span>
+<div class="flex flex-col">
+<span class="font-body-sm text-body-sm font-bold text-[#191c20]">Owner mode active: DT</span>
+<span class="font-mono-sm text-mono-sm text-[#565e74] mt-0.5">Staff view restriction: "Only the owner can change parts." Structural edits are permanently hashed to cluster ledger.</span>
+</div>
+</div>
+</div>
+<!-- Sticky Bottom Actions -->
+<div class="p-space-md bg-[#ffffff] border-t border-[#e2e1ec] flex items-center justify-between gap-space-sm">
+<button class="px-3.5 h-9 rounded-xl bg-[#faf8ff] border border-[#e2e1ec] hover:bg-error-container hover:text-error text-[#565e74] font-body-sm text-body-sm font-medium transition-colors shadow-xs">
+      Exclude from car
+    </button>
+<div class="flex items-center gap-2">
+<button class="px-3.5 h-9 rounded-xl bg-[#ffffff] border border-[#e2e1ec] hover:bg-[#ededf9] text-[#191c20] font-body-sm text-body-sm font-semibold transition-colors shadow-xs">
+        Edit
+      </button>
+<button class="px-4 h-9 rounded-xl bg-[#0153dc] hover:bg-[#003ea9] text-[#ffffff] font-body-sm text-body-sm font-semibold transition-all shadow-xs">
+        Confirm fit
+      </button>
+</div>
+</div>
+</div>
+<!-- Interactive Backdrop -->
+<div class="fixed inset-0 bg-[#0f172a]/20 backdrop-blur-[1px] z-40" id="drawer-backdrop"></div>
+</div></main></div>
+<script>
+  // Simple interactive handlers for drawer
+  const drawer = document.getElementById('part-detail-drawer');
+  const backdrop = document.getElementById('drawer-backdrop');
+  const closeBtn = document.getElementById('close-drawer-btn');
+  const triggerRow = document.getElementById('row-oem-1');
+
+  function closeDrawer() {
+    drawer.classList.add('translate-x-full');
+    backdrop.classList.add('hidden');
+  }
+
+  function openDrawer() {
+    drawer.classList.remove('translate-x-full');
+    backdrop.classList.remove('hidden');
+  }
+
+  if (closeBtn) closeBtn.addEventListener('click', closeDrawer);
+  if (backdrop) backdrop.addEventListener('click', closeDrawer);
+  if (triggerRow) triggerRow.addEventListener('click', openDrawer);
+
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeDrawer();
+  });
+</script>
+</body></html>
