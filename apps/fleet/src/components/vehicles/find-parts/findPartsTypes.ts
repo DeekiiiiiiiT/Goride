@@ -7,9 +7,13 @@ export type PartsMyVehicleRow = {
   license_plate?: string;
   label?: string;
   name?: string;
+  make?: string;
+  model?: string;
+  year?: string | number;
   parts_on_shelf?: number;
   subtitle?: string;
   service_due?: string;
+  hub?: string;
 };
 
 export type PartsVehicleOptions = {

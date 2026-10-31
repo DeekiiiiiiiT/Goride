@@ -1,13 +1,23 @@
 import type { ReactNode } from "react";
-import type { FindPartsScreenData } from "../findPartsScreenData";
+import type { Fp4ViewModel } from "../findPartsViewModels";
 
 export type Fp4Actions = {
-  onButton: (label: string) => void;
-  onVehicleCard?: (vehicleId: string) => void;
+  onBack: () => void;
+  onPickFront: () => void;
+  onPickRear: () => void;
+  onPickBoth: () => void;
+  onShowParts: (side: string) => void;
+  onEditPartCategory: () => void;
   children?: ReactNode;
 };
 
-export function Fp4Screen({ actions, data }: { actions: Fp4Actions; data: FindPartsScreenData }) {
+function pickPositionOption(actions: Fp4Actions, id: string) {
+  if (id === "rear") actions.onPickRear();
+  else if (id === "both") actions.onPickBoth();
+  else actions.onPickFront();
+}
+
+export function Fp4Screen({ actions, data }: { actions: Fp4Actions; data: Fp4ViewModel }) {
   return (
     <div className="find-parts-screen-root">
 <div className="fp-screen-root"><div className="flex flex-col w-full">
@@ -18,26 +28,26 @@ export function Fp4Screen({ actions, data }: { actions: Fp4Actions; data: FindPa
 <div className="max-w-[1400px] mx-auto px-gutter md:px-margin-desktop py-space-md flex flex-col lg:flex-row lg:items-center lg:justify-between gap-space-md">
 
 <nav aria-label="Step progress" className="flex items-center gap-space-xs overflow-x-auto text-body-sm font-body-sm">
-<a className="flex items-center gap-1.5 text-on-surface-variant hover:text-on-surface whitespace-nowrap group" href="#">
+<button type="button" className="flex items-center gap-1.5 text-on-surface-variant hover:text-on-surface whitespace-nowrap group" onClick={actions.onBack}>
 <span className="w-5 h-5 rounded-full bg-surface-container-highest text-on-surface flex items-center justify-center font-caption text-caption">
 <span className="material-symbols-outlined text-[13px]">check</span>
 </span>
 <span className="font-medium">1. Pick vehicle</span>
-</a>
+</button>
 <span className="text-surface-dim font-label-code text-label-code">/</span>
-<a className="flex items-center gap-1.5 text-on-surface-variant hover:text-on-surface whitespace-nowrap group" href="#">
+<button type="button" className="flex items-center gap-1.5 text-on-surface-variant hover:text-on-surface whitespace-nowrap group" onClick={actions.onBack}>
 <span className="w-5 h-5 rounded-full bg-surface-container-highest text-on-surface flex items-center justify-center font-caption text-caption">
 <span className="material-symbols-outlined text-[13px]">check</span>
 </span>
 <span className="font-medium">2. Trim &amp; Year</span>
-</a>
+</button>
 <span className="text-surface-dim font-label-code text-label-code">/</span>
-<a className="flex items-center gap-1.5 text-on-surface-variant hover:text-on-surface whitespace-nowrap group" href="#">
+<button type="button" className="flex items-center gap-1.5 text-on-surface-variant hover:text-on-surface whitespace-nowrap group" onClick={actions.onEditPartCategory}>
 <span className="w-5 h-5 rounded-full bg-surface-container-highest text-on-surface flex items-center justify-center font-caption text-caption">
 <span className="material-symbols-outlined text-[13px]">check</span>
 </span>
 <span className="font-medium">3. Category</span>
-</a>
+</button>
 <span className="text-surface-dim font-label-code text-label-code">/</span>
 <div className="flex items-center gap-1.5 text-on-surface whitespace-nowrap font-semibold">
 <span className="w-5 h-5 rounded-full bg-primary text-on-primary flex items-center justify-center font-caption text-caption">4</span>
@@ -49,16 +59,16 @@ export function Fp4Screen({ actions, data }: { actions: Fp4Actions; data: FindPa
 <div className="flex items-center gap-1.5 font-label-code text-label-code text-on-surface">
 <span className="font-bold">{data.vehicleLabel}</span>
 <span className="text-outline">›</span>
-<a className="flex items-center gap-0.5 text-primary hover:underline group" href="#">
+<button type="button" className="flex items-center gap-0.5 text-primary hover:underline group" onClick={actions.onEditPartCategory}>
 <span className="font-medium">Brake pads</span>
 <span className="material-symbols-outlined text-[14px]">edit</span>
-</a>
+</button>
 </div>
 <span className="text-surface-dim">|</span>
 
 <div className="flex items-center gap-space-xs">
 <span className="font-label-plate text-label-plate bg-primary text-on-primary px-space-xs py-0.5 rounded shadow-sm">{data.plate}</span>
-<span className="font-caption text-caption bg-surface-container-highest text-on-surface-variant px-space-sm py-0.5 rounded">1.5 Hybrid · GP5</span>
+<span className="font-caption text-caption bg-surface-container-highest text-on-surface-variant px-space-sm py-0.5 rounded">1.5 Hybrid · {data.trimLabel}</span>
 <span className="font-caption text-caption bg-secondary-fixed text-on-secondary-fixed px-space-sm py-0.5 rounded hidden sm:inline-block">{data.hubLabel} Fleet Unit</span>
 </div>
 </div>
@@ -72,19 +82,19 @@ export function Fp4Screen({ actions, data }: { actions: Fp4Actions; data: FindPa
 <span className="font-caption text-caption uppercase tracking-wider text-on-surface-variant font-semibold">Axle Position Disambiguation</span>
 <h1 className="font-headline-xl text-headline-xl text-on-surface tracking-tight">Which brakes?</h1>
 <p className="font-body-md text-body-md text-on-surface-variant max-w-2xl">
-          Front and back brake pads are different parts on the GP5 chassis. Select the axle needing replacement to load correct caliper fitments.
+          Front and back brake pads are different parts on the {data.trimLabel} chassis. Select the axle needing replacement to load correct caliper fitments.
         </p>
 </div>
 
 <div className="bg-surface-container-lowest p-space-md rounded-xl shadow-sm flex items-center gap-space-lg">
 <div className="flex flex-col">
 <span className="font-caption text-caption text-on-surface-variant uppercase">Current ODO</span>
-<span className="font-label-code text-label-code font-bold text-on-surface">64,280 km</span>
+<span className="font-label-code text-label-code font-bold text-on-surface">{data.odometerLabel}</span>
 </div>
 <div className="w-px h-8 bg-surface-container"></div>
 <div className="flex flex-col">
 <span className="font-caption text-caption text-on-surface-variant uppercase">Last Brake Service</span>
-<span className="font-label-code text-label-code text-on-surface">18,400 km ago</span>
+<span className="font-label-code text-label-code text-on-surface">{data.lastServiceLabel} ago</span>
 </div>
 </div>
 </div>
@@ -97,7 +107,7 @@ export function Fp4Screen({ actions, data }: { actions: Fp4Actions; data: FindPa
 <span className="material-symbols-outlined text-[18px]">build_circle</span>
 <span>CHASSIS VISUAL INSPECTION</span>
 </div>
-<span className="font-caption text-caption bg-surface-container-high text-on-surface-variant px-space-sm py-0.5 rounded">GP5 · FWD</span>
+<span className="font-caption text-caption bg-surface-container-high text-on-surface-variant px-space-sm py-0.5 rounded">{data.trimLabel} · FWD</span>
 </div>
 
 <div className="flex items-center justify-center gap-1.5 py-1 bg-surface-container-low rounded text-on-surface-variant font-caption text-caption uppercase font-semibold tracking-wider">
@@ -107,9 +117,9 @@ export function Fp4Screen({ actions, data }: { actions: Fp4Actions; data: FindPa
 
 <div className="relative w-full h-[460px] bg-surface-container-low rounded-xl flex items-center justify-center p-space-md overflow-hidden">
 
-<div className="absolute inset-0 opacity-20 pointer-events-none" style="background-image: radial-gradient(circle, #78767d 1px, transparent 1px); background-size: 20px 20px;"></div>
+<div className="absolute inset-0 opacity-20 pointer-events-none" style={{ backgroundImage: "radial-gradient(circle, #78767d 1px, transparent 1px)", backgroundSize: "20px 20px" }}></div>
 
-<svg className="w-full h-full max-w-[280px]" fill="none" viewbox="0 0 260 420" xmlns="http://www.w3.org/2000/svg">
+<svg className="w-full h-full max-w-[280px]" fill="none" viewBox="0 0 260 420" xmlns="http://www.w3.org/2000/svg">
 
 <line stroke="#c9c5cd" stroke-dasharray="4 4" stroke-width="1" x1="130" x2="130" y1="20" y2="400"></line>
 
@@ -120,7 +130,7 @@ export function Fp4Screen({ actions, data }: { actions: Fp4Actions; data: FindPa
 
 <rect fill="#e0e3e5" height="155" rx="8" width="112" x="74" y="152"></rect>
 
-<g className="cursor-pointer transition-opacity duration-300" id="diagram-front-axle">
+<g className="cursor-pointer transition-opacity duration-300" id="diagram-front-axle" onClick={actions.onPickFront} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") actions.onPickFront(); }} role="button" tabIndex={0}>
 
 <line stroke="#191c1e" stroke-linecap="round" stroke-width="4" x1="32" x2="228" y1="112" y2="112"></line>
 
@@ -137,7 +147,7 @@ export function Fp4Screen({ actions, data }: { actions: Fp4Actions; data: FindPa
 <circle cx="215" cy="112" fill="#000000" r="5"></circle>
 </g>
 
-<g className="cursor-pointer transition-opacity duration-300 opacity-25" id="diagram-rear-axle">
+<g className="cursor-pointer transition-opacity duration-300 opacity-25" id="diagram-rear-axle" onClick={actions.onPickRear} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") actions.onPickRear(); }} role="button" tabIndex={0}>
 
 <line stroke="#191c1e" stroke-linecap="round" stroke-width="4" x1="32" x2="228" y1="324" y2="324"></line>
 
@@ -153,13 +163,13 @@ export function Fp4Screen({ actions, data }: { actions: Fp4Actions; data: FindPa
 </svg>
 
 <div className="absolute top-20 left-4">
-<button className="px-space-sm py-0.5 rounded font-caption text-caption uppercase tracking-wider bg-primary text-on-primary shadow-sm flex items-center gap-1 transition-all" id="diagram-front-pill">
+<button type="button" className="px-space-sm py-0.5 rounded font-caption text-caption uppercase tracking-wider bg-primary text-on-primary shadow-sm flex items-center gap-1 transition-all" id="diagram-front-pill" onClick={actions.onPickFront}>
 <span className="w-1.5 h-1.5 rounded-full bg-tertiary-fixed"></span>
 <span>Front Axle (Selected)</span>
 </button>
 </div>
 <div className="absolute bottom-24 left-4">
-<button className="px-space-sm py-0.5 rounded font-caption text-caption uppercase tracking-wider bg-surface-container-highest text-on-surface-variant flex items-center gap-1 transition-all" id="diagram-rear-pill">
+<button type="button" className="px-space-sm py-0.5 rounded font-caption text-caption uppercase tracking-wider bg-surface-container-highest text-on-surface-variant flex items-center gap-1 transition-all" id="diagram-rear-pill" onClick={actions.onPickRear}>
 <span>Rear Axle</span>
 </button>
 </div>
@@ -181,100 +191,46 @@ export function Fp4Screen({ actions, data }: { actions: Fp4Actions; data: FindPa
 
 <div className="lg:col-span-7 flex flex-col gap-space-md">
 
-<div className="cursor-pointer bg-surface-container-high rounded-xl p-space-lg shadow-sm transition-all flex flex-col gap-space-md" id="card-front">
+{data.options.map((option, index) => {
+  const selected = index === 0;
+  return (
+<button
+  key={option.id}
+  type="button"
+  id={`card-${option.id}`}
+  className={`cursor-pointer rounded-xl p-space-lg shadow-sm transition-all flex flex-col gap-space-md text-left w-full ${selected ? "bg-surface-container-high" : "bg-surface-container-lowest hover:bg-surface-container-low"}`}
+  onClick={() => pickPositionOption(actions, option.id)}
+>
 <div className="flex items-start justify-between gap-space-md">
 <div className="flex items-start gap-space-md">
-<div className="w-6 h-6 rounded-full bg-primary text-on-primary flex items-center justify-center flex-shrink-0 mt-0.5 shadow-sm" id="radio-front">
-<span className="material-symbols-outlined text-[16px]" id="icon-front">check</span>
+<div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 shadow-sm ${selected ? "bg-primary text-on-primary" : "bg-surface-container-high text-transparent"}`}>
+<span className="material-symbols-outlined text-[16px]">{selected ? "check" : ""}</span>
 </div>
 <div className="space-y-1">
-<div className="flex items-center gap-space-sm">
-<h3 className="font-headline-sm text-headline-sm text-on-surface font-bold">Front</h3>
-<span className="font-caption text-caption uppercase bg-primary text-on-primary px-space-xs py-0.5 rounded font-semibold tracking-wider">70% Wear Load</span>
+<div className="flex items-center gap-space-sm flex-wrap">
+<h3 className="font-headline-sm text-headline-sm text-on-surface font-bold">{option.title.split(" ")[0]}</h3>
+{option.offerLabel ? (
+<span className="font-caption text-caption uppercase bg-primary text-on-primary px-space-xs py-0.5 rounded font-semibold tracking-wider">{option.offerLabel}</span>
+) : null}
 </div>
-<p className="font-body-md text-body-md text-on-surface font-medium">Front axle brake pad set (4 pads · Left &amp; Right wheels)</p>
+<p className="font-body-md text-body-md text-on-surface font-medium">{option.title}</p>
+{option.subtitle ? <p className="font-body-sm text-body-sm text-on-surface-variant">{option.subtitle}</p> : null}
 </div>
-</div>
-<div className="text-right flex-shrink-0">
-<span className="font-caption text-caption uppercase text-on-surface-variant block">Est. Replacement Time</span>
-<span className="font-label-code text-label-code font-bold text-on-surface">45 mins</span>
 </div>
 </div>
 <div className="bg-surface-container-lowest p-space-sm rounded-lg flex items-center gap-space-sm text-on-surface-variant font-body-sm text-body-sm">
 <span className="material-symbols-outlined text-[18px] text-on-surface">info</span>
-<span>Most common wear item (~70% of braking force). Fits GP5 disc brake calipers.</span>
+<span>Fits {data.trimLabel} disc brake calipers.</span>
 </div>
-
 <div className="flex flex-wrap items-center justify-between gap-space-sm pt-space-xs">
 <div className="flex items-center gap-2">
-<span className="w-2.5 h-2.5 rounded-full bg-primary animate-pulse"></span>
-<span className="font-label-code text-label-code font-bold text-on-surface">On your shelf: 2 sets available at {data.hubLabel} Hub #01</span>
-</div>
-<span className="font-caption text-caption bg-surface-container text-on-surface-variant px-space-sm py-0.5 rounded">Bins: KH-B4-09</span>
+<span className={`w-2.5 h-2.5 rounded-full ${selected ? "bg-primary animate-pulse" : "bg-secondary"}`}></span>
+<span className="font-label-code text-label-code font-bold text-on-surface">{option.stockLabel}</span>
 </div>
 </div>
-
-<div className="cursor-pointer bg-surface-container-lowest hover:bg-surface-container-low rounded-xl p-space-lg shadow-sm transition-all flex flex-col gap-space-md" id="card-rear">
-<div className="flex items-start justify-between gap-space-md">
-<div className="flex items-start gap-space-md">
-<div className="w-6 h-6 rounded-full bg-surface-container-high text-transparent flex items-center justify-center flex-shrink-0 mt-0.5" id="radio-rear">
-<span className="material-symbols-outlined text-[16px]" id="icon-rear"></span>
-</div>
-<div className="space-y-1">
-<div className="flex items-center gap-space-sm">
-<h3 className="font-headline-sm text-headline-sm text-on-surface font-bold">Back (Rear)</h3>
-<span className="font-caption text-caption bg-surface-container-high text-on-surface-variant px-space-xs py-0.5 rounded">Secondary Wear</span>
-</div>
-<p className="font-body-md text-body-md text-on-surface font-medium">Rear axle brake pad set (4 pads · Left &amp; Right wheels)</p>
-</div>
-</div>
-<div className="text-right flex-shrink-0">
-<span className="font-caption text-caption uppercase text-on-surface-variant block">Est. Replacement Time</span>
-<span className="font-label-code text-label-code font-bold text-on-surface">50 mins</span>
-</div>
-</div>
-<div className="bg-surface-container-low p-space-sm rounded-lg flex items-center gap-space-sm text-on-surface-variant font-body-sm text-body-sm">
-<span className="material-symbols-outlined text-[18px]">engineering</span>
-<span>Less frequent wear. Specific to JDM GP5 disc brake rear setup with integrated handbrake piston.</span>
-</div>
-
-<div className="flex flex-wrap items-center justify-between gap-space-sm pt-space-xs">
-<div className="flex items-center gap-2">
-<span className="w-2.5 h-2.5 rounded-full bg-secondary"></span>
-<span className="font-label-code text-label-code text-on-surface-variant">Supplier stock only ({data.hubLabel} Auto Parts, Hagley Park Rd)</span>
-</div>
-<span className="font-caption text-caption text-on-surface-variant">Same-day courier dispatch</span>
-</div>
-</div>
-
-<div className="cursor-pointer bg-surface-container-lowest hover:bg-surface-container-low rounded-xl p-space-lg shadow-sm transition-all flex flex-col gap-space-md" id="card-both">
-<div className="flex items-start justify-between gap-space-md">
-<div className="flex items-start gap-space-md">
-<div className="w-6 h-6 rounded-full bg-surface-container-high text-transparent flex items-center justify-center flex-shrink-0 mt-0.5" id="radio-both">
-<span className="material-symbols-outlined text-[16px]" id="icon-both"></span>
-</div>
-<div className="space-y-1">
-<div className="flex items-center gap-space-sm">
-<h3 className="font-headline-sm text-headline-sm text-on-surface font-bold">Both (Front &amp; Back)</h3>
-<span className="font-caption text-caption bg-secondary-fixed text-on-secondary-fixed px-space-xs py-0.5 rounded font-semibold">Recommended Package</span>
-</div>
-<p className="font-body-md text-body-md text-on-surface font-medium">Complete 8-pad replacement package for all four wheels</p>
-</div>
-</div>
-<div className="text-right flex-shrink-0">
-<span className="font-caption text-caption uppercase text-on-surface-variant block">Combined Job</span>
-<span className="font-label-code text-label-code font-bold text-on-surface">1 hr 25 mins</span>
-</div>
-</div>
-<div className="bg-surface-container-low p-space-sm rounded-lg flex items-center gap-space-sm text-on-surface-variant font-body-sm text-body-sm">
-<span className="material-symbols-outlined text-[18px]">verified</span>
-<span>Ideal for comprehensive 50,000 km brake overhaul or scheduled pre-COF fleet certifications.</span>
-</div>
-<div className="flex items-center gap-2 bg-surface-container-lowest p-space-sm rounded text-on-surface font-body-sm text-body-sm shadow-sm">
-<span className="material-symbols-outlined text-[16px] text-tertiary-fixed-dim">local_shipping</span>
-<span className="font-medium">Combined supplier order eligible for free courier delivery to {data.hubLabel} Hub.</span>
-</div>
-</div>
+</button>
+  );
+})}
 
 <div className="bg-surface-container-low rounded-xl p-space-md shadow-sm flex items-start gap-space-md">
 <div className="w-8 h-8 rounded-full bg-surface-container-highest flex items-center justify-center flex-shrink-0 text-on-surface">
@@ -291,16 +247,16 @@ export function Fp4Screen({ actions, data }: { actions: Fp4Actions; data: FindPa
 </div>
 
 <div className="w-full bg-surface-container-lowest p-space-md rounded-xl shadow-sm flex items-center justify-between gap-space-md">
-<a className="px-space-lg py-2.5 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-body-md text-body-md font-medium transition-colors flex items-center gap-space-xs" href="#">
+<button type="button" className="px-space-lg py-2.5 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-body-md text-body-md font-medium transition-colors flex items-center gap-space-xs" onClick={actions.onEditPartCategory}>
 <span className="material-symbols-outlined text-[18px]">arrow_back</span>
 <span>Back to Categories</span>
-</a>
+</button>
 <div className="flex items-center gap-space-md">
 <div className="hidden sm:flex flex-col text-right">
 <span className="font-caption text-caption text-on-surface-variant uppercase">Filtered Catalog</span>
 <span className="font-label-code text-label-code text-on-surface font-bold">Front Fitment Verified</span>
 </div>
-<button className="px-space-xl py-2.5 rounded-lg bg-primary text-on-primary hover:bg-inverse-surface font-body-md text-body-md font-semibold transition-transform active:scale-95 flex items-center gap-space-sm shadow-md">
+<button type="button" className="px-space-xl py-2.5 rounded-lg bg-primary text-on-primary hover:bg-inverse-surface font-body-md text-body-md font-semibold transition-transform active:scale-95 flex items-center gap-space-sm shadow-md" onClick={() => actions.onShowParts(data.options[0]?.id || "front")}>
 <span>Show parts</span>
 <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
 <span className="font-caption text-caption bg-surface-container-highest/30 px-space-xs py-0.5 rounded text-on-primary font-normal" id="parts-available-count">

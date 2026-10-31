@@ -1,9 +1,12 @@
 import type { FleetCar } from "../apps/fleet/src/components/vehicles/find-parts/CarStep";
 import type { PartsActivity } from "../apps/fleet/src/components/vehicles/find-parts/PartsActivityPanel";
 import {
+  findPartsFixtureBrowse,
+  findPartsFixtureFindSections,
   findPartsFixtureOffer,
   findPartsFixturePart,
   findPartsFixtureVehicle,
+  findPartsFixtureVersions,
 } from "../apps/fleet/src/components/vehicles/find-parts/findPartsFixtures";
 
 export { FIND_PARTS_FORBIDDEN_SAMPLES } from "../apps/fleet/src/components/vehicles/find-parts/findParts.noSample.banned";
@@ -46,38 +49,35 @@ export function fleetCorePartsFixtures(cars: FleetCar[] = []) {
         label: cars[0] ? [cars[0].year, cars[0].make, cars[0].model].filter(Boolean).join(" ") : vehicle.label,
       }],
     },
-    vehicleOptions: { makes: ["Nissan"], models: ["Note"], years: [2016], versions: [{ id: "var-1", name: "NCP160" }] },
+    vehicleOptions: { makes: ["Nissan"], models: ["Note"], years: [2016], versions: findPartsFixtureVersions },
     term: { hits: [], components: [], synonyms: [], parts: [] },
     wrongFitCount: { count: 0, days: 30 },
     activity: {
-      requests: { total: 1, items: [{ need_text: "Fixture request" }] },
-      quotes: { total: 0, items: [] },
-      repeatAlerts: { total: 0, items: [] },
+      requests: { total: 2, items: [{ id: "req-1", need_text: "Fixture front pads", status: "open" }, { id: "req-2", need_text: "Fixture alternator", status: "sourcing" }] },
+      quotes: { total: 1, items: [{ id: "q-1", reference: "FIX-Q-001", supplier: "Fixture Motors", total_jmd: 9999 }] },
+      repeatAlerts: { total: 1, items: [{ id: "alert-1", title: "Fixture wear alert", detail: "Repeat pad wear" }] },
       warrantyClaims: { total: 0, items: [] },
-      cores: { total: 0, items: [] },
+      cores: { total: 1, items: [{ id: "core-1", summary: "Fixture core credit" }] },
     },
     runnerOnline: { online: true },
     find: {
-      sections: [{
-        tier: 1,
-        label: "Best match",
-        items: [{
-          part: findPartsFixturePart,
-          stockQty: 0,
-          offers: [findPartsFixtureOffer],
-        }],
-      }],
+      sections: findPartsFixtureFindSections,
       car: { label: vehicle.label },
+      chassis: "FIX-300",
+      trimBadge: "FIX-VAR",
       linked: true,
     },
     vehicleContext: {
       label: vehicle.label,
       plate: vehicle.plate,
       odometer: 84000,
-      lastService: "None yet",
+      lastService: "Fixture service",
+      health_pct: 94,
+      hub_label: "Fixture hub",
+      trim: "FIX-VAR",
     },
-    browse: { areas: [], common: [], total: 0 },
-    symptoms: { problems: [] },
+    browse: findPartsFixtureBrowse,
+    symptoms: { problems: [{ id: "sym-1", name: "Fixture squeal", positionAware: true }] },
     partsList: { items: [] },
     savedSearches: { items: [] },
     supplierSync: { status: "idle" },

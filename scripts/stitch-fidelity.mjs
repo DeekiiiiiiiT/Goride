@@ -87,7 +87,7 @@ for (const row of readme.split('\n').filter((l) => /^\| S\d/.test(l))) {
 
 if (!failed) console.log('OK — Dominion Stitch fidelity');
 
-const FP_MIN = 90;
+const FP_MIN = 100;
 
 function fleetMainContent(html) {
   const page = html.replace(/<(script|style)[\s\S]*?<\/\1>/gi, '');

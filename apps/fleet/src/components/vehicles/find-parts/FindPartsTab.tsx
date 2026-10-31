@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { pickBestPart } from "@roam/types/partsBestPick";
 import { api } from "../../../services/api";
 import { usePermissions } from "../../../hooks/usePermissions";
@@ -14,9 +14,10 @@ import { ResultsView } from "./ResultsView";
 import type { PartItem } from "./PartDetailDrawer";
 import { VariantStep } from "./VariantStep";
 import { ActivityView } from "./ActivityView";
-import { usePartsActivity } from "./findPartsQueries";
-import { Fp11Screen } from "./screens/Fp11Screen";
-import { emptyFindPartsScreenData } from "./findPartsScreenData";
+import { usePartsActivity, usePartsRunnerOnline, usePartsSupplierSync } from "./findPartsQueries";
+import { Fp11Screen, type Fp11Actions } from "./screens/Fp11Screen";
+import { buildFp11ViewModel, type Fp11PreviewTab } from "./findPartsViewModels";
+import { clearFleetMaintenanceSearch, navigateFleetMaintenanceTab, notifyPartsAdmin } from "./findPartsActions";
 import "./findParts.css";
 
 type Step = "car" | "version" | "part" | "position" | "results" | "request" | "link" | "missing";
@@ -54,6 +55,59 @@ export function FindPartsTab({
   const [linkMeta, setLinkMeta] = useState({ make: "", model: "", year: "", plate: "" });
 
   const activity = usePartsActivity(canView);
+  const partsRunner = usePartsRunnerOnline(canView);
+  const partsSupplierSync = usePartsSupplierSync(canView);
+  const [fp11PreviewTab, setFp11PreviewTab] = useState<Fp11PreviewTab>("all");
+
+  useEffect(() => {
+    if (error) setFp11PreviewTab("error");
+  }, [error]);
+
+  function fp11HealthFields(previewTab: Fp11PreviewTab) {
+    const syncRow = partsSupplierSync.data as { last?: { status?: string } } | undefined;
+    return {
+      runnerOnline: Boolean(partsRunner.data?.online),
+      syncStatus: syncRow?.last?.status ?? null,
+      previewTab,
+    };
+  }
+
+  function requestPartsAccess() {
+    void notifyPartsAdmin({
+      kind: "access_request",
+      title: "Parts access request",
+      body: `User ${user?.email || "unknown"} (${role || "unknown"}) requested fleet parts access.`,
+    }).catch(() => undefined);
+  }
+
+  function buildFp11Actions(overrides: Partial<Fp11Actions>): Fp11Actions {
+    return {
+      onPreviewTab: setFp11PreviewTab,
+      onRequestAccess: requestPartsAccess,
+      onSelectVehicle: () => {
+        setError("");
+        setStep("car");
+        setView("search");
+        writeUrl({});
+      },
+      onBack: () => {
+        setError("");
+        setStep("car");
+        setView("search");
+        writeUrl({});
+      },
+      onCheckConnection: () => {
+        void notifyPartsAdmin({
+          kind: "connection_check",
+          title: "Parts connection check",
+          body: "Fleet user requested a parts hub / supplier sync connection check.",
+        }).catch(() => undefined);
+      },
+      onRetry: () => undefined,
+      onAskRoam: () => setStep("request"),
+      ...overrides,
+    };
+  }
 
   const search = useQuery({
     queryKey: ["parts-find", vehicleId, make, model, year, variantId, componentId, position],
@@ -95,7 +149,20 @@ export function FindPartsTab({
         <p>You don&apos;t have access to vehicle parts. Ask your fleet admin.</p>
         <p className="font-body-sm text-body-sm">Signed in as {user?.email || "unknown"} · role {role || "unknown"}</p>
         <button type="button" onClick={() => { window.location.search = ""; }}>Back to Fleet maintenance</button>
-        <Fp11Screen actions={{ onButton: () => undefined }} data={emptyFindPartsScreenData} />
+        <Fp11Screen
+          data={buildFp11ViewModel({
+            userEmail: user?.email,
+            role: role ?? undefined,
+            errorCode: "FORBIDDEN",
+            ...fp11HealthFields("noperm"),
+          })}
+          actions={buildFp11Actions({
+            onPreviewTab: (tab) => setFp11PreviewTab(tab),
+            onSelectVehicle: () => navigateFleetMaintenanceTab("find-parts"),
+            onBack: () => clearFleetMaintenanceSearch(),
+            onAskRoam: requestPartsAccess,
+          })}
+        />
       </div>
     );
   }
@@ -114,7 +181,35 @@ export function FindPartsTab({
               void search.refetch();
             }
           }}>Retry</button>
-          <Fp11Screen actions={{ onButton: () => { setError(""); void search.refetch(); } }} data={emptyFindPartsScreenData} />
+          <Fp11Screen
+            data={buildFp11ViewModel({
+              attempts,
+              userEmail: user?.email,
+              role: role ?? undefined,
+              errorCode: "TIMEOUT",
+              missingModel: model || undefined,
+              vehicleLabel: [year, make, model].filter(Boolean).join(" ") || undefined,
+              ...fp11HealthFields(fp11PreviewTab),
+            })}
+            actions={buildFp11Actions({
+              onRetry: () => {
+                const next = attempts + 1;
+                setAttempts(next);
+                if (next <= 3) {
+                  sessionStorage.setItem("find-parts-trail", JSON.stringify({ vehicleId, componentId, position }));
+                  setError("");
+                  void search.refetch();
+                }
+              },
+              onAskRoam: () => {
+                if (make && model && year) {
+                  void api.requestCatalogAddition({ make, model, year, vehicleId: vehicleId || null }).catch(() => undefined);
+                } else {
+                  setStep("request");
+                }
+              },
+            })}
+          />
         </div>
       ) : null}
       {view === "activity" ? (
@@ -206,12 +301,18 @@ export function FindPartsTab({
               loading={search.isLoading}
               error={search.error instanceof Error ? search.error.message : ""}
               result={search.data}
+              vehicleId={vehicleId}
+              plate={car?.licensePlate}
+              partName={partName}
               onRetry={() => search.refetch()}
               onQuote={(part) => setQuotePart(part)}
               onAsk={() => setStep("request")}
               bestId={bestId(search.data)}
               unsure={variantId === "any"}
               canLog={Boolean(vehicleId && onUseInService)}
+              onBackToPartSelection={() => setStep("part")}
+              onChangeCar={() => setStep("car")}
+              onEditPartCategory={() => setStep("part")}
               onUseInService={(item: PartItem) => {
                 if (!vehicleId || !onUseInService) return;
                 onUseInService(vehicleId, componentId || String(item.part?.maintenance_component_id || ""), String(item.part?.name || "Part"));
@@ -223,6 +324,10 @@ export function FindPartsTab({
               canEdit={can("vehicles.edit")}
               onBack={() => setStep("car")}
               onLinked={() => setStep("part")}
+              onSearchByMmy={() => {
+                setVehicleId("");
+                setStep("car");
+              }}
               vehicleId={vehicleId}
               make={linkMeta.make || make}
               model={linkMeta.model || model}

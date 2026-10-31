@@ -1,13 +1,28 @@
 import type { ReactNode } from "react";
-import type { FindPartsScreenData } from "../findPartsScreenData";
+import type { Fp11PreviewTab, Fp11ViewModel } from "../findPartsViewModels";
 
 export type Fp11Actions = {
-  onButton: (label: string) => void;
-  onVehicleCard?: (vehicleId: string) => void;
+  onRetry: () => void;
+  onAskRoam: () => void;
+  onRequestAccess: () => void;
+  onBack: () => void;
+  onCheckConnection: () => void;
+  onPreviewTab: (tab: Fp11PreviewTab) => void;
+  onSelectVehicle: () => void;
   children?: ReactNode;
 };
 
-export function Fp11Screen({ actions, data }: { actions: Fp11Actions; data: FindPartsScreenData }) {
+function previewTabClass(active: boolean) {
+  return active
+    ? "state-tab-btn flex items-center gap-1.5 px-space-md py-1.5 rounded font-label-code text-caption bg-surface-container-lowest text-primary shadow-sm font-semibold transition-all"
+    : "state-tab-btn flex items-center gap-1.5 px-space-md py-1.5 rounded font-label-code text-caption text-on-surface-variant hover:text-on-surface transition-all";
+}
+
+function showPreviewSection(active: Fp11PreviewTab, section: Fp11PreviewTab) {
+  return active === "all" || active === section;
+}
+
+export function Fp11Screen({ actions, data }: { actions: Fp11Actions; data: Fp11ViewModel }) {
   return (
     <div className="find-parts-screen-root">
 <div className="fp-screen-root"><div className="flex flex-col w-full">
@@ -28,7 +43,7 @@ export function Fp11Screen({ actions, data }: { actions: Fp11Actions; data: Find
 <span>TELEMETRY SYNC: ACTIVE</span>
 </span>
 <span className="text-outline-variant">|</span>
-<span>HUB STATUS: 99.98% UP</span>
+<span>{data.hubStatusLabel}</span>
 </div>
 </div>
 </div>
@@ -40,27 +55,27 @@ export function Fp11Screen({ actions, data }: { actions: Fp11Actions; data: Find
 <div className="font-label-code text-caption uppercase text-on-surface-variant tracking-wider">Exception &amp; Lifecycle Framework</div>
 <h1 className="font-headline-xl text-headline-xl text-on-surface mt-1 tracking-tight">Parts Catalog State Diagnostics</h1>
 <p className="font-body-md text-body-md text-on-surface-variant max-w-2xl mt-1">
-            Simulated edge-states for parts requisitioning, chassis cross-referencing, and permission gates across {data.hubLabel} Hub #01 depot terminals.
+            Simulated edge-states for parts requisitioning, chassis cross-referencing, and permission gates across {data.hubLabel} hub depot terminals.
           </p>
 </div>
 <div className="flex items-center gap-space-sm bg-surface-container-low p-1 rounded-lg self-start lg:self-auto overflow-x-auto max-w-full">
-<button className="state-tab-btn flex items-center gap-1.5 px-space-md py-1.5 rounded font-label-code text-caption bg-surface-container-lowest text-primary shadow-sm font-semibold transition-all" id="btn-tab-all">
+<button type="button" className={previewTabClass(data.activePreviewTab === "all")} id="btn-tab-all" onClick={() => actions.onPreviewTab("all")}>
 <span className="material-symbols-outlined text-[15px]">grid_view</span>
 <span>All States Overview</span>
 </button>
-<button className="state-tab-btn flex items-center gap-1.5 px-space-md py-1.5 rounded font-label-code text-caption text-on-surface-variant hover:text-on-surface transition-all" id="btn-tab-loading">
+<button type="button" className={previewTabClass(data.activePreviewTab === "loading")} id="btn-tab-loading" onClick={() => actions.onPreviewTab("loading")}>
 <span className="material-symbols-outlined text-[15px]">hourglass_top</span>
 <span>Skeleton &amp; Loading</span>
 </button>
-<button className="state-tab-btn flex items-center gap-1.5 px-space-md py-1.5 rounded font-label-code text-caption text-on-surface-variant hover:text-on-surface transition-all" id="btn-tab-error">
+<button type="button" className={previewTabClass(data.activePreviewTab === "error")} id="btn-tab-error" onClick={() => actions.onPreviewTab("error")}>
 <span className="material-symbols-outlined text-[15px]">cloud_off</span>
 <span>Network / Error</span>
 </button>
-<button className="state-tab-btn flex items-center gap-1.5 px-space-md py-1.5 rounded font-label-code text-caption text-on-surface-variant hover:text-on-surface transition-all" id="btn-tab-unlisted">
+<button type="button" className={previewTabClass(data.activePreviewTab === "unlisted")} id="btn-tab-unlisted" onClick={() => actions.onPreviewTab("unlisted")}>
 <span className="material-symbols-outlined text-[15px]">directions_car</span>
 <span>Missing Model</span>
 </button>
-<button className="state-tab-btn flex items-center gap-1.5 px-space-md py-1.5 rounded font-label-code text-caption text-on-surface-variant hover:text-on-surface transition-all" id="btn-tab-noperm">
+<button type="button" className={previewTabClass(data.activePreviewTab === "noperm")} id="btn-tab-noperm" onClick={() => actions.onPreviewTab("noperm")}>
 <span className="material-symbols-outlined text-[15px]">lock</span>
 <span>No Permission</span>
 </button>
@@ -72,6 +87,7 @@ export function Fp11Screen({ actions, data }: { actions: Fp11Actions; data: Find
 <div className="w-full px-margin-desktop py-space-xl">
 <div className="max-w-[1440px] mx-auto flex flex-col gap-space-xl">
 
+{showPreviewSection(data.activePreviewTab, "loading") ? (
 <section className="state-section flex flex-col gap-space-md" id="state-section-loading">
 <div className="flex items-center justify-between pb-space-xs">
 <div className="flex items-center gap-space-sm">
@@ -234,7 +250,9 @@ export function Fp11Screen({ actions, data }: { actions: Fp11Actions; data: Find
 </div>
 </div>
 </section>
+) : null}
 
+{showPreviewSection(data.activePreviewTab, "error") ? (
 <section className="state-section flex flex-col gap-space-md" id="state-section-error">
 <div className="flex items-center justify-between pb-space-xs">
 <div className="flex items-center gap-space-sm">
@@ -267,14 +285,14 @@ export function Fp11Screen({ actions, data }: { actions: Fp11Actions; data: Find
 </div>
 
 <div className="flex flex-col sm:flex-row lg:flex-col items-stretch lg:items-end gap-space-sm shrink-0 w-full sm:w-auto">
-<button className="bg-primary text-on-primary hover:bg-surface-tint active:scale-[0.98] transition-all px-space-xl py-2 rounded-lg font-body-sm text-body-sm font-semibold flex items-center justify-center gap-2">
+<button type="button" className="bg-primary text-on-primary hover:bg-surface-tint active:scale-[0.98] transition-all px-space-xl py-2 rounded-lg font-body-sm text-body-sm font-semibold flex items-center justify-center gap-2" onClick={actions.onRetry}>
 <span className="material-symbols-outlined text-[18px]">refresh</span>
 <span>Retry</span>
 </button>
-<a className="font-label-code text-caption text-on-surface-variant hover:text-on-surface text-center lg:text-right underline flex items-center justify-center lg:justify-end gap-1 pt-1" href="#">
+<button type="button" className="font-label-code text-caption text-on-surface-variant hover:text-on-surface text-center lg:text-right underline flex items-center justify-center lg:justify-end gap-1 pt-1" onClick={actions.onCheckConnection}>
 <span>Check connection status (24ms KIN)</span>
 <span className="material-symbols-outlined text-[14px]">open_in_new</span>
-</a>
+</button>
 </div>
 </div>
 
@@ -285,12 +303,14 @@ export function Fp11Screen({ actions, data }: { actions: Fp11Actions; data: Find
 </div>
 <div className="flex items-center gap-space-md">
 <span>LOCAL CACHE: PRESERVED</span>
-<span>ATTEMPT: 1 OF 3</span>
+<span>{data.attemptLabel}</span>
 </div>
 </div>
 </div>
 </section>
+) : null}
 
+{showPreviewSection(data.activePreviewTab, "unlisted") ? (
 <section className="state-section flex flex-col gap-space-md" id="state-section-unlisted">
 <div className="flex items-center justify-between pb-space-xs">
 <div className="flex items-center gap-space-sm">
@@ -311,7 +331,7 @@ export function Fp11Screen({ actions, data }: { actions: Fp11Actions; data: Find
 <div className="flex flex-col gap-space-xs">
 <div className="flex items-center gap-space-sm flex-wrap">
 <h3 className="font-headline-lg text-headline-lg text-on-surface font-semibold tracking-tight">
-                  We don't have the 1998 Toyota Probox in our car list yet.
+                  We don't have the 1998 {data.vehicleLabel} in our car list yet.
                 </h3>
 </div>
 <p className="font-body-md text-body-md text-on-surface-variant mt-1">
@@ -326,20 +346,22 @@ export function Fp11Screen({ actions, data }: { actions: Fp11Actions; data: Find
 </div>
 
 <div className="flex flex-col sm:flex-row lg:flex-col items-stretch lg:items-end gap-space-sm w-full lg:w-auto shrink-0">
-<button className="bg-primary text-on-primary hover:bg-surface-tint active:scale-[0.98] transition-all px-space-xl py-2.5 rounded-lg font-body-sm text-body-sm font-semibold flex items-center justify-center gap-2">
+<button type="button" className="bg-primary text-on-primary hover:bg-surface-tint active:scale-[0.98] transition-all px-space-xl py-2.5 rounded-lg font-body-sm text-body-sm font-semibold flex items-center justify-center gap-2" onClick={actions.onAskRoam}>
 <span className="material-symbols-outlined text-[18px]">add_circle</span>
 <span>Ask Roam to add it</span>
 </button>
-<button className="bg-surface-container-low text-on-surface hover:bg-surface-container-high transition-all px-space-lg py-2 rounded-lg font-body-sm text-body-sm text-center">
+<button type="button" className="bg-surface-container-low text-on-surface hover:bg-surface-container-high transition-all px-space-lg py-2 rounded-lg font-body-sm text-body-sm text-center" onClick={actions.onSelectVehicle}>
               Select another vehicle
             </button>
 <span className="font-label-code text-[11px] text-on-surface-variant text-center lg:text-right mt-1">
-              Pre-fills: Year 1998 · Make Toyota · Model Probox
+              Pre-fills: Year 1998 · Make · Model {data.vehicleLabel}
             </span>
 </div>
 </div>
 </section>
+) : null}
 
+{showPreviewSection(data.activePreviewTab, "noperm") ? (
 <section className="state-section flex flex-col gap-space-md" id="state-section-noperm">
 <div className="flex items-center justify-between pb-space-xs">
 <div className="flex items-center gap-space-sm">
@@ -363,27 +385,27 @@ export function Fp11Screen({ actions, data }: { actions: Fp11Actions; data: Find
                   You don't have access to vehicle parts. Ask your fleet admin.
                 </h3>
 <p className="font-body-md text-body-md text-on-surface-variant mt-1">
-                  Your role (<strong className="text-on-surface font-semibold">Driver / Dispatch Staff</strong>) allows viewing schedules and reporting issues, but parts requisitioning and quoting require <strong className="text-on-surface font-semibold">'Fleet Manager'</strong> or <strong className="text-on-surface font-semibold">'Purchasing'</strong> permissions.
+                  Your role (<strong className="text-on-surface font-semibold">{data.roleLabel}</strong>) allows viewing schedules and reporting issues, but parts requisitioning and quoting require <strong className="text-on-surface font-semibold">'Fleet Manager'</strong> or <strong className="text-on-surface font-semibold">'Purchasing'</strong> permissions.
                 </p>
 <div className="mt-space-md flex flex-wrap items-center gap-space-md text-body-sm text-on-surface-variant">
 <div className="flex items-center gap-1.5 font-label-code text-caption">
 <span className="material-symbols-outlined text-[16px] text-primary">verified_user</span>
-<span>ACTIVE PROFILE: John Doe (Driver Operator #210)</span>
+<span>ACTIVE PROFILE: {data.userEmail}</span>
 </div>
 <div className="flex items-center gap-1.5 font-label-code text-caption">
 <span className="material-symbols-outlined text-[16px] text-outline">location_on</span>
-<span>DEPOT: {data.hubLabel} Hub #01</span>
+<span>DEPOT: {data.hubLabel} hub</span>
 </div>
 </div>
 </div>
 </div>
 
 <div className="flex flex-col sm:flex-row lg:flex-col items-stretch lg:items-end gap-space-sm w-full lg:w-auto shrink-0">
-<button className="bg-primary text-on-primary hover:bg-surface-tint active:scale-[0.98] transition-all px-space-xl py-2.5 rounded-lg font-body-sm text-body-sm font-semibold flex items-center justify-center gap-2">
+<button type="button" className="bg-primary text-on-primary hover:bg-surface-tint active:scale-[0.98] transition-all px-space-xl py-2.5 rounded-lg font-body-sm text-body-sm font-semibold flex items-center justify-center gap-2" onClick={actions.onRequestAccess}>
 <span className="material-symbols-outlined text-[18px]">key</span>
-<span>Request access from JD (Fleet Lead)</span>
+<span>Request access from {data.adminLabel}</span>
 </button>
-<button className="bg-surface-container-low text-on-surface hover:bg-surface-container-high transition-all px-space-lg py-2 rounded-lg font-body-sm text-body-sm text-center">
+<button type="button" className="bg-surface-container-low text-on-surface hover:bg-surface-container-high transition-all px-space-lg py-2 rounded-lg font-body-sm text-body-sm text-center" onClick={actions.onBack}>
                 Back to Fleet maintenance
               </button>
 </div>
@@ -395,8 +417,8 @@ export function Fp11Screen({ actions, data }: { actions: Fp11Actions; data: Find
                 JD
               </div>
 <div>
-<span className="font-semibold text-on-surface">{data.hubLabel} Hub #01 Administrator:</span>
-<span className="text-on-surface-variant"> Julian Douglas (Lead Dispatcher) · Extension #401 · Desk 3B</span>
+<span className="font-semibold text-on-surface">{data.hubLabel} hub Administrator:</span>
+<span className="text-on-surface-variant"> None yet Douglas (Lead Dispatcher) · Extension #401 · Desk 3B</span>
 </div>
 </div>
 <div className="flex items-center gap-2 text-on-surface-variant font-label-code text-caption">
@@ -406,6 +428,7 @@ export function Fp11Screen({ actions, data }: { actions: Fp11Actions; data: Find
 </div>
 </div>
 </section>
+) : null}
 
 <div className="bg-surface-container-lowest rounded-xl shadow-sm p-space-lg">
 <div className="flex items-center justify-between pb-space-md">

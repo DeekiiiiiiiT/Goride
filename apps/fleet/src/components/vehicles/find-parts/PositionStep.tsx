@@ -1,7 +1,6 @@
 import { Fp4Screen } from "./screens/Fp4Screen";
 import { StepBar } from "./StepBar";
-import { fpButtonIs } from "./findPartsButton";
-import { buildFindPartsScreenData } from "./findPartsScreenData";
+import { buildFp4ViewModel } from "./findPartsViewModels";
 import { usePartsVehicleContext } from "./findPartsQueries";
 
 export function PositionStep({
@@ -16,33 +15,25 @@ export function PositionStep({
   onPick: (side: string) => void;
 }) {
   const ctx = usePartsVehicleContext(vehicleId, componentId);
-  const data = buildFindPartsScreenData({
-    plate: String((ctx.data as { plate?: string } | undefined)?.plate || "—"),
-    vehicleLabel: String((ctx.data as { label?: string } | undefined)?.label || "Vehicle"),
+  const data = buildFp4ViewModel({
+    ctx: (ctx.data as Record<string, unknown> | undefined) ?? null,
   });
-
-  function onButton(label: string) {
-    if (fpButtonIs(label, "back", "change")) {
-      onBack();
-      return;
-    }
-    if (fpButtonIs(label, "front", "show parts")) {
-      onPick("front");
-      return;
-    }
-    if (fpButtonIs(label, "rear", "back axle")) {
-      onPick("rear");
-      return;
-    }
-    if (fpButtonIs(label, "both")) {
-      onPick("both");
-    }
-  }
 
   return (
     <div>
       <StepBar step={4} trail={[]} />
-      <Fp4Screen actions={{ onButton }} data={data} />
+      <p className="font-body-sm text-caption text-on-surface-variant mb-space-sm">2. Trim &amp; year · 4. Position &amp; fit</p>
+      <Fp4Screen
+        data={data}
+        actions={{
+          onBack,
+          onPickFront: () => onPick("front"),
+          onPickRear: () => onPick("rear"),
+          onPickBoth: () => onPick("both"),
+          onShowParts: (side) => onPick(side),
+          onEditPartCategory: onBack,
+        }}
+      />
     </div>
   );
 }

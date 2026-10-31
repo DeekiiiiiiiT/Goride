@@ -1,13 +1,17 @@
 import type { ReactNode } from "react";
-import type { FindPartsScreenData } from "../findPartsScreenData";
+import type { Fp6ViewModel } from "../findPartsViewModels";
 
 export type Fp6Actions = {
-  onButton: (label: string) => void;
-  onVehicleCard?: (vehicleId: string) => void;
+  onClose: () => void;
+  onPingRfq: () => void;
+  onAddToOrder: () => void;
+  onAddToStock: () => void;
+  onUseInService: () => void;
+  onCopyCrossRef: (partNumber: string) => void;
   children?: ReactNode;
 };
 
-export function Fp6Screen({ actions, data }: { actions: Fp6Actions; data: FindPartsScreenData }) {
+export function Fp6Screen({ actions, data }: { actions: Fp6Actions; data: Fp6ViewModel }) {
   return (
     <div className="find-parts-screen-root">
 <div className="fp-screen-root"><div className="max-w-[1440px] mx-auto px-margin-desktop py-space-xl"><div className="flex flex-col w-full relative">
@@ -26,7 +30,7 @@ export function Fp6Screen({ actions, data }: { actions: Fp6Actions; data: FindPa
 <div className="flex items-center gap-space-md">
 <h1 className="font-headline-lg text-headline-lg text-on-surface tracking-tight">Parts Compatibility Index</h1>
 <span className="px-space-sm py-0.5 rounded bg-surface-container font-label-code text-caption text-secondary">REG: KGN-1505-LM</span>
-<span className="px-space-sm py-0.5 rounded bg-surface-container font-label-code text-caption text-secondary">VIN: NHP160-0028141</span>
+<span className="px-space-sm py-0.5 rounded bg-surface-container font-label-code text-caption text-secondary">VIN: {data.vinLabel}</span>
 </div>
 </div>
 <div className="flex items-center gap-space-sm">
@@ -45,7 +49,7 @@ export function Fp6Screen({ actions, data }: { actions: Fp6Actions; data: FindPa
 <div className="p-space-lg rounded-xl bg-surface-container-lowest shadow-sm flex flex-col gap-space-xs">
 <span className="font-caption text-caption text-secondary uppercase tracking-wider">Assigned Chassis</span>
 <span className="font-label-plate text-label-plate text-on-surface">1505 LM · PROBOX</span>
-<span className="font-caption text-caption text-secondary">Odometer: 142,880 km</span>
+<span className="font-caption text-caption text-secondary">Odometer: {data.odometerLabel}</span>
 </div>
 <div className="p-space-lg rounded-xl bg-surface-container-lowest shadow-sm flex flex-col gap-space-xs">
 <span className="font-caption text-caption text-secondary uppercase tracking-wider">Maintenance Due</span>
@@ -58,7 +62,7 @@ export function Fp6Screen({ actions, data }: { actions: Fp6Actions; data: FindPa
 <div className="p-space-lg rounded-xl bg-surface-container-lowest shadow-sm flex flex-col gap-space-xs">
 <span className="font-caption text-caption text-secondary uppercase tracking-wider">Local Hub Stock</span>
 <span className="font-headline-sm text-headline-sm text-on-surface">14 Items Verified</span>
-<span className="font-caption text-caption text-secondary">{data.hubLabel} Hub #01 Priority Rack</span>
+<span className="font-caption text-caption text-secondary">{data.hubLabel} hub Priority Rack</span>
 </div>
 <div className="p-space-lg rounded-xl bg-surface-container-lowest shadow-sm flex flex-col gap-space-xs">
 <span className="font-caption text-caption text-secondary uppercase tracking-wider">Supplier Coverage</span>
@@ -75,61 +79,33 @@ export function Fp6Screen({ actions, data }: { actions: Fp6Actions; data: FindPa
 </div>
 <div className="flex items-center gap-space-sm text-secondary font-caption text-caption">
 <span className="material-symbols-outlined text-[16px]">verified</span>
-<span>Cross-checked against Jamaica Fleet Registry NHP160 Specs</span>
+<span>Cross-checked against Jamaica Fleet Registry {data.vinLabel} Specs</span>
 </div>
 </div>
 
 <div className="space-y-space-sm">
-<div className="p-space-md rounded-lg bg-surface-container-high/40 flex items-center justify-between">
+{data.recommendedShelfCounts.map((row, index) => (
+<div key={`${row.partNumber}-${index}`} className={`p-space-md rounded-lg flex items-center justify-between ${index === 0 ? "bg-surface-container-high/40" : "bg-surface-container-lowest"}`}>
 <div className="flex items-center gap-space-md">
 <div className="w-12 h-12 rounded bg-surface-container flex items-center justify-center">
 <span className="material-symbols-outlined text-secondary">filter_alt</span>
 </div>
 <div>
-<div className="font-label-code text-label-code font-bold text-on-surface">Toyota {data.partNumber}</div>
-<div className="font-body-sm text-body-sm text-secondary">Oil filter cartridge with O-ring &amp; bypass valve</div>
+<div className="font-label-code text-label-code font-bold text-on-surface">{row.partNumber}</div>
+<div className="font-body-sm text-body-sm text-secondary">{row.description}</div>
 </div>
 </div>
 <div className="flex items-center gap-space-lg">
-<span className="font-label-price text-label-price text-on-surface font-semibold">{data.priceLabel}</span>
-<span className="px-2 py-1 rounded bg-surface-container font-caption text-caption font-semibold text-secondary">2 on shelf</span>
+<span className="font-label-price text-label-price text-on-surface font-semibold">{row.priceLabel}</span>
+<span className="px-2 py-1 rounded bg-surface-container font-caption text-caption font-semibold text-secondary">{row.shelfCountLabel}</span>
 </div>
 </div>
-<div className="p-space-md rounded-lg bg-surface-container-lowest flex items-center justify-between">
-<div className="flex items-center gap-space-md">
-<div className="w-12 h-12 rounded bg-surface-container flex items-center justify-center">
-<span className="material-symbols-outlined text-secondary">opacity</span>
-</div>
-<div>
-<div className="font-label-code text-label-code font-bold text-on-surface">Toyota 08880-13205</div>
-<div className="font-body-sm text-body-sm text-secondary">Motor Oil SP 0W-20 Full Synthetic (4.0L)</div>
-</div>
-</div>
-<div className="flex items-center gap-space-lg">
-<span className="font-label-price text-label-price text-on-surface font-semibold">J$ 5,900</span>
-<span className="px-2 py-1 rounded bg-surface-container font-caption text-caption text-secondary">6 on shelf</span>
-</div>
-</div>
-<div className="p-space-md rounded-lg bg-surface-container-lowest flex items-center justify-between">
-<div className="flex items-center gap-space-md">
-<div className="w-12 h-12 rounded bg-surface-container flex items-center justify-center">
-<span className="material-symbols-outlined text-secondary">circle</span>
-</div>
-<div>
-<div className="font-label-code text-label-code font-bold text-on-surface">Toyota 90430-12031</div>
-<div className="font-body-sm text-body-sm text-secondary">Engine Sump Drain Plug Gasket 12mm</div>
-</div>
-</div>
-<div className="flex items-center gap-space-lg">
-<span className="font-label-price text-label-price text-on-surface font-semibold">J$ 180</span>
-<span className="px-2 py-1 rounded bg-surface-container font-caption text-caption text-secondary">18 on shelf</span>
-</div>
-</div>
+))}
 </div>
 </div>
 </div>
 
-<div className="fixed inset-0 z-40 bg-primary/45 backdrop-blur-[1px] transition-opacity duration-300" id="drawer-backdrop"></div>
+<button type="button" aria-label="Close drawer backdrop" className="fixed inset-0 z-40 bg-primary/45 backdrop-blur-[1px] transition-opacity duration-300" id="drawer-backdrop" onClick={actions.onClose}></button>
 
 <aside aria-labelledby="drawer-part-title" aria-modal="true" className="fixed top-0 right-0 bottom-0 z-50 w-full max-w-[520px] bg-surface-container-lowest shadow-2xl flex flex-col justify-between overflow-hidden transform translate-x-0 transition-transform duration-300 ease-out" id="part-detail-drawer" role="dialog">
 
@@ -140,14 +116,14 @@ export function Fp6Screen({ actions, data }: { actions: Fp6Actions; data: FindPa
 <span className="w-1.5 h-1.5 rounded-full bg-secondary"></span>
 <span>Parts Inventory / Oil Filter</span>
 </div>
-<button aria-label="Close drawer" className="w-8 h-8 rounded-lg bg-surface-container-low hover:bg-surface-container flex items-center justify-center text-on-surface transition-colors">
+<button type="button" aria-label="Close drawer" className="w-8 h-8 rounded-lg bg-surface-container-low hover:bg-surface-container flex items-center justify-center text-on-surface transition-colors" onClick={actions.onClose}>
 <span className="material-symbols-outlined text-[20px]">close</span>
 </button>
 </div>
 
 <div className="flex flex-col gap-0.5">
-<h2 className="font-label-code text-headline-lg font-bold text-on-surface tracking-tight" id="drawer-part-title">Toyota {data.partNumber}</h2>
-<p className="font-body-sm text-body-sm text-secondary">Oil filter cartridge with O-ring &amp; bypass valve</p>
+<h2 className="font-label-code text-headline-lg font-bold text-on-surface tracking-tight" id="drawer-part-title">{data.brandLabel} {data.partNumber}</h2>
+<p className="font-body-sm text-body-sm text-secondary">{data.descriptionLine}</p>
 </div>
 
 <div className="flex flex-wrap items-center gap-space-xs pt-1">
@@ -161,7 +137,7 @@ export function Fp6Screen({ actions, data }: { actions: Fp6Actions; data: FindPa
 </span>
 <span className="inline-flex items-center gap-1 px-space-sm py-1 rounded bg-primary-container text-on-primary font-label-code text-caption font-semibold">
 <span className="material-symbols-outlined text-[13px] text-primary-fixed">inventory_2</span>
-<span>On your shelf — 2 ({data.hubLabel} Hub #01)</span>
+<span>On your shelf — 2 ({data.hubLabel} hub)</span>
 </span>
 </div>
 </header>
@@ -170,7 +146,7 @@ export function Fp6Screen({ actions, data }: { actions: Fp6Actions; data: FindPa
 
 <div className="w-full rounded-xl bg-surface-container-low p-space-md flex items-center gap-space-md">
 <div className="w-20 h-20 rounded-lg overflow-hidden shrink-0 bg-surface-container">
-<img className="w-full h-full object-cover" data-alt="High precision studio product macro photo of an authentic Toyota OEM oil filter cartridge with pleated yellow-brown cellulose media, black rubber O-ring seal, and plastic bypass seating valve cleanly lit in technical commercial lighting." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCcKdlTSrUud9a36Z0uHxAU610jD_I9V1UE_1kSW9B9kZaDUrzJ_pbYjYr5rgrHjqNshuKxO3fC002mpxc_ncgwV9gzOHUtAFQeY8uWBakENt0aYi7jkqgqVzHqQx4Npqr4rVFW1gN88VKN6W_NWf29saue51yIJtbPjFPjHhIU1oxVo3t-O4VavP0OpDSY5eQa96MmFTUhfuGYAG9SKyt48dwNAfWM5vNgvYyY97I" />
+<img className="w-full h-full object-cover" data-alt="High precision studio product macro photo of an authentic OEM oil filter cartridge with pleated yellow-brown cellulose media, black rubber O-ring seal, and plastic bypass seating valve cleanly lit in technical commercial lighting." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCcKdlTSrUud9a36Z0uHxAU610jD_I9V1UE_1kSW9B9kZaDUrzJ_pbYjYr5rgrHjqNshuKxO3fC002mpxc_ncgwV9gzOHUtAFQeY8uWBakENt0aYi7jkqgqVzHqQx4Npqr4rVFW1gN88VKN6W_NWf29saue51yIJtbPjFPjHhIU1oxVo3t-O4VavP0OpDSY5eQa96MmFTUhfuGYAG9SKyt48dwNAfWM5vNgvYyY97I" />
 </div>
 <div className="flex flex-col gap-0.5 min-w-0">
 <div className="flex items-center gap-space-xs font-label-code text-caption text-secondary">
@@ -186,14 +162,14 @@ export function Fp6Screen({ actions, data }: { actions: Fp6Actions; data: FindPa
 <section className="flex flex-col gap-space-sm">
 <div className="flex items-center justify-between">
 <h3 className="font-caption text-caption font-bold uppercase tracking-wider text-secondary">Why it fits this chassis</h3>
-<span className="font-label-code text-caption text-on-tertiary-container font-semibold">100% SPEC MATCH</span>
+<span className="font-label-code text-caption text-on-tertiary-container font-semibold">{data.specMatchLabel}</span>
 </div>
 <div className="flex flex-col gap-space-xs">
 <div className="p-space-md rounded-lg bg-surface-container-low flex items-start gap-space-sm">
 <span className="material-symbols-outlined text-[18px] text-on-surface shrink-0 mt-0.5">check_circle</span>
 <div className="flex flex-col">
 <span className="font-body-sm text-body-sm font-medium text-on-surface">The factory part listed for this car.</span>
-<span className="font-caption text-caption text-secondary">Direct cross-matched from Toyota EPC catalog for NHP160 hybrid drive.</span>
+<span className="font-caption text-caption text-secondary">Direct cross-matched from EPC catalog for {data.vinLabel} hybrid drive.</span>
 </div>
 </div>
 <div className="p-space-md rounded-lg bg-surface-container-low flex items-start gap-space-sm">
@@ -226,73 +202,52 @@ export function Fp6Screen({ actions, data }: { actions: Fp6Actions; data: FindPa
 <span className="col-span-3 text-right">Lead / Wty</span>
 </div>
 
-<div className="grid grid-cols-12 px-space-md py-3 items-center hover:bg-surface-container-high/50 transition-colors">
+{data.offers.map((offer, index) => (
+<div key={offer.id}>
+{index > 0 ? <div className="w-full h-px bg-surface-container"></div> : null}
+<div className={`grid grid-cols-12 px-space-md py-3 items-center hover:bg-surface-container-high/50 transition-colors ${offer.selected ? "" : "opacity-75 bg-surface-container-low"}`}>
 <div className="col-span-4 flex flex-col">
-<span className="font-body-sm text-body-sm font-semibold text-on-surface leading-tight">{data.hubLabel} Auto</span>
+<span className="font-body-sm text-body-sm font-semibold text-on-surface leading-tight">{offer.supplierLabel}</span>
 <div className="flex items-center gap-1 mt-0.5">
-<span className="w-1.5 h-1.5 rounded-full bg-on-surface"></span>
-<span className="font-caption text-caption text-on-surface font-medium">In stock</span>
+<span className={`w-1.5 h-1.5 rounded-full ${offer.selected ? "bg-on-surface" : "bg-secondary"}`}></span>
+<span className="font-caption text-caption text-on-surface font-medium">{offer.selected ? "In stock" : "Overseas order"}</span>
 </div>
 </div>
 <div className="col-span-2 text-right font-label-code text-caption text-secondary">
-              J$ 1,600
+              {offer.priceLabel}
             </div>
 <div className="col-span-3 text-right font-label-price text-label-price text-on-surface font-bold">
-              {data.priceLabel}
+              {offer.priceLabel}
             </div>
 <div className="col-span-3 text-right flex flex-col">
-<span className="font-body-sm text-body-sm font-medium text-on-surface">Today</span>
-<span className="font-caption text-caption text-secondary">3 months</span>
+<span className="font-body-sm text-body-sm font-medium text-on-surface">{offer.leadLabel}</span>
+<span className="font-caption text-caption text-secondary">{offer.selected ? "3 months" : "—"}</span>
 </div>
-</div>
-<div className="w-full h-px bg-surface-container"></div>
-
-<div className="grid grid-cols-12 px-space-md py-3 items-center opacity-75 hover:opacity-100 transition-opacity bg-surface-container-low">
-<div className="col-span-4 flex flex-col">
-<span className="font-body-sm text-body-sm font-medium text-on-surface leading-tight">JDM Direct (JP)</span>
-<span className="font-caption text-caption text-secondary">Overseas order</span>
-</div>
-<div className="col-span-2 text-right font-label-code text-caption text-secondary">
-              US$ 6.20
-            </div>
-<div className="col-span-3 text-right font-label-price text-label-price text-on-surface">
-              J$ 1,610
-            </div>
-<div className="col-span-3 text-right flex flex-col">
-<span className="font-body-sm text-body-sm text-secondary">12 days</span>
-<span className="font-caption text-caption text-secondary">—</span>
-</div>
-
+{!offer.selected ? (
 <div className="col-span-12 mt-2 pt-2 bg-surface-container-high/40 rounded p-space-sm flex items-center justify-between text-secondary">
 <div className="flex items-center gap-1 font-caption text-caption">
 <span className="material-symbols-outlined text-[14px] text-secondary">schedule</span>
-<span>Price may be old · logged 41 days ago</span>
+<span>Price may be old</span>
 </div>
-<span className="font-label-code text-caption font-semibold cursor-pointer hover:underline text-on-surface">Ping RFQ</span>
+<button type="button" className="font-label-code text-caption font-semibold cursor-pointer hover:underline text-on-surface" onClick={actions.onPingRfq}>Ping RFQ</button>
+</div>
+) : null}
 </div>
 </div>
+))}
 </div>
 </section>
 
 <section className="flex flex-col gap-space-sm">
 <h3 className="font-caption text-caption font-bold uppercase tracking-wider text-secondary">Fits these engine variants</h3>
 <div className="flex flex-wrap items-center gap-space-xs">
-
-<div className="px-space-md py-1.5 rounded-lg bg-surface-container text-on-surface flex items-center gap-space-xs shadow-sm">
-<span className="material-symbols-outlined text-[16px] text-on-surface font-bold">check</span>
-<span className="font-label-code text-body-sm font-semibold">1.5 hybrid (1NZ-FXE)</span>
-<span className="text-[10px] uppercase font-bold tracking-wider px-1 rounded bg-secondary-fixed text-on-secondary-fixed">Target</span>
+{data.variantChips.map((chip, index) => (
+<div key={`${chip.label}-${index}`} className={`px-space-md py-1.5 rounded-lg flex items-center gap-space-xs ${chip.excluded ? "bg-surface-container-low/60 text-secondary opacity-60" : chip.active ? "bg-surface-container text-on-surface shadow-sm" : "bg-surface-container-low text-on-surface"}`}>
+<span className="material-symbols-outlined text-[16px] font-bold">{chip.excluded ? "remove" : "check"}</span>
+<span className="font-label-code text-body-sm font-semibold">{chip.label}</span>
+{chip.active ? <span className="text-[10px] uppercase font-bold tracking-wider px-1 rounded bg-secondary-fixed text-on-secondary-fixed">Target</span> : null}
 </div>
-
-<div className="px-space-md py-1.5 rounded-lg bg-surface-container-low text-on-surface flex items-center gap-space-xs">
-<span className="material-symbols-outlined text-[16px] text-secondary font-bold">check</span>
-<span className="font-label-code text-body-sm font-medium">1.5 petrol (1NZ-FE)</span>
-</div>
-
-<div className="px-space-md py-1.5 rounded-lg bg-surface-container-low/60 text-secondary flex items-center gap-space-xs opacity-60">
-<span className="material-symbols-outlined text-[16px]">remove</span>
-<span className="font-label-code text-body-sm">1.3 petrol (1NR-FE)</span>
-</div>
+))}
 </div>
 </section>
 
@@ -303,32 +258,16 @@ export function Fp6Screen({ actions, data }: { actions: Fp6Actions; data: FindPa
 </div>
 <div className="grid grid-cols-1 sm:grid-cols-3 gap-space-xs">
 
-<button className="p-space-sm rounded-lg bg-surface-container-low hover:bg-surface-container flex flex-col gap-0.5 text-left transition-colors relative group">
+{data.crossRefRows.map((row, index) => (
+<button key={`${row.partNumber}-${index}`} type="button" className="p-space-sm rounded-lg bg-surface-container-low hover:bg-surface-container flex flex-col gap-0.5 text-left transition-colors relative group" onClick={() => actions.onCopyCrossRef(row.partNumber)}>
 <div className="flex items-center justify-between w-full">
-<span className="font-caption text-caption text-secondary">{data.partBrand}</span>
+<span className="font-caption text-caption text-secondary">{row.brand}</span>
 <span className="material-symbols-outlined text-[14px] text-secondary group-hover:text-on-surface">content_copy</span>
 </div>
-<span className="font-label-code text-caption font-bold text-on-surface">{data.partNumberAlt} z</span>
-<span className="text-[10px] text-secondary">Aftermarket OE grade</span>
+<span className="font-label-code text-caption font-bold text-on-surface">{row.partNumber}</span>
+<span className="text-[10px] text-secondary">{row.note}</span>
 </button>
-
-<button className="p-space-sm rounded-lg bg-surface-container-low hover:bg-surface-container flex flex-col gap-0.5 text-left transition-colors relative group">
-<div className="flex items-center justify-between w-full">
-<span className="font-caption text-caption text-secondary">DENSO</span>
-<span className="material-symbols-outlined text-[14px] text-secondary group-hover:text-on-surface">content_copy</span>
-</div>
-<span className="font-label-code text-caption font-bold text-on-surface">150-2040</span>
-<span className="text-[10px] text-secondary">Tier-1 First Time Fit</span>
-</button>
-
-<button className="p-space-sm rounded-lg bg-surface-container-low hover:bg-surface-container flex flex-col gap-0.5 text-left transition-colors relative group">
-<div className="flex items-center justify-between w-full">
-<span className="font-caption text-caption text-secondary">WIX FILTERS</span>
-<span className="material-symbols-outlined text-[14px] text-secondary group-hover:text-on-surface">content_copy</span>
-</div>
-<span className="font-label-code text-caption font-bold text-on-surface">57064</span>
-<span className="text-[10px] text-secondary">Heavy Duty Line</span>
-</button>
+))}
 </div>
 </section>
 
@@ -339,15 +278,15 @@ export function Fp6Screen({ actions, data }: { actions: Fp6Actions; data: FindPa
 <div className="p-space-md rounded-xl bg-surface-container-low flex flex-col justify-between gap-space-sm hover:shadow-sm transition-shadow">
 <div className="flex items-start gap-space-sm">
 <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 bg-surface-container">
-<img className="w-full h-full object-cover" data-alt="High quality studio photo of Toyota genuine motor oil silver 4-liter tin can container with red accents and Japanese engineering labels on clean backdrop." src="https://lh3.googleusercontent.com/aida-public/AB6AXuB7cZpI3Ri4h4oocGcMRK4GL4DBw1ll69GCpCK04it2S-FXWbw-dyl0koRHDSg89UPlyBs6k5SSUF3f4oCemW8-66b61Rk0AVnCHz60Vi7T0VNY7On6JqTbP8EoHM9FtLb4fcufqIEgVDigX88PCtpdI4UU-PNX0qVFdXiDrVn1gOPcWy3DTxLoOIvOkpK8tvxaKowzqTD2e5v9ZAPne580Q6u4WV7xt1uLIhMjDYo" />
+<img className="w-full h-full object-cover" data-alt="High quality studio photo of genuine motor oil silver 4-liter tin can container with red accents and Japanese engineering labels on clean backdrop." src="https://lh3.googleusercontent.com/aida-public/AB6AXuB7cZpI3Ri4h4oocGcMRK4GL4DBw1ll69GCpCK04it2S-FXWbw-dyl0koRHDSg89UPlyBs6k5SSUF3f4oCemW8-66b61Rk0AVnCHz60Vi7T0VNY7On6JqTbP8EoHM9FtLb4fcufqIEgVDigX88PCtpdI4UU-PNX0qVFdXiDrVn1gOPcWy3DTxLoOIvOkpK8tvxaKowzqTD2e5v9ZAPne580Q6u4WV7xt1uLIhMjDYo" />
 </div>
 <div className="flex flex-col min-w-0">
 <span className="font-body-sm text-body-sm font-semibold text-on-surface truncate">Engine oil 0W-20</span>
-<span className="font-caption text-caption text-secondary truncate">Toyota Synth · 3.4 L Req.</span>
-<span className="font-label-price text-caption font-bold text-on-surface mt-1">J$ 5,200</span>
+<span className="font-caption text-caption text-secondary truncate">Synth · 3.4 L Req.</span>
+<span className="font-label-price text-caption font-bold text-on-surface mt-1">No price yet</span>
 </div>
 </div>
-<button className="w-full py-1.5 px-space-sm rounded-lg bg-surface-container-lowest hover:bg-surface-container text-on-surface font-body-sm text-caption font-semibold flex items-center justify-center gap-1 shadow-sm transition-colors">
+<button type="button" className="w-full py-1.5 px-space-sm rounded-lg bg-surface-container-lowest hover:bg-surface-container text-on-surface font-body-sm text-caption font-semibold flex items-center justify-center gap-1 shadow-sm transition-colors" onClick={actions.onAddToOrder}>
 <span className="material-symbols-outlined text-[15px]">add</span>
 <span>Add to order</span>
 </button>
@@ -356,15 +295,15 @@ export function Fp6Screen({ actions, data }: { actions: Fp6Actions; data: FindPa
 <div className="p-space-md rounded-xl bg-surface-container-low flex flex-col justify-between gap-space-sm hover:shadow-sm transition-shadow">
 <div className="flex items-start gap-space-sm">
 <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 bg-surface-container">
-<img className="w-full h-full object-cover" data-alt="Close-up macro photo of a pack of metallic aluminum and fiber oil drain plug crush washers for Toyota oil pan sumps on clean surface." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBVa89_kVs9TeQLzEK8OMe3VE55mwWkupLvW08wg-5WnAv0xHGe90Jepztfj_Wt1fb0xtKQFzfRPlstXOjmRrAJ13a2jJnRY6I4la-41QXcGdNmftQI08PigE5qNiF_rq_ICZ776o-6w5zp6zw_IlGU59I7dizt9XdXPmMs_RJD-cYQrsKEd_zUuk5cQ59193-C_UC7COnHGF9e7X6ntQlVYXL7wYeRrXUYp0shz00" />
+<img className="w-full h-full object-cover" data-alt="Close-up macro photo of a pack of metallic aluminum and fiber oil drain plug crush washers for oil pan sumps on clean surface." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBVa89_kVs9TeQLzEK8OMe3VE55mwWkupLvW08wg-5WnAv0xHGe90Jepztfj_Wt1fb0xtKQFzfRPlstXOjmRrAJ13a2jJnRY6I4la-41QXcGdNmftQI08PigE5qNiF_rq_ICZ776o-6w5zp6zw_IlGU59I7dizt9XdXPmMs_RJD-cYQrsKEd_zUuk5cQ59193-C_UC7COnHGF9e7X6ntQlVYXL7wYeRrXUYp0shz00" />
 </div>
 <div className="flex flex-col min-w-0">
 <span className="font-body-sm text-body-sm font-semibold text-on-surface truncate">Drain plug washer</span>
 <span className="font-caption text-caption text-secondary truncate">14mm OEM crush gasket</span>
-<span className="font-label-price text-caption font-bold text-on-surface mt-1">J$ 180</span>
+<span className="font-label-price text-caption font-bold text-on-surface mt-1">No price yet</span>
 </div>
 </div>
-<button className="w-full py-1.5 px-space-sm rounded-lg bg-surface-container-lowest hover:bg-surface-container text-on-surface font-body-sm text-caption font-semibold flex items-center justify-center gap-1 shadow-sm transition-colors">
+<button type="button" className="w-full py-1.5 px-space-sm rounded-lg bg-surface-container-lowest hover:bg-surface-container text-on-surface font-body-sm text-caption font-semibold flex items-center justify-center gap-1 shadow-sm transition-colors" onClick={actions.onAddToOrder}>
 <span className="material-symbols-outlined text-[15px]">add</span>
 <span>Add to order</span>
 </button>
@@ -387,18 +326,18 @@ export function Fp6Screen({ actions, data }: { actions: Fp6Actions; data: FindPa
           </button>
 </div>
 
-<button className="flex-1 py-2 px-space-sm rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm font-semibold flex items-center justify-center gap-1 transition-colors">
+<button type="button" className="flex-1 py-2 px-space-sm rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm font-semibold flex items-center justify-center gap-1 transition-colors" onClick={actions.onAddToStock}>
 <span className="material-symbols-outlined text-[18px]">add_business</span>
 <span className="whitespace-nowrap">Add to stock</span>
 </button>
 
-<button className="flex-1 py-2 px-space-sm rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm font-semibold flex items-center justify-center gap-1 transition-colors">
+<button type="button" className="flex-1 py-2 px-space-sm rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm font-semibold flex items-center justify-center gap-1 transition-colors" onClick={actions.onPingRfq}>
 <span className="material-symbols-outlined text-[18px]">request_quote</span>
 <span className="whitespace-nowrap">Request quote</span>
 </button>
 </div>
 
-<button className="w-full py-3 px-space-lg rounded-xl bg-primary hover:bg-primary/90 text-on-primary font-body-md text-body-md font-semibold flex items-center justify-center gap-space-sm shadow-md transition-all active:scale-[0.99]">
+<button type="button" className="w-full py-3 px-space-lg rounded-xl bg-primary hover:bg-primary/90 text-on-primary font-body-md text-body-md font-semibold flex items-center justify-center gap-space-sm shadow-md transition-all active:scale-[0.99]" onClick={actions.onUseInService}>
 <span>Use in a service log</span>
 <span className="font-label-plate text-caption px-1.5 py-0.5 rounded bg-surface-container-highest/20 text-on-primary">{data.plate} PRE-FILLED</span>
 <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
@@ -407,7 +346,7 @@ export function Fp6Screen({ actions, data }: { actions: Fp6Actions; data: FindPa
 <div className="flex items-center justify-between text-[11px] font-caption text-secondary px-1 pt-0.5">
 <span className="flex items-center gap-1">
 <span className="w-1.5 h-1.5 rounded-full bg-on-surface"></span>
-<span>{data.hubLabel} Hub #01 Automated Allocation</span>
+<span>{data.hubLabel} hub Automated Allocation</span>
 </span>
 <span className="font-label-code">ROAM-FLT-LOG-V6</span>
 </div>

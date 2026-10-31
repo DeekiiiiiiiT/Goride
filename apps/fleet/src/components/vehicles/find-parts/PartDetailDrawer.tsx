@@ -1,7 +1,6 @@
-import { api } from "../../../services/api";
 import { Fp6Screen } from "./screens/Fp6Screen";
-import { fpButtonIs } from "./findPartsButton";
-import { buildFindPartsScreenData } from "./findPartsScreenData";
+import { addPartToOrgStock, addPartToPartsList, copyTextToClipboard } from "./findPartsActions";
+import { buildFp6ViewModel } from "./findPartsViewModels";
 import { usePartsVehicleContext, useWrongFitCount } from "./findPartsQueries";
 
 type Offer = {
@@ -43,36 +42,28 @@ export function PartDetailDrawer({
   canLog: boolean;
   vehicleId?: string;
 }) {
-  usePartsVehicleContext(vehicleId || "", item.part?.maintenance_component_id);
+  const ctx = usePartsVehicleContext(vehicleId || "", item.part?.maintenance_component_id);
   useWrongFitCount();
-  const offer = item.bestOffer || item.offers?.[0];
-  const data = buildFindPartsScreenData({
-    partNumber: String(item.part?.oem_part_number || item.part?.name || "—"),
-    priceJmd: offer?.landedCostJmd ?? null,
-    vehicleLabel: String(item.part?.name || "Part"),
-  });
-
-  function onButton(label: string) {
-    if (fpButtonIs(label, "close")) {
-      onClose();
-      return;
-    }
-    if (fpButtonIs(label, "quote", "rfq", "ping rfq")) {
-      onQuote();
-      return;
-    }
-    if (fpButtonIs(label, "use in") && canLog) {
-      onUseInService();
-      return;
-    }
-    if (fpButtonIs(label, "add to order")) {
-      void api.addToPartsList({ label: item.part?.name || "Part", partId: item.part?.id, componentId: item.part?.maintenance_component_id });
-    }
-  }
+  const data = buildFp6ViewModel({ item, ctx: (ctx.data as Record<string, unknown> | undefined) ?? null });
 
   return (
     <div className="fixed inset-0 z-40">
-      <Fp6Screen actions={{ onButton }} data={data} />
+      <button type="button" className="absolute inset-0 bg-inverse-surface/30" aria-label="Close part details" onClick={onClose} />
+      <Fp6Screen
+        data={data}
+        actions={{
+          onClose,
+          onPingRfq: onQuote,
+          onAddToOrder: () => {
+            void addPartToPartsList({ label: item.part?.name || "Part", partId: item.part?.id, componentId: item.part?.maintenance_component_id });
+          },
+          onAddToStock: () => {
+            void addPartToOrgStock(item.part?.id, 1);
+          },
+          onUseInService: () => { if (canLog) onUseInService(); },
+          onCopyCrossRef: (partNumber) => { void copyTextToClipboard(partNumber); },
+        }}
+      />
     </div>
   );
 }

@@ -56,7 +56,7 @@ export function CarStep({
     : cars.map((car) => ({ row: {} as PartsMyVehicleRow, car }));
 
   const activeCount = rows.length;
-  const makes = options.data?.makes?.length ? options.data.makes : ["Toyota", "Honda", "Nissan", "Mazda", "Suzuki"];
+  const makes = options.data?.makes?.length ? options.data.makes : [];
   const models = options.data?.models?.length ? options.data.models : [];
   const years = options.data?.years?.length ? options.data.years.map(String) : ["2016", "2017", "2018", "2019", "2020"];
 
@@ -174,7 +174,7 @@ export function CarStep({
                 </div>
                 {term.data?.hits?.length ? (
                   <ul className="mt-2 flex flex-col gap-1">
-                    {term.data.hits.slice(0, 5).map((hit) => (
+                    {term.data.hits.slice(0, 5).map((hit: { label: string }) => (
                       <li key={hit.label}>
                         <button type="button" className="text-left font-body-sm text-body-sm text-primary hover:underline" onClick={() => setTyped(hit.label)}>
                           {hit.label}
@@ -213,7 +213,7 @@ export function CarStep({
             <div className="flex flex-col">
               <span className="font-headline-sm text-caption text-on-surface uppercase tracking-wider font-semibold">Zero-Fitment Error Guarantee</span>
               <p className="font-body-sm text-caption text-on-surface-variant mt-0.5">
-                Every part cataloged is verified against Jamaican road conditions and JDM chassis designations (GP5, M900A, NCP160).
+                Every part cataloged is verified against Jamaican road conditions and the chassis code on your fitness certificate.
                 Wrong-fit reports in the last {wrongFit.data?.days ?? 30} days: {wrongFit.data?.count ?? 0}.
               </p>
             </div>

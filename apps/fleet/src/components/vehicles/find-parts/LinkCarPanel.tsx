@@ -1,13 +1,14 @@
+import { useState } from "react";
 import { api } from "../../../services/api";
 import { Fp9Screen } from "./screens/Fp9Screen";
-import { fpButtonIs } from "./findPartsButton";
-import { buildFindPartsScreenData } from "./findPartsScreenData";
+import { buildFp9ViewModel } from "./findPartsViewModels";
 import { usePartsVehicleOptions } from "./findPartsQueries";
 
 export function LinkCarPanel({
   canEdit,
   onBack,
   onLinked,
+  onSearchByMmy,
   vehicleId,
   make,
   model,
@@ -17,6 +18,7 @@ export function LinkCarPanel({
   canEdit: boolean;
   onBack: () => void;
   onLinked: () => void;
+  onSearchByMmy: () => void;
   vehicleId: string;
   make: string;
   model: string;
@@ -24,35 +26,39 @@ export function LinkCarPanel({
   plate: string;
 }) {
   const options = usePartsVehicleOptions(make, model);
-  const data = buildFindPartsScreenData({
-    plate,
-    vehicleLabel: [year, make, model].filter(Boolean).join(" ") || "Vehicle",
-  });
+  const [linkOpen, setLinkOpen] = useState(false);
+  const [pickedTrimId, setPickedTrimId] = useState("");
+  const data = buildFp9ViewModel({ make, model, year, plate, options: options.data ?? null, selectedTrimId: pickedTrimId || undefined });
 
   async function linkVariant(variantId: string) {
-    if (!canEdit || !vehicleId) return;
+    if (!canEdit || !vehicleId || !variantId) return;
     await api.saveVehicle({ id: vehicleId, vehicleId, variantId, catalogVariantId: variantId });
     onLinked();
   }
 
-  function onButton(label: string) {
-    if (fpButtonIs(label, "switch unit", "back")) {
-      onBack();
-      return;
-    }
-    if (fpButtonIs(label, "send notification")) {
-      void api.notifyPartsAdmin({ kind: "link_vehicle", body: `Link ${make} ${model} ${year} (${plate})` }).catch(() => undefined);
-      return;
-    }
-    if (fpButtonIs(label, "confirm & map", "select")) {
-      const versions = (options.data as { versions?: Array<{ id: string }> } | undefined)?.versions;
-      void linkVariant(versions?.[0]?.id || "").catch(() => undefined);
-    }
-  }
+  const defaultTrimId = String((options.data as { versions?: Array<{ id: string }> } | undefined)?.versions?.[0]?.id || data.trims[0]?.id || "");
 
   return (
     <div>
-      <Fp9Screen actions={{ onButton }} data={data} />
+      <Fp9Screen
+        data={data}
+        linkModalOpen={linkOpen}
+        actions={{
+          onBack,
+          onSwitchUnit: onBack,
+          onLinkNow: () => setLinkOpen(true),
+          onSearchByMmy,
+          onNotifyAdmin: () => {
+            void api.notifyPartsAdmin({ kind: "link_vehicle", body: `Link ${make} ${model} ${year} (${plate})` }).catch(() => undefined);
+          },
+          onConfirmMap: () => {
+            void linkVariant(pickedTrimId || defaultTrimId).catch(() => undefined);
+            setLinkOpen(false);
+          },
+          onPickTrim: (id) => setPickedTrimId(id),
+          onCloseLinkModal: () => setLinkOpen(false),
+        }}
+      />
     </div>
   );
 }

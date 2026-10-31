@@ -1,9 +1,9 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "../../../services/api";
 import { Fp7Screen } from "./screens/Fp7Screen";
-import { fpButtonIs } from "./findPartsButton";
-import { buildFindPartsScreenData } from "./findPartsScreenData";
+import { buildFp7ViewModel } from "./findPartsViewModels";
 import type { FleetCar } from "./CarStep";
+import { usePartsActivity } from "./findPartsQueries";
 
 export function QuoteDialog({
   part,
@@ -24,12 +24,19 @@ export function QuoteDialog({
   const [targetPrice, setTargetPrice] = useState("");
   const [sent, setSent] = useState("");
   const [error, setError] = useState("");
-  const qtyInputId = useId();
   const car = cars.find((row) => row.vehicleId === vehicle);
-  const data = buildFindPartsScreenData({
+  const activity = usePartsActivity(true);
+  const pendingQuotes = (activity.data?.quotes?.items || []).length;
+  const offers = (part.offers as Array<{ supplier_name?: string; landedCostJmd?: number }> | undefined) || [];
+  const data = buildFp7ViewModel({
+    part,
     plate: car?.licensePlate || "—",
     vehicleLabel: car ? [car.year, car.make, car.model].filter(Boolean).join(" ") : "Vehicle",
     quoteRef: sent || "—",
+    offers,
+    stockQty: Number(part.stockQty || 0),
+    pendingQuoteCount: pendingQuotes,
+    trimLabel: String(part.trimLabel || part.variant || ""),
   });
 
   useEffect(() => {
@@ -57,44 +64,38 @@ export function QuoteDialog({
     }
   }
 
-  function onButton(label: string) {
-    if (fpButtonIs(label, "cancel", "close", "done")) {
-      onClose();
-      return;
-    }
-    if (fpButtonIs(label, "24h", "within 24")) setUrgency("within_24h");
-    else if (fpButtonIs(label, "urgent")) setUrgency("urgent");
-    else if (fpButtonIs(label, "low")) setUrgency("low");
-    else if (fpButtonIs(label, "normal")) setUrgency("normal");
-    else if (fpButtonIs(label, "decrease quantity")) setQty((value) => Math.max(1, value - 1));
-    else if (fpButtonIs(label, "increase quantity")) setQty((value) => Math.min(24, value + 1));
-    else if (fpButtonIs(label, "send", "broadcast")) void send();
-  }
-
   return (
     <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-inverse-surface/30 p-space-md">
       <div className="w-full max-w-4xl">
         {error ? <p className="text-error mb-space-sm">{error}</p> : null}
-        {sent ? <p className="mb-space-sm">Reference {sent}</p> : null}
-        <label className="sr-only" htmlFor={qtyInputId}>Quantity</label>
-        <input
-          id="qtyInput"
-          className="sr-only"
-          type="number"
-          min={1}
-          max={24}
-          value={qty}
-          onChange={(e) => setQty(Number(e.target.value) || 1)}
+        <Fp7Screen
+          data={data}
+          form={{
+            qty,
+            note,
+            vehicle,
+            workOrder,
+            targetPrice,
+            urgency,
+            sent,
+            cars,
+          }}
+          actions={{
+            onClose,
+            onDone: onClose,
+            onViewActivity: onClose,
+            onDecQty: () => setQty((value) => Math.max(1, value - 1)),
+            onIncQty: () => setQty((value) => Math.min(24, value + 1)),
+            onQtyChange: (value) => setQty(value),
+            onNoteChange: setNote,
+            onVehicleChange: setVehicle,
+            onWorkOrderChange: setWorkOrder,
+            onTargetPriceChange: setTargetPrice,
+            onUrgency: setUrgency,
+            onSend: () => { void send(); },
+            onCancel: onClose,
+          }}
         />
-        <textarea className="sr-only" value={note} onChange={(e) => setNote(e.target.value)} aria-label="Note" />
-        <select className="sr-only" value={vehicle} onChange={(e) => setVehicle(e.target.value)} aria-label="Vehicle">
-          {cars.map((row) => (
-            <option key={row.vehicleId} value={row.vehicleId}>{row.licensePlate || row.vehicleId}</option>
-          ))}
-        </select>
-        <input type="text" className="sr-only" value={workOrder} onChange={(e) => setWorkOrder(e.target.value)} aria-label="Work order" />
-        <input type="text" className="sr-only" value={targetPrice} onChange={(e) => setTargetPrice(e.target.value)} aria-label="Target price" />
-        <Fp7Screen actions={{ onButton }} data={data} />
       </div>
     </div>
   );
