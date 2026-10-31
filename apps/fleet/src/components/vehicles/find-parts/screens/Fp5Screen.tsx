@@ -23,16 +23,17 @@ export function Fp5Screen({ actions, data, partName }: { actions: Fp5Actions; da
   const titlePart = partName || data.componentTitle || "Part";
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const best = data.rows.find((row) => row.isBest) || data.rows[0];
-  const variantScopeLabel = data.activeTrimScope === "all"
-    ? `Fits all ${data.filterAllCount || 0} trims`
-    : `Only ${data.trimLabel || "this version"}`;
+  const fitsAllLabel = `Fits all ${data.filterAllCount || 0} trims`;
+  const onlyTrimLabel = data.trimLabel && data.trimLabel !== "None yet"
+    ? `Only ${data.trimLabel}`
+    : "Only this version";
   const sections = useMemo(() => (data.tierSections.length ? data.tierSections : []), [data.tierSections]);
 
   return (
     <div className="find-parts-screen-root">
       <div className="fp-screen-root">
-        <div className="max-w-[1440px] mx-auto px-margin-desktop py-space-xl flex flex-col w-full gap-space-xl">
-          <div className="sticky top-[92px] z-40 bg-surface-container-lowest shadow-sm rounded-lg px-space-lg py-space-sm flex flex-wrap items-center justify-between gap-space-md">
+        <div className="flex flex-col w-full gap-space-xl py-space-xl">
+          <div className="sticky top-0 z-20 bg-surface-container-lowest shadow-sm rounded-lg px-space-lg py-space-sm flex flex-wrap items-center justify-between gap-space-md">
             <div className="flex items-center flex-wrap gap-space-sm font-label-code text-caption text-on-surface-variant">
               <span className="text-secondary flex items-center gap-1">
                 <span className="material-symbols-outlined text-[15px]">inventory_2</span>
@@ -70,7 +71,7 @@ export function Fp5Screen({ actions, data, partName }: { actions: Fp5Actions; da
                 {data.trimLabel && data.trimLabel !== "None yet" ? ` (${data.trimLabel})` : ""}
               </h1>
               <p className="font-body-md text-body-md text-on-surface-variant">
-                Viewing verified compatible parts cataloged for chassis {data.chassisLabel !== "—" ? data.chassisLabel : "your vehicle"}.
+                Viewing verified compatible parts cataloged for {data.chassisLabel !== "—" && data.chassisLabel !== "None yet" ? `chassis ${data.chassisLabel}` : "your vehicle"}.
               </p>
             </div>
             <div className="flex items-center gap-space-sm bg-surface-container-lowest p-space-md rounded-xl shadow-sm">
@@ -92,10 +93,10 @@ export function Fp5Screen({ actions, data, partName }: { actions: Fp5Actions; da
             <span className="font-caption text-caption text-on-surface-variant uppercase font-semibold ml-auto">Trim Scope:</span>
             <div className="inline-flex p-0.5 rounded-lg bg-surface-container-low text-caption font-body-sm">
               <button type="button" className={`px-space-sm py-1 rounded transition-colors ${data.activeTrimScope === "all" ? "bg-surface-container-lowest text-primary font-semibold shadow-sm" : "text-on-surface-variant hover:text-on-surface"}`} onClick={() => actions.onTrimScope("all")}>
-                {variantScopeLabel}
+                {fitsAllLabel}
               </button>
               <button type="button" className={`px-space-sm py-1 rounded transition-colors ${data.activeTrimScope === "specific" ? "bg-surface-container-lowest text-primary font-semibold shadow-sm" : "text-on-surface-variant hover:text-on-surface"}`} onClick={() => actions.onTrimScope("specific")}>
-                {data.trimLabel || "This version"}
+                {onlyTrimLabel}
               </button>
             </div>
           </div>
@@ -119,8 +120,10 @@ export function Fp5Screen({ actions, data, partName }: { actions: Fp5Actions; da
                   <div className="font-label-code text-headline-sm md:text-headline-lg font-bold text-on-surface tracking-tight">
                     {best.brandLabel} {best.partNumber} — {best.partName}
                   </div>
-                  <p className="font-caption text-caption text-on-surface-variant">{data.gtinLine}</p>
-                  <p className="font-body-md text-body-md text-on-surface-variant">{data.scheduleLine}</p>
+                  <p className="font-caption text-caption text-on-surface-variant">{data.gtinLine !== "None yet" ? data.gtinLine : null}</p>
+                  {data.scheduleLine !== "None yet" ? (
+                    <p className="font-body-md text-body-md text-on-surface-variant">{data.scheduleLine}</p>
+                  ) : null}
                 </div>
                 <div className="flex flex-col gap-space-xs shrink-0 lg:w-64">
                   <button type="button" className="w-full h-10 px-space-md rounded-lg bg-primary text-on-primary font-body-sm font-semibold hover:bg-inverse-surface transition-all flex items-center justify-center gap-2 shadow-sm" onClick={actions.onUseInService}>
@@ -141,7 +144,7 @@ export function Fp5Screen({ actions, data, partName }: { actions: Fp5Actions; da
               <span className="font-headline-sm text-headline-sm text-on-surface">Structured Match Categories</span>
               <span className="font-label-code text-caption px-2 py-0.5 rounded bg-surface-container-high text-on-surface-variant">{data.filterAllCount} MATCHES FOUND</span>
             </div>
-            <span className="font-caption text-caption text-on-surface-variant hidden sm:inline">Click any row to reveal fitment specs &amp; depot storage bins</span>
+            <span className="font-caption text-caption text-on-surface-variant hidden sm:inline">Click any row to reveal fitment specs</span>
           </div>
 
           <div className="flex flex-col gap-space-lg">
@@ -175,6 +178,9 @@ export function Fp5Screen({ actions, data, partName }: { actions: Fp5Actions; da
                           <div className="flex items-center flex-wrap gap-space-sm">
                             <span className="font-headline-sm text-body-lg font-bold text-on-surface">{row.partName}</span>
                             <span className="font-label-code text-body-md font-semibold text-primary">{row.brandLabel} {row.partNumber}</span>
+                            {row.isOemTier ? (
+                              <span className="font-caption text-caption text-on-surface-variant">Direct drop-in replacement</span>
+                            ) : null}
                             {row.verified ? (
                               <span className="inline-flex items-center gap-1 text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded font-caption text-caption font-semibold">
                                 Verified

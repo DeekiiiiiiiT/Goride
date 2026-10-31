@@ -54,8 +54,8 @@ export function Fp3Screen({
     <div className="find-parts-screen-root">
 <div className="fp-screen-root"><div className="flex flex-col w-full">
 
-<div className="sticky top-26 z-30 w-full bg-surface-container-lowest shadow-sm">
-<div className="max-w-[1440px] mx-auto px-4 md:px-8 py-3 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+<div className="sticky top-0 z-20 w-full bg-surface-container-lowest shadow-sm">
+<div className="w-full py-3 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
 
 <nav aria-label="Step progress" className="flex items-center gap-1 sm:gap-2 overflow-x-auto py-1">
 <div className="flex items-center gap-2 group cursor-pointer shrink-0">
@@ -99,7 +99,7 @@ export function Fp3Screen({
 </div>
 </div>
 
-<div className="max-w-[1440px] mx-auto w-full px-4 md:px-8 py-8 space-y-8">
+<div className="w-full py-8 space-y-8">
 
 <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
 <div>
@@ -129,6 +129,7 @@ export function Fp3Screen({
 <span className="font-caption text-caption uppercase tracking-wider font-bold text-on-tertiary-fixed-variant bg-surface-container-lowest/80 px-2 py-0.5 rounded">
                 Scheduled Maintenance Active
               </span>
+<span className="font-label-code text-caption px-1.5 py-0.5 rounded bg-tertiary-fixed text-on-tertiary-fixed-variant font-medium">Due soon</span>
 <span className="font-label-code text-caption text-on-surface-variant">{data.odometerLabel} · {data.hubLabel} Hub Schedule</span>
 </div>
 <h2 className="font-headline-sm text-headline-sm text-on-surface">This car has {data.serviceDueRows.length} services due: {servicesLine}</h2>
@@ -308,7 +309,7 @@ export function Fp3Screen({
 <span className="material-symbols-outlined text-[20px] text-on-surface mt-0.5 shrink-0">info</span>
 <div>
 <span className="font-body-sm text-body-sm font-semibold text-on-surface">Telemetry & Mechanical Assessment:</span>
-<p className="font-body-sm text-body-sm text-on-surface-variant mt-0.5">{symptom.answerText !== "None yet" ? symptom.answerText : "Usually worn brake pads. Metal-on-metal squealing indicates pads have reached the built-in acoustic wear indicator strip. Continued friction without pad material will groove and ruin the brake rotor disc."}</p>
+<p className="font-body-sm text-body-sm text-on-surface-variant mt-0.5">{symptom.answerText}</p>
 </div>
 </div>
 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">

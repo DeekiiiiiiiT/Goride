@@ -31,8 +31,8 @@ export function Fp9Screen({
     <div className="find-parts-screen-root">
 <div className="fp-screen-root"><div className="flex flex-col w-full">
 
-<section className="w-full px-margin-desktop py-space-xl">
-<div className="max-w-[1400px] mx-auto flex flex-col gap-space-xl">
+<section className="w-full py-space-xl">
+<div className="w-full flex flex-col gap-space-xl">
 
 <div className="bg-surface-container-lowest rounded-xl shadow-sm p-space-md flex flex-col sm:flex-row sm:items-center justify-between gap-space-md">
 <div className="flex items-center gap-space-md">
@@ -226,7 +226,7 @@ export function Fp9Screen({
 </div>
 </section>
 
-<div className="px-margin-desktop pb-space-xl">
+<div className="pb-space-xl">
 <button type="button" className="px-space-md py-space-sm rounded-lg text-on-surface hover:bg-surface-container font-body-sm text-body-sm font-semibold flex items-center gap-2" onClick={actions.onBack}>
 <span className="material-symbols-outlined text-[18px]">arrow_back</span>
 <span>Back to Fleet maintenance</span>

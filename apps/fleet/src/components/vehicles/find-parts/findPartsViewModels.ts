@@ -45,25 +45,40 @@ export function buildFp2ViewModel(input: {
 }): Fp2ViewModel {
   const title = [input.year, input.make, input.model].filter(Boolean).join(" ");
   const versionsRaw = input.options?.versions || [];
-  const trimCode = orDash(versionsRaw[0]?.name?.split(" ")[0] || input.model?.slice(0, 3).toUpperCase() || "—");
-  const defaultTemplates: Fp2VersionRow[] = [
-    { id: "hybrid", title: "1.5 hybrid", subtitle: `${trimCode} · LEB · 7-speed DCT`, chassisHint: `${trimCode}-1000001+`, fleetShareLabel: `Most common in fleet (${orNoneYet(String((input.fleetRows?.[0] as { hub?: string })?.hub || "Fleet hub"))})`, selected: true },
-    { id: "petrol_15", title: "1.5 petrol", subtitle: "GK5 · L15B · CVT", chassisHint: "GK5-1200001+", fleetShareLabel: "Standard i-VTEC Sport / RS" },
-    { id: "petrol_13", title: "1.3 petrol", subtitle: "GK3 · L13B · CVT", chassisHint: "GK3-1200001+", fleetShareLabel: "Entry JDM petrol engine" },
-    { id: "any", title: "Not sure", subtitle: "Universal Catalog Mode", chassisHint: "Annotated Comparison", fleetShareLabel: "Shows all matching options" },
-  ];
-  const versions: Fp2VersionRow[] = versionsRaw.length
-    ? versionsRaw.map((v, index) => ({
+  const trimCode = orDash(versionsRaw[0]?.name?.split(" ")[0] || "—");
+  const notSureRow: Fp2VersionRow = {
+    id: "any",
+    title: "Not sure",
+    subtitle: "Universal Catalog Mode",
+    chassisHint: "—",
+    fleetShareLabel: "Shows all matching options",
+  };
+  const maxFleetCount = versionsRaw.reduce((max, v) => Math.max(max, Number(v.fleetCount ?? 0)), 0);
+  let versions: Fp2VersionRow[] = [];
+  if (versionsRaw.length) {
+    versions = versionsRaw.map((v, index) => {
+      const serialFrom = String(v.chassis_serial_from ?? "").trim();
+      const prefix = String(v.chassisPrefix ?? "").trim();
+      const chassisHint = serialFrom || prefix || "Chassis match";
+      const fleetCount = Number(v.fleetCount ?? 0);
+      let fleetShareLabel = fleetCount > 0 ? `${fleetCount} in fleet` : "None yet";
+      if (maxFleetCount > 0 && fleetCount === maxFleetCount) {
+        fleetShareLabel = "Most common in fleet";
+      }
+      return {
         id: String(v.id),
         title: orNoneYet(v.name || v.description),
         subtitle: orNoneYet(v.description || v.name),
-        chassisHint: orDash((v as { chassisPrefix?: string }).chassisPrefix),
-        fleetShareLabel: v.fleetCount != null ? `${v.fleetCount} in fleet` : "None yet",
+        chassisHint: orDash(chassisHint),
+        fleetShareLabel,
         selected: index === 0,
-      }))
-    : defaultTemplates;
-  if (versionsRaw.length && !versions.some((v) => v.id === "any")) {
-    versions.push(defaultTemplates[3]);
+      };
+    });
+    if (!versions.some((v) => v.id === "any")) {
+      versions.push({ ...notSureRow, selected: false });
+    }
+  } else {
+    versions = [{ ...notSureRow, selected: true }];
   }
   const fleetCount = input.fleetRows?.length ?? 0;
   const fitPct = fleetCount > 0 ? formatPercent(100) : "0%";
@@ -168,17 +183,16 @@ function dedupeServiceDueRows(rows: Fp3ServiceDueRow[]): Fp3ServiceDueRow[] {
   return out;
 }
 
-function fp3TelematicsLine(ctx: Record<string, unknown>, hubLabel: string): string {
+function fp3TelematicsLine(ctx: Record<string, unknown>): string {
   const note = ctx.latestNote as { text?: string; at?: string | null } | null | undefined;
   const text = note?.text ? String(note.text).trim() : "";
   if (!text) return "None yet";
   const at = note?.at ? new Date(String(note.at)) : null;
-  const when = at && !Number.isNaN(at.getTime())
-    ? at.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" })
-    : "";
-  return when
-    ? `Automated telematics flag from ${hubLabel} Depot Diagnostic bay #3 (Logged ${when}).`
-    : `Automated telematics flag from ${hubLabel} Depot Diagnostic bay #3 (${text}).`;
+  if (at && !Number.isNaN(at.getTime())) {
+    const datePart = at.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    return `${text} (Logged ${datePart})`;
+  }
+  return text;
 }
 
 export type Fp3ViewModel = {
@@ -276,7 +290,6 @@ function fp3AreasFromBrowse(browse: Fp3BrowseInput | undefined, selectedAreaId?:
 function fp3SymptomWeight(rank: number): string {
   const pct = Math.max(55, 100 - (Math.max(rank, 1) - 1) * 12);
   if (rank <= 1) return `High probability (${formatPercent(pct)})`;
-  if (rank === 2) return `Inspect for scoring (${formatPercent(pct)})`;
   return formatPercent(pct);
 }
 
@@ -389,7 +402,7 @@ export function buildFp3ViewModel(input: {
     serviceDueRows: serviceDueRows.length ? serviceDueRows : [{ id: "empty", name: "None yet" }],
     hubLabel,
     orgShortCode,
-    telematicsLine: fp3TelematicsLine(ctx, hubLabel),
+    telematicsLine: fp3TelematicsLine(ctx),
     chassisCode: orDash(String(ctx.chassis_code || "")),
   };
 }
@@ -413,6 +426,7 @@ export type Fp4ViewModel = {
   hubLabel: string;
   fleetTip: string;
   trimLabel: string;
+  partLabel: string;
   options: Fp4OptionRow[];
 };
 
@@ -461,6 +475,7 @@ export function buildFp4ViewModel(input: {
     hubLabel: orNoneYet(String(ctx.hub_label || ctx.hubLabel || "Fleet hub")),
     fleetTip: orNoneYet(String(ctx.fleet_tip || ctx.fleetTip || "")),
     trimLabel: orNoneYet(String(ctx.trim || ctx.variant || "")),
+    partLabel: orNoneYet(String(ctx.part_label || ctx.partName || "parts")),
     options: positions.map((p) => ({
       id: p.id,
       heading: fp4Heading(p.id),
@@ -569,8 +584,7 @@ function rowFromItem(
         { label: "Material", value: orDash(String((item as { material?: string }).material || "—")) },
       ];
   const interchangeRaw = (item.interchange ?? item.sisterNames ?? "") as string;
-  const schedule = String(item.maintenance_schedule || item.service_schedule || "").trim()
-    || "Every 10,000 km or 6 months per Roam Fleet Preventive Manual.";
+  const schedule = String(item.maintenance_schedule || item.service_schedule || "").trim();
   return {
     id,
     tier,
@@ -588,7 +602,7 @@ function rowFromItem(
     scopeNote: trimScopeLabel || "Only this version",
     specLines,
     interchangeLine: orNoneYet(String(interchangeRaw || "—")),
-    scheduleLine: schedule,
+    scheduleLine: schedule || "None yet",
     emptyGapNote: "",
   };
 }
@@ -639,11 +653,17 @@ export function buildFp5ViewModel(input: {
   const chassisRaw = String(ctx.chassis_code || ctx.chassis || (input.result as { chassis?: string })?.chassis || "").trim();
   const chassis = chassisRaw ? orNoneYet(chassisRaw) : orNoneYet(String((input.result as { chassis?: string })?.chassis || ""));
   const gtin = String((bestItem as { gtin?: string } | undefined)?.gtin || "").trim();
+  const bestSpecs = Array.isArray((bestItem as { specs?: unknown })?.specs)
+    ? ((bestItem as { specs?: Array<{ key?: string; value?: string }> }).specs || [])
+    : [];
+  const oemSpecLine = bestSpecs.map((s) => String(s.value || "").trim()).find(Boolean) || "";
   const gtinLine = gtin
-    ? `GTIN: ${gtin} · ${orNoneYet(best?.brandLabel)}`
-    : orNoneYet(best?.partNumber || "—");
+    ? `GTIN: ${gtin}`
+    : oemSpecLine
+      ? oemSpecLine
+      : "None yet";
   const schedule = String((bestItem as { maintenance_schedule?: string } | undefined)?.maintenance_schedule || "").trim();
-  const scheduleLine = schedule || "Every 10,000 km or 6 months per Roam Fleet Preventive Manual.";
+  const scheduleLine = schedule || "None yet";
   const photoVerified = Boolean((bestItem as { photo_verified?: boolean } | undefined)?.photo_verified);
   const photoMatchLabel = photoVerified ? "PHOTO MATCH: Verified" : "PHOTO MATCH: —";
   const interchangeRaw = (bestItem as { interchange?: string; sisterNames?: string } | undefined)?.interchange
@@ -838,13 +858,13 @@ export function buildFp6ViewModel(input: {
         partNumber: orDash(row.partNumber),
         description: orNoneYet(row.description),
         priceLabel: formatPriceJmd(row.priceJmd),
-        shelfCountLabel: row.shelfQty != null && row.shelfQty > 0 ? `${row.shelfQty} on shelf` : "None yet",
+        shelfCountLabel: row.shelfQty != null && row.shelfQty > 0 ? String(row.shelfQty) : "None yet",
       }))
     : [{
         partNumber: orDash(part.oem_part_number),
-        description: orNoneYet(part.name ? `${part.name} with O-ring & bypass valve` : part.name),
+        description: orNoneYet(part.name),
         priceLabel: formatPriceJmd(offersRaw[0]?.landedCostJmd),
-        shelfCountLabel: stockQty > 0 ? `${stockQty} on shelf` : "None yet",
+        shelfCountLabel: "None yet",
       }];
   const variantLabels = input.variantLabels?.length
     ? input.variantLabels
@@ -866,11 +886,11 @@ export function buildFp6ViewModel(input: {
     plate: orDash(String(ctx.plate || "")),
     vinLabel: orDash(String(ctx.vin || ctx.chassis || ctx.trim || "")),
     odometerLabel: formatKm(Number(ctx.odometer)),
-    stockLabel: stockQty > 0 ? `On your shelf — ${stockQty} (${orNoneYet(input.item?.stockLocation || "hub")})` : "None yet",
+    stockLabel: "None yet",
     hubLabel: orNoneYet(String(ctx.hub_label || ctx.hubLabel || "Fleet hub")),
     priceLabel: formatPriceJmd(offersRaw[0]?.landedCostJmd),
-    serviceLine: orNoneYet(String(ctx.last_service || ctx.lastService || "Oil & filter exchange")),
-    descriptionLine: orNoneYet(part.name ? `${part.name} with O-ring & bypass valve` : ""),
+    serviceLine: orNoneYet(String(ctx.last_service || ctx.lastService || "")),
+    descriptionLine: orNoneYet(part.name),
     offers,
     crossRefs: cross.length ? cross : ["None yet"],
     crossRefRows,
@@ -982,9 +1002,6 @@ export function buildFp8ViewModel(input: {
   const health = input.healthPct;
   const partName = orNoneYet(input.partName);
   const positionLabel = orNoneYet(input.positionLabel || "front");
-  const positionSide = positionLabel.toLowerCase().includes("rear") || positionLabel.toLowerCase().includes("back")
-    ? "rear"
-    : "front";
   return {
     plate: orDash(input.plate),
     vehicleLabel: orNoneYet(input.vehicleLabel),
@@ -992,7 +1009,7 @@ export function buildFp8ViewModel(input: {
     chassisLabel: orDash(input.chassisLabel),
     partName,
     positionLabel,
-    headlineLine: `We don't have ${partName.toLowerCase() === "none yet" ? "this part" : partName} for ${positionSide} side of this car on file yet.`,
+    headlineLine: `We don't have ${partName.toLowerCase() === "none yet" ? "this part" : partName} for this car on file yet.`,
     hubLabel: orNoneYet(input.hubLabel || "Fleet hub"),
     vehiclePhotoUrl: catalogPhotoUrl(input.vehiclePhotoUrl),
     runnerOnline: Boolean(input.runnerOnline),
@@ -1063,7 +1080,7 @@ export function buildFp9ViewModel(input: {
     plate: orDash(input.plate),
     plateSecondary: orDash(input.plateSecondary),
     vehicleLabel: orNoneYet(title),
-    depotStockLabel: count > 0 ? `${count.toLocaleString()} parts in hub bins waiting for trim classification.` : "None yet in hub bins waiting for trim classification.",
+    depotStockLabel: "None yet",
     trimLabel: orNoneYet(trims[0]?.title),
     hubLabel: orNoneYet(String(input.plate ? "Fleet hub" : "Fleet hub")),
     trims,
@@ -1109,15 +1126,24 @@ function formatActivityDateKm(row: ActivityRow, dateKeys: string[], kmKeys: stri
   return km != null && km > 0 ? `${date} (${formatKm(km)})` : date;
 }
 
+function mapRequestStatusLabel(raw: string): string {
+  const s = raw.trim().toLowerCase();
+  if (s === "found" || s === "quoted" || s === "resolved" || s === "closed") return "Found";
+  if (s === "pending" || s === "open") return "Pending";
+  if (s === "looking" || s === "sourcing" || !s || s === "none yet") return "Looking";
+  return raw.trim() || "Looking";
+}
+
 function mapRequestCard(row: ActivityRow, index: number): Fp10ActivityCard {
   const status = orNoneYet(activityStr(row, "status"));
+  const statusLabel = mapRequestStatusLabel(status);
   return {
     id: String(row.id || `req-${index}`),
     kind: "request",
     title: orNoneYet(activityStr(row, "need_text", "title")),
     subtitle: status,
     meta: formatActivityDate(row.created_at),
-    statusLabel: status,
+    statusLabel,
   };
 }
 
@@ -1172,18 +1198,11 @@ function computeSlaPercent(requestItems: ActivityRow[], quoteItems: ActivityRow[
 
 function slaBarFromQuote(row: ActivityRow | undefined): { percent: number; label: string } {
   if (!row) return { percent: 0, label: "None yet" };
-  const dueRaw = activityStr(row, "reply_due_at");
-  const createdRaw = activityStr(row, "created_at");
-  if (!dueRaw || !createdRaw) return { percent: 0, label: "None yet" };
-  const due = Date.parse(dueRaw);
-  const start = Date.parse(createdRaw);
-  if (!Number.isFinite(due) || !Number.isFinite(start) || due <= start) return { percent: 0, label: "None yet" };
-  const total = due - start;
-  const left = due - Date.now();
-  const percent = Math.max(0, Math.min(100, Math.round((left / total) * 100)));
-  if (left <= 0) return { percent: 0, label: "SLA window elapsed" };
-  const hours = Math.max(1, Math.round(left / 3_600_000));
-  return { percent, label: `${hours}h remaining on reply SLA` };
+  const status = activityStr(row, "status").toLowerCase();
+  if (status === "open" || status === "pending") {
+    return { percent: 50, label: "Awaiting response from Roam" };
+  }
+  return { percent: 0, label: "None yet" };
 }
 
 export type Fp10ActivityCard = {
@@ -1337,27 +1356,45 @@ export function buildFp10ViewModel(input: {
   };
 }
 
-export type Fp11PreviewTab = "all" | "loading" | "error" | "unlisted" | "noperm";
+export type Fp11PreviewTab = "loading" | "error" | "unlisted" | "noperm";
 
 export type Fp11ViewModel = {
+  state: Fp11PreviewTab;
   errorCode: string;
+  httpStatusLine: string;
+  errorMessage: string;
   attemptLabel: string;
+  connectionStatusLabel: string;
+  vehicleChip: string;
+  sectionChip: string;
   userEmail: string;
   roleLabel: string;
   adminLabel: string;
   adminContactLine: string;
   missingModel: string;
   vinNote: string;
-  latencyLabel: string;
   hubLabel: string;
   vehicleLabel: string;
-  hubStatusLabel: string;
+  /** @deprecated stitch-only; equals state */
   activePreviewTab: Fp11PreviewTab;
+  hubStatusLabel: string;
+  latencyLabel: string;
 };
 
+function formatHttpStatusLine(status: number, message: string): string {
+  if (!status) return message.trim() || "Request failed";
+  const short = message.trim() || "Error";
+  return `HTTP ${status} ${short}`.slice(0, 120);
+}
+
 export function buildFp11ViewModel(input: {
+  state?: Fp11PreviewTab;
+  previewTab?: Fp11PreviewTab;
   errorCode?: string;
+  httpStatus?: number;
+  errorMessage?: string;
   attempts?: number;
+  latencyMs?: number | null;
   userEmail?: string;
   role?: string;
   adminName?: string;
@@ -1365,13 +1402,34 @@ export function buildFp11ViewModel(input: {
   missingModel?: string;
   hubLabel?: string;
   vehicleLabel?: string;
-  previewTab?: Fp11PreviewTab;
+  vehicleChip?: string;
+  sectionLabel?: string;
 }): Fp11ViewModel {
-  const attempts = input.attempts ?? 0;
-  const hubStatusLabel = "HUB STATUS: OPERATIONAL";
+  const state = input.state ?? input.previewTab ?? "error";
+  const attempts = Math.min(3, Math.max(0, input.attempts ?? 0));
+  const attemptNum = attempts > 0 ? attempts : 1;
+  const latency = input.latencyMs != null && input.latencyMs >= 0 ? input.latencyMs : null;
+  const connectionStatusLabel = latency != null
+    ? `Check connection status (${latency}ms)`
+    : "Check connection status";
+  const vehicleChip = orNoneYet(
+    input.vehicleChip
+    || input.vehicleLabel
+    || "Vehicle",
+  );
+  const sectionChip = orNoneYet(input.sectionLabel || "Part section");
+  const errorMessage = input.errorMessage?.trim()
+    || "The parts database did not respond in time. Your vehicle selection and entered notes are preserved.";
+  const httpStatus = input.httpStatus ?? 0;
   return {
-    errorCode: orNoneYet(input.errorCode || "TIMEOUT"),
-    attemptLabel: attempts > 0 ? `ATTEMPT: ${attempts} OF 3` : "ATTEMPT: 0 OF 3",
+    state,
+    errorCode: orNoneYet(input.errorCode || (httpStatus ? String(httpStatus) : "TIMEOUT")),
+    httpStatusLine: formatHttpStatusLine(httpStatus, input.errorMessage || input.errorCode || "GATEWAY_TIMEOUT"),
+    errorMessage,
+    attemptLabel: `ATTEMPT: ${attemptNum} OF 3`,
+    connectionStatusLabel,
+    vehicleChip,
+    sectionChip,
     userEmail: orNoneYet(input.userEmail),
     roleLabel: orNoneYet(input.role),
     adminLabel: orNoneYet(input.adminName || "Fleet lead"),
@@ -1379,12 +1437,12 @@ export function buildFp11ViewModel(input: {
       ? `${input.adminName}${input.adminRole ? ` (${input.adminRole})` : ""}`
       : "None yet",
     missingModel: orNoneYet(input.missingModel),
-    vinNote: "VIN uncatalogued / pre-2002 M vehicle",
-    latencyLabel: "< 1,400ms",
+    vinNote: "VIN uncatalogued / pre-2002 JDM vehicle",
     hubLabel: orNoneYet(input.hubLabel || "Fleet hub"),
     vehicleLabel: orNoneYet(input.vehicleLabel || "Vehicle"),
-    hubStatusLabel,
-    activePreviewTab: input.previewTab || "all",
+    activePreviewTab: state,
+    hubStatusLabel: "",
+    latencyLabel: latency != null ? `${latency}ms` : "",
   };
 }
 

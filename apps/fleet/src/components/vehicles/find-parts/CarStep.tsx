@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { api } from "../../../services/api";
 import type { PartsActivity } from "./PartsActivityPanel";
 import { PartsActivityPanel } from "./PartsActivityPanel";
 import { usePartsMyVehicles, usePartsVehicleOptions, usePartsTerm } from "./findPartsQueries";
@@ -19,6 +20,12 @@ function vehicleKey(row: PartsMyVehicleRow, index: number, cars: FleetCar[]) {
 
 function vehicleLabel(row: PartsMyVehicleRow, car?: FleetCar) {
   return String(row.label || row.name || [car?.year, car?.make, car?.model].filter(Boolean).join(" ") || "None yet");
+}
+
+function serviceDueOnCard(row: PartsMyVehicleRow): string {
+  const raw = row.service_due ?? (row as { serviceDue?: string }).serviceDue;
+  const text = raw != null ? String(raw).trim() : "";
+  return text && text !== "None yet" ? text : "";
 }
 
 function vehiclePlate(row: PartsMyVehicleRow, car?: FleetCar) {
@@ -45,6 +52,9 @@ export function CarStep({
   const [model, setModel] = useState("");
   const [year, setYear] = useState("");
   const [typed, setTyped] = useState("");
+  const [partsRequestOpen, setPartsRequestOpen] = useState(false);
+  const [partsRequestText, setPartsRequestText] = useState("");
+  const [partsRequestSent, setPartsRequestSent] = useState(false);
   const options = usePartsVehicleOptions(make || undefined, model || undefined, Boolean(make));
   const term = usePartsTerm(typed, typed.trim().length >= 2);
 
@@ -128,9 +138,9 @@ export function CarStep({
                           <span className="w-1.5 h-1.5 rounded-full bg-secondary" />
                           Verified specs
                         </span>
-                        {row.service_due ? (
+                        {serviceDueOnCard(row) ? (
                           <span className="inline-flex items-center gap-1 px-space-xs py-0.5 rounded bg-surface-container-highest font-caption text-caption text-on-surface-variant">
-                            Service due: {String(row.service_due)}
+                            Service due: {serviceDueOnCard(row)}
                           </span>
                         ) : row.parts_on_shelf != null && Number(row.parts_on_shelf) > 0 ? (
                           <span className="inline-flex items-center gap-1 px-space-xs py-0.5 rounded bg-surface-container-highest font-caption text-caption text-on-surface-variant">
@@ -237,8 +247,62 @@ export function CarStep({
             </div>
           </div>
         </div>
-        <PartsActivityPanel activity={activity} onSeeAll={onSeeAll} onAsk={onAsk} />
+        <div className="lg:col-span-4 flex flex-col gap-space-lg">
+          <div className="bg-surface-container-lowest rounded-xl p-space-md shadow-sm">
+            <button type="button" className="w-full py-2 px-space-md bg-surface-container-low hover:bg-surface-container text-on-surface font-body-sm text-body-sm font-semibold rounded shadow-sm flex items-center justify-center gap-space-xs" onClick={() => setPartsRequestOpen(true)}>
+              <span className="material-symbols-outlined text-[16px]">inventory_2</span>
+              <span>Submit Parts Request</span>
+            </button>
+          </div>
+          <PartsActivityPanel activity={activity} onSeeAll={onSeeAll} onAsk={onAsk} />
+        </div>
       </div>
+      {partsRequestOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-inverse-surface/30 backdrop-blur-xs p-space-md">
+          <div className="bg-surface-container-lowest rounded-xl max-w-md w-full p-space-xl shadow-xl flex flex-col">
+            <div className="flex items-center justify-between pb-space-md">
+              <div className="font-headline-sm text-headline-sm text-on-surface">Submit Parts Request</div>
+              <button type="button" className="text-on-surface-variant hover:text-on-surface p-1" onClick={() => { setPartsRequestOpen(false); setPartsRequestSent(false); }} aria-label="Close">
+                <span className="material-symbols-outlined text-[20px]">close</span>
+              </button>
+            </div>
+            <p className="font-body-sm text-body-sm text-on-surface-variant mb-space-md">
+              Describe the part you need. Roam will add it to Find parts when cataloged.
+            </p>
+            <div className="flex flex-col gap-space-sm mb-space-lg">
+              <label className="font-caption text-caption uppercase text-on-surface-variant font-semibold" htmlFor="fp1-parts-request">Part description or OEM number</label>
+              <input
+                id="fp1-parts-request"
+                className="h-10 px-space-md bg-surface-container-low rounded-lg font-body-sm text-body-sm text-on-surface focus:outline-none"
+                placeholder="e.g. Front brake pad set"
+                type="text"
+                value={partsRequestText}
+                onChange={(e) => setPartsRequestText(e.target.value)}
+              />
+            </div>
+            {partsRequestSent ? (
+              <p className="font-body-sm text-body-sm text-secondary mb-space-md">Request sent.</p>
+            ) : null}
+            <div className="flex items-center justify-end gap-space-sm">
+              <button type="button" className="px-space-md py-2 rounded-lg bg-surface-container-low text-on-surface font-body-sm text-body-sm font-medium" onClick={() => setPartsRequestOpen(false)}>Cancel</button>
+              <button
+                type="button"
+                className="px-space-lg py-2 rounded-lg bg-primary text-on-primary font-body-sm text-body-sm font-semibold"
+                onClick={() => {
+                  const note = partsRequestText.trim();
+                  if (!note) return;
+                  void api.requestFindPart({ note, vehicleId: null }).then(() => {
+                    setPartsRequestSent(true);
+                    setPartsRequestText("");
+                  }).catch(() => undefined);
+                }}
+              >
+                Send request
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

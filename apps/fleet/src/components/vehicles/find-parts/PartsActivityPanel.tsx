@@ -26,7 +26,7 @@ export function PartsActivityPanel({
   const requests = activity?.requests;
   const alerts = activity?.repeatAlerts;
   return (
-    <div className="lg:col-span-4 flex flex-col gap-space-lg">
+    <div className="flex flex-col gap-space-lg">
       <div className="bg-surface-container-lowest rounded-xl p-space-xl shadow-sm flex flex-col">
         <div className="flex items-center justify-between pb-space-md mb-space-md">
           <div className="font-headline-sm text-headline-sm text-on-surface">Your parts activity</div>

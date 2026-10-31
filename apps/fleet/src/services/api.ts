@@ -2,6 +2,17 @@ import { projectId } from '../utils/supabase/info';
 import { supabase } from '../utils/supabase/client';
 import { AuthRequiredError, getHeaders as sharedGetHeaders, requireAuthHeaders } from '../utils/authHeaders';
 export { AuthRequiredError };
+
+/** Failed fleet-core request with HTTP status for Find parts state cards. */
+export class FleetCoreRequestError extends Error {
+  readonly status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = "FleetCoreRequestError";
+    this.status = status;
+  }
+}
 import { Trip, ImportBatch, CanonicalBatchAuditSnapshot, DriverMetrics, VehicleMetrics, FinancialTransaction, LedgerEntry, LedgerFilterParams, PaginatedLedgerResponse, LedgerDriverOverview, IndriveWalletSummary, DisputeRefund } from '../types/data';
 import type { AppendCanonicalLedgerResult, CanonicalLedgerEventInput } from '../types/ledgerCanonical';
 import { OdometerReading } from '../types/vehicle';
@@ -2941,7 +2952,17 @@ export const api = {
       const q = new URLSearchParams({ vehicleId });
       if (componentId) q.set("componentId", componentId);
       const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/vehicle-context?${q}`, { headers: await getHeaders(null) });
-      if (!response.ok) throw new Error("Could not load the car");
+      if (!response.ok) {
+        const raw = await response.text();
+        let message = "Could not load the car";
+        try {
+          const body = JSON.parse(raw) as { error?: string };
+          if (typeof body.error === "string" && body.error.trim()) message = body.error.trim();
+        } catch {
+          if (raw.trim()) message = raw.trim();
+        }
+        throw new FleetCoreRequestError(response.status, message);
+      }
       return response.json();
   },
 

@@ -12,7 +12,7 @@ export type Fp6Actions = {
 export function Fp6Screen({ actions, data }: { actions: Fp6Actions; data: Fp6ViewModel }) {
   return (
     <div className="find-parts-screen-root">
-<div className="fp-screen-root"><div className="max-w-[1440px] mx-auto px-margin-desktop py-space-xl"><div className="flex flex-col w-full relative">
+<div className="fp-screen-root"><div className="w-full py-space-xl"><div className="flex flex-col w-full relative">
 
 <div className="w-full flex flex-col gap-space-xl opacity-45 pointer-events-none select-none filter blur-[0.5px]">
 

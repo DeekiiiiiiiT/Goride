@@ -32,7 +32,7 @@ export function Fp12Screen({ actions, data, partName }: { actions: Fp5Actions; d
   return (
     <div className="find-parts-screen-root">
       <div className="fp-screen-root flex flex-col w-full pb-28">
-        <section className="px-margin py-space-xs flex items-center gap-space-xs bg-surface-container-lowest shadow-sm sticky top-0 z-10 overflow-x-auto">
+        <section className="py-space-xs flex items-center gap-space-xs bg-surface-container-lowest shadow-sm sticky top-0 z-20 overflow-x-auto">
           <button type="button" className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-secondary-container text-on-secondary-fixed text-caption font-caption whitespace-nowrap" onClick={actions.onChangeCar}>
             <span className="font-label-plate text-caption tracking-wider">{data.plate}</span>
             <span className="truncate max-w-[110px]">{data.fitYearLabel}</span>
@@ -57,7 +57,8 @@ export function Fp12Screen({ actions, data, partName }: { actions: Fp5Actions; d
                 <span className="material-symbols-outlined text-[13px]">verified</span>
                 Verified Fit
               </span>
-              <span className="font-caption text-caption text-on-primary/80">Factory matched</span>
+              <span className="font-caption text-caption text-on-primary/80">Genuine OEM Spec</span>
+              <span className="font-caption text-caption text-on-primary/70">Fitment spec</span>
               <h3 className="font-headline-sm text-headline-sm leading-snug">{best.brandLabel} {best.partNumber}</h3>
               <p className="font-body-sm text-body-sm text-surface-container-high/90">{best.partName}</p>
               <button type="button" className="w-full h-11 bg-surface-container-lowest text-primary rounded-lg font-body-sm font-semibold flex items-center justify-center gap-2 shadow-sm" onClick={actions.onUseInService}>
@@ -105,6 +106,7 @@ export function Fp12Screen({ actions, data, partName }: { actions: Fp5Actions; d
         <section className="px-margin mt-space-md flex flex-col gap-space-sm">
           <details className="bg-surface-container-lowest rounded-xl shadow-sm p-space-md">
             <summary className="font-headline-sm text-body-sm font-semibold text-on-surface cursor-pointer">Your Parts Activity</summary>
+            <p className="font-body-sm text-caption text-on-surface-variant mt-space-sm">Awaiting response from Roam</p>
             <p className="font-body-sm text-caption text-on-surface-variant mt-space-sm">Repeat Part Notice: wear alerts appear here when the same component is replaced unusually often.</p>
           </details>
         </section>

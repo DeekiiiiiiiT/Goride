@@ -18,7 +18,7 @@ export function Fp2Screen({ actions, data }: { actions: Fp2Actions; data: Fp2Vie
 <div className="fp-screen-root"><div className="flex flex-col w-full">
 
 <div className="bg-surface-container-low">
-<div className="max-w-[1400px] mx-auto px-margin md:px-margin-desktop py-space-md">
+<div className="w-full py-space-md">
 <div className="flex items-center justify-between flex-wrap gap-y-space-sm">
 <ol className="flex items-center gap-space-md sm:gap-space-xl flex-wrap">
 
@@ -55,8 +55,8 @@ export function Fp2Screen({ actions, data }: { actions: Fp2Actions; data: Fp2Vie
 </div>
 </div>
 
-<div className="sticky top-26 z-40 bg-surface-container-lowest/95 backdrop-blur-md shadow-sm">
-<div className="max-w-[1400px] mx-auto px-margin md:px-margin-desktop py-2.5 flex items-center justify-between">
+<div className="sticky top-0 z-20 w-full bg-surface-container-lowest shadow-sm">
+<div className="w-full py-2.5 flex items-center justify-between">
 <div className="flex items-center gap-space-md">
 <div className="w-8 h-8 rounded bg-surface-container flex items-center justify-center text-primary">
 <span className="material-symbols-outlined text-[20px]">directions_car</span>
@@ -77,7 +77,7 @@ export function Fp2Screen({ actions, data }: { actions: Fp2Actions; data: Fp2Vie
 </div>
 </div>
 
-<div className="max-w-[1400px] mx-auto w-full px-margin md:px-margin-desktop py-space-xl">
+<div className="w-full py-space-xl">
 <div className="grid grid-cols-1 lg:grid-cols-12 gap-space-xl items-start">
 
 <section className="lg:col-span-8 flex flex-col gap-space-lg">
@@ -122,6 +122,18 @@ export function Fp2Screen({ actions, data }: { actions: Fp2Actions; data: Fp2Vie
 </div>
 </label>
 ))}
+</div>
+
+<div className="mt-space-md p-space-md rounded-lg bg-surface-container-low border border-outline-variant/30">
+<div className="flex flex-col gap-space-sm">
+<span className="font-label-code text-caption text-secondary">Universal Catalog Mode</span>
+<p className="font-body-sm text-body-sm text-on-surface-variant">
+              We&apos;ll present items that fit each variant and flag parts with a color-coded version chip so technicians never install incompatible spares.
+            </p>
+<div className="font-label-code text-caption text-on-surface">
+<span className="text-secondary">Filter mode:</span> Version-specific fitment
+</div>
+</div>
 </div>
 
 <div className="mt-space-lg p-space-md rounded-lg bg-surface-container flex items-start gap-space-md shadow-sm">

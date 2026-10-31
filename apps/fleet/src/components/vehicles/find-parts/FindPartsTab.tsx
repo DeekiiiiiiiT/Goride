@@ -17,6 +17,7 @@ import { usePartsActivity } from "./findPartsQueries";
 import { Fp11Screen, type Fp11Actions } from "./screens/Fp11Screen";
 import { buildFp11ViewModel, type Fp11PreviewTab } from "./findPartsViewModels";
 import { clearFleetMaintenanceSearch, navigateFleetMaintenanceTab, notifyPartsAdmin } from "./findPartsActions";
+import { fleetCoreErrorDetails, formatFindPartsVehicleChip, findPartsConnectionLatencyMs } from "./findPartsErrors";
 import "./findParts.css";
 
 type Step = "car" | "version" | "part" | "position" | "results" | "request" | "link" | "missing";
@@ -66,7 +67,7 @@ export function FindPartsTab({
   const fp11Admin = orgAdmin.data?.name
     ? { adminName: orgAdmin.data.name, adminRole: orgAdmin.data.role || undefined }
     : {};
-  const [fp11PreviewTab, setFp11PreviewTab] = useState<Fp11PreviewTab>("all");
+  const [fp11PreviewTab, setFp11PreviewTab] = useState<Fp11PreviewTab>("error");
   const deepLinkGateDone = useRef(false);
 
   function writeUrl(next: { vehicle?: string; part?: string; pos?: string; view?: string }) {
@@ -117,7 +118,10 @@ export function FindPartsTab({
       } else {
         setStep(params.get("part") ? "results" : "part");
       }
-    }).catch((err: unknown) => setError(err instanceof Error ? err.message : "Could not load parts"));
+    }).catch((err: unknown) => {
+      const { message } = fleetCoreErrorDetails(err);
+      setError(message);
+    });
   }
 
   useEffect(() => {
@@ -129,8 +133,8 @@ export function FindPartsTab({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- deep-link once on mount
   }, [canView]);
 
-  function fp11HealthFields(previewTab: Fp11PreviewTab) {
-    return { previewTab };
+  function fp11HealthFields(state: Fp11PreviewTab) {
+    return { state, previewTab: state };
   }
 
   function requestPartsAccess() {
@@ -195,20 +199,16 @@ export function FindPartsTab({
   if (!canView) {
     return (
       <div className="fleet-find-parts-stitch p-space-xl">
-        <h2 className="text-headline-lg">Role Authorization Gate</h2>
-        <p>You don&apos;t have access to vehicle parts. Ask your fleet admin.</p>
-        <p className="font-body-sm text-body-sm">Signed in as {user?.email || "unknown"} · role {role || "unknown"}</p>
-        <button type="button" onClick={() => { window.location.search = ""; }}>Back to Fleet maintenance</button>
         <Fp11Screen
           data={buildFp11ViewModel({
             userEmail: user?.email,
             role: role ?? undefined,
             errorCode: "FORBIDDEN",
+            httpStatus: 403,
             ...fp11Admin,
             ...fp11HealthFields("noperm"),
           })}
           actions={buildFp11Actions({
-            onPreviewTab: (tab) => setFp11PreviewTab(tab),
             onSelectVehicle: () => navigateFleetMaintenanceTab("find-parts"),
             onBack: () => clearFleetMaintenanceSearch(),
             onAskRoam: requestPartsAccess,
@@ -221,48 +221,43 @@ export function FindPartsTab({
   return (
     <div className="fleet-find-parts-stitch find-parts-nested-markup" data-step={stepNumber} data-trail={trail.map((chip) => chip.label).join(" › ")}>
       {error ? (
-        <div className="mb-space-md">
-          <p>Could not load parts. Nothing was changed. ATTEMPT: {attempts} OF 3</p>
-          <button type="button" onClick={() => {
-            const next = attempts + 1;
-            setAttempts(next);
-            if (next <= 3) {
-              sessionStorage.setItem("find-parts-trail", JSON.stringify({ vehicleId, componentId, position }));
-              setError("");
-              void search.refetch();
-            }
-          }}>Retry</button>
-          <Fp11Screen
-            data={buildFp11ViewModel({
-              attempts,
-              userEmail: user?.email,
-              role: role ?? undefined,
-              errorCode: "TIMEOUT",
-              missingModel: model || undefined,
-              vehicleLabel: [year, make, model].filter(Boolean).join(" ") || undefined,
-              ...fp11Admin,
-              ...fp11HealthFields(fp11PreviewTab),
-            })}
-            actions={buildFp11Actions({
-              onRetry: () => {
-                const next = attempts + 1;
-                setAttempts(next);
-                if (next <= 3) {
-                  sessionStorage.setItem("find-parts-trail", JSON.stringify({ vehicleId, componentId, position }));
-                  setError("");
-                  void search.refetch();
-                }
-              },
-              onAskRoam: () => {
-                if (make && model && year) {
-                  void api.requestCatalogAddition({ make, model, year, vehicleId: vehicleId || null }).catch(() => undefined);
-                } else {
-                  setStep("request");
-                }
-              },
-            })}
-          />
-        </div>
+        <Fp11Screen
+          data={buildFp11ViewModel({
+            state: "error",
+            attempts: attempts + 1,
+            userEmail: user?.email,
+            role: role ?? undefined,
+            httpStatus: error.includes("403") ? 403 : 0,
+            errorMessage: error,
+            vehicleLabel: [year, make, model].filter(Boolean).join(" ") || undefined,
+            vehicleChip: formatFindPartsVehicleChip(
+              [year, make, model].filter(Boolean).join(" ") || car?.make || "Vehicle",
+              car?.licensePlate,
+            ),
+            sectionLabel: partName || "Part section",
+            latencyMs: findPartsConnectionLatencyMs(),
+            missingModel: model || undefined,
+            ...fp11Admin,
+          })}
+          actions={buildFp11Actions({
+            onRetry: () => {
+              const next = attempts + 1;
+              setAttempts(next);
+              if (next <= 3) {
+                sessionStorage.setItem("find-parts-trail", JSON.stringify({ vehicleId, componentId, position }));
+                setError("");
+                void search.refetch();
+              }
+            },
+            onAskRoam: () => {
+              if (make && model && year) {
+                void api.requestCatalogAddition({ make, model, year, vehicleId: vehicleId || null }).catch(() => undefined);
+              } else {
+                setStep("request");
+              }
+            },
+          })}
+        />
       ) : null}
       {view === "activity" ? (
         <ActivityView activity={activity.data ?? null} onBack={() => { setView("search"); writeUrl({}); }} />

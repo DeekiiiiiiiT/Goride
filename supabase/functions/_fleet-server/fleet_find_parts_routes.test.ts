@@ -98,7 +98,8 @@ Deno.test("T8 activity quotes stay on the caller's org", async () => {
     },
   };
   await loadPartsActivity(supabase as never, "org-mine");
-  assertEquals(seen.filter((row) => row === "from:part_quote_request").length, 1);
+  assertEquals(seen.filter((row) => row === "from:parts_sourcing_requests").length, 1);
+  assertEquals(seen.filter((row) => row === "from:part_repeat_alert").length, 1);
   assertEquals(seen.includes("organization_id=org-mine"), true);
   assertEquals(seen.includes("organization_id=org-other"), false);
 });
@@ -156,6 +157,17 @@ Deno.test("alternate trims line joins siblings", () => {
   ]);
   assertEquals(line.includes("1NR-FE"), true);
   assertEquals(line.includes("and"), true);
+});
+
+Deno.test("vehicle context trim label for Roomy-style catalog row", () => {
+  assertEquals(
+    formatTrimStepLabel({
+      trim_series: "Pre-Facelift",
+      engine_code: "1KR-FE",
+      drivetrain: "2WD",
+    }),
+    "Pre-Facelift · 1KR-FE · 2WD",
+  );
 });
 
 Deno.test("hub label prefers vehicle depot then org name", () => {

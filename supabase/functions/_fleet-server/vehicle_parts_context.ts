@@ -8,6 +8,9 @@ import { resolveCatalogIdForKvVehicle } from "./vehicle_catalog_resolve.ts";
 const VARIANT_COLUMNS =
   "id, make, model, production_start_year, production_end_year, chassis_code, engine_code, engine_displacement_l, fuel_type, fuel_category, engine_type, drivetrain, transmission, body_type, trim_series";
 
+/** Columns loaded from part_repeat_alert when ledger notes are empty. */
+export const PART_REPEAT_ALERT_NOTE_COLUMNS = "detail, created_at";
+
 export type VehiclePartsCatalogRow = VariantLabelRow & {
   id?: string;
   make?: string | null;
@@ -185,7 +188,7 @@ export async function loadVehiclePartsContextExtras(
   if (!latestNote) {
     const { data: alert, error: alertErr } = await supabase
       .from("part_repeat_alert")
-      .select("detail, title, created_at")
+      .select(PART_REPEAT_ALERT_NOTE_COLUMNS)
       .eq("organization_id", orgId)
       .eq("vehicle_id", vehicleId)
       .eq("status", "open")
@@ -194,7 +197,7 @@ export async function loadVehiclePartsContextExtras(
       .maybeSingle();
     if (alertErr) throw alertErr;
     if (alert) {
-      const detail = String((alert as { detail?: string }).detail ?? (alert as { title?: string }).title ?? "").trim();
+      const detail = String((alert as { detail?: string }).detail ?? "").trim();
       if (detail) {
         latestNote = {
           text: detail,

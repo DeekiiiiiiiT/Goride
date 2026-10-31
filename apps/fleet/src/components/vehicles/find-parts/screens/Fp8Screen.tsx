@@ -16,7 +16,7 @@ export function Fp8Screen({ actions, data, form }: { actions: Fp8Actions; data: 
   return (
     <div className="find-parts-screen-root">
 <div className="fp-screen-root"><div className="flex flex-col w-full">
-<div className="w-full max-w-[1440px] mx-auto px-margin-desktop py-space-xl flex flex-col gap-space-xl">
+<div className="w-full py-space-xl flex flex-col gap-space-xl">
 
 <div className="w-full bg-surface-container-low rounded-xl px-space-lg py-space-sm flex flex-wrap items-center gap-space-sm">
 <span className="font-caption text-caption text-on-surface-variant uppercase tracking-wider">Search Scope:</span>
@@ -26,17 +26,17 @@ export function Fp8Screen({ actions, data, form }: { actions: Fp8Actions; data: 
 </div>
 <span className="material-symbols-outlined text-outline text-[16px]">chevron_right</span>
 <div className="inline-flex items-center gap-1.5 px-space-md py-1 rounded-lg bg-surface-container-lowest text-on-surface font-label-code text-caption shadow-sm">
-<span>1.5 hybrid ({data.trimLabel})</span>
+<span>{data.trimLabel}</span>
 <span className="material-symbols-outlined text-[14px] text-on-surface-variant hover:text-on-surface cursor-pointer">edit</span>
 </div>
 <span className="material-symbols-outlined text-outline text-[16px]">chevron_right</span>
 <div className="inline-flex items-center gap-1.5 px-space-md py-1 rounded-lg bg-surface-container-lowest text-on-surface font-label-code text-caption shadow-sm">
-<span>Brake pads</span>
+<span>{data.partName}</span>
 <span className="material-symbols-outlined text-[14px] text-on-surface-variant hover:text-on-surface cursor-pointer">edit</span>
 </div>
 <span className="material-symbols-outlined text-outline text-[16px]">chevron_right</span>
 <div className="inline-flex items-center gap-1.5 px-space-md py-1 rounded-lg bg-surface-container-highest text-on-surface font-label-code text-caption">
-<span className="font-semibold">Front</span>
+<span className="font-semibold">{data.positionLabel}</span>
 <span className="material-symbols-outlined text-[14px] text-on-surface cursor-pointer">close</span>
 </div>
 <button className="ml-auto font-caption text-caption text-on-surface-variant hover:text-on-surface underline underline-offset-2" type="button" onClick={actions.onBack}>
@@ -66,11 +66,13 @@ export function Fp8Screen({ actions, data, form }: { actions: Fp8Actions; data: 
 <div className="p-space-md rounded-xl bg-surface-container-low flex flex-col gap-space-xs">
 <span className="font-caption text-caption uppercase text-on-surface-variant tracking-wider font-semibold">Matched Vehicle Specs</span>
 <div className="flex flex-wrap items-center gap-space-xs">
-<span className="px-space-md py-1 rounded-md bg-surface-container-lowest text-on-surface font-label-code text-caption shadow-xs">{data.vehicleLabel} ({data.trimLabel}, 1.5 hybrid)</span>
-<span className="px-space-md py-1 rounded-md bg-surface-container-lowest text-on-surface font-label-code text-caption shadow-xs">Brake pads</span>
-<span className="px-space-md py-1 rounded-md bg-surface-container-lowest text-on-surface font-label-code text-caption shadow-xs">Front Axle</span>
+<span className="px-space-md py-1 rounded-md bg-surface-container-lowest text-on-surface font-label-code text-caption shadow-xs">{data.vehicleLabel}{data.trimLabel !== "None yet" ? ` (${data.trimLabel})` : ""}</span>
+<span className="px-space-md py-1 rounded-md bg-surface-container-lowest text-on-surface font-label-code text-caption shadow-xs">{data.partName}</span>
+<span className="px-space-md py-1 rounded-md bg-surface-container-lowest text-on-surface font-label-code text-caption shadow-xs">{data.positionLabel}</span>
 <span className="px-space-md py-1 rounded-md bg-surface-container-highest text-on-surface font-label-plate text-caption">{data.plate}</span>
-<span className="px-space-md py-1 rounded-md bg-surface-container text-on-secondary-container font-label-code text-caption">Chassis: {data.trimLabel}-3401928</span>
+{data.chassisLabel !== "—" ? (
+<span className="px-space-md py-1 rounded-md bg-surface-container text-on-secondary-container font-label-code text-caption">Chassis: {data.chassisLabel}</span>
+) : null}
 </div>
 </div>
 

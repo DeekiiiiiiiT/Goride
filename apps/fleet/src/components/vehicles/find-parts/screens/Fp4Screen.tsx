@@ -25,7 +25,7 @@ export function Fp4Screen({ actions, data }: { actions: Fp4Actions; data: Fp4Vie
 
 
 <section className="w-full bg-surface-container-lowest shadow-sm z-30">
-<div className="max-w-[1400px] mx-auto px-gutter md:px-margin-desktop py-space-md flex flex-col lg:flex-row lg:items-center lg:justify-between gap-space-md">
+<div className="w-full py-space-md flex flex-col lg:flex-row lg:items-center lg:justify-between gap-space-md">
 
 <nav aria-label="Step progress" className="flex items-center gap-space-xs overflow-x-auto text-body-sm font-body-sm">
 <button type="button" className="flex items-center gap-1.5 text-on-surface-variant hover:text-on-surface whitespace-nowrap group" onClick={actions.onBack}>
@@ -75,14 +75,14 @@ export function Fp4Screen({ actions, data }: { actions: Fp4Actions; data: Fp4Vie
 </div>
 </section>
 
-<div className="max-w-[1400px] w-full mx-auto px-gutter md:px-margin-desktop py-space-xl flex flex-col gap-space-xl">
+<div className="w-full py-space-xl flex flex-col gap-space-xl">
 
 <div className="flex flex-col md:flex-row md:items-end justify-between gap-space-md">
 <div className="space-y-1">
 <span className="font-caption text-caption uppercase tracking-wider text-on-surface-variant font-semibold">Axle Position Disambiguation</span>
 <h1 className="font-headline-xl text-headline-xl text-on-surface tracking-tight">Which brakes?</h1>
 <p className="font-body-md text-body-md text-on-surface-variant max-w-2xl">
-          Front and back brake pads are different parts on the {data.trimLabel} chassis. Select the axle needing replacement to load correct caliper fitments.
+          Front and back {data.partLabel} are different parts on the {data.trimLabel} chassis. Select the axle needing replacement to load correct caliper fitments.
         </p>
 </div>
 
@@ -209,6 +209,9 @@ export function Fp4Screen({ actions, data }: { actions: Fp4Actions; data: Fp4Vie
 <div className="space-y-1">
 <div className="flex items-center gap-space-sm flex-wrap">
 <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold">{option.heading}</h3>
+{option.id === "rear" ? (
+<span className="font-caption text-caption bg-surface-container-high text-on-surface-variant px-space-xs py-0.5 rounded">Secondary Wear</span>
+) : null}
 {option.offerLabel ? (
 <span className="font-caption text-caption uppercase bg-primary text-on-primary px-space-xs py-0.5 rounded font-semibold tracking-wider">{option.offerLabel}</span>
 ) : null}

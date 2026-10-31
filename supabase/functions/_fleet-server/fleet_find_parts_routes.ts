@@ -12,7 +12,7 @@ import { readPartTerm, readPartsBrowse, readSymptoms } from "./parts_catalog_rea
 import { canonicalOdometerForVehicle } from "./canonical_vehicle_odometer.ts";
 import { analyzeMaintenanceScheduleRow } from "../../../packages/finance-core/src/maintenanceOverdueDetails.ts";
 import { upsertPendingFromKvVehicle } from "./vehicle_catalog_pending_queries.ts";
-import { loadVehiclePartsContextExtras } from "./vehicle_parts_context.ts";
+import { loadVehiclePartsContextExtras, vehiclePlateFromKv } from "./vehicle_parts_context.ts";
 
 const PREFIX = "/make-server-37f42386/parts";
 const PHOTO_BUCKET = "parts-request-photos";
@@ -429,15 +429,69 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
       const orgId = String(getOrgId(c) || "");
       const raw = await kv.getByPrefix("vehicle:");
       const cars = filterByOrg(Array.isArray(raw) ? raw as Record<string, unknown>[] : [], c).slice(0, 40);
-      const items = cars.map((car) => myVehicleCard({
-        make: String(car.make ?? ""),
-        model: String(car.model ?? ""),
-        year: car.year as string | number | null,
-        versionLine: String(car.catalogVersionLabel ?? car.trim ?? "") || null,
-        verified: Boolean(car.catalogId || car.vehicleCatalogId),
-        shelfCount: Number(car.shelfCount ?? 0) || 0,
-        serviceDue: String(car.serviceDue ?? "") || null,
-      }));
+      const vehicleIds = cars.map((car) => String(car.id ?? car.vehicleId ?? "")).filter(Boolean);
+      const dueByVehicle = new Map<string, string>();
+      if (vehicleIds.length) {
+        const { data: schedules, error: schedErr } = await supabase
+          .from("vehicle_component_schedule")
+          .select("vehicle_id, position, next_due_miles, next_due_miles_max, next_due_date, schedule_status, category:maintenance_service_categories(name)")
+          .eq("organization_id", orgId)
+          .in("vehicle_id", vehicleIds);
+        if (schedErr) throw schedErr;
+        const today = new Date().toISOString().slice(0, 10);
+        for (const car of cars) {
+          const vehicleId = String(car.id ?? car.vehicleId ?? "");
+          if (!vehicleId) continue;
+          const odometer = Number((car.metrics as { odometer?: number } | undefined)?.odometer ?? 0);
+          for (const row of schedules || []) {
+            if (String((row as { vehicle_id?: string }).vehicle_id ?? "") !== vehicleId) continue;
+            const schedule = row as {
+              position?: string | null;
+              next_due_miles?: number | null;
+              next_due_miles_max?: number | null;
+              next_due_date?: string | null;
+              schedule_status?: string | null;
+              category?: { name?: string } | { name?: string }[] | null;
+            };
+            const category = Array.isArray(schedule.category) ? schedule.category[0] : schedule.category;
+            const analysis = analyzeMaintenanceScheduleRow(
+              odometer,
+              today,
+              schedule.next_due_miles != null ? Number(schedule.next_due_miles) : null,
+              schedule.next_due_miles_max != null ? Number(schedule.next_due_miles_max) : null,
+              schedule.next_due_date ? String(schedule.next_due_date).slice(0, 10) : null,
+              schedule.schedule_status,
+            );
+            if (analysis.status !== "overdue" && analysis.status !== "pending") continue;
+            const name = String(category?.name ?? "Service").trim();
+            if (name && !dueByVehicle.has(vehicleId)) dueByVehicle.set(vehicleId, name);
+          }
+        }
+      }
+      const items = cars.map((car) => {
+        const vehicleId = String(car.id ?? car.vehicleId ?? "");
+        const fromSchedule = dueByVehicle.get(vehicleId);
+        const fromKv = String(car.serviceDue ?? "").trim();
+        const serviceDue = fromSchedule || fromKv || null;
+        const card = myVehicleCard({
+          make: String(car.make ?? ""),
+          model: String(car.model ?? ""),
+          year: car.year as string | number | null,
+          versionLine: String(car.catalogVersionLabel ?? car.trim ?? "") || null,
+          verified: Boolean(car.catalogId || car.vehicleCatalogId),
+          shelfCount: Number(car.shelfCount ?? 0) || 0,
+          serviceDue,
+        });
+        return {
+          ...card,
+          vehicle_id: vehicleId,
+          plate: vehiclePlateFromKv(car),
+          label: card.name,
+          subtitle: card.versionLine !== "None yet" ? card.versionLine : undefined,
+          service_due: card.serviceDue !== "None yet" ? card.serviceDue : undefined,
+          serviceDue: card.serviceDue,
+        };
+      });
       return c.json({ items, organizationId: orgId });
     } catch (error) {
       return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);

@@ -20,7 +20,14 @@ export type PartsVehicleOptions = {
   makes: string[];
   models: string[];
   years: number[];
-  versions?: Array<{ id: string; name?: string; description?: string; fleetCount?: number }>;
+  versions?: Array<{
+    id: string;
+    name?: string;
+    description?: string;
+    fleetCount?: number;
+    chassisPrefix?: string;
+    chassis_serial_from?: string | null;
+  }>;
 };
 
 export type PartsTermResult = {

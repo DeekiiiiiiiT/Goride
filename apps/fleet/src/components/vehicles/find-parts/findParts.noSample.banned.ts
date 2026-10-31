@@ -34,4 +34,11 @@ export const FIND_PARTS_FORBIDDEN_SAMPLES = [
   "Hub #01",
   "Julian",
   "John Doe",
+  "Depot Diagnostic bay",
+  "with O-ring & bypass valve",
+  "Every 10,000 km or 6 months",
+  "parts in hub bins",
+  "On your shelf",
+  "reply SLA",
+  "NCP50 series",
 ] as const;

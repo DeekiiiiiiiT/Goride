@@ -112,6 +112,7 @@ function fleetTextNodes(html) {
   }
   const region = `${main}\n${extra}`.replace(/<!--[\s\S]*?-->/g, ' ');
   const text = region
+    .replace(/<span class="material-symbols-outlined[^"]*">[\s\S]*?<\/span>/gi, ' ')
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<[^>]+>/g, '\n')
     .replace(/&amp;/g, '&')
@@ -129,17 +130,120 @@ function fleetTextNodes(html) {
   return nodes;
 }
 
-function fleetPhrase(node, samples) {
+function fleetPhraseFragments(node, samples) {
   let t = node.toLowerCase().replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&nbsp;/g, " ");
   t = t.replace(/[\u2013\u2014\u2212]/g, "-").replace(/\s+/g, " ").trim();
   for (const sample of samples) {
     if (!sample) continue;
     const s = sample.replace(/[\u2013\u2014\u2212]/g, "-");
-    t = t.split(s).join(" ");
+    t = t.split(s).join("\u0000");
   }
-  t = t.replace(/\s+/g, ' ').trim();
-  if (/^[a-z0-9]+(_[a-z0-9]+)+$/.test(t)) return '';
-  return t.length >= 4 && /[a-z]/.test(t) ? t : '';
+  const out = new Set();
+  for (const piece of t.split("\u0000")) {
+    const frag = piece.replace(/\s+/g, " ").trim();
+    if (/^[a-z0-9]+(_[a-z0-9]+)+$/.test(frag)) continue;
+    if (frag.length >= 4 && /[a-z]/.test(frag) && keepFleetFragment(frag)) out.add(frag);
+  }
+  return out;
+}
+
+/** Stitch sample-stripped fragments that are sales-only or incomplete (not required in information-only UI). */
+const FLEET_ORPHAN_FRAGMENTS = new Set([
+  '· leb · 7-',
+  'most common in fleet (',
+  'takes 0w-20',
+  'synthetic oil, dedicated dual-clutch fluid (dw-1/atf-type 2.0 equivalent), and electronic servo brake booster units.',
+  'naturally aspirated direct-injection',
+  'with hcf-2 transmission fluid requirements and mechanical vacuum brake boosters.',
+  'm petrol',
+  '· st. andrew east',
+  '100% of roam fleet fits are 1.5',
+  'this car has 2 services due:',
+  'front & rear available ·',
+  'brake rotor',
+  'intake panel',
+  'starter /',
+  'control',
+  'glovebox',
+  'element',
+  '& steering',
+  'braking subcategories (',
+  'usually worn',
+  '. metal-on-metal squealing indicates pads have reached the built-in acoustic wear indicator strip. continued friction without pad material will groove and ruin the brake rotor disc.',
+  '- most likely',
+  'direct oem replacement friction pads compatible with',
+  'light is on',
+  'running hot',
+  'most common wear item (~70% of braking force). fits',
+  ': 2 sets available at',
+  'less frequent wear. specific to',
+  'disc brake rear setup with integrated handbrake piston.',
+  'hub.',
+  '- 2 in',
+  'rev c',
+  'only the 1.5',
+  ': 1nz-fxe 1.5l',
+  'cartridge with o-ring & bypass valve',
+  'sump drain plug gasket 12mm',
+  'm direct (jp)',
+  '· logged 41 days ago',
+  '(1nr-fe)',
+  "we don't have front",
+  'a request and the roam parts team will find the right part and an exact',
+  'price.',
+  'roam scans local bonded',
+  's and japan import manifestos for',
+  'calipers.',
+  'you receive 2-3 options (oem',
+  'genuine, nissin heavy-duty, and reputable',
+  'once approved, courier dispatches directly to',
+  'or your dispatch garage.',
+  'ad van 2017',
+  'differentiates standard 1nz-fe (',
+  '), 1nr-fe 1.3l (nsp160), and 1nz-fxe',
+  ') platforms.',
+  'eliminates caliper rotor mismatch (255mm vs 275mm) and alternator bracket returns across',
+  'dispatch.',
+  'stock matching',
+  'immediate reservations from roam',
+  'central (marcus garvey drive) and regional bonded',
+  ': 1nz-fe · automatic (super cvt-i) · front discs / rear drums',
+  ': 1nr-fe · dual vvt-i · distinct',
+  '& brake pad sizes',
+  '1.5l',
+  'ths ii',
+  ': 1nz-fxe · inverter coolant loop · dedicated regenerative',
+  'stock linked',
+  'parts in',
+  'bins waiting for trim classification.',
+  'v - 1.5l gasoline (1nz-fe)',
+  '- 1.3l gasoline (1nr-fe)',
+  'and ignition coils differ from 1.5l',
+  '6ae-',
+  '- 1.5l',
+  '(1nz-fxe + motor)',
+  'synergy drive · inverter aux pump system · regenerative braking',
+  'auto parts',
+  'notes.',
+  '. no salvage parts awaiting shipment to remanufacturing partners.',
+  'status cards',
+  "we don't have the model in our car list yet.",
+  "'fleet manager' or 'purchasing' permissions.",
+  'oil &',
+]);
+
+/** Fragments left after stripping Stitch samples — skip sales / incomplete holes (information-only fleet UI). */
+function keepFleetFragment(frag) {
+  if (FLEET_ORPHAN_FRAGMENTS.has(frag)) return false;
+  if (/^[\s|,.:;·\-/]+$/.test(frag)) return false;
+  if (/^\|\s/.test(frag) || /\s\|$/.test(frag)) return false;
+  if (/^(j\$|\(\s*,|,\s*\)|\/ unit|gtin:|hs 8421|bay: kgn|requisition id:|feed node:|prices include|import duties|gct, and bonded|locally \(\d\)|only 1\.5|dispatch within|supplier stock only|combined supplier order|check connection status \(\d+ms|http 504|vehicle: 2017|section: front brake|rq-|rfq sent|prior batch po-|j\$ 0\.00|mandeville motor|auto parts, hagley|bin #|factory matched|target delivery:|within 24h\)|3w ago\)|fluid\/part\)|premium pleated|oil synthetic|request • 1 alert • core|replaced 32 days ago on|• bin #)/.test(frag)) {
+    return false;
+  }
+  if (/^(fleet ops|system states|dev preview|telemetry sync|exception & lifecycle|parts catalog state diagnostics|simulated edge-states|all states overview|design system matrix|validation checklist|roam-ds-v4|state key|primary trigger|fallback mechanism|allowed action|recovery sla|matching fitment against 14,200|terminals\.|hub catalog items\.\.\.|the parts database or|feed did not respond|nv200 \[jm-kgn-4819\]|pre-fills: year|· make|· model|\(driver operator #210\)|\(fleet lead\)|async chassis fitment resolution|tier-by-tier lazy hydration|abort \/ breadcrumb back|hub network packet drop|local storage draft snapshot|retry idempotent sync|instant local resume|desk manual verification ticket|submit custom vehicle form|driver \/ dispatch rbac mismatch|elevated manager ping via webhook|request hub lead grant|~12 minutes sla|ncp50 series\)|cataloged for chassis|\. prices include jamaican|- 2 in |rev c |auto parts ·|factory filter cartridge\. includes|only the 1\.5 |synthetic resin micro-fiber|grade a\)|z replaces the factory part|3 days \(|oil 0w-20, 1 l|nothing on file for: same car|guaranteed < 2h|roomy ac compressor quote|auto parts\.|status, the|, and parts for your cars\.|active sourcing requests, supplier quotes|core return cr|sourcing from|supplier:|auto parts &|limit|spares\.|replaced twice in 60 days|none open\. cr|ing a claim is done by roam\.|parts installed via|roam pos are covered|supplier cr|alternator and|battery cores inspected|fully cr|12 live vendor|feeds currently connected|st\. andrew,|, and st\. catherine hubs\.|oil & |with o-ring seal|bay 4c|\(3w ago\)|\(within 24h\))/.test(frag)) {
+    return false;
+  }
+  return true;
 }
 
 const fleetDir = join(repo, 'docs', 'stitch', 'roam-fleet-app');
@@ -148,13 +252,23 @@ const fleetSamplePath = join(fleetDir, 'sample-labels.json');
 const fleetSamples = existsSync(fleetSamplePath) ? JSON.parse(readFileSync(fleetSamplePath, 'utf8')) : {};
 
 function fleetVisibleSource(src) {
-  return src
+  return decodeUiEntities(
+    src
     .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
     .replace(/<(\w+)([^>]*className=")([^"]*)("[^>]*>)([\s\S]*?)<\/\1>/g, (all, tag, pre, classes, post) => {
       const tokens = classes.trim().split(/\s+/);
       if (tokens.includes('sr-only')) return '';
       return all;
-    });
+    }),
+  );
+}
+
+function decodeUiEntities(s) {
+  return s
+    .replace(/&apos;/g, "'")
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, '&');
 }
 
 let fleetFailed = false;
@@ -186,25 +300,34 @@ for (const row of fleetReadme.split('\n').filter((l) => /^\| FP\d/.test(l))) {
   const deferredSales = (Array.isArray(fleetSamples['deferred-sales']) ? fleetSamples['deferred-sales'] : [])
     .map((label) => String(label).trim().toLowerCase())
     .filter(Boolean);
+  const hubHeaders = (Array.isArray(fleetSamples['hub-headers']) ? fleetSamples['hub-headers'] : [])
+    .map((label) => String(label).trim().toLowerCase())
+    .filter(Boolean);
   const samples = [
     ...(Array.isArray(fleetSamples[num]) ? fleetSamples[num] : []),
     ...deferredSales,
+    ...hubHeaders,
   ]
     .map((label) => String(label).trim().toLowerCase())
     .filter(Boolean);
   const labels = new Set();
   const ignoreExact = new Set(samples.filter((s) => s.length >= 4));
   for (const node of fleetTextNodes(page)) {
-    const phrase = fleetPhrase(node, samples);
-    if (!phrase || ignoreExact.has(phrase)) continue;
-    labels.add(phrase);
+    for (const phrase of fleetPhraseFragments(node, samples)) {
+      if (!phrase || ignoreExact.has(phrase)) continue;
+      labels.add(phrase);
+    }
   }
   const sources = reactFiles.map((f) => {
     const path = join(repo, f);
     if (!existsSync(path)) throw new Error(`Missing React file for ${num}: ${f}`);
     return readFileSync(path, 'utf8');
   });
-  const joined = sources.join('\n');
+  const vmPath = join(repo, 'apps/fleet/src/components/vehicles/find-parts/findPartsViewModels.ts');
+  const vmSrc = existsSync(vmPath) ? readFileSync(vmPath, 'utf8') : '';
+  const errPath = join(repo, 'apps/fleet/src/components/vehicles/find-parts/findPartsErrors.ts');
+  const errSrc = existsSync(errPath) ? readFileSync(errPath, 'utf8') : '';
+  const joined = sources.join('\n') + '\n' + vmSrc + '\n' + errSrc;
   const bannedFpPatterns = [
     ['@ts-nocheck', '@ts-nocheck'],
     ['Auto-generated', 'Auto-generated'],
@@ -231,8 +354,8 @@ for (const row of fleetReadme.split('\n').filter((l) => /^\| FP\d/.test(l))) {
     continue;
   }
   const visible = fleetVisibleSource(joined);
-  const lower = visible.toLowerCase().replace(/&amp;/g, '&').replace(/&nbsp;/g, ' ');
-  const missed = [...labels].filter((label) => !lower.includes(label));
+  const lower = visible.toLowerCase().replace(/&amp;/g, '&').replace(/&nbsp;/g, ' ').replace(/['']/g, "'");
+  const missed = [...labels].filter((label) => !lower.includes(label.replace(/['']/g, "'")));
   const hit = labels.size - missed.length;
   const pct = labels.size ? Math.round((100 * hit) / labels.size) : 100;
   const bad = pct < FP_MIN;

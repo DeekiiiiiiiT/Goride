@@ -25,7 +25,7 @@ export function Fp10Screen({ actions, data }: { actions: Fp10Actions; data: Fp10
 <div className="fp-screen-root"><div className="flex flex-col w-full">
 
 <div className="bg-surface-container-low">
-<div className="max-w-[1440px] mx-auto px-margin md:px-margin-desktop py-space-xs flex items-center justify-between">
+<div className="w-full py-space-xs flex items-center justify-between">
 <div className="flex items-center gap-space-sm">
 <button type="button" className="px-space-md py-1.5 rounded-lg font-body-sm text-body-sm text-on-surface-variant hover:bg-surface-container transition-colors flex items-center gap-space-xs" onClick={actions.onOpenCatalogSearch}>
 <span className="material-symbols-outlined text-[17px]">manage_search</span>
@@ -44,7 +44,7 @@ export function Fp10Screen({ actions, data }: { actions: Fp10Actions; data: Fp10
 </div>
 </div>
 
-<div className="max-w-[1440px] w-full mx-auto px-margin md:px-margin-desktop py-space-xl">
+<div className="w-full py-space-xl">
 
 <div className="flex flex-col md:flex-row md:items-end justify-between gap-space-md mb-space-lg">
 <div>
@@ -59,7 +59,7 @@ export function Fp10Screen({ actions, data }: { actions: Fp10Actions; data: Fp10
         </p>
 </div>
 
-<div className="flex items-center gap-space-sm bg-surface-container-lowest p-1.5 rounded-xl shadow-sm shrink-0">
+<div className="flex items-center gap-space-sm bg-surface-container-lowest p-1.5 rounded-xl shadow-sm shrink-0 flex-wrap">
 <div className="px-space-md py-1 text-center">
 <span className="font-caption text-caption text-secondary uppercase block">Open requests</span>
 <span className="font-label-code text-headline-sm font-semibold text-on-surface">{data.openRfqLabel}</span>
@@ -68,6 +68,12 @@ export function Fp10Screen({ actions, data }: { actions: Fp10Actions; data: Fp10
 <div className="px-space-md py-1 text-center">
 <span className="font-caption text-caption text-secondary uppercase block">Alerts</span>
 <span className="font-label-code text-headline-sm font-semibold text-on-surface">{data.filterCounts.alerts}</span>
+</div>
+<div className="w-px h-6 bg-surface-container-high hidden sm:block"></div>
+<div className="flex items-center gap-3 px-space-md py-1 font-label-code text-caption text-on-surface-variant">
+<span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span> Looking</span>
+<span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Found</span>
+<span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-surface-container-highest border border-outline-variant"></span> Pending</span>
 </div>
 </div>
 </div>
@@ -131,7 +137,7 @@ export function Fp10Screen({ actions, data }: { actions: Fp10Actions; data: Fp10
 </div>
 </div>
 <span className="px-2.5 py-1 rounded-full font-label-code text-caption bg-amber-50 text-amber-800 font-medium shrink-0 flex items-center gap-1.5 capitalize">
-<span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span> {card.kind}
+<span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span> {card.statusLabel}
                 </span>
 </div>
 <div className="mt-space-md p-space-sm rounded-lg bg-surface-container-low flex items-center justify-between">
