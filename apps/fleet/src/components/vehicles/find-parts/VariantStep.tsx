@@ -1,6 +1,5 @@
 import { api } from "../../../services/api";
 import { Fp2Screen } from "./screens/Fp2Screen";
-import { StepBar } from "./StepBar";
 import { buildFp2ViewModel } from "./findPartsViewModels";
 import { usePartsMyVehicles, usePartsVehicleOptions, useWrongFitCount } from "./findPartsQueries";
 import type { FleetCar } from "./CarStep";
@@ -41,7 +40,6 @@ export function VariantStep({
 
   return (
     <div>
-      <StepBar step={2} trail={[{ label: title || "Vehicle", onPick: onBack }]} />
       <Fp2Screen
         data={data}
         actions={{

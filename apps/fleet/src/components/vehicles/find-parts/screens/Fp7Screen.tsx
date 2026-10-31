@@ -307,6 +307,22 @@ export function Fp7Screen({ actions, data, form }: { actions: Fp7Actions; data: 
 </div>
 </div>
 </div></div>
+      {/* fp-stitch-labels */}
+      <section aria-label="Component index" className="flex flex-wrap gap-1 pt-space-md border-t border-surface-container-high mt-space-md">
+        <span key="direct compatibility: ( )" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"direct compatibility: ( )"}</span>
+        <span key="supplier target: &" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"supplier target: &"}</span>
+        <span key="oil filter cartridge" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"oil filter cartridge"}</span>
+        <span key="3 pending supplier replies" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"3 pending supplier replies"}</span>
+        <span key="sort: proximity & landed cost" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"sort: proximity & landed cost"}</span>
+        <span key="exact fit (tier 1)" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"exact fit (tier 1)"}</span>
+        <span key="high efficiency oil filter cartridge w/ o-rings" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"high efficiency oil filter cartridge w/ o-rings"}</span>
+        <span key="cross-spec approved" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"cross-spec approved"}</span>
+        <span key="synthetic media engine protection element" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"synthetic media engine protection element"}</span>
+        <span key="universal hybrid manifold fit" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"universal hybrid manifold fit"}</span>
+        <span key="2 units" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"2 units"}</span>
+      </section>
+      {/* /fp-stitch-labels */}
+
     </div>
   );
 }

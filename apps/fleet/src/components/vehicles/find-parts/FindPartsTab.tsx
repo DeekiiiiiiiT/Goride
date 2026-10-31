@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { pickBestPart } from "@roam/types/partsBestPick";
 import { api } from "../../../services/api";
 import { usePermissions } from "../../../hooks/usePermissions";
@@ -37,7 +37,7 @@ export function FindPartsTab({
   const [step, setStep] = useState<Step>(() => {
     if (params.get("view") === "activity") return "car";
     if (params.get("part")) return "results";
-    if (params.get("vehicle")) return "part";
+    if (params.get("vehicle")) return "car";
     return "car";
   });
   const [view, setView] = useState(params.get("view") === "activity" ? "activity" : "search");
@@ -58,10 +58,67 @@ export function FindPartsTab({
   const partsRunner = usePartsRunnerOnline(canView);
   const partsSupplierSync = usePartsSupplierSync(canView);
   const [fp11PreviewTab, setFp11PreviewTab] = useState<Fp11PreviewTab>("all");
+  const deepLinkGateDone = useRef(false);
+
+  function writeUrl(next: { vehicle?: string; part?: string; pos?: string; view?: string }) {
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", "find-parts");
+    if (next.vehicle) url.searchParams.set("vehicle", next.vehicle);
+    if (next.part) url.searchParams.set("part", next.part);
+    if (next.pos) url.searchParams.set("pos", next.pos);
+    if (next.view) url.searchParams.set("view", next.view);
+    else url.searchParams.delete("view");
+    window.history.replaceState(null, "", url);
+  }
 
   useEffect(() => {
     if (error) setFp11PreviewTab("error");
   }, [error]);
+
+  type FindPartsGateBody = {
+    linked?: boolean;
+    askVariant?: boolean;
+    make?: string;
+    model?: string;
+    year?: number;
+    vehicle?: { plate?: string; label?: string };
+  };
+
+  function applyVehicleGate(id: string, picked?: FleetCar) {
+    setVehicleId(id);
+    writeUrl({ vehicle: id });
+    void api.findParts({ vehicleId: id }).then((res) => {
+      const body = res as FindPartsGateBody;
+      if (body.linked === false) {
+        setLinkMeta({
+          make: body.make || picked?.make || "",
+          model: body.model || picked?.model || "",
+          year: String(body.year || picked?.year || ""),
+          plate: body.vehicle?.plate || picked?.licensePlate || "",
+        });
+        setMake(body.make || picked?.make || "");
+        setModel(body.model || picked?.model || "");
+        setYear(body.year ?? (picked?.year != null ? Number(picked.year) : null));
+        setStep("link");
+      } else if (body.askVariant) {
+        setMake(picked?.make || body.make || "");
+        setModel(picked?.model || body.model || "");
+        setYear(Number(picked?.year ?? body.year) || null);
+        setStep("version");
+      } else {
+        setStep(params.get("part") ? "results" : "part");
+      }
+    }).catch((err: unknown) => setError(err instanceof Error ? err.message : "Could not load parts"));
+  }
+
+  useEffect(() => {
+    const id = params.get("vehicle")?.trim() || "";
+    if (!canView || !id || params.get("part") || deepLinkGateDone.current) return;
+    deepLinkGateDone.current = true;
+    const picked = cars.find((row) => row.vehicleId === id);
+    applyVehicleGate(id, picked);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- deep-link once on mount
+  }, [canView]);
 
   function fp11HealthFields(previewTab: Fp11PreviewTab) {
     const syncRow = partsSupplierSync.data as { last?: { status?: string } } | undefined;
@@ -130,17 +187,6 @@ export function FindPartsTab({
     if (position) chips.push({ label: position === "rear" ? "Back" : "Front", onPick: () => setStep("position") });
     return chips;
   }, [car, make, model, year, componentId, partName, position]);
-
-  function writeUrl(next: { vehicle?: string; part?: string; pos?: string; view?: string }) {
-    const url = new URL(window.location.href);
-    url.searchParams.set("tab", "find-parts");
-    if (next.vehicle) url.searchParams.set("vehicle", next.vehicle);
-    if (next.part) url.searchParams.set("part", next.part);
-    if (next.pos) url.searchParams.set("pos", next.pos);
-    if (next.view) url.searchParams.set("view", next.view);
-    else url.searchParams.delete("view");
-    window.history.replaceState(null, "", url);
-  }
 
   if (!canView) {
     return (
@@ -222,35 +268,11 @@ export function FindPartsTab({
               activity={activity.data ?? null}
               onSeeAll={() => { setView("activity"); writeUrl({ view: "activity" }); }}
               onAsk={() => setStep("request")}
-              onPickCar={(picked) => {
-                setVehicleId(picked.vehicleId);
-                writeUrl({ vehicle: picked.vehicleId });
-                void api.findParts({ vehicleId: picked.vehicleId }).then((res) => {
-                  const body = res as { linked?: boolean; askVariant?: boolean; make?: string; model?: string; year?: number; vehicle?: { plate?: string; label?: string } };
-                  if (body.linked === false) {
-                    setLinkMeta({
-                      make: body.make || picked.make || "",
-                      model: body.model || picked.model || "",
-                      year: String(body.year || picked.year || ""),
-                      plate: body.vehicle?.plate || picked.licensePlate || "",
-                    });
-                    setMake(body.make || picked.make || "");
-                    setModel(body.model || picked.model || "");
-                    setYear(body.year || Number(picked.year) || null);
-                    setStep("link");
-                  } else if (body.askVariant) {
-                    setMake(picked.make || "");
-                    setModel(picked.model || "");
-                    setYear(Number(picked.year) || null);
-                    setStep("version");
-                  } else setStep("part");
-                }).catch((err: unknown) => setError(err instanceof Error ? err.message : "Could not load parts"));
-              }}
+              onPickCar={(picked) => applyVehicleGate(picked.vehicleId, picked)}
               onContinueOther={(choice) => {
                 const plate = cars.find((row) => (row.licensePlate || "").toLowerCase() === choice.typed.trim().toLowerCase());
                 if (plate) {
-                  setVehicleId(plate.vehicleId);
-                  setStep("part");
+                  applyVehicleGate(plate.vehicleId, plate);
                   return;
                 }
                 setVehicleId("");

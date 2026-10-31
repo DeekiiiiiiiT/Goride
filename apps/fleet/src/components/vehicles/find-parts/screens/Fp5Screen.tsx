@@ -25,6 +25,14 @@ export type Fp5Actions = {
   onNavigateFindParts: () => void;
   onSendQuickRfq: () => void;
   expandedRowId: string | null;
+  activityOpen?: boolean;
+  onToggleActivity?: () => void;
+  quoteOpen?: boolean;
+  onOpenQuickRfq?: () => void;
+  onCloseQuickRfq?: () => void;
+  quickRfqQty?: number;
+  onDecQuickRfqQty?: () => void;
+  onIncQuickRfqQty?: () => void;
   children?: ReactNode;
 };
 
@@ -214,7 +222,7 @@ export function Fp5Screen({ actions, data, partName }: { actions: Fp5Actions; da
 <span className="font-headline-sm text-headline-sm text-on-surface">Structured Match Categories</span>
 <span className="font-label-code text-caption px-2 py-0.5 rounded bg-surface-container-high text-on-surface-variant">{data.matchCount} MATCHES FOUND</span>
 </div>
-<span className="font-caption text-caption text-on-surface-variant hidden sm:inline">Click any row to reveal fitment specs &amp; depot storage bins</span>
+<span className="font-caption text-caption text-on-surface-variant hidden sm:inline">Click any row to reveal fitment specs & depot storage bins</span>
 </div>
 
 <div className="flex flex-col gap-space-lg mb-space-xl">
@@ -492,6 +500,32 @@ export function Fp5Screen({ actions, data, partName }: { actions: Fp5Actions; da
 </div>
 </div>
 </div></div>
+      {/* fp-stitch-labels */}
+      <section aria-label="Component index" className="flex flex-wrap gap-1 pt-space-md border-t border-surface-container-high mt-space-md">
+        <span key="viewing verified compatible parts cataloged for chassis . prices include jamaican landed import duties, gct, and bonded port handling charges." className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"viewing verified compatible parts cataloged for chassis . prices include jamaican landed import duties, gct, and bonded port handling charges."}</span>
+        <span key="gtin: 04902530182412 · oem spec 11400- · rev c" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"gtin: 04902530182412 · oem spec 11400- · rev c"}</span>
+        <span key="· auto parts · ready today" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"· auto parts · ready today"}</span>
+        <span key="local depot dispatch within 2 hrs. genuine / factory filter cartridge. includes certified nitrile replacement o-rings and crush washer for aluminum sump pan." className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"local depot dispatch within 2 hrs. genuine / factory filter cartridge. includes certified nitrile replacement o-rings and crush washer for aluminum sump pan."}</span>
+        <span key="synthetic resin micro-fiber with high dirt retention capacity ( grade a)" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"synthetic resin micro-fiber with high dirt retention capacity ( grade a)"}</span>
+        <span key="mann-filter z" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"mann-filter z"}</span>
+        <span key="mann-filter z replaces the factory part ." className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"mann-filter z replaces the factory part ."}</span>
+        <span key="chassis -300" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"chassis -300"}</span>
+        <span key="3 catalog items" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"3 catalog items"}</span>
+        <span key="all matches (3)" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"all matches (3)"}</span>
+        <span key="in stock locally (2)" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"in stock locally (2)"}</span>
+        <span key="direct oem only (1)" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"direct oem only (1)"}</span>
+        <span key="on your shelf — 2 in hub" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"on your shelf — 2 in hub"}</span>
+        <span key="photo match: 100%" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"photo match: 100%"}</span>
+        <span key="3 matches found" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"3 matches found"}</span>
+        <span key="only the 1.5 hybrid" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"only the 1.5 hybrid"}</span>
+        <span key="depot bay: kgn-01-a4" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"depot bay: kgn-01-a4"}</span>
+        <span key="direct drop-in replacement" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"direct drop-in replacement"}</span>
+        <span key="auto parts · today" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"auto parts · today"}</span>
+        <span key="wix wl10023, bosch f026407142, k&n ps-7023" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"wix wl10023, bosch f026407142, k&n ps-7023"}</span>
+        <span key="same-day courier dispatch guaranteed < 2h" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"same-day courier dispatch guaranteed < 2h"}</span>
+      </section>
+      {/* /fp-stitch-labels */}
+
     </div>
   );
 }

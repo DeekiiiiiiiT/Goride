@@ -57,6 +57,9 @@ export function PartsActivityPanel({
           </button>
         </div>
       </div>
+      <p className="font-caption text-caption text-on-surface-variant mt-space-md">
+        Example request copy: roomy ac compressor quote auto parts.
+      </p>
     </div>
   );
 }

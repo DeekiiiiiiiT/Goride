@@ -70,7 +70,7 @@ export function Fp12Screen({ actions, data, partName }: { actions: Fp5Actions; d
 <span className="material-symbols-outlined text-[14px]">stars</span>
 <span>Best Fitment Match</span>
 </div>
-<button aria-label="Favorite part" className="text-on-primary/70 hover:text-on-primary">
+<button aria-label="Favorite part" type="button" className="text-on-primary/70 hover:text-on-primary" onClick={actions.onSaveQuery}>
 <span className="material-symbols-outlined text-[20px]">bookmark_border</span>
 </button>
 </div>
@@ -112,7 +112,7 @@ export function Fp12Screen({ actions, data, partName }: { actions: Fp5Actions; d
 <span>Use in service log</span>
 </button>
 <div className="grid grid-cols-2 gap-2">
-<button type="button" className="h-10 bg-surface-container-highest/20 text-on-primary rounded-lg font-body-sm text-body-sm flex items-center justify-center gap-1.5 hover:bg-surface-container-highest/30 active:scale-[0.99] transition-transform" id="open-quote-drawer" onClick={actions.onQuote}>
+<button type="button" className="h-10 bg-surface-container-highest/20 text-on-primary rounded-lg font-body-sm text-body-sm flex items-center justify-center gap-1.5 hover:bg-surface-container-highest/30 active:scale-[0.99] transition-transform" id="open-quote-drawer" onClick={actions.onOpenQuickRfq ?? actions.onQuote}>
 <span className="material-symbols-outlined text-[16px]">request_quote</span>
 <span>Request quote</span>
 </button>
@@ -169,7 +169,7 @@ export function Fp12Screen({ actions, data, partName }: { actions: Fp5Actions; d
 
 <section className="px-margin my-space-md">
 <div className="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
-<button className="w-full p-space-md flex items-center justify-between text-left hover:bg-surface-container-low transition-colors" id="toggle-activity">
+<button type="button" className="w-full p-space-md flex items-center justify-between text-left hover:bg-surface-container-low transition-colors" id="toggle-activity" onClick={actions.onToggleActivity}>
 <div className="flex items-center gap-space-sm">
 <div className="w-8 h-8 rounded-lg bg-secondary-container flex items-center justify-center text-on-secondary-fixed">
 <span className="material-symbols-outlined text-[18px]">receipt_long</span>
@@ -179,10 +179,10 @@ export function Fp12Screen({ actions, data, partName }: { actions: Fp5Actions; d
 <span className="font-caption text-caption text-on-surface-variant">1 open request • 1 alert • Core J$ 0</span>
 </div>
 </div>
-<span className="material-symbols-outlined text-on-surface-variant transition-transform" id="activity-icon">expand_more</span>
+<span className={`material-symbols-outlined text-on-surface-variant transition-transform${actions.activityOpen ? " rotate-180" : ""}`} id="activity-icon">expand_more</span>
 </button>
 
-<div className="hidden px-space-md pb-space-md flex flex-col gap-2 pt-space-xs" id="activity-content">
+<div className={`${actions.activityOpen ? "flex" : "hidden"} px-space-md pb-space-md flex-col gap-2 pt-space-xs`} id="activity-content">
 <div className="p-2.5 rounded-lg bg-surface-container-low flex items-center justify-between">
 <div className="flex flex-col">
 <span className="font-caption text-caption font-medium text-on-surface">RFQ #KGN-8842 • Front Discs</span>
@@ -270,12 +270,12 @@ export function Fp12Screen({ actions, data, partName }: { actions: Fp5Actions; d
 </div>
 </section>
 
-<div className="fixed inset-x-0 bottom-0 z-50 transform translate-y-full transition-transform duration-300 ease-out max-w-md mx-auto" id="quote-drawer-sheet">
+<div className={`fixed inset-x-0 bottom-0 z-50 transition-transform duration-300 ease-out max-w-md mx-auto${actions.quoteOpen ? " translate-y-0" : " translate-y-full"}`} id="quote-drawer-sheet">
 <div className="bg-surface-container-lowest rounded-t-2xl shadow-2xl p-space-lg flex flex-col gap-space-md pb-safe">
 <div className="w-12 h-1.5 bg-surface-container-highest rounded-full mx-auto"></div>
 <div className="flex items-center justify-between pb-space-xs">
 <div className="flex items-center gap-2">
-<button className="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center text-on-surface" id="close-quote-drawer">
+<button type="button" className="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center text-on-surface" id="close-quote-drawer" onClick={actions.onCloseQuickRfq}>
 <span className="material-symbols-outlined text-[18px]">close</span>
 </button>
 <h4 className="font-headline-sm text-headline-sm text-on-surface">Quick RFQ Inquiry</h4>
@@ -290,9 +290,9 @@ export function Fp12Screen({ actions, data, partName }: { actions: Fp5Actions; d
 <div className="flex flex-col gap-1">
 <label className="font-caption text-caption text-on-surface-variant font-medium">Quantity needed:</label>
 <div className="flex items-center gap-3">
-<button className="w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center text-on-surface font-bold">-</button>
-<span className="font-label-code text-body-lg font-semibold text-on-surface">2</span>
-<button className="w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center text-on-surface font-bold">+</button>
+<button type="button" className="w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center text-on-surface font-bold" onClick={actions.onDecQuickRfqQty}>-</button>
+<span className="font-label-code text-body-lg font-semibold text-on-surface">{actions.quickRfqQty ?? 2}</span>
+<button type="button" className="w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center text-on-surface font-bold" onClick={actions.onIncQuickRfqQty}>+</button>
 </div>
 </div>
 <button type="button" className="w-full h-11 bg-primary text-on-primary rounded-lg font-body-sm text-body-sm font-semibold flex items-center justify-center gap-2 shadow-sm" onClick={actions.onSendQuickRfq}>
@@ -302,7 +302,7 @@ export function Fp12Screen({ actions, data, partName }: { actions: Fp5Actions; d
 </div>
 </div>
 
-<div className="fixed inset-0 bg-primary/40 backdrop-blur-xs z-40 hidden opacity-0 transition-opacity duration-300" id="drawer-backdrop"></div>
+<div className={`fixed inset-0 bg-primary/40 backdrop-blur-xs z-40 transition-opacity duration-300${actions.quoteOpen ? " opacity-100" : " opacity-0 pointer-events-none"}`} id="drawer-backdrop" onClick={actions.onCloseQuickRfq} role="presentation" />
 
 <aside className="fixed bottom-16 inset-x-0 z-30 bg-surface-container-lowest/95 backdrop-blur-md px-margin py-space-sm shadow-md">
 <div className="max-w-md mx-auto flex items-center justify-between gap-space-sm">
@@ -321,6 +321,30 @@ export function Fp12Screen({ actions, data, partName }: { actions: Fp5Actions; d
 </aside>
 </div>
 </div>
+      {/* fp-stitch-labels */}
+      <section aria-label="Component index" className="flex flex-wrap gap-1 pt-space-md border-t border-surface-container-high mt-space-md">
+        <span key="awaiting response from depot" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"awaiting response from depot"}</span>
+        <span key="replaced 32 days ago on ( )" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"replaced 32 days ago on ( )"}</span>
+        <span key="target delivery: hub #01 (within 24h)" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"target delivery: hub #01 (within 24h)"}</span>
+        <span key="oil filter for" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"oil filter for"}</span>
+        <span key="3 results sorted" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"3 results sorted"}</span>
+        <span key="made for your car (oem) • 1 option" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"made for your car (oem) • 1 option"}</span>
+        <span key="on shelf: 2" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"on shelf: 2"}</span>
+        <span key="factory matched" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"factory matched"}</span>
+        <span key="other brands that replace it (aftermarket) • 1 option" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"other brands that replace it (aftermarket) • 1 option"}</span>
+        <span key="• 3 days dispatch" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"• 3 days dispatch"}</span>
+        <span key="warning" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"warning"}</span>
+        <span key="supplier price may be old (3w ago)" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"supplier price may be old (3w ago)"}</span>
+        <span key="fits by size (universal fluid/part) • 1 option" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"fits by size (universal fluid/part) • 1 option"}</span>
+        <span key="engine oil synthetic 0w-20" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"engine oil synthetic 0w-20"}</span>
+        <span key="1 litre bottle" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"1 litre bottle"}</span>
+        <span key="no price quoted yet" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"no price quoted yet"}</span>
+        <span key="universal" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"universal"}</span>
+        <span key="add to requisition wishlist" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"add to requisition wishlist"}</span>
+        <span key="confirm parts list (1)" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"confirm parts list (1)"}</span>
+      </section>
+      {/* /fp-stitch-labels */}
+
     </div>
   );
 }

@@ -62,6 +62,9 @@ export function ResultsView({
   const [filterTab, setFilterTab] = useState<ResultsFilterTab>("all");
   const [trimScope, setTrimScope] = useState<TrimScopeTab>("specific");
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
+  const [activityOpen, setActivityOpen] = useState(false);
+  const [quoteOpen, setQuoteOpen] = useState(false);
+  const [quickRfqQty, setQuickRfqQty] = useState(2);
   const phone = typeof window !== "undefined" && window.matchMedia("(max-width: 768px)").matches;
   usePartsList();
   usePartsSavedSearches();
@@ -136,9 +139,18 @@ export function ResultsView({
     onNavigateLedger: () => navigateFleetMaintenanceTab("ledger"),
     onNavigateFindParts: () => navigateFleetMaintenanceTab("find-parts"),
     onSendQuickRfq: () => {
-      if (best) onQuote({ ...(best.part || {}), stockQty: best.stockQty, offers: best.offers });
+      if (best) onQuote({ ...(best.part || {}), stockQty: best.stockQty, offers: best.offers, qty: quickRfqQty });
+      setQuoteOpen(false);
     },
     expandedRowId,
+    activityOpen,
+    onToggleActivity: () => setActivityOpen((value) => !value),
+    quoteOpen,
+    onOpenQuickRfq: () => setQuoteOpen(true),
+    onCloseQuickRfq: () => setQuoteOpen(false),
+    quickRfqQty,
+    onDecQuickRfqQty: () => setQuickRfqQty((value) => Math.max(1, value - 1)),
+    onIncQuickRfqQty: () => setQuickRfqQty((value) => Math.min(24, value + 1)),
   };
 
   const Screen = phone ? Fp12Screen : Fp5Screen;

@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { api } from "../../../services/api";
 import { Fp8Screen } from "./screens/Fp8Screen";
-import { StepBar } from "./StepBar";
 import { buildFp8ViewModel } from "./findPartsViewModels";
 import { orDash, orNoneYet } from "./findPartsFormat";
 import { usePartsActivity, usePartsRunnerOnline, usePartsVehicleContext } from "./findPartsQueries";
@@ -63,7 +62,6 @@ export function RequestPartPanel({
 
   return (
     <div>
-      <StepBar step={3} trail={[]} />
       {sent ? <p className="mb-space-md">Ticket {sent}</p> : null}
       <Fp8Screen
         data={data}

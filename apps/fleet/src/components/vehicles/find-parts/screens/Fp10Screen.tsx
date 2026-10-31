@@ -56,7 +56,7 @@ export function Fp10Screen({ actions, data }: { actions: Fp10Actions; data: Fp10
 <div className="flex items-center gap-space-sm">
 <span className="font-label-code text-caption text-on-tertiary-container uppercase tracking-wider font-semibold">Procurement Pipeline</span>
 <span className="text-outline-variant">•</span>
-<span className="font-label-code text-caption text-secondary">St. Andrew &amp; Corporate Area Fleet</span>
+<span className="font-label-code text-caption text-secondary">St. Andrew & Corporate Area Fleet</span>
 </div>
 <h2 className="font-headline-xl text-headline-xl tracking-tight text-on-surface mt-0.5">Your parts activity</h2>
 <p className="font-body-md text-body-md text-on-surface-variant mt-1 max-w-3xl">
@@ -195,7 +195,7 @@ export function Fp10Screen({ actions, data }: { actions: Fp10Actions; data: Fp10
 <span className="text-caption text-secondary font-body-sm">(Oil filter)</span>
 </div>
 <p className="font-body-sm text-caption text-on-surface-variant mt-0.5">
-                    RFQ sent to {data.hubLabel} Auto Parts &amp; {data.hubLabel} Motor Spares
+                    RFQ sent to {data.hubLabel} Auto Parts & {data.hubLabel} Motor Spares
                   </p>
 </div>
 <span className="px-2.5 py-1 rounded-full font-label-code text-caption bg-blue-50 text-blue-800 font-medium shrink-0 flex items-center gap-1.5">
@@ -250,7 +250,7 @@ export function Fp10Screen({ actions, data }: { actions: Fp10Actions; data: Fp10
 </div>
 <div>
 <h3 className="font-headline-sm text-headline-sm tracking-tight text-on-surface">Repeat-part alerts</h3>
-<p className="font-body-sm text-caption text-on-surface-variant">Automated anomaly detection from service telemetry &amp; premature part exhaustion.</p>
+<p className="font-body-sm text-caption text-on-surface-variant">Automated anomaly detection from service telemetry & premature part exhaustion.</p>
 </div>
 </div>
 <span className="px-space-sm py-0.5 rounded-full font-label-code text-caption bg-amber-50 text-amber-800 font-semibold self-start md:self-auto">
@@ -418,6 +418,39 @@ export function Fp10Screen({ actions, data }: { actions: Fp10Actions; data: Fp10
 </div>
 </div>
 </div>
+      {/* fp-stitch-labels */}
+      <section aria-label="Component index" className="flex flex-wrap gap-1 pt-space-md border-t border-surface-container-high mt-space-md">
+        <span key="active sourcing requests, supplier quotes, wear anomalies, and core return credits across ." className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"active sourcing requests, supplier quotes, wear anomalies, and core return credits across ."}</span>
+        <span key="sourcing from /" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"sourcing from /"}</span>
+        <span key="rfq sent to auto parts & motor spares" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"rfq sent to auto parts & motor spares"}</span>
+        <span key="prior batch po-2908 landed at from spares." className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"prior batch po-2908 landed at from spares."}</span>
+        <span key="12 live vendor inventory feeds currently connected for st. andrew, , and st. catherine hubs." className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"12 live vendor inventory feeds currently connected for st. andrew, , and st. catherine hubs."}</span>
+        <span key="2 active" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"2 active"}</span>
+        <span key="front brake pads" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"front brake pads"}</span>
+        <span key="submitted 2h ago" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"submitted 2h ago"}</span>
+        <span key="looking" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"looking"}</span>
+        <span key="storefront" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"storefront"}</span>
+        <span key="supplier: auto parts" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"supplier: auto parts"}</span>
+        <span key="ready for review" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"ready for review"}</span>
+        <span key="found" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"found"}</span>
+        <span key="po pre-alloc:" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"po pre-alloc:"}</span>
+        <span key="see all 8 requests" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"see all 8 requests"}</span>
+        <span key="1 pending" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"1 pending"}</span>
+        <span key="4h remaining on reply sla" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"4h remaining on reply sla"}</span>
+        <span key="2 vendors notified" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"2 vendors notified"}</span>
+        <span key="info" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"info"}</span>
+        <span key="30d ago" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"30d ago"}</span>
+        <span key="1 critical review required" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"1 critical review required"}</span>
+        <span key="same brake pads replaced twice in 60 days" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"same brake pads replaced twice in 60 days"}</span>
+        <span key="caliper inspection telemetry flag triggered on rear-right assembly. sensor logs indicate sticking piston causing 3.4× premature friction wear relative to fleet median." className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"caliper inspection telemetry flag triggered on rear-right assembly. sensor logs indicate sticking piston causing 3.4× premature friction wear relative to fleet median."}</span>
+        <span key="see all 2 alerts" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"see all 2 alerts"}</span>
+        <span key="0 active claims" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"0 active claims"}</span>
+        <span key="alternator and hybrid battery cores inspected and fully credited for depot. no salvage parts awaiting shipment to remanufacturing partners." className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"alternator and hybrid battery cores inspected and fully credited for depot. no salvage parts awaiting shipment to remanufacturing partners."}</span>
+        <span key="historical returns audited: 24 units" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"historical returns audited: 24 units"}</span>
+        <span key="next sync in 08:42" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"next sync in 08:42"}</span>
+      </section>
+      {/* /fp-stitch-labels */}
+
     </div>
   );
 }

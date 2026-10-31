@@ -32,7 +32,7 @@ export function Fp2Screen({ actions, data }: { actions: Fp2Actions; data: Fp2Vie
 
 <li className="flex items-center gap-space-xs text-on-surface">
 <span className="w-5 h-5 rounded-full bg-primary text-on-primary flex items-center justify-center font-label-code text-[11px] font-bold">2</span>
-<span className="font-headline-sm text-body-md font-bold text-on-surface">Version &amp; Trim</span>
+<span className="font-headline-sm text-body-md font-bold text-on-surface">Version & Trim</span>
 <span className="material-symbols-outlined text-outline text-[16px] ml-space-xs">chevron_right</span>
 </li>
 
@@ -44,7 +44,7 @@ export function Fp2Screen({ actions, data }: { actions: Fp2Actions; data: Fp2Vie
 
 <li className="flex items-center gap-space-xs text-on-surface-variant opacity-60">
 <span className="w-5 h-5 rounded-full bg-surface-container-high text-on-surface-variant flex items-center justify-center font-label-code text-[11px]">4</span>
-<span className="font-body-sm text-body-sm">Position &amp; Fit</span>
+<span className="font-body-sm text-body-sm">Position & Fit</span>
 </li>
 </ol>
 <div className="hidden lg:flex items-center gap-2 font-label-code text-caption text-on-surface-variant">
@@ -67,7 +67,7 @@ export function Fp2Screen({ actions, data }: { actions: Fp2Actions; data: Fp2Vie
 <span className="px-2 py-0.5 rounded bg-surface-container text-on-surface-variant font-label-code text-caption">JDM / GK-GP SERIES</span>
 </div>
 <span className="hidden sm:inline text-surface-dim font-label-code">/</span>
-<span className="font-caption text-caption text-on-surface-variant">Awaiting chassis &amp; drivetrain specification confirmation</span>
+<span className="font-caption text-caption text-on-surface-variant">Awaiting chassis & drivetrain specification confirmation</span>
 </div>
 </div>
 <button type="button" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm font-medium transition-all shadow-sm" onClick={actions.onChangeCar}>
@@ -295,6 +295,32 @@ export function Fp2Screen({ actions, data }: { actions: Fp2Actions; data: Fp2Vie
 </div>
 </div>
 </div>
+      {/* fp-stitch-labels */}
+      <section aria-label="Component index" className="flex flex-wrap gap-1 pt-space-md border-t border-surface-container-high mt-space-md">
+        <span key="by vehicle" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"by vehicle"}</span>
+        <span key="service ledger" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"service ledger"}</span>
+        <span key="find parts" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"find parts"}</span>
+        <span key="· leb · 7-speed dct" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"· leb · 7-speed dct"}</span>
+        <span key="takes 0w-20 hybrid synthetic oil, dedicated dual-clutch fluid (dw-1/atf-type 2.0 equivalent), and electronic servo brake booster units." className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"takes 0w-20 hybrid synthetic oil, dedicated dual-clutch fluid (dw-1/atf-type 2.0 equivalent), and electronic servo brake booster units."}</span>
+        <span key="gk5 · l15b · cvt" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"gk5 · l15b · cvt"}</span>
+        <span key="standard i-vtec sport / rs" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"standard i-vtec sport / rs"}</span>
+        <span key="naturally aspirated direct-injection engine with hcf-2 transmission fluid requirements and mechanical vacuum brake boosters." className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"naturally aspirated direct-injection engine with hcf-2 transmission fluid requirements and mechanical vacuum brake boosters."}</span>
+        <span key="gk5-1200001+" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"gk5-1200001+"}</span>
+        <span key="1.3 petrol" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"1.3 petrol"}</span>
+        <span key="gk3 · l13b · cvt" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"gk3 · l13b · cvt"}</span>
+        <span key="entry m petrol engine" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"entry m petrol engine"}</span>
+        <span key="atkinson cycle l13b atkinson powertrain with smaller front disc calipers (240mm rotor) and alternate alternator clutch assembly." className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"atkinson cycle l13b atkinson powertrain with smaller front disc calipers (240mm rotor) and alternate alternator clutch assembly."}</span>
+        <span key="gk3-1200001+" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"gk3-1200001+"}</span>
+        <span key="not sure" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"not sure"}</span>
+        <span key="universal catalog mode" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"universal catalog mode"}</span>
+        <span key="shows all matching options" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"shows all matching options"}</span>
+        <span key="we'll present items that fit each variant and flag parts with a color-coded version chip so technicians never install incompatible spares." className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"we'll present items that fit each variant and flag parts with a color-coded version chip so technicians never install incompatible spares."}</span>
+        <span key="filter mode:" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"filter mode:"}</span>
+        <span key="annotated comparison" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"annotated comparison"}</span>
+        <span key="hybrid selection" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"hybrid selection"}</span>
+        <span key="100% of roam fleet fits are 1.5 hybrid variants." className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"100% of roam fleet fits are 1.5 hybrid variants."}</span>
+      </section>
+      {/* /fp-stitch-labels */}
     </div>
   );
 }

@@ -12,6 +12,7 @@ import { readPartTerm, readPartsBrowse, readSymptoms } from "./parts_catalog_rea
 import { canonicalOdometerForVehicle } from "./canonical_vehicle_odometer.ts";
 import { analyzeMaintenanceScheduleRow } from "../../../packages/finance-core/src/maintenanceOverdueDetails.ts";
 import { upsertPendingFromKvVehicle } from "./vehicle_catalog_pending_queries.ts";
+import { loadVehiclePartsContextExtras } from "./vehicle_parts_context.ts";
 
 const PREFIX = "/make-server-37f42386/parts";
 const PHOTO_BUCKET = "parts-request-photos";
@@ -416,7 +417,8 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
           };
         }
       }
-      return c.json({ odometer, due, lastService });
+      const extras = await loadVehiclePartsContextExtras(supabase, orgId, vehicleId, vehicle as Record<string, unknown>);
+      return c.json({ odometer, due, lastService, ...extras });
     } catch (error) {
       return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
     }

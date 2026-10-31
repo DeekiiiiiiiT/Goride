@@ -163,6 +163,12 @@ for (const row of fleetReadme.split('\n').filter((l) => /^\| FP\d/.test(l))) {
   const notStarted = /^Not started\b/.test(status);
   if (notStarted && !report) continue;
   const reactFiles = react.split(/\s*\+\s*/).map((f) => f.trim()).filter(Boolean);
+  const nonTsx = reactFiles.find((f) => !/\.tsx$/i.test(f));
+  if (nonTsx) {
+    console.log(`FAIL ${num} lists non-tsx file ${nonTsx} — ${react}`);
+    if (checked) fleetFailed = true;
+    continue;
+  }
   if (reactFiles.some((f) => /find-parts\/stitch\//.test(f))) {
     console.log(`FAIL ${num} lists find-parts/stitch/ — ${react}`);
     if (checked) fleetFailed = true;
@@ -204,7 +210,7 @@ for (const row of fleetReadme.split('\n').filter((l) => /^\| FP\d/.test(l))) {
     continue;
   }
   const visible = fleetVisibleSource(joined);
-  const lower = visible.toLowerCase();
+  const lower = visible.toLowerCase().replace(/&amp;/g, '&').replace(/&nbsp;/g, ' ');
   const missed = [...labels].filter((label) => !lower.includes(label));
   const hit = labels.size - missed.length;
   const pct = labels.size ? Math.round((100 * hit) / labels.size) : 100;

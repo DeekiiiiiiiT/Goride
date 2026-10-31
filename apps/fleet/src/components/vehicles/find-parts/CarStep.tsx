@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { StepBar } from "./StepBar";
 import type { PartsActivity } from "./PartsActivityPanel";
 import { PartsActivityPanel } from "./PartsActivityPanel";
 import { usePartsMyVehicles, usePartsVehicleOptions, usePartsTerm, useWrongFitCount } from "./findPartsQueries";
@@ -78,7 +77,6 @@ export function CarStep({
 
   return (
     <div className="w-full">
-      <StepBar step={1} trail={[]} />
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-space-lg w-full items-start">
         <div className="lg:col-span-8 flex flex-col gap-space-lg">
           <div className="bg-surface-container-lowest rounded-xl p-space-xl shadow-sm flex flex-col">

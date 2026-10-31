@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { Fp3Screen } from "./screens/Fp3Screen";
-import { StepBar } from "./StepBar";
 import { buildFp3ViewModel, type Fp3SearchHit } from "./findPartsViewModels";
 import { usePartsBrowse, usePartsSymptoms, usePartsTerm, usePartsVehicleContext } from "./findPartsQueries";
 
@@ -113,14 +112,9 @@ export function PartStep({
   }
 
   const activeArea = data.areas.find((a) => a.id === selectedAreaId) || data.areas[0];
-  const servicesSummary = data.serviceDueRows.filter((r) => r.name !== "None yet").map((r) => r.name).join(", ");
 
   return (
     <div>
-      <StepBar step={3} trail={[]} />
-      <p className="font-body-sm text-caption text-on-surface-variant mb-space-sm">
-        4. Position &amp; Fit · Continue to position &amp; fit · This car has {data.serviceDueRows.length} services due: {servicesSummary || "None yet"} · Front &amp; rear available · 2 in stock · Suspension &amp; steering · Lights &amp; visibility · Battery &amp; electrical · Tyres &amp; wheels · Telemetry &amp; mechanical assessment:
-      </p>
       <Fp3Screen
         data={data}
         activeArea={activeArea}

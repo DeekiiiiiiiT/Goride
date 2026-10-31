@@ -1,5 +1,4 @@
 import { Fp4Screen } from "./screens/Fp4Screen";
-import { StepBar } from "./StepBar";
 import { buildFp4ViewModel } from "./findPartsViewModels";
 import { usePartsVehicleContext } from "./findPartsQueries";
 
@@ -21,8 +20,6 @@ export function PositionStep({
 
   return (
     <div>
-      <StepBar step={4} trail={[]} />
-      <p className="font-body-sm text-caption text-on-surface-variant mb-space-sm">2. Trim &amp; year · 4. Position &amp; fit</p>
       <Fp4Screen
         data={data}
         actions={{

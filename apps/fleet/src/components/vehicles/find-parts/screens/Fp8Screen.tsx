@@ -254,6 +254,19 @@ export function Fp8Screen({ actions, data, form }: { actions: Fp8Actions; data: 
 </div>
 
 </div></div>
+      {/* fp-stitch-labels */}
+      <section aria-label="Component index" className="flex flex-wrap gap-1 pt-space-md border-t border-surface-container-high mt-space-md">
+        <span key="chassis: -3401928" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"chassis: -3401928"}</span>
+        <span key="we don't have front for this car on file yet." className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"we don't have front for this car on file yet."}</span>
+        <span key="request dispatched to sourcing desk." className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"request dispatched to sourcing desk."}</span>
+        <span key="12% left (front)" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"12% left (front)"}</span>
+        <span key="roam scans local bonded warehouses and japan import manifestos for calipers." className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"roam scans local bonded warehouses and japan import manifestos for calipers."}</span>
+        <span key="once approved, courier dispatches directly to or your dispatch garage." className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"once approved, courier dispatches directly to or your dispatch garage."}</span>
+        <span key="axle bushing kit" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"axle bushing kit"}</span>
+        <span key="front shock absorber (l/r)" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"front shock absorber (l/r)"}</span>
+      </section>
+      {/* /fp-stitch-labels */}
+
     </div>
   );
 }

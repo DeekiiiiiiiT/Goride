@@ -17,6 +17,12 @@ import {
   vehicleContextStatus,
   wearPercent,
 } from "./fleet_find_parts_routes.ts";
+import {
+  formatAlternateTrimsLine,
+  formatEngineFilterLine,
+  formatTrimStepLabel,
+  hubLabelFromVehicle,
+} from "./vehicle_parts_context.ts";
 
 Deno.test("T2 unlinked vehicle is a 404-or-403 decision, not a search", () => {
   assertEquals(vehicleContextStatus(true, false), 403);
@@ -129,4 +135,31 @@ Deno.test("photo upload refuses another org folder", () => {
   assertEquals(photoFolderAllowed("org-mine", "org-other/secret"), false);
   assertEquals(photoFolderAllowed("org-mine", "org-mine/photo.jpg"), true);
   assertEquals(photoFolderAllowed("org-mine", ""), true);
+});
+
+Deno.test("trim step label uses series engine and drivetrain", () => {
+  assertEquals(
+    formatTrimStepLabel({ trim_series: "Pre-Facelift", engine_code: "1KR-FE", drivetrain: "2WD" }),
+    "Pre-Facelift · 1KR-FE · 2WD",
+  );
+});
+
+Deno.test("engine filter line includes displacement", () => {
+  assertEquals(formatEngineFilterLine({ engine_code: "1NZ-FXE", engine_displacement_l: 1.5 }), "1NZ-FXE 1.5L");
+});
+
+Deno.test("alternate trims line joins siblings", () => {
+  const line = formatAlternateTrimsLine("a", [
+    { id: "a", engine_code: "1NZ-FE", engine_displacement_l: 1.5, chassis_code: "NSP160" },
+    { id: "b", engine_code: "1NR-FE", engine_displacement_l: 1.3, chassis_code: "NSP160" },
+    { id: "c", engine_code: "1NZ-FXE", engine_displacement_l: 1.5, chassis_code: "NHP160" },
+  ]);
+  assertEquals(line.includes("1NR-FE"), true);
+  assertEquals(line.includes("and"), true);
+});
+
+Deno.test("hub label prefers vehicle depot then org name", () => {
+  assertEquals(hubLabelFromVehicle({ depot: "Kingston" }, "Roam Fleet"), "Kingston");
+  assertEquals(hubLabelFromVehicle({}, "Kingston Auto"), "Kingston Auto");
+  assertEquals(hubLabelFromVehicle({}, null), "Fleet hub");
 });

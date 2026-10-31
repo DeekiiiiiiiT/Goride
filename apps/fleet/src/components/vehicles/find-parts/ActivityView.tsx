@@ -37,7 +37,6 @@ export function ActivityView({
 
   return (
     <div>
-      <p className="font-body-sm text-body-sm text-on-surface-variant mb-space-sm">jad telemetry broker live</p>
       <PartsActivityPanel activity={activity} onSeeAll={() => scrollToSection("section-requests")} onAsk={onBack} />
       <p className="font-body-sm text-caption text-on-surface-variant mb-space-sm">{data.regionLabel} · {data.anomalyLine}</p>
       <Fp10Screen

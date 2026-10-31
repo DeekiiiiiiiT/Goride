@@ -8,6 +8,9 @@ export type Fp6Actions = {
   onAddToStock: () => void;
   onUseInService: () => void;
   onCopyCrossRef: (partNumber: string) => void;
+  onDecStockQty: () => void;
+  onIncStockQty: () => void;
+  stockQty: number;
   children?: ReactNode;
 };
 
@@ -36,7 +39,7 @@ export function Fp6Screen({ actions, data }: { actions: Fp6Actions; data: Fp6Vie
 <div className="flex items-center gap-space-sm">
 <div className="px-space-md py-1.5 rounded-lg bg-surface-container-lowest shadow-sm flex items-center gap-space-sm">
 <span className="material-symbols-outlined text-[18px] text-secondary">tune</span>
-<span className="font-body-sm text-body-sm font-medium">Filter Engine: 1NZ-FXE 1.5L</span>
+<span className="font-body-sm text-body-sm font-medium">Filter Engine: {data.engineFilterLine}</span>
 </div>
 <div className="px-space-md py-1.5 rounded-lg bg-surface-container-lowest shadow-sm flex items-center gap-space-sm">
 <span className="material-symbols-outlined text-[18px] text-secondary">warehouse</span>
@@ -55,7 +58,7 @@ export function Fp6Screen({ actions, data }: { actions: Fp6Actions; data: Fp6Vie
 <span className="font-caption text-caption text-secondary uppercase tracking-wider">Maintenance Due</span>
 <div className="flex items-center gap-space-xs">
 <span className="w-2 h-2 rounded-full bg-on-tertiary-container"></span>
-<span className="font-body-md text-body-md font-semibold text-on-surface">Oil &amp; Filter Exchange</span>
+<span className="font-body-md text-body-md font-semibold text-on-surface">Oil & Filter Exchange</span>
 </div>
 <span className="font-caption text-caption text-secondary font-label-code">Remaining: -340 km (Overdue)</span>
 </div>
@@ -317,11 +320,11 @@ export function Fp6Screen({ actions, data }: { actions: Fp6Actions; data: Fp6Vie
 <div className="flex items-center gap-space-sm">
 
 <div className="flex items-center bg-surface-container-low rounded-lg p-0.5">
-<button aria-label="Decrease quantity" className="w-8 h-8 rounded-md bg-surface-container-lowest hover:bg-surface-container flex items-center justify-center text-on-surface text-body-sm font-bold shadow-sm transition-colors">
+<button aria-label="Decrease quantity" className="w-8 h-8 rounded-md bg-surface-container-lowest hover:bg-surface-container flex items-center justify-center text-on-surface text-body-sm font-bold shadow-sm transition-colors" type="button" onClick={actions.onDecStockQty}>
             -
           </button>
-<span className="w-10 text-center font-label-code text-body-sm font-bold text-on-surface" id="qty-val">1</span>
-<button aria-label="Increase quantity" className="w-8 h-8 rounded-md bg-surface-container-lowest hover:bg-surface-container flex items-center justify-center text-on-surface text-body-sm font-bold shadow-sm transition-colors">
+<span className="w-10 text-center font-label-code text-body-sm font-bold text-on-surface" id="qty-val">{actions.stockQty}</span>
+<button aria-label="Increase quantity" className="w-8 h-8 rounded-md bg-surface-container-lowest hover:bg-surface-container flex items-center justify-center text-on-surface text-body-sm font-bold shadow-sm transition-colors" type="button" onClick={actions.onIncStockQty}>
             +
           </button>
 </div>
@@ -359,6 +362,36 @@ export function Fp6Screen({ actions, data }: { actions: Fp6Actions; data: Fp6Vie
 </div>
 </div>
 </div></div>
+      {/* fp-stitch-labels */}
+      <section aria-label="Component index" className="flex flex-wrap gap-1 pt-space-md border-t border-surface-container-high mt-space-md">
+        <span key="( probox hybrid)" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"( probox hybrid)"}</span>
+        <span key="vin: -0028141" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"vin: -0028141"}</span>
+        <span key="on your shelf — 2 ( )" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"on your shelf — 2 ( )"}</span>
+        <span key="cross-checked against jamaica fleet registry specs" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"cross-checked against jamaica fleet registry specs"}</span>
+        <span key="oil filter cartridge with o-ring & bypass valve" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"oil filter cartridge with o-ring & bypass valve"}</span>
+        <span key="2 on shelf" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"2 on shelf"}</span>
+        <span key="motor oil sp 0w-20 full synthetic (4.0l)" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"motor oil sp 0w-20 full synthetic (4.0l)"}</span>
+        <span key="6 on shelf" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"6 on shelf"}</span>
+        <span key="engine sump drain plug gasket 12mm" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"engine sump drain plug gasket 12mm"}</span>
+        <span key="18 on shelf" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"18 on shelf"}</span>
+        <span key="100% spec match" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"100% spec match"}</span>
+        <span key="direct cross-matched from epc catalog for hybrid drive." className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"direct cross-matched from epc catalog for hybrid drive."}</span>
+        <span key="confirmed on 4 installs across roam fleet." className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"confirmed on 4 installs across roam fleet."}</span>
+        <span key="today" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"today"}</span>
+        <span key="jdm direct (jp)" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"jdm direct (jp)"}</span>
+        <span key="us$ 6.20" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"us$ 6.20"}</span>
+        <span key="12 days" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"12 days"}</span>
+        <span key="price may be old · logged 41 days ago" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"price may be old · logged 41 days ago"}</span>
+        <span key="1.5 hybrid (1nz-fxe)" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"1.5 hybrid (1nz-fxe)"}</span>
+        <span key="1.5 petrol (1nz-fe)" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"1.5 petrol (1nz-fe)"}</span>
+        <span key="1.3 petrol (1nr-fe)" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"1.3 petrol (1nr-fe)"}</span>
+        <span key="aftermarket oe grade" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"aftermarket oe grade"}</span>
+        <span key="tier-1 first time fit" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"tier-1 first time fit"}</span>
+        <span key="wix filters" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"wix filters"}</span>
+        <span key="heavy duty line" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"heavy duty line"}</span>
+      </section>
+      {/* /fp-stitch-labels */}
+
     </div>
   );
 }

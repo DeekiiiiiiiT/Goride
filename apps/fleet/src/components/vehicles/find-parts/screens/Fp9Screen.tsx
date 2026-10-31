@@ -10,6 +10,10 @@ export type Fp9Actions = {
   onConfirmMap: () => void;
   onPickTrim: (id: string) => void;
   onCloseLinkModal: () => void;
+  onChassisInputChange: (value: string) => void;
+  chassisInput: string;
+  onVerifyChassis: () => void;
+  verifyFeedback: string;
   children?: ReactNode;
 };
 
@@ -83,7 +87,9 @@ export function Fp9Screen({
 <span className="font-body-sm text-body-sm font-semibold">Chassis Code Specifics</span>
 </div>
 <p className="font-caption text-caption text-on-surface-variant">
-                  Differentiates standard 1NZ-FE ({data.trimLabel}), 1NR-FE 1.3L (NSP160), and 1NZ-FXE Hybrid (NHP160) platforms.
+                  {data.alternateTrimsLine !== "None yet"
+                    ? `Differentiates ${data.alternateTrimsLine} platforms.`
+                    : "Differentiates standard trim variants across this model year."}
                 </p>
 </div>
 <div className="bg-surface-container-low rounded-lg p-space-md flex flex-col gap-space-xs">
@@ -220,12 +226,12 @@ export function Fp9Screen({
 <div className="flex flex-col gap-space-xs pt-space-xs">
 <label className="font-body-sm text-body-sm font-semibold text-on-surface">Fast Stamped Code Input</label>
 <div className="flex gap-space-xs">
-<input className="w-full bg-surface-container-low px-space-md py-space-sm rounded font-label-code text-label-code text-on-surface focus:outline-none focus:ring-1 focus:ring-primary uppercase" id="quickChassisInput" placeholder="e.g. {data.trimLabel}-0019284" type="text" />
-<button className="px-space-md py-space-sm bg-primary text-on-primary rounded font-label-code text-caption font-bold shrink-0 hover:opacity-90" id="verifyChassisBtn">
+<input className="w-full bg-surface-container-low px-space-md py-space-sm rounded font-label-code text-label-code text-on-surface focus:outline-none focus:ring-1 focus:ring-primary uppercase" id="quickChassisInput" placeholder={`e.g. ${data.trimLabel}-0019284`} type="text" value={actions.chassisInput} onChange={(e) => actions.onChassisInputChange(e.target.value)} />
+<button type="button" className="px-space-md py-space-sm bg-primary text-on-primary rounded font-label-code text-caption font-bold shrink-0 hover:opacity-90" id="verifyChassisBtn" onClick={actions.onVerifyChassis}>
                   Verify
                 </button>
 </div>
-<span className="font-caption text-caption text-secondary" id="quickInputFeedback">Accepts standard Ministry of Transport import format.</span>
+<span className="font-caption text-caption text-secondary" id="quickInputFeedback">{actions.verifyFeedback || "Accepts standard Ministry of Transport import format."}</span>
 </div>
 </div>
 
@@ -296,13 +302,50 @@ export function Fp9Screen({
           Cancel
         </button>
 <button type="button" className="px-space-xl py-space-sm rounded bg-primary text-on-primary font-body-sm text-body-sm font-semibold shadow hover:opacity-90" id="confirmLinkBtn" onClick={actions.onConfirmMap}>
-          Confirm &amp; Map Vehicle
+          Confirm & Map Vehicle
         </button>
 </div>
 </div>
 </div>
 
 </div></div>
+      {/* fp-stitch-labels */}
+      <section aria-label="Component index" className="flex flex-wrap gap-1 pt-space-md border-t border-surface-container-high mt-space-md">
+        <span key="dbe- — 1.3l gasoline (1nr-fe)" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"dbe- — 1.3l gasoline (1nr-fe)"}</span>
+        <span key="6ae- — 1.5l hybrid (1nz-fxe + motor)" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"6ae- — 1.5l hybrid (1nz-fxe + motor)"}</span>
+        <span key="toyota 2016" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"toyota 2016"}</span>
+        <span key="we need to know exactly which toyota this is" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"we need to know exactly which toyota this is"}</span>
+        <span key="eliminates caliper rotor mismatch (255mm vs 275mm) and alternator bracket returns across dispatch." className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"eliminates caliper rotor mismatch (255mm vs 275mm) and alternator bracket returns across dispatch."}</span>
+        <span key="3 potential matches" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"3 potential matches"}</span>
+        <span key="84% fleet avg" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"84% fleet avg"}</span>
+        <span key="1.5l gasoline fwd" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"1.5l gasoline fwd"}</span>
+        <span key="engine: 1nz-fe · automatic (super cvt-i) · front discs / rear drums" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"engine: 1nz-fe · automatic (super cvt-i) · front discs / rear drums"}</span>
+        <span key="1,496 cc" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"1,496 cc"}</span>
+        <span key="12% fleet avg" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"12% fleet avg"}</span>
+        <span key="1.3l gasoline fwd" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"1.3l gasoline fwd"}</span>
+        <span key="engine: 1nr-fe · dual vvt-i · distinct oil filter & brake pad sizes" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"engine: 1nr-fe · dual vvt-i · distinct oil filter & brake pad sizes"}</span>
+        <span key="1,329 cc" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"1,329 cc"}</span>
+        <span key="4% fleet avg" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"4% fleet avg"}</span>
+        <span key="1.5l hybrid ths ii" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"1.5l hybrid ths ii"}</span>
+        <span key="engine: 1nz-fxe · inverter coolant loop · dedicated regenerative brakes" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"engine: 1nz-fxe · inverter coolant loop · dedicated regenerative brakes"}</span>
+        <span key="1,496 cc hybrid" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"1,496 cc hybrid"}</span>
+        <span key="1nz-fe 1496cc" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"1nz-fe 1496cc"}</span>
+        <span key="3,410 parts in bins waiting for trim classification." className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"3,410 parts in bins waiting for trim classification."}</span>
+        <span key="2016 toyota van" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"2016 toyota van"}</span>
+        <span key="dbe- v — 1.5l gasoline (1nz-fe)" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"dbe- v — 1.5l gasoline (1nz-fe)"}</span>
+        <span key="front-wheel drive · super cvt-i · most common jamaican commercial fleet import" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"front-wheel drive · super cvt-i · most common jamaican commercial fleet import"}</span>
+        <span key="100% replacement parts in stock at marcus garvey hub" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"100% replacement parts in stock at marcus garvey hub"}</span>
+        <span key="front-wheel drive · variable intake valves · fuel-saver configuration" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"front-wheel drive · variable intake valves · fuel-saver configuration"}</span>
+        <span key="filters and ignition coils differ from 1.5l" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"filters and ignition coils differ from 1.5l"}</span>
+        <span key="hybrid synergy drive · inverter aux pump system · regenerative braking" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"hybrid synergy drive · inverter aux pump system · regenerative braking"}</span>
+        <span key="requires high-voltage rated service components" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"requires high-voltage rated service components"}</span>
+      </section>
+      {/* /fp-stitch-labels */}
+
+
+
+
+
     </div>
   );
 }

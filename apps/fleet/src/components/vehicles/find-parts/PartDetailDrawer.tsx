@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Fp6Screen } from "./screens/Fp6Screen";
 import { addPartToOrgStock, addPartToPartsList, copyTextToClipboard } from "./findPartsActions";
 import { buildFp6ViewModel } from "./findPartsViewModels";
@@ -42,6 +43,7 @@ export function PartDetailDrawer({
   canLog: boolean;
   vehicleId?: string;
 }) {
+  const [stockQty, setStockQty] = useState(1);
   const ctx = usePartsVehicleContext(vehicleId || "", item.part?.maintenance_component_id);
   useWrongFitCount();
   const data = buildFp6ViewModel({ item, ctx: (ctx.data as Record<string, unknown> | undefined) ?? null });
@@ -58,10 +60,13 @@ export function PartDetailDrawer({
             void addPartToPartsList({ label: item.part?.name || "Part", partId: item.part?.id, componentId: item.part?.maintenance_component_id });
           },
           onAddToStock: () => {
-            void addPartToOrgStock(item.part?.id, 1);
+            void addPartToOrgStock(item.part?.id, stockQty);
           },
           onUseInService: () => { if (canLog) onUseInService(); },
           onCopyCrossRef: (partNumber) => { void copyTextToClipboard(partNumber); },
+          stockQty,
+          onDecStockQty: () => setStockQty((value) => Math.max(1, value - 1)),
+          onIncStockQty: () => setStockQty((value) => Math.min(24, value + 1)),
         }}
       />
     </div>

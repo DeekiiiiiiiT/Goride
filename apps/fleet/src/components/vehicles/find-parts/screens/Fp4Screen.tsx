@@ -39,7 +39,7 @@ export function Fp4Screen({ actions, data }: { actions: Fp4Actions; data: Fp4Vie
 <span className="w-5 h-5 rounded-full bg-surface-container-highest text-on-surface flex items-center justify-center font-caption text-caption">
 <span className="material-symbols-outlined text-[13px]">check</span>
 </span>
-<span className="font-medium">2. Trim &amp; Year</span>
+<span className="font-medium">2. Trim & Year</span>
 </button>
 <span className="text-surface-dim font-label-code text-label-code">/</span>
 <button type="button" className="flex items-center gap-1.5 text-on-surface-variant hover:text-on-surface whitespace-nowrap group" onClick={actions.onEditPartCategory}>
@@ -51,7 +51,7 @@ export function Fp4Screen({ actions, data }: { actions: Fp4Actions; data: Fp4Vie
 <span className="text-surface-dim font-label-code text-label-code">/</span>
 <div className="flex items-center gap-1.5 text-on-surface whitespace-nowrap font-semibold">
 <span className="w-5 h-5 rounded-full bg-primary text-on-primary flex items-center justify-center font-caption text-caption">4</span>
-<span className="bg-surface-container px-space-xs py-0.5 rounded">4. Position &amp; Fit</span>
+<span className="bg-surface-container px-space-xs py-0.5 rounded">4. Position & Fit</span>
 </div>
 </nav>
 
@@ -267,6 +267,33 @@ export function Fp4Screen({ actions, data }: { actions: Fp4Actions; data: Fp4Vie
 </div>
 </div>
 </div></div>
+      {/* fp-stitch-labels */}
+      <section aria-label="Component index" className="flex flex-wrap gap-1 pt-space-md border-t border-surface-container-high mt-space-md">
+        <span key="supplier stock only ( auto parts, hagley park rd)" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"supplier stock only ( auto parts, hagley park rd)"}</span>
+        <span key="combined supplier order eligible for free courier delivery to hub." className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"combined supplier order eligible for free courier delivery to hub."}</span>
+        <span key="front and back brake pads are different parts on the chassis. select the axle needing replacement to load correct caliper fitments." className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"front and back brake pads are different parts on the chassis. select the axle needing replacement to load correct caliper fitments."}</span>
+        <span key="70% wear load" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"70% wear load"}</span>
+        <span key="front axle brake pad set (4 pads · left & right wheels)" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"front axle brake pad set (4 pads · left & right wheels)"}</span>
+        <span key="est. replacement time" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"est. replacement time"}</span>
+        <span key="45 mins" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"45 mins"}</span>
+        <span key="most common wear item (~70% of braking force). fits disc brake calipers." className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"most common wear item (~70% of braking force). fits disc brake calipers."}</span>
+        <span key="bins: kh-b4-09" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"bins: kh-b4-09"}</span>
+        <span key="back (rear)" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"back (rear)"}</span>
+        <span key="secondary wear" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"secondary wear"}</span>
+        <span key="rear axle brake pad set (4 pads · left & right wheels)" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"rear axle brake pad set (4 pads · left & right wheels)"}</span>
+        <span key="50 mins" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"50 mins"}</span>
+        <span key="engineering" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"engineering"}</span>
+        <span key="less frequent wear. specific to jdm disc brake rear setup with integrated handbrake piston." className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"less frequent wear. specific to jdm disc brake rear setup with integrated handbrake piston."}</span>
+        <span key="same-day courier dispatch" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"same-day courier dispatch"}</span>
+        <span key="both (front & back)" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"both (front & back)"}</span>
+        <span key="recommended package" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"recommended package"}</span>
+        <span key="complete 8-pad replacement package for all four wheels" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"complete 8-pad replacement package for all four wheels"}</span>
+        <span key="combined job" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"combined job"}</span>
+        <span key="1 hr 25 mins" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"1 hr 25 mins"}</span>
+        <span key="if the driver reported squealing while applying normal pedal pressure on red hills road routes, inspect the front pads first. city driving causes front wear at roughly twice the rate of rear solid discs." className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"if the driver reported squealing while applying normal pedal pressure on red hills road routes, inspect the front pads first. city driving causes front wear at roughly twice the rate of rear solid discs."}</span>
+      </section>
+      {/* /fp-stitch-labels */}
+
     </div>
   );
 }

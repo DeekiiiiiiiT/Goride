@@ -138,6 +138,39 @@ export type Fp3ServiceDueRow = {
   name: string;
 };
 
+function fp3ServiceDueDisplayName(name: string, position?: string | null): string {
+  const base = orNoneYet(name);
+  if (!position) return base;
+  const pos = String(position).toLowerCase();
+  const label = pos === "front" ? "Front" : pos === "rear" ? "Rear" : position;
+  return `${base} · ${label}`;
+}
+
+function dedupeServiceDueRows(rows: Fp3ServiceDueRow[]): Fp3ServiceDueRow[] {
+  const seen = new Set<string>();
+  const out: Fp3ServiceDueRow[] = [];
+  for (const row of rows) {
+    const key = row.name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(row);
+  }
+  return out;
+}
+
+function fp3TelematicsLine(ctx: Record<string, unknown>, hubLabel: string): string {
+  const note = ctx.latestNote as { text?: string; at?: string | null } | null | undefined;
+  const text = note?.text ? String(note.text).trim() : "";
+  if (!text) return "None yet";
+  const at = note?.at ? new Date(String(note.at)) : null;
+  const when = at && !Number.isNaN(at.getTime())
+    ? at.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" })
+    : "";
+  return when
+    ? `Automated telematics flag from ${hubLabel} Depot Diagnostic bay #3 (Logged ${when}).`
+    : `Automated telematics flag from ${hubLabel} Depot Diagnostic bay #3 (${text}).`;
+}
+
 export type Fp3ViewModel = {
   plate: string;
   vehicleLabel: string;
@@ -156,12 +189,15 @@ export type Fp3ViewModel = {
   servicesDue: string[];
   serviceDueRows: Fp3ServiceDueRow[];
   hubLabel: string;
+  orgShortCode: string;
+  telematicsLine: string;
+  chassisCode: string;
 };
 
 type Fp3BrowseInput = {
   areas?: Array<{ id?: string; name?: string; parts?: Array<{ id: string; name: string; priceJmd?: number; positionAware?: boolean }> }>;
   systems?: Array<{ id: string; plainName?: string; name?: string; components?: Array<{ id: string; plainName?: string; name?: string; count?: number; positionAware?: boolean }> }>;
-  common?: Array<{ id: string; name?: string; plainName?: string; priceJmd?: number; positionAware?: boolean }>;
+  common?: Array<{ id: string; name?: string; plainName?: string; priceJmd?: number; positionAware?: boolean; description?: string }>;
 };
 
 function fp3ComponentIndex(browse: Fp3BrowseInput | undefined) {
@@ -255,7 +291,7 @@ export function buildFp3ViewModel(input: {
       id: part.id,
       name: orNoneYet(part.plainName || part.name),
       priceLabel: formatPriceJmd(part.priceJmd),
-      meta: "Common wear",
+      meta: orNoneYet(part.description || "Common wear"),
     });
   }
   for (const area of input.browse?.areas || []) {
@@ -270,14 +306,16 @@ export function buildFp3ViewModel(input: {
   }
   const areaRows = fp3AreasFromBrowse(input.browse, input.selectedAreaId, input.selectedChipId);
   const areaLabels = areaRows.map((a) => a.name).filter((n) => n !== "None yet");
-  const dueRaw = Array.isArray(ctx.due) ? ctx.due as Array<{ componentId?: string | null; name?: string }> : [];
+  const dueRaw = Array.isArray(ctx.due) ? ctx.due as Array<{ componentId?: string | null; name?: string; position?: string | null }> : [];
   const servicesLegacy = Array.isArray(ctx.services_due) ? (ctx.services_due as string[]) : [];
-  const serviceDueRows: Fp3ServiceDueRow[] = dueRaw.length
-    ? dueRaw.map((row, index) => ({
-        id: String(row.componentId || `due-${index}`),
-        name: orNoneYet(row.name),
-      }))
-    : servicesLegacy.map((name, index) => ({ id: `due-${index}`, name: orNoneYet(name) }));
+  const serviceDueRows: Fp3ServiceDueRow[] = dedupeServiceDueRows(
+    dueRaw.length
+      ? dueRaw.map((row, index) => ({
+          id: String(row.componentId || `due-${index}`),
+          name: fp3ServiceDueDisplayName(String(row.name || "Service"), row.position),
+        }))
+      : servicesLegacy.map((name, index) => ({ id: `due-${index}`, name: orNoneYet(name) })),
+  );
   const servicesDue = serviceDueRows.map((row) => row.name);
   const symptomRows: Fp3SymptomRow[] = [];
   if (input.symptoms?.symptoms?.length) {
@@ -320,6 +358,8 @@ export function buildFp3ViewModel(input: {
   }
   const partTotal = areaRows.reduce((sum, area) => sum + (area.partCount || 0), 0) || tiles.length;
   const selectedChip = areaRows.flatMap((a) => a.subChips).find((c) => c.selected);
+  const hubLabel = orNoneYet(String(ctx.hub_label || ctx.hubLabel || "Fleet hub"));
+  const orgShortCode = orNoneYet(String(ctx.orgShortCode || ctx.org_short_code || "Fleet"));
   return {
     plate: orDash(String(ctx.plate || "")),
     vehicleLabel: orNoneYet(String(ctx.label || "")),
@@ -337,7 +377,10 @@ export function buildFp3ViewModel(input: {
     searchHits: input.searchHits || [],
     servicesDue: servicesDue.length ? servicesDue : ["None yet"],
     serviceDueRows: serviceDueRows.length ? serviceDueRows : [{ id: "empty", name: "None yet" }],
-    hubLabel: orNoneYet(String(ctx.hub_label || ctx.hubLabel || "Fleet hub")),
+    hubLabel,
+    orgShortCode,
+    telematicsLine: fp3TelematicsLine(ctx, hubLabel),
+    chassisCode: orDash(String(ctx.chassis_code || "")),
   };
 }
 
@@ -598,6 +641,7 @@ export type Fp6ViewModel = {
   partBrand: string;
   partNumberAlt: string;
   specRows: Array<{ label: string; value: string }>;
+  engineFilterLine: string;
 };
 
 function fp6ParseCrossRefRows(sisterNames: string | null | undefined, brandFallback: string, altNumber?: string): Fp6CrossRefRow[] {
@@ -704,6 +748,7 @@ export function buildFp6ViewModel(input: {
     partBrand: brand,
     partNumberAlt,
     specRows: specs.length ? specs : [{ label: "None yet", value: "—" }],
+    engineFilterLine: String(ctx.engineFilterLine || "").trim() || "None yet",
   };
 }
 
@@ -836,6 +881,7 @@ export type Fp9ViewModel = {
   trimLabel: string;
   hubLabel: string;
   trims: Fp9TrimRow[];
+  alternateTrimsLine: string;
 };
 
 export function buildFp9ViewModel(input: {
@@ -847,6 +893,7 @@ export function buildFp9ViewModel(input: {
   options?: PartsVehicleOptions | null;
   depotPartsCount?: number;
   selectedTrimId?: string;
+  alternateTrimsLine?: string;
 }): Fp9ViewModel {
   const title = [input.year, input.make, input.model].filter(Boolean).join(" ");
   const versions = input.options?.versions || [];
@@ -875,6 +922,7 @@ export function buildFp9ViewModel(input: {
     trimLabel: orNoneYet(trims[0]?.title),
     hubLabel: orNoneYet(String(input.plate ? "Fleet hub" : "Fleet hub")),
     trims,
+    alternateTrimsLine: orNoneYet(String(input.alternateTrimsLine || "")),
   };
 }
 
