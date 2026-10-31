@@ -52,6 +52,6 @@
     "cars": [],
     "brandCounts": [{ "name": "Toyota", "count": 2 }, { "name": "NiBK", "count": 1 }],
     "areaCounts": [{ "name": "Brakes", "count": 2 }],
-    "statusCounts": { "all": 4, "verified": 0, "needs_checking": 2 }
+    "statusCounts": { "all": 2, "verified": 0, "needs_checking": 2 }
   }
 }

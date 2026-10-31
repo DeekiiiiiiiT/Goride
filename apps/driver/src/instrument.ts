@@ -40,6 +40,13 @@ if (dsn) {
       replaysSessionSampleRate: 0.1,
       replaysOnErrorSampleRate: 1.0,
       ignoreErrors: import.meta.env.DEV ? localDevNoise : [],
+      beforeSend(event) {
+        if (event.message === 'webview_render_process_gone') {
+          const raw = event.extra?.raw;
+          if (typeof raw === 'string' && !raw.includes('crash')) return null;
+        }
+        return event;
+      },
     } as Parameters<typeof Sentry.init>[0],
     sentryReactInit,
   );

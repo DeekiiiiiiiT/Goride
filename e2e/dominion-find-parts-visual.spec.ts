@@ -3,9 +3,15 @@
  * even when the live catalog is almost empty.
  * Run: npx playwright test -c playwright.dominion.config.ts e2e/dominion-find-parts-visual.spec.ts
  */
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
 import fit from "./fixtures/find-parts/fit-2018.json" with { type: "json" };
 import fullDatabase from "./fixtures/find-parts/full-database.json" with { type: "json" };
+
+function fileHash(path: string) {
+  return createHash("sha256").update(readFileSync(path)).digest("hex");
+}
 
 function token() {
   const encode = (value: object) => Buffer.from(JSON.stringify(value)).toString("base64url");
@@ -215,20 +221,34 @@ test("full database uses the filter panel and grouped table", async ({ page }) =
   await expect(page.getByText("Catalog notice:")).toBeVisible();
   await expect(page.getByText("OWNER_RW")).toBeVisible();
   await expect(page.getByRole("button", { name: "Verification queue" })).toHaveCount(0);
-  await page.screenshot({ path: "docs/stitch/dominion-redesign/screenshots/S42l-full-database-live-light.png", fullPage: true });
-
-  await page.evaluate(() => document.documentElement.classList.add("dark"));
-  const panelBg = await page.evaluate(() => {
-    const panel = document.querySelector(".full-database aside");
-    return panel ? getComputedStyle(panel).backgroundColor : "";
+  const statusLabels = page.locator("label:has(input[name='status_radio'])");
+  await expect(statusLabels.nth(0)).toContainText("2");
+  await expect(statusLabels.nth(1)).toContainText("0");
+  await expect(statusLabels.nth(2)).toContainText("2");
+  const lightShot = "docs/stitch/dominion-redesign/screenshots/S42l-full-database-live-light.png";
+  const darkShot = "docs/stitch/dominion-redesign/screenshots/S42l-full-database-live-dark.png";
+  const panel = page.locator(".full-database aside");
+  await page.evaluate(() => {
+    document.documentElement.classList.remove("dark");
+    document.documentElement.style.colorScheme = "light";
+    localStorage.setItem("preference_dark_mode", "false");
   });
-  expect(panelBg).not.toBe("rgb(255, 255, 255)");
+  await expect(panel).toHaveCSS("background-color", "rgb(255, 255, 255)");
+  await page.screenshot({ path: lightShot, fullPage: true });
+
+  await page.evaluate(() => {
+    document.documentElement.classList.add("dark");
+    document.documentElement.style.colorScheme = "dark";
+    localStorage.setItem("preference_dark_mode", "true");
+  });
+  await expect(panel).toHaveCSS("background-color", "rgb(17, 24, 39)");
   const titleColor = await page.evaluate(() => {
     const title = document.querySelector(".parts-db-title");
     return title ? getComputedStyle(title).color : "";
   });
   expect(titleColor).not.toBe("rgb(25, 27, 36)");
-  await page.screenshot({ path: "docs/stitch/dominion-redesign/screenshots/S42l-full-database-live-dark.png", fullPage: true });
+  await page.screenshot({ path: darkShot, fullPage: true });
+  expect(fileHash(lightShot)).not.toBe(fileHash(darkShot));
 
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.getByRole("button", { name: /Filters/ })).toBeVisible();
@@ -238,5 +258,7 @@ test("full database uses the filter panel and grouped table", async ({ page }) =
     return panel.scrollWidth <= panel.clientWidth + 8;
   });
   expect(overflow).toBe(true);
+  await expect(page.locator(".group-head").getByText("OEM").first()).toBeVisible();
+  await expect(page.getByText("1 record in file").first()).toBeVisible();
   await page.screenshot({ path: "docs/stitch/dominion-redesign/screenshots/S42l-full-database-live-phone.png", fullPage: true });
 });

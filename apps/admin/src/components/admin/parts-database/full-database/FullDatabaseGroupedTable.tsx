@@ -31,6 +31,22 @@ function StatusChip({ status }: { status: string }) {
   );
 }
 
+function GroupOwnerAction({ groupId, owner, ownerTitle, onNewFamily, onAddUniversal }: {
+  groupId: string;
+  owner: boolean;
+  ownerTitle?: string;
+  onNewFamily: () => void;
+  onAddUniversal: () => void;
+}) {
+  if (groupId === "sister") {
+    return <button type="button" className="font-body-sm text-[11px] md:text-body-sm text-primary font-semibold disabled:opacity-40" disabled={!owner} title={ownerTitle} onClick={onNewFamily}>New family</button>;
+  }
+  if (groupId === "universal") {
+    return <button type="button" className="font-body-sm text-[11px] md:text-body-sm text-primary font-semibold disabled:opacity-40" disabled={!owner} title={ownerTitle} onClick={onAddUniversal}>Add size-based part</button>;
+  }
+  return null;
+}
+
 function IconButton({ icon, label, disabled, title, danger, onClick }: {
   icon: string;
   label: string;
@@ -116,22 +132,24 @@ export function FullDatabaseGroupedTable({
         const open = !closed[group.id];
         return (
           <div key={group.id} className="border-b border-outline-variant/40">
-            <div className="group-head px-space-md py-2.5 bg-surface-container-low border-b border-outline-variant/40 flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: group.dot }} />
-                <span className="group-title font-headline-md text-headline-md font-bold text-on-surface">{group.title}</span>
-                <span className="group-inline-meta px-2 py-0.2 rounded bg-surface-container text-secondary font-mono-sm text-[11px] font-bold">{group.tag}</span>
-                <span className="group-inline-meta text-secondary font-mono-sm text-mono-sm">· {count} {group.id === "sister" ? "families" : "records"}</span>
+            <div className="group-head px-space-md py-2.5 bg-surface-container-low border-b border-outline-variant/40 md:flex md:items-center md:justify-between md:gap-2">
+              <div className="flex items-center justify-between gap-2 min-w-0">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: group.dot }} />
+                  <span className="group-title font-headline-md text-[14px] md:text-headline-md font-bold text-on-surface truncate">{group.title}</span>
+                  <span className="px-1.5 py-0.2 rounded bg-surface-container text-secondary font-mono-sm text-[10px] md:text-[11px] font-bold shrink-0">{group.tag}</span>
+                  <span className="hidden md:inline text-secondary font-mono-sm text-mono-sm">· {count} {group.id === "sister" ? "families" : "records"}</span>
+                </div>
+                <button type="button" className="md:hidden text-outline hover:text-on-surface p-0.5 shrink-0" title={open ? "Collapse group" : "Expand group"} onClick={() => setClosed((current) => ({ ...current, [group.id]: open }))}>
+                  <span className="material-symbols-outlined text-[17px]">{open ? "expand_less" : "expand_more"}</span>
+                </button>
               </div>
-              <div className="group-meta flex items-center gap-2 flex-wrap">
-                <span className="group-phone-meta px-2 py-0.2 rounded bg-surface-container text-secondary font-mono-sm text-[11px] font-bold">{group.tag}</span>
-                <span className="group-phone-meta text-secondary font-mono-sm text-mono-sm">· {count} {group.id === "sister" ? "families" : "records"}</span>
-                {group.id === "sister" ? (
-                  <button type="button" className="font-body-sm text-primary font-semibold disabled:opacity-40" disabled={!owner} title={ownerTitle} onClick={onNewFamily}>New family</button>
-                ) : null}
-                {group.id === "universal" ? (
-                  <button type="button" className="font-body-sm text-primary font-semibold disabled:opacity-40" disabled={!owner} title={ownerTitle} onClick={onAddUniversal}>Add size-based part</button>
-                ) : null}
+              <div className="md:hidden flex items-center justify-between gap-2 mt-1 pt-1 border-t border-outline-variant/40">
+                <span className="font-mono-sm text-[11px] text-secondary">{group.id === "sister" ? `${count} ${count === 1 ? "family" : "families"} on file` : `${count} ${count === 1 ? "record" : "records"} in file`}</span>
+                <GroupOwnerAction groupId={group.id} owner={owner} ownerTitle={ownerTitle} onNewFamily={onNewFamily} onAddUniversal={onAddUniversal} />
+              </div>
+              <div className="hidden md:flex items-center gap-2 shrink-0">
+                <GroupOwnerAction groupId={group.id} owner={owner} ownerTitle={ownerTitle} onNewFamily={onNewFamily} onAddUniversal={onAddUniversal} />
                 <button type="button" className="text-outline hover:text-on-surface p-1" title={open ? "Collapse group" : "Expand group"} onClick={() => setClosed((current) => ({ ...current, [group.id]: open }))}>
                   <span className="material-symbols-outlined text-[18px]">{open ? "expand_less" : "expand_more"}</span>
                 </button>

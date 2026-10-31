@@ -199,15 +199,23 @@ export function FullDatabaseTab({
     }
   }
 
-  const brandChoices = search.data?.facets?.brandCounts?.length
-    ? search.data.facets.brandCounts
+  const brandCounts = search.data?.facets?.brandCounts;
+  const brandChoices = brandCounts?.length
+    ? brandCounts
     : (search.data?.facets?.brands ?? []).map((name) => ({ name, count: 0 }));
   const areas = search.data?.facets?.areaCounts ?? (search.data?.facets?.assemblies ?? []).map((name) => ({ name, count: 0 }));
-  const statusCounts = search.data?.facets?.statusCounts ?? {
-    all: counts.all,
-    verified: 0,
-    needs_checking: 0,
-  };
+  const reportedStatus = search.data?.facets?.statusCounts;
+  const statusCounts = reportedStatus
+    ? {
+        all: reportedStatus.verified + reportedStatus.needs_checking,
+        verified: reportedStatus.verified,
+        needs_checking: reportedStatus.needs_checking,
+      }
+    : {
+        all: counts.oem + counts.engine + counts.aftermarket,
+        verified: 0,
+        needs_checking: 0,
+      };
   const title = make || model ? [make, model, year].filter(Boolean).join(" ") : "Whole database";
   const changedAt = overview.data?.lastCatalogChangeAt;
   const changedLabel = changedAt

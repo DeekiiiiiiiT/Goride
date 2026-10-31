@@ -34,5 +34,10 @@ if (dsn) {
     replaysOnErrorSampleRate: 1.0,
     enableLogs: true,
     ignoreErrors: import.meta.env.DEV ? localDevNoise : [],
+    beforeSendSpan(span) {
+      const desc = span.description || '';
+      if (desc.includes('/delivery/admin/markets')) return null;
+      return span;
+    },
   });
 }

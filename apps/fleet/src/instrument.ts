@@ -51,7 +51,10 @@ if (dsn) {
     replaysSessionSampleRate: 0.1,
     replaysOnErrorSampleRate: 1.0,
     enableLogs: true,
-    ignoreErrors: isDev ? localDevNoise : [],
+    ignoreErrors: [
+      ...(isDev ? localDevNoise : []),
+      /Failed to fetch \(.*supabase\.co\)/i,
+    ],
     beforeSend(event) {
       if (isDev && eventLooksLikeViteHmr(event)) return null;
       return event;
