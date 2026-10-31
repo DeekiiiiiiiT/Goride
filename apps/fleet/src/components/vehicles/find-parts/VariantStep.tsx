@@ -1,7 +1,7 @@
 import { api } from "../../../services/api";
 import { Fp2Screen } from "./screens/Fp2Screen";
 import { buildFp2ViewModel } from "./findPartsViewModels";
-import { usePartsMyVehicles, usePartsVehicleOptions, useWrongFitCount } from "./findPartsQueries";
+import { usePartsMyVehicles, usePartsVehicleOptions } from "./findPartsQueries";
 import type { FleetCar } from "./CarStep";
 import type { PartsMyVehicleRow } from "./findPartsTypes";
 
@@ -26,9 +26,17 @@ export function VariantStep({
 }) {
   const options = usePartsVehicleOptions(make, model);
   const myVehicles = usePartsMyVehicles();
-  useWrongFitCount();
   const title = [year, make, model].filter(Boolean).join(" ");
   const fleetRows = (myVehicles.data?.items || []) as PartsMyVehicleRow[];
+  const matchedRow = fleetRows.find(
+    (row) =>
+      String(row.make || "").toLowerCase() === make.toLowerCase()
+      && String(row.model || "").toLowerCase() === model.toLowerCase(),
+  );
+  const vehiclePhotoUrl =
+    String((matchedRow as { photo_url?: string; vehicle_photo_url?: string } | undefined)?.photo_url
+      || (matchedRow as { vehicle_photo_url?: string } | undefined)?.vehicle_photo_url
+      || "");
   const data = buildFp2ViewModel({
     make,
     model,
@@ -36,6 +44,7 @@ export function VariantStep({
     plate: plate || cars[0]?.licensePlate,
     options: options.data ?? null,
     fleetRows,
+    vehiclePhotoUrl: vehiclePhotoUrl || null,
   });
 
   return (

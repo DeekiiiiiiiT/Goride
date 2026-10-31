@@ -52,15 +52,10 @@ function useFleetHealthStatus() {
     queryKey: ["fleet-parts-health"],
     queryFn: async () => {
       try {
-        await api.partsRunnerOnline();
+        await api.partsMyVehicles();
         return "ALL SYSTEMS NOMINAL";
       } catch {
-        try {
-          await api.partsMyVehicles();
-          return "PARTS DESK DEGRADED";
-        } catch {
-          return "FLEET-CORE UNREACHABLE";
-        }
+        return "FLEET-CORE UNREACHABLE";
       }
     },
     refetchInterval: 60_000,

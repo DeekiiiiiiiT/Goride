@@ -418,7 +418,7 @@ export function Fp11Screen({ actions, data }: { actions: Fp11Actions; data: Fp11
               </div>
 <div>
 <span className="font-semibold text-on-surface">{data.hubLabel} hub Administrator:</span>
-<span className="text-on-surface-variant"> None yet Douglas (Lead Dispatcher) · Extension #401 · Desk 3B</span>
+<span className="text-on-surface-variant"> {data.adminContactLine}</span>
 </div>
 </div>
 <div className="flex items-center gap-2 text-on-surface-variant font-label-code text-caption">
@@ -487,22 +487,6 @@ export function Fp11Screen({ actions, data }: { actions: Fp11Actions; data: Fp11
 
 
 </div></div>
-      {/* fp-stitch-labels */}
-      <section aria-label="Component index" className="flex flex-wrap gap-1 pt-space-md border-t border-surface-container-high mt-space-md">
-        <span key="matching fitment against 14,200 hub catalog items..." className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"matching fitment against 14,200 hub catalog items..."}</span>
-        <span key="we don't have the in our car list yet." className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"we don't have the in our car list yet."}</span>
-        <span key="pre-fills: year · make · model" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"pre-fills: year · make · model"}</span>
-        <span key="active profile: (driver operator #210)" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"active profile: (driver operator #210)"}</span>
-        <span key="request access from (fleet lead)" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"request access from (fleet lead)"}</span>
-        <span key="hub status: 99.98% up" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"hub status: 99.98% up"}</span>
-        <span key="simulated edge-states for parts requisitioning, chassis cross-referencing, and permission gates across depot terminals." className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"simulated edge-states for parts requisitioning, chassis cross-referencing, and permission gates across depot terminals."}</span>
-        <span key="the parts database or hub inventory feed did not respond in time. your vehicle selection and entered notes are preserved." className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"the parts database or hub inventory feed did not respond in time. your vehicle selection and entered notes are preserved."}</span>
-        <span key="attempt: 1 of 3" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"attempt: 1 of 3"}</span>
-        <span key="driver / dispatch staff" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"driver / dispatch staff"}</span>
-        <span key="< 1,400ms" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"< 1,400ms"}</span>
-        <span key="vin uncatalogued / pre-2002 m vehicle" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"vin uncatalogued / pre-2002 m vehicle"}</span>
-      </section>
-      {/* /fp-stitch-labels */}
 
     </div>
   );

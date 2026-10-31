@@ -106,47 +106,17 @@ async function ownVehicle(c: Context, vehicleId: string) {
   return { status, vehicle: scoped[0] ?? null };
 }
 
-function stampOffers(body: Record<string, unknown>) {
-  const sections = Array.isArray(body.sections) ? body.sections : [];
-  return {
-    ...body,
-    sections: sections.map((section) => {
-      const row = section as { items?: unknown[] };
-      const items = Array.isArray(row.items) ? row.items : [];
-      return {
-        ...(section as Record<string, unknown>),
-        items: items.map((item) => {
-          const part = item as { offers?: unknown[] };
-          const offers = Array.isArray(part.offers) ? part.offers : [];
-          return { ...(item as Record<string, unknown>), bestOffer: offers[0] ?? null };
-        }),
-      };
-    }),
-  };
-}
-
-async function downtimeFor(orgId: string) {
-  if (!orgId) return 0;
-  const settings = await kv.get(`organization_settings:${orgId}`);
-  return Number((settings as { downtimeCostPerDayJmd?: number } | null)?.downtimeCostPerDayJmd) || 0;
-}
-
 export async function loadPartsActivity(supabase: SupabaseClient, orgId: string) {
-  const newest = async (table: string, extra?: (q: { eq: (c: string, v: string) => unknown }) => unknown) => {
-    let query = supabase.from(table).select("*", { count: "exact" }).eq("organization_id", orgId).order("created_at", { ascending: false }).limit(5);
-    if (extra) query = extra(query as never) as typeof query;
-    const { data, error, count } = await query;
+  const newest = async (table: string) => {
+    const { data, error, count } = await supabase.from(table).select("*", { count: "exact" }).eq("organization_id", orgId).order("created_at", { ascending: false }).limit(5);
     if (error) throw error;
     return { items: data || [], total: count ?? (data || []).length };
   };
-  const [requests, quotes, repeatAlerts, warrantyClaims, cores] = await Promise.all([
+  const [requests, repeatAlerts] = await Promise.all([
     newest("parts_sourcing_requests"),
-    newest("part_quote_request"),
     newest("part_repeat_alert"),
-    newest("part_warranty_claim"),
-    newest("part_core_return"),
   ]);
-  return { requests, quotes, repeatAlerts, warrantyClaims, cores };
+  return { requests, repeatAlerts };
 }
 
 export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseClient) {
@@ -198,11 +168,11 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
         componentId: componentId || null,
         position: position || null,
         side: side || null,
-        orgId: orgId || null,
-        downtimePerDay: await downtimeFor(orgId),
+        orgId: null,
+        downtimePerDay: 0,
       });
       return c.json({
-        ...stampOffers(body as unknown as Record<string, unknown>),
+        ...body,
         linked: Boolean(catalogId),
         vehicle: vehicle
           ? {
@@ -236,41 +206,6 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
   app.get(`${PREFIX}/symptoms`, ...view, async (c: Context) => {
     try {
       return c.json(await readSymptoms(supabase));
-    } catch (error) {
-      return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
-    }
-  });
-
-  app.post(`${PREFIX}/quote`, ...view, async (c: Context) => {
-    try {
-      const orgId = String(getOrgId(c) || "");
-      if (!orgId) return c.json({ error: "Organization required" }, 400);
-      const body = await c.req.json() as Record<string, unknown>;
-      const problem = quoteInputError(body);
-      if (problem) return c.json({ error: problem }, 400);
-      const vehicleId = body.vehicleId ? String(body.vehicleId) : "";
-      if (vehicleId) {
-        const access = await ownVehicle(c, vehicleId);
-        if (access.status !== 200) return c.json({ error: "Vehicle not found" }, access.status === 403 ? 403 : 404);
-      }
-      const qty = body.qty != null && body.qty !== "" ? Number(body.qty) : 1;
-      const { data, error } = await supabase.from("part_quote_request").insert({
-        organization_id: orgId,
-        vehicle_id: vehicleId || null,
-        part_id: body.partId ? String(body.partId) : null,
-        part_number: body.partNumber ? String(body.partNumber) : null,
-        qty,
-        note: body.note ? String(body.note).slice(0, 140) : null,
-        urgency: body.urgency ? String(body.urgency) : "normal",
-        reply_due_at: replyDueAt(body.urgency ? String(body.urgency) : "normal"),
-        target_price_jmd: body.targetPriceJmd != null && body.targetPriceJmd !== "" ? Number(body.targetPriceJmd) : null,
-        linked_service_id: body.linkedServiceId ? String(body.linkedServiceId).slice(0, 80) : null,
-        maintenance_component_id: body.componentId && UUID_RE.test(String(body.componentId)) ? String(body.componentId) : null,
-        supplier_ids: Array.isArray(body.supplierIds) ? body.supplierIds.map(String).slice(0, 8) : [],
-        status: "open",
-      }).select("*").single();
-      if (error) throw error;
-      return c.json({ item: data });
     } catch (error) {
       return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
     }
@@ -541,56 +476,6 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
     }
   });
 
-  app.get(`${PREFIX}/parts-list`, ...view, async (c: Context) => {
-    try {
-      const orgId = String(getOrgId(c) || "");
-      const user = c.get("rbacUser") as { userId?: string } | undefined;
-      const { data: list, error } = await supabase.from("fleet_parts_list").select("id, status").eq("organization_id", orgId).eq("user_id", user?.userId ?? "").eq("status", "open").maybeSingle();
-      if (error) throw error;
-      if (!list) return c.json({ list: null, lines: [] });
-      const { data: lines, error: lineError } = await supabase.from("fleet_parts_list_line").select("id, label, qty, part_id, supplier_id, organization_id").eq("list_id", (list as { id: string }).id).eq("organization_id", orgId);
-      if (lineError) throw lineError;
-      return c.json({ list, lines: scopedToOrg(lines || [], orgId) });
-    } catch (error) {
-      return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
-    }
-  });
-
-  app.post(`${PREFIX}/parts-list`, ...view, async (c: Context) => {
-    try {
-      const orgId = String(getOrgId(c) || "");
-      const user = c.get("rbacUser") as { userId?: string } | undefined;
-      const body = await c.req.json() as { label?: string; qty?: number; partId?: string; supplierId?: string; componentId?: string };
-      const label = String(body.label ?? "").trim().slice(0, 160);
-      if (!label) return c.json({ error: "Label is required" }, 400);
-      let listId = "";
-      const { data: existing } = await supabase.from("fleet_parts_list").select("id").eq("organization_id", orgId).eq("user_id", user?.userId ?? "").eq("status", "open").maybeSingle();
-      if (existing && (existing as { id?: string }).id) listId = String((existing as { id: string }).id);
-      else {
-        const { data: created, error } = await supabase.from("fleet_parts_list").insert({
-          organization_id: orgId,
-          user_id: user?.userId ?? null,
-          status: "open",
-        }).select("id").single();
-        if (error) throw error;
-        listId = String((created as { id: string }).id);
-      }
-      const { error: lineError } = await supabase.from("fleet_parts_list_line").insert({
-        list_id: listId,
-        organization_id: orgId,
-        label,
-        qty: Number(body.qty) > 0 ? Number(body.qty) : 1,
-        part_id: body.partId && UUID_RE.test(body.partId) ? body.partId : null,
-        supplier_id: body.supplierId && UUID_RE.test(body.supplierId) ? body.supplierId : null,
-        component_id: body.componentId && UUID_RE.test(body.componentId) ? body.componentId : null,
-      });
-      if (lineError) throw lineError;
-      return c.json({ ok: true, listId });
-    } catch (error) {
-      return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
-    }
-  });
-
   app.post(`${PREFIX}/wrong-fit`, ...view, async (c: Context) => {
     try {
       const orgId = String(getOrgId(c) || "");
@@ -604,22 +489,6 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
       const { error } = await supabase.from(table).update({ wrong_fit_reported_at: new Date().toISOString() }).eq("id", id).eq("organization_id", orgId);
       if (error) throw error;
       return c.json({ ok: true });
-    } catch (error) {
-      return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
-    }
-  });
-
-  app.get(`${PREFIX}/wrong-fit-count`, ...view, async (c: Context) => {
-    try {
-      const orgId = String(getOrgId(c) || "");
-      const since = new Date(Date.now() - 90 * 86_400_000).toISOString();
-      const countTable = async (table: string) => {
-        const { count, error } = await supabase.from(table).select("id", { count: "exact", head: true }).eq("organization_id", orgId).gte("wrong_fit_reported_at", since);
-        if (error) throw error;
-        return count ?? 0;
-      };
-      const [requests, quotes] = await Promise.all([countTable("parts_sourcing_requests"), countTable("part_quote_request")]);
-      return c.json({ count: requests + quotes, days: 90 });
     } catch (error) {
       return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
     }
@@ -645,34 +514,6 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
     }
   });
 
-  app.get(`${PREFIX}/supplier-sync`, ...view, async (c: Context) => {
-    try {
-      const orgId = String(getOrgId(c) || "");
-      const { data, error } = await supabase.from("parts_supplier_sync_run").select("id, status, message, started_at, finished_at, organization_id").eq("organization_id", orgId).order("started_at", { ascending: false }).limit(1).maybeSingle();
-      if (error) throw error;
-      const row = data && (data as { organization_id?: string }).organization_id === orgId ? data : null;
-      return c.json({ last: row, online: false });
-    } catch (error) {
-      return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
-    }
-  });
-
-  app.post(`${PREFIX}/supplier-sync`, ...view, async (c: Context) => {
-    try {
-      const orgId = String(getOrgId(c) || "");
-      const { error } = await supabase.from("parts_supplier_sync_run").insert({
-        organization_id: orgId,
-        status: "ok",
-        message: "Cache-only adapter. No live vendor feed is connected yet.",
-        finished_at: new Date().toISOString(),
-      });
-      if (error) throw error;
-      return c.json({ ok: true, message: "Cache-only adapter. No live vendor feed is connected yet." });
-    } catch (error) {
-      return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
-    }
-  });
-
   app.get(`${PREFIX}/fitment-report`, ...view, async (c: Context) => {
     try {
       const orgId = String(getOrgId(c) || "");
@@ -692,9 +533,5 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
     } catch (error) {
       return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
     }
-  });
-
-  app.get(`${PREFIX}/runner-online`, ...view, async (c: Context) => {
-    return c.json({ online: false, windowMinutes: 15 });
   });
 }

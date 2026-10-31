@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { PartsActivity } from "./PartsActivityPanel";
 import { PartsActivityPanel } from "./PartsActivityPanel";
-import { usePartsMyVehicles, usePartsVehicleOptions, usePartsTerm, useWrongFitCount } from "./findPartsQueries";
+import { usePartsMyVehicles, usePartsVehicleOptions, usePartsTerm } from "./findPartsQueries";
 import type { PartsMyVehicleRow } from "./findPartsTypes";
 
 export type FleetCar = {
@@ -41,7 +41,6 @@ export function CarStep({
   onAsk: () => void;
 }) {
   const myVehicles = usePartsMyVehicles();
-  const wrongFit = useWrongFitCount();
   const [make, setMake] = useState("");
   const [model, setModel] = useState("");
   const [year, setYear] = useState("");
@@ -129,9 +128,15 @@ export function CarStep({
                           <span className="w-1.5 h-1.5 rounded-full bg-secondary" />
                           Verified specs
                         </span>
-                        <span className="inline-flex items-center gap-1 px-space-xs py-0.5 rounded bg-surface-container-highest font-caption text-caption text-on-surface-variant">
-                          {Number(row.parts_on_shelf ?? 0)} parts on shelf
-                        </span>
+                        {row.service_due ? (
+                          <span className="inline-flex items-center gap-1 px-space-xs py-0.5 rounded bg-surface-container-highest font-caption text-caption text-on-surface-variant">
+                            Service due: {String(row.service_due)}
+                          </span>
+                        ) : row.parts_on_shelf != null && Number(row.parts_on_shelf) > 0 ? (
+                          <span className="inline-flex items-center gap-1 px-space-xs py-0.5 rounded bg-surface-container-highest font-caption text-caption text-on-surface-variant">
+                            {Number(row.parts_on_shelf)} parts on file
+                          </span>
+                        ) : null}
                       </div>
                       <div className="flex items-center justify-between text-on-surface font-body-sm text-caption font-semibold mt-1">
                         <span>Select vehicle</span>
@@ -152,6 +157,36 @@ export function CarStep({
                 <SelectField label="Model" id="select-model" value={model} onChange={setModel} options={models.length ? models : ["—"]} disabled={!make} />
                 <SelectField label="Year" id="select-year" value={year} onChange={setYear} options={years} disabled={!model} />
               </div>
+              {makes.length > 0 ? (
+                <div className="flex flex-wrap items-center gap-space-xs mt-space-sm">
+                  <span className="font-caption text-caption text-on-surface-variant uppercase font-semibold">Popular makes</span>
+                  {makes.slice(0, 8).map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      className={`px-space-sm py-1 rounded-lg font-body-sm text-caption border transition-colors ${make === m ? "bg-primary text-on-primary border-primary" : "bg-surface-container-lowest text-on-surface border-outline-variant/40 hover:bg-surface-container"}`}
+                      onClick={() => setMake(m)}
+                    >
+                      {m}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+              {models.length > 0 && make ? (
+                <div className="flex flex-wrap items-center gap-space-xs mt-space-xs">
+                  <span className="font-caption text-caption text-on-surface-variant uppercase font-semibold">Models</span>
+                  {models.slice(0, 6).map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      className={`px-space-sm py-1 rounded-lg font-body-sm text-caption border transition-colors ${model === m ? "bg-secondary-container text-on-secondary-container border-outline-variant/40" : "bg-surface-container-lowest text-on-surface border-outline-variant/40 hover:bg-surface-container"}`}
+                      onClick={() => setModel(m)}
+                    >
+                      {m}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
               <div className="flex flex-col mt-space-xs">
                 <span className="font-caption text-caption text-on-surface-variant font-medium mb-1.5">Or type vehicle / VIN:</span>
                 <div className="relative flex items-center w-full">
@@ -203,20 +238,6 @@ export function CarStep({
           </div>
         </div>
         <PartsActivityPanel activity={activity} onSeeAll={onSeeAll} onAsk={onAsk} />
-        <div className="lg:col-span-12">
-          <div className="bg-surface-container rounded-xl p-space-md flex items-start gap-space-md shadow-xs">
-            <div className="w-8 h-8 rounded-lg bg-surface-container-highest flex items-center justify-center text-on-surface shrink-0">
-              <span className="material-symbols-outlined text-[18px]">verified</span>
-            </div>
-            <div className="flex flex-col">
-              <span className="font-headline-sm text-caption text-on-surface uppercase tracking-wider font-semibold">Zero-Fitment Error Guarantee</span>
-              <p className="font-body-sm text-caption text-on-surface-variant mt-0.5">
-                Every part cataloged is verified against Jamaican road conditions and the chassis code on your fitness certificate.
-                Wrong-fit reports in the last {wrongFit.data?.days ?? 30} days: {wrongFit.data?.count ?? 0}.
-              </p>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   );

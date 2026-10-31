@@ -7,31 +7,12 @@ export function saveCurrentPartsSearch(name: string) {
   return api.savePartsSearch({ name: name || "Saved search", url: window.location.search });
 }
 
-export function addPartToPartsList(body: {
-  label: string;
-  partId?: string;
-  componentId?: string;
-  qty?: number;
-}) {
-  return api.addToPartsList(body);
-}
-
 export function notifyPartsAdmin(body: { kind?: string; title?: string; body: string }) {
   return api.notifyPartsAdmin(body);
 }
 
 export function downloadCurrentFitmentReport() {
   return api.downloadFitmentReport(Object.fromEntries(new URLSearchParams(window.location.search).entries()));
-}
-
-export function logBulkConsumableStockOut(partId: string | undefined, qty = 1) {
-  if (!partId) return Promise.resolve(undefined);
-  return api.setOrgPartStock({ partId, qty: -Math.abs(qty) });
-}
-
-export function addPartToOrgStock(partId: string | undefined, qty = 1) {
-  if (!partId) return Promise.resolve(undefined);
-  return api.setOrgPartStock({ partId, qty: Math.abs(qty) });
 }
 
 export function copyTextToClipboard(text: string) {

@@ -213,7 +213,7 @@ export function Fp3Screen({
 >
 <div className="flex items-start justify-between">
 <span className="material-symbols-outlined text-[24px] text-on-surface-variant group-hover:text-primary transition-colors">inventory_2</span>
-<span className="font-label-code text-caption px-1.5 py-0.5 rounded bg-surface-container text-on-surface-variant font-medium">{tile.priceLabel}</span>
+<span className="font-label-code text-caption px-1.5 py-0.5 rounded bg-surface-container text-on-surface-variant font-medium">{tile.meta}</span>
 </div>
 <div>
 <div className="font-headline-sm text-[15px] font-semibold text-on-surface group-hover:text-primary leading-snug">{tile.name}</div>
@@ -322,8 +322,7 @@ export function Fp3Screen({
 <h3 className="font-headline-sm text-headline-sm text-on-surface">{part.name}</h3>
 <p className="font-body-sm text-body-sm text-on-surface-variant mt-1">Direct OEM replacement compatible with {data.trimLabel} hybrid brake recovery regeneration calipers.</p>
 </div>
-<div className="flex items-center justify-between pt-2">
-<div className="font-label-price text-label-price text-on-surface">{part.priceLabel} <span className="font-body-sm text-caption text-on-surface-variant font-normal">landed</span></div>
+<div className="flex items-center justify-end pt-2">
 <button type="button" className={`px-3.5 py-1.5 rounded-lg font-body-sm text-body-sm font-medium flex items-center gap-1 transition-opacity ${partIndex === 0 ? "bg-primary text-on-primary hover:opacity-90" : "bg-surface-container hover:bg-surface-container-high text-on-surface"}`} onClick={() => actions.onPickProblem(part.id, part.name, part.positionAware)}>
 <span>{partIndex === 0 ? `Select ${part.name}` : `Add ${part.name} to check`}</span>
 <span className="material-symbols-outlined text-[16px]">{partIndex === 0 ? "arrow_forward" : "add"}</span>
@@ -358,85 +357,6 @@ export function Fp3Screen({
 </div>
 </div>
 </div></div>
-      {/* fp-stitch-labels */}
-      <section aria-label="Component index" className="flex flex-wrap gap-1 pt-space-md border-t border-surface-container-high mt-space-md">
-        <span key="engine oil & filter" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"engine oil & filter"}</span>
-        <span key="air filter" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"air filter"}</span>
-        <span key="oxygen sensor" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"oxygen sensor"}</span>
-        <span key="— also called o2 sensor / lambda probe" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"— also called o2 sensor / lambda probe"}</span>
-        <span key="exhaust / emissions" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"exhaust / emissions"}</span>
-        <span key="— disc brake friction set (front/rear)" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"— disc brake friction set (front/rear)"}</span>
-        <span key="front & rear available · 2 in stock" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"front & rear available · 2 in stock"}</span>
-        <span key="album" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"album"}</span>
-        <span key="— also called brake disc" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"— also called brake disc"}</span>
-        <span key="braking system" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"braking system"}</span>
-        <span key="2 in stock" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"2 in stock"}</span>
-        <span key="oil filter" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"oil filter"}</span>
-        <span key="spin-on cartridge" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"spin-on cartridge"}</span>
-        <span key="due soon" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"due soon"}</span>
-        <span key="engine intake panel" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"engine intake panel"}</span>
-        <span key="ceramic / semi-metallic" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"ceramic / semi-metallic"}</span>
-        <span key='front 26"+14"' className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{'front 26"+14"'}</span>
-        <span key="wiper blades" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"wiper blades"}</span>
-        <span key="all-weather aero beam" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"all-weather aero beam"}</span>
-        <span key="battery (12v aux)" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"battery (12v aux)"}</span>
-        <span key="starter / hybrid control" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"starter / hybrid control"}</span>
-        <span key="4 req." className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"4 req."}</span>
-        <span key="spark plugs" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"spark plugs"}</span>
-        <span key="iridium long life (100k)" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"iridium long life (100k)"}</span>
-        <span key="hvac" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"hvac"}</span>
-        <span key="carbon" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"carbon"}</span>
-        <span key="cabin a/c filter" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"cabin a/c filter"}</span>
-        <span key="glovebox hvac element" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"glovebox hvac element"}</span>
-        <span key="lightbulb" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"lightbulb"}</span>
-        <span key="led / h4" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"led / h4"}</span>
-        <span key="headlight bulb" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"headlight bulb"}</span>
-        <span key="high/low beam capsule" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"high/low beam capsule"}</span>
-        <span key="10 categories total" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"10 categories total"}</span>
-        <span key="32 parts" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"32 parts"}</span>
-        <span key="filters" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"filters"}</span>
-        <span key="6 parts" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"6 parts"}</span>
-        <span key="brakes" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"brakes"}</span>
-        <span key="active group (18)" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"active group (18)"}</span>
-        <span key="suspension & steering" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"suspension & steering"}</span>
-        <span key="14 parts" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"14 parts"}</span>
-        <span key="lights & visibility" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"lights & visibility"}</span>
-        <span key="12 parts" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"12 parts"}</span>
-        <span key="cooling" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"cooling"}</span>
-        <span key="8 parts" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"8 parts"}</span>
-        <span key="battery & electrical" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"battery & electrical"}</span>
-        <span key="22 parts" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"22 parts"}</span>
-        <span key="9 parts" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"9 parts"}</span>
-        <span key="7 parts" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"7 parts"}</span>
-        <span key="tyres & wheels" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"tyres & wheels"}</span>
-        <span key="11 parts" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"11 parts"}</span>
-        <span key="braking subcategories ( chassis)" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"braking subcategories ( chassis)"}</span>
-        <span key="5 items" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"5 items"}</span>
-        <span key="brake fluid" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"brake fluid"}</span>
-        <span key="dot 4" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"dot 4"}</span>
-        <span key="brake caliper" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"brake caliper"}</span>
-        <span key="brake shoes / drums" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"brake shoes / drums"}</span>
-        <span key="squeaks or grinds when i brake" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"squeaks or grinds when i brake"}</span>
-        <span key="audible indicator flag · front wheels typical" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"audible indicator flag · front wheels typical"}</span>
-        <span key="high probability (94%)" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"high probability (94%)"}</span>
-        <span key="front set" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"front set"}</span>
-        <span key="brake pads — most likely" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"brake pads — most likely"}</span>
-        <span key="direct oem replacement friction pads compatible with hybrid brake recovery regeneration calipers." className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"direct oem replacement friction pads compatible with hybrid brake recovery regeneration calipers."}</span>
-        <span key="select brake pads" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"select brake pads"}</span>
-        <span key="inspect for scoring" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"inspect for scoring"}</span>
-        <span key="pair disc" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"pair disc"}</span>
-        <span key="vented front rotor disk (262mm diameter). required if pulsation occurs or metal backing scored the contact face." className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"vented front rotor disk (262mm diameter). required if pulsation occurs or metal backing scored the contact face."}</span>
-        <span key="add rotor to check" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"add rotor to check"}</span>
-        <span key="car won't start, or clicks" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"car won't start, or clicks"}</span>
-        <span key="warning" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"warning"}</span>
-        <span key="engine light is on" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"engine light is on"}</span>
-        <span key="engine running hot" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"engine running hot"}</span>
-        <span key="airwave" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"airwave"}</span>
-        <span key="a/c smells or blows weak" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"a/c smells or blows weak"}</span>
-        <span key="a light is out" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"a light is out"}</span>
-        <span key="skip — show everything for this car (142 parts) →" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"skip — show everything for this car (142 parts) →"}</span>
-      </section>
-      {/* /fp-stitch-labels */}
     </div>
   );
 }

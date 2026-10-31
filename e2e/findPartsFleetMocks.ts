@@ -51,7 +51,6 @@ export function fleetCorePartsFixtures(cars: FleetCar[] = []) {
     },
     vehicleOptions: { makes: ["Nissan"], models: ["Note"], years: [2016], versions: findPartsFixtureVersions },
     term: { hits: [], components: [], synonyms: [], parts: [] },
-    wrongFitCount: { count: 0, days: 30 },
     activity: {
       requests: { total: 2, items: [{ id: "req-1", need_text: "Fixture front pads", status: "open" }, { id: "req-2", need_text: "Fixture alternator", status: "sourcing" }] },
       quotes: { total: 1, items: [{ id: "q-1", reference: "FIX-Q-001", supplier: "Fixture Motors", total_jmd: 9999 }] },
@@ -59,7 +58,6 @@ export function fleetCorePartsFixtures(cars: FleetCar[] = []) {
       warrantyClaims: { total: 0, items: [] },
       cores: { total: 1, items: [{ id: "core-1", summary: "Fixture core credit" }] },
     },
-    runnerOnline: { online: true },
     find: {
       sections: findPartsFixtureFindSections,
       car: { label: vehicle.label },
@@ -83,9 +81,7 @@ export function fleetCorePartsFixtures(cars: FleetCar[] = []) {
     },
     browse: findPartsFixtureBrowse,
     symptoms: { problems: [{ id: "sym-1", name: "Fixture squeal", positionAware: true }] },
-    partsList: { items: [] },
     savedSearches: { items: [] },
-    supplierSync: { status: "idle" },
   };
 }
 
@@ -94,15 +90,11 @@ export async function mockFleetCoreRoute(url: string, method: string, fixtures: 
   if (path.endsWith("/parts/my-vehicles")) return fixtures.myVehicles;
   if (path.endsWith("/parts/vehicle-options")) return fixtures.vehicleOptions;
   if (path.endsWith("/parts/term")) return fixtures.term;
-  if (path.endsWith("/parts/wrong-fit-count")) return fixtures.wrongFitCount;
   if (path.endsWith("/parts/activity")) return fixtures.activity;
-  if (path.endsWith("/parts/runner-online")) return fixtures.runnerOnline;
   if (path.includes("/parts/vehicle-context")) return fixtures.vehicleContext;
   if (path.endsWith("/parts/browse")) return fixtures.browse;
   if (path.endsWith("/parts/symptoms")) return fixtures.symptoms;
-  if (path.endsWith("/parts/parts-list")) return fixtures.partsList;
   if (path.endsWith("/parts/saved-searches")) return fixtures.savedSearches;
-  if (path.endsWith("/parts/supplier-sync") && method === "GET") return fixtures.supplierSync;
   if (path.includes("/parts/find")) return fixtures.find;
   return null;
 }

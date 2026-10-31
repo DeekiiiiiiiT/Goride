@@ -1,16 +1,12 @@
 import type { ReactNode } from "react";
 import type { Fp8ViewModel } from "../findPartsViewModels";
 
-export type Fp8FormState = { qty: number; note: string; urgency: string };
+export type Fp8FormState = { note: string };
 
 export type Fp8Actions = {
   onBack: () => void;
   onViewActivity: () => void;
-  onDecQty: () => void;
-  onIncQty: () => void;
-  onQtyChange: (qty: number) => void;
   onNoteChange: (note: string) => void;
-  onUrgency: (value: string) => void;
   onSubmit: () => void;
   onPhotoSelected: (file: File) => void;
   children?: ReactNode;
@@ -59,10 +55,10 @@ export function Fp8Screen({ actions, data, form }: { actions: Fp8Actions; data: 
 </div>
 <div className="flex flex-col gap-0.5">
 <h2 className="font-headline-sm text-headline-sm text-on-surface">
-                We don't have front brake pads for this car on file yet.
+                {data.headlineLine}
               </h2>
 <p className="font-body-md text-body-md text-on-surface-variant">
-                Send a request and the Roam parts team will find the right part and an exact landed price.
+                Tell us what you need and Roam will add the correct part number to Find parts.
               </p>
 </div>
 </div>
@@ -79,38 +75,6 @@ export function Fp8Screen({ actions, data, form }: { actions: Fp8Actions; data: 
 </div>
 
 <form className="flex flex-col gap-space-lg" id="sourcing-form" onSubmit={(e) => { e.preventDefault(); actions.onSubmit(); }}>
-<div className="grid grid-cols-1 sm:grid-cols-2 gap-space-lg">
-
-<div className="flex flex-col gap-space-xs">
-<label className="font-caption text-caption text-on-surface uppercase tracking-wider font-semibold" htmlFor="quantity-counter">Quantity needed (axle sets)</label>
-<div className="flex items-center h-10 w-fit rounded-lg bg-surface-container-low p-1">
-<button className="w-8 h-8 rounded-md bg-surface-container-lowest text-on-surface font-bold flex items-center justify-center hover:bg-surface-container transition-colors shadow-xs" type="button" onClick={actions.onDecQty}>
-<span className="material-symbols-outlined text-[16px]">remove</span>
-</button>
-<input className="w-12 text-center font-label-code text-body-md text-on-surface bg-transparent" id="qtyInput" type="number" min={1} value={form.qty} onChange={(e) => actions.onQtyChange(Number(e.target.value) || 1)} />
-<button className="w-8 h-8 rounded-md bg-surface-container-lowest text-on-surface font-bold flex items-center justify-center hover:bg-surface-container transition-colors shadow-xs" type="button" onClick={actions.onIncQty}>
-<span className="material-symbols-outlined text-[16px]">add</span>
-</button>
-</div>
-</div>
-
-<div className="flex flex-col gap-space-xs">
-<span className="font-caption text-caption text-on-surface uppercase tracking-wider font-semibold">Fulfillment urgency</span>
-<div className="grid grid-cols-3 gap-1 p-1 rounded-lg bg-surface-container-low h-10">
-<button className="urgency-btn rounded-md font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors py-1 text-center" type="button" onClick={() => actions.onUrgency("low")}>
-                    Low
-                  </button>
-<button className="urgency-btn rounded-md font-body-sm text-body-sm bg-surface-container-lowest text-on-surface font-semibold shadow-xs py-1 text-center" type="button" onClick={() => actions.onUrgency("normal")}>
-                    Normal
-                  </button>
-<button className="urgency-btn rounded-md font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors py-1 text-center flex items-center justify-center gap-1" type="button" onClick={() => actions.onUrgency("urgent")}>
-<span>Urgent</span>
-<span className="text-[10px] px-1 py-0.5 rounded bg-error-container text-on-error-container font-label-code font-bold leading-none">24h</span>
-</button>
-</div>
-</div>
-</div>
-
 <div className="flex flex-col gap-space-xs">
 <label className="font-caption text-caption text-on-surface uppercase tracking-wider font-semibold" htmlFor="sourcing-notes">Specification or mechanic note (optional)</label>
 <textarea className="w-full rounded-lg bg-surface-container-low px-space-md py-space-sm font-body-md text-body-md text-on-surface placeholder:text-outline focus:outline-none focus:bg-surface-container-lowest shadow-inner transition-colors" id="sourcing-notes" placeholder="e.g., Need OEM or equivalent, vehicle has minor squeal on deceleration. Prefer Akebono or Nissin compound." rows={3} value={form.note} onChange={(e) => actions.onNoteChange(e.target.value)} />
@@ -137,7 +101,7 @@ export function Fp8Screen({ actions, data, form }: { actions: Fp8Actions; data: 
                 ← Search a different part or return to categories
               </button>
 <button className="w-full sm:w-auto inline-flex items-center justify-center gap-space-sm px-space-xl py-2.5 rounded-lg bg-primary hover:bg-inverse-surface text-on-primary font-body-md text-body-md font-semibold transition-all shadow-md active:scale-[0.98]" type="submit">
-<span>Ask Roam to find it</span>
+<span>Ask Roam to add this part</span>
 <span className="material-symbols-outlined text-[18px]">send</span>
 </button>
 </div>
@@ -168,8 +132,12 @@ export function Fp8Screen({ actions, data, form }: { actions: Fp8Actions; data: 
 <span className="font-label-plate text-label-plate px-2 py-0.5 rounded bg-surface-container text-on-surface">{data.plate}</span>
 </div>
 <div className="flex items-center gap-space-md">
-<div className="w-16 h-12 rounded-lg bg-surface-container overflow-hidden shrink-0">
-<img className="w-full h-full object-cover" data-alt="Fleet vehicle in depot" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDJxJOy9SusfkJckQrtXIcAKAL54B2I27bgGHFgz1-ooVThzao_g3ZAqYH4l68xSeeY1Qj6CwlZAavSZHYrQTrJmjmWhVD2YycnpKQKlvVrEgcgO0Y1m2KbQ3EIhtm4rs9rMQAf5p9Itjacemz-KTeE4AEh7lszoj1n4Ralx8mqo9ICmi4J4gb_8tM3jk1PZFp1o5HtjNuCK8Lh1eZtrhxKiz1p8eAeSPB33qzeE24" />
+<div className="w-16 h-12 rounded-lg bg-surface-container overflow-hidden shrink-0 flex items-center justify-center">
+{data.vehiclePhotoUrl ? (
+<img className="w-full h-full object-cover" alt="" src={data.vehiclePhotoUrl} />
+) : (
+<span className="material-symbols-outlined text-on-surface-variant">directions_car</span>
+)}
 </div>
 <div className="flex flex-col min-w-0">
 <span className="font-body-md text-body-md font-semibold text-on-surface truncate">{data.vehicleLabel} Hybrid</span>
@@ -196,42 +164,13 @@ export function Fp8Screen({ actions, data, form }: { actions: Fp8Actions; data: 
 <ul className="flex flex-col gap-space-md font-body-sm text-body-sm text-on-surface-variant">
 <li className="flex items-start gap-space-sm">
 <span className="material-symbols-outlined text-[18px] text-on-surface shrink-0 mt-0.5">manage_search</span>
-<span><strong>Cross-brand fitment lookup:</strong> Roam scans local bonded warehouses and Japan import manifestos for {data.trimLabel} calipers.</span>
+<span><strong>Roam finds the right part number</strong> for your car, trim, and position.</span>
 </li>
 <li className="flex items-start gap-space-sm">
-<span className="material-symbols-outlined text-[18px] text-on-surface shrink-0 mt-0.5">payments</span>
-<span><strong>Landed Price Quotes:</strong> You receive 2–3 options (OEM Honda Genuine, Nissin Heavy-Duty, and Reputable Aftermarket).</span>
-</li>
-<li className="flex items-start gap-space-sm">
-<span className="material-symbols-outlined text-[18px] text-on-surface shrink-0 mt-0.5">local_shipping</span>
-<span><strong>Hub Delivery:</strong> Once approved, courier dispatches directly to {data.hubLabel} hub or your dispatch garage.</span>
+<span className="material-symbols-outlined text-[18px] text-on-surface shrink-0 mt-0.5">inventory_2</span>
+<span><strong>It shows in Find parts</strong> once the catalog entry is added for your fleet.</span>
 </li>
 </ul>
-<div className="p-space-md rounded-xl bg-surface-container-low flex items-center justify-between font-label-code text-caption">
-<div className="flex items-center gap-2">
-<span className="material-symbols-outlined text-[16px] text-on-surface">verified_user</span>
-<span className="text-on-surface">Zero Fitment Error Guarantee</span>
-</div>
-<span className="text-on-surface-variant">100% matched</span>
-</div>
-</div>
-
-<div className="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col gap-space-sm">
-<div className="flex items-center justify-between">
-<span className="font-caption text-caption text-on-surface-variant uppercase tracking-wider font-semibold">Recent Sourcing Wins</span>
-<span className="font-caption text-caption text-on-surface-variant">Last 48 hrs</span>
-</div>
-<div className="flex flex-col gap-space-sm">
-{data.sourcingWins.map((win) => (
-<div key={`${win.label}-${win.priceLabel}`} className="flex items-center justify-between py-1">
-<div className="flex flex-col">
-<span className="font-body-sm text-body-sm font-semibold text-on-surface">{win.label}</span>
-<span className="font-caption text-caption text-on-surface-variant">{data.vehicleLabel} {data.trimLabel}</span>
-</div>
-<span className="font-label-price text-label-price text-on-surface">{win.priceLabel}</span>
-</div>
-))}
-</div>
 </div>
 </div>
 </div>
@@ -254,18 +193,6 @@ export function Fp8Screen({ actions, data, form }: { actions: Fp8Actions; data: 
 </div>
 
 </div></div>
-      {/* fp-stitch-labels */}
-      <section aria-label="Component index" className="flex flex-wrap gap-1 pt-space-md border-t border-surface-container-high mt-space-md">
-        <span key="chassis: -3401928" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"chassis: -3401928"}</span>
-        <span key="we don't have front for this car on file yet." className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"we don't have front for this car on file yet."}</span>
-        <span key="request dispatched to sourcing desk." className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"request dispatched to sourcing desk."}</span>
-        <span key="12% left (front)" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"12% left (front)"}</span>
-        <span key="roam scans local bonded warehouses and japan import manifestos for calipers." className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"roam scans local bonded warehouses and japan import manifestos for calipers."}</span>
-        <span key="once approved, courier dispatches directly to or your dispatch garage." className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"once approved, courier dispatches directly to or your dispatch garage."}</span>
-        <span key="axle bushing kit" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"axle bushing kit"}</span>
-        <span key="front shock absorber (l/r)" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"front shock absorber (l/r)"}</span>
-      </section>
-      {/* /fp-stitch-labels */}
 
     </div>
   );

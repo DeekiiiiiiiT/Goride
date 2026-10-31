@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { api } from "../../../services/api";
 import type { PartsActivity } from "./PartsActivityPanel";
 
@@ -56,33 +56,6 @@ export function usePartsVehicleContext(vehicleId: string, componentId?: string, 
   });
 }
 
-export function useWrongFitCount(enabled = true) {
-  return useQuery({
-    queryKey: ["parts-wrong-fit-count"],
-    queryFn: () => api.wrongFitCount(),
-    enabled,
-    staleTime: 120_000,
-  });
-}
-
-export function usePartsRunnerOnline(enabled = true) {
-  return useQuery({
-    queryKey: ["parts-runner-online"],
-    queryFn: () => api.partsRunnerOnline(),
-    enabled,
-    staleTime: 30_000,
-  });
-}
-
-export function usePartsList(enabled = true) {
-  return useQuery({
-    queryKey: ["parts-list"],
-    queryFn: () => api.partsList(),
-    enabled,
-    staleTime: 30_000,
-  });
-}
-
 export function usePartsSavedSearches(enabled = true) {
   return useQuery({
     queryKey: ["parts-saved-searches"],
@@ -92,31 +65,11 @@ export function usePartsSavedSearches(enabled = true) {
   });
 }
 
-export function usePartsSupplierSync(enabled = true) {
-  return useQuery({
-    queryKey: ["parts-supplier-sync"],
-    queryFn: () => api.partsSupplierSync(),
-    enabled,
-    staleTime: 30_000,
-  });
-}
-
 export function usePartsActivity(enabled = true) {
   return useQuery({
     queryKey: ["parts-activity"],
     queryFn: () => api.partsActivity() as Promise<PartsActivity>,
     enabled,
     staleTime: 60_000,
-  });
-}
-
-export function useForcePartsSupplierSync() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: () => api.forcePartsSupplierSync(),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["parts-supplier-sync"] });
-      void qc.invalidateQueries({ queryKey: ["parts-activity"] });
-    },
   });
 }

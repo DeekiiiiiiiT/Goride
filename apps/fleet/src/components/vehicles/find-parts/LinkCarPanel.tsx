@@ -40,6 +40,7 @@ export function LinkCarPanel({
     options: options.data ?? null,
     selectedTrimId: pickedTrimId || undefined,
     alternateTrimsLine: String(ctxData.alternateTrimsLine || ""),
+    schematicPhotoUrl: String(ctxData.schematic_photo_url || ctxData.schematicPhotoUrl || ""),
   });
 
   async function verifyChassis() {

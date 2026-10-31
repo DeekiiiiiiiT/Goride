@@ -3,14 +3,10 @@ import { PartDetailDrawer, type PartItem } from "./PartDetailDrawer";
 import { Fp5Screen } from "./screens/Fp5Screen";
 import { Fp12Screen } from "./screens/Fp12Screen";
 import { buildFp5ViewModel } from "./findPartsViewModels";
-import { usePartsList, usePartsSavedSearches } from "./findPartsQueries";
+import { usePartsSavedSearches, usePartsVehicleContext } from "./findPartsQueries";
 import {
-  addPartToPartsList,
   downloadCurrentFitmentReport,
-  logBulkConsumableStockOut,
-  navigateFleetMaintenanceTab,
   saveCurrentPartsSearch,
-  type ResultsFilterTab,
   type TrimScopeTab,
 } from "./findPartsActions";
 
@@ -32,8 +28,8 @@ export function ResultsView({
   vehicleId,
   plate,
   partName,
+  componentId,
   onRetry,
-  onQuote,
   onAsk,
   onUseInService,
   onBackToPartSelection,
@@ -49,8 +45,8 @@ export function ResultsView({
   vehicleId: string;
   plate?: string;
   partName?: string;
+  componentId?: string;
   onRetry: () => void;
-  onQuote: (part: Record<string, unknown>) => void;
   onAsk: () => void;
   onUseInService: (item: PartItem) => void;
   onBackToPartSelection: () => void;
@@ -59,21 +55,22 @@ export function ResultsView({
   canLog: boolean;
 }) {
   const [open, setOpen] = useState<PartItem | null>(null);
-  const [filterTab, setFilterTab] = useState<ResultsFilterTab>("all");
   const [trimScope, setTrimScope] = useState<TrimScopeTab>("specific");
-  const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
-  const [activityOpen, setActivityOpen] = useState(false);
-  const [quoteOpen, setQuoteOpen] = useState(false);
-  const [quickRfqQty, setQuickRfqQty] = useState(2);
+  const [filterTab, setFilterTab] = useState<"all" | "oem">("all");
   const phone = typeof window !== "undefined" && window.matchMedia("(max-width: 768px)").matches;
-  usePartsList();
+  const vehicleContext = usePartsVehicleContext(vehicleId, componentId, Boolean(vehicleId));
   usePartsSavedSearches();
+  const ctxData = (vehicleContext.data as Record<string, unknown> | undefined) ?? null;
+  const variantCount = Number((ctxData?.variant_count as number | undefined) ?? (ctxData?.version_count as number | undefined) ?? 0);
   const data = buildFp5ViewModel({
     result,
     bestId,
-    filterTab,
     trimScope,
+    filterTab,
     plate,
+    partName,
+    vehicleContext: ctxData,
+    variantCount,
   });
   const best = useMemo(() => {
     const sections = result?.sections || [];
@@ -97,60 +94,22 @@ export function ResultsView({
     onSaveQuery: () => {
       void saveCurrentPartsSearch(result?.car?.label || partName || "Saved search");
     },
-    onQuote: () => {
-      if (best) onQuote({ ...(best.part || {}), stockQty: best.stockQty, offers: best.offers });
-    },
     onUseInService: () => {
       if (best && canLog) onUseInService(best);
     },
     onOpenRow: (id: string) => {
-      if (expandedRowId === id) {
-        const sections = result?.sections || [];
-        const item = sections.flatMap((s) => s.items || []).find((row) => row.part?.id === id);
-        if (item) setOpen(item);
-        return;
-      }
-      setExpandedRowId(id);
+      const sections = result?.sections || [];
+      const item = sections.flatMap((s) => s.items || []).find((row) => row.part?.id === id);
+      if (item) setOpen(item);
     },
     onOpenBest: () => {
       if (best) setOpen(best);
     },
-    onConfirmPartsList: () => {
-      void addPartToPartsList({ label: best?.part?.name || "Part", partId: best?.part?.id });
-    },
-    onAddToList: () => {
-      void addPartToPartsList({ label: best?.part?.name || "Part", partId: best?.part?.id });
-    },
-    onFreshQuote: () => {
-      if (best) onQuote({ ...(best.part || {}), stockQty: best.stockQty, offers: best.offers });
-    },
-    onBulkConsumable: () => {
-      void logBulkConsumableStockOut(best?.part?.id, 1);
-    },
-    onAllocate: () => {
-      if (best && canLog) onUseInService(best);
-    },
-    onFilterTab: setFilterTab,
     onTrimScope: setTrimScope,
+    onFilterTab: setFilterTab,
     onBackToPartSelection,
     onChangeCar,
     onEditPartCategory,
-    onNavigateVehicles: () => navigateFleetMaintenanceTab("vehicles"),
-    onNavigateLedger: () => navigateFleetMaintenanceTab("ledger"),
-    onNavigateFindParts: () => navigateFleetMaintenanceTab("find-parts"),
-    onSendQuickRfq: () => {
-      if (best) onQuote({ ...(best.part || {}), stockQty: best.stockQty, offers: best.offers, qty: quickRfqQty });
-      setQuoteOpen(false);
-    },
-    expandedRowId,
-    activityOpen,
-    onToggleActivity: () => setActivityOpen((value) => !value),
-    quoteOpen,
-    onOpenQuickRfq: () => setQuoteOpen(true),
-    onCloseQuickRfq: () => setQuoteOpen(false),
-    quickRfqQty,
-    onDecQuickRfqQty: () => setQuickRfqQty((value) => Math.max(1, value - 1)),
-    onIncQuickRfqQty: () => setQuickRfqQty((value) => Math.min(24, value + 1)),
   };
 
   const Screen = phone ? Fp12Screen : Fp5Screen;
@@ -165,7 +124,6 @@ export function ResultsView({
           vehicleId={vehicleId}
           canLog={canLog}
           onClose={() => setOpen(null)}
-          onQuote={() => { onQuote((open.part || {}) as Record<string, unknown>); setOpen(null); }}
           onUseInService={() => { onUseInService(open); setOpen(null); }}
         />
       ) : null}

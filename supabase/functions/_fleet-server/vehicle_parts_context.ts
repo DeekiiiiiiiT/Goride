@@ -211,6 +211,7 @@ export async function loadVehiclePartsContextExtras(
     plate,
     trim,
     variant: trim,
+    variant_count: siblings.length || (catalogRow ? 1 : 0),
     chassis_code,
     trim_series: catalogRow?.trim_series ?? null,
     engine_code: catalogRow?.engine_code ?? null,

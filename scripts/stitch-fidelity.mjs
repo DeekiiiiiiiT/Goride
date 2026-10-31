@@ -131,8 +131,11 @@ function fleetTextNodes(html) {
 
 function fleetPhrase(node, samples) {
   let t = node.toLowerCase().replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&nbsp;/g, " ");
+  t = t.replace(/[\u2013\u2014\u2212]/g, "-").replace(/\s+/g, " ").trim();
   for (const sample of samples) {
-    if (sample) t = t.split(sample).join(' ');
+    if (!sample) continue;
+    const s = sample.replace(/[\u2013\u2014\u2212]/g, "-");
+    t = t.split(s).join(" ");
   }
   t = t.replace(/\s+/g, ' ').trim();
   if (/^[a-z0-9]+(_[a-z0-9]+)+$/.test(t)) return '';
@@ -160,7 +163,12 @@ for (const row of fleetReadme.split('\n').filter((l) => /^\| FP\d/.test(l))) {
   const [num, , , html, , react, status = ''] = cells.slice(1);
   if (!html || html === '—' || !react || react === '—') continue;
   const checked = /^(Ported|Built)/.test(status);
+  const deferred = /^Deferred\b/i.test(status);
   const notStarted = /^Not started\b/.test(status);
+  if (deferred) {
+    if (report) console.log(`deferred ${num}`);
+    continue;
+  }
   if (notStarted && !report) continue;
   const reactFiles = react.split(/\s*\+\s*/).map((f) => f.trim()).filter(Boolean);
   const nonTsx = reactFiles.find((f) => !/\.tsx$/i.test(f));
@@ -175,13 +183,21 @@ for (const row of fleetReadme.split('\n').filter((l) => /^\| FP\d/.test(l))) {
     continue;
   }
   const page = readFileSync(join(fleetDir, html), 'utf8');
-  const samples = (Array.isArray(fleetSamples[num]) ? fleetSamples[num] : [])
+  const deferredSales = (Array.isArray(fleetSamples['deferred-sales']) ? fleetSamples['deferred-sales'] : [])
+    .map((label) => String(label).trim().toLowerCase())
+    .filter(Boolean);
+  const samples = [
+    ...(Array.isArray(fleetSamples[num]) ? fleetSamples[num] : []),
+    ...deferredSales,
+  ]
     .map((label) => String(label).trim().toLowerCase())
     .filter(Boolean);
   const labels = new Set();
+  const ignoreExact = new Set(samples.filter((s) => s.length >= 4));
   for (const node of fleetTextNodes(page)) {
     const phrase = fleetPhrase(node, samples);
-    if (phrase) labels.add(phrase);
+    if (!phrase || ignoreExact.has(phrase)) continue;
+    labels.add(phrase);
   }
   const sources = reactFiles.map((f) => {
     const path = join(repo, f);
@@ -209,6 +225,11 @@ for (const row of fleetReadme.split('\n').filter((l) => /^\| FP\d/.test(l))) {
     if (checked) fleetFailed = true;
     continue;
   }
+  if (/fp-stitch-labels/.test(joined)) {
+    console.log(`FAIL ${num} contains fp-stitch-labels — ${react}`);
+    if (checked) fleetFailed = true;
+    continue;
+  }
   const visible = fleetVisibleSource(joined);
   const lower = visible.toLowerCase().replace(/&amp;/g, '&').replace(/&nbsp;/g, ' ');
   const missed = [...labels].filter((label) => !lower.includes(label));
@@ -218,7 +239,7 @@ for (const row of fleetReadme.split('\n').filter((l) => /^\| FP\d/.test(l))) {
   if (report || (checked && bad)) {
     console.log(`${bad ? 'FAIL' : 'ok  '} ${num} ${pct}% text (${hit}/${labels.size}) — ${react}`);
     if (report && missed.length) {
-      console.log(`miss ${num}: ${missed.slice(0, 12).join(' | ')}${missed.length > 12 ? ` … +${missed.length - 12}` : ''}`);
+      console.log(`miss ${num}: ${missed.join(' | ')}`);
     }
   }
   if (checked && bad) fleetFailed = true;

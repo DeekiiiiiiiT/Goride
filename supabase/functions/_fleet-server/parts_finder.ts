@@ -47,6 +47,7 @@ type LoosePart = {
     manufacturer?: string | null;
     oem_part_number?: string | null;
     catalog_decision?: string | null;
+    maintenance_component_id?: string | null;
   };
 };
 
@@ -296,13 +297,19 @@ export async function findParts(
   );
   const picked = specificId ? variants.find((row) => String(row.id) === specificId) ?? variants[0] ?? null : null;
   const pickedId = picked ? String(picked.id ?? "") : "";
-  const first = loaded[0]?.parts;
-  const sections = first
+  const mergedIds = new Set(merged.map((item) => item.partId).filter(Boolean));
+  const catalogItems = loaded.flatMap((row) => (row.parts.items as LoosePart[]) || []);
+  const filteredCatalogItems = keepForPosition(catalogItems, input.position, input.side).filter((item) => {
+    const id = String(item.part?.id ?? item.fitmentId ?? "");
+    return id && mergedIds.has(id);
+  });
+  const universalSource = loaded[0]?.parts.universal;
+  const sections = filteredCatalogItems.length || universalSource
     ? assembleMatchSections(
       mode === "tiered"
-        ? await enrichFleetParts(supabase, "tiered", first.items, input.orgId ?? null, input.downtimePerDay ?? 0) as Array<{ tier?: number; sisterNames?: string | null }>
-        : [],
-      first.universal,
+        ? await enrichFleetParts(supabase, "tiered", filteredCatalogItems as never, null, 0) as Array<{ tier?: number; sisterNames?: string | null }>
+        : await enrichFleetParts(supabase, "legacy", filteredCatalogItems as never, null, 0) as Array<{ tier?: number; sisterNames?: string | null }>,
+      universalSource,
     )
     : assembleMatchSections([], []);
   let coverage = null;
@@ -340,7 +347,7 @@ export async function findParts(
     plainSections: built.sections,
     emptyTiers: built.emptyTiers,
     bestPick: best ? merged.find((item) => item.partId === best.id) ?? null : null,
-    ready: first?.ready ?? false,
+    ready: loaded[0]?.parts.ready ?? false,
     coverage,
   };
   if (!input.orgId) assertNoCustomerIdentity(body);

@@ -380,7 +380,7 @@ export async function enrichFleetParts(
   if (mode === "legacy") {
     return items.map((item) => {
       const pid = String(item.part.id ?? "");
-      const offers = [...item.offers, ...(orgByPart[pid] ?? [])].map((offer) => priceOffer(offer, downtimePerDay));
+      const offers = [...(item.offers ?? []), ...(orgByPart[pid] ?? [])].map((offer) => priceOffer(offer, downtimePerDay));
       return { fitmentId: item.fitmentId, part: item.part, offers };
     });
   }
@@ -398,7 +398,7 @@ export async function enrichFleetParts(
       confirmedInstalls: item.confirmedInstalls ?? 0,
       stockQty,
     });
-    const offers = [...item.offers, ...(orgByPart[pid] ?? [])]
+    const offers = [...(item.offers ?? []), ...(orgByPart[pid] ?? [])]
       .map((offer) => priceOffer(offer, downtimePerDay))
       .sort((a, b) => a.totalImpactJmd - b.totalImpactJmd);
     return {

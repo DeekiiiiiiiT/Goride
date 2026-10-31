@@ -179,8 +179,12 @@ export function Fp2Screen({ actions, data }: { actions: Fp2Actions; data: Fp2Vie
 <span className="font-label-code text-caption text-secondary">ACTIVE VEHICLE CONTEXT</span>
 <span className="w-2 h-2 rounded-full bg-on-tertiary-container animate-pulse"></span>
 </div>
-<div className="relative rounded-lg overflow-hidden mb-space-md bg-surface-container">
-<img className="w-full h-36 object-cover object-center" data-alt="Modern Japanese white hatchback parked cleanly under bright morning Caribbean sunlight with crisp road reflection, precision side-angle showcase in a modern fleet bay with concrete floor and minimal technical equipment in {data.hubLabel}." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBC94boDsO6smYsCV8uBJPN5CZzAazM8yHv0CMvqPh-Psz7E0bn9Wyv0XVU3HVK3PDFirfBXkTBzjAuLhhcyhCsU5zgXcQzPSvgqZjrG9x285Icgeu5_TD7J6XKmwnQwPGrflwH2EPDb5uGTGqk0DH2hJ4KRuMOHMFE45rqQBk7k5X9pVOwbp1JXilY2ubk9sTCLrZeYOZ6jRvxurpz64Vns7j7oAbImPHJDD8eHYw" />
+<div className="relative rounded-lg overflow-hidden mb-space-md bg-surface-container flex items-center justify-center min-h-[9rem]">
+{data.vehiclePhotoUrl ? (
+<img className="w-full h-36 object-cover object-center" alt="" src={data.vehiclePhotoUrl} />
+) : (
+<span className="material-symbols-outlined text-[48px] text-on-surface-variant">directions_car</span>
+)}
 <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded bg-primary/80 backdrop-blur-md text-on-primary font-label-plate text-[12px]">
               {data.vehicleHeroLabel}
             </div>
@@ -255,27 +259,6 @@ export function Fp2Screen({ actions, data }: { actions: Fp2Actions; data: Fp2Vie
 </div>
 </div>
 
-<div className="bg-primary text-on-primary rounded-xl p-space-lg shadow-md">
-<div className="flex items-center gap-space-sm mb-space-sm">
-<div className="w-8 h-8 rounded-full bg-surface-container-lowest/10 flex items-center justify-center">
-<span className="material-symbols-outlined text-[18px]">verified_user</span>
-</div>
-<div>
-<h4 className="font-headline-sm text-body-md font-bold">Zero-Fitment Guarantee</h4>
-<span className="font-label-code text-caption opacity-80">PROTECTION PROTOCOL</span>
-</div>
-</div>
-<p className="font-body-sm text-body-sm opacity-90 mb-space-md">
-            Orders placed via verified trim matching include free dispatch exchange if parts fail mechanical fit verification during {data.hubLabel} depot install.
-          </p>
-<div className="flex items-center justify-between text-caption font-label-code opacity-75">
-<span>AUDIT ID: KIN-VER-2025</span>
-<span className="flex items-center gap-1">
-<span className="material-symbols-outlined text-[13px]">lock</span>
-<span>LOCKED FIT SPEC</span>
-</span>
-</div>
-</div>
 
 <div className="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm">
 <div className="flex items-center justify-between mb-space-sm">
@@ -295,32 +278,6 @@ export function Fp2Screen({ actions, data }: { actions: Fp2Actions; data: Fp2Vie
 </div>
 </div>
 </div>
-      {/* fp-stitch-labels */}
-      <section aria-label="Component index" className="flex flex-wrap gap-1 pt-space-md border-t border-surface-container-high mt-space-md">
-        <span key="by vehicle" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"by vehicle"}</span>
-        <span key="service ledger" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"service ledger"}</span>
-        <span key="find parts" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"find parts"}</span>
-        <span key="· leb · 7-speed dct" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"· leb · 7-speed dct"}</span>
-        <span key="takes 0w-20 hybrid synthetic oil, dedicated dual-clutch fluid (dw-1/atf-type 2.0 equivalent), and electronic servo brake booster units." className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"takes 0w-20 hybrid synthetic oil, dedicated dual-clutch fluid (dw-1/atf-type 2.0 equivalent), and electronic servo brake booster units."}</span>
-        <span key="gk5 · l15b · cvt" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"gk5 · l15b · cvt"}</span>
-        <span key="standard i-vtec sport / rs" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"standard i-vtec sport / rs"}</span>
-        <span key="naturally aspirated direct-injection engine with hcf-2 transmission fluid requirements and mechanical vacuum brake boosters." className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"naturally aspirated direct-injection engine with hcf-2 transmission fluid requirements and mechanical vacuum brake boosters."}</span>
-        <span key="gk5-1200001+" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"gk5-1200001+"}</span>
-        <span key="1.3 petrol" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"1.3 petrol"}</span>
-        <span key="gk3 · l13b · cvt" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"gk3 · l13b · cvt"}</span>
-        <span key="entry m petrol engine" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"entry m petrol engine"}</span>
-        <span key="atkinson cycle l13b atkinson powertrain with smaller front disc calipers (240mm rotor) and alternate alternator clutch assembly." className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"atkinson cycle l13b atkinson powertrain with smaller front disc calipers (240mm rotor) and alternate alternator clutch assembly."}</span>
-        <span key="gk3-1200001+" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"gk3-1200001+"}</span>
-        <span key="not sure" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"not sure"}</span>
-        <span key="universal catalog mode" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"universal catalog mode"}</span>
-        <span key="shows all matching options" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"shows all matching options"}</span>
-        <span key="we'll present items that fit each variant and flag parts with a color-coded version chip so technicians never install incompatible spares." className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"we'll present items that fit each variant and flag parts with a color-coded version chip so technicians never install incompatible spares."}</span>
-        <span key="filter mode:" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"filter mode:"}</span>
-        <span key="annotated comparison" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"annotated comparison"}</span>
-        <span key="hybrid selection" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"hybrid selection"}</span>
-        <span key="100% of roam fleet fits are 1.5 hybrid variants." className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"100% of roam fleet fits are 1.5 hybrid variants."}</span>
-      </section>
-      {/* /fp-stitch-labels */}
     </div>
   );
 }

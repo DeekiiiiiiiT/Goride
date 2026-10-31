@@ -1,8 +1,8 @@
-import { useState } from "react";
 import { Fp6Screen } from "./screens/Fp6Screen";
-import { addPartToOrgStock, addPartToPartsList, copyTextToClipboard } from "./findPartsActions";
+import { copyTextToClipboard } from "./findPartsActions";
 import { buildFp6ViewModel } from "./findPartsViewModels";
-import { usePartsVehicleContext, useWrongFitCount } from "./findPartsQueries";
+import { usePartsVehicleContext } from "./findPartsQueries";
+import { api } from "../../../services/api";
 
 type Offer = {
   supplier?: { name?: string };
@@ -31,22 +31,28 @@ export type PartItem = {
 export function PartDetailDrawer({
   item,
   onClose,
-  onQuote,
   onUseInService,
   canLog,
   vehicleId,
 }: {
   item: PartItem;
   onClose: () => void;
-  onQuote: () => void;
   onUseInService: () => void;
   canLog: boolean;
   vehicleId?: string;
 }) {
-  const [stockQty, setStockQty] = useState(1);
   const ctx = usePartsVehicleContext(vehicleId || "", item.part?.maintenance_component_id);
-  useWrongFitCount();
   const data = buildFp6ViewModel({ item, ctx: (ctx.data as Record<string, unknown> | undefined) ?? null });
+
+  function reportNoFit() {
+    const partId = item.part?.id;
+    if (!partId) return;
+    void api.submitPartFitFeedback({
+      partId,
+      outcome: "no_fit",
+      vehicleId: vehicleId || undefined,
+    }).catch(() => undefined);
+  }
 
   return (
     <div className="fixed inset-0 z-40">
@@ -54,19 +60,10 @@ export function PartDetailDrawer({
       <Fp6Screen
         data={data}
         actions={{
-          onClose,
-          onPingRfq: onQuote,
-          onAddToOrder: () => {
-            void addPartToPartsList({ label: item.part?.name || "Part", partId: item.part?.id, componentId: item.part?.maintenance_component_id });
-          },
-          onAddToStock: () => {
-            void addPartToOrgStock(item.part?.id, stockQty);
-          },
+          onClose: () => onClose(),
+          onReportNoFit: reportNoFit,
           onUseInService: () => { if (canLog) onUseInService(); },
           onCopyCrossRef: (partNumber) => { void copyTextToClipboard(partNumber); },
-          stockQty,
-          onDecStockQty: () => setStockQty((value) => Math.max(1, value - 1)),
-          onIncStockQty: () => setStockQty((value) => Math.min(24, value + 1)),
         }}
       />
     </div>

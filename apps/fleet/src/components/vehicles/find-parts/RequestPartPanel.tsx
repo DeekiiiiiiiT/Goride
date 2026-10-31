@@ -3,7 +3,7 @@ import { api } from "../../../services/api";
 import { Fp8Screen } from "./screens/Fp8Screen";
 import { buildFp8ViewModel } from "./findPartsViewModels";
 import { orDash, orNoneYet } from "./findPartsFormat";
-import { usePartsActivity, usePartsRunnerOnline, usePartsVehicleContext } from "./findPartsQueries";
+import { usePartsVehicleContext } from "./findPartsQueries";
 
 export function RequestPartPanel({
   vehicleId,
@@ -11,6 +11,7 @@ export function RequestPartPanel({
   plate,
   componentId,
   partName,
+  position,
   onBack,
   onViewActivity,
 }: {
@@ -18,33 +19,26 @@ export function RequestPartPanel({
   carLabel: string;
   plate: string;
   componentId: string;
-  partName: string;
+  partName?: string;
+  position?: string | null;
   onBack: () => void;
   onViewActivity: () => void;
 }) {
-  const runner = usePartsRunnerOnline();
   const ctx = usePartsVehicleContext(vehicleId || "", componentId, Boolean(vehicleId));
-  const activity = usePartsActivity(true);
-  const [qty, setQty] = useState(1);
-  const [urgency, setUrgency] = useState("normal");
   const [note, setNote] = useState("");
   const [sent, setSent] = useState("");
   const ctxData = (ctx.data || {}) as Record<string, unknown>;
-  const wins = (activity.data?.requests?.items || [])
-    .filter((row) => row.found_price_jmd != null)
-    .slice(0, 3)
-    .map((row) => ({ label: orNoneYet(String(row.need_text || row.part_name || "Request")), foundPriceJmd: Number(row.found_price_jmd) }));
   const data = buildFp8ViewModel({
     plate,
     vehicleLabel: carLabel || "Vehicle",
     partName: partName || "Part",
+    positionLabel: position === "rear" ? "Rear axle" : position === "both" ? "Front and rear" : "Front axle",
     trimLabel: orNoneYet(String(ctxData.trim || ctxData.variant || "")),
-    chassisLabel: orDash(String(ctxData.chassis || ctxData.trim || "")),
+    chassisLabel: orDash(String(ctxData.chassis_code || ctxData.chassis || ctxData.trim || "")),
     hubLabel: orNoneYet(String(ctxData.hub_label || ctxData.hubLabel || "Fleet hub")),
-    runnerOnline: Boolean(runner.data?.online),
     targetKm: Number(ctxData.odometer),
     healthPct: Number(ctxData.health_pct),
-    sourcingWins: wins,
+    vehiclePhotoUrl: String(ctxData.photo_url || ctxData.vehicle_photo_url || ""),
   });
 
   async function submit(photoUrl?: string) {
@@ -52,8 +46,6 @@ export function RequestPartPanel({
       vehicleId,
       componentId: componentId || undefined,
       partName: partName || undefined,
-      qty,
-      urgency: urgency === "24h" ? "within_24h" : urgency,
       note,
       photo_url: photoUrl,
     });
@@ -65,15 +57,11 @@ export function RequestPartPanel({
       {sent ? <p className="mb-space-md">Ticket {sent}</p> : null}
       <Fp8Screen
         data={data}
-        form={{ qty, note, urgency }}
+        form={{ note }}
         actions={{
           onBack,
           onViewActivity,
-          onDecQty: () => setQty((value) => Math.max(1, value - 1)),
-          onIncQty: () => setQty((value) => Math.min(24, value + 1)),
-          onQtyChange: setQty,
           onNoteChange: setNote,
-          onUrgency: setUrgency,
           onSubmit: () => { void submit().catch(() => undefined); },
           onPhotoSelected: (file) => {
             void api.uploadPartRequestPhoto(file).then((res) => submit(res.photo_url)).catch(() => undefined);

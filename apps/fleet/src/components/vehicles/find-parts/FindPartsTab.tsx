@@ -8,13 +8,12 @@ import { CarStep, type FleetCar } from "./CarStep";
 import { LinkCarPanel } from "./LinkCarPanel";
 import { PartStep } from "./PartStep";
 import { PositionStep } from "./PositionStep";
-import { QuoteDialog } from "./QuoteDialog";
 import { RequestPartPanel } from "./RequestPartPanel";
 import { ResultsView } from "./ResultsView";
 import type { PartItem } from "./PartDetailDrawer";
 import { VariantStep } from "./VariantStep";
 import { ActivityView } from "./ActivityView";
-import { usePartsActivity, usePartsRunnerOnline, usePartsSupplierSync } from "./findPartsQueries";
+import { usePartsActivity } from "./findPartsQueries";
 import { Fp11Screen, type Fp11Actions } from "./screens/Fp11Screen";
 import { buildFp11ViewModel, type Fp11PreviewTab } from "./findPartsViewModels";
 import { clearFleetMaintenanceSearch, navigateFleetMaintenanceTab, notifyPartsAdmin } from "./findPartsActions";
@@ -51,12 +50,22 @@ export function FindPartsTab({
   const [position, setPosition] = useState(params.get("pos") || "");
   const [error, setError] = useState("");
   const [attempts, setAttempts] = useState(0);
-  const [quotePart, setQuotePart] = useState<Record<string, unknown> | null>(null);
   const [linkMeta, setLinkMeta] = useState({ make: "", model: "", year: "", plate: "" });
 
   const activity = usePartsActivity(canView);
-  const partsRunner = usePartsRunnerOnline(canView);
-  const partsSupplierSync = usePartsSupplierSync(canView);
+  const orgAdmin = useQuery({
+    queryKey: ["find-parts-org-admin"],
+    queryFn: async () => {
+      const rows = (await api.getTeamMembers()) as Array<{ name?: string; full_name?: string; role?: string }>;
+      const pick = rows.find((row) => /owner|admin|fleet lead|dispatcher lead/i.test(String(row.role || ""))) || rows[0];
+      if (!pick) return null;
+      return { name: String(pick.full_name || pick.name || "").trim(), role: String(pick.role || "").trim() };
+    },
+    staleTime: 300_000,
+  });
+  const fp11Admin = orgAdmin.data?.name
+    ? { adminName: orgAdmin.data.name, adminRole: orgAdmin.data.role || undefined }
+    : {};
   const [fp11PreviewTab, setFp11PreviewTab] = useState<Fp11PreviewTab>("all");
   const deepLinkGateDone = useRef(false);
 
@@ -121,12 +130,7 @@ export function FindPartsTab({
   }, [canView]);
 
   function fp11HealthFields(previewTab: Fp11PreviewTab) {
-    const syncRow = partsSupplierSync.data as { last?: { status?: string } } | undefined;
-    return {
-      runnerOnline: Boolean(partsRunner.data?.online),
-      syncStatus: syncRow?.last?.status ?? null,
-      previewTab,
-    };
+    return { previewTab };
   }
 
   function requestPartsAccess() {
@@ -200,6 +204,7 @@ export function FindPartsTab({
             userEmail: user?.email,
             role: role ?? undefined,
             errorCode: "FORBIDDEN",
+            ...fp11Admin,
             ...fp11HealthFields("noperm"),
           })}
           actions={buildFp11Actions({
@@ -235,6 +240,7 @@ export function FindPartsTab({
               errorCode: "TIMEOUT",
               missingModel: model || undefined,
               vehicleLabel: [year, make, model].filter(Boolean).join(" ") || undefined,
+              ...fp11Admin,
               ...fp11HealthFields(fp11PreviewTab),
             })}
             actions={buildFp11Actions({
@@ -327,7 +333,7 @@ export function FindPartsTab({
               plate={car?.licensePlate}
               partName={partName}
               onRetry={() => search.refetch()}
-              onQuote={(part) => setQuotePart(part)}
+              componentId={componentId}
               onAsk={() => setStep("request")}
               bestId={bestId(search.data)}
               unsure={variantId === "any"}
@@ -364,16 +370,9 @@ export function FindPartsTab({
               plate={car?.licensePlate || ""}
               componentId={componentId}
               partName={partName}
+              position={position}
               onBack={() => setStep("part")}
               onViewActivity={() => { setView("activity"); writeUrl({ view: "activity" }); }}
-            />
-          ) : null}
-          {quotePart ? (
-            <QuoteDialog
-              part={quotePart}
-              vehicleId={vehicleId || null}
-              cars={cars}
-              onClose={() => setQuotePart(null)}
             />
           ) : null}
         </>
@@ -393,5 +392,5 @@ function bestId(result: { sections?: Array<{ items?: Array<{ part?: { id?: strin
       status: "verified" as const,
     })),
   }));
-  return pickBestPart(sections, { useStock: true, usePrice: true })?.id ?? "";
+  return pickBestPart(sections, { useStock: false, usePrice: false })?.id ?? "";
 }

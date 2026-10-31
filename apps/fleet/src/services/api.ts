@@ -2954,16 +2954,6 @@ export const api = {
       return response.json() as Promise<{ makes: string[]; models: string[]; years: number[] }>;
   },
 
-  async requestPartQuoteV2(body: Record<string, unknown>) {
-      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/quote`, {
-        method: "POST",
-        headers: await getHeaders(),
-        body: JSON.stringify(body),
-      });
-      if (!response.ok) throw new Error((await response.json().catch(() => ({})) as { error?: string }).error || "Could not request a quote");
-      return response.json();
-  },
-
   async requestFindPart(body: Record<string, unknown>) {
       const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/request`, {
         method: "POST",
@@ -2996,22 +2986,6 @@ export const api = {
       return response.json();
   },
 
-  async partsList() {
-      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/parts-list`, { headers: await getHeaders(null) });
-      if (!response.ok) throw new Error("Could not load the parts list");
-      return response.json();
-  },
-
-  async addToPartsList(body: { label: string; qty?: number; partId?: string; supplierId?: string; componentId?: string }) {
-      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/parts-list`, {
-        method: "POST",
-        headers: await getHeaders(),
-        body: JSON.stringify(body),
-      });
-      if (!response.ok) throw new Error("Could not add that part");
-      return response.json();
-  },
-
   async reportWrongFit(body: { id: string; table?: "parts_sourcing_requests" | "part_quote_request" }) {
       const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/wrong-fit`, {
         method: "POST",
@@ -3022,12 +2996,6 @@ export const api = {
       return response.json();
   },
 
-  async wrongFitCount() {
-      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/wrong-fit-count`, { headers: await getHeaders(null) });
-      if (!response.ok) throw new Error("Could not load the fitment count");
-      return response.json() as Promise<{ count: number; days: number }>;
-  },
-
   async notifyPartsAdmin(body: { kind?: string; title?: string; body: string }) {
       const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/notify-admin`, {
         method: "POST",
@@ -3036,27 +3004,6 @@ export const api = {
       });
       if (!response.ok) throw new Error("Could not send that notice");
       return response.json();
-  },
-
-  async partsSupplierSync() {
-      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/supplier-sync`, { headers: await getHeaders(null) });
-      if (!response.ok) throw new Error("Could not load supplier sync");
-      return response.json();
-  },
-
-  async forcePartsSupplierSync() {
-      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/supplier-sync`, {
-        method: "POST",
-        headers: await getHeaders(),
-      });
-      if (!response.ok) throw new Error("Could not start a sync");
-      return response.json();
-  },
-
-  async partsRunnerOnline() {
-      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/runner-online`, { headers: await getHeaders(null) });
-      if (!response.ok) throw new Error("Could not check the parts desk");
-      return response.json() as Promise<{ online: boolean }>;
   },
 
   async requestCatalogAddition(body: { make: string; model: string; year: number; vehicleId?: string | null }) {

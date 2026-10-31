@@ -25,9 +25,6 @@ export function PartsActivityPanel({
 }) {
   const requests = activity?.requests;
   const alerts = activity?.repeatAlerts;
-  const claims = activity?.warrantyClaims;
-  const cores = activity?.cores;
-  const owed = (cores?.items || []).reduce((sum, row) => sum + Number(row.core_charge || 0), 0);
   return (
     <div className="lg:col-span-4 flex flex-col gap-space-lg">
       <div className="bg-surface-container-lowest rounded-xl p-space-xl shadow-sm flex flex-col">
@@ -40,8 +37,6 @@ export function PartsActivityPanel({
         <div className="flex flex-col divide-y divide-surface-container-high">
           <Row title="Requests" badge={`${requests?.total ?? 0} open`} body={newestLine(requests) || "None open."} />
           <Row title="Repeat-part alerts" badge={String(alerts?.total ?? 0)} body={newestLine(alerts) || "No frequent wear anomalies detected across hub this month."} />
-          <Row title="Warranty claims" badge={String(claims?.total ?? 0)} body={claims?.total ? newestLine(claims) : "All installed suspension & hybrid parts operating within warranty period."} />
-          <Row title="Core returns" badge={`J$ ${owed.toLocaleString()}`} body={cores?.total ? `${cores.total} cores owed` : "Alternator and high-voltage battery deposits are fully cleared."} />
         </div>
         <div className="mt-space-lg pt-space-md bg-surface-container-low p-space-md rounded-lg flex flex-col">
           <div className="flex items-center gap-space-xs text-on-surface font-headline-sm text-body-sm">
@@ -57,9 +52,6 @@ export function PartsActivityPanel({
           </button>
         </div>
       </div>
-      <p className="font-caption text-caption text-on-surface-variant mt-space-md">
-        Example request copy: roomy ac compressor quote auto parts.
-      </p>
     </div>
   );
 }

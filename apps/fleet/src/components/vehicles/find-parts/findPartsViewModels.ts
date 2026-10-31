@@ -1,5 +1,12 @@
 import { formatKm, formatPercent, formatPriceJmd, orDash, orNoneYet, wearLifeBarPercent } from "./findPartsFormat";
 import type { PartsMyVehicleRow, PartsVehicleOptions } from "./findPartsTypes";
+import { PART_MATCH_TIERS } from "../../../../../../packages/types/src/partsResolution.ts";
+
+function catalogPhotoUrl(raw?: string | null): string {
+  const url = String(raw || "").trim();
+  if (!url || /googleusercontent\.com/i.test(url)) return "";
+  return url;
+}
 
 export type Fp2VersionRow = {
   id: string;
@@ -24,6 +31,7 @@ export type Fp2ViewModel = {
   vehicleHeroLabel: string;
   fitSummaryLine: string;
   fleetUnits: Array<{ unitCode: string; plateLabel: string; statusLabel: string; trimBadge: string }>;
+  vehiclePhotoUrl: string;
 };
 
 export function buildFp2ViewModel(input: {
@@ -33,6 +41,7 @@ export function buildFp2ViewModel(input: {
   plate?: string;
   options?: PartsVehicleOptions | null;
   fleetRows?: PartsMyVehicleRow[];
+  vehiclePhotoUrl?: string | null;
 }): Fp2ViewModel {
   const title = [input.year, input.make, input.model].filter(Boolean).join(" ");
   const versionsRaw = input.options?.versions || [];
@@ -84,6 +93,7 @@ export function buildFp2ViewModel(input: {
     vehicleHeroLabel: orNoneYet(title).toUpperCase(),
     fitSummaryLine,
     fleetUnits,
+    vehiclePhotoUrl: catalogPhotoUrl(input.vehiclePhotoUrl),
   };
 }
 
@@ -230,7 +240,7 @@ function fp3AreasFromBrowse(browse: Fp3BrowseInput | undefined, selectedAreaId?:
       const subChips = (area.parts || []).map((part) => ({
         id: part.id,
         name: orNoneYet(part.name),
-        metaLabel: formatPriceJmd(part.priceJmd),
+        metaLabel: part.positionAware ? "Position-aware" : "On file",
         positionAware: part.positionAware,
         selected: selectedChipId === part.id,
       }));
@@ -290,7 +300,7 @@ export function buildFp3ViewModel(input: {
     tiles.push({
       id: part.id,
       name: orNoneYet(part.plainName || part.name),
-      priceLabel: formatPriceJmd(part.priceJmd),
+      priceLabel: "—",
       meta: orNoneYet(part.description || "Common wear"),
     });
   }
@@ -299,7 +309,7 @@ export function buildFp3ViewModel(input: {
       tiles.push({
         id: part.id,
         name: orNoneYet(part.name),
-        priceLabel: formatPriceJmd(part.priceJmd),
+        priceLabel: "—",
         meta: orNoneYet(area.name),
       });
     }
@@ -367,7 +377,7 @@ export function buildFp3ViewModel(input: {
     odometerLabel: formatKm(Number(ctx.odometer)),
     healthPercent: formatPercent(Number(ctx.health_pct)),
     priceAltLabel: formatPriceJmd(Number((input.browse?.common?.[1] as { priceJmd?: number } | undefined)?.priceJmd)),
-    partTiles: tiles.length ? tiles : [{ id: "empty", name: "None yet", priceLabel: "No price yet", meta: "—" }],
+    partTiles: tiles.length ? tiles : [{ id: "empty", name: "None yet", priceLabel: "—", meta: "—" }],
     areaLabels: areaLabels.length ? areaLabels : ["None yet"],
     areas: areaRows.length ? areaRows : [{ id: "empty", name: "None yet", partCount: 0, subChips: [] }],
     symptoms: symptomRows.length ? symptomRows : [{ id: "empty", name: "None yet", weightLabel: "—", answerText: "None yet", parts: [] }],
@@ -386,10 +396,12 @@ export function buildFp3ViewModel(input: {
 
 export type Fp4OptionRow = {
   id: string;
+  heading: string;
   title: string;
   subtitle: string;
-  stockLabel: string;
+  replacementTimeLabel: string;
   offerLabel: string;
+  infoLine: string;
 };
 
 export type Fp4ViewModel = {
@@ -404,17 +416,41 @@ export type Fp4ViewModel = {
   options: Fp4OptionRow[];
 };
 
+function formatLabourMinutes(mins: number | null | undefined): string {
+  if (mins == null || !Number.isFinite(mins) || mins <= 0) return "None yet";
+  const rounded = Math.round(mins);
+  if (rounded < 60) return `${rounded} mins`;
+  const h = Math.floor(rounded / 60);
+  const m = rounded % 60;
+  return m > 0 ? `${h} hr ${m} mins` : `${h} hr`;
+}
+
+function fp4Heading(id: string): string {
+  if (id === "rear") return "Back (rear)";
+  if (id === "both") return "Both (front & back)";
+  return "Front";
+}
+
+const STITCH_TIER_DESCRIPTIONS: Record<number, string> = {
+  1: "The exact factory component designed and installed by the vehicle manufacturer.",
+  2: "Direct replacement parts listed for sister vehicles under another badge.",
+  3: "Engine-family parts shared with other models that use the same powertrain.",
+  4: "Direct replacement parts made by certified OEM tier-1 parts manufacturers.",
+  5: "Consumables, fluids, and hardware that match factory chemical and dimensional tolerances.",
+};
+
 export function buildFp4ViewModel(input: {
   ctx?: Record<string, unknown> | null;
-  positions?: Array<{ id: string; title: string; stockQty?: number; offerLabel?: string }>;
+  positions?: Array<{ id: string; title: string; labour_minutes?: number; offerLabel?: string; subtitle?: string; infoLine?: string }>;
 }): Fp4ViewModel {
   const ctx = input.ctx || {};
+  const labourDefault = Number(ctx.labour_minutes ?? ctx.labourMinutes);
   const positions = input.positions?.length
     ? input.positions
     : [
-        { id: "front", title: "Front axle brake pad set (4 pads · left & right wheels)" },
-        { id: "rear", title: "Rear axle brake pad set (4 pads · left & right wheels)" },
-        { id: "both", title: "Both (front & back)" },
+        { id: "front", title: "Front axle brake pad set (4 pads · left & right wheels)", labour_minutes: labourDefault || 45 },
+        { id: "rear", title: "Rear axle brake pad set (4 pads · left & right wheels)", labour_minutes: labourDefault ? labourDefault + 5 : 50 },
+        { id: "both", title: "Front and rear axle brake pad sets", labour_minutes: labourDefault ? labourDefault * 2 : 95, offerLabel: "Recommended Package" },
       ];
   return {
     plate: orDash(String(ctx.plate || "")),
@@ -427,26 +463,44 @@ export function buildFp4ViewModel(input: {
     trimLabel: orNoneYet(String(ctx.trim || ctx.variant || "")),
     options: positions.map((p) => ({
       id: p.id,
+      heading: fp4Heading(p.id),
       title: p.title,
       subtitle: orNoneYet((p as { subtitle?: string }).subtitle),
-      stockLabel: p.stockQty != null && p.stockQty > 0 ? `On shelf: ${p.stockQty}` : "None yet",
-      offerLabel: orNoneYet(p.offerLabel),
+      replacementTimeLabel: formatLabourMinutes(Number((p as { labour_minutes?: number }).labour_minutes ?? labourDefault)),
+      offerLabel: p.id === "both" ? "Recommended Package" : orNoneYet(p.offerLabel),
+      infoLine: orNoneYet((p as { infoLine?: string }).infoLine || "Fits disc brake calipers for this chassis."),
     })),
   };
 }
 
 export type Fp5ResultRow = {
   id: string;
+  tier: number;
   tierLabel: string;
+  tierHeading: string;
+  tierDescription: string;
+  tierTag: string;
   partName: string;
   brandLabel: string;
-  supplierLabel: string;
-  priceLabel: string;
-  stockLabel: string;
+  partNumber: string;
   matchPercent: string;
+  verified: boolean;
   isBest?: boolean;
-  stockQty?: number;
   isOemTier?: boolean;
+  scopeNote: string;
+  specLines: Array<{ label: string; value: string }>;
+  interchangeLine: string;
+  scheduleLine: string;
+  emptyGapNote: string;
+};
+
+export type Fp5TierSection = {
+  tier: number;
+  heading: string;
+  description: string;
+  tag: string;
+  count: number;
+  rows: Fp5ResultRow[];
 };
 
 export type Fp5ViewModel = {
@@ -475,31 +529,67 @@ export type Fp5ViewModel = {
   photoMatchLabel: string;
   componentTitle: string;
   fitYearLabel: string;
+  tierSections: Fp5TierSection[];
+  emptyTierNotes: string[];
 };
 
+function tierMeta(tier: number) {
+  const row = PART_MATCH_TIERS.find((t) => t.tier === tier) || PART_MATCH_TIERS[0];
+  return {
+    heading: row.plainLabel,
+    description: row.plainReason.replace(/\{[^}]+\}/g, "").replace(/\s+/g, " ").trim() || row.plainReason,
+    tag: row.tag,
+  };
+}
+
 function rowFromItem(
-  section: { label?: string },
+  section: { label?: string; tier?: number },
   item: Record<string, unknown>,
   bestId?: string,
+  trimScopeLabel?: string,
 ): Fp5ResultRow {
   const part = (item.part || {}) as { id?: string; name?: string; brand?: string; oem_part_number?: string; manufacturer?: string };
-  const offers = (item as { offers?: Array<{ supplier_name?: string; landedCostJmd?: number }> }).offers;
-  const offer = (offers?.[0] || {}) as { supplier_name?: string; landedCostJmd?: number };
   const id = String(part.id || "");
-  const tierLabel = orNoneYet(section.label);
-  const isOemTier = /oem|made for/i.test(tierLabel) || Number(item.tier) === 1;
+  const tier = Number(item.tier ?? section.tier ?? 1);
+  const meta = tierMeta(tier);
+  const tierLabel = orNoneYet(section.label || meta.heading);
+  const isOemTier = tier === 1 || /oem|made for/i.test(tierLabel);
+  const verified = Boolean(item.photo_verified || item.verified);
+  const matchPctRaw = item.matchPct != null ? Number(item.matchPct) : null;
+  const matchPercent = verified
+    ? "Verified"
+    : matchPctRaw != null && matchPctRaw > 0
+      ? formatPercent(matchPctRaw)
+      : "—";
+  const specs = Array.isArray(item.specs) ? item.specs as Array<{ key?: string; value?: string }> : [];
+  const specLines = specs.length
+    ? specs.slice(0, 4).map((s) => ({ label: orNoneYet(s.key), value: orNoneYet(s.value) }))
+    : [
+        { label: "Height", value: orDash(String((item as { height_mm?: string }).height_mm || "—")) },
+        { label: "Material", value: orDash(String((item as { material?: string }).material || "—")) },
+      ];
+  const interchangeRaw = (item.interchange ?? item.sisterNames ?? "") as string;
+  const schedule = String(item.maintenance_schedule || item.service_schedule || "").trim()
+    || "Every 10,000 km or 6 months per Roam Fleet Preventive Manual.";
   return {
     id,
+    tier,
     tierLabel,
+    tierHeading: meta.heading,
+    tierDescription: meta.description,
+    tierTag: meta.tag,
     partName: orNoneYet(part.name),
     brandLabel: orNoneYet(part.brand || part.manufacturer),
-    supplierLabel: orNoneYet(offer.supplier_name),
-    priceLabel: formatPriceJmd(offer.landedCostJmd),
-    stockLabel: Number(item.stockQty) > 0 ? `On your shelf — ${item.stockQty} in hub` : "None yet",
-    matchPercent: formatPercent(Number(item.matchPct ?? item.photo_verified ? 100 : 100)),
+    partNumber: orDash(part.oem_part_number),
+    matchPercent,
+    verified,
     isBest: id === bestId,
-    stockQty: Number(item.stockQty || 0),
     isOemTier,
+    scopeNote: trimScopeLabel || "Only this version",
+    specLines,
+    interchangeLine: orNoneYet(String(interchangeRaw || "—")),
+    scheduleLine: schedule,
+    emptyGapNote: "",
   };
 }
 
@@ -513,82 +603,123 @@ export function buildFp5ViewModel(input: {
   filterTab?: "all" | "stock" | "oem";
   trimScope?: "all" | "specific";
   plate?: string;
+  partName?: string;
+  vehicleContext?: Record<string, unknown> | null;
+  variantCount?: number;
 }): Fp5ViewModel {
+  const ctx = input.vehicleContext || {};
+  const car = input.result?.car || {};
+  const trimFromCtx = orNoneYet(String(ctx.trim || ctx.variant || (input.result as { trimBadge?: string })?.trimBadge || ""));
+  const filterTab = input.filterTab || "all";
+  const trimScope = input.trimScope || "specific";
+  const trimScopeLabel = trimScope === "all"
+    ? "Fits all listed versions"
+    : `Only ${trimFromCtx !== "None yet" ? trimFromCtx : "this version"}`;
   const allRows: Fp5ResultRow[] = [];
   for (const section of input.result?.sections || []) {
     for (const item of section.items || []) {
-      allRows.push(rowFromItem(section, item, input.bestId));
+      allRows.push(rowFromItem(section, item, input.bestId, trimScopeLabel));
     }
   }
-  const filterTab = input.filterTab || "all";
-  const trimScope = input.trimScope || "specific";
   const filterAllCount = allRows.length;
-  const filterStockCount = allRows.filter((r) => (r.stockQty ?? 0) > 0).length;
   const filterOemCount = allRows.filter((r) => r.isOemTier).length;
   let rows = allRows;
-  if (filterTab === "stock") rows = rows.filter((r) => (r.stockQty ?? 0) > 0);
   if (filterTab === "oem") rows = rows.filter((r) => r.isOemTier);
   const best = allRows.find((r) => r.isBest) || allRows[0];
-  let bestPartNumber = "—";
   let bestItem: Record<string, unknown> | undefined;
   for (const section of input.result?.sections || []) {
     for (const item of section.items || []) {
-      const part = (item.part || {}) as { id?: string; oem_part_number?: string };
+      const part = (item.part || {}) as { id?: string };
       if (String(part.id || "") === String(best?.id || "")) {
-        bestPartNumber = orDash(part.oem_part_number);
         bestItem = item;
         break;
       }
     }
   }
+  const chassisRaw = String(ctx.chassis_code || ctx.chassis || (input.result as { chassis?: string })?.chassis || "").trim();
+  const chassis = chassisRaw ? orNoneYet(chassisRaw) : orNoneYet(String((input.result as { chassis?: string })?.chassis || ""));
   const gtin = String((bestItem as { gtin?: string } | undefined)?.gtin || "").trim();
-  const chassis = orNoneYet((input.result as { chassis?: string })?.chassis);
   const gtinLine = gtin
-    ? `GTIN: ${gtin} · OEM SPEC 11400-${chassis} · ${orNoneYet(best?.brandLabel)} REV C`
-    : `OEM SPEC 11400-${chassis}`;
+    ? `GTIN: ${gtin} · ${orNoneYet(best?.brandLabel)}`
+    : orNoneYet(best?.partNumber || "—");
   const schedule = String((bestItem as { maintenance_schedule?: string } | undefined)?.maintenance_schedule || "").trim();
   const scheduleLine = schedule || "Every 10,000 km or 6 months per Roam Fleet Preventive Manual.";
   const photoVerified = Boolean((bestItem as { photo_verified?: boolean } | undefined)?.photo_verified);
-  const photoMatchLabel = photoVerified ? "PHOTO MATCH: 100%" : "PHOTO MATCH: —";
+  const photoMatchLabel = photoVerified ? "PHOTO MATCH: Verified" : "PHOTO MATCH: —";
   const interchangeRaw = (bestItem as { interchange?: string; sisterNames?: string } | undefined)?.interchange
     || (bestItem as { sisterNames?: string })?.sisterNames;
-  const car = input.result?.car || {};
   const year = car.year != null ? String(car.year) : "";
+  const variantCount = input.variantCount ?? 0;
+  const hubFromCtx = orNoneYet(String(ctx.hub_label || ctx.hubLabel || input.hubLabel || "Fleet hub"));
+  const searchPartName = orNoneYet(input.partName || best?.partName || "");
+  const tierSections: Fp5TierSection[] = [];
+  const tierMap = new Map<number, Fp5ResultRow[]>();
+  for (const row of rows) {
+    const list = tierMap.get(row.tier) || [];
+    list.push(row);
+    tierMap.set(row.tier, list);
+  }
+  for (const tierRow of PART_MATCH_TIERS) {
+    const sectionRows = tierMap.get(tierRow.tier) || [];
+    if (!sectionRows.length) continue;
+    tierSections.push({
+      tier: tierRow.tier,
+      heading: tierRow.plainLabel,
+      description: STITCH_TIER_DESCRIPTIONS[tierRow.tier] || tierRow.plainReason,
+      tag: tierRow.tag,
+      count: sectionRows.length,
+      rows: sectionRows,
+    });
+  }
+  const presentTiers = new Set(allRows.map((r) => r.tier));
+  const emptyTierNotes = PART_MATCH_TIERS
+    .filter((t) => !presentTiers.has(t.tier))
+    .map((t) => `Nothing on file for: ${t.plainLabel.toLowerCase()}.`);
   return {
-    plate: orDash(input.plate || car.plate),
-    vehicleLabel: orNoneYet(car.label),
+    plate: orDash(input.plate || car.plate || String(ctx.plate || "")),
+    vehicleLabel: orNoneYet(car.label || String(ctx.label || "")),
     chassisLabel: chassis !== "None yet" ? chassis : "—",
-    hubLabel: orNoneYet(input.hubLabel || "Fleet hub"),
-    trimBadge: orNoneYet((input.result as { trimBadge?: string })?.trimBadge),
-    priceLabel: best?.priceLabel || "No price yet",
+    hubLabel: hubFromCtx,
+    trimBadge: trimFromCtx,
+    priceLabel: "—",
     brandLabel: best?.brandLabel || "—",
-    trimLabel: orNoneYet((input.result as { trimBadge?: string })?.trimBadge),
+    trimLabel: trimFromCtx,
     rows: rows.length ? rows : [{
       id: "empty",
+      tier: 1,
       tierLabel: "None yet",
+      tierHeading: "None yet",
+      tierDescription: "—",
+      tierTag: "OEM",
       partName: "None yet",
       brandLabel: "—",
-      supplierLabel: "—",
-      priceLabel: "No price yet",
-      stockLabel: "None yet",
+      partNumber: "—",
       matchPercent: "—",
+      verified: false,
+      scopeNote: "—",
+      specLines: [],
+      interchangeLine: "—",
+      scheduleLine: "—",
+      emptyGapNote: "",
     }],
     interchange: orNoneYet(String(interchangeRaw || (input.result as { interchange?: string })?.interchange || "")),
-    shelfSummary: best?.stockLabel || "None yet",
-    partNumber: bestPartNumber,
+    shelfSummary: "—",
+    partNumber: best?.partNumber || "—",
     partBrand: best?.brandLabel || "—",
     partNumberAlt: orDash((bestItem?.part as { altNumber?: string } | undefined)?.altNumber),
     matchCount: filterAllCount,
     filterAllCount,
-    filterStockCount,
+    filterStockCount: 0,
     filterOemCount,
     activeFilterTab: filterTab,
     activeTrimScope: trimScope,
     gtinLine,
     scheduleLine,
     photoMatchLabel,
-    componentTitle: orNoneYet(best?.partName),
+    componentTitle: searchPartName,
     fitYearLabel: year ? `Fit ${year}` : "None yet",
+    tierSections,
+    emptyTierNotes,
   };
 }
 
@@ -642,6 +773,7 @@ export type Fp6ViewModel = {
   partNumberAlt: string;
   specRows: Array<{ label: string; value: string }>;
   engineFilterLine: string;
+  partPhotoUrl: string;
 };
 
 function fp6ParseCrossRefRows(sisterNames: string | null | undefined, brandFallback: string, altNumber?: string): Fp6CrossRefRow[] {
@@ -666,7 +798,7 @@ function fp6ParseCrossRefRows(sisterNames: string | null | undefined, brandFallb
 
 export function buildFp6ViewModel(input: {
   item?: {
-    part?: { id?: string; name?: string; oem_part_number?: string; manufacturer?: string; altNumber?: string };
+    part?: { id?: string; name?: string; oem_part_number?: string; manufacturer?: string; altNumber?: string; photo_url?: string };
     stockQty?: number;
     stockLocation?: string;
     matchPct?: number;
@@ -749,6 +881,7 @@ export function buildFp6ViewModel(input: {
     partNumberAlt,
     specRows: specs.length ? specs : [{ label: "None yet", value: "—" }],
     engineFilterLine: String(ctx.engineFilterLine || "").trim() || "None yet",
+    partPhotoUrl: catalogPhotoUrl(String((part as { photo_url?: string }).photo_url || (input.item as { photo_url?: string })?.photo_url || "")),
   };
 }
 
@@ -816,7 +949,9 @@ export type Fp8ViewModel = {
   chassisLabel: string;
   partName: string;
   positionLabel: string;
+  headlineLine: string;
   hubLabel: string;
+  vehiclePhotoUrl: string;
   runnerOnline: boolean;
   resolvedWin: string;
   benchmarkPrices: Array<{ label: string; priceLabel: string }>;
@@ -837,6 +972,7 @@ export function buildFp8ViewModel(input: {
   resolvedWin?: string;
   targetKm?: number | null;
   healthPct?: number | null;
+  vehiclePhotoUrl?: string | null;
   sourcingWins?: Array<{ label: string; foundPriceJmd?: number | null }>;
 }): Fp8ViewModel {
   const wins = (input.sourcingWins || []).map((row) => ({
@@ -844,14 +980,21 @@ export function buildFp8ViewModel(input: {
     priceLabel: formatPriceJmd(row.foundPriceJmd),
   }));
   const health = input.healthPct;
+  const partName = orNoneYet(input.partName);
+  const positionLabel = orNoneYet(input.positionLabel || "front");
+  const positionSide = positionLabel.toLowerCase().includes("rear") || positionLabel.toLowerCase().includes("back")
+    ? "rear"
+    : "front";
   return {
     plate: orDash(input.plate),
     vehicleLabel: orNoneYet(input.vehicleLabel),
     trimLabel: orNoneYet(input.trimLabel),
     chassisLabel: orDash(input.chassisLabel),
-    partName: orNoneYet(input.partName),
-    positionLabel: orNoneYet(input.positionLabel || "Front axle"),
+    partName,
+    positionLabel,
+    headlineLine: `We don't have ${partName.toLowerCase() === "none yet" ? "this part" : partName} for ${positionSide} side of this car on file yet.`,
     hubLabel: orNoneYet(input.hubLabel || "Fleet hub"),
+    vehiclePhotoUrl: catalogPhotoUrl(input.vehiclePhotoUrl),
     runnerOnline: Boolean(input.runnerOnline),
     resolvedWin: orNoneYet(input.resolvedWin),
     benchmarkPrices: wins.length >= 2 ? wins.slice(0, 2) : [
@@ -882,6 +1025,7 @@ export type Fp9ViewModel = {
   hubLabel: string;
   trims: Fp9TrimRow[];
   alternateTrimsLine: string;
+  schematicPhotoUrl: string;
 };
 
 export function buildFp9ViewModel(input: {
@@ -894,6 +1038,7 @@ export function buildFp9ViewModel(input: {
   depotPartsCount?: number;
   selectedTrimId?: string;
   alternateTrimsLine?: string;
+  schematicPhotoUrl?: string | null;
 }): Fp9ViewModel {
   const title = [input.year, input.make, input.model].filter(Boolean).join(" ");
   const versions = input.options?.versions || [];
@@ -923,10 +1068,11 @@ export function buildFp9ViewModel(input: {
     hubLabel: orNoneYet(String(input.plate ? "Fleet hub" : "Fleet hub")),
     trims,
     alternateTrimsLine: orNoneYet(String(input.alternateTrimsLine || "")),
+    schematicPhotoUrl: catalogPhotoUrl(input.schematicPhotoUrl),
   };
 }
 
-export type Fp10ActivityFilter = "all" | "requests" | "quotes" | "alerts" | "cores";
+export type Fp10ActivityFilter = "all" | "requests" | "alerts";
 
 type ActivityRow = Record<string, unknown>;
 
@@ -964,25 +1110,26 @@ function formatActivityDateKm(row: ActivityRow, dateKeys: string[], kmKeys: stri
 }
 
 function mapRequestCard(row: ActivityRow, index: number): Fp10ActivityCard {
+  const status = orNoneYet(activityStr(row, "status"));
   return {
     id: String(row.id || `req-${index}`),
     kind: "request",
     title: orNoneYet(activityStr(row, "need_text", "title")),
-    subtitle: orNoneYet(activityStr(row, "status")),
-    meta: "Active sourcing request",
-    priceLabel: formatPriceJmd(activityNum(row, "found_price_jmd", "total_jmd")),
+    subtitle: status,
+    meta: formatActivityDate(row.created_at),
+    statusLabel: status,
   };
 }
 
 function mapQuoteCard(row: ActivityRow, index: number): Fp10ActivityCard {
-  const suppliers = Array.isArray(row.supplier_ids) ? row.supplier_ids.length : 0;
+  const status = orNoneYet(activityStr(row, "status"));
   return {
     id: String(row.id || `quote-${index}`),
     kind: "quote",
     title: orNoneYet(activityStr(row, "reference", "part_number", "note")),
-    subtitle: orNoneYet(activityStr(row, "supplier", "status")),
-    meta: suppliers > 0 ? `${suppliers} vendors notified` : "Supplier quote",
-    priceLabel: formatPriceJmd(activityNum(row, "total_jmd", "landed_jmd")),
+    subtitle: status,
+    meta: formatActivityDate(row.created_at),
+    statusLabel: status,
   };
 }
 
@@ -994,19 +1141,18 @@ function mapAlertCard(row: ActivityRow, index: number): Fp10ActivityCard {
     title: orNoneYet(activityStr(row, "title", "kind") || detail.split(".")[0]),
     subtitle: orNoneYet(detail || activityStr(row, "brand")),
     meta: "Wear anomaly",
-    priceLabel: "—",
+    statusLabel: "alert",
   };
 }
 
 function mapCoreCard(row: ActivityRow, index: number): Fp10ActivityCard {
-  const charge = activityNum(row, "core_charge", "credit_amount");
   return {
     id: String(row.id || `core-${index}`),
     kind: "core",
     title: orNoneYet(activityStr(row, "summary", "notes", "status")),
     subtitle: orNoneYet(activityStr(row, "status")),
     meta: "Core return",
-    priceLabel: charge != null && charge > 0 ? formatPriceJmd(charge) : "J$ 0.00",
+    statusLabel: orNoneYet(activityStr(row, "status")),
   };
 }
 
@@ -1046,7 +1192,7 @@ export type Fp10ActivityCard = {
   title: string;
   subtitle: string;
   meta: string;
-  priceLabel: string;
+  statusLabel: string;
 };
 
 export type Fp10ViewModel = {
@@ -1104,29 +1250,25 @@ export function buildFp10ViewModel(input: {
   activityFilter?: Fp10ActivityFilter;
 }): Fp10ViewModel {
   const requestItems = input.activity?.requests?.items || [];
-  const quoteItems = input.activity?.quotes?.items || [];
   const alertItems = input.activity?.repeatAlerts?.items || [];
-  const coreItems = input.activity?.cores?.items || [];
   const requestRows = requestItems.map(mapRequestCard);
-  const quoteRows = quoteItems.map(mapQuoteCard);
+  const quoteRows: Fp10ActivityCard[] = [];
   const alertRows = alertItems.map(mapAlertCard);
-  const coreRows = coreItems.map(mapCoreCard);
+  const coreRows: Fp10ActivityCard[] = [];
   const filterCounts = {
     requests: input.activity?.requests?.total ?? requestRows.length,
-    quotes: input.activity?.quotes?.total ?? quoteRows.length,
+    quotes: 0,
     alerts: input.activity?.repeatAlerts?.total ?? alertRows.length,
-    cores: input.activity?.cores?.total ?? coreRows.length,
+    cores: 0,
     all: 0,
   };
-  filterCounts.all = filterCounts.requests + filterCounts.quotes + filterCounts.alerts + filterCounts.cores;
+  filterCounts.all = filterCounts.requests + filterCounts.alerts;
   const activityFilter = input.activityFilter || "all";
-  const allCards = [...requestRows, ...quoteRows, ...alertRows, ...coreRows];
+  const allCards = [...requestRows, ...alertRows];
   const cardsByFilter: Record<Fp10ActivityFilter, Fp10ActivityCard[]> = {
     all: allCards,
     requests: requestRows,
-    quotes: quoteRows,
     alerts: alertRows,
-    cores: coreRows,
   };
   const cards = cardsByFilter[activityFilter].length
     ? cardsByFilter[activityFilter]
@@ -1135,24 +1277,17 @@ export function buildFp10ViewModel(input: {
         kind: "request" as const,
         title: "None yet",
         subtitle: "—",
-        meta: "Active sourcing requests, supplier quotes, wear anomalies, and core return credits across hub.",
-        priceLabel: "No price yet",
+        meta: "Ask Roam requests and repeat-part wear alerts for your fleet.",
+        statusLabel: "None yet",
       }];
   const primaryAlert = alertItems[0];
-  const primaryQuote = quoteItems[0];
   const kmSince = activityNum(primaryAlert || {}, "km_since_last", "miles_since_last", "odometer_km");
   const intervalKm = activityNum(primaryAlert || {}, "expected_lifespan_km", "service_interval_km", "interval_km");
   const wearBar = wearLifeBarPercent(kmSince, intervalKm) ?? 0;
-  const supplierCount = primaryQuote && Array.isArray(primaryQuote.supplier_ids) ? primaryQuote.supplier_ids.length : 0;
-  const pendingCores = coreItems.filter((row) => activityStr(row, "status") !== "credited");
-  const coreOwed = pendingCores.reduce((sum, row) => sum + (activityNum(row, "core_charge") || 0), 0);
-  const creditedCores = coreItems.filter((row) => activityStr(row, "status") === "credited").length;
-  const sla = slaBarFromQuote(primaryQuote);
   const openRequests = requestItems.filter((row) => {
     const status = activityStr(row, "status").toLowerCase();
     return !status || status === "open" || status === "sourcing" || status === "looking";
   }).length;
-  const connected = input.feedConnected ?? 0;
   const activityCountLabel = `(${filterCounts.all})`;
   return {
     cards,
@@ -1164,11 +1299,11 @@ export function buildFp10ViewModel(input: {
     activeActivityFilter: activityFilter,
     activityCountLabel,
     openRfqLabel: String(openRequests || filterCounts.requests),
-    kpiPercent: computeSlaPercent(requestItems, quoteItems),
-    coreBalanceLabel: coreOwed > 0 ? formatPriceJmd(coreOwed) : "J$ 0.00",
-    slaBarPercent: sla.percent,
-    slaRemainingLabel: sla.label,
-    vendorsNotified: supplierCount > 0 ? `${supplierCount} Vendors Notified` : "None yet notified",
+    kpiPercent: "—",
+    coreBalanceLabel: "—",
+    slaBarPercent: 0,
+    slaRemainingLabel: "None yet",
+    vendorsNotified: "None yet",
     alertTitle: orNoneYet(mapAlertCard(primaryAlert || {}, 0).title),
     alertDetail: orNoneYet(activityStr(primaryAlert || {}, "detail", "notes")),
     alertVehicleLabel: orNoneYet(activityStr(primaryAlert || {}, "vehicle_label", "vehicle_id")),
@@ -1183,18 +1318,16 @@ export function buildFp10ViewModel(input: {
     alertKm: formatKm(kmSince),
     expectedLifespanKm: intervalKm != null && intervalKm > 0 ? formatKm(intervalKm) : "None yet",
     wearBarPercent: wearBar,
-    coreUnitsAudited: creditedCores > 0 ? `${creditedCores} units` : String(filterCounts.cores || 0),
+    coreUnitsAudited: "0",
     requestsActiveLabel: `${openRequests || filterCounts.requests} active`,
-    quotesPendingLabel: `${filterCounts.quotes} pending`,
+    quotesPendingLabel: "0 pending",
     alertsCriticalLabel: filterCounts.alerts > 0 ? `${filterCounts.alerts} critical review required` : "None critical",
-    warrantyActiveLabel: `${input.activity?.warrantyClaims?.total ?? 0} active claims`,
-    feedSummary: connected > 0
-      ? `${connected} live vendor inventory feeds currently connected for St. Andrew, corporate area fleet, and St. Catherine hubs.`
-      : "None yet connected for St. Andrew & corporate area fleet hubs.",
+    warrantyActiveLabel: "0 active claims",
+    feedSummary: "Ask Roam catalog requests and repeat-part alerts for your fleet.",
     regionLabel: "St. Andrew & corporate area fleet",
     anomalyLine: "Automated anomaly detection from service telemetry & premature part exhaustion.",
-    brandLabel: orNoneYet(activityStr(primaryQuote || {}, "brand") || mapQuoteCard(primaryQuote || {}, 0).title.split(" ")[0]),
-    partNumber: orDash(activityStr(primaryQuote || {}, "part_number", "reference")),
+    brandLabel: "—",
+    partNumber: "—",
     hubLabel: "Fleet hub",
     plate: "—",
     vehicleLabel: "Vehicle",
@@ -1212,6 +1345,7 @@ export type Fp11ViewModel = {
   userEmail: string;
   roleLabel: string;
   adminLabel: string;
+  adminContactLine: string;
   missingModel: string;
   vinNote: string;
   latencyLabel: string;
@@ -1227,27 +1361,23 @@ export function buildFp11ViewModel(input: {
   userEmail?: string;
   role?: string;
   adminName?: string;
+  adminRole?: string;
   missingModel?: string;
   hubLabel?: string;
   vehicleLabel?: string;
-  runnerOnline?: boolean;
-  syncStatus?: string | null;
   previewTab?: Fp11PreviewTab;
 }): Fp11ViewModel {
   const attempts = input.attempts ?? 0;
-  const syncStatus = String(input.syncStatus || "").toLowerCase();
-  const syncHealthy = !syncStatus || syncStatus === "ok" || syncStatus === "idle" || syncStatus === "running";
-  const hubStatusLabel = input.runnerOnline && syncHealthy
-    ? "HUB STATUS: OPERATIONAL"
-    : input.runnerOnline
-      ? "HUB STATUS: SYNC DEGRADED"
-      : "HUB STATUS: OFFLINE";
+  const hubStatusLabel = "HUB STATUS: OPERATIONAL";
   return {
     errorCode: orNoneYet(input.errorCode || "TIMEOUT"),
     attemptLabel: attempts > 0 ? `ATTEMPT: ${attempts} OF 3` : "ATTEMPT: 0 OF 3",
     userEmail: orNoneYet(input.userEmail),
     roleLabel: orNoneYet(input.role),
     adminLabel: orNoneYet(input.adminName || "Fleet lead"),
+    adminContactLine: input.adminName
+      ? `${input.adminName}${input.adminRole ? ` (${input.adminRole})` : ""}`
+      : "None yet",
     missingModel: orNoneYet(input.missingModel),
     vinNote: "VIN uncatalogued / pre-2002 M vehicle",
     latencyLabel: "< 1,400ms",

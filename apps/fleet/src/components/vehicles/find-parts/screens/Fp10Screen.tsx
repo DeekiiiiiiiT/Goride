@@ -3,18 +3,13 @@ import type { Fp10ActivityFilter, Fp10ViewModel } from "../findPartsViewModels";
 
 export type Fp10Actions = {
   onBack: () => void;
-  onForceSync: () => void;
   onDismissAlert: () => void;
   onInspect: () => void;
-  onReviewOffer: () => void;
   onInvestigate: () => void;
   onOpenCatalogSearch: () => void;
   onFilterTab: (tab: Fp10ActivityFilter) => void;
   onSeeAllRequests: () => void;
-  onSeeAllQuotes: () => void;
   onSeeAllAlerts: () => void;
-  onReviewWarrantyTerms: () => void;
-  onViewReturnLedger: () => void;
   children?: ReactNode;
 };
 
@@ -36,7 +31,7 @@ export function Fp10Screen({ actions, data }: { actions: Fp10Actions; data: Fp10
 <span className="material-symbols-outlined text-[17px]">manage_search</span>
 <span>Catalog Search</span>
 </button>
-<button type="button" className="px-space-md py-1.5 rounded-lg font-body-sm text-body-sm bg-surface-container-lowest text-on-surface font-medium shadow-sm flex items-center gap-space-xs">
+<button type="button" className="px-space-md py-1.5 rounded-lg font-body-sm text-body-sm bg-surface-container-lowest text-on-surface font-medium shadow-sm flex items-center gap-space-xs" onClick={actions.onBack}>
 <span className="material-symbols-outlined text-[17px] text-[#f97316]">history_edu</span>
 <span>Your parts activity</span>
 <span className="w-1.5 h-1.5 rounded-full bg-[#f97316]"></span>
@@ -60,24 +55,19 @@ export function Fp10Screen({ actions, data }: { actions: Fp10Actions; data: Fp10
 </div>
 <h2 className="font-headline-xl text-headline-xl tracking-tight text-on-surface mt-0.5">Your parts activity</h2>
 <p className="font-body-md text-body-md text-on-surface-variant mt-1 max-w-3xl">
-          Active sourcing requests, supplier quotes, wear anomalies, and core return credits across {data.hubLabel} hub.
+          Ask Roam catalog requests and repeat-part wear alerts across {data.hubLabel} hub.
         </p>
 </div>
 
 <div className="flex items-center gap-space-sm bg-surface-container-lowest p-1.5 rounded-xl shadow-sm shrink-0">
 <div className="px-space-md py-1 text-center">
-<span className="font-caption text-caption text-secondary uppercase block">Open RFQs</span>
+<span className="font-caption text-caption text-secondary uppercase block">Open requests</span>
 <span className="font-label-code text-headline-sm font-semibold text-on-surface">{data.openRfqLabel}</span>
 </div>
 <div className="w-px h-6 bg-surface-container-high"></div>
 <div className="px-space-md py-1 text-center">
-<span className="font-caption text-caption text-secondary uppercase block">SLA Target</span>
-<span className="font-label-code text-headline-sm font-semibold text-emerald-600">{data.kpiPercent}</span>
-</div>
-<div className="w-px h-6 bg-surface-container-high"></div>
-<div className="px-space-md py-1 text-center">
-<span className="font-caption text-caption text-secondary uppercase block">Core Bal</span>
-<span className="font-label-code text-headline-sm font-semibold text-on-surface">{data.coreBalanceLabel}</span>
+<span className="font-caption text-caption text-secondary uppercase block">Alerts</span>
+<span className="font-label-code text-headline-sm font-semibold text-on-surface">{data.filterCounts.alerts}</span>
 </div>
 </div>
 </div>
@@ -91,20 +81,14 @@ export function Fp10Screen({ actions, data }: { actions: Fp10Actions; data: Fp10
 <button type="button" className={filterTabClass(data.activeActivityFilter === "requests")} onClick={() => actions.onFilterTab("requests")}>
           Requests <span className="ml-1 font-label-code text-caption text-secondary">{data.filterCounts.requests}</span>
 </button>
-<button type="button" className={filterTabClass(data.activeActivityFilter === "quotes")} onClick={() => actions.onFilterTab("quotes")}>
-          Quotes <span className="ml-1 font-label-code text-caption text-secondary">{data.filterCounts.quotes}</span>
-</button>
 <button type="button" className={filterTabClass(data.activeActivityFilter === "alerts")} onClick={() => actions.onFilterTab("alerts")}>
           Alerts <span className="ml-1 font-label-code text-caption text-on-error-container">{data.filterCounts.alerts}</span>
 </button>
-<button type="button" className={filterTabClass(data.activeActivityFilter === "cores")} onClick={() => actions.onFilterTab("cores")}>
-          Core returns <span className="ml-1 font-label-code text-caption text-secondary">{data.filterCounts.cores}</span>
-        </button>
 </div>
 
 <div className="w-full md:w-80 relative">
 <span className="material-symbols-outlined text-[18px] text-secondary absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">search</span>
-<input className="w-full h-9 pl-9 pr-8 bg-surface-container-low rounded-lg text-body-sm text-on-surface placeholder:text-outline focus:outline-none focus:bg-surface-container-lowest shadow-inner transition-all font-body-sm" id="parts-search-input" placeholder="Filter by plate, OEM SKU, or supplier..." type="text" />
+<input className="w-full h-9 pl-9 pr-8 bg-surface-container-low rounded-lg text-body-sm text-on-surface placeholder:text-outline focus:outline-none focus:bg-surface-container-lowest shadow-inner transition-all font-body-sm" id="parts-search-input" placeholder="Filter by plate or OEM SKU..." type="text" />
 <span className="font-label-code text-[10px] text-secondary absolute right-3 top-1/2 -translate-y-1/2 uppercase px-1 py-0.5 rounded bg-surface-container">Esc</span>
 </div>
 </div>
@@ -128,7 +112,7 @@ export function Fp10Screen({ actions, data }: { actions: Fp10Actions; data: Fp10
 </div>
 
 <div className="divide-y divide-surface-container-high/40">
-{(data.requestRows.length ? data.requestRows : [{ id: "empty-req", kind: "request" as const, title: "None yet", subtitle: "—", meta: "—", priceLabel: "No price yet" }]).map((card) => (
+{(data.requestRows.length ? data.requestRows : [{ id: "empty-req", kind: "request" as const, title: "None yet", subtitle: "—", meta: "—", statusLabel: "None yet" }]).map((card) => (
 <div key={card.id} className="p-space-lg hover:bg-surface-container-low/40 transition-colors group">
 <div className="flex items-start justify-between gap-space-md">
 <div className="space-y-1 min-w-0">
@@ -143,7 +127,7 @@ export function Fp10Screen({ actions, data }: { actions: Fp10Actions; data: Fp10
 <span className="material-symbols-outlined text-[14px]">schedule</span> {card.meta}
                     </span>
 <span>•</span>
-<span className="font-label-code text-caption">{card.priceLabel}</span>
+<span className="font-label-code text-caption capitalize">{card.statusLabel}</span>
 </div>
 </div>
 <span className="px-2.5 py-1 rounded-full font-label-code text-caption bg-amber-50 text-amber-800 font-medium shrink-0 flex items-center gap-1.5 capitalize">
@@ -152,8 +136,8 @@ export function Fp10Screen({ actions, data }: { actions: Fp10Actions; data: Fp10
 </div>
 <div className="mt-space-md p-space-sm rounded-lg bg-surface-container-low flex items-center justify-between">
 <span className="font-label-code text-caption text-secondary">REF: <strong className="text-on-surface font-semibold">{data.requestRef}</strong></span>
-<button type="button" className="font-body-sm text-caption text-primary font-medium hover:underline flex items-center gap-0.5" onClick={card.kind === "quote" ? actions.onReviewOffer : actions.onInspect}>
-                  {card.kind === "quote" ? "Review offer" : "Inspect lead"} <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
+<button type="button" className="font-body-sm text-caption text-primary font-medium hover:underline flex items-center gap-0.5" onClick={actions.onInspect}>
+                  Inspect lead <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
 </button>
 </div>
 </div>
@@ -169,78 +153,7 @@ export function Fp10Screen({ actions, data }: { actions: Fp10Actions; data: Fp10
 </div>
 </div>
 
-<div className="lg:col-span-6 bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden flex flex-col justify-between" id="section-quotes">
-<div>
 
-<div className="p-space-lg bg-surface-container-lowest flex items-center justify-between">
-<div className="flex items-center gap-space-sm">
-<div className="w-7 h-7 rounded-lg bg-secondary-fixed flex items-center justify-center">
-<span className="material-symbols-outlined text-[17px] text-on-secondary-fixed">request_quote</span>
-</div>
-<h3 className="font-headline-sm text-headline-sm tracking-tight text-on-surface">Quotes</h3>
-</div>
-<span className="px-space-sm py-0.5 rounded-full font-label-code text-caption bg-blue-100 text-blue-900 font-semibold flex items-center gap-1">
-<span className="w-1.5 h-1.5 rounded-full bg-blue-600"></span>
-              {data.quotesPendingLabel}
-            </span>
-</div>
-
-<div className="p-space-lg space-y-space-md">
-{data.quoteRows.length ? data.quoteRows.map((quote) => (
-<div key={quote.id} className="p-space-md rounded-xl bg-surface-container-low flex flex-col gap-space-md hover:shadow-sm transition-all">
-<div className="flex items-start justify-between gap-space-sm">
-<div>
-<div className="flex items-center gap-space-sm">
-<span className="font-label-code text-body-lg font-semibold text-on-surface">{quote.title}</span>
-<span className="text-caption text-secondary font-body-sm">(Oil filter)</span>
-</div>
-<p className="font-body-sm text-caption text-on-surface-variant mt-0.5">
-                    RFQ sent to {data.hubLabel} Auto Parts & {data.hubLabel} Motor Spares
-                  </p>
-</div>
-<span className="px-2.5 py-1 rounded-full font-label-code text-caption bg-blue-50 text-blue-800 font-medium shrink-0 flex items-center gap-1.5">
-<span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span>
-                  Waiting for price
-                </span>
-</div>
-
-<div className="space-y-1.5">
-<div className="flex items-center justify-between font-label-code text-caption text-secondary">
-<span className="flex items-center gap-1">
-<span className="material-symbols-outlined text-[15px] text-amber-600">hourglass_top</span>
-                    Vendor SLA Response Window
-                  </span>
-<span className="font-medium text-amber-700">{data.slaRemainingLabel}</span>
-</div>
-<div className="w-full bg-surface-container-high rounded-full h-1.5 overflow-hidden">
-<div className="bg-amber-500 h-1.5 rounded-full" style={{ width: `${data.slaBarPercent}%` }}></div>
-</div>
-</div>
-
-<div className="grid grid-cols-2 gap-space-sm pt-space-xs font-label-code text-caption">
-<div className="bg-surface-container-lowest p-2 rounded-lg">
-<span className="text-secondary text-[11px] block">Target Landed Limit</span>
-<span className="font-label-price text-on-surface font-semibold">{quote.priceLabel} / unit</span>
-</div>
-<div className="bg-surface-container-lowest p-2 rounded-lg">
-<span className="text-secondary text-[11px] block">Bidding Suppliers</span>
-<span className="text-on-surface font-semibold">{data.vendorsNotified}</span>
-</div>
-</div>
-</div>
-)) : (
-<div className="p-space-md rounded-xl bg-surface-container-low font-body-sm text-body-sm text-on-surface-variant">None yet</div>
-)}
-</div>
-
-<div className="p-space-md bg-surface-container-low flex items-center justify-between">
-<span className="font-label-code text-caption text-secondary">Last price catalog synced 09:15 AM</span>
-<button type="button" className="font-body-sm text-body-sm text-primary font-medium hover:underline flex items-center gap-1" onClick={actions.onSeeAllQuotes}>
-            See all quotes <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
-</button>
-</div>
-</div>
-</div>
 
 <div className="lg:col-span-12 bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden" id="section-alerts">
 <div className="p-space-lg flex flex-col md:flex-row md:items-center justify-between gap-space-md bg-surface-container-lowest">
@@ -312,93 +225,9 @@ export function Fp10Screen({ actions, data }: { actions: Fp10Actions; data: Fp10
 </div>
 </div>
 
-<div className="lg:col-span-6 bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden flex flex-col justify-between" id="section-warranty">
-<div>
 
-<div className="p-space-lg bg-surface-container-lowest flex items-center justify-between">
-<div className="flex items-center gap-space-sm">
-<div className="w-7 h-7 rounded-lg bg-secondary-fixed flex items-center justify-center">
-<span className="material-symbols-outlined text-[17px] text-on-secondary-fixed">verified_user</span>
-</div>
-<h3 className="font-headline-sm text-headline-sm tracking-tight text-on-surface">Warranty claims</h3>
-</div>
-<span className="px-space-sm py-0.5 rounded-full font-label-code text-caption bg-surface-container text-secondary">
-              {data.warrantyActiveLabel}
-            </span>
-</div>
 
-<div className="p-space-xl flex flex-col items-center text-center">
-<div className="w-12 h-12 rounded-full bg-surface-container flex items-center justify-center text-secondary mb-space-md">
-<span className="material-symbols-outlined text-[24px]">verified</span>
-</div>
-<h4 className="font-headline-sm text-body-lg font-semibold text-on-surface">None open. Crediting a claim is done by Roam.</h4>
-<p className="font-body-sm text-body-sm text-on-surface-variant max-w-md mt-1.5">
-              Parts installed via verified Roam POs are covered by zero-defect vendor replacement. Replacements are logged directly against supplier credit notes.
-            </p>
-<div className="mt-space-lg flex items-center gap-space-sm">
-<span className="px-2.5 py-1 rounded-md bg-surface-container-low font-label-code text-caption text-secondary">
-                Protected by SLA Guarantee v2.4
-              </span>
-</div>
-</div>
-</div>
-<div className="p-space-md bg-surface-container-low flex items-center justify-between">
-<span className="font-label-code text-caption text-secondary">Coverage: 100% Roam Approved Stock</span>
-<button type="button" className="font-body-sm text-body-sm text-primary font-medium hover:underline flex items-center gap-1" onClick={actions.onReviewWarrantyTerms}>
-            Review warranty terms <span className="material-symbols-outlined text-[16px]">north_east</span>
-</button>
-</div>
-</div>
 
-<div className="lg:col-span-6 bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden flex flex-col justify-between" id="section-core">
-<div>
-
-<div className="p-space-lg bg-surface-container-lowest flex items-center justify-between">
-<div className="flex items-center gap-space-sm">
-<div className="w-7 h-7 rounded-lg bg-secondary-fixed flex items-center justify-center">
-<span className="material-symbols-outlined text-[17px] text-on-secondary-fixed">change_circle</span>
-</div>
-<h3 className="font-headline-sm text-headline-sm tracking-tight text-on-surface">Core returns</h3>
-</div>
-<span className="px-space-sm py-0.5 rounded-full font-label-code text-caption bg-emerald-50 text-emerald-800 font-semibold">
-              All cleared
-            </span>
-</div>
-
-<div className="p-space-lg space-y-space-md">
-
-<div className="p-space-lg rounded-xl bg-surface-container-low flex items-center justify-between">
-<div>
-<span className="font-caption text-caption text-secondary uppercase font-semibold tracking-wider">Depot Core Balance</span>
-<div className="font-label-price text-headline-lg font-bold text-on-surface mt-0.5">
-                  J$ 0 pending <span className="text-secondary font-normal font-body-sm">· 0 overdue</span>
-</div>
-</div>
-<div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-800">
-<span className="material-symbols-outlined text-[22px]">check_circle</span>
-</div>
-</div>
-
-<div className="p-space-md rounded-lg bg-surface-container flex items-start gap-space-sm">
-<span className="material-symbols-outlined text-[18px] text-secondary shrink-0 mt-0.5">inventory</span>
-<p className="font-body-sm text-body-sm text-on-surface-variant leading-relaxed">
-                Alternator and hybrid battery cores inspected and fully credited for {data.hubLabel} depot. No salvage parts awaiting shipment to remanufacturing partners.
-              </p>
-</div>
-
-<div className="flex items-center justify-between font-label-code text-caption text-secondary px-1">
-<span>Last hub audit: Yesterday, 18:00 EST</span>
-<span>Inspector: Tech-Lead #04</span>
-</div>
-</div>
-</div>
-<div className="p-space-md bg-surface-container-low flex items-center justify-between">
-<span className="font-label-code text-caption text-secondary">Historical returns audited: {data.coreUnitsAudited}</span>
-<button type="button" className="font-body-sm text-body-sm text-primary font-medium hover:underline flex items-center gap-1" onClick={actions.onViewReturnLedger}>
-            View return ledger <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
-</button>
-</div>
-</div>
 </div>
 
 <div className="mt-space-xl p-space-md rounded-xl bg-surface-container-lowest shadow-sm flex flex-col md:flex-row items-center justify-between gap-space-md">
@@ -412,44 +241,11 @@ export function Fp10Screen({ actions, data }: { actions: Fp10Actions; data: Fp10
 </div>
 <div className="flex items-center gap-space-md shrink-0 font-label-code text-caption text-secondary">
 <span>Alert logged: {data.alertDate} · {data.alertKm}</span>
-<button type="button" className="px-space-md py-1 rounded bg-surface-container-high text-on-surface hover:bg-surface-dim transition-colors font-medium" onClick={actions.onForceSync}>Force Sync</button>
 </div>
 </div>
 </div>
 </div>
 </div>
-      {/* fp-stitch-labels */}
-      <section aria-label="Component index" className="flex flex-wrap gap-1 pt-space-md border-t border-surface-container-high mt-space-md">
-        <span key="active sourcing requests, supplier quotes, wear anomalies, and core return credits across ." className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"active sourcing requests, supplier quotes, wear anomalies, and core return credits across ."}</span>
-        <span key="sourcing from /" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"sourcing from /"}</span>
-        <span key="rfq sent to auto parts & motor spares" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"rfq sent to auto parts & motor spares"}</span>
-        <span key="prior batch po-2908 landed at from spares." className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"prior batch po-2908 landed at from spares."}</span>
-        <span key="12 live vendor inventory feeds currently connected for st. andrew, , and st. catherine hubs." className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"12 live vendor inventory feeds currently connected for st. andrew, , and st. catherine hubs."}</span>
-        <span key="2 active" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"2 active"}</span>
-        <span key="front brake pads" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"front brake pads"}</span>
-        <span key="submitted 2h ago" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"submitted 2h ago"}</span>
-        <span key="looking" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"looking"}</span>
-        <span key="storefront" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"storefront"}</span>
-        <span key="supplier: auto parts" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"supplier: auto parts"}</span>
-        <span key="ready for review" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"ready for review"}</span>
-        <span key="found" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"found"}</span>
-        <span key="po pre-alloc:" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"po pre-alloc:"}</span>
-        <span key="see all 8 requests" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"see all 8 requests"}</span>
-        <span key="1 pending" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"1 pending"}</span>
-        <span key="4h remaining on reply sla" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"4h remaining on reply sla"}</span>
-        <span key="2 vendors notified" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"2 vendors notified"}</span>
-        <span key="info" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"info"}</span>
-        <span key="30d ago" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"30d ago"}</span>
-        <span key="1 critical review required" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"1 critical review required"}</span>
-        <span key="same brake pads replaced twice in 60 days" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"same brake pads replaced twice in 60 days"}</span>
-        <span key="caliper inspection telemetry flag triggered on rear-right assembly. sensor logs indicate sticking piston causing 3.4× premature friction wear relative to fleet median." className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"caliper inspection telemetry flag triggered on rear-right assembly. sensor logs indicate sticking piston causing 3.4× premature friction wear relative to fleet median."}</span>
-        <span key="see all 2 alerts" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"see all 2 alerts"}</span>
-        <span key="0 active claims" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"0 active claims"}</span>
-        <span key="alternator and hybrid battery cores inspected and fully credited for depot. no salvage parts awaiting shipment to remanufacturing partners." className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"alternator and hybrid battery cores inspected and fully credited for depot. no salvage parts awaiting shipment to remanufacturing partners."}</span>
-        <span key="historical returns audited: 24 units" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"historical returns audited: 24 units"}</span>
-        <span key="next sync in 08:42" className="inline-flex px-2 py-0.5 rounded bg-surface-container-low font-caption text-caption text-on-surface-variant">{"next sync in 08:42"}</span>
-      </section>
-      {/* /fp-stitch-labels */}
 
     </div>
   );
