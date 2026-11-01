@@ -8,15 +8,17 @@ import { buildFp10ViewModel, type Fp10ActivityFilter } from "./findPartsViewMode
 export function ActivityView({
   activity,
   onBack,
+  orgShortCode,
 }: {
   activity: PartsActivity | null;
   onBack: () => void;
+  orgShortCode?: string;
 }) {
   const [activityFilter, setActivityFilter] = useState<Fp10ActivityFilter>("all");
 
   const data = useMemo(
-    () => buildFp10ViewModel({ activity: activity ?? undefined, activityFilter }),
-    [activity, activityFilter],
+    () => buildFp10ViewModel({ activity: activity ?? undefined, activityFilter, orgShortCode }),
+    [activity, activityFilter, orgShortCode],
   );
 
   function scrollToSection(id: string) {

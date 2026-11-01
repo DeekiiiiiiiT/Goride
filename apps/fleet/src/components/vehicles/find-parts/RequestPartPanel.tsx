@@ -28,26 +28,40 @@ export function RequestPartPanel({
   const [note, setNote] = useState("");
   const [sent, setSent] = useState("");
   const ctxData = (ctx.data || {}) as Record<string, unknown>;
+  const specs = (ctxData.specs || {}) as Record<string, unknown>;
+  const versionParts = [
+    String(ctxData.version || ctxData.trim || specs.trim_series || "").trim(),
+    String(specs.engine_code || "").trim(),
+    String(specs.drivetrain || "").trim(),
+  ].filter(Boolean);
   const data = buildFp8ViewModel({
     plate,
     vehicleLabel: carLabel || "Vehicle",
     partName: partName || "Part",
     positionLabel: position === "rear" ? "Rear axle" : position === "both" ? "Front and rear" : "Front axle",
     trimLabel: orNoneYet(String(ctxData.trim || ctxData.variant || "")),
-    chassisLabel: orDash(String(ctxData.chassis_code || ctxData.chassis || ctxData.trim || "")),
+    chassisLabel: orDash(String(specs.chassis_code || ctxData.chassis_code || ctxData.chassis || "")),
     hubLabel: orNoneYet(String(ctxData.hub_label || ctxData.hubLabel || "Fleet hub")),
     targetKm: Number(ctxData.odometer),
     healthPct: Number(ctxData.health_pct),
     vehiclePhotoUrl: String(ctxData.photo_url || ctxData.vehicle_photo_url || ""),
+    fitmentQueryRef: sent ? sent.toUpperCase() : undefined,
+    versionTag: versionParts.length ? versionParts.join(" · ") : orNoneYet(String(ctxData.trim || "")),
   });
 
   async function submit(photoUrl?: string) {
+    const ctxVariant = String((ctxData as { variantId?: string }).variantId || "");
     const res = await api.requestFindPart({
+      kind: "add_part_info",
       vehicleId,
       componentId: componentId || undefined,
+      maintenanceComponentId: componentId || undefined,
       partName: partName || undefined,
       note,
-      photo_url: photoUrl,
+      side: position === "left" || position === "right" ? position : undefined,
+      position: position && !["left", "right", "both"].includes(position) ? position : undefined,
+      vehicleCatalogId: ctxVariant || undefined,
+      photoUrl,
     });
     setSent(String((res as { item?: { id?: string } }).item?.id || "").slice(0, 8));
   }

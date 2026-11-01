@@ -5,6 +5,11 @@
   "scripts": {
     "test:e2e:toll": "node scripts/e2e/toll-reconciliation-smoke.mjs",
     "stitch:render:s42": "node scripts/stitch-render.mjs",
+    "build:find-parts-css": "node scripts/build-find-parts-css.mjs",
+    "build:pending-parts-css": "node scripts/build-pending-parts-css.mjs",
+    "build:stitch-parts-css": "pnpm build:find-parts-css && pnpm build:pending-parts-css",
+    "test:e2e:fleet:find-parts-capture": "node node_modules/@playwright/test/cli.js test -c playwright.fleet-find-parts.config.ts",
+    "test:e2e:dominion:pending-parts-capture": "node node_modules/@playwright/test/cli.js test -c playwright.dominion.config.ts e2e/dominion-pending-parts-visual.spec.ts",
     "test:e2e:fleet:fuel-soak": "node node_modules/@playwright/test/cli.js test --project=fleet e2e/fuel-recon-shadow-soak.spec.ts",
     "test:e2e:fleet": "node node_modules/@playwright/test/cli.js test --project=fleet",
     "test:e2e:rush": "playwright test",

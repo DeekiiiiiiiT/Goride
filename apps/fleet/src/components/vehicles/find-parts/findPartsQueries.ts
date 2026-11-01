@@ -29,19 +29,19 @@ export function usePartsTerm(term: string, enabled = true) {
   });
 }
 
-export function usePartsSymptoms(enabled = true) {
+export function usePartsSymptoms(variantId?: string, enabled = true) {
   return useQuery({
-    queryKey: ["parts-symptoms"],
-    queryFn: () => api.partsSymptoms(),
+    queryKey: ["parts-symptoms", variantId || ""],
+    queryFn: () => api.partsSymptoms(variantId),
     enabled,
     staleTime: 120_000,
   });
 }
 
-export function usePartsBrowse(enabled = true) {
+export function usePartsBrowse(variantId?: string, enabled = true) {
   return useQuery({
-    queryKey: ["parts-browse"],
-    queryFn: () => api.partsBrowse(),
+    queryKey: ["parts-browse", variantId || ""],
+    queryFn: () => api.partsBrowse(variantId),
     enabled,
     staleTime: 120_000,
   });

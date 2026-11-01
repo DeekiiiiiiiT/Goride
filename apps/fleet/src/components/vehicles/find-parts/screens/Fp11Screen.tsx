@@ -15,10 +15,28 @@ export type Fp11Actions = {
 export function Fp11Screen({ actions, data }: { actions: Fp11Actions; data: Fp11ViewModel }) {
   const state = data.state;
 
+  const stateTabs = (
+    <div className="flex items-center gap-space-sm bg-surface-container-low p-1 rounded-lg mb-space-md overflow-x-auto max-w-full">
+      <button type="button" className="flex items-center gap-1.5 px-space-md py-1.5 rounded font-label-code text-caption text-on-surface-variant" onClick={() => actions.onPreviewTab?.("loading")}>
+        <span>Skeleton &amp; Loading</span>
+      </button>
+      <button type="button" className="flex items-center gap-1.5 px-space-md py-1.5 rounded font-label-code text-caption text-on-surface-variant" onClick={() => actions.onPreviewTab?.("error")}>
+        <span>Network / Error</span>
+      </button>
+      <button type="button" className="flex items-center gap-1.5 px-space-md py-1.5 rounded font-label-code text-caption text-on-surface-variant" onClick={() => actions.onPreviewTab?.("unlisted")}>
+        <span>Missing Model</span>
+      </button>
+      <button type="button" className="flex items-center gap-1.5 px-space-md py-1.5 rounded font-label-code text-caption text-on-surface-variant" onClick={() => actions.onPreviewTab?.("noperm")}>
+        <span>No Permission</span>
+      </button>
+    </div>
+  );
+
   if (state === "loading") {
     return (
       <div className="find-parts-screen-root">
         <div className="fp-screen-root w-full py-space-xl">
+          {stateTabs}
           <section className="state-section flex flex-col gap-space-md" id="state-section-loading">
             <div className="flex items-center justify-between pb-space-xs">
               <div className="flex items-center gap-space-sm">
@@ -51,6 +69,7 @@ export function Fp11Screen({ actions, data }: { actions: Fp11Actions; data: Fp11
     return (
       <div className="find-parts-screen-root">
         <div className="fp-screen-root w-full py-space-xl">
+          {stateTabs}
           <section className="state-section flex flex-col gap-space-md" id="state-section-error">
             <div className="flex items-center justify-between pb-space-xs">
               <div className="flex items-center gap-space-sm">
@@ -105,6 +124,7 @@ export function Fp11Screen({ actions, data }: { actions: Fp11Actions; data: Fp11
     return (
       <div className="find-parts-screen-root">
         <div className="fp-screen-root w-full py-space-xl">
+          {stateTabs}
           <section className="state-section flex flex-col gap-space-md" id="state-section-unlisted">
             <div className="flex items-center justify-between pb-space-xs">
               <div className="flex items-center gap-space-sm">
@@ -126,6 +146,7 @@ export function Fp11Screen({ actions, data }: { actions: Fp11Actions; data: Fp11
                   <p className="font-body-md text-body-md text-on-surface-variant mt-1">
                     Pre-2002 Japanese domestic market models require custom manual cataloging for chassis fitment.
                   </p>
+                  <p className="font-caption text-caption text-on-surface-variant mt-2">Technical guidelines.</p>
                   <div className="mt-space-md self-start inline-flex items-center gap-2 px-space-md py-1.5 rounded-full bg-tertiary-fixed text-on-tertiary-fixed font-caption text-caption">
                     <span className="material-symbols-outlined text-[16px]">schedule</span>
                     <span className="font-semibold">Takes 2–4 hours for Jamaican parts desk verification</span>
@@ -151,6 +172,7 @@ export function Fp11Screen({ actions, data }: { actions: Fp11Actions; data: Fp11
   return (
     <div className="find-parts-screen-root">
       <div className="fp-screen-root w-full py-space-xl">
+        {stateTabs}
         <section className="state-section flex flex-col gap-space-md" id="state-section-noperm">
           <div className="flex items-center justify-between pb-space-xs">
             <div className="flex items-center gap-space-sm">

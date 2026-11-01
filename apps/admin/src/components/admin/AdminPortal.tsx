@@ -102,6 +102,7 @@ export function AdminPortal() {
       'fuel-analytics': ['grade', 'week', 'pcode', 'brand'],
       'fuel-prices': ['refinery', 'week', 'range', 'year'],
       'fuel-stations': ['q', 'status', 'pcode', 'brand', 'pin', 'source', 'issue', 'sort', 'dir', 'p', 'tab', 'sub'],
+      'pending-motor-vehicles': ['tab'],
     };
     const url = new URL(window.location.href);
     const keep = new Set(allowed[page] || []);
@@ -276,11 +277,7 @@ export function AdminPortal() {
           <VehicleCatalogManager />
         </div>
       )}
-      {currentPage === 'pending-motor-vehicles' && (
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px] dark:bg-card">
-          <PendingVehicleCatalogManager />
-        </div>
-      )}
+      {currentPage === 'pending-motor-vehicles' && <PendingVehicleCatalogManager />}
       {currentPage === 'maintenance-templates' && (
         <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px] dark:bg-card">
           <MaintenanceTemplatesManager />

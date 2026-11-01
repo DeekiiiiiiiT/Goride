@@ -6,10 +6,6 @@ import {
   Link2,
   XCircle,
   MessageSquareWarning,
-  HelpCircle,
-  Info,
-  RefreshCw,
-  Search,
 } from "lucide-react";
 import { useAuth } from "../../auth/AuthContext";
 import {
@@ -38,8 +34,30 @@ import {
   SelectValue,
   Textarea,
 } from "../maintenance-templates/plainUi";
+import { PendingPartsCatalogTab, PendingPartsQueueCount } from "./pending-parts/PendingPartsCatalogTab";
+import { PendingCatalogShell, type PendingCatalogTabId } from "./pending-parts/PendingCatalogShell";
+import { PendingVehiclesCatalogTab } from "./pending-parts/PendingVehiclesCatalogTab";
+import "./pending-parts/pendingParts.css";
 
 type QueueFilter = "all_pending" | "needs_info";
+
+function readCatalogTabFromUrl(): PendingCatalogTabId {
+  if (typeof window === "undefined") return "parts";
+  const tab = new URLSearchParams(window.location.search).get("tab");
+  return tab === "vehicles" ? "vehicles" : "parts";
+}
+
+function writeCatalogTabToUrl(tab: PendingCatalogTabId) {
+  const url = new URL(window.location.href);
+  url.searchParams.set("page", "pending-motor-vehicles");
+  url.searchParams.set("tab", tab);
+  window.history.replaceState({}, "", `${url.pathname}?${url.searchParams.toString()}`);
+}
+
+function syncSecondsAgo(syncedAt: number | null): number {
+  if (!syncedAt) return 4;
+  return Math.max(0, Math.round((Date.now() - syncedAt) / 1000));
+}
 
 export function PendingVehicleCatalogManager() {
   const { session } = useAuth();
@@ -64,6 +82,11 @@ export function PendingVehicleCatalogManager() {
   const [rejectReason, setRejectReason] = useState("");
   const [requestInfoMessage, setRequestInfoMessage] = useState("");
   const [actionBusy, setActionBusy] = useState(false);
+  const [catalogTab, setCatalogTab] = useState<PendingCatalogTabId>(() => readCatalogTabFromUrl());
+  const [partsQueueCount, setPartsQueueCount] = useState(0);
+  const [partsSyncSec, setPartsSyncSec] = useState(4);
+  const [vehiclesSyncedAt, setVehiclesSyncedAt] = useState<number | null>(null);
+  const [vehiclesSyncSec, setVehiclesSyncSec] = useState(4);
 
   const statusParam = queueFilter === "needs_info" ? "needs_info" : "open";
 
@@ -78,6 +101,8 @@ export function PendingVehicleCatalogManager() {
       });
       setItems(res.items);
       setTotal(res.total);
+      setVehiclesSyncedAt(Date.now());
+      setVehiclesSyncSec(4);
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Failed to load queue");
     } finally {
@@ -90,8 +115,23 @@ export function PendingVehicleCatalogManager() {
   }, [queueFilter]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (catalogTab === "vehicles") void load();
+  }, [load, catalogTab]);
+
+  useEffect(() => {
+    if (!token) return;
+    void listPendingVehicleCatalogRequests(token, { status: "open", limit: 1, offset: 0 })
+      .then((res) => setTotal((prev) => (catalogTab === "parts" ? res.total : prev)))
+      .catch(() => {});
+  }, [token, catalogTab, partsQueueCount]);
+
+  useEffect(() => {
+    if (catalogTab !== "vehicles" || !vehiclesSyncedAt) return;
+    const id = window.setInterval(() => {
+      setVehiclesSyncSec(syncSecondsAgo(vehiclesSyncedAt));
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [catalogTab, vehiclesSyncedAt]);
 
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -100,6 +140,11 @@ export function PendingVehicleCatalogManager() {
       `${row.proposed_make} ${row.proposed_model}`.toLowerCase().includes(needle),
     );
   }, [items, query]);
+
+  const setCatalogTabPersisted = (tab: PendingCatalogTabId) => {
+    setCatalogTab(tab);
+    writeCatalogTabToUrl(tab);
+  };
 
   const openDetail = async (row: VehicleCatalogPendingRequest) => {
     setSelected(row);
@@ -195,230 +240,39 @@ export function PendingVehicleCatalogManager() {
     }
   };
 
+  const activeSyncSec = catalogTab === "parts" ? partsSyncSec : vehiclesSyncSec;
+
   return (
-    <div className="max-w-[1440px] flex-1 p-8 text-slate-900">
-      <nav aria-label="Breadcrumb" className="mb-3 flex items-center gap-2 text-xs text-slate-500">
-        <span>Dominion</span>
-        <span aria-hidden>›</span>
-        <span>Master data</span>
-        <span aria-hidden>›</span>
-        <span>Vehicles</span>
-        <span aria-hidden>›</span>
-        <span className="font-semibold text-slate-900">Pending catalog</span>
-      </nav>
-
-      <div className="mb-6 flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Pending catalog</h1>
-          <p className="mt-1 text-sm text-slate-600">Catalog requests waiting for a decision.</p>
-        </div>
-        <button
-          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm transition-colors hover:bg-slate-50"
-          type="button"
-          onClick={() => void load()}
-          disabled={loading}
-        >
-          <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} aria-hidden />
-          Refresh queue
-        </button>
-      </div>
-
-      <div className="mb-6 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200/80 bg-white p-4">
-          <div className="relative min-w-[280px] max-w-md flex-1">
-            <Search
-              className="pointer-events-none absolute inset-y-0 left-3 my-auto h-4 w-4 text-slate-400"
-              aria-hidden
-            />
-            <input
-              className="w-full rounded-lg border border-slate-200 bg-slate-50/50 py-1.5 pl-9 pr-3 text-xs text-slate-800 placeholder-slate-400 focus:border-blue-600 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-600"
-              placeholder="Search pending requests..."
-              type="text"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5 text-xs shadow-sm">
-              <button
-                type="button"
-                className={`rounded-md px-2.5 py-1 ${
-                  queueFilter === "all_pending"
-                    ? "bg-slate-100 font-medium text-slate-700"
-                    : "text-slate-500 hover:text-slate-700"
-                }`}
-                onClick={() => setQueueFilter("all_pending")}
-              >
-                All pending
-              </button>
-              <button
-                type="button"
-                className={`rounded-md px-2.5 py-1 ${
-                  queueFilter === "needs_info"
-                    ? "bg-slate-100 font-medium text-slate-700"
-                    : "text-slate-500 hover:text-slate-700"
-                }`}
-                onClick={() => setQueueFilter("needs_info")}
-              >
-                Needs info
-              </button>
-            </div>
-            <span className="rounded-lg border border-slate-200 bg-slate-100 px-2.5 py-1 font-mono text-[11px] text-slate-600">
-              JMD-REGISTRY: ACTIVE
-            </span>
-          </div>
-        </div>
-
-        {loading ? (
-          <div className="flex justify-center py-16">
-            <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
-          </div>
+    <div className="pending-parts-stitch min-h-[600px] flex-1">
+      <PendingPartsQueueCount onCount={setPartsQueueCount} />
+      <PendingCatalogShell
+        catalogTab={catalogTab}
+        onTabChange={setCatalogTabPersisted}
+        vehiclesCount={total}
+        partsCount={partsQueueCount}
+        syncSeconds={activeSyncSec}
+        onRefreshVehicles={() => void load()}
+        vehiclesRefreshing={loading}
+      >
+        {catalogTab === "parts" ? (
+          <PendingPartsCatalogTab onSyncSeconds={setPartsSyncSec} />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-left text-xs">
-              <thead>
-                <tr className="border-b border-slate-200 bg-slate-50/80 text-[11px] font-semibold uppercase tracking-wider text-slate-600">
-                  <th className="px-5 py-3">Make</th>
-                  <th className="px-5 py-3">Model</th>
-                  <th className="px-5 py-3 font-mono">Year</th>
-                  <th className="px-5 py-3">Requested</th>
-                  <th className="px-5 py-3">Status</th>
-                  <th className="px-5 py-3 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {visible.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="px-5 py-12 text-center text-slate-500">
-                      The data is not in yet.
-                    </td>
-                  </tr>
-                ) : (
-                  visible.map((row) => {
-                    const needsInfo = row.status === "needs_info";
-                    return (
-                      <tr
-                        key={row.id}
-                        className={`transition-colors hover:bg-slate-50/60 ${needsInfo ? "bg-amber-50/10" : ""}`}
-                      >
-                        <td className="px-5 py-4 font-semibold text-slate-900">{row.proposed_make}</td>
-                        <td className="px-5 py-4 font-medium text-slate-800">{row.proposed_model}</td>
-                        <td className="px-5 py-4 font-mono font-medium text-slate-700">
-                          {row.proposed_production_start_year}
-                        </td>
-                        <td className="px-5 py-4">
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-mono font-medium text-slate-800">
-                              {new Date(row.created_at).toLocaleDateString("en-GB", {
-                                day: "2-digit",
-                                month: "short",
-                                year: "numeric",
-                              })}
-                            </span>
-                            <span className="text-[11px] text-slate-400">from {row.source}</span>
-                          </div>
-                        </td>
-                        <td className="px-5 py-4">
-                          {needsInfo ? (
-                            <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-300 bg-amber-100 px-2.5 py-1 text-[11px] font-medium text-amber-900">
-                              <span className="h-1.5 w-1.5 rounded-full bg-amber-600" />
-                              Needs info
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-800">
-                              <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                              Pending
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-5 py-4 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
-                            <button
-                              type="button"
-                              className="inline-flex items-center gap-1 rounded-lg bg-[#15803d] px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-emerald-800"
-                              onClick={() => void openDetail(row)}
-                            >
-                              <Check className="h-3.5 w-3.5" aria-hidden />
-                              Approve
-                            </button>
-                            <button
-                              type="button"
-                              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50"
-                              onClick={() => void openDetail(row)}
-                            >
-                              <Link2 className="h-3.5 w-3.5 text-slate-500" aria-hidden />
-                              Link to existing
-                            </button>
-                            <button
-                              type="button"
-                              className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-white px-2.5 py-1 text-xs font-medium text-[#b91c1c] transition-colors hover:bg-red-50"
-                              onClick={() => void openDetail(row)}
-                            >
-                              <XCircle className="h-3.5 w-3.5" aria-hidden />
-                              Reject
-                            </button>
-                            <button
-                              type="button"
-                              title="Ask for info"
-                              aria-label="help_outline"
-                              className="rounded-lg p-1 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800"
-                              onClick={() => void openDetail(row)}
-                            >
-                              <HelpCircle className="h-4 w-4" aria-hidden />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
+          <PendingVehiclesCatalogTab
+            items={items}
+            visible={visible}
+            total={total}
+            loading={loading}
+            query={query}
+            onQueryChange={setQuery}
+            queueFilter={queueFilter}
+            onQueueFilterChange={setQueueFilter}
+            page={page}
+            pageSize={PAGE_SIZE}
+            onPageChange={setPage}
+            onOpenDetail={(row) => void openDetail(row)}
+          />
         )}
-
-        <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50/70 p-3 text-xs text-slate-500">
-          <div className="font-mono text-[11px]">
-            Showing {visible.length} queued catalog item{visible.length === 1 ? "" : "s"}
-            {total > visible.length ? ` (${total} total)` : ""}
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] disabled:opacity-40"
-              disabled={loading || page === 0}
-              onClick={() => setPage((p) => Math.max(0, p - 1))}
-            >
-              Previous
-            </button>
-            <button
-              type="button"
-              className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] disabled:opacity-40"
-              disabled={loading || (page + 1) * PAGE_SIZE >= total}
-              onClick={() => setPage((p) => p + 1)}
-            >
-              Next
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-slate-100 text-slate-500">
-            <Info className="h-4 w-4" aria-hidden />
-          </div>
-          <div>
-            <div className="text-xs font-semibold text-slate-800">The data is not in yet.</div>
-            <div className="mt-0.5 text-[11px] text-slate-500">
-              Additional manufacturer spec sheets and tariff matrices will populate once synced.
-            </div>
-          </div>
-        </div>
-        <span className="rounded-lg border border-slate-200 bg-slate-100 px-3 py-1.5 font-mono text-[11px] font-semibold text-slate-600">
-          LOC: KINGSTON / PARISH REGISTRY JMD
-        </span>
-      </div>
+      </PendingCatalogShell>
 
       <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
         <DialogContent className="flex max-h-[min(90vh,880px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">

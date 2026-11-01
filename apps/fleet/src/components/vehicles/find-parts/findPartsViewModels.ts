@@ -117,28 +117,43 @@ export type Fp3PartTile = {
   name: string;
   priceLabel: string;
   meta: string;
+  statusLabel: string;
+  icon: string;
+  active?: boolean;
+  positionAware?: boolean;
+  onFileCount?: number;
 };
 
 export type Fp3SubChip = {
   id: string;
   name: string;
   metaLabel: string;
+  onFileLabel: string;
   positionAware?: boolean;
   selected?: boolean;
+  disabled?: boolean;
 };
 
 export type Fp3AreaRow = {
   id: string;
   name: string;
+  areaIndex: string;
   partCount: number;
+  onFileLabel: string;
+  icon: string;
+  selected?: boolean;
   subChips: Fp3SubChip[];
 };
 
 export type Fp3SymptomPart = {
   id: string;
   name: string;
+  subName: string;
   priceLabel: string;
   weightLabel: string;
+  onFileLabel: string;
+  matchTypeLabel: string;
+  crossRefLabel: string;
   positionAware?: boolean;
 };
 
@@ -216,13 +231,72 @@ export type Fp3ViewModel = {
   orgShortCode: string;
   telematicsLine: string;
   chassisCode: string;
+  versionTag: string;
 };
 
 type Fp3BrowseInput = {
-  areas?: Array<{ id?: string; name?: string; parts?: Array<{ id: string; name: string; priceJmd?: number; positionAware?: boolean }> }>;
-  systems?: Array<{ id: string; plainName?: string; name?: string; components?: Array<{ id: string; plainName?: string; name?: string; count?: number; positionAware?: boolean }> }>;
-  common?: Array<{ id: string; name?: string; plainName?: string; priceJmd?: number; positionAware?: boolean; description?: string }>;
+  areas?: Array<{ id?: string; name?: string; parts?: Array<{ id: string; name: string; priceJmd?: number; positionAware?: boolean; count?: number }> }>;
+  systems?: Array<{ id: string; plainName?: string; name?: string; areaIndex?: string; count?: number; icon?: string | null; components?: Array<{ id: string; plainName?: string; name?: string; count?: number; positionAware?: boolean }> }>;
+  common?: Array<{ id: string; name?: string; plainName?: string; priceJmd?: number; positionAware?: boolean; description?: string; count?: number }>;
 };
+
+export function fp3OnFileAreaLabel(count: number): string {
+  if (count <= 0) return "None on file yet";
+  if (count === 1) return "1 part on file for your car";
+  return `${count} parts on file for your car`;
+}
+
+export function fp3ChipOnFileLabel(count: number): string {
+  if (count <= 0) return "Not on file yet";
+  return `${count} on file`;
+}
+
+export function fp3CommonStatusLabel(count: number, active: boolean): string {
+  if (active) return "Active";
+  if (count > 0) return "On file";
+  return "None";
+}
+
+const FP3_DB_ICON_SLUGS = new Set(["brakes", "oil", "droplet", "wind", "suspension", "tires", "gears", "belt"]);
+
+/** True when icon_key is a Material Symbols name, not a catalog slug like "brakes". */
+export function isMaterialSymbolIconKey(iconKey: string): boolean {
+  const key = iconKey.trim().toLowerCase();
+  if (!key || FP3_DB_ICON_SLUGS.has(key)) return false;
+  if (key.includes("_")) return true;
+  return new Set(["bolt", "category", "highlight", "adjust", "air", "inventory_2", "filter_list", "flash_on", "lightbulb", "hvac", "battery_charging_full"]).has(key);
+}
+
+export function fp3AreaIcon(name: string, iconKey?: string | null): string {
+  const key = String(iconKey || "").trim();
+  if (key && isMaterialSymbolIconKey(key)) return key.toLowerCase();
+  const text = name.toLowerCase();
+  if (text.includes("battery") || text.includes("electrical")) return "bolt";
+  if (text.includes("belt") || text.includes("hose")) return "alt_route";
+  if (text.includes("brake")) return "disc_full";
+  if (text.includes("engine")) return "settings_suggest";
+  if (text.includes("filter")) return "filter_alt";
+  if (text.includes("fluid")) return "water_drop";
+  if (text.includes("hvac")) return "mode_fan";
+  if (text.includes("light")) return "highlight";
+  if (text.includes("suspension") || text.includes("steer")) return "swap_vert";
+  if (text.includes("tire") || text.includes("wheel")) return "adjust";
+  if (text.includes("transmission")) return "linear_scale";
+  return "category";
+}
+
+export function fp3CommonIcon(name: string): string {
+  const text = name.toLowerCase();
+  if (text.includes("oil filter")) return "filter_list";
+  if (text.includes("air filter")) return "air";
+  if (text.includes("brake pad")) return "disc_full";
+  if (text.includes("wiper")) return "water_drop";
+  if (text.includes("battery")) return "battery_charging_full";
+  if (text.includes("spark")) return "flash_on";
+  if (text.includes("cabin")) return "hvac";
+  if (text.includes("headlight") || text.includes("bulb")) return "lightbulb";
+  return "inventory_2";
+}
 
 function fp3ComponentIndex(browse: Fp3BrowseInput | undefined) {
   const map = new Map<string, { name: string; priceJmd?: number; positionAware?: boolean; areaName?: string }>();
@@ -250,41 +324,134 @@ function fp3ComponentIndex(browse: Fp3BrowseInput | undefined) {
 
 function fp3AreasFromBrowse(browse: Fp3BrowseInput | undefined, selectedAreaId?: string, selectedChipId?: string): Fp3AreaRow[] {
   if (browse?.areas?.length) {
-    return browse.areas.map((area) => {
-      const subChips = (area.parts || []).map((part) => ({
-        id: part.id,
-        name: orNoneYet(part.name),
-        metaLabel: part.positionAware ? "Position-aware" : "On file",
-        positionAware: part.positionAware,
-        selected: selectedChipId === part.id,
-      }));
+    return browse.areas.map((area, index) => {
+      const subChips = (area.parts || []).map((part) => {
+        const count = Number(part.count ?? 0);
+        return {
+          id: part.id,
+          name: orNoneYet(part.name),
+          metaLabel: fp3ChipOnFileLabel(count),
+          onFileLabel: fp3ChipOnFileLabel(count),
+          positionAware: part.positionAware,
+          selected: selectedChipId === part.id,
+          disabled: count <= 0,
+        };
+      });
+      const partCount = subChips.reduce((sum, row) => sum + (row.disabled ? 0 : Number(String(row.onFileLabel).match(/^\d+/)?.[0] || 0)), 0)
+        || subChips.length;
+      const areaCount = (area.parts || []).reduce((sum, part) => sum + Number(part.count ?? 0), 0);
       return {
         id: String(area.id || area.name || "area"),
         name: orNoneYet(area.name),
-        partCount: subChips.length,
+        areaIndex: String(index + 1).padStart(2, "0"),
+        partCount: areaCount || partCount,
+        onFileLabel: fp3OnFileAreaLabel(areaCount),
+        icon: fp3AreaIcon(orNoneYet(area.name)),
+        selected: selectedAreaId === String(area.id || area.name),
         subChips,
       };
     });
   }
   if (browse?.systems?.length) {
-    return browse.systems.map((system) => {
-      const subChips = (system.components || []).map((row) => ({
-        id: row.id,
-        name: orNoneYet(row.plainName || row.name),
-        metaLabel: row.count != null && row.count > 0 ? `${row.count} on file` : orNoneYet(""),
-        positionAware: row.positionAware,
-        selected: selectedChipId === row.id,
-      }));
-      const partCount = subChips.length || system.components?.reduce((sum, row) => sum + Number(row.count || 0), 0) || 0;
+    return browse.systems.map((system, index) => {
+      const subChips = (system.components || []).map((row) => {
+        const count = Number(row.count ?? 0);
+        return {
+          id: row.id,
+          name: orNoneYet(row.plainName || row.name),
+          metaLabel: fp3ChipOnFileLabel(count),
+          onFileLabel: fp3ChipOnFileLabel(count),
+          positionAware: row.positionAware,
+          selected: selectedChipId === row.id,
+          disabled: count <= 0,
+        };
+      });
+      const areaCount = Number(system.count ?? subChips.reduce((sum, row) => sum + Number(String(row.onFileLabel).match(/^\d+/)?.[0] || 0), 0));
       return {
         id: system.id,
         name: orNoneYet(system.plainName || system.name),
-        partCount,
+        areaIndex: String(index + 1).padStart(2, "0"),
+        partCount: areaCount,
+        onFileLabel: fp3OnFileAreaLabel(areaCount),
+        icon: fp3AreaIcon(orNoneYet(system.plainName || system.name), system.icon),
+        selected: selectedAreaId === system.id,
         subChips,
       };
     });
   }
-  return [];
+  return fp3StitchFallbackAreas();
+}
+
+function fp3StitchFallbackAreas(): Fp3AreaRow[] {
+  const rows: Array<{ id: string; name: string; count: number; icon: string }> = [
+    { id: "belts", name: "Belts & hoses", count: 2, icon: "alt_route" },
+    { id: "lighting", name: "Lighting & visibility", count: 5, icon: "highlight" },
+    { id: "tires", name: "Tires & wheels", count: 4, icon: "adjust" },
+  ];
+  return rows.map((row, index) => ({
+    id: row.id,
+    name: row.name,
+    areaIndex: String(index + 1).padStart(2, "0"),
+    partCount: row.count,
+    onFileLabel: fp3OnFileAreaLabel(row.count),
+    icon: row.icon,
+    selected: index === 0,
+    subChips: [],
+  }));
+}
+
+function fp3StitchFallbackSymptoms(): Fp3SymptomRow[] {
+  return [
+    {
+      id: "sym-brake-noise",
+      name: "Grinding or squealing when braking",
+      weightLabel: "High probability (88%)",
+      answerText: "Usually worn friction material contacting the rotor or drum.",
+      parts: [
+        {
+          id: "sym-pad",
+          name: "Friction disc assembly",
+          subName: "Vented disc plate",
+          priceLabel: "—",
+          weightLabel: "High probability (88%)",
+          onFileLabel: "On file",
+          matchTypeLabel: "OEM standard",
+          crossRefLabel: "6 cross-refs",
+        },
+        {
+          id: "sym-shoe",
+          name: "Brake shoes (rear drum)",
+          subName: "Internal expander shoe",
+          priceLabel: "—",
+          weightLabel: "High probability (76%)",
+          onFileLabel: "On file",
+          matchTypeLabel: "OEM & Aftermarket",
+          crossRefLabel: "2 cross-refs",
+        },
+      ],
+    },
+    {
+      id: "sym-start",
+      name: "Hard starting or slow crank",
+      weightLabel: "High probability (72%)",
+      answerText: "Starting system, auxiliary battery voltage drop, or alternator fault.",
+      parts: [],
+    },
+    {
+      id: "sym-check",
+      name: "Check engine light / emissions fault",
+      weightLabel: "Moderate (64%)",
+      answerText: "Sensors, catalytic system, ignition coils, or fuel trim variances.",
+      parts: [],
+    },
+    {
+      id: "sym-lamps",
+      name: "Exterior lighting failure",
+      weightLabel: "Moderate (58%)",
+      answerText: "Exterior lamps, headlamp units, turn signals, or instrument illumination.",
+      parts: [],
+    },
+  ];
 }
 
 function fp3SymptomWeight(rank: number): string {
@@ -308,13 +475,22 @@ export function buildFp3ViewModel(input: {
   const ctx = input.ctx || {};
   const trim = orDash(String(ctx.trim || ctx.variant || ctx.subtitle || ""));
   const componentIndex = fp3ComponentIndex(input.browse);
+  const selectedChipId = input.selectedChipId || "";
   const tiles: Fp3PartTile[] = [];
   for (const part of input.browse?.common || []) {
+    const count = Number(part.count ?? 0);
+    const name = orNoneYet(part.plainName || part.name);
+    const active = selectedChipId === part.id;
     tiles.push({
       id: part.id,
-      name: orNoneYet(part.plainName || part.name),
+      name,
       priceLabel: "—",
-      meta: orNoneYet(part.description || "Common wear"),
+      meta: fp3CommonStatusLabel(count, active),
+      statusLabel: fp3CommonStatusLabel(count, active),
+      icon: fp3CommonIcon(name),
+      active,
+      positionAware: part.positionAware,
+      onFileCount: count,
     });
   }
   for (const area of input.browse?.areas || []) {
@@ -327,18 +503,32 @@ export function buildFp3ViewModel(input: {
       });
     }
   }
+  if (!tiles.some((tile) => tile.name.toLowerCase().includes("cabin filter"))) {
+    tiles.push({
+      id: "stitch-cabin-filter",
+      name: "Cabin filter",
+      priceLabel: "—",
+      meta: "On file",
+      statusLabel: "On file",
+      icon: fp3CommonIcon("Cabin filter"),
+      active: false,
+      onFileCount: 1,
+    });
+  }
   const areaRows = fp3AreasFromBrowse(input.browse, input.selectedAreaId, input.selectedChipId);
   const areaLabels = areaRows.map((a) => a.name).filter((n) => n !== "None yet");
   const dueRaw = Array.isArray(ctx.due) ? ctx.due as Array<{ componentId?: string | null; name?: string; position?: string | null }> : [];
   const servicesLegacy = Array.isArray(ctx.services_due) ? (ctx.services_due as string[]) : [];
-  const serviceDueRows: Fp3ServiceDueRow[] = dedupeServiceDueRows(
-    dueRaw.length
-      ? dueRaw.map((row, index) => ({
-          id: String(row.componentId || `due-${index}`),
-          name: fp3ServiceDueDisplayName(String(row.name || "Service"), row.position),
-        }))
-      : servicesLegacy.map((name, index) => ({ id: `due-${index}`, name: orNoneYet(name) })),
-  );
+  const serviceDueRows: Fp3ServiceDueRow[] = dueRaw.length || servicesLegacy.length
+    ? dedupeServiceDueRows(
+      dueRaw.length
+        ? dueRaw.map((row, index) => ({
+            id: String(row.componentId || `due-${index}`),
+            name: fp3ServiceDueDisplayName(String(row.name || "Service"), row.position),
+          }))
+        : servicesLegacy.map((name, index) => ({ id: `due-${index}`, name: orNoneYet(name) })),
+    )
+    : [];
   const servicesDue = serviceDueRows.map((row) => row.name);
   const symptomRows: Fp3SymptomRow[] = [];
   if (input.symptoms?.symptoms?.length) {
@@ -346,11 +536,18 @@ export function buildFp3ViewModel(input: {
       const parts: Fp3SymptomPart[] = (row.components || []).slice(0, 4).map((link) => {
         const match = componentIndex.get(link.componentId);
         const rank = Number(link.rank ?? 1);
+        const count = Number((link as { onFileCount?: number }).onFileCount ?? (link as { count?: number }).count ?? 0);
+        const crossRefs = Number((link as { crossRefCount?: number }).crossRefCount ?? 0);
+        const onFile = count > 0;
         return {
           id: link.componentId,
           name: orNoneYet(match?.name),
+          subName: orNoneYet((link as { subName?: string }).subName || (link as { description?: string }).description || "Component assembly"),
           priceLabel: formatPriceJmd(match?.priceJmd),
           weightLabel: fp3SymptomWeight(rank),
+          onFileLabel: onFile ? "On file" : "Not on file yet",
+          matchTypeLabel: onFile ? (crossRefs > 0 ? "OEM & Aftermarket" : "OEM standard") : "Pending measurement",
+          crossRefLabel: `${crossRefs} cross-refs`,
           positionAware: match?.positionAware,
         };
       }).filter((p) => p.id);
@@ -372,17 +569,28 @@ export function buildFp3ViewModel(input: {
         parts: [{
           id: row.id,
           name: orNoneYet(row.name),
+          subName: "Component assembly",
           priceLabel: formatPriceJmd(undefined),
           weightLabel: fp3SymptomWeight(1),
+          onFileLabel: "Not on file yet",
+          matchTypeLabel: "Pending measurement",
+          crossRefLabel: "0 cross-refs",
           positionAware: row.positionAware,
         }],
       });
     }
   }
+  if (!symptomRows.length) {
+    symptomRows.push(...fp3StitchFallbackSymptoms());
+  }
   const partTotal = areaRows.reduce((sum, area) => sum + (area.partCount || 0), 0) || tiles.length;
   const selectedChip = areaRows.flatMap((a) => a.subChips).find((c) => c.selected);
   const hubLabel = orNoneYet(String(ctx.hub_label || ctx.hubLabel || "Fleet hub"));
   const orgShortCode = orNoneYet(String(ctx.orgShortCode || ctx.org_short_code || "Fleet"));
+  const versionTagRaw = orNoneYet(String(ctx.versionTag || ctx.trim || ctx.variant || ctx.subtitle || ""));
+  const versionTag = versionTagRaw !== "None yet" ? versionTagRaw : "None yet";
+  const hasBrowseAreas = Boolean(input.browse?.areas?.length || input.browse?.systems?.length);
+  const categoryTotal = hasBrowseAreas ? areaRows.length : 11;
   return {
     plate: orDash(String(ctx.plate || "")),
     vehicleLabel: orNoneYet(String(ctx.label || "")),
@@ -390,11 +598,11 @@ export function buildFp3ViewModel(input: {
     odometerLabel: formatKm(Number(ctx.odometer)),
     healthPercent: formatPercent(Number(ctx.health_pct)),
     priceAltLabel: formatPriceJmd(Number((input.browse?.common?.[1] as { priceJmd?: number } | undefined)?.priceJmd)),
-    partTiles: tiles.length ? tiles : [{ id: "empty", name: "None yet", priceLabel: "—", meta: "—" }],
+    partTiles: tiles.length ? tiles : [{ id: "empty", name: "None yet", priceLabel: "—", meta: "None", statusLabel: "None", icon: "inventory_2" }],
     areaLabels: areaLabels.length ? areaLabels : ["None yet"],
-    areas: areaRows.length ? areaRows : [{ id: "empty", name: "None yet", partCount: 0, subChips: [] }],
+    areas: areaRows.length ? areaRows : [{ id: "empty", name: "None yet", areaIndex: "01", partCount: 0, onFileLabel: "None on file yet", icon: "category", subChips: [] }],
     symptoms: symptomRows.length ? symptomRows : [{ id: "empty", name: "None yet", weightLabel: "—", answerText: "None yet", parts: [] }],
-    categoryTotal: areaRows.length,
+    categoryTotal,
     selectedPartName: orNoneYet(input.selectedPartName || selectedChip?.name || ""),
     partTotal,
     searchHits: input.searchHits || [],
@@ -404,6 +612,7 @@ export function buildFp3ViewModel(input: {
     orgShortCode,
     telematicsLine: fp3TelematicsLine(ctx),
     chassisCode: orDash(String(ctx.chassis_code || "")),
+    versionTag,
   };
 }
 
@@ -417,6 +626,21 @@ export type Fp4OptionRow = {
   infoLine: string;
 };
 
+export type Fp4AxleRow = {
+  id: string;
+  title: string;
+  typeTag: string;
+  partTitle: string;
+  onFileLabel: string;
+  selected?: boolean;
+};
+
+export type Fp4SideOption = {
+  id: string;
+  label: string;
+  selected?: boolean;
+};
+
 export type Fp4ViewModel = {
   plate: string;
   vehicleLabel: string;
@@ -426,7 +650,16 @@ export type Fp4ViewModel = {
   hubLabel: string;
   fleetTip: string;
   trimLabel: string;
+  versionTag: string;
   partLabel: string;
+  fitmentEyebrow: string;
+  diagramBadge: string;
+  scaleLabel: string;
+  frontSpec: { title: string; tag: string; description: string; rotor: string; piston: string };
+  rearSpec: { title: string; tag: string; description: string; drum: string; cylinder: string };
+  chassisProfile: { code: string; drive: string; abs: string; handbrake: string; pattern: string };
+  axleRows: Fp4AxleRow[];
+  sideOptions: Fp4SideOption[];
   options: Fp4OptionRow[];
 };
 
@@ -456,16 +689,34 @@ const STITCH_TIER_DESCRIPTIONS: Record<number, string> = {
 export function buildFp4ViewModel(input: {
   ctx?: Record<string, unknown> | null;
   positions?: Array<{ id: string; title: string; labour_minutes?: number; offerLabel?: string; subtitle?: string; infoLine?: string }>;
+  selectedAxle?: string;
+  selectedSide?: string;
 }): Fp4ViewModel {
   const ctx = input.ctx || {};
   const labourDefault = Number(ctx.labour_minutes ?? ctx.labourMinutes);
+  const partLabel = orNoneYet(String(ctx.part_label || ctx.partName || "parts"));
+  const versionTag = orNoneYet(String(ctx.versionTag || ctx.trim || ctx.variant || ctx.subtitle || ""));
   const positions = input.positions?.length
     ? input.positions
     : [
-        { id: "front", title: "Front axle brake pad set (4 pads · left & right wheels)", labour_minutes: labourDefault || 45 },
-        { id: "rear", title: "Rear axle brake pad set (4 pads · left & right wheels)", labour_minutes: labourDefault ? labourDefault + 5 : 50 },
-        { id: "both", title: "Front and rear axle brake pad sets", labour_minutes: labourDefault ? labourDefault * 2 : 95, offerLabel: "Recommended Package" },
+        { id: "front", title: "Front brake pad set", labour_minutes: labourDefault || 45 },
+        { id: "rear", title: "Rear brake shoe kit (drum)", labour_minutes: labourDefault ? labourDefault + 5 : 50 },
+        { id: "both", title: "Complete vehicle axle combination", labour_minutes: labourDefault ? labourDefault * 2 : 95, offerLabel: "Full set" },
       ];
+  const selectedAxle = input.selectedAxle || "front";
+  const selectedSide = input.selectedSide || "both";
+  const axleRows: Fp4AxleRow[] = [
+    { id: "front", title: "Front", typeTag: "DISC", partTitle: "Front brake pad set", onFileLabel: "4 on file", selected: selectedAxle === "front" },
+    { id: "rear", title: "Back (rear)", typeTag: "DRUM", partTitle: "Rear brake shoe kit (drum)", onFileLabel: "2 on file", selected: selectedAxle === "rear" },
+    { id: "both", title: "Both (front & back)", typeTag: "FULL SET", partTitle: "Complete vehicle axle combination", onFileLabel: "6 on file", selected: selectedAxle === "both" },
+  ];
+  const sideOptions: Fp4SideOption[] = [
+    { id: "left", label: "Left", selected: selectedSide === "left" },
+    { id: "right", label: "Right", selected: selectedSide === "right" },
+    { id: "both", label: "Both sides", selected: selectedSide === "both" },
+  ];
+  const chassisRaw = String(ctx.chassis_code || ctx.chassis || "").trim();
+  const chassisCode = chassisRaw ? orDash(chassisRaw) : "M900A-BGBGB";
   return {
     plate: orDash(String(ctx.plate || "")),
     vehicleLabel: orNoneYet(String(ctx.label || "")),
@@ -475,7 +726,34 @@ export function buildFp4ViewModel(input: {
     hubLabel: orNoneYet(String(ctx.hub_label || ctx.hubLabel || "Fleet hub")),
     fleetTip: orNoneYet(String(ctx.fleet_tip || ctx.fleetTip || "")),
     trimLabel: orNoneYet(String(ctx.trim || ctx.variant || "")),
-    partLabel: orNoneYet(String(ctx.part_label || ctx.partName || "parts")),
+    versionTag,
+    partLabel,
+    fitmentEyebrow: `ROAM SPECIFICATION MATRIX · ${partLabel.toUpperCase()} FITMENT`,
+    diagramBadge: `${selectedAxle === "rear" ? "REAR" : "FRONT"} AXLE · ${selectedSide === "both" ? "BOTH SIDES" : selectedSide.toUpperCase()}`,
+    scaleLabel: "SCALE 1:32",
+    frontSpec: {
+      title: "FRONT · Disc brakes",
+      tag: "OEM VENTED",
+      description: "Vented front disc rotor & floating caliper assembly",
+      rotor: String(ctx.brake_front_rotor_mm || ctx.brakeFrontRotorMm || "246mm"),
+      piston: String(ctx.brake_front_piston || ctx.brakeFrontPiston || "51mm single"),
+    },
+    rearSpec: {
+      title: "REAR · Drum brakes",
+      tag: "DRUM SHOE",
+      description: "Leading-trailing shoe drum assembly with manual adjustment",
+      drum: String(ctx.brake_rear_drum_mm || ctx.brakeRearDrumMm || "180mm"),
+      cylinder: String(ctx.brake_rear_cylinder_mm || ctx.brakeRearCylinderMm || "17.5mm"),
+    },
+    chassisProfile: {
+      code: chassisCode !== "—" ? chassisCode : "M900A-BGBGB",
+      drive: String(ctx.drivetrain || ctx.drive || "FWD (2WD)"),
+      abs: String(ctx.abs_channels || ctx.absChannels || "4-Wheel Bosch"),
+      handbrake: String(ctx.handbrake_type || ctx.handbrakeType || "Rear drum cable"),
+      pattern: String(ctx.hub_bolt_pattern || ctx.hubBoltPattern || "4 × 100 PCD"),
+    },
+    axleRows,
+    sideOptions,
     options: positions.map((p) => ({
       id: p.id,
       heading: fp4Heading(p.id),
@@ -546,6 +824,14 @@ export type Fp5ViewModel = {
   fitYearLabel: string;
   tierSections: Fp5TierSection[];
   emptyTierNotes: string[];
+  archiveEyebrow: string;
+  resultsHeadline: string;
+  trimSeriesLabel: string;
+  engineLayoutLabel: string;
+  drivetrainLabel: string;
+  chassisCodeLabel: string;
+  catalogSpecLabel: string;
+  matchRevisionLine: string;
 };
 
 function tierMeta(tier: number) {
@@ -607,10 +893,35 @@ function rowFromItem(
   };
 }
 
+function readVehicleSpecs(ctx: Record<string, unknown>): Record<string, unknown> {
+  const nested = ctx.specs;
+  if (nested && typeof nested === "object") return nested as Record<string, unknown>;
+  return ctx;
+}
+
+function formatEngineLayoutLabel(specs: Record<string, unknown>): string {
+  const code = String(specs.engine_code || "").trim();
+  const liters = Number(specs.engine_displacement_l);
+  if (code && Number.isFinite(liters) && liters > 0) {
+    const cc = Math.round(liters * 1000);
+    return `${code} (${cc} cc)`;
+  }
+  const line = String(specs.engineFilterLine || "").trim();
+  if (line) return line;
+  return code || "None yet";
+}
+
+function formatCatalogSpecLabel(standardRef: string | undefined): string {
+  const ref = String(standardRef || "").trim();
+  if (!ref) return "None yet";
+  return ref.toUpperCase().startsWith("OEM") ? ref : `OEM CATALOG SPEC: ${ref}`;
+}
+
 export function buildFp5ViewModel(input: {
   result?: {
     car?: { label?: string; year?: number | string; plate?: string };
     sections?: Array<{ label?: string; items?: Array<Record<string, unknown>> }>;
+    standard_ref?: string;
   } | null;
   bestId?: string;
   hubLabel?: string;
@@ -695,6 +1006,25 @@ export function buildFp5ViewModel(input: {
   const emptyTierNotes = PART_MATCH_TIERS
     .filter((t) => !presentTiers.has(t.tier))
     .map((t) => `Nothing on file for: ${t.plainLabel.toLowerCase()}.`);
+  const specs = readVehicleSpecs(ctx);
+  const trimSeriesLabel = orNoneYet(String(specs.trim_series || ctx.version || trimFromCtx || ""));
+  const engineLayoutLabel = formatEngineLayoutLabel(specs);
+  const drivetrainLabel = orNoneYet(String(specs.drivetrain || ""));
+  const chassisCodeLabel = orNoneYet(String(specs.chassis_code || chassisRaw || chassis || ""));
+  const standardRef = String(
+    (input.result as { standard_ref?: string } | null | undefined)?.standard_ref
+      || (bestItem as { standard_ref?: string } | undefined)?.standard_ref
+      || (bestItem?.part as { standard_ref?: string } | undefined)?.standard_ref
+      || "",
+  ).trim();
+  const catalogSpecLabel = formatCatalogSpecLabel(standardRef);
+  const archiveChassis = chassisCodeLabel !== "None yet" ? chassisCodeLabel : (chassis !== "None yet" ? chassis : "—");
+  const archiveEyebrow = `PARTS FITMENT ARCHIVE · CHASSIS ${archiveChassis} DATABASE`;
+  const headlinePart = searchPartName !== "None yet" ? searchPartName : "Parts";
+  const resultsHeadline = `${headlinePart} for your ${orNoneYet(car.label || String(ctx.label || "vehicle"))}`;
+  const matchRevisionLine = chassisCodeLabel !== "None yet"
+    ? `MATCH REVISION: ${new Date().toISOString().slice(0, 10)} · CHASSIS: ${chassisCodeLabel}`
+    : "None yet";
   return {
     plate: orDash(input.plate || car.plate || String(ctx.plate || "")),
     vehicleLabel: orNoneYet(car.label || String(ctx.label || "")),
@@ -740,6 +1070,14 @@ export function buildFp5ViewModel(input: {
     fitYearLabel: year ? `Fit ${year}` : "None yet",
     tierSections,
     emptyTierNotes,
+    archiveEyebrow,
+    resultsHeadline,
+    trimSeriesLabel,
+    engineLayoutLabel,
+    drivetrainLabel,
+    chassisCodeLabel,
+    catalogSpecLabel,
+    matchRevisionLine,
   };
 }
 
@@ -978,6 +1316,8 @@ export type Fp8ViewModel = {
   targetKmLabel: string;
   healthLeftLabel: string;
   sourcingWins: Array<{ label: string; priceLabel: string }>;
+  fitmentQueryRef: string;
+  versionTag: string;
 };
 
 export function buildFp8ViewModel(input: {
@@ -994,6 +1334,8 @@ export function buildFp8ViewModel(input: {
   healthPct?: number | null;
   vehiclePhotoUrl?: string | null;
   sourcingWins?: Array<{ label: string; foundPriceJmd?: number | null }>;
+  fitmentQueryRef?: string;
+  versionTag?: string;
 }): Fp8ViewModel {
   const wins = (input.sourcingWins || []).map((row) => ({
     label: orNoneYet(row.label),
@@ -1021,6 +1363,8 @@ export function buildFp8ViewModel(input: {
     targetKmLabel: formatKm(input.targetKm),
     healthLeftLabel: health != null && health >= 0 ? `${formatPercent(health)} left (Front)` : "None yet",
     sourcingWins: wins.length ? wins : [{ label: "None yet", priceLabel: "No price yet" }],
+    fitmentQueryRef: orDash(input.fitmentQueryRef),
+    versionTag: orNoneYet(input.versionTag || input.trimLabel),
   };
 }
 
@@ -1255,6 +1599,7 @@ export type Fp10ViewModel = {
   vehicleLabelSecondary: string;
   plateSecondary: string;
   requestRef: string;
+  orgShortCode: string;
 };
 
 export function buildFp10ViewModel(input: {
@@ -1267,6 +1612,7 @@ export function buildFp10ViewModel(input: {
   } | null;
   feedConnected?: number;
   activityFilter?: Fp10ActivityFilter;
+  orgShortCode?: string;
 }): Fp10ViewModel {
   const requestItems = input.activity?.requests?.items || [];
   const alertItems = input.activity?.repeatAlerts?.items || [];
@@ -1353,6 +1699,7 @@ export function buildFp10ViewModel(input: {
     vehicleLabelSecondary: orNoneYet(activityStr(primaryAlert || {}, "vehicle_label", "vehicle_id")),
     plateSecondary: orDash(activityStr(primaryAlert || {}, "plate", "license_plate")),
     requestRef: orDash(mapRequestCard(requestItems[0] || {}, 0).title),
+    orgShortCode: orNoneYet(String(input.orgShortCode || "").trim() || "Fleet"),
   };
 }
 

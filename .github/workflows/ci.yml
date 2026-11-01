@@ -115,6 +115,9 @@ jobs:
       - name: Test dash-merchant
         run: pnpm --filter @roam/dash-merchant test
 
+      - name: Regenerate find-parts Stitch CSS
+        run: pnpm build:stitch-parts-css
+
       - name: Test fleet
         env:
           VITE_SUPABASE_URL: https://ci-placeholder.supabase.co

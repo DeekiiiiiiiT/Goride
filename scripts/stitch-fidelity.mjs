@@ -33,6 +33,7 @@ for (const row of readme.split('\n').filter((l) => /^\| S\d/.test(l))) {
   const cells = row.split('|').map((c) => c.trim().replace(/^`|`$/g, ''));
   const [num, , , html, , react, status = ''] = cells.slice(1);
   if (SKIP.has(num)) continue;
+  if (/^S10[bcd]$/.test(num)) continue;
   if (/superseded by\s+\S+.*do not build/i.test(status)) continue;
   if (/^Retired\b/i.test(status)) continue;
   if (/^Not started\b/.test(status)) {
@@ -303,10 +304,17 @@ for (const row of fleetReadme.split('\n').filter((l) => /^\| FP\d/.test(l))) {
   const hubHeaders = (Array.isArray(fleetSamples['hub-headers']) ? fleetSamples['hub-headers'] : [])
     .map((label) => String(label).trim().toLowerCase())
     .filter(Boolean);
+  const globalSampleKeys = ['app-frame', 'design-board', 'sample', 'live-data', 'not-in-parts'];
+  const globalSamples = globalSampleKeys.flatMap((key) =>
+    (Array.isArray(fleetSamples[key]) ? fleetSamples[key] : [])
+      .map((label) => String(label).trim().toLowerCase())
+      .filter(Boolean),
+  );
   const samples = [
     ...(Array.isArray(fleetSamples[num]) ? fleetSamples[num] : []),
     ...deferredSales,
     ...hubHeaders,
+    ...globalSamples,
   ]
     .map((label) => String(label).trim().toLowerCase())
     .filter(Boolean);
@@ -368,4 +376,65 @@ for (const row of fleetReadme.split('\n').filter((l) => /^\| FP\d/.test(l))) {
   if (checked && bad) fleetFailed = true;
 }
 if (!fleetFailed) console.log('OK — Fleet Stitch fidelity');
-if (failed || fleetFailed) process.exit(1);
+
+const DOM_FULL = new Set(['S10b', 'S10c', 'S10d']);
+function dominionTextNodes(html) {
+  const page = html.replace(/<(script|style)[\s\S]*?<\/\1>/gi, '');
+  const main = (page.match(/<main[\s\S]*<\/main>/i) || [page])[0];
+  let extra = '';
+  for (const match of page.matchAll(/<(dialog|aside)[^>]*>[\s\S]*?<\/\1>/gi)) {
+    if (!main.includes(match[0])) extra += match[0];
+  }
+  const region = `${main}\n${extra}`.replace(/<!--[\s\S]*?-->/g, ' ');
+  const text = region
+    .replace(/<span class="material-symbols-outlined[^"]*">[\s\S]*?<\/span>/gi, ' ')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<[^>]+>/g, '\n')
+    .replace(/&amp;/g, '&')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&[a-z]+;/g, ' ');
+  const nodes = new Set();
+  for (const raw of text.split('\n')) {
+    const t = raw.replace(/\s+/g, ' ').trim();
+    if (t.length >= 3 && /[a-z]/i.test(t)) nodes.add(t);
+  }
+  return nodes;
+}
+
+let dominionFullFailed = false;
+for (const row of readme.split('\n').filter((l) => /^\| S10/.test(l))) {
+  const cells = row.split('|').map((c) => c.trim().replace(/^`|`$/g, ''));
+  const [num, , , html, , react, status = ''] = cells.slice(1);
+  if (!DOM_FULL.has(num)) continue;
+  if (!/^Ported/.test(status)) continue;
+  if (!html || !react) continue;
+  const samples = [
+    ...(Array.isArray(sampleLabels[num]) ? sampleLabels[num] : []),
+    ...(Array.isArray(sampleLabels['design-board']) ? sampleLabels['design-board'] : []),
+    ...(Array.isArray(sampleLabels['app-frame']) ? sampleLabels['app-frame'] : []),
+    ...(Array.isArray(sampleLabels['sample']) ? sampleLabels['sample'] : []),
+  ].map((s) => String(s).trim().toLowerCase()).filter(Boolean);
+  const page = readFileSync(join(dir, html), 'utf8');
+  const labels = new Set();
+  for (const node of dominionTextNodes(page)) {
+    for (const phrase of fleetPhraseFragments(node, samples)) {
+      if (phrase.length >= 4 && /[a-z]/.test(phrase)) labels.add(phrase);
+    }
+  }
+  const reactFiles = react.split(/\s*\+\s*/).map((f) => f.trim()).filter(Boolean);
+  const joined = reactFiles.map((f) => readFileSync(join(repo, f), 'utf8')).join('\n');
+  const lower = fleetVisibleSource(joined)
+    .toLowerCase()
+    .replace(/[\u2013\u2014\u2212]/g, '-');
+  const missed = [...labels].filter((label) => !lower.includes(label));
+  const hit = labels.size - missed.length;
+  const pct = labels.size ? Math.round((100 * hit) / labels.size) : 100;
+  const bad = pct < MIN;
+  if (report || bad) {
+    console.log(`${bad ? 'FAIL' : 'ok  '} ${num} ${pct}% text (${hit}/${labels.size}) — ${react}`);
+    if (report && missed.length) console.log(`miss ${num}: ${missed.slice(0, 12).join(' | ')}`);
+  }
+  if (bad) dominionFullFailed = true;
+}
+
+if (failed || fleetFailed || dominionFullFailed) process.exit(1);

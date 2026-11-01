@@ -2924,8 +2924,9 @@ export const api = {
       return response.json();
   },
 
-  async partsBrowse() {
-      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/browse`, { headers: await getHeaders(null) });
+  async partsBrowse(variantId?: string) {
+      const q = variantId ? `?variantId=${encodeURIComponent(variantId)}` : "";
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/browse${q}`, { headers: await getHeaders(null) });
       if (!response.ok) throw new Error("Could not load parts");
       return response.json();
   },
@@ -2936,8 +2937,9 @@ export const api = {
       return response.json();
   },
 
-  async partsSymptoms() {
-      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/symptoms`, { headers: await getHeaders(null) });
+  async partsSymptoms(variantId?: string) {
+      const q = variantId ? `?variantId=${encodeURIComponent(variantId)}` : "";
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/symptoms${q}`, { headers: await getHeaders(null) });
       if (!response.ok) throw new Error("Could not load problems");
       return response.json();
   },

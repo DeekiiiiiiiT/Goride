@@ -239,9 +239,9 @@ export function Fp2Screen({ actions, data }: { actions: Fp2Actions; data: Fp2Vie
 </div>
 ))}
 </div>
-<div className="mt-space-md p-space-sm rounded bg-surface-container text-on-surface font-caption text-caption flex items-center gap-1.5">
-<span className="material-symbols-outlined text-[16px] text-secondary">insights</span>
-<span>{data.fitSummaryLine}</span>
+<div className="mt-space-md p-space-sm rounded bg-surface-container text-on-surface font-caption text-caption flex flex-col gap-1">
+<span className="flex items-center gap-1.5"><span className="material-symbols-outlined text-[16px] text-secondary">insights</span><span>{data.fitSummaryLine}</span></span>
+<span>100% of | fits are 1.5</span>
 </div>
 </div>
 

@@ -13,6 +13,11 @@ export const FLEET_PAGE_REGISTRY: Record<string, FleetPageDef> = {
   drivers: { id: 'drivers', path: '/drivers', permission: 'nav.drivers' },
   'driver-analytics': { id: 'driver-analytics', path: '/driver-analytics', permission: 'nav.drivers' },
   vehicles: { id: 'vehicles', path: '/vehicles', permission: 'nav.vehicles' },
+  'maintenance-hub': {
+    id: 'maintenance-hub',
+    path: '/maintenance',
+    permission: 'nav.maintenance',
+  },
   'trip-analytics': { id: 'trip-analytics', path: '/trip-analytics', permission: 'nav.trips' },
   reports: { id: 'reports', path: '/reports', permission: 'nav.reports' },
   earnings: { id: 'earnings', path: '/earnings', permission: 'nav.tier_config' },

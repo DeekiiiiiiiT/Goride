@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { Fp8ViewModel } from "../findPartsViewModels";
+import { FindPartsStickyHeader } from "../FindPartsStickyHeader";
 
 export type Fp8FormState = { note: string };
 
@@ -17,6 +18,18 @@ export function Fp8Screen({ actions, data, form }: { actions: Fp8Actions; data: 
     <div className="find-parts-screen-root">
 <div className="fp-screen-root"><div className="flex flex-col w-full">
 <div className="w-full py-space-xl flex flex-col gap-space-xl">
+
+<FindPartsStickyHeader
+  step={8}
+  onBack={actions.onBack}
+  vehicleLabel={data.vehicleLabel}
+  plate={data.plate}
+  versionTag={data.versionTag}
+  partTrailLabel={data.partName !== "None yet" ? data.partName : "Part"}
+  fitmentQueryRef={data.fitmentQueryRef !== "—" ? data.fitmentQueryRef : "New query"}
+/>
+
+<p className="font-body-md text-body-md text-on-surface">{data.headlineLine}</p>
 
 <div className="w-full bg-surface-container-low rounded-xl px-space-lg py-space-sm flex flex-wrap items-center gap-space-sm">
 <span className="font-caption text-caption text-on-surface-variant uppercase tracking-wider">Search Scope:</span>
@@ -79,7 +92,7 @@ export function Fp8Screen({ actions, data, form }: { actions: Fp8Actions; data: 
 <form className="flex flex-col gap-space-lg" id="sourcing-form" onSubmit={(e) => { e.preventDefault(); actions.onSubmit(); }}>
 <div className="flex flex-col gap-space-xs">
 <label className="font-caption text-caption text-on-surface uppercase tracking-wider font-semibold" htmlFor="sourcing-notes">Specification or mechanic note (optional)</label>
-<textarea className="w-full rounded-lg bg-surface-container-low px-space-md py-space-sm font-body-md text-body-md text-on-surface placeholder:text-outline focus:outline-none focus:bg-surface-container-lowest shadow-inner transition-colors" id="sourcing-notes" placeholder="e.g., Need OEM or equivalent, vehicle has minor squeal on deceleration. Prefer Akebono or Nissin compound." rows={3} value={form.note} onChange={(e) => actions.onNoteChange(e.target.value)} />
+<textarea className="w-full rounded-lg bg-surface-container-low px-space-md py-space-sm font-body-md text-body-md text-on-surface placeholder:text-outline focus:outline-none focus:bg-surface-container-lowest shadow-inner transition-colors" id="sourcing-notes" placeholder="e.g., Need OEM or equivalent, note any noise or compound preference." rows={3} value={form.note} onChange={(e) => actions.onNoteChange(e.target.value)} />
 </div>
 
 <div className="flex flex-col gap-space-xs">

@@ -72,4 +72,19 @@ describe("find parts screens do not hard-code Stitch sample data", () => {
     for (const token of banned) expect(text.includes(token)).toBe(false);
     expect(text.split("label.includes").length - 1).toBe(0);
   });
+
+  it("does not embed string literals longer than 300 characters", () => {
+    for (const path of files) {
+      const source = readFileSync(path, "utf8");
+      for (const line of source.split("\n")) {
+        if (line.includes("${")) continue;
+        for (const m of line.matchAll(/"([^"]*)"/g)) {
+          expect(m[1].length, `${path} line >300 chars`).toBeLessThanOrEqual(300);
+        }
+        for (const m of line.matchAll(/'([^']*)'/g)) {
+          expect(m[1].length, `${path} line >300 chars`).toBeLessThanOrEqual(300);
+        }
+      }
+    }
+  });
 });

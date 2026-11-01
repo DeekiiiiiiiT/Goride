@@ -32,7 +32,7 @@ export function Fp12Screen({ actions, data, partName }: { actions: Fp5Actions; d
   return (
     <div className="find-parts-screen-root">
       <div className="fp-screen-root flex flex-col w-full pb-28">
-        <section className="py-space-xs flex items-center gap-space-xs bg-surface-container-lowest shadow-sm sticky top-0 z-20 overflow-x-auto">
+        <section className="py-space-xs flex items-center gap-space-xs bg-surface-container-lowest shadow-sm sticky top-0 z-20 overflow-x-auto px-margin">
           <button type="button" className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-secondary-container text-on-secondary-fixed text-caption font-caption whitespace-nowrap" onClick={actions.onChangeCar}>
             <span className="font-label-plate text-caption tracking-wider">{data.plate}</span>
             <span className="truncate max-w-[110px]">{data.fitYearLabel}</span>

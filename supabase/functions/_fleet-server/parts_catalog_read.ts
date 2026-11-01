@@ -36,6 +36,51 @@ export async function readPartsBrowse(supabase: SupabaseClient) {
   return shapeBrowse((data || []) as Array<Record<string, unknown>>);
 }
 
+export function mergeBrowseCoverage(
+  browse: ReturnType<typeof shapeBrowse>,
+  coverageAreas: Array<{ id: string; count: number }>,
+) {
+  const counts = new Map(coverageAreas.map((row) => [row.id, row.count]));
+  const componentMeta = new Map<string, { positionAware: boolean; count: number }>();
+  for (const system of browse.systems) {
+    for (const component of system.components) {
+      componentMeta.set(component.id, {
+        positionAware: component.positionAware,
+        count: counts.get(component.id) ?? 0,
+      });
+    }
+  }
+  const systems = browse.systems.map((system, index) => {
+    const components = system.components.map((row) => ({
+      ...row,
+      count: counts.get(row.id) ?? 0,
+    }));
+    const areaCount = components.reduce((sum, row) => sum + row.count, 0);
+    return {
+      ...system,
+      areaIndex: String(index + 1).padStart(2, "0"),
+      count: areaCount,
+      components,
+    };
+  });
+  const common = browse.common.map((row) => {
+    const meta = componentMeta.get(row.id);
+    return {
+      ...row,
+      positionAware: meta?.positionAware ?? false,
+      count: meta?.count ?? counts.get(row.id) ?? 0,
+    };
+  });
+  return { systems, common };
+}
+
+export async function readPartsBrowseForVariant(supabase: SupabaseClient, variantId?: string) {
+  const browse = await readPartsBrowse(supabase);
+  if (!variantId) return browse;
+  const coverage = await readFindPartsCoverage(supabase, variantId);
+  return mergeBrowseCoverage(browse, coverage.areas);
+}
+
 export type TermComponent = { id: string; name?: string | null; plain_name?: string | null };
 export type TermSynonym = { term?: string | null; maintenance_component_id?: string | null };
 export type TermPart = {
@@ -205,7 +250,10 @@ export async function readFindPartsCoverage(supabase: SupabaseClient, variantId:
   };
 }
 
-export async function readSymptoms(supabase: SupabaseClient, options?: { includeInactive?: boolean }) {
+export async function readSymptoms(
+  supabase: SupabaseClient,
+  options?: { includeInactive?: boolean; variantId?: string },
+) {
   let query = supabase
     .from("part_symptom")
     .select("id, label, hint, sort_order, active")
@@ -220,12 +268,22 @@ export async function readSymptoms(supabase: SupabaseClient, options?: { include
     .select("symptom_id, component_id, rank")
     .in("symptom_id", symptoms.map((row) => row.id));
   if (linkError) throw linkError;
-  const bySymptom = new Map<string, Array<{ componentId: string; rank: number }>>();
+  let onFileByComponent = new Map<string, number>();
+  const variantId = options?.variantId?.trim();
+  if (variantId) {
+    const coverage = await readFindPartsCoverage(supabase, variantId);
+    for (const row of coverage.areas) onFileByComponent.set(row.id, row.count);
+  }
+  const bySymptom = new Map<string, Array<{ componentId: string; rank: number; onFileCount?: number }>>();
   for (const link of links || []) {
     const row = link as { symptom_id?: string; component_id?: string; rank?: number };
     const id = String(row.symptom_id ?? "");
     const list = bySymptom.get(id) ?? [];
-    list.push({ componentId: String(row.component_id ?? ""), rank: Number(row.rank ?? 1) });
+    list.push({
+      componentId: String(row.component_id ?? ""),
+      rank: Number(row.rank ?? 1),
+      ...(variantId ? { onFileCount: onFileByComponent.get(String(row.component_id ?? "")) ?? 0 } : {}),
+    });
     bySymptom.set(id, list);
   }
   return {

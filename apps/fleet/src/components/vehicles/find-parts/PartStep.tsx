@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Fp3Screen } from "./screens/Fp3Screen";
 import { buildFp3ViewModel, type Fp3SearchHit } from "./findPartsViewModels";
 import { usePartsBrowse, usePartsSymptoms, usePartsTerm, usePartsVehicleContext } from "./findPartsQueries";
+import { onFileCountForComponent } from "./findPartsRoute";
 
 type SpeechRecognitionCtor = new () => {
   lang: string;
@@ -25,16 +26,18 @@ export function PartStep({
 }: {
   vehicleId: string;
   onBack: () => void;
-  onPick: (componentId: string, positionAware: boolean, name: string) => void;
+  onPick: (componentId: string, positionAware: boolean, name: string, onFileCount: number) => void;
   onSkip: () => void;
 }) {
-  const browse = usePartsBrowse(Boolean(vehicleId));
-  const symptoms = usePartsSymptoms(Boolean(vehicleId));
   const ctx = usePartsVehicleContext(vehicleId);
+  const variantId = String((ctx.data as { variantId?: string | null } | undefined)?.variantId || "");
+  const browse = usePartsBrowse(variantId || undefined, Boolean(vehicleId));
+  const symptoms = usePartsSymptoms(variantId || undefined, Boolean(vehicleId));
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedAreaId, setSelectedAreaId] = useState("");
   const [selectedChipId, setSelectedChipId] = useState("");
   const [selectedPartName, setSelectedPartName] = useState("");
+  const [selectedPositionAware, setSelectedPositionAware] = useState(false);
   const [openSymptomId, setOpenSymptomId] = useState("");
   const term = usePartsTerm(searchQuery, searchQuery.trim().length >= 2);
 
@@ -89,10 +92,25 @@ export function PartStep({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  function pickPart(id: string, name: string, positionAware?: boolean) {
+  useEffect(() => {
+    if (!selectedAreaId && data.areas[0]?.id) setSelectedAreaId(data.areas[0].id);
+  }, [data.areas, selectedAreaId]);
+
+  function selectPart(id: string, name: string, positionAware?: boolean) {
     setSelectedChipId(id);
     setSelectedPartName(name);
-    onPick(id, Boolean(positionAware), name);
+    setSelectedPositionAware(Boolean(positionAware));
+  }
+
+  function commitPart(id: string, name: string, positionAware?: boolean) {
+    selectPart(id, name, positionAware);
+    const count = onFileCountForComponent(browseData as Parameters<typeof onFileCountForComponent>[0], id);
+    onPick(id, Boolean(positionAware), name, count);
+  }
+
+  function advanceNext() {
+    if (!selectedChipId) return;
+    commitPart(selectedChipId, selectedPartName, selectedPositionAware);
   }
 
   function startVoiceSearch() {
@@ -120,20 +138,16 @@ export function PartStep({
         activeArea={activeArea}
         actions={{
           onBack,
-          onSkipTriage: onSkip,
-          onContinueToPosition: () => {
-            if (selectedChipId) pickPart(selectedChipId, selectedPartName, true);
-            else onPick("", true, selectedPartName || "Part");
-          },
-          onPickPart: pickPart,
-          onPickProblem: (id, name, positionAware) => pickPart(id, name, positionAware),
-          onPickServiceDue: (id, name) => pickPart(id, name, false),
+          onNext: advanceNext,
+          nextDisabled: !selectedChipId,
+          onPickPart: selectPart,
+          onPickProblem: (id, name, positionAware) => commitPart(id, name, positionAware),
           onSelectArea: (id) => setSelectedAreaId(id),
-          onSelectSubChip: (chipId, name, positionAware) => pickPart(chipId, name, positionAware),
+          onSelectSubChip: (chipId, name, positionAware) => selectPart(chipId, name, positionAware),
           onToggleSymptom: (id) => setOpenSymptomId((prev) => (prev === id ? "" : id)),
           onSearchChange: setSearchQuery,
           onSearchClear: () => setSearchQuery(""),
-          onSearchHit: (id, name, positionAware) => pickPart(id, name, positionAware),
+          onSearchHit: (id, name, positionAware) => commitPart(id, name, positionAware),
           onStartVoiceSearch: startVoiceSearch,
           searchQuery,
           selectedAreaId: selectedAreaId || activeArea?.id || "",

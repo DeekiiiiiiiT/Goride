@@ -138,11 +138,7 @@ export function CarStep({
                           <span className="w-1.5 h-1.5 rounded-full bg-secondary" />
                           Verified specs
                         </span>
-                        {serviceDueOnCard(row) ? (
-                          <span className="inline-flex items-center gap-1 px-space-xs py-0.5 rounded bg-surface-container-highest font-caption text-caption text-on-surface-variant">
-                            Service due: {serviceDueOnCard(row)}
-                          </span>
-                        ) : row.parts_on_shelf != null && Number(row.parts_on_shelf) > 0 ? (
+                        {row.parts_on_shelf != null && Number(row.parts_on_shelf) > 0 ? (
                           <span className="inline-flex items-center gap-1 px-space-xs py-0.5 rounded bg-surface-container-highest font-caption text-caption text-on-surface-variant">
                             {Number(row.parts_on_shelf)} parts on file
                           </span>

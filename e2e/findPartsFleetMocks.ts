@@ -1,3 +1,4 @@
+import type { Page, Route } from "@playwright/test";
 import type { FleetCar } from "../apps/fleet/src/components/vehicles/find-parts/CarStep";
 import type { PartsActivity } from "../apps/fleet/src/components/vehicles/find-parts/PartsActivityPanel";
 import {
@@ -8,8 +9,34 @@ import {
   findPartsFixtureVehicle,
   findPartsFixtureVersions,
 } from "../apps/fleet/src/components/vehicles/find-parts/findPartsFixtures";
+import {
+  STITCH_VISUAL_LABEL,
+  STITCH_VISUAL_PLATE,
+  STITCH_VISUAL_VEHICLE_ID,
+  stitchVisualActivity,
+  stitchVisualBrowse,
+  stitchVisualFindSections,
+  stitchVisualVehicleContext,
+} from "./findPartsStitchVisualFixtures";
 
 export { FIND_PARTS_FORBIDDEN_SAMPLES } from "../apps/fleet/src/components/vehicles/find-parts/findParts.noSample.banned";
+
+export const fleetTeamAccessFixture = {
+  portal: true,
+  role: "fleet_owner",
+  staffRole: null,
+  organizationId: "org-fixture-1",
+  productLine: "fleet" as const,
+  pendingInvite: null,
+  pendingTransfer: null,
+  outgoingTransfer: null,
+};
+
+export const fleetPlatformStatusFixture = {
+  maintenanceMode: false,
+  maintenanceMessage: "",
+  platformName: "Roam Fleet",
+};
 
 export function fleetAuthSession() {
   const encode = (value: object) => Buffer.from(JSON.stringify(value)).toString("base64url");
@@ -26,7 +53,7 @@ export function fleetAuthSession() {
     role: "authenticated",
     email: "owner@example.com",
     app_metadata: { role: "fleet_owner" },
-    user_metadata: { full_name: "Fixture Owner" },
+    user_metadata: { full_name: "Fixture Owner", productLine: "fleet" },
   };
   return {
     access_token: access,
@@ -85,8 +112,48 @@ export function fleetCorePartsFixtures(cars: FleetCar[] = []) {
   };
 }
 
+/** Stitch-aligned mocks for FP3–FP12 live PNG capture (see findPartsStitchVisualFixtures.ts). */
+export function fleetCoreStitchVisualFixtures() {
+  const base = fleetCorePartsFixtures([{
+    vehicleId: STITCH_VISUAL_VEHICLE_ID,
+    licensePlate: STITCH_VISUAL_PLATE,
+    year: "2019",
+    make: "Toyota",
+    model: "Roomy",
+  } as FleetCar]);
+  const find = stitchVisualFindSections();
+  return {
+    ...base,
+    myVehicles: {
+      items: [{
+        id: STITCH_VISUAL_VEHICLE_ID,
+        vehicle_id: STITCH_VISUAL_VEHICLE_ID,
+        plate: STITCH_VISUAL_PLATE,
+        label: STITCH_VISUAL_LABEL,
+        parts_on_shelf: 8,
+        subtitle: "Pre-Facelift · 1KR-FE · 2WD",
+        hub: "Kingston East Hub",
+      }],
+    },
+    vehicleContext: stitchVisualVehicleContext(),
+    browse: stitchVisualBrowse(),
+    activity: stitchVisualActivity(),
+    find: {
+      sections: find.sections,
+      car: find.car,
+      chassis: find.chassis,
+      trimBadge: find.trimBadge,
+      linked: true,
+      askVariant: false,
+      pickedVariantId: stitchVisualVehicleContext().variantId,
+    },
+  };
+}
+
 export async function mockFleetCoreRoute(url: string, method: string, fixtures: ReturnType<typeof fleetCorePartsFixtures>) {
   const path = new URL(url).pathname;
+  if (path.endsWith("/team/access")) return fleetTeamAccessFixture;
+  if (path.endsWith("/platform-status")) return fleetPlatformStatusFixture;
   if (path.endsWith("/parts/my-vehicles")) return fixtures.myVehicles;
   if (path.endsWith("/parts/vehicle-options")) return fixtures.vehicleOptions;
   if (path.endsWith("/parts/term")) return fixtures.term;
@@ -95,6 +162,43 @@ export async function mockFleetCoreRoute(url: string, method: string, fixtures: 
   if (path.endsWith("/parts/browse")) return fixtures.browse;
   if (path.endsWith("/parts/symptoms")) return fixtures.symptoms;
   if (path.endsWith("/parts/saved-searches")) return fixtures.savedSearches;
-  if (path.includes("/parts/find")) return fixtures.find;
+  if (path.includes("/parts/find")) {
+    return {
+      ...fixtures.find,
+      linked: fixtures.find?.linked ?? true,
+      askVariant: false,
+      pickedVariantId: fixtures.vehicleContext?.variantId ?? null,
+    };
+  }
   return null;
+}
+
+/** Playwright matches routes LIFO — register catch-alls before specific fleet-core paths. */
+export async function installFleetCoreMockRoutes(
+  page: Page,
+  fixtures: ReturnType<typeof fleetCorePartsFixtures>,
+) {
+  const fulfillFleetCore = async (route: Route) => {
+    const json = await mockFleetCoreRoute(route.request().url(), route.request().method(), fixtures);
+    if (json != null) {
+      await route.fulfill({ json });
+      return;
+    }
+    await route.fulfill({ json: {} });
+  };
+  await page.route("**/functions/v1/fleet-core/**", fulfillFleetCore);
+  await page.route("**/__sb/functions/v1/fleet-core/**", fulfillFleetCore);
+  await page.route("**/fleet-core/**", fulfillFleetCore);
+  await page.route("**/functions/v1/fleet-core/platform-status**", async (route) => {
+    await route.fulfill({ json: fleetPlatformStatusFixture });
+  });
+  await page.route("**/__sb/functions/v1/fleet-core/platform-status**", async (route) => {
+    await route.fulfill({ json: fleetPlatformStatusFixture });
+  });
+  await page.route("**/functions/v1/fleet-core/team/access**", async (route) => {
+    await route.fulfill({ json: fleetTeamAccessFixture });
+  });
+  await page.route("**/__sb/functions/v1/fleet-core/team/access**", async (route) => {
+    await route.fulfill({ json: fleetTeamAccessFixture });
+  });
 }

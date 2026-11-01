@@ -1,0 +1,161 @@
+ROAM FLEET — FIND PARTS (INFORMATION ONLY) — FULL DESIGN PROMPT (GOOGLE STITCH)
+
+
+
+
+Roam Fleet - Find Parts, version 2 (Desktop Web App, for fleet managers and their staff):
+
+Design high-fidelity desktop screens that update the "Find parts" tab inside Fleet maintenance in the Roam Fleet app. Find parts is an information tool, not a shop. A fleet manager, or a staff member who knows nothing about cars, picks their car, picks a part, says which side if it matters, and sees which part numbers fit their exact car. They buy the part wherever they like. Nothing on these screens shows prices, suppliers, stock, quotes or maintenance schedules. When Roam doesn't have a part on file for that car yet, the person asks Roam to add it with one tap, and can follow the request under "Your requests". The tone is calm, plain and helpful: a parts encyclopedia for your own cars.
+
+BRAND IDENTITY:
+- Match the existing Roam Fleet web app:
+  - black top bar with the "Roam Fleet" app tile, then a white nav row: Dashboard, Fleet Operations, Driver Operations, Money, Vehicle Operations (active, underlined), Delivery Operations, Analytics, Reports, Business Finance, avatar "DT"
+  - a thin dark status strip under it: "Switch vehicle or search hub…" search box on the left; clock "06:25 PM EST", "America/Jamaica", "JM (JMD)", user chip "DT · Deeki T" on the right
+  - page title "Fleet Maintenance" with an orange wrench icon, then the three tabs: By vehicle, Service ledger, Find parts (active)
+- LIGHT MODE (default):
+  - Primary: near-black #030213
+  - Background: white #FFFFFF; page wash: #f8fafc
+  - Card border: rgba(0,0,0,0.1)
+  - Text: #0a0a0a; muted text: #717182
+  - Success: #059669; warning: #d97706; error: #d4183d
+  - Chip fill: #f1f5f9
+  - Orange #f97316, only for the page icon
+- DARK MODE:
+  - Background #252525, surface #2e2e2e, border #444444
+  - Text #fafafa, muted #b4b4b4, primary #fafafa
+  - Success #34d399, warning #f59e0b, error #f87171
+- Five match-type accent bars (4px left edge on result sections):
+  - Made for your car #2563eb
+  - Same car, different badge #0e7490
+  - Fits your engine #b45309
+  - Other brands that replace it #7c3aed
+  - Fits by size #059669
+- Chips:
+  - "Verified": green dot
+  - "On file": emerald outline
+  - "Not on file yet": grey outline
+  - small grey tag for the match type ("OEM", "Sister", "Engine", "Aftermarket", "Universal")
+  - request status: "Sent" grey, "Roam is looking" blue, "Added" emerald, "Couldn't find" red
+- Typography: Inter. Part numbers, plates, counts and years use a mono font with tabular numerals.
+- No prices, no currency, no suppliers, no stock, no quotes, no maintenance schedules, no odometers, anywhere.
+- No gradients, glassmorphism or 3D. No AI badges, no confidence percentages.
+- Jamaica sample data:
+  - fleet cars: "Toyota Roomy 2019 · 5179KZ" (version "Pre-Facelift · 1KR-FE · 2WD", chassis M900A, front disc brakes, rear drum brakes), "Honda Fit 2018 · 1505LM" (version "Hybrid · LEB · GP5")
+  - parts: "Front brake pad set · Toyota 04465-B1190", "Rear brake shoe kit (drum) · Toyota 04495-B2400", "Rear brake shoe kit (drum) · Blue Print ADT34155", "Air filter", "Headlight bulb"
+
+DESIGN PRINCIPLES:
+- Desktop-first (1440px wide), with one phone screen
+- One question per step, big tappable cards
+- All navigation is at the top: one sticky Find parts header holds ← Back, the step trail, the car and part chips, and Next →. There are no Back / Continue / Show parts buttons at the bottom of any page.
+- Browse by area first; common parts are a shortcut underneath
+- Every part tile tells you up front whether Roam has it on file for this car
+- "Not on file yet" is never a dead end: one tap asks Roam to add it
+
+SCREEN 1: WHAT PART? (WITH THE NEW STICKY HEADER)
+- Fleet page frame as in Brand Identity, "Find parts" tab active
+- Sticky Find parts header, full width of the content, solid white, thin bottom border, flush under the dark status strip when scrolling:
+  - left: round "←" button with the label "Back"
+  - centre: step trail "✓ 1. Pick car / ✓ 2. Version: Pre-Facelift · 1KR-FE · 2WD / ● 3. Part / 4. Side"; done steps are clickable
+  - car chip "Toyota Roomy 2019 · 5179KZ" with a pencil; version tag "PRE-FACELIFT · 1KR-FE · 2WD"
+  - right: primary button "Next →", disabled until a part is chosen
+- Page heading "What part do you need?", sub line "Search by name, browse by area, or describe the problem."
+- Search box: "Try 'brake pads', 'o2 sensor' or a part number…", an "ESC to clear" chip, mic button
+- FIRST section "By area", with "11 areas" on the right:
+  - a grid of area cards, each with icon, name and "3 parts on file for your car" (or "None on file yet" in grey)
+  - areas: Battery & electrical, Belts & hoses, Brakes (selected, black), Engine, Filters, Fluids, HVAC, Lighting & visibility, Suspension & steering, Tires & wheels, Transmission
+- Under the selected area, the sub-part chips: "Brake pads · 6 on file", "Brake shoes / drums · 2 on file", "Brake fluid · Not on file yet", "Brake rotor · Not on file yet"
+- SECOND section "Common parts", smaller, a shortcut row:
+  - 8 compact tiles: Oil filter, Air filter, Brake pads, Wiper blades, Battery, Spark plugs, Cabin filter, Headlight bulb
+  - each tile has a status chip: "On file" in emerald or "Not on file yet" in grey
+- THIRD section "What's wrong with the car?":
+  - problems: "Squeaks or grinds when I brake", "Car won't start, or clicks", "Engine light is on", "A light is out"
+  - each opens a short plain answer with the likely parts
+- No maintenance banner, no "services due", no prices
+
+SCREEN 2: WHICH SIDE?
+- Same sticky header; trail "✓ Car / ✓ Version / ✓ Brake pads / ● 4. Side"; "Next →" is enabled once an axle is chosen
+- Heading "Which brakes?", sub line "Front and back are different parts on this car. Pick the axle, then the side."
+- Left: a top-down car diagram with "▲ Front of vehicle"
+  - the chosen axle and side are highlighted (front axle, left wheel)
+  - under it, two small spec boxes from the catalog: "FRONT · Disc brakes", "REAR · Drum brakes"
+- Right, step A "Axle", three cards, one selected:
+  - "Front" — "Front brake pad set · 4 on file"
+  - "Back (rear)" — "Rear brake shoe kit (drum) · 2 on file"
+  - "Both (front & back)" — "6 on file"
+- Right, step B "Side": three equal buttons "Left", "Right", "Both sides" ("Both sides" selected by default)
+- Note under the side buttons: "Most brake parts come as an axle set, so 'Both sides' is usually right."
+- No replacement times, no odometer, no maintenance tip
+
+SCREEN 3: NOT ON FILE YET → ASK ROAM TO ADD IT
+- Same sticky header; trail "✓ Car / ✓ Version / ● Air filter"; "Next →" hidden
+- A calm empty-state card, centred, with a grey icon of a document with a question mark:
+  - heading "We don't have air filter info for this car yet."
+  - line "Toyota Roomy 2019 · Pre-Facelift · 1KR-FE · 2WD"
+  - line "Ask Roam to add it. We'll look up the right part number for your exact car."
+- Request form, pre-filled and read-only where known:
+  - Car: "Toyota Roomy 2019 · Pre-Facelift · 1KR-FE · 2WD"
+  - Part: "Air filter"
+  - Side: "—" (or "Rear · Left" when it applies)
+  - Note (optional): text area "Anything that helps, e.g. the number on the old part"
+  - Photo of the old part (optional): drop zone "Drop a photo here or browse"
+- Primary button "Ask Roam to add this part"; text link "Search a different part"
+- Sent state, shown to the right as a second frame:
+  - green tick, "Request sent"
+  - "We'll let you know in Your requests when it's added."
+  - button "View your requests"
+- No quantity, no urgency, no prices, no suppliers
+
+SCREEN 4: RESULTS (INFORMATION ONLY)
+- Same sticky header; trail "✓ Car / ✓ Version / ✓ Brake pads / ✓ Rear · Both sides"
+  - on Results the right side of the header shows "Save search" and "Download fitment report" instead of Next
+- Heading "Rear brake parts for your Toyota Roomy 2019", sub "Pre-Facelift · 1KR-FE · 2WD · chassis M900A"
+- Filter chips "All matches (2)", "Made for your car only (1)"; version scope "Only this version" / "All versions"
+- "Best match" card: "Toyota 04495-B2400 — Rear brake shoe kit (drum)", "Verified" chip, buttons "Details" and "Use in a service log"
+- Sections with accent bars:
+  - "Made for your car · 1 · OEM" (Toyota 04495-B2400)
+  - "Other brands that replace it · 1 · Aftermarket" (Blue Print ADT34155)
+  - each row: part name, brand, part number, "Fits this version" tag, and a chevron that expands specs and other numbers
+- One folded line at the end: "Nothing on file for: Same car, different badge · Fits your engine · Fits by size." with one button "Ask Roam to find another option"
+
+SCREEN 5: YOUR REQUESTS
+- Same Fleet frame; the header shows the title "Your requests" with a "← Back to Find parts" button
+- Filter chips: "All (3)", "Waiting (2)", "Added (1)", "Couldn't find (0)"
+- Request cards:
+  - car and version, part and side, date asked
+  - a status chip: "Sent", "Roam is looking", "Added" or "Couldn't find"
+  - for "Added", a button "See the part" that opens Results
+- Empty state: "No requests yet. When a part isn't on file, ask Roam from the search."
+
+SCREEN 6: PHONE (390px) — WHAT PART? AND NOT ON FILE
+- Two phone frames side by side
+- The sticky header becomes a compact bar: "←", "Step 3 of 4 · Part", "Next →"; the car chip scrolls sideways under it
+- Frame 1: "By area" as a two-column grid, then the "Common parts" chips
+- Frame 2: Screen 3's not-on-file card and request form as a full-height sheet
+
+ADDITIONAL UI COMPONENTS:
+- Sticky Find parts header (Screens 1–5): ← Back, step trail, car/part chips, Next → (or Save search / Download on Results)
+- "On file" / "Not on file yet" status chip on area cards, sub-chips and common-part tiles
+- Axle cards plus Left / Right / Both sides segmented buttons
+- Pre-filled request form (no quantity, urgency or price)
+- Request status chips: Sent, Roam is looking, Added, Couldn't find
+
+INTERACTIONS:
+- Choosing a part:
+  - parts on file and no side question → Results;
+  - the part has sides (brakes, shocks, lights) → Which side?;
+  - nothing on file → Not on file yet (Screen 3).
+- ← Back always returns to the previous step; Next → moves on only when the step has a choice
+- The header stays at the top while scrolling; nothing shows above or through it
+- "Ask Roam to add this part" sends the request, shows the sent state, and the request appears in Your requests
+- When Roam adds the part, the request turns "Added" and "See the part" opens the results
+- Hover: cards lift slightly; selected cards get a 2px near-black outline
+
+Spec screens / Area
+| Screen | Area |
+|---|---|
+| 1 | What part? with sticky header |
+| 2 | Which side? |
+| 3 | Not on file yet → ask Roam |
+| 4 | Results (information only) |
+| 5 | Your requests |
+| 6 | Phone · What part? and Not on file |

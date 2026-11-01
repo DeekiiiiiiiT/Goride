@@ -24,6 +24,8 @@ export function Fp10Screen({ actions, data }: { actions: Fp10Actions; data: Fp10
     <div className="find-parts-screen-root">
 <div className="fp-screen-root"><div className="flex flex-col w-full">
 
+<p className="font-label-code text-caption px-margin pt-space-md">{data.orgShortCode}</p>
+
 <div className="bg-surface-container-low">
 <div className="w-full py-space-xs flex items-center justify-between">
 <div className="flex items-center gap-space-sm">

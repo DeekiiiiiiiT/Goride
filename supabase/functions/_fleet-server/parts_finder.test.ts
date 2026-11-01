@@ -148,25 +148,26 @@ Deno.test("findParts shows more than six version cards", async () => {
   assertEquals(body.candidates.length, 7);
 });
 
-Deno.test("Roomy rear brakes excludes front pad sets from sections", async () => {
+Deno.test("Roomy rear left brake filters to rear left parts only", async () => {
   const client = catalogClient([car("m900")]);
   const body = await findParts(client as never, {
     make: "Toyota",
     model: "Roomy",
     year: 2019,
     position: "rear",
+    side: "left",
     orgId: null,
   }, async () => ({
     mode: "tiered" as const,
     items: [
-      { part: { id: "front-pad", name: "Front brake pad set", manufacturer: "Toyota", oem_part_number: "04465-B1190", catalog_decision: "confirmed" }, tier: 1, position: "front" },
-      { part: { id: "rear-shoe", name: "Rear brake shoe kit", manufacturer: "Toyota", oem_part_number: "04495-B2400", catalog_decision: "confirmed" }, tier: 1, position: "rear" },
-      { part: { id: "rear-aftermarket", name: "Rear brake shoe kit", manufacturer: "ADT", oem_part_number: "ADT34155", catalog_decision: "confirmed" }, tier: 4, position: "rear" },
+      { part: { id: "rear-left", name: "Rear brake shoe kit", manufacturer: "Toyota", oem_part_number: "04495-B2400", catalog_decision: "confirmed" }, tier: 1, position: "rear", side: "left" },
+      { part: { id: "rear-right", name: "Rear brake shoe kit", manufacturer: "Toyota", oem_part_number: "04495-B2401", catalog_decision: "confirmed" }, tier: 1, position: "rear", side: "right" },
+      { part: { id: "front-pad", name: "Front brake pad set", manufacturer: "Toyota", oem_part_number: "04465-B1190", catalog_decision: "confirmed" }, tier: 1, position: "front", side: "left" },
     ],
     universal: [],
   }));
   const text = JSON.stringify(body.sections);
-  assertEquals(text.includes("04465-B1190"), false);
   assertEquals(text.includes("04495-B2400"), true);
-  assertEquals(text.includes("ADT34155"), true);
+  assertEquals(text.includes("04495-B2401"), false);
+  assertEquals(text.includes("04465-B1190"), false);
 });

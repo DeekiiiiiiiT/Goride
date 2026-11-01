@@ -13,11 +13,12 @@ import { ResultsView } from "./ResultsView";
 import type { PartItem } from "./PartDetailDrawer";
 import { VariantStep } from "./VariantStep";
 import { ActivityView } from "./ActivityView";
-import { usePartsActivity } from "./findPartsQueries";
+import { usePartsActivity, usePartsVehicleContext } from "./findPartsQueries";
 import { Fp11Screen, type Fp11Actions } from "./screens/Fp11Screen";
 import { buildFp11ViewModel, type Fp11PreviewTab } from "./findPartsViewModels";
 import { clearFleetMaintenanceSearch, navigateFleetMaintenanceTab, notifyPartsAdmin } from "./findPartsActions";
 import { fleetCoreErrorDetails, formatFindPartsVehicleChip, findPartsConnectionLatencyMs } from "./findPartsErrors";
+import { stepAfterPartPick, stepFromPartDeepLink } from "./findPartsRoute";
 import "./findParts.css";
 
 type Step = "car" | "version" | "part" | "position" | "results" | "request" | "link" | "missing";
@@ -36,7 +37,9 @@ export function FindPartsTab({
   const params = new URLSearchParams(window.location.search);
   const [step, setStep] = useState<Step>(() => {
     if (params.get("view") === "activity") return "car";
-    if (params.get("part")) return "results";
+    if (params.get("part")) {
+      return params.get("pos") ? "results" : "position";
+    }
     if (params.get("vehicle")) return "car";
     return "car";
   });
@@ -49,11 +52,15 @@ export function FindPartsTab({
   const [componentId, setComponentId] = useState(params.get("part") || "");
   const [partName, setPartName] = useState("");
   const [position, setPosition] = useState(params.get("pos") || "");
+  const [side, setSide] = useState(params.get("side") || "");
   const [error, setError] = useState("");
   const [attempts, setAttempts] = useState(0);
   const [linkMeta, setLinkMeta] = useState({ make: "", model: "", year: "", plate: "" });
 
   const activity = usePartsActivity(canView);
+  const orgVehicleId = vehicleId || cars[0]?.id || "";
+  const orgContext = usePartsVehicleContext(orgVehicleId, "", Boolean(orgVehicleId));
+  const orgShortCode = String((orgContext.data as { orgShortCode?: string } | undefined)?.orgShortCode || "");
   const orgAdmin = useQuery({
     queryKey: ["find-parts-org-admin"],
     queryFn: async () => {
@@ -70,12 +77,13 @@ export function FindPartsTab({
   const [fp11PreviewTab, setFp11PreviewTab] = useState<Fp11PreviewTab>("error");
   const deepLinkGateDone = useRef(false);
 
-  function writeUrl(next: { vehicle?: string; part?: string; pos?: string; view?: string }) {
+  function writeUrl(next: { vehicle?: string; part?: string; pos?: string; side?: string; view?: string }) {
     const url = new URL(window.location.href);
     url.searchParams.set("tab", "find-parts");
     if (next.vehicle) url.searchParams.set("vehicle", next.vehicle);
     if (next.part) url.searchParams.set("part", next.part);
     if (next.pos) url.searchParams.set("pos", next.pos);
+    if (next.side) url.searchParams.set("side", next.side);
     if (next.view) url.searchParams.set("view", next.view);
     else url.searchParams.delete("view");
     window.history.replaceState(null, "", url);
@@ -91,6 +99,7 @@ export function FindPartsTab({
     make?: string;
     model?: string;
     year?: number;
+    pickedVariantId?: string | null;
     vehicle?: { plate?: string; label?: string };
   };
 
@@ -116,7 +125,19 @@ export function FindPartsTab({
         setYear(Number(picked?.year ?? body.year) || null);
         setStep("version");
       } else {
-        setStep(params.get("part") ? "results" : "part");
+        if (body.pickedVariantId) setVariantId(body.pickedVariantId);
+        const partId = params.get("part")?.trim() || "";
+        if (partId) {
+          setComponentId(partId);
+          void api.partsBrowse(body.pickedVariantId || undefined).then((browse) => {
+            const next = stepFromPartDeepLink(params, browse as Parameters<typeof stepFromPartDeepLink>[1]);
+            setStep(next);
+          }).catch(() => {
+            setStep(params.get("pos") ? "results" : "position");
+          });
+        } else {
+          setStep("part");
+        }
       }
     }).catch((err: unknown) => {
       const { message } = fleetCoreErrorDetails(err);
@@ -126,7 +147,7 @@ export function FindPartsTab({
 
   useEffect(() => {
     const id = params.get("vehicle")?.trim() || "";
-    if (!canView || !id || params.get("part") || deepLinkGateDone.current) return;
+    if (!canView || !id || deepLinkGateDone.current) return;
     deepLinkGateDone.current = true;
     const picked = cars.find((row) => row.vehicleId === id);
     applyVehicleGate(id, picked);
@@ -175,12 +196,13 @@ export function FindPartsTab({
   }
 
   const search = useQuery({
-    queryKey: ["parts-find", vehicleId, make, model, year, variantId, componentId, position],
+    queryKey: ["parts-find", vehicleId, make, model, year, variantId, componentId, position, side],
     queryFn: () => api.findParts({
       ...(vehicleId ? { vehicleId } : { make, model, year: String(year) }),
       ...(variantId ? { variantId } : {}),
       ...(componentId ? { componentId } : {}),
-      ...(position ? { position } : {}),
+      ...(position ? { position, pos: position } : {}),
+      ...(side ? { side } : {}),
     }),
     enabled: canView && step === "results" && Boolean(vehicleId || (make && model && year)),
   });
@@ -260,7 +282,7 @@ export function FindPartsTab({
         />
       ) : null}
       {view === "activity" ? (
-        <ActivityView activity={activity.data ?? null} onBack={() => { setView("search"); writeUrl({}); }} />
+        <ActivityView activity={activity.data ?? null} orgShortCode={orgShortCode} onBack={() => { setView("search"); writeUrl({}); }} />
       ) : (
         <>
           {step === "car" ? (
@@ -302,11 +324,12 @@ export function FindPartsTab({
             <PartStep
               vehicleId={vehicleId}
               onBack={() => setStep(vehicleId ? "car" : "version")}
-              onPick={(id, positionAware, name) => {
+              onPick={(id, positionAware, name, onFileCount) => {
                 setComponentId(id);
                 setPartName(name);
                 writeUrl({ vehicle: vehicleId, part: id });
-                setStep(positionAware ? "position" : "results");
+                const next = stepAfterPartPick(onFileCount, positionAware);
+                setStep(next);
               }}
               onSkip={() => setStep("results")}
             />
@@ -316,7 +339,12 @@ export function FindPartsTab({
               vehicleId={vehicleId}
               componentId={componentId}
               onBack={() => setStep("part")}
-              onPick={(side) => { setPosition(side); writeUrl({ pos: side }); setStep("results"); }}
+              onPick={(pos, pickSide = "both") => {
+                setPosition(pos);
+                setSide(pickSide);
+                writeUrl({ vehicle: vehicleId, part: componentId, pos, side: pickSide });
+                setStep("results");
+              }}
             />
           ) : null}
           {step === "results" ? (

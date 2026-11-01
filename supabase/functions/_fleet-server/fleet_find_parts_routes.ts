@@ -8,7 +8,7 @@ import { requireAuth, requirePermission } from "./rbac_middleware.ts";
 import { filterByOrg, getOrgId } from "./org_scope.ts";
 import { resolveCatalogIdForKvVehicle } from "./vehicle_catalog_resolve.ts";
 import { findParts } from "./parts_finder.ts";
-import { readPartTerm, readPartsBrowse, readSymptoms } from "./parts_catalog_read.ts";
+import { readPartTerm, readPartsBrowseForVariant, readSymptoms } from "./parts_catalog_read.ts";
 import { canonicalOdometerForVehicle } from "./canonical_vehicle_odometer.ts";
 import { analyzeMaintenanceScheduleRow } from "../../../packages/finance-core/src/maintenanceOverdueDetails.ts";
 import { upsertPendingFromKvVehicle } from "./vehicle_catalog_pending_queries.ts";
@@ -189,7 +189,9 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
 
   app.get(`${PREFIX}/browse`, ...view, async (c: Context) => {
     try {
-      return c.json(await readPartsBrowse(supabase));
+      const variantId = c.req.query("variantId")?.trim() || "";
+      if (variantId && !UUID_RE.test(variantId)) return c.json({ error: "Invalid variant" }, 400);
+      return c.json(await readPartsBrowseForVariant(supabase, variantId || undefined));
     } catch (error) {
       return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
     }
@@ -205,7 +207,9 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
 
   app.get(`${PREFIX}/symptoms`, ...view, async (c: Context) => {
     try {
-      return c.json(await readSymptoms(supabase));
+      const variantId = c.req.query("variantId")?.trim() || "";
+      if (variantId && !UUID_RE.test(variantId)) return c.json({ error: "Invalid variant" }, 400);
+      return c.json(await readSymptoms(supabase, variantId ? { variantId } : undefined));
     } catch (error) {
       return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
     }
@@ -216,11 +220,13 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
       const orgId = String(getOrgId(c) || "");
       if (!orgId) return c.json({ error: "Organization required" }, 400);
       const body = await c.req.json() as Record<string, unknown>;
-      const needText = String(body.needText ?? "").trim();
-      if (!needText) return c.json({ error: "needText is required" }, 400);
-      const urgency = body.urgency ? String(body.urgency) : null;
+      const needText = String(body.needText ?? body.note ?? "").trim();
+      if (!needText && body.kind !== "add_part_info") return c.json({ error: "needText is required" }, 400);
+      const kind = body.kind ? String(body.kind).slice(0, 40) : null;
+      const isAddPart = kind === "add_part_info";
+      const urgency = isAddPart ? null : (body.urgency ? String(body.urgency) : null);
       if (urgency && !URGENCY.has(urgency)) return c.json({ error: "Urgency must be low, normal, urgent, or within_24h" }, 400);
-      const qty = body.qty != null && body.qty !== "" ? Number(body.qty) : null;
+      const qty = isAddPart ? null : (body.qty != null && body.qty !== "" ? Number(body.qty) : null);
       if (qty != null && (!Number.isFinite(qty) || qty <= 0)) return c.json({ error: "Quantity must be at least 1" }, 400);
       const vehicleId = String(body.vehicleId ?? "").trim();
       if (vehicleId) {
@@ -228,22 +234,34 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
         if (access.status !== 200) return c.json({ error: "Vehicle not found" }, access.status === 403 ? 403 : 404);
       }
       const user = c.get("rbacUser") as { id?: string } | undefined;
+      const side = body.side ? String(body.side).slice(0, 20) : null;
+      const position = body.position ? String(body.position).slice(0, 20) : null;
+      const catalogVariantId = body.vehicleCatalogId && UUID_RE.test(String(body.vehicleCatalogId))
+        ? String(body.vehicleCatalogId)
+        : (body.platformId && UUID_RE.test(String(body.platformId)) ? String(body.platformId) : null);
+      const composedNeed = needText
+        || [String(body.partName ?? "").trim(), side, position].filter(Boolean).join(" · ")
+        || "Part info request";
+      const sentAt = isAddPart ? new Date().toISOString() : null;
       const { data, error } = await supabase.from("parts_sourcing_requests").insert({
         organization_id: orgId,
         vehicle_id: vehicleId || null,
-        need_text: needText.slice(0, 2000),
+        need_text: composedNeed.slice(0, 2000),
         status: "open",
         created_by: user?.id ?? null,
         maintenance_component_id: body.maintenanceComponentId && UUID_RE.test(String(body.maintenanceComponentId))
           ? String(body.maintenanceComponentId)
-          : null,
-        platform_id: body.platformId && UUID_RE.test(String(body.platformId)) ? String(body.platformId) : null,
+          : (body.componentId && UUID_RE.test(String(body.componentId)) ? String(body.componentId) : null),
+        platform_id: catalogVariantId,
         engine_family_id: body.engineFamilyId && UUID_RE.test(String(body.engineFamilyId)) ? String(body.engineFamilyId) : null,
         urgency,
         reply_due_at: urgency ? replyDueAt(urgency) : null,
-        kind: body.kind ? String(body.kind).slice(0, 40) : null,
+        kind,
         qty,
         photo_url: body.photoUrl ? String(body.photoUrl).slice(0, 2000) : null,
+        install_side: side,
+        install_position: position,
+        sent_at: sentAt,
       }).select("*").single();
       if (error) throw error;
       return c.json({ item: data });
@@ -289,71 +307,30 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
     try {
       const orgId = String(getOrgId(c) || "");
       const vehicleId = c.req.query("vehicleId")?.trim() || "";
-      const componentId = c.req.query("componentId")?.trim() || "";
       if (!vehicleId) return c.json({ error: "vehicleId required" }, 400);
       const access = await ownVehicle(c, vehicleId);
       if (access.status === 404) return c.json({ error: "Vehicle not found" }, 404);
       if (access.status === 403) return c.json({ error: "Forbidden" }, 403);
       const vehicle = access.vehicle!;
-      const metrics = Number((vehicle.metrics as { odometer?: number } | undefined)?.odometer ?? 0);
-      const odometer = await canonicalOdometerForVehicle(supabase, vehicleId, metrics, c);
-      const { data: schedules, error } = await supabase
-        .from("vehicle_component_schedule")
-        .select("position, next_due_miles, next_due_miles_max, next_due_date, schedule_status, category:maintenance_service_categories(id, name)")
-        .eq("organization_id", orgId)
-        .eq("vehicle_id", vehicleId);
-      if (error) throw error;
-      const today = new Date().toISOString().slice(0, 10);
-      const due = (schedules || []).flatMap((row) => {
-        const schedule = row as {
-          position?: string | null;
-          next_due_miles?: number | null;
-          next_due_miles_max?: number | null;
-          next_due_date?: string | null;
-          schedule_status?: string | null;
-          category?: { id?: string; name?: string } | { id?: string; name?: string }[] | null;
-        };
-        const category = Array.isArray(schedule.category) ? schedule.category[0] : schedule.category;
-        const analysis = analyzeMaintenanceScheduleRow(
-          odometer,
-          today,
-          schedule.next_due_miles != null ? Number(schedule.next_due_miles) : null,
-          schedule.next_due_miles_max != null ? Number(schedule.next_due_miles_max) : null,
-          schedule.next_due_date ? String(schedule.next_due_date).slice(0, 10) : null,
-          schedule.schedule_status,
-        );
-        if (analysis.status !== "overdue" && analysis.status !== "pending") return [];
-        return [{
-          componentId: category?.id ?? null,
-          name: category?.name ?? "Service",
-          position: schedule.position ?? null,
-          kind: analysis.status === "overdue" ? "overdue" : "due_soon",
-        }];
-      });
-      let lastService: { date: string | null; km: number | null } | null = null;
-      if (componentId) {
-        const { data: last, error: lastError } = await supabase
-          .from("maintenance_service_ledger")
-          .select("performed_at_date, performed_at_miles")
-          .eq("organization_id", orgId)
-          .eq("vehicle_id", vehicleId)
-          .eq("category_id", componentId)
-          .is("voided_at", null)
-          .order("performed_at_date", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        if (lastError) throw lastError;
-        if (last) {
-          lastService = {
-            date: (last as { performed_at_date?: string }).performed_at_date ?? null,
-            km: (last as { performed_at_miles?: number }).performed_at_miles != null
-              ? Number((last as { performed_at_miles?: number }).performed_at_miles)
-              : null,
-          };
-        }
-      }
       const extras = await loadVehiclePartsContextExtras(supabase, orgId, vehicleId, vehicle as Record<string, unknown>);
-      return c.json({ odometer, due, lastService, ...extras });
+      const catalogId = (await resolveCatalogIdForKvVehicle(supabase, vehicle)) || "";
+      return c.json({
+        label: extras.label,
+        plate: extras.plate,
+        version: extras.trim || extras.variant,
+        variantId: catalogId || null,
+        specs: {
+          trim_series: extras.trim_series,
+          engine_code: extras.engine_code,
+          engine_displacement_l: extras.engine_displacement_l,
+          drivetrain: extras.drivetrain,
+          chassis_code: extras.chassis_code,
+          engineFilterLine: extras.engineFilterLine,
+          alternateTrimsLine: extras.alternateTrimsLine,
+        },
+        orgShortCode: extras.orgShortCode,
+        hub_label: extras.hub_label,
+      });
     } catch (error) {
       return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
     }

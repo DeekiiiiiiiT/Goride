@@ -261,8 +261,11 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
     void load();
   }, [load]);
 
+  const findPartsActive = hubTab === "find-parts";
+
   return (
     <div className="space-y-4">
+      {!findPartsActive && (
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="hidden md:block">
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
@@ -317,6 +320,7 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
           </Button>
         </div>
       </div>
+      )}
 
       {fleetMessage && (
         <div className="rounded-lg border border-emerald-200 bg-emerald-50 dark:bg-emerald-950/30 px-3 py-2 text-sm text-emerald-900 dark:text-emerald-100">
@@ -342,7 +346,14 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
         }}
         className="space-y-4"
       >
-        <TabsList className="h-10 bg-slate-100 dark:bg-slate-800/80 p-1">
+        <div className={findPartsActive ? "flex flex-wrap items-center justify-between gap-3 w-full bg-surface-container-lowest rounded-xl shadow-sm px-4 py-3" : ""}>
+          {findPartsActive ? (
+            <div className="flex items-center gap-2">
+              <Wrench className="w-6 h-6 text-amber-600" />
+              <span className="font-semibold text-slate-900 dark:text-white">Fleet Maintenance</span>
+            </div>
+          ) : null}
+        <TabsList className={`h-10 bg-slate-100 dark:bg-slate-800/80 p-1 ${findPartsActive ? "shrink-0" : ""}`}>
           <TabsTrigger value="by-vehicle" className="gap-1.5 px-4">
             <Car className="w-4 h-4" />
             By vehicle
@@ -358,6 +369,7 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
             </TabsTrigger>
           ) : null}
         </TabsList>
+        </div>
 
         <TabsContent value="service-ledger" className="mt-0 space-y-4">
           <MaintenanceServiceLedgerPanel vehicles={items} />

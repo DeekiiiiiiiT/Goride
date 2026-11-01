@@ -136,6 +136,7 @@ export function defaultSettingsForSegment(segment: SettingsSegment): Record<stri
         maintenanceMessage: "",
         securityPolicies: { ...DEFAULT_SECURITY },
         announcement: { ...DEFAULT_ANNOUNCEMENT },
+        pendingPartsWeeklyTarget: 12,
       };
     case "fleet":
       return defaultFleetProductSettings("Roam Fleet", true);

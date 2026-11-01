@@ -1,0 +1,99 @@
+ROAM DOMINION — PENDING CATALOG (VEHICLES AND PARTS) — FULL DESIGN PROMPT (GOOGLE STITCH)
+
+
+
+
+Roam Dominion - Pending Catalog (Desktop Admin, for the owner):
+
+Design high-fidelity desktop screens for "Pending catalog" in the Roam Dominion admin console. Today it lists only requests for new cars. It now becomes one queue with two tabs, Vehicles and Parts. The Parts tab collects the requests fleet managers send from Roam Fleet's Find parts tab when a part isn't on file for their car ("Ask Roam to add this part"). The owner sees which car versions need which parts, how many fleets asked, and any notes or photos. They look up the right part number, add it to the parts database straight from the request, and every fleet that asked sees it the next time they search. Dominion is the master reference database, so these screens never show customer names, company names or plates: requests are grouped by car version and part, with a count of how many fleets asked. The tone is a calm, efficient work queue.
+
+BRAND IDENTITY:
+- Match the existing Dominion console:
+  - dark navy left sidebar with "Dominion · Roam Admin Console"; groups MASTER DATA (Overview, Vehicles active, Places and Maps, Fuel, Tolls, Tax and Vendors), ENGINES (Fuel Brain, Toll Brain, Matching Brain), DISTRIBUTION (Apps, Data API, Change requests), PLATFORM (Staff and roles, Activity log, Platform Ops, Global settings), BACK OFFICE (GCT registrations, Ledger, Remittance)
+  - top bar: search "Search entities, engines, routes…" with a ⌘K chip, moon icon, user "DT · Deeki T · Owner"
+  - breadcrumb "DOMINION › MASTER DATA › VEHICLES › PENDING CATALOG"
+- LIGHT MODE (default):
+  - Primary: #0153dc; primary container: #dbe1ff
+  - Success: #006e31; error: #a83836
+  - Outline: #797a84
+  - Background: #faf8fe; cards white
+  - Text: #30323b
+- DARK MODE:
+  - Background: #0b1220
+  - Text: #e2e8f0
+  - Primary: #5b8def
+  - Success: #4ade80
+  - Outline: #94a3b8
+- Chips:
+  - "Asked by 3 fleets": primary container fill
+  - status: "New" grey, "Looking" blue, "Added" green, "Can't find" red
+  - "Has photo": camera icon
+- Typography: Inter. Part numbers, years, counts and dates use a mono font with tabular numerals.
+- No customer names, company names, plates or user names anywhere.
+- No gradients, glassmorphism or 3D.
+- Sample data:
+  - car versions: "Toyota Roomy 2016–2020 · Pre-Facelift · 1KR-FE · 2WD", "Honda Fit 2013–2020 · Hybrid · LEB · GP5", "Toyota Probox 2014–2021 · NCP160"
+  - parts asked for: "Air filter", "Headlight bulb", "Brake fluid", "Rear brake shoe kit · Left"
+
+DESIGN PRINCIPLES:
+- Desktop-first (1440px wide)
+- One queue, two tabs, newest first
+- Group duplicate asks: one row per car version + part + side, with "Asked by {n} fleets"
+- Every request can be finished from its drawer in one or two clicks
+- Never show who asked; show how many asked
+
+SCREEN 1: PENDING CATALOG — PARTS TAB
+- Dominion frame as in Brand Identity
+- Page title "Pending catalog", sub line "Cars and parts that apps have asked us to add."
+- Tabs: "Vehicles (1)" and "Parts (4)", with Parts selected
+- Summary cards on top: "New 3", "Looking 1", "Added this week 0", "Can't find 0"
+- Filter chips: "All", "New", "Looking", "Added", "Can't find"; a search box "Search car or part…"
+- Table, newest first, with columns:
+  - Car version ("Toyota Roomy 2016–2020 · Pre-Facelift · 1KR-FE · 2WD")
+  - Part ("Air filter", "Headlight bulb", "Brake fluid", "Rear brake shoe kit · Left")
+  - Asked by ("3 fleets" chip)
+  - First asked ("31 Oct 2026") and Last asked
+  - Photo (camera icon when any request has one)
+  - Status chip
+  - Row action "Open"
+- The Vehicles tab (not selected) keeps today's list of new-car requests
+
+SCREEN 2: PART REQUEST DETAIL (DRAWER OVER SCREEN 1)
+- Right drawer, 520px
+- Header: "Air filter" and "Toyota Roomy 2016–2020 · Pre-Facelift · 1KR-FE · 2WD"; status chip "New"; "Asked by 3 fleets · first asked 31 Oct 2026"
+- Section "What they asked":
+  - each request's note, numbered and without names: "Note 1: 'old one says 17801-…'", "Note 2: —"
+  - photos as thumbnails that open full size
+- Section "Already on file for this car": what the parts database has for this version and part type, or "Nothing yet"
+- Actions at the bottom:
+  - primary "Add this part": opens the Parts database add form, pre-filled with the car version, part type and side
+  - "Mark as looking"
+  - "Can't find it": asks for a short reason
+- Footer note: "When you add the part, every fleet that asked sees it the next time they search."
+
+SCREEN 3: STATES
+- Three frames of the Parts tab:
+  - Empty: "No part requests. When a fleet asks for a part we don't have, it shows here."
+  - Loading: skeleton rows
+  - Error: "Could not load requests." with Retry
+
+ADDITIONAL UI COMPONENTS:
+- Tabs "Vehicles / Parts" with counts
+- Summary count cards
+- Grouped request table with "Asked by {n} fleets"
+- Request drawer with notes, photos, on-file list and three actions
+- Status chips: New, Looking, Added, Can't find
+
+INTERACTIONS:
+- Clicking a row opens the drawer
+- "Add this part" opens the pre-filled parts form; saving it marks every matching request "Added" and closes the drawer
+- "Mark as looking" and "Can't find it" update every request in the group
+- Tabs and filter chips keep their place in the URL
+- Hover: rows highlight in the primary container colour
+
+Spec screens / Area
+| Screen | Area |
+|---|---|
+| 1 | Pending catalog · Parts tab |
+| 2 | Part request detail drawer |
+| 3 | Empty, loading and error states |

@@ -41,7 +41,8 @@
     "registered in the local kingston roam fleet inventory.",
     "active dispatch Â· kingston",
     "100% of roam fleet fits are 1.5 hybrid gp5 variants.",
-    "orders placed via verified trim matching include free dispatch exchange if parts fail mechanical fit verification during kingston depot install."
+    "orders placed via verified trim matching include free dispatch exchange if parts fail mechanical fit verification during kingston depot install.",
+    "100% of | fits are 1.5"
   ],
   "FP3": [
     "1505lm",
@@ -82,7 +83,25 @@
     "5 items",
     "dot 4",
     "warning",
-    "airwave"
+    "airwave",
+    "11 areas",
+    "belts & hoses",
+    "2 parts on file for your car",
+    "3 parts on file for your car",
+    "lighting & visibility",
+    "5 parts on file for your car",
+    "4 parts on file for your car",
+    "tires & wheels",
+    "cabin filter",
+    "friction disc assembly",
+    "6 cross-refs",
+    "brake shoes (rear drum)",
+    "internal expander shoe",
+    "2 cross-refs",
+    "vented disc plate",
+    "starting system, auxiliary battery voltage drop, or alternator fault.",
+    "sensors, catalytic system, ignition coils, or fuel trim variances.",
+    "exterior lamps, headlamp units, turn signals, or instrument illumination."
   ],
   "FP4": [
     "1505lm",
@@ -105,7 +124,12 @@
     "most common wear item (~70% of braking force). fits gp5 disc brake calipers.",
     "less frequent wear. specific to jdm gp5 disc brake rear setup with integrated handbrake piston.",
     "45 mins",
-    "50 mins"
+    "50 mins",
+    "roam specification matrix · brake fitment",
+    "rotor: 246mm",
+    "piston: 51mm single",
+    "drum id: 180mm",
+    "cylinder: 17.5mm"
   ],
   "FP5": [
     "1505lm",
@@ -976,6 +1000,37 @@
     "â€” disc brake friction set (front/rear)",
     "â€” oil filter",
     "â€¢ 3 days dispatch"
+  ],
+  "sample": [
+    "roomy 2019",
+    "toyota roomy 2019",
+    "pre-facelift · 1kr-fe · 2wd",
+    "5179kz",
+    "m900a-bgbge",
+    "m900a-bgbgb",
+    "1kr-fe · 2wd"
+  ],
+  "app-frame": [
+    "sys-jm",
+    "roam fleet",
+    "roam fleet dispatch core",
+    "station kingston #01",
+    "© 2024 roam fleet management system. all rights reserved."
+  ],
+  "design-board": [
+    "mobile specification view",
+    "390px viewport reference",
+    "part selection & missing registry flow",
+    "kingston fleet terminal diagnostic node · model verification ux",
+    "view 01 / step 03",
+    "view 02 / escalation",
+    "phone · what part?",
+    "phone · not on file yet",
+    "ergonomic rules",
+    "390×844pt target density · 44px minimum touch targets · zero price metadata display",
+    "empty state simulation preview",
+    "toggle preview view",
+    "fleet terminal diagnostic node"
   ],
   "hub-headers": [
     "refresh",

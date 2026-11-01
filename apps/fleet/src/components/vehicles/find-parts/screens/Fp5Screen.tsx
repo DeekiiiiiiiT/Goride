@@ -1,6 +1,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import type { Fp5ViewModel } from "../findPartsViewModels";
 import type { TrimScopeTab } from "../findPartsActions";
+import { FindPartsStickyHeader } from "../FindPartsStickyHeader";
 
 const STITCH_TIER1_HEADING = "Made for your car";
 
@@ -19,7 +20,7 @@ export type Fp5Actions = {
   children?: ReactNode;
 };
 
-export function Fp5Screen({ actions, data, partName }: { actions: Fp5Actions; data: Fp5ViewModel; partName?: string }) {
+export function Fp5Screen({ actions, data, partName, positionTrail }: { actions: Fp5Actions; data: Fp5ViewModel; partName?: string; positionTrail?: string }) {
   const titlePart = partName || data.componentTitle || "Part";
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const best = data.rows.find((row) => row.isBest) || data.rows[0];
@@ -33,70 +34,77 @@ export function Fp5Screen({ actions, data, partName }: { actions: Fp5Actions; da
     <div className="find-parts-screen-root">
       <div className="fp-screen-root">
         <div className="flex flex-col w-full gap-space-xl py-space-xl">
-          <div className="sticky top-0 z-20 bg-surface-container-lowest shadow-sm rounded-lg px-space-lg py-space-sm flex flex-wrap items-center justify-between gap-space-md">
-            <div className="flex items-center flex-wrap gap-space-sm font-label-code text-caption text-on-surface-variant">
-              <span className="text-secondary flex items-center gap-1">
-                <span className="material-symbols-outlined text-[15px]">inventory_2</span>
-                Fleet Spares
-              </span>
-              <span className="text-outline-variant">/</span>
-              <button type="button" className="inline-flex items-center gap-space-xs bg-surface-container-low px-space-sm py-1 rounded text-on-surface font-label-plate text-body-sm shadow-sm hover:bg-surface-container transition-colors" onClick={actions.onChangeCar}>
-                <span className="material-symbols-outlined text-secondary text-[16px]">directions_car</span>
-                <span>{data.vehicleLabel} · {data.plate}</span>
-              </button>
-              <span className="text-outline-variant">›</span>
-              <button type="button" className="inline-flex items-center gap-space-xs bg-secondary-container/40 px-space-sm py-1 rounded text-on-secondary-fixed font-body-sm shadow-sm hover:bg-secondary-container transition-colors" onClick={actions.onEditPartCategory}>
-                <span className="material-symbols-outlined text-[16px]">filter_alt</span>
-                <span className="font-semibold">{titlePart}</span>
-              </button>
-              {data.chassisLabel !== "—" ? (
-                <>
-                  <span className="hidden md:inline-flex text-outline-variant">·</span>
-                  <span className="hidden md:inline-flex items-center gap-1 bg-surface-container-highest px-2 py-0.5 rounded font-label-code text-[11px] text-on-surface-variant">
-                    CHASSIS {data.chassisLabel}
-                  </span>
-                </>
-              ) : null}
-            </div>
-            <button type="button" className="flex items-center gap-1 text-on-surface-variant hover:text-primary font-body-sm text-caption px-space-sm py-1 rounded bg-surface-container transition-colors" onClick={actions.onSaveQuery}>
-              <span className="material-symbols-outlined text-[15px]">bookmark_border</span>
-              <span className="hidden sm:inline">Save query</span>
-            </button>
-          </div>
+          <FindPartsStickyHeader
+            step={5}
+            onBack={actions.onBackToPartSelection}
+            vehicleLabel={data.vehicleLabel}
+            plate={data.plate}
+            versionTag={data.trimBadge || data.trimLabel}
+            partTrailLabel={titlePart}
+            resultsTrailLabel={positionTrail || "4. Rear · Both sides"}
+            onSaveSearch={actions.onSaveQuery}
+            onDownloadFitmentReport={actions.onDownloadReport}
+          />
 
-          <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-space-lg">
-            <div className="flex flex-col gap-1 max-w-3xl">
-              <h1 className="font-headline-xl text-headline-xl text-on-surface tracking-tight leading-tight">
-                {titlePart} for your {data.vehicleLabel}
-                {data.trimLabel && data.trimLabel !== "None yet" ? ` (${data.trimLabel})` : ""}
+          <section className="flex flex-col md:flex-row md:items-end justify-between gap-space-md">
+            <div className="flex flex-col gap-1">
+              <div className="inline-flex items-center gap-space-xs text-on-surface-variant font-label-code text-caption uppercase tracking-wider">
+                <span>{data.archiveEyebrow}</span>
+              </div>
+              <h1 className="font-headline-xl text-headline-xl tracking-tight text-on-surface">
+                {data.resultsHeadline}
               </h1>
-              <p className="font-body-md text-body-md text-on-surface-variant">
-                Viewing verified compatible parts cataloged for {data.chassisLabel !== "—" && data.chassisLabel !== "None yet" ? `chassis ${data.chassisLabel}` : "your vehicle"}.
+              <p className="font-body-md text-body-md text-on-surface-variant flex items-center gap-space-xs flex-wrap">
+                {data.trimSeriesLabel !== "None yet" ? (
+                  <>
+                    <span>{data.trimSeriesLabel}</span>
+                    <span className="text-outline-variant">·</span>
+                  </>
+                ) : null}
+                {data.engineLayoutLabel !== "None yet" ? (
+                  <>
+                    <span className="font-label-code text-caption bg-surface-container px-1 rounded">{data.engineLayoutLabel}</span>
+                    <span className="text-outline-variant">·</span>
+                  </>
+                ) : null}
+                {data.drivetrainLabel !== "None yet" ? (
+                  <>
+                    <span>{data.drivetrainLabel}</span>
+                    <span className="text-outline-variant">·</span>
+                  </>
+                ) : null}
+                {data.chassisCodeLabel !== "None yet" ? (
+                  <span>
+                    Chassis code <strong className="font-label-code font-bold text-on-surface">{data.chassisCodeLabel}</strong>
+                  </span>
+                ) : null}
               </p>
             </div>
-            <div className="flex items-center gap-space-sm bg-surface-container-lowest p-space-md rounded-xl shadow-sm">
-              <div className="flex flex-col pr-space-md">
-                <span className="font-caption text-caption text-on-surface-variant uppercase">Compatible Match Pool</span>
-                <span className="font-label-code text-headline-sm text-on-surface">{data.matchCount} catalog items</span>
-              </div>
-              <span className="material-symbols-outlined text-[22px] text-primary">verified</span>
+            {data.catalogSpecLabel !== "None yet" ? (
+            <div className="flex items-center gap-2 p-2 bg-surface-container-lowest rounded-xl shadow-sm">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 animate-pulse"></span>
+              <span className="font-label-code text-caption text-on-surface font-medium">{data.catalogSpecLabel}</span>
             </div>
-          </div>
+            ) : null}
+          </section>
 
-          <div className="flex flex-wrap items-center gap-space-md p-space-xs bg-surface-container-lowest rounded-xl shadow-sm">
-            <button type="button" className={`px-space-sm py-1.5 rounded-lg font-body-sm text-body-sm transition-colors ${data.activeFilterTab === "all" ? "bg-primary text-on-primary font-semibold shadow-sm" : "bg-surface-container-low text-on-surface-variant"}`} onClick={() => actions.onFilterTab("all")}>
-              All matches ({data.filterAllCount})
-            </button>
-            <button type="button" className={`px-space-sm py-1.5 rounded-lg font-body-sm text-body-sm transition-colors ${data.activeFilterTab === "oem" ? "bg-primary text-on-primary font-semibold shadow-sm" : "bg-surface-container-low text-on-surface-variant"}`} onClick={() => actions.onFilterTab("oem")}>
-              Direct OEM only ({data.filterOemCount})
-            </button>
-            <span className="font-caption text-caption text-on-surface-variant uppercase font-semibold ml-auto">Trim Scope:</span>
-            <div className="inline-flex p-0.5 rounded-lg bg-surface-container-low text-caption font-body-sm">
-              <button type="button" className={`px-space-sm py-1 rounded transition-colors ${data.activeTrimScope === "all" ? "bg-surface-container-lowest text-primary font-semibold shadow-sm" : "text-on-surface-variant hover:text-on-surface"}`} onClick={() => actions.onTrimScope("all")}>
-                {fitsAllLabel}
+          <div className="flex flex-wrap items-center justify-between gap-space-md p-space-sm bg-surface-container-low rounded-xl">
+            <div className="flex items-center gap-space-xs">
+              <button type="button" className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-body-sm text-body-sm font-semibold shadow-sm transition-all ${data.activeFilterTab === "all" ? "bg-primary text-on-primary" : "bg-surface-container-lowest text-on-surface"}`} onClick={() => actions.onFilterTab("all")}>
+                <span>All matches</span>
+                <span className="font-label-code text-caption font-bold">({data.filterAllCount})</span>
               </button>
-              <button type="button" className={`px-space-sm py-1 rounded transition-colors ${data.activeTrimScope === "specific" ? "bg-surface-container-lowest text-primary font-semibold shadow-sm" : "text-on-surface-variant hover:text-on-surface"}`} onClick={() => actions.onTrimScope("specific")}>
-                {onlyTrimLabel}
+              <button type="button" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-container-lowest text-on-surface font-body-sm text-body-sm font-medium shadow-sm" onClick={() => actions.onFilterTab("oem")}>
+                <span>Made for your car only</span>
+                <span className="font-label-code text-caption font-bold">({data.filterOemCount})</span>
+              </button>
+            </div>
+            <div className="flex items-center bg-surface-container p-1 rounded-lg">
+              <button type="button" className={`px-3 py-1 font-body-sm text-caption font-bold rounded shadow-sm ${data.activeTrimScope === "specific" ? "bg-surface-container-lowest text-on-surface" : "text-on-surface-variant"}`} onClick={() => actions.onTrimScope("specific")}>
+                Only this version
+              </button>
+              <button type="button" className="px-3 py-1 text-on-surface-variant font-body-sm text-caption font-medium rounded" onClick={() => actions.onTrimScope("all")}>
+                All versions (incl. Post-facelift)
               </button>
             </div>
           </div>
@@ -257,6 +265,9 @@ export function Fp5Screen({ actions, data, partName }: { actions: Fp5Actions; da
               <span>Download fitment report</span>
             </button>
           </div>
+          {data.matchRevisionLine !== "None yet" ? (
+            <p className="font-label-code text-caption text-on-surface-variant text-center pt-space-md">{data.matchRevisionLine}</p>
+          ) : null}
         </div>
       </div>
     </div>
