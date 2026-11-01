@@ -31,7 +31,7 @@ Feature flags (`public.platform_feature_flags`):
 | 20261101163823 | fleet_inventory_ledger_digest_search_path |
 | 20261101163825 | fleet_inventory_data_migration |
 
-Monolithic SQL for **local bootstrap** lives in [`supabase/migrations_archive/`](../supabase/migrations_archive/) (`20261101143100` … `20261101143600`). After `supabase db reset`, apply those files in order (or use CI inventory job).
+Monolithic SQL for **local bootstrap** lives in [`supabase/migrations_archive/`](../supabase/migrations_archive/) (`20261101143100` … `20261101143600`). CI now relies on full replay of split migrations `20261101163300`–`163408`; [`scripts/bootstrap-inventory-local-db.mjs`](../scripts/bootstrap-inventory-local-db.mjs) only seeds `fleet.inv_settings` for the test org after reset.
 
 New inventory fixes use versions **after** `20261101163825` (R10/R12 use production timestamps `20261101180924` … `20261101182842` — filenames must match `supabase migration list` on project `csfllzzastacofsvcdsc`).
 

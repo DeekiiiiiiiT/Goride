@@ -1,10 +1,6 @@
--- Fleet inventory engine (Phase 1): typed fleet.inv_* tables, hash-chained ledger, RLS, storage, org_part_stock compat view.
-
+-- chunk 1
 CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
 
--- ---------------------------------------------------------------------------
--- Settings & master data
--- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS fleet.inv_settings (
   organization_id text PRIMARY KEY,
   fleet_support_phone text,
@@ -147,59 +143,3 @@ CREATE TABLE IF NOT EXISTS fleet.inv_scan_device (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
-
--- ---------------------------------------------------------------------------
--- Ledger & balances
--- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS fleet.inv_movement (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  organization_id text NOT NULL,
-  ref_no text NOT NULL,
-  batch_no text,
-  type text NOT NULL,
-  reference_type text,
-  reference_id uuid,
-  reason text,
-  memo text,
-  reverses_movement_id uuid REFERENCES fleet.inv_movement (id) ON DELETE SET NULL,
-  approval_id uuid,
-  idempotency_key text,
-  created_by uuid,
-  created_at timestamptz NOT NULL DEFAULT now()
-);
-CREATE UNIQUE INDEX IF NOT EXISTS inv_movement_org_ref_uidx ON fleet.inv_movement (organization_id, ref_no);
-CREATE UNIQUE INDEX IF NOT EXISTS inv_movement_org_idempotency_uidx
-  ON fleet.inv_movement (organization_id, idempotency_key)
-  WHERE idempotency_key IS NOT NULL;
-CREATE INDEX IF NOT EXISTS inv_movement_org_created_idx ON fleet.inv_movement (organization_id, created_at DESC);
-
-CREATE TABLE IF NOT EXISTS fleet.inv_ledger (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  organization_id text NOT NULL,
-  movement_id uuid NOT NULL REFERENCES fleet.inv_movement (id) ON DELETE RESTRICT,
-  item_id uuid NOT NULL REFERENCES fleet.inv_item (id) ON DELETE RESTRICT,
-  location_id uuid NOT NULL REFERENCES fleet.inv_location (id) ON DELETE RESTRICT,
-  bin_id uuid REFERENCES fleet.inv_bin (id) ON DELETE SET NULL,
-  asset_id uuid,
-  qty_delta numeric(14, 3) NOT NULL CHECK (qty_delta <> 0),
-  unit_cost numeric(14, 2),
-  currency text NOT NULL DEFAULT 'JMD',
-  block_no bigint NOT NULL,
-  prev_hash text NOT NULL,
-  row_hash text NOT NULL,
-  created_at timestamptz NOT NULL DEFAULT now()
-);
-CREATE UNIQUE INDEX IF NOT EXISTS inv_ledger_org_block_uidx ON fleet.inv_ledger (organization_id, block_no);
-CREATE INDEX IF NOT EXISTS inv_ledger_org_item_idx ON fleet.inv_ledger (organization_id, item_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS inv_ledger_movement_idx ON fleet.inv_ledger (movement_id);
-
-CREATE TABLE IF NOT EXISTS fleet.inv_chain_check (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  organization_id text NOT NULL,
-  checked_at timestamptz NOT NULL DEFAULT now(),
-  entries bigint NOT NULL DEFAULT 0,
-  head_block bigint,
-  head_hash text,
-  ok boolean NOT NULL,
-  broken_at_block bigint,
-  

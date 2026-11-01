@@ -1,87 +1,113 @@
 
--- ---------------------------------------------------------------------------
--- Receiving & purchasing
--- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS fleet.inv_receipt (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  organization_id text NOT NULL,
-  ref_no text NOT NULL,
-  po_id uuid,
-  vendor_id uuid REFERENCES fleet.inv_vendor (id) ON DELETE SET NULL,
-  location_id uuid NOT NULL REFERENCES fleet.inv_location (id) ON DELETE RESTRICT,
-  received_on date NOT NULL DEFAULT CURRENT_DATE,
-  logged_at timestamptz NOT NULL DEFAULT now(),
-  batch_code text,
-  customs_status text,
-  dock_check_verified_at timestamptz,
-  movement_id uuid REFERENCES fleet.inv_movement (id) ON DELETE SET NULL,
-  created_at timestamptz NOT NULL DEFAULT now()
-);
-CREATE UNIQUE INDEX IF NOT EXISTS inv_receipt_org_ref_uidx ON fleet.inv_receipt (organization_id, ref_no);
+CREATE OR REPLACE FUNCTION fleet.inv_deny_ledger_mutation()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = fleet, pg_temp
+AS $$
+BEGIN
+  RAISE EXCEPTION 'inv_ledger is append-only';
+END;
+$$;
 
-CREATE TABLE IF NOT EXISTS fleet.inv_purchase_order (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  organization_id text NOT NULL,
-  number text NOT NULL,
-  vendor_id uuid REFERENCES fleet.inv_vendor (id) ON DELETE SET NULL,
-  ship_to_location_id uuid REFERENCES fleet.inv_location (id) ON DELETE SET NULL,
-  status text NOT NULL DEFAULT 'draft'
-    CHECK (status IN (
-      'draft', 'awaiting_approval', 'ordered', 'part_received', 'received',
-      'staged', 'closed', 'cancelled'
-    )),
-  initiated_by uuid,
-  ordered_at timestamptz,
-  expected_at timestamptz,
-  approved_by uuid,
-  approved_at timestamptz,
-  payment_status text NOT NULL DEFAULT 'unpaid'
-    CHECK (payment_status IN ('unpaid', 'settled')),
-  expense_id uuid,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
-CREATE UNIQUE INDEX IF NOT EXISTS inv_po_org_number_uidx ON fleet.inv_purchase_order (organization_id, number);
+CREATE OR REPLACE FUNCTION fleet.inv_ledger_canonical(p_row fleet.inv_ledger)
+RETURNS text
+LANGUAGE sql
+IMMUTABLE
+SET search_path = fleet, pg_temp
+AS $$
+  SELECT concat_ws(
+    '|',
+    p_row.organization_id,
+    p_row.movement_id::text,
+    p_row.item_id::text,
+    p_row.location_id::text,
+    COALESCE(p_row.bin_id::text, ''),
+    COALESCE(p_row.asset_id::text, ''),
+    p_row.qty_delta::text,
+    COALESCE(p_row.unit_cost::text, ''),
+    p_row.currency,
+    p_row.block_no::text
+  );
+$$;
 
-CREATE TABLE IF NOT EXISTS fleet.inv_purchase_order_line (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  organization_id text NOT NULL,
-  po_id uuid NOT NULL REFERENCES fleet.inv_purchase_order (id) ON DELETE CASCADE,
-  item_id uuid NOT NULL REFERENCES fleet.inv_item (id) ON DELETE RESTRICT,
-  qty_ordered numeric(14, 3) NOT NULL CHECK (qty_ordered > 0),
-  qty_received numeric(14, 3) NOT NULL DEFAULT 0 CHECK (qty_received >= 0),
-  unit_price numeric(14, 2),
-  landed_unit_cost numeric(14, 2)
-);
+CREATE OR REPLACE FUNCTION fleet.inv_ledger_hash_on_insert()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = fleet, pg_temp
+AS $$
+DECLARE
+  v_prev_hash text;
+  v_prev_block bigint;
+  v_canonical text;
+BEGIN
+  IF NEW.block_no IS NOT NULL AND NEW.block_no > 0 AND NEW.row_hash IS NOT NULL THEN
+    RETURN NEW;
+  END IF;
 
-CREATE TABLE IF NOT EXISTS fleet.inv_po_cost (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  organization_id text NOT NULL,
-  po_id uuid NOT NULL REFERENCES fleet.inv_purchase_order (id) ON DELETE CASCADE,
-  kind text NOT NULL CHECK (kind IN ('freight', 'duty', 'handling', 'courier')),
-  label text,
-  payee text,
-  amount numeric(14, 2) NOT NULL CHECK (amount >= 0)
-);
+  SELECT l.row_hash, l.block_no
+  INTO v_prev_hash, v_prev_block
+  FROM fleet.inv_ledger l
+  WHERE l.organization_id = NEW.organization_id
+  ORDER BY l.block_no DESC
+  LIMIT 1
+  FOR UPDATE;
 
-CREATE TABLE IF NOT EXISTS fleet.inv_requisition (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  organization_id text NOT NULL,
-  ref_no text NOT NULL,
-  requested_by uuid,
-  for_vehicle_id text REFERENCES fleet.vehicles (id) ON DELETE SET NULL,
-  for_user_id uuid,
-  status text NOT NULL DEFAULT 'open'
-    CHECK (status IN ('open', 'approved', 'issued', 'rejected')),
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
-CREATE UNIQUE INDEX IF NOT EXISTS inv_requisition_org_ref_uidx ON fleet.inv_requisition (organization_id, ref_no);
+  IF NOT FOUND THEN
+    v_prev_hash := repeat('0', 64);
+    NEW.block_no := 1;
+  ELSE
+    NEW.block_no := v_prev_block + 1;
+    NEW.prev_hash := v_prev_hash;
+  END IF;
 
-CREATE TABLE IF NOT EXISTS fleet.inv_requisition_line (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  organization_id text NOT NULL,
-  requisition_id uuid NOT NULL REFERENCES fleet.inv_requisition (id) ON DELETE CASCADE,
-  item_id uuid NOT NULL REFERENCES fleet.inv_item (id) ON DELETE RESTRICT,
-  qty numeric(14, 3) NOT NULL CHECK (qty > 0)
-);
+  IF NEW.prev_hash IS NULL OR NEW.prev_hash = '' THEN
+    NEW.prev_hash := v_prev_hash;
+  END IF;
+
+  v_canonical := fleet.inv_ledger_canonical(NEW);
+  NEW.row_hash := encode(digest(NEW.prev_hash || '|' || v_canonical, 'sha256'), 'hex');
+  RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION fleet.inv_ledger_refresh_balance()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = fleet, pg_temp
+AS $$
+DECLARE
+  v_line_value numeric(14, 2);
+BEGIN
+  v_line_value := COALESCE(NEW.unit_cost, 0) * NEW.qty_delta;
+
+  INSERT INTO fleet.inv_balance (
+    organization_id, item_id, location_id, bin_id, on_hand, value, updated_at
+  )
+  VALUES (
+    NEW.organization_id, NEW.item_id, NEW.location_id, NEW.bin_id,
+    NEW.qty_delta, v_line_value, now()
+  )
+  ON CONFLICT (organization_id, item_id, location_id, bin_key) DO UPDATE
+  SET
+    on_hand = fleet.inv_balance.on_hand + EXCLUDED.on_hand,
+    value = fleet.inv_balance.value + EXCLUDED.value,
+    updated_at = now();
+
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_inv_ledger_immutable ON fleet.inv_ledger;
+CREATE TRIGGER trg_inv_ledger_immutable
+  BEFORE UPDATE OR DELETE ON fleet.inv_ledger
+  FOR EACH ROW EXECUTE FUNCTION fleet.inv_deny_ledger_mutation();
+
+DROP TRIGGER IF EXISTS trg_inv_ledger_hash ON fleet.inv_ledger;
+CREATE TRIGGER trg_inv_ledger_hash
+  BEFORE INSERT ON fleet.inv_ledger
+  FOR EACH ROW EXECUTE FUNCTION fleet.inv_ledger_hash_on_insert();
+
+DROP TRIGGER IF EXISTS trg_inv_ledger_balance ON fleet.inv_ledger;
+CREATE TRIGGER trg_inv_ledger_balance
+  AFTER INSERT ON fleet.inv_ledger
+  FOR EACH ROW EXECUTE FUNCTION fleet.inv_ledger_refresh_balance();

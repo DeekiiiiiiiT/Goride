@@ -1,214 +1,85 @@
-et (id) ON DELETE CASCADE,
-  check_name text NOT NULL,
-  value text,
-  status text,
-  observed_at timestamptz NOT NULL DEFAULT now()
-);
 
-CREATE TABLE IF NOT EXISTS fleet.inv_document (
+-- Receiving & purchasing
+CREATE TABLE IF NOT EXISTS fleet.inv_receipt (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id text NOT NULL,
-  entity_type text NOT NULL,
-  entity_id uuid NOT NULL,
-  file_path text NOT NULL,
-  name text NOT NULL,
-  size_bytes bigint,
-  kind text,
-  created_at timestamptz NOT NULL DEFAULT now()
-);
-
--- ---------------------------------------------------------------------------
--- Kits
--- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS fleet.kit_template (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  organization_id text NOT NULL,
-  code text NOT NULL,
-  name text NOT NULL,
-  classification text CHECK (classification IN ('rideshare', 'delivery', 'executive')),
-  applies_text text,
-  body_type text,
-  compliance_badge text,
-  compliance_text text,
-  is_default boolean NOT NULL DEFAULT false,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
-CREATE UNIQUE INDEX IF NOT EXISTS kit_template_org_code_uidx ON fleet.kit_template (organization_id, lower(code));
-
-CREATE TABLE IF NOT EXISTS fleet.kit_template_version (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  organization_id text NOT NULL,
-  template_id uuid NOT NULL REFERENCES fleet.kit_template (id) ON DELETE CASCADE,
-  version integer NOT NULL,
-  status text NOT NULL DEFAULT 'draft'
-    CHECK (status IN ('draft', 'pending_sync', 'production', 'archived')),
-  change_note text,
-  author uuid,
-  revision_hash text,
-  published_at timestamptz,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (template_id, version)
-);
-
-CREATE TABLE IF NOT EXISTS fleet.kit_template_line (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  organization_id text NOT NULL,
-  version_id uuid NOT NULL REFERENCES fleet.kit_template_version (id) ON DELETE CASCADE,
-  line_type text NOT NULL DEFAULT 'item'
-    CHECK (line_type IN ('item', 'linked_toll_tag', 'linked_fuel_card')),
-  item_id uuid REFERENCES fleet.inv_item (id) ON DELETE SET NULL,
-  qty_required numeric(14, 3) NOT NULL DEFAULT 1 CHECK (qty_required > 0),
-  required boolean NOT NULL DEFAULT true,
-  blocks_road_clearance boolean NOT NULL DEFAULT false,
-  install_position text,
-  variant_note text,
-  sort_order integer NOT NULL DEFAULT 0
-);
-
-CREATE TABLE IF NOT EXISTS fleet.vehicle_kit (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  organization_id text NOT NULL,
-  vehicle_id text NOT NULL REFERENCES fleet.vehicles (id) ON DELETE CASCADE,
-  template_id uuid NOT NULL REFERENCES fleet.kit_template (id) ON DELETE RESTRICT,
-  version_id uuid NOT NULL REFERENCES fleet.kit_template_version (id) ON DELETE RESTRICT,
-  home_location_id uuid REFERENCES fleet.inv_location (id) ON DELETE SET NULL,
-  verification_status text NOT NULL DEFAULT 'pending_verification'
-    CHECK (verification_status IN ('verified', 'pending_verification')),
-  last_inspected_at timestamptz,
-  last_inspected_by uuid,
-  overrides jsonb NOT NULL DEFAULT '{}'::jsonb,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (organization_id, vehicle_id)
-);
-
-CREATE TABLE IF NOT EXISTS fleet.inv_kit_compliance_daily (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  organization_id text NOT NULL,
-  snapshot_date date NOT NULL,
-  vehicles integer NOT NULL DEFAULT 0,
-  vehicles_complete integer NOT NULL DEFAULT 0,
-  lines_required integer NOT NULL DEFAULT 0,
-  lines_present integer NOT NULL DEFAULT 0,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (organization_id, snapshot_date)
-);
-
--- ---------------------------------------------------------------------------
--- Counts, alerts, approvals, audit
--- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS fleet.inv_count_session (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  organization_id text NOT NULL,
-  code text NOT NULL,
+  ref_no text NOT NULL,
+  po_id uuid,
+  vendor_id uuid REFERENCES fleet.inv_vendor (id) ON DELETE SET NULL,
   location_id uuid NOT NULL REFERENCES fleet.inv_location (id) ON DELETE RESTRICT,
-  bins uuid[] NOT NULL DEFAULT '{}'::uuid[],
-  blind boolean NOT NULL DEFAULT true,
-  status text NOT NULL DEFAULT 'open'
-    CHECK (status IN ('open', 'submitted', 'under_audit', 'reconciled', 'closed')),
-  submitted_by uuid,
-  submitted_role text,
-  clerk_id text,
-  device_terminal text,
-  submitted_at timestamptz,
-  approved_by uuid,
-  audit_hash text,
+  received_on date NOT NULL DEFAULT CURRENT_DATE,
+  logged_at timestamptz NOT NULL DEFAULT now(),
+  batch_code text,
+  customs_status text,
+  dock_check_verified_at timestamptz,
   movement_id uuid REFERENCES fleet.inv_movement (id) ON DELETE SET NULL,
   created_at timestamptz NOT NULL DEFAULT now()
 );
-CREATE UNIQUE INDEX IF NOT EXISTS inv_count_session_org_code_uidx ON fleet.inv_count_session (organization_id, code);
+CREATE UNIQUE INDEX IF NOT EXISTS inv_receipt_org_ref_uidx ON fleet.inv_receipt (organization_id, ref_no);
 
-CREATE TABLE IF NOT EXISTS fleet.inv_count_line (
+CREATE TABLE IF NOT EXISTS fleet.inv_purchase_order (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id text NOT NULL,
-  session_id uuid NOT NULL REFERENCES fleet.inv_count_session (id) ON DELETE CASCADE,
-  item_id uuid NOT NULL REFERENCES fleet.inv_item (id) ON DELETE RESTRICT,
-  bin_id uuid REFERENCES fleet.inv_bin (id) ON DELETE SET NULL,
-  expected_qty numeric(14, 3),
-  counted_qty numeric(14, 3),
-  reason text CHECK (reason IS NULL OR reason IN ('lost', 'found', 'damaged', 'miscounted')),
-  unit_value numeric(14, 2),
-  variance_value numeric(14, 2),
-  line_status text NOT NULL DEFAULT 'exact'
-    CHECK (line_status IN ('exact', 'pre_approved', 'needs_approval', 'recount'))
-);
-
-CREATE TABLE IF NOT EXISTS fleet.inv_alert (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  organization_id text NOT NULL,
-  type text NOT NULL,
-  chip_label text,
-  severity text NOT NULL DEFAULT 'medium',
-  title text NOT NULL,
-  body text,
-  entity_type text,
-  entity_id uuid,
-  assignee_id uuid,
-  snoozed_until timestamptz,
-  status text NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'done')),
-  resolved_by uuid,
-  resolved_at timestamptz,
-  viewed_at timestamptz,
-  created_at timestamptz NOT NULL DEFAULT now()
-);
-CREATE INDEX IF NOT EXISTS inv_alert_org_status_idx ON fleet.inv_alert (organization_id, status, created_at DESC);
-
-CREATE TABLE IF NOT EXISTS fleet.inv_approval (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  organization_id text NOT NULL,
-  subject_type text NOT NULL CHECK (subject_type IN ('adjust', 'write_off', 'count', 'po')),
-  subject_id uuid NOT NULL,
-  amount numeric(14, 2),
-  rule_code text,
-  rule_name text,
-  requested_by uuid NOT NULL,
+  number text NOT NULL,
+  vendor_id uuid REFERENCES fleet.inv_vendor (id) ON DELETE SET NULL,
+  ship_to_location_id uuid REFERENCES fleet.inv_location (id) ON DELETE SET NULL,
+  status text NOT NULL DEFAULT 'draft'
+    CHECK (status IN (
+      'draft', 'awaiting_approval', 'ordered', 'part_received', 'received',
+      'staged', 'closed', 'cancelled'
+    )),
+  initiated_by uuid,
+  ordered_at timestamptz,
+  expected_at timestamptz,
   approved_by uuid,
-  status text NOT NULL DEFAULT 'pending'
-    CHECK (status IN ('pending', 'approved', 'rejected')),
+  approved_at timestamptz,
+  payment_status text NOT NULL DEFAULT 'unpaid'
+    CHECK (payment_status IN ('unpaid', 'settled')),
+  expense_id uuid,
   created_at timestamptz NOT NULL DEFAULT now(),
-  decided_at timestamptz,
-  CHECK (approved_by IS NULL OR approved_by <> requested_by)
+  updated_at timestamptz NOT NULL DEFAULT now()
 );
+CREATE UNIQUE INDEX IF NOT EXISTS inv_po_org_number_uidx ON fleet.inv_purchase_order (organization_id, number);
 
-CREATE TABLE IF NOT EXISTS fleet.inv_audit_log (
+CREATE TABLE IF NOT EXISTS fleet.inv_purchase_order_line (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id text NOT NULL,
-  entity_type text NOT NULL,
-  entity_id uuid NOT NULL,
-  action text NOT NULL,
-  before jsonb,
-  after jsonb,
-  user_id uuid,
-  created_at timestamptz NOT NULL DEFAULT now()
+  po_id uuid NOT NULL REFERENCES fleet.inv_purchase_order (id) ON DELETE CASCADE,
+  item_id uuid NOT NULL REFERENCES fleet.inv_item (id) ON DELETE RESTRICT,
+  qty_ordered numeric(14, 3) NOT NULL CHECK (qty_ordered > 0),
+  qty_received numeric(14, 3) NOT NULL DEFAULT 0 CHECK (qty_received >= 0),
+  unit_price numeric(14, 2),
+  landed_unit_cost numeric(14, 2)
 );
 
--- ---------------------------------------------------------------------------
--- Driver reports
--- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS fleet.inv_driver_report (
+CREATE TABLE IF NOT EXISTS fleet.inv_po_cost (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id text NOT NULL,
-  report_no text NOT NULL,
-  vehicle_id text NOT NULL REFERENCES fleet.vehicles (id) ON DELETE RESTRICT,
-  kit_line_id uuid REFERENCES fleet.kit_template_line (id) ON DELETE SET NULL,
-  asset_id uuid REFERENCES fleet.inv_asset (id) ON DELETE SET NULL,
-  item_id uuid REFERENCES fleet.inv_item (id) ON DELETE SET NULL,
-  issue text NOT NULL CHECK (issue IN ('damaged', 'missing', 'not_working')),
-  note text,
-  photo_paths text[] NOT NULL DEFAULT '{}'::text[],
-  gps_lat double precision,
-  gps_lng double precision,
-  queued_area text,
-  client_key text,
-  status text NOT NULL DEFAULT 'sent' CHECK (status IN ('sent', 'seen', 'fixed')),
-  seen_at timestamptz,
-  seen_by uuid,
-  fixed_at timestamptz,
-  fleet_reply text,
-  resolution_movement_id uuid REFERENCES fleet.inv_movement (id) ON DELETE SET NULL,
-  driver_liability boolean NOT NULL DEFAULT false,
-  created_at timestamptz NOT NULL DEFAULT now()
+  po_id uuid NOT NULL REFERENCES fleet.inv_purchase_order (id) ON DELETE CASCADE,
+  kind text NOT NULL CHECK (kind IN ('freight', 'duty', 'handling', 'courier')),
+  label text,
+  payee text,
+  amount numeric(14, 2) NOT NULL CHECK (amount >= 0)
 );
-CREATE UNIQUE INDEX IF NOT EXISTS inv_driver_report_org_no_uidx ON fleet.inv_driver_report (organization_id, report_no);
-CREATE UNIQUE I
+
+CREATE TABLE IF NOT EXISTS fleet.inv_requisition (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id text NOT NULL,
+  ref_no text NOT NULL,
+  requested_by uuid,
+  for_vehicle_id text REFERENCES fleet.vehicles (id) ON DELETE SET NULL,
+  for_user_id uuid,
+  status text NOT NULL DEFAULT 'open'
+    CHECK (status IN ('open', 'approved', 'issued', 'rejected')),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS inv_requisition_org_ref_uidx ON fleet.inv_requisition (organization_id, ref_no);
+
+CREATE TABLE IF NOT EXISTS fleet.inv_requisition_line (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id text NOT NULL,
+  requisition_id uuid NOT NULL REFERENCES fleet.inv_requisition (id) ON DELETE CASCADE,
+  item_id uuid NOT NULL REFERENCES fleet.inv_item (id) ON DELETE RESTRICT,
+  qty numeric(14, 3) NOT NULL CHECK (qty > 0)
+);

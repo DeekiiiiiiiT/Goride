@@ -64,6 +64,19 @@ for (const [prefix, list] of byPrefix) {
 
 for (const file of files) {
   const text = readFileSync(join(MIGRATIONS, file), 'utf8');
+  const trimmed = text.replace(/\s+$/, '');
+  const withoutLineComments = trimmed.replace(/^\s*--[^\n]*\n/gm, '').trim();
+  if (withoutLineComments.length > 0) {
+    const endsOk =
+      /;\s*$/.test(withoutLineComments) ||
+      /END\s*\$\$;\s*$/i.test(withoutLineComments);
+    if (!endsOk) {
+      console.error(
+        `${file}: migration SQL does not end on a complete statement (possible byte-split truncation)`,
+      );
+      failed = true;
+    }
+  }
   for (const table of NO_TRIP_ID_TABLES) {
     const alias = table.includes('fuel') ? 'fe' : 'ej';
     const pattern = new RegExp(
@@ -74,6 +87,24 @@ for (const file of files) {
       console.error(`${file}: invalid trip_id reference on ${table}`);
       failed = true;
     }
+  }
+}
+
+/** Equal-size consecutive chunks often mean a script was split by bytes, not statements. */
+const inventorySchemaChunks = files
+  .filter((f) => /_fleet_inventory_engine_schema_\d+\.sql$/.test(f))
+  .map((f) => ({ file: f, size: readFileSync(join(MIGRATIONS, f), 'utf8').length }))
+  .sort((a, b) => a.file.localeCompare(b.file));
+const sizeCounts = new Map();
+for (const { size } of inventorySchemaChunks) {
+  sizeCounts.set(size, (sizeCounts.get(size) || 0) + 1);
+}
+for (const [size, count] of sizeCounts) {
+  if (count >= 3 && size > 4000) {
+    console.error(
+      `${count} fleet_inventory_engine_schema_* files share ${size} bytes — check for byte-split migrations (see docs/ci-red-root-cause.md)`,
+    );
+    failed = true;
   }
 }
 

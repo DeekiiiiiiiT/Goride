@@ -97,3 +97,6 @@ supabase/functions/fleet-ops/index.ts
 supabase/functions/fleet-claims/index.ts
 supabase/functions/fleet-pay/index.ts
 supabase/functions/fleet-core/index.ts
+
+# Ephemeral prod migration export (scripts/decode-prod-b64-export.mjs)
+scripts/tmp-migrations/
