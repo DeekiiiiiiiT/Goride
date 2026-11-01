@@ -29,13 +29,70 @@ type GroundingMetadata = {
   }>;
 };
 
-type GeminiResponse = {
+export type GeminiResponse = {
   candidates?: Array<{
     content?: { parts?: Array<{ text?: string }> };
     groundingMetadata?: GroundingMetadata;
   }>;
   usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
+  groundingMetadata?: GroundingMetadata;
 };
+
+export function countGroundingChunks(geminiJson: GeminiResponse): number {
+  let n = 0;
+  const root = geminiJson.groundingMetadata;
+  if (root?.groundingChunks) n += root.groundingChunks.length;
+  for (const c of geminiJson.candidates || []) {
+    n += c.groundingMetadata?.groundingChunks?.length || 0;
+  }
+  return n;
+}
+
+export function buildCatalogPartSearchPrompt(input: {
+  searchQuery: string;
+  promptContext: string;
+  trustedDomains: string[];
+}): string {
+  const domains = input.trustedDomains.filter(Boolean).slice(0, 20);
+  const domainLine = domains.length
+    ? `Prefer catalogue results on: ${domains.join(", ")}.`
+    : "";
+  return [
+    "Use Google Search before answering.",
+    `Search query: ${input.searchQuery.trim()}`,
+    domainLine,
+    input.promptContext.trim(),
+    "",
+    "Search the web, then list up to 5 part-number matches you found on catalogue pages.",
+    "For each match include: brand, part number, part name, match type (OEM/Aftermarket/etc), and a short quote copied from the page.",
+    "Do not invent part numbers that do not appear on pages you searched. No prices, suppliers, or stock.",
+  ].filter(Boolean).join("\n");
+}
+
+export function buildCatalogPartJsonFromNotesPrompt(notes: string): string {
+  return [
+    "Convert these catalogue research notes into JSON only.",
+    notes.trim(),
+    "",
+    '{"candidates":[{"brand":"","partNumber":"","partName":"","matchType":"","fits":{},"sources":[{"quote":""}]}]}',
+    "Rules: up to 5 candidates; sources[].quote only (no URLs); no prices or stock.",
+  ].join("\n");
+}
+
+/** Full prompt including JSON (tests / legacy). Search phase uses buildCatalogPartSearchPrompt. */
+export function buildCatalogPartResearchPrompt(input: {
+  searchQuery: string;
+  promptContext: string;
+  trustedDomains: string[];
+}): string {
+  return [
+    buildCatalogPartSearchPrompt(input),
+    "",
+    "Return ONLY valid JSON:",
+    '{"candidates":[{"brand":"","partNumber":"","partName":"","matchType":"","fits":{},"sources":[{"quote":""}]}]}',
+    "Rules: up to 5 candidates; no prices, suppliers, stock, or quotes about buying; short quoted lines from each source page in sources[].quote (URLs are attached from search grounding — do not paste links).",
+  ].join("\n");
+}
 
 function segmentMatchesPartNumber(segmentText: string, partNumber: string): boolean {
   const norm = normalizePartNumberNorm(partNumber);
@@ -147,51 +204,78 @@ export function parseCandidatesFromGeminiText(text: string): { candidates?: Rese
 
 export async function runCatalogPartResearch(input: {
   promptContext: string;
+  searchQuery: string;
+  trustedDomains: string[];
 }): Promise<{ model: string; candidates: ResearchCandidate[]; raw?: GeminiResponse }> {
   const apiKey = Deno.env.get("GEMINI_API_KEY");
   if (!apiKey) throw new Error("GEMINI_API_KEY missing");
 
-  const prompt = `${input.promptContext}
+  const callGemini = async (
+    route: string,
+    prompt: string,
+    withSearch: boolean,
+  ): Promise<GeminiResponse> => {
+    const body: Record<string, unknown> = {
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: { temperature: 0.1 },
+    };
+    if (withSearch) body.tools = [{ google_search: {} }];
 
-Return ONLY valid JSON:
-{"candidates":[{"brand":"","partNumber":"","partName":"","matchType":"","fits":{},"sources":[{"quote":""}]}]}
-Rules: up to 5 candidates; no prices, suppliers, stock, or quotes about buying; short quoted lines from each source page in sources[].quote (URLs are attached from search grounding — do not paste links).`;
-
-  const body = {
-    contents: [{ role: "user", parts: [{ text: prompt }] }],
-    tools: [{ google_search: {} }],
-    generationConfig: { temperature: 0.1 },
+    return await trackedProviderCall({
+      provider: "gemini",
+      service: "text",
+      route,
+      model: MODEL,
+      run: async () => {
+        const res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          },
+        );
+        if (!res.ok) {
+          const bodyText = await res.text();
+          const snippet = bodyText.slice(0, 300);
+          throw new Error(`gemini_http_${res.status}: ${snippet}`);
+        }
+        return await res.json();
+      },
+      extractUsage: (r: GeminiResponse) => ({
+        inputTokens: r?.usageMetadata?.promptTokenCount,
+        outputTokens: r?.usageMetadata?.candidatesTokenCount,
+      }),
+    }) as GeminiResponse;
   };
 
-  const result = await trackedProviderCall({
-    provider: "gemini",
-    service: "text",
-    route: "catalog_research/runCatalogPartResearch",
-    model: MODEL,
-    run: async () => {
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        },
-      );
-      if (!res.ok) {
-        throw new Error(`gemini_http_${res.status}`);
-      }
-      return await res.json();
-    },
-    extractUsage: (r: GeminiResponse) => ({
-      inputTokens: r?.usageMetadata?.promptTokenCount,
-      outputTokens: r?.usageMetadata?.candidatesTokenCount,
-    }),
-  }) as GeminiResponse;
+  const searchPrompt = buildCatalogPartSearchPrompt(input);
+  const searchResult = await callGemini(
+    "catalog_research/runCatalogPartResearch/search",
+    searchPrompt,
+    true,
+  );
 
-  const text = result?.candidates?.[0]?.content?.parts?.map((p) => p.text).join("") || "{}";
+  const groundingChunks = countGroundingChunks(searchResult);
+  if (groundingChunks === 0) {
+    const text = searchResult?.candidates?.[0]?.content?.parts?.map((p) => p.text).join("") || "{}";
+    const parsed = parseCandidatesFromGeminiText(text);
+    const merged = attachGroundingSourcesToCandidates(parsed, searchResult);
+    return { model: MODEL, candidates: merged, raw: searchResult };
+  }
+
+  const notes = searchResult?.candidates?.[0]?.content?.parts?.map((p) => p.text).join("\n") || "";
+  const jsonPrompt = buildCatalogPartJsonFromNotesPrompt(notes);
+  const jsonResult = await callGemini(
+    "catalog_research/runCatalogPartResearch/json",
+    jsonPrompt,
+    false,
+  );
+
+  const text = jsonResult?.candidates?.[0]?.content?.parts?.map((p) => p.text).join("") || "{}";
   const parsed = parseCandidatesFromGeminiText(text);
-  const merged = attachGroundingSourcesToCandidates(parsed, result);
-  return { model: MODEL, candidates: merged, raw: result };
+  const merged = attachGroundingSourcesToCandidates(parsed, searchResult);
+  return { model: MODEL, candidates: merged, raw: searchResult };
 }
 
 export async function runCatalogVehicleResearch(input: {

@@ -4,6 +4,9 @@
 import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import {
   attachGroundingSourcesToCandidates,
+  buildCatalogPartResearchPrompt,
+  buildCatalogPartSearchPrompt,
+  countGroundingChunks,
   domainFromGroundingTitle,
   parseCandidatesFromGeminiText,
 } from "./catalog_research_gemini.ts";
@@ -84,4 +87,19 @@ Deno.test("R28: no grounding chunks yields empty sources", () => {
 Deno.test("R28: domainFromGroundingTitle parses catalogue domain", () => {
   assertEquals(domainFromGroundingTitle("partsouq.com"), "partsouq.com");
   assertEquals(domainFromGroundingTitle("www.masuma.parts"), "masuma.parts");
+});
+
+Deno.test("R30: buildCatalogPartSearchPrompt requires search without JSON block", () => {
+  const prompt = buildCatalogPartSearchPrompt({
+    searchQuery: "Toyota Roomy NCP50 1NR-FE Drive belt part number",
+    promptContext: "Part type: Drive belt",
+    trustedDomains: ["masuma.parts"],
+  });
+  assertEquals(prompt.startsWith("Use Google Search before answering."), true);
+  assertEquals(prompt.includes("Return ONLY valid JSON"), false);
+});
+
+Deno.test("R30: countGroundingChunks sums candidate metadata", () => {
+  assertEquals(countGroundingChunks({ candidates: [] }), 0);
+  assertEquals(countGroundingChunks(recordedFixture), 3);
 });

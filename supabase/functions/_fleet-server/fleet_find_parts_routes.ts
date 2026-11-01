@@ -125,10 +125,36 @@ export async function loadPartsActivity(supabase: SupabaseClient, orgId: string)
     if (error) throw error;
     return { items: data || [], total: count ?? (data || []).length };
   };
-  const [requests, repeatAlerts] = await Promise.all([
+  const [requestsRaw, repeatAlerts] = await Promise.all([
     newest("parts_sourcing_requests"),
     newest("part_repeat_alert"),
   ]);
+
+  const jobIds = [...new Set(
+    (requestsRaw.items as Array<{ catalog_research_job_id?: string | null }>)
+      .map((r) => r.catalog_research_job_id)
+      .filter((id): id is string => Boolean(id)),
+  )];
+  const retryByJob = new Map<string, string>();
+  if (jobIds.length) {
+    const { data: jobs, error: jobsErr } = await supabase
+      .from("catalog_research_job")
+      .select("id, next_research_at")
+      .in("id", jobIds);
+    if (jobsErr) throw jobsErr;
+    for (const j of jobs || []) {
+      const row = j as { id: string; next_research_at?: string | null };
+      if (row.next_research_at) retryByJob.set(row.id, row.next_research_at);
+    }
+  }
+  const requests = {
+    ...requestsRaw,
+    items: (requestsRaw.items as Array<Record<string, unknown>>).map((row) => {
+      const jobId = row.catalog_research_job_id ? String(row.catalog_research_job_id) : "";
+      const retryAt = jobId ? retryByJob.get(jobId) : undefined;
+      return retryAt ? { ...row, retry_at: retryAt } : row;
+    }),
+  };
   const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
   const { data: recent } = await supabase
     .from("parts_sourcing_requests")

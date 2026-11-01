@@ -250,6 +250,7 @@ jobs:
           supabase/functions/_fleet-server/catalog_research_intake.test.ts
           supabase/functions/_fleet-server/catalog_research_export.test.ts
           supabase/functions/_fleet-server/catalog_research_worker.test.ts
+          supabase/functions/_fleet-server/catalog_research_part_research.test.ts
 
       - name: Setup Supabase CLI
         uses: supabase/setup-cli@v1

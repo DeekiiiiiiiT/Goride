@@ -8,6 +8,11 @@ import {
   runCatalogPartResearch,
   runCatalogVehicleResearch,
 } from "./catalog_research_gemini.ts";
+import { finalizeCatalogJobNotFound } from "./catalog_research_not_found.ts";
+import {
+  geminiHttpErrorDetail,
+  runPartGeminiResearchWithRetry,
+} from "./catalog_research_part_research.ts";
 import {
   checkPartNumberShape,
   normalizeResearchCandidate,
@@ -23,7 +28,7 @@ import {
 import { classifyGeminiProviderError } from "./catalog_research_provider.ts";
 import { routeProposals } from "./catalog_research_route.ts";
 
-export const ENGINE_REV = "catalog-research-3";
+export const ENGINE_REV = "catalog-research-5";
 
 function throwOnSupabaseError(label: string, result: { error: unknown }): void {
   if (result.error) throw new Error(`${label}: ${formatSupabaseError(result.error)}`);
@@ -231,32 +236,94 @@ export async function runCatalogResearchWorker(supabase: SupabaseClient): Promis
 
     await supabaseUpdate(supabase, "catalog_research_job", { state: "researching" }, (q) => q.eq("id", jobId));
 
-    const research = await runCatalogPartResearch({
-      promptContext: [
-        `Car: ${vc?.make || ""} ${vc?.model || ""} years ${vc?.production_start_year || ""}-${vc?.production_end_year || ""}`,
-        `Chassis: ${vc?.chassis_code || ""} Engine: ${vc?.engine_code || ""} Drivetrain: ${vc?.drivetrain || ""}`,
-        `Part type: ${comp?.name || ""}`,
-        `Axle/side fit: ${job.fit_descriptor || ""}`,
-        `Match type: ${job.match_type || ""}`,
-        `Fleet notes:\n${noteLines}`,
-      ].join("\n"),
-    });
+    const trusted = await loadTrustedDomains(supabase);
+    const trustedDomains = [...trusted];
+    const promptContext = [
+      `Car: ${vc?.make || ""} ${vc?.model || ""} years ${vc?.production_start_year || ""}-${vc?.production_end_year || ""}`,
+      `Chassis: ${vc?.chassis_code || ""} Engine: ${vc?.engine_code || ""} Drivetrain: ${vc?.drivetrain || ""}`,
+      `Part type: ${comp?.name || ""}`,
+      `Axle/side fit: ${job.fit_descriptor || ""}`,
+      `Match type: ${job.match_type || ""}`,
+      `Fleet notes:\n${noteLines}`,
+    ].join("\n");
+    const searchQuery = [
+      vc?.make,
+      vc?.model,
+      vc?.chassis_code,
+      vc?.engine_code,
+      comp?.name,
+      "part number",
+    ].filter(Boolean).join(" ");
 
-    const groundingChunks = (research.raw?.candidates || []).reduce(
-      (n, c) => n + (c.groundingMetadata?.groundingChunks?.length || 0),
-      0,
-    );
+    const geminiInput = { promptContext, searchQuery, trustedDomains };
+
+    let researchResult: Awaited<ReturnType<typeof runPartGeminiResearchWithRetry>>;
+    try {
+      researchResult = await runPartGeminiResearchWithRetry(
+        () => runCatalogPartResearch(geminiInput),
+        async () => {
+          await supabaseRpc(supabase, "catalog_research_log_event", {
+            p_job_id: jobId,
+            p_step: "research",
+            p_outcome: "retry_search",
+            p_detail: { reason: "zero_grounding_chunks" },
+          });
+        },
+      );
+    } catch (researchErr) {
+      const httpDetail = geminiHttpErrorDetail(researchErr);
+      if (httpDetail?.status === 400) {
+        await supabaseRpc(supabase, "catalog_research_log_event", {
+          p_job_id: jobId,
+          p_step: "research",
+          p_outcome: "gemini_http_400",
+          p_detail: { httpStatus: 400, body: httpDetail.bodySnippet },
+        });
+      }
+      throw researchErr;
+    }
+
+    const { research, attempts, groundingChunks } = researchResult;
     const sourceUrls = research.candidates.reduce((n, c) => n + (c.sources?.length || 0), 0);
+
+    if (groundingChunks === 0 || research.candidates.length === 0) {
+      await finalizeCatalogJobNotFound(supabase, {
+        jobId,
+        groupKey: String(job.group_key),
+        msgId,
+        queue,
+        eventDetail: { groundingChunks, sourceUrls, attempts, model: research.model },
+      });
+      await supabaseUpdate(supabase, "catalog_research_settings", {
+        last_run_ms: Date.now() - started,
+        consecutive_failures: 0,
+      }, (q) => q.eq("id", 1));
+      return { ok: true, jobId, state: "not_found", noSearchResults: true };
+    }
+
     await supabaseRpc(supabase, "catalog_research_log_event", {
       p_job_id: jobId,
       p_step: "research",
       p_outcome: "ok",
-      p_detail: { model: research.model, count: research.candidates.length, groundingChunks, sourceUrls },
+      p_detail: {
+        model: research.model,
+        count: research.candidates.length,
+        groundingChunks,
+        sourceUrls,
+        attempts,
+      },
     });
+
+    const { error: reopenErr } = await supabase
+      .from("parts_sourcing_requests")
+      .update({ status: "in_progress", cant_find_at: null, cant_find_reason: null })
+      .eq("catalog_research_job_id", jobId)
+      .eq("kind", "add_part_info")
+      .eq("status", "rejected");
+    if (reopenErr) throw reopenErr;
 
     await supabaseUpdate(supabase, "catalog_research_job", { state: "checking" }, (q) => q.eq("id", jobId));
 
-    const trusted = await loadTrustedDomains(supabase);
     const knownManufacturers = await loadKnownManufacturers(supabase);
     const proposalRows: Array<Record<string, unknown>> = [];
     const routeInput: Array<{
@@ -270,6 +337,7 @@ export async function runCatalogResearchWorker(supabase: SupabaseClient): Promis
 
     let pageFetches = 0;
     for (const cand of research.candidates.slice(0, 5)) {
+      if (!(cand.sources?.length ?? 0)) continue;
       const normalized = normalizeResearchCandidate(cand.brand, cand.partNumber, knownManufacturers);
       const partNumberNorm = normalized.partNumberNorm;
       const shape = checkPartNumberShape(normalized.brand, normalized.partNumber);
