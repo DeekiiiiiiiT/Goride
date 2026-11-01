@@ -1,50 +1,34 @@
 # Fleet Inventory & Asset Management — Audit
 
-**Rev 7 · 1 Nov 2026 · Rev 6 implementation complete (code + prod migrations).**
-**Scope:** Fleet → Vehicle Operations → Inventory & Asset Management (Stitch IN1–IN18) and the Roam Driver car kit (Stitch DK1–DK6). Spec: `docs/stitch/roam-fleet-app/inventory/`, `docs/stitch/roam-driver-app/car-kit/`.
+**Rev 12 · 1 Nov 2026 · closure applied (migration `20261101182842`, repo sync, legacy removal).**
+**Scope:** Fleet → Vehicle Operations → Inventory & Asset Management (Stitch IN1–IN18) and the Roam Driver car kit (Stitch DK1–DK6).
 
-**Rev 6 closure summary**
+**Verified done (R12):** Four RPCs write balanced legs (`inv_receive` offset added); prod backfill for `ADJ-0001` / `OPN-0004`; `OPN-0004` reversed and mount re-posted at **J$3,675** (`r12-opn-phone-mount-5179`); org stock value **J$69,380**; `inv_verify_chain` ok; movement leg-sum integrity check covers all types; repo R10 migrations renamed to match prod (`80924`–`81115`); `inventory_legacy_stock.ts` removed; integration + unit tests added.
 
-| ID | Status | Notes |
-|----|--------|--------|
-| R6-01 | Done | `public.fleet_inv_*` bridge; controllers on `getServiceClient()`; prod `71948` / `71958`. |
-| R6-03 | Done | Stitch spacing/typography tokens in Fleet + Driver `globals.css` / scoped CSS. |
-| R6-06 | Done | Prod migrations `165324`–`165443` backfilled in repo. |
-| R6-04 | Done | Virtual locations + double-entry (`20261101192000` / prod `172128`). |
-| R6-05 | Done | Kit rebuild applied prod (`92100`); no direct `inv_ledger` updates. |
-| R6-02 | Done | Equipment → `maintenance_events` + second spare opening balance (`92300`). |
-| R6-10 | Done | Removed `apps/fleet/src/types/equipment.ts`; legacy HTTP routes return **410** when phase 2 on; drop migration applied. |
-| R6-09 | Done | Eight analytics views + public bridge + GET routes; QR label remains JSON payload (printable label = follow-up). |
-| R6-08 | Done | `POST /inventory/finance/post` returns **501** (no fake accept). |
-| R6-07 | Done | IN/DK screens wired to shell/API; Stitch sample strings removed. |
-| R6-11 | Done | Stable `Idempotency-Key` on `setOrgPartStock`; `org_part_stock_idempotency.test.ts`. |
-| R6-12 | Partial | `docs/fleet-inventory-r6-live-capture.md` + `live-data` sample stripping; owner PNG captures still manual. |
-
-**Deploy:** Redeploy **fleet-core** after pulling edge changes, then confirm Overview stock value (~**J$ 54,380**) and no “Invalid schema: fleet”.
-
-**SQL checks:** Run `scripts/sql/fleet_inventory_integrity_checks.sql` for Roam org (off-peak); expect 0 rows.
+**Still PO-led:** Stitch gap screens (§2); side-by-side `IN*-live.png` / `DK*-live.png` capture after signed-in Fleet/Driver session (see [`fleet-inventory-live-png-checklist.md`](fleet-inventory-live-png-checklist.md)).
 
 ---
 
-## 1. Open items (Rev 7)
+## 1. Open items (Rev 12)
 
-- **Side-by-side PNG proof:** Capture `screen-live.png` per `docs/fleet-inventory-r6-live-capture.md` (not checked into repo in this pass).
-- **15 Stitch gap flows** (settings, import, PO editor, etc.) — still placeholders until Stitch exports land (`STITCH_GAP_SCREENS.md`).
-- **Owner sign-off:** Maintenance UI shows migrated tyre/wheel history for 5179KZ; kit compliance target (7/10) after kit rebuild.
-- **Printable QR asset label** — optional; API returns JSON at `POST .../assets/:id/qr-label`.
+| ID | Status | Notes |
+|----|--------|--------|
+| R12-01 | **Done** | `20261101182842` + prod execute; 0 unbalanced movements |
+| R12-02 | **Done** | Reverse + repost at J$3,675; stock value J$69,380 |
+| R12-03 | **Done** | Local files aligned to prod versions |
+| R12-04 | **Pending push** | Commit + push from dev machine (see git) |
+| R12-05 | **Done** | Legacy draw removed; file deleted |
+| R12-06 | **Partial** | Assets API wired; 1 prod asset row — confirm GET 200 in Fleet UI once logged in |
+| R12-07 | **Pending** | No `IN*-live.png` / `DK*-live.png` in repo yet |
 
 ---
 
 ## 2. Screens the owner still needs to make in Stitch
 
-Still placeholders ("Stitch screen pending"): Inventory settings · Add/edit item · Import items · Locations & bins · Opening balances · Register asset · New/edit purchase order · Add/edit vendor + list · Start a count + count sheet · New requisition + list · Approval review drawer · Pair mobile scanner · Snooze settings · Kit version compare · Driver "Update status" sheet.
+See [`docs/stitch/roam-fleet-app/inventory/STITCH_GAP_SCREENS.md`](stitch/roam-fleet-app/inventory/STITCH_GAP_SCREENS.md) for sprint order.
 
 ---
 
-## 3. Order to finish (post–Rev 6)
+## 3. Post-apply checks
 
-1. Deploy fleet-core → verify production Overview.
-2. Owner PNG captures + Maintenance/kit sign-off.
-3. Port each Stitch gap export via `scripts/port-inventory-stitch.mjs`.
-
-**SQL checks (ongoing):** balances ≠ sum(ledger); movement legs not summing to zero; negative stock; asset status/location mismatch; cars without a kit; NULL `organization_id`; `inv_verify_chain` not ok.
+Run [`scripts/sql/fleet_inventory_integrity_checks.sql`](scripts/sql/fleet_inventory_integrity_checks.sql) — each query **0 rows**. Expected org stock value **J$ 69,380**.

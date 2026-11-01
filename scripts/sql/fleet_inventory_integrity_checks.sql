@@ -16,11 +16,10 @@ FROM (
 ) x
 WHERE x.bal_on_hand IS DISTINCT FROM x.ledger_sum;
 
--- Movement legs not summing to zero (transfers/issues/reverses; opening_balance is one-sided)
+-- Movement legs not summing to zero (all movement types including opening/receive/adjust/write-off)
 SELECT 'movement_legs_nonzero' AS check_id, m.organization_id, m.id AS movement_id, sum(l.qty_delta) AS leg_sum
 FROM fleet.inv_movement m
 JOIN fleet.inv_ledger l ON l.movement_id = m.id AND l.organization_id = m.organization_id
-WHERE m.type NOT IN ('opening_balance', 'receive', 'adjust', 'write_off')
 GROUP BY m.organization_id, m.id
 HAVING sum(l.qty_delta) IS DISTINCT FROM 0;
 

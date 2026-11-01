@@ -9313,7 +9313,6 @@ export function registerResidualMonolithRoutes(app: Hono) {
               return c.json({ error: "Expected array of items" }, 400);
           }
 
-          // Count inventory draws per inventoryId (1 unit per assigned equipment row)
           const drawByInventoryId = new Map<string, number>();
           for (const item of items) {
             if (!item || typeof item !== "object") continue;
@@ -9323,15 +9322,14 @@ export function registerResidualMonolithRoutes(app: Hono) {
               drawByInventoryId.set(id, (drawByInventoryId.get(id) || 0) + 1);
             }
           }
-
-          const updatedInventory: Record<string, unknown>[] = [];
-          for (const [invId, draw] of drawByInventoryId) {
-            const { legacyDrawInventoryQuantity } = await import("./inventory_legacy_stock.ts");
-            const result = await legacyDrawInventoryQuantity(invId, draw, c);
-            if (!result.ok) {
-              return c.json(result.body, result.status as 403 | 404 | 409 | 500);
-            }
-            updatedInventory.push(result.payload);
+          if (drawByInventoryId.size > 0) {
+            return c.json(
+              {
+                error:
+                  "Legacy inventory draw removed. Assign stock via /make-server-37f42386/inventory/issue.",
+              },
+              410,
+            );
           }
 
           const stampedItems = items.map((item: any) => {
@@ -9350,7 +9348,6 @@ export function registerResidualMonolithRoutes(app: Hono) {
           return c.json({
             success: true,
             count: stampedItems.length,
-            inventory: updatedInventory,
           });
       } catch(e: any) {
           return c.json({ error: e.message }, 500);

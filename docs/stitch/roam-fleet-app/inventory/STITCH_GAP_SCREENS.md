@@ -1,6 +1,15 @@
 # Stitch gap screens (audit §2)
 
-These 15 flows remain **product-owner Stitch deliverables**. Until HTML exports land under `docs/stitch/roam-fleet-app/inventory/`, the app uses [`gapScreens.tsx`](../../../apps/fleet/src/components/inventory/gap/gapScreens.tsx) placeholders wired from Inventory buttons.
+**Status (R12):** API/data path closed; **15 flows remain product-owner Stitch deliverables** (see sprint order below). Fleet uses [`gapScreens.tsx`](../../../apps/fleet/src/components/inventory/gap/gapScreens.tsx) placeholders until HTML exports land.
+
+### R12 sprint order (PO export → `node scripts/port-inventory-stitch.mjs` → replace `Gap*`)
+
+| Sprint | Screens |
+|--------|---------|
+| P1 | Opening balances · Register asset · Item editor · Approval drawer |
+| P2 | PO · Vendor · Count session · Scanner pair |
+| P3 | Settings · Import · Snooze · Kit compare |
+| Driver | Update reported item (car-kit Stitch) |
 
 | Gap | Stitch title | Owner action |
 |-----|----------------|--------------|

@@ -7,4 +7,4 @@ Capture side-by-side screenshots after staging sign-off:
 
 Run `node scripts/stitch-fidelity.mjs --report` before committing proof assets.
 
-**Status:** Pending owner/staging capture — wired UI uses live API data; proof files are intentionally not checked in as placeholders.
+**Status:** R12 prod verified (stock J$69,380, chain ok, 0 unbalanced movements). Capture side-by-side `IN*-live.png` / `DK*-live.png` after signed-in Fleet/Driver session; run `node scripts/stitch-fidelity.mjs --report` before committing proof assets.

@@ -50,3 +50,56 @@ Deno.test({
     );
   },
 });
+
+Deno.test({
+  name: "movement legs sum to zero after opening_balance (integration)",
+  ignore: !runIntegration,
+  fn: async () => {
+    const sb = serviceClient();
+    const org = Deno.env.get("INVENTORY_TEST_ORG_ID");
+    if (!org) throw new Error("set INVENTORY_TEST_ORG_ID");
+
+    const { data: locRows } = await sb
+      .schema("fleet")
+      .from("inv_location")
+      .select("id")
+      .eq("organization_id", org)
+      .neq("kind", "virtual")
+      .limit(1);
+    const loc = locRows?.[0]?.id as string | undefined;
+    if (!loc) return;
+
+    const { data: itemRows } = await sb
+      .schema("fleet")
+      .from("inv_item")
+      .select("id")
+      .eq("organization_id", org)
+      .is("archived_at", null)
+      .limit(1);
+    const itemId = itemRows?.[0]?.id as string | undefined;
+    if (!itemId) return;
+
+    const key = `test-legs-${Date.now()}`;
+    const { data: openData, error: openErr } = await sb.rpc(invRpcName("inv_opening_balance"), {
+      p_org_id: org,
+      p_lines: [{ item_id: itemId, location_id: loc, qty: 1, unit_cost: 1 }],
+      p_idempotency_key: key,
+    });
+    assertEquals(openErr, null);
+    const movementId = (openData as { movement_id?: string })?.movement_id;
+    if (!movementId) throw new Error("missing movement_id");
+
+    const { data: legs, error: legErr } = await sb
+      .schema("fleet")
+      .from("inv_ledger")
+      .select("qty_delta")
+      .eq("organization_id", org)
+      .eq("movement_id", movementId);
+    assertEquals(legErr, null);
+    const sum = (legs ?? []).reduce(
+      (acc, row) => acc + Number((row as { qty_delta: number }).qty_delta),
+      0,
+    );
+    assertEquals(sum, 0);
+  },
+});

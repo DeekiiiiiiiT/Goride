@@ -23,7 +23,19 @@ Deno.test("inventory phase0: templates route requires auth in registrar", async 
   assertEquals(true, true);
 });
 
-Deno.test("inventory phase0: legacy draw helper exists", async () => {
-  const mod = await import("./inventory_legacy_stock.ts");
-  assertEquals(typeof mod.legacyDrawInventoryQuantity, "function");
+Deno.test("inventory phase0: bulk equipment rejects legacy inventory draw", async () => {
+  const src = await Deno.readTextFile(
+    new URL("./register_residual_monolith_routes.tsx", import.meta.url),
+  );
+  const block = src.slice(
+    src.indexOf('"/make-server-37f42386/fleet/equipment/bulk"'),
+    src.indexOf("// Inventory Endpoints"),
+  );
+  if (block.includes("inventory_legacy_stock")) {
+    throw new Error("bulk equipment must not import inventory_legacy_stock");
+  }
+  if (!block.includes("Legacy inventory draw removed")) {
+    throw new Error("bulk equipment must 410 when inventoryId is set");
+  }
+  assertEquals(true, true);
 });

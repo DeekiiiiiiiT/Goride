@@ -1,6 +1,6 @@
 # Fleet inventory cutover runbook
 
-**Rev 5 implementation (Nov 2026):** Prod data migration applied via `20261101180000` / `20261101180100` (+ MCP follow-ups). Phase 2/3 flags re-enabled after wiring. Drop legacy tables: apply [`20261101180200_drop_legacy_fleet_inventory_tables.sql`](../supabase/migrations/20261101180200_drop_legacy_fleet_inventory_tables.sql) only after Fleet vehicle equipment UI no longer reads `fleet.equipment` / KV routes.
+**Rev 5 implementation (Nov 2026):** Prod data migration applied via `20261101180000` / `20261101180100` (+ MCP follow-ups). Phase 2/3 flags re-enabled after wiring. Drop legacy tables: apply [`20261101172934_drop_legacy_fleet_inventory_tables.sql`](../supabase/migrations/20261101172934_drop_legacy_fleet_inventory_tables.sql) only after Fleet vehicle equipment UI no longer reads `fleet.equipment` / KV routes.
 
 Feature flags (`public.platform_feature_flags`):
 
@@ -33,7 +33,13 @@ Feature flags (`public.platform_feature_flags`):
 
 Monolithic SQL for **local bootstrap** lives in [`supabase/migrations_archive/`](../supabase/migrations_archive/) (`20261101143100` … `20261101143600`). After `supabase db reset`, apply those files in order (or use CI inventory job).
 
-New inventory fixes use versions **after** `20261101163825` (e.g. `20261101180000_*`).
+New inventory fixes use versions **after** `20261101163825` (R10/R12 use production timestamps `20261101180924` … `20261101182842` — filenames must match `supabase migration list` on project `csfllzzastacofsvcdsc`).
+
+**R10 prod migration names (repo sync, Nov 2026):** `20261101180924` bridge_r10_01 · `20261101180928` void_legacy_dup_wos · `20261101181057` phone_balance_seed · `20261101181107` balance_refresh_fix · `20261101181109` phone_adjust · `20261101181112` mount_ledger · `20261101181115` spare_offset.
+
+**R12:** `20261101182842_fleet_inventory_r12_double_entry_and_phone_repair.sql` — four RPC double-entry + OPN-0004 repair. If a dev clone applied misnumbered `80500` files, run `supabase migration repair` to match remote before `db push`.
+
+Apply remote changes with **`supabase db push`** from committed migration files only (do not one-off MCP `apply_migration` for new inventory work).
 
 Drop legacy tables: recreate migration only after R5-02 + R5-11 (see step 7 below).
 
