@@ -17,7 +17,7 @@ Per vehicle:
 - `fleetStatus`: `overdue | odometer_needed | due_soon | ok`
 - `nextDueSummary`, `dueItemCounts`, `lastService`, `servicesAttention[]`
 
-Top-level: `nightlyRun`, `orgDueSoonKm`, `orgDueSoonDays`.
+Top-level: `nightlyRun`, `orgDueSoonKm`, `orgDueSoonDays`, `telemetryMissingCount` (no trusted odometer in 7 days), `nextScheduledWindow` (`{ date, site }` from earliest non-overdue `projected_due_date`), `partsRequisition` (`{ status: "Ready" | "Needs part numbers", detail }`).
 
 ### `GET /maintenance-due/:vehicleId`
 
@@ -31,9 +31,25 @@ Latest successful nightly run for org (for header strip).
 
 Recent `fleet.maintenance_alerts` for notification bell (paginated).
 
-### `GET /maintenance-service-history`
+### `GET /maintenance/service-history`
 
-Completed, non-voided work-order lines (ledger view). Filters: `vehicleId`, `categoryId`, `from`, `to`, `q`.
+Completed work-order lines from `maintenance_service_history_v`. Filters: `vehicle`, `part`, `from`, `q`, `page`.
+
+### `GET /maintenance/odometer-history/:vehicleId`
+
+Trusted readings. Query: `source`, `flagged=true`.
+
+### `POST /maintenance/odometer/:id/accept`
+
+Clears anomaly; sets verifier fields.
+
+### `POST /maintenance/odometer/:id/void`
+
+Body `{ reason }`.
+
+### `POST /maintenance/log-number`
+
+Reserves `LOG-YYYY-NNNNNN` (optional `idempotencyKey`).
 
 ### `POST /maintenance-log-number/reserve`
 

@@ -40,9 +40,12 @@ import { projectFromMaintenanceLog, voidOdometerReading } from "./odometer_ledge
 import { commitPartsUsage } from "./parts_match.ts";
 import { ledgerAllowedAfterParts } from "../../../packages/types/src/partsResolution.ts";
 import {
+  assessOdometerAnomaly,
   findWorkOrderByIdempotency,
   formatOdometerSourceLabel,
+  insertMaintenanceAuditLog,
   insertMaintenanceEvent,
+  loadFleetVehicleForOrg,
   loadFleetVehiclesForOrg,
   loadLatestMaintenanceJobRun,
   loadOrgDueSoonSettings,
@@ -1254,10 +1257,22 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
   );
 
   async function getVehicleFromKv(c: Context, vehicleId: string): Promise<Record<string, unknown> | null> {
-    const raw = await kv.get(`vehicle:${vehicleId}`);
-    if (!raw || typeof raw !== "object") return null;
-    const scoped = filterByOrg([raw as Record<string, unknown>], c);
-    return scoped[0] ?? null;
+    const orgId = getOrgId(c);
+    if (!orgId) return null;
+    const row = await loadFleetVehicleForOrg(orgId, vehicleId);
+    if (!row) return null;
+    return {
+      id: row.id,
+      vehicleId: row.id,
+      licensePlate: row.license_plate,
+      make: row.make,
+      model: row.model,
+      year: row.year,
+      fleetUnitId: row.fleet_unit_id,
+      homeBase: row.home_base,
+      vin: row.vin,
+      organizationId: row.organization_id,
+    };
   }
 
   // -------------------------------------------------------------------------
@@ -1736,7 +1751,10 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
 
         const prevStatus = String(existing.status ?? "").trim().toLowerCase();
         if (prevStatus === "completed") {
-          return c.json({ error: "Completed services cannot be edited. Void and re-log instead." }, 400);
+          return c.json(
+            { error: "Completed services can't be changed — void it and log again.", code: "immutable" },
+            409,
+          );
         }
 
         const nextStatus = body.status != null ? String(body.status) : String(existing.status ?? "Completed");
@@ -2014,7 +2032,10 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           .maybeSingle();
         if (fetchErr) throw fetchErr;
         if (existing && String(existing.status ?? "").trim().toLowerCase() === "completed") {
-          return c.json({ error: "Completed services cannot be deleted. Void instead." }, 400);
+          return c.json(
+            { error: "Completed services can't be changed — void it and log again.", code: "immutable" },
+            409,
+          );
         }
         const { error } = await supabase
           .from("maintenance_records")
@@ -2570,11 +2591,67 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           };
         }));
 
+        const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+        const nowMs = Date.now();
+        let telemetryMissingCount = 0;
+        for (const row of items) {
+          const meta = row.odometerMeta as { recordedAt?: string } | null | undefined;
+          if (!meta?.recordedAt) {
+            telemetryMissingCount += 1;
+            continue;
+          }
+          const ts = Date.parse(meta.recordedAt);
+          if (!Number.isFinite(ts) || nowMs - ts > sevenDaysMs) telemetryMissingCount += 1;
+        }
+
+        let nextScheduledDate: string | null = null;
+        let nextScheduledVehicleId: string | null = null;
+        for (const row of dueRows) {
+          const st = String(row.due_status ?? "ok");
+          if (st === "overdue") continue;
+          const pd = row.projected_due_date != null ? String(row.projected_due_date).slice(0, 10) : null;
+          if (!pd) continue;
+          if (!nextScheduledDate || pd < nextScheduledDate) {
+            nextScheduledDate = pd;
+            nextScheduledVehicleId = String(row.vehicle_id ?? "");
+          }
+        }
+        const nextVehicle = nextScheduledVehicleId
+          ? vehicles.find((v) => String(v.id) === nextScheduledVehicleId)
+          : null;
+        const nextScheduledWindow = nextScheduledDate
+          ? {
+              date: nextScheduledDate,
+              site: nextVehicle?.home_base?.trim() || nextVehicle?.license_plate?.trim() || "",
+            }
+          : null;
+
+        const dueAttentionRows = dueRows.filter((r) => {
+          const st = String(r.due_status ?? "ok");
+          return st === "overdue" || st === "due_soon";
+        });
+        const catalogIds = [...new Set(vehicles.map((v) => String(v.vehicle_catalog_id ?? "")).filter(Boolean))];
+        let partsReady = dueAttentionRows.length === 0;
+        if (!partsReady && catalogIds.length > 0) {
+          const { count, error: fitErr } = await supabase
+            .from("part_fitment")
+            .select("id", { count: "exact", head: true })
+            .in("vehicle_catalog_id", catalogIds);
+          partsReady = !fitErr && (count ?? 0) > 0;
+        }
+        const partsRequisition = {
+          status: partsReady ? "Ready" as const : "Needs part numbers" as const,
+          detail: partsReady ? "Catalogue linked" : "Add part numbers for due items",
+        };
+
         return c.json({
           items,
           nightlyRun: nightlyRun ?? null,
           dueSoonKm: dueSoonSettings.dueSoonKm,
           dueSoonDays: dueSoonSettings.dueSoonDays,
+          telemetryMissingCount,
+          nextScheduledWindow,
+          partsRequisition,
         });
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -2639,11 +2716,10 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         const orgId = getOrgId(c);
         if (!orgId) return c.json({ error: "Organization required" }, 400);
         const vehicleId = c.req.param("vehicleId");
-        const vehicle = await kv.get(`vehicle:${vehicleId}`);
-        const metricsBase = Number(
-          (vehicle as { metrics?: { odometer?: number } } | null)?.metrics?.odometer ?? 0,
-        );
-        const odo = await canonicalOdometerForVehicle(supabase, vehicleId, metricsBase, c);
+        const trustedOdo = orgId ? await loadTrustedOdometerMap(orgId) : new Map();
+        const trusted = trustedOdo.get(vehicleId);
+        const metricsBase = 0;
+        const odo = trusted?.reading ?? await canonicalOdometerForVehicle(supabase, vehicleId, metricsBase, c);
         const today = todayIso();
 
         const { data: states, error } = await supabase
@@ -2695,11 +2771,9 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         if (!orgId) return c.json({ error: "Organization required" }, 400);
         const vehicleId = c.req.param("vehicleId");
         const templateId = c.req.param("templateId");
-        const vehicle = await kv.get(`vehicle:${vehicleId}`);
-        const metricsBase = Number(
-          (vehicle as { metrics?: { odometer?: number } } | null)?.metrics?.odometer ?? 0,
-        );
-        const odo = await canonicalOdometerForVehicle(supabase, vehicleId, metricsBase, c);
+        const trustedOdo = await loadTrustedOdometerMap(orgId);
+        const trusted = trustedOdo.get(vehicleId);
+        const odo = trusted?.reading ?? await canonicalOdometerForVehicle(supabase, vehicleId, 0, c);
         const today = todayIso();
         const items = await getPackageChecklist({
           sb: supabase,
@@ -3234,6 +3308,19 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         };
         const ledgerResult = await appendCanonicalMaintenanceIfEligible(ledgerInput, c);
 
+        const recordedAtIso = `${performed_at_date}T12:00:00.000Z`;
+        let odometerAnomaly: Awaited<ReturnType<typeof assessOdometerAnomaly>> | null = null;
+        try {
+          odometerAnomaly = await assessOdometerAnomaly(
+            supabase,
+            vehicleId,
+            performed_at_miles,
+            recordedAtIso,
+          );
+        } catch (anomErr) {
+          console.warn("[maintenance complete] assess_odometer_anomaly:", anomErr);
+        }
+
         try {
           await projectFromMaintenanceLog(
             {
@@ -3250,13 +3337,15 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           throw odoErr;
         }
 
-        await recomputeScheduleForVehicle(supabase, vehicleId);
-        await insertMaintenanceEvent(supabase, {
-          organizationId: orgId,
-          vehicleId,
-          type: "service.logged",
-          payload: { workOrderId: id, recordId },
+        const { data: finalizeResult, error: finalizeErr } = await supabase.rpc("log_service", {
+          payload: {
+            organizationId: orgId,
+            vehicleId,
+            workOrderId: id,
+            recordId,
+          },
         });
+        if (finalizeErr) throw finalizeErr;
 
         return c.json({
           item: mapDbWorkOrderToApi(completedWo as Record<string, unknown>, lineRows),
@@ -3267,6 +3356,18 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           ledgerWarning: ledgerResult.failed
             ? "Work order completed but not posted to books — contact support if this persists"
             : undefined,
+          odometerAnomaly: odometerAnomaly?.isAnomaly ?? false,
+          anomalyReason: odometerAnomaly?.anomalyReason ?? null,
+          neighbors: odometerAnomaly
+            ? {
+                expected: odometerAnomaly.priorReading != null
+                  ? odometerAnomaly.priorReading
+                  : performed_at_miles,
+                before: odometerAnomaly.priorReading,
+                after: odometerAnomaly.nextReading,
+              }
+            : null,
+          finalize: finalizeResult,
         });
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -3627,6 +3728,241 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
         console.error("[maintenance overdue-digest]", e);
+        return c.json({ error: msg }, 500);
+      }
+    },
+  );
+
+  route.post(
+    "/maintenance-work-orders/:id/void",
+    requireAuth(),
+    requirePermission("vehicles.edit"),
+    async (c) => {
+      try {
+        const orgId = getOrgId(c);
+        if (!orgId) return c.json({ error: "Organization required" }, 400);
+        const id = c.req.param("id");
+        if (!isUuid(id)) return c.json({ error: "Invalid id" }, 400);
+        const body = (await c.req.json()) as Record<string, unknown>;
+        const reason = String(body.reason ?? "").trim();
+        if (!reason) return c.json({ error: "reason is required" }, 400);
+
+        const { data: wo, error: fetchErr } = await supabase
+          .from("maintenance_work_orders")
+          .select("*")
+          .eq("id", id)
+          .eq("organization_id", orgId)
+          .maybeSingle();
+        if (fetchErr) throw fetchErr;
+        if (!wo) return c.json({ error: "Not found" }, 404);
+        if (String(wo.status) !== "completed") {
+          return c.json({ error: "Only completed work orders can be voided" }, 400);
+        }
+        if (wo.voided_at != null) return c.json({ error: "Already voided" }, 400);
+
+        const before = { ...(wo as Record<string, unknown>) };
+        const { data: voided, error: upErr } = await supabase
+          .from("maintenance_work_orders")
+          .update({
+            voided_at: new Date().toISOString(),
+            void_reason: reason,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", id)
+          .eq("organization_id", orgId)
+          .select()
+          .single();
+        if (upErr) throw upErr;
+
+        const recordId = wo.maintenance_record_id != null ? String(wo.maintenance_record_id) : null;
+        if (recordId) {
+          try {
+            await deleteCanonicalLedgerBySource("financial_event", [recordId]);
+          } catch (ledgerErr) {
+            console.error("[maintenance void] ledger reversal failed:", ledgerErr);
+          }
+        }
+
+        await recomputeScheduleForVehicle(supabase, String(wo.vehicle_id));
+        await insertMaintenanceEvent(supabase, {
+          organizationId: orgId,
+          vehicleId: String(wo.vehicle_id),
+          type: "service.voided",
+          payload: { workOrderId: id, reason },
+        });
+        await insertMaintenanceAuditLog(supabase, {
+          organizationId: orgId,
+          entityType: "maintenance_work_order",
+          entityId: id,
+          reason,
+          before,
+          after: voided as Record<string, unknown>,
+        });
+
+        return c.json({ item: voided });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (msg.includes("cannot be edited")) {
+          return c.json({ error: "Completed services can't be changed — void it and log again." }, 409);
+        }
+        return c.json({ error: msg }, 500);
+      }
+    },
+  );
+
+  route.get(
+    "/maintenance/odometer-history/:vehicleId",
+    requireAuth(),
+    async (c) => {
+      try {
+        const orgId = getOrgId(c);
+        if (!orgId) return c.json({ error: "Organization required" }, 400);
+        const vehicleId = c.req.param("vehicleId");
+        const source = c.req.query("source")?.trim();
+        const flagged = c.req.query("flagged") === "true";
+        let q = fleetDb()
+          .from("odometer_readings")
+          .select("*")
+          .eq("vehicle_id", vehicleId)
+          .eq("organization_id", orgId)
+          .eq("is_voided", false)
+          .order("recorded_at", { ascending: false })
+          .limit(200);
+        if (source) q = q.eq("source", source);
+        if (flagged) q = q.eq("is_anomaly", true);
+        const { data, error } = await q;
+        if (error) throw error;
+        return c.json({ items: data || [] });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return c.json({ error: msg }, 500);
+      }
+    },
+  );
+
+  route.post(
+    "/maintenance/odometer/:id/accept",
+    requireAuth(),
+    requirePermission("vehicles.edit"),
+    async (c) => {
+      try {
+        const orgId = getOrgId(c);
+        if (!orgId) return c.json({ error: "Organization required" }, 400);
+        const id = c.req.param("id");
+        const userId = c.get("userId") as string | undefined;
+        const { data, error } = await fleetDb()
+          .from("odometer_readings")
+          .update({
+            is_anomaly: false,
+            is_verified: true,
+            verified_by: userId ?? null,
+            verified_at: new Date().toISOString(),
+          })
+          .eq("id", id)
+          .eq("organization_id", orgId)
+          .select()
+          .maybeSingle();
+        if (error) throw error;
+        if (!data) return c.json({ error: "Not found" }, 404);
+        return c.json({ item: data });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return c.json({ error: msg }, 500);
+      }
+    },
+  );
+
+  route.post(
+    "/maintenance/odometer/:id/void",
+    requireAuth(),
+    requirePermission("vehicles.edit"),
+    async (c) => {
+      try {
+        const orgId = getOrgId(c);
+        if (!orgId) return c.json({ error: "Organization required" }, 400);
+        const id = c.req.param("id");
+        const body = (await c.req.json()) as Record<string, unknown>;
+        const reason = String(body.reason ?? "").trim() || "voided";
+        const { data, error } = await fleetDb()
+          .from("odometer_readings")
+          .update({
+            is_voided: true,
+            void_reason: reason,
+          })
+          .eq("id", id)
+          .eq("organization_id", orgId)
+          .select()
+          .maybeSingle();
+        if (error) throw error;
+        if (!data) return c.json({ error: "Not found" }, 404);
+        return c.json({ item: data });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return c.json({ error: msg }, 500);
+      }
+    },
+  );
+
+  route.get(
+    "/maintenance/service-history",
+    requireAuth(),
+    async (c) => {
+      try {
+        const orgId = getOrgId(c);
+        if (!orgId) return c.json({ error: "Organization required" }, 400);
+        const vehicle = c.req.query("vehicle")?.trim() || c.req.query("vehicleId")?.trim() || "";
+        const part = c.req.query("part")?.trim() || "";
+        const from = c.req.query("from")?.trim() || "";
+        const qText = c.req.query("q")?.trim() || "";
+        const page = Math.max(1, Number(c.req.query("page") || 1) || 1);
+        const pageSize = 50;
+        const fromIdx = (page - 1) * pageSize;
+        const toIdx = fromIdx + pageSize - 1;
+
+        let q = fleetDb()
+          .from("fleet_maintenance_service_history_v")
+          .select("*", { count: "exact" })
+          .eq("organization_id", orgId)
+          .order("performed_at_date", { ascending: false })
+          .range(fromIdx, toIdx);
+        if (vehicle) q = q.eq("vehicle_id", vehicle);
+        if (part) q = q.or(`category_code.ilike.%${part}%,category_name.ilike.%${part}%`);
+        if (from) q = q.gte("performed_at_date", from);
+        if (qText) {
+          q = q.or(
+            `log_number.ilike.%${qText}%,provider.ilike.%${qText}%,category_name.ilike.%${qText}%`,
+          );
+        }
+        const { data, error, count } = await q;
+        if (error) throw error;
+        return c.json({ items: data || [], page, pageSize, total: count ?? 0 });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return c.json({ error: msg }, 500);
+      }
+    },
+  );
+
+  route.post(
+    "/maintenance/log-number",
+    requireAuth(),
+    requirePermission("vehicles.edit"),
+    async (c) => {
+      try {
+        const orgId = getOrgId(c);
+        if (!orgId) return c.json({ error: "Organization required" }, 400);
+        const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+        const idempotencyKey = String(body.idempotencyKey ?? body.idempotency_key ?? "").trim();
+        if (idempotencyKey) {
+          const existing = await findWorkOrderByIdempotency(supabase, orgId, idempotencyKey);
+          if (existing?.log_number) {
+            return c.json({ logNumber: String(existing.log_number), idempotentReplay: true });
+          }
+        }
+        const logNumber = await reserveMaintenanceLogNumber(supabase);
+        return c.json({ logNumber, idempotencyKey: idempotencyKey || null });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
         return c.json({ error: msg }, 500);
       }
     },

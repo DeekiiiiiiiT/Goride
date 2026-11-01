@@ -15,16 +15,17 @@ describe("maintenance due windows (L-11)", () => {
     expect(r.status).toBe("pending");
   });
 
-  it("marks overdue when past km due", () => {
+  it("marks overdue when past km due point (not max window)", () => {
     const r = analyzeMaintenanceScheduleRow(
       125_000,
       "2026-11-01",
       120_000,
-      null,
+      130_000,
       null,
       "active",
       { dueSoonKm: 1000, dueSoonDays: 14 },
     );
     expect(r.status).toBe("overdue");
+    expect(r.kmOverdue).toBe(5000);
   });
 });

@@ -2710,13 +2710,17 @@ export const api = {
       return json;
   },
 
-  async reserveMaintenanceLogNumber() {
+  async reserveMaintenanceLogNumber(idempotencyKey?: string) {
       const response = await fetchWithRetry(
-        `${API_ENDPOINTS.fleetOps}/maintenance-log-number/reserve`,
-        { method: "POST", headers: await getHeaders() },
+        `${API_ENDPOINTS.fleetOps}/maintenance/log-number`,
+        {
+          method: "POST",
+          headers: await getHeaders(),
+          body: JSON.stringify({ idempotencyKey: idempotencyKey ?? undefined }),
+        },
       );
       if (!response.ok) throw new Error("Failed to reserve log number");
-      const json = await response.json() as { logNumber?: string };
+      const json = await response.json() as { logNumber?: string; idempotentReplay?: boolean };
       return json.logNumber ?? "";
   },
 
@@ -2872,23 +2876,62 @@ export const api = {
           headers: await getHeaders(null),
       });
       if (!response.ok) throw new Error("Failed to fetch maintenance fleet summary");
-      return response.json() as Promise<{
-        items: Array<{
-          vehicleId: string;
-          licensePlate?: string;
-          make?: string;
-          model?: string;
-          year?: string;
-          odometer: number;
-          fleetStatus: string;
-          nextDueOdometer: number | null;
-          scheduleRowCount: number;
-          maxCalendarDaysOverdue: number | null;
-          maxKmOverdue: number | null;
-          servicesAttention: Array<{ taskName: string; kind: "overdue" | "due_soon" }>;
-          servicesAttentionTruncated: boolean;
-        }>;
-      }>;
+      return response.json();
+  },
+
+  async getMaintenanceServiceHistory(params?: {
+    vehicleId?: string;
+    part?: string;
+    from?: string;
+    q?: string;
+    page?: number;
+  }) {
+    const qs = new URLSearchParams();
+    if (params?.vehicleId) qs.set("vehicle", params.vehicleId);
+    if (params?.part) qs.set("part", params.part);
+    if (params?.from) qs.set("from", params.from);
+    if (params?.q) qs.set("q", params.q);
+    if (params?.page) qs.set("page", String(params.page));
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fleetOps}/maintenance/service-history?${qs.toString()}`,
+      { headers: await getHeaders(null) },
+    );
+    if (!response.ok) throw new Error("Failed to fetch maintenance service history");
+    return response.json() as Promise<{ items: Array<Record<string, unknown>>; page: number; total: number }>;
+  },
+
+  async getMaintenanceOdometerHistory(vehicleId: string, filters?: { source?: string; flagged?: boolean }) {
+    const qs = new URLSearchParams();
+    if (filters?.source) qs.set("source", filters.source);
+    if (filters?.flagged) qs.set("flagged", "true");
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fleetOps}/maintenance/odometer-history/${encodeURIComponent(vehicleId)}?${qs.toString()}`,
+      { headers: await getHeaders(null) },
+    );
+    if (!response.ok) throw new Error("Failed to fetch odometer history");
+    return response.json() as Promise<{ items: Array<Record<string, unknown>> }>;
+  },
+
+  async acceptMaintenanceOdometerReading(id: string) {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fleetOps}/maintenance/odometer/${encodeURIComponent(id)}/accept`,
+      { method: "POST", headers: await getHeaders() },
+    );
+    if (!response.ok) throw new Error("Failed to accept odometer reading");
+    return response.json();
+  },
+
+  async voidMaintenanceOdometerReading(id: string, reason: string) {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fleetOps}/maintenance/odometer/${encodeURIComponent(id)}/void`,
+      {
+        method: "POST",
+        headers: await getHeaders(),
+        body: JSON.stringify({ reason }),
+      },
+    );
+    if (!response.ok) throw new Error("Failed to void odometer reading");
+    return response.json();
   },
 
   async getCompatibleParts(vehicleId: string, componentId?: string) {

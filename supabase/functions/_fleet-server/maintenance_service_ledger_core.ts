@@ -361,8 +361,11 @@ export async function bootstrapVehicleComponentSchedules(args: {
         vehicle_id: args.vehicleId,
         category_id: categoryId,
         position: pos,
-        last_performed_miles: args.currentOdo,
-        last_performed_date: args.baselineDate,
+        baseline_odometer: args.currentOdo,
+        baseline_date: args.baselineDate,
+        baseline_source: "bootstrap",
+        last_performed_miles: null,
+        last_performed_date: null,
         next_due_miles: computed.next_due_miles,
         next_due_miles_max: computed.next_due_miles_max,
         next_due_date: computed.next_due_date,
@@ -394,13 +397,8 @@ export function analyzeComponentRowStatus(
   let overdueMiles = false;
   let milesDue = false;
   if (nextMiles != null && Number.isFinite(nextMiles)) {
-    if (nextMax != null && Number.isFinite(nextMax) && nextMax > nextMiles) {
-      overdueMiles = currentOdo > nextMax;
-      milesDue = currentOdo >= nextMiles && currentOdo <= nextMax;
-    } else {
-      overdueMiles = currentOdo > nextMiles;
-      milesDue = currentOdo >= nextMiles;
-    }
+    overdueMiles = currentOdo >= nextMiles;
+    milesDue = currentOdo >= nextMiles - 1000 && currentOdo < nextMiles;
   }
   const overdueDate = nextDate != null && today > nextDate;
   const dueDate = nextDate != null && today >= nextDate;

@@ -72,12 +72,28 @@ export type FleetVehicleRow = {
   year?: string | null;
   fleet_unit_id?: string | null;
   home_base?: string | null;
+  vin?: string | null;
+  vehicle_catalog_id?: string | null;
 };
+
+export async function loadFleetVehicleForOrg(
+  orgId: string,
+  vehicleId: string,
+): Promise<FleetVehicleRow | null> {
+  const { data, error } = await fleetDb()
+    .from("fleet_vehicles")
+    .select("id, organization_id, license_plate, make, model, year, fleet_unit_id, home_base, vin, vehicle_catalog_id")
+    .eq("organization_id", orgId)
+    .eq("id", vehicleId)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as FleetVehicleRow | null) ?? null;
+}
 
 export async function loadFleetVehiclesForOrg(orgId: string): Promise<FleetVehicleRow[]> {
   const { data, error } = await fleetDb()
     .from("fleet_vehicles")
-    .select("id, organization_id, license_plate, make, model, year, fleet_unit_id, home_base")
+    .select("id, organization_id, license_plate, make, model, year, fleet_unit_id, home_base, vin, vehicle_catalog_id")
     .eq("organization_id", orgId)
     .limit(500);
   if (error) throw error;
@@ -124,7 +140,7 @@ export async function recomputeScheduleForVehicle(
   const { error } = await supabase.rpc("recompute_maintenance_schedule", {
     p_vehicle_id: vehicleId,
   });
-  if (error) console.warn("[maintenance] recompute_maintenance_schedule:", error.message);
+  if (error) throw new Error(`recompute_maintenance_schedule: ${error.message}`);
 }
 
 export async function insertMaintenanceEvent(
@@ -142,7 +158,62 @@ export async function insertMaintenanceEvent(
     type: row.type,
     payload: row.payload ?? {},
   });
-  if (error) console.warn("[maintenance] maintenance_events insert:", error.message);
+  if (error) throw new Error(`maintenance_events insert: ${error.message}`);
+}
+
+export type OdometerAnomalyAssessment = {
+  isAnomaly: boolean;
+  anomalyReason: string | null;
+  priorReading: number | null;
+  priorRecordedAt: string | null;
+  nextReading: number | null;
+  nextRecordedAt: string | null;
+};
+
+export async function assessOdometerAnomaly(
+  supabase: SupabaseClient,
+  vehicleId: string,
+  reading: number,
+  recordedAt: string,
+): Promise<OdometerAnomalyAssessment> {
+  const { data, error } = await supabase.rpc("assess_odometer_anomaly", {
+    p_vehicle_id: vehicleId,
+    p_reading: reading,
+    p_recorded_at: recordedAt,
+  });
+  if (error) throw error;
+  const row = Array.isArray(data) ? data[0] : data;
+  const r = (row || {}) as Record<string, unknown>;
+  return {
+    isAnomaly: r.is_anomaly === true,
+    anomalyReason: r.anomaly_reason != null ? String(r.anomaly_reason) : null,
+    priorReading: r.prior_reading != null ? Number(r.prior_reading) : null,
+    priorRecordedAt: r.prior_recorded_at != null ? String(r.prior_recorded_at) : null,
+    nextReading: r.next_reading != null ? Number(r.next_reading) : null,
+    nextRecordedAt: r.next_recorded_at != null ? String(r.next_recorded_at) : null,
+  };
+}
+
+export async function insertMaintenanceAuditLog(
+  supabase: SupabaseClient,
+  row: {
+    organizationId: string;
+    entityType: string;
+    entityId: string;
+    reason?: string | null;
+    before?: Record<string, unknown>;
+    after?: Record<string, unknown>;
+  },
+): Promise<void> {
+  const { error } = await supabase.from("fleet_maintenance_audit_log").insert({
+    organization_id: row.organizationId,
+    entity_type: row.entityType,
+    entity_id: row.entityId,
+    reason: row.reason ?? null,
+    before_json: row.before ?? {},
+    after_json: row.after ?? {},
+  });
+  if (error) throw new Error(`maintenance_audit_log insert: ${error.message}`);
 }
 
 export async function findWorkOrderByIdempotency(

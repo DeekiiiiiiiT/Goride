@@ -1,0 +1,62 @@
+-- Prod-applied: fleet_maintenance_expand_components (audit O-07 sync)
+
+INSERT INTO public.vehicle_component_schedule (
+  organization_id,
+  vehicle_id,
+  category_id,
+  position,
+  last_performed_miles,
+  last_performed_date,
+  next_due_miles,
+  next_due_miles_max,
+  next_due_date,
+  schedule_status,
+  source_template_id,
+  baseline_odometer,
+  baseline_date,
+  baseline_source,
+  updated_at
+)
+SELECT
+  vms.organization_id,
+  vms.vehicle_id,
+  mpc.category_id,
+  CASE WHEN c.position_aware THEN pos.pos ELSE NULL END AS position,
+  vcs_existing.last_performed_miles,
+  vcs_existing.last_performed_date,
+  coalesce(vcs_existing.next_due_miles, vms.next_due_miles),
+  vcs_existing.next_due_miles_max,
+  coalesce(vcs_existing.next_due_date, vms.next_due_date),
+  coalesce(vcs_existing.schedule_status, vms.schedule_status, 'active'),
+  vms.template_id,
+  vcs_existing.baseline_odometer,
+  vcs_existing.baseline_date,
+  vcs_existing.baseline_source,
+  now()
+FROM public.vehicle_maintenance_schedule vms
+JOIN public.maintenance_package_categories mpc ON mpc.template_id = vms.template_id
+JOIN public.maintenance_service_categories c ON c.id = mpc.category_id
+LEFT JOIN LATERAL (
+  SELECT unnest(ARRAY['LF', 'RF', 'LR', 'RR']::text[]) AS pos
+  WHERE c.position_aware
+  UNION ALL
+  SELECT NULL::text WHERE NOT c.position_aware
+) pos ON true
+LEFT JOIN public.vehicle_component_schedule vcs_existing
+  ON vcs_existing.organization_id = vms.organization_id
+ AND vcs_existing.vehicle_id = vms.vehicle_id
+ AND vcs_existing.category_id = mpc.category_id
+ AND (
+   (vcs_existing.position IS NULL AND pos.pos IS NULL)
+   OR vcs_existing.position = pos.pos
+ )
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.vehicle_component_schedule x
+  WHERE x.organization_id = vms.organization_id
+    AND x.vehicle_id = vms.vehicle_id
+    AND x.category_id = mpc.category_id
+    AND (
+      (x.position IS NULL AND pos.pos IS NULL)
+      OR x.position = pos.pos
+    )
+);

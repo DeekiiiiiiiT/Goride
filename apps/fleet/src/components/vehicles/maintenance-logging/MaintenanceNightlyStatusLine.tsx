@@ -6,6 +6,7 @@ type NightlyRun = {
   vehicles_checked?: number;
   alerts_written?: number;
   success?: boolean;
+  id?: string;
 };
 
 export function MaintenanceNightlyStatusLine({
@@ -17,27 +18,36 @@ export function MaintenanceNightlyStatusLine({
 }) {
   if (missed) {
     return (
-      <p className="text-sm text-red-600 dark:text-red-400 flex items-center gap-2">
-        <span className="inline-block w-2 h-2 rounded-full bg-red-500" />
-        Nightly check didn&apos;t run last night — due items may be out of date.
-      </p>
+      <div className="flex items-center gap-2 mt-2 font-mono text-[11px] text-error flex-wrap">
+        <span className="w-2 h-2 rounded-full bg-error shadow-sm" />
+        <span className="font-medium text-on-surface">Nightly check didn&apos;t run last night</span>
+        <span className="text-outline-variant">·</span>
+        <span className="text-stitch-secondary">Due items may be out of date</span>
+      </div>
     );
   }
   if (!run?.success) {
     return (
-      <p className="text-sm text-muted-foreground">
+      <div className="flex items-center gap-2 mt-2 font-mono text-[11px] text-stitch-secondary">
+        <span className="w-2 h-2 rounded-full bg-outline" />
         Nightly check status unknown.
-      </p>
+      </div>
     );
   }
   const alerts = Number(run.alerts_written ?? 0);
+  const cars = Number(run.vehicles_checked ?? 0);
   return (
-    <p className="text-sm text-slate-600 dark:text-slate-400 flex items-center gap-2 flex-wrap">
-      <span className="inline-block w-2 h-2 rounded-full bg-emerald-500" />
-      Nightly check ran 02:00 today · {Number(run.vehicles_checked ?? 0)} cars checked
+    <div className="flex items-center gap-2 mt-2 font-mono text-[11px] text-stitch-secondary flex-wrap">
+      <span className="w-2 h-2 rounded-full bg-emerald-600 shadow-sm animate-pulse" />
+      <span className="font-medium text-on-surface">Nightly check ran 02:00 today</span>
+      <span className="text-outline-variant">·</span>
+      <span>{cars} cars checked</span>
       {alerts > 0 ? (
-        <span className="text-red-600 font-medium">· {alerts} alerts flagged</span>
+        <>
+          <span className="text-outline-variant">·</span>
+          <span className="text-error font-semibold">{alerts} alerts flagged</span>
+        </>
       ) : null}
-    </p>
+    </div>
   );
 }

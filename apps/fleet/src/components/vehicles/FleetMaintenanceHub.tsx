@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useState } from "react";
-import { Loader2, ListChecks, Package, Plus, Wrench, Car, History } from "lucide-react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { Loader2, ListChecks, Package, Wrench, Car, History } from "lucide-react";
 import { api } from "../../services/api";
 import { Button } from "../ui/button";
 import {
@@ -10,27 +10,20 @@ import {
   TableHeader,
   TableRow,
 } from "../ui/table";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "../ui/dialog";
-import { Label } from "../ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../ui/select";
 import { LogMaintenanceServiceDialog } from "./LogMaintenanceServiceDialog";
-import { MaintenanceServiceLedgerPanel } from "./MaintenanceServiceLedgerPanel";
 import { MaintenanceNightlyStatusLine } from "./maintenance-logging/MaintenanceNightlyStatusLine";
 import { MaintenanceDueItemsDrawer } from "./maintenance-logging/MaintenanceDueItemsDrawer";
+import { MaintenanceOverviewPanel } from "./maintenance-logging/MaintenanceOverviewPanel";
+import { MaintenanceHubKpiCards } from "./maintenance-logging/MaintenanceHubKpiCards";
+import {
+  MaintenanceHubEmptyState,
+  MaintenanceHubErrorState,
+  MaintenanceHubLoadingState,
+} from "./maintenance-logging/MaintenanceHubStates";
+import { MaintenanceServiceHistoryPanel } from "./maintenance-logging/MaintenanceServiceHistoryPanel";
 import { LogOdometerDialog } from "./maintenance-logging/LogOdometerDialog";
+import { OdometerHistoryDrawer } from "./maintenance-logging/OdometerHistoryDrawer";
+import { LogServiceWhichCarDialog } from "./maintenance-logging/log-service";
 import { catalogOptionsFromScheduleRows } from "../../utils/maintenanceCatalogOptions";
 import type {
   CatalogMaintenanceTaskOption,
@@ -57,18 +50,6 @@ type DriverRequestRow = {
   payload_json?: Record<string, unknown> | null;
 };
 
-function formatFleetOverdueLine(
-  maxCal: number | null | undefined,
-  maxKm: number | null | undefined,
-): string {
-  const c = maxCal ?? null;
-  const k = maxKm ?? null;
-  if (c != null && k != null) return `${c.toLocaleString()} d · ${k.toLocaleString()} km`;
-  if (c != null) return `${c.toLocaleString()} d`;
-  if (k != null) return `${k.toLocaleString()} km`;
-  return "—";
-}
-
 type FleetHubVehicleRow = {
   vehicleId: string;
   licensePlate?: string;
@@ -77,6 +58,7 @@ type FleetHubVehicleRow = {
   year?: string;
   fleetUnitId?: string;
   homeBase?: string;
+  vin?: string;
   odometer: number;
   odometerMeta?: {
     reading: number;
@@ -111,20 +93,38 @@ function vehicleLabel(row: {
   return row.vehicleId;
 }
 
+function fleetOrgDisplayName(): string | undefined {
+  try {
+    return localStorage.getItem("roam_fleet_name")?.trim() || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
   const { can } = usePermissions();
   const canViewParts = can("vehicles.view");
+  const orgName = fleetOrgDisplayName();
+
   const [loading, setLoading] = useState(true);
   const [fleetBootstrapping, setFleetBootstrapping] = useState(false);
   const [fleetMessage, setFleetMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<FleetHubVehicleRow[]>([]);
+  const [telemetryMissingCount, setTelemetryMissingCount] = useState(0);
+  const [nextScheduledWindow, setNextScheduledWindow] = useState<{ date: string; site: string } | null>(
+    null,
+  );
+  const [partsRequisition, setPartsRequisition] = useState<{ status: string; detail: string } | null>(
+    null,
+  );
+
   const [servicesDueView, setServicesDueView] = useState<FleetHubVehicleRow | null>(null);
   const [nightlyRun, setNightlyRun] = useState<Record<string, unknown> | null>(null);
   const [logOdometerVehicle, setLogOdometerVehicle] = useState<FleetHubVehicleRow | null>(null);
+  const [odometerHistoryVehicle, setOdometerHistoryVehicle] = useState<FleetHubVehicleRow | null>(null);
 
   const [vehiclePickerOpen, setVehiclePickerOpen] = useState(false);
-  const [pickerVehicleId, setPickerVehicleId] = useState<string>("");
   const [scheduleLoading, setScheduleLoading] = useState(false);
 
   const [logDialogOpen, setLogDialogOpen] = useState(false);
@@ -140,6 +140,22 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
     const tab = new URLSearchParams(window.location.search).get("tab");
     return tab === "find-parts" ? "find-parts" : tab === "service-ledger" ? "service-ledger" : "by-vehicle";
   });
+
+  const overviewAttentionCount = useMemo(
+    () =>
+      items.filter((i) => {
+        const s = i.fleetStatus.toLowerCase();
+        return s.includes("overdue") || s.includes("odometer");
+      }).length,
+    [items],
+  );
+
+  const overdueCount = useMemo(
+    () => items.filter((i) => i.fleetStatus.toLowerCase().includes("overdue")).length,
+    [items],
+  );
+
+  const nightlyMissed = !loading && !nightlyRun?.success;
 
   const loadRequests = useCallback(async () => {
     setRequestsLoading(true);
@@ -160,8 +176,15 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
     try {
       const res = await api.getMaintenanceFleetSummary();
       setNightlyRun((res as { nightlyRun?: Record<string, unknown> }).nightlyRun ?? null);
+      setTelemetryMissingCount(Number((res as { telemetryMissingCount?: number }).telemetryMissingCount ?? 0));
+      setNextScheduledWindow(
+        (res as { nextScheduledWindow?: { date: string; site: string } | null }).nextScheduledWindow ?? null,
+      );
+      setPartsRequisition(
+        (res as { partsRequisition?: { status: string; detail: string } | null }).partsRequisition ?? null,
+      );
       setItems(
-        (res.items || []).map((row) => ({
+        ((res.items || []) as FleetHubVehicleRow[]).map((row) => ({
           ...row,
           maxCalendarDaysOverdue: row.maxCalendarDaysOverdue ?? null,
           maxKmOverdue: row.maxKmOverdue ?? null,
@@ -210,9 +233,7 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
           : [];
         setCatalogForLog(catalogOptionsFromScheduleRows(rows));
         const odo = items.find((i) => i.vehicleId === vehicleId)?.odometer;
-        setDefaultOdoForLog(
-          initial?.odo ?? (Number.isFinite(odo) ? odo : undefined),
-        );
+        setDefaultOdoForLog(initial?.odo ?? (Number.isFinite(odo) ? odo : undefined));
         setInitialLogForComplete(initial ?? null);
         setLogVehicleId(vehicleId);
         setLogDialogOpen(true);
@@ -261,18 +282,16 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
   );
 
   const handleOpenVehiclePicker = useCallback(() => {
-    setPickerVehicleId(items[0]?.vehicleId ?? "");
     setVehiclePickerOpen(true);
-  }, [items]);
+  }, []);
 
-  const handleContinueFromPicker = useCallback(async () => {
-    if (!pickerVehicleId) {
-      toast.error("Select a vehicle");
-      return;
-    }
-    setVehiclePickerOpen(false);
-    await prepareLogForVehicle(pickerVehicleId);
-  }, [pickerVehicleId, prepareLogForVehicle]);
+  const handleContinueFromPicker = useCallback(
+    async (vehicleId: string) => {
+      setVehiclePickerOpen(false);
+      await prepareLogForVehicle(vehicleId);
+    },
+    [prepareLogForVehicle],
+  );
 
   const handleLogSaved = useCallback(() => {
     void load();
@@ -281,63 +300,93 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
   const findPartsActive = hubTab === "find-parts";
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 max-[390px]:px-2 max-[390px]:space-y-3">
+      {nightlyMissed && !findPartsActive ? (
+        <section className="w-full bg-error-container text-on-error-container px-4 py-3 rounded-lg shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-error text-on-error flex items-center justify-center shrink-0">
+              <span className="material-symbols-outlined text-[18px]">warning</span>
+            </div>
+            <div>
+              <p className="font-semibold text-sm">Nightly check didn&apos;t run last night.</p>
+              <p className="text-sm opacity-90">Due items may be out of date across fleet asset registries.</p>
+            </div>
+          </div>
+          <Button type="button" size="sm" className="gap-1 shrink-0" onClick={() => void load()}>
+            <span className="material-symbols-outlined text-[16px]">sync</span>
+            Refresh
+          </Button>
+        </section>
+      ) : null}
+
       {!findPartsActive && (
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div className="hidden md:block">
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-            <Wrench className="w-7 h-7 text-amber-600" />
-            Fleet maintenance
-          </h1>
-          <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-            What each car is due for, what was done, and parts for your cars.
-          </p>
-          <MaintenanceNightlyStatusLine run={nightlyRun} missed={!nightlyRun?.success} />
+        <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
+          <div className="flex flex-col">
+            <div className="flex items-center gap-2 mb-1">
+              <div className="w-8 h-8 rounded-lg bg-surface-container-high flex items-center justify-center text-on-tertiary-container">
+                <Wrench className="w-5 h-5" />
+              </div>
+              <h1 className="text-2xl font-bold text-on-surface tracking-tight">Fleet maintenance</h1>
+            </div>
+            <p className="text-sm text-on-surface-variant">
+              What each car is due for, what was done, and parts for your cars.
+            </p>
+            <MaintenanceNightlyStatusLine run={nightlyRun} missed={nightlyMissed} />
+          </div>
+          <div className="flex flex-wrap gap-2 justify-end max-[390px]:w-full">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void load()}
+              disabled={loading}
+              className="shrink-0 gap-2 bg-surface-container-lowest"
+            >
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : (
+                <span className="material-symbols-outlined text-[16px]">sync</span>
+              )}
+              Refresh
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void handleBootstrapFleet()}
+              disabled={loading || fleetBootstrapping}
+              className="shrink-0 gap-2 bg-surface-container-lowest"
+            >
+              {fleetBootstrapping ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <ListChecks className="w-4 h-4" />
+              )}
+              Bootstrap schedules
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setHubTab("find-parts");
+                const url = new URL(window.location.href);
+                url.searchParams.set("tab", "find-parts");
+                window.history.replaceState(null, "", url);
+              }}
+              disabled={loading || items.length === 0}
+              className="shrink-0 gap-2 bg-surface-container-lowest"
+            >
+              <Package className="w-4 h-4" />
+              Compatible parts
+            </Button>
+            <Button
+              type="button"
+              variant="default"
+              onClick={handleOpenVehiclePicker}
+              disabled={loading || items.length === 0}
+              className="shrink-0 gap-2 max-[390px]:w-full"
+            >
+              <span className="material-symbols-outlined text-[16px]">add</span>
+              Log service
+            </Button>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2 justify-end">
-          <Button
-            type="button"
-            variant="default"
-            onClick={handleOpenVehiclePicker}
-            disabled={loading || items.length === 0}
-            className="shrink-0 gap-2"
-            title={items.length === 0 ? "No vehicles in fleet" : undefined}
-          >
-            <Plus className="w-4 h-4" />
-            Log service
-          </Button>
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={handleBootstrapFleet}
-            disabled={loading || fleetBootstrapping}
-            className="shrink-0 gap-2"
-            title="Create schedule rows from Super Admin templates for vehicles with a catalog match and no schedule yet"
-          >
-            {fleetBootstrapping ? <Loader2 className="w-4 h-4 animate-spin" /> : <ListChecks className="w-4 h-4" />}
-            Bootstrap schedules
-          </Button>
-          <Button type="button" variant="outline" onClick={load} disabled={loading} className="shrink-0">
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Refresh"}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => {
-              setHubTab("find-parts");
-              const url = new URL(window.location.href);
-              url.searchParams.set("tab", "find-parts");
-              window.history.replaceState(null, "", url);
-            }}
-            disabled={loading || items.length === 0}
-            className="shrink-0 gap-2"
-            title="Parts from Super Admin catalog (requires motor catalog link on the vehicle)"
-          >
-            <Package className="w-4 h-4" />
-            Compatible parts
-          </Button>
-        </div>
-      </div>
       )}
 
       {fleetMessage && (
@@ -346,11 +395,19 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
         </div>
       )}
 
-      {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 dark:bg-red-950/40 px-3 py-2 text-sm text-red-800 dark:text-red-200">
-          {error}
-        </div>
-      )}
+      {!findPartsActive && !loading && error ? (
+        <MaintenanceHubErrorState message={error} onRetry={() => void load()} />
+      ) : null}
+
+      {!findPartsActive && !loading && !error ? (
+        <MaintenanceHubKpiCards
+          overdueCount={overdueCount}
+          telemetryMissingCount={telemetryMissingCount}
+          fleetTotal={items.length}
+          nextScheduledWindow={nextScheduledWindow}
+          partsRequisition={partsRequisition}
+        />
+      ) : null}
 
       <Tabs
         value={hubTab}
@@ -364,33 +421,44 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
         }}
         className="space-y-4"
       >
-        <div className={findPartsActive ? "flex flex-wrap items-center justify-between gap-3 w-full bg-surface-container-lowest rounded-xl shadow-sm px-4 py-3" : ""}>
+        <div
+          className={
+            findPartsActive
+              ? "flex flex-wrap items-center justify-between gap-3 w-full bg-surface-container-lowest rounded-xl shadow-sm px-4 py-3"
+              : ""
+          }
+        >
           {findPartsActive ? (
             <div className="flex items-center gap-2">
               <Wrench className="w-6 h-6 text-amber-600" />
               <span className="font-semibold text-slate-900 dark:text-white">Fleet Maintenance</span>
             </div>
           ) : null}
-        <TabsList className={`h-10 bg-slate-100 dark:bg-slate-800/80 p-1 ${findPartsActive ? "shrink-0" : ""}`}>
-          <TabsTrigger value="by-vehicle" className="gap-1.5 px-4">
-            <Car className="w-4 h-4" />
-            Overview
-          </TabsTrigger>
-          <TabsTrigger value="service-ledger" className="gap-1.5 px-4">
-            <History className="w-4 h-4" />
-            Service history
-          </TabsTrigger>
-          {canViewParts ? (
-            <TabsTrigger value="find-parts" className="gap-1.5 px-4">
-              <Package className="w-4 h-4" />
-              Find parts
+          <TabsList className={`h-10 bg-surface-container p-1 ${findPartsActive ? "shrink-0" : ""}`}>
+            <TabsTrigger value="by-vehicle" className="gap-1.5 px-4">
+              <Car className="w-4 h-4" />
+              Overview
+              {overviewAttentionCount > 0 ? (
+                <span className="bg-surface-container-high text-on-surface-variant font-mono text-[10px] px-1.5 py-0.5 rounded-full ml-0.5">
+                  {overviewAttentionCount}
+                </span>
+              ) : null}
             </TabsTrigger>
-          ) : null}
-        </TabsList>
+            <TabsTrigger value="service-ledger" className="gap-1.5 px-4">
+              <History className="w-4 h-4" />
+              Service history
+            </TabsTrigger>
+            {canViewParts ? (
+              <TabsTrigger value="find-parts" className="gap-1.5 px-4">
+                <Package className="w-4 h-4" />
+                Find parts
+              </TabsTrigger>
+            ) : null}
+          </TabsList>
         </div>
 
         <TabsContent value="service-ledger" className="mt-0 space-y-4">
-          <MaintenanceServiceLedgerPanel vehicles={items} />
+          {loading ? <MaintenanceHubLoadingState /> : <MaintenanceServiceHistoryPanel vehicles={items} />}
         </TabsContent>
 
         <TabsContent value="find-parts" className="mt-0">
@@ -409,214 +477,99 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
         </TabsContent>
 
         <TabsContent value="by-vehicle" className="mt-0 space-y-4">
-      {(driverRequests.length > 0 || requestsLoading) && (
-        <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20 shadow-sm overflow-hidden">
-          <div className="px-4 py-3 border-b border-amber-200 dark:border-amber-800 flex items-center justify-between gap-2">
-            <div>
-              <h2 className="font-semibold text-slate-900 dark:text-slate-100">Driver requests</h2>
-              <p className="text-xs text-slate-600 dark:text-slate-400">
-                Open issues from drivers — complete with cost to post to books, or dismiss.
-              </p>
+          {(driverRequests.length > 0 || requestsLoading) && !loading && !error ? (
+            <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20 shadow-sm overflow-hidden">
+              <div className="px-4 py-3 border-b border-amber-200 dark:border-amber-800 flex items-center justify-between gap-2">
+                <div>
+                  <h2 className="font-semibold text-slate-900 dark:text-slate-100">Driver requests</h2>
+                  <p className="text-xs text-slate-600 dark:text-slate-400">
+                    Open issues from drivers — complete with cost to post to books, or dismiss.
+                  </p>
+                </div>
+                {requestsLoading ? <Loader2 className="w-4 h-4 animate-spin text-slate-400" /> : null}
+              </div>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Vehicle</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Notes</TableHead>
+                    <TableHead className="w-[200px] text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {driverRequests.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center text-slate-500 py-6 text-sm">
+                        No open driver requests.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    driverRequests.map((row) => {
+                      const veh = items.find((i) => i.vehicleId === row.vehicle_id);
+                      return (
+                        <TableRow key={row.id}>
+                          <TableCell className="whitespace-nowrap">{row.performed_at_date}</TableCell>
+                          <TableCell>{veh ? vehicleLabel(veh) : row.vehicle_id}</TableCell>
+                          <TableCell>{row.service_type || "—"}</TableCell>
+                          <TableCell className="max-w-xs truncate" title={row.notes || undefined}>
+                            {row.notes || "—"}
+                          </TableCell>
+                          <TableCell className="text-right space-x-2">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="default"
+                              className="h-8"
+                              onClick={() => void handleCompleteRequest(row)}
+                              disabled={scheduleLoading}
+                            >
+                              Complete
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="h-8"
+                              onClick={() => void handleDismissRequest(row)}
+                            >
+                              Dismiss
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
+                </TableBody>
+              </Table>
             </div>
-            {requestsLoading ? <Loader2 className="w-4 h-4 animate-spin text-slate-400" /> : null}
-          </div>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead>Vehicle</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Notes</TableHead>
-                <TableHead className="w-[200px] text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {driverRequests.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center text-slate-500 py-6 text-sm">
-                    No open driver requests.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                driverRequests.map((row) => {
-                  const veh = items.find((i) => i.vehicleId === row.vehicle_id);
-                  return (
-                    <TableRow key={row.id}>
-                      <TableCell className="whitespace-nowrap">{row.performed_at_date}</TableCell>
-                      <TableCell>{veh ? vehicleLabel(veh) : row.vehicle_id}</TableCell>
-                      <TableCell>{row.service_type || "—"}</TableCell>
-                      <TableCell className="max-w-xs truncate" title={row.notes || undefined}>
-                        {row.notes || "—"}
-                      </TableCell>
-                      <TableCell className="text-right space-x-2">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="default"
-                          className="h-8"
-                          onClick={() => void handleCompleteRequest(row)}
-                          disabled={scheduleLoading}
-                        >
-                          Complete
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          className="h-8"
-                          onClick={() => void handleDismissRequest(row)}
-                        >
-                          Dismiss
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })
-              )}
-            </TableBody>
-          </Table>
-        </div>
-      )}
+          ) : null}
 
-      {loading ? (
-        <div className="flex justify-center py-20">
-          <Loader2 className="w-10 h-10 text-slate-400 animate-spin" />
-        </div>
-      ) : (
-        <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 shadow-sm overflow-hidden">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Vehicle</TableHead>
-                <TableHead>Plate</TableHead>
-                <TableHead className="text-right">Odometer</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-center">Due items</TableHead>
-                <TableHead className="text-right">Next due</TableHead>
-                <TableHead className="text-right">Last service</TableHead>
-                <TableHead className="w-[100px] text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {items.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={8} className="text-center text-slate-500 py-12">
-                    No vehicles or no schedule data yet. Match vehicles to the motor catalog and bootstrap schedules from the vehicle profile.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                items.map((row) => {
-                  return (
-                    <TableRow key={row.vehicleId}>
-                      <TableCell className="font-medium">
-                        {row.make} {row.model} {row.year ? `(${row.year})` : ""}
-                      </TableCell>
-                      <TableCell>{row.licensePlate ?? "—"}</TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {row.odometer > 0 ? (
-                          <div>
-                            <div>{row.odometer.toLocaleString()}</div>
-                            {row.odometerMeta?.sourceLabel ? (
-                              <div className="text-[10px] text-muted-foreground">
-                                {row.odometerMeta.sourceLabel}
-                              </div>
-                            ) : null}
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <span
-                          className={
-                            row.fleetStatus === "Overdue"
-                              ? "text-red-600 font-medium"
-                              : row.fleetStatus === "Odometer needed"
-                                ? "text-slate-600 font-medium"
-                                : row.fleetStatus === "Due Soon"
-                                  ? "text-amber-600 font-medium"
-                                  : row.fleetStatus === "No schedule"
-                                    ? "text-slate-500 dark:text-slate-400"
-                                    : "text-emerald-600"
-                          }
-                        >
-                          {row.fleetStatus}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {(row.dueCounts?.overdue ?? 0) + (row.dueCounts?.dueSoon ?? 0) === 0 ? (
-                          <span className="text-slate-400">—</span>
-                        ) : (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 gap-1.5"
-                            onClick={() => setServicesDueView(row)}
-                          >
-                            {(row.dueCounts?.overdue ?? 0) > 0 ? (
-                              <span className="text-red-600 text-xs font-medium">
-                                {row.dueCounts?.overdue} overdue
-                              </span>
-                            ) : null}
-                            {(row.dueCounts?.dueSoon ?? 0) > 0 ? (
-                              <span className="text-amber-600 text-xs font-medium">
-                                {row.dueCounts?.dueSoon} due soon
-                              </span>
-                            ) : null}
-                          </Button>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right text-sm max-w-[200px]">
-                        {row.nextDueSummary ||
-                          (row.nextDueOdometer != null
-                            ? row.nextDueOdometer.toLocaleString()
-                            : "—")}
-                      </TableCell>
-                      <TableCell className="text-right text-sm tabular-nums">
-                        {row.lastService?.date
-                          ? `${row.lastService.date} · ${row.lastService.miles?.toLocaleString() ?? "—"} km`
-                          : "Never serviced"}
-                      </TableCell>
-                      <TableCell className="text-right space-x-1">
-                        {row.fleetStatus === "Odometer needed" ? (
-                          <Button
-                            type="button"
-                            variant="default"
-                            size="sm"
-                            className="h-8"
-                            onClick={() => setLogOdometerVehicle(row)}
-                          >
-                            Log odometer
-                          </Button>
-                        ) : null}
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="h-8"
-                          onClick={() => void prepareLogForVehicle(row.vehicleId)}
-                          disabled={scheduleLoading}
-                        >
-                          Log service
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })
-              )}
-            </TableBody>
-          </Table>
-        </div>
-      )}
-
-      {onNavigate && (
-        <div className="flex justify-end">
-          <Button type="button" variant="secondary" onClick={() => onNavigate("vehicles")}>
-            Go to Vehicles
-          </Button>
-        </div>
-      )}
+          {loading ? (
+            <MaintenanceHubLoadingState />
+          ) : error ? null : items.length === 0 ? (
+            <MaintenanceHubEmptyState onGoToVehicles={onNavigate ? () => onNavigate("vehicles") : undefined} />
+          ) : (
+            <MaintenanceOverviewPanel
+              items={items}
+              orgName={orgName}
+              onLogService={(id) => void prepareLogForVehicle(id)}
+              onLogOdometer={(id) => {
+                const row = items.find((i) => i.vehicleId === id);
+                if (row) setLogOdometerVehicle(row);
+              }}
+              onOpenDueDrawer={(id) => {
+                const row = items.find((i) => i.vehicleId === id);
+                if (row) setServicesDueView(row);
+              }}
+              onOdometerHistory={(id) => {
+                const row = items.find((i) => i.vehicleId === id);
+                if (row) setOdometerHistoryVehicle(row);
+              }}
+              onGoToVehicles={onNavigate ? () => onNavigate("vehicles") : undefined}
+            />
+          )}
         </TabsContent>
       </Tabs>
 
@@ -630,6 +583,19 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
           setServicesDueView(null);
           void prepareLogForVehicle(id);
         }}
+        onRecordMaintenanceEvent={(id) => {
+          setServicesDueView(null);
+          void prepareLogForVehicle(id);
+        }}
+      />
+
+      <OdometerHistoryDrawer
+        open={!!odometerHistoryVehicle}
+        onOpenChange={(open) => {
+          if (!open) setOdometerHistoryVehicle(null);
+        }}
+        vehicle={odometerHistoryVehicle}
+        onChanged={() => void load()}
       />
 
       <LogOdometerDialog
@@ -639,40 +605,19 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
         }}
         vehicleId={logOdometerVehicle?.vehicleId ?? ""}
         vehicleLabel={logOdometerVehicle ? vehicleLabel(logOdometerVehicle) : ""}
+        licensePlate={logOdometerVehicle?.licensePlate}
+        vin={logOdometerVehicle?.vin}
+        hasReading={(logOdometerVehicle?.odometerMeta?.reading ?? logOdometerVehicle?.odometer ?? 0) > 0}
         onSaved={() => void load()}
       />
 
-      <Dialog open={vehiclePickerOpen} onOpenChange={setVehiclePickerOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Log service</DialogTitle>
-            <DialogDescription>Which car was serviced?</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-2 py-2">
-            <Label htmlFor="fleet-log-vehicle">Vehicle</Label>
-            <Select value={pickerVehicleId} onValueChange={setPickerVehicleId}>
-              <SelectTrigger id="fleet-log-vehicle" className="w-full">
-                <SelectValue placeholder="Select vehicle" />
-              </SelectTrigger>
-              <SelectContent>
-                {items.map((row) => (
-                  <SelectItem key={row.vehicleId} value={row.vehicleId}>
-                    {vehicleLabel(row)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setVehiclePickerOpen(false)}>
-              Cancel
-            </Button>
-            <Button type="button" onClick={() => void handleContinueFromPicker()} disabled={!pickerVehicleId || scheduleLoading}>
-              {scheduleLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Continue"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <LogServiceWhichCarDialog
+        open={vehiclePickerOpen}
+        onOpenChange={setVehiclePickerOpen}
+        vehicles={items}
+        loading={scheduleLoading}
+        onContinue={(id) => void handleContinueFromPicker(id)}
+      />
 
       {logVehicleId ? (
         <LogMaintenanceServiceDialog

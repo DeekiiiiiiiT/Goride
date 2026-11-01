@@ -82,10 +82,33 @@ export function MaintenanceServiceLedgerPanel({
     try {
       const [out, hist] = await Promise.all([
         api.getMaintenanceOutstanding(vehicleId),
-        api.getMaintenanceServiceLedger(vehicleId, 150),
+        api.getMaintenanceServiceHistory({ vehicleId, page: 1 }),
       ]);
       setOutstanding(out.items || []);
-      setHistory(hist.items || []);
+      setHistory(
+        (hist.items || []).map((row) => ({
+          id: String(row.line_id ?? row.lineId ?? row.id ?? ""),
+          organizationId: String(row.organization_id ?? row.organizationId ?? ""),
+          vehicleId: String(row.vehicle_id ?? row.vehicleId ?? vehicleId),
+          performedAtDate: String(row.performed_at_date ?? row.performedAtDate ?? "").slice(0, 10),
+          performedAtMiles:
+            row.performed_at_miles != null
+              ? Number(row.performed_at_miles)
+              : row.performedAtMiles != null
+                ? Number(row.performedAtMiles)
+                : null,
+          categoryId: String(row.category_id ?? row.categoryId ?? ""),
+          categoryCode: String(row.category_code ?? row.categoryCode ?? ""),
+          categoryName: String(row.category_name ?? row.categoryName ?? ""),
+          position: row.position != null ? String(row.position) : null,
+          action: row.action != null ? String(row.action) : null,
+          templateId: row.template_id != null ? String(row.template_id) : null,
+          maintenanceRecordId: null,
+          workOrderId: row.work_order_id != null ? String(row.work_order_id) : null,
+          notes: null,
+          createdAt: String(row.completed_at ?? row.completedAt ?? ""),
+        })) as MaintenanceServiceLedgerEntry[],
+      );
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to load service ledger");
       setOutstanding([]);
