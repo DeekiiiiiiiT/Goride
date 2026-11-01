@@ -10,6 +10,9 @@ ALTER TABLE public.maintenance_work_orders
   ADD COLUMN IF NOT EXISTS voided_by uuid,
   ADD COLUMN IF NOT EXISTS void_reason text;
 
+ALTER TABLE public.maintenance_service_categories
+  ADD COLUMN IF NOT EXISTS overdue_effect text;
+
 ALTER TABLE public.vehicle_component_schedule
   ADD COLUMN IF NOT EXISTS baseline_source text,
   ADD COLUMN IF NOT EXISTS baseline_odometer numeric,
