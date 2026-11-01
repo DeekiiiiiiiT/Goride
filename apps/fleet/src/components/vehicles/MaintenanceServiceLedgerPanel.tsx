@@ -105,7 +105,7 @@ export function MaintenanceServiceLedgerPanel({
         <div>
           <h2 className="text-base font-semibold text-slate-900 dark:text-white flex items-center gap-2">
             <History className="w-4 h-4 text-amber-600" />
-            Service ledger
+            Service history
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
             What’s still due vs what was done — by component and corner. Not expense books.

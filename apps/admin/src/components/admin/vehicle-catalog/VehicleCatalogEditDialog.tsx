@@ -184,6 +184,10 @@ const WHEELS_BRAKES_FIELD_HINTS = {
     "The number of wheel studs and the diameter of the circle they form, also known as PCD (e.g., 4x100, 5x114.3).",
   wheelOffsetMm:
     "The distance from the hub mounting surface to the centerline of the wheel (e.g., 45, 50).",
+  absChannels:
+    "ABS layout shown on Fleet Find parts (e.g. 4-wheel Bosch). Shown on the Which side? chassis profile.",
+  handbrakeType:
+    "Parking brake mechanism shown on Fleet Find parts (e.g. rear drum cable).",
 } as const;
 
 const CATALOG_FORM_TOOLTIP_CLASS =
@@ -241,6 +245,8 @@ type FormState = {
   brake_size_mm: string;
   tire_size: string;
   bolt_pattern: string;
+  abs_channels: string;
+  handbrake_type: string;
   wheel_offset_mm: string;
   engine_oil_capacity_l: string;
   coolant_capacity_l: string;
@@ -315,6 +321,8 @@ function emptyForm(): FormState {
     brake_size_mm: "",
     tire_size: "",
     bolt_pattern: "",
+    abs_channels: "",
+    handbrake_type: "",
     wheel_offset_mm: "",
     engine_oil_capacity_l: "",
     coolant_capacity_l: "",
@@ -388,6 +396,8 @@ function recordToForm(r: VehicleCatalogRecord): FormState {
     brake_size_mm: s(r.brake_size_mm),
     tire_size: t(r.tire_size),
     bolt_pattern: t(r.bolt_pattern),
+    abs_channels: t(r.abs_channels),
+    handbrake_type: t(r.handbrake_type),
     wheel_offset_mm: s(r.wheel_offset_mm),
     engine_oil_capacity_l: s(r.engine_oil_capacity_l),
     coolant_capacity_l: s(r.coolant_capacity_l),
@@ -485,6 +495,8 @@ function toCreatePayload(form: FormState): VehicleCatalogCreatePayload {
   assign("brake_size_mm", optNum(form.brake_size_mm));
   assign("tire_size", form.tire_size.trim() || null);
   assign("bolt_pattern", form.bolt_pattern.trim() || null);
+  assign("abs_channels", form.abs_channels.trim() || null);
+  assign("handbrake_type", form.handbrake_type.trim() || null);
   assign("wheel_offset_mm", optNum(form.wheel_offset_mm));
   assign("engine_oil_capacity_l", optNum(form.engine_oil_capacity_l));
   assign("coolant_capacity_l", form.vehicle_class === "motorcycle" && form.cooling_type.trim().toLowerCase() === "air"
@@ -559,6 +571,8 @@ function toPatchPayload(form: FormState): Partial<VehicleCatalogRecord> {
     brake_size_mm: optNum(form.brake_size_mm),
     tire_size: form.tire_size.trim() || null,
     bolt_pattern: form.bolt_pattern.trim() || null,
+    abs_channels: form.abs_channels.trim() || null,
+    handbrake_type: form.handbrake_type.trim() || null,
     wheel_offset_mm: optNum(form.wheel_offset_mm),
     engine_oil_capacity_l: optNum(form.engine_oil_capacity_l),
     coolant_capacity_l:
@@ -1219,6 +1233,20 @@ export function VehicleCatalogEditDialog({
                 value={form.bolt_pattern}
                 onChange={update("bolt_pattern")}
                 placeholder="5x114.3"
+              />
+              <FieldWithHint
+                label="ABS channels"
+                hint={WHEELS_BRAKES_FIELD_HINTS.absChannels}
+                value={form.abs_channels}
+                onChange={update("abs_channels")}
+                placeholder="4-wheel Bosch"
+              />
+              <FieldWithHint
+                label="Handbrake type"
+                hint={WHEELS_BRAKES_FIELD_HINTS.handbrakeType}
+                value={form.handbrake_type}
+                onChange={update("handbrake_type")}
+                placeholder="Rear drum cable"
               />
               <FieldWithHint
                 label="Wheel offset mm"

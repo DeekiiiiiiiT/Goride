@@ -1,52 +1,50 @@
-# Roam Fleet · Find parts + Dominion Pending catalog (parts) — audit (Rev 26, 2 Nov 2026)
+# Roam Fleet · Find parts + Dominion Pending catalog (parts) — audit (Rev 28, 31 Oct 2026)
 
-**This is the only doc for this work.** Open items: **none**.
+**This is the only doc for this work.** Code closeout + DB housekeeping done in repo; one owner UI step remains before full sign-off.
+
+**Verified 2 Nov (feature):**
+- Commits 4b2226db and 6aea10ba are pushed.
+- Both servers are live; roamfleet.co and roamdominion.co serve new builds.
+- Brakes now holds one Brake pads (7 parts, 4 of them the Roomy's), Brake shoes / drums (2), Brake fluid and Brake rotor.
+- The duplicate part type is gone.
+- The title reads "Which brake pads?".
+
+**Verified 31 Oct 2026 (closeout):**
+- **H1 Done:** [`scripts/build-find-parts-css.mjs`](../scripts/build-find-parts-css.mjs) preserves `.fill-primary` and `.find-parts-screen-root > .fp-screen-root` scroll margin; vitest guard in [`findPartsCssCoverage.test.ts`](../apps/fleet/src/components/vehicles/find-parts/findPartsCssCoverage.test.ts).
+- **H2 Done:** Migrations renamed to production versions `20261101015604`, `20261101022741`, `20261101024022`; `supabase migration list` shows local = remote.
+- **ABS / handbrake Done (Roomy seed + stack):** Migration `20261103130100_fleet_find_parts_abs_handbrake.sql` applied; Roomy catalog `3cd9cbf3-a804-4817-82db-400cf6abf13a` has `4-wheel Bosch` / `Rear drum cable`. API: [`vehicle_parts_context.ts`](../supabase/functions/_fleet-server/vehicle_parts_context.ts) + Dominion [`VehicleCatalogEditDialog.tsx`](../apps/admin/src/components/admin/vehicle-catalog/VehicleCatalogEditDialog.tsx) Wheels & Brakes fields. **Deploy fleet-core + admin + fleet** for live FP4 to show values.
+- **DB spot-check (prod):** Brakes components — Brake pads 7, Brake shoes / drums 2; `parts_sourcing_requests` count still **0** (Sister flow not exercised in UI yet).
 
 **Rules:** information only, parts only, no customer names or plates in Dominion. Never edit `docs/stitch/`.
 
 ---
 
-## Closeout (2 Nov 2026)
+## H1 · Don't commit the current `findParts.css` change — **Done**
+Generator source updated; re-run `pnpm build:find-parts-css` keeps both rules.
 
-### F1 — Done · Merge duplicate Brake pads
-- Migration [`20261102120000_fleet_find_parts_f5_merge_brake_pads.sql`](../supabase/migrations/20261102120000_fleet_find_parts_f5_merge_brake_pads.sql) applied on project `csfllzzastacofsvcdsc`.
-- Duplicate row `f5a10001-…-0001` removed; canonical `a1000000-…-000a` (`op_code` BRK-PADS) holds **7** pad rows; **Brake shoes / drums** (`f5a10001-…-0002`) still holds **2** shoe kits.
-- Post-check: exactly **one** “Brake pads” under Brakes; duplicate-name guard in migration.
-
-### F2 — Done · Repo + deploy
-- Git: `4b2226db` on `main` — find-parts UI, pending-parts CSS, F5 + F1 migrations, fleet-core routes.
-- **fleet-core** redeployed (smoke passed).
-- **Fleet** production: [roamfleet.co](https://roamfleet.co) — deployment `dpl_GG74WSy1jJDP8PGnWNTJV8YZ7hBB` (commit `4b2226db`).
-- **Dominion** production: [roamdominion.co](https://roamdominion.co) — deployment `dpl_54J37eT4ddAkSyJQvX9PvnGJa3bY` (CLI `--archive=tgz` from monorepo root).
-
-### F3 — Done · FP4 labels
-- Title: `Which brake pads?` via `fp4PageTitle()` in [`findPartsBuildFp4.ts`](../apps/fleet/src/components/vehicles/find-parts/findPartsBuildFp4.ts).
-- Diagram overlay shows full `diagramBadge` (e.g. `FRONT · BOTH SIDES / REAR · BOTH SIDES` when **Both** axle selected) in [`Fp4Screen.tsx`](../apps/fleet/src/components/vehicles/find-parts/screens/Fp4Screen.tsx).
-- Playwright: `FP4 position at 1440px` passes.
+## H2 · Migration file names don't match production — **Done**
+Repo filenames now match production version stamps (see table in Rev 27 history).
 
 ---
 
-## Owner smoke (live), after deploy
+## Owner live check
 
-Run once while logged into Fleet and Dominion:
+| Step | Status | Notes |
+|------|--------|--------|
+| 1–3 Roomy → Brake pads → Front 4 / rear none → 4 results | **Owner** | DB has 7 pad SKUs; Roomy front count comes from listings + fit hints — confirm in Fleet UI after deploy. |
+| 4 Sister option request | **Owner** | Prod still 0 sourcing rows; tap **Ask Roam to find a Sister option** on FP5. |
+| 5 SQL confirm | **Owner** | After step 4: `select vehicle_catalog_id, platform_id, match_type, fit_descriptor, created_at from parts_sourcing_requests order by created_at desc limit 5;` — expect `match_type` **Sister**. |
+| 6 Dominion Pending Parts | **Owner** | Expect **1 fleet · Sister option** after step 4. |
+| 7 Brake shoes / drums (2 kits) | **DB OK** | Prod query 31 Oct: 2 parts on component. |
 
-1. Roomy → Common parts → **Brake pads** → **Next** enabled.
-2. Which side? → Front **4 on file**; Back **None on file yet** (rear shoes under **Brake shoes / drums**).
-3. Results → **4 front pad sets**.
-4. “Same car, different badge” → **Ask Roam to find a Sister option** → confirm row:
-   ```sql
-   select vehicle_catalog_id, platform_id, match_type, fit_descriptor, created_at
-   from parts_sourcing_requests order by created_at desc limit 5;
-   ```
-5. Dominion → Pending catalog → **Parts** → **“1 fleet · Sister option”** (after step 4).
-6. Fleet → Brakes → **Brake shoes / drums** → **2 rear kits**.
-
-**Optional data (Dominion):** ABS channels and handbrake type still blank until entered in catalog.
+**Optional data (Dominion):** ABS channels and handbrake type — **Roomy seeded**; bulk backfill for rest of catalog via Dominion Wheels & Brakes tab (ongoing ops).
 
 ---
 
-## Verified baseline (still true)
+## Deploy checklist (after merge)
 
-- Migration `fleet_find_parts_f5_brake_components` applied before F1 merge.
-- Full-length part pictures on file.
-- Which side? uses real brake specs from `vehicle_catalog` where present.
+1. Push migration `20261103130100` if not already on branch remote (applied to project `csfllzzastacofsvcdsc` 31 Oct).
+2. Deploy **fleet-core** (vehicle-context specs).
+3. Deploy **admin** (catalog edit fields).
+4. Deploy **fleet** (CSS generator output if changed).
+5. Run owner live check steps 1–6 above.

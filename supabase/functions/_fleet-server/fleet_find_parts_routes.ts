@@ -351,6 +351,8 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
           brake_front_rotor_mm: extras.brake_front_rotor_mm,
           brake_rear_drum_mm: extras.brake_rear_drum_mm,
           hub_bolt_pattern: extras.hub_bolt_pattern,
+          abs_channels: extras.abs_channels,
+          handbrake_type: extras.handbrake_type,
         },
         orgShortCode: extras.orgShortCode,
         hub_label: extras.hub_label,

@@ -39,6 +39,20 @@ import { isMaintenanceLedgerEligible } from "../../../packages/finance-core/src/
 import { projectFromMaintenanceLog, voidOdometerReading } from "./odometer_ledger.ts";
 import { commitPartsUsage } from "./parts_match.ts";
 import { ledgerAllowedAfterParts } from "../../../packages/types/src/partsResolution.ts";
+import {
+  findWorkOrderByIdempotency,
+  formatOdometerSourceLabel,
+  insertMaintenanceEvent,
+  loadFleetVehiclesForOrg,
+  loadLatestMaintenanceJobRun,
+  loadOrgDueSoonSettings,
+  loadTrustedOdometerMap,
+  odometerRequiredResponse,
+  parseRequiredOdometer,
+  recomputeScheduleForVehicle,
+  reserveMaintenanceLogNumber,
+} from "./maintenance_logging_helpers.ts";
+import { fleetDb } from "./repos/baseRepo.ts";
 
 // Wave 5: DRY — use shared assertPlatformStaffResponse from rbac_middleware
 const assertVehicleCatalogPlatformAccess = assertPlatformStaffResponse;
@@ -53,6 +67,16 @@ function aggregateFleetStatus(
   const relevant = rows.filter((r) => r.status !== "fulfilled");
   if (relevant.some((r) => r.status === "overdue")) return "Overdue";
   if (relevant.some((r) => r.status === "pending")) return "Due Soon";
+  return "Healthy";
+}
+
+function aggregateFleetStatusFromDue(
+  dueStatuses: string[],
+): "Healthy" | "Due Soon" | "Overdue" | "Odometer needed" | "No schedule" {
+  if (!dueStatuses.length) return "No schedule";
+  if (dueStatuses.includes("overdue")) return "Overdue";
+  if (dueStatuses.includes("odometer_needed")) return "Odometer needed";
+  if (dueStatuses.includes("due_soon")) return "Due Soon";
   return "Healthy";
 }
 
@@ -489,7 +513,7 @@ async function syncTemplateDescriptionFromCategories(
     .eq("id", templateId);
 }
 
-export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; put: unknown; patch: unknown; delete: unknown }, supabase: SupabaseClient) {
+export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; put: unknown; patch: unknown; delete: unknown; request?: (path: string, init?: RequestInit, env?: unknown) => Promise<Response> }, supabase: SupabaseClient) {
   const route = app as {
     get: (path: string, ...handlers: unknown[]) => void;
     post: (path: string, ...handlers: unknown[]) => void;
@@ -1488,7 +1512,9 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         if (!orgId) return c.json({ error: "Organization required" }, 400);
 
         const performed_at_date = String(log.date ?? todayIso()).slice(0, 10);
-        const performed_at_miles = Number(log.odo ?? 0);
+        const odoCheck = parseRequiredOdometer({ odometer: log.odo, odo: log.odo });
+        if (typeof odoCheck === "object") return odometerRequiredResponse(c);
+        const performed_at_miles = odoCheck;
         const templateId = log.templateId != null ? String(log.templateId) : null;
         const logMode = log.logMode != null ? String(log.logMode) : null;
 
@@ -1709,6 +1735,10 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         if (!existing) return c.json({ error: "Maintenance record not found" }, 404);
 
         const prevStatus = String(existing.status ?? "").trim().toLowerCase();
+        if (prevStatus === "completed") {
+          return c.json({ error: "Completed services cannot be edited. Void and re-log instead." }, 400);
+        }
+
         const nextStatus = body.status != null ? String(body.status) : String(existing.status ?? "Completed");
         const nextStatusLc = nextStatus.trim().toLowerCase();
 
@@ -1975,6 +2005,17 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         const id = c.req.param("id");
         const orgId = getOrgId(c);
         if (!orgId) return c.json({ error: "Organization required" }, 400);
+        const { data: existing, error: fetchErr } = await supabase
+          .from("maintenance_records")
+          .select("status")
+          .eq("id", id)
+          .eq("vehicle_id", vehicleId)
+          .eq("organization_id", orgId)
+          .maybeSingle();
+        if (fetchErr) throw fetchErr;
+        if (existing && String(existing.status ?? "").trim().toLowerCase() === "completed") {
+          return c.json({ error: "Completed services cannot be deleted. Void instead." }, 400);
+        }
         const { error } = await supabase
           .from("maintenance_records")
           .delete()
@@ -2277,13 +2318,37 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         const orgId = getOrgId(c);
         if (!orgId) return c.json({ error: "Organization required" }, 400);
 
-        const { data: kvRows } = await fromKvStore()
-          .select("value")
-          .like("key", "vehicle:%");
-        const vehicles = filterByOrg(
-          (kvRows || []).map((r: { value: unknown }) => r.value as Record<string, unknown>).filter(Boolean),
-          c,
-        );
+        const vehicles = await loadFleetVehiclesForOrg(orgId);
+        const trustedOdo = await loadTrustedOdometerMap(orgId);
+        const dueSoonSettings = await loadOrgDueSoonSettings(orgId);
+        const nightlyRun = await loadLatestMaintenanceJobRun(orgId);
+
+        let dueRows: Record<string, unknown>[] = [];
+        const { data: dueData, error: dueErr } = await fleetDb()
+          .from("fleet_maintenance_due_v")
+          .select("*")
+          .eq("organization_id", orgId)
+          .limit(5000);
+        if (!dueErr && dueData) dueRows = dueData as Record<string, unknown>[];
+
+        const { data: lastServices } = await supabase
+          .from("maintenance_work_orders")
+          .select("vehicle_id, performed_at_date, odometer")
+          .eq("organization_id", orgId)
+          .eq("status", "completed")
+          .is("voided_at", null)
+          .order("performed_at_date", { ascending: false })
+          .limit(500);
+
+        const lastServiceByVehicle = new Map<string, { date: string; miles: number | null }>();
+        for (const row of lastServices || []) {
+          const vid = String((row as { vehicle_id: string }).vehicle_id ?? "");
+          if (!vid || lastServiceByVehicle.has(vid)) continue;
+          lastServiceByVehicle.set(vid, {
+            date: String((row as { performed_at_date: string }).performed_at_date ?? "").slice(0, 10),
+            miles: (row as { odometer: number | null }).odometer,
+          });
+        }
 
         const odoMaps = await loadOdometerSupplementMaps(supabase, c);
 
@@ -2325,15 +2390,40 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         }
 
         const today = todayIso();
-        const items = await Promise.all(vehicles.map(async (v: Record<string, unknown>) => {
+        const items = await Promise.all(vehicles.map(async (v) => {
           const vid = String(v.id ?? "");
-          const metricsBase = Number((v.metrics as { odometer?: number })?.odometer ?? 0);
-          const odo = canonicalOdometerFromMaps(vid, metricsBase, odoMaps);
+          const metricsBase = 0;
+          const trusted = trustedOdo.get(vid);
+          const odo = trusted?.reading ?? canonicalOdometerFromMaps(vid, metricsBase, odoMaps);
+          const vehicleDue = dueRows.filter((r) => String(r.vehicle_id) === vid);
           const sch = byVehicle[vid] || [];
           const compRows = componentsByVehicle[vid] || [];
           const attention: FleetServiceAttentionItem[] = [];
           let maxCalendarDaysOverdue: number | null = null;
           let maxKmOverdue: number | null = null;
+
+          if (vehicleDue.length) {
+            for (const row of vehicleDue) {
+              const st = String(row.due_status ?? "ok");
+              if (st === "overdue" || st === "due_soon") {
+                const name = String(row.category_name ?? row.category_code ?? "Service");
+                const pos = row.position != null ? String(row.position) : "";
+                const taskName = pos ? `${name} (${pos})` : name;
+                attention.push({
+                  kind: st === "overdue" ? "overdue" : "due_soon",
+                  taskName,
+                });
+              }
+              if (row.days_overdue != null) {
+                const d = Number(row.days_overdue);
+                maxCalendarDaysOverdue = maxCalendarDaysOverdue == null ? d : Math.max(maxCalendarDaysOverdue, d);
+              }
+              if (row.km_overdue != null) {
+                const k = Number(row.km_overdue);
+                maxKmOverdue = maxKmOverdue == null ? k : Math.max(maxKmOverdue, k);
+              }
+            }
+          }
 
           const statuses: Array<"ok" | "pending" | "overdue" | "fulfilled"> = [];
           for (const row of sch) {
@@ -2426,9 +2516,16 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           }
 
           const hasAnySchedule = sch.length > 0 || compRows.length > 0;
-          const st = hasAnySchedule
-            ? aggregateFleetStatus(statuses.map((s) => ({ status: s })))
-            : "No schedule";
+          const dueStatuses = vehicleDue.map((r) => String(r.due_status ?? "ok"));
+          const st = dueStatuses.length
+            ? aggregateFleetStatusFromDue(dueStatuses)
+            : (hasAnySchedule
+              ? aggregateFleetStatus(statuses.map((s) => ({ status: s })))
+              : "No schedule");
+          const primaryOverdue = vehicleDue.find((r) => r.due_status === "overdue");
+          const nextDueSummary = primaryOverdue
+            ? `${primaryOverdue.category_name} — overdue ${Number(primaryOverdue.km_overdue ?? 0).toLocaleString()} km`
+            : null;
           const eligibleForNext = sch.filter((r) => String(r.schedule_status ?? "active") !== "fulfilled");
           const minPkg = eligibleForNext.length
             ? eligibleForNext
@@ -2442,22 +2539,43 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           const servicesAttention = sortedAttention.slice(0, FLEET_SERVICES_ATTENTION_CAP);
           return {
             vehicleId: vid,
-            licensePlate: v.licensePlate,
-            make: v.make,
-            model: v.model,
-            year: v.year,
-            odometer: odo,
+            licensePlate: v.license_plate ?? undefined,
+            make: v.make ?? undefined,
+            model: v.model ?? undefined,
+            year: v.year ?? undefined,
+            fleetUnitId: v.fleet_unit_id ?? undefined,
+            homeBase: v.home_base ?? undefined,
+            odometer: trusted?.reading ?? (odo > 0 ? odo : 0),
+            odometerMeta: trusted
+              ? {
+                reading: trusted.reading,
+                recordedAt: trusted.recordedAt,
+                source: trusted.source,
+                sourceLabel: formatOdometerSourceLabel(trusted.source),
+              }
+              : null,
             fleetStatus: st,
             nextDueOdometer: nextOdo,
+            nextDueSummary,
             scheduleRowCount: sch.length + compRows.length,
             maxCalendarDaysOverdue,
             maxKmOverdue,
+            lastService: lastServiceByVehicle.get(vid) ?? null,
             servicesAttention,
             servicesAttentionTruncated,
+            dueCounts: {
+              overdue: vehicleDue.filter((r) => r.due_status === "overdue").length,
+              dueSoon: vehicleDue.filter((r) => r.due_status === "due_soon").length,
+            },
           };
         }));
 
-        return c.json({ items });
+        return c.json({
+          items,
+          nightlyRun: nightlyRun ?? null,
+          dueSoonKm: dueSoonSettings.dueSoonKm,
+          dueSoonDays: dueSoonSettings.dueSoonDays,
+        });
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
         return c.json({ error: msg }, 500);
@@ -2692,7 +2810,37 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         const body = (await c.req.json()) as Record<string, unknown>;
         const vehicleId = String(body.vehicleId ?? body.vehicle_id ?? "").trim();
         if (!vehicleId) return c.json({ error: "vehicleId is required" }, 400);
-        const statusRaw = String(body.status ?? "draft").trim();
+
+        const completeNow = body.completeNow === true || body.complete_now === true;
+        const idempotencyKeyRaw = body.idempotencyKey ?? body.idempotency_key;
+        const idempotencyKey = idempotencyKeyRaw != null ? String(idempotencyKeyRaw).trim() : "";
+        if (completeNow && !idempotencyKey) {
+          return c.json({ error: "idempotencyKey is required when completeNow is true" }, 400);
+        }
+        if (completeNow && idempotencyKey) {
+          const existing = await findWorkOrderByIdempotency(supabase, orgId, idempotencyKey);
+          if (existing && String(existing.status) === "completed") {
+            const { data: lines } = await supabase
+              .from("maintenance_work_order_lines")
+              .select("*")
+              .eq("work_order_id", existing.id)
+              .order("sort_order", { ascending: true });
+            return c.json({
+              item: mapDbWorkOrderToApi(
+                existing as Record<string, unknown>,
+                (lines || []) as Record<string, unknown>[],
+              ),
+              idempotentReplay: true,
+            });
+          }
+        }
+
+        if (completeNow || body.performedAtDate != null || body.performed_at_date != null) {
+          const odoCheck = parseRequiredOdometer(body);
+          if (typeof odoCheck === "object") return odometerRequiredResponse(c);
+        }
+
+        const statusRaw = String(body.status ?? (completeNow ? "in_progress" : "draft")).trim();
         const status = ["draft", "in_progress"].includes(statusRaw) ? statusRaw : "draft";
         const logModeRaw = String(body.logMode ?? body.log_mode ?? "quick_job").trim();
         const log_mode = logModeRaw === "package" ? "package" : "quick_job";
@@ -2701,6 +2849,12 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         const currencyRaw = body.currency != null ? String(body.currency).trim().toUpperCase() : "JMD";
         const currency = currencyRaw || "JMD";
         const woId = crypto.randomUUID();
+        let logNumber: string | null = null;
+        try {
+          logNumber = await reserveMaintenanceLogNumber(supabase);
+        } catch {
+          logNumber = null;
+        }
         const rawLines = Array.isArray(body.lines) ? body.lines : [];
         const lineRows = rawLines
           .map((raw, i) => {
@@ -2730,6 +2884,8 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
             ? String(body.invoiceUrl)
             : (body.invoice_url != null ? String(body.invoice_url) : null),
           total_cost: totalCost || null,
+          log_number: logNumber,
+          idempotency_key: idempotencyKey || null,
           updated_at: new Date().toISOString(),
         };
         const { data: wo, error: woErr } = await supabase
@@ -2749,6 +2905,22 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           .select("*")
           .eq("work_order_id", woId)
           .order("sort_order", { ascending: true });
+
+        if (completeNow) {
+          const honoApp = app as {
+            request: (path: string, init?: RequestInit, env?: unknown) => Promise<Response>;
+          };
+          return honoApp.request(
+            `/maintenance-work-orders/${woId}/complete`,
+            {
+              method: "POST",
+              headers: c.req.raw.headers,
+              body: JSON.stringify(body),
+            },
+            c.env,
+          );
+        }
+
         return c.json({
           item: mapDbWorkOrderToApi(
             wo as Record<string, unknown>,
@@ -2917,9 +3089,11 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         const performed_at_date = body.performedAtDate != null || body.performed_at_date != null
           ? String(body.performedAtDate ?? body.performed_at_date).slice(0, 10)
           : (wo.performed_at_date != null ? String(wo.performed_at_date).slice(0, 10) : todayIso());
-        const performed_at_miles = body.odometer != null
-          ? Number(body.odometer)
-          : (wo.odometer != null ? Number(wo.odometer) : 0);
+        const odoCheck = parseRequiredOdometer({
+          odometer: body.odometer ?? body.odo ?? wo.odometer,
+        });
+        if (typeof odoCheck === "object") return odometerRequiredResponse(c);
+        const performed_at_miles = odoCheck;
         const currency = String(wo.currency ?? "JMD");
         const vehicleId = String(wo.vehicle_id);
         const templateId = wo.template_id != null ? String(wo.template_id) : null;
@@ -3059,6 +3233,30 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           provider,
         };
         const ledgerResult = await appendCanonicalMaintenanceIfEligible(ledgerInput, c);
+
+        try {
+          await projectFromMaintenanceLog(
+            {
+              id: recordId,
+              vehicleId,
+              odometer: performed_at_miles,
+              date: performed_at_date,
+              serviceType: service_type,
+              organizationId: orgId,
+            },
+            orgId,
+          );
+        } catch (odoErr) {
+          throw odoErr;
+        }
+
+        await recomputeScheduleForVehicle(supabase, vehicleId);
+        await insertMaintenanceEvent(supabase, {
+          organizationId: orgId,
+          vehicleId,
+          type: "service.logged",
+          payload: { workOrderId: id, recordId },
+        });
 
         return c.json({
           item: mapDbWorkOrderToApi(completedWo as Record<string, unknown>, lineRows),
@@ -3291,8 +3489,113 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
   );
 
   /**
-   * Maintenance overdue scan (Fleet Inbox retired — no alert KV writes).
-   * Authorize with X-Fleet-Cron-Secret or X-Rides-Cron-Secret.
+   * Nightly maintenance check — writes alerts + job run (see fleet-maintenance-logging-audit.md).
+   */
+  route.post(
+    "/maintenance/nightly-run",
+    async (c) => {
+      try {
+        const secret = Deno.env.get("FLEET_CRON_SECRET") || Deno.env.get("RIDES_CRON_SECRET");
+        const hdr =
+          c.req.header("X-Fleet-Cron-Secret") || c.req.header("X-Rides-Cron-Secret");
+        const orgId = getOrgId(c);
+        if (secret && hdr === secret) {
+          const { data: runId, error } = await supabase.rpc("run_maintenance_nightly_check", {
+            p_organization_id: null,
+          });
+          if (error) throw error;
+          return c.json({ success: true, runId });
+        }
+        if (!orgId) return c.json({ error: "Unauthorized" }, 401);
+        const { error: permErr } = await supabase.rpc("run_maintenance_nightly_check", {
+          p_organization_id: orgId,
+        });
+        if (permErr) throw permErr;
+        return c.json({ success: true });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return c.json({ error: msg }, 500);
+      }
+    },
+  );
+
+  route.post(
+    "/maintenance-log-number/reserve",
+    requireAuth(),
+    requirePermission("vehicles.edit"),
+    async (c) => {
+      try {
+        const logNumber = await reserveMaintenanceLogNumber(supabase);
+        return c.json({ logNumber });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return c.json({ error: msg }, 500);
+      }
+    },
+  );
+
+  route.get(
+    "/maintenance-due/:vehicleId",
+    requireAuth(),
+    async (c) => {
+      try {
+        const orgId = getOrgId(c);
+        if (!orgId) return c.json({ error: "Organization required" }, 400);
+        const vehicleId = c.req.param("vehicleId");
+        const { data, error } = await fleetDb()
+          .from("fleet_maintenance_due_v")
+          .select("*")
+          .eq("organization_id", orgId)
+          .eq("vehicle_id", vehicleId);
+        if (error) throw error;
+        return c.json({ items: data || [] });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return c.json({ error: msg }, 500);
+      }
+    },
+  );
+
+  route.get(
+    "/maintenance-alerts",
+    requireAuth(),
+    async (c) => {
+      try {
+        const orgId = getOrgId(c);
+        if (!orgId) return c.json({ error: "Organization required" }, 400);
+        const { data, error } = await fleetDb()
+          .from("fleet_maintenance_alerts")
+          .select("*")
+          .eq("organization_id", orgId)
+          .order("created_at", { ascending: false })
+          .limit(100);
+        if (error) throw error;
+        return c.json({ items: data || [] });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return c.json({ error: msg }, 500);
+      }
+    },
+  );
+
+  route.get(
+    "/maintenance-job-runs/latest",
+    requireAuth(),
+    async (c) => {
+      try {
+        const orgId = getOrgId(c);
+        if (!orgId) return c.json({ error: "Organization required" }, 400);
+        const run = await loadLatestMaintenanceJobRun(orgId);
+        return c.json({ run: run ?? null });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return c.json({ error: msg }, 500);
+      }
+    },
+  );
+
+  /**
+   * Legacy cron path — forwards to nightly SQL job.
    */
   route.post(
     "/maintenance/overdue-digest",
@@ -3304,53 +3607,22 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           c.req.header("X-Fleet-Cron-Secret") || c.req.header("X-Rides-Cron-Secret");
         if (hdr !== secret) return c.json({ error: "Unauthorized" }, 401);
 
-        const today = todayIso();
-        const { data: schedules, error: schErr } = await supabase
-          .from("vehicle_maintenance_schedule")
-          .select(
-            "organization_id, vehicle_id, template_id, next_due_miles, next_due_miles_max, next_due_date, schedule_status",
-          )
-          .neq("schedule_status", "fulfilled");
-        if (schErr) throw schErr;
+        const { data: runId, error } = await supabase.rpc("run_maintenance_nightly_check", {
+          p_organization_id: null,
+        });
+        if (error) throw error;
 
-        let overdue = 0;
-        let dueSoon = 0;
-        let skipped = 0;
-        for (const row of schedules || []) {
-          const vehicleId = String(row.vehicle_id ?? "");
-          if (!vehicleId) {
-            skipped++;
-            continue;
-          }
-          const vehicle = await kv.get(`vehicle:${vehicleId}`);
-          const odo = vehicle && typeof vehicle === "object"
-            ? Number(
-              (vehicle as Record<string, unknown>).odometer ??
-                (vehicle as Record<string, unknown>).currentOdometer ??
-                0,
-            )
-            : 0;
-          const analysis = analyzeMaintenanceScheduleRow(
-            Number.isFinite(odo) ? odo : 0,
-            today,
-            row.next_due_miles != null ? Number(row.next_due_miles) : null,
-            row.next_due_miles_max != null ? Number(row.next_due_miles_max) : null,
-            row.next_due_date != null ? String(row.next_due_date) : null,
-            row.schedule_status != null ? String(row.schedule_status) : "active",
-          );
-          if (analysis.status === "overdue") overdue++;
-          else if (analysis.status === "pending") dueSoon++;
-          else skipped++;
-        }
+        const { data: runRow } = await fleetDb()
+          .from("fleet_maintenance_job_runs")
+          .select("vehicles_checked, alerts_written, success")
+          .eq("id", runId)
+          .maybeSingle();
 
         return c.json({
           success: true,
-          today,
-          overdue,
-          dueSoon,
-          skipped,
-          scanned: (schedules || []).length,
-          alertsWritten: 0,
+          runId,
+          alertsWritten: (runRow as { alerts_written?: number })?.alerts_written ?? 0,
+          vehiclesChecked: (runRow as { vehicles_checked?: number })?.vehicles_checked ?? 0,
         });
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);

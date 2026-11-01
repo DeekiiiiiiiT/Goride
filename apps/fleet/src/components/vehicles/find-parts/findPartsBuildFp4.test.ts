@@ -56,4 +56,18 @@ describe("buildFp4ViewModel", () => {
     });
     expect(vm.diagramBadge).toBe("FRONT · BOTH SIDES / REAR · BOTH SIDES");
   });
+
+  it("maps abs and handbrake from vehicle-context specs", () => {
+    const vm = buildFp4ViewModel({
+      componentName: "Brake pads",
+      ctx: {
+        specs: {
+          abs_channels: "4-wheel Bosch",
+          handbrake_type: "Rear drum cable",
+        },
+      },
+    });
+    expect(vm.chassisProfile.abs).toBe("4-wheel Bosch");
+    expect(vm.chassisProfile.handbrake).toBe("Rear drum cable");
+  });
 });

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { Loader2, ListChecks, Package, Plus, Wrench, Car, History, Eye } from "lucide-react";
+import { Loader2, ListChecks, Package, Plus, Wrench, Car, History } from "lucide-react";
 import { api } from "../../services/api";
 import { Button } from "../ui/button";
 import {
@@ -28,6 +28,9 @@ import {
 } from "../ui/select";
 import { LogMaintenanceServiceDialog } from "./LogMaintenanceServiceDialog";
 import { MaintenanceServiceLedgerPanel } from "./MaintenanceServiceLedgerPanel";
+import { MaintenanceNightlyStatusLine } from "./maintenance-logging/MaintenanceNightlyStatusLine";
+import { MaintenanceDueItemsDrawer } from "./maintenance-logging/MaintenanceDueItemsDrawer";
+import { LogOdometerDialog } from "./maintenance-logging/LogOdometerDialog";
 import { catalogOptionsFromScheduleRows } from "../../utils/maintenanceCatalogOptions";
 import type {
   CatalogMaintenanceTaskOption,
@@ -72,12 +75,23 @@ type FleetHubVehicleRow = {
   make?: string;
   model?: string;
   year?: string;
+  fleetUnitId?: string;
+  homeBase?: string;
   odometer: number;
+  odometerMeta?: {
+    reading: number;
+    recordedAt: string;
+    source: string;
+    sourceLabel: string;
+  } | null;
   fleetStatus: string;
   nextDueOdometer: number | null;
+  nextDueSummary?: string | null;
   scheduleRowCount: number;
   maxCalendarDaysOverdue: number | null;
   maxKmOverdue: number | null;
+  lastService?: { date: string; miles: number | null } | null;
+  dueCounts?: { overdue: number; dueSoon: number };
   servicesAttention: Array<{ taskName: string; kind: "overdue" | "due_soon" }>;
   servicesAttentionTruncated: boolean;
 };
@@ -106,6 +120,8 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<FleetHubVehicleRow[]>([]);
   const [servicesDueView, setServicesDueView] = useState<FleetHubVehicleRow | null>(null);
+  const [nightlyRun, setNightlyRun] = useState<Record<string, unknown> | null>(null);
+  const [logOdometerVehicle, setLogOdometerVehicle] = useState<FleetHubVehicleRow | null>(null);
 
   const [vehiclePickerOpen, setVehiclePickerOpen] = useState(false);
   const [pickerVehicleId, setPickerVehicleId] = useState<string>("");
@@ -143,6 +159,7 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
     setError(null);
     try {
       const res = await api.getMaintenanceFleetSummary();
+      setNightlyRun((res as { nightlyRun?: Record<string, unknown> }).nightlyRun ?? null);
       setItems(
         (res.items || []).map((row) => ({
           ...row,
@@ -270,11 +287,12 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
         <div className="hidden md:block">
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
             <Wrench className="w-7 h-7 text-amber-600" />
-            Fleet Maintenance
+            Fleet maintenance
           </h1>
           <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-            By vehicle status, the service ledger, and parts for your cars.
+            What each car is due for, what was done, and parts for your cars.
           </p>
+          <MaintenanceNightlyStatusLine run={nightlyRun} missed={!nightlyRun?.success} />
         </div>
         <div className="flex flex-wrap gap-2 justify-end">
           <Button
@@ -286,7 +304,7 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
             title={items.length === 0 ? "No vehicles in fleet" : undefined}
           >
             <Plus className="w-4 h-4" />
-            + Log new service
+            Log service
           </Button>
           <Button
             type="button"
@@ -356,11 +374,11 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
         <TabsList className={`h-10 bg-slate-100 dark:bg-slate-800/80 p-1 ${findPartsActive ? "shrink-0" : ""}`}>
           <TabsTrigger value="by-vehicle" className="gap-1.5 px-4">
             <Car className="w-4 h-4" />
-            By vehicle
+            Overview
           </TabsTrigger>
           <TabsTrigger value="service-ledger" className="gap-1.5 px-4">
             <History className="w-4 h-4" />
-            Service ledger
+            Service history
           </TabsTrigger>
           {canViewParts ? (
             <TabsTrigger value="find-parts" className="gap-1.5 px-4">
@@ -473,71 +491,105 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
                 <TableHead>Plate</TableHead>
                 <TableHead className="text-right">Odometer</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="text-right">Overdue</TableHead>
-                <TableHead className="text-center w-[100px]">Services due</TableHead>
-                <TableHead className="text-right">Next due (km)</TableHead>
-                <TableHead className="text-right">Schedule rows</TableHead>
+                <TableHead className="text-center">Due items</TableHead>
+                <TableHead className="text-right">Next due</TableHead>
+                <TableHead className="text-right">Last service</TableHead>
                 <TableHead className="w-[100px] text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {items.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center text-slate-500 py-12">
+                  <TableCell colSpan={8} className="text-center text-slate-500 py-12">
                     No vehicles or no schedule data yet. Match vehicles to the motor catalog and bootstrap schedules from the vehicle profile.
                   </TableCell>
                 </TableRow>
               ) : (
                 items.map((row) => {
-                  const dueCount = row.servicesAttention?.length ?? 0;
                   return (
                     <TableRow key={row.vehicleId}>
                       <TableCell className="font-medium">
                         {row.make} {row.model} {row.year ? `(${row.year})` : ""}
                       </TableCell>
                       <TableCell>{row.licensePlate ?? "—"}</TableCell>
-                      <TableCell className="text-right tabular-nums">{row.odometer.toLocaleString()}</TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {row.odometer > 0 ? (
+                          <div>
+                            <div>{row.odometer.toLocaleString()}</div>
+                            {row.odometerMeta?.sourceLabel ? (
+                              <div className="text-[10px] text-muted-foreground">
+                                {row.odometerMeta.sourceLabel}
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
                       <TableCell>
                         <span
                           className={
                             row.fleetStatus === "Overdue"
                               ? "text-red-600 font-medium"
-                              : row.fleetStatus === "Due Soon"
-                                ? "text-amber-600 font-medium"
-                                : row.fleetStatus === "No schedule"
-                                  ? "text-slate-500 dark:text-slate-400"
-                                  : "text-emerald-600"
+                              : row.fleetStatus === "Odometer needed"
+                                ? "text-slate-600 font-medium"
+                                : row.fleetStatus === "Due Soon"
+                                  ? "text-amber-600 font-medium"
+                                  : row.fleetStatus === "No schedule"
+                                    ? "text-slate-500 dark:text-slate-400"
+                                    : "text-emerald-600"
                           }
                         >
                           {row.fleetStatus}
                         </span>
                       </TableCell>
-                      <TableCell className="text-right tabular-nums text-sm text-slate-700 dark:text-slate-300">
-                        {formatFleetOverdueLine(row.maxCalendarDaysOverdue, row.maxKmOverdue)}
-                      </TableCell>
                       <TableCell className="text-center">
-                        {dueCount === 0 ? (
+                        {(row.dueCounts?.overdue ?? 0) + (row.dueCounts?.dueSoon ?? 0) === 0 ? (
                           <span className="text-slate-400">—</span>
                         ) : (
                           <Button
                             type="button"
                             variant="ghost"
                             size="sm"
-                            className="h-8 gap-1.5 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                            className="h-8 gap-1.5"
                             onClick={() => setServicesDueView(row)}
-                            title={`View ${dueCount} service${dueCount === 1 ? "" : "s"} due`}
-                            aria-label={`View ${dueCount} services due`}
                           >
-                            <Eye className="w-4 h-4" />
-                            <span className="tabular-nums text-xs font-medium">{dueCount}</span>
+                            {(row.dueCounts?.overdue ?? 0) > 0 ? (
+                              <span className="text-red-600 text-xs font-medium">
+                                {row.dueCounts?.overdue} overdue
+                              </span>
+                            ) : null}
+                            {(row.dueCounts?.dueSoon ?? 0) > 0 ? (
+                              <span className="text-amber-600 text-xs font-medium">
+                                {row.dueCounts?.dueSoon} due soon
+                              </span>
+                            ) : null}
                           </Button>
                         )}
                       </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {row.nextDueOdometer != null ? row.nextDueOdometer.toLocaleString() : "—"}
+                      <TableCell className="text-right text-sm max-w-[200px]">
+                        {row.nextDueSummary ||
+                          (row.nextDueOdometer != null
+                            ? row.nextDueOdometer.toLocaleString()
+                            : "—")}
                       </TableCell>
-                      <TableCell className="text-right">{row.scheduleRowCount}</TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="text-right text-sm tabular-nums">
+                        {row.lastService?.date
+                          ? `${row.lastService.date} · ${row.lastService.miles?.toLocaleString() ?? "—"} km`
+                          : "Never serviced"}
+                      </TableCell>
+                      <TableCell className="text-right space-x-1">
+                        {row.fleetStatus === "Odometer needed" ? (
+                          <Button
+                            type="button"
+                            variant="default"
+                            size="sm"
+                            className="h-8"
+                            onClick={() => setLogOdometerVehicle(row)}
+                          >
+                            Log odometer
+                          </Button>
+                        ) : null}
                         <Button
                           type="button"
                           variant="outline"
@@ -546,7 +598,7 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
                           onClick={() => void prepareLogForVehicle(row.vehicleId)}
                           disabled={scheduleLoading}
                         >
-                          Log
+                          Log service
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -568,85 +620,33 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
         </TabsContent>
       </Tabs>
 
-      <Dialog
+      <MaintenanceDueItemsDrawer
         open={!!servicesDueView}
         onOpenChange={(open) => {
           if (!open) setServicesDueView(null);
         }}
-      >
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Services due</DialogTitle>
-            <DialogDescription>
-              {servicesDueView ? vehicleLabel(servicesDueView) : ""}
-              {servicesDueView?.servicesAttentionTruncated
-                ? " — showing top items; open Service ledger for the full list."
-                : null}
-            </DialogDescription>
-          </DialogHeader>
-          <ul className="space-y-2 py-1 max-h-[50vh] overflow-y-auto">
-            {(servicesDueView?.servicesAttention ?? []).map((item, idx) => (
-              <li
-                key={`${item.taskName}-${item.kind}-${idx}`}
-                className="flex items-start justify-between gap-3 rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2.5"
-              >
-                <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                  {item.taskName}
-                </span>
-                <span
-                  className={
-                    item.kind === "overdue"
-                      ? "shrink-0 text-xs font-semibold uppercase tracking-wide text-red-600"
-                      : "shrink-0 text-xs font-semibold uppercase tracking-wide text-amber-600"
-                  }
-                >
-                  {item.kind === "overdue" ? "Overdue" : "Due soon"}
-                </span>
-              </li>
-            ))}
-          </ul>
-          <DialogFooter className="gap-2 sm:gap-2">
-            {servicesDueView && canViewParts ? (
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => {
-                  const url = new URL(window.location.href);
-                  url.searchParams.set("tab", "find-parts");
-                  url.searchParams.set("vehicle", servicesDueView.vehicleId);
-                  window.history.replaceState(null, "", url);
-                  setHubTab("find-parts");
-                  setServicesDueView(null);
-                }}
-              >
-                Find parts for this
-              </Button>
-            ) : null}
-            <Button type="button" variant="outline" onClick={() => setServicesDueView(null)}>
-              Close
-            </Button>
-            {servicesDueView ? (
-              <Button
-                type="button"
-                onClick={() => {
-                  const id = servicesDueView.vehicleId;
-                  setServicesDueView(null);
-                  void prepareLogForVehicle(id);
-                }}
-                disabled={scheduleLoading}
-              >
-                Log service
-              </Button>
-            ) : null}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        vehicle={servicesDueView}
+        onLogService={(id) => {
+          setServicesDueView(null);
+          void prepareLogForVehicle(id);
+        }}
+      />
+
+      <LogOdometerDialog
+        open={!!logOdometerVehicle}
+        onOpenChange={(open) => {
+          if (!open) setLogOdometerVehicle(null);
+        }}
+        vehicleId={logOdometerVehicle?.vehicleId ?? ""}
+        vehicleLabel={logOdometerVehicle ? vehicleLabel(logOdometerVehicle) : ""}
+        onSaved={() => void load()}
+      />
 
       <Dialog open={vehiclePickerOpen} onOpenChange={setVehiclePickerOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Log new service</DialogTitle>
-            <DialogDescription>Choose which vehicle this service is for.</DialogDescription>
+            <DialogTitle>Log service</DialogTitle>
+            <DialogDescription>Which car was serviced?</DialogDescription>
           </DialogHeader>
           <div className="space-y-2 py-2">
             <Label htmlFor="fleet-log-vehicle">Vehicle</Label>

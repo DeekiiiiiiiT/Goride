@@ -1,0 +1,296 @@
+ROAM FLEET — MAINTENANCE LOGGING FULL DESIGN PROMPT (GOOGLE STITCH)
+
+
+
+
+Roam Fleet - Maintenance Logging (Desktop Web App, for fleet managers and their staff):
+
+Design high-fidelity desktop screens for how maintenance gets logged in Fleet maintenance in the Roam Fleet app. There is no telematics: people are the only source of mileage. A fleet manager or staff member opens a car, says when the work was done and at what odometer reading, picks what was done, adds costs, and saves once. The app then works out what each part of the car is due for next. Every night at 2:00 AM a check runs and flags anything overdue or coming up. The screens must make the odometer impossible to skip and easy to trust. They must show clearly when a reading looks wrong (without blocking it) and show what is due per part of the car, not one vague number per car. The tone is calm, plain and exact: a service desk logbook, not a mechanic's spreadsheet.
+
+BRAND IDENTITY:
+- Match the existing Roam Fleet web app:
+  - black top bar with the "Roam Fleet" app tile, then a white nav row: Dashboard, Fleet Operations, Driver Operations, Money, Vehicle Operations (active, underlined), Delivery Operations, Analytics, Reports, Business Finance, and the avatar "JD"
+  - dark sub-bar with "Switch vehicle or search hub..." on the left and "08:47 PM EST · America/Jamaica · JM (JMD)" on the right
+  - white page, centred content (max ~1400px), shadcn-style components
+  - page title "Fleet maintenance" with an orange wrench icon
+- LIGHT MODE (default):
+  - Primary: Near-black (#030213) — primary buttons, the active tab, the selected choice outline
+  - Background: White (#FFFFFF); page wash: Slate 50 (#f8fafc)
+  - Surface cards: White, with a 1px border rgba(0,0,0,0.1)
+  - Muted text: #717182
+  - Text primary: #0a0a0a
+  - Success / OK / done: Emerald (#059669)
+  - Warning / due soon / check reading: Amber (#d97706)
+  - Error / overdue: Red (#d4183d)
+  - Neutral / odometer needed: Slate 500 (#64748b)
+  - Accent: Orange (#f97316), used only for the page icon
+  - Icon tiles in the log dialog: Indigo 600 (#4f46e5) line icon on a Slate 100 (#f1f5f9) rounded square
+  - Muted fill for tabs and chips: Slate 100 (#f1f5f9)
+- DARK MODE:
+  - Background: #252525
+  - Surface: #2e2e2e
+  - Border: #444444
+  - Text primary: #fafafa
+  - Muted text: #b4b4b4
+  - Primary: #fafafa (buttons become light with dark text)
+  - Success: #34d399
+  - Warning: #f59e0b
+  - Error: #f87171
+  - Neutral: #94a3b8
+- Status pills (rounded, small, word + reason, never colour alone):
+  - "Overdue · Oil & filter" — red fill, white text
+  - "Due soon · Brake pads (front)" — amber outline, amber text
+  - "OK" — emerald text, no fill
+  - "Odometer needed" — slate fill, dark text
+- Reading chips:
+  - "Check reading" — amber outline with a small warning triangle
+  - Source tag in grey: "fuel", "check-in", "service", "manual"
+- Money is Jamaican dollars: "J$ 16,800"
+- Kilometres always as "195,192 km"; dates as "31 Oct 2026"
+- No gradients, glassmorphism or 3D. No AI badges, no confidence percentages.
+- Typography: Inter. Plates, odometer readings, km, prices and counts use a mono font with tabular numerals.
+- Jamaica context:
+  - fleet cars: "Honda Fit 2018 · 1505LM" (no odometer reading yet), "Toyota Roomy 2019 · 5179KZ" (195,192 km, overdue)
+  - service providers: "Whole-Heated Car Service LTD", "Kingston Auto Care"
+
+DESIGN PRINCIPLES:
+- Desktop-first (1440px wide), with a phone version
+- The odometer comes first: every log starts with "When and at what mileage?" before any work is picked
+- The car being logged is always visible: the dialog header shows the name, plate and current odometer on every step
+- Capture, never block: an odd reading is saved and labelled "Check reading", never refused
+- Due state is per part of the car (oil, front brake pads, each tyre), never one number per car
+- Plain words first: "Next due: Oil & filter — overdue 67,192 km", never "Next due (km) 128,000"
+- No internal ids, codes or row counts anywhere ("TPL 5EFCDC04" and "Schedule rows" are gone)
+- One verb for one action: "Log service" on the button, the dialog title and the save button
+- One save: the save button shows a spinner and cannot be pressed twice
+- Every number says where it came from and how old it is: "195,192 km · 2 h ago · fuel"
+- Light theme default, dark mode variant
+- 8px spacing grid, 12px card corners, hairline borders, soft shadows, skeleton loading
+
+---
+
+SCREEN 1: OVERVIEW TAB (WAS "BY VEHICLE")
+- Page header:
+  - Orange wrench icon + "Fleet maintenance"
+  - Sub-line: "What each car is due for, what was done, and parts for your cars."
+  - Under the sub-line, a small grey line with a green dot: "Nightly check ran 02:00 today · 2 cars checked · 3 alerts"
+  - Right buttons: "Log service" (black, with a single plus icon), "Bootstrap schedules", "Refresh", "Compatible parts"
+- Tab switcher (pill style, slate background): "Overview" (active, white pill with a car icon) | "Service history" (clock icon) | "Find parts" (box icon)
+- Vehicle table (white card), columns:
+  - Vehicle: "Toyota Roomy (2019)" in bold, a link
+  - Plate: mono "5179KZ"
+  - Odometer: mono "195,192 km", with a small grey line under it "2 h ago · fuel"
+  - Status: red pill "Overdue · Oil & filter"
+  - Next due: "Oil & filter — overdue 67,192 km" in red; grey second line "and 1 more overdue"
+  - Due items: red count pill "2 overdue" + amber pill "1 due soon"; clicking opens Screen 2
+  - Last service: "6 Jan 2026 · 123,000 km"
+  - Actions: "Log service" (outline) and a "⋯" menu with "Log odometer" and "Odometer history"
+- Row 2:
+  - Vehicle "Honda Fit (2018)", Plate "1505LM"
+  - Odometer: "—" with grey line "No reading yet"
+  - Status: slate pill "Odometer needed"
+  - Next due: grey "Log an odometer reading to see km-based items"
+  - Due items: "—"
+  - Last service: "Never serviced"
+  - Actions: black "Log odometer", and outline "Log service"
+- Rows are sorted most urgent first: Overdue → Odometer needed → Due soon → OK
+- "Go to Vehicles" button bottom-right, unchanged
+
+SCREEN 2: DUE ITEMS FOR ONE CAR (RIGHT DRAWER)
+- Opens from the due-items pill or a row click
+- Header: "Toyota Roomy 2019 · 5179KZ", mono "195,192 km · 31 Oct 2026 · fuel"
+- Small grey line: "Checked by the nightly check at 02:00 today"
+- List of every part of the car, grouped by status with a heading for each group:
+  - "Overdue (2)":
+    - Row: "Oil & filter" · "Every 5,000 km or 3 months" · "Last done 6 Jan 2026 at 123,000 km" · red "Overdue 67,192 km · 208 days"
+    - Row: "Air filter" · "Every 20,000 km or 12 months" · red "Overdue 52,192 km"
+  - "Due soon (1)":
+    - Row: "Brake pads — front" · amber "Due in 820 km · about 6 Nov"
+  - "OK (22)": collapsed by default with a "Show" link
+- Each row has a small "Log this" button that opens the Log service dialog with that item already ticked
+- Footer: black "Log service for this car"
+
+SCREEN 3: LOG SERVICE — STEP 0, WHICH CAR?
+- Only shown when "Log service" is pressed from the page header (no car chosen yet)
+- Dialog title: "Log service"
+- Sub-line: "Which car was serviced?"
+- Two large cards, each with a car icon, name, mono plate and odometer:
+  - "Toyota Roomy 2019" / "5179KZ" / "195,192 km · 2 h ago" with a red "2 overdue" pill
+  - "Honda Fit 2018" / "1505LM" / "No reading yet" with a slate "Odometer needed" pill
+- A search input above them: "Search plate, make or model"
+- Footer: "Cancel" (left) | "Continue" (black, disabled until a car is picked)
+
+SCREEN 4: LOG SERVICE — STEP 1, WHEN AND AT WHAT MILEAGE?
+- Dialog title: "Log service"
+- Car header strip on this step and on every later step: car icon, "Toyota Roomy 2019 · 5179KZ", and on the right mono "Current 195,192 km · 31 Oct · fuel"
+- A thin step bar under the header: "1 Date & mileage" (active) · "2 Work done" · "3 Details" · "4 Review"
+- Title: "When and at what mileage?"
+- Sub-line: "We use this to work out when each part is due next."
+- Fields, side by side:
+  - "Date of service" — date input, "31 Oct 2026"
+  - "Odometer (km)" — required, marked with a red asterisk; mono "195,192" prefilled
+  - Helper under the odometer: "Last trusted reading 195,192 km · 31 Oct · fuel"
+- Below the fields, a soft grey note: "Logging an older service? Change the date first; the reading will be checked against that day."
+- Footer: "Cancel" (left) | "Continue" (black)
+- Show a second version of this screen (Screen 4b) where the reading looks wrong:
+  - Date "6 Jan 2026", Odometer "1,230,000"
+  - Amber box under the field with a warning triangle and the title "Check reading"
+  - Text: "This doesn't fit the readings around that day. 5 Jan 2026: 122,940 km (fuel) · 8 Jan 2026: 123,310 km (fuel). You can still save it; it will be labelled for review and won't be used as the current odometer."
+  - Two text buttons in the box: "Fix the number" | "Keep it and continue"
+- Show a third version (Screen 4c) with the field empty: red outline on the odometer field, red text "Enter the odometer reading", and the Continue button disabled
+
+SCREEN 5: LOG SERVICE — STEP 2, WHAT WAS DONE?
+- Car header strip and step bar ("2 Work done" active)
+- Title: "What was done?"
+- Search input across the full width: "Search a job — e.g. oil change, brake pads, wipers"
+  - Open suggestion dropdown: "Oil & filter change — Engine" · "Brake pads — Brakes" · "Wiper blades — Lighting & visibility"
+- Section "Service packages", one card per package in a 4-column grid, most-due first:
+  - "Basic Service" · grey "Every 5,000 km or 3 months" · red pill "Overdue" (highlighted with a red 1px border)
+  - "Inspection Service" · "Every 5,000 km or 3 months" · red pill "Overdue"
+  - "Intermediate Service" · "Every 10,000 km or 6 months" · amber pill "Due soon"
+  - "Major Service" · "Every 40,000 km or 24 months" · green "OK"
+  - "Long-term Service" · "Every 100,000 km or 60 months" · green "OK"
+- Section "Quick jobs", sub-line "Pick a part of the car, then a component.":
+  - 11 tiles, each with its own distinct line icon:
+    - Engine (engine block)
+    - Filters (funnel)
+    - Tires & wheels (tyre)
+    - Brakes (brake disc)
+    - Fluids (droplet)
+    - Belts & hoses (link)
+    - Lighting & visibility (bulb)
+    - Suspension & steering (shock absorber)
+    - Transmission (gear)
+    - HVAC (fan)
+    - Battery & electrical (lightning bolt)
+  - Due hints: the "Engine" tile has a small red dot and the text "1 overdue"; "Brakes" has an amber dot and "1 due soon"
+- Dashed card at the bottom, unchanged: "Open digital inspection" / "Walk systems pass / attention / fail and add recommended work."
+- Footer: "Back" (left) | nothing on the right until something is picked
+
+SCREEN 6: LOG SERVICE — STEP 3, DETAILS FOR EACH LINE
+- Car header strip and step bar ("3 Details" active)
+- Keep the existing component and line form exactly as it is today: the component list for the chosen package or system, then the action and cost fields for each line
+- Only two changes:
+  - the car header strip at the top
+  - "Save line" stays as the button name
+- Show it for "Basic Service" with 3 components ticked: "Engine oil", "Oil filter", "Air filter"
+
+SCREEN 7: LOG SERVICE — STEP 4, REVIEW AND SAVE
+- Car header strip and step bar ("4 Review" active)
+- Title: "Review and log"
+- Summary card at the top, read-only, with an "Edit" link that returns to step 1:
+  - "Date 31 Oct 2026"
+  - "Odometer 195,192 km"
+- "Scan invoice / receipt" upload card, unchanged, showing "Uploaded" in green
+- Line list: "Engine oil — Replaced — J$ 6,500", "Oil filter — Replaced — J$ 1,800", "Air filter — Replaced — J$ 2,400"
+- Fields: "Service provider" with "Whole-Heated Car Service LTD"; "Currency" JMD
+- Total row in mono: "Total J$ 10,700"
+- A grey "What happens next" box:
+  - "Oil & filter: next due 200,192 km or 31 Jan 2027"
+  - "Air filter: next due 215,192 km or 31 Oct 2027"
+- Footer: "Back" (left) | black "Log service"
+- Show a second version (Screen 7b) while saving: the button reads "Logging…" with a spinner, it is disabled, and every field is greyed out
+
+SCREEN 8: LOG ODOMETER (SMALL DIALOG)
+- Opens from the row action "Log odometer"
+- Title: "Log odometer"
+- Car strip: "Honda Fit 2018 · 1505LM · No reading yet"
+- Fields: "Date and time" (now), "Odometer (km)" required, mono input, "Photo of dashboard (optional)" drop zone
+- Helper: "This is the car's first reading. Km-based service items will appear after you save."
+- Footer: "Cancel" | black "Save reading"
+- Toast after save: "Reading saved · 1505LM now 84,210 km"
+
+SCREEN 9: ODOMETER HISTORY (RIGHT DRAWER)
+- Opens from "⋯ → Odometer history"
+- Header: "Toyota Roomy 2019 · 5179KZ"
+- Top card: "Current odometer 195,192 km" with grey "Latest trusted reading · 31 Oct 2026 · fuel"
+- Filter chips: "All 587" | "Check reading 89" (amber) | "Fuel" | "Check-in" | "Service" | "Manual"
+- Table, newest first: Date · Reading (mono) · Source tag · Label
+  - "31 Oct 2026 · 195,192 km · fuel"
+  - "29 Oct 2026 · 191,722 km · fuel · Check reading" (row with a faint amber background)
+  - "28 Oct 2026 · 194,880 km · check-in"
+- Each "Check reading" row has two small buttons: "It's correct" (clears the label) | "Void" (asks for a reason)
+- Note at the bottom: "Readings labelled Check reading are kept but never used as the current odometer."
+
+SCREEN 10: SERVICE HISTORY TAB (WAS "SERVICE LEDGER")
+- Same page header and tab switcher; "Service history" is the active pill
+- Sub-line in the card: "Every service that was done, one line per part."
+- Filter bar: "Vehicle" select (All cars), "Part" select (All parts), date range "Last 12 months", search "Search provider or note", and an outline "Export CSV" button on the right
+- Table columns: Date · Vehicle (with mono plate) · Part · Action · Odometer (mono) · Provider · Cost (mono J$) · Invoice (paper icon link)
+  - "6 Jan 2026 · Toyota Roomy 5179KZ · Engine oil · Replaced · 123,000 km · Whole-Heated Car Service LTD · J$ 16,800 · 📄"
+- Only completed work is listed here; nothing "still due" appears on this tab
+- Footer: "Showing 1–1 of 1"
+
+SCREEN 11: STATES
+- Loading: skeleton rows in the Overview table and skeleton tiles in the dialog, with a shimmer
+- Nightly check missed: a red bar under the page sub-line, "Nightly check didn't run last night. Due items may be out of date." with "Run now"
+- Save failed: a red box above the dialog footer, "Couldn't log this service. Nothing was saved. Try again." with "Try again"; the button keeps the same request so a retry never logs twice
+- Empty: Overview with no cars, "No cars yet. Add a car in Vehicles to start logging service." with "Go to Vehicles"
+- Car with no service plan: in Screen 2 the drawer says "This car has no service plan yet." with black "Set up plan"
+- No permission: "You don't have access to maintenance. Ask your fleet admin."
+
+SCREEN 12: LOG SERVICE (390px PHONE)
+- The top bar collapses to the app tile, the page title and a menu
+- The three tabs scroll sideways
+- Overview rows become cards: name + mono plate, the status pill, the "Next due" line, odometer with its age, and a full-width "Log service" button
+- The Log service dialog becomes a full-screen sheet with a back arrow; the car header strip sticks to the top
+- Step 1 fields stack; the odometer input opens the number keypad
+- Package cards and quick-job tiles sit in 2 columns
+- A sticky bottom bar on every step: "Back" | "Continue" / "Log service"
+- Drawers (due items, odometer history) become full-screen sheets
+- No page-level horizontal scrolling
+
+---
+
+ADDITIONAL UI COMPONENTS:
+- Status pill with word + reason (Overdue, Due soon, OK, Odometer needed)
+- Due-count pills ("2 overdue", "1 due soon")
+- Odometer cell with a mono reading and a grey "age · source" line
+- Car header strip for the dialog (name, plate, current odometer)
+- Four-step bar (Date & mileage · Work done · Details · Review)
+- Required number input with a red asterisk, red error state and helper text
+- Amber "Check reading" box with neighbouring readings and two text buttons
+- Package card with interval line and status pill
+- Quick-job tile with a distinct icon and an optional red/amber due dot
+- Search with suggestion dropdown
+- "What happens next" summary box
+- Saving button state (spinner, disabled)
+- Due-items drawer grouped by status
+- Odometer history table with source tags and label actions
+- Filter bar with selects, date range, search and Export CSV
+- "Nightly check" status line (green dot ok, red bar missed)
+- Skeleton loaders, error box, empty and no-permission states
+- Toasts: "Service logged", "Reading saved", "Label cleared"
+
+INTERACTIONS:
+- "Log service" in the page header opens Step 0 (which car?); the row "Log service" skips Step 0
+- "Log this" in the due-items drawer opens the dialog on Step 1 with that item already ticked for Step 2
+- Step 1 can't continue without an odometer reading above 0
+- The odometer is prefilled with the latest trusted reading; changing the date re-checks the reading against that day
+- A reading that doesn't fit shows the amber "Check reading" box; "Keep it and continue" carries on, and the saved reading gets the label
+- Search in Step 2 jumps straight to the line form for the chosen component
+- Package and quick-job cards show what is due for this car right now
+- Review shows date and odometer read-only; "Edit" goes back to Step 1 and keeps every line
+- "Log service" on Review saves once; the button locks with a spinner until the server answers; a retry after an error never logs twice
+- After saving, a toast "Service logged · 5179KZ"; the Overview row updates its status, next due and last service without a page reload
+- "Log odometer" saves a reading; a car showing "Odometer needed" switches to its real status straight away
+- In Odometer history, "It's correct" clears the label; "Void" asks for a reason, then removes the reading from use
+- The Overview tab sorts most urgent first; clicking a column header re-sorts
+- "Run now" on the missed-check bar runs the nightly check and refreshes the page
+- The Find parts tab is unchanged
+
+---
+
+Spec screens	Area
+1 Overview tab (was By vehicle)	Overview
+2 Due items for one car	Due list
+3 Log service — which car?	Log: car
+4 Log service — when and at what mileage? (+ 4b check reading, 4c empty)	Log: odometer
+5 Log service — what was done?	Log: work
+6 Log service — details for each line	Log: details
+7 Log service — review and save (+ 7b saving)	Log: review
+8 Log odometer	Odometer
+9 Odometer history	Odometer
+10 Service history tab (was Service ledger)	History
+11 States	States
+12 Phone (390px)	Mobile

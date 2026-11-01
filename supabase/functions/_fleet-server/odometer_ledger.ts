@@ -172,9 +172,11 @@ export async function getCurrentOdometer(vehicleId: string): Promise<CurrentOdom
     .select("*")
     .eq("vehicle_id", vid)
     .eq("is_voided", false)
+    .eq("is_anomaly", false)
     .eq("is_hard", true)
     .not("reading", "is", null)
     .gt("reading", 0)
+    .order("recorded_at", { ascending: false })
     .order("reading", { ascending: false })
     .limit(1)
     .maybeSingle();

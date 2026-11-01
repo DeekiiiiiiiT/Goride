@@ -2684,6 +2684,8 @@ export const api = {
     notes?: string | null;
     invoiceUrl?: string | null;
     lines?: MaintenanceLogLine[];
+    completeNow?: boolean;
+    idempotencyKey?: string;
   }) {
       const response = await fetchWithRetry(`${API_ENDPOINTS.fleetOps}/maintenance-work-orders`, {
           method: "POST",
@@ -2692,10 +2694,39 @@ export const api = {
       });
       if (!response.ok) {
         const err = await response.json().catch(() => ({}));
+        const code = (err as { code?: string }).code;
+        if (code === "odometer_required") {
+          throw new Error("Odometer is required and must be greater than zero");
+        }
         throw new Error((err as { error?: string }).error || "Failed to create work order");
       }
-      const json = await response.json() as { data?: MaintenanceWorkOrder } & MaintenanceWorkOrder;
-      return (json.data || json) as MaintenanceWorkOrder;
+      const json = await response.json() as {
+        item?: MaintenanceWorkOrder;
+        data?: MaintenanceWorkOrder;
+        ledgerPosted?: boolean;
+        ledgerWarning?: string;
+        idempotentReplay?: boolean;
+      };
+      return json;
+  },
+
+  async reserveMaintenanceLogNumber() {
+      const response = await fetchWithRetry(
+        `${API_ENDPOINTS.fleetOps}/maintenance-log-number/reserve`,
+        { method: "POST", headers: await getHeaders() },
+      );
+      if (!response.ok) throw new Error("Failed to reserve log number");
+      const json = await response.json() as { logNumber?: string };
+      return json.logNumber ?? "";
+  },
+
+  async getMaintenanceDueItems(vehicleId: string) {
+      const response = await fetchWithRetry(
+        `${API_ENDPOINTS.fleetOps}/maintenance-due/${encodeURIComponent(vehicleId)}`,
+        { headers: await getHeaders(null) },
+      );
+      if (!response.ok) throw new Error("Failed to load due items");
+      return response.json() as Promise<{ items: unknown[] }>;
   },
 
   async updateWorkOrder(id: string, patch: Partial<{

@@ -123,6 +123,8 @@ export interface VehicleCatalogRecord {
   brake_size_mm?: number | null;
   tire_size?: string | null;
   bolt_pattern?: string | null;
+  abs_channels?: string | null;
+  handbrake_type?: string | null;
   wheel_offset_mm?: number | null;
   engine_oil_capacity_l?: number | null;
   coolant_capacity_l?: number | null;

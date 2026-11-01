@@ -47,32 +47,39 @@ export function analyzeMaintenanceScheduleRow(
   nextMilesMaxRaw: number | null | undefined,
   nextDate: string | null,
   scheduleRowStatus?: string | null,
+  options?: { dueSoonKm?: number; dueSoonDays?: number },
 ): MaintenanceScheduleRowAnalysis {
   if (scheduleRowStatus === "fulfilled") {
     return { status: "fulfilled", calendarDaysOverdue: null, kmOverdue: null };
   }
 
+  const dueSoonKm = options?.dueSoonKm ?? 1000;
+  const dueSoonDays = options?.dueSoonDays ?? 14;
   const maxM = normalizeNextMilesMax(nextMiles, nextMilesMaxRaw);
 
   let overdueMiles = false;
-  let milesDueOrInWindow = false;
+  let dueSoonMiles = false;
   if (nextMiles != null && Number.isFinite(Number(nextMiles))) {
     const nm = Number(nextMiles);
-    if (maxM != null) {
-      overdueMiles = currentOdo > maxM;
-      milesDueOrInWindow = currentOdo >= nm && currentOdo <= maxM;
-    } else {
-      overdueMiles = currentOdo > nm;
-      milesDueOrInWindow = currentOdo >= nm;
+    const overdueAt = maxM != null ? maxM + 1 : nm;
+    overdueMiles = currentOdo >= overdueAt;
+    if (!overdueMiles && currentOdo > 0) {
+      dueSoonMiles = currentOdo >= Math.max(0, nm - dueSoonKm) && currentOdo < overdueAt;
     }
   }
 
   const overdueDate = nextDate != null && today > nextDate;
-  const dueDate = nextDate != null && today >= nextDate;
+  let dueSoonDate = false;
+  if (nextDate != null && !overdueDate) {
+    const dueSoonStart = new Date(nextDate + "T12:00:00Z");
+    dueSoonStart.setUTCDate(dueSoonStart.getUTCDate() - dueSoonDays);
+    const startYmd = dueSoonStart.toISOString().slice(0, 10);
+    dueSoonDate = today >= startYmd && today <= nextDate;
+  }
 
   let status: MaintenanceScheduleRowAnalysis["status"];
   if (overdueMiles || overdueDate) status = "overdue";
-  else if (milesDueOrInWindow || dueDate) status = "pending";
+  else if (dueSoonMiles || dueSoonDate) status = "pending";
   else status = "ok";
 
   let calendarDaysOverdue: number | null = null;

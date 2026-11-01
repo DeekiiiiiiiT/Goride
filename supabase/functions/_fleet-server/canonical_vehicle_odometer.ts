@@ -26,21 +26,37 @@ export async function canonicalOdometerForVehicle(
   return parseNum(metricsFallback);
 }
 
-/** Batch maps for schedule screens — ledger max per vehicle (hard + not voided). */
+/** Batch maps for schedule screens — latest trusted reading per vehicle (not max). */
 export async function loadOdometerSupplementMaps(
   _supabase: SupabaseClient,
   c: Context,
 ): Promise<OdometerSupplementMaps> {
   const orgId = getOrgId(c);
   let q = fleetDb()
-    .from(fleetTable("odometer_readings"))
+    .from("fleet_vehicle_current_odometer_v")
     .select("vehicle_id, reading")
-    .eq("is_voided", false)
-    .eq("is_hard", true)
     .gt("reading", 0);
   if (orgId) q = q.eq("organization_id", orgId);
   const { data, error } = await q.limit(20000);
-  if (error) throw error;
+  if (error) {
+    // Fallback if migration not applied yet
+    let fq = fleetDb()
+      .from(fleetTable("odometer_readings"))
+      .select("vehicle_id, reading, recorded_at")
+      .eq("is_voided", false)
+      .eq("is_anomaly", false)
+      .gt("reading", 0);
+    if (orgId) fq = fq.eq("organization_id", orgId);
+    const fb = await fq.order("recorded_at", { ascending: false }).limit(20000);
+    if (fb.error) throw fb.error;
+    const manualMaxByVehicleId = new Map<string, number>();
+    for (const row of fb.data || []) {
+      const vid = String((row as any).vehicle_id || "");
+      if (!vid || manualMaxByVehicleId.has(vid)) continue;
+      manualMaxByVehicleId.set(vid, parseNum((row as any).reading));
+    }
+    return { manualMaxByVehicleId, fuelMaxByVehicleId: new Map() };
+  }
 
   const manualMaxByVehicleId = new Map<string, number>();
   for (const row of data || []) {
@@ -48,10 +64,8 @@ export async function loadOdometerSupplementMaps(
     if (!vid) continue;
     const odo = parseNum((row as any).reading);
     if (odo <= 0) continue;
-    const prev = manualMaxByVehicleId.get(vid) ?? 0;
-    if (odo > prev) manualMaxByVehicleId.set(vid, odo);
+    manualMaxByVehicleId.set(vid, odo);
   }
 
-  // Fuel map kept for API shape compatibility; ledger already includes fuel projections.
   return { manualMaxByVehicleId, fuelMaxByVehicleId: new Map() };
 }

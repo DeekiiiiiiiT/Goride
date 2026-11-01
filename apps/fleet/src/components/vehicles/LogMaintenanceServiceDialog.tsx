@@ -45,7 +45,7 @@ import {
 } from "../../types/maintenance";
 import type { CompatiblePartsItem } from "../../types/partSourcing";
 
-type DialogStep = "pick" | "system" | "component" | "form" | "inspect" | "review";
+type DialogStep = "when" | "pick" | "system" | "component" | "form" | "inspect" | "review";
 type LogMode = "package" | "quick_job" | "inspect";
 
 type PackageChoice = {
@@ -254,8 +254,10 @@ function categoryMatchLine(cat: MaintenanceServiceCategory, line: MaintenanceLog
 
 function stepTitle(step: DialogStep): string {
   switch (step) {
+    case "when":
+      return "Log service";
     case "pick":
-      return "Add Service Log";
+      return "Log service";
     case "system":
       return "Select Component";
     case "component":
@@ -273,6 +275,8 @@ function stepTitle(step: DialogStep): string {
 
 function stepDescription(step: DialogStep, packageLabel?: string, systemName?: string): string {
   switch (step) {
+    case "when":
+      return "When and at what mileage? We use this to work out when each part is due next.";
     case "pick":
       return "Choose a service package, system quick job, or open a digital inspection.";
     case "system":
@@ -303,7 +307,8 @@ export function LogMaintenanceServiceDialog({
   initialLog,
   onSaved,
 }: LogMaintenanceServiceDialogProps) {
-  const [step, setStep] = useState<DialogStep>("pick");
+  const [step, setStep] = useState<DialogStep>("when");
+  const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
   const [isLoading, setIsLoading] = useState(false);
   const [scanLoading, setScanLoading] = useState(false);
   const [quickJobsLoading, setQuickJobsLoading] = useState(false);
@@ -337,7 +342,7 @@ export function LogMaintenanceServiceDialog({
     date: new Date().toISOString().split("T")[0],
     type: "Regular Maintenance",
     currency: "JMD",
-    odo: 0,
+    odo: defaultOdo && defaultOdo > 0 ? defaultOdo : 0,
     provider: "",
     notes: "",
     invoiceUrl: "",
@@ -389,6 +394,7 @@ export function LogMaintenanceServiceDialog({
   // Reset + load systems / quick jobs when dialog opens
   useEffect(() => {
     if (!open) return;
+    setIdempotencyKey(crypto.randomUUID());
 
     const odoPrefill =
       initialLog?.odo ??
@@ -447,7 +453,7 @@ export function LogMaintenanceServiceDialog({
         }));
       }
     } else {
-      setStep("pick");
+      setStep("when");
     }
 
     let cancelled = false;
@@ -762,6 +768,11 @@ export function LogMaintenanceServiceDialog({
       toast.error("Please fill in required fields");
       return;
     }
+    const odoNum = Number(formMeta.odo);
+    if (!Number.isFinite(odoNum) || odoNum <= 0) {
+      toast.error("Odometer is required and must be greater than zero");
+      return;
+    }
     const activeLines = lines.filter((l) => !l.declined);
     if (!activeLines.length && !lines.length) {
       toast.error("Add at least one line before saving");
@@ -796,35 +807,28 @@ export function LogMaintenanceServiceDialog({
       if (initialLog?.id) {
         result = await api.updateMaintenanceLog(vehicleId, logId, payload);
       } else {
-        // Prefer work-order complete path; fall back to log bridge (creates completed WO).
-        try {
-          const wo = await api.createWorkOrder({
-            vehicleId,
-            status: "in_progress",
-            performedAtDate: formMeta.date,
-            odometer: Number(formMeta.odo) || 0,
-            provider: formMeta.provider || null,
-            currency: formMeta.currency || "JMD",
-            templateId: payload.templateId || null,
-            packageComplete: Boolean(payload.packageComplete),
-            logMode: payload.logMode,
-            notes: formMeta.notes || null,
-            invoiceUrl: invoiceUrl || null,
-            lines,
-          });
-          result = await api.completeWorkOrder(wo.id, {
-            performedAtDate: formMeta.date,
-            odometer: Number(formMeta.odo) || 0,
-            provider: formMeta.provider || null,
-            currency: formMeta.currency || "JMD",
-            templateId: payload.templateId || null,
-            packageComplete: Boolean(payload.packageComplete),
-            logMode: payload.logMode,
-            notes: formMeta.notes || null,
-            invoiceUrl: invoiceUrl || null,
-            lines,
-            totalCost: payload.cost,
-          });
+        const woRes = await api.createWorkOrder({
+          vehicleId,
+          status: "in_progress",
+          performedAtDate: formMeta.date,
+          odometer: odoNum,
+          provider: formMeta.provider || null,
+          currency: formMeta.currency || "JMD",
+          templateId: payload.templateId || null,
+          packageComplete: Boolean(payload.packageComplete),
+          logMode: payload.logMode,
+          notes: formMeta.notes || null,
+          invoiceUrl: invoiceUrl || null,
+          lines,
+          completeNow: true,
+          idempotencyKey,
+        });
+        result = {
+          ledgerPosted: woRes.ledgerPosted,
+          ledgerWarning: woRes.ledgerWarning,
+        };
+        const woId = woRes.item?.id;
+        if (woId) {
           try {
             const findings = lines
               .filter((l) => l.recommended)
@@ -839,16 +843,13 @@ export function LogMaintenanceServiceDialog({
             if (findings.length) {
               await api.saveInspectionFindings({
                 vehicleId,
-                workOrderId: wo.id,
+                workOrderId: woId,
                 findings,
               });
             }
           } catch (inspErr) {
             console.warn("Inspection findings save skipped:", inspErr);
           }
-        } catch (woErr) {
-          console.warn("Work order path failed, using maintenance log bridge:", woErr);
-          result = await api.saveMaintenanceLog(payload);
         }
       }
 
@@ -1107,6 +1108,44 @@ export function LogMaintenanceServiceDialog({
         </ResponsiveDialogHeader>
 
         <div className="flex-1 overflow-y-auto px-6 py-6">
+          {step === "when" && (
+            <div className="space-y-6 max-w-md">
+              <div className="space-y-2">
+                <Label htmlFor="svc-date">Date of service</Label>
+                <Input
+                  id="svc-date"
+                  type="date"
+                  value={formMeta.date}
+                  onChange={(e) => setFormMeta((p) => ({ ...p, date: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="svc-odo">Odometer (km) *</Label>
+                <Input
+                  id="svc-odo"
+                  type="number"
+                  min={1}
+                  value={formMeta.odo || ""}
+                  onChange={(e) =>
+                    setFormMeta((p) => ({ ...p, odo: Number(e.target.value) || 0 }))
+                  }
+                />
+                {defaultOdo != null && defaultOdo > 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    Last trusted reading {defaultOdo.toLocaleString()} km
+                  </p>
+                ) : null}
+              </div>
+              <Button
+                type="button"
+                className="w-full sm:w-auto"
+                disabled={Number(formMeta.odo) <= 0 || !formMeta.date}
+                onClick={() => setStep("pick")}
+              >
+                Continue
+              </Button>
+            </div>
+          )}
           {step === "pick" && (
             <div className="space-y-8">
               <section className="space-y-3">
@@ -1128,7 +1167,6 @@ export function LogMaintenanceServiceDialog({
                       {pkg.dueKind ? (
                         <span className="text-[10px] text-slate-500 uppercase tracking-wide">
                           {pkg.dueKind.replace(/_/g, " ")}
-                          {pkg.templateId ? ` · tpl ${pkg.templateId.slice(0, 8)}` : ""}
                         </span>
                       ) : null}
                     </button>
@@ -1739,11 +1777,11 @@ export function LogMaintenanceServiceDialog({
           {step === "review" && (
             <Button
               onClick={handleSave}
-              disabled={isLoading || lines.length < 1}
+              disabled={isLoading || lines.length < 1 || Number(formMeta.odo) <= 0}
               className="bg-slate-900 text-white hover:bg-slate-800"
             >
               {isLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-              Save Log
+              Log service
             </Button>
           )}
         </ResponsiveDialogFooter>

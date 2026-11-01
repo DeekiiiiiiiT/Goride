@@ -82,6 +82,16 @@ function assertCoverage(scope: string, cssPath: string, scanDirs: string[]) {
 }
 
 describe("find parts stitch CSS coverage", () => {
+  it("keeps manual FP4 rules from build-find-parts-css.mjs", () => {
+    const css = readFileSync(
+      join(repo, "apps/fleet/src/components/vehicles/find-parts/findParts.css"),
+      "utf8",
+    );
+    expect(css).toContain(".fleet-find-parts-stitch .find-parts-screen-root > .fp-screen-root");
+    expect(css).toContain("scroll-margin-top: 5rem");
+    expect(css).toContain(".fleet-find-parts-stitch .fill-primary { fill: #0061a4; }");
+  });
+
   it("defines custom design tokens used in fleet find-parts TSX", () => {
     assertCoverage(
       "fleet-find-parts-stitch",

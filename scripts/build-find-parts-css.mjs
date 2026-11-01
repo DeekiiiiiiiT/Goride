@@ -25,6 +25,13 @@ const manualHead = `/* Scoped to Find parts. Other Fleet tabs do not use these n
   display: none;
 }`;
 
+/** Not emitted by Stitch Tailwind scan — React FP screens / SVG diagram only. */
+const manualFp4 = `.fleet-find-parts-stitch .find-parts-screen-root > .fp-screen-root {
+  scroll-margin-top: 5rem;
+}
+.fleet-find-parts-stitch .fill-primary { fill: #0061a4; }
+`;
+
 const manualTail = `.fleet-find-parts-stitch .find-parts-stepbar, .fleet-find-parts-stitch .find-parts-trail { overflow-x: auto; }
 .fleet-find-parts-stitch .divide-y > :not([hidden]) ~ :not([hidden]) { border-top-width: 1px; border-top-style: solid; }
 .fleet-find-parts-stitch .divide-surface-container-high > :not([hidden]) ~ :not([hidden]) { border-color: #e6e8ea; }
@@ -37,5 +44,5 @@ const manualTail = `.fleet-find-parts-stitch .find-parts-stepbar, .fleet-find-pa
 
 const generated = generateScopedStitchCss('fleet-find-parts-stitch', theme);
 const out = join(repo, 'apps', 'fleet', 'src', 'components', 'vehicles', 'find-parts', 'findParts.css');
-writeFileSync(out, `${manualHead}\n${generated.join('\n')}\n${manualTail}`);
+writeFileSync(out, `${manualHead}\n${manualFp4}${generated.join('\n')}\n${manualTail}`);
 console.log(`wrote ${generated.length + 2} sections → ${out}`);

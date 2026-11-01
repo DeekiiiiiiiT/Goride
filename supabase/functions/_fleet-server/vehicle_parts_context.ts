@@ -6,7 +6,7 @@ import { variantCodeLine, type VariantLabelRow } from "../../../packages/types/s
 import { resolveCatalogIdForKvVehicle } from "./vehicle_catalog_resolve.ts";
 
 const VARIANT_COLUMNS =
-  "id, make, model, production_start_year, production_end_year, chassis_code, engine_code, engine_displacement_l, fuel_type, fuel_category, engine_type, drivetrain, transmission, body_type, trim_series, front_brake_type, rear_brake_type, brake_size_mm, bolt_pattern";
+  "id, make, model, production_start_year, production_end_year, chassis_code, engine_code, engine_displacement_l, fuel_type, fuel_category, engine_type, drivetrain, transmission, body_type, trim_series, front_brake_type, rear_brake_type, brake_size_mm, bolt_pattern, abs_channels, handbrake_type";
 
 /** Columns loaded from part_repeat_alert when ledger notes are empty. */
 export const PART_REPEAT_ALERT_NOTE_COLUMNS = "detail, created_at";
@@ -155,6 +155,12 @@ export async function loadVehiclePartsContextExtras(
   const boltPattern = catalogRow && "bolt_pattern" in catalogRow
     ? String((catalogRow as { bolt_pattern?: string | null }).bolt_pattern ?? "").trim()
     : "";
+  const absChannels = catalogRow && "abs_channels" in catalogRow
+    ? String((catalogRow as { abs_channels?: string | null }).abs_channels ?? "").trim()
+    : "";
+  const handbrakeType = catalogRow && "handbrake_type" in catalogRow
+    ? String((catalogRow as { handbrake_type?: string | null }).handbrake_type ?? "").trim()
+    : "";
 
   let orgShortCode: string | null = null;
   let orgName: string | null = null;
@@ -244,5 +250,7 @@ export async function loadVehiclePartsContextExtras(
       ? String(brakeSize)
       : null,
     hub_bolt_pattern: boltPattern || null,
+    abs_channels: absChannels || null,
+    handbrake_type: handbrakeType || null,
   };
 }
