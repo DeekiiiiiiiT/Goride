@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/><meta content="mobile_stack" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Space+Mono:wght@700&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { colors: { "secondary-fixed-dim": "#ffb4ab", "error": "#ba1a1a", "outline-variant": "#bccac0", "on-secondary": "#ffffff", "secondary-container": "#e02928", "on-tertiary-container": "#fffbff", "on-primary": "#ffffff", "tertiary-fixed": "#ffdcc3", "primary-fixed-dim": "#68dba9", "surface-tint": "#059669", "on-secondary-container": "#fffbff", "tertiary-fixed-dim": "#ffb77d", "on-secondary-fixed-variant": "#93000b", "on-primary-container": "#f5fff7", "surface-container-lowest": "#ffffff", "on-tertiary-fixed": "#2f1500", "surface-variant": "#f1f5f9", "primary-fixed": "#d1fae5", "tertiary-container": "#b15f00", "on-surface": "#0f172a", "on-background": "#0f172a", "inverse-on-surface": "#eef0ff", "outline": "#64748b", "on-primary-fixed-variant": "#005137", "inverse-surface": "#283044", "surface-container-highest": "#e2e8f0", "on-surface-variant": "#475569", "error-container": "#ffdad6", "on-tertiary-fixed-variant": "#6e3900", "surface-container": "#f1f5f9", "surface-bright": "#faf8ff", "surface-dim": "#d2d9f4", "primary-container": "#047857", "tertiary": "#8d4b00", "on-primary-fixed": "#064e3b", "on-tertiary": "#ffffff", "secondary-fixed": "#ffdad6", "inverse-primary": "#68dba9", "background": "#f8fafc", "secondary": "#bb0112", "surface-container-low": "#f8fafc", "on-error-container": "#93000a", "on-error": "#ffffff", "surface-container-high": "#e2e8f0", "primary": "#059669", "on-secondary-fixed": "#410002", "surface": "#f8fafc" }, borderRadius: { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, spacing: { "margin": "1rem", "space-sm": "0.75rem", "space-xs": "0.5rem", "space-xl": "2rem", "gutter": "1rem", "space-md": "1rem", "space-lg": "1.5rem" }, fontFamily: { "body-md": ["Inter"], "label-button": ["Inter"], "headline-sm": ["Inter"], "label-plate": ["Space Mono"], "label-status": ["Inter"], "label-code": ["Space Mono"], "body-sm": ["Inter"], "headline-md": ["Inter"], "headline-lg": ["Inter"], "body-lg": ["Inter"] }, fontSize: { "body-md": ["16px", { lineHeight: "24px", fontWeight: "400" }], "label-button": ["16px", { lineHeight: "24px", fontWeight: "600" }], "headline-sm": ["20px", { lineHeight: "28px", fontWeight: "600" }], "label-plate": ["20px", { lineHeight: "24px", letterSpacing: "0.1em", fontWeight: "700" }], "label-status": ["13px", { lineHeight: "16px", fontWeight: "700" }], "label-code": ["14px", { lineHeight: "18px", letterSpacing: "0.05em", fontWeight: "700" }], "body-sm": ["14px", { lineHeight: "20px", fontWeight: "500" }], "headline-md": ["24px", { lineHeight: "32px", fontWeight: "700" }], "headline-lg": ["32px", { lineHeight: "40px", fontWeight: "700" }], "body-lg": ["18px", { lineHeight: "26px", fontWeight: "400" }] } } } };</script><style>@layer base{html,body{width:100%;margin:0;padding:0;}body{overscroll-behavior:none;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+</head><body class="bg-[#f8fafc] font-body-md text-slate-900 flex flex-col min-h-screen"><header class="fixed top-0 w-full z-30 pt-safe bg-[#f8fafc]/90 backdrop-blur-xl border-b border-slate-200/80"><div class="h-16 px-gutter flex items-center justify-between gap-space-xs"><div class="flex items-center gap-space-xs min-w-0"><button aria-label="Go back" class="w-12 h-12 flex items-center justify-center rounded-lg text-slate-900 hover:bg-slate-100 transition-colors -ml-2" onclick="history.back()"><span class="material-symbols-outlined text-[24px]">arrow_back</span></button><img alt="Roam Driver Logo" class="h-8 w-auto object-contain flex-shrink-0" src="https://lh3.googleusercontent.com/aida/AEtjO1VErWZbgv_w8_i8ZiW7-JEPrLEv-drB87q_2BPzPBTAQqa_ovbMnA4dEDa4MZDKtt0ZoTvk2m2Ek3F7OyC72m_pxJKUzot7yv5I70i9W6hLURrZQhvHjSFgMUZJMfyNCO3V8bA1UYdtO3dShNNUmmRq7ZkF3XHrARaU3PCEHQYHyA1cBreY6m6rAONFpPvGG5QHfSRfR_aoQzATa5bBCAW5zRZ670RT0nQ08Am4qRuj"/><h1 class="font-headline-sm text-headline-sm text-slate-900 leading-tight truncate">Weekly Checklist</h1></div><div class="flex items-center gap-space-xs flex-shrink-0"><div class="bg-white border border-slate-200 px-space-xs py-0.5 rounded-lg flex items-center shadow-sm"><span class="font-label-code text-label-code text-slate-800 tracking-wider uppercase">5179KZ</span></div><img alt="Profile" class="w-8 h-8 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuALLy2M7QqpOW6UNfHk1UDkmZuyXk9uNVOSt-PaIW9Nhuo0MxV1lwRRRFNKCcI_oqhV8a_0UZz3qMJPrR7skLyggtYFeCvlJyJJJALAQ9JudCt4UsSBT4l58-8xRQPL-skUUO_mDw3CLNHyor2kpa5P7SQueHj3hM60EixtVGsoOsc5YMbn0tCl9fb8IfnHGQqiN6--82vFkD9BM_8suNNAej1PFOTuncwUV99p5KE"/></div></div></header><main class="flex flex-col relative w-full pt-16 pb-safe bg-slate-50 min-h-screen"><div class="flex flex-col w-full relative">
+<!-- Vehicle Checklist View (Underlying Context) -->
+<div aria-hidden="true" class="px-gutter py-space-md opacity-40 pointer-events-none select-none">
+<div class="bg-white border border-slate-200 rounded-xl p-space-md mb-space-md shadow-sm">
+<div class="flex items-center justify-between mb-space-xs">
+<span class="font-headline-sm text-headline-sm text-slate-900 font-bold">Weekly Car Kit</span>
+<span class="font-label-code text-label-code text-emerald-700 bg-emerald-100 font-bold px-space-xs py-0.5 rounded">4/5 Ready</span>
+</div>
+<div class="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+<div class="h-full bg-emerald-600 rounded-full w-4/5"></div>
+</div>
+</div>
+<div class="flex flex-col gap-space-sm">
+<div class="bg-white border border-slate-200 p-space-md rounded-xl flex items-center justify-between shadow-sm">
+<div class="flex items-center gap-space-sm">
+<span class="material-symbols-outlined text-emerald-600">tire_repair</span>
+<span class="font-body-md text-body-md text-slate-800 font-medium">Jack &amp; Spare Tire</span>
+</div>
+<span class="material-symbols-outlined text-emerald-600" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+<div class="bg-white border border-slate-200 p-space-md rounded-xl flex items-center justify-between shadow-sm">
+<div class="flex items-center gap-space-sm">
+<span class="material-symbols-outlined text-emerald-600">medical_services</span>
+<span class="font-body-md text-body-md text-slate-800 font-medium">First Aid Box</span>
+</div>
+<span class="material-symbols-outlined text-emerald-600" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+<div class="bg-white border border-rose-300 p-space-md rounded-xl flex items-center justify-between shadow-sm">
+<div class="flex items-center gap-space-sm">
+<span class="material-symbols-outlined text-emerald-600">videocam</span>
+<span class="font-body-md text-body-md text-slate-800 font-medium">Dash Camera</span>
+</div>
+<span class="material-symbols-outlined text-rose-600">error</span>
+</div>
+</div>
+</div>
+<!-- Modal Backdrop Overlay -->
+<div class="fixed inset-0 z-40 bg-slate-900/60 backdrop-blur-sm transition-opacity duration-300" id="modalBackdrop"></div>
+<!-- Interactive Bottom Sheet Modal -->
+<div class="fixed inset-x-0 bottom-0 z-50 flex flex-col max-h-[92vh] bg-white rounded-t-[28px] shadow-2xl transition-transform duration-300 ease-out transform translate-y-0 overflow-hidden border-t border-slate-200" id="bottomSheet">
+<!-- Drag Handle Area -->
+<div class="w-full flex items-center justify-center pt-3 pb-1 cursor-grab active:cursor-grabbing touch-none select-none" id="sheetHandle">
+<div class="w-12 h-1.5 rounded-full bg-slate-300"></div>
+</div>
+<!-- Header Section -->
+<div class="px-gutter pt-2 pb-3 flex items-start justify-between flex-shrink-0 border-b border-slate-100">
+<div class="flex flex-col min-w-0 pr-space-xs">
+<h2 class="font-headline-md text-[20px] font-bold text-slate-900 tracking-tight leading-tight truncate">Report a problem · Dash camera</h2>
+<div class="flex items-center gap-2 mt-1.5">
+<span class="inline-flex items-center gap-1 font-label-code text-[12px] font-bold text-slate-700 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-md uppercase tracking-wider">
+<span class="material-symbols-outlined text-[14px] text-slate-500">directions_car</span>
+5179KZ · Toyota Roomy
+</span>
+</div>
+</div>
+<button aria-label="Close dialog" class="w-10 h-10 -mr-1 flex items-center justify-center rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900 transition-colors flex-shrink-0" id="closeModalBtn">
+<span class="material-symbols-outlined text-[22px]">close</span>
+</button>
+</div>
+<!-- Scrollable Form Container -->
+<div class="px-gutter py-4 flex-1 overflow-y-auto space-y-5 overscroll-contain">
+<!-- Three large choice chips in a row (min 48px touch targets) -->
+<div>
+<label class="block font-body-sm text-sm font-bold text-slate-900 mb-2">
+            Select issue type <span class="text-rose-600">*</span>
+</label>
+<div aria-label="Issue type" class="grid grid-cols-3 gap-2" role="radiogroup">
+<!-- Choice Chip 1: Damaged -->
+<button aria-checked="false" class="issue-chip h-12 min-h-[48px] px-2 rounded-xl border border-slate-200 bg-slate-50 text-slate-700 font-semibold text-sm flex items-center justify-center gap-1.5 transition-all hover:bg-slate-100 active:scale-[0.98]" data-option="Damaged" role="radio" type="button">
+<span class="material-symbols-outlined text-[18px] text-slate-500">broken_image</span>
+<span class="truncate">Damaged</span>
+</button>
+<!-- Choice Chip 2: Missing -->
+<button aria-checked="false" class="issue-chip h-12 min-h-[48px] px-2 rounded-xl border border-slate-200 bg-slate-50 text-slate-700 font-semibold text-sm flex items-center justify-center gap-1.5 transition-all hover:bg-slate-100 active:scale-[0.98]" data-option="Missing" role="radio" type="button">
+<span class="material-symbols-outlined text-[18px] text-slate-500">inventory_2</span>
+<span class="truncate">Missing</span>
+</button>
+<!-- Choice Chip 3: Not working (Selected in emerald styling with check icon) -->
+<button aria-checked="true" class="issue-chip h-12 min-h-[48px] px-2 rounded-xl border-2 border-emerald-600 bg-emerald-50 text-emerald-800 font-bold text-sm flex items-center justify-center gap-1.5 transition-all shadow-sm ring-1 ring-emerald-600/20 active:scale-[0.98]" data-option="Not working" role="radio" type="button">
+<span class="material-symbols-outlined text-[18px] text-emerald-600 font-bold">check</span>
+<span class="truncate">Not working</span>
+</button>
+</div>
+</div>
+<!-- Photo Area: Big dashed square / photo preview block -->
+<div class="flex flex-col gap-1.5">
+<label class="font-body-sm text-sm font-bold text-slate-900">
+          Photo proof
+        </label>
+<div class="relative w-full rounded-2xl border-2 border-dashed border-emerald-400/80 bg-slate-50/70 p-3 sm:p-4">
+<div class="flex items-center gap-3.5">
+<!-- Attached Photo Thumbnail with Camera Icon badge & '×' remove button -->
+<div class="relative w-20 h-20 sm:w-24 sm:h-24 rounded-xl overflow-hidden border border-slate-200 shadow-sm flex-shrink-0 bg-slate-900">
+<img alt="Car dashcam with damaged cable and cracked screen" class="w-full h-full object-cover" data-alt="High contrast outdoor photo of a car dashboard camera with a shattered lens glass and detached power socket, shot in bright direct tropical sunlight." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBl0fMCbF-zIjYjFl9YXxXXmr3QkvqHQAIa2o7xtbrRIJqCHyhMjaKu6xN2lQxMcIYGwFiwnOiVVq2QRxpMrN1XcWSWO9vIf6FRMbWXMYD_T9M1mmhOI5GSiW6Swb_AhYBU2aHA15pkSQfsqngoASvPiPXlwK46dEUdH2sFnF5A-1dVgsrsHG05gB5avRlADmIE8_E_leOeadc-oB1a5PRFRIZ-rTVGmzfhebNm130"/>
+<!-- Camera Icon Badge -->
+<div class="absolute bottom-1 left-1 bg-slate-900/85 text-white p-1 rounded-md flex items-center justify-center">
+<span class="material-symbols-outlined text-[13px]">photo_camera</span>
+</div>
+<!-- '×' Remove Button -->
+<button aria-label="Remove attached photo" class="absolute top-1 right-1 w-6 h-6 rounded-full bg-slate-900/80 hover:bg-rose-600 text-white flex items-center justify-center transition-colors shadow-sm" type="button">
+<span class="material-symbols-outlined text-[14px]">close</span>
+</button>
+</div>
+<!-- Photo Meta Details -->
+<div class="flex flex-col justify-center min-w-0">
+<div class="inline-flex items-center gap-1.5 text-emerald-700 font-bold text-sm">
+<span class="material-symbols-outlined text-[18px]" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span>dashcam_proof.jpg</span>
+</div>
+<p class="text-xs text-slate-500 mt-0.5">Attached just now · 1.4 MB</p>
+<button class="mt-2 inline-flex items-center gap-1 text-emerald-700 hover:text-emerald-800 text-xs font-semibold hover:underline w-fit" type="button">
+<span class="material-symbols-outlined text-[15px]">autorenew</span>
+              Replace photo
+            </button>
+</div>
+</div>
+</div>
+<!-- Helper text directly underneath -->
+<p class="text-xs text-slate-500 font-medium flex items-center gap-1 pl-0.5">
+<span class="material-symbols-outlined text-[15px] text-emerald-600">verified</span>
+          A photo helps the fleet fix it faster.
+        </p>
+</div>
+<!-- Note box -->
+<div class="flex flex-col gap-1.5">
+<label class="font-body-sm text-sm font-bold text-slate-900" for="reportNotes">
+          What happened? <span class="font-normal text-slate-500">(optional)</span>
+</label>
+<div class="bg-slate-50 border border-slate-200 rounded-xl p-3 focus-within:bg-white focus-within:ring-2 focus-within:ring-emerald-600 focus-within:border-emerald-600 transition-all">
+<textarea class="w-full bg-transparent font-body-md text-sm sm:text-base text-slate-900 placeholder:text-slate-400 resize-none focus:outline-none" id="reportNotes" placeholder="e.g. Screen flickers when the car starts" rows="3">Power cable loose and screen stays black when vehicle starts.</textarea>
+</div>
+</div>
+<!-- Clear Helper Note -->
+<div class="bg-slate-100 border border-slate-200/80 p-3.5 rounded-xl flex items-start gap-2.5">
+<span class="material-symbols-outlined text-emerald-700 text-[20px] flex-shrink-0 mt-0.5">info</span>
+<p class="font-body-sm text-xs sm:text-sm text-slate-600 leading-snug">
+          A report alerts the fleet manager to review. It doesn't change your weekly checklist until reviewed.
+        </p>
+</div>
+<!-- Interactive CTA & Demonstration of Sending State -->
+<div class="pt-2 space-y-2.5 pb-2">
+<!-- Primary CTA Button (min 50px height, Emerald 600) -->
+<button class="w-full h-[52px] min-h-[50px] rounded-xl bg-emerald-600 text-white font-label-button text-base font-semibold shadow-md hover:bg-emerald-700 active:scale-[0.99] transition-all flex items-center justify-center gap-2" id="submitReportBtn" type="button">
+<span class="material-symbols-outlined text-[20px]">send</span>
+<span>Send report</span>
+</button>
+<!-- Interactive Simulation Mode Toggle / Inline demonstration -->
+<div class="flex items-center justify-between px-1 pt-1">
+<span class="text-xs text-slate-500 font-medium">Demo button states</span>
+<button class="text-xs text-emerald-700 hover:text-emerald-800 font-semibold underline" id="toggleStateBtn" type="button">
+            Simulate "Sending" state
+          </button>
+</div>
+<!-- Disabled Sending State Demonstration Box -->
+<div class="hidden p-2.5 rounded-xl bg-slate-100 border border-slate-200 transition-all" id="sendingStateDemoBox">
+<div class="flex items-center justify-between text-xs text-slate-600 mb-1.5 font-medium">
+<span>Sending State (Preview)</span>
+<span class="text-[11px] bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded">Disabled</span>
+</div>
+<button aria-disabled="true" class="w-full h-[50px] rounded-xl bg-emerald-600/70 text-white/90 font-semibold text-sm flex items-center justify-center gap-2 cursor-not-allowed shadow-inner" disabled="" type="button">
+<span class="material-symbols-outlined animate-spin text-[18px]">progress_activity</span>
+<span>Sending report... (cannot be tapped twice)</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+<script>
+  (function() {
+    const bottomSheet = document.getElementById('bottomSheet');
+    const modalBackdrop = document.getElementById('modalBackdrop');
+    const closeModalBtn = document.getElementById('closeModalBtn');
+    const submitReportBtn = document.getElementById('submitReportBtn');
+    const toggleStateBtn = document.getElementById('toggleStateBtn');
+    const sendingStateDemoBox = document.getElementById('sendingStateDemoBox');
+    const choiceChips = document.querySelectorAll('.issue-chip');
+
+    // Choice chips click interaction
+    choiceChips.forEach(chip => {
+      chip.addEventListener('click', () => {
+        choiceChips.forEach(c => {
+          c.setAttribute('aria-checked', 'false');
+          c.className = 'issue-chip h-12 min-h-[48px] px-2 rounded-xl border border-slate-200 bg-slate-50 text-slate-700 font-semibold text-sm flex items-center justify-center gap-1.5 transition-all hover:bg-slate-100 active:scale-[0.98]';
+          const icon = c.querySelector('.material-symbols-outlined');
+          if (icon) {
+            const opt = c.getAttribute('data-option');
+            icon.className = 'material-symbols-outlined text-[18px] text-slate-500';
+            if (opt === 'Damaged') icon.textContent = 'broken_image';
+            else if (opt === 'Missing') icon.textContent = 'inventory_2';
+            else icon.textContent = 'power_off';
+          }
+        });
+
+        chip.setAttribute('aria-checked', 'true');
+        chip.className = 'issue-chip h-12 min-h-[48px] px-2 rounded-xl border-2 border-emerald-600 bg-emerald-50 text-emerald-800 font-bold text-sm flex items-center justify-center gap-1.5 transition-all shadow-sm ring-1 ring-emerald-600/20 active:scale-[0.98]';
+        const activeIcon = chip.querySelector('.material-symbols-outlined');
+        if (activeIcon) {
+          activeIcon.className = 'material-symbols-outlined text-[18px] text-emerald-600 font-bold';
+          activeIcon.textContent = 'check';
+        }
+      });
+    });
+
+    // Toggle inline sending state demo
+    if (toggleStateBtn && sendingStateDemoBox) {
+      toggleStateBtn.addEventListener('click', () => {
+        const isHidden = sendingStateDemoBox.classList.contains('hidden');
+        if (isHidden) {
+          sendingStateDemoBox.classList.remove('hidden');
+          toggleStateBtn.textContent = 'Hide "Sending" state';
+        } else {
+          sendingStateDemoBox.classList.add('hidden');
+          toggleStateBtn.textContent = 'Simulate "Sending" state';
+        }
+      });
+    }
+
+    // Dismiss Sheet Handlers
+    function dismissSheet() {
+      bottomSheet.classList.remove('translate-y-0');
+      bottomSheet.classList.add('translate-y-full');
+      modalBackdrop.classList.add('opacity-0');
+      setTimeout(() => {
+        window.history.back();
+      }, 250);
+    }
+
+    if (closeModalBtn) closeModalBtn.addEventListener('click', dismissSheet);
+    if (modalBackdrop) modalBackdrop.addEventListener('click', dismissSheet);
+
+    // Interactive Submit with disabled state prevention
+    if (submitReportBtn) {
+      submitReportBtn.addEventListener('click', () => {
+        submitReportBtn.disabled = true;
+        submitReportBtn.className = "w-full h-[52px] min-h-[50px] rounded-xl bg-emerald-600/70 text-white/95 font-label-button text-sm font-semibold flex items-center justify-center gap-2 cursor-not-allowed shadow-inner transition-all";
+        submitReportBtn.innerHTML = `
+          <span class="material-symbols-outlined animate-spin text-[19px]">progress_activity</span>
+          <span>Sending report... (cannot be tapped twice)</span>
+        `;
+        setTimeout(() => {
+          dismissSheet();
+        }, 1200);
+      });
+    }
+  })();
+</script></main></body></html>

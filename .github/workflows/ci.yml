@@ -247,7 +247,26 @@ jobs:
           supabase/functions/_fleet-server/catalog_research_intake.test.ts
           supabase/functions/_fleet-server/catalog_research_export.test.ts
 
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start Supabase and bootstrap inventory schema
+        run: |
+          supabase start -x imgproxy,logflare
+          supabase db reset --local
+          node scripts/bootstrap-inventory-local-db.mjs
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          INVENTORY_TEST_ORG_ID: test-org-inv
+
       - name: Deno test fleet inventory engine
+        env:
+          INVENTORY_INTEGRATION_TESTS: "1"
+          INVENTORY_TEST_ORG_ID: test-org-inv
+          SUPABASE_URL: http://127.0.0.1:54321
+          SUPABASE_SERVICE_ROLE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU
         run: >
           deno test --allow-read --allow-env --no-check
           supabase/functions/_fleet-server/inventory_phase0_security.test.ts

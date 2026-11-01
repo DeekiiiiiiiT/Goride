@@ -61,7 +61,8 @@ import {
 import { logAdminAction, getAuditLogs, getAuditLogsByActor } from "./audit_log.ts";
 import { logRoleChange } from "../_shared/auditLog.ts";
 import { 
-  stampOrg, 
+  stampOrg,
+  stampOrgRequired, 
   stampRecord,
   filterByOrg, 
   filterByOrgStrict, 
@@ -8788,7 +8789,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
       }
       
       // Key structure: equipment:{vehicleId}:{itemId}
-      await kv.set(`equipment:${item.vehicleId}:${item.id}`, stampOrg(item, c));
+      await kv.set(`equipment:${item.vehicleId}:${item.id}`, stampOrgRequired(item, c));
       return c.json({ success: true, data: item });
     } catch (e: any) {
       return c.json({ error: e.message }, 500);
@@ -9294,36 +9295,24 @@ export function registerResidualMonolithRoutes(app: Hono) {
 
           const updatedInventory: Record<string, unknown>[] = [];
           for (const [invId, draw] of drawByInventoryId) {
-            const stock = await kv.get(`inventory:${invId}`);
-            if (!stock || typeof stock !== "object") {
-              return c.json({ error: `Inventory item not found: ${invId}` }, 404);
+            const { legacyDrawInventoryQuantity } = await import("./inventory_legacy_stock.ts");
+            const result = await legacyDrawInventoryQuantity(invId, draw, c);
+            if (!result.ok) {
+              return c.json(result.body, result.status as 403 | 404 | 409 | 500);
             }
-            if (!belongsToOrg(stock as Record<string, unknown>, c)) {
-              return c.json({ error: "Forbidden", inventoryId: invId }, 403);
-            }
-            const qty = Number((stock as { quantity?: unknown }).quantity) || 0;
-            if (qty < draw) {
-              const name = String((stock as { name?: unknown }).name || invId);
-              return c.json({
-                error: `Insufficient stock for "${name}": need ${draw}, have ${qty}`,
-                inventoryId: invId,
-                available: qty,
-                requested: draw,
-              }, 409);
-            }
-            const next = stampOrg({
-              ...(stock as Record<string, unknown>),
-              quantity: qty - draw,
-              updatedAt: new Date().toISOString(),
-            }, c);
-            await kv.set(`inventory:${invId}`, next);
-            updatedInventory.push(next);
+            updatedInventory.push(result.payload);
           }
 
-          const stampedItems = items.map((item: any) => stampOrg(
-            { ...item, id: item.id || crypto.randomUUID() },
-            c,
-          ));
+          const stampedItems = items.map((item: any) => {
+            try {
+              return stampOrgRequired(
+                { ...item, id: item.id || crypto.randomUUID() },
+                c,
+              );
+            } catch (e: unknown) {
+              throw e;
+            }
+          });
           const keys = stampedItems.map((item: any) => `equipment:${item.vehicleId}:${item.id}`);
           await kv.mset(keys, stampedItems);
 
@@ -9338,6 +9327,22 @@ export function registerResidualMonolithRoutes(app: Hono) {
   });
 
   // Inventory Endpoints
+  async function legacyInventoryWritesDisabled(c: Context): Promise<Response | null> {
+    try {
+      const { isFleetInventoryPhaseEnabled } = await import("./platform_inventory_flags.ts");
+      const on = await isFleetInventoryPhaseEnabled("fleet_inventory_phase2_stock");
+      if (on) {
+        return c.json(
+          { error: "Legacy inventory API retired. Use /make-server-37f42386/inventory/*." },
+          410,
+        );
+      }
+    } catch {
+      /* flag read failed — allow legacy */
+    }
+    return null;
+  }
+
   app.get("/make-server-37f42386/inventory", requireAuth(), async (c) => {
       try {
           const { data, error } = await fromKvStore()
@@ -9358,6 +9363,8 @@ export function registerResidualMonolithRoutes(app: Hono) {
     requirePermission("vehicles.edit"),
     async (c) => {
       try {
+          const blocked = await legacyInventoryWritesDisabled(c);
+          if (blocked) return blocked;
           const item = await c.req.json();
           if (!item.id) item.id = crypto.randomUUID();
           // Cross-tenant: refuse overwrite of another org's row
@@ -9365,7 +9372,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
           if (existing && !belongsToOrg(existing as Record<string, unknown>, c)) {
             return c.json({ error: "Forbidden" }, 403);
           }
-          const stamped = stampOrg(item, c);
+          const stamped = stampOrgRequired(item, c);
           await kv.set(`inventory:${item.id}`, stamped);
           return c.json({ success: true, data: stamped });
       } catch(e: any) {
@@ -9397,7 +9404,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
             if (existing && !belongsToOrg(existing as Record<string, unknown>, c)) {
               return c.json({ error: "Forbidden", id: item.id }, 403);
             }
-            const stamped = stampOrg(item, c);
+            const stamped = stampOrgRequired(item, c);
             keys.push(`inventory:${stamped.id}`);
             stampedItems.push(stamped);
           }
@@ -9437,14 +9444,23 @@ export function registerResidualMonolithRoutes(app: Hono) {
       }
   });
 
-  app.post("/make-server-37f42386/templates", async (c) => {
+  app.post(
+    "/make-server-37f42386/templates",
+    requireAuth(),
+    requirePermission("inventory.kits.manage"),
+    async (c) => {
       try {
           const t = await c.req.json();
           if (!t.id) t.id = crypto.randomUUID();
-          await kv.set(`template:equipment:${t.id}`, stampOrg(t, c));
-          return c.json({ success: true, data: t });
+          const stamped = stampOrgRequired(t, c);
+          await kv.set(`template:equipment:${stamped.id}`, stamped);
+          return c.json({ success: true, data: stamped });
       } catch(e: any) {
-          return c.json({ error: e.message }, 500);
+          const msg = e?.message || String(e);
+          if (/stampOrgRequired|organizationId required/i.test(msg)) {
+            return c.json({ error: "Organization required" }, 403);
+          }
+          return c.json({ error: msg }, 500);
       }
   });
 
@@ -11830,6 +11846,12 @@ export function registerResidualMonolithRoutes(app: Hono) {
         FEATURE_FLAGS.PARTS_TIERED_SEARCH,
         orgId,
       );
+
+      const { loadFleetInventoryFeatureFlags } = await import("./platform_inventory_flags.ts");
+      effectiveModules = {
+        ...effectiveModules,
+        ...(await loadFleetInventoryFeatureFlags()),
+      };
 
       return c.json({
         orgId,

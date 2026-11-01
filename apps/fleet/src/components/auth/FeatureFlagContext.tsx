@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
-import { API_ENDPOINTS } from '@roam/api-client';
+import { API_ENDPOINTS, publicAnonKey, withSettingsSegmentHeaders } from '@roam/api-client';
 import {
   allModulesOff,
   mergeFleetEffectiveModules,
@@ -7,7 +7,6 @@ import {
   DEFAULT_ENTERPRISE_ENABLED_MODULES,
   type ModuleKey,
 } from '@roam/platform-settings';
-import { withProductLineHeaders } from '../../config/productLine';
 import { fetchEnterpriseModules } from '../../services/enterpriseModulesClient';
 import {
   readCachedEnabledModules,
@@ -76,6 +75,12 @@ function mergeWithLegacyFleetDefaults(effective: Record<string, boolean>): Recor
   return out;
 }
 
+function platformFeatureFlagHeaders(accessToken?: string | null): Record<string, string> {
+  return withSettingsSegmentHeaders('fleet', {
+    Authorization: `Bearer ${accessToken || publicAnonKey}`,
+  });
+}
+
 export function FeatureFlagProvider({ children }: { children: React.ReactNode }) {
   const { user, session } = useAuth();
   const [enabledModules, setEnabledModules] = useState<Record<string, boolean>>(initialEnabledModules);
@@ -88,7 +93,7 @@ export function FeatureFlagProvider({ children }: { children: React.ReactNode })
   const fetchPreLoginShell = useCallback(async () => {
     try {
       const res = await fetch(`${API_ENDPOINTS.fleetCore}/platform-feature-flags`, {
-        headers: withProductLineHeaders(),
+        headers: platformFeatureFlagHeaders(),
       });
       if (res.ok) {
         const data = await res.json();
@@ -137,9 +142,28 @@ export function FeatureFlagProvider({ children }: { children: React.ReactNode })
       const orgOverrides = (data.orgOverrides || {}) as Record<string, boolean>;
       orgOverridesRef.current = orgOverrides;
 
+      let inventoryFlags: Record<string, boolean> = {};
+      try {
+        const flagRes = await fetch(`${API_ENDPOINTS.fleetCore}/platform-feature-flags`, {
+          headers: platformFeatureFlagHeaders(token),
+        });
+        if (flagRes.ok) {
+          const flagData = await flagRes.json();
+          const mods = (flagData.enabledModules || {}) as Record<string, boolean>;
+          for (const [key, value] of Object.entries(mods)) {
+            if (key.startsWith('fleet_inventory_') || key.startsWith('inv_')) {
+              inventoryFlags[key] = value;
+            }
+          }
+        }
+      } catch {
+        /* platform flags are best-effort; enterprise modules remain source for org keys */
+      }
+
       const next = mergeWithLegacyFleetDefaults({
         ...allModulesOff(),
         ...(data.effectiveModules || {}),
+        ...inventoryFlags,
       });
       lastKnownRef.current = next;
       setEnabledModules(next);

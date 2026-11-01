@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_standard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={"darkMode":"class","theme":{"extend":{"colors":{"surface-dim":"#d8dadc","inverse-on-surface":"#eff1f3","primary":"#000000","on-tertiary-container":"#d95f00","on-background":"#191c1e","surface-container-low":"#f2f4f6","tertiary":"#000000","on-error-container":"#93000a","on-tertiary-fixed":"#341100","tertiary-container":"#341100","surface":"#f7f9fb","primary-fixed-dim":"#c8c3df","surface-variant":"#e0e3e5","surface-container":"#eceef0","on-primary-fixed":"#1b192e","secondary-container":"#dfdef1","error":"#ba1a1a","surface-tint":"#5e5c74","inverse-primary":"#c8c3df","outline-variant":"#c9c5cd","on-primary":"#ffffff","on-secondary-fixed-variant":"#454555","on-error":"#ffffff","surface-container-high":"#e6e8ea","background":"#f7f9fb","on-surface-variant":"#47464c","surface-bright":"#f7f9fb","secondary-fixed":"#e2e1f4","on-secondary-fixed":"#1a1a28","on-tertiary":"#ffffff","inverse-surface":"#2d3133","tertiary-fixed-dim":"#ffb690","surface-container-lowest":"#ffffff","secondary":"#5d5d6d","outline":"#78767d","primary-container":"#1b192e","on-secondary-container":"#616172","on-surface":"#191c1e","on-tertiary-fixed-variant":"#783200","primary-fixed":"#e4dffc","on-primary-container":"#84819a","on-primary-fixed-variant":"#46445b","tertiary-fixed":"#ffdbca","secondary-fixed-dim":"#c6c5d8","error-container":"#ffdad6","surface-container-highest":"#e0e3e5","on-secondary":"#ffffff"},"borderRadius":{"DEFAULT":"0.25rem","lg":"0.5rem","xl":"0.75rem","full":"9999px"},"spacing":{"margin-desktop":"2rem","margin":"1rem","space-md":"0.75rem","space-xs":"0.25rem","space-sm":"0.5rem","gutter-desktop":"1.5rem","space-xl":"1.5rem","space-lg":"1rem","gutter":"1rem"},"fontFamily":{"headline-xl":["Inter"],"caption":["Inter"],"headline-sm":["Inter"],"headline-lg":["Inter"],"body-lg":["Inter"],"label-code":["JetBrains Mono"],"body-md":["Inter"],"body-sm":["Inter"],"label-plate":["JetBrains Mono"],"label-price":["JetBrains Mono"]},"fontSize":{"headline-xl":["30px",{"lineHeight":"38px","letterSpacing":"-0.02em","fontWeight":"600"}],"caption":["11px",{"lineHeight":"14px","letterSpacing":"0.02em","fontWeight":"500"}],"headline-sm":["18px",{"lineHeight":"26px","letterSpacing":"-0.01em","fontWeight":"600"}],"headline-lg":["24px",{"lineHeight":"32px","letterSpacing":"-0.015em","fontWeight":"600"}],"body-lg":["16px",{"lineHeight":"24px","letterSpacing":"-0.005em","fontWeight":"400"}],"label-code":["13px",{"lineHeight":"18px","letterSpacing":"-0.01em","fontWeight":"500"}],"body-md":["14px",{"lineHeight":"20px","letterSpacing":"0em","fontWeight":"400"}],"body-sm":["13px",{"lineHeight":"18px","letterSpacing":"0em","fontWeight":"400"}],"label-plate":["14px",{"lineHeight":"18px","letterSpacing":"0.08em","fontWeight":"700"}],"label-price":["14px",{"lineHeight":"20px","letterSpacing":"-0.02em","fontWeight":"600"}]}}}}</script></head><body class="bg-surface font-body-md text-on-surface antialiased"><header class="fixed top-0 left-0 right-0 z-50 shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="h-12 bg-primary px-margin-desktop flex items-center justify-between"><div class="flex items-center gap-space-md"><div class="flex items-center gap-space-sm"><div class="w-6 h-6 rounded bg-surface-container-lowest flex items-center justify-center"><span class="material-symbols-outlined text-primary text-[16px]">local_shipping</span></div><span class="font-headline-sm text-headline-sm text-on-primary tracking-tight font-bold">ROAM FLEET</span></div><div class="h-4 w-px bg-on-surface-variant/40 mx-space-sm"></div><span class="font-caption text-caption uppercase tracking-wider text-surface-dim font-semibold">Fleet Maintenance OS</span></div><div class="flex items-center gap-space-md"><div class="flex items-center gap-space-xs bg-primary-container px-space-md py-1 rounded border border-outline-variant/20"><span class="material-symbols-outlined text-[14px] text-surface-dim">hub</span><span class="font-label-code text-label-code text-on-primary">Kingston Hub #01</span></div><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div><div class="h-11 bg-surface-container-lowest px-margin-desktop flex items-center justify-between"><nav class="flex items-center gap-space-lg h-full" data-active-classes="border-b-2 border-primary text-primary font-semibold"><a class="h-full flex items-center text-on-surface-variant hover:text-on-surface transition-colors font-body-md text-body-md" data-path="dashboard" href="#">Dashboard</a><a class="h-full flex items-center text-on-surface-variant hover:text-on-surface transition-colors font-body-md text-body-md" data-path="fleet-operations" href="#">Fleet Operations</a><a class="h-full flex items-center text-on-surface-variant hover:text-on-surface transition-colors font-body-md text-body-md" data-path="driver-operations" href="#">Driver Operations</a><a class="h-full flex items-center text-on-surface-variant hover:text-on-surface transition-colors font-body-md text-body-md" data-path="money" href="#">Money</a><a class="h-full flex items-center text-on-surface-variant hover:text-on-surface transition-colors font-body-md text-body-md" data-path="vehicle-operations" href="#">Vehicle Operations</a><a class="h-full flex items-center text-on-surface-variant hover:text-on-surface transition-colors font-body-md text-body-md" data-path="delivery-operations" href="#">Delivery Operations</a><a class="h-full flex items-center text-on-surface-variant hover:text-on-surface transition-colors font-body-md text-body-md" data-path="analytics" href="#">Analytics</a><a class="h-full flex items-center text-on-surface-variant hover:text-on-surface transition-colors font-body-md text-body-md" data-path="reports" href="#">Reports</a><a class="h-full flex items-center text-on-surface-variant hover:text-on-surface transition-colors font-body-md text-body-md" data-path="business-finance" href="#">Business Finance</a></nav><div class="flex items-center gap-space-md"><div class="w-7 h-7 rounded-full bg-primary-container flex items-center justify-center"><span class="font-label-code text-[11px] text-on-primary font-bold">JD</span></div></div></div><div class="h-9 bg-primary-container px-margin-desktop flex items-center justify-between text-on-primary"><div class="flex items-center gap-space-sm"><span class="material-symbols-outlined text-[15px] text-on-primary-container">search</span><span class="font-body-sm text-body-sm text-on-primary-container">Switch vehicle or search hub...</span><span class="font-label-code text-[10px] text-on-primary-container bg-surface-container-highest/20 px-1.5 py-0.5 rounded ml-space-xs">⌘K</span></div><div class="flex items-center gap-space-sm"><span class="w-1.5 h-1.5 rounded-full bg-surface-tint"></span><span class="font-label-code text-caption text-surface-dim">08:47 PM EST · America/Jamaica · JM (JMD)</span></div></div></header><main class="w-full pt-32 bg-surface min-h-[calc(100vh-80px)]"><div class="flex flex-col w-full">
+<!-- Operational Sub-Context Header (Slate Dark strip) -->
+<div class="w-full bg-primary-container px-margin-desktop py-space-sm flex items-center justify-between text-surface-dim shadow-inner">
+<div class="flex items-center gap-space-md">
+<div class="flex items-center gap-space-xs">
+<span class="w-2 h-2 rounded-full bg-surface-tint"></span>
+<span class="font-label-code text-caption text-surface-container-lowest">08:20:30 AM EST · America/Jamaica · JM (JMD)</span>
+</div>
+<span class="text-on-primary-container/40">/</span>
+<div class="flex items-center gap-space-xs">
+<span class="font-label-code text-caption bg-surface-container-highest/20 px-1.5 py-0.5 rounded text-surface-dim">DE</span>
+<span class="font-body-sm text-body-sm text-surface-dim font-medium">Deeki T</span>
+<span class="font-label-code text-[10px] text-surface-variant bg-surface-tint/30 px-1 rounded">platform_owner</span>
+</div>
+</div>
+<div class="flex items-center gap-space-lg">
+<span class="font-caption text-caption text-surface-dim uppercase tracking-wider">Storage Node: Primary Warehouse Alpha</span>
+<div class="h-3 w-px bg-outline-variant/30"></div>
+<div class="flex items-center gap-1 text-surface-dim">
+<span class="material-symbols-outlined text-[14px]">lock_clock</span>
+<span class="font-label-code text-caption">Immutable Audit Stream Active</span>
+</div>
+</div>
+</div>
+<!-- Page Viewport Content -->
+<div class="max-w-[1440px] w-full mx-auto px-margin-desktop py-space-xl flex flex-col gap-space-lg">
+<!-- Top Sub-Navigation & Module Title Strip -->
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-space-md pb-space-sm">
+<div class="flex flex-col gap-1">
+<div class="flex items-center gap-space-sm">
+<span class="font-caption text-caption uppercase tracking-wider text-secondary font-semibold">Inventory Logistics / Stores</span>
+<span class="text-outline-variant">›</span>
+<span class="font-caption text-caption text-on-surface-variant">Kingston Fleet Base</span>
+</div>
+<h1 class="font-headline-lg text-headline-lg text-on-surface font-bold tracking-tight">Inventory &amp; Asset Management</h1>
+</div>
+<!-- Segmented Pill Tab Bar -->
+<div class="bg-surface-container-high p-1 rounded-lg flex items-center gap-1 shadow-sm">
+<button class="bg-surface-container-lowest text-primary shadow-sm px-space-md py-1.5 rounded font-body-sm text-body-sm font-semibold transition-all">
+          Stock
+        </button>
+<button class="text-on-surface-variant hover:text-on-surface px-space-md py-1.5 rounded font-body-sm text-body-sm font-medium transition-colors">
+          Movements &amp; Audits
+        </button>
+<button class="text-on-surface-variant hover:text-on-surface px-space-md py-1.5 rounded font-body-sm text-body-sm font-medium transition-colors">
+          Purchase Orders
+        </button>
+<button class="text-on-surface-variant hover:text-on-surface px-space-md py-1.5 rounded font-body-sm text-body-sm font-medium transition-colors">
+          Suppliers
+        </button>
+<button class="text-on-surface-variant hover:text-on-surface px-space-md py-1.5 rounded font-body-sm text-body-sm font-medium transition-colors">
+          Fleet Kit Sets
+        </button>
+</div>
+</div>
+<!-- Stock Controls & Action Header -->
+<div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-space-md">
+<div class="flex items-center gap-space-sm">
+<h2 class="font-headline-sm text-headline-sm text-on-surface font-semibold">Stock Inventory</h2>
+<span class="bg-surface-container-high text-on-surface font-label-code text-caption px-2 py-0.5 rounded-full font-semibold">10 items</span>
+</div>
+<div class="flex items-center gap-space-sm w-full sm:w-auto">
+<!-- Location Filter Dropdown -->
+<div class="relative group">
+<button class="h-9 px-space-md bg-surface-container-lowest text-on-surface rounded font-body-sm text-body-sm font-medium flex items-center gap-space-sm shadow-sm hover:bg-surface-container-low transition-colors">
+<span class="material-symbols-outlined text-[16px] text-secondary">location_on</span>
+<span>All locations</span>
+<span class="material-symbols-outlined text-[16px] text-secondary">arrow_drop_down</span>
+</button>
+</div>
+<!-- Add Item with Tooltip -->
+<div class="relative group">
+<button class="h-9 px-space-md bg-primary text-on-primary rounded font-body-sm text-body-sm font-semibold flex items-center gap-space-xs hover:bg-surface-tint transition-colors shadow-sm">
+<span class="material-symbols-outlined text-[18px]">add</span>
+<span>Add item</span>
+</button>
+<!-- Tooltip Hint -->
+<div class="absolute right-0 top-full mt-2 w-72 p-space-sm bg-inverse-surface text-inverse-on-surface rounded shadow-xl text-caption font-body-sm opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-30">
+<div class="flex items-start gap-1.5">
+<span class="material-symbols-outlined text-[14px] text-tertiary-fixed-dim shrink-0 mt-0.5">info</span>
+<span>Adds item definition to catalogue, quantities only change via audit transactions.</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Filter Bar Card -->
+<div class="bg-surface-container-lowest rounded-lg p-space-md shadow-sm flex flex-col lg:flex-row items-stretch lg:items-center gap-space-md">
+<!-- Search Input -->
+<div class="relative flex-1">
+<span class="material-symbols-outlined absolute left-3 top-2.5 text-[18px] text-secondary">search</span>
+<input class="w-full h-9 pl-9 pr-space-md bg-surface-container-low text-on-surface rounded font-body-sm text-body-sm placeholder:text-outline focus:outline-none focus:bg-surface-container-lowest transition-all" placeholder="Search name, SKU or serial..." type="text"/>
+</div>
+<!-- Dropdown Selectors Group -->
+<div class="flex flex-wrap sm:flex-nowrap items-center gap-space-sm">
+<!-- Category Filter -->
+<div class="relative min-w-[170px] flex-1 sm:flex-initial">
+<select class="w-full h-9 px-space-md pr-8 bg-surface-container-low text-on-surface rounded font-body-sm text-body-sm font-medium appearance-none cursor-pointer focus:outline-none">
+<option>All categories</option>
+<option>Electronics</option>
+<option>Tires &amp; wheels</option>
+<option>Tools &amp; roadside</option>
+<option>Safety equipment</option>
+<option>Interior &amp; accessories</option>
+</select>
+<span class="material-symbols-outlined absolute right-2.5 top-2.5 text-[16px] text-secondary pointer-events-none">arrow_drop_down</span>
+</div>
+<!-- Status Filter -->
+<div class="relative min-w-[190px] flex-1 sm:flex-initial">
+<select class="w-full h-9 px-space-md pr-8 bg-surface-container-low text-on-surface rounded font-body-sm text-body-sm font-medium appearance-none cursor-pointer focus:outline-none">
+<option>All statuses (OK, Low, Out)</option>
+<option>Status: OK</option>
+<option>Status: Low</option>
+<option>Status: Out</option>
+</select>
+<span class="material-symbols-outlined absolute right-2.5 top-2.5 text-[16px] text-secondary pointer-events-none">arrow_drop_down</span>
+</div>
+<!-- Type Filter -->
+<div class="relative min-w-[210px] flex-1 sm:flex-initial">
+<select class="w-full h-9 px-space-md pr-8 bg-surface-container-low text-on-surface rounded font-body-sm text-body-sm font-medium appearance-none cursor-pointer focus:outline-none">
+<option>All types (Quantity / Tracked)</option>
+<option>Type: Quantity Batch</option>
+<option>Type: Tracked by Serial</option>
+</select>
+<span class="material-symbols-outlined absolute right-2.5 top-2.5 text-[16px] text-secondary pointer-events-none">arrow_drop_down</span>
+</div>
+<button class="h-9 px-space-md bg-surface-container-high hover:bg-surface-container-highest text-on-surface rounded font-body-sm text-body-sm font-medium flex items-center gap-1 transition-colors">
+<span class="material-symbols-outlined text-[16px]">filter_alt_off</span>
+<span>Reset</span>
+</button>
+</div>
+</div>
+<!-- Stock Table Module -->
+<div class="bg-surface-container-lowest rounded-lg shadow-sm overflow-hidden flex flex-col">
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface-container-low/70">
+<th class="py-space-md px-space-lg font-caption text-caption uppercase text-secondary font-semibold tracking-wider">Item &amp; SKU</th>
+<th class="py-space-md px-space-md font-caption text-caption uppercase text-secondary font-semibold tracking-wider">Category</th>
+<th class="py-space-md px-space-md font-caption text-caption uppercase text-secondary font-semibold tracking-wider">Location</th>
+<th class="py-space-md px-space-md font-caption text-caption uppercase text-secondary font-semibold tracking-wider text-right">On hand</th>
+<th class="py-space-md px-space-md font-caption text-caption uppercase text-secondary font-semibold tracking-wider text-right">Reserved</th>
+<th class="py-space-md px-space-md font-caption text-caption uppercase text-secondary font-semibold tracking-wider text-right">Available</th>
+<th class="py-space-md px-space-md font-caption text-caption uppercase text-secondary font-semibold tracking-wider text-right">Reorder at</th>
+<th class="py-space-md px-space-md font-caption text-caption uppercase text-secondary font-semibold tracking-wider text-right">Avg cost</th>
+<th class="py-space-md px-space-md font-caption text-caption uppercase text-secondary font-semibold tracking-wider text-right">Value</th>
+<th class="py-space-md px-space-md font-caption text-caption uppercase text-secondary font-semibold tracking-wider text-center">Status</th>
+<th class="py-space-md px-space-lg font-caption text-caption uppercase text-secondary font-semibold tracking-wider text-right">Actions</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-surface-container-low font-body-sm text-body-sm text-on-surface">
+<!-- ROW 1: Phone Holder Mount -->
+<tr class="hover:bg-surface-container-low/50 transition-colors group">
+<td class="py-space-sm px-space-lg">
+<div class="font-body-md text-body-md font-bold text-on-surface leading-tight">Phone Holder Mount</div>
+<div class="font-label-code text-caption text-secondary font-medium tracking-wide">ACC-PHM-01</div>
+</td>
+<td class="py-space-sm px-space-md text-on-surface-variant font-medium">Electronics · Phone holder</td>
+<td class="py-space-sm px-space-md">
+<div class="inline-flex items-center gap-1 text-on-surface-variant">
+<span class="material-symbols-outlined text-[14px] text-outline">warehouse</span>
+<span>Main store — Kingston</span>
+</div>
+</td>
+<td class="py-space-sm px-space-md text-right font-label-code text-label-code font-semibold cursor-pointer hover:text-tertiary-container group/q" title="Click to view ledger movements">
+<span class="px-1.5 py-0.5 rounded group-hover/q:bg-surface-container-high transition-colors">1</span>
+</td>
+<td class="py-space-sm px-space-md text-right font-label-code text-label-code text-outline cursor-pointer hover:text-on-surface group/r" title="Click to view reserved reservations">
+<span class="px-1.5 py-0.5 rounded group-hover/r:bg-surface-container-high transition-colors">0</span>
+</td>
+<td class="py-space-sm px-space-md text-right font-label-code text-label-code font-bold text-on-surface">1</td>
+<td class="py-space-sm px-space-md text-right font-label-code text-label-code text-secondary">3</td>
+<td class="py-space-sm px-space-md text-right font-label-price text-label-price text-on-surface">J$ 5,400.00</td>
+<td class="py-space-sm px-space-md text-right font-label-price text-label-price font-semibold text-on-surface">J$ 5,400.00</td>
+<td class="py-space-sm px-space-md text-center">
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-caption font-semibold bg-tertiary-fixed text-on-tertiary-container">
+<span class="w-1.5 h-1.5 rounded-full bg-on-tertiary-container"></span>
+                  Low
+                </span>
+</td>
+<td class="py-space-sm px-space-lg text-right">
+<div class="flex items-center justify-end gap-1">
+<button class="p-1 rounded text-secondary hover:text-on-surface hover:bg-surface-container-high transition-colors" title="Edit Item Details">
+<span class="material-symbols-outlined text-[17px]">edit</span>
+</button>
+<button class="p-1 rounded text-secondary hover:text-on-surface hover:bg-surface-container-high transition-colors" title="Movement Operations">
+<span class="material-symbols-outlined text-[17px]">more_horiz</span>
+</button>
+</div>
+</td>
+</tr>
+<!-- ROW 2: Dash camera (Interactive '⋯' Open State Demonstration) -->
+<tr class="bg-surface-container-lowest hover:bg-surface-container-low/50 transition-colors group relative">
+<td class="py-space-sm px-space-lg">
+<div class="flex items-center gap-space-sm">
+<div>
+<div class="font-body-md text-body-md font-bold text-on-surface leading-tight">Dash camera</div>
+<div class="font-label-code text-caption text-secondary font-medium tracking-wide">ELC-DCM-01</div>
+</div>
+<span class="font-label-code text-[10px] bg-secondary-container text-on-secondary-fixed font-semibold px-2 py-0.5 rounded-full tracking-wider uppercase">
+                    Tracked by serial
+                  </span>
+</div>
+</td>
+<td class="py-space-sm px-space-md text-on-surface-variant font-medium">Electronics · Cameras</td>
+<td class="py-space-sm px-space-md">
+<div class="inline-flex items-center gap-1 text-on-surface font-medium">
+<span class="material-symbols-outlined text-[14px] text-secondary">directions_car</span>
+<span>On cars (5179KZ)</span>
+</div>
+</td>
+<td class="py-space-sm px-space-md text-right font-label-code text-label-code font-semibold cursor-pointer hover:text-primary group/q" title="Click to view ledger movements">
+<span class="px-1.5 py-0.5 rounded group-hover/q:bg-surface-container-high transition-colors">1</span>
+</td>
+<td class="py-space-sm px-space-md text-right font-label-code text-label-code text-outline cursor-pointer hover:text-on-surface group/r" title="Click to view reserved reservations">
+<span class="px-1.5 py-0.5 rounded group-hover/r:bg-surface-container-high transition-colors">0</span>
+</td>
+<td class="py-space-sm px-space-md text-right font-label-code text-label-code font-bold text-on-surface">1</td>
+<td class="py-space-sm px-space-md text-right font-label-code text-label-code text-secondary">1</td>
+<td class="py-space-sm px-space-md text-right font-label-price text-label-price text-on-surface">J$ 45,998.85</td>
+<td class="py-space-sm px-space-md text-right font-label-price text-label-price font-semibold text-on-surface">J$ 45,998.85</td>
+<td class="py-space-sm px-space-md text-center">
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-caption font-semibold bg-surface-container-high text-on-surface">
+<span class="w-1.5 h-1.5 rounded-full bg-primary"></span>
+                  OK
+                </span>
+</td>
+<td class="py-space-sm px-space-lg text-right relative">
+<div class="flex items-center justify-end gap-1">
+<button class="p-1 rounded text-secondary hover:text-on-surface hover:bg-surface-container-high transition-colors" title="Edit Item Details">
+<span class="material-symbols-outlined text-[17px]">edit</span>
+</button>
+<button class="p-1 rounded text-on-surface bg-surface-container-high transition-colors" id="active-action-btn" title="Movement Operations">
+<span class="material-symbols-outlined text-[17px]">more_horiz</span>
+</button>
+</div>
+<!-- Active ⋯ Dropdown Menu Layer -->
+<div class="absolute right-6 top-10 w-64 bg-surface-container-lowest rounded-lg shadow-xl py-1.5 text-left z-40">
+<div class="px-3 py-1 font-caption text-caption text-secondary uppercase tracking-wider font-semibold">Asset Operations</div>
+<button class="w-full px-3 py-1.5 text-left text-body-sm font-medium hover:bg-surface-container-low flex items-center gap-2 text-on-surface transition-colors">
+<span class="material-symbols-outlined text-[16px] text-secondary">input</span>
+<span>Receive stock...</span>
+</button>
+<button class="w-full px-3 py-1.5 text-left text-body-sm font-medium hover:bg-surface-container-low flex items-center gap-2 text-on-surface transition-colors">
+<span class="material-symbols-outlined text-[16px] text-secondary">output</span>
+<span>Issue to vehicle / tech...</span>
+</button>
+<button class="w-full px-3 py-1.5 text-left text-body-sm font-medium hover:bg-surface-container-low flex items-center gap-2 text-on-surface transition-colors">
+<span class="material-symbols-outlined text-[16px] text-secondary">swap_horiz</span>
+<span>Transfer between hubs...</span>
+</button>
+<button class="w-full px-3 py-1.5 text-left text-body-sm font-medium hover:bg-surface-container-low flex items-center gap-2 text-on-surface transition-colors">
+<span class="material-symbols-outlined text-[16px] text-secondary">fact_check</span>
+<span>Cycle count item...</span>
+</button>
+<div class="h-px bg-surface-container-low my-1"></div>
+<!-- Archive Action (Disabled with Hover Tooltip) -->
+<div class="relative group/arch w-full">
+<button class="w-full px-3 py-1.5 text-left text-body-sm font-medium flex items-center gap-2 text-outline/50 cursor-not-allowed">
+<span class="material-symbols-outlined text-[16px] text-outline/50">archive</span>
+<span>Archive SKU</span>
+</button>
+<!-- Tooltip -->
+<div class="absolute right-0 bottom-full mb-1 w-64 p-2 bg-inverse-surface text-inverse-on-surface rounded shadow-lg text-caption font-body-sm opacity-0 pointer-events-none group-hover/arch:opacity-100 transition-opacity z-50">
+                      Move or write off the 1 in stock before archiving.
+                    </div>
+</div>
+</div>
+</td>
+</tr>
+<!-- ROW 3: Spare tyre -->
+<tr class="hover:bg-surface-container-low/50 transition-colors group">
+<td class="py-space-sm px-space-lg">
+<div class="font-body-md text-body-md font-bold text-on-surface leading-tight">Spare tyre</div>
+<div class="font-label-code text-caption text-secondary font-medium tracking-wide">TYR-SPR-01</div>
+</td>
+<td class="py-space-sm px-space-md text-on-surface-variant font-medium">Tires &amp; wheels</td>
+<td class="py-space-sm px-space-md">
+<div class="inline-flex items-center gap-1 text-on-surface font-medium">
+<span class="material-symbols-outlined text-[14px] text-secondary">directions_car</span>
+<span>On cars (5179KZ)</span>
+</div>
+</td>
+<td class="py-space-sm px-space-md text-right font-label-code text-label-code font-semibold cursor-pointer hover:text-primary group/q" title="Click to view ledger movements">
+<span class="px-1.5 py-0.5 rounded group-hover/q:bg-surface-container-high transition-colors">1</span>
+</td>
+<td class="py-space-sm px-space-md text-right font-label-code text-label-code text-outline cursor-pointer hover:text-on-surface group/r" title="Click to view reserved reservations">
+<span class="px-1.5 py-0.5 rounded group-hover/r:bg-surface-container-high transition-colors">0</span>
+</td>
+<td class="py-space-sm px-space-md text-right font-label-code text-label-code font-bold text-on-surface">1</td>
+<td class="py-space-sm px-space-md text-right font-label-code text-label-code text-secondary">2</td>
+<td class="py-space-sm px-space-md text-right font-label-price text-label-price text-on-surface">J$ 20,000.00</td>
+<td class="py-space-sm px-space-md text-right font-label-price text-label-price font-semibold text-on-surface">J$ 20,000.00</td>
+<td class="py-space-sm px-space-md text-center">
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-caption font-semibold bg-surface-container-high text-on-surface">
+<span class="w-1.5 h-1.5 rounded-full bg-primary"></span>
+                  OK
+                </span>
+</td>
+<td class="py-space-sm px-space-lg text-right">
+<div class="flex items-center justify-end gap-1">
+<button class="p-1 rounded text-secondary hover:text-on-surface hover:bg-surface-container-high transition-colors" title="Edit Item Details">
+<span class="material-symbols-outlined text-[17px]">edit</span>
+</button>
+<button class="p-1 rounded text-secondary hover:text-on-surface hover:bg-surface-container-high transition-colors" title="Movement Operations">
+<span class="material-symbols-outlined text-[17px]">more_horiz</span>
+</button>
+</div>
+</td>
+</tr>
+<!-- ROW 4: Car jack -->
+<tr class="hover:bg-surface-container-low/50 transition-colors group">
+<td class="py-space-sm px-space-lg">
+<div class="font-body-md text-body-md font-bold text-on-surface leading-tight">Car jack</div>
+<div class="font-label-code text-caption text-secondary font-medium tracking-wide">TLS-JCK-01</div>
+</td>
+<td class="py-space-sm px-space-md text-on-surface-variant font-medium">Tools &amp; roadside</td>
+<td class="py-space-sm px-space-md">
+<div class="inline-flex items-center gap-1 text-on-surface font-medium">
+<span class="material-symbols-outlined text-[14px] text-secondary">directions_car</span>
+<span>On cars (5179KZ)</span>
+</div>
+</td>
+<td class="py-space-sm px-space-md text-right font-label-code text-label-code font-semibold cursor-pointer hover:text-primary group/q" title="Click to view ledger movements">
+<span class="px-1.5 py-0.5 rounded group-hover/q:bg-surface-container-high transition-colors">1</span>
+</td>
+<td class="py-space-sm px-space-md text-right font-label-code text-label-code text-outline cursor-pointer hover:text-on-surface group/r" title="Click to view reserved reservations">
+<span class="px-1.5 py-0.5 rounded group-hover/r:bg-surface-container-high transition-colors">0</span>
+</td>
+<td class="py-space-sm px-space-md text-right font-label-code text-label-code font-bold text-on-surface">1</td>
+<td class="py-space-sm px-space-md text-right font-label-code text-label-code text-secondary">2</td>
+<td class="py-space-sm px-space-md text-right font-label-price text-label-price text-on-surface">J$ 5,600.00</td>
+<td class="py-space-sm px-space-md text-right font-label-price text-label-price font-semibold text-on-surface">J$ 5,600.00</td>
+<td class="py-space-sm px-space-md text-center">
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-caption font-semibold bg-surface-container-high text-on-surface">
+<span class="w-1.5 h-1.5 rounded-full bg-primary"></span>
+                  OK
+                </span>
+</td>
+<td class="py-space-sm px-space-lg text-right">
+<div class="flex items-center justify-end gap-1">
+<button class="p-1 rounded text-secondary hover:text-on-surface hover:bg-surface-container-high transition-colors" title="Edit Item Details">
+<span class="material-symbols-outlined text-[17px]">edit</span>
+</button>
+<button class="p-1 rounded text-secondary hover:text-on-surface hover:bg-surface-container-high transition-colors" title="Movement Operations">
+<span class="material-symbols-outlined text-[17px]">more_horiz</span>
+</button>
+</div>
+</td>
+</tr>
+<!-- ROW 5: Lug wrench -->
+<tr class="hover:bg-surface-container-low/50 transition-colors group">
+<td class="py-space-sm px-space-lg">
+<div class="font-body-md text-body-md font-bold text-on-surface leading-tight">Lug wrench</div>
+<div class="font-label-code text-caption text-secondary font-medium tracking-wide">TLS-WRN-01</div>
+</td>
+<td class="py-space-sm px-space-md text-on-surface-variant font-medium">Tools &amp; roadside</td>
+<td class="py-space-sm px-space-md">
+<div class="inline-flex items-center gap-1 text-on-surface font-medium">
+<span class="material-symbols-outlined text-[14px] text-secondary">directions_car</span>
+<span>On cars (5179KZ)</span>
+</div>
+</td>
+<td class="py-space-sm px-space-md text-right font-label-code text-label-code font-semibold cursor-pointer hover:text-primary group/q" title="Click to view ledger movements">
+<span class="px-1.5 py-0.5 rounded group-hover/q:bg-surface-container-high transition-colors">1</span>
+</td>
+<td class="py-space-sm px-space-md text-right font-label-code text-label-code text-outline cursor-pointer hover:text-on-surface group/r" title="Click to view reserved reservations">
+<span class="px-1.5 py-0.5 rounded group-hover/r:bg-surface-container-high transition-colors">0</span>
+</td>
+<td class="py-space-sm px-space-md text-right font-label-code text-label-code font-bold text-on-surface">1</td>
+<td class="py-space-sm px-space-md text-right font-label-code text-label-code text-secondary">2</td>
+<td class="py-space-sm px-space-md text-right font-label-price text-label-price text-on-surface">J$ 2,805.00</td>
+<td class="py-space-sm px-space-md text-right font-label-price text-label-price font-semibold text-on-surface">J$ 2,805.00</td>
+<td class="py-space-sm px-space-md text-center">
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-caption font-semibold bg-surface-container-high text-on-surface">
+<span class="w-1.5 h-1.5 rounded-full bg-primary"></span>
+                  OK
+                </span>
+</td>
+<td class="py-space-sm px-space-lg text-right">
+<div class="flex items-center justify-end gap-1">
+<button class="p-1 rounded text-secondary hover:text-on-surface hover:bg-surface-container-high transition-colors" title="Edit Item Details">
+<span class="material-symbols-outlined text-[17px]">edit</span>
+</button>
+<button class="p-1 rounded text-secondary hover:text-on-surface hover:bg-surface-container-high transition-colors" title="Movement Operations">
+<span class="material-symbols-outlined text-[17px]">more_horiz</span>
+</button>
+</div>
+</td>
+</tr>
+<!-- ROW 6: Tyre pump (Out of Stock / Faint Red Left Indicator) -->
+<tr class="bg-error-container/10 hover:bg-error-container/20 transition-colors group border-l-[3px] border-l-error">
+<td class="py-space-sm px-space-lg">
+<div class="font-body-md text-body-md font-bold text-on-surface leading-tight">Tyre pump</div>
+<div class="font-label-code text-caption text-secondary font-medium tracking-wide">TLS-PMP-01</div>
+</td>
+<td class="py-space-sm px-space-md text-on-surface-variant font-medium">Tools &amp; roadside</td>
+<td class="py-space-sm px-space-md">
+<div class="inline-flex items-center gap-1 text-on-surface-variant">
+<span class="material-symbols-outlined text-[14px] text-outline">warehouse</span>
+<span>Main store — Kingston</span>
+</div>
+</td>
+<td class="py-space-sm px-space-md text-right font-label-code text-label-code font-bold text-error cursor-pointer group/q" title="Click to view ledger movements">
+<span class="px-1.5 py-0.5 rounded group-hover/q:bg-surface-container-high transition-colors">0</span>
+</td>
+<td class="py-space-sm px-space-md text-right font-label-code text-label-code text-outline cursor-pointer hover:text-on-surface group/r" title="Click to view reserved reservations">
+<span class="px-1.5 py-0.5 rounded group-hover/r:bg-surface-container-high transition-colors">0</span>
+</td>
+<td class="py-space-sm px-space-md text-right font-label-code text-label-code font-bold text-error">0</td>
+<td class="py-space-sm px-space-md text-right font-label-code text-label-code text-secondary font-semibold">2</td>
+<td class="py-space-sm px-space-md text-right font-label-price text-label-price text-on-surface">J$ 6,500.00</td>
+<td class="py-space-sm px-space-md text-right font-label-price text-label-price font-semibold text-outline">J$ 0.00</td>
+<td class="py-space-sm px-space-md text-center">
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-caption font-semibold bg-error-container text-on-error-container">
+<span class="w-1.5 h-1.5 rounded-full bg-error"></span>
+                  Out
+                </span>
+</td>
+<td class="py-space-sm px-space-lg text-right">
+<div class="flex items-center justify-end gap-1">
+<button class="p-1 rounded text-secondary hover:text-on-surface hover:bg-surface-container-high transition-colors" title="Edit Item Details">
+<span class="material-symbols-outlined text-[17px]">edit</span>
+</button>
+<button class="p-1 rounded text-secondary hover:text-on-surface hover:bg-surface-container-high transition-colors" title="Movement Operations">
+<span class="material-symbols-outlined text-[17px]">more_horiz</span>
+</button>
+</div>
+</td>
+</tr>
+<!-- ROW 7: First-aid kit (Out of Stock / Faint Red Left Indicator) -->
+<tr class="bg-error-container/10 hover:bg-error-container/20 transition-colors group border-l-[3px] border-l-error">
+<td class="py-space-sm px-space-lg">
+<div class="font-body-md text-body-md font-bold text-on-surface leading-tight">First-aid kit</div>
+<div class="font-label-code text-caption text-secondary font-medium tracking-wide">SAF-FAK-01</div>
+</td>
+<td class="py-space-sm px-space-md text-on-surface-variant font-medium">Safety equipment</td>
+<td class="py-space-sm px-space-md">
+<div class="inline-flex items-center gap-1 text-on-surface-variant">
+<span class="material-symbols-outlined text-[14px] text-outline">warehouse</span>
+<span>Main store — Kingston</span>
+</div>
+</td>
+<td class="py-space-sm px-space-md text-right font-label-code text-label-code font-bold text-error cursor-pointer group/q" title="Click to view ledger movements">
+<span class="px-1.5 py-0.5 rounded group-hover/q:bg-surface-container-high transition-colors">0</span>
+</td>
+<td class="py-space-sm px-space-md text-right font-label-code text-label-code text-outline cursor-pointer hover:text-on-surface group/r" title="Click to view reserved reservations">
+<span class="px-1.5 py-0.5 rounded group-hover/r:bg-surface-container-high transition-colors">0</span>
+</td>
+<td class="py-space-sm px-space-md text-right font-label-code text-label-code font-bold text-error">0</td>
+<td class="py-space-sm px-space-md text-right font-label-code text-label-code text-secondary font-semibold">2</td>
+<td class="py-space-sm px-space-md text-right font-label-price text-label-price text-on-surface">J$ 3,200.00</td>
+<td class="py-space-sm px-space-md text-right font-label-price text-label-price font-semibold text-outline">J$ 0.00</td>
+<td class="py-space-sm px-space-md text-center">
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-caption font-semibold bg-error-container text-on-error-container">
+<span class="w-1.5 h-1.5 rounded-full bg-error"></span>
+                  Out
+                </span>
+</td>
+<td class="py-space-sm px-space-lg text-right">
+<div class="flex items-center justify-end gap-1">
+<button class="p-1 rounded text-secondary hover:text-on-surface hover:bg-surface-container-high transition-colors" title="Edit Item Details">
+<span class="material-symbols-outlined text-[17px]">edit</span>
+</button>
+<button class="p-1 rounded text-secondary hover:text-on-surface hover:bg-surface-container-high transition-colors" title="Movement Operations">
+<span class="material-symbols-outlined text-[17px]">more_horiz</span>
+</button>
+</div>
+</td>
+</tr>
+<!-- ROW 8: Warning triangle (Out of Stock / Faint Red Left Indicator) -->
+<tr class="bg-error-container/10 hover:bg-error-container/20 transition-colors group border-l-[3px] border-l-error">
+<td class="py-space-sm px-space-lg">
+<div class="font-body-md text-body-md font-bold text-on-surface leading-tight">Warning triangle</div>
+<div class="font-label-code text-caption text-secondary font-medium tracking-wide">SAF-TRG-01</div>
+</td>
+<td class="py-space-sm px-space-md text-on-surface-variant font-medium">Safety equipment</td>
+<td class="py-space-sm px-space-md">
+<div class="inline-flex items-center gap-1 text-on-surface-variant">
+<span class="material-symbols-outlined text-[14px] text-outline">warehouse</span>
+<span>Main store — Kingston</span>
+</div>
+</td>
+<td class="py-space-sm px-space-md text-right font-label-code text-label-code font-bold text-error cursor-pointer group/q" title="Click to view ledger movements">
+<span class="px-1.5 py-0.5 rounded group-hover/q:bg-surface-container-high transition-colors">0</span>
+</td>
+<td class="py-space-sm px-space-md text-right font-label-code text-label-code text-outline cursor-pointer hover:text-on-surface group/r" title="Click to view reserved reservations">
+<span class="px-1.5 py-0.5 rounded group-hover/r:bg-surface-container-high transition-colors">0</span>
+</td>
+<td class="py-space-sm px-space-md text-right font-label-code text-label-code font-bold text-error">0</td>
+<td class="py-space-sm px-space-md text-right font-label-code text-label-code text-secondary font-semibold">2</td>
+<td class="py-space-sm px-space-md text-right font-label-price text-label-price text-on-surface">J$ 2,100.00</td>
+<td class="py-space-sm px-space-md text-right font-label-price text-label-price font-semibold text-outline">J$ 0.00</td>
+<td class="py-space-sm px-space-md text-center">
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-caption font-semibold bg-error-container text-on-error-container">
+<span class="w-1.5 h-1.5 rounded-full bg-error"></span>
+                  Out
+                </span>
+</td>
+<td class="py-space-sm px-space-lg text-right">
+<div class="flex items-center justify-end gap-1">
+<button class="p-1 rounded text-secondary hover:text-on-surface hover:bg-surface-container-high transition-colors" title="Edit Item Details">
+<span class="material-symbols-outlined text-[17px]">edit</span>
+</button>
+<button class="p-1 rounded text-secondary hover:text-on-surface hover:bg-surface-container-high transition-colors" title="Movement Operations">
+<span class="material-symbols-outlined text-[17px]">more_horiz</span>
+</button>
+</div>
+</td>
+</tr>
+<!-- ROW 9: Fire extinguisher -->
+<tr class="hover:bg-surface-container-low/50 transition-colors group">
+<td class="py-space-sm px-space-lg">
+<div class="font-body-md text-body-md font-bold text-on-surface leading-tight">Fire extinguisher</div>
+<div class="font-label-code text-caption text-secondary font-medium tracking-wide">SAF-EXT-01</div>
+</td>
+<td class="py-space-sm px-space-md text-on-surface-variant font-medium">Safety equipment</td>
+<td class="py-space-sm px-space-md">
+<div class="inline-flex items-center gap-1 text-on-surface-variant">
+<span class="material-symbols-outlined text-[14px] text-outline">warehouse</span>
+<span>Main store — Kingston</span>
+</div>
+</td>
+<td class="py-space-sm px-space-md text-right font-label-code text-label-code font-semibold cursor-pointer hover:text-primary group/q" title="Click to view ledger movements">
+<span class="px-1.5 py-0.5 rounded group-hover/q:bg-surface-container-high transition-colors">1</span>
+</td>
+<td class="py-space-sm px-space-md text-right font-label-code text-label-code text-outline cursor-pointer hover:text-on-surface group/r" title="Click to view reserved reservations">
+<span class="px-1.5 py-0.5 rounded group-hover/r:bg-surface-container-high transition-colors">0</span>
+</td>
+<td class="py-space-sm px-space-md text-right font-label-code text-label-code font-bold text-on-surface">1</td>
+<td class="py-space-sm px-space-md text-right font-label-code text-label-code text-secondary">1</td>
+<td class="py-space-sm px-space-md text-right font-label-price text-label-price text-on-surface">J$ 7,800.00</td>
+<td class="py-space-sm px-space-md text-right font-label-price text-label-price font-semibold text-on-surface">J$ 7,800.00</td>
+<td class="py-space-sm px-space-md text-center">
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-caption font-semibold bg-surface-container-high text-on-surface">
+<span class="w-1.5 h-1.5 rounded-full bg-primary"></span>
+                  OK
+                </span>
+</td>
+<td class="py-space-sm px-space-lg text-right">
+<div class="flex items-center justify-end gap-1">
+<button class="p-1 rounded text-secondary hover:text-on-surface hover:bg-surface-container-high transition-colors" title="Edit Item Details">
+<span class="material-symbols-outlined text-[17px]">edit</span>
+</button>
+<button class="p-1 rounded text-secondary hover:text-on-surface hover:bg-surface-container-high transition-colors" title="Movement Operations">
+<span class="material-symbols-outlined text-[17px]">more_horiz</span>
+</button>
+</div>
+</td>
+</tr>
+<!-- ROW 10: Car mats (set) -->
+<tr class="hover:bg-surface-container-low/50 transition-colors group">
+<td class="py-space-sm px-space-lg">
+<div class="font-body-md text-body-md font-bold text-on-surface leading-tight">Car mats (set)</div>
+<div class="font-label-code text-caption text-secondary font-medium tracking-wide">ACC-MAT-01</div>
+</td>
+<td class="py-space-sm px-space-md text-on-surface-variant font-medium">Interior &amp; accessories</td>
+<td class="py-space-sm px-space-md">
+<div class="inline-flex items-center gap-1 text-on-surface-variant">
+<span class="material-symbols-outlined text-[14px] text-outline">warehouse</span>
+<span>Main store — Kingston</span>
+</div>
+</td>
+<td class="py-space-sm px-space-md text-right font-label-code text-label-code font-semibold cursor-pointer hover:text-primary group/q" title="Click to view ledger movements">
+<span class="px-1.5 py-0.5 rounded group-hover/q:bg-surface-container-high transition-colors">1</span>
+</td>
+<td class="py-space-sm px-space-md text-right font-label-code text-label-code text-outline cursor-pointer hover:text-on-surface group/r" title="Click to view reserved reservations">
+<span class="px-1.5 py-0.5 rounded group-hover/r:bg-surface-container-high transition-colors">0</span>
+</td>
+<td class="py-space-sm px-space-md text-right font-label-code text-label-code font-bold text-on-surface">1</td>
+<td class="py-space-sm px-space-md text-right font-label-code text-label-code text-secondary">1</td>
+<td class="py-space-sm px-space-md text-right font-label-price text-label-price text-on-surface">J$ 8,000.00</td>
+<td class="py-space-sm px-space-md text-right font-label-price text-label-price font-semibold text-on-surface">J$ 8,000.00</td>
+<td class="py-space-sm px-space-md text-center">
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-caption font-semibold bg-surface-container-high text-on-surface">
+<span class="w-1.5 h-1.5 rounded-full bg-primary"></span>
+                  OK
+                </span>
+</td>
+<td class="py-space-sm px-space-lg text-right">
+<div class="flex items-center justify-end gap-1">
+<button class="p-1 rounded text-secondary hover:text-on-surface hover:bg-surface-container-high transition-colors" title="Edit Item Details">
+<span class="material-symbols-outlined text-[17px]">edit</span>
+</button>
+<button class="p-1 rounded text-secondary hover:text-on-surface hover:bg-surface-container-high transition-colors" title="Movement Operations">
+<span class="material-symbols-outlined text-[17px]">more_horiz</span>
+</button>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Table Footer / Pagination & Aggregate Metric Strip -->
+<div class="px-space-lg py-space-md bg-surface-container-low flex flex-col sm:flex-row items-center justify-between gap-space-md">
+<div class="flex items-center gap-space-md font-body-sm text-body-sm text-on-surface-variant">
+<span>Showing <strong class="text-on-surface font-semibold">1–10</strong> of <strong class="text-on-surface font-semibold">10</strong> items</span>
+<div class="h-4 w-px bg-outline-variant/40"></div>
+<div class="flex items-center gap-1">
+<button class="h-7 w-7 rounded flex items-center justify-center text-outline/50 bg-surface-container-lowest cursor-not-allowed">
+<span class="material-symbols-outlined text-[16px]">chevron_left</span>
+</button>
+<span class="px-2 font-label-code text-caption text-on-surface font-bold">Page 1 of 1</span>
+<button class="h-7 w-7 rounded flex items-center justify-center text-outline/50 bg-surface-container-lowest cursor-not-allowed">
+<span class="material-symbols-outlined text-[16px]">chevron_right</span>
+</button>
+</div>
+</div>
+<div class="flex items-center gap-space-sm bg-surface-container-lowest px-space-md py-1.5 rounded shadow-sm">
+<span class="font-caption text-caption text-secondary uppercase font-semibold">Total catalogue value:</span>
+<span class="font-label-price text-label-price text-on-surface font-bold">J$ 90,278.85</span>
+</div>
+</div>
+</div>
+<!-- Supplementary Quick Diagnostics Cards -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-space-md">
+<!-- Valuation Health -->
+<div class="bg-surface-container-lowest p-space-md rounded-lg shadow-sm flex items-center justify-between">
+<div>
+<div class="font-caption text-caption uppercase text-secondary font-semibold">Active Capital Depots</div>
+<div class="font-headline-sm text-headline-sm font-bold text-on-surface mt-0.5">2 Nodes</div>
+<div class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">Main store + Vehicle Deployments</div>
+</div>
+<div class="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[20px]">account_balance</span>
+</div>
+</div>
+<!-- Critical Replenishment Warning -->
+<div class="bg-surface-container-lowest p-space-md rounded-lg shadow-sm flex items-center justify-between">
+<div>
+<div class="font-caption text-caption uppercase text-secondary font-semibold">Replenishment Triggers</div>
+<div class="font-headline-sm text-headline-sm font-bold text-error mt-0.5">4 Critical Items</div>
+<div class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">1 Low Stock · 3 Completely Depleted</div>
+</div>
+<div class="w-10 h-10 rounded-full bg-error-container flex items-center justify-center text-on-error-container">
+<span class="material-symbols-outlined text-[20px]">notification_important</span>
+</div>
+</div>
+<!-- Audit Integrity status -->
+<div class="bg-surface-container-lowest p-space-md rounded-lg shadow-sm flex items-center justify-between">
+<div>
+<div class="font-caption text-caption uppercase text-secondary font-semibold">Inventory Ledger Drift</div>
+<div class="font-headline-sm text-headline-sm font-bold text-on-surface mt-0.5">0.00% Zero-Loss</div>
+<div class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">Reconciled 2 hrs ago by Deeki T</div>
+</div>
+<div class="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[20px]">verified</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Interactive script for closing dropdown on outside clicks -->
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const actionBtn = document.getElementById('active-action-btn');
+      if (actionBtn) {
+        actionBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const menu = actionBtn.parentElement.nextElementSibling;
+          if (menu) {
+            menu.classList.toggle('hidden');
+          }
+        });
+      }
+    });
+  </script>
+</div></main><footer class="w-full bg-surface-container-lowest shadow-[0_1px_8px_rgba(0,0,0,0.04)] py-space-lg"><div class="max-w-[1440px] mx-auto px-margin-desktop flex items-center justify-between text-on-surface-variant font-caption text-caption"><div><span>© 2025 Roam Fleet Infrastructure Ltd. Kingston Hub, Jamaica. All rights reserved.</span></div><div class="flex items-center gap-space-md"><span class="flex items-center gap-space-xs"><span class="w-2 h-2 rounded-full bg-on-surface"></span><span class="font-label-code text-label-code text-on-surface">Systems Operational</span></span><span class="text-outline-variant">|</span><span class="font-label-code text-label-code">v3.18.4-carib</span></div></div></footer></body></html>

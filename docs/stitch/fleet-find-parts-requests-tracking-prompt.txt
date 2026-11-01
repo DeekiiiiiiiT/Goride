@@ -1,0 +1,111 @@
+ROAM FLEET — FIND PARTS · YOUR REQUESTS AND "NOW ON FILE" — FULL DESIGN PROMPT (GOOGLE STITCH)
+
+
+
+
+Roam Fleet - Find Parts, request tracking (Desktop Web App, for fleet managers and their staff):
+
+Design high-fidelity screens that update how fleet managers follow the parts they asked Roam to add from the Find parts tab in Fleet maintenance. Roam now researches each request automatically, so a request moves on its own from "Sent" to "Roam is looking" to "Added", usually within a day. People should always know where their request is, get told plainly when a part is now on file, and be able to open it in one click. Find parts is an information tool: it tells people which parts fit their car. It never shows prices, suppliers, stock or quotes. The tone is calm and reassuring: "we're on it, and here's the answer".
+
+BRAND IDENTITY:
+- Match the existing Roam Fleet Find parts screens exactly:
+  - black top bar with the "Roam Fleet" tile and the white nav row (Dashboard, Fleet Operations, Driver Operations, Money, Vehicle Operations active and underlined, Delivery Operations, Analytics, Reports, Business Finance), avatar on the right
+  - the dark status strip: "Switch vehicle or search hub…" on the left; "07:28 PM EST", "America/Jamaica", "JM (JMD)", "DE · Deeki T · platform_owner" on the right
+  - the white card heading "Fleet Maintenance" with the orange wrench icon, and the tabs on the right: Overview (badge 2), Service history, Find parts (active)
+  - the sticky Find parts header: "← Back" on the left, the step trail in the middle, "Next →" on the right
+- LIGHT MODE (default):
+  - Primary: near-black #030213
+  - Background: white #FFFFFF; page wash: #f8fafc
+  - Card border: rgba(0,0,0,0.1)
+  - Text: #0a0a0a; muted text: #717182
+  - Success / on file: #059669; info: #2563eb; error: #d4183d
+  - Muted chip fill: #f1f5f9
+  - Orange #f97316, only for the page icon
+- DARK MODE:
+  - Background #252525, surface #2e2e2e, border #444444
+  - Text #fafafa, muted #b4b4b4, primary #fafafa
+  - Success #34d399; info #60a5fa; error #f87171
+- Request status chips:
+  - "Sent": grey
+  - "Roam is looking": blue, with a small spinning ring
+  - "Added": emerald
+  - "Couldn't find": red outline
+- "Checked by Roam" chip on results: emerald outline, small shield-tick icon, text "Checked against 2 catalogues"
+- Typography: Inter for text; a mono font with tabular numerals for counts, plates, dates and part numbers.
+- No prices, suppliers, stock, quotes or maintenance schedules anywhere. No AI badges or confidence percentages.
+- No gradients, glassmorphism or 3D.
+- Sample data (Toyota Roomy 2019 · 5179KZ, version "Pre-Facelift · 1KR-FE · 2WD"; Honda Fit 2018 · 1505LM, version "Hybrid · LEB · GP5"):
+  - "Drive belt · Toyota Roomy 2019" — Added — "Toyota 90916-02729"
+  - "Air filter · Toyota Roomy 2019" — Roam is looking
+  - "Brake pads · Front · Sister option · Honda Fit 2018" — Sent
+  - "Cabin filter · Honda Fit 2018" — Couldn't find — "No trusted catalogue lists a cabin filter for GP5 yet. We'll try again on 8 Nov."
+
+DESIGN PRINCIPLES:
+- Desktop-first (1440px wide), with one phone screen
+- Every request shows where it is right now and what happens next
+- When a part is added, the person is told once, plainly, with one button to see it
+- "Couldn't find" is never a dead end: it says why and when Roam tries again
+- All navigation stays in the sticky header; no bottom buttons
+
+SCREEN 1: YOUR REQUESTS (WITH TIMELINE)
+- Fleet frame; the sticky header shows "← Back to Find parts" and the title "Your requests"
+- Filter chips: "All (4)", "Waiting (2)", "Added (1)", "Couldn't find (1)"
+- Request cards, newest first, each with:
+  - part and side, car and version, plate in mono, "Asked 01 Nov 2026"
+  - status chip on the right
+  - a slim horizontal timeline of four dots: "Sent → Roam is looking → Checked → Added", with done dots filled and the current one ringed; time under each done dot in mono
+  - Added: the part line "Toyota 90916-02729 · Drive belt" and a primary button "See the part"
+  - Roam is looking: muted line "Roam is checking trusted parts catalogues. Usually within a day."
+  - Couldn't find: the reason line and "We'll try again on 8 Nov.", plus a text link "Add a note or photo" that opens the note field
+- Empty state: "No requests yet. When a part isn't on file, ask Roam from the search."
+
+SCREEN 2: "NOW ON FILE" NOTICE AND RESULTS
+- Two frames side by side
+- Frame A — the "What part do you need?" page with a notice bar directly under the sticky header:
+  - emerald left edge, tick icon, "Drive belt for your Toyota Roomy 2019 is now on file."
+  - buttons "See the part" (primary) and "Dismiss" (text); when there are several: "3 parts you asked for are now on file" with "See them"
+  - the "Belts & hoses" area card now shows "1 part on file for your car"
+- Frame B — Results for Drive belt:
+  - heading "Drive belt for your Toyota Roomy 2019", sub "Pre-Facelift · 1KR-FE · 2WD · chassis M900A"
+  - Best match card "Toyota 90916-02729 — V-ribbed belt", chip "Checked against 2 catalogues", buttons "Details" and "Use in a service log"
+  - "Details" expands to show "Fits: M900A · 1KR-FE · 2016–2020" and "Added 01 Nov 2026 after your request"
+  - the folded line at the end for the other match types, with "Ask Roam to find another option"
+
+SCREEN 3: REQUEST SENT AND DAILY LIMIT
+- Two frames of the "Not on file yet" request screen, after pressing "Ask Roam to add this part"
+- Frame A — sent:
+  - green tick, "Request sent"
+  - "Roam is checking trusted parts catalogues for your exact car. Usually within a day."
+  - when another fleet already asked: "Others asked for this too, so it's already in line."
+  - buttons "View your requests" and text link "Search a different part"
+- Frame B — limit reached:
+  - calm amber card, "You've sent 30 requests today. Roam will pick up more tomorrow."
+  - the form stays filled in, the send button is disabled with "Try again tomorrow"
+
+SCREEN 4: PHONE (390px) — YOUR REQUESTS AND NOTICE
+- Two phone frames side by side
+- The sticky header is the compact bar: "←", "Your requests"
+- Frame 1: request cards full width, status chip under the title, the timeline as four small dots with labels below
+- Frame 2: the "now on file" notice as a top banner over the What part? page, with "See the part"
+
+ADDITIONAL UI COMPONENTS:
+- Request card with four-step timeline
+- Status chips: Sent, Roam is looking, Added, Couldn't find
+- "Now on file" notice bar (single and grouped)
+- "Checked against 2 catalogues" chip
+- Daily limit card
+
+INTERACTIONS:
+- Request status updates on its own when the page is open (every 30 seconds) and when the person comes back to the tab
+- "See the part" opens Results for that car and part, with the right side already picked
+- "Dismiss" hides the notice for good for that part
+- "Add a note or photo" on a Couldn't find card sends the note to Roam and the card goes back to "Sent"
+- Hover: cards lift slightly; focus rings are 2px near-black
+
+Spec screens / Area
+| Screen | Area |
+|---|---|
+| 1 | Your requests with timeline |
+| 2 | "Now on file" notice and Results chip |
+| 3 | Request sent and daily limit |
+| 4 | Phone — requests and notice |

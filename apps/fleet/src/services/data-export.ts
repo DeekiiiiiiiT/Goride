@@ -7,8 +7,6 @@ import { ServiceRequest, Trip } from '../types/data';
 import { OdometerReading } from '../types/vehicle';
 import { jsonToCsv, downloadBlob } from '../utils/csv-helper';
 import { VehicleMetrics } from '../types/data';
-import { equipmentService } from './equipmentService';
-import { inventoryService } from './inventoryService';
 import JSZip from 'jszip';
 import {
     FUEL_CSV_COLUMNS, SERVICE_CSV_COLUMNS, ODOMETER_CSV_COLUMNS, CHECKIN_CSV_COLUMNS,
@@ -515,26 +513,13 @@ export async function fetchAllClaims(startDate?: string, endDate?: string): Prom
  * Fetches all equipment items across all vehicles.
  */
 export async function fetchAllEquipment(): Promise<any[]> {
-    try {
-        const items = await equipmentService.getAllEquipment();
-        return items || [];
-    } catch (error) {
-        console.error("Error fetching equipment for export:", error);
-        throw error;
-    }
+    console.warn('Legacy equipment export removed — use Inventory export.csv');
+    return [];
 }
 
-/**
- * Fetches all inventory stock items.
- */
 export async function fetchAllInventory(): Promise<any[]> {
-    try {
-        const items = await inventoryService.getInventory();
-        return items || [];
-    } catch (error) {
-        console.error("Error fetching inventory for export:", error);
-        throw error;
-    }
+    console.warn('Legacy inventory export removed — use GET /inventory/export.csv');
+    return [];
 }
 
 /**

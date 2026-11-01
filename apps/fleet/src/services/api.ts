@@ -3079,6 +3079,22 @@ export const api = {
       return response.json();
   },
 
+  async partsRequestDraftGet() {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/request-draft`, { headers: await getHeaders(null) });
+      if (!response.ok) throw new Error("Could not load draft");
+      return response.json();
+  },
+
+  async partsRequestDraftSave(payload: Record<string, unknown>) {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/request-draft`, {
+        method: "PUT",
+        headers: await getHeaders(null),
+        body: JSON.stringify({ payload }),
+      });
+      if (!response.ok) throw new Error("Could not save draft");
+      return response.json();
+  },
+
   async partsVehicleContext(vehicleId: string, componentId?: string) {
       const q = new URLSearchParams({ vehicleId });
       if (componentId) q.set("componentId", componentId);

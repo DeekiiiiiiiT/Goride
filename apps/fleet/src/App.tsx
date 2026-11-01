@@ -12,7 +12,7 @@ import { AppLayout } from './components/layout/AppLayout';
 import { Dashboard } from './components/dashboard/Dashboard';
 import { SettingsPage } from './components/settings/SettingsPage';
 import { FleetMaintenanceHub } from './components/vehicles/FleetMaintenanceHub';
-import { FleetPage } from './components/fleet/FleetPage';
+import { InventoryPageGate } from './components/inventory/InventoryPageGate';
 import { ReportsPage } from './components/reports/ReportsPage';
 import { UserManagementPage } from './components/users/UserManagementPage';
 import { StaffInviteBanner } from './components/users/StaffInviteBanner';
@@ -855,9 +855,9 @@ function AppContent() {
             <FleetMaintenanceHub onNavigate={setCurrentPage} />
           </PermissionGate>
         )}
-        {currentPage === 'fleet' && (
-          <PermissionGate permission="nav.fleet" onNavigate={setCurrentPage}>
-            <FleetPage />
+        {currentPage === 'inventory' && (
+          <PermissionGate permission="inventory.view" onNavigate={setCurrentPage}>
+            <InventoryPageGate />
           </PermissionGate>
         )}
         {currentPage === 'trip-analytics' && (

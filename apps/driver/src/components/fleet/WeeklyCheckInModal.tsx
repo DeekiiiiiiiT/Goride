@@ -17,8 +17,11 @@ import {
   saveCameraDraft,
 } from '../../utils/nativePhotoCapture';
 import { toast } from 'sonner';
+import { Dk5KitStep } from '../car-kit/screens/Dk5KitStep';
+import { driverInventoryApi } from '../../services/driverInventoryApi';
+import '../car-kit/car-kit.css';
 
-type CheckInStep = 'CAPTURE' | 'ANALYZING' | 'CONFIRM_AI' | 'MANUAL_ENTRY' | 'SUBMITTING';
+type CheckInStep = 'CAPTURE' | 'ANALYZING' | 'CONFIRM_AI' | 'MANUAL_ENTRY' | 'KIT_CHECK' | 'SUBMITTING';
 
 interface WeeklyCheckInModalProps {
     isOpen: boolean;
@@ -33,6 +36,7 @@ interface WeeklyCheckInModalProps {
     ) => Promise<void>;
     isLoading: boolean;
     isForced?: boolean;
+    vehicleId?: string | null;
 }
 
 /** Plain portal (no Radix Dialog) — Radix overlay caused grey-screen freeze on mobile Safari. */
@@ -42,6 +46,7 @@ export function WeeklyCheckInModal({
     onSubmit,
     isLoading,
     isForced = false,
+    vehicleId = null,
 }: WeeklyCheckInModalProps) {
     const [step, setStep] = useState<CheckInStep>('CAPTURE');
     const [odometer, setOdometer] = useState<string>('');
@@ -53,6 +58,13 @@ export function WeeklyCheckInModal({
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const scanAbortRef = useRef<AbortController | null>(null);
     const scanGenerationRef = useRef(0);
+    const [kitBusy, setKitBusy] = useState(false);
+    const [pendingSubmit, setPendingSubmit] = useState<{
+        method: 'ai_verified' | 'manual_override';
+        review: 'auto_approved' | 'pending_review';
+        reason?: string;
+        fallbackStep: CheckInStep;
+    } | null>(null);
 
     // Reset state when opening
     useEffect(() => {
@@ -67,6 +79,8 @@ export function WeeklyCheckInModal({
             setScanResult(null);
             setManualReason('');
             setErrorMsg(null);
+            setKitBusy(false);
+            setPendingSubmit(null);
         }
     }, [isOpen]);
 
@@ -198,18 +212,56 @@ export function WeeklyCheckInModal({
         }
     };
 
+    const queueKitStep = (
+        method: 'ai_verified' | 'manual_override',
+        review: 'auto_approved' | 'pending_review',
+        reason?: string,
+        fallbackStep: CheckInStep = 'CONFIRM_AI',
+    ) => {
+        setPendingSubmit({ method, review, reason, fallbackStep });
+        setErrorMsg(null);
+        setStep('KIT_CHECK');
+    };
+
     const handleConfirmAI = async () => {
-        await runSubmit('ai_verified', 'auto_approved', undefined, 'CONFIRM_AI');
+        queueKitStep('ai_verified', 'auto_approved', undefined, 'CONFIRM_AI');
     };
 
     const handleManualSubmit = async () => {
         if (!odometer) return;
-        await runSubmit(
+        queueKitStep(
             'manual_override',
             'pending_review',
             manualReason || 'User manual override',
             'MANUAL_ENTRY',
         );
+    };
+
+    const completeKitAndSubmit = async (allPresent: boolean) => {
+        if (!pendingSubmit) return;
+        setKitBusy(true);
+        setErrorMsg(null);
+        try {
+            await driverInventoryApi.kitCheck(
+                { allPresent, vehicleId },
+                `kit-check-${crypto.randomUUID()}`,
+            );
+            await runSubmit(
+                pendingSubmit.method,
+                pendingSubmit.review,
+                pendingSubmit.reason,
+                pendingSubmit.fallbackStep,
+            );
+        } catch (err: any) {
+            const msg =
+                typeof err?.message === 'string' && err.message.trim()
+                    ? err.message
+                    : 'Could not save kit check. Please try again.';
+            setErrorMsg(msg);
+            setStep('KIT_CHECK');
+        } finally {
+            setKitBusy(false);
+        }
     };
 
     const renderContent = () => {
@@ -347,6 +399,22 @@ export function WeeklyCheckInModal({
                         </div>
                     )}
 
+                    {step === 'KIT_CHECK' && (
+                        <div className="py-2 driver-car-kit-stitch">
+                            {errorMsg && (
+                                <div className="mb-3 flex items-center gap-3 rounded-lg border border-red-100 bg-red-50 p-4 text-sm text-red-700">
+                                    <AlertTriangle className="h-5 w-5 shrink-0" />
+                                    {errorMsg}
+                                </div>
+                            )}
+                            <Dk5KitStep
+                                busy={kitBusy || isLoading}
+                                onConfirmAll={() => void completeKitAndSubmit(true)}
+                                onReportIssue={() => void completeKitAndSubmit(false)}
+                            />
+                        </div>
+                    )}
+
                     {step === 'MANUAL_ENTRY' && (
                         <div className="space-y-6 py-4">
                             {errorMsg && (
@@ -423,12 +491,15 @@ export function WeeklyCheckInModal({
                 ? 'Step 3: Confirm Reading'
                 : step === 'MANUAL_ENTRY'
                   ? 'Manual Override'
-                  : '';
+                  : step === 'KIT_CHECK'
+                    ? 'Step 4: Kit check'
+                    : '';
 
     const canDismiss =
         !isForced &&
         step !== 'ANALYZING' &&
         step !== 'SUBMITTING' &&
+        step !== 'KIT_CHECK' &&
         !isLoading;
 
     return createPortal(

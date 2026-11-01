@@ -272,11 +272,43 @@ function decodeUiEntities(s) {
     .replace(/&amp;/g, '&');
 }
 
+/** Match Stitch phrase fragments against ported TSX (em dashes, JSX text escapes). */
+function fidelityCompareText(s) {
+  return decodeUiEntities(String(s))
+    .toLowerCase()
+    .replace(/&nbsp;/g, ' ')
+    .replace(/['']/g, "'")
+    .replace(/[\u2013\u2014\u2212]/g, '-')
+    .replace(/\{'([^']*)'\}/g, '$1');
+}
+
+function fidelityIncludes(haystack, label) {
+  const h = fidelityCompareText(haystack);
+  const needle = fidelityCompareText(label);
+  return h.includes(needle);
+}
+
 let fleetFailed = false;
-for (const row of fleetReadme.split('\n').filter((l) => /^\| FP\d/.test(l))) {
+for (const row of fleetReadme.split('\n').filter((l) => /^\| (FP|IN)\d/.test(l))) {
   const cells = row.split('|').map((c) => c.trim().replace(/^`|`$/g, ''));
-  const [num, , , html, , react, status = ''] = cells.slice(1);
-  if (!html || html === '—' || !react || react === '—') continue;
+  let num;
+  let react;
+  let status;
+  let htmlPath;
+  if (/^\| IN\d/.test(row)) {
+    const [n, , stitchFolder, ported, st = ''] = cells.slice(1);
+    num = n;
+    react = ported;
+    status = st;
+    htmlPath = join(fleetDir, 'inventory', stitchFolder, 'code.html');
+  } else {
+    const [n, , , htmlFile, , ported, st = ''] = cells.slice(1);
+    num = n;
+    react = ported;
+    status = st;
+    htmlPath = join(fleetDir, htmlFile);
+  }
+  if (!existsSync(htmlPath) || !react || react === '—') continue;
   const checked = /^(Ported|Built)/.test(status);
   const deferred = /^Deferred\b/i.test(status);
   const notStarted = /^Not started\b/.test(status);
@@ -284,7 +316,10 @@ for (const row of fleetReadme.split('\n').filter((l) => /^\| FP\d/.test(l))) {
     if (report) console.log(`deferred ${num}`);
     continue;
   }
-  if (notStarted && !report) continue;
+  if (notStarted) {
+    if (report) console.log(`unchecked ${num}`);
+    continue;
+  }
   const reactFiles = react.split(/\s*\+\s*/).map((f) => f.trim()).filter(Boolean);
   const nonTsx = reactFiles.find((f) => !/\.tsx$/i.test(f));
   if (nonTsx) {
@@ -297,7 +332,7 @@ for (const row of fleetReadme.split('\n').filter((l) => /^\| FP\d/.test(l))) {
     if (checked) fleetFailed = true;
     continue;
   }
-  const page = readFileSync(join(fleetDir, html), 'utf8');
+  const page = readFileSync(htmlPath, 'utf8');
   const deferredSales = (Array.isArray(fleetSamples['deferred-sales']) ? fleetSamples['deferred-sales'] : [])
     .map((label) => String(label).trim().toLowerCase())
     .filter(Boolean);
@@ -332,10 +367,16 @@ for (const row of fleetReadme.split('\n').filter((l) => /^\| FP\d/.test(l))) {
     return readFileSync(path, 'utf8');
   });
   const vmPath = join(repo, 'apps/fleet/src/components/vehicles/find-parts/findPartsViewModels.ts');
-  const vmSrc = existsSync(vmPath) ? readFileSync(vmPath, 'utf8') : '';
+  const vmSrc =
+    num.startsWith('IN') || !existsSync(vmPath) ? '' : readFileSync(vmPath, 'utf8');
   const errPath = join(repo, 'apps/fleet/src/components/vehicles/find-parts/findPartsErrors.ts');
-  const errSrc = existsSync(errPath) ? readFileSync(errPath, 'utf8') : '';
-  const joined = sources.join('\n') + '\n' + vmSrc + '\n' + errSrc;
+  const errSrc =
+    num.startsWith('IN') || !existsSync(errPath) ? '' : readFileSync(errPath, 'utf8');
+  const invHelpersPath = join(repo, 'apps/fleet/src/components/inventory/inventoryFormat.ts');
+  const invHelpers = num.startsWith('IN') && existsSync(invHelpersPath)
+    ? readFileSync(invHelpersPath, 'utf8')
+    : '';
+  const joined = sources.join('\n') + '\n' + vmSrc + '\n' + errSrc + '\n' + invHelpers;
   const bannedFpPatterns = [
     ['@ts-nocheck', '@ts-nocheck'],
     ['Auto-generated', 'Auto-generated'],
@@ -362,8 +403,7 @@ for (const row of fleetReadme.split('\n').filter((l) => /^\| FP\d/.test(l))) {
     continue;
   }
   const visible = fleetVisibleSource(joined);
-  const lower = visible.toLowerCase().replace(/&amp;/g, '&').replace(/&nbsp;/g, ' ').replace(/['']/g, "'");
-  const missed = [...labels].filter((label) => !lower.includes(label.replace(/['']/g, "'")));
+  const missed = [...labels].filter((label) => !fidelityIncludes(visible, label));
   const hit = labels.size - missed.length;
   const pct = labels.size ? Math.round((100 * hit) / labels.size) : 100;
   const bad = pct < FP_MIN;
@@ -376,6 +416,61 @@ for (const row of fleetReadme.split('\n').filter((l) => /^\| FP\d/.test(l))) {
   if (checked && bad) fleetFailed = true;
 }
 if (!fleetFailed) console.log('OK — Fleet Stitch fidelity');
+
+const driverDir = join(repo, 'docs', 'stitch', 'roam-driver-app');
+const driverReadmePath = join(driverDir, 'README.md');
+let driverFailed = false;
+if (existsSync(driverReadmePath)) {
+  const driverReadme = readFileSync(driverReadmePath, 'utf8');
+  const driverSamplePath = join(driverDir, 'sample-labels.json');
+  const driverSamples = existsSync(driverSamplePath)
+    ? JSON.parse(readFileSync(driverSamplePath, 'utf8'))
+    : {};
+  for (const row of driverReadme.split('\n').filter((l) => /^\| DK\d/.test(l))) {
+    const cells = row.split('|').map((c) => c.trim().replace(/^`|`$/g, ''));
+    const [num, , stitchFolder, react, status = ''] = cells.slice(1);
+    if (!react || react === '—') continue;
+    const checked = /^(Ported|Built)/.test(status);
+    const notStarted = /^Not started\b/.test(status);
+    if (notStarted) {
+      if (report) console.log(`unchecked ${num}`);
+      continue;
+    }
+    const htmlPath = join(driverDir, 'car-kit', stitchFolder, 'code.html');
+    if (!existsSync(htmlPath)) {
+      console.log(`FAIL ${num} missing stitch html — ${stitchFolder}`);
+      if (checked) driverFailed = true;
+      continue;
+    }
+    const page = readFileSync(htmlPath, 'utf8');
+    const samples = (Array.isArray(driverSamples[num]) ? driverSamples[num] : [])
+      .map((label) => String(label).trim().toLowerCase())
+      .filter(Boolean);
+    const labels = new Set();
+    for (const node of fleetTextNodes(page)) {
+      for (const phrase of fleetPhraseFragments(node, samples)) {
+        if (!phrase || samples.includes(phrase)) continue;
+        labels.add(phrase);
+      }
+    }
+    const reactFiles = react.split(/\s*\+\s*/).map((f) => f.trim()).filter(Boolean);
+    const sources = reactFiles.map((f) => {
+      const path = join(repo, f);
+      if (!existsSync(path)) throw new Error(`Missing React file for ${num}: ${f}`);
+      return readFileSync(path, 'utf8');
+    });
+    const visible = fleetVisibleSource(sources.join('\n'));
+    const missed = [...labels].filter((label) => !fidelityIncludes(visible, label));
+    const hit = labels.size - missed.length;
+    const pct = labels.size ? Math.round((100 * hit) / labels.size) : 100;
+    const bad = pct < FP_MIN;
+    if (report || (checked && bad)) {
+      console.log(`${bad ? 'FAIL' : 'ok  '} ${num} ${pct}% text (${hit}/${labels.size}) — ${react}`);
+    }
+    if (checked && bad) driverFailed = true;
+  }
+}
+if (!driverFailed) console.log('OK — Driver car-kit Stitch fidelity');
 
 const DOM_FULL = new Set(['S10b', 'S10c', 'S10d']);
 function dominionTextNodes(html) {
@@ -437,4 +532,4 @@ for (const row of readme.split('\n').filter((l) => /^\| S10/.test(l))) {
   if (bad) dominionFullFailed = true;
 }
 
-if (failed || fleetFailed || dominionFullFailed) process.exit(1);
+if (failed || fleetFailed || driverFailed || dominionFullFailed) process.exit(1);

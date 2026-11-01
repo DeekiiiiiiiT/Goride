@@ -1,7 +1,5 @@
 import { api, fetchFleetTimezone } from './api';
 import { fuelService } from './fuelService';
-import { equipmentService } from './equipmentService';
-import { inventoryService } from './inventoryService';
 import { ImportType, validateImportFile } from './import-validator';
 import JSZip from 'jszip';
 import { BackupManifest } from './data-export';
@@ -279,25 +277,12 @@ export const importExecutor = {
     /**
      * Restores an Equipment record.
      */
-    async restoreEquipment(data: any): Promise<void> {
-        const equipment = {
-            ...data,
-            id: data.id || crypto.randomUUID(),
-            status: data.status || 'Active',
-        };
-        await equipmentService.saveEquipment(equipment);
+    async restoreEquipment(_data: unknown): Promise<void> {
+        throw new Error('Legacy equipment restore removed — use Inventory import.');
     },
 
-    /**
-     * Restores an Inventory record.
-     */
-    async restoreInventory(data: any): Promise<void> {
-        const inventory = {
-            ...data,
-            id: data.id || crypto.randomUUID(),
-            status: data.status || 'Active',
-        };
-        await inventoryService.saveStock(inventory);
+    async restoreInventory(_data: unknown): Promise<void> {
+        throw new Error('Legacy inventory restore removed — use Inventory import.');
     },
 
     /**

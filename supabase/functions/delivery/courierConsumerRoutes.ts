@@ -9,6 +9,7 @@ import { courierDeliveryEarnings, courierTipEarnings } from "../_shared/dashMone
 import { resolvePeakPayBonus } from "../_shared/courierPeakPay.ts";
 import { ORDER_CUSTOMER_EMBED_MINIMAL } from "./orderSelectEmbeds.ts";
 import { courierAssignmentFields } from "./courierFleetAttribution.ts";
+import { assertRoadClearForDispatch } from "./inventoryRoadClearanceGate.ts";
 import { processDispute, logCourierUnassignRedispatch } from "./disputeResolution/processDispute.ts";
 import { notifyCustomerOrderStatus } from "../_shared/dashOrderSms.ts";
 
@@ -747,6 +748,28 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
     );
 
     const assignment = await courierAssignmentFields(serviceSb, auth.userId);
+
+    if (assignment.courier_fleet_id) {
+      const fleetSb = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+        { db: { schema: "fleet" } },
+      );
+      const { data: driverRow } = await fleetSb
+        .from("drivers")
+        .select("assigned_vehicle_id")
+        .eq("organization_id", assignment.courier_fleet_id)
+        .eq("user_id", auth.userId)
+        .maybeSingle();
+      const vehicleId = (driverRow as { assigned_vehicle_id?: string } | null)?.assigned_vehicle_id;
+      if (vehicleId) {
+        const road = await assertRoadClearForDispatch(assignment.courier_fleet_id, String(vehicleId));
+        if (!road.ok) {
+          return c.json({ error: road.message, code: "road_clearance_blocked" }, 409);
+        }
+      }
+    }
+
     const { data: order, error } = await serviceSb
       .from("orders")
       .update({

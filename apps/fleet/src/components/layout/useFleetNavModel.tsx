@@ -6,6 +6,7 @@ import { useServiceLineScope } from '../../contexts/ServiceLineScopeContext';
 import { buildFleetNavModel, type FleetNavModel } from './fleetNavModel';
 import type { NavLeaf } from './nav/types';
 import { useFuelReviewQueueCounts } from '../../hooks/useFuelReviewQueueCounts';
+import { useInventoryPhase2Enabled } from '../../hooks/useInventoryPhase2Flag';
 
 export function NavNewBadge() {
   return (
@@ -41,6 +42,7 @@ export function useFleetNavModel(): FleetNavModel {
   const canSeeReviewQueue =
     isModuleEnabled('fuelManagement') && canView('fuel-reimbursements');
   const { data: queueCounts } = useFuelReviewQueueCounts(canSeeReviewQueue);
+  const inventoryPhase2Enabled = useInventoryPhase2Enabled();
 
   return buildFleetNavModel({
     canView,
@@ -56,5 +58,6 @@ export function useFleetNavModel(): FleetNavModel {
     },
     reviewQueueCount: queueCounts?.total ?? 0,
     unattributedFuelCount: queueCounts?.unattributedFuelCount ?? 0,
+    inventoryPhase2Enabled,
   });
 }

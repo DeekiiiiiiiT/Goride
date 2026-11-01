@@ -276,14 +276,8 @@ export function ExportCenter() {
     safeCount('tollPlazas', () => api.getTollPlazas(), { plazaNames: true });
     // Gas station master DB is Super Admin only — not exported from fleet customer app
     safeCount('claims', () => api.getClaims());
-    safeCount('equipment', async () => {
-      const { equipmentService } = await import('../../services/equipmentService');
-      return equipmentService.getAllEquipment();
-    });
-    safeCount('inventory', async () => {
-      const { inventoryService } = await import('../../services/inventoryService');
-      return inventoryService.getInventory();
-    });
+    safeCount('equipment', async () => []);
+    safeCount('inventory', async () => []);
     safeCount('tollTransactions', () => api.getTollTransactionsExport());
 
     (async () => {

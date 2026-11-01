@@ -363,7 +363,16 @@ export type Permission =
   | 'recon.view'
   | 'recon.prepare'
   | 'recon.approve'
-  | 'recon.external_sources';
+  | 'recon.external_sources'
+  // Fleet inventory & asset management (EAM)
+  | 'inventory.view'
+  | 'inventory.move'
+  | 'inventory.adjust'
+  | 'inventory.approve'
+  | 'inventory.kits.manage'
+  | 'inventory.purchasing'
+  | 'inventory.report'
+  | 'inventory.export';
 
 // ---------------------------------------------------------------------------
 // 4. Role → Permissions map
@@ -430,6 +439,8 @@ const ALL_CUSTOMER_PERMISSIONS: Permission[] = [
   'expenses.view', 'expenses.export', 'expenses.create', 'expenses.approve',
   'expenses.pay', 'expenses.manage_rules', 'expenses.manage_vendors',
   'recon.view', 'recon.prepare', 'recon.approve',
+  'inventory.view', 'inventory.move', 'inventory.adjust', 'inventory.kits.manage',
+  'inventory.purchasing', 'inventory.export', 'inventory.report',
 ];
 
 /** Expense Hub permissions. Owner and manager get all; accountant gets view + export. */
@@ -490,12 +501,17 @@ const FLEET_ACCOUNTANT_PERMISSIONS: Permission[] = [
   'recon.view',
   'recon.prepare',
   'recon.approve',
+  'inventory.view',
+  'inventory.approve',
+  'inventory.purchasing',
+  'inventory.export',
 ];
 
 const FLEET_VIEWER_PERMISSIONS: Permission[] = [
   'nav.dashboard',
   'reports.view',
   'recon.view',
+  'inventory.view',
 ];
 
 /**
@@ -542,8 +558,8 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
 
   unassigned: [],
 
-  // Driver
-  driver: [],
+  // Driver — car kit reports only (assigned vehicle enforced server-side)
+  driver: ['inventory.report'],
   hauler: [],
   explorer_user: [],
 };
@@ -649,6 +665,7 @@ export const PAGE_PERMISSION_MAP: Record<string, Permission> = {
   'vehicle-analytics':  'nav.vehicle_analytics',
   'maintenance-hub':    'nav.maintenance',
   'fleet':              'nav.fleet',
+  'inventory':          'inventory.view',
   'fuel-management':    'nav.fuel_reports',
   'fuel-overview':      'nav.fuel_reports',
   'fuel-analytics':     'nav.fuel_reports',

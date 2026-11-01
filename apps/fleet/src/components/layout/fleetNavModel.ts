@@ -58,6 +58,8 @@ export type BuildFleetNavModelInput = {
   reviewQueueCount?: number;
   /** Unattributed fuel fills in the lookback window (health signal). */
   unattributedFuelCount?: number;
+  /** Platform flag fleet_inventory_phase2_stock (fail-closed). */
+  inventoryPhase2Enabled?: boolean;
 };
 
 export type FleetNavDesk = {
@@ -106,6 +108,7 @@ export function buildFleetNavModel(input: BuildFleetNavModelInput): FleetNavMode
     labels,
     reviewQueueCount = 0,
     unattributedFuelCount = 0,
+    inventoryPhase2Enabled = false,
   } = input;
 
   const hasRushDeliveryLine = serviceLines.includes('rush_delivery');
@@ -153,7 +156,9 @@ export function buildFleetNavModel(input: BuildFleetNavModelInput): FleetNavMode
   });
   const canSeeVehicleOps =
     hasSharedOps &&
-    (canView('vehicles') || canView('maintenance-hub') || canView('fleet'));
+    (canView('vehicles') ||
+      canView('maintenance-hub') ||
+      canView('inventory'));
   const canSeeCourierOps = computeCanSeeCourierOps({
     hasRushDeliveryLine,
     rushModuleEnabled: rushModuleNavEnabled(isModuleEnabled),
@@ -234,9 +239,10 @@ export function buildFleetNavModel(input: BuildFleetNavModelInput): FleetNavMode
       id: 'maintenance-hub',
       label: 'Maintenance',
     }),
-    leaf(canView('fleet'), {
-      id: 'fleet',
+    leaf(canView('inventory'), {
+      id: 'inventory',
       label: 'Inventory & Asset Management',
+      showNewBadge: inventoryPhase2Enabled,
     }),
   ]);
 

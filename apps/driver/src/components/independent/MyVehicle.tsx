@@ -9,7 +9,10 @@ import { api } from '../../services/api';
 const cardClass =
   'rounded-2xl border border-slate-200 bg-white shadow-[0_4px_20px_rgba(0,0,0,0.05)] dark:border-slate-700 dark:bg-slate-900';
 
-export function MyVehicle() {
+import { useDriverInventoryPhase3Enabled } from '../../hooks/useDriverInventoryPhase3';
+
+export function MyVehicle({ onOpenCarKit }: { onOpenCarKit?: () => void }) {
+  const carKitEnabled = useDriverInventoryPhase3Enabled();
   const { user } = useAuth();
   const { driverRecord } = useCurrentDriver();
   const { vehicle, loading } = useDriverProfileExtras(driverRecord, user);
@@ -101,6 +104,15 @@ export function MyVehicle() {
               </p>
             </div>
           </div>
+          {onOpenCarKit && carKitEnabled ? (
+            <button
+              type="button"
+              onClick={onOpenCarKit}
+              className="mt-4 w-full rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white dark:bg-white dark:text-slate-900"
+            >
+              My car kit
+            </button>
+          ) : null}
         </div>
       )}
     </div>

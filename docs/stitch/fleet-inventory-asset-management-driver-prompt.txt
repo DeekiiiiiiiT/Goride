@@ -1,0 +1,149 @@
+ROAM DRIVER — MY CAR KIT FULL DESIGN PROMPT (GOOGLE STITCH)
+
+
+
+
+Roam Driver - My Car Kit (Phone App, 390px, for drivers of fleet cars):
+
+Design high-fidelity phone screens for the "My car kit" part of the Roam Driver app. Every fleet car carries a standard kit: spare tyre, car jack, lug wrench, tyre pump, phone holder, first-aid kit, warning triangle, dash camera, plus the car's toll tag and fuel card. The driver uses these screens to see what should be in the car they drive, confirm the kit once a week during their weekly check-in, and report anything that is damaged, missing or not working, with a photo. A report never changes the fleet's records directly: it goes to the fleet manager as an alert to review. Drivers never see prices, costs or stock levels. The tone is friendly, quick and plain: a checklist you can finish in under a minute at a petrol station.
+
+BRAND IDENTITY:
+- Match the existing Roam Driver app:
+  - white cards on a light slate page, rounded corners, large touch targets (min 48px)
+  - bottom tab bar as in the driver app; this feature lives under the car/vehicle area and in the weekly check-in flow
+- LIGHT MODE (default):
+  - Primary: Emerald 600 (#059669) — primary buttons, ticks, the active tab
+  - Background: Slate 100 (#f1f5f9)
+  - Surface cards: White (#ffffff), border Slate 300 (#cbd5e1)
+  - Text primary: Slate 900 (#0f172a)
+  - Muted text: Slate 600 (#475569)
+  - Missing / damaged / error: Red 600 (#dc2626)
+  - Waiting for review: Amber 600 (#d97706)
+  - Linked (toll tag, fuel card): Slate 500 (#64748b)
+- DARK MODE:
+  - Background: #0f172a
+  - Surface: #1e293b
+  - Border: #334155
+  - Text primary: #f8fafc
+  - Muted text: #cbd5e1
+  - Primary: #10b981
+  - Error: #ef4444
+  - Waiting: #f59e0b
+- Status chips (rounded, small, always a word):
+  - "In the car" — emerald tick, no fill
+  - "Not in this car" — red outline, red text
+  - "Reported" — amber fill, dark text
+  - "Fixed" — emerald fill, white text
+  - "Linked" — slate outline (toll tag, fuel card)
+- Dates as "1 Nov 2026"; times as "08:20 AM"
+- No prices, no J$ amounts, no stock counts, no serial numbers shown in full (only the last 4: "•••• 2118")
+- No gradients, glassmorphism or 3D. No AI badges.
+- Typography: Inter; plates in mono.
+- Jamaica context:
+  - car: "Toyota Roomy 2019 · 5179KZ"
+  - second car (for a driver with no kit yet): "Honda Fit 2018 · 1505LM"
+  - fleet manager name on replies: "Fleet team"
+
+DESIGN PRINCIPLES:
+- Phone only (390px), one hand, outdoors in sunlight: high contrast, big tap areas
+- A checklist, not a form: one tap per item
+- Reporting takes three taps plus a photo: pick the item, pick what's wrong, send
+- A report is a message to the fleet, never an edit: the driver can't change the item, the price or the kit
+- Every report shows its status afterwards (Sent → Seen → Fixed) so the driver knows it was heard
+- Missing items are said plainly: "Not in this car — the fleet has been told"
+- Works on a weak signal: a report saves on the phone and sends when back online, with a clear "Waiting to send" label
+- Light theme default, dark mode variant
+- 8px spacing grid, 16px card corners, skeleton loading
+
+---
+
+SCREEN 1: MY CAR KIT
+- Header: back arrow, title "My car kit", sub-line "Toyota Roomy 2019 · 5179KZ"
+- Summary card: big emerald ring "7 of 10", text "Your car has 7 of 10 kit items. 3 are not in the car — the fleet knows."
+- Checklist (white card, one row per item, icon on the left, chip on the right):
+  - "Spare tyre" — "In the car"
+  - "Car jack" — "In the car"
+  - "Lug wrench" — "In the car"
+  - "Phone holder" — "In the car"
+  - "Dash camera •••• 2118" — "In the car"
+  - "Tyre pump" — red "Not in this car"
+  - "First-aid kit" — red "Not in this car"
+  - "Warning triangle" — red "Not in this car"
+  - "Toll tag" — slate "Linked"
+  - "Fuel card" — slate "Linked"
+- Each "In the car" row has a small text button "Report a problem"
+- Card "Also in this car": "Car mats"
+- Bottom: full-width outline button "Report something else"
+
+SCREEN 2: REPORT A PROBLEM (BOTTOM SHEET)
+- Opens from "Report a problem" on an item
+- Title: "Report a problem · Dash camera"
+- Three large choice chips in a row: "Damaged" | "Missing" | "Not working"
+- Note box: "What happened? (optional)" with placeholder "e.g. Screen flickers when the car starts"
+- Photo area: big dashed square "Add photo" with a camera icon; after a photo, a thumbnail with an "×"
+- Helper text under the photo: "A photo helps the fleet fix it faster."
+- Full-width emerald button "Send report" (disabled until a choice is picked)
+- Sending state: spinner on the button; it can't be tapped twice
+
+SCREEN 3: REPORT SENT
+- Full-screen confirmation: emerald tick circle, "Report sent", "The fleet team will look at it. You'll see updates here."
+- Card with the report: "Dash camera · Not working · 1 Nov 2026 08:20 AM" + photo thumbnail
+- Button "Back to my kit"
+- Offline version of this screen: amber clock icon, "Saved — waiting to send", "We'll send it as soon as you're back online."
+
+SCREEN 4: MY REPORTS
+- Reached from a link at the bottom of My car kit: "My reports (2)"
+- List of report cards, newest first:
+  - "Warning triangle · Missing · 1 Nov 2026" — amber "Reported" · status line "Sent → Seen"
+  - "Dash camera · Not working · 12 Mar 2026" — emerald "Fixed" · reply "Fleet team: Replaced the power cable. 14 Mar 2026"
+- Tap a card for its full view with photo and the status timeline (Sent · Seen by fleet · Fixed)
+
+SCREEN 5: WEEKLY CHECK-IN — KIT STEP
+- One step inside the existing weekly check-in flow, after the odometer and photos steps
+- Progress dots at the top showing this is step 4 of 5
+- Title: "Is everything in your kit?"
+- Compact list of the kit items with small icons (no chips)
+- Two large buttons stacked: emerald "Yes, it's all there" and outline "No — something's missing or broken"
+- "No" opens a picker: tick the items with a problem, then the Report sheet (Screen 2) for each, one after another
+- Items already known to be missing are shown greyed with "Already reported" so the driver isn't asked again
+
+SCREEN 6: STATES
+- Loading: skeleton summary ring and skeleton checklist rows
+- No car assigned: illustration of a car outline, "No car is assigned to you right now. Your kit will show here when you get a car."
+- Car with no kit set up yet (1505LM): "Honda Fit 2018 · 1505LM" header, message "Your fleet hasn't set up a kit for this car yet." and button "Report something in the car"
+- Load failed: red bar "Couldn't load your kit. Check your signal and try again." with "Try again"
+- Send failed (online but refused): red box in the sheet "Couldn't send. Your report is still here — try again." with "Try again"; retry never sends twice
+
+---
+
+ADDITIONAL UI COMPONENTS:
+- Kit summary ring with "x of y" and one plain sentence
+- Checklist row: icon, item name, optional last-4 serial, status chip, "Report a problem" text button
+- Choice chips (Damaged, Missing, Not working), large and full-width-friendly
+- Photo picker square with thumbnail and remove "×"
+- Report card with status line (Sent → Seen → Fixed) and fleet reply
+- Offline "Waiting to send" label with clock icon
+- Check-in step with progress dots
+- Skeleton loaders, error bars, empty states
+- Toasts: "Report sent", "Saved — waiting to send"
+
+INTERACTIONS:
+- Tapping "Report a problem" opens the sheet with that item already chosen
+- "Report something else" opens the sheet with an item picker first (kit items plus "Something not on the list")
+- "Send report" stays disabled until Damaged, Missing or Not working is picked
+- Picking "Missing" changes that row's chip to amber "Reported" right away
+- Reports made offline are kept on the phone and sent automatically when back online; the card shows "Waiting to send" until then
+- In the weekly check-in, "Yes, it's all there" finishes the step in one tap
+- The driver can never edit an item, its price, or the kit list
+- Toll tag and fuel card rows open read-only info ("Toll tag on this car — managed by the fleet")
+- When the fleet marks a report "Fixed", the driver gets a push notification "Dash camera report marked fixed" and the card updates
+
+---
+
+Spec screens	Area
+1 My car kit	Kit
+2 Report a problem (sheet)	Report
+3 Report sent (+ offline)	Report
+4 My reports	Reports
+5 Weekly check-in — kit step	Check-in
+6 States	States

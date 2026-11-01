@@ -8,6 +8,7 @@ import {
   getPlatformSettingsCached,
   buildPlatformStatusPayload,
 } from "./platform_settings.ts";
+import { loadFleetInventoryFeatureFlags } from "./platform_inventory_flags.ts";
 
 export function registerPlatformStatusRoutes(app: Hono) {
   // Public endpoint: GET /platform-status (no auth required)
@@ -40,10 +41,12 @@ export function registerPlatformStatusRoutes(app: Hono) {
       // Opt-in forensic tab — public shell has no org; never treat global enabled
       // as GA. Logged-in UI uses /enterprise/me/modules with orgId (allowlist).
       const driverActivity = false;
+      const inventoryFlags = await loadFleetInventoryFeatureFlags();
       return c.json({
         enabledModules: {
           ...defaultModules,
           ...(settings.enabledModules || {}),
+          ...inventoryFlags,
           driver_activity: driverActivity,
         },
       });

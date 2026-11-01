@@ -1,0 +1,331 @@
+ROAM FLEET — INVENTORY & ASSET MANAGEMENT FULL DESIGN PROMPT (GOOGLE STITCH)
+
+
+
+
+Roam Fleet - Inventory & Asset Management (Desktop Web App, for fleet owners, fleet managers and their staff):
+
+Design high-fidelity desktop screens for the Inventory & Asset Management section of the Roam Fleet app. A fleet keeps a store of equipment (spare tyres, jacks, lug wrenches, tyre pumps, phone holders, first-aid kits, warning triangles, fire extinguishers, dash cameras) and puts a standard kit into every car. The section answers four questions at a glance: what do we have and where is it, does every car have its full kit, which expensive devices need attention, and what do we need to buy. Stock never changes by typing over a number: it only changes when someone receives, issues, returns, moves, counts or writes off an item, and every change is kept in a history that cannot be edited. Expensive devices like dash cameras are tracked one by one by serial number, with warranty and inspection dates. Drivers report damaged or missing items from the driver app (designed in a separate prompt); their reports arrive here as alerts. The tone is calm, plain and exact: a well-run storeroom logbook, not an accounting system.
+
+BRAND IDENTITY:
+- Match the existing Roam Fleet web app:
+  - white top nav row with the black "Roam Fleet" app tile, then: Dashboard, Fleet Operations, Driver Operations, Money, Vehicle Operations (active, underlined), Delivery Operations, Analytics, Reports, Business Finance, and a round avatar
+  - dark navy sub-bar (#020817) with "Switch vehicle or search hub..." on the left and "08:20:30 AM EST · America/Jamaica · JM (JMD) · DE · Deeki T · platform_owner" on the right
+  - page wash Slate 50, centred content (max ~1400px), shadcn-style components
+  - page title "Inventory & Asset Management" in bold, large
+- LIGHT MODE (default):
+  - Primary: Near-black (#030213) — primary buttons ("Issue", "Receive"), the active tab, selected outlines
+  - Background: White (#FFFFFF); page wash: Slate 50 (#f8fafc)
+  - Surface cards: White, with a 1px border rgba(0,0,0,0.1)
+  - Muted text: #717182
+  - Text primary: #0a0a0a
+  - Success / OK / complete: Emerald (#059669)
+  - Warning / low stock / due soon / needs approval: Amber (#d97706)
+  - Error / out of stock / missing / overdue: Red (#d4183d)
+  - Neutral / not tracked yet / archived: Slate 500 (#64748b)
+  - Info / reserved / on order: Indigo 600 (#4f46e5)
+  - Muted fill for tabs and chips: Slate 100 (#f1f5f9)
+- DARK MODE:
+  - Background: #252525
+  - Surface: #2e2e2e
+  - Border: #444444
+  - Text primary: #fafafa
+  - Muted text: #b4b4b4
+  - Primary: #fafafa (buttons become light with dark text)
+  - Success: #34d399
+  - Warning: #f59e0b
+  - Error: #f87171
+  - Neutral: #94a3b8
+  - Info: #818cf8
+- Status chips (rounded, small, always a word, never colour alone):
+  - Stock: "OK" (emerald text, no fill) · "Low" (amber outline, amber text) · "Out" (red fill, white text)
+  - Kit cell: "✓" (emerald) · "Missing" (red outline) · "Short 1" (amber outline) · "Damaged" (red text with a small crack icon) · "Inspection due" (amber) · "Linked" (slate, for toll tag and fuel card)
+  - Asset: "Installed" (emerald) · "In store" (slate) · "In repair" (amber) · "Faulty" (red) · "Lost" (red fill) · "Retired" (slate outline)
+  - Movement type tags in grey mono caps: RECEIVE, ISSUE, RETURN, TRANSFER, COUNT, WRITE-OFF, WORK ORDER, REVERSAL
+  - "Needs approval" — amber fill, dark text
+- Money is Jamaican dollars: "J$ 5,400.00"; quantities as plain numbers with units: "3 each"
+- Dates as "1 Nov 2026"; times as "08:20 AM"
+- No gradients, glassmorphism or 3D. No AI badges, no confidence percentages.
+- Typography: Inter. Plates, SKUs, serial numbers, quantities, money and PO numbers use a mono font with tabular numerals.
+- Jamaica context:
+  - fleet cars: "Toyota Roomy 2019 · 5179KZ" (Rideshare), "Honda Fit 2018 · 1505LM" (Rideshare)
+  - storage location: "Main store — Kingston"
+  - vendors: "Kingston Auto Supplies", "Amazon (via shipping agent)", "Car Toys Jamaica"
+  - items with real numbers: Phone Holder Mount J$ 5,400.00 · Dash camera J$ 45,998.85 · Spare tyre J$ 20,000.00 · Car jack J$ 5,600.00 · Lug wrench J$ 2,805.00 · Car mats J$ 8,000.00 · Tyre pump J$ 6,500.00 · First-aid kit J$ 3,200.00 · Warning triangle J$ 2,100.00 · Fire extinguisher J$ 7,800.00
+  - kit: "Rideshare car kit" — Spare tyre, Car jack, Lug wrench, Tyre pump, Phone holder, First-aid kit, Warning triangle, Dash camera, Toll tag (linked), Fuel card (linked); Fire extinguisher optional
+
+DESIGN PRINCIPLES:
+- Desktop-first (1440px wide), with a phone version
+- Keep what works: the existing tab bar, the black primary button in the top-right, and the Stock table layout stay recognisable; the "Bulk Assignment" button becomes "Issue" in the same spot
+- Stock is never typed over: quantities are read-only everywhere; every change goes through Receive, Issue, Return, Transfer, Count or Write-off
+- Every number can be clicked to see the history behind it
+- Preview before anything changes: every action dialog shows a "What will change" box before the confirm button
+- Kits are the heart of the page: for each car, what it should have, what it has, what's missing
+- Plain words first: "Missing 3 items — Tyre pump, First-aid kit, Warning triangle", never "compliance 0.7"
+- No internal ids, UUIDs or table names anywhere
+- One verb per action: "Issue" on the button, the dialog title and the confirm button
+- One save: confirm buttons show a spinner and cannot be pressed twice
+- Corrections never delete: a wrong movement is undone with a "Reverse" that shows in the history
+- Light theme default, dark mode variant
+- 8px spacing grid, 12px card corners, hairline borders, soft shadows, skeleton loading
+
+---
+
+SCREEN 1: OVERVIEW TAB
+- Page header:
+  - "Inventory & Asset Management"
+  - Sub-line: "What you have, where it is, and what every car is missing."
+  - Small grey line with a green dot: "Nightly check ran 06:30 today · all stock numbers add up"
+  - Right buttons: outline square "⚙" (Settings), outline "⋯" menu (Transfer, Count stock, Export CSV), outline "Receive" (box-with-arrow-down icon), black "Issue" (grid icon)
+- Tab switcher (pill style, slate background): "Overview" (active) | "Stock" | "Vehicle kits" | "Assets" | "Movements" | "Purchasing" | "Counts" | "Alerts" with a red count badge "5"
+- Row of five KPI tiles (white cards, label on top, mono value, grey line under):
+  - "Stock value" — "J$ 90,278.85" — "J$ 5,400.00 in store · J$ 84,878.85 on cars"
+  - "Low or out of stock" — "1" — "Phone Holder Mount"
+  - "Cars with a full kit" — "0 of 2" — red "2 cars missing items"
+  - "Devices needing attention" — "1" — "Dash camera has no serial number"
+  - "Open purchase orders" — "0" — "Nothing on order"
+- Left (two-thirds): card "Needs action" — a list of the top alerts, each with an icon, a plain sentence and one action button:
+  - "Honda Fit 2018 · 1505LM is missing its whole kit (10 items)" — black "Issue kit"
+  - "Toyota Roomy 2019 · 5179KZ is missing 3 items — Tyre pump, First-aid kit, Warning triangle" — "Issue missing"
+  - "Phone Holder Mount is low — 1 in store, reorder at 3" — "Reorder"
+  - "Dash camera on 5179KZ has no serial number" — "Add serial"
+  - "Confirm the second spare tyre found on 5179KZ" — "Count now"
+- Right (one-third): card "Kit completeness" — one horizontal bar per car with name, mono plate and percentage: "5179KZ — 70% (7 of 10)" amber bar; "1505LM — 0% (0 of 10)" red bar; link "Open Vehicle kits"
+- Under it: card "Suggested to buy" — "Phone Holder Mount · buy 5 · Car Toys Jamaica · 7 days" with an outline "Create draft order" button
+
+SCREEN 2: STOCK TAB
+- Header row: "Stock" on the left; on the right a location select "All locations ▾", and an outline "+ Add item" button (adds an item to the list, never a quantity)
+- Filter bar: search "Search name, SKU or serial", "Category" select, "Status" select (All, OK, Low, Out), "Type" select (All, Counted by quantity, Tracked by serial)
+- Table (white card, like the current Stock Inventory table, with more columns):
+  - Item: bold "Phone Holder Mount", grey mono SKU under it "ACC-PHM-01"
+  - Category: "Electronics · Phone holder"
+  - Location: "Main store — Kingston"
+  - On hand: mono "1"
+  - Reserved: mono "0"
+  - Available: mono "1"
+  - Reorder at: mono "3"
+  - Avg cost: mono "J$ 5,400.00"
+  - Value: mono "J$ 5,400.00"
+  - Status: amber "Low"
+  - Actions: pencil (edit details), "⋯" (Receive, Issue, Transfer, Count, Archive)
+- More rows (location "On cars"): "Dash camera · ELC-DCM-01 · Tracked by serial · 1 · Installed" ; "Spare tyre · TYR-SPR-01 · 1 · On 5179KZ" ; "Car jack · TLS-JCK-01 · 1 · On 5179KZ"
+- Rows where on hand is 0 show red "Out" and the row has a faint red left border
+- Hovering "Archive" on an item that still has stock shows a tooltip: "Move or write off the 1 in stock before archiving."
+- Footer: "Showing 1–10 of 10" with pagination, and "Total value J$ 90,278.85" right-aligned in mono
+
+SCREEN 3: ITEM DETAILS (RIGHT DRAWER)
+- Opens from a Stock row
+- Header: "Phone Holder Mount", grey mono "ACC-PHM-01", chips "Counted by quantity" and amber "Low"
+- Top tiles: "On hand 1" · "Reserved 0" · "Avg cost J$ 5,400.00" · "Value J$ 5,400.00"
+- Section "Where it is": table Location · On hand · Reserved — "Main store — Kingston · 1 · 0"; "5179KZ (on car) · 1 · 0"
+- Section "Used in": "Rideshare car kit — 1 per car" and "On 1 car: 5179KZ"
+- Section "Reorder rule": "Reorder at 3 · buy 5 · from Car Toys Jamaica · 7 days" with an "Edit" link
+- Section "Recent history": last 5 movements with date, type tag, quantity (+/− in mono, green/red), location, person — "11 Jan 2026 · RECEIVE · +1 · Main store · Deeki T · Opening balance"
+- Footer: outline "Receive", outline "Transfer", black "Issue"
+- Note: the quantity is never an editable field; the pencil only edits name, category, SKU, photo and reorder rule
+
+SCREEN 4: RECEIVE DIALOG
+- Title: "Receive stock"
+- Fields:
+  - "From" — select: "Purchase order…" or "No purchase order"; when "No purchase order", a "Vendor" select "Car Toys Jamaica"
+  - "Into" — "Main store — Kingston"
+  - "Received on" — "1 Nov 2026"
+  - Lines table: Item (search select) · Qty · Unit price (J$) · Serial numbers (only shown for tracked items)
+    - "Phone Holder Mount · 5 · J$ 5,200.00"
+    - "Dash camera · 1 · J$ 44,500.00 · Serial: [ DC-70A-0042118 ]" with a small camera "Scan" button
+  - "Extra costs" row: "Shipping J$ 3,500.00" · "Duty J$ 2,000.00" — spread across lines by value
+- "What will change" box (slate background):
+  - "Main store: Phone Holder Mount 1 → 6"
+  - "New dash camera DC-70A-0042118 added to Main store"
+  - "Average cost Phone Holder Mount J$ 5,400.00 → J$ 5,348.00 (includes shipping and duty)"
+- Footer: "Cancel" | black "Receive"
+- Toast: "Received 2 lines into Main store"
+
+SCREEN 5: ISSUE DIALOG (REPLACES BULK ASSIGNMENT)
+- Title: "Issue to cars"
+- Step bar: "What · Which cars · Check · Done"
+- Step "What": two big choice cards — "A whole kit" (selected, shows "Rideshare car kit · 10 items") and "Single items"; below it "Take from: Main store — Kingston"
+- Step "Which cars": checklist of cars with plate, model, kit percentage: "☑ 1505LM Honda Fit 2018 — 0%", "☑ 5179KZ Toyota Roomy 2019 — 70% (only missing items will be issued)"
+- Step "Check" — the preview table, one row per car per item:
+  - Columns: Car · Item · Needs · In store · Will issue · Result
+  - "1505LM · Spare tyre · 1 · 0 · 0 · red 'Short 1'"
+  - "1505LM · Phone holder · 1 · 6 · 1 · emerald 'OK'"
+  - "5179KZ · Tyre pump · 1 · 0 · 0 · red 'Short 1'"
+  - Toll tag and Fuel card lines show slate "Linked — managed in Toll tags / Fuel cards"
+  - Summary line above the table: "Can issue 1 of 11 items now. 10 are short in store."
+  - Checkbox: "☑ Issue what's available now and leave the rest as missing"
+  - Link: "Create a draft order for the 10 short items"
+- Footer: "Back" | black "Issue 1 item"
+- Done: "1 item issued to 1 car" with "View in Movements"
+
+SCREEN 6: VEHICLE KITS TAB
+- Header row: "Vehicle kits"; toggle "Matrix | Cards" (Matrix active); sub-tab pills "Cars" (active) | "Kit templates"
+- Matrix (white card): rows are cars, columns are kit lines (column headers rotated or short: Spare tyre, Jack, Lug wrench, Pump, Phone holder, First aid, Triangle, Dash cam, Toll tag, Fuel card, Fire ext. (optional, grey header))
+  - First column: "Toyota Roomy 2019" bold, mono "5179KZ", "Rideshare car kit", amber "70% · 7 of 10"
+    - cells, in column order: ✓ ✓ ✓ Missing ✓ Missing Missing ✓ Linked Linked "—"
+  - Row 2: "Honda Fit 2018", mono "1505LM", red "0% · 0 of 10" — all required cells "Missing"
+- Clicking a red cell opens the Issue dialog for that car and item
+- Extra items on a car that aren't in the kit appear in a grey "Also on this car" line under the row: "Car mats × 1"
+- Cards view: one card per car (like today's Assignments tab) with the percentage bar, missing items in red, present items in a list, and buttons "Issue missing" and "Report"
+
+SCREEN 7: KIT TEMPLATE EDITOR
+- Sub-tab "Kit templates" list: cards "Rideshare car kit · 10 items + 1 optional · used by 2 cars · version 3"; outline "+ New kit"
+- Editor page: name field, "For" chips "Rideshare" / "Delivery", "Body type" select "Any"
+- Lines table: Item · Qty · Required/Optional toggle · Where it goes (e.g. "Boot", "Dashboard") · drag handle
+- A "Linked records" section with two rows: "Toll tag — from Toll tags" and "Fuel card — from Fuel cards" with on/off toggles
+- Right panel: "Version history" — "v3 · 1 Nov 2026 · Deeki T · added Warning triangle"
+- Footer: "Cancel" | "Save as new version"
+- Confirm box after save: "2 cars use this kit. Move them to version 3?" — "Not now" | black "Move 2 cars"
+
+SCREEN 8: ASSETS TAB
+- Header: "Assets — items tracked by serial number"; filter chips: "All 1" | "Installed 1" | "In store 0" | "In repair 0" | "Faulty 0" | "Warranty ending 0"
+- Table: Serial (mono) · Item · Status · Where · Installed · Warranty ends · Next inspection · Device health
+  - "No serial yet" (amber, with an "Add serial" link) · "Dash camera" · emerald "Installed" · "5179KZ" · "6 Jan 2026" · "—" · "—" · grey "Not connected"
+- Hint card at the top, dismissible: "Fire extinguishers need a yearly check. Track them by serial to get reminders."
+
+SCREEN 9: ASSET PAGE
+- Header: "Dash camera", mono serial "DC-70A-0042118", chip "Installed on 5179KZ"
+- Facts grid: Bought "6 Jan 2026" · Cost "J$ 45,998.85" · Vendor "Amazon (via shipping agent)" · Warranty ends "6 Jan 2027" (with "in 66 days" in grey) · Next inspection "—" · Device "Not connected"
+- Timeline (newest first), each with an icon, date, person and short text:
+  - "1 Nov 2026 · Serial number added · Deeki T"
+  - "12 Mar 2026 · Driver report: 'Screen flickers' · photo thumbnail · Driver of 5179KZ"
+  - "6 Jan 2026 · Installed on 5179KZ · Deeki T"
+  - "6 Jan 2026 · Received into Main store · J$ 45,998.85"
+- Documents strip: "Invoice.pdf", "Warranty.jpg" with upload "+"
+- Buttons: "Move", "Send to repair", "Mark faulty", "Retire", "Print QR label"
+
+SCREEN 10: MOVEMENTS TAB
+- Header: "Movements — every stock change, kept forever"
+- Filter bar: date range "Last 30 days", Type select, Item search, Location select, Person select, outline "Export CSV"
+- Table: Date & time · Type tag · Item · Qty (mono, green "+1", red "−1") · From → To · Reference · By · Reason
+  - "1 Nov 2026 08:31 · ISSUE · Phone holder · −1 · Main store → 1505LM · Kit: Rideshare car kit · Deeki T · —"
+  - "1 Nov 2026 08:10 · RECEIVE · Phone Holder Mount · +5 · Car Toys Jamaica → Main store · PO-0001 · Deeki T · —"
+  - "11 Jan 2026 · RECEIVE · Phone Holder Mount · +1 · Opening balance → Main store · Moved from old system · System · —"
+- Row "⋯" menu: "Reverse" — opens a box "Reverse this movement? A new REVERSAL line will undo it. Reason (required)."
+- Reversed rows are struck through lightly with a grey "Reversed 1 Nov 2026" tag; the reversal row sits above it
+
+SCREEN 11: PURCHASING TAB
+- Sub-pills: "Orders" (active) | "Suggested" (badge 1) | "Vendors"
+- Orders board with columns: Draft · Ordered · Part received · Received · Closed
+  - Card in Draft: mono "PO-0002" · "Car Toys Jamaica" · "3 lines · J$ 31,600.00" · "Expected 8 Nov"
+- Order page: header "PO-0002 · Car Toys Jamaica · Draft"; lines table Item · Ordered · Received · Unit price · Line total; Extra costs: Shipping, Duty, FX rate; totals in mono; buttons "Send for approval" (if over the limit) or black "Mark ordered", later "Receive"
+- Suggested: table Item · Available · On order · Reorder at · Suggest · Vendor · Lead time, with checkboxes and black "Create draft order"
+- Vendors: list with name, phone, lead time, "Linked to Dominion supplier" chip where linked
+
+SCREEN 12: COUNTS TAB
+- List of count sessions: "Main store — 1 Nov 2026 — Submitted — 2 differences"; black "Start a count"
+- Count screen: location header, table Item · Expected (hidden until submit, shown as "•••") · Counted (number input) · Difference
+- After submit: differences in amber/red "−1 Spare tyre"; reason select per difference (Damaged, Lost, Found, Miscounted before); "Submit for approval"
+- Approver view: "Approve 2 changes · value −J$ 15,000.00"; amounts above J$ 20,000.00 show "Needs approval"
+
+SCREEN 13: ALERTS TAB
+- Inventory alerts only (car service and document alerts live in Vehicles and Maintenance; a grey link at the bottom says "Car service and document alerts are in Vehicles")
+- Filter chips: "Open 5" | "Assigned to me" | "Snoozed" | "Done"
+- Each alert row: severity icon, sentence, age, assignee avatar, action button, and "⋯" (Assign, Snooze 7 days, Mark done)
+  - red "1505LM is missing its whole kit" · "Issue kit"
+  - amber "Phone Holder Mount is low (1 of 3)" · "Reorder"
+  - amber "Dash camera on 5179KZ has no serial number" · "Add serial"
+  - amber "Driver report: Warning triangle missing — 5179KZ · photo" · "Review"
+  - red "Nightly check found a stock number that doesn't add up — Main store, Car jack" · "Open"
+
+SCREEN 14: TRANSFER / RETURN / WRITE-OFF DIALOG
+- One dialog shape for the three actions, title changes: "Move stock", "Return from car", "Write off"
+- Fields: Item, Qty, From, To (hidden for write-off), Reason select (required for write-off: Damaged, Lost, Stolen, Expired, Other) and a note
+- "What will change" box: "5179KZ: Spare tyre 2 → 1 · Main store: 0 → 1"
+- When the write-off value is above J$ 20,000.00: amber box "This needs approval by a second person. It will wait in Alerts until approved." and the button reads "Send for approval"
+- Footer: "Cancel" | black action button
+
+SCREEN 15: VEHICLE DETAIL — EQUIPMENT PANEL
+- Inside the existing Vehicle Detail page (Profile tab), replacing the Equipment card
+- Card title "Kit & equipment" with amber "70% · 7 of 10"
+- Two columns: "Missing" (red list: Tyre pump, First-aid kit, Warning triangle, each with "Issue") and "On this car" (list with item, serial if tracked, condition chip)
+- Buttons: "Issue missing", "Return item", "Report problem"
+- Note under the card: "Tyres and wheels fitted to the car are in Maintenance → Parts of the car."
+
+SCREEN 16: FIRST-TIME SETUP
+- Shown when the fleet has no locations or items yet
+- Card "Set up inventory" with three numbered steps and ticks:
+  - "1 · Add where you keep stock" — "Main store — Kingston" input + "Add"
+  - "2 · Add your items" — buttons "Load the starter list (10 items)" and "Add items myself"
+  - "3 · Pick a kit for your cars" — "Rideshare car kit" preselected, "Assign to 2 cars"
+- Footer: "Finish setup"; after that, a first-count prompt: "Count what you actually have so your numbers start right" — black "Start a count"
+
+SCREEN 17: STATES
+- Loading: skeleton KPI tiles, skeleton table rows with shimmer, per tab (never a full-page "Loading Fleet Data...")
+- Load failed: red bar under the tab switcher, "Couldn't load stock. Nothing is lost — try again." with "Try again" (never shows an empty table on failure)
+- Empty stock (after setup, nothing received): "No stock yet. Receive your first delivery." with black "Receive"
+- Not enough stock in an Issue: the Check step's red rows and the summary line (Screen 5)
+- Save failed: red box above the dialog footer, "Couldn't save. Nothing changed. Try again." — retry never saves twice
+- Nightly check failed: red bar "Some stock numbers don't add up. Open Alerts."
+- No permission: read-only view with a grey bar "You can view inventory but not change it. Ask your fleet owner."
+
+SCREEN 18: PHONE (390px)
+- Top bar collapses to the app tile, page title (visible on phone) and a menu
+- Tabs scroll sideways
+- KPI tiles stack 2 per row
+- Stock rows become cards: item name, SKU, location, big mono "On hand 1", status chip, "⋯"
+- Vehicle kits shows the Cards view only
+- Sticky bottom bar: "Receive" | "Issue" | "Scan" (camera icon)
+- Scan opens the camera with a square frame: "Point at a QR label on an item, a device or a shelf"; after a scan, a sheet shows the item or asset with its actions
+- Dialogs become full-screen sheets with a back arrow; no page-level horizontal scrolling
+
+---
+
+ADDITIONAL UI COMPONENTS:
+- KPI tile with label, mono value and grey explanation line
+- Status chips for stock, kit cells, assets and approvals (always with a word)
+- Movement type tags in grey mono caps
+- Signed quantity cell (+ green, − red, mono)
+- "What will change" preview box (slate background, before → after lines)
+- Kit matrix with sticky first column and rotated column headers
+- Kit completeness bar with percentage and "x of y"
+- Step bar (What · Which cars · Check · Done)
+- Item drawer with tiles, location table, "Used in", reorder rule and recent history
+- Asset timeline with icons, photos and people
+- Orders board (kanban columns by status)
+- Count sheet with hidden expected values until submit
+- Alert row with assignee, snooze and action button
+- QR label preview (item name, SKU or serial, QR code) and camera scan frame
+- Reason select (required) and "Needs approval" box
+- Skeleton loaders, error bar, empty, first-time setup and read-only states
+- Toasts: "Received", "Issued", "Moved", "Reversed", "Report sent", "Count submitted"
+
+INTERACTIONS:
+- "Issue" in the header opens Screen 5; a red kit cell or "Issue missing" opens it prefilled for that car and item
+- "Use" on a kit template opens Issue with that kit already chosen
+- The Issue "Check" step recalculates live as cars are ticked; the confirm button shows the exact count it will issue
+- Quantities are never editable; the pencil on an item edits details only
+- "Archive" is disabled while an item still has stock, with a tooltip saying why
+- "Reverse" on a movement asks for a reason and adds a REVERSAL line; nothing is deleted
+- Write-offs and count changes above J$ 20,000.00 go to "Needs approval"; a second person approves from Alerts
+- Receiving a tracked item requires one serial per unit; "Scan" fills the serial from the camera
+- Saving a new kit version asks whether to move cars to it
+- Every confirm button locks with a spinner until the server answers; a retry never saves twice
+- After any action, KPI tiles, the Stock row, the kit matrix and Alerts update without a page reload
+- Clicking any quantity or value opens Movements filtered to that item and location
+- "Create draft order" from Suggested or from the Issue shortfall opens a prefilled PO in Draft
+- A driver report (sent from the driver app) appears in Alerts with its photo and a "Review" button
+- Toll tags and fuel cards are shown as "Linked" and open their own pages; they can't be issued here
+
+
+---
+
+Spec screens	Area
+1 Overview tab	Overview
+2 Stock tab	Stock
+3 Item details drawer	Stock
+4 Receive dialog	Actions
+5 Issue dialog (replaces Bulk Assignment)	Actions
+6 Vehicle kits tab (matrix + cards)	Kits
+7 Kit template editor	Kits
+8 Assets tab	Assets
+9 Asset page	Assets
+10 Movements tab	History
+11 Purchasing tab (orders, suggested, vendors)	Purchasing
+12 Counts tab	Counts
+13 Alerts tab	Alerts
+14 Move / return / write-off dialog	Actions
+15 Vehicle Detail — kit & equipment panel	Vehicle
+16 First-time setup	Setup
+17 States	States
+18 Phone (390px)	Mobile

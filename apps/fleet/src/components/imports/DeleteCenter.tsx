@@ -795,14 +795,8 @@ function DeleteCenterInner() {
     safeCount('tollPlazas', () => api.getTollPlazas(), { plazaNames: true });
     safeCount('stations', () => api.getStations());
     safeCount('claims', () => api.getClaims());
-    safeCount('equipment', async () => {
-      const { equipmentService } = await import('../../services/equipmentService');
-      return equipmentService.getAllEquipment();
-    });
-    safeCount('inventory', async () => {
-      const { inventoryService } = await import('../../services/inventoryService');
-      return inventoryService.getInventory();
-    });
+    safeCount('equipment', async () => []);
+    safeCount('inventory', async () => []);
 
     // Prefix-based counts via bulkDeletePreview
     bulkCount('fuel', 'fuel_entry:');

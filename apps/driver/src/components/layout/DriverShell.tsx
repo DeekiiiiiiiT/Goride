@@ -41,6 +41,7 @@ import {
 } from '../../utils/nativePhotoCapture';
 
 import { MyVehicle } from '../independent/MyVehicle';
+import { CarKitPage } from '../car-kit/CarKitPage';
 import { TaxCenter } from '../independent/TaxCenter';
 import { InsuranceCenter } from '../independent/InsuranceCenter';
 import { RideDispatchPage } from '../rides/RideDispatchPage';
@@ -127,7 +128,8 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
     currentPage === 'insurance' ||
     currentPage === 'settings' ||
     currentPage === 'documents' ||
-    currentPage === 'fleet-invites';
+    currentPage === 'fleet-invites' ||
+    currentPage === 'car-kit';
   const mintDriverLayout =
     mintHomeLayout ||
     mintEarningsLayout ||
@@ -231,7 +233,14 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
           <IndependentEarningsPage />
         );
       case 'vehicle':
-        return <MyVehicle />;
+        return <MyVehicle onOpenCarKit={() => setCurrentPage('car-kit')} />;
+      case 'car-kit':
+        return (
+          <CarKitPage
+            onBack={() => setCurrentPage('vehicle')}
+            vehicleId={custodyVehicleId ?? driverRecord?.vehicleId ?? null}
+          />
+        );
       case 'tax':
         return <TaxCenter />;
       case 'insurance':
@@ -600,6 +609,7 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
           onSubmit={handleWeeklyCheckInSubmit}
           isLoading={checkInSubmitting || checkInHookLoading}
           isForced={checkInForced}
+          vehicleId={custodyVehicleId ?? driverRecord?.vehicleId ?? null}
         />
       )}
     </div>

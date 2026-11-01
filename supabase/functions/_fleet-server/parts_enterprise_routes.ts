@@ -8,7 +8,7 @@ import { isCatalogVariantUuid, parseImportVehicleLabel } from "../../../packages
 import { FEATURE_FLAGS, isFeatureEnabled } from "./feature_flags.ts";
 import { decodeFrameBatch, decodeFrameNumber, engineFamilyPrefix } from "../../../packages/types/src/frameNumberDecode.ts";
 import { CacheOnlySupplierAdapter } from "./parts_supplier_adapter.ts";
-import { decideCatalogPart, loadCatalogReview } from "./parts_catalog_review.ts";
+import { upsertOrgPartStockViaEngine } from "./inventory_org_part_stock_bridge.ts";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 function isUuid(s: string): boolean {
@@ -666,25 +666,21 @@ export function registerPartsEnterpriseRoutes(route: RouteApp, supabase: Supabas
       const hasUniversal = isUuid(universalPartId);
       if (hasPart === hasUniversal) return c.json({ error: "Choose a catalog part or a size item, not both." }, 400);
       const location = body.location ? String(body.location) : null;
-      let stockQuery = supabase.from("org_part_stock").select("id").eq("organization_id", orgId);
-      stockQuery = hasPart ? stockQuery.eq("part_id", partId) : stockQuery.eq("universal_part_id", universalPartId);
-      stockQuery = location ? stockQuery.eq("location", location) : stockQuery.is("location", null);
-      const existing = await stockQuery.maybeSingle();
-      const row = {
-        organization_id: orgId,
-        part_id: hasPart ? partId : null,
-        universal_part_id: hasUniversal ? universalPartId : null,
-        qty: Number(body.qty ?? 0),
+      const targetQty = Number(body.qty ?? 0);
+      const reorderPoint = body.reorderPoint != null ? Number(body.reorderPoint) : null;
+      const idemRaw = c.req.header("Idempotency-Key") || c.req.header("idempotency-key");
+      const idem = idemRaw?.trim();
+      if (!idem) return c.json({ error: "Idempotency-Key header required" }, 400);
+      const { item } = await upsertOrgPartStockViaEngine(
+        orgId,
+        hasPart ? partId : null,
+        hasUniversal ? universalPartId : null,
         location,
-        reorder_point: body.reorderPoint != null ? Number(body.reorderPoint) : null,
-        updated_at: new Date().toISOString(),
-      };
-      const foundId = (existing.data as { id?: string } | null)?.id;
-      const { data, error } = foundId
-        ? await supabase.from("org_part_stock").update(row).eq("id", foundId).select("*").single()
-        : await supabase.from("org_part_stock").insert(row).select("*").single();
-      if (error) throw error;
-      return c.json({ item: data });
+        targetQty,
+        reorderPoint,
+        idem,
+      );
+      return c.json({ item });
     } catch (e) {
       return fail(c, e);
     }

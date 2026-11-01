@@ -65,7 +65,9 @@ export type Permission =
   | 'data.import' | 'data.export' | 'data.backfill'
   | 'expenses.view' | 'expenses.export' | 'expenses.create' | 'expenses.manage_rules'
   | 'expenses.approve' | 'expenses.pay' | 'expenses.manage_vendors'
-  | 'recon.view' | 'recon.prepare' | 'recon.approve' | 'recon.external_sources';
+  | 'recon.view' | 'recon.prepare' | 'recon.approve' | 'recon.external_sources'
+  | 'inventory.view' | 'inventory.move' | 'inventory.adjust' | 'inventory.approve'
+  | 'inventory.kits.manage' | 'inventory.purchasing' | 'inventory.report' | 'inventory.export';
 
 export interface RbacUser {
   userId: string;

@@ -1,0 +1,19 @@
+.fleet-inventory-stitch {
+  font-family: Inter, sans-serif;
+  color: #191c1e;
+  background: #f7f9fb;
+}
+.fleet-inventory-stitch .material-symbols-outlined {
+  font-family: "Material Symbols Outlined";
+  font-weight: normal;
+  font-style: normal;
+  line-height: 1;
+  display: inline-block;
+  white-space: nowrap;
+  font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
+}
+.fleet-inventory-stitch .bg-surface-container { background-color: #eceef0; }
+.fleet-inventory-stitch .bg-surface-container-low { background-color: #f2f4f6; }
+.fleet-inventory-stitch .bg-surface { background-color: #f7f9fb; }
+.fleet-inventory-stitch .text-on-surface { color: #191c1e; }
+.fleet-inventory-stitch .text-on-surface-variant { color: #47464c; }

@@ -1,0 +1,166 @@
+ROAM DOMINION — PENDING CATALOG · AUTOMATED RESEARCH — FULL DESIGN PROMPT (GOOGLE STITCH)
+
+
+
+
+Roam Dominion - Pending Catalog with automated research (Desktop Admin, for the owner):
+
+Design high-fidelity desktop screens that upgrade "Pending catalog" in the Roam Dominion admin console from a manual to-do list into an automated research queue. When a fleet asks for a part (or a car) that Roam doesn't have, Roam now researches it on its own, one request at a time in the order they arrived. It looks the part up on a short list of trusted parts catalogues, checks each page really shows that part number for that exact car, and then either adds the part by itself (when two trusted catalogues agree) or puts it in front of the owner to review. The owner's job becomes: glance at the queue, approve or fix what needs review, and undo anything that looks wrong. Every result shows where it came from. Dominion is the master reference database, so these screens never show customer names, company names or plates: requests are grouped by car version and part, with a count of how many fleets asked. Find parts is information only, so there are no prices, suppliers or stock anywhere. The tone is a calm, trustworthy control room.
+
+BRAND IDENTITY:
+- Match the existing Dominion console and the current Pending catalog screens:
+  - dark navy left sidebar with "Dominion · Roam Admin Console"; groups MASTER DATA (Overview, Vehicles active, Places and Maps, Fuel, Tolls, Tax and Vendors), ENGINES (Fuel Brain, Toll Brain, Matching Brain), DISTRIBUTION (Apps, Data API, Change requests), PLATFORM (Staff and roles, Activity log, Platform Ops, Global settings), BACK OFFICE (GCT registrations, Ledger, Remittance); footer "KGN-DC-01 · JMD READY"
+  - top bar: search "Search entities, engines, routes…" with a ⌘K chip, moon icon, user "DT · Deeki T · Owner"
+  - breadcrumb "DOMINION › MASTER DATA › VEHICLES › PENDING CATALOG"
+  - page title "Pending catalog", sub line "Cars and parts that apps have asked us to add."; tabs "Vehicles (1)" and "Parts (6)"
+- LIGHT MODE (default):
+  - Primary: #0153dc; primary container: #dbe1ff
+  - Success: #006e31; warning: #8a5a00; error: #a83836
+  - Outline: #797a84
+  - Background: #faf8fe; cards white
+  - Text: #30323b
+- DARK MODE:
+  - Background: #0b1220
+  - Text: #e2e8f0
+  - Primary: #5b8def
+  - Success: #4ade80; warning: #fbbf24; error: #f87171
+  - Outline: #94a3b8
+- Status chips (one set, used everywhere):
+  - "Queued": grey
+  - "Researching": blue, with a small spinning ring
+  - "Needs review": amber
+  - "Added automatically": green outline with a small tick icon
+  - "Added": solid green
+  - "Couldn't find": red
+  - "Failed": red outline with a warning triangle
+- Source chips: the catalogue's domain in mono ("partsouq.com") with a green tick when the page confirmed the part, or a grey cross when it didn't
+- Check rows: a tick or cross icon, a plain sentence, and a mono detail on the right
+- Typography: Inter. Part numbers, domains, counts, times and dates use a mono font with tabular numerals.
+- No customer names, company names, plates or user names of fleets anywhere. No prices, suppliers, stock or quotes.
+- No gradients, glassmorphism or 3D. No confidence percentages; show the checks instead.
+- Sample data:
+  - car versions: "Toyota Roomy 2016–2020 · Pre-Facelift · Custom G · 1KR-FE · M900A", "Honda Fit 2013–2020 · Hybrid · LEB · GP5", "Toyota Probox 2014–2021 · NCP160"
+  - parts asked for: "Drive belt", "Air filter", "Brake pads · Front · Both", "Rear brake shoe kit · Left", "Headlight bulb", "Cabin filter"
+  - research result: "Toyota 90916-02729 · V-ribbed belt" confirmed on partsouq.com and amayama.com
+
+DESIGN PRINCIPLES:
+- Desktop-first (1440px wide)
+- The owner should see in two seconds: is the system running, how many need me, did anything go wrong
+- Every automatic decision shows its sources and checks, and can be undone in one click
+- One queue, newest asks grouped; the system works on them oldest first, one at a time
+- Never show who asked; show how many fleets asked
+
+SCREEN 1: PENDING CATALOG — PARTS TAB WITH THE RESEARCH STRIP
+- Dominion frame as in Brand Identity, Parts tab selected
+- Directly under the tabs, a full-width "Research" strip (white card, thin border):
+  - left: a green dot and "Research is on", or an amber "Paused — Gemini returned errors 3 times in a row" with a "Resume" button
+  - a "Shadow mode" chip with the line "Everything goes to review until 20 approvals in a row (12 / 20)"
+  - counters in mono: "Queue 3", "Working on 1", "Needs you 2", "Failed 0", "Today 14 / 40 jobs"
+  - right: link "Research settings →"
+- Summary cards: "Needs review 2", "Added automatically this week 5", "Added this week 7", "Couldn't find 1"
+- Filter chips: "All", "Needs review", "Researching", "Queued", "Added automatically", "Added", "Couldn't find", "Failed"; search "Search car or part…"
+- Table, newest first, columns:
+  - Car version
+  - Part (with side when it has one)
+  - Asked by ("3 fleets" chip)
+  - First asked / Last asked
+  - Status chip
+  - Result: "Toyota 90916-02729 · 2 sources" or "—"
+  - Row action "Open"
+- The row being researched right now shows a thin blue progress line along its bottom edge and "Checking amayama.com…" in muted mono under the status chip
+- Footer note: "Roam researches one request at a time, oldest first. Only trusted catalogues count."
+
+SCREEN 2: REQUEST DRAWER — NEEDS REVIEW
+- Right drawer, 560px, over Screen 1
+- Header: "REQUEST GROUP #REQ-685C06AD / Needs review"; title "Drive belt"; "Toyota Roomy 2016–2020 · Pre-Facelift · Custom G · 1KR-FE · M900A"; chips "Asked by 1 fleet", "first asked 01 Nov 2026"; outlined button "Copy for search"
+- Amber note at the top: "Only one trusted catalogue confirmed this part. Check it and approve, or fix it."
+- Section "Roam found":
+  - a candidate card, selected: "Toyota 90916-02729", "V-ribbed belt", match tag "Made for your car"
+  - fits line: "M900A · 1KR-FE · 2016–2020"
+  - source chips: "partsouq.com ✓" and "megazip.net ✗ (page didn't show M900A)"
+  - each source expands to show the quoted line from the page in mono and an "Open page ↗" link
+  - a second, collapsed candidate: "Bando 4PK875 · Other brands that replace it · 1 source"
+- Section "Checks", a list of tick and cross rows:
+  - "✓ Part number shape is right for Toyota — 90916-02729"
+  - "✓ Page shows this part number — partsouq.com"
+  - "✓ Page shows this car — M900A"
+  - "✗ Second trusted catalogue agrees — only 1 of 2"
+  - "✓ Not already on file — new part"
+- Section "What they asked": "Note 1: —"
+- Section "Already on file for this car": "Nothing yet"
+- Section "History" (timeline, mono times):
+  - "01 Nov 06:07 · Asked by a fleet"
+  - "01 Nov 06:08 · Research started"
+  - "01 Nov 06:09 · 3 sources found, 1 dropped (not on the trusted list)"
+  - "01 Nov 06:09 · Sent to review"
+- Sticky footer actions:
+  - "Couldn't find it" (outlined)
+  - "Edit and add" (grey): opens the same candidate as an editable form (brand, part number, name, fits, source URL required)
+  - primary "Approve and add"
+- Footer note: "When you add the part, every fleet that asked sees it the next time they search."
+
+SCREEN 3: REQUEST DRAWER — ADDED AUTOMATICALLY
+- Same drawer, a different request: "Air filter · Toyota Roomy 2016–2020 … M900A", status chip "Added automatically"
+- Green note: "Two trusted catalogues agreed, so Roam added this part on its own."
+- Card "Added": "Toyota 17801-B1010 · Air filter element", match tag "Made for your car"; source chips "partsouq.com ✓", "amayama.com ✓"
+- "Checks" all ticks
+- "History": "Asked → Research started → 2 sources confirmed → Added automatically → 3 fleets told"
+- Footer: primary "Looks right" (marks it reviewed) and a secondary destructive "Undo" with the line "Removes this fit, reopens the request and sends it to review."
+
+SCREEN 4: RESEARCH SETTINGS AND HEALTH
+- Same Dominion frame; breadcrumb "… › PENDING CATALOG › RESEARCH SETTINGS"; back link "← Pending catalog"
+- Card "Research":
+  - switch "Research is on"
+  - switch "Shadow mode — send everything to review" with "12 / 20 approvals in a row"
+  - number field "Jobs per day" (40)
+  - a muted line "Requests per fleet per day: 30"
+- Card "Health", four tiles in mono: "Queue 3 · oldest 2 h", "Working on 1 · 40 s", "Needs review 2 · oldest 1 day", "Failed 0"
+  - under them, a calm list of warnings when present: "1 request waiting more than 24 hours", "Research paused at 06:41 — Gemini errors"
+- Card "Trusted catalogues", a table:
+  - Domain, Kind ("OEM catalogue" / "Aftermarket catalogue"), Pages confirmed (count), Active switch
+  - rows: partsouq.com, amayama.com, megazip.net, 7zap.com (OEM catalogue); rockauto.com (Aftermarket catalogue)
+  - button "Add catalogue" opening a small inline row (domain, kind)
+- Card "Failed jobs": rows with car, part, the plain error ("Page fetch timed out 4 times"), time, and a "Retry" button; empty state "No failed jobs."
+
+SCREEN 5: VEHICLES TAB — CAR VERSION REVIEW DRAWER
+- Vehicles tab selected; drawer over it
+- Header: "Toyota Passo 2016–2023", status "Needs review", "Asked by 2 fleets"
+- Note: "Cars are never added automatically. Check what Roam found and approve."
+- Section "Roam found": a spec grid in mono — Version "X · Facelift", Chassis "M700A", Engine "1KR-FE", Years "2016–2023", Drivetrain "2WD", Gearbox "CVT"; each value with its source chip
+- Section "Checks" and "History" as on Screen 2
+- Footer: "Couldn't find it", primary "Approve and open Add vehicle" (opens the existing Add vehicle form pre-filled)
+
+SCREEN 6: STATES
+- Four small frames of the Parts tab:
+  - Empty: "No part requests. When a fleet asks for a part we don't have, it shows here."
+  - Loading: skeleton strip and rows
+  - Error: "Could not load requests." with Retry
+  - Research off: the strip in grey, "Research is off. Requests wait here until you turn it on." with "Turn on"
+
+ADDITIONAL UI COMPONENTS:
+- Research strip (on / paused / off / shadow mode)
+- Status chips: Queued, Researching, Needs review, Added automatically, Added, Couldn't find, Failed
+- Candidate card with source chips and an expandable quote
+- Check list (tick / cross rows)
+- History timeline
+- Trusted catalogue table with Active switch
+- Failed job row with Retry
+
+INTERACTIONS:
+- Clicking a row opens the drawer; the table keeps its filter and scroll
+- "Approve and add" adds the part, marks every request in the group Added, tells every fleet that asked, and closes the drawer
+- "Edit and add" turns the candidate into a form; a source URL is required
+- "Undo" asks once ("Undo this add?") and then reopens the request as Needs review
+- "Resume", the switches and "Retry" act at once and show a small toast
+- The research strip and the researching row update on their own every 10 seconds
+- Hover: rows highlight in the primary container colour
+
+Spec screens / Area
+| Screen | Area |
+|---|---|
+| 1 | Parts tab with research strip |
+| 2 | Drawer — needs review |
+| 3 | Drawer — added automatically |
+| 4 | Research settings and health |
+| 5 | Vehicles tab — car version review |
+| 6 | Empty, loading, error and research-off states |

@@ -18,6 +18,11 @@ export const FLEET_PAGE_REGISTRY: Record<string, FleetPageDef> = {
     path: '/maintenance',
     permission: 'nav.maintenance',
   },
+  inventory: {
+    id: 'inventory',
+    path: '/vehicle-operations/inventory',
+    permission: 'inventory.view',
+  },
   'trip-analytics': { id: 'trip-analytics', path: '/trip-analytics', permission: 'nav.trips' },
   reports: { id: 'reports', path: '/reports', permission: 'nav.reports' },
   earnings: { id: 'earnings', path: '/earnings', permission: 'nav.tier_config' },

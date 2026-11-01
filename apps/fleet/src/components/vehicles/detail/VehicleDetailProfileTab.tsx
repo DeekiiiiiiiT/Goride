@@ -7,8 +7,8 @@ import { Label } from '../../ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../ui/tabs';
 import { Vehicle, VehicleDocument } from '../../../types/vehicle';
 import type { CatalogMaintenanceTaskOption } from '../../../types/maintenance';
-import { EquipmentManager } from '../EquipmentManager';
-import { ExteriorManager } from '../ExteriorManager';
+import { In15VehicleKitCard } from '../../inventory/screens/In15VehicleKitCard';
+import { useInventoryPhase3Enabled } from '../../../hooks/useInventoryPhase2Flag';
 import { MaintenanceManager, MaintenanceLog } from '../MaintenanceManager';
 import {
   vehicleServiceLines,
@@ -63,6 +63,7 @@ export function VehicleDetailProfileTab({
   orgServiceLines = ['rideshare'],
   onSaveServiceLines,
 }: VehicleDetailProfileTabProps) {
+  const inventoryKitsEnabled = useInventoryPhase3Enabled();
   const showPlatformEditor = orgServiceLines.length > 1 && Boolean(onSaveServiceLines);
   const [draftLines, setDraftLines] = useState<VehicleServiceLine[]>(() => vehicleServiceLines(vehicle));
   const [savingLines, setSavingLines] = useState(false);
@@ -109,18 +110,14 @@ export function VehicleDetailProfileTab({
                       >
                           Maintenance
                       </TabsTrigger>
+                      {inventoryKitsEnabled ? (
                       <TabsTrigger 
                           value="equipment" 
                           className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-indigo-600 data-[state=active]:text-indigo-600 border-b-2 border-transparent rounded-none px-0 py-2"
                       >
                           Equipment
                       </TabsTrigger>
-                      <TabsTrigger 
-                          value="exterior" 
-                          className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-indigo-600 data-[state=active]:text-indigo-600 border-b-2 border-transparent rounded-none px-0 py-2"
-                      >
-                          Exterior Check
-                      </TabsTrigger>
+                      ) : null}
                   </TabsList>
 
                   <TabsContent value="general" className="space-y-6">
@@ -277,11 +274,7 @@ export function VehicleDetailProfileTab({
                   </TabsContent>
 
                   <TabsContent value="equipment" className="space-y-6">
-                      <EquipmentManager vehicleId={vehicle.id || vehicle.licensePlate} />
-                  </TabsContent>
-
-                  <TabsContent value="exterior" className="space-y-6">
-                      <ExteriorManager vehicleId={vehicle.id || vehicle.licensePlate} />
+                      {inventoryKitsEnabled ? <In15VehicleKitCard /> : null}
                   </TabsContent>
               </Tabs>
           </TabsContent>

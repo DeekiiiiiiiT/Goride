@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/>
+<meta content="mobile_stack" name="shell-type"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Space+Mono:wght@700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "primary": "#059669",
+            "primary-dark": "#047857",
+            "primary-container": "#ecfdf5",
+            "on-primary": "#ffffff",
+            "surface": "#f8fafc",
+            "surface-container-lowest": "#ffffff",
+            "surface-container-low": "#f1f5f9",
+            "surface-container": "#e2e8f0",
+            "on-surface": "#0f172a",
+            "on-surface-variant": "#475569",
+            "outline": "#cbd5e1",
+            "outline-light": "#e2e8f0",
+            "warning": "#d97706",
+            "warning-container": "#fef3c7",
+            "warning-content": "#92400e"
+          },
+          fontFamily: {
+            "sans": ["Inter", "sans-serif"],
+            "mono": ["Space Mono", "monospace"]
+          }
+        }
+      }
+    };
+  </script>
+<style>
+    @layer base {
+      html, body {
+        width: 100%;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        overscroll-behavior: none;
+      }
+      .pb-safe {
+        padding-bottom: env(safe-area-inset-bottom, 16px);
+      }
+      .pt-safe {
+        padding-top: env(safe-area-inset-top, 0px);
+      }
+    }
+    ::-webkit-scrollbar {
+      display: none;
+    }
+  </style>
+</head>
+<body class="bg-surface font-sans text-on-surface antialiased min-h-screen flex flex-col justify-between">
+<!-- Top App Bar -->
+<header class="sticky top-0 z-50 pt-safe bg-white border-b border-outline-light shadow-[0_1px_3px_rgba(0,0,0,0.03)]">
+<div class="h-16 px-4 flex items-center justify-between gap-3">
+<div class="flex items-center gap-3 min-w-0">
+<button aria-label="Go back" class="w-10 h-10 -ml-1 flex items-center justify-center rounded-full text-on-surface hover:bg-surface-container-low active:scale-95 transition" onclick="history.back()">
+<span class="material-symbols-outlined text-[24px]">arrow_back</span>
+</button>
+<div class="flex flex-col min-w-0">
+<span class="text-xs font-medium text-on-surface-variant uppercase tracking-wider">Vehicle</span>
+<h1 class="text-sm sm:text-base font-semibold text-on-surface truncate">Toyota Roomy 2019 · <span class="font-mono text-emerald-800 font-bold">5179KZ</span></h1>
+</div>
+</div>
+<div class="flex items-center gap-2 flex-shrink-0">
+<span class="inline-flex items-center px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-800 text-xs font-bold font-mono border border-emerald-200">
+          5179KZ
+        </span>
+<img alt="Driver profile" class="w-9 h-9 rounded-full object-cover ring-2 ring-emerald-100" src="https://lh3.googleusercontent.com/aida-public/AB6AXuALLy2M7QqpOW6UNfHk1UDkmZuyXk9uNVOSt-PaIW9Nhuo0MxV1lwRRRFNKCcI_oqhV8a_0UZz3qMJPrR7skLyggtYFeCvlJyJJJALAQ9JudCt4UsSBT4l58-8xRQPL-skUUO_mDw3CLNHyor2kpa5P7SQueHj3hM60EixtVGsoOsc5YMbn0tCl9fb8IfnHGQqiN6--82vFkD9BM_8suNNAej1PFOTuncwUV99p5KE"/>
+</div>
+</div>
+<!-- Toggle Selector between Live Sent Confirmation & Queued Offline Version -->
+<div class="px-4 py-2 bg-slate-50 border-t border-outline-light flex gap-2">
+<button class="flex-1 py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all bg-white text-emerald-700 shadow-sm border border-emerald-600/20" id="tab-online" onclick="switchView('online')">
+<span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+<span>Sent confirmation</span>
+</button>
+<button class="flex-1 py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all text-slate-600 hover:text-slate-900 border border-transparent" id="tab-offline" onclick="switchView('offline')">
+<span class="w-2 h-2 rounded-full bg-amber-500"></span>
+<span>Offline version</span>
+</button>
+</div>
+</header>
+<!-- Main Content Area -->
+<main class="flex-1 px-4 py-5 max-w-md mx-auto w-full flex flex-col">
+<!-- VIEW 1: ONLINE CONFIRMATION (Primary View) -->
+<div class="flex flex-col flex-1" id="view-online">
+<!-- Full-screen hero section -->
+<div class="flex flex-col items-center text-center my-2">
+<div class="w-20 h-20 rounded-full bg-emerald-50 border-4 border-emerald-100 flex items-center justify-center shadow-sm text-emerald-600 mb-3 animate-[pulse_2.5s_infinite]">
+<span class="material-symbols-outlined text-[44px]" style="font-variation-settings: 'FILL' 1, 'wght' 700;">check_circle</span>
+</div>
+<h2 class="text-2xl font-bold text-slate-900 tracking-tight">Report sent</h2>
+<p class="text-slate-500 text-sm mt-1 max-w-xs leading-relaxed">
+          The fleet team will look at it. You'll see updates here.
+        </p>
+</div>
+<!-- Report Details Card -->
+<div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm my-4">
+<div class="flex items-center justify-between pb-3 border-b border-slate-100 mb-3">
+<div class="flex items-center gap-2">
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-xs font-semibold border border-emerald-200">
+<span class="material-symbols-outlined text-[14px]" style="font-variation-settings: 'FILL' 1;">done_all</span>
+              Delivered
+            </span>
+</div>
+<span class="font-mono text-xs font-bold text-slate-500 tracking-wide">REF: #RP-8842</span>
+</div>
+<div class="flex items-start gap-3">
+<!-- Photo Thumbnail -->
+<div class="relative w-16 h-16 rounded-xl overflow-hidden bg-slate-100 flex-shrink-0 border border-slate-200">
+<img alt="Dashcam defect photo" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCmLN44X87tuWazRTrbRJitrq0W6YomuY1fEycUPq1oKTX7Q2WEXFMr-aXK0qutznz46RBUjNOP95i_AdICv2LS7DvNXNZewvxIaMZHZYH1BFIPRd8swnGIhS6Aw58RsybTYpqLs-gWdqj2GCXVEhqhiBGtGB3_-x8v08qP0BuOv38f65v_SyaqiCgBVQXLoIxj_CXfTuWCTmnjVKNKM_uO08hMQ4ZkHDXe9YuotZs"/>
+<div class="absolute bottom-0 inset-x-0 bg-slate-900/60 backdrop-blur-xs py-0.5 text-[9px] text-white text-center font-medium">Photo</div>
+</div>
+<div class="flex flex-col flex-1 min-w-0 justify-center">
+<h3 class="text-base font-bold text-slate-900 truncate">Dash camera</h3>
+<div class="flex items-center gap-1.5 mt-0.5">
+<span class="inline-block w-2 h-2 rounded-full bg-red-500"></span>
+<span class="text-xs font-semibold text-red-600">Not working</span>
+</div>
+<div class="flex items-center gap-1 text-slate-500 text-xs mt-1.5">
+<span class="material-symbols-outlined text-[14px]">calendar_today</span>
+<span>1 Nov 2026 · 08:20 AM</span>
+</div>
+</div>
+</div>
+<!-- Status Pipeline -->
+<div class="mt-5 pt-4 border-t border-slate-100">
+<div class="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-3">Resolution Progress</div>
+<div class="relative pl-7 space-y-4">
+<!-- Connecting line -->
+<div class="absolute left-3 top-2.5 bottom-2.5 w-0.5 bg-slate-200 -translate-x-1/2"></div>
+<!-- Step 1: Sent (checked) -->
+<div class="relative flex items-start gap-2.5">
+<div class="absolute -left-7 top-0 w-6 h-6 rounded-full bg-emerald-600 text-white flex items-center justify-center ring-4 ring-white shadow-xs">
+<span class="material-symbols-outlined text-[15px]" style="font-variation-settings: 'FILL' 1, 'wght' 700;">check</span>
+</div>
+<div>
+<p class="text-xs font-bold text-slate-900">Sent</p>
+<p class="text-[11px] text-slate-500">Delivered directly to dispatch queue</p>
+</div>
+</div>
+<!-- Step 2: Seen by fleet (pending) -->
+<div class="relative flex items-start gap-2.5">
+<div class="absolute -left-7 top-0 w-6 h-6 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center ring-4 ring-white">
+<span class="material-symbols-outlined text-[14px]">hourglass_top</span>
+</div>
+<div>
+<div class="flex items-center gap-1.5">
+<p class="text-xs font-bold text-slate-900">Seen by fleet</p>
+<span class="text-[10px] font-semibold px-1.5 py-0.2 bg-amber-50 text-amber-700 rounded border border-amber-200">Pending</span>
+</div>
+<p class="text-[11px] text-slate-500">Fleet reviewer notified · typically under 2 hrs</p>
+</div>
+</div>
+<!-- Step 3: Fixed / Restocked -->
+<div class="relative flex items-start gap-2.5">
+<div class="absolute -left-7 top-0 w-6 h-6 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center ring-4 ring-white">
+<span class="material-symbols-outlined text-[14px]">build</span>
+</div>
+<div>
+<p class="text-xs font-semibold text-slate-500">Fixed / Restocked</p>
+<p class="text-[11px] text-slate-400">Scheduled for replacement at next service hub</p>
+</div>
+</div>
+</div>
+</div>
+<div class="mt-4 p-3 rounded-xl bg-slate-50 border border-slate-200/80 flex items-start gap-2.5">
+<span class="material-symbols-outlined text-emerald-600 text-[18px] flex-shrink-0 mt-0.5">verified_user</span>
+<p class="text-[11px] leading-relaxed text-slate-600">
+<span class="font-semibold text-slate-800">Zero Driver Liability:</span> This issue is officially logged. You are cleared for shift inspection and won't be charged.
+          </p>
+</div>
+</div>
+<!-- Action Button -->
+<div class="mt-auto pt-3 pb-safe">
+<button class="w-full min-h-[48px] h-12 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-semibold text-base flex items-center justify-center gap-2 shadow-sm transition-all active:scale-[0.99]" onclick="window.history.back()">
+<span class="material-symbols-outlined text-[20px]">arrow_back</span>
+<span>Back to my kit</span>
+</button>
+</div>
+</div>
+<!-- VIEW 2: OFFLINE VERSION (Queued / Offline View) -->
+<div class="hidden flex-col flex-1" id="view-offline">
+<!-- Amber clock icon hero badge -->
+<div class="flex flex-col items-center text-center my-2">
+<div class="w-20 h-20 rounded-full bg-amber-50 border-4 border-amber-100 flex items-center justify-center shadow-sm text-amber-600 mb-3">
+<span class="material-symbols-outlined text-[44px]">schedule</span>
+</div>
+<h2 class="text-2xl font-bold text-slate-900 tracking-tight">Saved — waiting to send</h2>
+<p class="text-slate-500 text-sm mt-1 max-w-xs leading-relaxed">
+          We'll send it as soon as you're back online.
+        </p>
+</div>
+<!-- Offline Status Banner -->
+<div class="bg-amber-50 border border-amber-200 rounded-xl p-3.5 my-3 flex items-start gap-3 text-amber-900">
+<span class="material-symbols-outlined text-amber-600 text-[22px] flex-shrink-0 mt-0.5">signal_cellular_connected_no_internet_4_bar</span>
+<div class="text-xs leading-relaxed">
+<p class="font-bold text-amber-900">No cellular connection</p>
+<p class="text-amber-800 mt-0.5">Don't close Roam Driver. The report will safely upload automatically once a stable signal is detected.</p>
+</div>
+</div>
+<!-- Queued Report Card -->
+<div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm flex flex-col gap-3.5 my-2">
+<div class="flex items-center justify-between">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 text-xs font-semibold">
+<span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+            Offline status: Queued locally
+          </span>
+<span class="text-xs text-slate-400 font-mono">Item #2 of 2</span>
+</div>
+<div class="flex items-start gap-3">
+<div class="w-12 h-12 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-700 flex-shrink-0">
+<span class="material-symbols-outlined text-[26px]">tire_repair</span>
+</div>
+<div class="flex flex-col min-w-0 flex-1">
+<h3 class="text-base font-bold text-slate-900 truncate">Tyre pump</h3>
+<div class="flex items-center gap-1.5 mt-0.5">
+<span class="inline-block w-2 h-2 rounded-full bg-red-500"></span>
+<span class="text-xs font-semibold text-red-600">Missing</span>
+<span class="text-slate-300">·</span>
+<span class="text-xs font-medium text-slate-600">Saved on phone</span>
+</div>
+<p class="text-[11px] text-slate-400 mt-1">Stored at 08:22 AM · Ready for sync</p>
+</div>
+</div>
+<div class="pt-2 flex items-center gap-2">
+<button class="flex-1 min-h-[48px] h-12 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-semibold text-sm flex items-center justify-center gap-1.5 shadow-sm transition active:scale-[0.98]" id="offline-retry-btn" onclick="triggerRetryAnimation()">
+<span class="material-symbols-outlined text-[18px]" id="offline-retry-icon">sync</span>
+<span id="offline-retry-label">Retry now</span>
+</button>
+<button class="min-h-[48px] h-12 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-700 font-semibold text-sm flex items-center justify-center gap-1 transition" onclick="cancelQueuedReport()">
+<span class="material-symbols-outlined text-[18px]">close</span>
+<span>Dismiss</span>
+</button>
+</div>
+</div>
+<!-- Action Button -->
+<div class="mt-auto pt-3 pb-safe">
+<button class="w-full min-h-[48px] h-12 rounded-xl border border-slate-300 hover:bg-slate-50 text-slate-800 font-semibold text-base flex items-center justify-center gap-2 shadow-xs transition-all active:scale-[0.99]" onclick="window.history.back()">
+<span class="material-symbols-outlined text-[20px]">arrow_back</span>
+<span>Back to my kit</span>
+</button>
+</div>
+</div>
+</main>
+<script>
+    function switchView(mode) {
+      const viewOnline = document.getElementById('view-online');
+      const viewOffline = document.getElementById('view-offline');
+      const tabOnline = document.getElementById('tab-online');
+      const tabOffline = document.getElementById('tab-offline');
+
+      if (mode === 'online') {
+        viewOnline.classList.remove('hidden');
+        viewOnline.classList.add('flex');
+        viewOffline.classList.add('hidden');
+        viewOffline.classList.remove('flex');
+
+        tabOnline.className = 'flex-1 py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all bg-white text-emerald-700 shadow-sm border border-emerald-600/20';
+        tabOffline.className = 'flex-1 py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all text-slate-600 hover:text-slate-900 border border-transparent';
+      } else {
+        viewOnline.classList.add('hidden');
+        viewOnline.classList.remove('flex');
+        viewOffline.classList.remove('hidden');
+        viewOffline.classList.add('flex');
+
+        tabOffline.className = 'flex-1 py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all bg-white text-amber-700 shadow-sm border border-amber-500/20';
+        tabOnline.className = 'flex-1 py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all text-slate-600 hover:text-slate-900 border border-transparent';
+      }
+    }
+
+    function triggerRetryAnimation() {
+      const icon = document.getElementById('offline-retry-icon');
+      const label = document.getElementById('offline-retry-label');
+      const btn = document.getElementById('offline-retry-btn');
+      
+      icon.classList.add('animate-spin');
+      label.textContent = 'Connecting...';
+      btn.disabled = true;
+
+      setTimeout(() => {
+        icon.classList.remove('animate-spin');
+        icon.textContent = 'check';
+        label.textContent = 'Sent successfully!';
+        btn.classList.remove('bg-emerald-600');
+        btn.classList.add('bg-slate-800');
+
+        setTimeout(() => {
+          switchView('online');
+        }, 1000);
+      }, 1500);
+    }
+
+    function cancelQueuedReport() {
+      if (confirm('Cancel this queued report?')) {
+        switchView('online');
+      }
+    }
+  </script>
+</body></html>
