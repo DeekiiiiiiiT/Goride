@@ -13,14 +13,28 @@ const decoder = new TextDecoder("utf-8", { fatal: true });
 
 const files = (await readdir(migrationsDir)).filter((f) => f.endsWith(".sql")).sort();
 const invalid = [];
+const bom = [];
 
 for (const file of files) {
   const bytes = await readFile(join(migrationsDir, file));
+  if (bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
+    bom.push(file);
+    continue;
+  }
   try {
     decoder.decode(bytes);
   } catch {
     invalid.push(file);
   }
+}
+
+if (bom.length) {
+  console.error("Migration files must not start with a UTF-8 BOM (Postgres rejects EF BB BF on fresh replay):");
+  for (const file of bom) {
+    console.error(`  ${file}`);
+  }
+  console.error("Create migrations with supabase migration new; do not use PowerShell Out-File / Set-Content -Encoding utf8.");
+  process.exit(1);
 }
 
 if (invalid.length) {

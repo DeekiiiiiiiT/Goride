@@ -1,8 +1,7 @@
-import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { getServiceClient } from "./service_client.ts";
 import { invDb, invRpcName } from "./inventory_db.ts";
 
-type FleetDb = SupabaseClient<any, any, any>;
+type FleetDb = ReturnType<typeof invDb>;
 
 export async function upsertOrgPartStockViaEngine(
   orgId: string,

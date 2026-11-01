@@ -8,6 +8,7 @@ import { isCatalogVariantUuid, parseImportVehicleLabel } from "../../../packages
 import { FEATURE_FLAGS, isFeatureEnabled } from "./feature_flags.ts";
 import { decodeFrameBatch, decodeFrameNumber, engineFamilyPrefix } from "../../../packages/types/src/frameNumberDecode.ts";
 import { CacheOnlySupplierAdapter } from "./parts_supplier_adapter.ts";
+import { decideCatalogPart, loadCatalogReview } from "./parts_catalog_review.ts";
 import { upsertOrgPartStockViaEngine } from "./inventory_org_part_stock_bridge.ts";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
