@@ -116,8 +116,9 @@ function fleetOrgDisplayName(): string | undefined {
 
 export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
   const { user } = useAuth();
-  const { can } = usePermissions();
+  const { can, canAny } = usePermissions();
   const canViewParts = can("vehicles.view");
+  const canClearDoNotDrive = canAny("vehicles.edit", "maintenance.approve");
   const orgName = fleetOrgDisplayName();
 
   const [loading, setLoading] = useState(true);
@@ -547,6 +548,17 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
                 if (row) setOdometerHistoryVehicle(row);
               }}
               onGoToVehicles={onNavigate ? () => onNavigate("vehicles") : undefined}
+              canClearDoNotDrive={canClearDoNotDrive}
+              onClearDoNotDrive={async (vehicleId, reason) => {
+                try {
+                  await api.clearVehicleDoNotDrive(vehicleId, reason);
+                  toast.success("Do not drive cleared");
+                  await load();
+                } catch (e: unknown) {
+                  toast.error(e instanceof Error ? e.message : "Could not clear do not drive");
+                  throw e;
+                }
+              }}
             />
           )}
         </TabsContent>

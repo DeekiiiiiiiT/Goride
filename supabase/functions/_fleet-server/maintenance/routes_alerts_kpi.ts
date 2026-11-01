@@ -187,6 +187,7 @@ export function registerMaintenanceAlertsKpiRoutes(route: RouteApp, supabase: Su
           organizationId: orgId,
           entityType: "fleet.vehicles",
           entityId: vehicleId,
+          actorId,
           reason,
           before: (before ?? {}) as Record<string, unknown>,
           after: updated as Record<string, unknown>,

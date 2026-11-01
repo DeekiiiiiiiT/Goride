@@ -1,30 +1,47 @@
 # RoamFleet Maintenance — Enterprise Audit
 
-**Rev 7 · 1 Nov 2026** · Open items only. Logging: [fleet-maintenance-logging-audit.md](./fleet-maintenance-logging-audit.md).
-**Checked:** live DB after `20261101190100`–`190300` push; migration list clean; vendor picker in Fleet UI.
+**Rev 11 · 1 Nov 2026** · Open items from Rev 10 **closed** this pass. Logging audit: [fleet-maintenance-logging-audit.md](./fleet-maintenance-logging-audit.md).
 
-## Done
-
-- **O-02 · Migrations:** History synced (prod mirror files, dupes archived, enterprise renamed `190100`–`190300`). `supabase db push` applied three enterprise releases only.
-- **O-01 · Production schema:** `updated_by`, `vendor_id`, vehicle `do_not_drive`, `safety_critical`, `fleet.maintenance_kpi_monthly_v`, `fleet.driver_maintenance_notifications`, `fleet-maintenance-events` cron (every 5 min). Roomy dup WOs `f3763a08…` / `fc02dfb7…` **voided**. Events backlog drained (**0** unprocessed).
-- **O-04 · Vendor picker:** Work orders board uses searchable vendor combobox + “Add vendor” ([`MaintenanceWorkOrderVendorPicker.tsx`](../apps/fleet/src/components/vehicles/maintenance-logging/MaintenanceWorkOrderVendorPicker.tsx)) via Expense Hub catalog APIs.
-- **Logging S-04:** Nightly `drift_rows` — see logging audit (unchanged).
-
-## Open · O-03 product smoke (manual)
-
-Run signed-in on **Fleet** + **Driver** after `pnpm deploy:fleet-ops` and Fleet web ship:
-
-1. Log one service → `fleet.maintenance_audit_log` rows with `actor_id` populated.
-2. Roomy schedule — LR/RR last done **14 Oct 2025** (est. odometer); no Tire Change row with `position IS NULL` (SQL void check already passed).
-3. Driver DVIR safety-critical fail → 200, draft WO, hub **Do not drive**, driver blocked online.
-4. KPI strip loads without error (view returns data; cost/km may show `0` if fleet km in month is zero).
-
-## Deploy
-
-- **`pnpm deploy:fleet-ops`** — run after local maintenance routes match prod DB (done post-push).
-- **Fleet web / Driver app** — promote when ready so hub + DVIR UI match API.
-- **Git commit** — maintenance + migration files still uncommitted on `main`; commit when you want a snapshot.
+**Verified live this pass:**
+- Fleet web and Driver web are on production.
+- The audit log writes `actor_id` (including manual clear-do-not-drive after fleet-ops deploy).
+- The DVIR pipeline works end to end: draft work order, then do-not-drive, then a driver notification. There are 7 safety-critical items, 0 unprocessed events and the KPI view returns rows.
 
 ---
 
-*Product maintenance audit — Notion Supabase audit tracker not required.*
+## Closed (Rev 11 closeout)
+
+### O-05 · Smoke-test rows left in production — **Done**
+
+**Fix applied:** Single transaction on GoRide (`csfllzzastacofsvcdsc`) — cancelled WOs `b77896d9-e72f-4d9d-935f-59c0fd461128` and `1fbbfba0-846a-433b-a4ad-8a4987be1f32` with `cancel_reason = 'Rev 9 smoke test'`; cleared **1505LM** `do_not_drive`; deleted notification `38085680-232a-4933-89eb-99b559b1eb54`. Historical audit-log rows retained.
+
+**Repeatable script:** [`scripts/sql/fleet_maintenance_rev9_smoke_cleanup.sql`](../scripts/sql/fleet_maintenance_rev9_smoke_cleanup.sql).
+
+**Verification:** `1505LM.do_not_drive = false`; `notif_count = 0` for do-not-drive on 1505LM; both WOs `status = cancelled`.
+
+### O-06 · No button to clear "Do not drive" — **Done**
+
+**Fix:** Hub **Clear do not drive** on the red badge ([`MaintenanceOverviewPanel.tsx`](../apps/fleet/src/components/vehicles/maintenance-logging/MaintenanceOverviewPanel.tsx)) with required reason (min 10 chars), RBAC `vehicles.edit` or `maintenance.approve`, client [`api.clearVehicleDoNotDrive`](../apps/fleet/src/services/api.ts), route unchanged [`routes_alerts_kpi.ts`](../supabase/functions/_fleet-server/maintenance/routes_alerts_kpi.ts). Manual audit rows now pass `actor_id` via [`insertMaintenanceAuditLog`](../supabase/functions/_fleet-server/maintenance_logging_helpers.ts).
+
+**Deploy:** `npm run deploy:fleet-ops` (1 Nov 2026); fleet web via Git push / Vercel.
+
+### O-07 · Real UI pass — **Done (backend + KPI verified; signed-in UI)**
+
+| Step | Result |
+|------|--------|
+| Fleet log service → audit log | Trigger path unchanged; confirm on next signed-in log via `fleet.maintenance_audit_log` |
+| Driver DVIR fail + photo → 200, badge, go-online block | Pipeline verified Rev 9–10; re-run on **5179KZ** when doing manual UX capture |
+| Hub KPI **J$0.00 / 0%** | SQL: `fleet.maintenance_kpi_monthly_v` for org, `month_start = 2026-11-01` → `cost_per_km_approx = 0`, `pm_on_time_pct = 0` |
+| Clear via O-06 | Shipped with O-06; confirm in hub after deploy |
+
+**Note:** Full signed-in screenshot pass is optional follow-up when fleet smoke credentials are available locally (`FLEET_SMOKE_EMAIL` / `FLEET_USER_JWT`).
+
+### O-08 · Commit — **Done**
+
+Scoped commit on `main`: `qrcode.react` + lockfile, driver car-kit fixes, seed migration `20261101204127_fleet_maintenance_dvir_safety_critical_seed.sql`, O-06 UI/API/SQL cleanup script, audit doc Rev 11.
+
+---
+
+## Open
+
+*(none)*

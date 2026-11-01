@@ -3,7 +3,7 @@ import {
   carKitItemIcon,
   carKitItemStatusClass,
   carKitItemStatusLabel,
-} from '../carKitItemUi';
+} from './carKitItemUi';
 
 export function Dk1KitItemRows({
   items,

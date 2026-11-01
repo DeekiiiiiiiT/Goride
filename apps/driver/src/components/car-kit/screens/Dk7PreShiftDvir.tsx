@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../../../services/api";
-import { Button } from "../../ui/button";
+import { Button } from "@roam/ui";
 import { toast } from "sonner";
 
 type TemplateItem = {

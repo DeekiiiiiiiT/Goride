@@ -1,6 +1,16 @@
 import React, { useMemo, useState } from "react";
-import { ChevronRight, MoreHorizontal } from "lucide-react";
+import { ChevronRight, Loader2, MoreHorizontal } from "lucide-react";
 import { Button } from "../../ui/button";
+import { Input } from "../../ui/input";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "../../ui/alert-dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -86,6 +96,8 @@ export function MaintenanceOverviewPanel({
   onOpenDueDrawer,
   onOdometerHistory,
   onGoToVehicles,
+  canClearDoNotDrive = false,
+  onClearDoNotDrive,
 }: {
   items: MaintenanceOverviewVehicleRow[];
   orgName?: string;
@@ -94,8 +106,13 @@ export function MaintenanceOverviewPanel({
   onOpenDueDrawer: (vehicleId: string) => void;
   onOdometerHistory: (vehicleId: string) => void;
   onGoToVehicles?: () => void;
+  canClearDoNotDrive?: boolean;
+  onClearDoNotDrive?: (vehicleId: string, reason: string) => Promise<void>;
 }) {
   const [filter, setFilter] = useState("");
+  const [clearTarget, setClearTarget] = useState<MaintenanceOverviewVehicleRow | null>(null);
+  const [clearReason, setClearReason] = useState("");
+  const [clearing, setClearing] = useState(false);
 
   const filtered = useMemo(() => {
     const q = filter.trim().toLowerCase();
@@ -208,13 +225,27 @@ export function MaintenanceOverviewPanel({
                       <td className="py-4 px-3 align-top">
                         <div className="flex flex-col gap-1">
                           {row.doNotDrive ? (
-                            <span
-                              className="inline-flex items-center gap-1 bg-error text-on-error font-caption text-[11px] font-semibold px-2 py-1 rounded-full w-fit"
-                              title={row.doNotDriveReason ?? undefined}
-                            >
-                              <span className="material-symbols-outlined text-[12px]">block</span>
-                              Do not drive
-                            </span>
+                            <div className="flex flex-col gap-1.5 items-start">
+                              <span
+                                className="inline-flex items-center gap-1 bg-error text-on-error font-caption text-[11px] font-semibold px-2 py-1 rounded-full w-fit"
+                                title={row.doNotDriveReason ?? undefined}
+                              >
+                                <span className="material-symbols-outlined text-[12px]">block</span>
+                                Do not drive
+                              </span>
+                              {canClearDoNotDrive && onClearDoNotDrive ? (
+                                <button
+                                  type="button"
+                                  className="min-h-[44px] px-2 py-1 text-[11px] font-semibold text-error hover:bg-error-container rounded-md underline-offset-2 hover:underline"
+                                  onClick={() => {
+                                    setClearTarget(row);
+                                    setClearReason("");
+                                  }}
+                                >
+                                  Clear do not drive
+                                </button>
+                              ) : null}
+                            </div>
                           ) : null}
                           {statusBadge(row.fleetStatus, primaryAttention)}
                         </div>
@@ -349,6 +380,70 @@ export function MaintenanceOverviewPanel({
           ) : null}
         </div>
       </div>
+
+      <AlertDialog
+        open={!!clearTarget}
+        onOpenChange={(open) => {
+          if (!open && !clearing) {
+            setClearTarget(null);
+            setClearReason("");
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Clear do not drive?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {clearTarget
+                ? `This removes the do-not-drive hold on ${vehicleTitle(clearTarget)}${
+                    clearTarget.licensePlate ? ` (${clearTarget.licensePlate})` : ""
+                  }. The driver can go online again after you confirm.`
+                : "Confirm clearing the do-not-drive flag."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="flex flex-col gap-1.5 py-2">
+            <label className="text-sm font-medium text-on-surface" htmlFor="clear-dnd-reason">
+              Reason (required)
+            </label>
+            <Input
+              id="clear-dnd-reason"
+              value={clearReason}
+              onChange={(e) => setClearReason(e.target.value)}
+              placeholder="e.g. False alarm — brakes OK after shop check"
+              disabled={clearing}
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={clearing}>Cancel</AlertDialogCancel>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={clearing || clearReason.trim().length < 10 || !clearTarget || !onClearDoNotDrive}
+              onClick={() => {
+                if (!clearTarget || !onClearDoNotDrive) return;
+                const reason = clearReason.trim();
+                if (reason.length < 10) return;
+                setClearing(true);
+                void onClearDoNotDrive(clearTarget.vehicleId, reason)
+                  .then(() => {
+                    setClearTarget(null);
+                    setClearReason("");
+                  })
+                  .finally(() => setClearing(false));
+              }}
+            >
+              {clearing ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                  Clearing…
+                </>
+              ) : (
+                "Clear do not drive"
+              )}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="bg-surface-container-low p-4 rounded-xl flex items-start gap-3">

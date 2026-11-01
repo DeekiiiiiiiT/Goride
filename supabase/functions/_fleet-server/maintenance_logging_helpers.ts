@@ -206,6 +206,7 @@ export async function insertMaintenanceAuditLog(
     organizationId: string;
     entityType: string;
     entityId: string;
+    actorId?: string | null;
     reason?: string | null;
     before?: Record<string, unknown>;
     after?: Record<string, unknown>;
@@ -215,6 +216,7 @@ export async function insertMaintenanceAuditLog(
     organization_id: row.organizationId,
     entity_type: row.entityType,
     entity_id: row.entityId,
+    actor_id: row.actorId ?? null,
     reason: row.reason ?? null,
     before_json: row.before ?? {},
     after_json: row.after ?? {},

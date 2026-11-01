@@ -2711,6 +2711,22 @@ export const api = {
     return response.json() as Promise<{ items: Array<Record<string, unknown>> }>;
   },
 
+  async clearVehicleDoNotDrive(vehicleId: string, reason: string) {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fleetOps}/maintenance-vehicles/${encodeURIComponent(vehicleId)}/clear-do-not-drive`,
+      {
+        method: "PATCH",
+        headers: await getHeaders(),
+        body: JSON.stringify({ reason }),
+      },
+    );
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error((err as { error?: string }).error || "Failed to clear do not drive");
+    }
+    return response.json() as Promise<{ item: Record<string, unknown> }>;
+  },
+
   async getWorkOrder(id: string) {
       const response = await fetchWithRetry(
         `${API_ENDPOINTS.fleetOps}/maintenance-work-orders/${encodeURIComponent(id)}`,
