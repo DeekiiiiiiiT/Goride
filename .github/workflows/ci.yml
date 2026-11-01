@@ -240,6 +240,25 @@ jobs:
           supabase/functions/_fleet-server/parts_catalog_read.test.ts
           supabase/functions/_fleet-server/vehicleVariantLabel.test.ts
           supabase/functions/_fleet-server/fleet_find_parts_routes.test.ts
+          supabase/functions/_fleet-server/catalog_research_number_shape.test.ts
+          supabase/functions/_fleet-server/catalog_research_route.test.ts
+          supabase/functions/_fleet-server/catalog_research_gemini.test.ts
+          supabase/functions/_fleet-server/catalog_research_verify.test.ts
+          supabase/functions/_fleet-server/catalog_research_intake.test.ts
+          supabase/functions/_fleet-server/catalog_research_export.test.ts
+
+      - name: Deno test fleet inventory engine
+        run: >
+          deno test --allow-read --allow-env --no-check
+          supabase/functions/_fleet-server/inventory_phase0_security.test.ts
+          supabase/functions/_fleet-server/inventory_controller_auth.test.ts
+          supabase/functions/_fleet-server/inventory_ledger_invariants.test.ts
+          supabase/functions/_fleet-server/inventory_hash_chain.test.ts
+          supabase/functions/_fleet-server/inventory_issue_concurrency.test.ts
+          supabase/functions/_fleet-server/inventory_fifo_cost.test.ts
+          supabase/functions/_fleet-server/inventory_approvals.test.ts
+          supabase/functions/_fleet-server/inventory_driver_reports.test.ts
+          supabase/functions/_fleet-server/inventory_integration.test.ts
 
       - name: Deno test ledger read API parity
         run: >

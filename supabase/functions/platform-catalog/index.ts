@@ -10,6 +10,7 @@ import { registerMasterRoutes, registerTollRateRoutes } from "./masterRoutes.ts"
 import { registerPartSourcingRoutes } from "../_fleet-server/part_sourcing_routes.ts";
 import { registerPendingVehicleCatalogRoutes } from "../_fleet-server/pending_vehicle_catalog_routes.ts";
 import { registerPendingPartsCatalogRoutes } from "../_fleet-server/pending_parts_catalog_routes.ts";
+import { registerCatalogResearchRoutes } from "../_fleet-server/catalog_research_routes.ts";
 import { registerVehicleCatalogWriteRoutes } from "../_fleet-server/vehicle_catalog_write_routes.ts";
 
 const app = new Hono().basePath("/platform-catalog");
@@ -364,6 +365,7 @@ try {
   registerPartSourcingRoutes(app, writer);
   registerPendingVehicleCatalogRoutes(app, writer);
   registerPendingPartsCatalogRoutes(app, writer);
+  registerCatalogResearchRoutes(app, writer);
   registerVehicleCatalogWriteRoutes(app, writer);
 } catch (err) {
   console.error("catalog master writes not mounted", err instanceof Error ? err.message : err);

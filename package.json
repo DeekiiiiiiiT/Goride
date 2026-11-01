@@ -120,6 +120,7 @@
     "deploy:evidence-cleanup": "npx supabase functions deploy evidence-cleanup --use-api --project-ref csfllzzastacofsvcdsc",
     "deploy:petrojam-prices": "npx supabase functions deploy petrojam-prices --use-api --project-ref csfllzzastacofsvcdsc",
     "deploy:platform-catalog": "npx supabase functions deploy platform-catalog --use-api --project-ref csfllzzastacofsvcdsc",
+    "deploy:catalog-research": "npx supabase functions deploy catalog-research --use-api --project-ref csfllzzastacofsvcdsc",
     "deploy:before-user-created": "npx supabase functions deploy before-user-created --use-api --project-ref csfllzzastacofsvcdsc",
     "deploy:custom-access-token": "npx supabase functions deploy custom-access-token --use-api --project-ref csfllzzastacofsvcdsc",
     "deploy:explorer": "npx supabase functions deploy explorer --use-api --project-ref csfllzzastacofsvcdsc",

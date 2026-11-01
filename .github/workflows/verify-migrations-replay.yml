@@ -51,3 +51,4 @@ jobs:
           supabase db query --local -f supabase/tests/vehicle_database_rebuild_checks.sql
           supabase db query --local -f supabase/tests/places_checks.sql
           supabase db query --local -f supabase/tests/price_engine_checks.sql
+          supabase db query --local -f supabase/tests/catalog_research_claim_checks.sql

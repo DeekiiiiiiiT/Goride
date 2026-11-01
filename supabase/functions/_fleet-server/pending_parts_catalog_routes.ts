@@ -9,6 +9,7 @@ import { getPlatformSettingsCached } from "./platform_settings.ts";
 import { applyPendingPartsGroupFilters, pendingPartsGroupKey } from "./pending_parts_group.ts";
 import { getCatalogParts } from "./catalog_api.ts";
 import { mapPendingOnFileParts } from "./pending_parts_on_file.ts";
+import { notifyFleetsRequestOutcome } from "./catalog_research_notify.ts";
 
 const PREFIX = "/make-server-37f42386/admin/pending-catalog/parts-queue";
 const FORBIDDEN_RESPONSE_KEYS = new Set([
@@ -131,7 +132,7 @@ export function registerPendingPartsCatalogRoutes(app: { get: Function; patch: F
       const groupId = c.req.param("groupId");
       let query = supabase
         .from("parts_sourcing_requests")
-        .select("id, platform_id, vehicle_catalog_id, maintenance_component_id, install_side, install_position, fit_descriptor, match_type, need_text, photo_url, created_at, status, looking_note, resolution_note, kind")
+        .select("id, platform_id, vehicle_catalog_id, maintenance_component_id, install_side, install_position, fit_descriptor, match_type, need_text, photo_url, created_at, status, looking_note, resolution_note, kind, catalog_research_job_id")
         .eq("kind", "add_part_info");
       applyPendingPartsGroupFilters(query, groupId);
       const { data, error } = await query.order("created_at", { ascending: true });
@@ -163,9 +164,11 @@ export function registerPendingPartsCatalogRoutes(app: { get: Function; patch: F
         });
         onFile = mapPendingOnFileParts(catalog.items);
       }
+      const researchJobId = (rows[0] as { catalog_research_job_id?: string | null } | undefined)?.catalog_research_job_id ?? null;
       return c.json({
         groupId,
         fleetCount: notes.length,
+        researchJobId,
         notes,
         photos: rows.filter((row) => (row as { photo_url?: string }).photo_url).map((row) => stripPii({
           url: (row as { photo_url?: string }).photo_url,
@@ -212,13 +215,9 @@ export function registerPendingPartsCatalogRoutes(app: { get: Function; patch: F
           cant_find_at: now,
           cant_find_reason: String(body.reason || "").slice(0, 500) || null,
         });
+        await notifyFleetsRequestOutcome(supabase, groupId, "not_found");
       } else if (action === "added") {
-        await applyUpdate({
-          status: "resolved",
-          added_at: now,
-          resolved_part_id: String(body.resolvedPartId || "") || null,
-          resolution_note: String(body.note || "").slice(0, 2000) || null,
-        });
+        return c.json({ error: "Use promote proposal instead of Mark added" }, 400);
       } else {
         return c.json({ error: "Unknown action" }, 400);
       }
