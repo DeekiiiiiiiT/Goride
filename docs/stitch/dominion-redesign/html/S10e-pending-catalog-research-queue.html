@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_dashboard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{"colors":{"inverse-surface":"#2e3039","primary-fixed-dim":"#b4c5ff","on-tertiary-fixed":"#141b30","on-primary-container":"#ced8ff","tertiary-container":"#575e77","outline-variant":"#c3c6d7","background":"#faf8ff","surface-container-high":"#e7e7f3","surface-container":"#ededf9","on-tertiary-fixed-variant":"#3f465e","surface-container-highest":"#e1e1ed","tertiary-fixed-dim":"#bfc5e2","on-secondary":"#ffffff","outline":"#737686","on-secondary-fixed":"#131b2e","on-secondary-container":"#5c647a","on-primary-fixed":"#00174b","error-container":"#ffdad6","secondary-container":"#dae2fd","tertiary":"#40465e","on-background":"#191b24","on-error-container":"#93000a","inverse-on-surface":"#f0f0fc","surface-bright":"#faf8ff","on-surface":"#191b24","on-error":"#ffffff","tertiary-fixed":"#dbe1ff","inverse-primary":"#b4c5ff","surface-dim":"#d9d9e5","primary-fixed":"#dbe1ff","on-tertiary-container":"#d2d8f6","secondary-fixed-dim":"#bec6e0","on-tertiary":"#ffffff","on-primary":"#ffffff","error":"#ba1a1a","secondary-fixed":"#dae2fd","surface-container-lowest":"#ffffff","secondary":"#565e74","primary-container":"#0153dc","surface-variant":"#e1e1ed","on-secondary-fixed-variant":"#3f465c","primary":"#003ea9","on-primary-fixed-variant":"#003ea8","surface-container-low":"#f3f3ff","surface-tint":"#0053db","surface":"#faf8ff","on-surface-variant":"#434655"},"borderRadius":{"DEFAULT":"0.125rem","lg":"0.25rem","xl":"0.5rem","full":"0.75rem"},"spacing":{"space-lg":"1rem","gutter":"1rem","margin-panel":"1rem","gutter-dense":"0.5rem","space-md":"0.75rem","space-xl":"1.5rem","space-xs":"0.25rem","margin":"1.5rem","space-sm":"0.5rem"},"fontFamily":{"body-md":["Inter"],"mono-sm":["JetBrains Mono"],"headline-xl":["Inter"],"body-sm":["Inter"],"mono-lg":["JetBrains Mono"],"label-md":["Inter"],"headline-md":["Inter"],"label-xs":["Inter"],"mono-md":["JetBrains Mono"],"headline-lg":["Inter"]},"fontSize":{"body-md":["14px",{"lineHeight":"20px","letterSpacing":"0","fontWeight":"400"}],"mono-sm":["11px",{"lineHeight":"14px","letterSpacing":"0.02em","fontWeight":"400"}],"headline-xl":["24px",{"lineHeight":"32px","letterSpacing":"-0.02em","fontWeight":"600"}],"body-sm":["13px",{"lineHeight":"18px","letterSpacing":"0","fontWeight":"400"}],"mono-lg":["14px",{"lineHeight":"20px","letterSpacing":"-0.01em","fontWeight":"500"}],"label-md":["12px",{"lineHeight":"16px","letterSpacing":"0.01em","fontWeight":"500"}],"headline-md":["16px",{"lineHeight":"24px","letterSpacing":"-0.01em","fontWeight":"600"}],"label-xs":["11px",{"lineHeight":"14px","letterSpacing":"0.04em","fontWeight":"600"}],"mono-md":["12px",{"lineHeight":"16px","letterSpacing":"0","fontWeight":"500"}],"headline-lg":["20px",{"lineHeight":"28px","letterSpacing":"-0.015em","fontWeight":"600"}]}}}};</script></head><body class="bg-surface font-body-md text-on-surface antialiased"><aside class="fixed left-0 top-0 h-full w-[260px] bg-[#0d131f] z-50 flex flex-col justify-between select-none border-r border-[#192233]"><div class="flex flex-col min-h-0"><div class="h-14 px-margin-panel border-b border-[#192233] flex items-center gap-space-sm bg-[#090e17]"><div class="w-6 h-6 rounded-lg bg-primary-container flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[16px]">deployed_code</span></div><div class="flex flex-col min-w-0"><span class="font-headline-md text-headline-md font-semibold text-white tracking-tight truncate leading-tight">Dominion</span><span class="font-mono-sm text-mono-sm text-outline-variant uppercase tracking-wider truncate">Roam Admin Console</span></div></div><div class="overflow-y-auto px-space-xs py-space-sm space-y-space-md"><div class="space-y-space-xs"><div class="px-space-sm py-space-xs font-mono-sm text-mono-sm uppercase tracking-wider text-outline-variant font-semibold">Master Data</div><nav class="flex flex-col gap-[2px]" data-active-classes="bg-primary-container text-on-primary font-semibold shadow-sm"><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-outline-variant hover:text-white hover:bg-[#151f33] transition-colors" data-path="overview" href="#"><span class="material-symbols-outlined text-[18px]">grid_view</span><span class="font-body-sm text-body-sm">Overview</span></a><a aria-current="page" class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg transition-colors bg-primary-container text-on-primary font-semibold shadow-sm" data-path="vehicles" href="#"><span class="material-symbols-outlined text-[18px]">directions_car</span><span class="font-body-sm text-body-sm flex-1">Vehicles</span><span class="w-1.5 h-1.5 rounded-full bg-primary-fixed-dim"></span></a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-outline-variant hover:text-white hover:bg-[#151f33] transition-colors" data-path="places-and-maps" href="#"><span class="material-symbols-outlined text-[18px]">map</span><span class="font-body-sm text-body-sm">Places and Maps</span></a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-outline-variant hover:text-white hover:bg-[#151f33] transition-colors" data-path="fuel" href="#"><span class="material-symbols-outlined text-[18px]">local_gas_station</span><span class="font-body-sm text-body-sm">Fuel</span></a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-outline-variant hover:text-white hover:bg-[#151f33] transition-colors" data-path="tolls" href="#"><span class="material-symbols-outlined text-[18px]">toll</span><span class="font-body-sm text-body-sm">Tolls</span></a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-outline-variant hover:text-white hover:bg-[#151f33] transition-colors" data-path="tax-and-vendors" href="#"><span class="material-symbols-outlined text-[18px]">receipt_long</span><span class="font-body-sm text-body-sm">Tax and Vendors</span></a></nav></div><div class="space-y-space-xs"><div class="px-space-sm py-space-xs font-mono-sm text-mono-sm uppercase tracking-wider text-outline-variant font-semibold">Engines</div><nav class="flex flex-col gap-[2px]" data-active-classes="bg-primary-container text-on-primary font-semibold shadow-sm"><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-outline-variant hover:text-white hover:bg-[#151f33] transition-colors" data-path="fuel-brain" href="#"><span class="material-symbols-outlined text-[18px]">psychology</span><span class="font-body-sm text-body-sm">Fuel Brain</span></a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-outline-variant hover:text-white hover:bg-[#151f33] transition-colors" data-path="toll-brain" href="#"><span class="material-symbols-outlined text-[18px]">alt_route</span><span class="font-body-sm text-body-sm">Toll Brain</span></a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-outline-variant hover:text-white hover:bg-[#151f33] transition-colors" data-path="matching-brain" href="#"><span class="material-symbols-outlined text-[18px]">hub</span><span class="font-body-sm text-body-sm">Matching Brain</span></a></nav></div><div class="space-y-space-xs"><div class="px-space-sm py-space-xs font-mono-sm text-mono-sm uppercase tracking-wider text-outline-variant font-semibold">Distribution</div><nav class="flex flex-col gap-[2px]" data-active-classes="bg-primary-container text-on-primary font-semibold shadow-sm"><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-outline-variant hover:text-white hover:bg-[#151f33] transition-colors" data-path="apps" href="#"><span class="material-symbols-outlined text-[18px]">apps</span><span class="font-body-sm text-body-sm">Apps</span></a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-outline-variant hover:text-white hover:bg-[#151f33] transition-colors" data-path="data-api" href="#"><span class="material-symbols-outlined text-[18px]">api</span><span class="font-body-sm text-body-sm">Data API</span></a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-outline-variant hover:text-white hover:bg-[#151f33] transition-colors" data-path="change-requests" href="#"><span class="material-symbols-outlined text-[18px]">published_with_changes</span><span class="font-body-sm text-body-sm">Change Requests</span></a></nav></div><div class="space-y-space-xs"><div class="px-space-sm py-space-xs font-mono-sm text-mono-sm uppercase tracking-wider text-outline-variant font-semibold">Platform</div><nav class="flex flex-col gap-[2px]" data-active-classes="bg-primary-container text-on-primary font-semibold shadow-sm"><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-outline-variant hover:text-white hover:bg-[#151f33] transition-colors" data-path="staff-and-roles" href="#"><span class="material-symbols-outlined text-[18px]">badge</span><span class="font-body-sm text-body-sm">Staff and Roles</span></a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-outline-variant hover:text-white hover:bg-[#151f33] transition-colors" data-path="activity-log" href="#"><span class="material-symbols-outlined text-[18px]">history</span><span class="font-body-sm text-body-sm">Activity Log</span></a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-outline-variant hover:text-white hover:bg-[#151f33] transition-colors" data-path="platform-ops" href="#"><span class="material-symbols-outlined text-[18px]">terminal</span><span class="font-body-sm text-body-sm">Platform Ops</span></a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-outline-variant hover:text-white hover:bg-[#151f33] transition-colors" data-path="global-settings" href="#"><span class="material-symbols-outlined text-[18px]">settings</span><span class="font-body-sm text-body-sm">Global Settings</span></a></nav></div><div class="space-y-space-xs"><div class="px-space-sm py-space-xs font-mono-sm text-mono-sm uppercase tracking-wider text-outline-variant font-semibold">Back Office</div><nav class="flex flex-col gap-[2px]" data-active-classes="bg-primary-container text-on-primary font-semibold shadow-sm"><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-outline-variant hover:text-white hover:bg-[#151f33] transition-colors" data-path="gct-registrations" href="#"><span class="material-symbols-outlined text-[18px]">domain</span><span class="font-body-sm text-body-sm">GCT Registrations</span></a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-outline-variant hover:text-white hover:bg-[#151f33] transition-colors" data-path="ledger" href="#"><span class="material-symbols-outlined text-[18px]">account_balance</span><span class="font-body-sm text-body-sm">Ledger</span></a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-outline-variant hover:text-white hover:bg-[#151f33] transition-colors" data-path="remittance" href="#"><span class="material-symbols-outlined text-[18px]">payments</span><span class="font-body-sm text-body-sm">Remittance</span></a></nav></div></div></div><div class="p-space-sm border-t border-[#192233] bg-[#090e17] space-y-space-xs"><div class="flex items-center justify-between font-mono-sm text-mono-sm"><span class="text-white font-medium">KGN-DC-01</span><span class="text-emerald-400 font-semibold">JMD READY</span></div><div class="flex items-center justify-between font-mono-sm text-mono-sm text-outline-variant"><span>CLUSTER: ACTIVE</span><div class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span><span class="text-emerald-400">SYNCED</span></div></div></div></aside><div class="pl-[260px]"><header class="fixed top-0 left-[260px] right-0 h-14 bg-surface-container-lowest border-b border-[#e2e8f0] z-40 flex items-center justify-between px-margin"><div class="flex items-center gap-space-sm min-w-0"><div class="flex items-center gap-space-xs font-mono-sm text-mono-sm text-outline tracking-wider uppercase truncate"><span class="hover:text-on-surface cursor-pointer transition-colors">DOMINION</span><span>›</span><span class="hover:text-on-surface cursor-pointer transition-colors">MASTER DATA</span><span>›</span><span class="hover:text-on-surface cursor-pointer transition-colors">VEHICLES</span><span>›</span><span class="text-primary font-semibold truncate">PENDING CATALOG</span></div></div><div class="flex items-center gap-space-md"><div class="relative flex items-center"><span class="material-symbols-outlined absolute left-space-sm text-outline text-[18px]">search</span><input class="w-[360px] h-9 pl-9 pr-12 rounded-xl bg-surface border border-[#e2e8f0] font-body-sm text-body-sm text-on-surface placeholder:text-outline focus:outline-none focus:border-primary transition-all" placeholder="Search entities, engines, routes…" type="text"/><span class="absolute right-space-sm font-mono-sm text-mono-sm bg-surface-container border border-[#e2e8f0] text-outline px-1.5 py-0.5 rounded-lg">⌘K</span></div><div class="flex items-center gap-space-xs px-2.5 py-1 rounded-full bg-surface border border-[#e2e8f0] font-mono-sm text-mono-sm"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span><span class="text-on-surface-variant font-medium">NODE: OK</span></div><button class="w-8 h-8 rounded-lg flex items-center justify-center text-outline hover:text-on-surface hover:bg-surface-container transition-all" type="button"><span class="material-symbols-outlined text-[20px]">dark_mode</span></button><div class="h-4 w-px bg-[#e2e8f0]"></div><div class="flex items-center gap-space-sm"><div class="flex items-center gap-space-xs bg-surface border border-[#e2e8f0] px-2.5 py-1 rounded-full"><div class="w-5 h-5 rounded-full bg-primary flex items-center justify-center font-mono-sm text-[10px] text-white font-semibold">DT</div><span class="font-label-md text-label-md text-on-surface font-medium">Deeki T</span><span class="font-mono-sm text-mono-sm text-outline">·</span><span class="font-label-md text-label-md text-secondary">Owner</span></div><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="w-full min-h-[calc(100vh-56px)] pt-14 bg-surface text-[#30323b]"><div class="flex flex-col w-full">
+<div class="px-margin py-margin max-w-[1560px] w-full mx-auto space-y-space-lg">
+<!-- Top Headline Block -->
+<div class="flex flex-col gap-space-xs">
+<div class="flex items-center justify-between">
+<div>
+<h1 class="font-headline-xl text-headline-xl text-on-surface tracking-tight font-semibold">Pending catalog</h1>
+<p class="font-body-md text-body-md text-secondary mt-0.5">Cars and parts that apps have asked us to add.</p>
+</div>
+<div class="flex items-center gap-space-sm">
+<button class="h-9 px-space-md bg-surface-container-low hover:bg-surface-container text-on-surface font-body-sm text-body-sm font-medium rounded-xl shadow-sm transition-colors flex items-center gap-1.5" type="button">
+<span class="material-symbols-outlined text-[17px] text-secondary">tune</span>
+<span>Queue Priority</span>
+</button>
+<button class="h-9 px-space-md bg-primary-container text-on-primary font-body-sm text-body-sm font-medium rounded-xl shadow-sm hover:opacity-95 transition-opacity flex items-center gap-1.5" type="button">
+<span class="material-symbols-outlined text-[17px]">play_arrow</span>
+<span>Resume Dispatcher</span>
+</button>
+</div>
+</div>
+<!-- Navigation Tabs -->
+<div class="flex items-center gap-space-sm pt-space-sm">
+<a class="px-3.5 py-1.5 rounded-lg font-body-sm text-body-sm text-secondary hover:text-on-surface hover:bg-surface-container-low transition-colors flex items-center gap-2" href="#">
+<span>Vehicles</span>
+<span class="px-1.5 py-0.5 rounded-md bg-surface-container-high text-secondary font-mono-sm text-mono-sm font-medium">1</span>
+</a>
+<a class="px-3.5 py-1.5 rounded-lg bg-surface-container-lowest font-body-sm text-body-sm text-primary font-semibold shadow-sm flex items-center gap-2" href="#">
+<span>Parts</span>
+<span class="px-1.5 py-0.5 rounded-md bg-primary-container text-on-primary font-mono-sm text-mono-sm font-semibold">6</span>
+</a>
+</div>
+</div>
+<!-- Live Automated Research Strip -->
+<div class="w-full bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-wrap items-center justify-between gap-space-md">
+<div class="flex flex-wrap items-center gap-space-md">
+<!-- Status indicator -->
+<div class="flex items-center gap-2 px-2.5 py-1 rounded-full bg-surface-container-low">
+<span class="relative flex h-2 w-2">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+</span>
+<span class="font-mono-sm text-mono-sm text-on-surface font-semibold uppercase tracking-wider">Research is on</span>
+</div>
+<div class="h-4 w-px bg-surface-container-high hidden sm:block"></div>
+<!-- Shadow Mode Pill -->
+<div class="flex items-center gap-2">
+<span class="px-2 py-0.5 rounded-md bg-surface-container font-mono-sm text-mono-sm text-on-surface-variant font-medium">Shadow mode</span>
+<span class="font-body-sm text-body-sm text-secondary hidden md:inline">
+            Everything goes to review until 20 approvals in a row
+            <span class="font-mono-sm text-mono-sm font-semibold text-on-surface ml-1">(12 / 20)</span>
+</span>
+</div>
+<div class="h-4 w-px bg-surface-container-high hidden lg:block"></div>
+<!-- Metric Stream -->
+<div class="flex items-center gap-space-sm font-mono-sm text-mono-sm text-secondary">
+<span class="text-on-surface font-medium">Queue <span class="text-primary font-semibold">3</span></span>
+<span class="text-outline">·</span>
+<span class="text-on-surface font-medium">Working on <span class="text-primary font-semibold">1</span></span>
+<span class="text-outline">·</span>
+<span class="text-on-surface font-medium">Needs you <span class="text-error font-semibold">2</span></span>
+<span class="text-outline">·</span>
+<span class="text-on-surface font-medium">Failed <span class="text-secondary font-semibold">0</span></span>
+<span class="text-outline">·</span>
+<span class="text-secondary">Today <span class="text-on-surface font-semibold">14 / 40</span> jobs</span>
+</div>
+</div>
+<a class="font-body-sm text-body-sm text-primary font-medium hover:underline flex items-center gap-1" href="#">
+<span>Research settings</span>
+<span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+</a>
+</div>
+<!-- Summary Metric Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-space-md">
+<!-- Card 1 -->
+<div class="bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col justify-between h-28 relative overflow-hidden">
+<div class="flex items-center justify-between">
+<span class="font-label-md text-label-md text-secondary uppercase tracking-wider font-semibold">Needs review</span>
+<span class="material-symbols-outlined text-outline-variant text-[20px]">pending_actions</span>
+</div>
+<div class="flex items-baseline justify-between mt-auto">
+<span class="font-headline-xl text-headline-xl font-semibold text-on-surface">2</span>
+<span class="px-2 py-0.5 rounded-full bg-surface-container font-mono-sm text-mono-sm font-semibold text-on-surface-variant">Awaiting gate</span>
+</div>
+</div>
+<!-- Card 2 -->
+<div class="bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col justify-between h-28 relative overflow-hidden">
+<div class="flex items-center justify-between">
+<span class="font-label-md text-label-md text-secondary uppercase tracking-wider font-semibold">Added automatically this week</span>
+<span class="material-symbols-outlined text-outline-variant text-[20px]">smart_toy</span>
+</div>
+<div class="flex items-baseline justify-between mt-auto">
+<span class="font-headline-xl text-headline-xl font-semibold text-primary">5</span>
+<span class="px-2 py-0.5 rounded-full bg-secondary-container font-mono-sm text-mono-sm font-semibold text-on-secondary-fixed">Catalog verified</span>
+</div>
+</div>
+<!-- Card 3 -->
+<div class="bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col justify-between h-28 relative overflow-hidden">
+<div class="flex items-center justify-between">
+<span class="font-label-md text-label-md text-secondary uppercase tracking-wider font-semibold">Added this week</span>
+<span class="material-symbols-outlined text-outline-variant text-[20px]">task_alt</span>
+</div>
+<div class="flex items-baseline justify-between mt-auto">
+<span class="font-headline-xl text-headline-xl font-semibold text-on-surface">7</span>
+<span class="font-mono-sm text-mono-sm text-secondary">Total merged</span>
+</div>
+</div>
+<!-- Card 4 -->
+<div class="bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col justify-between h-28 relative overflow-hidden">
+<div class="flex items-center justify-between">
+<span class="font-label-md text-label-md text-secondary uppercase tracking-wider font-semibold">Couldn't find</span>
+<span class="material-symbols-outlined text-outline-variant text-[20px]">search_off</span>
+</div>
+<div class="flex items-baseline justify-between mt-auto">
+<span class="font-headline-xl text-headline-xl font-semibold text-error">1</span>
+<span class="px-2 py-0.5 rounded-full bg-error-container font-mono-sm text-mono-sm font-semibold text-on-error-container">Manual spec needed</span>
+</div>
+</div>
+</div>
+<!-- Filter & Operational Controls Bar -->
+<div class="flex flex-col lg:flex-row lg:items-center justify-between gap-space-sm">
+<div class="flex flex-wrap items-center gap-1.5">
+<button class="h-8 px-3 rounded-lg bg-inverse-surface text-inverse-on-surface font-body-sm text-body-sm font-medium flex items-center gap-1.5 shadow-sm" type="button">
+<span>All</span>
+<span class="font-mono-sm text-mono-sm opacity-80">6</span>
+</button>
+<button class="h-8 px-3 rounded-lg bg-surface-container-lowest hover:bg-surface-container-low text-secondary hover:text-on-surface font-body-sm text-body-sm font-medium flex items-center gap-1.5 transition-colors shadow-sm" type="button">
+<span>Needs review</span>
+<span class="font-mono-sm text-mono-sm bg-surface-container px-1 rounded text-on-surface">2</span>
+</button>
+<button class="h-8 px-3 rounded-lg bg-surface-container-lowest hover:bg-surface-container-low text-secondary hover:text-on-surface font-body-sm text-body-sm font-medium flex items-center gap-1.5 transition-colors shadow-sm" type="button">
+<span>Researching</span>
+<span class="font-mono-sm text-mono-sm bg-surface-container px-1 rounded text-on-surface">1</span>
+</button>
+<button class="h-8 px-3 rounded-lg bg-surface-container-lowest hover:bg-surface-container-low text-secondary hover:text-on-surface font-body-sm text-body-sm font-medium flex items-center gap-1.5 transition-colors shadow-sm" type="button">
+<span>Queued</span>
+<span class="font-mono-sm text-mono-sm bg-surface-container px-1 rounded text-on-surface">2</span>
+</button>
+<button class="h-8 px-3 rounded-lg bg-surface-container-lowest hover:bg-surface-container-low text-secondary hover:text-on-surface font-body-sm text-body-sm font-medium flex items-center gap-1.5 transition-colors shadow-sm" type="button">
+<span>Added automatically</span>
+<span class="font-mono-sm text-mono-sm bg-surface-container px-1 rounded text-on-surface">5</span>
+</button>
+<button class="h-8 px-3 rounded-lg bg-surface-container-lowest hover:bg-surface-container-low text-secondary hover:text-on-surface font-body-sm text-body-sm font-medium flex items-center gap-1.5 transition-colors shadow-sm" type="button">
+<span>Added</span>
+<span class="font-mono-sm text-mono-sm bg-surface-container px-1 rounded text-on-surface">7</span>
+</button>
+<button class="h-8 px-3 rounded-lg bg-surface-container-lowest hover:bg-surface-container-low text-secondary hover:text-on-surface font-body-sm text-body-sm font-medium flex items-center gap-1.5 transition-colors shadow-sm" type="button">
+<span>Couldn't find</span>
+<span class="font-mono-sm text-mono-sm bg-surface-container px-1 rounded text-on-surface">1</span>
+</button>
+<button class="h-8 px-3 rounded-lg bg-surface-container-lowest hover:bg-surface-container-low text-secondary hover:text-on-surface font-body-sm text-body-sm font-medium flex items-center gap-1.5 transition-colors shadow-sm" type="button">
+<span>Failed</span>
+<span class="font-mono-sm text-mono-sm bg-surface-container px-1 rounded text-on-surface">0</span>
+</button>
+</div>
+<div class="relative flex items-center min-w-[320px]">
+<span class="material-symbols-outlined absolute left-3 text-secondary text-[18px]">search</span>
+<input class="w-full h-9 pl-9 pr-4 rounded-xl bg-surface-container-lowest font-body-sm text-body-sm text-on-surface placeholder:text-outline focus:outline-none shadow-sm" placeholder="Search car or part…" type="text"/>
+</div>
+</div>
+<!-- Master Queue Spec Table -->
+<div class="w-full bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface-container-low h-9">
+<th class="px-space-md py-2 font-label-xs text-label-xs font-semibold text-secondary uppercase tracking-wider">Car version</th>
+<th class="px-space-md py-2 font-label-xs text-label-xs font-semibold text-secondary uppercase tracking-wider">Part</th>
+<th class="px-space-md py-2 font-label-xs text-label-xs font-semibold text-secondary uppercase tracking-wider">Asked by</th>
+<th class="px-space-md py-2 font-label-xs text-label-xs font-semibold text-secondary uppercase tracking-wider">First asked / Last asked</th>
+<th class="px-space-md py-2 font-label-xs text-label-xs font-semibold text-secondary uppercase tracking-wider">Status</th>
+<th class="px-space-md py-2 font-label-xs text-label-xs font-semibold text-secondary uppercase tracking-wider">Result</th>
+<th class="px-space-md py-2 font-label-xs text-label-xs font-semibold text-secondary uppercase tracking-wider text-right">Actions</th>
+</tr>
+</thead>
+<tbody class="divide-none">
+<!-- Row 1: Toyota Roomy Needs Review -->
+<tr class="h-14 hover:bg-surface-container-low/50 transition-colors">
+<td class="px-space-md py-2">
+<div class="flex flex-col min-w-0">
+<span class="font-body-sm text-body-sm font-semibold text-on-surface truncate">Toyota Roomy 2016–2020</span>
+<span class="font-mono-sm text-mono-sm text-secondary truncate">Pre-Facelift · Custom G · 1KR-FE · M900A</span>
+</div>
+</td>
+<td class="px-space-md py-2">
+<span class="font-body-sm text-body-sm text-on-surface font-medium">Drive belt</span>
+</td>
+<td class="px-space-md py-2">
+<span class="inline-flex items-center px-2 py-0.5 rounded-full bg-primary-container text-on-primary font-mono-sm text-mono-sm font-medium">3 fleets</span>
+</td>
+<td class="px-space-md py-2">
+<span class="font-mono-sm text-mono-sm text-secondary">31 Oct 2026 / 31 Oct 2026</span>
+</td>
+<td class="px-space-md py-2">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-surface-container font-mono-sm text-mono-sm font-semibold text-on-surface-variant">
+<span class="w-1.5 h-1.5 rounded-full bg-outline"></span>
+<span>Needs review</span>
+</span>
+</td>
+<td class="px-space-md py-2">
+<div class="flex items-center gap-2">
+<span class="font-mono-sm text-mono-sm text-primary font-semibold hover:underline cursor-pointer">Toyota 90916-02729</span>
+<span class="font-mono-sm text-mono-sm text-secondary">· 2 sources</span>
+</div>
+</td>
+<td class="px-space-md py-2 text-right">
+<button class="h-8 px-3 bg-surface-container-low hover:bg-surface-container text-on-surface font-body-sm text-body-sm font-medium rounded-lg shadow-sm transition-colors" type="button">
+                  Open
+                </button>
+</td>
+</tr>
+<!-- Row 2: Honda Fit Live Crawl -->
+<tr class="h-14 bg-surface-container-low/40 relative">
+<td class="px-space-md py-2">
+<div class="flex flex-col min-w-0">
+<span class="font-body-sm text-body-sm font-semibold text-on-surface truncate">Honda Fit 2013–2020</span>
+<span class="font-mono-sm text-mono-sm text-secondary truncate">Hybrid · LEB · GP5</span>
+</div>
+</td>
+<td class="px-space-md py-2">
+<span class="font-body-sm text-body-sm text-on-surface font-medium">Brake pads · Front · Both</span>
+</td>
+<td class="px-space-md py-2">
+<span class="inline-flex items-center px-2 py-0.5 rounded-full bg-primary-container text-on-primary font-mono-sm text-mono-sm font-medium">2 fleets</span>
+</td>
+<td class="px-space-md py-2">
+<span class="font-mono-sm text-mono-sm text-secondary">30 Oct 2026 / 31 Oct 2026</span>
+</td>
+<td class="px-space-md py-2">
+<div class="flex flex-col gap-0.5">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-primary text-on-primary font-mono-sm text-mono-sm font-semibold w-max">
+<span class="material-symbols-outlined text-[13px] animate-spin">progress_activity</span>
+<span>Researching</span>
+</span>
+<span class="font-mono-sm text-[10px] text-primary truncate">Checking amayama.com…</span>
+</div>
+</td>
+<td class="px-space-md py-2">
+<span class="font-mono-sm text-mono-sm text-outline">—</span>
+</td>
+<td class="px-space-md py-2 text-right">
+<button class="h-8 px-3 bg-surface-container-low hover:bg-surface-container text-on-surface font-body-sm text-body-sm font-medium rounded-lg shadow-sm transition-colors" type="button">
+                  Open
+                </button>
+</td>
+</tr>
+<!-- Row 2 automated progress line -->
+<tr class="h-0.5 p-0 m-0">
+<td class="p-0 bg-surface-container" colspan="7">
+<div class="h-0.5 bg-primary-container w-2/3 animate-pulse"></div>
+</td>
+</tr>
+<!-- Row 3: Toyota Probox Needs Review -->
+<tr class="h-14 hover:bg-surface-container-low/50 transition-colors">
+<td class="px-space-md py-2">
+<div class="flex flex-col min-w-0">
+<span class="font-body-sm text-body-sm font-semibold text-on-surface truncate">Toyota Probox 2014–2021</span>
+<span class="font-mono-sm text-mono-sm text-secondary truncate">NCP160</span>
+</div>
+</td>
+<td class="px-space-md py-2">
+<span class="font-body-sm text-body-sm text-on-surface font-medium">Air filter</span>
+</td>
+<td class="px-space-md py-2">
+<span class="inline-flex items-center px-2 py-0.5 rounded-full bg-primary-container text-on-primary font-mono-sm text-mono-sm font-medium">1 fleet</span>
+</td>
+<td class="px-space-md py-2">
+<span class="font-mono-sm text-mono-sm text-secondary">29 Oct 2026 / 30 Oct 2026</span>
+</td>
+<td class="px-space-md py-2">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-surface-container font-mono-sm text-mono-sm font-semibold text-on-surface-variant">
+<span class="w-1.5 h-1.5 rounded-full bg-outline"></span>
+<span>Needs review</span>
+</span>
+</td>
+<td class="px-space-md py-2">
+<div class="flex items-center gap-2">
+<span class="font-mono-sm text-mono-sm text-primary font-semibold hover:underline cursor-pointer">Toyota 17801-21060</span>
+<span class="font-mono-sm text-mono-sm text-secondary">· 2 sources</span>
+</div>
+</td>
+<td class="px-space-md py-2 text-right">
+<button class="h-8 px-3 bg-surface-container-low hover:bg-surface-container text-on-surface font-body-sm text-body-sm font-medium rounded-lg shadow-sm transition-colors" type="button">
+                  Open
+                </button>
+</td>
+</tr>
+<!-- Row 4: Honda Fit Added Automatically -->
+<tr class="h-14 hover:bg-surface-container-low/50 transition-colors">
+<td class="px-space-md py-2">
+<div class="flex flex-col min-w-0">
+<span class="font-body-sm text-body-sm font-semibold text-on-surface truncate">Honda Fit 2013–2020</span>
+<span class="font-mono-sm text-mono-sm text-secondary truncate">Hybrid · LEB · GP5</span>
+</div>
+</td>
+<td class="px-space-md py-2">
+<span class="font-body-sm text-body-sm text-on-surface font-medium">Cabin filter</span>
+</td>
+<td class="px-space-md py-2">
+<span class="inline-flex items-center px-2 py-0.5 rounded-full bg-primary-container text-on-primary font-mono-sm text-mono-sm font-medium">4 fleets</span>
+</td>
+<td class="px-space-md py-2">
+<span class="font-mono-sm text-mono-sm text-secondary">28 Oct 2026 / 29 Oct 2026</span>
+</td>
+<td class="px-space-md py-2">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-secondary-container font-mono-sm text-mono-sm font-semibold text-on-secondary-fixed">
+<span class="material-symbols-outlined text-[13px]">check</span>
+<span>Added automatically</span>
+</span>
+</td>
+<td class="px-space-md py-2">
+<div class="flex items-center gap-2">
+<span class="font-mono-sm text-mono-sm text-primary font-semibold hover:underline cursor-pointer">Honda 80291-TF0-941</span>
+<span class="font-mono-sm text-mono-sm text-secondary">· 2 sources</span>
+</div>
+</td>
+<td class="px-space-md py-2 text-right">
+<button class="h-8 px-3 bg-surface-container-low hover:bg-surface-container text-on-surface font-body-sm text-body-sm font-medium rounded-lg shadow-sm transition-colors" type="button">
+                  Open
+                </button>
+</td>
+</tr>
+<!-- Row 5: Toyota Roomy Queued -->
+<tr class="h-14 hover:bg-surface-container-low/50 transition-colors">
+<td class="px-space-md py-2">
+<div class="flex flex-col min-w-0">
+<span class="font-body-sm text-body-sm font-semibold text-on-surface truncate">Toyota Roomy 2016–2020</span>
+<span class="font-mono-sm text-mono-sm text-secondary truncate">Pre-Facelift · Custom G · 1KR-FE · M900A</span>
+</div>
+</td>
+<td class="px-space-md py-2">
+<span class="font-body-sm text-body-sm text-on-surface font-medium">Rear brake shoe kit · Left</span>
+</td>
+<td class="px-space-md py-2">
+<span class="inline-flex items-center px-2 py-0.5 rounded-full bg-primary-container text-on-primary font-mono-sm text-mono-sm font-medium">2 fleets</span>
+</td>
+<td class="px-space-md py-2">
+<span class="font-mono-sm text-mono-sm text-secondary">28 Oct 2026 / 28 Oct 2026</span>
+</td>
+<td class="px-space-md py-2">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-surface-container-high font-mono-sm text-mono-sm font-semibold text-secondary">
+<span class="w-1.5 h-1.5 rounded-full bg-outline"></span>
+<span>Queued</span>
+</span>
+</td>
+<td class="px-space-md py-2">
+<span class="font-mono-sm text-mono-sm text-outline">—</span>
+</td>
+<td class="px-space-md py-2 text-right">
+<button class="h-8 px-3 bg-surface-container-low hover:bg-surface-container text-on-surface font-body-sm text-body-sm font-medium rounded-lg shadow-sm transition-colors" type="button">
+                  Open
+                </button>
+</td>
+</tr>
+<!-- Row 6: Toyota Probox Couldn't find -->
+<tr class="h-14 hover:bg-surface-container-low/50 transition-colors">
+<td class="px-space-md py-2">
+<div class="flex flex-col min-w-0">
+<span class="font-body-sm text-body-sm font-semibold text-on-surface truncate">Toyota Probox 2014–2021</span>
+<span class="font-mono-sm text-mono-sm text-secondary truncate">NCP160</span>
+</div>
+</td>
+<td class="px-space-md py-2">
+<span class="font-body-sm text-body-sm text-on-surface font-medium">Headlight bulb</span>
+</td>
+<td class="px-space-md py-2">
+<span class="inline-flex items-center px-2 py-0.5 rounded-full bg-primary-container text-on-primary font-mono-sm text-mono-sm font-medium">1 fleet</span>
+</td>
+<td class="px-space-md py-2">
+<span class="font-mono-sm text-mono-sm text-secondary">25 Oct 2026 / 26 Oct 2026</span>
+</td>
+<td class="px-space-md py-2">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-error-container font-mono-sm text-mono-sm font-semibold text-on-error-container">
+<span class="material-symbols-outlined text-[13px]">error</span>
+<span>Couldn't find</span>
+</span>
+</td>
+<td class="px-space-md py-2">
+<span class="font-mono-sm text-mono-sm text-outline">—</span>
+</td>
+<td class="px-space-md py-2 text-right">
+<button class="h-8 px-3 bg-surface-container-low hover:bg-surface-container text-on-surface font-body-sm text-body-sm font-medium rounded-lg shadow-sm transition-colors" type="button">
+                  Open
+                </button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Pagination / Catalog Engine Status Footer Inside Table Wrapper -->
+<div class="h-10 px-space-md bg-surface-container-low flex items-center justify-between font-mono-sm text-mono-sm text-secondary">
+<div>Showing 1–6 of 6 queue units</div>
+<div class="flex items-center gap-space-md">
+<span class="hover:text-on-surface cursor-pointer">Export CSV</span>
+<span class="text-outline">·</span>
+<span class="hover:text-on-surface cursor-pointer">Reprocess All Queued</span>
+</div>
+</div>
+</div>
+<!-- Informational Policy Footer Note -->
+<div class="flex items-center gap-2 text-secondary bg-surface-container-lowest p-space-sm px-space-md rounded-xl shadow-sm">
+<span class="material-symbols-outlined text-[18px] text-outline">verified_user</span>
+<p class="font-body-sm text-body-sm">
+        Roam researches one request at a time, oldest first. Only trusted catalogues count.
+      </p>
+</div>
+</div>
+</div></main></div></body></html>

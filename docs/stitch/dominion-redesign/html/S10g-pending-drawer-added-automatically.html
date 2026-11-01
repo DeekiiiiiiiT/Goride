@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_dashboard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{"colors":{"inverse-surface":"#2e3039","primary-fixed-dim":"#b4c5ff","on-tertiary-fixed":"#141b30","on-primary-container":"#ced8ff","tertiary-container":"#575e77","outline-variant":"#c3c6d7","background":"#faf8ff","surface-container-high":"#e7e7f3","surface-container":"#ededf9","on-tertiary-fixed-variant":"#3f465e","surface-container-highest":"#e1e1ed","tertiary-fixed-dim":"#bfc5e2","on-secondary":"#ffffff","outline":"#737686","on-secondary-fixed":"#131b2e","on-secondary-container":"#5c647a","on-primary-fixed":"#00174b","error-container":"#ffdad6","secondary-container":"#dae2fd","tertiary":"#40465e","on-background":"#191b24","on-error-container":"#93000a","inverse-on-surface":"#f0f0fc","surface-bright":"#faf8ff","on-surface":"#191b24","on-error":"#ffffff","tertiary-fixed":"#dbe1ff","inverse-primary":"#b4c5ff","surface-dim":"#d9d9e5","primary-fixed":"#dbe1ff","on-tertiary-container":"#d2d8f6","secondary-fixed-dim":"#bec6e0","on-tertiary":"#ffffff","on-primary":"#ffffff","error":"#ba1a1a","secondary-fixed":"#dae2fd","surface-container-lowest":"#ffffff","secondary":"#565e74","primary-container":"#0153dc","surface-variant":"#e1e1ed","on-secondary-fixed-variant":"#3f465c","primary":"#003ea9","on-primary-fixed-variant":"#003ea8","surface-container-low":"#f3f3ff","surface-tint":"#0053db","surface":"#faf8ff","on-surface-variant":"#434655"},"borderRadius":{"DEFAULT":"0.125rem","lg":"0.25rem","xl":"0.5rem","full":"0.75rem"},"spacing":{"space-lg":"1rem","gutter":"1rem","margin-panel":"1rem","gutter-dense":"0.5rem","space-md":"0.75rem","space-xl":"1.5rem","space-xs":"0.25rem","margin":"1.5rem","space-sm":"0.5rem"},"fontFamily":{"body-md":["Inter"],"mono-sm":["JetBrains Mono"],"headline-xl":["Inter"],"body-sm":["Inter"],"mono-lg":["JetBrains Mono"],"label-md":["Inter"],"headline-md":["Inter"],"label-xs":["Inter"],"mono-md":["JetBrains Mono"],"headline-lg":["Inter"]},"fontSize":{"body-md":["14px",{"lineHeight":"20px","letterSpacing":"0","fontWeight":"400"}],"mono-sm":["11px",{"lineHeight":"14px","letterSpacing":"0.02em","fontWeight":"400"}],"headline-xl":["24px",{"lineHeight":"32px","letterSpacing":"-0.02em","fontWeight":"600"}],"body-sm":["13px",{"lineHeight":"18px","letterSpacing":"0","fontWeight":"400"}],"mono-lg":["14px",{"lineHeight":"20px","letterSpacing":"-0.01em","fontWeight":"500"}],"label-md":["12px",{"lineHeight":"16px","letterSpacing":"0.01em","fontWeight":"500"}],"headline-md":["16px",{"lineHeight":"24px","letterSpacing":"-0.01em","fontWeight":"600"}],"label-xs":["11px",{"lineHeight":"14px","letterSpacing":"0.04em","fontWeight":"600"}],"mono-md":["12px",{"lineHeight":"16px","letterSpacing":"0","fontWeight":"500"}],"headline-lg":["20px",{"lineHeight":"28px","letterSpacing":"-0.015em","fontWeight":"600"}]}}}};</script></head><body class="bg-surface font-body-md text-on-surface antialiased"><aside class="fixed left-0 top-0 h-full w-[260px] bg-[#0d131f] z-50 flex flex-col justify-between select-none border-r border-[#192233]"><div class="flex flex-col min-h-0"><div class="h-14 px-margin-panel border-b border-[#192233] flex items-center gap-space-sm bg-[#090e17]"><div class="w-6 h-6 rounded-lg bg-primary-container flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[16px]">deployed_code</span></div><div class="flex flex-col min-w-0"><span class="font-headline-md text-headline-md font-semibold text-white tracking-tight truncate leading-tight">Dominion</span><span class="font-mono-sm text-mono-sm text-outline-variant uppercase tracking-wider truncate">Roam Admin Console</span></div></div><div class="overflow-y-auto px-space-xs py-space-sm space-y-space-md"><div class="space-y-space-xs"><div class="px-space-sm py-space-xs font-mono-sm text-mono-sm uppercase tracking-wider text-outline-variant font-semibold">Master Data</div><nav class="flex flex-col gap-[2px]" data-active-classes="bg-primary-container text-on-primary font-semibold shadow-sm"><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-outline-variant hover:text-white hover:bg-[#151f33] transition-colors" data-path="overview" href="#"><span class="material-symbols-outlined text-[18px]">grid_view</span><span class="font-body-sm text-body-sm">Overview</span></a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-outline-variant hover:text-white hover:bg-[#151f33] transition-colors" data-path="vehicles" href="#"><span class="material-symbols-outlined text-[18px]">directions_car</span><span class="font-body-sm text-body-sm flex-1">Vehicles</span><span class="w-1.5 h-1.5 rounded-full bg-primary-fixed-dim"></span></a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-outline-variant hover:text-white hover:bg-[#151f33] transition-colors" data-path="places-and-maps" href="#"><span class="material-symbols-outlined text-[18px]">map</span><span class="font-body-sm text-body-sm">Places and Maps</span></a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-outline-variant hover:text-white hover:bg-[#151f33] transition-colors" data-path="fuel" href="#"><span class="material-symbols-outlined text-[18px]">local_gas_station</span><span class="font-body-sm text-body-sm">Fuel</span></a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-outline-variant hover:text-white hover:bg-[#151f33] transition-colors" data-path="tolls" href="#"><span class="material-symbols-outlined text-[18px]">toll</span><span class="font-body-sm text-body-sm">Tolls</span></a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-outline-variant hover:text-white hover:bg-[#151f33] transition-colors" data-path="tax-and-vendors" href="#"><span class="material-symbols-outlined text-[18px]">receipt_long</span><span class="font-body-sm text-body-sm">Tax and Vendors</span></a></nav></div><div class="space-y-space-xs"><div class="px-space-sm py-space-xs font-mono-sm text-mono-sm uppercase tracking-wider text-outline-variant font-semibold">Engines</div><nav class="flex flex-col gap-[2px]" data-active-classes="bg-primary-container text-on-primary font-semibold shadow-sm"><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-outline-variant hover:text-white hover:bg-[#151f33] transition-colors" data-path="fuel-brain" href="#"><span class="material-symbols-outlined text-[18px]">psychology</span><span class="font-body-sm text-body-sm">Fuel Brain</span></a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-outline-variant hover:text-white hover:bg-[#151f33] transition-colors" data-path="toll-brain" href="#"><span class="material-symbols-outlined text-[18px]">alt_route</span><span class="font-body-sm text-body-sm">Toll Brain</span></a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-outline-variant hover:text-white hover:bg-[#151f33] transition-colors" data-path="matching-brain" href="#"><span class="material-symbols-outlined text-[18px]">hub</span><span class="font-body-sm text-body-sm">Matching Brain</span></a></nav></div><div class="space-y-space-xs"><div class="px-space-sm py-space-xs font-mono-sm text-mono-sm uppercase tracking-wider text-outline-variant font-semibold">Distribution</div><nav class="flex flex-col gap-[2px]" data-active-classes="bg-primary-container text-on-primary font-semibold shadow-sm"><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-outline-variant hover:text-white hover:bg-[#151f33] transition-colors" data-path="apps" href="#"><span class="material-symbols-outlined text-[18px]">apps</span><span class="font-body-sm text-body-sm">Apps</span></a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-outline-variant hover:text-white hover:bg-[#151f33] transition-colors" data-path="data-api" href="#"><span class="material-symbols-outlined text-[18px]">api</span><span class="font-body-sm text-body-sm">Data API</span></a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-outline-variant hover:text-white hover:bg-[#151f33] transition-colors" data-path="change-requests" href="#"><span class="material-symbols-outlined text-[18px]">published_with_changes</span><span class="font-body-sm text-body-sm">Change Requests</span></a></nav></div><div class="space-y-space-xs"><div class="px-space-sm py-space-xs font-mono-sm text-mono-sm uppercase tracking-wider text-outline-variant font-semibold">Platform</div><nav class="flex flex-col gap-[2px]" data-active-classes="bg-primary-container text-on-primary font-semibold shadow-sm"><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-outline-variant hover:text-white hover:bg-[#151f33] transition-colors" data-path="staff-and-roles" href="#"><span class="material-symbols-outlined text-[18px]">badge</span><span class="font-body-sm text-body-sm">Staff and Roles</span></a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-outline-variant hover:text-white hover:bg-[#151f33] transition-colors" data-path="activity-log" href="#"><span class="material-symbols-outlined text-[18px]">history</span><span class="font-body-sm text-body-sm">Activity Log</span></a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-outline-variant hover:text-white hover:bg-[#151f33] transition-colors" data-path="platform-ops" href="#"><span class="material-symbols-outlined text-[18px]">terminal</span><span class="font-body-sm text-body-sm">Platform Ops</span></a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-outline-variant hover:text-white hover:bg-[#151f33] transition-colors" data-path="global-settings" href="#"><span class="material-symbols-outlined text-[18px]">settings</span><span class="font-body-sm text-body-sm">Global Settings</span></a></nav></div><div class="space-y-space-xs"><div class="px-space-sm py-space-xs font-mono-sm text-mono-sm uppercase tracking-wider text-outline-variant font-semibold">Back Office</div><nav class="flex flex-col gap-[2px]" data-active-classes="bg-primary-container text-on-primary font-semibold shadow-sm"><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-outline-variant hover:text-white hover:bg-[#151f33] transition-colors" data-path="gct-registrations" href="#"><span class="material-symbols-outlined text-[18px]">domain</span><span class="font-body-sm text-body-sm">GCT Registrations</span></a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-outline-variant hover:text-white hover:bg-[#151f33] transition-colors" data-path="ledger" href="#"><span class="material-symbols-outlined text-[18px]">account_balance</span><span class="font-body-sm text-body-sm">Ledger</span></a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-outline-variant hover:text-white hover:bg-[#151f33] transition-colors" data-path="remittance" href="#"><span class="material-symbols-outlined text-[18px]">payments</span><span class="font-body-sm text-body-sm">Remittance</span></a></nav></div></div></div><div class="p-space-sm border-t border-[#192233] bg-[#090e17] space-y-space-xs"><div class="flex items-center justify-between font-mono-sm text-mono-sm"><span class="text-white font-medium">KGN-DC-01</span><span class="text-emerald-400 font-semibold">JMD READY</span></div><div class="flex items-center justify-between font-mono-sm text-mono-sm text-outline-variant"><span>CLUSTER: ACTIVE</span><div class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span><span class="text-emerald-400">SYNCED</span></div></div></div></aside><div class="pl-[260px]"><header class="fixed top-0 left-[260px] right-0 h-14 bg-surface-container-lowest border-b border-[#e2e8f0] z-40 flex items-center justify-between px-margin"><div class="flex items-center gap-space-sm min-w-0"><div class="flex items-center gap-space-xs font-mono-sm text-mono-sm text-outline tracking-wider uppercase truncate"><span class="hover:text-on-surface cursor-pointer transition-colors">DOMINION</span><span>›</span><span class="hover:text-on-surface cursor-pointer transition-colors">MASTER DATA</span><span>›</span><span class="hover:text-on-surface cursor-pointer transition-colors">VEHICLES</span><span>›</span><span class="text-primary font-semibold truncate">PENDING CATALOG</span></div></div><div class="flex items-center gap-space-md"><div class="relative flex items-center"><span class="material-symbols-outlined absolute left-space-sm text-outline text-[18px]">search</span><input class="w-[360px] h-9 pl-9 pr-12 rounded-xl bg-surface border border-[#e2e8f0] font-body-sm text-body-sm text-on-surface placeholder:text-outline focus:outline-none focus:border-primary transition-all" placeholder="Search entities, engines, routes…" type="text"/><span class="absolute right-space-sm font-mono-sm text-mono-sm bg-surface-container border border-[#e2e8f0] text-outline px-1.5 py-0.5 rounded-lg">⌘K</span></div><div class="flex items-center gap-space-xs px-2.5 py-1 rounded-full bg-surface border border-[#e2e8f0] font-mono-sm text-mono-sm"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span><span class="text-on-surface-variant font-medium">NODE: OK</span></div><button class="w-8 h-8 rounded-lg flex items-center justify-center text-outline hover:text-on-surface hover:bg-surface-container transition-all" type="button"><span class="material-symbols-outlined text-[20px]">dark_mode</span></button><div class="h-4 w-px bg-[#e2e8f0]"></div><div class="flex items-center gap-space-sm"><div class="flex items-center gap-space-xs bg-surface border border-[#e2e8f0] px-2.5 py-1 rounded-full"><div class="w-5 h-5 rounded-full bg-primary flex items-center justify-center font-mono-sm text-[10px] text-white font-semibold">DT</div><span class="font-label-md text-label-md text-on-surface font-medium">Deeki T</span><span class="font-mono-sm text-mono-sm text-outline">·</span><span class="font-label-md text-label-md text-secondary">Owner</span></div><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="w-full min-h-[calc(100vh-56px)] pt-14 bg-surface text-[#30323b]"><div class="flex flex-col w-full relative">
+<!-- Underlying Screen 1: Master Data Pending Catalog Workspace -->
+<div class="w-full p-margin opacity-45 pointer-events-none select-none transition-opacity duration-200">
+<!-- Top Action & Meta Ribbon -->
+<div class="flex flex-col gap-space-md mb-space-lg">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-md">
+<div>
+<h1 class="font-headline-xl text-headline-xl text-on-surface tracking-tight">Pending Catalog Resolution</h1>
+<p class="font-body-sm text-body-sm text-secondary mt-0.5">Automated ingestion queue, engine cross-index discrepancies, and fleet part requests.</p>
+</div>
+<div class="flex items-center gap-space-xs bg-surface-container px-2.5 py-1 rounded-full text-secondary">
+<span class="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
+<span class="font-mono-sm text-mono-sm font-semibold uppercase tracking-wider">Queue: 14 pending</span>
+</div>
+</div>
+<div class="flex items-center gap-space-sm">
+<button class="h-9 px-space-md rounded-xl bg-surface-container-lowest text-on-surface font-body-sm text-body-sm flex items-center gap-space-xs shadow-sm" type="button">
+<span class="material-symbols-outlined text-[18px]">download</span>
+<span>Export CSV</span>
+</button>
+<button class="h-9 px-space-md rounded-xl bg-primary-container text-on-primary font-body-sm text-body-sm font-semibold flex items-center gap-space-xs shadow-sm" type="button">
+<span class="material-symbols-outlined text-[18px]">refresh</span>
+<span>Re-run Scrapers</span>
+</button>
+</div>
+</div>
+<!-- Filter Matrix Tab Bar -->
+<div class="flex items-center justify-between bg-surface-container-low p-1.5 rounded-xl">
+<div class="flex items-center gap-1">
+<button class="px-space-md py-1.5 rounded-lg bg-surface-container-lowest shadow-sm text-primary font-body-sm text-body-sm font-semibold flex items-center gap-space-xs" type="button">
+<span>Parts Requests</span>
+<span class="px-1.5 py-0.2 bg-primary-fixed text-on-primary-fixed rounded font-mono-sm text-mono-sm">48</span>
+</button>
+<button class="px-space-md py-1.5 rounded-lg text-secondary font-body-sm text-body-sm hover:text-on-surface flex items-center gap-space-xs" type="button">
+<span>Discrepant OEM Fits</span>
+<span class="px-1.5 py-0.2 bg-surface-container-high text-secondary rounded font-mono-sm text-mono-sm">12</span>
+</button>
+<button class="px-space-md py-1.5 rounded-lg text-secondary font-body-sm text-body-sm hover:text-on-surface flex items-center gap-space-xs" type="button">
+<span>Autonomous Ingestion Log</span>
+<span class="px-1.5 py-0.2 bg-surface-container-high text-secondary rounded font-mono-sm text-mono-sm">184</span>
+</button>
+</div>
+<div class="flex items-center gap-space-sm pr-1">
+<div class="flex items-center gap-1 text-secondary font-mono-sm text-mono-sm bg-surface-container px-2 py-1 rounded-lg">
+<span>Scope:</span>
+<span class="font-semibold text-on-surface">Toyota / Daihatsu 1KR</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Background Table Mockup -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
+<div class="h-9 bg-surface px-space-md flex items-center justify-between text-secondary font-mono-sm text-mono-sm uppercase tracking-wider font-semibold">
+<div class="w-28">Request ID</div>
+<div class="w-64">Part Description</div>
+<div class="flex-1">Target Application / Engine</div>
+<div class="w-36">Sources</div>
+<div class="w-44">Status</div>
+<div class="w-28 text-right">Age</div>
+</div>
+<!-- Row 1: Selected Item -->
+<div class="h-14 px-space-md flex items-center justify-between bg-primary-fixed/20">
+<div class="w-28 font-mono-sm text-mono-sm text-primary font-semibold">#REQ-540B19EF</div>
+<div class="w-64 flex flex-col">
+<span class="font-body-sm text-body-sm font-semibold text-on-surface">Air filter element</span>
+<span class="font-mono-sm text-mono-sm text-secondary">OEM: 17801-B1010</span>
+</div>
+<div class="flex-1 flex flex-col">
+<span class="font-body-sm text-body-sm text-on-surface">Toyota Roomy (M900A)</span>
+<span class="font-mono-sm text-mono-sm text-secondary">1KR-FE · Custom G · 2016-2020</span>
+</div>
+<div class="w-36 flex items-center gap-1 font-mono-sm text-mono-sm text-secondary">
+<span class="px-1.5 py-0.5 bg-surface-container rounded">partsouq</span>
+<span class="px-1.5 py-0.5 bg-surface-container rounded">amayama</span>
+</div>
+<div class="w-44">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-mono-sm text-mono-sm font-medium bg-emerald-50 text-emerald-700">
+<span class="material-symbols-outlined text-[13px]">check_circle</span>
+            Added automatically
+          </span>
+</div>
+<div class="w-28 text-right font-mono-sm text-mono-sm text-secondary">18m ago</div>
+</div>
+<!-- Row 2 -->
+<div class="h-14 px-space-md flex items-center justify-between bg-surface-container-lowest">
+<div class="w-28 font-mono-sm text-mono-sm text-on-surface">#REQ-540B19EE</div>
+<div class="w-64 flex flex-col">
+<span class="font-body-sm text-body-sm font-semibold text-on-surface">Front Brake Pad Set</span>
+<span class="font-mono-sm text-mono-sm text-secondary">04465-B1440</span>
+</div>
+<div class="flex-1 flex flex-col">
+<span class="font-body-sm text-body-sm text-on-surface">Toyota Tank (M910A) 4WD</span>
+<span class="font-mono-sm text-mono-sm text-secondary">1KR-VET Turbo</span>
+</div>
+<div class="w-36 flex items-center gap-1 font-mono-sm text-mono-sm text-secondary">
+<span class="px-1.5 py-0.5 bg-surface-container rounded">megazip</span>
+</div>
+<div class="w-44">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-mono-sm text-mono-sm font-medium bg-surface-container text-secondary">
+<span class="material-symbols-outlined text-[13px]">hourglass_top</span>
+            Single source
+          </span>
+</div>
+<div class="w-28 text-right font-mono-sm text-mono-sm text-secondary">2h ago</div>
+</div>
+<!-- Row 3 -->
+<div class="h-14 px-space-md flex items-center justify-between bg-surface-container-lowest">
+<div class="w-28 font-mono-sm text-mono-sm text-on-surface">#REQ-540B19EA</div>
+<div class="w-64 flex flex-col">
+<span class="font-body-sm text-body-sm font-semibold text-on-surface">Cabin Pollen Filter</span>
+<span class="font-mono-sm text-mono-sm text-secondary">87139-52040</span>
+</div>
+<div class="flex-1 flex flex-col">
+<span class="font-body-sm text-body-sm text-on-surface">Toyota Yaris Cross (MXPJ10)</span>
+<span class="font-mono-sm text-mono-sm text-secondary">M15A-FXE Hybrid</span>
+</div>
+<div class="w-36 flex items-center gap-1 font-mono-sm text-mono-sm text-secondary">
+<span class="px-1.5 py-0.5 bg-surface-container rounded">toyodiy</span>
+<span class="px-1.5 py-0.5 bg-surface-container rounded">amayama</span>
+</div>
+<div class="w-44">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-mono-sm text-mono-sm font-medium bg-emerald-50 text-emerald-700">
+<span class="material-symbols-outlined text-[13px]">check_circle</span>
+            Added automatically
+          </span>
+</div>
+<div class="w-28 text-right font-mono-sm text-mono-sm text-secondary">4h ago</div>
+</div>
+<!-- Row 4 -->
+<div class="h-14 px-space-md flex items-center justify-between bg-surface-container-lowest">
+<div class="w-28 font-mono-sm text-mono-sm text-on-surface">#REQ-540B19D9</div>
+<div class="w-64 flex flex-col">
+<span class="font-body-sm text-body-sm font-semibold text-on-surface">Oil Filter Spin-On</span>
+<span class="font-mono-sm text-mono-sm text-secondary">90915-10009</span>
+</div>
+<div class="flex-1 flex flex-col">
+<span class="font-body-sm text-body-sm text-on-surface">Subaru Justy (M900F)</span>
+<span class="font-mono-sm text-mono-sm text-secondary">1KR-FE NA</span>
+</div>
+<div class="w-36 flex items-center gap-1 font-mono-sm text-mono-sm text-secondary">
+<span class="px-1.5 py-0.5 bg-surface-container rounded">partsouq</span>
+<span class="px-1.5 py-0.5 bg-surface-container rounded">rockauto</span>
+</div>
+<div class="w-44">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-mono-sm text-mono-sm font-medium bg-amber-50 text-amber-800">
+<span class="material-symbols-outlined text-[13px]">warning</span>
+            Discrepant thread
+          </span>
+</div>
+<div class="w-28 text-right font-mono-sm text-mono-sm text-secondary">6h ago</div>
+</div>
+</div>
+</div>
+<!-- Dimmed Modal Backdrop Overlay -->
+<div class="fixed inset-0 top-14 left-[260px] bg-slate-950/25 z-40 backdrop-blur-[1px] transition-all"></div>
+<!-- Screen 3: Request Drawer — Added Automatically (Right Docked 560px) -->
+<aside class="fixed top-14 right-0 bottom-0 w-[560px] bg-surface-container-lowest shadow-2xl z-50 flex flex-col justify-between overflow-hidden" style="box-shadow: -8px 0 32px -4px rgba(15, 23, 42, 0.12);">
+<!-- Drawer Fixed Header -->
+<div class="px-space-xl pt-space-xl pb-space-lg bg-surface-container-lowest flex flex-col gap-space-sm shrink-0">
+<!-- Eyebrow & Status Chip & Close Action -->
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-xs flex-wrap min-w-0">
+<span class="font-mono-sm text-mono-sm uppercase tracking-wider text-secondary font-medium">REQUEST GROUP #REQ-540B19EF</span>
+<span class="font-mono-sm text-mono-sm text-outline-variant">/</span>
+<div class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-mono-sm text-mono-sm font-semibold">
+<span class="material-symbols-outlined text-[13px] text-emerald-600">check_circle</span>
+<span>Added automatically</span>
+</div>
+</div>
+<button class="w-7 h-7 rounded-lg flex items-center justify-center text-outline hover:text-on-surface hover:bg-surface-container transition-colors" title="Close Drawer" type="button">
+<span class="material-symbols-outlined text-[18px]">close</span>
+</button>
+</div>
+<!-- Title & Specification -->
+<div>
+<h2 class="font-headline-xl text-headline-xl font-bold text-slate-900 tracking-tight">Air filter</h2>
+<p class="font-body-sm text-body-sm text-slate-500 mt-1">Toyota Roomy 2016–2020 · Pre-Facelift · Custom G · 1KR-FE · M900A</p>
+</div>
+<!-- Quick Action / Fleet Demand Chips -->
+<div class="flex items-center gap-space-xs pt-1 flex-wrap">
+<span class="inline-flex items-center gap-1 px-2 py-1 rounded bg-[#dbe1ff] text-[#0153dc] font-mono-sm text-mono-sm font-semibold">
+<span class="material-symbols-outlined text-[14px]">local_shipping</span>
+<span>Asked by 3 fleets</span>
+</span>
+<span class="inline-flex items-center gap-1 px-2 py-1 rounded bg-surface-container font-mono-sm text-mono-sm text-secondary">
+<span class="material-symbols-outlined text-[14px]">calendar_today</span>
+<span>first asked 28 Oct 2026</span>
+</span>
+<button class="inline-flex items-center gap-1 px-2 py-1 rounded bg-surface-container-low hover:bg-surface-container text-on-surface font-body-sm text-body-sm transition-colors" type="button">
+<span class="material-symbols-outlined text-[14px] text-secondary">content_copy</span>
+<span class="font-mono-sm text-mono-sm font-medium">Copy for search</span>
+</button>
+</div>
+</div>
+<!-- Scrollable Drawer Body Content -->
+<div class="flex-1 overflow-y-auto px-space-xl py-space-lg space-y-space-lg min-h-0 bg-surface-container-lowest">
+<!-- Green Autonomous Consensus Banner -->
+<div class="bg-emerald-50 rounded-xl p-space-md flex items-start gap-space-md text-emerald-900 shadow-sm">
+<div class="w-6 h-6 rounded-full bg-emerald-600 text-white flex items-center justify-center shrink-0 mt-0.5">
+<span class="material-symbols-outlined text-[15px]">done_all</span>
+</div>
+<div class="flex flex-col gap-0.5 text-emerald-900">
+<span class="font-body-sm text-body-sm font-semibold text-emerald-950">Autonomous Catalog Ingestion</span>
+<span class="font-body-sm text-body-sm text-emerald-800 leading-snug">Two trusted catalogues agreed, so Roam added this part on its own.</span>
+</div>
+</div>
+<!-- SECTION: ADDED -->
+<div class="space-y-space-xs">
+<div class="flex items-center justify-between">
+<span class="font-mono-sm text-mono-sm uppercase tracking-wider font-semibold text-slate-500">ADDED</span>
+<span class="font-mono-sm text-mono-sm text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded font-medium">Auto-committed</span>
+</div>
+<div class="bg-white rounded-xl p-space-md shadow-sm relative overflow-hidden">
+<!-- Green left accent indicator -->
+<div class="absolute left-0 top-0 bottom-0 w-1.5 bg-emerald-600"></div>
+<div class="pl-2 space-y-space-md">
+<!-- Part Identification Header -->
+<div class="flex items-start justify-between gap-space-sm">
+<div class="flex flex-col">
+<div class="flex items-center gap-space-sm">
+<span class="font-mono-lg text-mono-lg font-bold text-slate-900 tracking-tight">Toyota 17801-B1010</span>
+</div>
+<span class="font-body-sm text-body-sm text-slate-600 mt-0.5">Air filter element (Intake Cleaner)</span>
+</div>
+<!-- Tier 1 Match Chip (Dominion Token) -->
+<span class="inline-flex items-center gap-1 h-[22px] px-2 rounded-full font-mono-sm text-mono-sm font-medium bg-[#0153dc]/10 text-[#0153dc]">
+<span class="w-1.5 h-1.5 rounded-full bg-[#0153dc]"></span>
+<span>Made for your car</span>
+</span>
+</div>
+<!-- Fits Specification Ribbon -->
+<div class="flex items-center gap-space-xs text-slate-700 font-mono-sm text-mono-sm bg-surface-container-low px-2.5 py-1.5 rounded-lg">
+<span class="material-symbols-outlined text-[15px] text-slate-400">directions_car</span>
+<span class="font-semibold text-slate-900">Fits:</span>
+<span>M900A · 1KR-FE · 2016–2020 · JDM Chassis Engine Spec</span>
+</div>
+<!-- Agreement Evidence Sources -->
+<div class="space-y-space-xs pt-1">
+<span class="font-mono-sm text-mono-sm text-slate-500 font-medium uppercase tracking-wider block">Source Attributions</span>
+<div class="flex items-center gap-space-xs flex-wrap">
+<a class="inline-flex items-center gap-1 px-2.5 py-1 rounded font-mono-sm text-mono-sm text-emerald-800 bg-emerald-50 hover:bg-emerald-100 transition-colors" href="#">
+<span class="material-symbols-outlined text-[14px] text-emerald-600">verified</span>
+<span>partsouq.com</span>
+<span class="font-semibold text-emerald-600">✓</span>
+</a>
+<a class="inline-flex items-center gap-1 px-2.5 py-1 rounded font-mono-sm text-mono-sm text-emerald-800 bg-emerald-50 hover:bg-emerald-100 transition-colors" href="#">
+<span class="material-symbols-outlined text-[14px] text-emerald-600">verified</span>
+<span>amayama.com</span>
+<span class="font-semibold text-emerald-600">✓</span>
+</a>
+</div>
+</div>
+<!-- Collapsible / Expanded Evidence Detail -->
+<div class="bg-surface-container-low rounded-lg p-2.5 text-slate-700 font-mono-sm text-mono-sm space-y-1">
+<div class="flex items-center justify-between text-slate-500">
+<span class="font-semibold text-slate-700 flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px] text-slate-400">menu_book</span>
+                  Cross-Indexed Diagram Evidence
+                </span>
+<a class="text-primary hover:underline inline-flex items-center gap-0.5 font-medium" href="#">
+<span>Open page</span>
+<span class="material-symbols-outlined text-[12px]">north_east</span>
+</a>
+</div>
+<p class="font-mono-sm text-mono-sm text-slate-600 leading-relaxed italic bg-white/70 p-2 rounded">
+                "Fig 17-01 Air Cleaner: Ref 17801 (17801-B1010) applied to 2016.11–2020.09 M900A 1KRFE ATM, Custom G trim package."
+              </p>
+</div>
+</div>
+</div>
+</div>
+<!-- SECTION: CHECKS -->
+<div class="space-y-space-xs">
+<div class="flex items-center justify-between">
+<span class="font-mono-sm text-mono-sm uppercase tracking-wider font-semibold text-slate-500">CHECKS</span>
+<span class="font-mono-sm text-mono-sm text-emerald-700 font-semibold">5 of 5 passed (100%)</span>
+</div>
+<div class="bg-white rounded-xl shadow-sm divide-y-0 flex flex-col gap-1 p-1.5">
+<!-- Check 1 -->
+<div class="flex items-center justify-between px-space-md py-2 rounded-lg bg-surface-container-low/60 hover:bg-surface-container-low transition-colors">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[17px] text-emerald-600">check_circle</span>
+<span class="font-body-sm text-body-sm text-slate-800">Part number shape is right for Toyota</span>
+</div>
+<span class="font-mono-sm text-mono-sm font-semibold text-slate-900 bg-white px-2 py-0.5 rounded shadow-xs">17801-B1010</span>
+</div>
+<!-- Check 2 -->
+<div class="flex items-center justify-between px-space-md py-2 rounded-lg bg-surface-container-low/60 hover:bg-surface-container-low transition-colors">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[17px] text-emerald-600">check_circle</span>
+<span class="font-body-sm text-body-sm text-slate-800">Page shows this part number</span>
+</div>
+<span class="font-mono-sm text-mono-sm font-semibold text-slate-900 bg-white px-2 py-0.5 rounded shadow-xs">partsouq.com</span>
+</div>
+<!-- Check 3 -->
+<div class="flex items-center justify-between px-space-md py-2 rounded-lg bg-surface-container-low/60 hover:bg-surface-container-low transition-colors">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[17px] text-emerald-600">check_circle</span>
+<span class="font-body-sm text-body-sm text-slate-800">Page shows this car</span>
+</div>
+<span class="font-mono-sm text-mono-sm font-semibold text-slate-900 bg-white px-2 py-0.5 rounded shadow-xs">M900A</span>
+</div>
+<!-- Check 4 -->
+<div class="flex items-center justify-between px-space-md py-2 rounded-lg bg-surface-container-low/60 hover:bg-surface-container-low transition-colors">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[17px] text-emerald-600">check_circle</span>
+<span class="font-body-sm text-body-sm text-slate-800">Second trusted catalogue agrees</span>
+</div>
+<span class="font-mono-sm text-mono-sm font-semibold text-slate-900 bg-white px-2 py-0.5 rounded shadow-xs">amayama.com</span>
+</div>
+<!-- Check 5 -->
+<div class="flex items-center justify-between px-space-md py-2 rounded-lg bg-surface-container-low/60 hover:bg-surface-container-low transition-colors">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[17px] text-emerald-600">check_circle</span>
+<span class="font-body-sm text-body-sm text-slate-800">Not already on file</span>
+</div>
+<span class="font-mono-sm text-mono-sm font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded shadow-xs">catalog updated</span>
+</div>
+</div>
+</div>
+<!-- SECTION: WHAT THEY ASKED -->
+<div class="space-y-space-xs">
+<span class="font-mono-sm text-mono-sm uppercase tracking-wider font-semibold text-slate-500">WHAT THEY ASKED</span>
+<div class="bg-white rounded-xl p-space-md shadow-sm space-y-2">
+<div class="flex items-start gap-space-sm p-2 rounded-lg bg-surface-container-low text-slate-700">
+<span class="font-mono-sm text-mono-sm font-semibold text-slate-500 w-14 shrink-0">Note 1:</span>
+<span class="font-mono-sm text-mono-sm text-slate-800">"old one says 17801-..."</span>
+</div>
+<div class="flex items-start gap-space-sm p-2 rounded-lg bg-surface-container-low text-slate-700">
+<span class="font-mono-sm text-mono-sm font-semibold text-slate-500 w-14 shrink-0">Note 2:</span>
+<span class="font-mono-sm text-mono-sm text-slate-400 italic">— [No fleet comment appended]</span>
+</div>
+<div class="flex items-start gap-space-sm p-2 rounded-lg bg-surface-container-low text-slate-700">
+<span class="font-mono-sm text-mono-sm font-semibold text-slate-500 w-14 shrink-0">Note 3:</span>
+<span class="font-mono-sm text-mono-sm text-slate-800">"Standard square intake box, not turbo"</span>
+</div>
+</div>
+</div>
+<!-- SECTION: HISTORY -->
+<div class="space-y-space-xs pb-space-lg">
+<div class="flex items-center justify-between">
+<span class="font-mono-sm text-mono-sm uppercase tracking-wider font-semibold text-slate-500">HISTORY</span>
+<span class="font-mono-sm text-mono-sm text-slate-400">Total duration: 3 mins</span>
+</div>
+<div class="bg-white rounded-xl p-space-md shadow-sm">
+<!-- Stepper flow visually -->
+<div class="flex items-center justify-between px-2 pb-4 mb-4 bg-surface-container-low/50 p-2.5 rounded-lg">
+<div class="flex flex-col items-center gap-1 text-center">
+<span class="w-6 h-6 rounded-full bg-slate-900 text-white flex items-center justify-center font-mono-sm text-[10px] font-bold">1</span>
+<span class="font-mono-sm text-[10px] text-slate-600 font-medium">Asked</span>
+</div>
+<span class="h-0.5 flex-1 bg-emerald-600 mx-1"></span>
+<div class="flex flex-col items-center gap-1 text-center">
+<span class="w-6 h-6 rounded-full bg-slate-900 text-white flex items-center justify-center font-mono-sm text-[10px] font-bold">2</span>
+<span class="font-mono-sm text-[10px] text-slate-600 font-medium">Research</span>
+</div>
+<span class="h-0.5 flex-1 bg-emerald-600 mx-1"></span>
+<div class="flex flex-col items-center gap-1 text-center">
+<span class="w-6 h-6 rounded-full bg-slate-900 text-white flex items-center justify-center font-mono-sm text-[10px] font-bold">3</span>
+<span class="font-mono-sm text-[10px] text-slate-600 font-medium">Confirmed</span>
+</div>
+<span class="h-0.5 flex-1 bg-emerald-600 mx-1"></span>
+<div class="flex flex-col items-center gap-1 text-center">
+<span class="w-6 h-6 rounded-full bg-emerald-600 text-white flex items-center justify-center font-mono-sm text-[10px] font-bold">✓</span>
+<span class="font-mono-sm text-[10px] text-emerald-700 font-bold">Added</span>
+</div>
+<span class="h-0.5 flex-1 bg-emerald-600 mx-1"></span>
+<div class="flex flex-col items-center gap-1 text-center">
+<span class="w-6 h-6 rounded-full bg-emerald-600 text-white flex items-center justify-center font-mono-sm text-[10px] font-bold">✓</span>
+<span class="font-mono-sm text-[10px] text-emerald-700 font-bold">Notified</span>
+</div>
+</div>
+<!-- Vertical Detailed Timestamped Log -->
+<div class="relative pl-6 space-y-3.5 before:content-[''] before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-200">
+<!-- Event 1 -->
+<div class="relative flex flex-col">
+<span class="w-2.5 h-2.5 rounded-full bg-slate-400 absolute -left-[21px] top-1"></span>
+<div class="flex items-baseline gap-2">
+<span class="font-mono-sm text-mono-sm font-semibold text-slate-900">28 Oct 09:14</span>
+<span class="font-body-sm text-body-sm text-slate-700">Asked by 3 fleets</span>
+</div>
+</div>
+<!-- Event 2 -->
+<div class="relative flex flex-col">
+<span class="w-2.5 h-2.5 rounded-full bg-slate-400 absolute -left-[21px] top-1"></span>
+<div class="flex items-baseline gap-2">
+<span class="font-mono-sm text-mono-sm font-semibold text-slate-900">28 Oct 09:15</span>
+<span class="font-body-sm text-body-sm text-slate-700">Research started via Autonomous Engine</span>
+</div>
+</div>
+<!-- Event 3 -->
+<div class="relative flex flex-col">
+<span class="w-2.5 h-2.5 rounded-full bg-emerald-500 absolute -left-[21px] top-1"></span>
+<div class="flex items-baseline gap-2">
+<span class="font-mono-sm text-mono-sm font-semibold text-slate-900">28 Oct 09:16</span>
+<span class="font-body-sm text-body-sm text-slate-700">2 sources confirmed (<span class="font-mono-sm text-mono-sm text-slate-600">partsouq.com</span>, <span class="font-mono-sm text-mono-sm text-slate-600">amayama.com</span>)</span>
+</div>
+</div>
+<!-- Event 4 -->
+<div class="relative flex flex-col">
+<span class="w-2.5 h-2.5 rounded-full bg-emerald-600 absolute -left-[21px] top-1"></span>
+<div class="flex items-baseline gap-2">
+<span class="font-mono-sm text-mono-sm font-semibold text-slate-900">28 Oct 09:16</span>
+<span class="font-body-sm text-body-sm text-emerald-800 font-semibold">Added automatically to master catalog</span>
+</div>
+</div>
+<!-- Event 5 -->
+<div class="relative flex flex-col">
+<span class="w-2.5 h-2.5 rounded-full bg-emerald-600 absolute -left-[21px] top-1"></span>
+<div class="flex items-baseline gap-2">
+<span class="font-mono-sm text-mono-sm font-semibold text-slate-900">28 Oct 09:17</span>
+<span class="font-body-sm text-body-sm text-slate-700">3 fleets notified on next search</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Sticky Footer Actions Panel -->
+<div class="p-space-xl bg-surface-container-lowest flex flex-col gap-2 shrink-0 shadow-lg">
+<div class="flex items-center gap-space-md">
+<!-- Destructive Secondary Undo Button -->
+<button class="h-10 px-space-xl rounded-xl bg-[#fff1f2] hover:bg-red-100 text-[#b91c1c] font-body-sm text-body-sm font-semibold flex items-center justify-center gap-1.5 transition-colors" type="button">
+<span class="material-symbols-outlined text-[18px]">undo</span>
+<span>Undo</span>
+</button>
+<!-- Primary Confirm Button -->
+<button class="h-10 flex-1 rounded-xl bg-[#0153dc] hover:bg-blue-700 text-white font-body-sm text-body-sm font-semibold flex items-center justify-center gap-2 shadow-sm transition-colors" type="button">
+<span class="material-symbols-outlined text-[18px]">thumb_up</span>
+<span>Looks right</span>
+</button>
+</div>
+<!-- Explanatory Warning Line -->
+<p class="font-mono-sm text-[11px] text-slate-500 text-center leading-tight pt-1">
+        Removes this fit, reopens the request and sends it to review.
+      </p>
+</div>
+</aside>
+</div></main></div></body></html>

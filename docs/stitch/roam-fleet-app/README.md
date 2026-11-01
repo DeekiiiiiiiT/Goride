@@ -36,6 +36,34 @@ HTML only, under `docs/stitch/roam-fleet-app/html/`. These are layout references
 | FP7 | Request a quote | `find_parts_request_a_quote` | `html/find-parts-quote.html` | `find-parts` | — | Deferred — sales |
 | FP8 | Not on file yet, ask Roam (v2) | `find_parts_not_on_file_yet_ask_roam` | `html/find-parts-request.html` | `find-parts` | `apps/fleet/src/components/vehicles/find-parts/FindPartsStickyHeader.tsx + apps/fleet/src/components/vehicles/find-parts/RequestPartPanel.tsx + apps/fleet/src/components/vehicles/find-parts/screens/Fp8Screen.tsx` | In progress — `screenshots/FP8-live.png` |
 | FP9 | Car not linked yet | `find_parts_car_not_linked_yet` | `html/find-parts-link-car.html` | `find-parts` | `apps/fleet/src/components/vehicles/find-parts/LinkCarPanel.tsx + apps/fleet/src/components/vehicles/find-parts/screens/Fp9Screen.tsx` | Ported |
-| FP10 | Your requests (v2) | `find_parts_your_requests` | `html/find-parts-activity.html` | `find-parts` | `apps/fleet/src/components/vehicles/find-parts/PartsActivityPanel.tsx + apps/fleet/src/components/vehicles/find-parts/ActivityView.tsx + apps/fleet/src/components/vehicles/find-parts/screens/Fp10Screen.tsx` | In progress — `screenshots/FP10-live.png` |
 | FP11 | Loading, error, no permission | `find_parts_loading_error_no_permission` | `html/find-parts-states.html` | `find-parts` | `apps/fleet/src/components/vehicles/find-parts/FindPartsTab.tsx + apps/fleet/src/components/vehicles/find-parts/screens/Fp11Screen.tsx` | In progress |
 | FP12 | Phone 390 px, what part + not on file (v2) | `find_parts_phone_390px_what_part_not_on_file` | `html/find-parts-phone.html` | `find-parts` | `apps/fleet/src/components/vehicles/find-parts/ResultsView.tsx + apps/fleet/src/components/vehicles/find-parts/screens/Fp12Screen.tsx` | In progress — `screenshots/FP12-live.png` |
+| FP13 | Your requests with timeline | `find_parts_your_requests_with_timeline` | `html/find-parts-requests-timeline.html` | `find-parts` | `apps/fleet/src/components/vehicles/find-parts/ActivityView.tsx + apps/fleet/src/components/vehicles/find-parts/screens/Fp13Screen.tsx + apps/fleet/src/components/vehicles/find-parts/findPartsViewModels.ts` | In progress |
+| FP14 | Now on file notice + Results chip | `find_parts_now_on_file_notice_results` | `html/find-parts-now-on-file.html` | `find-parts` | `apps/fleet/src/components/vehicles/find-parts/screens/FpNowOnFileNotice.tsx + apps/fleet/src/components/vehicles/find-parts/screens/Fp5Screen.tsx` | In progress |
+| FP15 | Request sent + daily limit | `find_parts_request_sent_daily_limit` | `html/find-parts-request-sent-limit.html` | `find-parts` | `apps/fleet/src/components/vehicles/find-parts/RequestPartPanel.tsx + apps/fleet/src/components/vehicles/find-parts/screens/Fp8Screen.tsx` | In progress |
+| FP16 | Phone · requests + notice | `find_parts_phone_390px_requests_notice` | `html/find-parts-phone-requests.html` | `find-parts` | `apps/fleet/src/components/vehicles/find-parts/screens/Fp16Screen.tsx + apps/fleet/src/components/vehicles/find-parts/screens/FpNowOnFileNotice.tsx` | In progress |
+
+## Inventory & asset management screens
+
+HTML under `docs/stitch/roam-fleet-app/inventory/<folder>/code.html`. Design system: `inventory/fleet_operational_engine/DESIGN.md`. Live route: `vehicle-operations/inventory`.
+
+| # | Screen | Stitch folder | Ported to | Status |
+|---|---|---|---|---|
+| IN1 | Overview | `inventory_asset_management_overview` | `apps/fleet/src/components/inventory/screens/In1Overview.tsx + apps/fleet/src/components/inventory/InventoryPage.tsx + apps/fleet/src/components/inventory/InventoryTabs.tsx` | Ported |
+| IN2 | Stock | `inventory_asset_management_stock` | `apps/fleet/src/components/inventory/screens/In2Stock.tsx + apps/fleet/src/components/inventory/StockRowMenu.tsx` | Ported |
+| IN3 | Item details drawer | `inventory_asset_management_item_details_drawer` | `apps/fleet/src/components/inventory/screens/In3ItemDrawer.tsx` | Ported |
+| IN4 | Receive stock | `inventory_asset_management_receive_dialog` | `apps/fleet/src/components/inventory/screens/In4ReceiveDialog.tsx` | Ported |
+| IN5 | Issue to cars | `inventory_asset_management_issue_dialog` | `apps/fleet/src/components/inventory/screens/In5IssueDialog.tsx` | Ported |
+| IN6 | Vehicle kits | `inventory_asset_management_vehicle_kits_tab` | `apps/fleet/src/components/inventory/screens/In6VehicleKits.tsx` | Ported |
+| IN7 | Kit template editor | `inventory_asset_management_kit_template_editor` | `apps/fleet/src/components/inventory/screens/In7KitTemplateEditor.tsx` | Ported |
+| IN8 | Assets | `inventory_asset_management_assets_tab` | `apps/fleet/src/components/inventory/screens/In8Assets.tsx` | Ported |
+| IN9 | Asset page | `inventory_asset_management_asset_page` | `apps/fleet/src/components/inventory/screens/In9AssetPage.tsx` | Ported |
+| IN10 | Movements | `inventory_asset_management_movements_tab` | `apps/fleet/src/components/inventory/screens/In10Movements.tsx` | Ported |
+| IN11 | Purchasing | `inventory_asset_management_purchasing_tab` | `apps/fleet/src/components/inventory/screens/In11Purchasing.tsx` | Ported |
+| IN12 | Counts | `inventory_asset_management_counts_tab` | `apps/fleet/src/components/inventory/screens/In12Counts.tsx` | Ported |
+| IN13 | Alerts | `inventory_asset_management_alerts_tab` | `apps/fleet/src/components/inventory/screens/In13Alerts.tsx` | Ported |
+| IN14 | Move / Return / Write off | `inventory_asset_management_transfer_return_write_off_dialog` | `apps/fleet/src/components/inventory/screens/In14CustodyDialog.tsx` | Ported |
+| IN15 | Vehicle Detail — Kit & equipment card | `vehicle_detail_kit_equipment_panel_5179kz` | `apps/fleet/src/components/inventory/screens/In15VehicleKitCard.tsx + apps/fleet/src/components/vehicles/detail/VehicleDetailProfileTab.tsx` | Ported |
+| IN16 | First-time setup | `inventory_asset_management_first_time_setup` | `apps/fleet/src/components/inventory/screens/In16FirstTimeSetup.tsx` | Ported |
+| IN17 | States | `inventory_asset_management_states_edge_cases` | `apps/fleet/src/components/inventory/screens/In17States.tsx` | Ported |
+| IN18 | Phone (390px) | `inventory_asset_management_phone_390px_mobile_view` | `apps/fleet/src/components/inventory/screens/In18Phone.tsx` | Ported |
