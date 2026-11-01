@@ -71,7 +71,7 @@ export function In12Counts() {
       <span className="material-symbols-outlined text-[18px]">history</span>
       <span>Count history & logs</span>
       </button>
-      <button type="button" className="px-space-lg py-2 bg-primary text-on-primary font-body-sm text-body-sm font-semibold rounded-lg shadow-sm hover:opacity-95 transition-all flex items-center gap-space-xs">
+      <button type="button" onClick={() => shell.openModal('count-session')} className="px-space-lg py-2 bg-primary text-on-primary font-body-sm text-body-sm font-semibold rounded-lg shadow-sm hover:opacity-95 transition-all flex items-center gap-space-xs">
       <span className="material-symbols-outlined text-[18px]">add</span>
       <span>+ Start a count</span>
       </button>

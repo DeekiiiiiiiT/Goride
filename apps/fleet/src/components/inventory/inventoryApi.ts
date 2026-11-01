@@ -221,4 +221,141 @@ export const inventoryApi = {
       headers: { 'Content-Type': 'application/json' },
       body: '{}',
     }),
+  settings: () => invFetch('/settings'),
+  updateSettings: (body: unknown) =>
+    invFetch('/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+  categories: () => invFetch('/categories'),
+  createCategory: (body: unknown) =>
+    invFetch('/categories', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+  patchCategory: (id: string, body: unknown) =>
+    invFetch(`/categories/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+  locationsBins: () => invFetch('/locations'),
+  createLocation: (body: unknown) =>
+    invFetch('/locations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+  patchLocation: (id: string, body: unknown) =>
+    invFetch(`/locations/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+  createBin: (body: unknown) =>
+    invFetch('/bins', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+  patchBin: (id: string, body: unknown) =>
+    invFetch(`/bins/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+  createVendor: (body: unknown) =>
+    invFetch('/vendors', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+  patchVendor: (id: string, body: unknown) =>
+    invFetch(`/vendors/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+  vendorStats: () => invFetch('/analytics/vendor-stats'),
+  createPurchaseOrder: (body: unknown) =>
+    invFetch('/purchase-orders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+  patchPurchaseOrder: (id: string, body: unknown) =>
+    invFetch(`/purchase-orders/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+  startCountSession: (body: unknown) =>
+    invFetch('/counts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+  saveCountLines: (id: string, lines: unknown[]) =>
+    invFetch(`/counts/${encodeURIComponent(id)}/lines`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lines }),
+    }),
+  approvals: (status = 'pending') => invFetch(`/approvals?status=${encodeURIComponent(status)}`),
+  approveApproval: (id: string) =>
+    invFetch(`/approvals/${encodeURIComponent(id)}/approve`, { method: 'POST' }),
+  rejectApproval: (id: string) =>
+    invFetch(`/approvals/${encodeURIComponent(id)}/reject`, { method: 'POST' }),
+  requisitions: () => invFetch('/requisitions'),
+  createRequisition: (body: unknown) =>
+    invFetch('/requisitions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+  approveRequisition: (id: string) =>
+    invFetch(`/requisitions/${encodeURIComponent(id)}/approve`, { method: 'POST' }),
+  rejectRequisition: (id: string) =>
+    invFetch(`/requisitions/${encodeURIComponent(id)}/reject`, { method: 'POST' }),
+  issueRequisition: (id: string) =>
+    invFetch(`/requisitions/${encodeURIComponent(id)}/issue`, { method: 'POST' }),
+  regenerateScanner: (id: string) =>
+    invFetch(`/scanners/${encodeURIComponent(id)}/regenerate`, { method: 'POST' }),
+  unpairScanner: (id: string) =>
+    invFetch(`/scanners/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  alertRules: () => invFetch('/alert-rules'),
+  updateAlertRules: (rules: unknown[]) =>
+    invFetch('/alert-rules', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rules }),
+    }),
+  importItems: (file: unknown) =>
+    invFetch('/items/import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ file }),
+    }),
+  openingBalance: (body: unknown, idempotencyKey: string) =>
+    invFetch('/opening-balance', {
+      method: 'POST',
+      headers: idempotencyHeaders(idempotencyKey),
+      body: JSON.stringify(body),
+    }),
+  registerAsset: (body: unknown) =>
+    invFetch('/assets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+  kitsCompare: (params?: URLSearchParams) =>
+    invFetch(`/kits/compare${params?.toString() ? `?${params}` : ''}`),
+  resolveDriverReport: (id: string, body: unknown) =>
+    invFetch(`/driver/reports/${encodeURIComponent(id)}/resolve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
 };

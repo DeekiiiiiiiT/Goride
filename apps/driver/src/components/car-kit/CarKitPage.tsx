@@ -8,7 +8,8 @@ import { Dk2ReportSheet } from './screens/Dk2ReportSheet';
 import { Dk3ReportSent } from './screens/Dk3ReportSent';
 import { Dk4MyReports } from './screens/Dk4MyReports';
 import { Dk6States } from './screens/Dk6States';
-import { Dk7PreShiftDvir } from './screens/Dk7PreShiftDvir';
+import { DkUpdateReportedItemSheet } from './screens/DkUpdateReportedItemSheet';
+import type { DriverReportRow } from '../../services/driverInventoryApi';
 
 /** Driver car kit — DK1–DK6 navigation (R5-08). */
 export function CarKitPage({
@@ -20,6 +21,7 @@ export function CarKitPage({
 }) {
   const flow = useCarKitFlow(vehicleId);
   const [showDvir, setShowDvir] = useState(false);
+  const [activeReport, setActiveReport] = useState<DriverReportRow | null>(null);
 
   const handleNav = useCallback(
     (action: CarKitNavAction) => {
@@ -69,7 +71,13 @@ export function CarKitPage({
     }
     switch (flow.screen) {
       case 'dk4':
-        return <Dk4MyReports reports={flow.reports} reportsLoading={flow.reportsLoading} />;
+        return (
+          <Dk4MyReports
+            reports={flow.reports}
+            reportsLoading={flow.reportsLoading}
+            onOpenReport={(report) => setActiveReport(report)}
+          />
+        );
       case 'dk3':
         return <Dk3ReportSent report={flow.lastReport} />;
       case 'dk1':
@@ -114,6 +122,14 @@ export function CarKitPage({
             <Dk2ReportSheet kit={flow.kit} />
           </CarKitNavHost>
         </div>
+      ) : null}
+
+      {activeReport ? (
+        <DkUpdateReportedItemSheet
+          report={activeReport}
+          offline={!navigator.onLine}
+          onClose={() => setActiveReport(null)}
+        />
       ) : null}
 
       {showDvir && vehicleId ? (

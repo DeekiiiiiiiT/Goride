@@ -55,3 +55,79 @@ WHERE status = 'approved'
   AND approved_by IS NOT NULL
   AND requested_by IS NOT NULL
   AND approved_by = requested_by;
+
+-- Layer qty ≠ on-hand (real locations; bins aggregated at location)
+SELECT 'layer_qty_vs_on_hand' AS check_id, x.*
+FROM (
+  SELECT
+    b.organization_id,
+    b.item_id,
+    b.location_id,
+    b.on_hand,
+    COALESCE((
+      SELECT sum(cl.qty_remaining)
+      FROM fleet.inv_cost_layer cl
+      WHERE cl.organization_id = b.organization_id
+        AND cl.item_id = b.item_id
+        AND cl.location_id = b.location_id
+    ), 0) AS layer_qty
+  FROM fleet.inv_balance b
+  JOIN fleet.inv_location loc
+    ON loc.id = b.location_id AND loc.organization_id = b.organization_id
+  WHERE loc.kind <> 'virtual'
+) x
+WHERE x.on_hand IS DISTINCT FROM x.layer_qty;
+
+-- Layer extended cost ≠ balance value
+SELECT 'layer_value_vs_balance' AS check_id, x.*
+FROM (
+  SELECT
+    b.organization_id,
+    b.item_id,
+    b.location_id,
+    b.value AS balance_value,
+    COALESCE((
+      SELECT sum(cl.qty_remaining * cl.unit_cost)
+      FROM fleet.inv_cost_layer cl
+      WHERE cl.organization_id = b.organization_id
+        AND cl.item_id = b.item_id
+        AND cl.location_id = b.location_id
+    ), 0) AS layer_value
+  FROM fleet.inv_balance b
+  JOIN fleet.inv_location loc
+    ON loc.id = b.location_id AND loc.organization_id = b.organization_id
+  WHERE loc.kind <> 'virtual'
+) x
+WHERE x.balance_value IS DISTINCT FROM x.layer_value;
+
+-- Cost layers at virtual locations
+SELECT 'layers_at_virtual_location' AS check_id,
+  cl.organization_id,
+  cl.id AS layer_id,
+  cl.item_id,
+  cl.location_id,
+  cl.qty_remaining
+FROM fleet.inv_cost_layer cl
+JOIN fleet.inv_location loc
+  ON loc.id = cl.location_id AND loc.organization_id = cl.organization_id
+WHERE loc.kind = 'virtual'
+  AND cl.qty_remaining > 0;
+
+-- Layers remain when on-hand is zero
+SELECT 'orphan_layers_zero_on_hand' AS check_id, x.*
+FROM (
+  SELECT
+    cl.organization_id,
+    cl.item_id,
+    cl.location_id,
+    b.on_hand,
+    sum(cl.qty_remaining) AS layer_qty
+  FROM fleet.inv_cost_layer cl
+  LEFT JOIN fleet.inv_balance b
+    ON b.organization_id = cl.organization_id
+   AND b.item_id = cl.item_id
+   AND b.location_id = cl.location_id
+  WHERE cl.qty_remaining > 0
+  GROUP BY cl.organization_id, cl.item_id, cl.location_id, b.on_hand
+) x
+WHERE COALESCE(x.on_hand, 0) = 0;

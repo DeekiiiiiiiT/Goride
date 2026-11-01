@@ -37,7 +37,49 @@ const DRIVER_SCREENS = {
   Dk4MyReports: "my_reports_history_fleet_replies",
   Dk5KitStep: "weekly_check_in_kit_step",
   Dk6States: "my_car_kit_states_errors",
+  DkUpdateReportedItemSheet: "update_reported_item_sheet",
 };
+
+const GAP_SCREENS = {
+  GapOpeningBalances: "inventory_asset_management_opening_balances",
+  GapRegisterAsset: "inventory_asset_management_register_asset_dialog",
+  GapItemEditor: "inventory_asset_management_add_edit_item_drawer",
+  GapApprovalDrawer: "inventory_asset_management_approval_review_drawer",
+  GapPurchaseOrder: "inventory_asset_management_new_edit_purchase_order",
+  GapVendorEditor: "inventory_asset_management_vendors_list_edit_drawer",
+  GapCountSession: "inventory_asset_management_count_sheet_start_dialog",
+  GapScannerPair: "inventory_asset_management_pair_mobile_scanner",
+  GapInventorySettings: "inventory_asset_management_settings",
+  GapImportItems: "inventory_asset_management_import_items_3_step_dialog",
+  GapSnoozeSettings: "inventory_asset_management_snooze_settings_alert_rules",
+  GapKitCompare: "inventory_asset_management_kit_version_compare",
+  GapDriverReportUpdate: "inventory_asset_management_update_reported_item_drawer",
+  GapLocationsBins: "inventory_asset_management_locations_bins",
+  GapRequisition: "inventory_asset_management_requisitions_new_request_dialog",
+};
+
+function gapComponentTemplate(exportName, jsxBody) {
+  return `/** Ported from Stitch gap screen — panel only (audit R16-01). */
+import { GapModalShell } from './GapModalShell';
+import { useGapCompliance } from './useGapCompliance';
+
+export function ${exportName}(p: { onClose?: () => void }) {
+  const compliance = useGapCompliance();
+  return (
+    <GapModalShell onClose={p.onClose} ariaLabel="${exportName.replace('Gap', '')}">
+      <div className="fleet-inventory-stitch inventory-stitch-root">
+${jsxBody.split("\n").map((line) => (line.trim() ? `        ${line}` : "")).join("\n")}
+        {compliance.safetyNotice ? (
+          <div className="mt-space-md rounded-lg border border-outline-variant/30 bg-surface-container-low p-space-md font-body-sm text-body-sm text-on-surface-variant">
+            {compliance.safetyNotice}
+          </div>
+        ) : null}
+      </div>
+    </GapModalShell>
+  );
+}
+`;
+}
 
 function extractRegions(html) {
   const cleaned = html.replace(/<(script|style)[\s\S]*?<\/\1>/gi, "");
@@ -120,6 +162,82 @@ function portFleet() {
   }
 }
 
+function portGap() {
+  const outDir = path.join(repo, "apps/fleet/src/components/inventory/gap");
+  fs.mkdirSync(outDir, { recursive: true });
+  for (const [name, folder] of Object.entries(GAP_SCREENS)) {
+    const htmlPath = path.join(
+      repo,
+      "docs/stitch/roam-fleet-app/inventory",
+      folder,
+      "code.html",
+    );
+    if (!fs.existsSync(htmlPath)) {
+      console.warn("missing gap", htmlPath);
+      continue;
+    }
+    const html = fs.readFileSync(htmlPath, "utf8");
+    const regions = extractRegions(html);
+    const jsx = htmlToJsx(regions);
+    const file = path.join(outDir, `${name}.tsx`);
+    fs.writeFileSync(file, gapComponentTemplate(name, jsx));
+    console.log("gap", name, jsx.length);
+  }
+}
+
+function portDriverUpdate() {
+  const outDir = path.join(repo, "apps/driver/src/components/car-kit/screens");
+  const name = "DkUpdateReportedItemSheet";
+  const folder = "update_reported_item_sheet";
+  const htmlPath = path.join(repo, "docs/stitch/roam-driver-app/car-kit", folder, "code.html");
+  if (!fs.existsSync(htmlPath)) {
+    console.warn("missing", htmlPath);
+    return;
+  }
+  const html = fs.readFileSync(htmlPath, "utf8");
+  const regions = extractRegions(html);
+  const jsx = htmlToJsx(regions);
+  const body = `/** Ported from Stitch — driver update reported item (audit R16). */
+import type { DriverReportRow } from '../../../services/driverInventoryApi';
+
+export function DkUpdateReportedItemSheet({
+  report,
+  offline,
+  onClose,
+}: {
+  report: DriverReportRow;
+  offline?: boolean;
+  onClose?: () => void;
+}) {
+  const urgent = report.issue === 'not_working';
+  const fixed = report.status === 'fixed';
+  return (
+    <div className="driver-car-kit-stitch fixed inset-0 z-[60] flex flex-col justify-end bg-inverse-surface/65">
+      <div className="max-h-[92vh] overflow-y-auto rounded-t-2xl bg-surface shadow-xl">
+        ${jsx.split("\n").map((line) => (line.trim() ? `        ${line}` : "")).join("\n")}
+        {fixed ? (
+          <p className="px-margin pb-space-md font-body-sm text-on-surface-variant">This report is closed.</p>
+        ) : null}
+        {offline ? (
+          <p className="px-margin pb-space-md font-body-sm text-amber-800">Offline — updates queue when you reconnect.</p>
+        ) : null}
+        {urgent && !fixed ? (
+          <p className="px-margin pb-space-md font-body-sm text-error">Urgent safety item — fleet has been notified.</p>
+        ) : null}
+        {onClose ? (
+          <button type="button" className="mx-margin mb-space-lg w-[calc(100%-2rem)] rounded-lg bg-primary py-3 font-body-sm text-on-primary" onClick={onClose}>
+            Close
+          </button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+`;
+  fs.writeFileSync(path.join(outDir, `${name}.tsx`), body);
+  console.log("driver", name, jsx.length);
+}
+
 function portDriver() {
   const outDir = path.join(repo, "apps/driver/src/components/car-kit/screens");
   fs.mkdirSync(outDir, { recursive: true });
@@ -144,5 +262,9 @@ function portDriver() {
 }
 
 const args = process.argv.slice(2);
-if (args.includes("--driver") || args.length === 0) portDriver();
-if (args.includes("--fleet") || args.length === 0) portFleet();
+if (args.includes("--gap")) portGap();
+else if (args.includes("--driver-update")) portDriverUpdate();
+else {
+  if (args.includes("--driver") || args.length === 0) portDriver();
+  if (args.includes("--fleet") || args.length === 0) portFleet();
+}

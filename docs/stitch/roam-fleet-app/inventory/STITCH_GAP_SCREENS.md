@@ -1,32 +1,23 @@
-# Stitch gap screens (audit §2)
+# Stitch gap screens (audit Rev 16)
 
-**Status (R12):** API/data path closed; **15 flows remain product-owner Stitch deliverables** (see sprint order below). Fleet uses [`gapScreens.tsx`](../../../apps/fleet/src/components/inventory/gap/gapScreens.tsx) placeholders until HTML exports land.
+**Status:** All 15 Fleet gap flows ported to `apps/fleet/src/components/inventory/gap/Gap*.tsx` via `node scripts/port-inventory-stitch.mjs --gap`. Driver update sheet: `apps/driver/src/components/car-kit/screens/DkUpdateReportedItemSheet.tsx` (`--driver-update`).
 
-### R12 sprint order (PO export → `node scripts/port-inventory-stitch.mjs` → replace `Gap*`)
+| Gap | Stitch folder | React |
+|-----|----------------|-------|
+| Settings | `inventory_asset_management_settings` | `gap/GapInventorySettings.tsx` |
+| Item editor | `inventory_asset_management_add_edit_item_drawer` | `gap/GapItemEditor.tsx` |
+| Import | `inventory_asset_management_import_items_3_step_dialog` | `gap/GapImportItems.tsx` |
+| Locations | `inventory_asset_management_locations_bins` | `gap/GapLocationsBins.tsx` |
+| Opening balances | `inventory_asset_management_opening_balances` | `gap/GapOpeningBalances.tsx` |
+| Register asset | `inventory_asset_management_register_asset_dialog` | `gap/GapRegisterAsset.tsx` |
+| PO | `inventory_asset_management_new_edit_purchase_order` | `gap/GapPurchaseOrder.tsx` |
+| Vendor | `inventory_asset_management_vendors_list_edit_drawer` | `gap/GapVendorEditor.tsx` |
+| Count | `inventory_asset_management_count_sheet_start_dialog` | `gap/GapCountSession.tsx` |
+| Requisition | `inventory_asset_management_requisitions_new_request_dialog` | `gap/GapRequisition.tsx` |
+| Approval | `inventory_asset_management_approval_review_drawer` | `gap/GapApprovalDrawer.tsx` |
+| Scanner | `inventory_asset_management_pair_mobile_scanner` | `gap/GapScannerPair.tsx` |
+| Snooze | `inventory_asset_management_snooze_settings_alert_rules` | `gap/GapSnoozeSettings.tsx` |
+| Kit compare | `inventory_asset_management_kit_version_compare` | `gap/GapKitCompare.tsx` |
+| Fleet report update | `inventory_asset_management_update_reported_item_drawer` | `gap/GapDriverReportUpdate.tsx` |
 
-| Sprint | Screens |
-|--------|---------|
-| P1 | Opening balances · Register asset · Item editor · Approval drawer |
-| P2 | PO · Vendor · Count session · Scanner pair |
-| P3 | Settings · Import · Snooze · Kit compare |
-| Driver | Update reported item (car-kit Stitch) |
-
-| Gap | Stitch title | Owner action |
-|-----|----------------|--------------|
-| Settings | Inventory settings | Export + port |
-| Item editor | Add / edit item | Export + port |
-| Import | Import items | Export + port |
-| Locations | Locations & bins | Export + port |
-| Opening balances | Opening balances | Export + port |
-| Register asset | Register asset | Export + port |
-| PO | New / edit purchase order | Export + port |
-| Vendor | Add / edit vendor + list | Export + port |
-| Count | Start count + count sheet | Export + port |
-| Requisition | New requisition + list | Export + port |
-| Approval | Approval review drawer | Export + port |
-| Scanner | Pair mobile scanner | Export + port |
-| Snooze | Snooze settings | Export + port |
-| Kit compare | Kit version compare | Export + port |
-| Driver status | Update reported item | Export in driver car-kit Stitch |
-
-After each export: `node scripts/port-inventory-stitch.mjs` and replace the matching `Gap*` component.
+Modals open from Inventory tabs through `InventoryShellContext.openModal` (see `InventoryGapModals.tsx`).

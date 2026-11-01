@@ -1,0 +1,282 @@
+ROAM FLEET — INVENTORY & ASSET MANAGEMENT: MISSING SCREENS (GOOGLE STITCH)
+
+
+
+
+Roam Fleet - Inventory & Asset Management, missing screens (Desktop Web App, for fleet owners, fleet managers and their staff):
+
+Design the 15 remaining high-fidelity screens for the Inventory & Asset Management section of the Roam Fleet app. The main tabs (Overview, Stock, Vehicle kits, Assets, Movements, Purchasing, Counts, Alerts) and the Issue, Receive, Transfer/Return/Write-off dialogs are already designed; these new screens must sit beside them and look like the same product. Each screen opens from a button that already exists on those tabs (named under every screen below). Stock never changes by typing over a number: it changes only through Receive, Issue, Return, Transfer, Count or Write-off, and every change is kept in a history that cannot be edited. Large changes (adjustments, write-offs, counts with big differences, purchase orders over the approval limit) wait for a second person to approve; the person who asked can never approve their own request. The tone is calm, plain and exact: a well-run storeroom logbook, not an accounting system.
+
+BRAND IDENTITY:
+- Match the existing Roam Fleet web app:
+  - white top nav row with the black "Roam Fleet" app tile, then: Dashboard, Fleet Operations, Driver Operations, Money, Vehicle Operations (active, underlined), Delivery Operations, Analytics, Reports, Business Finance, and a round avatar
+  - dark navy sub-bar (#020817) with "Switch vehicle or search hub..." on the left and "08:20:30 AM EST · America/Jamaica · JM (JMD) · DE · Deeki T · platform_owner" on the right
+  - page wash Slate 50, centred content (max ~1400px), shadcn-style components
+  - page title "Inventory & Asset Management" in bold, large
+- LIGHT MODE (default):
+  - Primary: Near-black (#030213) — primary buttons ("Issue", "Receive"), the active tab, selected outlines
+  - Background: White (#FFFFFF); page wash: Slate 50 (#f8fafc)
+  - Surface cards: White, with a 1px border rgba(0,0,0,0.1)
+  - Muted text: #717182
+  - Text primary: #0a0a0a
+  - Success / OK / complete: Emerald (#059669)
+  - Warning / low stock / due soon / needs approval: Amber (#d97706)
+  - Error / out of stock / missing / overdue: Red (#d4183d)
+  - Neutral / not tracked yet / archived: Slate 500 (#64748b)
+  - Info / reserved / on order: Indigo 600 (#4f46e5)
+  - Muted fill for tabs and chips: Slate 100 (#f1f5f9)
+- DARK MODE:
+  - Background: #252525
+  - Surface: #2e2e2e
+  - Border: #444444
+  - Text primary: #fafafa
+  - Muted text: #b4b4b4
+  - Primary: #fafafa (buttons become light with dark text)
+  - Success: #34d399
+  - Warning: #f59e0b
+  - Error: #f87171
+  - Neutral: #94a3b8
+  - Info: #818cf8
+- Status chips (rounded, small, always a word, never colour alone):
+  - Stock: "OK" (emerald text, no fill) · "Low" (amber outline, amber text) · "Out" (red fill, white text)
+  - Kit cell: "✓" (emerald) · "Missing" (red outline) · "Short 1" (amber outline) · "Damaged" (red text with a small crack icon) · "Inspection due" (amber) · "Linked" (slate, for toll tag and fuel card)
+  - Asset: "Installed" (emerald) · "In store" (slate) · "In repair" (amber) · "Faulty" (red) · "Lost" (red fill) · "Retired" (slate outline)
+  - Movement type tags in grey mono caps: RECEIVE, ISSUE, RETURN, TRANSFER, COUNT, WRITE-OFF, WORK ORDER, REVERSAL
+  - "Needs approval" — amber fill, dark text
+- Money is Jamaican dollars: "J$ 5,400.00"; quantities as plain numbers with units: "3 each"
+- Dates as "1 Nov 2026"; times as "08:20 AM"
+- No gradients, glassmorphism or 3D. No AI badges, no confidence percentages.
+- Typography: Inter. Plates, SKUs, serial numbers, quantities, money and PO numbers use a mono font with tabular numerals.
+- Jamaica context:
+  - fleet cars: "Toyota Roomy 2019 · 5179KZ" (Rideshare), "Honda Fit 2018 · 1505LM" (Rideshare)
+  - storage location: "Main store — Kingston"
+  - vendors: "Kingston Auto Supplies", "Amazon (via shipping agent)", "Car Toys Jamaica"
+  - items with real numbers: Phone Holder Mount J$ 5,400.00 · Dash camera J$ 45,998.85 · Spare tyre J$ 20,000.00 · Car jack J$ 5,600.00 · Lug wrench J$ 2,805.00 · Car mats J$ 8,000.00 · Tyre pump J$ 6,500.00 · First-aid kit J$ 3,200.00 · Warning triangle J$ 2,100.00 · Fire extinguisher J$ 7,800.00
+  - kit: "Rideshare car kit" — Spare tyre, Car jack, Lug wrench, Tyre pump, Phone holder, First-aid kit, Warning triangle, Dash camera, Toll tag (linked), Fuel card (linked); Fire extinguisher optional
+
+DESIGN PRINCIPLES:
+- Desktop-first (1440px wide), with a phone version
+- Keep what works: the existing tab bar, the black primary button in the top-right, and the Stock table layout stay recognisable; the "Bulk Assignment" button becomes "Issue" in the same spot
+- Stock is never typed over: quantities are read-only everywhere; every change goes through Receive, Issue, Return, Transfer, Count or Write-off
+- Every number can be clicked to see the history behind it
+- Preview before anything changes: every action dialog shows a "What will change" box before the confirm button
+- Kits are the heart of the page: for each car, what it should have, what it has, what's missing
+- Plain words first: "Missing 3 items — Tyre pump, First-aid kit, Warning triangle", never "compliance 0.7"
+- No internal ids, UUIDs or table names anywhere
+- One verb per action: "Issue" on the button, the dialog title and the confirm button
+- One save: confirm buttons show a spinner and cannot be pressed twice
+- Corrections never delete: a wrong movement is undone with a "Reverse" that shows in the history
+- Light theme default, dark mode variant
+- 8px spacing grid, 12px card corners, hairline borders, soft shadows, skeleton loading
+- New screens are dialogs (centred, 640–880px wide) or right-side drawers (560px) over the existing Inventory page, unless a screen says "full page"
+- Every dialog: title, one-line plain explanation, the form, a "What will change" box, then Cancel (outline) + one black confirm button using the same verb as the title
+- Required fields are marked; errors show under the field in red, in plain words
+- Nothing is deleted: items, vendors, locations and bins are "Archived" and can be restored
+
+---
+
+=== P1 — MAKE FIRST ===
+
+SCREEN 1: OPENING BALANCES (FULL PAGE)
+- Opens from: Overview "Set up inventory" checklist step "Enter what you already have", and Settings → "Opening balances"
+- Header: back link "Inventory", title "Opening balances", sub-line "Enter the stock you already have before you start using Receive and Issue. Do this once per location."
+- Location picker at the top: "Main store — Kingston" (selected) · "Vehicle — 5179KZ" · "Vehicle — 1505LM"
+- Table, one row per item, columns: Item (icon + name + SKU in mono) · Bin (picker, e.g. "A-01") · Quantity (number box) · Unit cost (J$ box, prefilled from the item's default cost, editable) · Line value (read-only, mono) · remove "×"
+  - Rows: Spare tyre · 1 · J$ 15,000.00 · J$ 15,000.00 / Phone Holder Mount · 1 · J$ 5,400.00 · J$ 5,400.00
+  - "+ Add item" row at the bottom with a search box
+- Right summary card: "2 items · 2 units · J$ 20,400.00", "Date of balance: 1 Nov 2026" (date picker), note box "Where did these numbers come from? (optional)"
+- Already-entered state: if the location already has an opening balance, show an amber bar "Main store already has an opening balance from 1 Nov 2026 (OPN-0001). New lines are added on top; to fix a wrong line, reverse it from Movements."
+- "What will change" box: "Main store will show 2 items worth J$ 20,400.00. This is recorded as OPN-0006 in Movements."
+- Buttons: "Cancel" · black "Post opening balance"
+- After posting: green toast "Opening balance posted — OPN-0006" and the rows become read-only with a "View in Movements" link
+
+SCREEN 2: REGISTER ASSET (DIALOG)
+- Opens from: Assets tab "Register asset"; Receive dialog when a serial-tracked item (dash camera) is received
+- Title "Register asset", sub-line "Track one expensive device by its serial number."
+- Fields, two columns:
+  - Item (picker limited to serial-tracked items): "Dash camera"
+  - Asset tag (auto-filled "AST-0002", editable, mono)
+  - Serial number (mono, required): "DC70-88412118"
+  - IMEI (optional, mono)
+  - Purchase cost (J$): "J$ 45,998.85"
+  - Where is it now: "In store — Main store — Kingston" or "Installed — Vehicle 5179KZ" (radio + picker); Bin (optional)
+  - Warranty ends: "1 Nov 2027" (with helper "12 months from purchase")
+  - Next inspection due: "1 Feb 2027" (helper "every 90 days")
+  - Insurance: insurer name + policy number (optional, collapsed section "Insurance")
+  - Device connection (optional, collapsed section "Connected device"): provider "70mai", device id, firmware
+- Photo + documents drop zone: "Add receipt or photo"
+- Duplicate check: if the serial already exists, red message under the field "This serial is already registered as AST-0001 on 5179KZ." and the confirm button stays disabled
+- "What will change" box: "Dash camera DC70-88412118 is added as AST-0002, In store at Main store."
+- Buttons: "Cancel" · black "Register asset"
+
+SCREEN 3: ADD / EDIT ITEM (DRAWER)
+- Opens from: Stock tab "+ New item"; item details drawer "Edit"
+- Title "New item" (or "Edit item · Phone Holder Mount")
+- Sections:
+  - Basics: Name "Phone Holder Mount" · Short code "PHM" · SKU (auto "INV-0007", editable, mono) · Category picker "Car kit › Accessories" · Description · Model · Icon picker (small grid of line icons) · Photo
+  - Tracking: segmented "Count by quantity" | "Track each one by serial number" with a helper line for each; unit of measure "each"
+  - Cost and buying: Default unit cost "J$ 5,400.00" · Default vendor "Car Toys Jamaica"
+  - Reordering (per location table): Location · Reorder at · Order qty · Safety stock — row "Main store — Kingston · 1 · 2 · 1"
+  - Warranty and inspection: warranty months · warranty type (Manufacturer / Seller) · inspection every N days · inspection kind
+  - Link to parts catalog (optional): search box "Find in Roam parts catalog", shows the linked part as a small card with "Unlink"
+  - Lifecycle: "Active" / "Being replaced by…" (pick the new item) / "Archived"
+- Edit mode only: read-only line "On hand: 2 each across 2 locations · J$ 9,075.00" with "View history"; a note "Quantities can't be edited here — use Receive, Issue or Count."
+- Buttons: "Cancel" · black "Save item"; in edit mode a text button "Archive item" (red text) that asks "Archive Phone Holder Mount? It stays in history and can be restored."
+
+SCREEN 4: APPROVAL REVIEW (DRAWER)
+- Opens from: Alerts "Needs approval" chip; Overview "2 waiting for approval"; any row marked "Needs approval"
+- Title "Approval needed · Write-off", amber "Needs approval" chip
+- Who and what: "Requested by Deeki T · 1 Nov 2026 08:20 AM", rule line "Rule: write-offs over J$ 5,000 need a second person"
+- Summary card: item "Dash camera AST-0001 · DC70-88412118", location "Vehicle — 5179KZ", quantity "1", value "J$ 45,998.85" (mono), reason "Damaged beyond repair", note from requester, attached photos (thumbnails)
+- Types to show as variants in the same layout: Write-off · Adjustment · Count with differences (show the 3 biggest lines with "+1 / −2" and J$ values) · Purchase order (vendor, lines, total)
+- "What will change if approved" box: "AST-0001 moves to Disposed. Stock value drops by J$ 45,998.85. Recorded as WO-0003."
+- Decision area: comment box "Comment (required if rejecting)", buttons outline red "Reject" · black "Approve"
+- Self-approval state: if the viewer is the requester, both buttons are replaced by grey text "You asked for this, so someone else must approve it."
+- History strip at the bottom: "Requested 08:20 AM · Approved by — · Rejected by —"
+
+=== P2 ===
+
+SCREEN 5: NEW / EDIT PURCHASE ORDER (FULL PAGE)
+- Opens from: Purchasing tab "+ New PO"; reorder suggestion "Create PO"; PO row "Edit" (draft only)
+- Header: back link "Purchasing", title "New purchase order", PO number "PO-0004" in mono, status chip "Draft"
+- Top fields: Vendor picker ("Kingston Auto Supplies", shows phone and "usually 5 days"); Ship to "Main store — Kingston"; Expected by (date, prefilled from lead time)
+- Lines table: Item · Qty · Unit price (J$) · Line total — rows "Tyre pump · 2 · J$ 6,500.00 · J$ 13,000.00", "First-aid kit · 2 · J$ 3,200.00 · J$ 6,400.00"; "+ Add item"
+- Extra costs (landed cost) table: Kind (Shipping / Customs / Agent fee / Other) · Label · Paid to · Amount — row "Customs · Duty and GCT · Jamaica Customs · J$ 2,400.00"; helper "These are spread across the items so stock cost is the real cost."
+- Right summary: Subtotal · Extra costs · Total "J$ 21,800.00" · landed cost per line (small table) · Payment "Unpaid" / "Settled"
+- Approval notice when the total is over the limit: amber bar "Over J$ 20,000 — this PO needs approval before it is sent."
+- Buttons: "Save draft" (outline) · black "Send for approval" (over limit) or "Place order" (under limit)
+- Status timeline for an existing PO: Draft → Awaiting approval → Ordered → Part received → Received → Closed (Cancelled shown as a red end state)
+
+SCREEN 6: VENDORS (LIST) + ADD / EDIT VENDOR (DRAWER)
+- List opens from: Purchasing tab "Vendors"
+- Vendor list (full page or wide panel): search, columns Name · Phone · Usually delivers in · Open POs · Last order · Status — rows "Kingston Auto Supplies · 876-555-0142 · 5 days · 1 · 28 Oct 2026 · Active", "Car Toys Jamaica · 876-555-0199 · 2 days · 0 · 2 Sep 2026 · Active", "Amazon (via shipping agent) · — · 14 days · 0 · 15 Mar 2026 · Active"; "Show archived" toggle; "+ New vendor"
+- Drawer "New vendor" / "Edit vendor · Kingston Auto Supplies": Name · Phone · What they sell (description) · Tags (chips: "Tyres", "Batteries", "Accessories") · Usually delivers in (days) · Link to Roam supplier directory (optional search) · Active switch
+- Edit mode: small stats card "3 POs this year · J$ 64,200.00 · on time 2 of 3"
+- Buttons: "Cancel" · black "Save vendor"; red text "Archive vendor" (blocked with a message if the vendor has open POs)
+
+SCREEN 7: START A COUNT (DIALOG) + COUNT SHEET (FULL PAGE)
+- Start dialog opens from: Counts tab "Start count"
+  - Title "Start a count", Location "Main store — Kingston", bins (all / pick: "A-01", "A-02"), "Blind count" switch with helper "Counters won't see the expected quantity", assign to (staff picker), device (optional: "Handheld — Store 1")
+  - "What will change": "Stock at Main store is frozen for counting. Issues from these bins wait until the count is submitted."
+  - Buttons "Cancel" · black "Start count"
+- Count sheet (full page): header "Count CNT-0003 · Main store — Kingston", status chip "Open", progress "3 of 5 lines counted"
+  - Table: Bin · Item · Expected (hidden when blind) · Counted (big number box) · Difference (shown after entry, red if short, amber if over) · Reason (picker: Damaged, Lost, Found, Wrong bin, Other)
+  - Rows: "A-01 · Spare tyre · 1 · [1] · 0", "A-02 · Phone Holder Mount · 1 · [0] · −1 · J$ −5,400.00 · Lost"
+  - Scan bar at the top: "Scan or type a code"
+  - Footer summary: "2 differences · net J$ −5,400.00"; when over the limit, amber "Needs approval before stock changes"
+  - Buttons: "Save and finish later" · black "Submit count"
+  - Status timeline: Open → Submitted → Under review → Reconciled → Closed
+
+SCREEN 8: PAIR MOBILE SCANNER (DIALOG)
+- Opens from: Counts tab or Settings "Scanners"
+- Title "Pair a scanner", sub-line "Use a phone or handheld scanner to count and receive faster."
+- Step 1: device type cards: "Phone" · "Handheld scanner" · "USB scanner" · "Gate reader"
+- Step 2 (phone): large QR code and a 6-digit code "482 913" in mono, "Open roamfleet.co/scan on the phone and enter this code", countdown "Code expires in 9:41"
+- Step 3: name "Store phone 1", location "Main store — Kingston"
+- Waiting state: spinner "Waiting for the phone…"; success state: emerald tick "Store phone 1 is paired"
+- Paired devices list underneath: Name · Type · Location · Last seen · Read success "98 of 100" · "Unpair" text button
+
+=== P3 ===
+
+SCREEN 9: INVENTORY SETTINGS (FULL PAGE)
+- Opens from: gear icon in the Inventory page header
+- Left section list, content on the right:
+  - General: fleet support phone "876-555-0100" (shown to drivers), safety notice text for the driver kit screen, fiscal year starts (month)
+  - Approvals: approval limit "J$ 20,000.00", rule name "Second person over limit", write-off rule, monthly buying cap "J$ 150,000.00"
+  - Locations & bins: link card to Screen 14
+  - Categories: tree with drag-to-reorder, "+ Add category", archive
+  - Scanners: link to Screen 8
+  - Alerts: link to Screen 11
+  - Opening balances: link to Screen 1
+  - Write-off note: default scrap note text
+- Each section saves on its own with a black "Save" and shows "Saved 08:20 AM"
+
+SCREEN 10: IMPORT ITEMS (DIALOG, 3 STEPS)
+- Opens from: Stock tab "More ▾ → Import items"
+- Step 1 "Upload": drop zone "Drop a CSV or Excel file", link "Download template"
+- Step 2 "Match columns": two columns, file column → Roam field (Name, SKU, Category, Unit, Default cost, Vendor, Tracking); unmatched shown amber
+- Step 3 "Check": table preview with row status chips "New" (emerald) · "Updates existing" (indigo) · "Problem" (red with reason, e.g. "Cost is not a number"); summary "12 new · 3 updates · 1 problem"
+- Note: "Import adds items only. Quantities come from Opening balances or Receive."
+- Buttons: "Back" · black "Import 15 items" (problem rows skipped and listed in a download)
+
+SCREEN 11: SNOOZE SETTINGS (POPOVER + SETTINGS SECTION)
+- Popover opens from: an alert row's "Snooze"
+  - Options: "1 day", "3 days", "1 week", "Until a date…", and "Assign to…" (staff picker)
+  - Note box "Why? (optional)"; black "Snooze"
+- Settings section "Alerts": table of alert types (Low stock · Missing kit item · Driver report · Inspection due · Warranty ending · Count difference · Approval waiting) with columns Default snooze · Who is told · Can be snoozed (switch); safety items (Spare tyre, Warning triangle, First-aid kit) show a lock and "Can't be snoozed — blocks the car from the road"
+
+SCREEN 12: KIT VERSION COMPARE (FULL PAGE)
+- Opens from: Kit template editor "Version history → Compare"
+- Header: "Rideshare car kit", two pickers "Version 3 (1 Nov 2026)" vs "Version 4 (draft)"
+- Side-by-side list of lines; added lines green with "+ Added", removed red with "− Removed", changed amber with "1 → 2"; e.g. "+ Fire extinguisher (optional)", "Warning triangle 1 → 2"
+- Impact card: "Applying version 4 affects 2 cars. 5179KZ will need 2 more items; 1505LM will need 9 more items. Estimated cost J$ 34,700.00."
+- Buttons: "Back" · outline "Keep editing" · black "Apply version 4 to 2 cars"
+
+=== ALSO IN THE BACKLOG ===
+
+SCREEN 13: UPDATE REPORTED ITEM — FLEET SIDE (DRAWER)
+- Opens from: Alerts "Driver report" row; asset or vehicle kit cell with a "Reported" chip
+- Header: "Report R-0012 · Warning triangle · Missing", vehicle "5179KZ", driver name, "1 Nov 2026 08:20 AM", status chip "Sent" / "Seen" / "Fixed"
+- Driver's note and photo, small map pin of where it was reported
+- Timeline of updates from both sides: "Driver: Still missing · 2 Nov", "Fleet: Replacement on the way · 2 Nov"
+- Fleet update choices (chips): "Replacement on the way" · "Ready to collect at the hub" · "Urgent safety item"
+- Reply box "Message to the driver" (shown in the driver app)
+- Resolve options: "Mark fixed — issue from stock" (opens the Issue dialog prefilled), "Mark fixed — no stock used", and a switch "Driver is responsible for the cost"
+- Buttons: "Close" · black "Send update"
+
+SCREEN 14: LOCATIONS & BINS (FULL PAGE)
+- Opens from: Settings → Locations & bins; Stock tab location filter "Manage locations"
+- Left: list of locations grouped Warehouse / Vehicles / People, each with code, name, item count and value: "MAIN · Main store — Kingston · 2 items · J$ 20,400.00", "VEH-5179KZ · Vehicle — 5179KZ · 6 items · J$ 48,980.00"
+- Right: selected location details: name, code, type, address + small map, photo, "Default location" and "Locked store" switches, Active switch
+- Bins table under it: Code "A-01" · Zone "Tyres" · Capacity "4" · Items in it · archive
+- "+ New location" and "+ New bin" open small dialogs; vehicle locations are created automatically per car and can't be renamed
+- Archive is blocked while stock is inside: "Move the 2 items out first."
+
+SCREEN 15: REQUISITIONS — NEW REQUEST (DIALOG) + LIST
+- List opens from: Purchasing or Stock tab "Requests"; columns Ref "RQ-0004" · For (car or person) · Items · Requested by · Status chip (Open / Approved / Issued / Rejected) · Date
+- New request dialog: For "Vehicle 5179KZ" or a staff member; lines Item · Qty (with "2 in stock" hint per item); note
+- "What will change": "2 items are held for 5179KZ until issued. Nothing leaves the store yet."
+- Approved request shows black "Issue now" that opens the existing Issue dialog prefilled
+- Buttons: "Cancel" · black "Send request"
+
+---
+
+ADDITIONAL UI COMPONENTS:
+- "What will change" box (slate 50 fill, list of plain sentences)
+- Approval bar (amber) and self-approval notice (grey)
+- Status timeline (dots joined by a line, current step bold)
+- Editable table rows with a running total footer
+- Location / item / vendor / staff pickers with search
+- Step header for multi-step dialogs (1 Upload · 2 Match · 3 Check)
+- QR pairing card with countdown
+- Diff list row (added / removed / changed)
+- Toasts: "Opening balance posted", "Asset registered", "Item saved", "Approved", "PO sent", "Count submitted", "Scanner paired", "Update sent to driver"
+- Skeleton, empty ("No vendors yet — add your first one"), and error states ("Couldn't save. Nothing was changed — try again.") for every screen
+
+INTERACTIONS:
+- Every confirm button shows a spinner and can't be pressed twice
+- Every screen with numbers links them to Movements history
+- Over-limit actions route to Screen 4 instead of changing stock
+- Archiving never deletes; archived things are hidden behind "Show archived"
+- Serial numbers are checked for duplicates as you type
+- Count sheets autosave every line
+- Closing a dialog with unsaved changes asks "Discard changes?"
+
+---
+
+Spec screens	Area	Priority
+1 Opening balances	Setup	P1
+2 Register asset	Assets	P1
+3 Add / edit item	Stock	P1
+4 Approval review drawer	Approvals	P1
+5 New / edit purchase order	Purchasing	P2
+6 Vendors list + add / edit vendor	Purchasing	P2
+7 Start count + count sheet	Counts	P2
+8 Pair mobile scanner	Counts	P2
+9 Inventory settings	Settings	P3
+10 Import items	Stock	P3
+11 Snooze settings	Alerts	P3
+12 Kit version compare	Vehicle kits	P3
+13 Update reported item (fleet side)	Alerts	Backlog
+14 Locations & bins	Settings	Backlog
+15 New requisition + list	Purchasing	Backlog

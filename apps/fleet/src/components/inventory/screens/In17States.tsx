@@ -454,7 +454,7 @@ export function In17States() {
       <div className="flex items-center gap-space-md flex-shrink-0">
       <div className="flex flex-col text-right">
       <span className="font-caption text-caption uppercase text-outline font-semibold">Engine Version</span>
-      <span className="font-label-code text-body-sm font-bold text-on-surface">v3.18.4-carib-state-engine</span>
+      <span className="font-label-code text-body-sm font-bold text-on-surface">inventory-state-engine</span>
       </div>
       <button type="button" className="bg-surface-container-low hover:bg-surface-container-high transition-colors p-2 rounded-lg text-on-surface"  title="Scroll to top">
       <span className="material-symbols-outlined text-[20px]">arrow_upward</span>

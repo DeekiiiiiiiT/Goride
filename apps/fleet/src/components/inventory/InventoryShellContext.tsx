@@ -19,7 +19,36 @@ export type InventoryModalId =
   | 'item-drawer'
   | 'asset-page'
   | 'kit-editor'
-  | 'first-time-setup';
+  | 'first-time-setup'
+  | 'inventory-settings'
+  | 'opening-balances'
+  | 'item-editor'
+  | 'import-items'
+  | 'locations-bins'
+  | 'register-asset'
+  | 'purchase-order'
+  | 'vendor-editor'
+  | 'count-session'
+  | 'requisition'
+  | 'approval-drawer'
+  | 'scanner-pair'
+  | 'snooze-settings'
+  | 'kit-compare'
+  | 'driver-report-update';
+
+export type InventoryGapDraft = {
+  safetyNotice?: string | null;
+  openingBalance?: Record<string, unknown>;
+  importFile?: unknown;
+  countSession?: Record<string, unknown>;
+  purchaseOrder?: Record<string, unknown>;
+  vendor?: Record<string, unknown>;
+  requisition?: Record<string, unknown>;
+  asset?: Record<string, unknown>;
+  pairingCode?: string;
+  alertRules?: unknown[];
+  reportResolve?: Record<string, unknown>;
+};
 
 export type InventoryShellState = {
   tab: InventoryTabId;
@@ -31,6 +60,13 @@ export type InventoryShellState = {
   setSelectedItemId: (id: string | null) => void;
   selectedAssetId: string | null;
   setSelectedAssetId: (id: string | null) => void;
+  selectedApprovalId: string | null;
+  setSelectedApprovalId: (id: string | null) => void;
+  selectedReportId: string | null;
+  setSelectedReportId: (id: string | null) => void;
+  gapDraft: InventoryGapDraft;
+  setGapDraft: (draft: InventoryGapDraft) => void;
+  setErrorBanner: (message: string | null) => void;
   readOnly: boolean;
   errorBanner: string | null;
   discrepancyBanner: string | null;
@@ -113,6 +149,9 @@ export function InventoryShellProvider({
   const [modal, setModal] = useState<InventoryModalId>('none');
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
+  const [selectedApprovalId, setSelectedApprovalId] = useState<string | null>(null);
+  const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
+  const [gapDraft, setGapDraft] = useState<InventoryGapDraft>({});
   const [overview, setOverview] = useState<Record<string, unknown> | null>(null);
   const [stockRows, setStockRows] = useState<Record<string, unknown>[]>([]);
   const [items, setItems] = useState<Record<string, unknown>[]>([]);
@@ -218,6 +257,13 @@ export function InventoryShellProvider({
       setSelectedItemId,
       selectedAssetId,
       setSelectedAssetId,
+      selectedApprovalId,
+      setSelectedApprovalId,
+      selectedReportId,
+      setSelectedReportId,
+      gapDraft,
+      setGapDraft,
+      setErrorBanner,
       readOnly,
       errorBanner,
       discrepancyBanner,
@@ -244,6 +290,9 @@ export function InventoryShellProvider({
       modal,
       selectedItemId,
       selectedAssetId,
+      selectedApprovalId,
+      selectedReportId,
+      gapDraft,
       readOnly,
       errorBanner,
       discrepancyBanner,

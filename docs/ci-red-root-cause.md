@@ -1,57 +1,39 @@
 # GitHub Actions red: what's left
 
-Rev 13. Fix landed 2026-11-01 — bulk-synced **86** migration bodies from production `schema_migrations.statements` (see tooling below). **Awaiting GitHub:** CI + Parts SQL checks green on the merge commit (local `supabase db start` failed on this machine — Docker init error).
+Rev 14. Checked 2026-11-01 20:20 UTC against `main` @ `9c1126b8`.
 
-Rev 12 baseline: `main` @ `e1246409`. Root cause unchanged: repo files were rewrites, not prod copies (example: `20261101165443` used `value_delta`; prod creates `fleet.r5_fix_phone_holder_opening`).
+**Red:** CI ("Start Supabase and bootstrap inventory schema") and Parts SQL ("Start the database").
+**Green:** Vercel.
 
-## Status
+The production sync is right, and the repo now holds real bodies instead of `SELECT 1` stubs. What's left is 4 files where production's copy only works on production's own data. Rev 12's "overwrite every differing file" also removed a replay guard added in an earlier round (`fuel_refineries` T3). That's my mistake, and it's fixed below.
 
-| Check | State |
-|-------|--------|
-| Repo MD5 vs prod (126 versions, 5 skipped) | **Done** — `node scripts/compare-migration-md5-to-prod.mjs` |
-| CI — Start Supabase + inventory tests | Pending GitHub |
-| Parts SQL — db reset + 5 test files | Pending GitHub |
-| Vercel | Was green on Rev 12 |
-
-**Skip list (placeholder prod rows — repo file unchanged):** `20261030022441`, `20261031000834`, `20261101032731`, `20261101172128`, `20261101174625`.
-
-## Tooling (Rev 13)
-
-1. Export prod bodies (read-only): SQL in §1 below, or MCP → `node scripts/merge-mcp-prod-export.mjs …`
-2. Write repo files: `node scripts/sync-migration-bodies-from-prod-export.mjs scripts/tmp-migrations/prod-export.json`
-3. Verify: `node scripts/compare-migration-md5-to-prod.mjs` (uses [scripts/prod-migration-md5-fingerprints.json](../scripts/prod-migration-md5-fingerprints.json))
-4. Also: `node scripts/assert-migrations-utf8.mjs`, `node scripts/validate-migration-sql.mjs`
-
-Legacy path still works: [scripts/decode-prod-b64-export.mjs](../scripts/decode-prod-b64-export.mjs) → [scripts/apply-tmp-migration-bodies.mjs](../scripts/apply-tmp-migration-bodies.mjs) (now maps all `tmp-migrations/<version>.sql` files).
-
-## 1. Repo migrations are rewrites, not copies of what production ran
+## 1. Four migrations assume production data, which an empty database doesn't have
 
 ```
-Applying migration 20261101165443_fleet_inventory_r5_fix_phone_holder_v3.sql...
-ERROR: column "value_delta" of relation "inv_ledger" does not exist (SQLSTATE 42703)
+Applying migration 20261029210000_fuel_refineries.sql...
+ERROR: T3 e10_87 <NULL> (SQLSTATE P0001)
 ```
 
-In production, `20261101165443` creates the function `fleet.r5_fix_phone_holder_opening`. The repo file held a hand-written `UPDATE … SET value_delta = …`.
+I checked every migration from `20261029140000` onwards for (a) self-tests that compare against fixed production values and (b) data repairs that target hard-coded production rows. The other self-tests compare a table with itself, so they pass on an empty database. The other repairs look rows up first and do nothing when those rows are missing. Only these 4 fail:
 
-**Fix (applied):** overwrite every drifted repo migration with production's `array_to_string(statements, E'\n')` for that version. UTF-8 without BOM. Production unchanged.
+| File | Why it fails on an empty DB | Fix |
+|---|---|---|
+| `20261029210000_fuel_refineries.sql` (~line 934) | T3 expects production's 22 Oct Petrojam prices | Wrap the two T3 price checks (`e10_87`, `ulsd`) in `if exists (select 1 from fuel.petrojam_prices_legacy where price_date = '2026-10-22') then … end if;`. Leave the `2000-01-01` check outside the wrapper |
+| `20261101181057_fleet_inventory_r10_03a_phone_balance_seed.sql` | Inserts a balance for item `5129bef3-…` / location `b62780a6-…`, so the foreign key fails | Add `AND EXISTS (SELECT 1 FROM fleet.inv_item WHERE id = '5129bef3-8bab-4793-b84d-fa62f9557c5e') AND EXISTS (SELECT 1 FROM fleet.inv_location WHERE id = 'b62780a6-c9b8-4de3-8bff-3ce1e55faea3')` to its `WHERE` |
+| `20261101181109_fleet_inventory_r10_03b_phone_adjust.sql` | Calls `fleet.inv_adjust` on that same missing item | Put both statements inside `DO $$ BEGIN IF EXISTS (SELECT 1 FROM fleet.inv_item WHERE id = '5129bef3-8bab-4793-b84d-fa62f9557c5e') THEN PERFORM fleet.inv_adjust(…same args…); UPDATE …same…; END IF; END $$;` |
+| `20261101181112_fleet_inventory_r10_03c_mount_ledger.sql` | Calls `fleet.inv_opening_balance` for mount `ca661367-…`, which doesn't exist | Make the first line after `BEGIN`: `IF NOT EXISTS (SELECT 1 FROM fleet.inv_item WHERE id = v_mount) THEN RETURN; END IF;` |
 
-Production MD5 check (replay-safe — statement array joined with `;\\n`, see `migration-md5-normalize.mjs`):
+None of this changes production. All 4 already ran there, and in production each guard is true.
 
-```sql
-select version, md5(regexp_replace(regexp_replace(
-  (select string_agg(stmt, E';\\n' ORDER BY ord) FROM unnest(statements) WITH ORDINALITY AS t(stmt, ord)) || E';\\n',
-  '--[^\\n]*', '', 'g'), '\\s+', '', 'g'))
-from supabase_migrations.schema_migrations where version >= '20261029140000';
-```
-
-Compare with `node scripts/compare-migration-md5-to-prod.mjs` (same normalisation in [scripts/migration-md5-normalize.mjs](../scripts/migration-md5-normalize.mjs)).
+Add these 4 versions to the skip list in `scripts/compare-migration-md5-to-prod.mjs`, with the reason "replay guard, differs from prod on purpose". Otherwise the compare reports them as drift.
 
 ## Verify
 
-Parts SQL must pass all five files under `supabase/tests/` after replay. **Close this doc** only when GitHub shows **CI** and **Parts SQL checks** green on the same `main` commit.
+After one push, CI and Parts SQL get through "Start the database". Parts SQL then has to pass the five `supabase/tests/` files, which have never run yet. Don't mark this doc closed until GitHub shows both green.
+
+Housekeeping: the untracked `scripts/.fp-replay*.json` and `scripts/mismatch-versions.json` are scratch output. Delete them, or add them to `.gitignore`.
 
 ## Rule for next time
 
-- A migration that already ran on production is copied from `schema_migrations.statements`, never rewritten from memory or summarised as "prod sync".
-- Apply new migrations with `supabase db push` from the repo file, so the repo and production can't drift.
-- Run `node scripts/compare-migration-md5-to-prod.mjs` before merge when touching applied migration bodies.
+- Copy a production migration body exactly, then add a guard only where it reads production-only rows or values.
+- When syncing from production, keep the skip list of guarded versions so a sync never removes a guard again.

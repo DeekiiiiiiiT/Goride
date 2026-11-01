@@ -96,7 +96,7 @@ export function In8Assets() {
       <span className="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-on-surface-variant text-base">search</span>
       <input className="w-full bg-surface-container-lowest text-on-surface placeholder:text-on-surface-variant font-body-sm text-body-sm pl-8 pr-3 py-1.5 rounded-lg shadow-sm outline-none focus:bg-surface-container-lowest focus:ring-2 focus:ring-primary/20" placeholder="Search serial, asset or car..." type="text"/>
       </div>
-      <button type="button" className="h-9 px-space-md rounded-lg bg-surface-container-lowest text-on-surface hover:bg-surface-container-high font-body-sm text-body-sm font-semibold transition-colors shadow-sm flex items-center gap-space-xs">
+      <button type="button" onClick={() => shell.openModal('register-asset')} className="h-9 px-space-md rounded-lg bg-surface-container-lowest text-on-surface hover:bg-surface-container-high font-body-sm text-body-sm font-semibold transition-colors shadow-sm flex items-center gap-space-xs">
       <span className="material-symbols-outlined text-base">add</span>
       <span>Register asset</span>
       </button>

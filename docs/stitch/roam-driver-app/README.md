@@ -12,3 +12,4 @@
 | DK4 | My reports | `my_reports_history_fleet_replies` | `apps/driver/src/components/car-kit/screens/Dk4MyReports.tsx + apps/driver/src/components/car-kit/Dk4ReportsList.tsx` | Ported |
 | DK5 | Weekly check-in kit step | `weekly_check_in_kit_step` | `apps/driver/src/components/car-kit/screens/Dk5KitStep.tsx + apps/driver/src/components/fleet/WeeklyCheckInModal.tsx` | Ported |
 | DK6 | States | `my_car_kit_states_errors` | `apps/driver/src/components/car-kit/screens/Dk6States.tsx` | Ported |
+| DK7 | Update reported item sheet | `update_reported_item_sheet` | `apps/driver/src/components/car-kit/screens/DkUpdateReportedItemSheet.tsx` | Ported |

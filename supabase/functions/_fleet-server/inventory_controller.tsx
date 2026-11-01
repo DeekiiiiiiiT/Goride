@@ -537,6 +537,37 @@ app.post(`${PREFIX}/driver/reports`, requirePermission("inventory.report"), asyn
   }
 });
 
+app.post(`${PREFIX}/driver/reports/:id/resolve`, requirePermission("inventory.approve"), async (c) => {
+  try {
+    const org = orgOrForbid(c);
+    if (org instanceof Response) return org;
+    const reportId = c.req.param("id");
+    const body = await c.req.json() as Record<string, unknown>;
+    const mode = String(body.mode ?? "fixed_without_stock");
+    const now = new Date().toISOString();
+    const patch: Record<string, unknown> = {
+      status: "fixed",
+      fixed_at: now,
+      fleet_reply: body.note ?? body.fleet_reply ?? null,
+      driver_liability: Boolean(body.driver_liability),
+    };
+    const { data, error } = await invDb().from("fleet_inv_driver_report").update(patch)
+      .eq("organization_id", org).eq("id", reportId).select("*").maybeSingle();
+    if (error) return c.json({ error: error.message }, 500);
+    if (!data) return c.json({ error: "Not found" }, 404);
+    return c.json({
+      report: data,
+      mode,
+      payrollDeductionPosted: Boolean(body.payroll_deduction && body.driver_liability),
+      liabilityLabel: body.payroll_deduction && body.driver_liability
+        ? "Driver payroll deduction"
+        : "Driver marked responsible",
+    });
+  } catch (e) {
+    return safeErrorResponse(c, e, "inventory.driver.reports.resolve");
+  }
+});
+
 app.post(`${PREFIX}/driver/reports/:id/updates`, requirePermission("inventory.report"), async (c) => {
   const org = orgOrForbid(c);
   if (org instanceof Response) return org;

@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_dashboard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{colors:{"surface-container-low":"#f2f4f6","inverse-surface":"#2d3133","on-background":"#191c1e","on-surface":"#191c1e","error-container":"#ffdad6","primary-fixed-dim":"#c8c3df","error":"#ba1a1a","surface-dim":"#d8dadc","on-secondary-fixed-variant":"#454555","background":"#f7f9fb","tertiary":"#000000","primary-fixed":"#e4dffc","outline-variant":"#c9c5cd","surface":"#f7f9fb","tertiary-fixed":"#ffdbca","secondary":"#5d5d6d","tertiary-fixed-dim":"#ffb690","outline":"#78767d","on-error-container":"#93000a","inverse-primary":"#c8c3df","on-surface-variant":"#47464c","on-tertiary":"#ffffff","on-secondary-container":"#616172","surface-container-high":"#e6e8ea","primary-container":"#1b192e","secondary-container":"#dfdef1","primary":"#000000","on-secondary":"#ffffff","secondary-fixed-dim":"#c6c5d8","on-primary-fixed-variant":"#46445b","surface-tint":"#5e5c74","on-tertiary-fixed-variant":"#783200","secondary-fixed":"#e2e1f4","on-secondary-fixed":"#1a1a28","inverse-on-surface":"#eff1f3","on-primary-fixed":"#1b192e","surface-container":"#eceef0","on-error":"#ffffff","on-primary-container":"#84819a","surface-variant":"#e0e3e5","on-tertiary-fixed":"#341100","surface-bright":"#f7f9fb","on-primary":"#ffffff","tertiary-container":"#341100","surface-container-highest":"#e0e3e5","surface-container-lowest":"#ffffff","on-tertiary-container":"#d95f00"},borderRadius:{DEFAULT:"0.25rem",lg:"0.5rem",xl:"0.75rem",full:"9999px"},spacing:{"margin-desktop":"2rem","gutter-desktop":"1.5rem","space-md":"0.75rem",margin:"1rem","space-xl":"1.5rem","space-lg":"1rem","space-sm":"0.5rem","space-xs":"0.25rem",gutter:"1rem"},fontFamily:{caption:["Inter"],"label-price":["JetBrains Mono"],"label-plate":["JetBrains Mono"],"headline-xl":["Inter"],"body-md":["Inter"],"headline-lg":["Inter"],"body-sm":["Inter"],"label-code":["JetBrains Mono"],"body-lg":["Inter"],"headline-sm":["Inter"]},fontSize:{caption:["11px",{lineHeight:"14px",letterSpacing:"0.02em",fontWeight:"500"}],"label-price":["14px",{lineHeight:"20px",letterSpacing:"-0.02em",fontWeight:"600"}],"label-plate":["14px",{lineHeight:"18px",letterSpacing:"0.08em",fontWeight:"700"}],"headline-xl":["30px",{lineHeight:"38px",letterSpacing:"-0.02em",fontWeight:"600"}],"body-md":["14px",{lineHeight:"20px",letterSpacing:"0em",fontWeight:"400"}],"headline-lg":["24px",{lineHeight:"32px",letterSpacing:"-0.015em",fontWeight:"600"}],"body-sm":["13px",{lineHeight:"18px",letterSpacing:"0em",fontWeight:"400"}],"label-code":["13px",{lineHeight:"18px",letterSpacing:"-0.01em",fontWeight:"500"}],"body-lg":["16px",{lineHeight:"24px",letterSpacing:"-0.005em",fontWeight:"400"}],"headline-sm":["18px",{lineHeight:"26px",letterSpacing:"-0.01em",fontWeight:"600"}]}}}};</script></head><body class="bg-surface font-body-md text-on-surface antialiased"><header class="fixed top-0 left-0 right-0 z-50 flex flex-col"><div class="h-12 w-full bg-primary-container text-on-primary-container px-margin-desktop flex items-center justify-between font-label-code text-label-code shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="flex items-center gap-space-lg"><div class="flex items-center gap-space-xs text-on-primary"><span class="material-symbols-outlined text-[16px]">hub</span><span class="font-semibold">Kingston Hub #01</span></div><span class="opacity-40 text-on-primary-container">|</span><div class="flex items-center gap-space-xs text-on-primary-container"><span class="material-symbols-outlined text-[16px]">schedule</span><span>America/Jamaica</span><span class="text-caption font-caption opacity-75">UTC-5</span></div><span class="opacity-40 text-on-primary-container">|</span><div class="flex items-center gap-space-xs text-on-primary-container"><span class="material-symbols-outlined text-[16px]">payments</span><span>JMD ($)</span></div></div><div class="flex items-center gap-space-lg"><div class="flex items-center gap-space-sm"><span class="bg-primary text-on-primary font-bold px-space-xs py-0.5 rounded text-caption font-caption">PROD</span><span class="text-on-primary font-semibold">DE · Deeki T</span><span class="text-caption font-caption px-space-xs py-0.5 rounded bg-surface-container-high/20 text-on-primary-container">platform_owner</span></div><div class="flex items-center gap-space-xs pl-space-md"><span class="w-2 h-2 rounded-full bg-on-tertiary-container"></span><span class="text-caption font-caption text-on-primary-container uppercase tracking-wider">Operational</span></div></div></div><div class="h-16 w-full bg-surface-container-lowest shadow-[0_1px_8px_rgba(0,0,0,0.04)] px-margin-desktop flex items-center justify-between"><div class="flex items-center gap-space-xl"><div class="flex items-center gap-space-sm"><div class="w-9 h-9 rounded-lg bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[20px]">local_shipping</span></div><div class="flex flex-col"><span class="font-headline-sm text-headline-sm text-on-surface leading-none tracking-tight">ROAM</span><span class="font-caption text-caption text-on-surface-variant uppercase tracking-widest">Fleet Engine</span></div></div><nav class="flex items-center gap-space-lg h-16" data-active-classes="text-on-surface font-semibold border-b-2 border-primary"><a class="text-on-surface-variant hover:text-on-surface transition-colors font-body-sm text-body-sm h-full flex items-center px-space-xs border-b-2 border-transparent" data-path="dashboard" href="#">Dashboard</a><a class="text-on-surface-variant hover:text-on-surface transition-colors font-body-sm text-body-sm h-full flex items-center px-space-xs border-b-2 border-transparent" data-path="fleet-operations" href="#">Fleet Operations</a><a class="text-on-surface-variant hover:text-on-surface transition-colors font-body-sm text-body-sm h-full flex items-center px-space-xs border-b-2 border-transparent" data-path="driver-operations" href="#">Driver Operations</a><a class="text-on-surface-variant hover:text-on-surface transition-colors font-body-sm text-body-sm h-full flex items-center px-space-xs border-b-2 border-transparent" data-path="money" href="#">Money</a><a class="text-on-surface-variant hover:text-on-surface transition-colors font-body-sm text-body-sm h-full flex items-center px-space-xs border-b-2 border-transparent" data-path="vehicle-operations" href="#">Vehicle Operations</a><a class="text-on-surface-variant hover:text-on-surface transition-colors font-body-sm text-body-sm h-full flex items-center px-space-xs border-b-2 border-transparent" data-path="delivery-operations" href="#">Delivery Operations</a><a class="text-on-surface-variant hover:text-on-surface transition-colors font-body-sm text-body-sm h-full flex items-center px-space-xs border-b-2 border-transparent" data-path="analytics" href="#">Analytics</a><a class="text-on-surface-variant hover:text-on-surface transition-colors font-body-sm text-body-sm h-full flex items-center px-space-xs border-b-2 border-transparent" data-path="reports" href="#">Reports</a><a class="text-on-surface-variant hover:text-on-surface transition-colors font-body-sm text-body-sm h-full flex items-center px-space-xs border-b-2 border-transparent" data-path="business-finance" href="#">Business Finance</a></nav></div><div class="flex items-center gap-space-md"><button class="flex items-center gap-space-sm px-space-md py-1.5 rounded-lg bg-surface-container text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors text-body-sm font-body-sm" type="button"><span class="material-symbols-outlined text-[18px]">search</span><span class="hidden xl:inline text-caption font-caption">Search telemetry, parts, VIN...</span><kbd class="px-1.5 py-0.5 rounded bg-surface-container-lowest text-caption font-label-code text-on-surface-variant shadow-[0_1px_8px_rgba(0,0,0,0.04)]">⌘K</kbd></button><button aria-label="Notifications" class="w-9 h-9 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface flex items-center justify-center transition-colors relative" type="button"><span class="material-symbols-outlined text-[20px]">notifications</span><span class="absolute top-2 right-2 w-2 h-2 rounded-full bg-error"></span></button><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><aside class="fixed left-0 top-28 bottom-0 w-64 bg-surface-container-lowest shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-40 flex flex-col justify-between py-space-lg"><div class="flex flex-col gap-space-xs px-space-md"><div class="px-space-md py-space-xs text-caption font-caption uppercase tracking-wider text-on-surface-variant font-semibold">Inventory &amp; Asset Scope</div><nav class="flex flex-col gap-1" data-active-classes="bg-surface-container text-on-surface font-semibold"><a class="flex items-center gap-space-md px-space-md py-space-sm rounded-lg text-body-sm font-body-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="inventory-catalog" href="#"><span class="material-symbols-outlined text-[20px]">category</span>Inventory Stock</a><a class="flex items-center gap-space-md px-space-md py-space-sm rounded-lg text-body-sm font-body-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="parts-fitment-crossref" href="#"><span class="material-symbols-outlined text-[20px]">manufacturing</span>Fitment &amp; Compatibility</a><a class="flex items-center gap-space-md px-space-md py-space-sm rounded-lg text-body-sm font-body-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="work-orders-repairs" href="#"><span class="material-symbols-outlined text-[20px]">build</span>Work Orders</a><a class="flex items-center gap-space-md px-space-md py-space-sm rounded-lg text-body-sm font-body-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="asset-depreciation-tracker" href="#"><span class="material-symbols-outlined text-[20px]">account_balance_wallet</span>Asset Valuation</a><a class="flex items-center gap-space-md px-space-md py-space-sm rounded-lg text-body-sm font-body-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="procurement-suppliers" href="#"><span class="material-symbols-outlined text-[20px]">storefront</span>Suppliers &amp; POs</a><a class="flex items-center gap-space-md px-space-md py-space-sm rounded-lg text-body-sm font-body-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="telemetry-diagnostics" href="#"><span class="material-symbols-outlined text-[20px]">sensors</span>Diagnostic Logs</a></nav></div><div class="px-space-lg pt-space-md"><div class="p-space-md rounded-lg bg-surface-container-low shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="flex items-center justify-between text-caption font-caption text-on-surface-variant mb-1"><span>Active Depot Stock</span><span class="font-label-code text-label-code text-on-surface font-semibold">84.6%</span></div><div class="w-full h-1.5 rounded-full bg-surface-container-high overflow-hidden"><div class="h-full bg-primary rounded-full w-[84.6%]"></div></div><div class="mt-space-xs text-caption font-caption text-on-surface-variant">Warehouse A &amp; Yard Kingston</div></div></div></aside><div class="pl-64"><main class="w-full pt-28 px-gutter-desktop pb-margin-desktop bg-surface min-h-screen"><div class="flex flex-col w-full relative">
+<!-- BACKGROUND LAYER: Fleet Operations Vehicle Kit & Alerts Table (Dimmed & Blurred Context) -->
+<div class="w-full filter blur-[1.5px] opacity-40 pointer-events-none select-none transition-all duration-300">
+<div class="flex flex-col gap-space-lg">
+<!-- Breadcrumb / Context header -->
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-sm font-label-code text-label-code text-on-surface-variant">
+<span>DEPOT_01</span>
+<span>/</span>
+<span>COMPLIANCE &amp; SAFETY KITS</span>
+<span>/</span>
+<span class="text-on-surface font-semibold">ALERTS_QUEUE</span>
+</div>
+<div class="flex items-center gap-space-md">
+<span class="px-space-sm py-0.5 rounded bg-surface-container-high text-caption font-caption text-on-surface">14 Pending Audits</span>
+<span class="px-space-sm py-0.5 rounded bg-error-container text-caption font-caption text-on-error-container font-semibold">3 Critical Items</span>
+</div>
+</div>
+<!-- Kit Inventory Telemetry Stats Row -->
+<div class="grid grid-cols-4 gap-space-md">
+<div class="bg-surface-container-lowest p-space-lg rounded-xl shadow-sm">
+<div class="text-caption font-caption text-on-surface-variant uppercase tracking-wider mb-1">Active Kit Discrepancies</div>
+<div class="font-headline-lg text-headline-lg text-on-surface">07 <span class="text-caption font-caption text-error font-semibold">▲ 2 today</span></div>
+</div>
+<div class="bg-surface-container-lowest p-space-lg rounded-xl shadow-sm">
+<div class="text-caption font-caption text-on-surface-variant uppercase tracking-wider mb-1">Staged Emergency Kits</div>
+<div class="font-headline-lg text-headline-lg text-on-surface">42 <span class="text-caption font-caption text-on-surface-variant">/ 50 target</span></div>
+</div>
+<div class="bg-surface-container-lowest p-space-lg rounded-xl shadow-sm">
+<div class="text-caption font-caption text-on-surface-variant uppercase tracking-wider mb-1">Avg Resolution Time</div>
+<div class="font-headline-lg text-headline-lg text-on-surface">3.8h <span class="text-caption font-caption text-on-surface-variant">Hub SLA: &lt;6h</span></div>
+</div>
+<div class="bg-surface-container-lowest p-space-lg rounded-xl shadow-sm">
+<div class="text-caption font-caption text-on-surface-variant uppercase tracking-wider mb-1">Driver Sign-off Rate</div>
+<div class="font-headline-lg text-headline-lg text-on-surface">98.2% <span class="text-caption font-caption text-on-surface-variant font-label-code">JMD COMPLIANT</span></div>
+</div>
+</div>
+<!-- Under-the-hood Mocked Table -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
+<div class="px-space-lg py-space-md bg-surface-container-low flex items-center justify-between">
+<div class="font-headline-sm text-headline-sm text-on-surface">Reported Safety &amp; Onboard Items</div>
+<div class="flex items-center gap-space-sm font-label-code text-label-code text-on-surface-variant">
+<span>Filter: Non-Compliant</span>
+</div>
+</div>
+<table class="w-full text-left font-body-sm text-body-sm">
+<thead class="bg-surface-container-high/40 text-caption font-caption uppercase tracking-wider text-on-surface-variant">
+<tr>
+<th class="py-space-sm px-space-lg">Report ID</th>
+<th class="py-space-sm px-space-lg">Plate / Model</th>
+<th class="py-space-sm px-space-lg">Assigned Driver</th>
+<th class="py-space-sm px-space-lg">Reported Missing</th>
+<th class="py-space-sm px-space-lg">Status</th>
+<th class="py-space-sm px-space-lg text-right">Landed Cost</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-surface-container">
+<tr class="bg-surface-container-high/20">
+<td class="py-space-md px-space-lg font-label-code text-on-surface">R-0012</td>
+<td class="py-space-md px-space-lg"><span class="font-label-plate text-label-plate px-space-xs py-0.5 rounded bg-surface-container font-bold text-on-surface">5179KZ</span> · Toyota Roomy</td>
+<td class="py-space-md px-space-lg">Marlon Samuels</td>
+<td class="py-space-md px-space-lg font-semibold text-error">Warning Triangle (High-Vis Foldable)</td>
+<td class="py-space-md px-space-lg"><span class="px-2 py-0.5 rounded text-caption font-caption bg-surface-container-high text-on-surface font-semibold">Under Review</span></td>
+<td class="py-space-md px-space-lg text-right font-label-price text-label-price">J$ 2,100</td>
+</tr>
+<tr>
+<td class="py-space-md px-space-lg font-label-code text-on-surface">R-0011</td>
+<td class="py-space-md px-space-lg"><span class="font-label-plate text-label-plate px-space-xs py-0.5 rounded bg-surface-container font-bold text-on-surface">8841JR</span> · Nissan AD Wagon</td>
+<td class="py-space-md px-space-lg">Alwayne Gordon</td>
+<td class="py-space-md px-space-lg">Dry Powder Extinguisher 1.0kg</td>
+<td class="py-space-md px-space-lg"><span class="px-2 py-0.5 rounded text-caption font-caption bg-surface-container-high text-on-surface">Staged in Bin</span></td>
+<td class="py-space-md px-space-lg text-right font-label-price text-label-price">J$ 5,800</td>
+</tr>
+<tr>
+<td class="py-space-md px-space-lg font-label-code text-on-surface">R-0010</td>
+<td class="py-space-md px-space-lg"><span class="font-label-plate text-label-plate px-space-xs py-0.5 rounded bg-surface-container font-bold text-on-surface">3022LE</span> · Suzuki Carry</td>
+<td class="py-space-md px-space-lg">Kadeem Burke</td>
+<td class="py-space-md px-space-lg">First Aid Rapid Kit (MOHW Reg)</td>
+<td class="py-space-md px-space-lg"><span class="px-2 py-0.5 rounded text-caption font-caption bg-surface-container-high text-on-surface">Resolved</span></td>
+<td class="py-space-md px-space-lg text-right font-label-price text-label-price">J$ 3,450</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+<!-- BACKDROP OVERLAY -->
+<div class="fixed inset-0 bg-primary/30 backdrop-blur-[2px] z-50 transition-opacity" id="drawer-backdrop"></div>
+<!-- SLIDE-OVER DRAWER (580px wide) -->
+<aside aria-labelledby="drawer-title" aria-modal="true" class="fixed top-0 right-0 bottom-0 w-full max-w-[580px] bg-surface-container-lowest z-50 flex flex-col shadow-2xl overflow-hidden" id="report-drawer" role="dialog">
+<!-- TOP SLIDE-OVER BAR: Title & Close -->
+<div class="px-space-xl pt-space-lg pb-space-md bg-surface-container-lowest flex items-start justify-between">
+<div class="flex flex-col gap-1 min-w-0 pr-space-md">
+<div class="flex items-center gap-space-xs font-label-code text-caption text-on-surface-variant uppercase tracking-wider">
+<span class="inline-block w-2 h-2 rounded-full bg-on-tertiary-container animate-pulse"></span>
+<span>Safety Telemetry Discrepancy</span>
+<span>·</span>
+<span>HUB KINGSTON #01</span>
+</div>
+<h2 class="font-headline-lg text-headline-lg text-on-surface tracking-tight" id="drawer-title">Update reported item</h2>
+</div>
+<button aria-label="Close drawer" class="w-9 h-9 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface flex items-center justify-center transition-colors focus:outline-none" id="btn-close-drawer">
+<span class="material-symbols-outlined text-[20px]">close</span>
+</button>
+</div>
+<!-- DRAWER SUB-HEADER: Report Meta Bar & Tri-State Segment -->
+<div class="px-space-xl py-space-md bg-surface-container-low flex flex-col gap-space-md">
+<div class="flex items-center justify-between">
+<div class="flex items-baseline gap-space-xs">
+<span class="font-label-code text-label-code font-bold text-on-surface">Report R-0012</span>
+<span class="text-on-surface-variant font-caption text-caption">·</span>
+<span class="font-body-md text-body-md font-semibold text-on-surface">Warning triangle</span>
+<span class="text-on-surface-variant font-caption text-caption">·</span>
+<span class="px-1.5 py-0.5 rounded text-caption font-caption font-bold bg-error-container text-on-error-container uppercase tracking-wide">Missing</span>
+</div>
+<div class="font-label-code text-caption text-on-surface-variant">
+          1 Nov 2026, 08:20 AM
+        </div>
+</div>
+<!-- Vehicle & Driver Identifier Card -->
+<div class="flex items-center justify-between p-space-md rounded-lg bg-surface-container-lowest shadow-sm">
+<div class="flex items-center gap-space-md">
+<div class="flex flex-col">
+<span class="font-caption text-caption text-on-surface-variant uppercase tracking-wider">Vehicle Plate</span>
+<div class="flex items-center gap-space-xs mt-0.5">
+<span class="font-label-plate text-label-plate px-2 py-0.5 rounded bg-surface-container-high text-on-surface tracking-widest font-bold">5179KZ</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Toyota Roomy 1.0L</span>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-space-sm pl-space-md">
+<div class="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center font-label-code text-caption font-bold text-on-surface">MS</div>
+<div class="flex flex-col">
+<span class="font-body-sm text-body-sm font-semibold text-on-surface leading-tight">Marlon Samuels</span>
+<span class="font-caption text-caption text-on-surface-variant">Route Driver · Fleet A</span>
+</div>
+</div>
+</div>
+<!-- Lifecycle Status Chips (Sent / Seen [Active Emerald] / Fixed) -->
+<div class="flex items-center justify-between pt-space-xs">
+<span class="font-caption text-caption uppercase tracking-wider font-semibold text-on-surface-variant">Report Lifecycle</span>
+<div class="flex items-center p-0.5 rounded-lg bg-surface-container">
+<div class="px-space-md py-1 rounded text-caption font-caption font-medium text-on-surface-variant">
+            Sent
+          </div>
+<div class="px-space-md py-1 rounded text-caption font-caption font-semibold bg-surface-container-lowest text-on-surface shadow-sm flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-emerald-600"></span>
+<span>Seen</span>
+<span class="text-[10px] text-emerald-700 font-label-code">09:15A</span>
+</div>
+<div class="px-space-md py-1 rounded text-caption font-caption font-medium text-on-surface-variant opacity-60">
+            Fixed
+          </div>
+</div>
+</div>
+</div>
+<!-- SCROLLABLE BODY CONTENT -->
+<div class="flex-1 overflow-y-auto px-space-xl py-space-lg flex flex-col gap-space-xl">
+<!-- 1. DRIVER REPORT SUBMISSION CARD -->
+<div class="flex flex-col gap-space-sm p-space-lg rounded-xl bg-surface-container-low shadow-sm">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-xs text-on-surface">
+<span class="material-symbols-outlined text-[18px] text-on-surface-variant">quickreply</span>
+<span class="font-headline-sm text-body-lg font-semibold text-on-surface">Driver's Submission</span>
+</div>
+<span class="text-caption font-label-code text-on-surface-variant">Mobile Field Report</span>
+</div>
+<p class="font-body-md text-body-md text-on-surface leading-relaxed bg-surface-container-lowest p-space-md rounded-lg">
+          "Triangle was damaged during roadside tire change on Spanish Town Road, reflector bracket snapped."
+        </p>
+<!-- Media & GPS Attachment Thumbnails -->
+<div class="grid grid-cols-2 gap-space-md pt-space-xs">
+<!-- Attached photo thumbnail -->
+<div class="relative group rounded-lg overflow-hidden bg-surface-container-high h-28 flex flex-col justify-end p-space-sm shadow-sm cursor-pointer">
+<img class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" data-alt="Close up photograph of a cracked red plastic automotive emergency warning triangle with a broken black base bracket resting on asphalt in daylight, gritty texture, industrial fleet photo inspection quality" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCajZAU_sgT3q-KlATl8ijg0aB7UWqsuVPPWQs7CeHdJyd9YdBjwVyKCHsIfsQ5o2jNfRPOzPgmjOxuhfRtlS66Q1Epgji1G0VdC70aAFgsajNSspvapkIyMZj7sbcau-1UK81BtbHPjYG_QEkUczFweHC3YThN36q3KDLWvD9A8WJ77lIrfHCaxxs5YGjhHoVdIPIui2t3nnhrMKvxCndsHQn94g8k27hGg-1vM1E"/>
+<div class="absolute inset-0 bg-gradient-to-t from-primary/80 via-primary/20 to-transparent"></div>
+<div class="relative z-10 flex items-center justify-between text-on-primary">
+<span class="font-caption text-caption flex items-center gap-1 font-semibold">
+<span class="material-symbols-outlined text-[14px]">photo_camera</span>
+                bracket_damage.jpg
+              </span>
+<span class="font-label-code text-[10px] opacity-80">1.8 MB</span>
+</div>
+</div>
+<!-- GPS Location Map Pin Thumbnail -->
+<div class="relative rounded-lg overflow-hidden h-28 p-space-sm flex flex-col justify-between shadow-sm" data-location="Spanish Town Road, Kingston 11, Jamaica" style="">
+<div class="absolute inset-0 bg-surface-container-high">
+<!-- Geometric subtle map grid pattern representing static map view -->
+<svg class="w-full h-full opacity-25" preserveaspectratio="none" viewbox="0 0 100 60">
+<path d="M0 20 H100 M0 40 H100 M20 0 V60 M60 0 V60 M80 0 V60" fill="none" stroke="currentColor" stroke-width="0.8"></path>
+<path d="M-10 45 Q 40 10 110 50" fill="none" stroke="currentColor" stroke-width="2.5"></path>
+<path d="M30 60 L75 0" fill="none" stroke="currentColor" stroke-width="1.8"></path>
+</svg>
+</div>
+<div class="relative z-10 flex items-center justify-between">
+<span class="px-1.5 py-0.5 rounded bg-surface-container-lowest/90 font-label-code text-[10px] text-on-surface font-semibold shadow-xs">
+                GPS FIX ±4m
+              </span>
+<span class="material-symbols-outlined text-error text-[18px] drop-shadow-sm">location_on</span>
+</div>
+<div class="relative z-10 bg-surface-container-lowest/95 backdrop-blur-xs p-1.5 rounded">
+<div class="font-caption text-caption font-semibold text-on-surface leading-tight truncate">Spanish Town Road, Kingston 11</div>
+<div class="font-label-code text-[10px] text-on-surface-variant truncate">GPS 17.9942, -76.8211</div>
+</div>
+</div>
+</div>
+</div>
+<!-- 2. AUDIT TIMELINE (Both Sides) -->
+<div class="flex flex-col gap-space-sm">
+<div class="flex items-center justify-between">
+<span class="font-caption text-caption uppercase tracking-wider font-semibold text-on-surface-variant">Activity &amp; Exchange Log</span>
+<span class="font-label-code text-caption text-on-surface-variant">4 Events Recorded</span>
+</div>
+<div class="relative pl-6 flex flex-col gap-space-md before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-surface-container-high">
+<!-- Timeline Item 1 -->
+<div class="relative flex flex-col">
+<span class="absolute -left-6 top-1 w-2.5 h-2.5 rounded-full bg-error ring-4 ring-surface-container-lowest"></span>
+<div class="flex items-baseline justify-between">
+<span class="font-body-sm text-body-sm font-semibold text-on-surface">Driver (Marlon S.)</span>
+<span class="font-label-code text-caption text-on-surface-variant">1 Nov 08:20 AM</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">Reported missing &amp; hardware snapped during roadside deployment.</p>
+</div>
+<!-- Timeline Item 2 -->
+<div class="relative flex flex-col">
+<span class="absolute -left-6 top-1 w-2.5 h-2.5 rounded-full bg-on-surface ring-4 ring-surface-container-lowest"></span>
+<div class="flex items-baseline justify-between">
+<span class="font-body-sm text-body-sm font-semibold text-on-surface">Fleet Ops (Deeki T.)</span>
+<span class="font-label-code text-caption text-on-surface-variant">1 Nov 09:15 AM</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">Reviewed photo documentation. Verified chassis compliance stock.</p>
+</div>
+<!-- Timeline Item 3 -->
+<div class="relative flex flex-col">
+<span class="absolute -left-6 top-1 w-2.5 h-2.5 rounded-full bg-on-tertiary-container ring-4 ring-surface-container-lowest"></span>
+<div class="flex items-baseline justify-between">
+<span class="font-body-sm text-body-sm font-semibold text-on-surface">Fleet Ops</span>
+<span class="font-label-code text-caption text-on-surface-variant">2 Nov 08:00 AM</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">Replacement on the way · Dispatched replenishment requisition from Main Store.</p>
+</div>
+<!-- Timeline Item 4 -->
+<div class="relative flex flex-col">
+<span class="absolute -left-6 top-1 w-2.5 h-2.5 rounded-full bg-error ring-4 ring-surface-container-lowest"></span>
+<div class="flex items-baseline justify-between">
+<span class="font-body-sm text-body-sm font-semibold text-on-surface">Driver</span>
+<span class="font-label-code text-caption text-on-surface-variant">2 Nov 10:45 AM</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">Still missing · Flagged before afternoon depot route start.</p>
+</div>
+</div>
+</div>
+<!-- 3. FLEET UPDATE QUICK CHOICES -->
+<div class="flex flex-col gap-space-sm pt-space-xs">
+<label class="font-caption text-caption uppercase tracking-wider font-semibold text-on-surface-variant">
+          Status Presets &amp; Quick Dispatch Tags
+        </label>
+<div class="flex flex-wrap gap-space-sm" id="quick-choices-group">
+<!-- Replacement on the way (selected) -->
+<button class="chip-toggle px-space-md py-1.5 rounded-full text-body-sm font-body-sm font-semibold transition-all bg-primary text-on-primary shadow-xs flex items-center gap-1.5" data-chip="replacement" type="button">
+<span class="material-symbols-outlined text-[16px]">check_circle</span>
+<span>Replacement on the way</span>
+</button>
+<!-- Ready to collect at the hub -->
+<button class="chip-toggle px-space-md py-1.5 rounded-full text-body-sm font-body-sm transition-all bg-surface-container hover:bg-surface-container-high text-on-surface flex items-center gap-1.5" data-chip="hub-pickup" type="button">
+<span class="material-symbols-outlined text-[16px]">warehouse</span>
+<span>Ready to collect at the hub</span>
+</button>
+<!-- Urgent safety item -->
+<button class="chip-toggle px-space-md py-1.5 rounded-full text-body-sm font-body-sm transition-all bg-surface-container hover:bg-surface-container-high text-on-surface flex items-center gap-1.5" data-chip="urgent" type="button">
+<span class="material-symbols-outlined text-[16px] text-error">warning</span>
+<span>Urgent safety item</span>
+</button>
+</div>
+</div>
+<!-- 4. REPLY BOX: MESSAGE TO THE DRIVER -->
+<div class="flex flex-col gap-space-xs">
+<div class="flex items-center justify-between">
+<label class="font-caption text-caption uppercase tracking-wider font-semibold text-on-surface-variant flex items-center gap-1" for="driver-message-input">
+<span class="material-symbols-outlined text-[15px]">send_to_mobile</span>
+            Message to the Driver
+          </label>
+<span class="font-label-code text-caption text-on-surface-variant">Markdown Supported</span>
+</div>
+<textarea class="w-full p-space-md rounded-lg bg-surface-container-lowest text-body-md font-body-md text-on-surface focus:outline-none focus:ring-1 focus:ring-primary shadow-sm resize-none" id="driver-message-input" rows="3">New triangle is staged at Kingston Main Store (Bin A-05). Please collect before 4:00 PM dispatch shift.</textarea>
+<div class="flex items-center gap-1 text-caption font-caption text-on-surface-variant">
+<span class="material-symbols-outlined text-[14px] text-emerald-700">bolt</span>
+<span>Shown immediately in Marlon's driver mobile app &amp; vehicle notification log.</span>
+</div>
+</div>
+<!-- 5. RESOLUTION OPTIONS & STOCK ROUTING -->
+<div class="p-space-lg rounded-xl bg-surface-container-low flex flex-col gap-space-md shadow-sm">
+<span class="font-caption text-caption uppercase tracking-wider font-semibold text-on-surface-variant">Resolution &amp; Inventory Discharge</span>
+<div aria-label="Resolution triggers" class="flex flex-col gap-space-sm" role="radiogroup">
+<!-- Option A: Issue from stock (Default selected style) -->
+<label class="flex items-start gap-space-md p-space-md rounded-lg bg-surface-container-lowest cursor-pointer shadow-xs transition-colors hover:bg-surface-container-lowest/80">
+<input checked="" class="mt-1 text-primary focus:ring-primary accent-primary" name="resolution_type" type="radio" value="stock"/>
+<div class="flex flex-col flex-1">
+<div class="flex items-center justify-between">
+<span class="font-body-md text-body-md font-semibold text-on-surface">Mark fixed — issue from stock</span>
+<span class="font-label-code text-caption px-1.5 py-0.5 rounded bg-surface-container-high text-on-surface font-semibold">SKU: SFT-TRG-01</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">
+                Automatically triggers stock issue dialog: reserves item in Bin A-05 and links serial to vehicle <span class="font-label-plate text-caption font-bold">5179KZ</span>.
+              </p>
+</div>
+</label>
+<!-- Option B: No stock used -->
+<label class="flex items-start gap-space-md p-space-md rounded-lg bg-surface-container-lowest cursor-pointer shadow-xs transition-colors hover:bg-surface-container-lowest/80">
+<input class="mt-1 text-primary focus:ring-primary accent-primary" name="resolution_type" type="radio" value="nostock"/>
+<div class="flex flex-col flex-1">
+<span class="font-body-md text-body-md font-semibold text-on-surface">Mark fixed — no stock used</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">
+                Driver recovered original item, resolved off-depot, or sourced externally without deducting depot reserve.
+              </p>
+</div>
+</label>
+</div>
+<!-- Cost Allocation Switch Toggle -->
+<div class="pt-space-xs flex items-start justify-between gap-space-md">
+<div class="flex flex-col">
+<span class="font-body-md text-body-md font-semibold text-on-surface">Driver is responsible for the cost</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">If toggled, cost <span class="font-label-price text-caption font-bold text-on-surface">J$ 2,100.00</span> is routed to Driver Payroll Deduction.</span>
+</div>
+<!-- Toggle input -->
+<button aria-checked="false" class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full bg-surface-container-highest transition-colors duration-200 ease-in-out focus:outline-none" id="cost-deduction-toggle" role="switch" type="button">
+<span class="sr-only">Toggle driver cost responsibility</span>
+<span class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-surface-container-lowest shadow ring-0 transition duration-200 ease-in-out translate-x-0.5 mt-0.5" id="cost-toggle-thumb"></span>
+</button>
+</div>
+</div>
+</div>
+<!-- DRAWER FIXED FOOTER -->
+<div class="px-space-xl py-space-lg bg-surface-container-lowest flex items-center justify-between gap-space-md shadow-md">
+<div class="flex items-center gap-space-xs font-label-code text-caption text-on-surface-variant">
+<span class="material-symbols-outlined text-[16px]">sync</span>
+<span>Auto-sync enabled</span>
+</div>
+<div class="flex items-center gap-space-md">
+<button class="px-space-lg py-2 rounded-lg bg-surface-container hover:bg-surface-container-high font-body-sm text-body-sm font-semibold text-on-surface transition-colors" id="btn-close-action" type="button">
+          Close
+        </button>
+<button class="px-space-xl py-2 rounded-lg bg-primary hover:bg-primary/90 text-on-primary font-body-sm text-body-sm font-semibold shadow-md flex items-center gap-space-xs transition-transform active:scale-95" id="btn-send-update" type="button">
+<span>Send update</span>
+<span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+</button>
+</div>
+</div>
+</aside>
+<!-- INTERACTIVE LOGIC SCRIPT -->
+<script>
+    (function initReportDrawer() {
+      // Toggle Switch Handler
+      const toggleBtn = document.getElementById('cost-deduction-toggle');
+      const toggleThumb = document.getElementById('cost-toggle-thumb');
+      let isChecked = false;
+
+      if (toggleBtn && toggleThumb) {
+        toggleBtn.addEventListener('click', () => {
+          isChecked = !isChecked;
+          toggleBtn.setAttribute('aria-checked', isChecked ? 'true' : 'false');
+          if (isChecked) {
+            toggleBtn.classList.remove('bg-surface-container-highest');
+            toggleBtn.classList.add('bg-primary');
+            toggleThumb.classList.remove('translate-x-0.5');
+            toggleThumb.classList.add('translate-x-5.5');
+          } else {
+            toggleBtn.classList.remove('bg-primary');
+            toggleBtn.classList.add('bg-surface-container-highest');
+            toggleThumb.classList.remove('translate-x-5.5');
+            toggleThumb.classList.add('translate-x-0.5');
+          }
+        });
+      }
+
+      // Quick Choice Preset Chips Toggle
+      const chipButtons = document.querySelectorAll('.chip-toggle');
+      const messageTextarea = document.getElementById('driver-message-input');
+
+      chipButtons.forEach((btn) => {
+        btn.addEventListener('click', () => {
+          chipButtons.forEach((b) => {
+            b.classList.remove('bg-primary', 'text-on-primary', 'shadow-xs');
+            b.classList.add('bg-surface-container', 'text-on-surface');
+          });
+          btn.classList.add('bg-primary', 'text-on-primary', 'shadow-xs');
+          btn.classList.remove('bg-surface-container', 'text-on-surface');
+
+          const chipType = btn.dataset.chip;
+          if (chipType === 'hub-pickup' && messageTextarea) {
+            messageTextarea.value = "Replacement triangle is verified and waiting at Kingston Hub Central Desk. Please sign out before next trip.";
+          } else if (chipType === 'urgent' && messageTextarea) {
+            messageTextarea.value = "CRITICAL SAFETY ITEM: Please pause route operations or visit the nearest depot immediately for kit clearance.";
+          } else if (chipType === 'replacement' && messageTextarea) {
+            messageTextarea.value = "New triangle is staged at Kingston Main Store (Bin A-05). Please collect before 4:00 PM dispatch shift.";
+          }
+        });
+      });
+
+      // Close handlers for simulation
+      const closeButtons = [
+        document.getElementById('btn-close-drawer'),
+        document.getElementById('btn-close-action'),
+        document.getElementById('drawer-backdrop')
+      ];
+
+      closeButtons.forEach(btn => {
+        if (!btn) return;
+        btn.addEventListener('click', () => {
+          const drawer = document.getElementById('report-drawer');
+          const backdrop = document.getElementById('drawer-backdrop');
+          if (drawer) drawer.classList.add('translate-x-full', 'transition-transform', 'duration-300');
+          if (backdrop) backdrop.classList.add('opacity-0', 'pointer-events-none');
+          setTimeout(() => {
+            if (drawer) drawer.classList.remove('translate-x-full');
+            if (backdrop) backdrop.classList.remove('opacity-0', 'pointer-events-none');
+          }, 1200);
+        });
+      });
+
+      // Submit feedback simulation
+      const sendUpdateBtn = document.getElementById('btn-send-update');
+      if (sendUpdateBtn) {
+        sendUpdateBtn.addEventListener('click', () => {
+          const originalText = sendUpdateBtn.innerHTML;
+          sendUpdateBtn.innerHTML = '<span class="material-symbols-outlined text-[18px] animate-spin">progress_activity</span><span>Updating Hub...</span>';
+          sendUpdateBtn.disabled = true;
+          setTimeout(() => {
+            sendUpdateBtn.innerHTML = '<span class="material-symbols-outlined text-[18px]">done</span><span>Sent to Driver App</span>';
+            setTimeout(() => {
+              sendUpdateBtn.innerHTML = originalText;
+              sendUpdateBtn.disabled = false;
+            }, 1800);
+          }, 800);
+        });
+      }
+    })();
+  </script>
+</div></main></div></body></html>

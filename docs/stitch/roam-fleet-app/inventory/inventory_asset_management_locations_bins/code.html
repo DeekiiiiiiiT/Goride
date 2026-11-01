@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_standard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={"darkMode":"class","theme":{"extend":{"colors":{"surface-dim":"#d8dadc","inverse-on-surface":"#eff1f3","primary":"#000000","on-tertiary-container":"#d95f00","on-background":"#191c1e","surface-container-low":"#f2f4f6","tertiary":"#000000","on-error-container":"#93000a","on-tertiary-fixed":"#341100","tertiary-container":"#341100","surface":"#f7f9fb","primary-fixed-dim":"#c8c3df","surface-variant":"#e0e3e5","surface-container":"#eceef0","on-primary-fixed":"#1b192e","secondary-container":"#dfdef1","error":"#ba1a1a","surface-tint":"#5e5c74","inverse-primary":"#c8c3df","outline-variant":"#c9c5cd","on-primary":"#ffffff","on-secondary-fixed-variant":"#454555","on-error":"#ffffff","surface-container-high":"#e6e8ea","background":"#f7f9fb","on-surface-variant":"#47464c","surface-bright":"#f7f9fb","secondary-fixed":"#e2e1f4","on-secondary-fixed":"#1a1a28","on-tertiary":"#ffffff","inverse-surface":"#2d3133","tertiary-fixed-dim":"#ffb690","surface-container-lowest":"#ffffff","secondary":"#5d5d6d","outline":"#78767d","primary-container":"#1b192e","on-secondary-container":"#616172","on-surface":"#191c1e","on-tertiary-fixed-variant":"#783200","primary-fixed":"#e4dffc","on-primary-container":"#84819a","on-primary-fixed-variant":"#46445b","tertiary-fixed":"#ffdbca","secondary-fixed-dim":"#c6c5d8","error-container":"#ffdad6","surface-container-highest":"#e0e3e5","on-secondary":"#ffffff"},"borderRadius":{"DEFAULT":"0.25rem","lg":"0.5rem","xl":"0.75rem","full":"9999px"},"spacing":{"margin-desktop":"2rem","margin":"1rem","space-md":"0.75rem","space-xs":"0.25rem","space-sm":"0.5rem","gutter-desktop":"1.5rem","space-xl":"1.5rem","space-lg":"1rem","gutter":"1rem"},"fontFamily":{"headline-xl":["Inter"],"caption":["Inter"],"headline-sm":["Inter"],"headline-lg":["Inter"],"body-lg":["Inter"],"label-code":["JetBrains Mono"],"body-md":["Inter"],"body-sm":["Inter"],"label-plate":["JetBrains Mono"],"label-price":["JetBrains Mono"]},"fontSize":{"headline-xl":["30px",{"lineHeight":"38px","letterSpacing":"-0.02em","fontWeight":"600"}],"caption":["11px",{"lineHeight":"14px","letterSpacing":"0.02em","fontWeight":"500"}],"headline-sm":["18px",{"lineHeight":"26px","letterSpacing":"-0.01em","fontWeight":"600"}],"headline-lg":["24px",{"lineHeight":"32px","letterSpacing":"-0.015em","fontWeight":"600"}],"body-lg":["16px",{"lineHeight":"24px","letterSpacing":"-0.005em","fontWeight":"400"}],"label-code":["13px",{"lineHeight":"18px","letterSpacing":"-0.01em","fontWeight":"500"}],"body-md":["14px",{"lineHeight":"20px","letterSpacing":"0em","fontWeight":"400"}],"body-sm":["13px",{"lineHeight":"18px","letterSpacing":"0em","fontWeight":"400"}],"label-plate":["14px",{"lineHeight":"18px","letterSpacing":"0.08em","fontWeight":"700"}],"label-price":["14px",{"lineHeight":"20px","letterSpacing":"-0.02em","fontWeight":"600"}]}}}}</script></head><body class="bg-surface font-body-md text-on-surface antialiased"><header class="fixed top-0 left-0 right-0 z-50 shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="h-12 bg-primary px-margin-desktop flex items-center justify-between"><div class="flex items-center gap-space-md"><div class="flex items-center gap-space-sm"><div class="w-6 h-6 rounded bg-surface-container-lowest flex items-center justify-center"><span class="material-symbols-outlined text-primary text-[16px]">local_shipping</span></div><span class="font-headline-sm text-headline-sm text-on-primary tracking-tight font-bold">ROAM FLEET</span></div><div class="h-4 w-px bg-on-surface-variant/40 mx-space-sm"></div><span class="font-caption text-caption uppercase tracking-wider text-surface-dim font-semibold">Fleet Maintenance OS</span></div><div class="flex items-center gap-space-md"><div class="flex items-center gap-space-xs bg-primary-container px-space-md py-1 rounded border border-outline-variant/20"><span class="material-symbols-outlined text-[14px] text-surface-dim">hub</span><span class="font-label-code text-label-code text-on-primary">Kingston Hub #01</span></div><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div><div class="h-11 bg-surface-container-lowest px-margin-desktop flex items-center justify-between"><nav class="flex items-center gap-space-lg h-full" data-active-classes="border-b-2 border-primary text-primary font-semibold"><a class="h-full flex items-center text-on-surface-variant hover:text-on-surface transition-colors font-body-md text-body-md" data-path="dashboard" href="#">Dashboard</a><a class="h-full flex items-center text-on-surface-variant hover:text-on-surface transition-colors font-body-md text-body-md" data-path="inventory-asset-management-first-time-setup" href="#">Inventory &amp; Assets</a><a class="h-full flex items-center text-on-surface-variant hover:text-on-surface transition-colors font-body-md text-body-md" data-path="fleet-operations" href="#">Fleet Operations</a><a class="h-full flex items-center text-on-surface-variant hover:text-on-surface transition-colors font-body-md text-body-md" data-path="system-states-diagnostics" href="#">System States</a><a class="h-full flex items-center text-on-surface-variant hover:text-on-surface transition-colors font-body-md text-body-md" data-path="driver-operations" href="#">Driver Operations</a><a class="h-full flex items-center text-on-surface-variant hover:text-on-surface transition-colors font-body-md text-body-md" data-path="analytics" href="#">Analytics</a><a class="h-full flex items-center text-on-surface-variant hover:text-on-surface transition-colors font-body-md text-body-md" data-path="reports" href="#">Reports</a></nav><div class="flex items-center gap-space-md"><div class="w-7 h-7 rounded-full bg-primary-container flex items-center justify-center"><span class="font-label-code text-[11px] text-on-primary font-bold">JD</span></div></div></div><div class="h-9 bg-primary-container px-margin-desktop flex items-center justify-between text-on-primary"><div class="flex items-center gap-space-sm"><span class="material-symbols-outlined text-[15px] text-on-primary-container">search</span><span class="font-body-sm text-body-sm text-on-primary-container">Switch vehicle or search hub...</span><span class="font-label-code text-[10px] text-on-primary-container bg-surface-container-highest/20 px-1.5 py-0.5 rounded ml-space-xs">⌘K</span></div><div class="flex items-center gap-space-sm"><span class="w-1.5 h-1.5 rounded-full bg-surface-tint"></span><span class="font-label-code text-caption text-surface-dim">08:47 PM EST · America/Jamaica · JM (JMD)</span></div></div></header><main class="w-full pt-32 bg-surface min-h-[calc(100vh-80px)]"><div class="flex flex-col w-full">
+<!-- Sub-header Breadcrumb / Control Strip -->
+<div class="px-margin-desktop py-space-md flex flex-col md:flex-row md:items-center justify-between gap-space-md">
+<div class="flex flex-col gap-space-xs">
+<div class="flex items-center gap-space-xs">
+<a class="font-caption text-caption text-secondary hover:text-primary transition-colors flex items-center gap-1" href="#">
+<span class="material-symbols-outlined text-[13px]">arrow_back</span>
+          Settings
+        </a>
+<span class="text-surface-dim font-caption text-caption">/</span>
+<span class="font-caption text-caption text-on-surface font-semibold">Locations &amp; Bins</span>
+</div>
+<div class="flex items-baseline gap-space-md">
+<h1 class="font-headline-lg text-headline-lg text-primary tracking-tight">Locations &amp; Bins</h1>
+<span class="font-label-code text-[11px] text-secondary bg-surface-container px-2 py-0.5 rounded">HUB: KIN-01</span>
+</div>
+<p class="font-body-sm text-body-sm text-secondary">
+        Manage storage depots, vehicle inventory lockers, and physical warehouse bins across the fleet network.
+      </p>
+</div>
+<!-- Header Actions -->
+<div class="flex items-center gap-space-sm shrink-0">
+<button class="px-space-md py-2 rounded-lg bg-surface-container-lowest text-primary shadow-sm hover:bg-surface-container transition-all flex items-center gap-1.5 font-body-sm text-body-sm font-semibold" onclick="document.getElementById('modal-new-location').classList.toggle('hidden')">
+<span class="material-symbols-outlined text-[18px]">add_location_alt</span>
+        + New location
+      </button>
+<button class="px-space-lg py-2 rounded-lg bg-primary text-on-primary shadow-md hover:bg-primary/90 transition-all flex items-center gap-1.5 font-body-sm text-body-sm font-semibold" onclick="document.getElementById('modal-new-bin').classList.toggle('hidden')">
+<span class="material-symbols-outlined text-[18px] text-on-primary">inventory_2</span>
+        + New bin
+      </button>
+</div>
+</div>
+<!-- Main Content Dual-Pane Body -->
+<div class="px-margin-desktop pb-space-xl grid grid-cols-1 xl:grid-cols-12 gap-gutter-desktop items-start">
+<!-- LEFT COLUMN: Hub & Locker Directory (4 Cols on 12-col grid) -->
+<div class="xl:col-span-4 flex flex-col gap-space-md w-full">
+<!-- Search & Filters -->
+<div class="bg-surface-container-lowest p-space-md rounded-xl shadow-sm flex flex-col gap-space-sm">
+<div class="relative w-full">
+<span class="material-symbols-outlined text-secondary absolute left-3 top-2.5 text-[18px]">search</span>
+<input class="w-full pl-9 pr-space-md py-2 bg-surface-container-low rounded-lg font-body-sm text-body-sm text-on-surface focus:outline-none focus:bg-surface-container-lowest transition-colors" placeholder="Search code, plate, or depot..." type="text"/>
+</div>
+<div class="flex items-center justify-between font-caption text-caption text-secondary px-1">
+<span>5 Active Storage Targets</span>
+<span class="font-label-code text-caption font-semibold">TOTAL: J$ 93,185.00</span>
+</div>
+</div>
+<!-- Locations Accordion/List -->
+<div class="flex flex-col gap-space-md">
+<!-- GROUP: WAREHOUSES & DEPOTS -->
+<div class="flex flex-col gap-space-xs">
+<div class="flex items-center justify-between px-space-xs py-1">
+<span class="font-caption text-caption text-secondary font-bold tracking-wider uppercase">Warehouses &amp; Depots (2)</span>
+<span class="material-symbols-outlined text-secondary text-[16px]">warehouse</span>
+</div>
+<!-- Item 1: MAIN (Active State) -->
+<div class="bg-surface-container-lowest p-space-md rounded-xl shadow-md cursor-pointer transition-all relative overflow-hidden bg-gradient-to-r from-surface-container-high/40 to-surface-container-lowest">
+<div class="absolute left-0 top-0 bottom-0 w-1.5 bg-primary"></div>
+<div class="flex items-start justify-between gap-space-sm pl-2">
+<div class="flex flex-col gap-0.5">
+<div class="flex items-center gap-space-xs">
+<span class="font-label-code text-caption px-1.5 py-0.5 bg-primary text-on-primary rounded font-bold">MAIN</span>
+<span class="font-body-md text-body-md text-primary font-semibold">Main store — Kingston</span>
+</div>
+<span class="font-body-sm text-body-sm text-secondary">Terminal 3, Marcus Garvey Dr</span>
+</div>
+<span class="bg-secondary-container text-on-secondary-fixed text-[11px] font-caption px-2 py-0.5 rounded-full font-semibold shrink-0">Default depot</span>
+</div>
+<div class="mt-space-sm pt-space-xs flex items-center justify-between pl-2 font-caption text-caption">
+<span class="text-secondary flex items-center gap-1 font-body-sm">
+<span class="material-symbols-outlined text-[15px]">inventory_2</span> 2 items allocated
+              </span>
+<span class="font-label-price text-label-price text-on-surface">J$ 20,400.00</span>
+</div>
+</div>
+<!-- Item 2: MBY -->
+<div class="bg-surface-container-lowest hover:bg-surface-container-low p-space-md rounded-xl shadow-sm cursor-pointer transition-all">
+<div class="flex items-start justify-between gap-space-sm">
+<div class="flex flex-col gap-0.5">
+<div class="flex items-center gap-space-xs">
+<span class="font-label-code text-caption px-1.5 py-0.5 bg-surface-container-high text-secondary rounded font-bold">MBY</span>
+<span class="font-body-md text-body-md text-on-surface font-medium">Montego Bay Outpost</span>
+</div>
+<span class="font-body-sm text-body-sm text-secondary">Freeport Wharf Sector 4</span>
+</div>
+<span class="text-secondary font-caption text-caption">Standby</span>
+</div>
+<div class="mt-space-sm flex items-center justify-between font-caption text-caption text-secondary">
+<span>0 items</span>
+<span class="font-label-price text-label-price text-secondary">J$ 0.00</span>
+</div>
+</div>
+</div>
+<!-- GROUP: VEHICLE LOCKERS -->
+<div class="flex flex-col gap-space-xs">
+<div class="flex items-center justify-between px-space-xs py-1">
+<span class="font-caption text-caption text-secondary font-bold tracking-wider uppercase">Vehicle Lockers (2 active cars)</span>
+<span class="material-symbols-outlined text-secondary text-[16px]">directions_car</span>
+</div>
+<!-- Item 3: VEH-5179KZ -->
+<div class="bg-surface-container-lowest hover:bg-surface-container-low p-space-md rounded-xl shadow-sm cursor-pointer transition-all">
+<div class="flex items-start justify-between gap-space-sm">
+<div class="flex flex-col gap-0.5">
+<div class="flex items-center gap-space-xs">
+<span class="font-label-plate text-caption px-1.5 py-0.5 bg-surface-container-highest text-primary rounded font-bold">5179KZ</span>
+<span class="font-body-md text-body-md text-on-surface font-medium">Toyota Roomy</span>
+</div>
+<span class="font-label-code text-caption text-secondary">Lockbox Trunk A &amp; B</span>
+</div>
+<span class="bg-surface-container text-secondary text-[11px] font-caption px-2 py-0.5 rounded-full font-medium">Route En Route</span>
+</div>
+<div class="mt-space-sm flex items-center justify-between font-caption text-caption">
+<span class="text-secondary font-body-sm">6 items</span>
+<span class="font-label-price text-label-price text-on-surface">J$ 48,980.00</span>
+</div>
+</div>
+<!-- Item 4: VEH-1505LM -->
+<div class="bg-surface-container-lowest hover:bg-surface-container-low p-space-md rounded-xl shadow-sm cursor-pointer transition-all">
+<div class="flex items-start justify-between gap-space-sm">
+<div class="flex flex-col gap-0.5">
+<div class="flex items-center gap-space-xs">
+<span class="font-label-plate text-caption px-1.5 py-0.5 bg-surface-container-highest text-primary rounded font-bold">1505LM</span>
+<span class="font-body-md text-body-md text-on-surface font-medium">Honda Fit</span>
+</div>
+<span class="font-label-code text-caption text-secondary">Locker Tray #2</span>
+</div>
+<span class="bg-surface-container text-secondary text-[11px] font-caption px-2 py-0.5 rounded-full font-medium">Serviced</span>
+</div>
+<div class="mt-space-sm flex items-center justify-between font-caption text-caption">
+<span class="text-secondary font-body-sm">3 items</span>
+<span class="font-label-price text-label-price text-on-surface">J$ 18,205.00</span>
+</div>
+</div>
+</div>
+<!-- GROUP: CUSTODIANS & STAFF -->
+<div class="flex flex-col gap-space-xs">
+<div class="flex items-center justify-between px-space-xs py-1">
+<span class="font-caption text-caption text-secondary font-bold tracking-wider uppercase">Custodians &amp; Staff (1)</span>
+<span class="material-symbols-outlined text-secondary text-[16px]">badge</span>
+</div>
+<!-- Item 5: STF-DEEKI -->
+<div class="bg-surface-container-lowest hover:bg-surface-container-low p-space-md rounded-xl shadow-sm cursor-pointer transition-all">
+<div class="flex items-start justify-between gap-space-sm">
+<div class="flex flex-col gap-0.5">
+<div class="flex items-center gap-space-xs">
+<span class="font-label-code text-caption px-1.5 py-0.5 bg-surface-container text-on-surface rounded font-bold">STF-DEEKI</span>
+<span class="font-body-md text-body-md text-on-surface font-medium">Deeki T (Field Kit)</span>
+</div>
+<span class="font-body-sm text-body-sm text-secondary">Lead Mobile Tech · Kingston Core</span>
+</div>
+</div>
+<div class="mt-space-sm flex items-center justify-between font-caption text-caption">
+<span class="text-secondary font-body-sm">1 item</span>
+<span class="font-label-price text-label-price text-on-surface">J$ 5,600.00</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- RIGHT COLUMN: Selected Location Detail & Bins Ledger (8 Cols on 12-col grid) -->
+<div class="xl:col-span-8 flex flex-col gap-space-lg w-full">
+<!-- Top Card: Selected Location Specifications -->
+<div class="bg-surface-container-lowest p-space-xl rounded-xl shadow-md flex flex-col gap-space-lg">
+<!-- Header Info Line -->
+<div class="flex flex-col md:flex-row md:items-start justify-between gap-space-md pb-space-sm">
+<div class="flex items-start gap-space-md">
+<div class="w-12 h-12 rounded-xl bg-primary text-on-primary flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[24px]">corporate_fare</span>
+</div>
+<div class="flex flex-col gap-0.5">
+<div class="flex items-center gap-space-sm">
+<span class="font-label-code text-caption px-2 py-0.5 rounded bg-primary text-on-primary font-bold">MAIN</span>
+<h2 class="font-headline-sm text-headline-sm text-primary font-bold">Main store — Kingston</h2>
+</div>
+<span class="font-body-sm text-body-sm text-secondary font-medium">Central Depot Warehouse · Primary Inbound Terminal</span>
+<p class="font-body-sm text-body-sm text-on-surface mt-1 flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px] text-secondary">pin_drop</span>
+                Terminal 3, Marcus Garvey Drive, Kingston Port, Jamaica
+              </p>
+</div>
+</div>
+<div class="flex items-center gap-space-xs self-start shrink-0">
+<button class="px-space-md py-1.5 rounded-lg bg-surface-container hover:bg-surface-variant font-body-sm text-body-sm text-on-surface font-medium transition-colors flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px]">edit</span> Edit Details
+            </button>
+<button class="px-space-md py-1.5 rounded-lg bg-surface-container hover:bg-surface-variant font-body-sm text-body-sm text-on-surface font-medium transition-colors flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px]">print</span> Label Sheet
+            </button>
+</div>
+</div>
+<!-- Geographic & Architectural Visual Snapshot -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-space-md">
+<!-- Dynamic Map Location Box -->
+<div class="md:col-span-2 relative rounded-lg overflow-hidden bg-surface-container-high h-40 shadow-sm flex flex-col justify-between p-3" data-location="Terminal 3 Marcus Garvey Drive Kingston Jamaica" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuCwbxy-kHvBb5RaTCU9H11JzSZEQbTOc246FvktoeJuKdukZelDfFc6qFn2JTZVz-2Dkrt9ojmeBC7fi2Ju-xH7m5hu47TDGK2DFlvr4K1uT-9I0LRHVSIBQNauH_D8xS8VoHncLHYfTVh-mL2YO_uH-PpyWshI67CAR_86hlgvGi8LuXfh3aZFPHSzylFLqFRmhRAnt_-raj7olE_6EyBtKwXT233cS2VzrmiB5Vs')">
+<div class="absolute inset-0 bg-primary/20 backdrop-blur-[1px]"></div>
+<div class="relative z-10 flex items-center justify-between">
+<span class="font-label-code text-caption px-2 py-0.5 bg-primary text-on-primary rounded font-semibold tracking-wide">GEO: 17.9714° N, 76.8118° W</span>
+<span class="bg-surface-container-lowest text-primary font-caption text-caption px-2 py-0.5 rounded shadow-sm">Kingston Harbour Sector</span>
+</div>
+<div class="relative z-10 bg-surface-container-lowest/95 p-2 rounded-lg backdrop-blur-sm self-start flex items-center gap-2 text-on-surface">
+<span class="material-symbols-outlined text-primary text-[18px]">navigation</span>
+<span class="font-label-code text-caption font-semibold">Berth 11 Access Gate · 24/7 Gatehouse Active</span>
+</div>
+</div>
+<!-- Exterior Photo Thumbnail -->
+<div class="relative rounded-lg overflow-hidden h-40 shadow-sm group">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" data-alt="Modern concrete logistics warehouse depot exterior in Kingston Jamaica industrial port under tropical Caribbean sky with secure metal roller doors and commercial transport bay." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAJbbu4iOJmvIa0SeSCyoDXuukj3FnKrWKgMsyXEWiJPwQkiAl70rOnCwmsPmg8PNwGXqz6BjbHAEtnjNWZ5WBuNibFzOqPt9UaMQ03W4e8cOvrqL_sOa6dUxCrYpNW2Bn6B9wDN3X4dxnFqrtTzIEewroArk6Y5MQ8Shbaewh8loGRPjZyed-zJBg-i0R50FVxfcca3VHG1OodfLka4tMHiYN-2MJaOpZV-yjUemg"/>
+<div class="absolute inset-0 bg-gradient-to-t from-primary/80 via-transparent to-transparent flex items-end p-space-sm">
+<span class="font-caption text-caption text-on-primary font-medium flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">photo_camera</span> Secure Facility Bay 3
+              </span>
+</div>
+</div>
+</div>
+<!-- Metric Cards Grid -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-space-md">
+<div class="bg-surface-container p-space-md rounded-lg flex flex-col gap-0.5">
+<span class="font-caption text-caption text-secondary uppercase font-semibold">Total Stock Value</span>
+<span class="font-label-price text-headline-sm text-primary">J$ 20,400.00</span>
+<span class="font-caption text-caption text-secondary">Landed valuation</span>
+</div>
+<div class="bg-surface-container p-space-md rounded-lg flex flex-col gap-0.5">
+<span class="font-caption text-caption text-secondary uppercase font-semibold">Assigned Bins</span>
+<span class="font-headline-sm text-headline-sm text-primary font-bold">5 Bins</span>
+<span class="font-caption text-caption text-secondary">3 With Allocations</span>
+</div>
+<div class="bg-surface-container p-space-md rounded-lg flex flex-col gap-0.5">
+<span class="font-caption text-caption text-secondary uppercase font-semibold">Items Held</span>
+<span class="font-headline-sm text-headline-sm text-primary font-bold">2 SKUs</span>
+<span class="font-caption text-caption text-secondary">1 Tyres · 1 Telematics</span>
+</div>
+<div class="bg-surface-container p-space-md rounded-lg flex flex-col gap-0.5">
+<span class="font-caption text-caption text-secondary uppercase font-semibold">Bin Occupancy</span>
+<div class="flex items-center gap-2 mt-0.5">
+<span class="font-label-code text-body-md text-primary font-bold">42%</span>
+<div class="flex-1 h-2 bg-surface-variant rounded-full overflow-hidden">
+<div class="h-full bg-primary rounded-full" style="width: 42%;"></div>
+</div>
+</div>
+<span class="font-caption text-caption text-secondary">Max vol: 57 units</span>
+</div>
+</div>
+<!-- Status, Security Switches & Archive Guard -->
+<div class="p-space-md bg-surface-container-low rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-space-md">
+<div class="flex flex-wrap items-center gap-space-lg">
+<!-- Switch 1: Default -->
+<label class="flex items-center gap-space-xs cursor-pointer">
+<div class="relative inline-flex items-center h-5 rounded-full w-9 bg-primary cursor-pointer transition-colors">
+<span class="translate-x-4 inline-block w-3.5 h-3.5 transform bg-on-primary rounded-full transition-transform"></span>
+</div>
+<div class="flex flex-col">
+<span class="font-body-sm text-body-sm font-semibold text-on-surface">Default location</span>
+<span class="font-caption text-[10px] text-secondary">Preferred inbound receipt hub</span>
+</div>
+</label>
+<!-- Switch 2: Locked Store -->
+<label class="flex items-center gap-space-xs cursor-pointer">
+<div class="relative inline-flex items-center h-5 rounded-full w-9 bg-primary cursor-pointer transition-colors">
+<span class="translate-x-4 inline-block w-3.5 h-3.5 transform bg-on-primary rounded-full transition-transform"></span>
+</div>
+<div class="flex flex-col">
+<span class="font-body-sm text-body-sm font-semibold text-on-surface">Locked store</span>
+<span class="font-caption text-[10px] text-secondary">Keyholder scan required</span>
+</div>
+</label>
+<!-- Switch 3: Active State -->
+<label class="flex items-center gap-space-xs cursor-pointer">
+<div class="relative inline-flex items-center h-5 rounded-full w-9 bg-primary cursor-pointer transition-colors">
+<span class="translate-x-4 inline-block w-3.5 h-3.5 transform bg-on-primary rounded-full transition-transform"></span>
+</div>
+<div class="flex flex-col">
+<span class="font-body-sm text-body-sm font-semibold text-on-surface">Active depot</span>
+<span class="font-caption text-[10px] text-secondary">Accepting dispatches</span>
+</div>
+</label>
+</div>
+<!-- Archive Guard Control -->
+<div class="relative group shrink-0">
+<button class="px-space-md py-2 rounded-lg bg-surface-variant text-on-surface-variant/40 font-body-sm text-body-sm font-semibold cursor-not-allowed flex items-center gap-1.5" disabled="">
+<span class="material-symbols-outlined text-[16px]">archive</span>
+              Archive location
+            </button>
+<!-- Warning Tooltip Hover -->
+<div class="absolute right-0 bottom-full mb-2 hidden group-hover:flex flex-col w-72 p- space-md bg-inverse-surface text-inverse-on-surface text-caption font-caption rounded-lg shadow-xl z-30">
+<div class="flex items-center gap-1 text-on-tertiary-fixed-variant font-bold mb-0.5">
+<span class="material-symbols-outlined text-[14px]">warning</span> Blocked Action
+              </div>
+<span>Cannot archive Main store while stock is inside. Move the 2 items out first.</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Bottom Card: Registered Bins Ledger Table -->
+<div class="bg-surface-container-lowest p-space-xl rounded-xl shadow-md flex flex-col gap-space-md">
+<!-- Table Control Toolbar -->
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-space-md">
+<div class="flex flex-col">
+<h3 class="font-headline-sm text-headline-sm text-primary font-bold">Physical Storage Bins in Main store — Kingston</h3>
+<span class="font-body-sm text-body-sm text-secondary">5 registered bins configured for rack, shelf, and heavy store management</span>
+</div>
+<div class="flex items-center gap-space-sm shrink-0">
+<div class="relative">
+<span class="material-symbols-outlined text-secondary absolute left-2.5 top-2 text-[16px]">filter_list</span>
+<input class="pl-8 pr-3 py-1.5 bg-surface-container-low rounded-lg font-body-sm text-body-sm text-on-surface focus:outline-none focus:bg-surface-container-lowest" placeholder="Filter bins..." type="text"/>
+</div>
+<button class="px-space-md py-1.5 rounded-lg bg-primary text-on-primary font-body-sm text-body-sm font-semibold hover:bg-primary/90 transition-all flex items-center gap-1" onclick="document.getElementById('modal-new-bin').classList.remove('hidden')">
+<span class="material-symbols-outlined text-[16px]">add</span> + Add bin
+            </button>
+</div>
+</div>
+<!-- Data Table (Zero borders, rhythm dividers via subtle surface shift) -->
+<div class="overflow-x-auto w-full">
+<table class="w-full text-left font-body-md text-body-md border-collapse">
+<thead>
+<tr class="bg-surface-container-low text-secondary font-caption text-caption uppercase tracking-wider">
+<th class="py-2.5 px-space-md font-bold rounded-l-lg">Bin Code</th>
+<th class="py-2.5 px-space-md font-bold">Zone / Department</th>
+<th class="py-2.5 px-space-md font-bold">Capacity</th>
+<th class="py-2.5 px-space-md font-bold">Items in Bin</th>
+<th class="py-2.5 px-space-md font-bold text-right">Stock Value</th>
+<th class="py-2.5 px-space-md font-bold text-right rounded-r-lg">Status / Action</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-surface-container-low">
+<!-- Row 1: A-01 -->
+<tr class="hover:bg-surface-container/50 transition-colors">
+<td class="py-3 px-space-md">
+<div class="flex items-center gap-2">
+<span class="font-label-code text-label-code px-2 py-0.5 bg-surface-container-high rounded font-bold text-primary">A-01</span>
+<span class="material-symbols-outlined text-[16px] text-secondary">pallet</span>
+</div>
+</td>
+<td class="py-3 px-space-md">
+<span class="font-body-sm text-body-sm font-medium text-on-surface">Tyres &amp; Heavy Spares</span>
+<div class="text-[11px] font-caption text-secondary">Ground Level Bay 1</div>
+</td>
+<td class="py-3 px-space-md">
+<span class="font-label-code text-body-sm text-secondary">4 units</span>
+</td>
+<td class="py-3 px-space-md">
+<div class="flex flex-col">
+<span class="font-body-sm text-body-sm font-semibold text-primary">1 item</span>
+<span class="font-caption text-caption text-secondary">Spare tyre 195/65 R15 (OEM Dunlop)</span>
+</div>
+</td>
+<td class="py-3 px-space-md text-right">
+<span class="font-label-price text-label-price text-on-surface">J$ 15,000.00</span>
+</td>
+<td class="py-3 px-space-md text-right">
+<div class="inline-flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-primary"></span>
+<span class="font-caption text-caption font-semibold text-primary">Active</span>
+</div>
+</td>
+</tr>
+<!-- Row 2: A-02 -->
+<tr class="hover:bg-surface-container/50 transition-colors">
+<td class="py-3 px-space-md">
+<div class="flex items-center gap-2">
+<span class="font-label-code text-label-code px-2 py-0.5 bg-surface-container-high rounded font-bold text-primary">A-02</span>
+<span class="material-symbols-outlined text-[16px] text-secondary">shelves</span>
+</div>
+</td>
+<td class="py-3 px-space-md">
+<span class="font-body-sm text-body-sm font-medium text-on-surface">Cabin Accessories</span>
+<div class="text-[11px] font-caption text-secondary">Shelf Tier 2</div>
+</td>
+<td class="py-3 px-space-md">
+<span class="font-label-code text-body-sm text-secondary">20 units</span>
+</td>
+<td class="py-3 px-space-md">
+<span class="font-body-sm text-body-sm text-secondary italic">0 items (Empty)</span>
+</td>
+<td class="py-3 px-space-md text-right">
+<span class="font-label-price text-label-price text-secondary">J$ 0.00</span>
+</td>
+<td class="py-3 px-space-md text-right">
+<div class="inline-flex items-center gap-2">
+<button class="px-2 py-0.5 rounded bg-surface-container hover:bg-error-container hover:text-on-error-container text-secondary text-caption font-caption transition-colors">
+                      Archive Bin
+                    </button>
+</div>
+</td>
+</tr>
+<!-- Row 3: B-12 -->
+<tr class="hover:bg-surface-container/50 transition-colors">
+<td class="py-3 px-space-md">
+<div class="flex items-center gap-2">
+<span class="font-label-code text-label-code px-2 py-0.5 bg-surface-container-high rounded font-bold text-primary">B-12</span>
+<span class="material-symbols-outlined text-[16px] text-secondary">grid_view</span>
+</div>
+</td>
+<td class="py-3 px-space-md">
+<span class="font-body-sm text-body-sm font-medium text-on-surface">Mobile Mounts</span>
+<div class="text-[11px] font-caption text-secondary">Small Bin Carousel B</div>
+</td>
+<td class="py-3 px-space-md">
+<span class="font-label-code text-body-sm text-secondary">15 units</span>
+</td>
+<td class="py-3 px-space-md">
+<div class="flex flex-col">
+<span class="font-body-sm text-body-sm font-semibold text-primary">1 item</span>
+<span class="font-caption text-caption text-secondary">Phone Holder Mount (Magnetic Vent Clip)</span>
+</div>
+</td>
+<td class="py-3 px-space-md text-right">
+<span class="font-label-price text-label-price text-on-surface">J$ 5,400.00</span>
+</td>
+<td class="py-3 px-space-md text-right">
+<div class="inline-flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-primary"></span>
+<span class="font-caption text-caption font-semibold text-primary">Active</span>
+</div>
+</td>
+</tr>
+<!-- Row 4: A-04 -->
+<tr class="hover:bg-surface-container/50 transition-colors">
+<td class="py-3 px-space-md">
+<div class="flex items-center gap-2">
+<span class="font-label-code text-label-code px-2 py-0.5 bg-surface-container-high rounded font-bold text-primary">A-04</span>
+<span class="material-symbols-outlined text-[16px] text-secondary">lock</span>
+</div>
+</td>
+<td class="py-3 px-space-md">
+<span class="font-body-sm text-body-sm font-medium text-on-surface">High-Value Telematics &amp; Cameras</span>
+<div class="text-[11px] font-caption text-secondary">Security Vault C-1</div>
+</td>
+<td class="py-3 px-space-md">
+<span class="font-label-code text-body-sm text-secondary">10 units</span>
+</td>
+<td class="py-3 px-space-md">
+<div class="flex items-center gap-1.5 text-on-tertiary-container font-caption text-caption bg-tertiary-fixed px-2 py-1 rounded inline-block">
+<span class="material-symbols-outlined text-[14px]">lock_clock</span> Locked cage (0 pending audits)
+                  </div>
+</td>
+<td class="py-3 px-space-md text-right">
+<span class="font-label-price text-label-price text-secondary">—</span>
+</td>
+<td class="py-3 px-space-md text-right">
+<div class="inline-flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-primary"></span>
+<span class="font-caption text-caption font-semibold text-primary">Active</span>
+</div>
+</td>
+</tr>
+<!-- Row 5: A-05 -->
+<tr class="hover:bg-surface-container/50 transition-colors">
+<td class="py-3 px-space-md">
+<div class="flex items-center gap-2">
+<span class="font-label-code text-label-code px-2 py-0.5 bg-surface-container-high rounded font-bold text-primary">A-05</span>
+<span class="material-symbols-outlined text-[16px] text-secondary">output</span>
+</div>
+</td>
+<td class="py-3 px-space-md">
+<span class="font-body-sm text-body-sm font-medium text-on-surface">Road Safety Kits &amp; Triangles</span>
+<div class="text-[11px] font-caption text-secondary">Dispatch Staging Bay</div>
+</td>
+<td class="py-3 px-space-md">
+<span class="font-label-code text-body-sm text-secondary">8 units</span>
+</td>
+<td class="py-3 px-space-md">
+<div class="flex items-center gap-1 font-body-sm text-body-sm text-on-surface">
+<span class="material-symbols-outlined text-[16px] text-secondary">outbound</span>
+<span>Staged for vehicle</span>
+<span class="font-label-plate text-caption px-1.5 py-0.2 bg-surface-container rounded font-bold">5179KZ</span>
+</div>
+</td>
+<td class="py-3 px-space-md text-right">
+<span class="font-label-price text-label-price text-secondary">—</span>
+</td>
+<td class="py-3 px-space-md text-right">
+<div class="inline-flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-primary"></span>
+<span class="font-caption text-caption font-semibold text-primary">Active</span>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Table Micro-footer Bar -->
+<div class="p-space-sm bg-surface-container rounded-lg flex items-center justify-between font-caption text-caption text-secondary">
+<div class="flex items-center gap-space-sm">
+<span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-primary"></span> QR Code scanning ready on all listed bins</span>
+<span>·</span>
+<span>Last inventory audit: Today, 14:15 EST by JD</span>
+</div>
+<a class="text-primary hover:underline font-semibold flex items-center gap-1" href="#">
+            Export Bins Catalog (CSV) <span class="material-symbols-outlined text-[14px]">download</span>
+</a>
+</div>
+</div>
+</div>
+</div>
+<!-- INTERACTIVE MODAL DIALOG 1: + New Location -->
+<div class="fixed inset-0 z-50 bg-primary/40 backdrop-blur-sm hidden flex items-center justify-center p-4" id="modal-new-location">
+<div class="bg-surface-container-lowest rounded-xl max-w-lg w-full p-space-xl shadow-2xl flex flex-col gap-space-md relative">
+<div class="flex items-center justify-between pb-space-xs">
+<div class="flex items-center gap-space-xs">
+<div class="w-8 h-8 rounded bg-primary text-on-primary flex items-center justify-center">
+<span class="material-symbols-outlined text-[18px]">add_location</span>
+</div>
+<h3 class="font-headline-sm text-headline-sm text-primary font-bold">Register Storage Depot</h3>
+</div>
+<button class="w-8 h-8 rounded-full hover:bg-surface-container flex items-center justify-center text-secondary" onclick="document.getElementById('modal-new-location').classList.add('hidden')">
+<span class="material-symbols-outlined text-[18px]">close</span>
+</button>
+</div>
+<div class="flex flex-col gap-space-sm font-body-sm text-body-sm">
+<div class="grid grid-cols-3 gap-space-sm">
+<div class="flex flex-col gap-1">
+<label class="font-caption text-caption text-secondary uppercase font-semibold">Location Code</label>
+<input class="p-2 bg-surface-container-low rounded font-label-code text-label-code uppercase" placeholder="e.g. OCH" type="text"/>
+</div>
+<div class="col-span-2 flex flex-col gap-1">
+<label class="font-caption text-caption text-secondary uppercase font-semibold">Location Name</label>
+<input class="p-2 bg-surface-container-low rounded" placeholder="e.g. Ocho Rios Outpost" type="text"/>
+</div>
+</div>
+<div class="flex flex-col gap-1">
+<label class="font-caption text-caption text-secondary uppercase font-semibold">Physical Type</label>
+<select class="p-2 bg-surface-container-low rounded">
+<option>Warehouse / Regional Depot</option>
+<option>Vehicle Locker Trunk</option>
+<option>Staff Field Bag / Custodian</option>
+<option>External Contractor Workshop</option>
+</select>
+</div>
+<div class="flex flex-col gap-1">
+<label class="font-caption text-caption text-secondary uppercase font-semibold">Address / Port Bay</label>
+<input class="p-2 bg-surface-container-low rounded" placeholder="Street or harbour terminal location..." type="text"/>
+</div>
+<div class="flex items-center gap-space-md pt-2">
+<label class="flex items-center gap-2 cursor-pointer">
+<input class="rounded text-primary" type="checkbox"/>
+<span class="text-body-sm">Set as network default depot</span>
+</label>
+</div>
+</div>
+<div class="flex items-center justify-end gap-space-sm pt-space-sm">
+<button class="px-space-md py-2 rounded-lg bg-surface-container font-body-sm text-body-sm font-medium hover:bg-surface-variant" onclick="document.getElementById('modal-new-location').classList.add('hidden')">Cancel</button>
+<button class="px-space-lg py-2 rounded-lg bg-primary text-on-primary font-body-sm text-body-sm font-semibold hover:bg-primary/90" onclick="document.getElementById('modal-new-location').classList.add('hidden')">Save Location</button>
+</div>
+</div>
+</div>
+<!-- INTERACTIVE MODAL DIALOG 2: + New Bin -->
+<div class="fixed inset-0 z-50 bg-primary/40 backdrop-blur-sm hidden flex items-center justify-center p-4" id="modal-new-bin">
+<div class="bg-surface-container-lowest rounded-xl max-w-md w-full p-space-xl shadow-2xl flex flex-col gap-space-md relative">
+<div class="flex items-center justify-between pb-space-xs">
+<div class="flex items-center gap-space-xs">
+<div class="w-8 h-8 rounded bg-primary text-on-primary flex items-center justify-center">
+<span class="material-symbols-outlined text-[18px]">shelves</span>
+</div>
+<h3 class="font-headline-sm text-headline-sm text-primary font-bold">Register Storage Bin</h3>
+</div>
+<button class="w-8 h-8 rounded-full hover:bg-surface-container flex items-center justify-center text-secondary" onclick="document.getElementById('modal-new-bin').classList.add('hidden')">
+<span class="material-symbols-outlined text-[18px]">close</span>
+</button>
+</div>
+<div class="flex flex-col gap-space-sm font-body-sm text-body-sm">
+<div class="flex flex-col gap-1">
+<label class="font-caption text-caption text-secondary uppercase font-semibold">Assign to Location</label>
+<input class="p-2 bg-surface-container rounded text-secondary font-medium" disabled="" type="text" value="Main store — Kingston (MAIN)"/>
+</div>
+<div class="grid grid-cols-2 gap-space-sm">
+<div class="flex flex-col gap-1">
+<label class="font-caption text-caption text-secondary uppercase font-semibold">Bin Code</label>
+<input class="p-2 bg-surface-container-low rounded font-label-code text-label-code uppercase" placeholder="e.g. C-08" type="text"/>
+</div>
+<div class="flex flex-col gap-1">
+<label class="font-caption text-caption text-secondary uppercase font-semibold">Unit Capacity</label>
+<input class="p-2 bg-surface-container-low rounded font-label-code text-label-code" placeholder="25" type="number"/>
+</div>
+</div>
+<div class="flex flex-col gap-1">
+<label class="font-caption text-caption text-secondary uppercase font-semibold">Zone / Department</label>
+<input class="p-2 bg-surface-container-low rounded" placeholder="e.g. Brake Pads &amp; Fluid Hub" type="text"/>
+</div>
+<div class="flex flex-col gap-1">
+<label class="font-caption text-caption text-secondary uppercase font-semibold">Security Level</label>
+<select class="p-2 bg-surface-container-low rounded">
+<option>Standard Rack Storage</option>
+<option>Locked Wire Cage (Double-auth)</option>
+<option>Hazmat Certified Compartment</option>
+</select>
+</div>
+</div>
+<div class="flex items-center justify-end gap-space-sm pt-space-sm">
+<button class="px-space-md py-2 rounded-lg bg-surface-container font-body-sm text-body-sm font-medium hover:bg-surface-variant" onclick="document.getElementById('modal-new-bin').classList.add('hidden')">Cancel</button>
+<button class="px-space-lg py-2 rounded-lg bg-primary text-on-primary font-body-sm text-body-sm font-semibold hover:bg-primary/90" onclick="document.getElementById('modal-new-bin').classList.add('hidden')">Add Storage Bin</button>
+</div>
+</div>
+</div>
+</div></main><footer class="w-full bg-surface-container-lowest shadow-[0_1px_8px_rgba(0,0,0,0.04)] py-space-lg"><div class="max-w-[1440px] mx-auto px-margin-desktop flex items-center justify-between text-on-surface-variant font-caption text-caption"><div><span>© 2025 Roam Fleet Infrastructure Ltd. Kingston Hub, Jamaica. All rights reserved.</span></div><div class="flex items-center gap-space-md"><span class="flex items-center gap-space-xs"><span class="w-2 h-2 rounded-full bg-on-surface"></span><span class="font-label-code text-label-code text-on-surface">Systems Operational</span></span><span class="text-outline-variant">|</span><span class="font-label-code text-label-code">v3.18.4-carib</span></div></div></footer></body></html>

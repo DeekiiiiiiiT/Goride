@@ -34,7 +34,7 @@ export function In1Overview() {
       </div>
 
       <div className="flex items-center gap-space-sm shrink-0">
-      <button type="button" aria-label="Settings" className="h-9 px-space-md flex items-center justify-center rounded-lg bg-surface-container-lowest text-on-surface hover:bg-surface-container transition-colors shadow-sm" title="Settings">
+      <button type="button" onClick={() => shell.openModal('inventory-settings')} aria-label="Settings" className="h-9 px-space-md flex items-center justify-center rounded-lg bg-surface-container-lowest text-on-surface hover:bg-surface-container transition-colors shadow-sm" title="Settings">
       <span className="material-symbols-outlined text-[18px]">settings</span>
       </button>
       <button type="button" aria-label="More Options" className="h-9 px-space-md flex items-center justify-center rounded-lg bg-surface-container-lowest text-on-surface hover:bg-surface-container transition-colors shadow-sm" title="More Options">

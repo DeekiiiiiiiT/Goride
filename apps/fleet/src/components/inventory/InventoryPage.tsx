@@ -13,6 +13,7 @@ import { In9AssetPage } from './screens/In9AssetPage';
 import { In7KitTemplateEditor } from './screens/In7KitTemplateEditor';
 import { InventoryModalFrame } from './InventoryModalFrame';
 import { useInventoryShell } from './InventoryShellContext';
+import { InventoryGapModals } from './InventoryGapModals';
 
 function tabFromSearch(): InventoryTabId {
   const raw = new URLSearchParams(window.location.search).get('tab');
@@ -68,6 +69,7 @@ function InventoryModals() {
           <In7KitTemplateEditor />
         </InventoryModalFrame>
       ) : null}
+      <InventoryGapModals />
     </>
   );
 }

@@ -14,6 +14,7 @@
  * Ported FP rows must score 100%. Not-started rows are scored only with --report.
  */
 import { existsSync, readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 
 const repo = join(import.meta.dirname, '..');
@@ -539,4 +540,47 @@ for (const row of readme.split('\n').filter((l) => /^\| S10/.test(l))) {
   if (bad) dominionFullFailed = true;
 }
 
-if (failed || fleetFailed || driverFailed || dominionFullFailed) process.exit(1);
+let livePngFailed = false;
+const liveHashes = new Map();
+
+function auditLivePng(id, pngPath) {
+  if (!existsSync(pngPath)) {
+    console.log(`FAIL ${id} missing screen-live.png — ${pngPath}`);
+    livePngFailed = true;
+    return;
+  }
+  const hash = createHash('sha256').update(readFileSync(pngPath)).digest('hex');
+  const prior = liveHashes.get(hash);
+  if (prior) {
+    console.log(`FAIL ${id} duplicate screen-live.png (same file as ${prior})`);
+    livePngFailed = true;
+    return;
+  }
+  liveHashes.set(hash, id);
+}
+
+const fleetInvReadme = join(repo, 'docs', 'stitch', 'roam-fleet-app', 'README.md');
+if (existsSync(fleetInvReadme)) {
+  for (const line of readFileSync(fleetInvReadme, 'utf8').split('\n')) {
+    if (!/^\| IN\d/.test(line)) continue;
+    const cells = line.split('|').map((c) => c.trim().replace(/^`|`$/g, ''));
+    const id = cells[1];
+    const folder = cells[3];
+    if (!id || !folder || folder === '—') continue;
+    auditLivePng(id, join(repo, 'docs', 'stitch', 'roam-fleet-app', 'inventory', folder, 'screen-live.png'));
+  }
+}
+const driverReadmeLive = join(repo, 'docs', 'stitch', 'roam-driver-app', 'README.md');
+if (existsSync(driverReadmeLive)) {
+  for (const line of readFileSync(driverReadmeLive, 'utf8').split('\n')) {
+    if (!/^\| DK\d/.test(line)) continue;
+    const cells = line.split('|').map((c) => c.trim().replace(/^`|`$/g, ''));
+    const id = cells[1];
+    const folder = cells[3];
+    if (!id || !folder || folder === '—') continue;
+    auditLivePng(id, join(repo, 'docs', 'stitch', 'roam-driver-app', 'car-kit', folder, 'screen-live.png'));
+  }
+}
+if (!livePngFailed) console.log('OK — Inventory live PNG audit');
+
+if (failed || fleetFailed || driverFailed || dominionFullFailed || livePngFailed) process.exit(1);

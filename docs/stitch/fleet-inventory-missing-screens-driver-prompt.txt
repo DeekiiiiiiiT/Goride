@@ -1,0 +1,80 @@
+ROAM DRIVER — MY CAR KIT: MISSING SCREEN (GOOGLE STITCH)
+
+
+
+
+Roam Driver - My Car Kit, missing screen (Phone App, 390px, for drivers of fleet cars):
+
+Design one more high-fidelity phone screen for the "My car kit" part of the Roam Driver app. The kit checklist, Report a problem sheet, Report sent, My reports, weekly check-in kit step and states are already designed; this screen must match them exactly. After a driver reports an item as damaged, missing or not working, things change: they find it under the seat, they buy a replacement themselves, or it is still missing days later. This screen lets the driver tell the fleet that, in one tap, from the report itself. It never changes the fleet's stock or the kit: it adds an update to the report that the fleet manager sees. Drivers never see prices, costs or stock levels.
+
+BRAND IDENTITY:
+- Match the existing Roam Driver app:
+  - white cards on a light slate page, rounded corners, large touch targets (min 48px)
+  - bottom tab bar as in the driver app
+- LIGHT MODE (default):
+  - Primary: Emerald 600 (#059669) — primary buttons, ticks
+  - Background: Slate 100 (#f1f5f9)
+  - Surface cards: White (#ffffff), border Slate 300 (#cbd5e1)
+  - Text primary: Slate 900 (#0f172a)
+  - Muted text: Slate 600 (#475569)
+  - Missing / damaged / error: Red 600 (#dc2626)
+  - Waiting / reported: Amber 600 (#d97706)
+- DARK MODE:
+  - Background: #0f172a · Surface: #1e293b · Border: #334155
+  - Text primary: #f8fafc · Muted text: #cbd5e1
+  - Primary: #10b981 · Error: #ef4444 · Waiting: #f59e0b
+- Status chips (rounded, small, always a word): "Reported" (amber fill) · "Seen" (slate outline) · "Fixed" (emerald fill, white text)
+- Dates as "2 Nov 2026"; times as "08:20 AM"
+- No prices, no J$ amounts, no stock counts
+- No gradients, glassmorphism or 3D. No AI badges.
+- Typography: Inter; plates in mono.
+- Jamaica context: car "Toyota Roomy 2019 · 5179KZ"; fleet replies signed "Fleet team"
+
+DESIGN PRINCIPLES:
+- Phone only (390px), one hand, outdoors in sunlight: high contrast, big tap areas
+- One tap to pick the update, one tap to send
+- An update is a message to the fleet, never an edit of the kit
+- Works on a weak signal: the update saves on the phone and sends when back online, with "Waiting to send"
+- Light theme default, dark mode variant
+- 8px spacing grid, 16px card corners, skeleton loading
+
+---
+
+SCREEN 1: UPDATE REPORTED ITEM (BOTTOM SHEET)
+- Opens from: a report card in My reports ("Update" button), and from a "Reported" row on My car kit
+- Sheet header: drag handle, title "Update your report", sub-line "Warning triangle · Missing · reported 1 Nov 2026"
+- Current status line: amber "Reported" chip + "Sent → Seen by fleet"
+- Latest fleet message card (if any): "Fleet team: A replacement is on the way. 2 Nov 2026 09:10 AM"
+- Three large full-width choice cards, each with an icon, a bold label and one helper line:
+  - "I found it" — "It's back in the car. The fleet will close the report."
+  - "I got a replacement" — "You replaced it yourself. Add a photo of the new one."
+  - "Still missing" — "Remind the fleet it's still not in the car."
+- Picking "I got a replacement" shows the photo square "Add photo" (required) and a note box "Where did you get it? (optional)"
+- Picking "I found it" shows an optional photo square
+- Note box for any choice: "Anything else? (optional)"
+- Full-width emerald button "Send update", disabled until a choice is picked; spinner while sending; can't be tapped twice
+- Variants on the same frame:
+  - Sent: toast "Update sent", the report card timeline gains "You: I found it · 2 Nov 08:20 AM"
+  - Offline: amber clock "Saved — waiting to send"
+  - Fixed report: sheet opens read-only with emerald "Fixed" chip and "This report is closed. Report a new problem if something else is wrong." plus button "Report a problem"
+  - Safety item flagged urgent by the fleet: red bar at the top "Safety item — the car shouldn't be driven without it. Call the fleet: 876-555-0100" with a call button
+
+---
+
+ADDITIONAL UI COMPONENTS:
+- Large choice card (icon, label, helper, selected state with emerald border and tick)
+- Report timeline row ("You:" and "Fleet team:" entries)
+- Photo picker square with thumbnail and remove "×"
+- Offline "Waiting to send" label
+- Toast "Update sent"
+
+INTERACTIONS:
+- Only one choice can be picked at a time
+- "Send update" stays disabled until a choice is picked (and a photo, for "I got a replacement")
+- Updates made offline send automatically when back online
+- The driver can never change the item, the kit or any price
+
+---
+
+Spec screens	Area
+1 Update reported item (sheet + variants)	Reports

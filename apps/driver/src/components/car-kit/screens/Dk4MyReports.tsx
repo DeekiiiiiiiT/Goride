@@ -12,9 +12,11 @@ function reportCounts(reports: DriverReportRow[]) {
 export function Dk4MyReports({
   reports = [],
   reportsLoading,
+  onOpenReport,
 }: {
   reports?: DriverReportRow[];
   reportsLoading?: boolean;
+  onOpenReport?: (report: DriverReportRow) => void;
 }) {
   const { total, open, resolved } = reportCounts(reports);
 
@@ -69,7 +71,7 @@ export function Dk4MyReports({
             </div>
           </div>
 
-          <Dk4ReportsList reports={reports} loading={reportsLoading} hideSummary />
+          <Dk4ReportsList reports={reports} loading={reportsLoading} hideSummary onOpenReport={onOpenReport} />
         </div>
       </div>
     </div>

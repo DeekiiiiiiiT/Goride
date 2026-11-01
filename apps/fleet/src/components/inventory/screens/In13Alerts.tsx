@@ -70,7 +70,7 @@ export function In13Alerts() {
       <span className="material-symbols-outlined absolute left-space-md top-1/2 -translate-y-1/2 text-on-surface-variant text-[18px]">search</span>
       <input className="w-full bg-surface-container-low pl-9 pr-space-md py-2 rounded-lg font-body-sm text-body-sm text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:bg-surface-container-lowest transition-colors" placeholder="Search alerts..." type="text"/>
       </div>
-      <button type="button" className="flex items-center gap-space-xs bg-surface-container-low hover:bg-surface-container text-on-surface px-space-md py-2 rounded-lg font-body-sm text-body-sm font-semibold transition-colors">
+      <button type="button" onClick={() => shell.openModal('snooze-settings')} className="flex items-center gap-space-xs bg-surface-container-low hover:bg-surface-container text-on-surface px-space-md py-2 rounded-lg font-body-sm text-body-sm font-semibold transition-colors">
       <span className="material-symbols-outlined text-[18px] text-on-surface-variant">schedule</span>
       <span>Snooze settings</span>
       </button>
@@ -188,7 +188,7 @@ export function In13Alerts() {
       </div>
 
       <div className="flex items-center gap-space-xs">
-      <button type="button" className="bg-primary hover:bg-primary/90 text-on-primary px-space-lg py-2 rounded-lg font-body-sm text-body-sm font-semibold shadow-sm transition-transform active:scale-95 flex items-center gap-1">
+      <button type="button" onClick={() => shell.openModal('approval-drawer')} className="flex items-center gap-space-xs bg-primary hover:bg-primary/90 text-on-primary px-space-lg py-2 rounded-lg font-body-sm text-body-sm font-semibold shadow-sm transition-transform active:scale-95 flex items-center gap-1">
       <span className="material-symbols-outlined text-[16px]">build_circle</span>
       <span>Issue kit</span>
       </button>
@@ -375,7 +375,7 @@ export function In13Alerts() {
       </button>
 
       <div className="flex items-center gap-space-xs">
-      <button type="button" className="bg-primary hover:bg-primary/90 text-on-primary px-space-lg py-2 rounded-lg font-body-sm text-body-sm font-semibold shadow-sm transition-transform active:scale-95 flex items-center gap-1">
+      <button type="button" onClick={() => shell.openModal('approval-drawer')} className="flex items-center gap-space-xs bg-primary hover:bg-primary/90 text-on-primary px-space-lg py-2 rounded-lg font-body-sm text-body-sm font-semibold shadow-sm transition-transform active:scale-95 flex items-center gap-1">
       <span className="material-symbols-outlined text-[16px]">sync_alt</span>
       <span>Open</span>
       </button>

@@ -87,7 +87,7 @@ export function In11Purchasing() {
       <span className="material-symbols-outlined text-[16px]">file_download</span>
                 Export Audit Ledger
               </button>
-      <button type="button" className="h-9 px-space-lg bg-primary text-on-primary font-body-sm text-body-sm rounded font-semibold shadow-sm hover:bg-primary-container transition-all flex items-center gap-space-xs active:scale-[0.98]">
+      <button type="button" onClick={() => shell.openModal('purchase-order')} className="h-9 px-space-lg bg-primary text-on-primary font-body-sm text-body-sm rounded font-semibold shadow-sm hover:bg-primary-container transition-all flex items-center gap-space-xs active:scale-[0.98]">
       <span className="material-symbols-outlined text-[16px]">add</span>
                 + New purchase order
               </button>

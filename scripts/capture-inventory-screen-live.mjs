@@ -1,13 +1,16 @@
 /**
- * Capture screen-live.png beside each Stitch screen.png (R13-02).
- * Uses Playwright against local Fleet with VITE_FLEET_INVENTORY_PHASE2=1.
+ * Capture screen-live.png beside each Stitch screen.png (R15-01).
  *
  *   $env:VITE_FLEET_INVENTORY_PHASE2='1'; npm run dev -- --port 5199   # apps/fleet
- *   node scripts/capture-inventory-screen-live.mjs --base http://127.0.0.1:5199
+ *   npm run dev -- --port 5174   # apps/driver
+ *   npx playwright codegen http://127.0.0.1:5199 --save-storage=playwright/.auth/fleet.json
  *
- * Requires a signed-in session in the browser profile or pass --storage state.json from Playwright auth.
+ *   node scripts/capture-inventory-screen-live.mjs \
+ *     --base http://127.0.0.1:5199 \
+ *     --driver-base http://127.0.0.1:5174 \
+ *     --storage playwright/.auth/fleet.json
  */
-import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { createHash, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { chromium } from '@playwright/test';
 
@@ -21,9 +24,24 @@ const base =
   baseIdx >= 0 && args[baseIdx + 1]
     ? args[baseIdx + 1].replace(/\/$/, '')
     : 'http://127.0.0.1:5199';
+const driverBaseIdx = args.indexOf('--driver-base');
+const driverBase =
+  driverBaseIdx >= 0 && args[driverBaseIdx + 1]
+    ? args[driverBaseIdx + 1].replace(/\/$/, '')
+    : 'http://127.0.0.1:5174';
 const storageIdx = args.indexOf('--storage');
 const storageState =
   storageIdx >= 0 && args[storageIdx + 1] ? args[storageIdx + 1] : undefined;
+const allowUnsigned = args.includes('--allow-unsigned');
+
+if (!storageState && !allowUnsigned) {
+  console.error('FAIL: pass --storage <playwright-state.json> or --allow-unsigned for local-only capture');
+  process.exit(1);
+}
+if (storageState && !existsSync(storageState)) {
+  console.error(`FAIL: storage state not found: ${storageState}`);
+  process.exit(1);
+}
 
 function fleetRows() {
   const readme = readFileSync(join(fleetStitch, 'README.md'), 'utf8');
@@ -74,6 +92,13 @@ const TAB_BY_IN = {
   IN18: 'overview',
 };
 
+async function assertSignedIn(page, label) {
+  const body = (await page.textContent('body')) ?? '';
+  if (/welcome back/i.test(body)) {
+    throw new Error(`${label}: page still shows sign-in (Welcome back)`);
+  }
+}
+
 async function captureFleet(browser) {
   const context = await browser.newContext(
     storageState ? { storageState, viewport: { width: 1440, height: 900 } } : { viewport: { width: 1440, height: 900 } },
@@ -84,6 +109,7 @@ async function captureFleet(browser) {
     const url = `${base}/vehicle-operations/inventory?tab=${tab}`;
     await page.setViewportSize(row.viewport);
     await page.goto(url, { waitUntil: 'networkidle', timeout: 120_000 });
+    await assertSignedIn(page, row.id);
     const outDir = join(fleetStitch, 'inventory', row.folder);
     mkdirSync(outDir, { recursive: true });
     const outPath = join(outDir, 'screen-live.png');
@@ -100,7 +126,8 @@ async function captureDriver(browser) {
   const page = await context.newPage();
   for (const row of driverRows()) {
     await page.setViewportSize(row.viewport);
-    await page.goto(`${base}/car-kit`, { waitUntil: 'networkidle', timeout: 120_000 });
+    await page.goto(`${driverBase}/car-kit`, { waitUntil: 'networkidle', timeout: 120_000 });
+    await assertSignedIn(page, row.id);
     const outDir = join(driverStitch, 'car-kit', row.folder);
     if (!existsSync(outDir)) {
       console.warn('skip', row.id, 'missing folder', outDir);

@@ -8,6 +8,7 @@ import { getOrgId } from "./org_scope.ts";
 import { getServiceClient } from "./service_client.ts";
 import { invDb, invRpcName } from "./inventory_db.ts";
 import { safeErrorResponse } from "./safe_error.ts";
+import { registerInventoryR16Routes, assertAlertSnoozeAllowed } from "./inventory_controller_r16.ts";
 
 type InvEnv = { Variables: { rbacUser?: RbacUser } };
 type InvCtx = Context<InvEnv>;
@@ -806,6 +807,9 @@ export function registerInventoryExtendedRoutes(app: Hono<InvEnv>) {
     try {
       const org = orgOrForbid(c);
       if (org instanceof Response) return org;
+      const alertId = c.req.param("id");
+      const blocked = await assertAlertSnoozeAllowed(org, alertId);
+      if (blocked) return c.json({ error: blocked }, 409);
       const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
       const days = Number(body.days ?? 7) || 7;
       const until = body.until
@@ -890,10 +894,15 @@ export function registerInventoryExtendedRoutes(app: Hono<InvEnv>) {
     const org = orgOrForbid(c);
     if (org instanceof Response) return org;
     const body = await c.req.json();
+    const refNo = String(body.ref_no ?? `REQ-${crypto.randomUUID().slice(0, 8).toUpperCase()}`);
     const { data, error } = await fleetDb().from("fleet_inv_requisition").insert({
       organization_id: org,
-      title: body.title ?? "Requisition",
-      status: "draft",
+      ref_no: refNo,
+      requested_by: actorId(c),
+      for_vehicle_id: body.for_vehicle_id ?? null,
+      needed_by: body.needed_by ?? null,
+      note: body.note ?? null,
+      status: "open",
     }).select("*").single();
     if (error) return c.json({ error: error.message }, 500);
     return c.json({ requisition: data });
@@ -987,4 +996,6 @@ export function registerInventoryExtendedRoutes(app: Hono<InvEnv>) {
       501,
     );
   });
+
+  registerInventoryR16Routes(app);
 }

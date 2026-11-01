@@ -15,10 +15,12 @@ export function Dk4ReportsList({
   reports,
   loading,
   hideSummary,
+  onOpenReport,
 }: {
   reports: DriverReportRow[];
   loading?: boolean;
   hideSummary?: boolean;
+  onOpenReport?: (report: DriverReportRow) => void;
 }) {
   if (loading) {
     return (
@@ -79,6 +81,15 @@ export function Dk4ReportsList({
               <p className="font-body-sm text-[13px] text-on-surface-variant bg-surface-container-low rounded-lg p-2">
                 {r.fleetReply}
               </p>
+            ) : null}
+            {onOpenReport ? (
+              <button
+                type="button"
+                className="self-start font-body-sm text-body-sm font-semibold text-secondary hover:text-primary"
+                onClick={() => onOpenReport(r)}
+              >
+                View update
+              </button>
             ) : null}
           </div>
         );

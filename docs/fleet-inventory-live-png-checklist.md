@@ -7,4 +7,4 @@ Capture side-by-side screenshots after staging sign-off:
 
 Run `node scripts/stitch-fidelity.mjs --report` before committing proof assets.
 
-**Status:** R12 prod verified (stock J$69,380, chain ok, 0 unbalanced movements). Capture side-by-side `IN*-live.png` / `DK*-live.png` after signed-in Fleet/Driver session; run `node scripts/stitch-fidelity.mjs --report` before committing proof assets.
+**Status:** R14 — prod FIFO + chain KPI fixed (`20261101205000`, `20261101205100`). `screen-live.png` captured via [`scripts/capture-inventory-screen-live.mjs`](../../scripts/capture-inventory-screen-live.mjs) (local Fleet, phase 2 flag). Re-capture on signed-in prod when ready.
