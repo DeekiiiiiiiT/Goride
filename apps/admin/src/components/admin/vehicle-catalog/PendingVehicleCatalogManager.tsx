@@ -37,6 +37,7 @@ import {
 import { PendingPartsCatalogTab, PendingPartsQueueCount } from "./pending-parts/PendingPartsCatalogTab";
 import { PendingCatalogShell, type PendingCatalogTabId } from "./pending-parts/PendingCatalogShell";
 import { PendingVehiclesCatalogTab } from "./pending-parts/PendingVehiclesCatalogTab";
+import { PendingVehicleReviewDrawer } from "./pending-parts/PendingVehicleReviewDrawer";
 import "./pending-parts/pendingParts.css";
 
 type QueueFilter = "all_pending" | "needs_info";
@@ -71,6 +72,8 @@ export function PendingVehicleCatalogManager() {
   const PAGE_SIZE = 50;
   const [selected, setSelected] = useState<VehicleCatalogPendingRequest | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
+  const [reviewDrawerOpen, setReviewDrawerOpen] = useState(false);
+  const [marketFilter, setMarketFilter] = useState<string>("all");
   const [detailLoading, setDetailLoading] = useState(false);
 
   const [make, setMake] = useState("");
@@ -158,7 +161,8 @@ export function PendingVehicleCatalogManager() {
     setExistingId("");
     setRejectReason("");
     setRequestInfoMessage("");
-    setDetailOpen(true);
+    setReviewDrawerOpen(true);
+    setDetailOpen(false);
     setDetailLoading(false);
   };
 
@@ -269,10 +273,29 @@ export function PendingVehicleCatalogManager() {
             page={page}
             pageSize={PAGE_SIZE}
             onPageChange={setPage}
+            marketFilter={marketFilter}
+            onMarketFilterChange={setMarketFilter}
             onOpenDetail={(row) => void openDetail(row)}
           />
         )}
       </PendingCatalogShell>
+
+      <PendingVehicleReviewDrawer
+        open={reviewDrawerOpen}
+        accessToken={token || ""}
+        row={selected}
+        marketFilter={marketFilter}
+        busy={actionBusy}
+        onClose={() => setReviewDrawerOpen(false)}
+        onApprove={() => {
+          setReviewDrawerOpen(false);
+          setDetailOpen(true);
+        }}
+        onReject={() => {
+          setReviewDrawerOpen(false);
+          void handleReject();
+        }}
+      />
 
       <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
         <DialogContent className="flex max-h-[min(90vh,880px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">

@@ -2,6 +2,7 @@ import { API_ENDPOINTS } from "./apiConfig";
 import { publicAnonKey } from "../utils/supabase/info";
 
 const PARTS_QUEUE_BASE = `${API_ENDPOINTS.catalog}/make-server-37f42386/admin/pending-catalog/parts-queue`;
+const RESEARCH_BASE = `${API_ENDPOINTS.catalog}/make-server-37f42386/admin/catalog-research`;
 
 function edgeHeaders(accessToken: string, contentType?: string): HeadersInit {
   const h: Record<string, string> = {
@@ -49,15 +50,22 @@ export type PendingPartsOnFileRow = {
 export type PendingPartsGroupDetail = {
   groupId: string;
   fleetCount: number;
+  researchJobId?: string | null;
   notes: PendingPartsGroupNote[];
   photos: PendingPartsGroupPhoto[];
   onFile?: PendingPartsOnFileRow[];
 };
 
+export type CatalogResearchJobDetail = {
+  job: Record<string, unknown> | null;
+  proposals: Array<Record<string, unknown>>;
+  vehicleProposals: Array<Record<string, unknown>>;
+  events: Array<Record<string, unknown>>;
+};
+
 export type PendingPartsPatchAction =
   | { action: "looking"; note?: string }
-  | { action: "cant_find"; reason?: string }
-  | { action: "added"; resolvedPartId?: string; note?: string };
+  | { action: "cant_find"; reason?: string };
 
 export type VehicleCatalogBrief = {
   id: string;
@@ -222,4 +230,202 @@ export function formatPartLabel(
   }
   const subtitle = matchType ? `${baseName} · ${matchType} option` : (meta?.areaName || "Fleet part request");
   return { title, subtitle };
+}
+
+export type CatalogResearchStrip = {
+  queued: number;
+  needsReview: number;
+  failed: number;
+  workingOn?: number;
+  todayResearchCount?: number;
+  enabled: boolean;
+  paused: boolean;
+  dailyJobLimit: number;
+  status?: string;
+  shadowStreak?: number;
+  shadowMode?: boolean;
+};
+
+export type CatalogResearchSettingsResponse = {
+  settings: {
+    enabled: boolean;
+    shadow_mode: boolean;
+    paused: boolean;
+    shadow_approve_streak?: number;
+    daily_job_limit?: number;
+  };
+  engineRev: string;
+  latencyMs: number | null;
+  status: string;
+  health: Record<string, unknown>;
+};
+
+export async function fetchCatalogResearchStrip(accessToken: string): Promise<CatalogResearchStrip> {
+  const res = await fetch(`${RESEARCH_BASE}/strip`, { headers: edgeHeaders(accessToken) });
+  if (!res.ok) throw new Error(await readError(res));
+  return res.json() as Promise<CatalogResearchStrip>;
+}
+
+export async function fetchCatalogResearchSettings(accessToken: string): Promise<CatalogResearchSettingsResponse> {
+  const res = await fetch(`${RESEARCH_BASE}/settings`, { headers: edgeHeaders(accessToken) });
+  if (!res.ok) throw new Error(await readError(res));
+  return res.json() as Promise<CatalogResearchSettingsResponse>;
+}
+
+export async function patchCatalogResearchSettings(
+  accessToken: string,
+  body: { enabled?: boolean; shadow_mode?: boolean; paused?: boolean; daily_job_limit?: number },
+): Promise<void> {
+  const res = await fetch(`${RESEARCH_BASE}/settings`, {
+    method: "PATCH",
+    headers: edgeHeaders(accessToken, "application/json"),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+}
+
+export async function reprocessQueuedJobs(accessToken: string): Promise<{ requeued: number }> {
+  const res = await fetch(`${RESEARCH_BASE}/reprocess-queued`, {
+    method: "POST",
+    headers: edgeHeaders(accessToken),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+  return res.json() as Promise<{ requeued: number }>;
+}
+
+export async function fetchCatalogResearchJob(
+  accessToken: string,
+  jobId: string,
+): Promise<CatalogResearchJobDetail> {
+  const res = await fetch(`${RESEARCH_BASE}/jobs/${encodeURIComponent(jobId)}`, {
+    headers: edgeHeaders(accessToken),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+  const data = (await res.json()) as CatalogResearchJobDetail & { job?: Record<string, unknown> };
+  return {
+    job: data.job ?? null,
+    proposals: data.proposals || [],
+    vehicleProposals: data.vehicleProposals || [],
+    events: data.events || [],
+  };
+}
+
+export async function postCatalogResearchJobAction(
+  accessToken: string,
+  jobId: string,
+  action: string,
+  body?: Record<string, unknown>,
+): Promise<void> {
+  const path =
+    action === "research-next"
+      ? `${RESEARCH_BASE}/jobs/${encodeURIComponent(jobId)}/research-next`
+      : `${RESEARCH_BASE}/jobs/${encodeURIComponent(jobId)}/${action}`;
+  const res = await fetch(path, {
+    method: "POST",
+    headers: edgeHeaders(accessToken, "application/json"),
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) throw new Error(await readError(res));
+}
+
+/** Matches `ENGINE_REV` in supabase/functions/_fleet-server/catalog_research_worker.ts */
+export const CATALOG_RESEARCH_ENGINE_REV = "catalog-research-1";
+
+export type CatalogResearchJobListItem = {
+  jobId: string;
+  state: string;
+  groupKey: string;
+  fleetCount: number;
+  resultPartNumber: string;
+  sourceCount: number;
+  updatedAt: string;
+};
+
+export type CatalogResearchIncident = {
+  id: string;
+  state: string;
+  last_error: string | null;
+  attempts: number;
+  updated_at: string;
+};
+
+export type CatalogTrustedSource = {
+  domain: string;
+  kind: "oem_catalog" | "aftermarket_catalog" | string;
+  active: boolean;
+};
+
+export async function fetchCatalogResearchJobs(
+  accessToken: string,
+  state?: string,
+): Promise<CatalogResearchJobListItem[]> {
+  const q = state ? `?state=${encodeURIComponent(state)}` : "";
+  const res = await fetch(`${RESEARCH_BASE}/jobs${q}`, { headers: edgeHeaders(accessToken) });
+  if (!res.ok) throw new Error(await readError(res));
+  const data = await res.json();
+  return (data.items || []) as CatalogResearchJobListItem[];
+}
+
+export async function fetchCatalogResearchIncidents(
+  accessToken: string,
+): Promise<CatalogResearchIncident[]> {
+  const res = await fetch(`${RESEARCH_BASE}/incidents`, { headers: edgeHeaders(accessToken) });
+  if (!res.ok) throw new Error(await readError(res));
+  const data = await res.json();
+  return (data.items || []) as CatalogResearchIncident[];
+}
+
+export async function retryCatalogResearchJob(accessToken: string, jobId: string): Promise<void> {
+  const res = await fetch(`${RESEARCH_BASE}/jobs/${encodeURIComponent(jobId)}/retry`, {
+    method: "POST",
+    headers: edgeHeaders(accessToken),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+}
+
+export async function downloadCatalogResearchExportCsv(accessToken: string): Promise<void> {
+  const res = await fetch(`${RESEARCH_BASE}/export.csv`, { headers: edgeHeaders(accessToken) });
+  if (!res.ok) throw new Error(await readError(res));
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "catalog_research_jobs.csv";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+export async function fetchCatalogTrustedSources(
+  accessToken: string,
+): Promise<CatalogTrustedSource[]> {
+  const res = await fetch(`${RESEARCH_BASE}/trusted-sources`, { headers: edgeHeaders(accessToken) });
+  if (!res.ok) throw new Error(await readError(res));
+  const data = await res.json();
+  return (data.items || []) as CatalogTrustedSource[];
+}
+
+export async function patchCatalogTrustedSource(
+  accessToken: string,
+  domain: string,
+  active: boolean,
+): Promise<void> {
+  const res = await fetch(`${RESEARCH_BASE}/trusted-sources/${encodeURIComponent(domain)}`, {
+    method: "PATCH",
+    headers: edgeHeaders(accessToken, "application/json"),
+    body: JSON.stringify({ active }),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+}
+
+export async function addCatalogTrustedSource(
+  accessToken: string,
+  domain: string,
+  kind: "oem_catalog" | "aftermarket_catalog",
+): Promise<void> {
+  const res = await fetch(`${RESEARCH_BASE}/trusted-sources`, {
+    method: "POST",
+    headers: edgeHeaders(accessToken, "application/json"),
+    body: JSON.stringify({ domain, kind }),
+  });
+  if (!res.ok) throw new Error(await readError(res));
 }

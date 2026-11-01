@@ -13,6 +13,12 @@ function formatRequested(iso: string): string {
   return new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
 
+const MARKET_OPTIONS = [
+  { id: "all", label: "All markets" },
+  { id: "JM", label: "Jamaica (JM)" },
+  { id: "JDM", label: "JDM" },
+];
+
 export function PendingVehiclesCatalogTab({
   items,
   visible,
@@ -22,6 +28,8 @@ export function PendingVehiclesCatalogTab({
   onQueryChange,
   queueFilter,
   onQueueFilterChange,
+  marketFilter,
+  onMarketFilterChange,
   page,
   pageSize,
   onPageChange,
@@ -35,6 +43,8 @@ export function PendingVehiclesCatalogTab({
   onQueryChange: (value: string) => void;
   queueFilter: QueueFilter;
   onQueueFilterChange: (filter: QueueFilter) => void;
+  marketFilter: string;
+  onMarketFilterChange: (market: string) => void;
   page: number;
   pageSize: number;
   onPageChange: (page: number) => void;
@@ -156,6 +166,21 @@ export function PendingVehiclesCatalogTab({
         <div className="flex flex-wrap items-center gap-space-xs">
           {filterChip("all_pending", "All pending", items.length)}
           {filterChip("needs_info", "Needs info", metrics.needsInfo)}
+          <span className="mx-1 h-6 w-px bg-surface-container-high" />
+          {MARKET_OPTIONS.map((opt) => (
+            <button
+              key={opt.id}
+              type="button"
+              className={`rounded-lg px-3 py-1.5 font-mono-sm text-mono-sm font-medium ${
+                marketFilter === opt.id
+                  ? "bg-primary text-on-primary"
+                  : "bg-surface-container text-on-surface hover:bg-surface-variant"
+              }`}
+              onClick={() => onMarketFilterChange(opt.id)}
+            >
+              {opt.label}
+            </button>
+          ))}
         </div>
         <div className="flex flex-1 items-center justify-end gap-space-sm lg:max-w-xl">
           <div className="relative flex w-full max-w-sm items-center">

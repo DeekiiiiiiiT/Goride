@@ -1,22 +1,29 @@
-import React, { useEffect, useState } from "react";
+// Stitch: dominion-redesign/pending_catalog_drawer_needs_review + pending_catalog_drawer_added_automatically
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import type {
+  CatalogResearchJobListItem,
   PendingPartsGroupDetail,
   PendingPartsPatchAction,
   PendingPartsQueueGroup,
+  PartsBrowseNameMap,
   VehicleCatalogBrief,
+} from "../../../../services/pendingPartsCatalogService";
+import {
+  componentPositionAware,
+  fetchCatalogResearchJob,
+  partPlainName,
+  postCatalogResearchJobAction,
 } from "../../../../services/pendingPartsCatalogService";
 import { buildPartSearchText } from "./buildPartSearchText";
 import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  Input,
-  Label,
-  Textarea,
-} from "../../maintenance-templates/plainUi";
-import { writeCatalogSearch, type CatalogMatch } from "../../parts-database/partsCatalogUrl";
+  buildPartProposalChecks,
+  buildResearchStepBar,
+  formatFitsLine,
+  formatHistoryEvents,
+  parseProposalRow,
+  partDrawerVariantFromJobState,
+  type PartDrawerVariant,
+} from "./pendingCatalogViewModels";
 
 export type PendingPartDrawerDisplay = {
   partTitle: string;
@@ -30,39 +37,62 @@ export type PendingPartDrawerDisplay = {
 
 type PendingPartRequestDrawerProps = {
   open: boolean;
+  accessToken: string;
   group: PendingPartsQueueGroup | null;
+  job: CatalogResearchJobListItem | null;
   display: PendingPartDrawerDisplay | null;
   detail: PendingPartsGroupDetail | null;
   detailLoading: boolean;
   busy: boolean;
   vehicleBrief: VehicleCatalogBrief | null;
-  partPlainName: string;
-  positionAware: boolean;
+  partNames: PartsBrowseNameMap;
   onClose: () => void;
   onPatch: (action: PendingPartsPatchAction) => Promise<void>;
+  onReload: () => Promise<void>;
 };
 
 export function PendingPartRequestDrawer({
   open,
+  accessToken,
   group,
+  job,
   display,
   detail,
   detailLoading,
   busy,
   vehicleBrief,
-  partPlainName,
-  positionAware,
+  partNames,
   onClose,
   onPatch,
+  onReload,
 }: PendingPartRequestDrawerProps) {
-  const [lookingOpen, setLookingOpen] = useState(false);
-  const [cantFindOpen, setCantFindOpen] = useState(false);
-  const [addedOpen, setAddedOpen] = useState(false);
-  const [lookingNote, setLookingNote] = useState("");
-  const [cantFindReason, setCantFindReason] = useState("");
-  const [resolvedPartId, setResolvedPartId] = useState("");
-  const [resolutionNote, setResolutionNote] = useState("");
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
+  const [researchBusy, setResearchBusy] = useState(false);
+  const [jobDetail, setJobDetail] = useState<Awaited<ReturnType<typeof fetchCatalogResearchJob>> | null>(null);
+  const [jobLoading, setJobLoading] = useState(false);
+
+  const jobId = detail?.researchJobId || job?.jobId || null;
+  const variant: PartDrawerVariant = partDrawerVariantFromJobState(job?.state ?? jobDetail?.job?.state as string);
+
+  const reloadJob = useCallback(async () => {
+    if (!jobId || !accessToken) {
+      setJobDetail(null);
+      return;
+    }
+    setJobLoading(true);
+    try {
+      setJobDetail(await fetchCatalogResearchJob(accessToken, jobId));
+    } catch {
+      setJobDetail(null);
+    } finally {
+      setJobLoading(false);
+    }
+  }, [accessToken, jobId]);
+
+  useEffect(() => {
+    if (!open) return;
+    void reloadJob();
+  }, [open, reloadJob]);
 
   useEffect(() => {
     if (!open) return;
@@ -80,17 +110,36 @@ export function PendingPartRequestDrawer({
     return () => window.clearTimeout(t);
   }, [copyState]);
 
+  const proposal = useMemo(() => {
+    const row = (jobDetail?.proposals || [])[0] as Record<string, unknown> | undefined;
+    return row ? parseProposalRow(row) : null;
+  }, [jobDetail]);
+
+  const checks = useMemo(
+    () => (proposal ? buildPartProposalChecks(proposal, detail?.onFile?.length ?? 0) : null),
+    [proposal, detail?.onFile],
+  );
+
+  const stepBar = useMemo(
+    () => buildResearchStepBar((jobDetail?.events || []) as Array<Record<string, unknown>>),
+    [jobDetail],
+  );
+
+  const history = useMemo(
+    () => formatHistoryEvents((jobDetail?.events || []) as Array<Record<string, unknown>>).slice(-8),
+    [jobDetail],
+  );
+
   if (!open || !group || !display) return null;
 
-  const onFile = detail?.onFile ?? [];
-  const chassisCode = vehicleBrief?.chassis_code || "—";
-  const onFileHeader = `${partPlainName} · ${chassisCode}`;
+  const partPlain = partPlainName(group.componentId, partNames);
+  const positionAware = componentPositionAware(group.componentId, partNames);
 
   const copyForSearch = async () => {
     const text = buildPartSearchText(
       group,
       vehicleBrief ?? undefined,
-      partPlainName,
+      partPlain,
       detail?.notes ?? [],
       positionAware,
     );
@@ -105,30 +154,24 @@ export function PendingPartRequestDrawer({
   const copyButtonLabel =
     copyState === "copied" ? "Copied ✓" : copyState === "failed" ? "Couldn't copy" : "Copy for search";
 
-  const matchTypeToCatalog = (raw?: string | null): CatalogMatch | undefined => {
-    const tag = String(raw || "").trim().toLowerCase();
-    if (tag === "oem" || tag.includes("made for")) return "oem";
-    if (tag === "sister") return "sister";
-    if (tag === "engine") return "engine";
-    if (tag === "aftermarket") return "aftermarket";
-    if (tag === "universal") return "universal";
-    return undefined;
-  };
+  async function researchAct(action: string, body?: Record<string, unknown>) {
+    if (!jobId) return;
+    setResearchBusy(true);
+    try {
+      await postCatalogResearchJobAction(accessToken, jobId, action, body);
+      await reloadJob();
+      await onReload();
+    } finally {
+      setResearchBusy(false);
+    }
+  }
 
-  const openPartsDatabase = () => {
-    const variant = group.vehicleCatalogId || group.platformId;
-    if (!variant) return;
-    writeCatalogSearch(
-      {
-        tab: "Full database",
-        variant,
-        part: group.componentId || null,
-        match: matchTypeToCatalog(group.matchType) || null,
-      },
-      "push",
-    );
-    window.dispatchEvent(new PopStateEvent("popstate"));
-  };
+  const statusChipClass =
+    variant === "auto_added"
+      ? "bg-emerald-50 text-emerald-700"
+      : variant === "needs_review"
+        ? "bg-amber-100 text-amber-900"
+        : "border border-outline-variant/40 bg-surface-container text-on-surface-variant";
 
   return (
     <>
@@ -139,109 +182,162 @@ export function PendingPartRequestDrawer({
         onClick={onClose}
       />
       <aside
-        className="fixed top-0 right-0 z-50 flex h-screen w-full max-w-[560px] flex-col justify-between overflow-hidden border-l border-surface-variant bg-surface-container-lowest shadow-2xl"
+        className="fixed top-0 right-0 z-50 flex h-screen w-full max-w-[560px] flex-col overflow-hidden border-l border-surface-variant bg-surface-container-lowest shadow-2xl"
         aria-modal
         role="dialog"
-        aria-labelledby="pending-part-drawer-title"
       >
         <div className="flex-none border-b border-surface-variant bg-surface-container-lowest p-space-lg">
           <div className="mb-2 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="font-mono-sm text-mono-sm font-semibold tracking-wider text-on-surface-variant">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-mono-sm text-mono-sm font-semibold uppercase tracking-wider text-on-surface-variant">
                 REQUEST GROUP #REQ-{display.reqShortId}
               </span>
-              <span className="font-mono-sm text-outline-variant">/</span>
-              <span className="rounded-full border border-outline-variant/40 bg-surface-container px-2 py-0.5 font-mono-sm text-[11px] font-semibold text-on-surface-variant">
+              <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 font-label-xs text-label-xs font-semibold ${statusChipClass}`}>
+                {variant === "needs_review" ? (
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-600" />
+                ) : null}
                 {display.statusLabel}
               </span>
             </div>
-            <button
-              type="button"
-              className="flex h-8 w-8 items-center justify-center rounded-lg bg-surface-container text-on-surface transition-colors hover:bg-surface-variant"
-              title="Close drawer (Esc)"
-              onClick={onClose}
-            >
+            <button type="button" className="flex h-8 w-8 items-center justify-center rounded-lg bg-surface-container" onClick={onClose}>
               <span className="material-symbols-outlined text-[18px]">close</span>
             </button>
           </div>
-          <div className="mb-space-md">
-            <h2 id="pending-part-drawer-title" className="font-headline-xl text-headline-xl font-bold tracking-tight text-on-surface">
-              {display.partTitle}
-            </h2>
-            <div className="mt-0.5 flex items-center gap-1.5">
-              <span className="font-body-md text-body-md font-semibold text-on-surface">{display.vehicleHeadline}</span>
-              {display.vehicleSubline ? (
-                <span className="font-body-sm text-body-sm text-on-surface-variant">· {display.vehicleSubline}</span>
-              ) : null}
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-space-sm border-t border-surface-container-high pt-2">
-            <div className="inline-flex items-center gap-1.5 rounded-full bg-primary-container px-2.5 py-1 font-mono-sm text-mono-sm font-semibold text-white shadow-xs">
-              <span className="material-symbols-outlined text-[15px]">group</span>
-              <span>{display.fleetLabel}</span>
-            </div>
-            <div className="flex items-center gap-1 font-mono-sm text-mono-sm text-on-surface-variant">
-              <span className="material-symbols-outlined text-[14px]">calendar_today</span>
-              <span>first asked {display.firstAskedLabel}</span>
-            </div>
+          <h2 className="font-headline-xl text-headline-xl font-bold tracking-tight text-on-surface">{display.partTitle}</h2>
+          <p className="mt-0.5 font-body-sm text-body-sm text-on-surface-variant">
+            {display.vehicleHeadline}
+            {display.vehicleSubline ? ` · ${display.vehicleSubline}` : ""}
+          </p>
+          <div className="mt-space-md flex flex-wrap items-center gap-space-sm border-t border-surface-container-high pt-2">
+            <span className="inline-flex items-center gap-1.5 rounded-md bg-primary-fixed px-2.5 py-1 font-mono-sm text-mono-sm font-semibold text-primary">
+              {display.fleetLabel}
+            </span>
+            <span className="font-mono-sm text-mono-sm text-on-surface-variant">first asked {display.firstAskedLabel}</span>
             <button
               type="button"
-              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-outline-variant/60 bg-transparent px-2.5 font-label-md text-label-md font-semibold text-on-surface transition-colors hover:bg-surface-container"
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-outline-variant/60 px-2.5 font-label-md text-label-md font-semibold"
               onClick={() => void copyForSearch()}
             >
               <span className="material-symbols-outlined text-[16px]">content_copy</span>
-              <span>{copyButtonLabel}</span>
+              {copyButtonLabel}
             </button>
           </div>
         </div>
 
-        <div className="flex-1 space-y-space-xl overflow-y-auto bg-surface p-space-lg">
-          <section className="space-y-space-sm">
-            <div className="flex items-center justify-between">
-              <span className="flex items-center gap-1 font-label-xs text-label-xs font-semibold uppercase tracking-wider text-on-surface-variant">
-                <span className="material-symbols-outlined text-[14px]">chat_bubble_outline</span>
-                <span>What they asked</span>
-              </span>
-              <span className="font-mono-sm text-[11px] font-medium text-[#006e31]">Verified Zero PII</span>
+        <div className="flex-1 space-y-space-lg overflow-y-auto bg-surface p-space-lg">
+          {variant === "needs_review" && proposal ? (
+            <div className="flex items-start gap-space-sm rounded-xl bg-amber-50 p-space-md shadow-sm">
+              <span className="material-symbols-outlined mt-0.5 text-[20px] text-amber-700">warning</span>
+              <p className="font-body-sm text-body-sm font-medium text-amber-900">
+                Only one trusted catalogue confirmed this part. Check it and approve, or fix it.
+              </p>
             </div>
-            {detailLoading ? (
-              <div className="h-20 animate-pulse rounded-xl bg-surface-container" />
-            ) : (
-              <div className="space-y-2">
-                {(detail?.notes || []).length === 0 ? (
-                  <div className="rounded-xl border border-surface-variant bg-surface-container-lowest p-3 font-body-sm text-body-sm text-on-surface-variant">
-                    No notes on file.
+          ) : null}
+          {variant === "auto_added" && proposal ? (
+            <div className="flex items-start gap-space-md rounded-xl bg-emerald-50 p-space-md text-emerald-900 shadow-sm">
+              <span className="material-symbols-outlined text-[20px] text-emerald-600">done_all</span>
+              <div>
+                <p className="font-body-sm font-semibold text-emerald-950">Autonomous Catalog Ingestion</p>
+                <p className="font-body-sm text-emerald-800">
+                  Two trusted catalogues agreed, so Roam added this part on its own.
+                </p>
+              </div>
+            </div>
+          ) : null}
+
+          {proposal ? (
+            <section className="space-y-space-sm">
+              <div className="flex items-center justify-between">
+                <h3 className="font-label-xs text-label-xs font-semibold uppercase tracking-wider text-on-surface-variant">
+                  {variant === "auto_added" ? "Added" : "Roam found"}
+                </h3>
+                <span className="font-mono-sm text-mono-sm text-on-surface-variant">1 active candidate</span>
+              </div>
+              <div className="relative space-y-space-md overflow-hidden rounded-xl bg-surface-container-lowest p-space-md shadow-md">
+                <div className="absolute bottom-0 left-0 top-0 w-1 bg-primary-container" />
+                <div className="pl-space-xs">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="font-mono-lg text-mono-lg font-bold text-on-surface">
+                        {proposal.brand} {proposal.partNumber}
+                      </div>
+                      <div className="font-body-sm text-body-sm text-on-surface-variant">{proposal.partName || display.partTitle}</div>
+                    </div>
+                    {proposal.matchType ? (
+                      <span className="rounded-full bg-primary-fixed px-2 py-0.5 font-mono-sm text-mono-sm font-semibold text-primary">
+                        Made for your car
+                      </span>
+                    ) : null}
                   </div>
+                  <div className="mt-2 rounded-lg bg-surface-container-low px-space-sm py-1.5 font-mono-sm text-mono-sm text-on-surface-variant">
+                    Fits: {formatFitsLine(vehicleBrief)}
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {proposal.sources.slice(0, 4).map((s, i) => {
+                      const ok = s.number_found && s.car_found && !s.dropped;
+                      return (
+                        <span
+                          key={i}
+                          className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 font-mono-sm text-mono-sm ${
+                            ok ? "bg-emerald-50 text-emerald-800" : "bg-surface-container-high text-secondary"
+                          }`}
+                        >
+                          {s.domain || "source"} {ok ? "✓" : "✗"}
+                        </span>
+                      );
+                    })}
+                  </div>
+                  {proposal.sources[0]?.quote ? (
+                    <div className="mt-2 rounded-lg bg-inverse-surface p-space-sm font-mono-sm text-[11px] leading-relaxed text-inverse-on-surface">
+                      {proposal.sources[0].quote}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            </section>
+          ) : jobLoading ? (
+            <div className="h-24 animate-pulse rounded-xl bg-surface-container" />
+          ) : null}
+
+          {checks ? (
+            <section className="space-y-space-sm">
+              <div className="flex items-center justify-between">
+                <h3 className="font-label-xs text-label-xs font-semibold uppercase tracking-wider text-on-surface-variant">Checks</h3>
+                <span className="font-mono-sm text-mono-sm font-semibold text-emerald-700">
+                  {checks.passed} of {checks.total} passed
+                </span>
+              </div>
+              <div className="overflow-hidden rounded-xl bg-surface-container-lowest shadow-sm">
+                {checks.rows.map((row, i) => (
+                  <div
+                    key={row.label}
+                    className={`flex items-center justify-between px-space-md py-2.5 ${i % 2 ? "bg-surface-container-low/50" : ""} ${!row.ok ? "bg-error-container/20" : ""}`}
+                  >
+                    <div className="flex items-center gap-2 font-body-sm text-body-sm">
+                      <span className={`material-symbols-outlined text-[18px] ${row.ok ? "text-emerald-600" : "text-error"}`}>
+                        {row.ok ? "check" : "close"}
+                      </span>
+                      {row.label}
+                    </div>
+                    <span className="font-mono-sm text-mono-sm text-on-surface-variant">{row.detail}</span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
+          <section className="space-y-space-sm">
+            <h3 className="font-label-xs text-label-xs font-semibold uppercase tracking-wider text-on-surface-variant">What they asked</h3>
+            {detailLoading ? (
+              <div className="h-16 animate-pulse rounded-xl bg-surface-container" />
+            ) : (
+              <div className="space-y-2 rounded-xl bg-surface-container-lowest p-space-md shadow-sm">
+                {(detail?.notes || []).length === 0 ? (
+                  <p className="font-mono-sm text-mono-sm text-on-surface-variant">No custom notes submitted</p>
                 ) : (
                   (detail?.notes || []).map((note, index) => (
-                    <div
-                      key={note.id}
-                      className="rounded-xl border border-surface-variant bg-surface-container-lowest p-3 shadow-xs"
-                    >
-                      <div className="flex items-start gap-2">
-                        <span
-                          className={`mt-1.5 h-1.5 w-1.5 flex-none rounded-full ${note.text?.trim() ? "bg-primary" : "bg-outline-variant"}`}
-                        />
-                        <p className="font-body-sm text-body-sm text-on-surface">
-                          Note {index + 1}:{" "}
-                          {note.text?.trim() ? (
-                            <span className="font-mono-sm font-medium text-on-surface">&quot;{note.text}&quot;</span>
-                          ) : (
-                            <span className="text-on-surface-variant">—</span>
-                          )}
-                        </p>
-                      </div>
-                      <div className="mt-1 pl-3.5 font-mono-sm text-[10px] text-on-surface-variant">
-                        Fleet Request Log #{note.logRef}
-                        {note.at
-                          ? ` · ${new Date(note.at).toLocaleDateString("en-GB", {
-                              day: "2-digit",
-                              month: "short",
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}`
-                          : ""}
-                      </div>
+                    <div key={note.id} className="rounded-lg bg-surface-container-low p-2 font-mono-sm text-mono-sm text-on-surface">
+                      Note {index + 1}: {note.text?.trim() ? `"${note.text}"` : "—"}
                     </div>
                   ))
                 )}
@@ -250,243 +346,117 @@ export function PendingPartRequestDrawer({
           </section>
 
           <section className="space-y-space-sm">
-            <div className="flex items-center justify-between">
-              <span className="flex items-center gap-1 font-label-xs text-label-xs font-semibold uppercase tracking-wider text-on-surface-variant">
-                <span className="material-symbols-outlined text-[14px]">photo_library</span>
-                <span>
-                  Uploaded Photos ({detail?.photos?.length ?? group.photoCount} Verification Documents)
-                </span>
-              </span>
-              <span className="font-mono-sm text-[11px] text-primary">Click to inspect zoom</span>
-            </div>
-            {(detail?.photos || []).length === 0 ? (
-              <div className="rounded-xl border border-surface-variant bg-surface-container-lowest p-4 text-center font-body-sm text-body-sm text-on-surface-variant">
-                No photos attached.
+            <h3 className="font-label-xs text-label-xs font-semibold uppercase tracking-wider text-on-surface-variant">
+              Already on file for this car
+            </h3>
+            {(detail?.onFile || []).length === 0 ? (
+              <div className="rounded-xl bg-surface-container-lowest p-space-md shadow-sm">
+                <p className="font-headline-md font-semibold text-on-surface">Nothing yet</p>
+                <p className="font-body-sm text-body-sm text-on-surface-variant">
+                  No {partPlain.toLowerCase()} on file for this car version yet.
+                </p>
               </div>
             ) : (
-              <div className="grid grid-cols-2 gap-space-md">
-                {(detail?.photos || []).map((photo) => (
-                  <a
-                    key={photo.requestId}
-                    href={photo.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="group cursor-pointer overflow-hidden rounded-xl border border-surface-variant bg-surface-container-lowest shadow-xs transition-all hover:border-primary-container"
-                  >
-                    <div className="relative h-28 w-full overflow-hidden bg-surface-container">
-                      <img src={photo.url} alt="" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
-                    </div>
-                    <div className="p-2 font-mono-sm text-[10px] text-on-surface-variant">Reference photo</div>
-                  </a>
-                ))}
-              </div>
-            )}
-          </section>
-
-          <section className="space-y-space-sm">
-            <div className="flex items-center justify-between">
-              <span className="flex items-center gap-1 font-label-xs text-label-xs font-semibold uppercase tracking-wider text-on-surface-variant">
-                <span className="material-symbols-outlined text-[14px]">folder_open</span>
-                <span>Already on file for this car</span>
-              </span>
-              <span className="font-mono-sm text-[11px] font-medium text-on-surface-variant">{onFileHeader}</span>
-            </div>
-            {detailLoading ? (
-              <div className="h-24 animate-pulse rounded-xl bg-surface-container" />
-            ) : onFile.length > 0 ? (
-              <ul className="space-y-2 rounded-xl border border-surface-variant bg-surface-container-lowest p-3">
-                {onFile.map((row, index) => (
-                  <li
-                    key={`${row.partNumber}-${row.brand}-${index}`}
-                    className="flex flex-wrap items-center justify-between gap-2 border-b border-surface-variant/60 pb-2 last:border-0 last:pb-0"
-                  >
-                    <div className="min-w-0">
-                      <span className="font-body-sm text-body-sm font-semibold text-on-surface">{row.brand}</span>
-                      <span className="ml-2 font-mono-sm text-mono-sm text-on-surface-variant">{row.partNumber}</span>
-                    </div>
-                    <span className="rounded-full bg-surface-container px-2 py-0.5 font-mono-sm text-[10px] font-semibold text-on-surface-variant">
-                      {row.matchType}
-                    </span>
+              <ul className="rounded-xl border border-surface-variant bg-surface-container-lowest p-3">
+                {(detail?.onFile || []).map((row, index) => (
+                  <li key={`${row.partNumber}-${index}`} className="font-body-sm text-body-sm">
+                    {row.brand} · {row.partNumber}
                   </li>
                 ))}
               </ul>
-            ) : (
-              <div className="flex items-center justify-center rounded-xl border border-surface-variant bg-surface-container-lowest p-4 text-center">
-                <div className="flex flex-col items-center py-2">
-                  <span className="material-symbols-outlined mb-1 text-[24px] text-outline">inbox</span>
-                  <span className="font-headline-md text-headline-md font-semibold text-on-surface">Nothing yet</span>
-                  <p className="mt-0.5 max-w-xs font-body-sm text-body-sm text-on-surface-variant">
-                    No {partPlainName.toLowerCase()} on file for this car version yet.
-                  </p>
-                </div>
-              </div>
             )}
           </section>
 
-          <section className="space-y-3 rounded-xl border border-primary-container/30 bg-surface-container-lowest p-space-md shadow-xs">
-            <div className="flex items-center justify-between border-b border-surface-variant pb-2">
-              <div className="flex items-center gap-1.5">
-                <span className="material-symbols-outlined text-[18px] text-primary-container">library_add</span>
-                <span className="font-headline-md text-[14px] font-bold text-on-surface">Pre-filled Form Snapshot</span>
+          {(stepBar.asked || stepBar.research) && (
+            <section className="space-y-space-sm">
+              <h3 className="font-label-xs text-label-xs font-semibold uppercase tracking-wider text-on-surface-variant">History</h3>
+              <div className="flex items-center justify-between rounded-lg bg-surface-container-low/50 p-2.5">
+                {["Asked", "Research", "Confirmed", "Added"].map((label, idx) => {
+                  const done =
+                    (idx === 0 && stepBar.asked) ||
+                    (idx === 1 && stepBar.research) ||
+                    (idx === 2 && stepBar.confirmed) ||
+                    (idx === 3 && stepBar.added);
+                  return (
+                    <React.Fragment key={label}>
+                      <div className="flex flex-col items-center gap-1 text-center">
+                        <span
+                          className={`flex h-6 w-6 items-center justify-center rounded-full font-mono-sm text-[10px] font-bold ${
+                            done ? "bg-emerald-600 text-white" : "bg-slate-900 text-white"
+                          }`}
+                        >
+                          {idx + 1}
+                        </span>
+                        <span className="font-mono-sm text-[10px] text-on-surface-variant">{label}</span>
+                      </div>
+                      {idx < 3 ? <span className="mx-1 h-0.5 flex-1 bg-emerald-600" /> : null}
+                    </React.Fragment>
+                  );
+                })}
               </div>
-              <span className="rounded bg-primary-fixed px-2 py-0.5 font-mono-sm text-[10px] font-semibold text-primary">
-                AUTO-MAPPED
-              </span>
-            </div>
-            <div className="grid grid-cols-2 gap-2 font-mono-sm text-[12px]">
-              <div className="rounded border border-surface-variant bg-surface p-2">
-                <span className="block text-[10px] uppercase text-on-surface-variant">Car Version</span>
-                <span className="block truncate font-semibold text-on-surface">{display.vehicleHeadline}</span>
+              {stepBar.fleetsNotified != null ? (
+                <p className="font-mono-sm text-mono-sm text-on-surface-variant">{stepBar.fleetsNotified} fleets notified</p>
+              ) : null}
+              <div className="space-y-1 font-mono-sm text-[11px] text-on-surface-variant">
+                {history.map((h) => (
+                  <div key={`${h.at}-${h.label}`}>{h.at ? new Date(h.at).toLocaleString("en-GB") : "—"} · {h.label}</div>
+                ))}
               </div>
-              <div className="rounded border border-surface-variant bg-surface p-2">
-                <span className="block text-[10px] uppercase text-on-surface-variant">Match tier</span>
-                <span className="block truncate font-semibold text-on-surface">{group.matchType ? `${group.matchType} option` : "—"}</span>
-              </div>
-              <div className="rounded border border-surface-variant bg-surface p-2 col-span-2">
-                <span className="block text-[10px] uppercase text-on-surface-variant">Part Type &amp; Side</span>
-                <span className="block truncate font-semibold text-on-surface">{display.partTitle || "—"}</span>
-              </div>
-            </div>
-          </section>
+            </section>
+          )}
         </div>
 
         <div className="flex-none space-y-2 border-t border-surface-variant bg-surface-container-lowest p-space-lg">
-          <div className="grid grid-cols-12 items-center gap-space-sm">
+          {variant === "needs_review" && proposal ? (
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                disabled={busy || researchBusy}
+                className="h-10 rounded-xl border border-outline-variant font-label-md font-semibold text-on-surface-variant"
+                onClick={() => void researchAct("not-found")}
+              >
+                Couldn&apos;t find it
+              </button>
+              <button
+                type="button"
+                disabled={busy || researchBusy}
+                className="h-10 rounded-xl bg-primary-container font-label-md font-semibold text-white"
+                onClick={() => void researchAct("looks-right", { proposalId: proposal.id })}
+              >
+                Looks right
+              </button>
+            </div>
+          ) : variant === "auto_added" ? (
             <button
               type="button"
-              disabled={busy}
-              className="col-span-3 flex h-10 items-center justify-center gap-1 rounded-xl border border-outline-variant/60 bg-transparent font-label-md text-label-md font-semibold text-on-surface-variant transition-colors hover:border-error/50 hover:bg-error/5 hover:text-error disabled:opacity-50"
-              onClick={() => setCantFindOpen(true)}
+              disabled={busy || researchBusy}
+              className="h-10 w-full rounded-xl border border-outline-variant font-label-md font-semibold text-on-surface"
+              onClick={() => void researchAct("undo")}
             >
-              <span className="material-symbols-outlined text-[16px]">help_outline</span>
-              <span className="truncate">Can't find it</span>
+              Undo auto-add
             </button>
-            <button
-              type="button"
-              disabled={busy}
-              className="col-span-4 flex h-10 items-center justify-center gap-1 rounded-xl bg-surface-container font-label-md text-label-md font-semibold text-on-surface transition-colors hover:bg-surface-variant disabled:opacity-50"
-              onClick={() => setLookingOpen(true)}
-            >
-              <span className="material-symbols-outlined text-[16px]">search_insights</span>
-              <span className="truncate">Mark as looking</span>
-            </button>
-            <button
-              type="button"
-              disabled={busy}
-              className="col-span-5 flex h-10 items-center justify-center gap-1.5 rounded-xl bg-primary-container font-label-md text-label-md font-semibold text-white shadow-md transition-colors hover:bg-primary disabled:opacity-50"
-              onClick={() => setAddedOpen(true)}
-            >
-              <span className="material-symbols-outlined text-[18px]">add_circle</span>
-              <span className="truncate">Add this part</span>
-            </button>
-          </div>
-          <p className="pt-1 text-center font-mono-sm text-[11px] text-on-surface-variant">
-            When you add the part, every fleet that asked sees it the next time they search.
-          </p>
+          ) : (
+            <div className="grid grid-cols-12 gap-2">
+              <button
+                type="button"
+                disabled={busy}
+                className="col-span-4 h-10 rounded-xl border border-outline-variant font-label-md font-semibold"
+                onClick={() => void onPatch({ action: "cant_find" })}
+              >
+                Can&apos;t find it
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                className="col-span-8 h-10 rounded-xl bg-primary-container font-label-md font-semibold text-white"
+                onClick={() => void onPatch({ action: "looking" })}
+              >
+                Mark as looking
+              </button>
+            </div>
+          )}
         </div>
       </aside>
-
-      <Dialog open={lookingOpen} onOpenChange={setLookingOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Mark as looking</DialogTitle>
-          </DialogHeader>
-          <Label htmlFor="looking-note">Memo to fleets (optional)</Label>
-          <Textarea id="looking-note" rows={3} value={lookingNote} onChange={(e) => setLookingNote(e.target.value)} />
-          <DialogFooter>
-            <button
-              type="button"
-              className="rounded-lg bg-primary-container px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
-              disabled={busy}
-              onClick={() =>
-                void onPatch({ action: "looking", note: lookingNote.trim() || undefined }).then(() => {
-                  setLookingOpen(false);
-                  setLookingNote("");
-                })
-              }
-            >
-              Save
-            </button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={cantFindOpen} onOpenChange={setCantFindOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Can&apos;t find it</DialogTitle>
-          </DialogHeader>
-          <Label htmlFor="cant-find-reason">Reason (optional)</Label>
-          <Textarea
-            id="cant-find-reason"
-            rows={3}
-            value={cantFindReason}
-            onChange={(e) => setCantFindReason(e.target.value)}
-          />
-          <DialogFooter>
-            <button
-              type="button"
-              className="rounded-lg bg-error px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
-              disabled={busy}
-              onClick={() =>
-                void onPatch({ action: "cant_find", reason: cantFindReason.trim() || undefined }).then(() => {
-                  setCantFindOpen(false);
-                  setCantFindReason("");
-                })
-              }
-            >
-              Mark unresolved
-            </button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={addedOpen} onOpenChange={setAddedOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Add this part</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            Create the part in the Parts database, then paste its catalog id here to close every request in this group.
-          </p>
-          <button
-            type="button"
-            className="mb-2 text-sm font-medium text-primary hover:underline"
-            onClick={openPartsDatabase}
-          >
-            Open Parts database (pre-filled car version)
-          </button>
-          <Label htmlFor="resolved-part-id">Part catalog id</Label>
-          <Input id="resolved-part-id" value={resolvedPartId} onChange={(e) => setResolvedPartId(e.target.value)} />
-          <Label htmlFor="resolution-note">Resolution note (optional)</Label>
-          <Textarea
-            id="resolution-note"
-            rows={2}
-            value={resolutionNote}
-            onChange={(e) => setResolutionNote(e.target.value)}
-          />
-          <DialogFooter>
-            <button
-              type="button"
-              className="rounded-lg bg-primary-container px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
-              disabled={busy || !resolvedPartId.trim()}
-              onClick={() =>
-                void onPatch({
-                  action: "added",
-                  resolvedPartId: resolvedPartId.trim(),
-                  note: resolutionNote.trim() || undefined,
-                }).then(() => {
-                  setAddedOpen(false);
-                  setResolvedPartId("");
-                  setResolutionNote("");
-                })
-              }
-            >
-              Mark added
-            </button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </>
   );
 }

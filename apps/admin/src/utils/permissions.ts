@@ -544,6 +544,7 @@ export const PAGE_PERMISSIONS: Record<string, DominionPageSensitivity> = {
   'toll-live-monitor': 'standard',
   'motor-vehicles': 'standard',
   'pending-motor-vehicles': 'standard',
+  'pending-catalog-research': 'standard',
   'maintenance-templates': 'standard',
   'parts-sourcing': 'standard',
   'api-center': 'standard',
