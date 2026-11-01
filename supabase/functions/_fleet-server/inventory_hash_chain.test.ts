@@ -1,8 +1,7 @@
 import { assertEquals } from "jsr:@std/assert@1";
+import { readMigrationGlob } from "./test_read_migration_glob.ts";
 
-const RPC = await Deno.readTextFile(
-  new URL("../../../supabase/migrations/20261101143300_fleet_inventory_engine_rpcs.sql", import.meta.url),
-);
+const RPC = await readMigrationGlob("_fleet_inventory_engine_rpcs_");
 
 Deno.test("inv_verify_chain RPC exists", () => {
   if (!RPC.includes("CREATE OR REPLACE FUNCTION fleet.inv_verify_chain")) {

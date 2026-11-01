@@ -7,6 +7,8 @@
   scroll-margin-top: 5rem;
 }
 .fleet-find-parts-stitch .fill-primary { fill: #0061a4; }
+.fleet-find-parts-stitch .outline-none { outline: 2px solid transparent; outline-offset: 2px; }
+.fleet-find-parts-stitch .bg-emerald-100\/50 { background-color: rgb(209 250 229 / 0.5); }
 /* Generated from Stitch tailwind.config — do not hand-edit token rules. Run build:*-parts-css. */
 .fleet-find-parts-stitch { font-family: Inter, sans-serif; color: #191c1e; background: #f7f9fb; }
 .fleet-find-parts-stitch .material-symbols-outlined { font-family: "Material Symbols Outlined"; font-weight: normal; font-style: normal; line-height: 1; display: inline-block; white-space: nowrap; font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24; }

@@ -15,6 +15,8 @@ const theme = mergeThemeExtend(configs);
 
 const manualTail = `.pending-parts-stitch .text-headline-sm, .pending-parts-stitch .font-headline-sm { font-size: 18px; line-height: 26px; letter-spacing: -0.01em; font-weight: 600; }
 .pending-parts-stitch .material-symbols-outlined { vertical-align: middle; }
+.pending-parts-stitch .font-caption { font-size: 12px; line-height: 16px; font-weight: 400; }
+.pending-parts-stitch .text-caption { font-size: 12px; line-height: 16px; }
 `;
 
 const generated = generateScopedStitchCss('pending-parts-stitch', theme, {

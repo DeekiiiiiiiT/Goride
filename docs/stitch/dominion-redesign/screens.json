@@ -99,6 +99,12 @@
     "find_parts_everything_for_this_car",
     "find_parts_problems_list_and_drawer",
     "find_parts_loading_error_switched_off",
-    "find_parts_mobile_390px"
+    "find_parts_mobile_390px",
+    "pending_catalog_automated_research_queue_parts_tab",
+    "pending_catalog_drawer_needs_review",
+    "pending_catalog_drawer_added_automatically",
+    "pending_catalog_research_settings_and_health",
+    "pending_catalog_vehicles_tab_car_version_review_drawer",
+    "pending_catalog_empty_loading_error_research_off_states"
   ]
 }

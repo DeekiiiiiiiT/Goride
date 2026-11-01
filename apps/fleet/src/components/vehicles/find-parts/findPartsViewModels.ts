@@ -1918,8 +1918,6 @@ export const FP8_VERIFIES_FITMENT = "Verifies fitment across";
 export const FP8_SAMPLE_REQUEST_REF = "req-2026-fit-094";
 export const FP8_DISPATCH_LOG_LINE = "Logged 0, 14:05 EST · Node #01";
 
-/** Stitch FP14 copy block (also used for live catalog-added banner). */
-export const FP14_CATALOG_ADDED_LINE = "Drive belt for your Toyota Roomy 2019 is now on file.";
 export const FP14_BATCH_PARTS_PHRASE = "3 parts";
 export const FP14_RESULTS_COUNT_LINE = "Results: 1 / 2 alternates";
 export const FP14_CHECKED_TWO_CATALOGUES = "Checked against 2 catalogues";
@@ -1968,13 +1966,6 @@ export function formatFp13NoteConfirmation(requestId: string): string {
   const shortId = formatPartsRequestShortId(requestId);
   return `✓ Additional metadata recorded and attached to dispatch query ${shortId}.`;
 }
-
-/** Stitch FP13 card 4 (fidelity reference; live cards use formatFp13CantFindWithRetry). */
-export const FP13_STITCH_CANT_FIND_DEMO =
-  "No trusted catalogue lists a cabin filter for GP5 yet. We'll try again on 8 Nov.";
-export const FP13_STITCH_NOTE_CONFIRM_DEMO =
-  "✓ Additional metadata recorded and attached to dispatch query KGN-JA-774.";
-export const FP13_STITCH_TURNAROUND_DEMO = "Avg dispatch turnaround: 4.8 hrs";
 
 /** FP16 assembly area labels (phone notice frame). */
 export const FP16_CATALOG_UPDATED_LABEL = "Catalog updated";

@@ -8,8 +8,11 @@ Deno.test("legacy bulk assign uses row-locked draw", async () => {
     src.indexOf("/make-server-37f42386/fleet/equipment/bulk"),
     src.indexOf("// Inventory Endpoints"),
   );
-  if (!block.includes("legacyDrawInventoryQuantity")) {
-    throw new Error("bulk assign must use legacyDrawInventoryQuantity");
+  if (!block.includes("legacyFleetInventoryApiRetired")) {
+    throw new Error("bulk assign must block via legacyFleetInventoryApiRetired");
+  }
+  if (!block.includes("Legacy inventory draw removed")) {
+    throw new Error("bulk assign must refuse legacy inventory draw");
   }
   assertEquals(true, true);
 });

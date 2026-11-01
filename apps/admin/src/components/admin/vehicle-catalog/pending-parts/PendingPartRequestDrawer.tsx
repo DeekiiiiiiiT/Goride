@@ -24,6 +24,7 @@ import {
   partDrawerVariantFromJobState,
   type PartDrawerVariant,
 } from "./pendingCatalogViewModels";
+import { PendingResearchJobPanel } from "./PendingResearchJobPanel";
 
 export type PendingPartDrawerDisplay = {
   partTitle: string;
@@ -366,6 +367,16 @@ export function PendingPartRequestDrawer({
               </ul>
             )}
           </section>
+
+          {jobId ? (
+            <PendingResearchJobPanel
+              accessToken={accessToken}
+              jobId={jobId}
+              jobDetail={jobDetail}
+              jobDetailLoading={jobLoading}
+              onJobDetailReload={reloadJob}
+            />
+          ) : null}
 
           {(stepBar.asked || stepBar.research) && (
             <section className="space-y-space-sm">

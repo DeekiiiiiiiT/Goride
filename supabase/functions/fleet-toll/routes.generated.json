@@ -1,6 +1,6 @@
 {
   "slug": "fleet-toll",
-  "generatedAt": "2026-11-01T06:05:52.072Z",
+  "generatedAt": "2026-11-01T18:55:11.554Z",
   "routeCount": 101,
   "routes": [
     "DELETE /toll-plazas/:id",

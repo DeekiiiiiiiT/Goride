@@ -1,4 +1,4 @@
--- Fleet Find parts audit R1–R12: promote/claim fixes, priority queue, backfill, vehicle proposals.
+-- Fleet Find parts audit R1-R12: promote/claim fixes, priority queue, backfill, vehicle proposals.
 
 DO $$
 BEGIN

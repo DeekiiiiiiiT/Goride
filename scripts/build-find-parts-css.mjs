@@ -34,6 +34,8 @@ const manualFp4 = `.fleet-find-parts-stitch .find-parts-screen-root > .fp-screen
   scroll-margin-top: 5rem;
 }
 .fleet-find-parts-stitch .fill-primary { fill: #0061a4; }
+.fleet-find-parts-stitch .outline-none { outline: 2px solid transparent; outline-offset: 2px; }
+.fleet-find-parts-stitch .bg-emerald-100\\/50 { background-color: rgb(209 250 229 / 0.5); }
 `;
 
 const manualTail = `.fleet-find-parts-stitch .find-parts-stepbar, .fleet-find-parts-stitch .find-parts-trail { overflow-x: auto; }

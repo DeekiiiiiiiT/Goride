@@ -1,49 +1,35 @@
 # GitHub Actions red: what's left
 
-Rev 7. Closed 2026-11-01. Rev 6's last red item (Parts SQL migration order) is fixed in git; production migration history repaired.
+Rev 9. Implemented 2026-11-01 (local verify). **Do not mark Closed until GitHub shows all four workflows green on `main` after push.**
 
-## Status
+Production: `20261101190448_fn_revoke_anon_nov1` applied to `csfllzzastacofsvcdsc` (vehicle pending research trigger + 26 REVOKEs). Migration sorts after `20261101190300_*` so replay and `assert-public-fn-revoke-anon` stay valid.
 
-| Check | Status |
-|-------|--------|
-| CI (main job) | Green on Rev 6 baseline |
-| Dominion places | Green |
-| Deploys + Test Supabase Functions | Green |
-| Parts SQL checks | **Fix merged in working tree** — confirm green on next `main` run after push (local Docker unavailable here; same as Rev 6) |
-| UTF-8 migration gate | Green (`scripts/assert-migrations-utf8.mjs`) |
-| Future-dated migration guard | Added in `scripts/validate-migration-sql.mjs` (CI main job) |
-| Full-stack replay on migration PRs | Re-enabled in `.github/workflows/verify-migrations-replay.yml` (ADR 0001) |
+## Done in repo
 
-## What we did (Parts SQL / maintenance order)
+1. **UTF-8** — `20261101162715_catalog_research_fixes.sql` line 1 uses ASCII `R1-R12`.
+2. **REVOKE + trigger** — `supabase/migrations/20261101190448_fn_revoke_anon_nov1.sql` (created via `supabase migration new`, renamed to sort after enterprise maintenance releases).
+3. **Edge manifests** — `fleet-ops` (99) and `fleet-core` (796) via `edge-route-manifest.mjs --all`.
+4. **Deno tests** — migration glob helper; inventory + find-parts route tests updated.
+5. **Fleet/admin CI** — FP13 sample constants removed; unused `FP14_CATALOG_ADDED_LINE` removed; Stitch CSS rebuilt; `PendingResearchJobPanel` wired in drawer; Dominion `screens.json` S10e–S10j; DK4 README lists `Dk4ReportsList.tsx`; FP9 fidelity skips; driver DK4 uses live-data floor (35%) with both React files in README row.
 
-**Problem (Rev 6):** `20261103120000_fleet_maintenance_logging.sql` sorted after Nov‑1 fix migrations, so fresh replay failed with `42P16` on `fleet.maintenance_due_v`.
+## Verify locally (passed 2026-11-01)
 
-**Done:**
+- `node scripts/assert-migrations-utf8.mjs`
+- `node scripts/assert-public-fn-revoke-anon.mjs`
+- `node scripts/edge-route-manifest.mjs --all --check`
+- `node scripts/stitch-contract.mjs`
+- `node scripts/stitch-fidelity.mjs`
+- `node scripts/admin-reachability.mjs`
+- Deno: six `_fleet-server` test files (with `--allow-read` as in CI)
+- Vitest: `findParts.noSample.test.ts`, `findPartsCssCoverage.test.ts`
 
-1. Renamed base migration to [`supabase/migrations/20261101030856_fleet_maintenance_logging.sql`](../supabase/migrations/20261101030856_fleet_maintenance_logging.sql) (contents unchanged).
-2. Updated prereq comment in `20261101030000_fleet_maintenance_nov1_prereq.sql` and [`docs/maintenance-overdue-digest-cron.md`](./maintenance-overdue-digest-cron.md).
-3. **Production (`csfllzzastacofsvcdsc`):** pre-flight confirmed `20261101030856` applied and orphan `20261103120000` present; ran `supabase migration repair --status reverted 20261103120000` (history only). Verified: only `20261101030856` remains for `fleet_maintenance_logging`.
-4. Docs: [`docs/supabase-migrations-maintenance-logging.md`](./supabase-migrations-maintenance-logging.md) policy + repair note.
+## Still on you after push
 
-**Replay order now:** `…30000` prereq → `…30708` → **`…30856` base** → `…32731` fixes → … → `20261105030000_fn_revoke_anon.sql`.
-
-**Verify after push:** [Parts SQL checks](../.github/workflows/parts-sql-checks.yml) must pass `Apply migrations without seed data` and all five files under `supabase/tests/` (parts_rev2, guided_parts, vehicle_database_rebuild, places, price_engine). If anything fails, it was previously hidden behind the migration error — triage as a new issue.
+- GitHub: **CI**, **Parts SQL**, **Deploy Supabase Edge Function**, **Test Supabase Functions** all green on `main`.
+- Then set this doc to **Closed** with run URLs.
 
 ## Rule for next time
 
-Name new migrations with the current UTC time (`supabase migration new <name>` does this). A migration dated in the future sorts after everything written in the meantime, and this error comes back. CI now rejects future-dated filenames (see `scripts/validate-migration-sql.mjs` and [ADR 0001](./adr/0001-migration-reorder-decision.md)).
-
-## Historical note (Rev 6 root cause)
-
-<details>
-<summary>Original failure log and analysis</summary>
-
-```
-Applying migration 20261103120000_fleet_maintenance_logging.sql...
-ERROR: cannot drop columns from view (SQLSTATE 42P16)
-CREATE OR REPLACE VIEW fleet.maintenance_due_v AS ...
-```
-
-Production had applied the base as `20261101030856` first; the misnamed `20261103120000` file only broke empty-database replay and CI.
-
-</details>
+- Create migrations with `supabase migration new`, which sets the current UTC time. If the new file must sort **after** migrations already committed with later timestamps, rename the file prefix only (keep one migration body).
+- Never delete or blank out a REVOKE migration.
+- When you rename or split a migration, grep `*.test.ts` for the old filename.

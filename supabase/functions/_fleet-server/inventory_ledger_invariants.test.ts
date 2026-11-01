@@ -1,9 +1,8 @@
 /** Ledger invariant contracts documented in audit §6.2 / §11.1 (enforced in SQL migrations). */
 import { assertEquals } from "jsr:@std/assert@1";
+import { readMigrationGlob } from "./test_read_migration_glob.ts";
 
-const SCHEMA = await Deno.readTextFile(
-  new URL("../../../supabase/migrations/20261101143200_fleet_inventory_engine_schema.sql", import.meta.url),
-);
+const SCHEMA = await readMigrationGlob("_fleet_inventory_engine_schema_");
 
 Deno.test("inv_ledger is append-only in schema", () => {
   if (!/inv_ledger_immutable|BEFORE UPDATE OR DELETE ON fleet\.inv_ledger/i.test(SCHEMA)) {

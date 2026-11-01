@@ -9,17 +9,35 @@ import {
 type PendingResearchJobPanelProps = {
   accessToken: string;
   jobId: string | null | undefined;
+  /** When set, the parent owns fetch (e.g. request drawer) — avoids duplicate API calls. */
+  jobDetail?: CatalogResearchJobDetail | null;
+  jobDetailLoading?: boolean;
+  onJobDetailReload?: () => Promise<void>;
 };
 
-export function PendingResearchJobPanel({ accessToken, jobId }: PendingResearchJobPanelProps) {
+export function PendingResearchJobPanel({
+  accessToken,
+  jobId,
+  jobDetail: externalDetail,
+  jobDetailLoading = false,
+  onJobDetailReload,
+}: PendingResearchJobPanelProps) {
   const [detail, setDetail] = useState<CatalogResearchJobDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [editSourceUrl, setEditSourceUrl] = useState("");
 
+  const usesExternal = onJobDetailReload !== undefined;
+  const shownDetail = usesExternal ? (externalDetail ?? null) : detail;
+  const shownLoading = usesExternal ? jobDetailLoading : loading;
+
   const reload = useCallback(async () => {
     if (!jobId) {
-      setDetail(null);
+      if (!usesExternal) setDetail(null);
+      return;
+    }
+    if (usesExternal) {
+      await onJobDetailReload();
       return;
     }
     setLoading(true);
@@ -30,16 +48,17 @@ export function PendingResearchJobPanel({ accessToken, jobId }: PendingResearchJ
     } finally {
       setLoading(false);
     }
-  }, [accessToken, jobId]);
+  }, [accessToken, jobId, onJobDetailReload, usesExternal]);
 
   useEffect(() => {
+    if (usesExternal) return;
     void reload();
-  }, [reload]);
+  }, [reload, usesExternal]);
 
   if (!jobId) return null;
 
-  const job = detail?.job;
-  const proposal = (detail?.proposals || [])[0];
+  const job = shownDetail?.job;
+  const proposal = (shownDetail?.proposals || [])[0];
   const checks = (proposal?.checks || {}) as Record<string, unknown>;
   const shadowWouldAuto = checks.shadowWouldAuto === true;
 
@@ -70,7 +89,7 @@ export function PendingResearchJobPanel({ accessToken, jobId }: PendingResearchJ
           </span>
         ) : null}
       </div>
-      {loading ? (
+      {shownLoading ? (
         <div className="h-16 animate-pulse rounded-lg bg-surface-container" />
       ) : !job ? (
         <p className="font-body-sm text-body-sm text-on-surface-variant">No research job linked yet.</p>
@@ -96,9 +115,9 @@ export function PendingResearchJobPanel({ accessToken, jobId }: PendingResearchJ
           ) : (
             <p className="font-body-sm text-body-sm text-on-surface-variant">No proposal yet — queued or researching.</p>
           )}
-          {(detail?.events || []).length > 0 ? (
+          {(shownDetail?.events || []).length > 0 ? (
             <div className="max-h-28 overflow-y-auto font-mono-sm text-[10px] text-on-surface-variant">
-              {(detail?.events || []).slice(-6).map((ev) => (
+              {(shownDetail?.events || []).slice(-6).map((ev) => (
                 <div key={String(ev.id || ev.at)}>
                   {String(ev.step || "")} · {String(ev.outcome || "")}
                 </div>

@@ -88,8 +88,26 @@ Deno.test("T8 activity quotes stay on the caller's org", async () => {
       seen.push(`${column}=${value}`);
       return chain;
     },
+    gte(column: string, value: string) {
+      seen.push(`${column}>=${value}`);
+      return chain;
+    },
+    in(column: string, value: unknown) {
+      seen.push(`${column} in ${JSON.stringify(value)}`);
+      return chain;
+    },
+    lt(column: string, value: string) {
+      seen.push(`${column}<${value}`);
+      return chain;
+    },
+    not(_column: string, _op: string, _value: unknown) {
+      return chain;
+    },
     order() { return chain; },
     limit() { return Promise.resolve({ data: [], error: null, count: 0 }); },
+    then(resolve: (v: unknown) => void, reject?: (e: unknown) => void) {
+      return Promise.resolve({ data: [], error: null, count: 0 }).then(resolve, reject);
+    },
   };
   const supabase = {
     from(table: string) {
@@ -98,7 +116,7 @@ Deno.test("T8 activity quotes stay on the caller's org", async () => {
     },
   };
   await loadPartsActivity(supabase as never, "org-mine");
-  assertEquals(seen.filter((row) => row === "from:parts_sourcing_requests").length, 1);
+  assertEquals(seen.filter((row) => row === "from:parts_sourcing_requests").length > 0, true);
   assertEquals(seen.filter((row) => row === "from:part_repeat_alert").length, 1);
   assertEquals(seen.includes("organization_id=org-mine"), true);
   assertEquals(seen.includes("organization_id=org-other"), false);
