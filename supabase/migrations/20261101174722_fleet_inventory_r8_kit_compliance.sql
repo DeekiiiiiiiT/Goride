@@ -1,6 +1,3 @@
--- R8-05: Kit template dedupe + fuel card link; kit compliance counts installed assets.
--- Bridge driver report tables for fleet-core PostgREST access.
-
 DO $$
 DECLARE
   v_org text := '8cfa606a-f6ea-4ccb-a2b2-1d2cc323a823';
@@ -115,10 +112,3 @@ BEGIN
     );
   END LOOP;
 END $$;
-
-CREATE OR REPLACE VIEW public.fleet_inv_vehicle_kit
-WITH (security_invoker = true) AS
-SELECT * FROM fleet.vehicle_kit;
-
-REVOKE ALL ON public.fleet_inv_vehicle_kit FROM PUBLIC, anon, authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.fleet_inv_vehicle_kit TO service_role;

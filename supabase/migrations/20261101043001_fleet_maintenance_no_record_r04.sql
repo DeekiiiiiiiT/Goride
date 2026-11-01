@@ -1,5 +1,4 @@
--- Fleet maintenance logging audit R-04 (part 1): category default intervals
--- Production version: 20261101043001 — already applied; repo sync only.
+-- Fleet maintenance logging audit R-04: no_record status, recompute inserts, category intervals
 
 UPDATE public.maintenance_service_categories c
 SET
@@ -8,7 +7,7 @@ SET
 FROM (VALUES
   ('air_filter', 10000::numeric, 6),
   ('cabin_filter', 10000::numeric, 6),
-  ('tires', 40000::numeric, 36),
+  ('tires', 5000::numeric, 3),
   ('rotate_tires', 10000::numeric, 6),
   ('brake_fluid', 40000::numeric, 24),
   ('coolant_flush', 100000::numeric, 60),

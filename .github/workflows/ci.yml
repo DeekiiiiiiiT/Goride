@@ -53,6 +53,9 @@ jobs:
       - name: Check migration files are UTF-8
         run: node scripts/assert-migrations-utf8.mjs
 
+      - name: Check migration bodies match production fingerprints
+        run: node scripts/compare-migration-md5-to-prod.mjs
+
       - name: Check public function revoke from anon
         run: node scripts/assert-public-fn-revoke-anon.mjs
 

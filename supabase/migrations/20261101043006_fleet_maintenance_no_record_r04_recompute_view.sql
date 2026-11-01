@@ -1,6 +1,3 @@
--- Fleet maintenance logging audit R-04 (part 2): recompute function
--- Production version: 20261101043006 - already applied; repo sync only.
-
 CREATE OR REPLACE FUNCTION fleet.recompute_maintenance_schedule(p_vehicle_id text)
 RETURNS integer
 LANGUAGE plpgsql
@@ -18,7 +15,6 @@ DECLARE
   v_base_date date;
   v_in_package boolean;
   v_org text;
-  v_pos text;
 BEGIN
   FOR v_row IN
     SELECT vcs.*
@@ -189,4 +185,4 @@ BEGIN
 
   RETURN v_updated;
 END;
-$$;
+$$;

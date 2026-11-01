@@ -22,8 +22,7 @@ BEGIN
   END IF;
   RETURN COALESCE(NEW, OLD);
 END;
-$$;
-
+$$
 CREATE OR REPLACE FUNCTION fleet.guard_completed_maintenance_wo_line()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -48,8 +47,7 @@ BEGIN
   END IF;
   RETURN COALESCE(NEW, OLD);
 END;
-$$;
-
+$$
 -- ---------------------------------------------------------------------------
 -- R-02: Legacy R8 import remediation (idempotent)
 -- ---------------------------------------------------------------------------
@@ -172,8 +170,7 @@ BEGIN
     updated_at = now()
   WHERE wo.id::text LIKE 'f3763a08%'
      OR wo.id::text LIKE 'fc02dfb7%';
-END $$;
-
+END $$
 DO $$
 DECLARE
   v_vehicle text;
@@ -185,8 +182,7 @@ BEGIN
   IF v_vehicle IS NOT NULL THEN
     PERFORM fleet.recompute_maintenance_schedule(v_vehicle);
   END IF;
-END $$;
-
+END $$
 -- ---------------------------------------------------------------------------
 -- Recompute: skip dateUnknown legacy lines (R-02)
 -- ---------------------------------------------------------------------------
@@ -378,8 +374,7 @@ BEGIN
 
   RETURN v_updated;
 END;
-$$;
-
+$$
 -- ---------------------------------------------------------------------------
 -- R-03: Nightly check — snapshot, recompute, drift, then alerts
 -- ---------------------------------------------------------------------------
@@ -493,8 +488,7 @@ BEGIN
 
   RETURN v_run_id;
 END;
-$$;
-
+$$
 -- ---------------------------------------------------------------------------
 -- R-04: Event consumer + 5-minute cron
 -- ---------------------------------------------------------------------------
@@ -523,8 +517,7 @@ BEGIN
   GET DIAGNOSTICS v_count = ROW_COUNT;
   RETURN v_count;
 END;
-$$;
-
+$$
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN
@@ -539,20 +532,16 @@ BEGIN
   ELSE
     RAISE NOTICE 'pg_cron missing; skipped fleet-maintenance-events';
   END IF;
-END $$;
-
-REVOKE ALL ON FUNCTION fleet.process_maintenance_events(integer) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION fleet.process_maintenance_events(integer) TO service_role;
-
+END $$
+REVOKE ALL ON FUNCTION fleet.process_maintenance_events(integer) FROM PUBLIC, anon, authenticated
+GRANT EXECUTE ON FUNCTION fleet.process_maintenance_events(integer) TO service_role
 CREATE OR REPLACE FUNCTION public.process_maintenance_events(p_batch_size integer DEFAULT 200)
 RETURNS integer
 LANGUAGE sql
 SECURITY DEFINER
 SET search_path = fleet, public
-AS $$ SELECT fleet.process_maintenance_events(p_batch_size); $$;
-
-GRANT EXECUTE ON FUNCTION public.process_maintenance_events(integer) TO service_role;
-
+AS $$ SELECT fleet.process_maintenance_events(p_batch_size); $$
+GRANT EXECUTE ON FUNCTION public.process_maintenance_events(integer) TO service_role
 -- ---------------------------------------------------------------------------
 -- Integrity report extensions (R-03 schedule_drift, R-04 event_unprocessed_1h)
 -- ---------------------------------------------------------------------------
@@ -603,4 +592,4 @@ AS $$
   WHERE e.processed_at IS NULL
     AND e.occurred_at < now() - interval '1 hour'
     AND (p_organization_id IS NULL OR e.organization_id = p_organization_id);
-$$;
+$$

@@ -77,8 +77,7 @@ begin
     )
   );
 end;
-$$;
-
+$$
 create or replace function public.refinery_record_error(
   p_refinery_id uuid,
   p_trigger text,
@@ -98,8 +97,7 @@ begin
   returning id into v_id;
   return v_id;
 end;
-$$;
-
+$$
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values (
   'refinery-price-sources',
@@ -108,9 +106,8 @@ values (
   10485760,
   array['application/pdf','image/jpeg','image/png','image/webp']::text[]
 )
-on conflict (id) do nothing;
-
-revoke all on function public.refinery_runs(text, int) from public, anon, authenticated;
-revoke all on function public.refinery_record_error(uuid, text, uuid, text, text) from public, anon, authenticated;
-grant execute on function public.refinery_runs(text, int) to service_role;
-grant execute on function public.refinery_record_error(uuid, text, uuid, text, text) to service_role;
+on conflict (id) do nothing
+revoke all on function public.refinery_runs(text, int) from public, anon, authenticated
+revoke all on function public.refinery_record_error(uuid, text, uuid, text, text) from public, anon, authenticated
+grant execute on function public.refinery_runs(text, int) to service_role
+grant execute on function public.refinery_record_error(uuid, text, uuid, text, text) to service_role

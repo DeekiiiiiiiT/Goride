@@ -1,5 +1,4 @@
--- R16: pgmq 1.5 composite reads + transaction advisory lock (replaces session lock 908871234).
--- Advisory key 908871235 — do not reuse 908871234 (may be stuck on pooled connections).
+-- R16: pgmq 1.5 composite reads + transaction advisory lock
 
 CREATE OR REPLACE FUNCTION public.catalog_research_claim()
 RETURNS jsonb
@@ -62,7 +61,7 @@ BEGIN
   IF v_msg_id IS NOT NULL THEN
     v_queue := 'catalog_research_priority';
   ELSE
-    SELECT r.msg_id, r.read_ct, r.message
+    SELECT r.msg_id, r.read_ct, v_message
     INTO v_msg_id, v_read_ct, v_message
     FROM pgmq.read('catalog_research', 600, 1) r
     LIMIT 1;

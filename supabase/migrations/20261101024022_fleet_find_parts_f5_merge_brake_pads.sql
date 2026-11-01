@@ -6,11 +6,6 @@ DECLARE
   v_duplicate uuid := 'f5a10001-0000-4000-8000-000000000001'::uuid;
   v_dup_name_count integer;
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM public.maintenance_service_categories WHERE id = v_duplicate) THEN
-    RAISE NOTICE 'F1 merge: duplicate row % already removed', v_duplicate;
-    RETURN;
-  END IF;
-
   SELECT id INTO v_canonical
   FROM public.maintenance_service_categories
   WHERE op_code = 'BRK-PADS'
@@ -26,6 +21,11 @@ BEGIN
 
   IF v_canonical IS NULL THEN
     RAISE EXCEPTION 'F1 merge: canonical Brake pads (BRK-PADS) not found';
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM public.maintenance_service_categories WHERE id = v_duplicate) THEN
+    RAISE NOTICE 'F1 merge: duplicate row % already removed', v_duplicate;
+    RETURN;
   END IF;
 
   IF v_canonical = v_duplicate THEN

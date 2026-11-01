@@ -3,20 +3,15 @@
 ALTER TABLE fleet.vehicles
   ADD COLUMN IF NOT EXISTS do_not_drive boolean NOT NULL DEFAULT false,
   ADD COLUMN IF NOT EXISTS do_not_drive_reason text,
-  ADD COLUMN IF NOT EXISTS do_not_drive_set_at timestamptz;
-
+  ADD COLUMN IF NOT EXISTS do_not_drive_set_at timestamptz
 ALTER TABLE fleet.organization_settings
-  ADD COLUMN IF NOT EXISTS wo_approval_threshold_jmd numeric NOT NULL DEFAULT 50000;
-
+  ADD COLUMN IF NOT EXISTS wo_approval_threshold_jmd numeric NOT NULL DEFAULT 50000
 ALTER TABLE public.maintenance_work_orders
-  ADD COLUMN IF NOT EXISTS updated_by uuid;
-
+  ADD COLUMN IF NOT EXISTS updated_by uuid
 ALTER TABLE public.maintenance_work_order_lines
-  ADD COLUMN IF NOT EXISTS updated_by uuid;
-
+  ADD COLUMN IF NOT EXISTS updated_by uuid
 ALTER TABLE public.maintenance_inspection_items
-  ADD COLUMN IF NOT EXISTS safety_critical boolean NOT NULL DEFAULT false;
-
+  ADD COLUMN IF NOT EXISTS safety_critical boolean NOT NULL DEFAULT false
 CREATE TABLE IF NOT EXISTS fleet.driver_maintenance_notifications (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id text NOT NULL,
@@ -28,17 +23,13 @@ CREATE TABLE IF NOT EXISTS fleet.driver_maintenance_notifications (
   payload jsonb NOT NULL DEFAULT '{}'::jsonb,
   read_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now()
-);
-
+)
 CREATE INDEX IF NOT EXISTS idx_driver_maint_notif_driver_unread
   ON fleet.driver_maintenance_notifications (driver_user_id, created_at DESC)
-  WHERE read_at IS NULL;
-
-ALTER TABLE fleet.driver_maintenance_notifications ENABLE ROW LEVEL SECURITY;
-GRANT ALL ON fleet.driver_maintenance_notifications TO service_role;
-
-DROP VIEW IF EXISTS fleet.maintenance_kpi_monthly_v;
-
+  WHERE read_at IS NULL
+ALTER TABLE fleet.driver_maintenance_notifications ENABLE ROW LEVEL SECURITY
+GRANT ALL ON fleet.driver_maintenance_notifications TO service_role
+DROP VIEW IF EXISTS fleet.maintenance_kpi_monthly_v
 -- cost/km = total WO cost / fleet km (max-min odometer per vehicle per month)
 -- pm_on_time_pct = schedule rows due in month completed on/before due date
 CREATE OR REPLACE VIEW fleet.maintenance_kpi_monthly_v AS
@@ -105,10 +96,8 @@ FROM wo_month w
 LEFT JOIN km_month k
   ON k.organization_id = w.organization_id AND k.month_start = w.month_start
 LEFT JOIN pm_month p
-  ON p.organization_id = w.organization_id AND p.month_start = w.month_start;
-
-GRANT SELECT ON fleet.maintenance_kpi_monthly_v TO service_role;
-
+  ON p.organization_id = w.organization_id AND p.month_start = w.month_start
+GRANT SELECT ON fleet.maintenance_kpi_monthly_v TO service_role
 CREATE OR REPLACE FUNCTION fleet.maintenance_audit_log_trigger_fn()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -149,18 +138,15 @@ BEGIN
   );
   RETURN coalesce(NEW, OLD);
 END;
-$$;
-
-DROP TRIGGER IF EXISTS trg_mwo_audit ON public.maintenance_work_orders;
+$$
+DROP TRIGGER IF EXISTS trg_mwo_audit ON public.maintenance_work_orders
 CREATE TRIGGER trg_mwo_audit
   AFTER INSERT OR UPDATE OR DELETE ON public.maintenance_work_orders
-  FOR EACH ROW EXECUTE FUNCTION fleet.maintenance_audit_log_trigger_fn();
-
-DROP TRIGGER IF EXISTS trg_mwo_line_audit ON public.maintenance_work_order_lines;
+  FOR EACH ROW EXECUTE FUNCTION fleet.maintenance_audit_log_trigger_fn()
+DROP TRIGGER IF EXISTS trg_mwo_line_audit ON public.maintenance_work_order_lines
 CREATE TRIGGER trg_mwo_line_audit
   AFTER INSERT OR UPDATE OR DELETE ON public.maintenance_work_order_lines
-  FOR EACH ROW EXECUTE FUNCTION fleet.maintenance_audit_log_trigger_fn();
-
+  FOR EACH ROW EXECUTE FUNCTION fleet.maintenance_audit_log_trigger_fn()
 CREATE OR REPLACE FUNCTION fleet.maintenance_integrity_report(p_organization_id text DEFAULT NULL)
 RETURNS TABLE (check_name text, detail jsonb)
 LANGUAGE sql
@@ -245,8 +231,7 @@ AS $$
     AND wo.opened_at < now() - interval '14 days'
     AND wo.voided_at IS NULL
     AND (p_organization_id IS NULL OR wo.organization_id = p_organization_id);
-$$;
-
+$$
 -- Driver notifications for request triage + do-not-drive (G-07)
 CREATE OR REPLACE FUNCTION fleet.process_maintenance_events(p_batch_size integer DEFAULT 200)
 RETURNS integer
@@ -308,13 +293,11 @@ BEGIN
   END LOOP;
   RETURN v_count;
 END;
-$$;
-
+$$
 CREATE OR REPLACE FUNCTION public.maintenance_integrity_report(p_organization_id text DEFAULT NULL)
 RETURNS TABLE (check_name text, detail jsonb)
 LANGUAGE sql
 SECURITY DEFINER
 SET search_path = fleet, public
-AS $$ SELECT * FROM fleet.maintenance_integrity_report(p_organization_id); $$;
-
-GRANT EXECUTE ON FUNCTION public.maintenance_integrity_report(text) TO service_role;
+AS $$ SELECT * FROM fleet.maintenance_integrity_report(p_organization_id); $$
+GRANT EXECUTE ON FUNCTION public.maintenance_integrity_report(text) TO service_role

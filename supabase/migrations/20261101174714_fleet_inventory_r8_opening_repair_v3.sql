@@ -1,18 +1,80 @@
--- R8 opening repair v3 (prod 20261101174714): warehouse phone mount leg + unit cost alignment.
+CREATE OR REPLACE FUNCTION fleet.inv_ledger_refresh_balance()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = fleet, pg_temp
+AS $$
+DECLARE
+  v_line_value numeric(14, 2);
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM fleet.inv_location loc
+    WHERE loc.id = NEW.location_id
+      AND loc.organization_id = NEW.organization_id
+      AND loc.kind = 'virtual'
+  ) THEN
+    RETURN NEW;
+  END IF;
+
+  v_line_value := COALESCE(NEW.unit_cost, 0) * NEW.qty_delta;
+
+  INSERT INTO fleet.inv_balance (
+    organization_id, item_id, location_id, bin_id, on_hand, value, updated_at
+  )
+  VALUES (
+    NEW.organization_id, NEW.item_id, NEW.location_id, NEW.bin_id,
+    NEW.qty_delta, v_line_value, now()
+  )
+  ON CONFLICT (organization_id, item_id, location_id, bin_key) DO UPDATE
+  SET
+    on_hand = fleet.inv_balance.on_hand + EXCLUDED.on_hand,
+    value = fleet.inv_balance.value + EXCLUDED.value,
+    updated_at = now();
+
+  RETURN NEW;
+END;
+$$;
 
 DO $$
 DECLARE
   v_org text := '8cfa606a-f6ea-4ccb-a2b2-1d2cc323a823';
   v_mount uuid := 'ca661367-4e4e-4d2a-9cfb-774ae21c4120';
-  v_loc uuid;
+  v_supplier uuid;
+  v_mov record;
+  v_leg record;
   v_drift numeric;
+  v_loc uuid;
 BEGIN
-  UPDATE fleet.inv_item
-  SET default_unit_cost = 5400,
-      name = 'Phone Holder Mount',
-      updated_at = now()
-  WHERE organization_id = v_org
-    AND id = v_mount;
+  v_supplier := fleet._inv_virtual_location_id(v_org, 'V-SUPPLIER', 'Supplier (virtual)');
+
+  FOR v_mov IN
+    SELECT id FROM fleet.inv_movement
+    WHERE organization_id = v_org AND type = 'opening_balance'
+  LOOP
+    FOR v_leg IN
+      SELECT l.*
+      FROM fleet.inv_ledger l
+      JOIN fleet.inv_location loc ON loc.id = l.location_id AND loc.organization_id = l.organization_id
+      WHERE l.organization_id = v_org
+        AND l.movement_id = v_mov.id
+        AND l.qty_delta > 0
+        AND loc.kind <> 'virtual'
+    LOOP
+      IF NOT EXISTS (
+        SELECT 1 FROM fleet.inv_ledger o
+        WHERE o.organization_id = v_org
+          AND o.movement_id = v_mov.id
+          AND o.item_id = v_leg.item_id
+          AND o.location_id = v_supplier
+          AND o.qty_delta = -v_leg.qty_delta
+      ) THEN
+        PERFORM fleet._inv_append_ledger_leg(
+          v_org, v_mov.id, v_leg.item_id, v_supplier, NULL, NULL,
+          -v_leg.qty_delta, v_leg.unit_cost
+        );
+      END IF;
+    END LOOP;
+  END LOOP;
 
   SELECT b.location_id,
     b.on_hand - coalesce((
@@ -28,11 +90,7 @@ BEGIN
     ), 0)
   INTO v_loc, v_drift
   FROM fleet.inv_balance b
-  JOIN fleet.inv_location loc ON loc.id = b.location_id AND loc.organization_id = b.organization_id
-  WHERE b.organization_id = v_org
-    AND b.item_id = v_mount
-    AND loc.kind = 'warehouse'
-    AND b.on_hand > 0
+  WHERE b.organization_id = v_org AND b.item_id = v_mount AND b.on_hand > 0
   ORDER BY b.on_hand DESC
   LIMIT 1;
 
@@ -47,7 +105,7 @@ BEGIN
           'item_id', v_mount,
           'location_id', v_loc,
           'qty', v_drift,
-          'unit_cost', 5400
+          'unit_cost', 3675
         )),
         'r8-03-phone-mount-leg'
       );

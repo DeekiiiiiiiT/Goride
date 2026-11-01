@@ -9,3 +9,5 @@
 **Production history (2026-11-01):** After the resequence merge, run `supabase migration repair --status reverted 20261103120000` on the linked project so the orphan version row matches git (DDL unchanged).
 
 **File encoding (Windows):** Save migration SQL as UTF-8 **without BOM**. Run `node scripts/assert-migrations-utf8.mjs` before push. Do not use PowerShell `Out-File` / `Set-Content -Encoding utf8` (adds BOM). If production and git drift on applied migrations, copy bodies from `supabase_migrations.schema_migrations.statements` — see [ci-red-root-cause.md](./ci-red-root-cause.md).
+
+**Prod parity gate:** After any Dashboard/MCP hotfix on an already-applied version, refresh [scripts/prod-migration-md5-fingerprints.json](../scripts/prod-migration-md5-fingerprints.json) from production (MD5 query in ci-red doc) and run `node scripts/compare-migration-md5-to-prod.mjs` before merge. CI and Parts SQL run this check on every migration change.

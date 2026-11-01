@@ -1,36 +1,33 @@
-CREATE OR REPLACE FUNCTION public.catalog_research_priority_enqueue(p_job_id uuid)
-RETURNS bigint
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = pgmq, public
+CREATE OR REPLACE FUNCTION public.catalog_research_part_kind_from_match(p_match_type text)
+RETURNS text
+LANGUAGE sql
+IMMUTABLE
 AS $$
-DECLARE
-  v_job record;
-  v_msg_id bigint;
-BEGIN
-  SELECT * INTO v_job FROM public.catalog_research_job WHERE id = p_job_id FOR UPDATE;
-  IF NOT FOUND THEN
-    RAISE EXCEPTION 'job_not_found';
-  END IF;
-
-  IF v_job.pgmq_msg_id IS NOT NULL AND v_job.pgmq_queue IS NOT NULL THEN
-    PERFORM pgmq.archive(v_job.pgmq_queue, v_job.pgmq_msg_id);
-  ELSIF v_job.pgmq_msg_id IS NOT NULL THEN
-    PERFORM pgmq.archive('catalog_research', v_job.pgmq_msg_id);
-  END IF;
-
-  SELECT pgmq.send('catalog_research_priority', jsonb_build_object('jobId', p_job_id)) INTO v_msg_id;
-
-  UPDATE public.catalog_research_job SET
-    state = 'queued',
-    pgmq_msg_id = v_msg_id,
-    pgmq_queue = 'catalog_research_priority',
-    updated_at = now()
-  WHERE id = p_job_id;
-
-  RETURN v_msg_id;
-END;
+  SELECT CASE upper(coalesce(trim(p_match_type), ''))
+    WHEN 'AFTERMARKET' THEN 'aftermarket'
+    WHEN 'UNIVERSAL' THEN 'aftermarket'
+    WHEN 'OE_SUPPLIER' THEN 'oe_supplier'
+    WHEN 'REMAN' THEN 'reman'
+    WHEN 'USED' THEN 'used'
+    ELSE 'oem'
+  END;
 $$;
 
-REVOKE ALL ON FUNCTION public.catalog_research_priority_enqueue(uuid) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.catalog_research_priority_enqueue(uuid) TO service_role;
+CREATE OR REPLACE FUNCTION public.catalog_research_research_group_key(
+  p_vehicle_catalog_id uuid,
+  p_component_id uuid,
+  p_fit_descriptor text,
+  p_install_side text,
+  p_match_type text
+) RETURNS text
+LANGUAGE sql
+IMMUTABLE
+AS $$
+  SELECT concat_ws(
+    ':',
+    coalesce(p_vehicle_catalog_id::text, ''),
+    coalesce(p_component_id::text, ''),
+    coalesce(nullif(trim(p_fit_descriptor), ''), coalesce(nullif(trim(p_install_side), ''), '')),
+    coalesce(nullif(trim(p_match_type), ''), '')
+  );
+$$;

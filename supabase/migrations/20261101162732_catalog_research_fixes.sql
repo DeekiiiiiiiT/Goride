@@ -1,33 +1,11 @@
-CREATE OR REPLACE FUNCTION public.catalog_research_part_kind_from_match(p_match_type text)
-RETURNS text
-LANGUAGE sql
-IMMUTABLE
-AS $$
-  SELECT CASE upper(coalesce(trim(p_match_type), ''))
-    WHEN 'AFTERMARKET' THEN 'aftermarket'
-    WHEN 'UNIVERSAL' THEN 'aftermarket'
-    WHEN 'OE_SUPPLIER' THEN 'oe_supplier'
-    WHEN 'REMAN' THEN 'reman'
-    WHEN 'USED' THEN 'used'
-    ELSE 'oem'
-  END;
-$$;
+-- Fleet Find parts audit R1–R12 (truncated grants only if re-run)
+DO $$
+BEGIN
+  PERFORM pgmq.create('catalog_research_priority');
+EXCEPTION WHEN others THEN NULL;
+END $$;
 
-CREATE OR REPLACE FUNCTION public.catalog_research_research_group_key(
-  p_vehicle_catalog_id uuid,
-  p_component_id uuid,
-  p_fit_descriptor text,
-  p_install_side text,
-  p_match_type text
-) RETURNS text
-LANGUAGE sql
-IMMUTABLE
-AS $$
-  SELECT concat_ws(
-    ':',
-    coalesce(p_vehicle_catalog_id::text, ''),
-    coalesce(p_component_id::text, ''),
-    coalesce(nullif(trim(p_fit_descriptor), ''), coalesce(nullif(trim(p_install_side), ''), '')),
-    coalesce(nullif(trim(p_match_type), ''), '')
-  );
-$$;
+ALTER TABLE public.part_master DROP CONSTRAINT IF EXISTS part_master_catalog_decision_check;
+ALTER TABLE public.part_master ADD CONSTRAINT part_master_catalog_decision_check CHECK (catalog_decision IN ('pending', 'confirmed', 'rejected', 'auto_confirmed'));
+
+ALTER TABLE public.catalog_research_job ADD COLUMN IF NOT EXISTS next_research_at timestamptz, ADD COLUMN IF NOT EXISTS pgmq_queue text;

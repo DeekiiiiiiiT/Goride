@@ -1,8 +1,6 @@
 -- Full database: one answer with match-type groups, live counts, and make/model/year.
 
-DROP FUNCTION IF EXISTS public.admin_catalog_master_search(text, text, text, text, uuid, text, integer, integer);
-DROP FUNCTION IF EXISTS public.admin_catalog_master_search(text, text, text, text, uuid, text, integer, integer, text, text, integer);
-
+DROP FUNCTION IF EXISTS public.admin_catalog_master_search(text, text, text, text, uuid, text, integer, integer)
 CREATE FUNCTION public.admin_catalog_master_search(
   p_q text DEFAULT '',
   p_match text DEFAULT 'all',
@@ -438,9 +436,8 @@ BEGIN
       SELECT jsonb_agg(jsonb_build_object('name', assembly, 'count', n) ORDER BY n DESC, assembly)
       FROM (SELECT assembly, count(*)::integer AS n FROM tmp_parts WHERE assembly <> '' GROUP BY assembly) a
     ), '[]'::jsonb),
-    -- Parts only. Sister families and size-based parts have no status, so they must not inflate All.
     'statusCounts', jsonb_build_object(
-      'all', (SELECT count(*) FROM tmp_master),
+      'all', (SELECT count(*) FROM tmp_master) + v_sister + v_universal,
       'verified', (SELECT count(*) FROM tmp_master WHERE status = 'verified'),
       'needs_checking', (SELECT count(*) FROM tmp_master WHERE status = 'needs_checking')
     ),
@@ -468,7 +465,6 @@ BEGIN
     'emptyTiers', coalesce(v_empty, '[]'::jsonb)
   );
 END;
-$$;
-
-REVOKE ALL ON FUNCTION public.admin_catalog_master_search(text, text, text, text, uuid, text, integer, integer, text, text, integer) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.admin_catalog_master_search(text, text, text, text, uuid, text, integer, integer, text, text, integer) TO service_role;
+$$
+REVOKE ALL ON FUNCTION public.admin_catalog_master_search(text, text, text, text, uuid, text, integer, integer, text, text, integer) FROM PUBLIC, anon, authenticated
+GRANT EXECUTE ON FUNCTION public.admin_catalog_master_search(text, text, text, text, uuid, text, integer, integer, text, text, integer) TO service_role

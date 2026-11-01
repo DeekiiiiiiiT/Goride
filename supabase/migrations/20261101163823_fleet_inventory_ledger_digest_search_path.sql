@@ -1,9 +1,8 @@
--- Ledger hash trigger must resolve extensions.digest (pgcrypto lives in extensions schema).
 CREATE OR REPLACE FUNCTION fleet.inv_ledger_hash_on_insert()
-RETURNS trigger
-LANGUAGE plpgsql
-SET search_path = fleet, extensions, pg_temp
-AS $$
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO fleet, public, extensions
+AS $function$
 DECLARE
   v_prev_hash text;
   v_prev_block bigint;
@@ -37,4 +36,4 @@ BEGIN
   NEW.row_hash := encode(digest(NEW.prev_hash || '|' || v_canonical, 'sha256'), 'hex');
   RETURN NEW;
 END;
-$$;
+$function$;

@@ -1,2 +1,22 @@
--- Repo mirror: already applied on production (20261101030927 / fleet_maintenance_logging_p8_wrappers).
-SELECT 1;
+CREATE OR REPLACE VIEW public.fleet_vehicle_current_odometer_v WITH (security_invoker = true) AS SELECT * FROM fleet.vehicle_current_odometer_v;
+CREATE OR REPLACE VIEW public.fleet_maintenance_due_v WITH (security_invoker = true) AS SELECT * FROM fleet.maintenance_due_v;
+CREATE OR REPLACE VIEW public.fleet_maintenance_vehicle_status_v WITH (security_invoker = true) AS SELECT * FROM fleet.maintenance_vehicle_status_v;
+CREATE OR REPLACE VIEW public.fleet_maintenance_service_history_v WITH (security_invoker = true) AS SELECT * FROM fleet.maintenance_service_history_v;
+GRANT SELECT ON public.fleet_vehicle_current_odometer_v TO service_role;
+GRANT SELECT ON public.fleet_maintenance_due_v TO service_role;
+GRANT SELECT ON public.fleet_maintenance_vehicle_status_v TO service_role;
+GRANT SELECT ON public.fleet_maintenance_service_history_v TO service_role;
+CREATE OR REPLACE FUNCTION public.recompute_maintenance_schedule(p_vehicle_id text) RETURNS integer LANGUAGE sql SECURITY DEFINER SET search_path = fleet, public AS $$ SELECT fleet.recompute_maintenance_schedule(p_vehicle_id); $$;
+CREATE OR REPLACE FUNCTION public.run_maintenance_nightly_check(p_organization_id text DEFAULT NULL) RETURNS uuid LANGUAGE sql SECURITY DEFINER SET search_path = fleet, public AS $$ SELECT fleet.run_maintenance_nightly_check(p_organization_id); $$;
+CREATE OR REPLACE FUNCTION public.next_maintenance_log_number() RETURNS text LANGUAGE sql SECURITY DEFINER SET search_path = fleet, public AS $$ SELECT fleet.next_maintenance_log_number(); $$;
+GRANT EXECUTE ON FUNCTION public.recompute_maintenance_schedule(text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.run_maintenance_nightly_check(text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.next_maintenance_log_number() TO service_role;
+CREATE OR REPLACE VIEW public.fleet_maintenance_events WITH (security_invoker = true) AS SELECT * FROM fleet.maintenance_events;
+CREATE OR REPLACE VIEW public.fleet_maintenance_alerts WITH (security_invoker = true) AS SELECT * FROM fleet.maintenance_alerts;
+CREATE OR REPLACE VIEW public.fleet_maintenance_job_runs WITH (security_invoker = true) AS SELECT * FROM fleet.maintenance_job_runs;
+CREATE OR REPLACE VIEW public.fleet_maintenance_audit_log WITH (security_invoker = true) AS SELECT * FROM fleet.maintenance_audit_log;
+GRANT SELECT, INSERT ON public.fleet_maintenance_events TO service_role;
+GRANT SELECT, INSERT ON public.fleet_maintenance_alerts TO service_role;
+GRANT SELECT, INSERT, UPDATE ON public.fleet_maintenance_job_runs TO service_role;
+GRANT SELECT, INSERT ON public.fleet_maintenance_audit_log TO service_role;

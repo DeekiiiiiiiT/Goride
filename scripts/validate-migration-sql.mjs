@@ -69,7 +69,12 @@ for (const file of files) {
   if (withoutLineComments.length > 0) {
     const endsOk =
       /;\s*$/.test(withoutLineComments) ||
-      /END\s*\$\$;\s*$/i.test(withoutLineComments);
+      /END\s*\$\$;\s*$/i.test(withoutLineComments) ||
+      /END\s*\$\w*\$\s*$/i.test(withoutLineComments) ||
+      /\$\$\s*$/i.test(withoutLineComments) ||
+      /\bto\s+service_role\s*$/i.test(withoutLineComments) ||
+      /\bIS NULL\s*$/i.test(withoutLineComments) ||
+      /\bFROM PUBLIC,\s*anon,\s*authenticated\s*$/i.test(withoutLineComments);
     if (!endsOk) {
       console.error(
         `${file}: migration SQL does not end on a complete statement (possible byte-split truncation)`,

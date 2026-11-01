@@ -16,12 +16,10 @@ create table fuel.refinery (
   is_benchmark boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
-);
-
+)
 create unique index refinery_one_benchmark_per_country
   on fuel.refinery (country)
-  where is_benchmark;
-
+  where is_benchmark
 create table fuel.refinery_product (
   code text primary key,
   label text not null,
@@ -29,8 +27,7 @@ create table fuel.refinery_product (
   engine_grade text unique,
   board_group text not null check (board_group in ('motor', 'other')),
   sort int not null
-);
-
+)
 create table fuel.refinery_sync_run (
   id uuid primary key default gen_random_uuid(),
   refinery_id uuid references fuel.refinery(id),
@@ -45,8 +42,7 @@ create table fuel.refinery_sync_run (
   error text,
   started_at timestamptz not null default now(),
   finished_at timestamptz
-);
-
+)
 create table fuel.refinery_price (
   id uuid primary key default gen_random_uuid(),
   refinery_id uuid not null references fuel.refinery(id),
@@ -62,39 +58,31 @@ create table fuel.refinery_price (
   reason text,
   first_seen_at timestamptz not null default now(),
   last_seen_at timestamptz not null default now()
-);
-
+)
 create unique index refinery_price_current
   on fuel.refinery_price (refinery_id, product_code, effective_date)
-  where superseded_at is null;
-
+  where superseded_at is null
 create index refinery_price_lookup
   on fuel.refinery_price (product_code, effective_date desc)
-  where superseded_at is null;
-
+  where superseded_at is null
 create index refinery_price_refinery_date
   on fuel.refinery_price (refinery_id, effective_date desc)
-  where superseded_at is null;
-
-alter table fuel.refinery enable row level security;
-alter table fuel.refinery_product enable row level security;
-alter table fuel.refinery_price enable row level security;
-alter table fuel.refinery_sync_run enable row level security;
-
-create policy refinery_select on fuel.refinery for select to authenticated using (true);
-create policy refinery_product_select on fuel.refinery_product for select to authenticated using (true);
-create policy refinery_price_select on fuel.refinery_price for select to authenticated using (true);
-create policy refinery_sync_run_select on fuel.refinery_sync_run for select to authenticated using (true);
-
-create policy refinery_service on fuel.refinery for all to service_role using (true) with check (true);
-create policy refinery_product_service on fuel.refinery_product for all to service_role using (true) with check (true);
-create policy refinery_price_service on fuel.refinery_price for all to service_role using (true) with check (true);
-create policy refinery_sync_run_service on fuel.refinery_sync_run for all to service_role using (true) with check (true);
-
-revoke all on fuel.refinery, fuel.refinery_product, fuel.refinery_price, fuel.refinery_sync_run from anon, public;
-grant select on fuel.refinery, fuel.refinery_product, fuel.refinery_price, fuel.refinery_sync_run to authenticated;
-grant all on fuel.refinery, fuel.refinery_product, fuel.refinery_price, fuel.refinery_sync_run to service_role;
-
+  where superseded_at is null
+alter table fuel.refinery enable row level security
+alter table fuel.refinery_product enable row level security
+alter table fuel.refinery_price enable row level security
+alter table fuel.refinery_sync_run enable row level security
+create policy refinery_select on fuel.refinery for select to authenticated using (true)
+create policy refinery_product_select on fuel.refinery_product for select to authenticated using (true)
+create policy refinery_price_select on fuel.refinery_price for select to authenticated using (true)
+create policy refinery_sync_run_select on fuel.refinery_sync_run for select to authenticated using (true)
+create policy refinery_service on fuel.refinery for all to service_role using (true) with check (true)
+create policy refinery_product_service on fuel.refinery_product for all to service_role using (true) with check (true)
+create policy refinery_price_service on fuel.refinery_price for all to service_role using (true) with check (true)
+create policy refinery_sync_run_service on fuel.refinery_sync_run for all to service_role using (true) with check (true)
+revoke all on fuel.refinery, fuel.refinery_product, fuel.refinery_price, fuel.refinery_sync_run from anon, public
+grant select on fuel.refinery, fuel.refinery_product, fuel.refinery_price, fuel.refinery_sync_run to authenticated
+grant all on fuel.refinery, fuel.refinery_product, fuel.refinery_price, fuel.refinery_sync_run to service_role
 insert into fuel.refinery (
   slug, name, operator, country, website, price_source_url, source_kind, cadence, status, is_benchmark
 ) values (
@@ -108,8 +96,7 @@ insert into fuel.refinery (
   'weekly_thu',
   'active',
   true
-);
-
+)
 insert into fuel.refinery_product (code, label, unit, engine_grade, board_group, sort) values
   ('gasolene_87', 'Gasolene 87', 'per litre', 'e10_87', 'motor', 1),
   ('gasolene_90', 'Gasolene 90', 'per litre', 'e10_90', 'motor', 2),
@@ -119,8 +106,7 @@ insert into fuel.refinery_product (code, label, unit, engine_grade, board_group,
   ('propane', 'Propane', null, null, 'other', 6),
   ('butane', 'Butane', null, null, 'other', 7),
   ('hfo', 'HFO', null, null, 'other', 8),
-  ('asphalt', 'Asphalt', null, null, 'other', 9);
-
+  ('asphalt', 'Asphalt', null, null, 'other', 9)
 insert into fuel.refinery_price (
   refinery_id, product_code, effective_date, price_jmd, revision, source, source_url, first_seen_at, last_seen_at
 )
@@ -141,13 +127,10 @@ cross join lateral (
     ('hfo', p.hfo),
     ('asphalt', p.asphalt)
 ) as v(code, price)
-where v.price is not null;
-
-alter table fuel.petrojam_prices rename to petrojam_prices_legacy;
-comment on table fuel.petrojam_prices_legacy is 'Read-only wide Petrojam history. Live prices are fuel.refinery_price. Drop only after the compat view has been the only reader.';
-
-revoke insert, update, delete, truncate on fuel.petrojam_prices_legacy from authenticated, anon;
-
+where v.price is not null
+alter table fuel.petrojam_prices rename to petrojam_prices_legacy
+comment on table fuel.petrojam_prices_legacy is 'Read-only wide Petrojam history. Live prices are fuel.refinery_price. Drop only after the compat view has been the only reader.'
+revoke insert, update, delete, truncate on fuel.petrojam_prices_legacy from authenticated, anon
 create view fuel.petrojam_prices
 with (security_invoker = true) as
 select
@@ -170,21 +153,16 @@ from fuel.refinery_price c
 join fuel.refinery r on r.id = c.refinery_id and r.is_benchmark
 left join fuel.petrojam_prices_legacy l on l.price_date = c.effective_date
 where c.superseded_at is null
-group by c.effective_date;
-
-grant select on fuel.petrojam_prices to authenticated, service_role;
-
-drop view if exists public.fuel_petrojam_prices;
+group by c.effective_date
+grant select on fuel.petrojam_prices to authenticated, service_role
+drop view if exists public.fuel_petrojam_prices
 create view public.fuel_petrojam_prices
 with (security_invoker = true) as
-select * from fuel.petrojam_prices;
-
-grant select on public.fuel_petrojam_prices to anon, authenticated, service_role;
-
+select * from fuel.petrojam_prices
+grant select on public.fuel_petrojam_prices to anon, authenticated, service_role
 revoke insert, update, delete, truncate, trigger, references
   on public.fuel_petrojam_prices, public.fuel_retail_price_markup
-  from anon, authenticated;
-
+  from anon, authenticated
 create or replace function places.wholesale_on(p_grade text, p_on date)
 returns numeric
 language sql
@@ -200,8 +178,7 @@ as $$
     and p.effective_date <= coalesce(p_on, current_date)
   order by p.effective_date desc
   limit 1;
-$$;
-
+$$
 create or replace function places.latest_petrojam_date()
 returns date
 language sql
@@ -213,8 +190,7 @@ as $$
   from fuel.refinery_price p
   join fuel.refinery r on r.id = p.refinery_id and r.is_benchmark
   where p.superseded_at is null;
-$$;
-
+$$
 create or replace function fuel.benchmark()
 returns table (id uuid, name text, slug text)
 language sql
@@ -227,10 +203,8 @@ as $$
   where r.is_benchmark
   order by r.country
   limit 1;
-$$;
-
-grant execute on function fuel.benchmark() to authenticated, service_role;
-
+$$
+grant execute on function fuel.benchmark() to authenticated, service_role
 create or replace function fuel.freshness_label(p_latest date, p_today date)
 returns text
 language sql
@@ -242,8 +216,7 @@ as $$
     when p_today - p_latest > 8 then 'Late'
     else 'Due'
   end;
-$$;
-
+$$
 create or replace function fuel.next_expected_thursday(p_latest date)
 returns date
 language sql
@@ -258,8 +231,7 @@ as $$
       end
     )
   end;
-$$;
-
+$$
 create or replace function public.refinery_write_snapshot(
   p_refinery_id uuid,
   p_rows jsonb,
@@ -401,8 +373,7 @@ exception when others then
   values (p_refinery_id, coalesce(p_trigger, 'owner'), p_actor, p_mode, p_pages, sqlerrm, clock_timestamp(), clock_timestamp());
   return jsonb_build_object('error', sqlerrm, 'weeks_found', 0, 'weeks_new', 0, 'weeks_unchanged', 0, 'weeks_revised', 0);
 end;
-$$;
-
+$$
 create or replace function public.refinery_list()
 returns jsonb
 language sql
@@ -432,8 +403,7 @@ as $$
     from fuel.refinery r
     left join places.place pl on pl.id = r.place_id
   ) x;
-$$;
-
+$$
 create or replace function public.refinery_board(p_slug text, p_week date)
 returns jsonb
 language plpgsql
@@ -546,8 +516,7 @@ begin
     'products', v_products
   );
 end;
-$$;
-
+$$
 create or replace function public.refinery_series(
   p_slug text,
   p_products text[],
@@ -632,8 +601,7 @@ begin
     ) z
   );
 end;
-$$;
-
+$$
 create or replace function public.refinery_history(p_slug text, p_year int, p_page int)
 returns jsonb
 language plpgsql
@@ -699,8 +667,7 @@ begin
     )
   );
 end;
-$$;
-
+$$
 create or replace function public.refinery_versions(p_slug text, p_product text, p_week date)
 returns jsonb
 language sql
@@ -719,8 +686,7 @@ as $$
   from fuel.refinery_price p
   join fuel.refinery r on r.id = p.refinery_id
   where r.slug = p_slug and p.product_code = p_product and p.effective_date = p_week;
-$$;
-
+$$
 create or replace function public.refinery_runs(p_slug text, p_limit int default 10)
 returns jsonb
 language plpgsql
@@ -798,8 +764,7 @@ begin
     )
   );
 end;
-$$;
-
+$$
 create or replace function public.refinery_save(
   p_slug text,
   p_patch jsonb,
@@ -881,8 +846,7 @@ begin
 
   return (select row_to_json(r)::jsonb from fuel.refinery r where r.id = v_id);
 end;
-$$;
-
+$$
 create or replace function public.refinery_patch_product(p_code text, p_label text, p_unit text)
 returns jsonb
 language plpgsql
@@ -902,28 +866,25 @@ begin
   end if;
   return v;
 end;
-$$;
-
-revoke all on function public.refinery_write_snapshot(uuid, jsonb, text, text, text, uuid, text, int, text, uuid) from public, anon, authenticated;
-revoke all on function public.refinery_list() from public, anon, authenticated;
-revoke all on function public.refinery_board(text, date) from public, anon, authenticated;
-revoke all on function public.refinery_series(text, text[], date, date, boolean) from public, anon, authenticated;
-revoke all on function public.refinery_history(text, int, int) from public, anon, authenticated;
-revoke all on function public.refinery_versions(text, text, date) from public, anon, authenticated;
-revoke all on function public.refinery_runs(text, int) from public, anon, authenticated;
-revoke all on function public.refinery_save(text, jsonb, uuid, text) from public, anon, authenticated;
-revoke all on function public.refinery_patch_product(text, text, text) from public, anon, authenticated;
-
-grant execute on function public.refinery_write_snapshot(uuid, jsonb, text, text, text, uuid, text, int, text, uuid) to service_role;
-grant execute on function public.refinery_list() to service_role;
-grant execute on function public.refinery_board(text, date) to service_role;
-grant execute on function public.refinery_series(text, text[], date, date, boolean) to service_role;
-grant execute on function public.refinery_history(text, int, int) to service_role;
-grant execute on function public.refinery_versions(text, text, date) to service_role;
-grant execute on function public.refinery_runs(text, int) to service_role;
-grant execute on function public.refinery_save(text, jsonb, uuid, text) to service_role;
-grant execute on function public.refinery_patch_product(text, text, text) to service_role;
-
+$$
+revoke all on function public.refinery_write_snapshot(uuid, jsonb, text, text, text, uuid, text, int, text, uuid) from public, anon, authenticated
+revoke all on function public.refinery_list() from public, anon, authenticated
+revoke all on function public.refinery_board(text, date) from public, anon, authenticated
+revoke all on function public.refinery_series(text, text[], date, date, boolean) from public, anon, authenticated
+revoke all on function public.refinery_history(text, int, int) from public, anon, authenticated
+revoke all on function public.refinery_versions(text, text, date) from public, anon, authenticated
+revoke all on function public.refinery_runs(text, int) from public, anon, authenticated
+revoke all on function public.refinery_save(text, jsonb, uuid, text) from public, anon, authenticated
+revoke all on function public.refinery_patch_product(text, text, text) from public, anon, authenticated
+grant execute on function public.refinery_write_snapshot(uuid, jsonb, text, text, text, uuid, text, int, text, uuid) to service_role
+grant execute on function public.refinery_list() to service_role
+grant execute on function public.refinery_board(text, date) to service_role
+grant execute on function public.refinery_series(text, text[], date, date, boolean) to service_role
+grant execute on function public.refinery_history(text, int, int) to service_role
+grant execute on function public.refinery_versions(text, text, date) to service_role
+grant execute on function public.refinery_runs(text, int) to service_role
+grant execute on function public.refinery_save(text, jsonb, uuid, text) to service_role
+grant execute on function public.refinery_patch_product(text, text, text) to service_role
 -- T1–T4 and T7. A failure rolls the migration back.
 do $$
 declare
@@ -970,13 +931,11 @@ begin
     raise exception 'T2 compat view mismatch %', mismatch;
   end if;
 
-  if exists (select 1 from fuel.petrojam_prices_legacy where price_date = '2026-10-22') then
-    if places.wholesale_on('e10_87', '2026-10-22') is distinct from 201.8128 then
-      raise exception 'T3 e10_87 %', places.wholesale_on('e10_87', '2026-10-22');
-    end if;
-    if places.wholesale_on('ulsd', '2026-10-22') is distinct from 271.5973 then
-      raise exception 'T3 ulsd %', places.wholesale_on('ulsd', '2026-10-22');
-    end if;
+  if places.wholesale_on('e10_87', '2026-10-22') is distinct from 201.8128 then
+    raise exception 'T3 e10_87 %', places.wholesale_on('e10_87', '2026-10-22');
+  end if;
+  if places.wholesale_on('ulsd', '2026-10-22') is distinct from 271.5973 then
+    raise exception 'T3 ulsd %', places.wholesale_on('ulsd', '2026-10-22');
   end if;
   if places.wholesale_on('e10_87', '2000-01-01') is not null then
     raise exception 'T3 pre-2004 should be null';
@@ -1002,4 +961,4 @@ begin
   if grants <> 0 then
     raise exception 'T7 anon grants %', grants;
   end if;
-end $$;
+end $$

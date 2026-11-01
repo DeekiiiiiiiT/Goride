@@ -1,53 +1,55 @@
 # GitHub Actions red: what's left
 
-Rev 11. Remediation applied 2026-11-01 (local). Production repair done. **CI / Parts SQL still red on GitHub until this commit is pushed** (last remote run: [CI 41340793190](https://github.com/DeekiiiiiiiT/Goride/actions/runs/41340793190), [Parts SQL 41340793213](https://github.com/DeekiiiiiiiT/Goride/actions/runs/41340793213) @ `6e78b1de`).
+Rev 13. Fix landed 2026-11-01 — bulk-synced **86** migration bodies from production `schema_migrations.statements` (see tooling below). **Awaiting GitHub:** CI + Parts SQL checks green on the merge commit (local `supabase db start` failed on this machine — Docker init error).
 
-## Done (Rev 11)
+Rev 12 baseline: `main` @ `e1246409`. Root cause unchanged: repo files were rewrites, not prod copies (example: `20261101165443` used `value_delta`; prod creates `fleet.r5_fix_phone_holder_opening`).
 
-1. **Nine migration files** restored from production `supabase_migrations.schema_migrations` (UTF-8, no BOM). Sizes now follow statement boundaries (no equal 8,593-byte chunks). `20261101163616` contains pg_cron `fleet-inventory-nightly-integrity`, not `SELECT 1`.
-2. **Production history:** `supabase migration repair --status reverted 20261101185632` — duplicate revoke row removed; `20261101190448` remains applied.
-3. **CI bootstrap:** [`scripts/bootstrap-inventory-local-db.mjs`](../scripts/bootstrap-inventory-local-db.mjs) seeds test org only (no archive double-apply after full replay).
-4. **Guards:** [`scripts/validate-migration-sql.mjs`](../scripts/validate-migration-sql.mjs) rejects truncated files and warns on equal-size `fleet_inventory_engine_schema_*` chunks. Encoding notes in [`docs/supabase-migrations-maintenance-logging.md`](./supabase-migrations-maintenance-logging.md).
-5. **Repeat export:** `scripts/decode-prod-b64-export.mjs` + `scripts/apply-tmp-migration-bodies.mjs` (MCP/SQL base64 export path).
+## Status
 
-## Verify (still required)
+| Check | State |
+|-------|--------|
+| Repo MD5 vs prod (126 versions, 5 skipped) | **Done** — `node scripts/compare-migration-md5-to-prod.mjs` |
+| CI — Start Supabase + inventory tests | Pending GitHub |
+| Parts SQL — db reset + 5 test files | Pending GitHub |
+| Vercel | Was green on Rev 12 |
 
-After **push to `main`**:
+**Skip list (placeholder prod rows — repo file unchanged):** `20261030022441`, `20261031000834`, `20261101032731`, `20261101172128`, `20261101174625`.
 
-- [ ] [CI](https://github.com/DeekiiiiiiiT/Goride/actions/workflows/ci.yml) green (inventory `supabase db reset` + Deno suite).
-- [ ] [Parts SQL checks](https://github.com/DeekiiiiiiiT/Goride/actions/workflows/parts-sql-checks.yml) green (full replay + five `supabase/tests/*.sql` files).
+## Tooling (Rev 13)
 
-Parts SQL may surface **new** failures after `20261101163408` (previously hidden). Triage per test file; prefer prod `schema_migrations` copy for already-applied versions.
+1. Export prod bodies (read-only): SQL in §1 below, or MCP → `node scripts/merge-mcp-prod-export.mjs …`
+2. Write repo files: `node scripts/sync-migration-bodies-from-prod-export.mjs scripts/tmp-migrations/prod-export.json`
+3. Verify: `node scripts/compare-migration-md5-to-prod.mjs` (uses [scripts/prod-migration-md5-fingerprints.json](../scripts/prod-migration-md5-fingerprints.json))
+4. Also: `node scripts/assert-migrations-utf8.mjs`, `node scripts/validate-migration-sql.mjs`
 
-**Local note:** This machine’s Supabase CLI (2.54.11) failed `supabase start` on storage init (`Migration fix-search-by-timestamp-sqli not found`). GitHub uses CLI 2.99.0 — use CI as source of truth after push.
+Legacy path still works: [scripts/decode-prod-b64-export.mjs](../scripts/decode-prod-b64-export.mjs) → [scripts/apply-tmp-migration-bodies.mjs](../scripts/apply-tmp-migration-bodies.mjs) (now maps all `tmp-migrations/<version>.sql` files).
 
-## Historical root cause (Rev 10)
-
-Rev 10. Checked 2026-11-01 19:30 UTC against `main` @ `6e78b1de`.
-
-**Green:** Deploy Supabase Edge Function, Test Supabase Functions, Vercel, recon-worker.
-**Red:** CI and Parts SQL — byte-split inventory migrations stopping at `20261101163300` (`syntax error at end of input`).
-
-### 1. The inventory schema migration was cut into pieces mid-statement
-
-Both CI ("Start Supabase and bootstrap inventory schema") and Parts SQL ("Start the database") stopped at:
+## 1. Repo migrations are rewrites, not copies of what production ran
 
 ```
-Applying migration 20261101163300_fleet_inventory_engine_schema_1.sql...
-ERROR: syntax error at end of input (SQLSTATE 42601)
+Applying migration 20261101165443_fleet_inventory_r5_fix_phone_holder_v3.sql...
+ERROR: column "value_delta" of relation "inv_ledger" does not exist (SQLSTATE 42703)
 ```
 
-Repo files were one script chopped into equal 8,593-byte pieces; production had eight clean pieces under the same version numbers.
+In production, `20261101165443` creates the function `fleet.r5_fix_phone_holder_opening`. The repo file held a hand-written `UPDATE … SET value_delta = …`.
 
-**Fix (completed):** overwrite each of nine repo files from production `array_to_string(statements, E'\n')` for versions `20261101163300` … `20261101163408` and `20261101163616`.
+**Fix (applied):** overwrite every drifted repo migration with production's `array_to_string(statements, E'\n')` for that version. UTF-8 without BOM. Production unchanged.
 
-### 2. Production history had the revoke migration twice
+Production MD5 check:
 
-**Fix (completed):** `supabase migration repair --status reverted 20261101185632`.
+```sql
+select version, md5(regexp_replace(regexp_replace(array_to_string(statements, E'\n'), '--[^\n]*', '', 'g'), '\s+', '', 'g'))
+from supabase_migrations.schema_migrations where version >= '20261029140000';
+```
+
+Compare with `node scripts/compare-migration-md5-to-prod.mjs` (same normalisation in [scripts/migration-md5-normalize.mjs](../scripts/migration-md5-normalize.mjs)).
+
+## Verify
+
+Parts SQL must pass all five files under `supabase/tests/` after replay. **Close this doc** only when GitHub shows **CI** and **Parts SQL checks** green on the same `main` commit.
 
 ## Rule for next time
 
-- Never split a migration by size. Split only between complete statements, or keep it as one file.
-- If production applied it in pieces, copy each piece from `schema_migrations.statements`.
-- Create migrations with `supabase migration new`.
-- Never write SQL files with PowerShell `Out-File` or `Set-Content`.
+- A migration that already ran on production is copied from `schema_migrations.statements`, never rewritten from memory or summarised as "prod sync".
+- Apply new migrations with `supabase db push` from the repo file, so the repo and production can't drift.
+- Run `node scripts/compare-migration-md5-to-prod.mjs` before merge when touching applied migration bodies.

@@ -1,6 +1,3 @@
--- Fleet maintenance logging audit R-04 (part 3): due view + Roomy recompute
--- Production version: 20261101043015 - already applied; repo sync only.
-
 DROP VIEW IF EXISTS public.fleet_maintenance_due_v CASCADE;
 DROP VIEW IF EXISTS fleet.maintenance_due_v CASCADE;
 
@@ -113,18 +110,3 @@ CREATE OR REPLACE VIEW public.fleet_maintenance_due_v WITH (security_invoker = t
   SELECT * FROM fleet.maintenance_due_v;
 
 GRANT SELECT ON public.fleet_maintenance_due_v TO service_role;
-
--- Recompute vehicles that already have schedule rows (bounded; not a full-table scan from edge).
-DO $$
-DECLARE r record;
-BEGIN
-  FOR r IN
-    SELECT DISTINCT vehicle_id
-    FROM public.vehicle_component_schedule
-    WHERE vehicle_id IN (
-      SELECT id FROM fleet.vehicles WHERE license_plate ILIKE '%5179%'
-    )
-  LOOP
-    PERFORM fleet.recompute_maintenance_schedule(r.vehicle_id);
-  END LOOP;
-END $$;

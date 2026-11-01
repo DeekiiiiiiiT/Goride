@@ -1,41 +1,55 @@
--- Prod sync R6-06 (R5 data pass A): default warehouse + vehicle stock locations for Roam fleet org.
-
-DO $$
+CREATE OR REPLACE FUNCTION fleet.ensure_vehicle_inv_locations(p_org_id text)
+RETURNS integer
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = fleet, public
+AS $$
 DECLARE
-  v_org text := '8cfa606a-f6ea-4ccb-a2b2-1d2cc323a823';
-  v_veh record;
-  v_loc uuid;
+  v_row record;
+  v_count integer := 0;
+  v_plate text;
 BEGIN
-  INSERT INTO fleet.inv_settings (organization_id) VALUES (v_org)
-  ON CONFLICT (organization_id) DO NOTHING;
-
-  IF NOT EXISTS (
-    SELECT 1 FROM fleet.inv_location WHERE organization_id = v_org AND is_default = true
-  ) THEN
-    INSERT INTO fleet.inv_location (
-      organization_id, code, name, kind, is_default, is_active
-    ) VALUES (
-      v_org, 'JM-KIN-ST01', 'Main store — Kingston', 'warehouse', true, true
-    );
-  END IF;
-
-  FOR v_veh IN
-    SELECT id, license_plate FROM fleet.vehicles WHERE organization_id = v_org
+  FOR v_row IN
+    SELECT v.id, v.organization_id, coalesce(v.payload_json->>'licensePlate', v.id) AS plate
+    FROM fleet.vehicles v
+    WHERE v.organization_id = p_org_id
   LOOP
-    IF NOT EXISTS (
-      SELECT 1 FROM fleet.inv_location
-      WHERE organization_id = v_org AND kind = 'vehicle' AND vehicle_id = v_veh.id
-    ) THEN
-      INSERT INTO fleet.inv_location (
-        organization_id, code, name, kind, vehicle_id, is_active
-      ) VALUES (
-        v_org,
-        'VEH-' || upper(replace(coalesce(v_veh.license_plate, v_veh.id), ' ', '')),
-        coalesce(v_veh.license_plate, v_veh.id),
-        'vehicle',
-        v_veh.id,
-        true
-      );
-    END IF;
+    v_plate := v_row.plate;
+    INSERT INTO fleet.inv_location (
+      organization_id, code, name, kind, vehicle_id, is_default, is_active
+    )
+    SELECT
+      p_org_id,
+      'VEH-' || upper(v_row.id),
+      'Vehicle — ' || v_plate,
+      'vehicle',
+      v_row.id,
+      false,
+      true
+    WHERE NOT EXISTS (
+      SELECT 1 FROM fleet.inv_location l
+      WHERE l.organization_id = p_org_id AND l.vehicle_id = v_row.id
+    );
+    v_count := v_count + 1;
   END LOOP;
-END $$;
+  RETURN v_count;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION fleet.trg_vehicles_ensure_inv_location()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = fleet, public
+AS $$
+BEGIN
+  PERFORM fleet.ensure_vehicle_inv_locations(NEW.organization_id);
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS vehicles_ensure_inv_location ON fleet.vehicles;
+CREATE TRIGGER vehicles_ensure_inv_location
+  AFTER INSERT ON fleet.vehicles
+  FOR EACH ROW
+  EXECUTE FUNCTION fleet.trg_vehicles_ensure_inv_location();

@@ -1,2 +1,9 @@
--- Repo mirror: already applied on production (20261030130827 / admin_body_families).
-SELECT 1;
+CREATE OR REPLACE FUNCTION public.admin_body_families() RETURNS jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT jsonb_build_object(
+    'families', COALESCE((SELECT jsonb_agg(jsonb_build_object('id', parent.id, 'code', parent.code, 'label', COALESCE(parent.label, parent.code), 'maker', parent.maker, 'evidenceUrl', parent.family_evidence_url, 'members', (SELECT COALESCE(jsonb_agg(jsonb_build_object('id', child.id, 'code', child.code, 'maker', child.maker, 'label', child.label) ORDER BY child.maker, child.code), '[]'::jsonb) FROM public.vehicle_platform child WHERE child.parent_id = parent.id)) ORDER BY parent.label) FROM public.vehicle_platform parent WHERE parent.parent_id IS NULL AND EXISTS (SELECT 1 FROM public.vehicle_platform c WHERE c.parent_id = parent.id)), '[]'::jsonb),
+    'unassigned', COALESCE((SELECT jsonb_agg(jsonb_build_object('id', vp.id, 'code', vp.code, 'maker', vp.maker, 'label', vp.label, 'cars', (SELECT count(*) FROM public.vehicle_catalog vc WHERE vc.platform_id = vp.id)) ORDER BY vp.maker, vp.code) FROM public.vehicle_platform vp WHERE vp.parent_id IS NULL AND NOT EXISTS (SELECT 1 FROM public.vehicle_platform c WHERE c.parent_id = vp.id)), '[]'::jsonb),
+    'engines', COALESCE((SELECT jsonb_agg(jsonb_build_object('id', ef.id, 'code', ef.code, 'displacementCc', ef.displacement_cc, 'fuel', ef.fuel_type, 'cars', (SELECT COALESCE(jsonb_agg(jsonb_build_object('id', vc.id, 'make', vc.make, 'model', vc.model, 'chassis', vc.chassis_code) ORDER BY vc.make, vc.model), '[]'::jsonb) FROM public.vehicle_catalog vc WHERE vc.engine_family_id = ef.id)) ORDER BY ef.code) FROM public.engine_family ef), '[]'::jsonb)
+  );
+$$;
+REVOKE ALL ON FUNCTION public.admin_body_families() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.admin_body_families() TO service_role;

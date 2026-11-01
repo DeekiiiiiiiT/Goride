@@ -3,11 +3,9 @@
 -- One read function answers the page. No new cron and no materialized view.
 
 alter table places.published_fuel_price
-  add column if not exists last_report_at timestamptz;
-
+  add column if not exists last_report_at timestamptz
 alter table places.price_current
-  add column if not exists last_report_at timestamptz;
-
+  add column if not exists last_report_at timestamptz
 update places.price_current pc
 set last_report_at = src.max_at
 from (
@@ -21,8 +19,7 @@ from (
 ) src
 where pc.place_id = src.place_id
   and pc.grade = src.grade
-  and pc.last_report_at is null;
-
+  and pc.last_report_at is null
 update places.published_fuel_price h
 set last_report_at = src.max_at
 from (
@@ -36,8 +33,7 @@ from (
 ) src
 where h.place_id = src.place_id
   and h.grade = src.grade
-  and h.last_report_at is null;
-
+  and h.last_report_at is null
 create or replace function places.price_engine_publish(p_place_id text, p_grade text)
 returns void
 language plpgsql
@@ -244,8 +240,7 @@ begin
   end if;
   perform places.refresh_public_place(p_place_id);
 end;
-$$;
-
+$$
 create or replace view fleet.station_quality with (security_invoker = true) as
 select
   p.id,
@@ -270,8 +265,7 @@ select
     )
   ) as complete
 from places.place p
-where p.place_type = 'gas_station';
-
+where p.place_type = 'gas_station'
 insert into places.place_legacy_archive (id, legacy_kv_id, reason, payload)
 select
   p.id,
@@ -285,13 +279,11 @@ from places.place p
 where p.status = 'verified'
   and p.verified_at is null
 on conflict (id) do update
-set payload = places.place_legacy_archive.payload || jsonb_build_object('verified_at_backfill', excluded.payload);
-
+set payload = places.place_legacy_archive.payload || jsonb_build_object('verified_at_backfill', excluded.payload)
 update places.place
 set verified_at = updated_at
 where status = 'verified'
-  and verified_at is null;
-
+  and verified_at is null
 create or replace function places.station_analytics(
   p_grade text,
   p_week date default null,
@@ -668,7 +660,6 @@ begin
 
   return result;
 end;
-$$;
-
-revoke all on function places.station_analytics(text, date, text, uuid, boolean) from public, anon, authenticated;
-grant execute on function places.station_analytics(text, date, text, uuid, boolean) to service_role;
+$$
+revoke all on function places.station_analytics(text, date, text, uuid, boolean) from public, anon, authenticated
+grant execute on function places.station_analytics(text, date, text, uuid, boolean) to service_role

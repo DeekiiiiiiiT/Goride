@@ -1,2 +1,5 @@
--- Repo mirror: already applied on production (20261101044916 / fleet_find_parts_brk_shoes_op_code).
-SELECT 1;
+update public.maintenance_service_categories
+set op_code = 'BRK-SHOES',
+    updated_at = now()
+where code = 'brake_shoes_drums'
+  and (op_code is null or btrim(op_code) = '');

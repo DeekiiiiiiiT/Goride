@@ -1,28 +1,59 @@
 #!/usr/bin/env node
-import { readFileSync, writeFileSync } from 'node:fs';
+/**
+ * Copy scripts/tmp-migrations/<version>.sql into supabase/migrations/<matching file>.
+ * Skips MIGRATION_SYNC_SKIP_VERSIONS. Optional --dry-run.
+ */
+import { readFileSync, writeFileSync, readdirSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
+import { MIGRATION_SYNC_SKIP_VERSIONS } from './migration-md5-normalize.mjs';
 
+function bodyEndsOk(trimmed) {
+  const withoutLineComments = trimmed.replace(/^\s*--[^\n]*\n/gm, '').trim();
+  if (withoutLineComments.length === 0) return false;
+  return (
+    /;\s*$/.test(withoutLineComments) ||
+    /END\s*\$\$;\s*$/i.test(withoutLineComments) ||
+    /\$\$\s*$/i.test(withoutLineComments) ||
+    /END\s*\$\w*\$\s*$/i.test(withoutLineComments)
+  );
+}
+
+const dryRun = process.argv.includes('--dry-run');
 const root = join(dirname(import.meta.dirname));
 const tmp = join(root, 'scripts', 'tmp-migrations');
 const migrationsDir = join(root, 'supabase', 'migrations');
 
-const map = [
-  ['20261101163300', '20261101163300_fleet_inventory_engine_schema_1.sql'],
-  ['20261101163316', '20261101163316_fleet_inventory_engine_schema_2.sql'],
-  ['20261101163329', '20261101163329_fleet_inventory_engine_schema_3.sql'],
-  ['20261101163332', '20261101163332_fleet_inventory_engine_schema_4.sql'],
-  ['20261101163335', '20261101163335_fleet_inventory_engine_schema_5.sql'],
-  ['20261101163357', '20261101163357_fleet_inventory_engine_schema_6.sql'],
-  ['20261101163402', '20261101163402_fleet_inventory_engine_schema_7.sql'],
-  ['20261101163408', '20261101163408_fleet_inventory_engine_schema_8.sql'],
-  ['20261101163616', '20261101163616_fleet_inventory_engine_rpcs_4.sql'],
-];
+const byPrefix = new Map();
+for (const f of readdirSync(migrationsDir).filter((x) => x.endsWith('.sql'))) {
+  const m = /^(\d{14})_/.exec(f);
+  if (m) byPrefix.set(m[1], f);
+}
 
-for (const [version, filename] of map) {
-  const body = readFileSync(join(tmp, `${version}.sql`), 'utf8').trimEnd();
-  if (!body.endsWith(';')) {
-    console.error(`${version}: does not end with semicolon`);
+const tmpFiles = readdirSync(tmp).filter((f) => /^\d{14}\.sql$/.test(f));
+if (!tmpFiles.length) {
+  console.error('No scripts/tmp-migrations/<version>.sql files found');
+  process.exit(1);
+}
+
+for (const tf of tmpFiles.sort()) {
+  const version = tf.replace(/\.sql$/, '');
+  if (MIGRATION_SYNC_SKIP_VERSIONS.has(version)) {
+    console.log(`Skip ${version}`);
+    continue;
+  }
+  const filename = byPrefix.get(version);
+  if (!filename) {
+    console.error(`No migration file for version ${version}`);
     process.exit(1);
+  }
+  const body = readFileSync(join(tmp, tf), 'utf8').trimEnd();
+  if (!bodyEndsOk(body)) {
+    console.error(`${version}: does not end on a complete statement`);
+    process.exit(1);
+  }
+  if (dryRun) {
+    console.log(`[dry-run] Would write ${filename}`);
+    continue;
   }
   writeFileSync(join(migrationsDir, filename), `${body}\n`, 'utf8');
   console.log(`Wrote ${filename} (${Buffer.byteLength(body, 'utf8')} bytes)`);
