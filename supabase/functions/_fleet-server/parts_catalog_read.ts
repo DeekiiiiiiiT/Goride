@@ -10,13 +10,13 @@ export function shapeBrowse(rows: Array<Record<string, unknown>>) {
   const components = parts.filter((row) => row.parent_id != null);
   return {
     systems: systems.map((system) => ({
-      id: system.id,
+      id: String(system.id),
       plainName: system.plain_name || system.name,
       icon: system.icon_key ?? null,
       components: components
         .filter((row) => row.parent_id === system.id)
         .map((row) => ({
-          id: row.id,
+          id: String(row.id),
           plainName: row.plain_name || row.name,
           positionAware: Boolean(row.position_aware),
           opCode: row.op_code ? String(row.op_code) : null,
@@ -28,7 +28,7 @@ export function shapeBrowse(rows: Array<Record<string, unknown>>) {
       .filter((row) => Number(row.common_rank) >= 1 && Number(row.common_rank) <= 8)
       .sort((a, b) => Number(a.common_rank) - Number(b.common_rank))
       .map((row) => ({
-        id: row.id,
+        id: String(row.id),
         plainName: row.plain_name || row.name,
         positionAware: Boolean(row.position_aware),
         opCode: row.op_code ? String(row.op_code) : null,
