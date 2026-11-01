@@ -8,6 +8,7 @@ import { pickBestPart, type BestPickItem } from "../../../packages/types/src/par
 import { variantCodeLine, variantPlainLabel, type VariantLabelRow } from "../../../packages/types/src/vehicleVariantLabel.ts";
 import { assembleMatchSections, enrichFleetParts, getCatalogParts } from "./catalog_api.ts";
 import { assertNoCustomerIdentity } from "./catalog_parts_shape.ts";
+import type { PartsFitPair } from "../../../packages/types/src/partsFitParam.ts";
 
 const CANDIDATE_CAP = 6;
 
@@ -61,8 +62,17 @@ function sideOf(value: string | null | undefined): PartSide {
   return null;
 }
 
-function fitsAxis(value: string | null | undefined, wanted: string | null | undefined): boolean {
+function fitsAxis(
+  value: string | null | undefined,
+  wanted: string | null | undefined,
+  axis: "position" | "side",
+): boolean {
   if (!wanted) return true;
+  if (wanted === "both") {
+    if (!value || value === "both") return true;
+    if (axis === "position") return value === "front" || value === "rear";
+    return value === "left" || value === "right";
+  }
   if (!value || value === "both") return true;
   return value === wanted;
 }
@@ -73,7 +83,18 @@ export function keepForPosition<T extends { position?: string | null; side?: str
   position?: string | null,
   side?: string | null,
 ): T[] {
-  return items.filter((item) => fitsAxis(item.position, position) && fitsAxis(item.side, side));
+  return items.filter(
+    (item) => fitsAxis(item.position, position, "position") && fitsAxis(item.side, side, "side"),
+  );
+}
+
+export function keepForFitPairs<T extends { position?: string | null; side?: string | null }>(
+  items: T[],
+  pairs: PartsFitPair[] | null | undefined,
+): T[] {
+  if (!pairs?.length) return items;
+  if (pairs.length === 1) return keepForPosition(items, pairs[0].axle, pairs[0].side);
+  return items.filter((item) => pairs.some((pair) => keepForPosition([item], pair.axle, pair.side).length > 0));
 }
 
 /** True only when two versions would show different parts. */
@@ -231,6 +252,7 @@ export async function findParts(
     componentId?: string | null;
     position?: string | null;
     side?: string | null;
+    fitPairs?: PartsFitPair[] | null;
     orgId?: string | null;
     downtimePerDay?: number;
   },
@@ -284,7 +306,11 @@ export async function findParts(
   const askVariant = !specificId && !anyVariant && shouldAskVariant(partSets);
   let merged = mergeFound(groups);
   merged = await attachSides(supabase, merged, searchIds);
-  merged = keepForPosition(merged, input.position, input.side);
+  if (input.fitPairs?.length) {
+    merged = keepForFitPairs(merged, input.fitPairs);
+  } else {
+    merged = keepForPosition(merged, input.position, input.side);
+  }
   const built = plainSections(merged, mode === "legacy");
   const bestPool: BestPickItem[] = merged.map((item) => ({
     id: item.partId,
@@ -299,7 +325,10 @@ export async function findParts(
   const pickedId = picked ? String(picked.id ?? "") : "";
   const mergedIds = new Set(merged.map((item) => item.partId).filter(Boolean));
   const catalogItems = loaded.flatMap((row) => (row.parts.items as LoosePart[]) || []);
-  const filteredCatalogItems = keepForPosition(catalogItems, input.position, input.side).filter((item) => {
+  const filteredCatalogItems = (input.fitPairs?.length
+    ? keepForFitPairs(catalogItems, input.fitPairs)
+    : keepForPosition(catalogItems, input.position, input.side)
+  ).filter((item) => {
     const id = String(item.part?.id ?? item.fitmentId ?? "");
     return id && mergedIds.has(id);
   });

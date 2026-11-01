@@ -40,3 +40,24 @@ describe("fp3 area numbering", () => {
     expect(vm.areas.map((r) => r.areaIndex)).toEqual(["01", "02"]);
   });
 });
+
+describe("formatPartsVersionTag", () => {
+  it("reads version field from vehicle-context shape", async () => {
+    const { formatPartsVersionTag } = await import("@roam/types/partsVehicleContext");
+    expect(formatPartsVersionTag({
+      version: "Pre-Facelift · 1KR-FE · 2WD",
+      specs: { trim_series: "Ignored when version set" },
+    })).toBe("Pre-Facelift · 1KR-FE · 2WD");
+  });
+
+  it("builds FP3 header from specs when version missing", async () => {
+    const { buildFp3ViewModel } = await import("./findPartsViewModels");
+    const vm = buildFp3ViewModel({
+      ctx: {
+        specs: { trim_series: "Pre-Facelift", engine_code: "1KR-FE", drivetrain: "2WD" },
+      },
+      selectedChipId: "",
+    });
+    expect(vm.versionTag).toBe("Pre-Facelift · 1KR-FE · 2WD");
+  });
+});

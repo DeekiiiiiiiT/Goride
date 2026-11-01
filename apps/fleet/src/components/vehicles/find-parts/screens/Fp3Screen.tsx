@@ -6,6 +6,7 @@ export type Fp3Actions = {
   onBack: () => void;
   onNext: () => void;
   nextDisabled?: boolean;
+  nextHint?: string;
   onPickPart: (id: string, name: string, positionAware?: boolean) => void;
   onPickProblem: (id: string, name: string, positionAware?: boolean) => void;
   onSelectArea: (id: string) => void;
@@ -237,6 +238,7 @@ export function Fp3Screen({ actions, data, activeArea }: { actions: Fp3Actions; 
           versionTag={data.versionTag}
           onNext={actions.onNext}
           nextDisabled={actions.nextDisabled}
+          nextHint={actions.nextHint}
         />
 
         {/* Desktop / tablet — stitch browse.html */}

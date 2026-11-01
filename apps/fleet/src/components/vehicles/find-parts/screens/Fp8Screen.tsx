@@ -123,20 +123,6 @@ export function Fp8Screen({ actions, data, form }: { actions: Fp8Actions; data: 
 </form>
 </div>
 
-<div className="hidden rounded-xl bg-emerald-50 text-emerald-950 p-space-lg shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-space-md" id="success-banner">
-<div className="flex items-center gap-space-md">
-<div className="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center shrink-0">
-<span className="material-symbols-outlined text-[18px]">check</span>
-</div>
-<div className="flex flex-col">
-<span className="font-body-md text-body-md font-semibold text-emerald-900">Request dispatched to {data.hubLabel} Sourcing Desk.</span>
-<span className="font-caption text-caption text-emerald-700">Ticket #REQ-8849 logged. Average quote time is currently 18 minutes.</span>
-</div>
-</div>
-<button type="button" className="font-body-sm text-body-sm text-emerald-900 font-semibold underline underline-offset-4 hover:text-emerald-700 whitespace-nowrap" onClick={actions.onViewActivity}>
-            View in activity ledger →
-          </button>
-</div>
 </div>
 
 <div className="lg:col-span-4 flex flex-col gap-space-lg">
@@ -155,8 +141,8 @@ export function Fp8Screen({ actions, data, form }: { actions: Fp8Actions; data: 
 )}
 </div>
 <div className="flex flex-col min-w-0">
-<span className="font-body-md text-body-md font-semibold text-on-surface truncate">{data.vehicleLabel} Hybrid</span>
-<span className="font-caption text-caption text-on-surface-variant">{data.hubLabel} Route Cluster 03</span>
+<span className="font-body-md text-body-md font-semibold text-on-surface truncate">{data.vehicleLabel}</span>
+<span className="font-caption text-caption text-on-surface-variant">{data.hubLabel}</span>
 </div>
 </div>
 <div className="grid grid-cols-2 gap-space-sm pt-space-xs font-label-code text-caption">

@@ -1,5 +1,11 @@
 /** Chassis diagram from find-parts-position.html (Stitch FP4). */
-export function Fp4VehicleDiagram({ frontActive }: { frontActive?: boolean }) {
+export function Fp4VehicleDiagram({
+  frontActive,
+  rearActive,
+}: {
+  frontActive?: boolean;
+  rearActive?: boolean;
+}) {
   return (
     <svg className="h-full max-h-[300px] w-full" fill="none" viewBox="0 0 240 320" xmlns="http://www.w3.org/2000/svg">
       <path
@@ -22,9 +28,17 @@ export function Fp4VehicleDiagram({ frontActive }: { frontActive?: boolean }) {
       />
       <line className="text-surface-container-highest" stroke="currentColor" strokeDasharray="3 3" strokeWidth="1" x1="120" x2="120" y1="24" y2="300" />
       <g>
-        <line className={frontActive ? "text-outline-variant" : "text-primary"} stroke="currentColor" strokeWidth={frontActive ? 2 : 3} x1="32" x2="208" y1="240" y2="240" />
-        <rect className="text-outline-variant" height="36" rx="4" stroke="currentColor" strokeWidth="1.5" width="16" x="24" y="222" />
-        <rect className="text-outline-variant" height="36" rx="4" stroke="currentColor" strokeWidth="1.5" width="16" x="200" y="222" />
+        <line className={rearActive ? "text-primary" : "text-outline-variant"} stroke="currentColor" strokeWidth={rearActive ? 3 : 2} x1="32" x2="208" y1="240" y2="240" />
+        <rect className={rearActive ? "text-primary" : "text-outline-variant"} height="36" rx="4" stroke="currentColor" strokeWidth="1" width="16" x="24" y="222" />
+        <rect className={rearActive ? "text-primary" : "text-outline-variant"} height="36" rx="4" stroke="currentColor" strokeWidth="1" width="16" x="200" y="222" />
+        {rearActive ? (
+          <>
+            <circle className="text-primary" cx="32" cy="240" fill="none" r="14" stroke="currentColor" strokeDasharray="2 2" strokeWidth="1.5" />
+            <circle className="fill-primary" cx="32" cy="240" r="4" />
+            <circle className="text-primary" cx="208" cy="240" fill="none" r="14" stroke="currentColor" strokeDasharray="2 2" strokeWidth="1.5" />
+            <circle className="fill-primary" cx="208" cy="240" r="4" />
+          </>
+        ) : null}
       </g>
       <g>
         <line className={frontActive ? "text-primary" : "text-outline-variant"} stroke="currentColor" strokeWidth={frontActive ? 3 : 2} x1="32" x2="208" y1="92" y2="92" />

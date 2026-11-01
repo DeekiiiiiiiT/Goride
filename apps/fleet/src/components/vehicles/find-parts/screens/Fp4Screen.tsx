@@ -9,11 +9,16 @@ export type Fp4Actions = {
   onEditPartCategory: () => void;
   onSelectAxle: (id: string) => void;
   onSelectSide: (id: string) => void;
+  onSelectFrontSide?: (id: string) => void;
+  onSelectRearSide?: (id: string) => void;
   children?: ReactNode;
 };
 
 export function Fp4Screen({ actions, data }: { actions: Fp4Actions; data: Fp4ViewModel }) {
   const partTrail = data.partLabel !== "None yet" ? data.partLabel : "Part";
+  const selectedAxleIds = data.axleRows.filter((a) => a.selected).map((a) => a.id);
+  const frontActive = selectedAxleIds.includes("front") || selectedAxleIds.includes("both");
+  const rearActive = selectedAxleIds.includes("rear") || selectedAxleIds.includes("both");
   return (
     <div className="find-parts-screen-root">
       <div className="fp-screen-root flex flex-col w-full">
@@ -31,11 +36,11 @@ export function Fp4Screen({ actions, data }: { actions: Fp4Actions; data: Fp4Vie
           <div className="mb-space-xl">
             <div className="flex items-baseline gap-2 mb-1">
               <span className="font-label-code text-caption text-on-surface-variant uppercase tracking-widest font-semibold">
-                {data.fitmentEyebrow} · {partTrail.toUpperCase()} FITMENT
+                {data.fitmentEyebrow}
               </span>
             </div>
             <h1 className="font-headline-xl text-headline-xl text-on-surface tracking-tight font-bold">Which {data.partLabel}?</h1>
-            <p className="font-body-md text-body-md text-on-surface-variant mt-1">Front and back are different parts on this car. Pick the axle, then the side.</p>
+            <p className="font-body-md text-body-md text-on-surface-variant mt-1">Pick the axle, then the side when this part is sold per wheel.</p>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-gutter-desktop items-start">
@@ -49,7 +54,7 @@ export function Fp4Screen({ actions, data }: { actions: Fp4Actions; data: Fp4Vie
                   <span className="font-label-code text-caption px-1.5 py-0.5 rounded bg-surface-container-low text-on-surface-variant">{data.scaleLabel}</span>
                 </div>
                 <div className="relative w-full min-h-[280px] bg-surface-container-low rounded-xl flex items-center justify-center p-space-sm">
-                  <Fp4VehicleDiagram frontActive={data.axleRows.some((a) => a.selected && /front/i.test(a.id))} />
+                  <Fp4VehicleDiagram frontActive={frontActive} rearActive={rearActive} />
                   <div className="absolute bottom-3 left-3 bg-surface-container-lowest/95 backdrop-blur-sm px-2.5 py-1 rounded shadow-sm flex items-center gap-1.5 font-label-code text-caption">
                     <span className="w-1.5 h-1.5 rounded-full bg-primary"></span>
                     <span className="font-semibold text-on-surface">{data.diagramBadge.split(" · ")[0]}</span>
@@ -133,33 +138,66 @@ export function Fp4Screen({ actions, data }: { actions: Fp4Actions; data: Fp4Vie
                 </div>
               </section>
 
+              {data.showSideStep ? (
               <section className="flex flex-col gap-space-md">
                 <div className="flex items-center justify-between">
                   <span className="font-label-code text-caption font-bold text-on-surface uppercase tracking-wider">STEP B · CHOOSE SIDE</span>
-                  <span className="font-label-code text-caption text-on-surface-variant">Default: axle pair</span>
+                  <span className="font-label-code text-caption text-on-surface-variant">Required</span>
                 </div>
-                <div className="flex flex-wrap gap-space-sm">
-                  {data.sideOptions.map((side) => (
-                    <button
-                      key={side.id}
-                      type="button"
-                      className={`px-4 py-2 rounded-lg font-body-sm text-body-sm font-semibold transition-colors ${side.selected ? "bg-primary text-on-primary shadow-sm" : "bg-surface-container-lowest hover:bg-surface-container text-on-surface"}`}
-                      onClick={() => actions.onSelectSide(side.id)}
-                    >
-                      {side.label}
-                    </button>
-                  ))}
-                </div>
-                <div className="bg-surface-container-low rounded-xl p-space-md flex gap-space-md">
-                  <span className="material-symbols-outlined text-on-surface-variant">info</span>
-                  <div>
-                    <div className="font-caption text-caption uppercase text-on-surface font-semibold">Standard packaging advisory</div>
-                    <p className="font-body-sm text-body-sm text-on-surface-variant mt-1">
-                      Most brake parts come as an axle set, so &quot;Both sides&quot; is usually right. Single-sided fitments apply only when sourcing replacement calipers or individual wheel cylinders.
-                    </p>
+                {data.axleRows.some((a) => a.selected && a.id === "both") ? (
+                  <>
+                    <div className="flex flex-col gap-space-sm">
+                      <span className="font-label-code text-caption text-on-surface-variant">Front side</span>
+                      <div className="flex flex-wrap gap-space-sm">
+                        {(data.frontSideOptions || data.sideOptions).map((side) => (
+                          <button
+                            key={`front-${side.id}`}
+                            type="button"
+                            className={`px-4 py-2 rounded-lg font-body-sm text-body-sm font-semibold transition-colors ${side.selected ? "bg-primary text-on-primary shadow-sm" : "bg-surface-container-lowest hover:bg-surface-container text-on-surface"}`}
+                            onClick={() => actions.onSelectFrontSide?.(side.id)}
+                          >
+                            {side.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-space-sm">
+                      <span className="font-label-code text-caption text-on-surface-variant">Rear side</span>
+                      <div className="flex flex-wrap gap-space-sm">
+                        {(data.rearSideOptions || data.sideOptions).map((side) => (
+                          <button
+                            key={`rear-${side.id}`}
+                            type="button"
+                            className={`px-4 py-2 rounded-lg font-body-sm text-body-sm font-semibold transition-colors ${side.selected ? "bg-primary text-on-primary shadow-sm" : "bg-surface-container-lowest hover:bg-surface-container text-on-surface"}`}
+                            onClick={() => actions.onSelectRearSide?.(side.id)}
+                          >
+                            {side.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex flex-wrap gap-space-sm">
+                    {data.sideOptions.map((side) => (
+                      <button
+                        key={side.id}
+                        type="button"
+                        className={`px-4 py-2 rounded-lg font-body-sm text-body-sm font-semibold transition-colors ${side.selected ? "bg-primary text-on-primary shadow-sm" : "bg-surface-container-lowest hover:bg-surface-container text-on-surface"}`}
+                        onClick={() => actions.onSelectSide(side.id)}
+                      >
+                        {side.label}
+                      </button>
+                    ))}
                   </div>
-                </div>
+                )}
               </section>
+              ) : data.axleSetAdvisory ? (
+              <div className="bg-surface-container-low rounded-xl p-space-md flex gap-space-md">
+                <span className="material-symbols-outlined text-on-surface-variant">info</span>
+                <p className="font-body-sm text-body-sm text-on-surface-variant">{data.axleSetAdvisory}</p>
+              </div>
+              ) : null}
 
               <section className="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm">
                 <div className="font-label-code text-caption font-bold text-on-surface uppercase tracking-wider mb-space-md">Chassis fitment profile</div>

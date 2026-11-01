@@ -51,7 +51,7 @@ export function stitchVisualVehicleContext() {
     label: STITCH_VISUAL_LABEL,
     plate: STITCH_VISUAL_PLATE,
     variantId: STITCH_VISUAL_VARIANT_ID,
-    version: "Pre-Facelift",
+    version: "Pre-Facelift · 1KR-FE · 2WD",
     odometer: 84200,
     lastService: "Fixture brake service",
     health_pct: 91,
@@ -106,6 +106,7 @@ export function stitchVisualFindSections() {
         label: "Made for your car",
         items: [{
           tier: 1,
+          position: "rear",
           part: {
             id: "part-stitch-oem-1",
             name: "Rear brake shoe kit (drum)",

@@ -20,8 +20,10 @@ const mockQueue = {
     {
       groupId: "grp-stitch-1",
       platformId: "plat-1",
+      vehicleCatalogId: "plat-1",
       componentId: "cmp-intake",
       side: null,
+      matchType: "Sister",
       fleetCount: 1,
       firstAsked: "2026-07-12T10:00:00Z",
       lastAsked: "2026-07-12T10:00:00Z",
@@ -184,7 +186,7 @@ test.describe("Dominion pending parts stitch live PNGs", () => {
     await installDominionMocks(page, { items: [], total: 0, weeklyTarget: 12 });
     await page.goto("/?page=pending-motor-vehicles");
     await page.getByRole("button", { name: /Parts\s+\d/i }).click();
-    await expect(page.getByText("No part requests.", { exact: false })).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByText(/No part requests/i)).toBeVisible({ timeout: 20_000 });
     await page.locator(".pending-parts-stitch").screenshot({
       path: "docs/stitch/dominion-redesign/screenshots/S10d-live.png",
     });

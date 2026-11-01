@@ -2931,6 +2931,13 @@ export const api = {
       return response.json();
   },
 
+  async partsComponentFitHints(variantId: string, componentId: string) {
+      const q = new URLSearchParams({ variantId, componentId });
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/component-fit-hints?${q}`, { headers: await getHeaders(null) });
+      if (!response.ok) throw new Error("Could not load fit hints");
+      return response.json();
+  },
+
   async partsTerm(q: string) {
       const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/term?q=${encodeURIComponent(q)}`, { headers: await getHeaders(null) });
       if (!response.ok) throw new Error("Could not search parts");

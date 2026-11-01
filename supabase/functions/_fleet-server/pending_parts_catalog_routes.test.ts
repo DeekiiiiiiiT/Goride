@@ -19,12 +19,35 @@ Deno.test("stripPii removes org plate and user fields", () => {
   assertEquals(row.fleetCount, 2);
 });
 
-Deno.test("groupPartsRequests aggregates by variant component and side", () => {
+Deno.test("groupPartsRequests aggregates by catalog component fit and match type", () => {
   const groups = groupPartsRequests([
-    { id: "1", platform_id: "v1", maintenance_component_id: "c1", install_side: "left", created_at: "2026-10-01T00:00:00Z", status: "open" },
-    { id: "2", platform_id: "v1", maintenance_component_id: "c1", install_side: "left", created_at: "2026-10-02T00:00:00Z", status: "open", photo_url: "x" },
+    {
+      id: "1",
+      vehicle_catalog_id: "v1",
+      platform_id: "p1",
+      maintenance_component_id: "c1",
+      install_side: "both",
+      fit_descriptor: "front:both,rear:both",
+      match_type: "Sister",
+      created_at: "2026-10-01T00:00:00Z",
+      status: "open",
+    },
+    {
+      id: "2",
+      vehicle_catalog_id: "v1",
+      platform_id: "p1",
+      maintenance_component_id: "c1",
+      install_side: "both",
+      fit_descriptor: "front:both,rear:both",
+      match_type: "Sister",
+      created_at: "2026-10-02T00:00:00Z",
+      status: "open",
+      photo_url: "x",
+    },
   ]);
   assertEquals(groups.length, 1);
   assertEquals(groups[0].fleetCount, 2);
   assertEquals(groups[0].photoCount, 1);
+  assertEquals(groups[0].vehicleCatalogId, "v1");
+  assertEquals(groups[0].matchType, "Sister");
 });

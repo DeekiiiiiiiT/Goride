@@ -15,6 +15,7 @@ export type FindPartsStickyHeaderProps = {
   fitmentQueryRef?: string;
   onNext?: () => void;
   nextDisabled?: boolean;
+  nextHint?: string;
   onSaveSearch?: () => void;
   onDownloadFitmentReport?: () => void;
 };
@@ -125,13 +126,14 @@ export function FindPartsStickyHeader(props: FindPartsStickyHeaderProps) {
     fitmentQueryRef,
     onNext,
     nextDisabled,
+    nextHint,
     onSaveSearch,
     onDownloadFitmentReport,
   } = props;
 
   if (step === 8) {
     return (
-      <header className="sticky top-0 pt-4 z-20 bg-surface-container-lowest shadow-sm w-full">
+      <header className="sticky -top-4 pt-4 z-20 bg-surface-container-lowest shadow-sm w-full">
         <div className="w-full py-space-sm flex items-center justify-between min-h-[58px] gap-space-md flex-wrap">
           <div className="flex items-center gap-space-md">
             <button
@@ -174,7 +176,7 @@ export function FindPartsStickyHeader(props: FindPartsStickyHeaderProps) {
 
   if (step === 5) {
     return (
-      <div className="sticky top-0 pt-4 z-20 w-full bg-surface-container-lowest shadow-sm">
+      <div className="sticky -top-4 pt-4 z-20 w-full bg-surface-container-lowest shadow-sm">
         <div className="w-full py-space-sm flex flex-wrap items-center justify-between gap-space-md">
           <div className="flex items-center gap-space-md">
             <button type="button" className="group inline-flex items-center gap-space-xs text-on-surface hover:text-primary transition-colors py-1 px-2 -ml-2 rounded-lg hover:bg-surface-container" onClick={onBack}>
@@ -214,7 +216,7 @@ export function FindPartsStickyHeader(props: FindPartsStickyHeaderProps) {
   }
 
   return (
-    <div className="sticky top-0 pt-4 z-20 w-full bg-surface-container-lowest shadow-sm">
+    <div className="sticky -top-4 pt-4 z-20 w-full bg-surface-container-lowest shadow-sm">
       <div className="w-full h-16 flex items-center justify-between gap-space-md flex-wrap">
         <div className="flex items-center gap-space-sm flex-shrink-0">
           <button type="button" className="group flex items-center gap-space-xs px-3.5 py-1.5 rounded-full bg-surface-container-low hover:bg-surface-container-high transition-colors" onClick={onBack}>
@@ -238,6 +240,9 @@ export function FindPartsStickyHeader(props: FindPartsStickyHeaderProps) {
           </div>
         </div>
         <div className="flex items-center gap-space-sm flex-shrink-0">
+          {nextHint && nextDisabled ? (
+            <span className="font-body-sm text-body-sm text-on-surface-variant mr-1">{nextHint}</span>
+          ) : null}
           {onNext ? (
             <button
               type="button"

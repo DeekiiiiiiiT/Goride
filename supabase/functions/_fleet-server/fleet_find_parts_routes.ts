@@ -13,6 +13,9 @@ import { canonicalOdometerForVehicle } from "./canonical_vehicle_odometer.ts";
 import { analyzeMaintenanceScheduleRow } from "../../../packages/finance-core/src/maintenanceOverdueDetails.ts";
 import { upsertPendingFromKvVehicle } from "./vehicle_catalog_pending_queries.ts";
 import { loadVehiclePartsContextExtras, vehiclePlateFromKv } from "./vehicle_parts_context.ts";
+import { buildPartsSourcingInsert, normalizeMatchType } from "./parts_sourcing_request_build.ts";
+import { readComponentFitHints } from "./parts_component_fit_hints.ts";
+import { resolvePartsFitPairs } from "../../../packages/types/src/partsFitParam.ts";
 
 const PREFIX = "/make-server-37f42386/parts";
 const PHOTO_BUCKET = "parts-request-photos";
@@ -134,6 +137,8 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
       const componentId = c.req.query("componentId")?.trim() || "";
       const position = c.req.query("position") || c.req.query("pos") || "";
       const side = c.req.query("side") || "";
+      const fit = c.req.query("fit") || "";
+      const fitPairs = resolvePartsFitPairs({ fit, position, side });
 
       let vehicle: Record<string, unknown> | null = null;
       let catalogId = "";
@@ -166,8 +171,9 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
         year: vehicle && vehicle.year != null ? Number(vehicle.year) : year,
         variantId: variantId || catalogId || null,
         componentId: componentId || null,
-        position: position || null,
-        side: side || null,
+        position: fitPairs.length === 1 ? fitPairs[0].axle : (fitPairs.length ? null : (position || null)),
+        side: fitPairs.length === 1 ? fitPairs[0].side : (fitPairs.length ? null : (side || null)),
+        fitPairs: fitPairs.length ? fitPairs : null,
         orgId: null,
         downtimePerDay: 0,
       });
@@ -192,6 +198,18 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
       const variantId = c.req.query("variantId")?.trim() || "";
       if (variantId && !UUID_RE.test(variantId)) return c.json({ error: "Invalid variant" }, 400);
       return c.json(await readPartsBrowseForVariant(supabase, variantId || undefined));
+    } catch (error) {
+      return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+    }
+  });
+
+  app.get(`${PREFIX}/component-fit-hints`, ...view, async (c: Context) => {
+    try {
+      const variantId = c.req.query("variantId")?.trim() || "";
+      const componentId = c.req.query("componentId")?.trim() || "";
+      if (!variantId || !UUID_RE.test(variantId)) return c.json({ error: "variantId required" }, 400);
+      if (!componentId || !UUID_RE.test(componentId)) return c.json({ error: "componentId required" }, 400);
+      return c.json(await readComponentFitHints(supabase, variantId, componentId));
     } catch (error) {
       return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
     }
@@ -239,30 +257,31 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
       const catalogVariantId = body.vehicleCatalogId && UUID_RE.test(String(body.vehicleCatalogId))
         ? String(body.vehicleCatalogId)
         : (body.platformId && UUID_RE.test(String(body.platformId)) ? String(body.platformId) : null);
+      const matchType = normalizeMatchType(body.matchType ?? body.match_type);
       const composedNeed = needText
         || [String(body.partName ?? "").trim(), side, position].filter(Boolean).join(" · ")
         || "Part info request";
       const sentAt = isAddPart ? new Date().toISOString() : null;
-      const { data, error } = await supabase.from("parts_sourcing_requests").insert({
-        organization_id: orgId,
-        vehicle_id: vehicleId || null,
-        need_text: composedNeed.slice(0, 2000),
-        status: "open",
-        created_by: user?.id ?? null,
-        maintenance_component_id: body.maintenanceComponentId && UUID_RE.test(String(body.maintenanceComponentId))
+      const insertRow = await buildPartsSourcingInsert(supabase, {
+        orgId,
+        vehicleId: vehicleId || null,
+        needText: composedNeed,
+        componentId: body.maintenanceComponentId && UUID_RE.test(String(body.maintenanceComponentId))
           ? String(body.maintenanceComponentId)
           : (body.componentId && UUID_RE.test(String(body.componentId)) ? String(body.componentId) : null),
-        platform_id: catalogVariantId,
-        engine_family_id: body.engineFamilyId && UUID_RE.test(String(body.engineFamilyId)) ? String(body.engineFamilyId) : null,
-        urgency,
-        reply_due_at: urgency ? replyDueAt(urgency) : null,
+        engineFamilyId: body.engineFamilyId && UUID_RE.test(String(body.engineFamilyId)) ? String(body.engineFamilyId) : null,
+        vehicleCatalogId: catalogVariantId,
+        matchType: isAddPart ? matchType : null,
+        fit: body,
         kind,
+        urgency,
         qty,
-        photo_url: body.photoUrl ? String(body.photoUrl).slice(0, 2000) : null,
-        install_side: side,
-        install_position: position,
-        sent_at: sentAt,
-      }).select("*").single();
+        userId: user?.id ?? null,
+        photoUrl: body.photoUrl ? String(body.photoUrl).slice(0, 2000) : null,
+        sentAt,
+        replyDueAt: urgency ? replyDueAt(urgency) : null,
+      });
+      const { data, error } = await supabase.from("parts_sourcing_requests").insert(insertRow).select("*").single();
       if (error) throw error;
       return c.json({ item: data });
     } catch (error) {

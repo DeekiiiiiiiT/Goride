@@ -148,6 +148,24 @@ Deno.test("findParts shows more than six version cards", async () => {
   assertEquals(body.candidates.length, 7);
 });
 
+Deno.test("both position keeps front and rear rows", () => {
+  const items = [
+    { id: "front", position: "front", side: null },
+    { id: "rear", position: "rear", side: null },
+    { id: "blank", position: null, side: null },
+  ];
+  assertEquals(keepForPosition(items, "both").map((item) => item.id).sort(), ["blank", "front", "rear"]);
+});
+
+Deno.test("both side keeps left and right rows", () => {
+  const items = [
+    { id: "left", position: "front", side: "left" },
+    { id: "right", position: "front", side: "right" },
+    { id: "blank", position: "front", side: null },
+  ];
+  assertEquals(keepForPosition(items, "front", "both").map((item) => item.id).sort(), ["blank", "left", "right"]);
+});
+
 Deno.test("Roomy rear left brake filters to rear left parts only", async () => {
   const client = catalogClient([car("m900")]);
   const body = await findParts(client as never, {
@@ -170,4 +188,34 @@ Deno.test("Roomy rear left brake filters to rear left parts only", async () => {
   assertEquals(text.includes("04495-B2400"), true);
   assertEquals(text.includes("04495-B2401"), false);
   assertEquals(text.includes("04465-B1190"), false);
+});
+
+Deno.test("Roomy both axles returns six brake rows", async () => {
+  const client = catalogClient([car("m900")]);
+  const items = [
+    ...Array.from({ length: 4 }, (_, i) => ({
+      part: { id: `front-${i}`, name: "Front brake pad set", manufacturer: "Toyota", oem_part_number: `04465-F${i}`, catalog_decision: "confirmed" },
+      tier: 1,
+      position: "front",
+      side: null,
+    })),
+    ...Array.from({ length: 2 }, (_, i) => ({
+      part: { id: `rear-${i}`, name: "Rear brake shoe kit", manufacturer: "Toyota", oem_part_number: `04495-R${i}`, catalog_decision: "confirmed" },
+      tier: 1,
+      position: "rear",
+      side: null,
+    })),
+  ];
+  const body = await findParts(client as never, {
+    make: "Toyota",
+    model: "Roomy",
+    year: 2019,
+    position: "both",
+    side: "both",
+    orgId: null,
+  }, async () => ({ mode: "tiered" as const, items, universal: [] }));
+  const ids = JSON.stringify(body.sections);
+  assertEquals(ids.includes("04465-F0"), true);
+  assertEquals(ids.includes("04495-R0"), true);
+  assertEquals((body.sections || []).flatMap((s) => s.items || []).length, 6);
 });

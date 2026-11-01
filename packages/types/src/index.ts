@@ -33,6 +33,8 @@ export * from './partsResolution';
 export * from './vehicleVariantLabel';
 export * from './partsBestPick';
 export * from './findPartsParse';
+export * from './partsFitParam';
+export * from './partsVehicleContext';
 export * from './frameNumberDecode';
 export * from './partsCatalogCsvImport';
 export * from './partsDatabaseImportCsv';

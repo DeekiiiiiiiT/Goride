@@ -1,12 +1,36 @@
 import { useMemo, useState, type ReactNode } from "react";
-import type { Fp5ViewModel } from "../findPartsViewModels";
+import type { Fp5ResultRow, Fp5ViewModel } from "../findPartsViewModels";
 import type { TrimScopeTab } from "../findPartsActions";
 import { FindPartsStickyHeader } from "../FindPartsStickyHeader";
 
 const STITCH_TIER1_HEADING = "Made for your car";
 
+function groupRowsForPositionSubheads(rows: Fp5ResultRow[]): Array<{ subhead: string | null; rows: Fp5ResultRow[] }> {
+  const labels = rows.map((r) => r.positionLabel).filter((l): l is string => Boolean(l));
+  const unique = new Set(labels);
+  if (unique.size <= 1) return [{ subhead: null, rows }];
+  const order = ["Front", "Rear", "Front & rear"];
+  const buckets = new Map<string, Fp5ResultRow[]>();
+  for (const row of rows) {
+    const key = row.positionLabel || "Other";
+    const list = buckets.get(key) || [];
+    list.push(row);
+    buckets.set(key, list);
+  }
+  const keys = [...buckets.keys()].sort((a, b) => {
+    const ai = order.indexOf(a);
+    const bi = order.indexOf(b);
+    if (ai === -1 && bi === -1) return a.localeCompare(b);
+    if (ai === -1) return 1;
+    if (bi === -1) return -1;
+    return ai - bi;
+  });
+  return keys.map((key) => ({ subhead: key, rows: buckets.get(key) || [] }));
+}
+
 export type Fp5Actions = {
   onAskRoam: () => void;
+  onAskForTier?: (matchType: string) => void;
   onDownloadReport: () => void;
   onSaveQuery: () => void;
   onUseInService: () => void;
@@ -156,14 +180,9 @@ export function Fp5Screen({ actions, data, partName, positionTrail }: { actions:
           </div>
 
           <div className="flex flex-col gap-space-lg">
-            {!sections.some((section) => section.tier === 1) ? (
-              <div className="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden p-space-md pl-space-lg">
-                <span className="font-headline-sm text-headline-sm font-bold text-on-surface">{STITCH_TIER1_HEADING}</span>
-              </div>
-            ) : null}
             {sections.map((section) => (
               <div key={section.tier} className="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-space-sm p-space-md bg-surface-container-low/60 pl-space-lg">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-space-sm p-space-md bg-surface-container-low/60 pl-space-lg border-l-4 border-primary">
                   <div className="flex items-center flex-wrap gap-space-sm">
                     <span className="font-headline-sm text-headline-sm font-bold text-on-surface">
                       {section.tier === 1 ? STITCH_TIER1_HEADING : section.heading}
@@ -173,10 +192,31 @@ export function Fp5Screen({ actions, data, partName, positionTrail }: { actions:
                   </div>
                   <p className="font-body-sm text-body-sm text-on-surface-variant max-w-xl">{section.description}</p>
                 </div>
-                {section.rows.map((row) => {
+                {section.isEmpty ? (
+                  <div className="p-space-md pl-space-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-space-md border-t border-surface-container-high">
+                    <p className="font-body-sm text-body-sm text-on-surface-variant italic">{section.emptyLine}</p>
+                    {section.askLabel ? (
+                      <button
+                        type="button"
+                        className="px-space-md py-2 rounded-lg bg-surface-container-lowest hover:bg-surface text-primary font-body-sm font-semibold shadow-sm transition-colors flex items-center gap-1.5 shrink-0"
+                        onClick={() => actions.onAskForTier?.(section.tag)}
+                      >
+                        <span>{section.askLabel}</span>
+                        <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
+                      </button>
+                    ) : null}
+                  </div>
+                ) : groupRowsForPositionSubheads(section.rows).map(({ subhead, rows: subRows }) => (
+                  <div key={subhead || "all"} className="border-t border-surface-container-high first:border-t-0">
+                    {subhead ? (
+                      <div className="px-space-lg pt-space-md pb-space-xs">
+                        <span className="font-label-code text-caption font-bold uppercase tracking-wider text-on-surface-variant">{subhead}</span>
+                      </div>
+                    ) : null}
+                    {subRows.map((row) => {
                   const open = expanded[row.id];
                   return (
-                    <div key={row.id} className="border-t border-surface-container-high">
+                    <div key={row.id} className={subhead ? "border-t border-surface-container-high/60" : "border-t border-surface-container-high"}>
                       <button
                         type="button"
                         className="p-space-lg flex flex-col sm:flex-row sm:items-center justify-between gap-space-md hover:bg-surface-container-low/30 transition-colors w-full text-left"
@@ -231,40 +271,12 @@ export function Fp5Screen({ actions, data, partName, positionTrail }: { actions:
                     </div>
                   );
                 })}
+                  </div>
+                ))}
               </div>
             ))}
           </div>
 
-          {data.emptyTierNotes.map((note) => (
-            <div key={note} className="bg-surface-container-low rounded-xl p-space-md flex flex-col sm:flex-row items-center justify-between gap-space-md">
-              <p className="font-body-sm text-body-sm text-on-surface-variant">{note}</p>
-              <button type="button" className="px-space-md py-2 rounded-lg bg-surface-container-lowest hover:bg-surface text-primary font-body-sm font-semibold shadow-sm transition-colors flex items-center gap-1.5 shrink-0" onClick={actions.onAskRoam}>
-                <span>Ask Roam to find another option</span>
-                <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
-              </button>
-            </div>
-          ))}
-
-          <div className="bg-surface-container-low rounded-xl p-space-md flex flex-col sm:flex-row items-center justify-between gap-space-md shadow-sm">
-            <p className="font-body-md text-body-sm text-on-surface-variant">
-              Don&apos;t see the right part? Ask Roam to add it to the catalog.
-            </p>
-            <button type="button" className="px-space-md py-2 rounded-lg bg-surface-container-lowest hover:bg-surface text-primary font-body-sm font-semibold shadow-sm transition-colors flex items-center gap-1.5 shrink-0" onClick={actions.onAskRoam}>
-              <span>Ask Roam to add this part</span>
-              <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
-            </button>
-          </div>
-
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-space-md pt-space-lg border-t border-surface-container-high">
-            <button type="button" className="w-full sm:w-auto px-space-lg py-2.5 rounded-lg bg-surface-container-lowest hover:bg-surface-container-low text-on-surface font-body-sm font-medium transition-colors flex items-center justify-center gap-2 shadow-sm" onClick={actions.onBackToPartSelection}>
-              <span className="material-symbols-outlined text-[18px]">arrow_back</span>
-              <span>Back to part selection</span>
-            </button>
-            <button type="button" className="w-full sm:w-auto px-space-lg py-2.5 rounded-lg bg-surface-container-lowest hover:bg-surface-container-low text-on-surface font-body-sm font-medium transition-colors flex items-center justify-center gap-2 shadow-sm" onClick={actions.onDownloadReport}>
-              <span className="material-symbols-outlined text-[18px]">file_download</span>
-              <span>Download fitment report</span>
-            </button>
-          </div>
           {data.matchRevisionLine !== "None yet" ? (
             <p className="font-label-code text-caption text-on-surface-variant text-center pt-space-md">{data.matchRevisionLine}</p>
           ) : null}

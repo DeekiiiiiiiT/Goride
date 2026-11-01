@@ -14,7 +14,7 @@ import {
   Label,
   Textarea,
 } from "../../maintenance-templates/plainUi";
-import { writeCatalogSearch } from "../../parts-database/partsCatalogUrl";
+import { writeCatalogSearch, type CatalogMatch } from "../../parts-database/partsCatalogUrl";
 
 export type PendingPartDrawerDisplay = {
   partTitle: string;
@@ -66,11 +66,29 @@ export function PendingPartRequestDrawer({
 
   if (!open || !group || !display) return null;
 
+  const matchTypeToCatalog = (raw?: string | null): CatalogMatch | undefined => {
+    const tag = String(raw || "").trim().toLowerCase();
+    if (tag === "oem" || tag.includes("made for")) return "oem";
+    if (tag === "sister") return "sister";
+    if (tag === "engine") return "engine";
+    if (tag === "aftermarket") return "aftermarket";
+    if (tag === "universal") return "universal";
+    return undefined;
+  };
+
   const openPartsDatabase = () => {
-    if (group.platformId) {
-      writeCatalogSearch({ tab: "Full database", variant: group.platformId }, "push");
-      window.dispatchEvent(new PopStateEvent("popstate"));
-    }
+    const variant = group.vehicleCatalogId || group.platformId;
+    if (!variant) return;
+    writeCatalogSearch(
+      {
+        tab: "Full database",
+        variant,
+        part: group.componentId || null,
+        match: matchTypeToCatalog(group.matchType) || null,
+      },
+      "push",
+    );
+    window.dispatchEvent(new PopStateEvent("popstate"));
   };
 
   return (
@@ -254,8 +272,12 @@ export function PendingPartRequestDrawer({
                 <span className="block truncate font-semibold text-on-surface">{display.vehicleHeadline}</span>
               </div>
               <div className="rounded border border-surface-variant bg-surface p-2">
+                <span className="block text-[10px] uppercase text-on-surface-variant">Match tier</span>
+                <span className="block truncate font-semibold text-on-surface">{group.matchType ? `${group.matchType} option` : "—"}</span>
+              </div>
+              <div className="rounded border border-surface-variant bg-surface p-2 col-span-2">
                 <span className="block text-[10px] uppercase text-on-surface-variant">Part Type &amp; Side</span>
-                <span className="block truncate font-semibold text-on-surface">{display.partTitle || "Air filter · Engine intake"}</span>
+                <span className="block truncate font-semibold text-on-surface">{display.partTitle || "—"}</span>
               </div>
             </div>
           </section>

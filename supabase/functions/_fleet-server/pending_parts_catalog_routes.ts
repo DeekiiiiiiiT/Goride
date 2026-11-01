@@ -6,6 +6,7 @@ import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { assertPlatformStaffResponse } from "./rbac_middleware.ts";
 import { dominionCan } from "../../../packages/auth-client/src/dominionPermissions.ts";
 import { getPlatformSettingsCached } from "./platform_settings.ts";
+import { applyPendingPartsGroupFilters, pendingPartsGroupKey } from "./pending_parts_group.ts";
 
 const PREFIX = "/make-server-37f42386/admin/pending-catalog/parts-queue";
 const FORBIDDEN_RESPONSE_KEYS = new Set([
@@ -36,9 +37,12 @@ export function stripPii<T extends Record<string, unknown>>(row: T): Record<stri
 export function groupPartsRequests(rows: Array<Record<string, unknown>>) {
   const groups = new Map<string, {
     groupId: string;
+    vehicleCatalogId: string | null;
     platformId: string | null;
     componentId: string | null;
     side: string | null;
+    fitDescriptor: string | null;
+    matchType: string | null;
     fleetCount: number;
     firstAsked: string | null;
     lastAsked: string | null;
@@ -47,18 +51,24 @@ export function groupPartsRequests(rows: Array<Record<string, unknown>>) {
     requestIds: string[];
   }>();
   for (const row of rows) {
+    const vehicleCatalogId = row.vehicle_catalog_id ? String(row.vehicle_catalog_id) : "";
     const platformId = row.platform_id ? String(row.platform_id) : "";
     const componentId = row.maintenance_component_id ? String(row.maintenance_component_id) : "";
     const side = row.install_side ? String(row.install_side) : "";
-    const groupId = `${platformId}:${componentId}:${side}`;
+    const fitDescriptor = row.fit_descriptor ? String(row.fit_descriptor) : "";
+    const matchType = row.match_type ? String(row.match_type) : "";
+    const groupId = pendingPartsGroupKey(row);
     const created = String(row.created_at || "");
     const existing = groups.get(groupId);
     if (!existing) {
       groups.set(groupId, {
         groupId,
+        vehicleCatalogId: vehicleCatalogId || null,
         platformId: platformId || null,
         componentId: componentId || null,
         side: side || null,
+        fitDescriptor: fitDescriptor || null,
+        matchType: matchType || null,
         fleetCount: 1,
         firstAsked: created || null,
         lastAsked: created || null,
@@ -94,7 +104,7 @@ export function registerPendingPartsCatalogRoutes(app: { get: Function; patch: F
     try {
       const { data, error } = await supabase
         .from("parts_sourcing_requests")
-        .select("id, platform_id, maintenance_component_id, install_side, install_position, status, created_at, photo_url, need_text, looking_note, resolution_note, kind")
+        .select("id, platform_id, vehicle_catalog_id, maintenance_component_id, install_side, install_position, fit_descriptor, match_type, status, created_at, photo_url, need_text, looking_note, resolution_note, kind")
         .eq("kind", "add_part_info")
         .order("created_at", { ascending: false })
         .limit(500);
@@ -117,17 +127,11 @@ export function registerPendingPartsCatalogRoutes(app: { get: Function; patch: F
     if (denied) return denied;
     try {
       const groupId = c.req.param("groupId");
-      const [platformId, componentId, side] = groupId.split(":");
       let query = supabase
         .from("parts_sourcing_requests")
-        .select("id, platform_id, maintenance_component_id, install_side, need_text, photo_url, created_at, status, looking_note, resolution_note, kind")
+        .select("id, platform_id, vehicle_catalog_id, maintenance_component_id, install_side, fit_descriptor, match_type, need_text, photo_url, created_at, status, looking_note, resolution_note, kind")
         .eq("kind", "add_part_info");
-      if (platformId) query = query.eq("platform_id", platformId);
-      else query = query.is("platform_id", null);
-      if (componentId) query = query.eq("maintenance_component_id", componentId);
-      else query = query.is("maintenance_component_id", null);
-      if (side) query = query.eq("install_side", side);
-      else query = query.is("install_side", null);
+      applyPendingPartsGroupFilters(query, groupId);
       const { data, error } = await query.order("created_at", { ascending: true });
       if (error) throw error;
       const notes = (data || []).map((row, index) => stripPii({
@@ -161,18 +165,12 @@ export function registerPendingPartsCatalogRoutes(app: { get: Function; patch: F
       const groupId = c.req.param("groupId");
       const body = await c.req.json() as Record<string, unknown>;
       const action = String(body.action || "");
-      const [platformId, componentId, sideKey] = groupId.split(":");
       const now = new Date().toISOString();
       const user = c.get("rbacUser") as { id?: string } | undefined;
 
       const applyUpdate = async (patch: Record<string, unknown>) => {
         let query = supabase.from("parts_sourcing_requests").update(patch).eq("kind", "add_part_info");
-        if (platformId) query = query.eq("platform_id", platformId);
-        else query = query.is("platform_id", null);
-        if (componentId) query = query.eq("maintenance_component_id", componentId);
-        else query = query.is("maintenance_component_id", null);
-        if (sideKey) query = query.eq("install_side", sideKey);
-        else query = query.is("install_side", null);
+        applyPendingPartsGroupFilters(query, groupId);
         const { error } = await query;
         if (error) throw error;
       };

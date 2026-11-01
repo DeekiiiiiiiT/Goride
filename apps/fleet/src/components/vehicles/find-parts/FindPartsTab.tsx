@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { pickBestPart } from "@roam/types/partsBestPick";
+import { formatPartsFitParam } from "@roam/types/partsFitParam";
 import { api } from "../../../services/api";
 import { usePermissions } from "../../../hooks/usePermissions";
 import { useAuth } from "../../auth/AuthContext";
@@ -53,6 +54,8 @@ export function FindPartsTab({
   const [partName, setPartName] = useState("");
   const [position, setPosition] = useState(params.get("pos") || "");
   const [side, setSide] = useState(params.get("side") || "");
+  const [fitParam, setFitParam] = useState(params.get("fit") || "");
+  const [requestMatchType, setRequestMatchType] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [attempts, setAttempts] = useState(0);
   const [linkMeta, setLinkMeta] = useState({ make: "", model: "", year: "", plate: "" });
@@ -77,13 +80,15 @@ export function FindPartsTab({
   const [fp11PreviewTab, setFp11PreviewTab] = useState<Fp11PreviewTab>("error");
   const deepLinkGateDone = useRef(false);
 
-  function writeUrl(next: { vehicle?: string; part?: string; pos?: string; side?: string; view?: string }) {
+  function writeUrl(next: { vehicle?: string; part?: string; pos?: string; side?: string; fit?: string; view?: string }) {
     const url = new URL(window.location.href);
     url.searchParams.set("tab", "find-parts");
     if (next.vehicle) url.searchParams.set("vehicle", next.vehicle);
     if (next.part) url.searchParams.set("part", next.part);
     if (next.pos) url.searchParams.set("pos", next.pos);
     if (next.side) url.searchParams.set("side", next.side);
+    if (next.fit) url.searchParams.set("fit", next.fit);
+    else if (next.fit === "") url.searchParams.delete("fit");
     if (next.view) url.searchParams.set("view", next.view);
     else url.searchParams.delete("view");
     window.history.replaceState(null, "", url);
@@ -196,11 +201,12 @@ export function FindPartsTab({
   }
 
   const search = useQuery({
-    queryKey: ["parts-find", vehicleId, make, model, year, variantId, componentId, position, side],
+    queryKey: ["parts-find", vehicleId, make, model, year, variantId, componentId, position, side, fitParam],
     queryFn: () => api.findParts({
       ...(vehicleId ? { vehicleId } : { make, model, year: String(year) }),
       ...(variantId ? { variantId } : {}),
       ...(componentId ? { componentId } : {}),
+      ...(fitParam ? { fit: fitParam } : {}),
       ...(position ? { position, pos: position } : {}),
       ...(side ? { side } : {}),
     }),
@@ -323,6 +329,8 @@ export function FindPartsTab({
           {step === "part" ? (
             <PartStep
               vehicleId={vehicleId}
+              initialComponentId={componentId}
+              initialPartName={partName}
               onBack={() => setStep(vehicleId ? "car" : "version")}
               onPick={(id, positionAware, name, onFileCount) => {
                 setComponentId(id);
@@ -338,11 +346,17 @@ export function FindPartsTab({
             <PositionStep
               vehicleId={vehicleId}
               componentId={componentId}
+              partName={partName}
               onBack={() => setStep("part")}
-              onPick={(pos, pickSide = "both") => {
+              onPick={(pos, pickSide = "both", fit) => {
                 setPosition(pos);
                 setSide(pickSide);
-                writeUrl({ vehicle: vehicleId, part: componentId, pos, side: pickSide });
+                const nextFit = fit || formatPartsFitParam([{
+                  axle: pos === "rear" ? "rear" : pos === "both" ? "front" : "front",
+                  side: (pickSide || "both") as "both",
+                }]);
+                setFitParam(nextFit);
+                writeUrl({ vehicle: vehicleId, part: componentId, pos, side: pickSide, fit: nextFit });
                 setStep("results");
               }}
             />
@@ -357,7 +371,15 @@ export function FindPartsTab({
               partName={partName}
               onRetry={() => search.refetch()}
               componentId={componentId}
-              onAsk={() => setStep("request")}
+              fitParam={fitParam}
+              onAsk={() => {
+                setRequestMatchType(null);
+                setStep("request");
+              }}
+              onAskForTier={(matchType) => {
+                setRequestMatchType(matchType);
+                setStep("request");
+              }}
               bestId={bestId(search.data)}
               unsure={variantId === "any"}
               canLog={Boolean(vehicleId && onUseInService)}
@@ -394,6 +416,8 @@ export function FindPartsTab({
               componentId={componentId}
               partName={partName}
               position={position}
+              fitParam={fitParam}
+              matchType={requestMatchType}
               onBack={() => setStep("part")}
               onViewActivity={() => { setView("activity"); writeUrl({ view: "activity" }); }}
             />

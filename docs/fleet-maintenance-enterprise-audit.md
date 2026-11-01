@@ -1,10 +1,18 @@
 # RoamFleet Maintenance — Enterprise Audit
 
-**Rev 1 · 31 Oct 2026** · Audit only — no code was changed.
-**Scope:** the whole Maintenance section (`Vehicle Operations → Maintenance`): By vehicle, Service ledger, Find parts (only where it touches maintenance), Log new service dialog, Bootstrap schedules, driver service requests, the overdue digest, and the database behind them.
+**Rev 2 · 31 Oct 2026 (evening)** · Audit only — no code was changed.
+**Scope:** the whole Maintenance section (`Vehicle Operations → Maintenance`): By vehicle, Service ledger, Find parts (only where it touches maintenance), Add Service Log dialog (every step), Bootstrap schedules, driver service requests, the overdue digest, the odometer feed, and the database behind them.
 **Lens:** systems architect + UI/UX lead + senior developers.
 **Telematics:** out of scope. It stays **Coming soon** (see §6.4 for the slot it plugs into later).
-**Checked against:** the code in this repo, the live GoRide database (read-only queries on 31 Oct 2026), and the screenshot of `localhost:3000` from 31 Oct 2026.
+**Checked against:** the code in this repo, the live GoRide database (read-only queries on 31 Oct 2026), and two screenshots of `localhost:3000/maintenance` (hub + Add Service Log dialog, 31 Oct 2026).
+
+### What changed in Rev 2
+- Re-checked every Rev 1 finding against code and live data: **all 18 are still open** (no maintenance code changed since Rev 1; same 2 work orders, no cron job, 0 inspection findings, 0 Fit odometer readings).
+- Mapped the new **"No-Telematics Phase 1"** guide (manual odometer, nightly rules engine, table separation, event bus) onto this system — §2.1.
+- New findings: **M-19** odometer is optional on a service log (0 is saved), **M-20** the "current odometer" is the highest reading ever, including readings flagged as anomalies, **M-21** the dialog asks for odometer last, **M-22** nightly job is per vehicle, must be per task.
+- **M-16 corrected:** Rev 1 said "refuse a completion odometer below the latest reading". That would block back-dated services (e.g. the Roomy's 6 Jan service typed in today). The check is now against readings **around the service date**.
+- Dialog UX findings from the new screenshot: **U-15 – U-22**.
+- §6.1 corrected: the maintenance tables live in **`public`**, not `fleet` (only `fleet.maintenance_logs` and `fleet.odometer_readings` are in `fleet`).
 
 ---
 
@@ -48,6 +56,30 @@ The blueprint is a good **map of capabilities**. Its **technology choices** are 
 
 **Rule for the whole build:** Postgres is the event bus, the work order is the source of truth, and everything else (schedule state, service ledger, alerts, KPIs) is **derived** from completed work orders + odometer readings.
 
+### 2.1 The "No-Telematics Phase 1" guide, mapped to this system (Rev 2)
+
+The guide is right about the **behaviour**: people are the odometer source, a nightly job finds what is due, and every completed service sets the next due point. Its diagram is a generic cloud stack. Here is each box, what exists today, and what to build.
+
+| Guide says | What you have today | Build it as | Finding |
+|---|---|---|---|
+| Fleet manager web app (React/Next.js) | `apps/fleet` (React + Vite) | Same app | — |
+| Driver / mechanic app (React Native), manual odometer | Driver app already records odometer at check-in (33 readings) and fuel (550 readings) | Add odometer to the DVIR and "Report a problem"; no separate mechanic app until you employ mechanics | M-07 |
+| **Odometer mandatory on the service log** | **Not mandatory.** Blank → saved as **0** | Required field, first step of the dialog, prefilled from current odometer | **M-19, M-21** |
+| `OdometerUpdated` event | `fleet.odometer_readings` (587 rows, sources fuel / checkin / service / manual) — written directly, no event | Every insert also writes `odometer.recorded` to `maintenance_events` | §6.3 |
+| Asset service (vehicles + odometer) | `fleet.vehicles` (relational, 2 rows) **but** maintenance reads vehicles through the KV bridge | Read `fleet.vehicles` + `fleet.odometer_readings` directly | M-10 |
+| Current odometer = last reading | Current odometer = **highest reading ever**, anomalies included | Latest trusted reading | **M-20** |
+| Nightly rules engine (cron 2 AM) | `/maintenance/overdue-digest` exists, **no cron job**, writes 0 alerts | `pg_cron` at 07:00 UTC (02:00 Jamaica), reads `maintenance_due_v` | M-05, **M-22** |
+| Rule `current_odometer >= next_due_km OR next_due_date <= today` per **vehicle** | Per schedule row, no look-ahead | Per **(vehicle × component × position)**, with due-soon window | M-09, **M-22** |
+| Service completed → next due = odometer + interval | Schedule rows are written by several paths and drift | `recompute_maintenance_schedule(vehicle_id)` from completed work-order lines | M-03 |
+| Separate tables: vehicles, schedules, work_orders, service_logs | **Too many**, not too few: 4 places store a service, 2 schedule tables, 2 compat views, an empty `explorer.odometer_reading` | One write path (work orders + lines), one schedule table, everything else a view | M-04 |
+| API gateway (Kong / AWS) | `fleet-ops` / `fleet-core` edge functions with `requireAuth` | Keep | — |
+| Event bus (Kafka / RabbitMQ) | None | `maintenance_events` outbox table in Postgres | §6.3 |
+| Redis cache for status | None | **Not needed.** `maintenance_vehicle_status_v` view (indexed) answers in one query at this size | M-10 |
+| S3 blob storage (inspections, receipts) | Supabase Storage via `uploadEvidenceFile` (invoice upload already works) | Keep; add inspection photos to the same bucket | M-07 |
+| Notification service (alerts, email) | Notification bell exists; maintenance never writes to it | `maintenance_alerts` → bell now, email/WhatsApp Phase 3 | M-05 |
+| Kubernetes / microservices | Supabase edge functions | Keep; split the 3,362-line file into modules | M-12 |
+| Phase 2 telematics → TimescaleDB | — | Same `odometer_readings` table with `source='telematics'` (partition by month when it passes ~1M rows) + `maintenance_events` | §6.4 |
+
 ---
 
 ## 3. Findings
@@ -82,7 +114,7 @@ Each finding has one fix.
 
 ### M-05 · High · The overdue alert job does nothing
 - **Evidence:** `maintenance_routes.ts:3297-3361` counts overdue rows and returns `alertsWritten: 0` (hard-coded). It never writes an alert. No `cron.job` exists for it (live DB). It reads odometer from `vehicle.odometer` (not the canonical odometer the hub uses) and ignores component schedules. `docs/maintenance-overdue-digest-cron.md` says it posts alerts — it does not.
-- **Fix:** Build the digest on the same derived view as the hub (§6.2, `fleet.maintenance_due_v`), write one row per (vehicle, task, day) into a real `fleet.maintenance_alerts` table (idempotent key already designed in that doc), show them in the notification bell, and schedule it with `pg_cron` daily at 13:00 UTC. Email/WhatsApp to the fleet manager in Phase 3.
+- **Fix:** Build the digest on the same derived view as the hub (§6.2, `fleet.maintenance_due_v`), write one row per (vehicle, task, day) into a real `fleet.maintenance_alerts` table (idempotent key already designed in that doc), show them in the notification bell, and schedule it with `pg_cron` daily at 07:00 UTC / 02:00 Jamaica (M-22). Email/WhatsApp to the fleet manager in Phase 3.
 
 ### M-06 · High · Work orders have no lifecycle and no screen
 - **Evidence:** the only path creates a work order already `in_progress` and completes it immediately (M-02). There is no work-order list, no "open" state, no assignee, no shop/vendor, no "awaiting parts", no approval, no downtime. The hub has no Work orders tab.
@@ -132,9 +164,9 @@ Required fields per state: `open` (vehicle, reported odometer, at least one line
 - **Evidence:** work orders and records can be edited/deleted (`PATCH/DELETE /maintenance-logs/...`) with no history row. Deleting a log reverses finance (sign-off doc) but nothing records who/why.
 - **Fix:** `fleet.maintenance_audit_log` (who, when, before/after JSON, reason) written by trigger on work orders and lines. Completed work orders cannot be deleted — only **voided** with a reason, which reverses finance and recomputes the schedule.
 
-### M-16 · Medium · Odometer entry has no front door in Maintenance
-- **Evidence:** readings arrive from check-in, fuel, service and manual elsewhere, but the hub has no "Log odometer". A completion odometer lower than the latest reading is not refused.
-- **Fix:** "Log odometer" action per vehicle (writes `source='manual'`, photo optional). Server refuses a work-order completion odometer below the vehicle's latest reading minus a 50 km tolerance, with a clear message. Readings that jump more than 1,500 km/day get labelled **"Check reading"** (stored, never blocked — capture, don't gate).
+### M-16 · Medium · Odometer entry has no front door in Maintenance *(fix corrected in Rev 2)*
+- **Evidence:** readings arrive from check-in, fuel, service and manual elsewhere, but the hub has no "Log odometer". A service odometer that does not fit the vehicle's other readings is not checked at all.
+- **Fix:** "Log odometer" action per vehicle (writes `source='manual'`, photo optional). For any service or manual reading, the server finds the nearest trusted reading **on or before** the service date and the nearest **after** it. If the new reading is below the earlier one (−50 km tolerance), above the later one (+50 km), or implies more than 1,500 km/day, it is **saved with `is_anomaly = true`** and shown with a **"Check reading"** label and the two neighbouring readings. It is never refused (capture, don't gate) and never used as the current odometer until someone clears the label (M-20). Back-dated services are therefore allowed.
 
 ### M-17 · Low · Parts used are not recorded against stock
 - **Evidence:** `maintenance_parts_usage` 0 rows, `part_warranty_claim` 0 rows; `fleet.inventory` not touched by work orders.
@@ -143,6 +175,22 @@ Required fields per state: `open` (vehicle, reported odometer, at least one line
 ### M-18 · Low · The docs overstate what is live
 - **Evidence:** `docs/maintenance-overdue-digest-cron.md` (says alerts are posted), `docs/fleet-maintenance-finance-audit.md` (says the core loop is complete).
 - **Fix:** Point both at this audit with a one-line banner: "Superseded by fleet-maintenance-enterprise-audit.md".
+
+### M-19 · Critical · Odometer is optional on a service log, and blank is saved as 0 *(Rev 2)*
+- **Evidence:** the Odometer field (`LogMaintenanceServiceDialog.tsx:1565-1574`) has no required check; Save Log is disabled only when there are no lines (`:1740`). The client sends `Number(formMeta.odo) || 0` (`:805`, `:817`). The server's complete route takes `body.odometer`, else the work order's odometer, **else 0** (`maintenance_routes.ts:2920-2922`); the log bridge does `Number(body.odometer ?? body.odo ?? 0)` (`:2052`). A service at 0 km then sets "next due" to one interval from zero, so the car reads Healthy for its next 5,000 km of a 195,000 km life (same failure as M-01).
+- **Fix:** Odometer is **required and > 0** on every service, work-order completion and driver request. The field is prefilled with the current odometer (M-20) and shows "last read 31 Oct · fuel". The server returns **400 `odometer_required`** when it is missing or 0 — on `POST /maintenance-work-orders`, `/complete`, and the log bridge (until the bridge is removed by M-02). The sanity check on the value itself is M-16 (label, not block).
+
+### M-20 · High · "Current odometer" is the highest reading ever, including flagged anomalies *(Rev 2)*
+- **Evidence:** `loadOdometerSupplementMaps` (`canonical_vehicle_odometer.ts:30-54`) takes the **max** reading per vehicle where `is_voided = false` and `is_hard = true`. It does **not** exclude `is_anomaly = true`. Live: **89 of 550** fuel readings for the Roomy are flagged anomaly (16%). Today the highest anomaly (191,722) is below the true max (195,192), so the screen is not wrong yet. One typo (e.g. 1,951,920 at a pump) would make the car permanently "overdue by 1.7 million km", and nothing but a manual void would fix it.
+- **Fix:** Current odometer = the reading with the **latest `recorded_at`** among `is_voided = false AND is_anomaly = false` readings (ties → highest). Expose it once, from SQL: `fleet.vehicle_current_odometer_v (vehicle_id, reading, recorded_at, source)`. Hub, digest, Log dialog prefill and driver app all read that view. Anomalies stay stored and visible with their label (M-16).
+
+### M-21 · High · The dialog asks for the odometer last, after all the work is picked *(Rev 2)*
+- **Evidence:** screenshot 1 — step "pick" shows packages, quick jobs and inspection, but no vehicle, date or odometer. Odometer and date appear only on the **review** step (`stepDescription('review')`, `:291`), after the user has built every line. The dialog header also does not say **which car** is being logged.
+- **Fix:** Dialog header always shows **vehicle name · plate · current odometer (last read date · source)**. The first step becomes **"When and at what mileage?"** — Date (default today) and Odometer (required, prefilled, M-19) — then the existing pick step. Review shows them read-only with an Edit link. When opened from the top "Log service" button with no vehicle chosen, step 0 is a vehicle picker.
+
+### M-22 · Medium · The guide's nightly rule is per vehicle; due state must be per task *(Rev 2)*
+- **Evidence:** the pasted guide's rule `SELECT * FROM vehicles WHERE current_odometer >= next_due_km OR next_due_date <= TODAY` assumes one `next_due_km` per vehicle. This repo already tracks 25 component rows for the Fit and per-corner positions (`vehicle_component_schedule`). Collapsing to one number per vehicle is what produces today's misleading "Next due (km) 128,000" column (U-05).
+- **Fix:** The nightly job (M-05) evaluates `maintenance_due_v` — one row per **(vehicle, component, position)** — and the vehicle's status is the **worst** of its rows (Do not drive > Overdue > Odometer needed > Due soon > OK). The job runs at **07:00 UTC (02:00 Jamaica)** via `pg_cron`, writes alerts (M-05) and the drift check (§9 item 4), and stores one `maintenance_job_runs` row (started, finished, vehicles checked, alerts written, error) so a missed night is visible on the hub ("Last checked 02:00 today"). Status on screen is still computed live from the view; the job never "sets" a status column.
 
 ---
 
@@ -164,6 +212,19 @@ Required fields per state: `open` (vehicle, reported odometer, at least one line
 | U-12 | Empty state tells the user to "bootstrap schedules from the vehicle profile" (jargon) | "This car has no service plan yet. **Set up plan**" — one button that runs bootstrap for that car |
 | U-13 | Driver requests appear above the table only when present, layout jumps | Move to their own **Requests** tab with a count badge |
 | U-14 | Telematics not represented | A disabled "Live vehicle health · Coming soon" card in the vehicle drawer (no fake data) |
+
+**Add Service Log dialog (screenshot 1, Rev 2)**
+
+| # | Issue | Fix |
+|---|---|---|
+| U-15 | Package card shows an internal id: "SERVICE PACKAGE · **TPL 5EFCDC04**" (`LogMaintenanceServiceDialog.tsx:1131`) | Show the interval and state instead: "Every 5,000 km or 3 months · **Overdue**" / "Due in 820 km". Never show ids |
+| U-16 | One package card on a 4-column grid, 3 empty slots; the other 4 catalogue packages (Inspection, Intermediate, Major, Long-term) are not offered | List every package that applies to this vehicle (merged global + catalogue templates), sorted most-due first, due ones highlighted |
+| U-17 | **Tires & wheels** and **Brakes** use the same circle icon; Engine uses a droplet-like icon next to Fluids' droplet | One distinct icon per system in `maintenanceCategoryIcons.ts` (tyre, brake disc, engine block, droplet only for Fluids) |
+| U-18 | 11 system tiles, no search — "brake pads" takes two clicks and a guess | Search box above Quick jobs that matches components across all systems ("oil", "pads", "wiper") and jumps straight to the line form |
+| U-19 | Quick-job tiles give no hint what is due on this car | Red/amber dot + "2 due" on any system tile with overdue / due-soon rows for this vehicle (from `maintenance_due_v`) |
+| U-20 | "Open digital inspection" sits at the bottom of a service log as a dashed card — inspections are a separate job | After M-07 the main entry is the Inspections tab; in this dialog it becomes a small text link "Do an inspection instead" |
+| U-21 | Tab **"Service ledger"** (circled) reads as money; its own copy says "Not expense books" | Rename per §5: **Overview** (was By vehicle) and **Service history** (was Service ledger); "Outstanding" moves to Schedule |
+| U-22 | Dialog title "Add Service Log" but toolbar says "Log new service" and save says "Save Log" | One verb everywhere: **Log service** (button, title, save) |
 
 ---
 
@@ -198,7 +259,9 @@ Pre-trip DVIR (≤ 90 seconds, big pass/fail buttons, photo on fail), "Report a 
 
 ## 6. Target architecture
 
-### 6.1 Data model (all in `fleet` schema, RLS by `organization_id`)
+### 6.1 Data model (RLS by `organization_id`)
+
+*Rev 2 correction:* today the maintenance tables are in **`public`**; only `maintenance_logs` and `odometer_readings` are in `fleet`. New tables go in `fleet` (matches the rest of the fleet domain); existing `public.maintenance_*` tables stay where they are — moving them is not worth the risk. `public.fleet_maintenance_logs` / `public.fleet_odometer_readings` are compat views; `explorer.odometer_reading` (0 rows) is unrelated to Fleet and is not used.
 
 | Table | Purpose | Status |
 |---|---|---|
@@ -213,7 +276,9 @@ Pre-trip DVIR (≤ 90 seconds, big pass/fail buttons, photo on fail), "Report a 
 | `fleet.odometer_readings` | Canonical odometer (already 587 rows) | exists → add `source='inspection'`, `flag` |
 | `maintenance_records`, `fleet.maintenance_logs`, `maintenance_service_ledger` | Become views over work orders | migrate |
 
-Views: `maintenance_due_v`, `maintenance_vehicle_status_v`, `maintenance_kpi_monthly_v`.
+| `maintenance_job_runs` | One row per nightly run (M-22) | **new** |
+
+Views: `vehicle_current_odometer_v` (M-20), `maintenance_due_v`, `maintenance_vehicle_status_v`, `maintenance_kpi_monthly_v`.
 
 ### 6.2 Trigger (PM) engine
 - Inputs: catalogue intervals, completed work-order lines, canonical odometer, calendar, org settings (due-soon window, severe service).
@@ -263,15 +328,15 @@ apps/fleet/src/components/maintenance/
 Each phase ends with its checks green before the next starts.
 
 **Phase 0 — Make today's numbers true (Critical)**
-M-01, M-02 (+ orphan clean-up), M-03, M-04, M-09, M-18.
-*Done when:* Fit shows "Odometer needed"; Roomy shows every overdue component with correct km; recompute = stored for every row; a double-clicked save creates one work order; one finance posting per work order.
+M-19 + M-20 first (every later number depends on the odometer), then M-01, M-02 (+ orphan clean-up), M-03, M-04, M-09, M-18.
+*Done when:* a service cannot be saved without an odometer; current odometer comes from `vehicle_current_odometer_v` and ignores anomalies; Fit shows "Odometer needed"; Roomy shows every overdue component with correct km; recompute = stored for every row; a double-clicked save creates one work order; one finance posting per work order.
 
 **Phase 1 — Speed + structure**
-M-10 (views), M-12 (split), U-01…U-13 on the existing screen, M-16.
+M-10 (views), M-12 (split), U-01…U-13 on the existing screen, M-16, M-21 + U-15…U-22 on the dialog.
 *Done when:* hub loads from views in one query; no `fromKvStore` in maintenance; tsc no worse than baseline.
 
 **Phase 2 — Level 3 workflow**
-M-06 work orders + tab, M-08 requests, M-13 vendors, M-05 alerts + cron, M-11 full component templates.
+M-06 work orders + tab, M-08 requests, M-13 vendors, M-05 + M-22 nightly job + alerts, M-11 full component templates.
 *Done when:* request → draft WO → open → in_shop → completed → closed works end-to-end; digest writes alerts once per day; bell shows them.
 
 **Phase 3 — Inspections + driver**
@@ -296,6 +361,8 @@ M-14 KPIs + downtime, M-15 audit trail + void, approval threshold, M-17 parts fr
    - vehicle with schedule but no odometer reading in 7 days
    - completion odometer < previous reading
 5. **e2e:** log service, request → WO lifecycle, DVIR fail → draft WO.
+6. **Odometer (Rev 2):** API returns 400 `odometer_required` for missing / 0; a back-dated service below today's reading saves (labelled only if it breaks its date neighbours); an anomaly reading higher than all others does **not** change current odometer.
+7. **Nightly job (Rev 2):** a `maintenance_job_runs` row exists for every day; alert if yesterday's is missing or errored.
 
 ---
 
@@ -309,3 +376,5 @@ M-14 KPIs + downtime, M-15 audit trail + void, approval threshold, M-17 parts fr
 | Overdue digest | not scheduled; writes 0 alerts |
 | Inspections | 11 templates, 17 items, 0 findings |
 | Templates | 5, all global, all recurring |
+| Odometer readings (Rev 2) | 587 total, all Roomy: fuel 550 (**89 flagged anomaly**), check-in 33, service 3, manual 1 (voided); 0 readings at 0 km |
+| Rev 1 findings fixed since Rev 1 | none (code and data unchanged) |

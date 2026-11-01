@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Fp3Screen } from "./screens/Fp3Screen";
 import { buildFp3ViewModel, type Fp3SearchHit } from "./findPartsViewModels";
 import { usePartsBrowse, usePartsSymptoms, usePartsTerm, usePartsVehicleContext } from "./findPartsQueries";
-import { onFileCountForComponent } from "./findPartsRoute";
+import { onFileCountForComponent, partNameForComponent, positionAwareForComponent } from "./findPartsRoute";
 
 type SpeechRecognitionCtor = new () => {
   lang: string;
@@ -18,13 +18,31 @@ function speechSupported(): boolean {
     || (window as unknown as { webkitSpeechRecognition?: SpeechRecognitionCtor }).webkitSpeechRecognition);
 }
 
+function resolvePartFromBrowse(
+  browse: Parameters<typeof onFileCountForComponent>[0],
+  partId: string,
+): { id: string; name: string; positionAware: boolean } | null {
+  if (!partId || !browse) return null;
+  const name = partNameForComponent(browse, partId);
+  if (!name) return null;
+  return {
+    id: partId,
+    name,
+    positionAware: positionAwareForComponent(browse, partId),
+  };
+}
+
 export function PartStep({
   vehicleId,
+  initialComponentId,
+  initialPartName,
   onBack,
   onPick,
   onSkip,
 }: {
   vehicleId: string;
+  initialComponentId?: string;
+  initialPartName?: string;
   onBack: () => void;
   onPick: (componentId: string, positionAware: boolean, name: string, onFileCount: number) => void;
   onSkip: () => void;
@@ -35,8 +53,8 @@ export function PartStep({
   const symptoms = usePartsSymptoms(variantId || undefined, Boolean(vehicleId));
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedAreaId, setSelectedAreaId] = useState("");
-  const [selectedChipId, setSelectedChipId] = useState("");
-  const [selectedPartName, setSelectedPartName] = useState("");
+  const [selectedChipId, setSelectedChipId] = useState(initialComponentId || "");
+  const [selectedPartName, setSelectedPartName] = useState(initialPartName || "");
   const [selectedPositionAware, setSelectedPositionAware] = useState(false);
   const [openSymptomId, setOpenSymptomId] = useState("");
   const term = usePartsTerm(searchQuery, searchQuery.trim().length >= 2);
@@ -74,6 +92,21 @@ export function PartStep({
     });
   }, [term.data, browseData]);
 
+  useEffect(() => {
+    const fromUrl = typeof window !== "undefined"
+      ? new URLSearchParams(window.location.search).get("part")?.trim() || ""
+      : "";
+    const partId = initialComponentId || fromUrl;
+    if (!partId || !browseData) return;
+    const resolved = resolvePartFromBrowse(browseData, partId);
+    if (!resolved) return;
+    setSelectedChipId(resolved.id);
+    setSelectedPartName(resolved.name);
+    setSelectedPositionAware(resolved.positionAware);
+  }, [initialComponentId, browseData]);
+
+  const nextHint = selectedAreaId && !selectedChipId ? "Pick a part below" : "";
+
   const data = buildFp3ViewModel({
     ctx: (ctx.data as Record<string, unknown> | undefined) ?? null,
     browse: browseData,
@@ -82,6 +115,7 @@ export function PartStep({
     selectedChipId,
     selectedPartName,
     searchHits,
+    nextHint,
   });
 
   useEffect(() => {
@@ -140,6 +174,7 @@ export function PartStep({
           onBack,
           onNext: advanceNext,
           nextDisabled: !selectedChipId,
+          nextHint: data.nextHint,
           onPickPart: selectPart,
           onPickProblem: (id, name, positionAware) => commitPart(id, name, positionAware),
           onSelectArea: (id) => setSelectedAreaId(id),

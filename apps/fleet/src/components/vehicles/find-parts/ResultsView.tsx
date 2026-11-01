@@ -60,6 +60,7 @@ export function ResultsView({
   componentId,
   onRetry,
   onAsk,
+  onAskForTier,
   onUseInService,
   onBackToPartSelection,
   onChangeCar,
@@ -77,6 +78,7 @@ export function ResultsView({
   componentId?: string;
   onRetry: () => void;
   onAsk: () => void;
+  onAskForTier?: (matchType: string) => void;
   onUseInService: (item: PartItem) => void;
   onBackToPartSelection: () => void;
   onChangeCar: () => void;
@@ -185,6 +187,7 @@ export function ResultsView({
 
   const actions = {
     onAskRoam: onAsk,
+    onAskForTier,
     onDownloadReport: () => { void downloadCurrentFitmentReport(); },
     onSaveQuery: () => {
       void saveCurrentPartsSearch(result?.car?.label || partName || "Saved search");

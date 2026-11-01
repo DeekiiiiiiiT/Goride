@@ -12,6 +12,8 @@ export function RequestPartPanel({
   componentId,
   partName,
   position,
+  fitParam,
+  matchType,
   onBack,
   onViewActivity,
 }: {
@@ -21,6 +23,8 @@ export function RequestPartPanel({
   componentId: string;
   partName?: string;
   position?: string | null;
+  fitParam?: string;
+  matchType?: string | null;
   onBack: () => void;
   onViewActivity: () => void;
 }) {
@@ -58,6 +62,8 @@ export function RequestPartPanel({
       maintenanceComponentId: componentId || undefined,
       partName: partName || undefined,
       note,
+      matchType: matchType || undefined,
+      fit: fitParam || undefined,
       side: position === "left" || position === "right" ? position : undefined,
       position: position && !["left", "right", "both"].includes(position) ? position : undefined,
       vehicleCatalogId: ctxVariant || undefined,

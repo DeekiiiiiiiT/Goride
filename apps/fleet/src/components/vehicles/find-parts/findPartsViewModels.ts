@@ -1,6 +1,7 @@
 import { formatKm, formatPercent, formatPriceJmd, orDash, orNoneYet, wearLifeBarPercent } from "./findPartsFormat";
 import type { PartsMyVehicleRow, PartsVehicleOptions } from "./findPartsTypes";
 import { PART_MATCH_TIERS } from "../../../../../../packages/types/src/partsResolution.ts";
+import { formatPartsVersionTag, readPartsVehicleSpecs } from "@roam/types/partsVehicleContext";
 
 function catalogPhotoUrl(raw?: string | null): string {
   const url = String(raw || "").trim();
@@ -232,6 +233,7 @@ export type Fp3ViewModel = {
   telematicsLine: string;
   chassisCode: string;
   versionTag: string;
+  nextHint?: string;
 };
 
 type Fp3BrowseInput = {
@@ -400,60 +402,6 @@ function fp3StitchFallbackAreas(): Fp3AreaRow[] {
   }));
 }
 
-function fp3StitchFallbackSymptoms(): Fp3SymptomRow[] {
-  return [
-    {
-      id: "sym-brake-noise",
-      name: "Grinding or squealing when braking",
-      weightLabel: "High probability (88%)",
-      answerText: "Usually worn friction material contacting the rotor or drum.",
-      parts: [
-        {
-          id: "sym-pad",
-          name: "Friction disc assembly",
-          subName: "Vented disc plate",
-          priceLabel: "—",
-          weightLabel: "High probability (88%)",
-          onFileLabel: "On file",
-          matchTypeLabel: "OEM standard",
-          crossRefLabel: "6 cross-refs",
-        },
-        {
-          id: "sym-shoe",
-          name: "Brake shoes (rear drum)",
-          subName: "Internal expander shoe",
-          priceLabel: "—",
-          weightLabel: "High probability (76%)",
-          onFileLabel: "On file",
-          matchTypeLabel: "OEM & Aftermarket",
-          crossRefLabel: "2 cross-refs",
-        },
-      ],
-    },
-    {
-      id: "sym-start",
-      name: "Hard starting or slow crank",
-      weightLabel: "High probability (72%)",
-      answerText: "Starting system, auxiliary battery voltage drop, or alternator fault.",
-      parts: [],
-    },
-    {
-      id: "sym-check",
-      name: "Check engine light / emissions fault",
-      weightLabel: "Moderate (64%)",
-      answerText: "Sensors, catalytic system, ignition coils, or fuel trim variances.",
-      parts: [],
-    },
-    {
-      id: "sym-lamps",
-      name: "Exterior lighting failure",
-      weightLabel: "Moderate (58%)",
-      answerText: "Exterior lamps, headlamp units, turn signals, or instrument illumination.",
-      parts: [],
-    },
-  ];
-}
-
 function fp3SymptomWeight(rank: number): string {
   const pct = Math.max(55, 100 - (Math.max(rank, 1) - 1) * 12);
   if (rank <= 1) return `High probability (${formatPercent(pct)})`;
@@ -471,6 +419,7 @@ export function buildFp3ViewModel(input: {
   selectedChipId?: string;
   selectedPartName?: string;
   searchHits?: Fp3SearchHit[];
+  nextHint?: string;
 }): Fp3ViewModel {
   const ctx = input.ctx || {};
   const trim = orDash(String(ctx.trim || ctx.variant || ctx.subtitle || ""));
@@ -581,14 +530,19 @@ export function buildFp3ViewModel(input: {
     }
   }
   if (!symptomRows.length) {
-    symptomRows.push(...fp3StitchFallbackSymptoms());
+    symptomRows.push({
+      id: "empty",
+      name: "None yet",
+      weightLabel: "—",
+      answerText: "None yet",
+      parts: [],
+    });
   }
   const partTotal = areaRows.reduce((sum, area) => sum + (area.partCount || 0), 0) || tiles.length;
   const selectedChip = areaRows.flatMap((a) => a.subChips).find((c) => c.selected);
   const hubLabel = orNoneYet(String(ctx.hub_label || ctx.hubLabel || "Fleet hub"));
   const orgShortCode = orNoneYet(String(ctx.orgShortCode || ctx.org_short_code || "Fleet"));
-  const versionTagRaw = orNoneYet(String(ctx.versionTag || ctx.trim || ctx.variant || ctx.subtitle || ""));
-  const versionTag = versionTagRaw !== "None yet" ? versionTagRaw : "None yet";
+  const versionTag = formatPartsVersionTag(ctx);
   const hasBrowseAreas = Boolean(input.browse?.areas?.length || input.browse?.systems?.length);
   const categoryTotal = hasBrowseAreas ? areaRows.length : 11;
   return {
@@ -612,7 +566,8 @@ export function buildFp3ViewModel(input: {
     orgShortCode,
     telematicsLine: fp3TelematicsLine(ctx),
     chassisCode: orDash(String(ctx.chassis_code || "")),
-    versionTag,
+    versionTag: formatPartsVersionTag(ctx),
+    nextHint: input.nextHint || "",
   };
 }
 
@@ -661,22 +616,11 @@ export type Fp4ViewModel = {
   axleRows: Fp4AxleRow[];
   sideOptions: Fp4SideOption[];
   options: Fp4OptionRow[];
+  showSideStep?: boolean;
+  axleSetAdvisory?: string | null;
+  frontSideOptions?: Fp4SideOption[];
+  rearSideOptions?: Fp4SideOption[];
 };
-
-function formatLabourMinutes(mins: number | null | undefined): string {
-  if (mins == null || !Number.isFinite(mins) || mins <= 0) return "None yet";
-  const rounded = Math.round(mins);
-  if (rounded < 60) return `${rounded} mins`;
-  const h = Math.floor(rounded / 60);
-  const m = rounded % 60;
-  return m > 0 ? `${h} hr ${m} mins` : `${h} hr`;
-}
-
-function fp4Heading(id: string): string {
-  if (id === "rear") return "Back (rear)";
-  if (id === "both") return "Both (front & back)";
-  return "Front";
-}
 
 const STITCH_TIER_DESCRIPTIONS: Record<number, string> = {
   1: "The exact factory component designed and installed by the vehicle manufacturer.",
@@ -686,85 +630,7 @@ const STITCH_TIER_DESCRIPTIONS: Record<number, string> = {
   5: "Consumables, fluids, and hardware that match factory chemical and dimensional tolerances.",
 };
 
-export function buildFp4ViewModel(input: {
-  ctx?: Record<string, unknown> | null;
-  positions?: Array<{ id: string; title: string; labour_minutes?: number; offerLabel?: string; subtitle?: string; infoLine?: string }>;
-  selectedAxle?: string;
-  selectedSide?: string;
-}): Fp4ViewModel {
-  const ctx = input.ctx || {};
-  const labourDefault = Number(ctx.labour_minutes ?? ctx.labourMinutes);
-  const partLabel = orNoneYet(String(ctx.part_label || ctx.partName || "parts"));
-  const versionTag = orNoneYet(String(ctx.versionTag || ctx.trim || ctx.variant || ctx.subtitle || ""));
-  const positions = input.positions?.length
-    ? input.positions
-    : [
-        { id: "front", title: "Front brake pad set", labour_minutes: labourDefault || 45 },
-        { id: "rear", title: "Rear brake shoe kit (drum)", labour_minutes: labourDefault ? labourDefault + 5 : 50 },
-        { id: "both", title: "Complete vehicle axle combination", labour_minutes: labourDefault ? labourDefault * 2 : 95, offerLabel: "Full set" },
-      ];
-  const selectedAxle = input.selectedAxle || "front";
-  const selectedSide = input.selectedSide || "both";
-  const axleRows: Fp4AxleRow[] = [
-    { id: "front", title: "Front", typeTag: "DISC", partTitle: "Front brake pad set", onFileLabel: "4 on file", selected: selectedAxle === "front" },
-    { id: "rear", title: "Back (rear)", typeTag: "DRUM", partTitle: "Rear brake shoe kit (drum)", onFileLabel: "2 on file", selected: selectedAxle === "rear" },
-    { id: "both", title: "Both (front & back)", typeTag: "FULL SET", partTitle: "Complete vehicle axle combination", onFileLabel: "6 on file", selected: selectedAxle === "both" },
-  ];
-  const sideOptions: Fp4SideOption[] = [
-    { id: "left", label: "Left", selected: selectedSide === "left" },
-    { id: "right", label: "Right", selected: selectedSide === "right" },
-    { id: "both", label: "Both sides", selected: selectedSide === "both" },
-  ];
-  const chassisRaw = String(ctx.chassis_code || ctx.chassis || "").trim();
-  const chassisCode = chassisRaw ? orDash(chassisRaw) : "M900A-BGBGB";
-  return {
-    plate: orDash(String(ctx.plate || "")),
-    vehicleLabel: orNoneYet(String(ctx.label || "")),
-    odometerLabel: formatKm(Number(ctx.odometer)),
-    lastServiceLabel: orNoneYet(String(ctx.lastService || ctx.last_service || "")),
-    healthPercent: formatPercent(Number(ctx.health_pct)),
-    hubLabel: orNoneYet(String(ctx.hub_label || ctx.hubLabel || "Fleet hub")),
-    fleetTip: orNoneYet(String(ctx.fleet_tip || ctx.fleetTip || "")),
-    trimLabel: orNoneYet(String(ctx.trim || ctx.variant || "")),
-    versionTag,
-    partLabel,
-    fitmentEyebrow: `ROAM SPECIFICATION MATRIX · ${partLabel.toUpperCase()} FITMENT`,
-    diagramBadge: `${selectedAxle === "rear" ? "REAR" : "FRONT"} AXLE · ${selectedSide === "both" ? "BOTH SIDES" : selectedSide.toUpperCase()}`,
-    scaleLabel: "SCALE 1:32",
-    frontSpec: {
-      title: "FRONT · Disc brakes",
-      tag: "OEM VENTED",
-      description: "Vented front disc rotor & floating caliper assembly",
-      rotor: String(ctx.brake_front_rotor_mm || ctx.brakeFrontRotorMm || "246mm"),
-      piston: String(ctx.brake_front_piston || ctx.brakeFrontPiston || "51mm single"),
-    },
-    rearSpec: {
-      title: "REAR · Drum brakes",
-      tag: "DRUM SHOE",
-      description: "Leading-trailing shoe drum assembly with manual adjustment",
-      drum: String(ctx.brake_rear_drum_mm || ctx.brakeRearDrumMm || "180mm"),
-      cylinder: String(ctx.brake_rear_cylinder_mm || ctx.brakeRearCylinderMm || "17.5mm"),
-    },
-    chassisProfile: {
-      code: chassisCode !== "—" ? chassisCode : "M900A-BGBGB",
-      drive: String(ctx.drivetrain || ctx.drive || "FWD (2WD)"),
-      abs: String(ctx.abs_channels || ctx.absChannels || "4-Wheel Bosch"),
-      handbrake: String(ctx.handbrake_type || ctx.handbrakeType || "Rear drum cable"),
-      pattern: String(ctx.hub_bolt_pattern || ctx.hubBoltPattern || "4 × 100 PCD"),
-    },
-    axleRows,
-    sideOptions,
-    options: positions.map((p) => ({
-      id: p.id,
-      heading: fp4Heading(p.id),
-      title: p.title,
-      subtitle: orNoneYet((p as { subtitle?: string }).subtitle),
-      replacementTimeLabel: formatLabourMinutes(Number((p as { labour_minutes?: number }).labour_minutes ?? labourDefault)),
-      offerLabel: p.id === "both" ? "Recommended Package" : orNoneYet(p.offerLabel),
-      infoLine: orNoneYet((p as { infoLine?: string }).infoLine || "Fits disc brake calipers for this chassis."),
-    })),
-  };
-}
+export { buildFp4ViewModel } from "./findPartsBuildFp4";
 
 export type Fp5ResultRow = {
   id: string;
@@ -785,6 +651,7 @@ export type Fp5ResultRow = {
   interchangeLine: string;
   scheduleLine: string;
   emptyGapNote: string;
+  positionLabel?: string | null;
 };
 
 export type Fp5TierSection = {
@@ -794,6 +661,9 @@ export type Fp5TierSection = {
   tag: string;
   count: number;
   rows: Fp5ResultRow[];
+  isEmpty?: boolean;
+  emptyLine?: string;
+  askLabel?: string;
 };
 
 export type Fp5ViewModel = {
@@ -843,6 +713,14 @@ function tierMeta(tier: number) {
   };
 }
 
+function formatResultPositionLabel(item: Record<string, unknown>): string | null {
+  const raw = String(item.position ?? (item.part as { position?: string } | undefined)?.position ?? "").trim().toLowerCase();
+  if (raw === "front") return "Front";
+  if (raw === "rear") return "Rear";
+  if (raw === "both") return "Front & rear";
+  return null;
+}
+
 function rowFromItem(
   section: { label?: string; tier?: number },
   item: Record<string, unknown>,
@@ -890,6 +768,7 @@ function rowFromItem(
     interchangeLine: orNoneYet(String(interchangeRaw || "—")),
     scheduleLine: schedule || "None yet",
     emptyGapNote: "",
+    positionLabel: formatResultPositionLabel(item),
   };
 }
 
@@ -934,7 +813,7 @@ export function buildFp5ViewModel(input: {
 }): Fp5ViewModel {
   const ctx = input.vehicleContext || {};
   const car = input.result?.car || {};
-  const trimFromCtx = orNoneYet(String(ctx.trim || ctx.variant || (input.result as { trimBadge?: string })?.trimBadge || ""));
+  const trimFromCtx = formatPartsVersionTag(ctx);
   const filterTab = input.filterTab || "all";
   const trimScope = input.trimScope || "specific";
   const trimScopeLabel = trimScope === "all"
@@ -992,7 +871,6 @@ export function buildFp5ViewModel(input: {
   }
   for (const tierRow of PART_MATCH_TIERS) {
     const sectionRows = tierMap.get(tierRow.tier) || [];
-    if (!sectionRows.length) continue;
     tierSections.push({
       tier: tierRow.tier,
       heading: tierRow.plainLabel,
@@ -1000,13 +878,12 @@ export function buildFp5ViewModel(input: {
       tag: tierRow.tag,
       count: sectionRows.length,
       rows: sectionRows,
+      isEmpty: sectionRows.length === 0,
+      emptyLine: sectionRows.length === 0 ? "None on file for your car yet." : "",
+      askLabel: sectionRows.length === 0 ? `Ask Roam to find a ${tierRow.tag} option` : "",
     });
   }
-  const presentTiers = new Set(allRows.map((r) => r.tier));
-  const emptyTierNotes = PART_MATCH_TIERS
-    .filter((t) => !presentTiers.has(t.tier))
-    .map((t) => `Nothing on file for: ${t.plainLabel.toLowerCase()}.`);
-  const specs = readVehicleSpecs(ctx);
+  const specs = readPartsVehicleSpecs(ctx);
   const trimSeriesLabel = orNoneYet(String(specs.trim_series || ctx.version || trimFromCtx || ""));
   const engineLayoutLabel = formatEngineLayoutLabel(specs);
   const drivetrainLabel = orNoneYet(String(specs.drivetrain || ""));
@@ -1069,7 +946,7 @@ export function buildFp5ViewModel(input: {
     componentTitle: searchPartName,
     fitYearLabel: year ? `Fit ${year}` : "None yet",
     tierSections,
-    emptyTierNotes,
+    emptyTierNotes: [] as string[],
     archiveEyebrow,
     resultsHeadline,
     trimSeriesLabel,

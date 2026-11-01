@@ -20,7 +20,7 @@ import {
   uiStatusBucket,
 } from "../../../../services/pendingPartsCatalogService";
 import { PendingPartRequestDrawer, type PendingPartDrawerDisplay } from "./PendingPartRequestDrawer";
-import { PendingPartsEmpty, PendingPartsError, PendingPartsLoading } from "./PendingPartsStates";
+import { PendingPartsError } from "./PendingPartsStates";
 
 type StatusFilter = "all" | "new" | "looking" | "added" | "cant_find";
 
@@ -91,8 +91,8 @@ export function PendingPartsCatalogTab({ onSyncSeconds }: { onSyncSeconds?: (sec
       setPartNames(names);
       setSyncedAt(Date.now());
       onSyncSeconds?.(4);
-      const platformIds = queue.items.map((g) => g.platformId).filter(Boolean) as string[];
-      const catalogMap = await fetchVehicleCatalogBriefs(token, platformIds);
+      const catalogIds = queue.items.map((g) => g.vehicleCatalogId || g.platformId).filter(Boolean) as string[];
+      const catalogMap = await fetchVehicleCatalogBriefs(token, catalogIds);
       setVehicles(catalogMap);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Could not load requests");
@@ -108,8 +108,10 @@ export function PendingPartsCatalogTab({ onSyncSeconds }: { onSyncSeconds?: (sec
   const rows: RowView[] = useMemo(() => {
     return items.map((group) => {
       const bucket = uiStatusBucket(group.status);
-      const v = group.platformId ? vehicles.get(group.platformId) : undefined;
-      const part = formatPartLabel(group.componentId, group.side, partNames);
+      const v = group.vehicleCatalogId
+        ? vehicles.get(group.vehicleCatalogId)
+        : (group.platformId ? vehicles.get(group.platformId) : undefined);
+      const part = formatPartLabel(group.componentId, group.side, partNames, group.matchType);
       return {
         group,
         bucket,
@@ -233,14 +235,8 @@ export function PendingPartsCatalogTab({ onSyncSeconds }: { onSyncSeconds?: (sec
     URL.revokeObjectURL(url);
   };
 
-  if (loading && items.length === 0 && !error) {
-    return <PendingPartsLoading />;
-  }
-  if (error && items.length === 0) {
+  if (error && items.length === 0 && !loading) {
     return <PendingPartsError message={error} onRetry={() => void load()} />;
-  }
-  if (!loading && items.length === 0) {
-    return <PendingPartsEmpty />;
   }
 
   const filterChip = (id: StatusFilter, label: string) => {
@@ -405,10 +401,17 @@ export function PendingPartsCatalogTab({ onSyncSeconds }: { onSyncSeconds?: (sec
               </tr>
             </thead>
             <tbody className="font-body-sm text-body-sm text-on-surface">
-              {pageRows.length === 0 ? (
+              {loading && items.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="px-space-md py-12 text-center text-on-surface-variant">
-                    No matching requests.
+                    Loading part requests…
+                  </td>
+                </tr>
+              ) : pageRows.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="px-space-md py-12 text-center text-on-surface-variant">
+                    <p className="font-headline-sm text-headline-sm text-on-surface mb-1">No part requests yet.</p>
+                    <p className="font-body-sm text-body-sm">When a fleet asks for a part we don&apos;t have, it shows here.</p>
                   </td>
                 </tr>
               ) : (

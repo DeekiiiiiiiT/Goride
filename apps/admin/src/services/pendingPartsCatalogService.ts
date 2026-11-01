@@ -14,9 +14,12 @@ function edgeHeaders(accessToken: string, contentType?: string): HeadersInit {
 
 export type PendingPartsQueueGroup = {
   groupId: string;
+  vehicleCatalogId?: string | null;
   platformId: string | null;
   componentId: string | null;
   side: string | null;
+  fitDescriptor?: string | null;
+  matchType?: string | null;
   fleetCount: number;
   firstAsked: string | null;
   lastAsked: string | null;
@@ -187,12 +190,15 @@ export function formatPartLabel(
   componentId: string | null,
   side: string | null,
   names: PartsBrowseNameMap,
+  matchType?: string | null,
 ): { title: string; subtitle: string } {
   const meta = componentId ? names.get(componentId) : undefined;
-  let title = meta?.plainName || (componentId ? "Requested part" : "Part request");
+  const baseName = meta?.plainName || (componentId ? "Requested part" : "Part request");
+  let title = baseName;
   if (side) {
     const sideLabel = side.charAt(0).toUpperCase() + side.slice(1);
-    title = `${title} · ${sideLabel}`;
+    title = `${baseName} · ${sideLabel}`;
   }
-  return { title, subtitle: meta?.areaName || "Fleet part request" };
+  const subtitle = matchType ? `${baseName} · ${matchType} option` : (meta?.areaName || "Fleet part request");
+  return { title, subtitle };
 }

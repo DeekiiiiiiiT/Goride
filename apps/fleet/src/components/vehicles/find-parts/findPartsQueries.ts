@@ -47,6 +47,15 @@ export function usePartsBrowse(variantId?: string, enabled = true) {
   });
 }
 
+export function usePartsComponentFitHints(variantId?: string, componentId?: string, enabled = true) {
+  return useQuery({
+    queryKey: ["parts-fit-hints", variantId || "", componentId || ""],
+    queryFn: () => api.partsComponentFitHints(String(variantId), String(componentId)),
+    enabled: enabled && Boolean(variantId && componentId),
+    staleTime: 120_000,
+  });
+}
+
 export function usePartsVehicleContext(vehicleId: string, componentId?: string, enabled = true) {
   return useQuery({
     queryKey: ["parts-vehicle-context", vehicleId, componentId || ""],

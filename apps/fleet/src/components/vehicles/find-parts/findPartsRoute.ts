@@ -1,9 +1,25 @@
-type BrowseComponent = { id: string; count?: number; positionAware?: boolean };
+type BrowseComponent = { id: string; count?: number; positionAware?: boolean; plainName?: string; name?: string };
 
 type BrowseShape = {
   systems?: Array<{ components?: BrowseComponent[] }>;
   common?: BrowseComponent[];
+  areas?: Array<{ parts?: BrowseComponent[] }>;
 };
+
+export function partNameForComponent(browse: BrowseShape | undefined, componentId: string): string {
+  if (!componentId || !browse) return "";
+  for (const system of browse.systems || []) {
+    const match = system.components?.find((row) => row.id === componentId);
+    if (match) return String(match.plainName || match.name || "");
+  }
+  for (const area of browse.areas || []) {
+    const match = area.parts?.find((row) => row.id === componentId);
+    if (match) return String(match.name || "");
+  }
+  const common = browse.common?.find((row) => row.id === componentId);
+  if (common) return String(common.plainName || common.name || "");
+  return "";
+}
 
 export function positionAwareForComponent(browse: BrowseShape | undefined, componentId: string): boolean {
   if (!componentId || !browse) return false;
@@ -22,7 +38,7 @@ export function stepFromPartDeepLink(
 ): "position" | "results" | "request" {
   const partId = params.get("part");
   if (!partId) return "request";
-  if (params.get("pos")) return "results";
+  if (params.get("fit") || params.get("pos")) return "results";
   if (!browse) return "position";
   const onFile = onFileCountForComponent(browse, partId);
   return stepAfterPartPick(onFile, positionAwareForComponent(browse, partId));
