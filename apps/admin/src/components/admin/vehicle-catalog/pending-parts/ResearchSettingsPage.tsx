@@ -263,9 +263,16 @@ export function ResearchSettingsPage() {
                         <div className="flex flex-col gap-1">
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-mono-md font-semibold">{row.domain}</span>
-                            {row.blocked ? (
+                            {row.blocked_at || row.blocked ? (
                               <span className="rounded bg-error-container px-2 py-0.5 font-label-xs font-semibold uppercase text-error">
-                                Blocked
+                                Blocked since{" "}
+                                {row.blocked_at
+                                  ? new Date(row.blocked_at).toLocaleDateString(undefined, {
+                                      year: "numeric",
+                                      month: "short",
+                                      day: "numeric",
+                                    })
+                                  : "—"}
                               </span>
                             ) : null}
                           </div>

@@ -235,14 +235,17 @@ export function registerCatalogResearchRoutes(app: { get: Function; patch: Funct
     const health = (healthRaw || {}) as Record<string, {
       recentFetches?: Array<Record<string, unknown>>;
       blocked?: boolean;
+      blocked_at?: string | null;
     }>;
     const items = (data || []).map((row) => {
-      const r = row as { domain: string };
+      const r = row as { domain: string; blocked_at?: string | null };
       const h = health[r.domain] || {};
+      const blockedAt = r.blocked_at ?? h.blocked_at ?? null;
       return {
         ...row,
         recentFetches: h.recentFetches || [],
-        blocked: Boolean(h.blocked),
+        blocked: Boolean(blockedAt ?? h.blocked),
+        blocked_at: blockedAt,
       };
     });
     return c.json({ items });
@@ -266,7 +269,9 @@ export function registerCatalogResearchRoutes(app: { get: Function; patch: Funct
     const domain = decodeURIComponent(c.req.param("domain"));
     const body = await c.req.json() as { active?: boolean };
     if (typeof body.active !== "boolean") return c.json({ error: "active required" }, 400);
-    const { error } = await supabase.from("catalog_trusted_source").update({ active: body.active }).eq("domain", domain);
+    const patch: Record<string, unknown> = { active: body.active };
+    if (body.active) patch.blocked_at = null;
+    const { error } = await supabase.from("catalog_trusted_source").update(patch).eq("domain", domain);
     if (error) return c.json({ error: error.message }, 400);
     return c.json({ ok: true });
   });

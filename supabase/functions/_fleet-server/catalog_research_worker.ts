@@ -27,8 +27,9 @@ import {
 } from "./catalog_research_verify.ts";
 import { classifyGeminiProviderError } from "./catalog_research_provider.ts";
 import { routeProposals } from "./catalog_research_route.ts";
+import { consecutive403PairShouldBlock } from "./catalog_trusted_source_block.ts";
 
-export const ENGINE_REV = "catalog-research-5";
+export const ENGINE_REV = "catalog-research-6";
 
 function throwOnSupabaseError(label: string, result: { error: unknown }): void {
   if (result.error) throw new Error(`${label}: ${formatSupabaseError(result.error)}`);
@@ -63,10 +64,55 @@ async function supabaseInsert(
   throwOnSupabaseError(`insert ${table}`, result);
 }
 
-async function loadTrustedDomains(supabase: SupabaseClient): Promise<Set<string>> {
+async function loadActiveTrustedDomains(supabase: SupabaseClient): Promise<Set<string>> {
   const { data, error } = await supabase.from("catalog_trusted_source").select("domain").eq("active", true);
   if (error) throw error;
   return new Set((data || []).map((r) => String((r as { domain: string }).domain).toLowerCase()));
+}
+
+async function loadPromptTrustedDomainList(supabase: SupabaseClient): Promise<string[]> {
+  const { data, error } = await supabase
+    .from("catalog_trusted_source")
+    .select("domain")
+    .eq("active", true)
+    .is("blocked_at", null);
+  if (error) throw error;
+  return (data || []).map((r) => String((r as { domain: string }).domain).toLowerCase());
+}
+
+export async function maybeAutoBlockTrustedSourceAfterFetch(
+  supabase: SupabaseClient,
+  input: { domain: string; jobId: string },
+): Promise<boolean> {
+  const domain = input.domain.toLowerCase();
+  const { data: recent, error: fetchErr } = await supabase
+    .from("catalog_trusted_source_fetch")
+    .select("http_status")
+    .eq("domain", domain)
+    .order("fetched_at", { ascending: false })
+    .limit(2);
+  if (fetchErr) throw fetchErr;
+  const statuses = (recent || []).map((r) => Number((r as { http_status: number }).http_status));
+  if (!consecutive403PairShouldBlock(statuses)) return false;
+
+  const { data: row, error: rowErr } = await supabase
+    .from("catalog_trusted_source")
+    .select("blocked_at")
+    .eq("domain", domain)
+    .maybeSingle();
+  if (rowErr) throw rowErr;
+  if ((row as { blocked_at?: string | null } | null)?.blocked_at) return false;
+
+  await supabaseUpdate(supabase, "catalog_trusted_source", { blocked_at: new Date().toISOString() }, (q) =>
+    q.eq("domain", domain)
+  );
+  await supabaseRpc(supabase, "catalog_research_log_event", {
+    p_job_id: input.jobId,
+    p_step: "trusted_source",
+    p_outcome: "domain_blocked",
+    p_detail: { domain, http_status: 403 },
+  });
+  return true;
 }
 
 async function loadKnownManufacturers(supabase: SupabaseClient): Promise<string[]> {
@@ -106,6 +152,7 @@ async function recordTrustedSourceFetch(
     reason: input.reason,
   });
   await supabaseRpc(supabase, "catalog_trusted_source_fetch_trim", { p_domain: domain, p_keep: 50 });
+  await maybeAutoBlockTrustedSourceAfterFetch(supabase, { domain, jobId: input.jobId });
 }
 
 async function bumpPagesConfirmed(supabase: SupabaseClient, domain: string): Promise<void> {
@@ -236,8 +283,8 @@ export async function runCatalogResearchWorker(supabase: SupabaseClient): Promis
 
     await supabaseUpdate(supabase, "catalog_research_job", { state: "researching" }, (q) => q.eq("id", jobId));
 
-    const trusted = await loadTrustedDomains(supabase);
-    const trustedDomains = [...trusted];
+    const trusted = await loadActiveTrustedDomains(supabase);
+    const trustedDomains = await loadPromptTrustedDomainList(supabase);
     const promptContext = [
       `Car: ${vc?.make || ""} ${vc?.model || ""} years ${vc?.production_start_year || ""}-${vc?.production_end_year || ""}`,
       `Chassis: ${vc?.chassis_code || ""} Engine: ${vc?.engine_code || ""} Drivetrain: ${vc?.drivetrain || ""}`,

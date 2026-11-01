@@ -366,6 +366,7 @@ export type CatalogTrustedSource = {
   pages_confirmed?: number;
   recentFetches?: CatalogTrustedSourceFetchRow[];
   blocked?: boolean;
+  blocked_at?: string | null;
 };
 
 export async function fetchCatalogResearchJobs(
