@@ -16,4 +16,4 @@ FROM (VALUES
 ) AS v(code, miles, months)
 WHERE c.code = v.code
   AND c.default_interval_miles IS NULL
-  AND c.default_interval_months IS NULL;
+  AND c.default_interval_months IS NULL;;

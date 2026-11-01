@@ -7,7 +7,6 @@ DECLARE
   v_public text;
   r record;
 BEGIN
-  -- Drop misnamed mirrors (inv_* tables became fleet_inv_inv_*).
   FOR r IN
     SELECT c.relname AS view_name
     FROM pg_class c
@@ -59,4 +58,4 @@ BEGIN
       v_public
     );
   END LOOP;
-END $$;
+END $$;;

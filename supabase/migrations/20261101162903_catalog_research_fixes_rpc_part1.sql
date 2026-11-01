@@ -24,4 +24,4 @@ BEGIN
 END;
 $$;
 REVOKE ALL ON FUNCTION public.catalog_research_priority_enqueue(uuid) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.catalog_research_priority_enqueue(uuid) TO service_role;
+GRANT EXECUTE ON FUNCTION public.catalog_research_priority_enqueue(uuid) TO service_role;;

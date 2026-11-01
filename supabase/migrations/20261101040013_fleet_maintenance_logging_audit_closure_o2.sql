@@ -10,4 +10,4 @@ AS $$
      OR lower(trim(c.name)) LIKE '%' || lower(split_part(trim(p_label), ' ', 1)) || '%'
   ORDER BY length(c.name) DESC
   LIMIT 1;
-$$;
+$$;;

@@ -51,4 +51,4 @@ BEGIN
     'broken_at_block', v_broken
   );
 END;
-$$;
+$$;;

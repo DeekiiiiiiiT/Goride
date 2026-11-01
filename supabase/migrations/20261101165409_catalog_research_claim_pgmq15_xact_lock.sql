@@ -103,4 +103,4 @@ BEGIN
     'queue', v_queue
   );
 END;
-$$;
+$$;;

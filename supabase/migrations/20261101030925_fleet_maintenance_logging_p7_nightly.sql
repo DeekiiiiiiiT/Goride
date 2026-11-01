@@ -57,4 +57,4 @@ BEGIN
   ELSE
     RAISE NOTICE 'pg_cron missing; skipped fleet-maintenance-nightly';
   END IF;
-END $$;
+END $$;;

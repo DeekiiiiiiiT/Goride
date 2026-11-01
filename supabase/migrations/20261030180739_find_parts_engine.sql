@@ -97,3 +97,4 @@ grant select on public.part_symptom to authenticated;
 grant select on public.part_symptom_component to authenticated;
 grant all on public.part_symptom to service_role;
 grant all on public.part_symptom_component to service_role;
+;

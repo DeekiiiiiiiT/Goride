@@ -19,4 +19,4 @@ CREATE OR REPLACE VIEW public.fleet_maintenance_audit_log WITH (security_invoker
 GRANT SELECT, INSERT ON public.fleet_maintenance_events TO service_role;
 GRANT SELECT, INSERT ON public.fleet_maintenance_alerts TO service_role;
 GRANT SELECT, INSERT, UPDATE ON public.fleet_maintenance_job_runs TO service_role;
-GRANT SELECT, INSERT ON public.fleet_maintenance_audit_log TO service_role;
+GRANT SELECT, INSERT ON public.fleet_maintenance_audit_log TO service_role;;

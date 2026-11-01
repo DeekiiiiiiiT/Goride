@@ -473,4 +473,4 @@ WHERE b.name IN ('Kingston', 'Saint Andrew', 'Saint Catherine', 'Spanish Town')
     SELECT 1 FROM geo.publish_log l WHERE l.version_id = v.id
   );
 
-NOTIFY pgrst, 'reload schema';
+NOTIFY pgrst, 'reload schema';;

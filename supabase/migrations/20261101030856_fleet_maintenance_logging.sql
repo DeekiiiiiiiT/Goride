@@ -42,4 +42,4 @@ ALTER TABLE public.vehicle_component_schedule
   ADD COLUMN IF NOT EXISTS baseline_odometer numeric,
   ADD COLUMN IF NOT EXISTS baseline_date date;
 
-CREATE SEQUENCE IF NOT EXISTS fleet.maintenance_log_number_seq START 1;
+CREATE SEQUENCE IF NOT EXISTS fleet.maintenance_log_number_seq START 1;;

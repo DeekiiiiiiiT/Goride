@@ -68,4 +68,4 @@ $$;
 DROP TRIGGER IF EXISTS vehicle_catalog_one_maker_per_platform ON public.vehicle_catalog;
 CREATE TRIGGER vehicle_catalog_one_maker_per_platform BEFORE INSERT OR UPDATE OF platform_id, make ON public.vehicle_catalog FOR EACH ROW EXECUTE FUNCTION public.reject_mixed_maker_platform();
 DROP FUNCTION IF EXISTS public.seed_in_use_engine_parts();
-REVOKE INSERT, UPDATE, DELETE ON TABLE public.part_fitment FROM PUBLIC, anon, authenticated;
+REVOKE INSERT, UPDATE, DELETE ON TABLE public.part_fitment FROM PUBLIC, anon, authenticated;;

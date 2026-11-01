@@ -1,6 +1,6 @@
 -- Full database: one answer with match-type groups, live counts, and make/model/year.
 
-DROP FUNCTION IF EXISTS public.admin_catalog_master_search(text, text, text, text, uuid, text, integer, integer)
+DROP FUNCTION IF EXISTS public.admin_catalog_master_search(text, text, text, text, uuid, text, integer, integer);
 CREATE FUNCTION public.admin_catalog_master_search(
   p_q text DEFAULT '',
   p_match text DEFAULT 'all',
@@ -465,6 +465,6 @@ BEGIN
     'emptyTiers', coalesce(v_empty, '[]'::jsonb)
   );
 END;
-$$
-REVOKE ALL ON FUNCTION public.admin_catalog_master_search(text, text, text, text, uuid, text, integer, integer, text, text, integer) FROM PUBLIC, anon, authenticated
-GRANT EXECUTE ON FUNCTION public.admin_catalog_master_search(text, text, text, text, uuid, text, integer, integer, text, text, integer) TO service_role
+$$;
+REVOKE ALL ON FUNCTION public.admin_catalog_master_search(text, text, text, text, uuid, text, integer, integer, text, text, integer) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.admin_catalog_master_search(text, text, text, text, uuid, text, integer, integer, text, text, integer) TO service_role;

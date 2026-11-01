@@ -109,4 +109,4 @@ END;
 $$;
 
 REVOKE ALL ON FUNCTION public.catalog_trusted_source_fetch_trim(text, integer) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.catalog_trusted_source_fetch_trim(text, integer) TO service_role;
+GRANT EXECUTE ON FUNCTION public.catalog_trusted_source_fetch_trim(text, integer) TO service_role;;

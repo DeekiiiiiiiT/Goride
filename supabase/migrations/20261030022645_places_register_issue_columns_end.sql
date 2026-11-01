@@ -72,4 +72,4 @@ left join geo.boundaries parish
  and parish.pcode = left(p.pcode, 4);
 
 revoke all on places.place_list_row from public, anon, authenticated;
-grant select on places.place_list_row to service_role;
+grant select on places.place_list_row to service_role;;

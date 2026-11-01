@@ -111,4 +111,4 @@ BEGIN
       t
     );
   END LOOP;
-END $$;
+END $$;;

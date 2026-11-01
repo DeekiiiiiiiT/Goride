@@ -1,6 +1,4 @@
--- ---------------------------------------------------------------------------
--- inv_transfer, inv_adjust, inv_reverse, inv_write_off
--- ---------------------------------------------------------------------------
+-- see repo supabase/migrations/.tmp_rpc_2.sql
 CREATE OR REPLACE FUNCTION fleet.inv_transfer(
   p_org_id text,
   p_item_id uuid,
@@ -250,3 +248,4 @@ BEGIN
   );
 END;
 $$;
+;

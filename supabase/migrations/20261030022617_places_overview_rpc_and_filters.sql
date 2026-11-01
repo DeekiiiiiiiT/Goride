@@ -248,4 +248,4 @@ $$;
 
 revoke all on function places.places_overview() from public, anon, authenticated;
 grant execute on function places.places_overview() to service_role;
-notify pgrst, 'reload schema';
+notify pgrst, 'reload schema';;

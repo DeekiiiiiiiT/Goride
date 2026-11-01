@@ -12,4 +12,4 @@ update public.vehicle_catalog
 set
   abs_channels = coalesce(nullif(trim(abs_channels), ''), '4-wheel Bosch'),
   handbrake_type = coalesce(nullif(trim(handbrake_type), ''), 'Rear drum cable')
-where id = '3cd9cbf3-a804-4817-82db-400cf6abf13a'::uuid;
+where id = '3cd9cbf3-a804-4817-82db-400cf6abf13a'::uuid;;

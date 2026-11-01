@@ -64,4 +64,4 @@ SELECT l.id AS line_id, wo.organization_id, wo.vehicle_id, wo.id AS work_order_i
   l.action, l.positions, l.part_number, l.brand, l.material, l.line_total, l.values_json, wo.closed_at AS completed_at
 FROM public.maintenance_work_order_lines l
 JOIN public.maintenance_work_orders wo ON wo.id = l.work_order_id
-WHERE wo.status = 'completed' AND wo.voided_at IS NULL;
+WHERE wo.status = 'completed' AND wo.voided_at IS NULL;;

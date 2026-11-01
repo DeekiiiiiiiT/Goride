@@ -100,4 +100,4 @@ CREATE TABLE IF NOT EXISTS fleet.inv_reservation (
   expires_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now()
 );
-CREATE INDEX IF NOT EXISTS inv_reservation_org_status_idx ON fleet.inv_reservation (organization_id, status);
+CREATE INDEX IF NOT EXISTS inv_reservation_org_status_idx ON fleet.inv_reservation (organization_id, status);;

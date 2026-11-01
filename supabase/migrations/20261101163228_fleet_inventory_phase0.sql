@@ -24,7 +24,6 @@ SET
   updated_at = now()
 WHERE organization_id IS NULL;
 
--- Legacy KV inventory draw with row lock (until inv_issue_to_vehicles replaces bulk assign)
 CREATE OR REPLACE FUNCTION fleet.legacy_inventory_draw(
   p_inventory_id text,
   p_org_id text,
@@ -103,4 +102,4 @@ VALUES
   ('fleet_inventory_phase7_counts', false),
   ('fleet_inventory_phase8_telematics', false),
   ('inv_road_clearance_gate', false)
-ON CONFLICT (name) DO NOTHING;
+ON CONFLICT (name) DO NOTHING;;

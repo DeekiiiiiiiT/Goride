@@ -18,4 +18,4 @@ alter table public.part_master
   add column if not exists certification text;
 
 alter table public.maintenance_service_categories
-  add column if not exists reference_note text;
+  add column if not exists reference_note text;;

@@ -30,4 +30,4 @@ AS $$
     coalesce(nullif(trim(p_fit_descriptor), ''), coalesce(nullif(trim(p_install_side), ''), '')),
     coalesce(nullif(trim(p_match_type), ''), '')
   );
-$$;
+$$;;

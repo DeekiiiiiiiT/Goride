@@ -14,3 +14,4 @@ BEGIN
     RAISE NOTICE 'pg_cron missing; skipped fleet-inventory-nightly-integrity';
   END IF;
 END $$;
+;

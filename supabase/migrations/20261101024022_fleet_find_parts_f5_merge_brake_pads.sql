@@ -122,4 +122,4 @@ BEGIN
   IF v_dup_name_count > 0 THEN
     RAISE EXCEPTION 'F1 merge: duplicate component names still exist under the same area';
   END IF;
-END $$;
+END $$;;

@@ -38,4 +38,4 @@ BEGIN
   RETURN jsonb_build_object('familyId', v_family, 'dryRun', false, 'before', jsonb_array_length(v_before), 'after', jsonb_array_length(v_after), 'beforeCars', v_before, 'afterCars', v_after);
 END; $$;
 REVOKE ALL ON FUNCTION public.admin_save_body_family(jsonb) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.admin_save_body_family(jsonb) TO service_role;
+GRANT EXECUTE ON FUNCTION public.admin_save_body_family(jsonb) TO service_role;;

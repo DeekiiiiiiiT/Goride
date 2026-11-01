@@ -1,5 +1,4 @@
--- R8-04: Legacy equipment events → completed maintenance work orders; second spare opening balance.
-
+-- content from file
 DO $$
 DECLARE
   v_org text := '8cfa606a-f6ea-4ccb-a2b2-1d2cc323a823';
@@ -120,4 +119,4 @@ BEGIN
       );
     END IF;
   END IF;
-END $$;
+END $$;;

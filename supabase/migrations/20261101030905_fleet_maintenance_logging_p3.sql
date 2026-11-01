@@ -13,4 +13,4 @@ WHERE r.is_voided = false
 ORDER BY r.vehicle_id, r.recorded_at DESC, r.reading DESC;
 
 COMMENT ON VIEW fleet.vehicle_current_odometer_v IS
-  'Latest trusted odometer per vehicle (not max ever).';
+  'Latest trusted odometer per vehicle (not max ever).';;

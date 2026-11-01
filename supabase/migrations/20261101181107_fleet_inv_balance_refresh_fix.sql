@@ -1,5 +1,3 @@
--- R10-03b: inv_ledger_refresh_balance must UPDATE existing rows before INSERT (generated bin_key).
-
 CREATE OR REPLACE FUNCTION fleet.inv_ledger_refresh_balance()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -44,4 +42,4 @@ BEGIN
 
   RETURN NEW;
 END;
-$$;
+$$;;

@@ -1,5 +1,3 @@
--- Fleet Find parts: quote urgency, another-car requests, pending-catalog source.
-
 alter table public.part_quote_request
   add column if not exists urgency text,
   add column if not exists maintenance_component_id uuid references public.maintenance_service_categories (id) on delete set null;
@@ -27,4 +25,4 @@ values (
   8388608,
   array['image/jpeg','image/png','image/webp']::text[]
 )
-on conflict (id) do nothing;
+on conflict (id) do nothing;;

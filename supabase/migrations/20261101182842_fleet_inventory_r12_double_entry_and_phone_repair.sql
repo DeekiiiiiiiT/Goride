@@ -58,4 +58,4 @@ BEGIN
 
   RETURN jsonb_build_object('movement_id', v_movement_id, 'ref_no', v_ref);
 END;
-$$;
+$$;;

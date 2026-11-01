@@ -84,4 +84,4 @@ BEGIN
   PERFORM public.refresh_variant_parts_readiness();
   RETURN jsonb_build_object('ok', true, 'groupId', v_group);
 END;
-$$;
+$$;;

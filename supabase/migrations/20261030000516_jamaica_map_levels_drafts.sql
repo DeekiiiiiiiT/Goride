@@ -172,4 +172,4 @@ CREATE TRIGGER places_fill_pcode
   FOR EACH ROW
   EXECUTE FUNCTION geo.places_fill_pcode();
 
-UPDATE geo.places SET lat = lat;
+UPDATE geo.places SET lat = lat;;

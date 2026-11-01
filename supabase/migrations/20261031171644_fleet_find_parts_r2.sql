@@ -1,5 +1,4 @@
--- Fleet Find parts Rev 2. Columns checked against production on 31 Oct 2026
--- before this file was written. Each add is IF NOT EXISTS.
+-- Fleet Find parts Rev 2. Columns checked against production on 31 Oct 2026.
 
 alter table public.part_quote_request
   drop constraint if exists part_quote_request_urgency_check;
@@ -134,4 +133,4 @@ create policy fleet_parts_notices_no_direct on public.fleet_parts_notices
 
 drop policy if exists parts_supplier_sync_run_no_direct on public.parts_supplier_sync_run;
 create policy parts_supplier_sync_run_no_direct on public.parts_supplier_sync_run
-  for all using (false) with check (false);
+  for all using (false) with check (false);;

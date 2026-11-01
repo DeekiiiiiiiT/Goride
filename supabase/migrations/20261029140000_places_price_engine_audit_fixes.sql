@@ -2,10 +2,10 @@
 -- Unknown grade is not "out of bounds". A later duplicate is kept at weight 0.
 -- A matched gas-card row does not count twice. Corrected amount/litres stay on the check.
 
-alter table places.price_report_check drop constraint if exists price_report_check_status_check
+alter table places.price_report_check drop constraint if exists price_report_check_status_check;
 alter table places.price_report_check
   add constraint price_report_check_status_check
-  check (status in ('accepted', 'review', 'waiting_place', 'approved', 'rejected', 'duplicate'))
+  check (status in ('accepted', 'review', 'waiting_place', 'approved', 'rejected', 'duplicate'));
 delete from places.price_current a
 where a.ctid in (
   select ctid from (
@@ -18,10 +18,10 @@ where a.ctid in (
     where place_id is not null
   ) ranked
   where rn > 1
-)
-alter table places.price_current drop constraint if exists price_current_place_grade_key
+);
+alter table places.price_current drop constraint if exists price_current_place_grade_key;
 alter table places.price_current
-  add constraint price_current_place_grade_key unique (place_id, grade)
+  add constraint price_current_place_grade_key unique (place_id, grade);
 create or replace function places.effective_report_price(p_source text, p_id uuid, p_price numeric)
 returns numeric
 language sql
@@ -39,7 +39,7 @@ as $$
     ),
     p_price
   );
-$$
+$$;
 create or replace function places.vehicle_catalog_grade(p_vehicle_id text)
 returns text
 language plpgsql
@@ -97,7 +97,7 @@ begin
 
   return null;
 end;
-$$
+$$;
 create or replace function places.price_engine_check(p_source text, p_id uuid)
 returns void
 language plpgsql
@@ -294,7 +294,7 @@ begin
     weight = excluded.weight,
     checked_at = now();
 end;
-$$
+$$;
 create or replace function places.price_engine_publish(p_place_id text, p_grade text)
 returns void
 language plpgsql
@@ -471,7 +471,7 @@ begin
   end if;
   perform places.refresh_public_place(p_place_id);
 end;
-$$
+$$;
 create or replace function places.price_engine_review(
   p_source text,
   p_id uuid,
@@ -526,7 +526,7 @@ begin
 
   perform places.price_engine_publish(v_place, v_grade);
 end;
-$$
+$$;
 create or replace function places.price_engine_fix_and_approve(
   p_source text,
   p_id uuid,
@@ -583,7 +583,7 @@ begin
 
   perform places.price_engine_publish(v_place, v_grade);
 end;
-$$
+$$;
 create or replace function places.price_engine_set_grade(p_source text, p_id uuid, p_grade text)
 returns void
 language plpgsql
@@ -626,7 +626,7 @@ begin
   end if;
   perform places.price_engine_publish(v_place, p_grade);
 end;
-$$
+$$;
 create or replace function places.price_engine_on_report()
 returns trigger
 language plpgsql
@@ -665,18 +665,18 @@ begin
   end if;
   return coalesce(new, old);
 end;
-$$
-drop trigger if exists fleet_price_report_engine on places.fleet_price_report
+$$;
+drop trigger if exists fleet_price_report_engine on places.fleet_price_report;
 create trigger fleet_price_report_engine
   after insert or delete or update of place_id, grade, litres, amount
   on places.fleet_price_report
-  for each row execute function places.price_engine_on_report('fleet')
-drop trigger if exists plug_price_report_engine on places.plug_price_report
+  for each row execute function places.price_engine_on_report('fleet');
+drop trigger if exists plug_price_report_engine on places.plug_price_report;
 create trigger plug_price_report_engine
   after insert or delete or update of place_id, grade, litres, amount
   on places.plug_price_report
-  for each row execute function places.price_engine_on_report('plug')
-drop trigger if exists plug_price_report_master_change on places.plug_price_report
+  for each row execute function places.price_engine_on_report('plug');
+drop trigger if exists plug_price_report_master_change on places.plug_price_report;
 create or replace view places.price_review_row as
 select
   c.source,
@@ -701,25 +701,25 @@ from places.price_report_check c
 join places.price_report r on r.source = c.source and r.id = c.report_id
 left join places.fleet_price_report f on c.source = 'fleet' and f.id = c.report_id
 left join places.plug_price_report g on c.source = 'plug' and g.id = c.report_id
-left join places.place p on p.id = r.place_id
-revoke all on places.price_review_row from public, anon, authenticated
-grant select on places.price_review_row to service_role
-revoke all on function places.effective_report_price(text, uuid, numeric) from public, anon, authenticated
-revoke all on function places.vehicle_catalog_grade(text) from public, anon, authenticated
-revoke all on function places.price_engine_check(text, uuid) from public, anon, authenticated
-revoke all on function places.price_engine_publish(text, text) from public, anon, authenticated
-revoke all on function places.price_engine_review(text, uuid, text, text, uuid) from public, anon, authenticated
-revoke all on function places.price_engine_fix_and_approve(text, uuid, numeric, numeric, uuid, text) from public, anon, authenticated
-revoke all on function places.price_engine_set_grade(text, uuid, text) from public, anon, authenticated
-revoke all on function places.price_engine_on_report() from public, anon, authenticated
-grant execute on function places.effective_report_price(text, uuid, numeric) to service_role
-grant execute on function places.vehicle_catalog_grade(text) to service_role
-grant execute on function places.price_engine_check(text, uuid) to service_role
-grant execute on function places.price_engine_publish(text, text) to service_role
-grant execute on function places.price_engine_review(text, uuid, text, text, uuid) to service_role
-grant execute on function places.price_engine_fix_and_approve(text, uuid, numeric, numeric, uuid, text) to service_role
-grant execute on function places.price_engine_set_grade(text, uuid, text) to service_role
-grant execute on function places.price_engine_on_report() to service_role
+left join places.place p on p.id = r.place_id;
+revoke all on places.price_review_row from public, anon, authenticated;
+grant select on places.price_review_row to service_role;
+revoke all on function places.effective_report_price(text, uuid, numeric) from public, anon, authenticated;
+revoke all on function places.vehicle_catalog_grade(text) from public, anon, authenticated;
+revoke all on function places.price_engine_check(text, uuid) from public, anon, authenticated;
+revoke all on function places.price_engine_publish(text, text) from public, anon, authenticated;
+revoke all on function places.price_engine_review(text, uuid, text, text, uuid) from public, anon, authenticated;
+revoke all on function places.price_engine_fix_and_approve(text, uuid, numeric, numeric, uuid, text) from public, anon, authenticated;
+revoke all on function places.price_engine_set_grade(text, uuid, text) from public, anon, authenticated;
+revoke all on function places.price_engine_on_report() from public, anon, authenticated;
+grant execute on function places.effective_report_price(text, uuid, numeric) to service_role;
+grant execute on function places.vehicle_catalog_grade(text) to service_role;
+grant execute on function places.price_engine_check(text, uuid) to service_role;
+grant execute on function places.price_engine_publish(text, text) to service_role;
+grant execute on function places.price_engine_review(text, uuid, text, text, uuid) to service_role;
+grant execute on function places.price_engine_fix_and_approve(text, uuid, numeric, numeric, uuid, text) to service_role;
+grant execute on function places.price_engine_set_grade(text, uuid, text) to service_role;
+grant execute on function places.price_engine_on_report() to service_role;
 do $regrade$
 begin
   if to_regclass('fleet.fuel_entries') is null then
@@ -758,7 +758,7 @@ begin
     and r.grade = 'unknown'
     and chosen.grade is not null;
 end
-$regrade$
+$regrade$;
 do $recheck$
 declare
   rec record;
@@ -771,7 +771,7 @@ begin
     perform places.price_engine_check(rec.source, rec.report_id);
   end loop;
 end
-$recheck$
+$recheck$;
 do $cards$
 begin
   if to_regclass('fleet.fuel_entries') is null then
@@ -810,7 +810,7 @@ begin
     )
     and c.status not in ('approved', 'rejected');
 end
-$cards$
+$cards$;
 do $republish$
 declare
   rec record;
@@ -824,4 +824,4 @@ begin
     perform places.price_engine_publish(rec.place_id, rec.grade);
   end loop;
 end
-$republish$
+$republish$;

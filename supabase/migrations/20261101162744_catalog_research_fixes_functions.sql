@@ -16,4 +16,4 @@ CREATE TABLE IF NOT EXISTS public.catalog_vehicle_proposal (
 );
 ALTER TABLE public.catalog_vehicle_proposal ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS catalog_vehicle_proposal_no_direct ON public.catalog_vehicle_proposal;
-CREATE POLICY catalog_vehicle_proposal_no_direct ON public.catalog_vehicle_proposal FOR ALL USING (false) WITH CHECK (false);
+CREATE POLICY catalog_vehicle_proposal_no_direct ON public.catalog_vehicle_proposal FOR ALL USING (false) WITH CHECK (false);;

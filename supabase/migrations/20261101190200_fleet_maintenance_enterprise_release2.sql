@@ -8,16 +8,16 @@ ALTER TABLE public.maintenance_work_orders
   ADD COLUMN IF NOT EXISTS approved_by uuid,
   ADD COLUMN IF NOT EXISTS approved_at timestamptz,
   ADD COLUMN IF NOT EXISTS source text,
-  ADD COLUMN IF NOT EXISTS cancel_reason text
+  ADD COLUMN IF NOT EXISTS cancel_reason text;
 CREATE INDEX IF NOT EXISTS idx_mwo_org_status_opened
-  ON public.maintenance_work_orders (organization_id, status, opened_at DESC)
+  ON public.maintenance_work_orders (organization_id, status, opened_at DESC);
 UPDATE public.maintenance_work_orders wo
 SET source = 'driver_request'
 WHERE source IS NULL
   AND (
     coalesce(wo.payload_json->>'source', '') = 'driver_service_request'
     OR wo.provider ILIKE 'Driver Request%'
-  )
+  );
 -- Uniform schedule backfill hook: ensure component rows exist for all package members (M-11)
 INSERT INTO public.vehicle_component_schedule (
   organization_id,
@@ -50,4 +50,4 @@ LEFT JOIN public.vehicle_component_schedule vcs
  AND vcs.vehicle_id = vms.vehicle_id
  AND vcs.category_id = mpc.category_id
  AND (vcs.position IS NOT DISTINCT FROM pos.pos)
-WHERE vcs.id IS NULL
+WHERE vcs.id IS NULL;

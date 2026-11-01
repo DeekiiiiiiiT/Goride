@@ -82,4 +82,4 @@ CREATE TABLE IF NOT EXISTS fleet.inv_requisition_line (
   requisition_id uuid NOT NULL REFERENCES fleet.inv_requisition (id) ON DELETE CASCADE,
   item_id uuid NOT NULL REFERENCES fleet.inv_item (id) ON DELETE RESTRICT,
   qty numeric(14, 3) NOT NULL CHECK (qty > 0)
-);
+);;

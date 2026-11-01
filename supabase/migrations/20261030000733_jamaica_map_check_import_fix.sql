@@ -89,4 +89,4 @@ END;
 $$;
 
 REVOKE ALL ON FUNCTION geo.check_import(jsonb) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION geo.check_import(jsonb) TO service_role;
+GRANT EXECUTE ON FUNCTION geo.check_import(jsonb) TO service_role;;

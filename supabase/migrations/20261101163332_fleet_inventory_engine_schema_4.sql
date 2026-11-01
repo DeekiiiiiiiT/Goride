@@ -83,4 +83,4 @@ CREATE TABLE IF NOT EXISTS fleet.inv_document (
   size_bytes bigint,
   kind text,
   created_at timestamptz NOT NULL DEFAULT now()
-);
+);;

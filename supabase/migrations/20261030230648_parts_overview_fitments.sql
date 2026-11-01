@@ -19,4 +19,4 @@ AS $$
       + (SELECT count(*) FROM public.vehicle_catalog_pending_requests WHERE status IN ('pending', 'needs_info'))
     )
   );
-$$;
+$$;;

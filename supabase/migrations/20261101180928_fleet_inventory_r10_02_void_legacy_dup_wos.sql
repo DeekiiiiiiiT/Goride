@@ -45,4 +45,4 @@ BEGIN
       AND wo.total_cost > 0
       AND coalesce(jsonb_array_length(wo.payload_json->'damage_history'), 0) = 0;
   END IF;
-END $$;
+END $$;;

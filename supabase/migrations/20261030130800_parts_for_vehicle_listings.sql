@@ -75,4 +75,4 @@ LANGUAGE sql STABLE AS $$
     COALESCE((SELECT count(*)::integer FROM public.part_fit_feedback f WHERE f.part_id = h.part_id AND f.outcome = 'fit'), 0),
     h.description
   FROM hits h LEFT JOIN sister ON true LEFT JOIN oem_ref ON oem_ref.interchange_group_id = h.interchange_group_id;
-$$;
+$$;;

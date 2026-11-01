@@ -47,4 +47,4 @@ where upper(oem_part_number) in (
 
 update public.part_master
 set maintenance_component_id = 'f5a10001-0000-4000-8000-000000000002'
-where upper(oem_part_number) in ('04495-B2400', 'ADT34155');
+where upper(oem_part_number) in ('04495-B2400', 'ADT34155');;

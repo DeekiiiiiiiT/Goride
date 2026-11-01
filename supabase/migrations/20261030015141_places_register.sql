@@ -362,4 +362,4 @@ begin
     delete from places.place_alias where id = p_remove_alias and place_id = p_id;
   end if;
 end;
-$$;
+$$;;

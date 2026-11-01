@@ -51,4 +51,4 @@ BEGIN
   PERFORM public.save_universal_part(jsonb_build_object('specKey','wiper_driver_mm','specValue','525','manufacturer','OEM spec','partNumber','525','name','Driver wiper 525 mm','evidenceUrl','https://wiper-wiper.com/2023/07/14/roomy/'));
   PERFORM public.save_universal_part(jsonb_build_object('specKey','transmission_fluid','specValue','CVT Fluid FE','manufacturer','Toyota','partNumber','CVT-FE','name','CVT Fluid FE','evidenceUrl','http://www.toyota-club.net/files/techdata/ttx/tank.htm'));
 END $$;
-DROP FUNCTION public.roomy_seed_vehicle(text, text, text, uuid, uuid, integer, integer);
+DROP FUNCTION public.roomy_seed_vehicle(text, text, text, uuid, uuid, integer, integer);;

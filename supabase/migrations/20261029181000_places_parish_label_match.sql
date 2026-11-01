@@ -10,7 +10,7 @@ as $$
     when p_text is null then null
     else lower(regexp_replace(btrim(p_text), '^st\.?\s+', 'saint ', 'i'))
   end;
-$$
+$$;
 create or replace view fleet.station_quality with (security_invoker = true) as
 select
   p.id,
@@ -35,7 +35,7 @@ select
     )
   ) as complete
 from places.place p
-where p.place_type = 'gas_station'
+where p.place_type = 'gas_station';
 create or replace function places.station_analytics(
   p_grade text,
   p_week date default null,
@@ -412,8 +412,8 @@ begin
 
   return result;
 end;
-$$
-revoke all on function places.parish_text_key(text) from public, anon, authenticated
-grant execute on function places.parish_text_key(text) to service_role
-revoke all on function places.station_analytics(text, date, text, uuid, boolean) from public, anon, authenticated
-grant execute on function places.station_analytics(text, date, text, uuid, boolean) to service_role
+$$;
+revoke all on function places.parish_text_key(text) from public, anon, authenticated;
+grant execute on function places.parish_text_key(text) to service_role;
+revoke all on function places.station_analytics(text, date, text, uuid, boolean) from public, anon, authenticated;
+grant execute on function places.station_analytics(text, date, text, uuid, boolean) to service_role;

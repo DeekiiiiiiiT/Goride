@@ -27,4 +27,4 @@ BEGIN
   WHERE v_label LIKE '%' || lower(trim(c.name)) || '%' ORDER BY length(c.name) DESC LIMIT 1;
   RETURN v_id;
 END;
-$$;
+$$;;

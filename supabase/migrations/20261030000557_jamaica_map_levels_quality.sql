@@ -175,4 +175,4 @@ BEGIN
 END
 $cron$;
 
-NOTIFY pgrst, 'reload schema';
+NOTIFY pgrst, 'reload schema';;

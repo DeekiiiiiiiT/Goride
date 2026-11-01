@@ -52,4 +52,4 @@ DROP TRIGGER IF EXISTS vehicles_ensure_inv_location ON fleet.vehicles;
 CREATE TRIGGER vehicles_ensure_inv_location
   AFTER INSERT ON fleet.vehicles
   FOR EACH ROW
-  EXECUTE FUNCTION fleet.trg_vehicles_ensure_inv_location();
+  EXECUTE FUNCTION fleet.trg_vehicles_ensure_inv_location();;

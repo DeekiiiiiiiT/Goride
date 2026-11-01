@@ -95,4 +95,4 @@ GRANT ALL ON fleet.maintenance_events TO service_role;
 GRANT ALL ON fleet.maintenance_alerts TO service_role;
 GRANT ALL ON fleet.maintenance_job_runs TO service_role;
 GRANT ALL ON fleet.maintenance_audit_log TO service_role;
-GRANT USAGE ON SEQUENCE fleet.maintenance_log_number_seq TO service_role;
+GRANT USAGE ON SEQUENCE fleet.maintenance_log_number_seq TO service_role;;

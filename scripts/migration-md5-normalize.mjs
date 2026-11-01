@@ -22,6 +22,13 @@ export function normalizeMigrationSqlForMd5(sql) {
   return noWs;
 }
 
+/** Body for repo replay: prod statement array with semicolon boundaries. */
+export function migrationBodyFromProdStatements(statements) {
+  if (!statements?.length) return '';
+  const parts = statements.map((s) => String(s).trimEnd().replace(/;\s*$/, ''));
+  return `${parts.join(';\n')};\n`;
+}
+
 export function migrationBodyMd5(sql) {
   return createHash('md5').update(normalizeMigrationSqlForMd5(sql), 'utf8').digest('hex');
 }

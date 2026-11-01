@@ -30,4 +30,4 @@ RETURNS TABLE (check_name text, detail jsonb) LANGUAGE sql STABLE SECURITY DEFIN
     SELECT 1 FROM fleet.maintenance_job_runs r WHERE r.success = true AND r.started_at::date = current_date
       AND (p_organization_id IS NULL OR r.organization_id = p_organization_id)
   );
-$$;
+$$;;

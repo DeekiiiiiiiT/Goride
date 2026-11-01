@@ -17,4 +17,4 @@ BEGIN
     END IF;
     UPDATE public.parts_sourcing_requests SET catalog_research_job_id = v_job_id, research_group_key = v_group_key WHERE id = r.id;
   END LOOP;
-END $$;
+END $$;;

@@ -110,4 +110,4 @@ CREATE TRIGGER trg_inv_ledger_hash
 DROP TRIGGER IF EXISTS trg_inv_ledger_balance ON fleet.inv_ledger;
 CREATE TRIGGER trg_inv_ledger_balance
   AFTER INSERT ON fleet.inv_ledger
-  FOR EACH ROW EXECUTE FUNCTION fleet.inv_ledger_refresh_balance();
+  FOR EACH ROW EXECUTE FUNCTION fleet.inv_ledger_refresh_balance();;

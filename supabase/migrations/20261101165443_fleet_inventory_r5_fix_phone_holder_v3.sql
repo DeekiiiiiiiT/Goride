@@ -32,4 +32,4 @@ BEGIN
   PERFORM fleet.inv_opening_balance(p_org_id, v_lines, 'migration-r5-phone-holder-5400-v3');
   RETURN jsonb_build_object('item_id', v_item_id, 'unit_cost', v_cost);
 END;
-$$;
+$$;;

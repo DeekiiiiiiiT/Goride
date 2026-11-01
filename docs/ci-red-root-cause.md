@@ -35,10 +35,12 @@ In production, `20261101165443` creates the function `fleet.r5_fix_phone_holder_
 
 **Fix (applied):** overwrite every drifted repo migration with production's `array_to_string(statements, E'\n')` for that version. UTF-8 without BOM. Production unchanged.
 
-Production MD5 check:
+Production MD5 check (replay-safe — statement array joined with `;\\n`, see `migration-md5-normalize.mjs`):
 
 ```sql
-select version, md5(regexp_replace(regexp_replace(array_to_string(statements, E'\n'), '--[^\n]*', '', 'g'), '\s+', '', 'g'))
+select version, md5(regexp_replace(regexp_replace(
+  (select string_agg(stmt, E';\\n' ORDER BY ord) FROM unnest(statements) WITH ORDINALITY AS t(stmt, ord)) || E';\\n',
+  '--[^\\n]*', '', 'g'), '\\s+', '', 'g'))
 from supabase_migrations.schema_migrations where version >= '20261029140000';
 ```
 

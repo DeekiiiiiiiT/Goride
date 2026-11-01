@@ -471,3 +471,4 @@ $$;
 
 REVOKE ALL ON FUNCTION public.admin_catalog_master_search(text, text, text, text, uuid, text, integer, integer, text, text, integer) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.admin_catalog_master_search(text, text, text, text, uuid, text, integer, integer, text, text, integer) TO service_role;
+;

@@ -30,4 +30,4 @@ END; $$;
 REVOKE ALL ON FUNCTION public.remove_guided_variant(jsonb) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.undo_parts_catalog_batch(uuid) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.remove_guided_variant(jsonb) TO service_role;
-GRANT EXECUTE ON FUNCTION public.undo_parts_catalog_batch(uuid) TO service_role;
+GRANT EXECUTE ON FUNCTION public.undo_parts_catalog_batch(uuid) TO service_role;;

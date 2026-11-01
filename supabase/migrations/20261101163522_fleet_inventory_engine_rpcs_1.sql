@@ -497,4 +497,4 @@ BEGIN
     'preview', v_preview
   );
 END;
-$$;
+$$;;

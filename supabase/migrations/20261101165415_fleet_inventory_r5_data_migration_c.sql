@@ -78,4 +78,4 @@ BEGIN
   ON CONFLICT (organization_id, vehicle_id) DO UPDATE SET template_id = EXCLUDED.template_id, version_id = EXCLUDED.version_id, home_location_id = EXCLUDED.home_location_id, updated_at = now();
   RETURN jsonb_build_object('equipment_migrated', v_migrated, 'equipment_skipped', v_skipped, 'kit_template_id', v_template_id, 'kit_version_id', v_version_id);
 END;
-$$;
+$$;;

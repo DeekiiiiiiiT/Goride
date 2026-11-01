@@ -98,3 +98,4 @@ END $$;
 
 COMMENT ON TABLE fleet.inventory IS 'Legacy KV mirror — read-only during inv_* cutover; drop after 30 days post phase2 prod';
 COMMENT ON TABLE fleet.equipment IS 'Legacy equipment — superseded by inv_asset / vehicle_kit';
+;

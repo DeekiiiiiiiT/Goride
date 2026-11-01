@@ -1,4 +1,4 @@
--- Extended inventory RPCs (from migrations_archive/20261101143600) — required by inventory HTTP surface.
+-- Extended inventory RPCs (audit R6-01)
 
 CREATE OR REPLACE FUNCTION fleet.inv_return_from_vehicle(
   p_org_id text,
@@ -122,4 +122,4 @@ REVOKE ALL ON FUNCTION fleet.inv_pair_scanner(text, text, text) FROM PUBLIC, ano
 GRANT EXECUTE ON FUNCTION fleet.inv_return_from_vehicle(text, uuid, text, uuid, numeric, text) TO service_role;
 GRANT EXECUTE ON FUNCTION fleet.inv_recompute_reorder(text) TO service_role;
 GRANT EXECUTE ON FUNCTION fleet.inv_publish_kit_version(text, uuid, uuid, text) TO service_role;
-GRANT EXECUTE ON FUNCTION fleet.inv_pair_scanner(text, text, text) TO service_role;
+GRANT EXECUTE ON FUNCTION fleet.inv_pair_scanner(text, text, text) TO service_role;;

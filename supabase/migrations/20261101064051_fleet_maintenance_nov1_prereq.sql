@@ -24,4 +24,4 @@ FROM fleet.odometer_readings r
 WHERE r.is_voided = false
   AND r.is_anomaly = false
   AND r.reading > 0
-ORDER BY r.vehicle_id, r.recorded_at DESC, r.reading DESC;
+ORDER BY r.vehicle_id, r.recorded_at DESC, r.reading DESC;;

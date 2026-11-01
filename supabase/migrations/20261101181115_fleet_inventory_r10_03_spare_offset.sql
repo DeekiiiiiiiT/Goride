@@ -1,5 +1,4 @@
--- R10-03 (prod applied as 80502–80503c + balance trigger fix). Idempotent spare offset.
-
+-- Idempotent: second spare supplier offset (also applied during R10 cutover).
 DO $$
 DECLARE
   v_org text := '8cfa606a-f6ea-4ccb-a2b2-1d2cc323a823';
@@ -8,7 +7,6 @@ DECLARE
   v_leg record;
 BEGIN
   v_supplier := fleet._inv_virtual_location_id(v_org, 'V-SUPPLIER', 'Supplier (virtual)');
-
   FOR v_mov IN
     SELECT id FROM fleet.inv_movement
     WHERE organization_id = v_org AND idempotency_key = 'r8-04-second-spare'
@@ -37,4 +35,4 @@ BEGIN
       END IF;
     END LOOP;
   END LOOP;
-END $$;
+END $$;;

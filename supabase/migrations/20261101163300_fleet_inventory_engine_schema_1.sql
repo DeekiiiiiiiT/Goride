@@ -142,4 +142,4 @@ CREATE TABLE IF NOT EXISTS fleet.inv_scan_device (
   reads_total bigint NOT NULL DEFAULT 0,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
-);
+);;

@@ -1,7 +1,3 @@
--- Prod-applied: fleet_maintenance_logging_audit_closure_o9
--- ---------------------------------------------------------------------------
--- O-09: projected_due_date NULL when overdue
--- ---------------------------------------------------------------------------
 DROP VIEW IF EXISTS public.fleet_maintenance_due_v CASCADE;
 DROP VIEW IF EXISTS fleet.maintenance_due_v CASCADE;
 
@@ -105,4 +101,4 @@ BEGIN
   FOR r IN SELECT DISTINCT vehicle_id FROM public.vehicle_component_schedule LOOP
     PERFORM fleet.recompute_maintenance_schedule(r.vehicle_id);
   END LOOP;
-END $$;
+END $$;;

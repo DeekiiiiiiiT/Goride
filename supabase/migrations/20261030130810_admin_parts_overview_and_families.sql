@@ -17,4 +17,4 @@ END; $$;
 REVOKE ALL ON FUNCTION public.admin_parts_overview() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.admin_exclude_listing(jsonb) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.admin_parts_overview() TO service_role;
-GRANT EXECUTE ON FUNCTION public.admin_exclude_listing(jsonb) TO service_role;
+GRANT EXECUTE ON FUNCTION public.admin_exclude_listing(jsonb) TO service_role;;

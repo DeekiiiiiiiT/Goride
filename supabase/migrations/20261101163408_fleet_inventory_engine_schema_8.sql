@@ -109,4 +109,4 @@ COMMENT ON VIEW public.org_part_stock IS
   'Compatibility view over fleet.inv_balance for Find parts / parts_enterprise readers (INV-05).';
 
 REVOKE ALL ON public.org_part_stock FROM PUBLIC, anon, authenticated;
-GRANT SELECT ON public.org_part_stock TO service_role;
+GRANT SELECT ON public.org_part_stock TO service_role;;

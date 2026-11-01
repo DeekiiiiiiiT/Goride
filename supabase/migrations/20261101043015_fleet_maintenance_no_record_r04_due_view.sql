@@ -109,4 +109,4 @@ FROM scored;
 CREATE OR REPLACE VIEW public.fleet_maintenance_due_v WITH (security_invoker = true) AS
   SELECT * FROM fleet.maintenance_due_v;
 
-GRANT SELECT ON public.fleet_maintenance_due_v TO service_role;
+GRANT SELECT ON public.fleet_maintenance_due_v TO service_role;;

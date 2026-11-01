@@ -74,4 +74,4 @@ BEGIN
     v_next.reading,
     v_next.recorded_at;
 END;
-$$;
+$$;;

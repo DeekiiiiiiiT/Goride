@@ -118,4 +118,4 @@ AS $$
 $$;
 
 REVOKE ALL ON FUNCTION geo.list_boundaries_admin(int, text) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION geo.list_boundaries_admin(int, text) TO service_role;
+GRANT EXECUTE ON FUNCTION geo.list_boundaries_admin(int, text) TO service_role;;

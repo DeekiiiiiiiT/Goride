@@ -6,4 +6,4 @@ CREATE OR REPLACE FUNCTION public.admin_body_families() RETURNS jsonb LANGUAGE s
   );
 $$;
 REVOKE ALL ON FUNCTION public.admin_body_families() FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.admin_body_families() TO service_role;
+GRANT EXECUTE ON FUNCTION public.admin_body_families() TO service_role;;

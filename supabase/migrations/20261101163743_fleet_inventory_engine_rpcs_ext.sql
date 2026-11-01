@@ -176,3 +176,4 @@ GRANT EXECUTE ON FUNCTION fleet.inv_release(text, uuid, uuid, numeric, text) TO 
 GRANT EXECUTE ON FUNCTION fleet.inv_recompute_reorder(text) TO service_role;
 GRANT EXECUTE ON FUNCTION fleet.inv_publish_kit_version(text, uuid, uuid, text) TO service_role;
 GRANT EXECUTE ON FUNCTION fleet.inv_pair_scanner(text, text, text) TO service_role;
+;

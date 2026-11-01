@@ -84,6 +84,6 @@ begin
     ) weeks
   );
 end;
-$$
-revoke all on function public.refinery_series(text, text[], date, date, boolean) from public, anon, authenticated
-grant execute on function public.refinery_series(text, text[], date, date, boolean) to service_role
+$$;
+revoke all on function public.refinery_series(text, text[], date, date, boolean) from public, anon, authenticated;
+grant execute on function public.refinery_series(text, text[], date, date, boolean) to service_role;

@@ -9,15 +9,15 @@ FROM public.engine_family ef
 WHERE upper(ef.code) = '1KR-FE'
   AND upper(coalesce(vc.chassis_code, '')) IN ('M910A', 'M910S', 'M910F')
   AND lower(vc.model) IN ('tank', 'thor', 'justy')
-  AND upper(coalesce(vc.engine_code, '')) IS DISTINCT FROM '1KR-VET'
+  AND upper(coalesce(vc.engine_code, '')) IS DISTINCT FROM '1KR-VET';
 UPDATE public.vehicle_catalog
 SET drivetrain = '2WD'
 WHERE upper(coalesce(chassis_code, '')) IN ('M900S', 'M900F')
-  AND lower(model) IN ('thor', 'justy')
+  AND lower(model) IN ('thor', 'justy');
 UPDATE public.vehicle_catalog
 SET drivetrain = '4WD'
 WHERE upper(coalesce(chassis_code, '')) IN ('M910A', 'M910S', 'M910F')
-  AND lower(model) IN ('tank', 'thor', 'justy')
+  AND lower(model) IN ('tank', 'thor', 'justy');
 -- D2: wipers and CVT fluid reach the sister family; oil reaches the 1KR-FE only.
 DO $$
 DECLARE
@@ -71,7 +71,7 @@ BEGIN
       'wiper_rear_mm',
       'transmission_fluid'
     );
-END $$
+END $$;
 -- D1 and D4: drop fake OEM-spec parts, fake universals, and the Union O-104 row.
 DO $$
 DECLARE
@@ -144,17 +144,17 @@ BEGIN
     AND NOT EXISTS (
       SELECT 1 FROM public.part_master pm WHERE pm.interchange_group_id = g.id
     );
-END $$
-ALTER TABLE public.part_master DROP CONSTRAINT IF EXISTS part_master_no_oem_spec
+END $$;
+ALTER TABLE public.part_master DROP CONSTRAINT IF EXISTS part_master_no_oem_spec;
 ALTER TABLE public.part_master
   ADD CONSTRAINT part_master_no_oem_spec
-  CHECK (upper(btrim(coalesce(manufacturer, ''))) <> 'OEM SPEC')
-ALTER TABLE public.universal_part DROP CONSTRAINT IF EXISTS universal_part_no_oem_spec
+  CHECK (upper(btrim(coalesce(manufacturer, ''))) <> 'OEM SPEC');
+ALTER TABLE public.universal_part DROP CONSTRAINT IF EXISTS universal_part_no_oem_spec;
 ALTER TABLE public.universal_part
   ADD CONSTRAINT universal_part_no_oem_spec
-  CHECK (upper(btrim(coalesce(manufacturer, ''))) <> 'OEM SPEC')
-DROP MATERIALIZED VIEW IF EXISTS public.variant_parts_readiness
-DROP FUNCTION IF EXISTS public.parts_for_vehicle(uuid, uuid, integer)
+  CHECK (upper(btrim(coalesce(manufacturer, ''))) <> 'OEM SPEC');
+DROP MATERIALIZED VIEW IF EXISTS public.variant_parts_readiness;
+DROP FUNCTION IF EXISTS public.parts_for_vehicle(uuid, uuid, integer);
 CREATE OR REPLACE FUNCTION public.parts_for_vehicle(
   p_catalog_id uuid,
   p_component_id uuid DEFAULT NULL,
@@ -360,9 +360,9 @@ AS $$
   FROM hits h
   LEFT JOIN sister ON true
   LEFT JOIN oem_ref ON oem_ref.interchange_group_id = h.interchange_group_id;
-$$
-REVOKE ALL ON FUNCTION public.parts_for_vehicle(uuid, uuid, integer) FROM PUBLIC, anon, authenticated
-GRANT EXECUTE ON FUNCTION public.parts_for_vehicle(uuid, uuid, integer) TO service_role
+$$;
+REVOKE ALL ON FUNCTION public.parts_for_vehicle(uuid, uuid, integer) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.parts_for_vehicle(uuid, uuid, integer) TO service_role;
 CREATE MATERIALIZED VIEW public.variant_parts_readiness AS
  WITH core AS (
          SELECT v.op_code
@@ -428,8 +428,8 @@ CREATE MATERIALIZED VIEW public.variant_parts_readiness AS
     components_ready = (( SELECT count(*) AS count
            FROM core)) AS ready,
     cells
-   FROM rolled
-CREATE UNIQUE INDEX variant_parts_readiness_variant_id ON public.variant_parts_readiness USING btree (variant_id)
+   FROM rolled;
+CREATE UNIQUE INDEX variant_parts_readiness_variant_id ON public.variant_parts_readiness USING btree (variant_id);
 CREATE OR REPLACE FUNCTION public.save_guided_part(p_input jsonb)
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -633,7 +633,7 @@ BEGIN
   PERFORM public.refresh_variant_parts_readiness();
   RETURN jsonb_build_object('ok', true, 'groupId', v_group);
 END;
-$$
+$$;
 CREATE OR REPLACE FUNCTION public.save_catalog_spec(p_input jsonb)
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -721,9 +721,9 @@ BEGIN
   PERFORM public.refresh_variant_parts_readiness();
   RETURN jsonb_build_object('ok', true, 'id', v_id);
 END;
-$$
-REVOKE ALL ON FUNCTION public.save_catalog_spec(jsonb) FROM PUBLIC, anon, authenticated
-GRANT EXECUTE ON FUNCTION public.save_catalog_spec(jsonb) TO service_role
+$$;
+REVOKE ALL ON FUNCTION public.save_catalog_spec(jsonb) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.save_catalog_spec(jsonb) TO service_role;
 CREATE OR REPLACE FUNCTION public.save_universal_part(p_input jsonb)
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -761,9 +761,9 @@ BEGIN
   RETURNING id INTO v_id;
   RETURN jsonb_build_object('ok', true, 'id', v_id);
 END;
-$$
-REVOKE ALL ON FUNCTION public.save_universal_part(jsonb) FROM PUBLIC, anon, authenticated
-GRANT EXECUTE ON FUNCTION public.save_universal_part(jsonb) TO service_role
+$$;
+REVOKE ALL ON FUNCTION public.save_universal_part(jsonb) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.save_universal_part(jsonb) TO service_role;
 CREATE OR REPLACE FUNCTION public.admin_body_families()
 RETURNS jsonb
 LANGUAGE sql
@@ -842,7 +842,7 @@ AS $$
       FROM public.engine_family ef
     ), '[]'::jsonb)
   );
-$$
+$$;
 CREATE OR REPLACE FUNCTION public.admin_save_body_family(p_input jsonb)
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -998,7 +998,7 @@ BEGIN
     'afterCars', v_after
   );
 END;
-$$
+$$;
 CREATE OR REPLACE FUNCTION public.listing_reach_preview(
   p_variant uuid,
   p_scope text,
@@ -1069,9 +1069,9 @@ AS $$
       SELECT jsonb_agg(label ORDER BY label) FROM scored WHERE tier = 3
     ), '[]'::jsonb)
   );
-$$
-REVOKE ALL ON FUNCTION public.listing_reach_preview(uuid, text, uuid[]) FROM PUBLIC, anon, authenticated
-GRANT EXECUTE ON FUNCTION public.listing_reach_preview(uuid, text, uuid[]) TO service_role
+$$;
+REVOKE ALL ON FUNCTION public.listing_reach_preview(uuid, text, uuid[]) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.listing_reach_preview(uuid, text, uuid[]) TO service_role;
 CREATE OR REPLACE FUNCTION public.guided_part_group(p_group uuid, p_variant uuid)
 RETURNS jsonb
 LANGUAGE sql
@@ -1124,9 +1124,9 @@ AS $$
     ON pl.interchange_group_id = p_group
    AND pl.vehicle_catalog_id = vc.id
   WHERE vc.id = p_variant;
-$$
-REVOKE ALL ON FUNCTION public.guided_part_group(uuid, uuid) FROM PUBLIC, anon, authenticated
-GRANT EXECUTE ON FUNCTION public.guided_part_group(uuid, uuid) TO service_role
+$$;
+REVOKE ALL ON FUNCTION public.guided_part_group(uuid, uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.guided_part_group(uuid, uuid) TO service_role;
 CREATE OR REPLACE FUNCTION public.admin_recent_import_batches()
 RETURNS jsonb
 LANGUAGE sql
@@ -1146,6 +1146,6 @@ AS $$
     ORDER BY max(pl.verified_at) DESC
     LIMIT 5
   ) s;
-$$
-REVOKE ALL ON FUNCTION public.admin_recent_import_batches() FROM PUBLIC, anon, authenticated
-GRANT EXECUTE ON FUNCTION public.admin_recent_import_batches() TO service_role
+$$;
+REVOKE ALL ON FUNCTION public.admin_recent_import_batches() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.admin_recent_import_batches() TO service_role;

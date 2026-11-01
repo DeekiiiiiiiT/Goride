@@ -63,4 +63,4 @@ BEGIN
   PERFORM public.catalog_research_log_event(v_job.id, 'promote', v_job_state, jsonb_build_object('proposalId', p_proposal_id, 'partId', v_part_id), p_actor);
   RETURN jsonb_build_object('partId', v_part_id, 'idempotent', false, 'jobState', v_job_state);
 END;
-$$;
+$$;;

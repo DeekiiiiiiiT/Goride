@@ -26,4 +26,4 @@ BEGIN
   ON CONFLICT (organization_id, item_id, location_id, bin_key) DO UPDATE SET on_hand = EXCLUDED.on_hand, value = EXCLUDED.value, updated_at = now();
   RETURN jsonb_build_object('item_id', v_item_id, 'unit_cost', v_cost, 'row_hash', v_hash);
 END;
-$$;
+$$;;

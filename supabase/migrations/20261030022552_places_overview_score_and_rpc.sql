@@ -128,4 +128,4 @@ $$;
 
 revoke all on function fleet.score_master_data() from public, anon, authenticated;
 grant execute on function fleet.score_master_data() to service_role;
-select fleet.score_master_data();
+select fleet.score_master_data();;

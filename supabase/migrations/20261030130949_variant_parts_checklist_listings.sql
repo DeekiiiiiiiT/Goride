@@ -35,4 +35,4 @@ BEGIN
   RETURN jsonb_build_object('jobs', v_jobs, 'specs', COALESCE(v_specs, '[]'::jsonb), 'supplies', COALESCE(v_supplies, '[]'::jsonb), 'vehicle', COALESCE(v_vehicle, '{}'::jsonb), 'otherParts', COALESCE(v_other, '[]'::jsonb), 'reach', COALESCE(v_reach, '{}'::jsonb));
 END; $$;
 REVOKE ALL ON FUNCTION public.variant_parts_checklist(uuid) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.variant_parts_checklist(uuid) TO service_role;
+GRANT EXECUTE ON FUNCTION public.variant_parts_checklist(uuid) TO service_role;;

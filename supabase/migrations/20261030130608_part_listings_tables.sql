@@ -34,4 +34,4 @@ CREATE POLICY part_listing_exclusion_no_direct_access ON public.part_listing_exc
 GRANT ALL ON TABLE public.part_listing TO service_role;
 GRANT ALL ON TABLE public.part_listing_exclusion TO service_role;
 REVOKE ALL ON TABLE public.part_listing FROM anon, authenticated;
-REVOKE ALL ON TABLE public.part_listing_exclusion FROM anon, authenticated;
+REVOKE ALL ON TABLE public.part_listing_exclusion FROM anon, authenticated;;

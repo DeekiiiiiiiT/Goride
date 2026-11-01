@@ -21,4 +21,4 @@ BEGIN
   BEGIN
     PERFORM fleet.inv_opening_balance(v_org, jsonb_build_array(jsonb_build_object('item_id',(SELECT id FROM fleet.inv_item WHERE organization_id = v_org AND name ILIKE 'Spare Tire' LIMIT 1),'location_id',(SELECT id FROM fleet.inv_location WHERE organization_id = v_org AND code ILIKE '%main%' LIMIT 1),'qty',1,'unit_cost',15000)), 'r6-02-second-spare-opening');
   EXCEPTION WHEN OTHERS THEN NULL; END;
-END $$;
+END $$;;

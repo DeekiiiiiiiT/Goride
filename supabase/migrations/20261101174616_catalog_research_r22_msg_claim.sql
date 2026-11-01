@@ -158,4 +158,4 @@ END;
 $$;
 
 REVOKE ALL ON FUNCTION public.catalog_research_claim() FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.catalog_research_claim() TO service_role;
+GRANT EXECUTE ON FUNCTION public.catalog_research_claim() TO service_role;;

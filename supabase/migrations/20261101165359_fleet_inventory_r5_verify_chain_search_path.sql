@@ -38,4 +38,4 @@ BEGIN
   END LOOP;
   RETURN jsonb_build_object('ok', v_ok, 'entries', v_count, 'head_block', v_head_block, 'head_hash', v_head_hash, 'broken_at_block', v_broken);
 END;
-$$;
+$$;;

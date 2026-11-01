@@ -32,4 +32,4 @@ BEGIN
   END IF;
 
   PERFORM fleet.inv_verify_chain(v_org);
-END $$;
+END $$;;

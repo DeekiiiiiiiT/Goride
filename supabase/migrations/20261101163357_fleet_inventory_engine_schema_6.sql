@@ -125,4 +125,4 @@ CREATE TABLE IF NOT EXISTS fleet.inv_driver_report_update (
   )),
   note text,
   created_at timestamptz NOT NULL DEFAULT now()
-);
+);;

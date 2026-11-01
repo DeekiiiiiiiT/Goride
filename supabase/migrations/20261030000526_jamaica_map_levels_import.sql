@@ -144,4 +144,4 @@ END;
 $$;
 
 REVOKE ALL ON FUNCTION geo.save_import_drafts(uuid, uuid) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION geo.save_import_drafts(uuid, uuid) TO service_role;
+GRANT EXECUTE ON FUNCTION geo.save_import_drafts(uuid, uuid) TO service_role;;

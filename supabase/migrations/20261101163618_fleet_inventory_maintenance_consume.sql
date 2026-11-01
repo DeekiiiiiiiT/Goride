@@ -48,3 +48,4 @@ $$;
 
 REVOKE ALL ON FUNCTION fleet.inv_consume_for_work_order(text, uuid, uuid, uuid, numeric, text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION fleet.inv_consume_for_work_order(text, uuid, uuid, uuid, numeric, text) TO service_role;
+;

@@ -72,4 +72,4 @@ CREATE TABLE IF NOT EXISTS fleet.inv_kit_compliance_daily (
   lines_present integer NOT NULL DEFAULT 0,
   created_at timestamptz NOT NULL DEFAULT now(),
   UNIQUE (organization_id, snapshot_date)
-);
+);;

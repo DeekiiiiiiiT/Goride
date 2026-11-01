@@ -38,4 +38,4 @@ BEGIN
   RETURN jsonb_build_object('applied', applied, 'errors', errors, 'batchId', p_batch_id);
 END; $$;
 REVOKE ALL ON FUNCTION public.import_parts_catalog_rows(jsonb, uuid) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.import_parts_catalog_rows(jsonb, uuid) TO service_role;
+GRANT EXECUTE ON FUNCTION public.import_parts_catalog_rows(jsonb, uuid) TO service_role;;

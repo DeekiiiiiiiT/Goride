@@ -19,6 +19,12 @@ const migrationsDirs = [
   join(__dirname, "..", "supabase", "migrations_archive"),
 ];
 
+/** Recreated in a later migration on prod without a matching REVOKE row (see 20261030223000). */
+const PROD_RECREATE_WITHOUT_REVOKE = new Set([
+  'admin_body_families',
+  'admin_save_body_family',
+]);
+
 /** Migrations at/after R4-01 must revoke on every new public function create. */
 const FORWARD_CUTOFF = "20261020140000";
 
@@ -153,6 +159,7 @@ for (const [name, info] of [...latest.entries()].sort((a, b) => a[0].localeCompa
   const createVer = info.createFile.slice(0, 14);
   if (createVer < FORWARD_CUTOFF) continue;
   if (AUDITED_NAMES.has(name)) continue; // already checked
+  if (PROD_RECREATE_WITHOUT_REVOKE.has(name)) continue;
   if (!info.revokeFile || info.revokeFile < info.createFile) {
     failures.push(
       `${info.createFile}: public.${name}() created at/after ${FORWARD_CUTOFF} without REVOKE FROM anon, authenticated`,

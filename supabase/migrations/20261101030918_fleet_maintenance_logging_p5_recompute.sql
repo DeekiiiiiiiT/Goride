@@ -72,4 +72,4 @@ BEGIN
   END LOOP;
   RETURN v_updated;
 END;
-$$;
+$$;;

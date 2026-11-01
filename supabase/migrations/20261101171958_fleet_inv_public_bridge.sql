@@ -1,8 +1,5 @@
 -- Public PostgREST bridge for fleet inventory (audit R6-01). service_role only — do not grant to authenticated.
 
--- ---------------------------------------------------------------------------
--- Table mirrors (updatable single-table views)
--- ---------------------------------------------------------------------------
 DO $$
 DECLARE
   t text;
@@ -45,7 +42,6 @@ BEGIN
   END LOOP;
 END $$;
 
--- Read-only analytics views
 CREATE OR REPLACE VIEW public.fleet_inv_v_stock
 WITH (security_invoker = true) AS
 SELECT * FROM fleet.v_inv_stock;
@@ -69,9 +65,6 @@ GRANT SELECT ON public.fleet_inv_v_stock, public.fleet_inv_v_stock_kpis,
   public.fleet_inv_v_kit_compliance, public.fleet_inv_v_alerts_tiles
   TO service_role;
 
--- ---------------------------------------------------------------------------
--- RPC wrappers (SECURITY DEFINER → fleet schema)
--- ---------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.fleet_inv_verify_chain(p_org_id text)
 RETURNS jsonb
 LANGUAGE sql
@@ -281,4 +274,4 @@ BEGIN
     EXECUTE format('REVOKE ALL ON FUNCTION public.%s FROM PUBLIC, anon, authenticated', fn);
     EXECUTE format('GRANT EXECUTE ON FUNCTION public.%s TO service_role', fn);
   END LOOP;
-END $$;
+END $$;;
