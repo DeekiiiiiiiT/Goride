@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { formatMaintenanceScheduledDate } from "../../utils/maintenanceDisplayFormat";
+import { formatMaintenanceScheduledDate } from "../../../utils/maintenanceDisplayFormat";
 
 export type MaintenanceHubKpiProps = {
   overdueCount: number;

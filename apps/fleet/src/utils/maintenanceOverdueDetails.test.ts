@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   analyzeMaintenanceScheduleRow,
   diffCalendarDaysUtc,
+  formatWorstDueSummary,
+  pickWorstMaintenanceDueRow,
   sortFleetServiceAttention,
 } from "./maintenanceOverdueDetails.ts";
 
@@ -39,7 +41,7 @@ describe("analyzeMaintenanceScheduleRow", () => {
     );
     expect(a.status).toBe("overdue");
     expect(a.calendarDaysOverdue).toBeNull();
-    expect(a.kmOverdue).toBe(3000);
+    expect(a.kmOverdue).toBe(5000);
   });
 
   it("returns km overdue when past single threshold without upper band", () => {
@@ -57,5 +59,17 @@ describe("sortFleetServiceAttention", () => {
       { kind: "overdue", taskName: "Air filter" },
     ]);
     expect(sorted.map((x) => x.taskName)).toEqual(["Air filter", "Oil", "Brake fluid"]);
+  });
+});
+
+describe("pickWorstMaintenanceDueRow", () => {
+  it("prefers largest km overdue then days", () => {
+    const row = pickWorstMaintenanceDueRow([
+      { category_name: "Oil", due_status: "overdue", km_overdue: 1000, days_overdue: 0 },
+      { category_name: "Tire Change", due_status: "overdue", km_overdue: 5000, days_overdue: 0 },
+      { category_name: "Brake", due_status: "due_soon", km_overdue: 0, days_overdue: 0 },
+    ]);
+    expect(row?.category_name).toBe("Tire Change");
+    expect(formatWorstDueSummary(row)).toContain("5,000");
   });
 });

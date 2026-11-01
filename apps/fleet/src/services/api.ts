@@ -3218,24 +3218,6 @@ export const api = {
       return response.json() as Promise<{ items: Array<Record<string, unknown>>; enginePrefix: string | null; engineFamily: { id: string; code: string } | null }>;
   },
 
-  async bootstrapMaintenanceFleet() {
-      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetOps}/maintenance-fleet-bootstrap`, {
-          method: "POST",
-          headers: await getHeaders(),
-          body: JSON.stringify({}),
-      });
-      if (!response.ok) throw new Error("Failed to bootstrap fleet maintenance schedules");
-      return response.json() as Promise<{
-        totalCreated: number;
-        results: Array<{
-          vehicleId: string;
-          created: number;
-          skippedReason?: string;
-          catalogId?: string | null;
-        }>;
-      }>;
-  },
-
   async getTollTags() {
     const tags: any[] = [];
     let cursor: string | null = null;

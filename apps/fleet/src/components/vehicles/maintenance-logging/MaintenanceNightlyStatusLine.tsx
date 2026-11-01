@@ -1,5 +1,5 @@
 import React from "react";
-import { formatNightlyCheckRanLabel } from "../../utils/maintenanceDisplayFormat";
+import { formatNightlyCheckRanLabel } from "../../../utils/maintenanceDisplayFormat";
 
 type NightlyRun = {
   started_at?: string;

@@ -292,6 +292,7 @@ export function MaintenanceTemplatesManager() {
     position_aware: false,
     default_interval_miles: "",
     default_interval_months: "",
+    description: "",
   });
 
   const [form, setForm] = useState({
@@ -742,11 +743,12 @@ export function MaintenanceTemplatesManager() {
       schema_preset: "simple",
       kind: "system",
       parent_id: "",
-      op_code: "",
-      position_aware: false,
-      default_interval_miles: "",
-      default_interval_months: "",
-    });
+    op_code: "",
+    position_aware: false,
+    default_interval_miles: "",
+    default_interval_months: "",
+    description: "",
+  });
     setCategoryDialogOpen(true);
   };
 
@@ -763,11 +765,12 @@ export function MaintenanceTemplatesManager() {
       schema_preset: "commercial",
       kind: "component",
       parent_id: defaultParent,
-      op_code: "",
-      position_aware: false,
-      default_interval_miles: "",
-      default_interval_months: "",
-    });
+    op_code: "",
+    position_aware: false,
+    default_interval_miles: "",
+    default_interval_months: "",
+    description: "",
+  });
     setCategoryDialogOpen(true);
   };
 
@@ -790,6 +793,7 @@ export function MaintenanceTemplatesManager() {
         c.default_interval_miles != null ? String(c.default_interval_miles) : "",
       default_interval_months:
         c.default_interval_months != null ? String(c.default_interval_months) : "",
+      description: c.description || "",
     });
     setCategoryDialogOpen(true);
   };
@@ -851,6 +855,7 @@ export function MaintenanceTemplatesManager() {
           : categoryForm.default_interval_months.trim() === ""
             ? null
             : Number(categoryForm.default_interval_months),
+        description: isSystem ? null : categoryForm.description.trim() || null,
       };
       if (editingCategory) {
         await updateMaintenanceCategory(token, editingCategory.id, payload);
@@ -2119,6 +2124,23 @@ export function MaintenanceTemplatesManager() {
                 <Label htmlFor="cat-quick-job" className="text-sm cursor-pointer">
                   Show in Quick Jobs
                 </Label>
+              </div>
+            )}
+            {!isEditingSystem && (
+              <div className="space-y-1.5">
+                <Label className="text-xs">Description (Find parts overlay)</Label>
+                <textarea
+                  value={categoryForm.description}
+                  onChange={(e) =>
+                    setCategoryForm((f) => ({ ...f, description: e.target.value }))
+                  }
+                  className="min-h-[72px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                  placeholder="One line shown under the part name in Fleet Find parts (optional)"
+                  maxLength={280}
+                />
+                <p className="text-[11px] text-slate-500 leading-snug">
+                  Owner-written copy only. Leave blank until you have a sourced one-liner.
+                </p>
               </div>
             )}
             {!isEditingSystem && (

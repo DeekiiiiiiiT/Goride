@@ -3,6 +3,11 @@
 :root {
   --font-size: 16px;
   --color-stitch-secondary: #5d5d6d;
+  --color-on-primary: #ffffff;
+  --color-primary-container: #1b192e;
+  --color-outline-variant: #c9c5cd;
+  --color-surface-container-highest: #e0e3e5;
+  --color-surface-tint: #5e5c74;
   --background: #ffffff;
   --foreground: oklch(0.145 0 0);
   --card: #ffffff;
@@ -79,6 +84,11 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(0.269 0 0);
   --sidebar-ring: oklch(0.439 0 0);
+  --color-on-primary: #1b192e;
+  --color-primary-container: #c8c3df;
+  --color-outline-variant: #47464c;
+  --color-surface-container-highest: #2d3133;
+  --color-surface-tint: #84819a;
 }
 
 @theme inline {
@@ -137,6 +147,11 @@
   --color-secondary-container: #dfdef1;
   --color-stitch-secondary: #5d5d6d;
   --color-on-secondary-container: #616172;
+  --color-on-primary: #ffffff;
+  --color-primary-container: #1b192e;
+  --color-outline-variant: #c9c5cd;
+  --color-surface-container-highest: #e0e3e5;
+  --color-surface-tint: #5e5c74;
 }
 
 @layer base {

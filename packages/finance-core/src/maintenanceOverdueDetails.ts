@@ -55,16 +55,14 @@ export function analyzeMaintenanceScheduleRow(
 
   const dueSoonKm = options?.dueSoonKm ?? 1000;
   const dueSoonDays = options?.dueSoonDays ?? 14;
-  const maxM = normalizeNextMilesMax(nextMiles, nextMilesMaxRaw);
 
   let overdueMiles = false;
   let dueSoonMiles = false;
   if (nextMiles != null && Number.isFinite(Number(nextMiles))) {
     const nm = Number(nextMiles);
-    const overdueAt = maxM != null ? maxM + 1 : nm;
-    overdueMiles = currentOdo >= overdueAt;
+    overdueMiles = currentOdo >= nm;
     if (!overdueMiles && currentOdo > 0) {
-      dueSoonMiles = currentOdo >= Math.max(0, nm - dueSoonKm) && currentOdo < overdueAt;
+      dueSoonMiles = currentOdo >= Math.max(0, nm - dueSoonKm) && currentOdo < nm;
     }
   }
 
@@ -91,11 +89,7 @@ export function analyzeMaintenanceScheduleRow(
     }
     if (overdueMiles && nextMiles != null && Number.isFinite(Number(nextMiles))) {
       const nm = Number(nextMiles);
-      if (maxM != null) {
-        kmOverdue = Math.max(0, currentOdo - maxM);
-      } else {
-        kmOverdue = Math.max(0, currentOdo - nm);
-      }
+      kmOverdue = Math.max(0, currentOdo - nm);
     }
   }
 
@@ -134,4 +128,46 @@ export function sortFleetServiceAttention(
     if (a.kind !== b.kind) return a.kind === "overdue" ? -1 : 1;
     return a.taskName.localeCompare(b.taskName, undefined, { sensitivity: "base" });
   });
+}
+
+export interface MaintenanceDueRowPick {
+  category_name?: string | null;
+  due_status?: string | null;
+  km_overdue?: number | null;
+  days_overdue?: number | null;
+}
+
+/** Pick the single worst due row for fleet status / next-due copy (R-04 / R-05a). */
+export function pickWorstMaintenanceDueRow<T extends MaintenanceDueRowPick>(
+  rows: T[],
+): T | null {
+  const eligible = rows.filter((r) => {
+    const st = String(r.due_status ?? "");
+    return st === "overdue" || st === "due_soon";
+  });
+  if (!eligible.length) return null;
+  return [...eligible].sort((a, b) => {
+    const kmA = Number(a.km_overdue ?? 0);
+    const kmB = Number(b.km_overdue ?? 0);
+    if (kmB !== kmA) return kmB - kmA;
+    const dayA = Number(a.days_overdue ?? 0);
+    const dayB = Number(b.days_overdue ?? 0);
+    return dayB - dayA;
+  })[0];
+}
+
+export function formatWorstDueSummary(row: MaintenanceDueRowPick | null): string | null {
+  if (!row || !row.category_name) return null;
+  const name = String(row.category_name);
+  if (row.due_status === "overdue") {
+    const km = Number(row.km_overdue ?? 0);
+    if (km > 0) return `${name} — overdue ${km.toLocaleString()} km`;
+    const days = Number(row.days_overdue ?? 0);
+    if (days > 0) return `${name} — overdue ${days} days`;
+    return `${name} — overdue`;
+  }
+  if (row.due_status === "due_soon") {
+    return `${name} — due soon`;
+  }
+  return name;
 }

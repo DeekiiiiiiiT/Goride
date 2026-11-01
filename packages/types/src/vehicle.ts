@@ -278,8 +278,9 @@ export interface OdometerReading {
   driverName?: string;
   date: string; // ISO string
   value: number; // The odometer reading in km
+  odometer?: number;
   type: OdometerType;
-  source: OdometerSource | 'Weekly Check-in' | 'Vehicle Handover' | 'Fuel Receipt';
+  source: OdometerSource | UnifiedOdometerSource | 'Weekly Check-in' | 'Vehicle Handover' | 'Fuel Receipt';
   notes?: string;
   referenceId?: string; // ID of the service log, document, or trip batch
   imageUrl?: string; // Photo of the odometer
