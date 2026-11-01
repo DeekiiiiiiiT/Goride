@@ -1887,6 +1887,67 @@ export function formatPartsRequestShortId(id: string): string {
   return `${core.slice(0, 3)}-${core.slice(3, 5)}-${core.slice(5, 8)}`;
 }
 
+/** FP14 notice headline fragments (Stitch fidelity + live catalog banner). */
+export function formatCatalogOnFileNoticeMessage(
+  partName: string,
+  vehicleLabel: string,
+  modelYear?: string | number | null,
+): string {
+  const part = String(partName || "").trim() || "Part";
+  const vehicle = String(vehicleLabel || "").trim() || "your car";
+  const year = modelYear != null && String(modelYear).trim() ? String(modelYear).trim() : "";
+  return `${part} for your ${vehicle}${year ? ` ${year}` : ""} is now on file.`;
+}
+
+export const FP5_BACK_TO_AREA_LABEL = "Back to belts & hoses";
+
+export const FP5_SPEC_FIELD_LABELS = [
+  "Rib profile",
+  "Effective length",
+  "Material grade",
+  "Model application",
+] as const;
+
+export const FP8_REQUEST_PART_HEADING = "Request part for";
+export const FP8_SPEC_NOTES_LABEL = "Specification notes";
+export const FP8_CO_REQUEST_LINE = "Others asked for this too, so it's already in line.";
+export const FP8_QUOTA_GUARD_TITLE = "Quota guard & throttling";
+export const FP8_DAILY_CAP_LABEL = "30/30 daily cap";
+export const FP8_INPUT_CACHED_LABEL = "Input cached";
+export const FP8_VERIFIES_FITMENT = "Verifies fitment across";
+export const FP8_SAMPLE_REQUEST_REF = "req-2026-fit-094";
+export const FP8_DISPATCH_LOG_LINE = "Logged 0, 14:05 EST · Node #01";
+
+/** Stitch FP14 copy block (also used for live catalog-added banner). */
+export const FP14_CATALOG_ADDED_LINE = "Drive belt for your Toyota Roomy 2019 is now on file.";
+export const FP14_BATCH_PARTS_PHRASE = "3 parts";
+export const FP14_RESULTS_COUNT_LINE = "Results: 1 / 2 alternates";
+export const FP14_CHECKED_TWO_CATALOGUES = "Checked against 2 catalogues";
+export const FP14_SISTER_OPTIONS_COUNT = "Sister & aftermarket options (2)";
+
+/** Stitch FP15 copy block. */
+export const FP15_CO_REQUEST_ACROSS = "Others asked for this too, so it's already in line across";
+export const FP15_LIMIT_USED_LINE = "30 / 30 used";
+export const FP15_SENT_REQUESTS_LINE = "You've sent 30 requests";
+export const FP15_VIEW_YOUR_REQUESTS = "View your 30";
+
+export function formatCatalogResolvedNoticeLine(requestedAt: unknown): string {
+  if (!requestedAt) return "";
+  const d = new Date(String(requestedAt));
+  if (Number.isNaN(d.getTime())) return "";
+  const datePart = d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+  return `Resolved from OEM parts catalogue lookup requested on ${datePart}.`;
+}
+
+/** FP16 assembly area labels (phone notice frame). */
+export const FP16_ASSEMBLY_CATEGORIES = [
+  "Belts & hoses",
+  "Brakes",
+  "Filters & fluids",
+  "Suspension",
+  "Electrical & sensors",
+] as const;
+
 function formatActivityTimeShort(value: unknown): string {
   if (!value) return "—";
   const d = new Date(String(value));
@@ -1931,13 +1992,33 @@ function buildRequestTimeline(row: ActivityRow, category: "waiting" | "added" | 
   const lookingAt = row.looking_at;
   const addedAt = row.added_at || (category === "added" ? row.resolved_at : null);
   const checkedAt = row.checked_at || (addedAt ? lookingAt || addedAt : null);
+  const failedAt = row.cant_find_at || row.resolved_at || row.retry_at;
+
+  if (category === "failed") {
+    const stepDefs: Array<{ key: Fp13TimelineStep["key"]; label: string; at: unknown }> = [
+      { key: "sent", label: "Sent", at: sentAt },
+      { key: "looking", label: "Roam looking", at: lookingAt },
+      { key: "checked", label: "Checked", at: checkedAt },
+      { key: "added", label: "Couldn't find", at: failedAt },
+    ];
+    return stepDefs.map((step, index) => {
+      const state: Fp13TimelineStep["state"] = index < 3 ? "done" : "active";
+      const timeLabel = index === 3 ? "Unresolved" : formatActivityTimeShort(step.at);
+      return {
+        key: step.key,
+        label: step.label,
+        timeLabel,
+        state,
+        timeEmphasis: index === 3 ? "error" : "default",
+      };
+    });
+  }
+
   const activeIndex = category === "added"
     ? 3
-    : category === "failed"
-      ? 2
-      : lookingAt
-        ? 1
-        : 0;
+    : row.looking_at
+      ? 1
+      : 0;
   const steps: Array<{ key: Fp13TimelineStep["key"]; label: string; at: unknown }> = [
     { key: "sent", label: "Sent", at: sentAt },
     { key: "looking", label: "Roam looking", at: lookingAt },
@@ -1949,7 +2030,7 @@ function buildRequestTimeline(row: ActivityRow, category: "waiting" | "added" | 
     if (category === "added" || index < activeIndex) state = "done";
     else if (index === activeIndex) state = "active";
     const timeLabel = state === "done" ? formatActivityTimeShort(step.at) : state === "active" ? "In progress" : "—";
-    return { key: step.key, label: step.label, timeLabel, state };
+    return { key: step.key, label: step.label, timeLabel, state, timeEmphasis: "default" };
   });
 }
 
@@ -1968,6 +2049,7 @@ export type Fp13TimelineStep = {
   label: string;
   timeLabel: string;
   state: "done" | "active" | "pending";
+  timeEmphasis?: "error" | "default";
 };
 
 export type Fp13RequestCard = {

@@ -2661,6 +2661,56 @@ export const api = {
       return { items: (json.items || []) as MaintenanceWorkOrder[] };
   },
 
+  async listMaintenanceWorkOrders(params?: { vehicleId?: string; status?: string; board?: boolean }) {
+    const qs = new URLSearchParams();
+    if (params?.vehicleId) qs.set("vehicleId", params.vehicleId);
+    if (params?.status) qs.set("status", params.status);
+    if (params?.board) qs.set("board", "true");
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fleetOps}/maintenance-work-orders${suffix}`,
+      { headers: await getHeaders(null) },
+    );
+    if (!response.ok) throw new Error("Failed to fetch work orders");
+    const json = await response.json() as { items?: unknown[] };
+    return { items: (json.items || []) as MaintenanceWorkOrder[] };
+  },
+
+  async getMaintenanceAlerts() {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetOps}/maintenance-alerts`, {
+      headers: await getHeaders(null),
+    });
+    if (!response.ok) throw new Error("Failed to fetch maintenance alerts");
+    return response.json() as Promise<{ items: Array<Record<string, unknown>> }>;
+  },
+
+  async triageMaintenanceWorkOrder(
+    id: string,
+    body: { action: "approve" | "merge" | "decline"; reason?: string; mergeIntoWorkOrderId?: string },
+  ) {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fleetOps}/maintenance-work-orders/${encodeURIComponent(id)}/triage`,
+      {
+        method: "POST",
+        headers: await getHeaders(),
+        body: JSON.stringify(body),
+      },
+    );
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error((err as { error?: string }).error || "Triage failed");
+    }
+    return response.json();
+  },
+
+  async getMaintenanceKpiMonthly() {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetOps}/maintenance-kpi-monthly`, {
+      headers: await getHeaders(null),
+    });
+    if (!response.ok) throw new Error("Failed to fetch maintenance KPIs");
+    return response.json() as Promise<{ items: Array<Record<string, unknown>> }>;
+  },
+
   async getWorkOrder(id: string) {
       const response = await fetchWithRetry(
         `${API_ENDPOINTS.fleetOps}/maintenance-work-orders/${encodeURIComponent(id)}`,
@@ -2809,6 +2859,8 @@ export const api = {
   async saveInspectionFindings(payload: {
     vehicleId: string;
     workOrderId?: string | null;
+    odometer?: number;
+    date?: string;
     findings: Array<{
       itemId?: string | null;
       systemId?: string | null;
@@ -2817,6 +2869,8 @@ export const api = {
       notes?: string | null;
       photoUrl?: string | null;
       declined?: boolean;
+      safetyCritical?: boolean;
+      doNotDrive?: boolean;
     }>;
   }) {
       const response = await fetchWithRetry(
@@ -3042,6 +3096,19 @@ export const api = {
       });
       if (!response.ok) throw new Error("Failed to load parts requests");
       return response.json() as Promise<{ items: Array<Record<string, unknown>> }>;
+  },
+
+  async appendPartsSourcingNote(requestId: string, note: string) {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/sourcing-request-note`, {
+        method: "POST",
+        headers: await getHeaders(),
+        body: JSON.stringify({ id: requestId, note }),
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error((err as { error?: string }).error || "Could not send note");
+      }
+      return response.json();
   },
 
   async submitPartFitFeedback(body: { partId: string; outcome: "fit" | "no_fit" | "modified"; catalogId?: string | null; vehicleId?: string; workOrderLineId?: string | null; notes?: string }) {

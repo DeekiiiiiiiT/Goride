@@ -78,11 +78,23 @@ export function isGoogleGroundingRedirectUrl(url: string): boolean {
   }
 }
 
+export const CATALOG_FETCH_BROWSER_HEADERS: Record<string, string> = {
+  "User-Agent":
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+  Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+  "Accept-Language": "en-US,en;q=0.9",
+};
+
 export type CatalogSourceFetch = {
   html: string;
   finalUrl: string;
   /** Original URL when it was a grounding redirect. */
   redirectUrl: string | null;
+  httpStatus: number;
+  byteCount: number;
+  fetchError: string | null;
+  /** Grounding redirect did not land on a catalogue page. */
+  redirectFailed: boolean;
 };
 
 export async function fetchCatalogSourcePage(
@@ -96,15 +108,49 @@ export async function fetchCatalogSourcePage(
     const res = await fetchImpl(url, {
       signal: ctrl.signal,
       redirect: "follow",
-      headers: { "User-Agent": "RoamCatalogResearch/1" },
+      headers: CATALOG_FETCH_BROWSER_HEADERS,
     });
     const finalUrl = res.url || url;
-    if (!res.ok) return { html: "", finalUrl, redirectUrl };
-    const html = await res.text();
-    return { html, finalUrl, redirectUrl };
-  } catch {
-    return { html: "", finalUrl: url, redirectUrl };
+    const html = res.ok ? await res.text() : "";
+    const byteCount = html.length;
+    const finalHost = domainFromUrl(finalUrl);
+    const redirectFailed = Boolean(
+      redirectUrl
+        && (isGoogleGroundingRedirectUrl(finalUrl)
+          || finalHost === "vertexaisearch.cloud.google.com"
+          || (!res.ok && res.status === 0)),
+    );
+    return {
+      html,
+      finalUrl,
+      redirectUrl,
+      httpStatus: res.status,
+      byteCount,
+      fetchError: res.ok ? null : `http_${res.status}`,
+      redirectFailed,
+    };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    const redirectFailed = Boolean(redirectUrl);
+    return {
+      html: "",
+      finalUrl: url,
+      redirectUrl,
+      httpStatus: 0,
+      byteCount: 0,
+      fetchError: msg,
+      redirectFailed,
+    };
   } finally {
     clearTimeout(t);
   }
+}
+
+/** Build source telemetry fields shared by worker + fetch log. */
+export function catalogSourceFetchMeta(fetched: CatalogSourceFetch): Record<string, unknown> {
+  return {
+    http_status: fetched.httpStatus,
+    byte_count: fetched.byteCount,
+    final_url: fetched.finalUrl,
+  };
 }

@@ -351,10 +351,21 @@ export type CatalogResearchIncident = {
   updated_at: string;
 };
 
+export type CatalogTrustedSourceFetchRow = {
+  at: string;
+  http_status: number;
+  byte_count: number;
+  final_url: string;
+  reason: string | null;
+};
+
 export type CatalogTrustedSource = {
   domain: string;
   kind: "oem_catalog" | "aftermarket_catalog" | string;
   active: boolean;
+  pages_confirmed?: number;
+  recentFetches?: CatalogTrustedSourceFetchRow[];
+  blocked?: boolean;
 };
 
 export async function fetchCatalogResearchJobs(

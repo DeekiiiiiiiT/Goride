@@ -123,6 +123,62 @@ BEGIN
   ) THEN
     NULL;
   END IF;
+
+  -- R22: complete_msg archives with explicit queue
+  INSERT INTO public.catalog_research_job (
+    id, job_type, group_key, vehicle_catalog_id, maintenance_component_id,
+    fit_descriptor, match_type, fleet_count, state, pgmq_read_ct
+  ) VALUES (
+    'c6666666-6666-4666-8666-666666666666',
+    'part',
+    'archive-test:serpentine:OEM',
+    v_vc, v_comp, 'front', 'OEM', 1, 'queued', 0
+  ) ON CONFLICT (id) DO UPDATE SET state = 'queued', pgmq_msg_id = NULL, pgmq_queue = NULL, pgmq_read_ct = 0;
+
+  SELECT public.catalog_research_enqueue_job('c6666666-6666-4666-8666-666666666666'::uuid) INTO v_msg;
+  v_claim := public.catalog_research_claim();
+  IF coalesce(v_claim->>'claimed', 'false') <> 'true' THEN
+    RAISE EXCEPTION 'archive test: expected claim, got %', v_claim;
+  END IF;
+  UPDATE public.catalog_research_job SET state = 'needs_review', updated_at = now() WHERE id = 'c6666666-6666-4666-8666-666666666666';
+  PERFORM public.catalog_research_complete_msg(v_msg, 'catalog_research');
+  v_claim := public.catalog_research_claim();
+  IF v_claim->>'reason' IS DISTINCT FROM 'empty' THEN
+    RAISE EXCEPTION 'archive test: expected empty queue after complete_msg, got %', v_claim;
+  END IF;
+
+  -- R22: stale message for needs_review must not fail job
+  INSERT INTO public.catalog_research_job (
+    id, job_type, group_key, vehicle_catalog_id, maintenance_component_id,
+    fit_descriptor, match_type, fleet_count, state, pgmq_read_ct
+  ) VALUES (
+    'c7777777-7777-4777-8777-777777777777',
+    'part',
+    'stale-test:serpentine:OEM',
+    v_vc, v_comp, 'front', 'OEM', 1, 'needs_review', 0
+  ) ON CONFLICT (id) DO UPDATE SET state = 'needs_review', last_error = NULL, updated_at = now();
+
+  PERFORM pgmq.send(
+    'catalog_research',
+    jsonb_build_object('jobId', 'c7777777-7777-4777-8777-777777777777'),
+    0
+  );
+  FOR i IN 1..4 LOOP
+    PERFORM pgmq.read('catalog_research', 600, 1);
+  END LOOP;
+  v_claim := public.catalog_research_claim();
+  IF coalesce(v_claim->>'claimed', 'false') = 'true' THEN
+    RAISE EXCEPTION 'stale test: expected no claim, got %', v_claim;
+  END IF;
+  IF v_claim->>'reason' IS DISTINCT FROM 'stale_job' THEN
+    RAISE EXCEPTION 'stale test: expected stale_job, got %', v_claim;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.catalog_research_job
+    WHERE id = 'c7777777-7777-4777-8777-777777777777' AND state = 'needs_review'
+  ) THEN
+    RAISE EXCEPTION 'stale test: job state changed from needs_review';
+  END IF;
 END $$;
 
 ROLLBACK;

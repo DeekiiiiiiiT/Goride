@@ -230,7 +230,22 @@ export function registerCatalogResearchRoutes(app: { get: Function; patch: Funct
     if (denied) return denied;
     const { data, error } = await supabase.from("catalog_trusted_source").select("*").order("domain");
     if (error) return c.json({ error: error.message }, 500);
-    return c.json({ items: data || [] });
+    const { data: healthRaw, error: healthErr } = await supabase.rpc("catalog_trusted_source_fetch_health");
+    if (healthErr) return c.json({ error: healthErr.message }, 500);
+    const health = (healthRaw || {}) as Record<string, {
+      recentFetches?: Array<Record<string, unknown>>;
+      blocked?: boolean;
+    }>;
+    const items = (data || []).map((row) => {
+      const r = row as { domain: string };
+      const h = health[r.domain] || {};
+      return {
+        ...row,
+        recentFetches: h.recentFetches || [],
+        blocked: Boolean(h.blocked),
+      };
+    });
+    return c.json({ items });
   });
 
   app.post(`${PREFIX}/trusted-sources`, async (c: Context) => {

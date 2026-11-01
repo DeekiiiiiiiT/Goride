@@ -59,7 +59,29 @@ Deno.test("R21: redirect lands on partsouq and trusted check uses final domain",
   }) as typeof fetch));
   assertEquals(res.redirectUrl, grounding);
   assertEquals(res.finalUrl, finalUrl);
+  assertEquals(res.httpStatus, 200);
+  assertEquals(res.byteCount, "<html>partsouq</html>".length);
+  assertEquals(res.redirectFailed, false);
   assertEquals(isTrustedDomain(domainFromUrl(res.finalUrl), new Set(["partsouq.com"])), true);
+});
+
+Deno.test("R25: failed grounding redirect is redirect_failed not untrusted", async () => {
+  const grounding = "https://vertexaisearch.cloud.google.com/grounding-api-redirect/x";
+  const res = await fetchCatalogSourcePage(grounding, (() => Promise.reject(new Error("network"))) as typeof fetch);
+  assertEquals(res.redirectFailed, true);
+  assertEquals(res.httpStatus, 0);
+  assertEquals(res.byteCount, 0);
+});
+
+Deno.test("R25: HTTP 403 still records status and zero bytes", async () => {
+  const res = await fetchCatalogSourcePage("https://partsouq.com/x", ((() => {
+    const r = new Response("blocked", { status: 403 });
+    Object.defineProperty(r, "url", { value: "https://partsouq.com/x" });
+    return Promise.resolve(r);
+  }) as typeof fetch));
+  assertEquals(res.httpStatus, 403);
+  assertEquals(res.byteCount, 0);
+  assertEquals(res.html, "");
 });
 
 Deno.test("R21: redirect to untrusted domain is identifiable", async () => {
@@ -72,4 +94,5 @@ Deno.test("R21: redirect to untrusted domain is identifiable", async () => {
   }) as typeof fetch));
   assertEquals(domainFromUrl(res.finalUrl), "random-blog.example");
   assertEquals(isTrustedDomain(domainFromUrl(res.finalUrl), new Set(["partsouq.com"])), false);
+  assertEquals(res.redirectFailed, false);
 });

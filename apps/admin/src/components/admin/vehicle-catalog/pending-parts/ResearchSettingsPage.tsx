@@ -36,6 +36,7 @@ export function ResearchSettingsPage() {
   const [newDomain, setNewDomain] = useState("");
   const [newKind, setNewKind] = useState<"oem_catalog" | "aftermarket_catalog">("oem_catalog");
   const [showAddDomain, setShowAddDomain] = useState(false);
+  const [expandedDomain, setExpandedDomain] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -256,12 +257,33 @@ export function ResearchSettingsPage() {
                 </thead>
                 <tbody>
                   {sources.map((row) => (
-                    <tr key={row.domain} className="border-t border-surface-container-high">
-                      <td className="px-space-lg py-space-md font-mono-md font-semibold">{row.domain}</td>
+                    <React.Fragment key={row.domain}>
+                    <tr className="border-t border-surface-container-high">
+                      <td className="px-space-lg py-space-md">
+                        <div className="flex flex-col gap-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-mono-md font-semibold">{row.domain}</span>
+                            {row.blocked ? (
+                              <span className="rounded bg-error-container px-2 py-0.5 font-label-xs font-semibold uppercase text-error">
+                                Blocked
+                              </span>
+                            ) : null}
+                          </div>
+                          <button
+                            type="button"
+                            className="self-start font-label-xs text-primary hover:underline"
+                            onClick={() => setExpandedDomain((d) => (d === row.domain ? null : row.domain))}
+                          >
+                            {expandedDomain === row.domain ? "Hide fetch log" : "Last 10 fetches"}
+                          </button>
+                        </div>
+                      </td>
                       <td className="px-space-md py-space-md font-mono-sm text-mono-sm">
                         {row.kind === "aftermarket_catalog" ? "Aftermarket catalogue" : "OEM catalogue"}
                       </td>
-                      <td className="px-space-md py-space-md text-right font-mono-md">—</td>
+                      <td className="px-space-md py-space-md text-right font-mono-md">
+                        {row.pages_confirmed ?? 0}
+                      </td>
                       <td className="px-space-lg py-space-md text-right">
                         <div className="inline-flex items-center justify-end gap-2">
                           <button
@@ -299,6 +321,40 @@ export function ResearchSettingsPage() {
                         </div>
                       </td>
                     </tr>
+                    {expandedDomain === row.domain && (row.recentFetches?.length ?? 0) > 0 ? (
+                      <tr key={`${row.domain}-fetches`} className="border-t border-surface-container-high bg-surface-container-low/50">
+                        <td colSpan={4} className="px-space-lg py-space-md">
+                          <div className="overflow-x-auto">
+                            <table className="w-full font-mono-sm text-mono-sm">
+                              <thead>
+                                <tr className="text-on-surface-variant font-label-xs uppercase">
+                                  <th className="text-left py-1 pr-4">Time</th>
+                                  <th className="text-left py-1 pr-4">HTTP</th>
+                                  <th className="text-left py-1 pr-4">Bytes</th>
+                                  <th className="text-left py-1">Final URL</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {(row.recentFetches || []).map((f, i) => (
+                                  <tr key={`${row.domain}-${i}`} className="border-t border-surface-container-high">
+                                    <td className="py-1 pr-4 whitespace-nowrap">
+                                      {f.at ? new Date(f.at).toLocaleString() : "—"}
+                                    </td>
+                                    <td className="py-1 pr-4">{f.http_status}</td>
+                                    <td className="py-1 pr-4">{f.byte_count}</td>
+                                    <td className="py-1 truncate max-w-md" title={f.final_url}>
+                                      {f.final_url}
+                                      {f.reason ? ` · ${f.reason}` : ""}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : null}
+                    </React.Fragment>
                   ))}
                 </tbody>
               </table>

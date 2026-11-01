@@ -663,6 +663,35 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
     }
   });
 
+  app.post(`${PREFIX}/sourcing-request-note`, ...view, async (c: Context) => {
+    try {
+      const orgId = String(getOrgId(c) || "");
+      const body = await c.req.json() as { id?: string; note?: string };
+      const id = String(body.id ?? "").trim();
+      const note = String(body.note ?? "").trim().slice(0, 2000);
+      if (!UUID_RE.test(id)) return c.json({ error: "Request id required" }, 400);
+      if (!note) return c.json({ error: "Note is required" }, 400);
+      const { data: row, error: readError } = await supabase
+        .from("parts_sourcing_requests")
+        .select("id, organization_id, status")
+        .eq("id", id)
+        .maybeSingle();
+      if (readError) throw readError;
+      if (!row || (row as { organization_id?: string }).organization_id !== orgId) {
+        return c.json({ error: "Not found" }, 404);
+      }
+      const { error } = await supabase
+        .from("parts_sourcing_requests")
+        .update({ looking_note: note, updated_at: new Date().toISOString() })
+        .eq("id", id)
+        .eq("organization_id", orgId);
+      if (error) throw error;
+      return c.json({ ok: true });
+    } catch (error) {
+      return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+    }
+  });
+
   app.get(`${PREFIX}/request-draft`, ...view, async (c: Context) => {
     try {
       const orgId = String(getOrgId(c) || "");

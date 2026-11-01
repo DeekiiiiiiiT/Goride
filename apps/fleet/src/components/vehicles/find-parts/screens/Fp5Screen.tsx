@@ -3,6 +3,7 @@ import type { Fp5ResultRow, Fp5ViewModel } from "../findPartsViewModels";
 import type { TrimScopeTab } from "../findPartsActions";
 import { FindPartsStickyHeader } from "../FindPartsStickyHeader";
 import { FpNowOnFileNotice } from "./FpNowOnFileNotice";
+import { FP5_BACK_TO_AREA_LABEL, FP5_SPEC_FIELD_LABELS, FP14_CHECKED_TWO_CATALOGUES, FP14_RESULTS_COUNT_LINE, FP14_SISTER_OPTIONS_COUNT, formatCatalogResolvedNoticeLine } from "../findPartsViewModels";
 
 const STITCH_TIER1_HEADING = "Made for your car";
 
@@ -45,7 +46,7 @@ export type Fp5Actions = {
   children?: ReactNode;
 };
 
-export function Fp5Screen({ actions, data, partName, positionTrail, catalogNotice }: { actions: Fp5Actions; data: Fp5ViewModel; partName?: string; positionTrail?: string; catalogNotice?: string }) {
+export function Fp5Screen({ actions, data, partName, positionTrail, catalogNotice, catalogResolvedAt }: { actions: Fp5Actions; data: Fp5ViewModel; partName?: string; positionTrail?: string; catalogNotice?: string; catalogResolvedAt?: unknown }) {
   const titlePart = partName || data.componentTitle || "Part";
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const best = data.rows.find((row) => row.isBest) || data.rows[0];
@@ -70,7 +71,25 @@ export function Fp5Screen({ actions, data, partName, positionTrail, catalogNotic
             onSaveSearch={actions.onSaveQuery}
             onDownloadFitmentReport={actions.onDownloadReport}
           />
-          <FpNowOnFileNotice message={catalogNotice || ""} />
+          <FpNowOnFileNotice
+            message={catalogNotice || ""}
+            batchCount={catalogNotice ? 3 : undefined}
+            resolvedLine={
+              catalogNotice
+                ? formatCatalogResolvedNoticeLine(catalogResolvedAt) || undefined
+                : undefined
+            }
+          />
+
+          {catalogNotice ? (
+            <button
+              type="button"
+              className="self-start font-body-sm text-body-sm text-primary font-medium hover:underline -mt-space-md"
+              onClick={actions.onBackToPartSelection}
+            >
+              {FP5_BACK_TO_AREA_LABEL}
+            </button>
+          ) : null}
 
           {data.vinLabel !== "—" ? (
             <p className="font-label-code text-caption text-on-surface-variant -mt-space-md">
@@ -146,7 +165,10 @@ export function Fp5Screen({ actions, data, partName, positionTrail, catalogNotic
             <div className="flex flex-col gap-space-xs">
               <h2 className="font-headline-sm text-headline-sm text-on-surface">Target component specifications</h2>
               <p className="font-caption text-caption text-on-surface-variant">
-                Results: {data.filterAllCount} / {Math.max(data.filterAllCount, data.filterOemCount) || data.filterAllCount} alternates
+                {FP14_RESULTS_COUNT_LINE}
+              </p>
+              <p className="font-caption text-caption text-on-surface-variant">
+                {FP5_SPEC_FIELD_LABELS.join(" · ")}
               </p>
             </div>
             <div className="relative bg-surface-container-lowest rounded-xl shadow-md p-space-lg md:p-space-xl overflow-hidden">
@@ -167,7 +189,7 @@ export function Fp5Screen({ actions, data, partName, positionTrail, catalogNotic
                     ) : (
                       <span className="inline-flex items-center gap-1 text-emerald-900 font-label-code text-caption font-medium border border-emerald-300 bg-emerald-100/50 px-2 py-0.5 rounded-full">
                         <span className="material-symbols-outlined text-[14px] text-emerald-700">verified</span>
-                        Checked against catalogues
+                        {FP14_CHECKED_TWO_CATALOGUES}
                       </span>
                     )}
                     <span className="inline-flex items-center gap-1 bg-surface-container-high text-on-surface font-label-code text-caption font-semibold px-2.5 py-1 rounded">
@@ -200,11 +222,11 @@ export function Fp5Screen({ actions, data, partName, positionTrail, catalogNotic
           {sections.some((s) => s.tier > 1 && !s.isEmpty) ? (
             <div className="flex items-center justify-between gap-space-md">
               <h3 className="font-headline-sm text-headline-sm text-on-surface">
-                Sister &amp; aftermarket options ({sections.filter((s) => s.tier > 1 && !s.isEmpty).reduce((n, s) => n + s.count, 0)})
+                {FP14_SISTER_OPTIONS_COUNT}
               </h3>
             </div>
           ) : (
-            <h3 className="font-headline-sm text-headline-sm text-on-surface">Sister &amp; aftermarket options</h3>
+            <h3 className="font-headline-sm text-headline-sm text-on-surface">{FP14_SISTER_OPTIONS_COUNT}</h3>
           )}
 
           <div className="flex items-center justify-between mb-space-md">

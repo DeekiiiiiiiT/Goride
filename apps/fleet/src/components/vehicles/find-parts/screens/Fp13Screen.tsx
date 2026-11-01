@@ -1,11 +1,14 @@
 import type { ReactNode } from "react";
+import { useState } from "react";
 import type { Fp13RequestCard, Fp13RequestFilter, Fp13TimelineStep, Fp13ViewModel } from "../findPartsViewModels";
+import { formatPartsRequestShortId } from "../findPartsViewModels";
 
 export type Fp13Actions = {
   onBack: () => void;
   onFilter: (filter: Fp13RequestFilter) => void;
   onSeePart: (cardId: string) => void;
   onAddNote: (cardId: string) => void;
+  onSendNote?: (cardId: string, note: string) => Promise<void>;
   children?: ReactNode;
 };
 
@@ -58,7 +61,7 @@ function TimelineRow({ steps }: { steps: Fp13TimelineStep[] }) {
             <div className={`font-headline-sm text-caption mt-1.5 ${step.state === "pending" ? "text-secondary" : "text-on-surface"} ${index === 1 || index === 2 ? "text-center" : ""}`}>
               {step.label}
             </div>
-            <div className={`font-label-code text-caption ${step.state === "pending" ? "text-outline" : "text-on-surface-variant"}`}>
+            <div className={`font-label-code text-caption ${step.timeEmphasis === "error" ? "text-error font-bold" : step.state === "pending" ? "text-outline" : "text-on-surface-variant"}`}>
               {step.timeLabel}
             </div>
           </div>
@@ -69,6 +72,23 @@ function TimelineRow({ steps }: { steps: Fp13TimelineStep[] }) {
 }
 
 function RequestCard({ card, actions }: { card: Fp13RequestCard; actions: Fp13Actions }) {
+  const [noteOpen, setNoteOpen] = useState(false);
+  const [noteText, setNoteText] = useState("");
+  const [noteSent, setNoteSent] = useState(false);
+  const [noteBusy, setNoteBusy] = useState(false);
+
+  async function sendNote() {
+    if (!actions.onSendNote || !noteText.trim()) return;
+    setNoteBusy(true);
+    try {
+      await actions.onSendNote(card.id, noteText.trim());
+      setNoteSent(true);
+      setNoteOpen(false);
+    } finally {
+      setNoteBusy(false);
+    }
+  }
+
   return (
     <div className="request-card w-full bg-surface-container-lowest rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow">
       <div className="flex flex-col md:flex-row">
@@ -107,7 +127,7 @@ function RequestCard({ card, actions }: { card: Fp13RequestCard; actions: Fp13Ac
 
           <TimelineRow steps={card.timeline} />
 
-          {card.footerNote ? (
+          {card.footerNote && card.filterCategory !== "failed" ? (
             <div className="p-space-md rounded-xl bg-surface-container-low flex flex-col sm:flex-row sm:items-center justify-between gap-space-md text-on-surface-variant">
               <div className="flex items-start gap-space-sm">
                 <span className="material-symbols-outlined text-secondary text-[18px]">schedule</span>
@@ -127,11 +147,58 @@ function RequestCard({ card, actions }: { card: Fp13RequestCard; actions: Fp13Ac
           ) : null}
 
           {card.filterCategory === "failed" ? (
-            <div className="flex flex-col gap-space-sm">
-              {card.retryLabel ? <p className="font-body-sm text-body-sm text-on-surface-variant">{card.retryLabel}</p> : null}
-              <button type="button" className="font-body-sm text-body-sm text-primary font-medium hover:underline self-start" onClick={() => actions.onAddNote(card.id)}>
-                Add a note or photo
-              </button>
+            <div className="flex flex-col gap-space-md p-space-md rounded-xl bg-surface-container">
+              <div className="flex items-start gap-space-md">
+                <span className="material-symbols-outlined text-secondary text-[20px] mt-0.5">info</span>
+                <div className="flex-1">
+                  {card.footerNote ? (
+                    <p className="font-body-sm text-body-sm text-on-surface">{card.footerNote}</p>
+                  ) : null}
+                  {card.retryLabel ? (
+                    <p className="font-body-sm text-body-sm text-on-surface-variant mt-1">{card.retryLabel}</p>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="mt-space-xs font-headline-sm text-body-sm text-on-surface hover:text-primary flex items-center gap-1.5 transition-colors"
+                    onClick={() => {
+                      setNoteOpen((v) => !v);
+                      actions.onAddNote(card.id);
+                    }}
+                  >
+                    <span className="material-symbols-outlined text-[16px]">edit_note</span>
+                    <span>Add a note or photo</span>
+                  </button>
+                </div>
+              </div>
+              {noteOpen ? (
+                <div className="flex flex-col gap-space-sm pt-space-sm border-t border-surface-container-highest">
+                  <label className="font-body-sm text-body-sm text-on-surface-variant" htmlFor={`note-${card.id}`}>
+                    Provide vehicle chassis sub-code, existing part photo, or aftermarket casing stamping to refine match:
+                  </label>
+                  <div className="flex flex-col sm:flex-row gap-space-sm">
+                    <input
+                      id={`note-${card.id}`}
+                      className="flex-1 bg-surface-container-lowest text-on-surface placeholder:text-surface-tint font-body-sm text-body-sm px-space-md py-2 rounded-lg outline-none focus:ring-1 focus:ring-primary"
+                      placeholder="e.g., photo of existing filter, aftermarket code from box, or chassis sub-code"
+                      value={noteText}
+                      onChange={(e) => setNoteText(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      disabled={noteBusy || !noteText.trim()}
+                      className="bg-primary text-on-primary hover:bg-inverse-surface font-headline-sm text-body-sm px-space-lg py-2 rounded-lg transition-transform active:scale-95 shrink-0 flex items-center justify-center gap-1 disabled:opacity-50"
+                      onClick={() => void sendNote()}
+                    >
+                      <span>Send note to Roam</span>
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+              {noteSent ? (
+                <p className="font-label-code text-caption text-on-surface pt-1">
+                  {`✓ Additional metadata recorded and attached to dispatch query ${formatPartsRequestShortId(card.id)}.`}
+                </p>
+              ) : null}
             </div>
           ) : null}
         </div>
@@ -208,9 +275,11 @@ export function Fp13Screen({ actions, data }: { actions: Fp13Actions; data: Fp13
               <span className="material-symbols-outlined text-[20px]">lightbulb</span>
             </div>
             <div className="flex flex-col gap-1">
-              <span className="font-headline-sm text-body-sm text-on-surface">When a part isn&apos;t on file, ask Roam from the search.</span>
+              <span className="font-headline-sm text-body-sm text-on-surface">
+                Can&apos;t find a component in the standard parts catalog?
+              </span>
               <span className="font-body-sm text-body-sm text-on-surface-variant">
-                Research pipelines will populate this list automatically. Trigger an OEM search from the main hub search bar using the vehicle plate or chassis prefix.
+                Simply trigger an OEM search from the main hub search bar using the vehicle plate or chassis prefix.
               </span>
             </div>
           </div>

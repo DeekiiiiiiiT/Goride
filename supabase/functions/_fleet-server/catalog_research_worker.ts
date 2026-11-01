@@ -4,17 +4,55 @@
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { formatSupabaseError } from "../_shared/formatSupabaseError.ts";
 import { runCatalogPartResearch, runCatalogVehicleResearch } from "./catalog_research_gemini.ts";
-import { normalizePartNumberNorm, checkPartNumberShape } from "./catalog_research_number_shape.ts";
 import {
+  checkPartNumberShape,
+  normalizeResearchCandidate,
+} from "./catalog_research_number_shape.ts";
+import {
+  catalogSourceFetchMeta,
   domainFromUrl,
   fetchCatalogSourcePage,
   isTrustedDomain,
+  type CatalogSourceFetch,
   verifySourcePage,
 } from "./catalog_research_verify.ts";
 import { classifyGeminiProviderError } from "./catalog_research_provider.ts";
 import { routeProposals } from "./catalog_research_route.ts";
 
-export const ENGINE_REV = "catalog-research-1";
+export const ENGINE_REV = "catalog-research-3";
+
+function throwOnSupabaseError(label: string, result: { error: unknown }): void {
+  if (result.error) throw new Error(`${label}: ${formatSupabaseError(result.error)}`);
+}
+
+async function supabaseRpc(
+  supabase: SupabaseClient,
+  fn: string,
+  args: Record<string, unknown>,
+): Promise<unknown> {
+  const result = await supabase.rpc(fn, args);
+  throwOnSupabaseError(`rpc ${fn}`, result);
+  return result.data;
+}
+
+async function supabaseUpdate(
+  supabase: SupabaseClient,
+  table: string,
+  patch: Record<string, unknown>,
+  filter: (q: ReturnType<SupabaseClient["from"]>) => ReturnType<ReturnType<SupabaseClient["from"]>["eq"]>,
+): Promise<void> {
+  const result = await filter(supabase.from(table).update(patch));
+  throwOnSupabaseError(`update ${table}`, result);
+}
+
+async function supabaseInsert(
+  supabase: SupabaseClient,
+  table: string,
+  rows: Record<string, unknown> | Array<Record<string, unknown>>,
+): Promise<void> {
+  const result = await supabase.from(table).insert(rows);
+  throwOnSupabaseError(`insert ${table}`, result);
+}
 
 async function loadTrustedDomains(supabase: SupabaseClient): Promise<Set<string>> {
   const { data, error } = await supabase.from("catalog_trusted_source").select("domain").eq("active", true);
@@ -22,7 +60,53 @@ async function loadTrustedDomains(supabase: SupabaseClient): Promise<Set<string>
   return new Set((data || []).map((r) => String((r as { domain: string }).domain).toLowerCase()));
 }
 
-async function handleGeminiProviderFault(
+async function loadKnownManufacturers(supabase: SupabaseClient): Promise<string[]> {
+  const { data, error } = await supabase.from("part_master").select("manufacturer").not("manufacturer", "is", null).limit(800);
+  if (error) throw error;
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const row of data || []) {
+    const m = String((row as { manufacturer: string }).manufacturer || "").trim();
+    if (!m) continue;
+    const key = m.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(m);
+  }
+  return out;
+}
+
+async function recordTrustedSourceFetch(
+  supabase: SupabaseClient,
+  input: {
+    domain: string;
+    jobId: string;
+    requestedUrl: string;
+    fetched: CatalogSourceFetch;
+    reason: string | null;
+  },
+): Promise<void> {
+  const domain = input.domain.toLowerCase();
+  await supabaseInsert(supabase, "catalog_trusted_source_fetch", {
+    domain,
+    job_id: input.jobId,
+    requested_url: input.requestedUrl,
+    final_url: input.fetched.finalUrl,
+    http_status: input.fetched.httpStatus,
+    byte_count: input.fetched.byteCount,
+    reason: input.reason,
+  });
+  await supabaseRpc(supabase, "catalog_trusted_source_fetch_trim", { p_domain: domain, p_keep: 50 });
+}
+
+async function bumpPagesConfirmed(supabase: SupabaseClient, domain: string): Promise<void> {
+  const { data, error } = await supabase.from("catalog_trusted_source").select("pages_confirmed").eq("domain", domain).maybeSingle();
+  if (error || !data) return;
+  const next = Number((data as { pages_confirmed?: number }).pages_confirmed || 0) + 1;
+  await supabaseUpdate(supabase, "catalog_trusted_source", { pages_confirmed: next }, (q) => q.eq("domain", domain));
+}
+
+export async function handleGeminiProviderFault(
   supabase: SupabaseClient,
   input: {
     jobId: string;
@@ -32,16 +116,16 @@ async function handleGeminiProviderFault(
   },
 ): Promise<Record<string, unknown>> {
   const provider = input.provider!;
-  await supabase.rpc("catalog_research_complete_msg", { p_msg_id: input.msgId, p_queue: input.queue });
-  await supabase.rpc("catalog_research_enqueue_job", { p_job_id: input.jobId });
-  await supabase.from("catalog_research_job").update({
+  await supabaseRpc(supabase, "catalog_research_complete_msg", { p_msg_id: input.msgId, p_queue: input.queue });
+  await supabaseRpc(supabase, "catalog_research_enqueue_job", { p_job_id: input.jobId });
+  await supabaseUpdate(supabase, "catalog_research_job", {
     state: "queued",
     last_error: provider.pausedReason,
     pgmq_msg_id: null,
     pgmq_queue: null,
-    pgmq_read_ct: null,
+    pgmq_read_ct: 0,
     updated_at: new Date().toISOString(),
-  }).eq("id", input.jobId);
+  }, (q) => q.eq("id", input.jobId));
 
   const patch: Record<string, unknown> = {
     paused: true,
@@ -50,13 +134,14 @@ async function handleGeminiProviderFault(
   };
   if (provider.autoResumeMinutes != null) {
     patch.auto_resume_at = new Date(Date.now() + provider.autoResumeMinutes * 60_000).toISOString();
-    const { data: settings } = await supabase.from("catalog_research_settings").select("auto_resume_attempt").eq("id", 1).single();
+    const { data: settings, error: settingsErr } = await supabase.from("catalog_research_settings").select("auto_resume_attempt").eq("id", 1).single();
+    throwOnSupabaseError("select catalog_research_settings", { error: settingsErr });
     patch.auto_resume_attempt = (settings?.auto_resume_attempt || 0) + 1;
   } else {
     patch.auto_resume_at = null;
   }
-  await supabase.from("catalog_research_settings").update(patch).eq("id", 1);
-  await supabase.rpc("catalog_research_log_event", {
+  await supabaseUpdate(supabase, "catalog_research_settings", patch, (q) => q.eq("id", 1));
+  await supabaseRpc(supabase, "catalog_research_log_event", {
     p_job_id: input.jobId,
     p_step: "recovery",
     p_outcome: "paused_provider",
@@ -99,7 +184,7 @@ export async function runCatalogResearchWorker(supabase: SupabaseClient): Promis
         ].join("\n"),
       });
 
-      await supabase.rpc("catalog_research_log_event", {
+      await supabaseRpc(supabase, "catalog_research_log_event", {
         p_job_id: jobId,
         p_step: "research",
         p_outcome: "ok",
@@ -107,7 +192,7 @@ export async function runCatalogResearchWorker(supabase: SupabaseClient): Promis
       });
 
       const prop = research.proposal;
-      await supabase.from("catalog_vehicle_proposal").insert({
+      await supabaseInsert(supabase, "catalog_vehicle_proposal", {
         job_id: jobId,
         make: prop.make ?? pending?.proposed_make,
         model: prop.model ?? pending?.proposed_model,
@@ -122,15 +207,15 @@ export async function runCatalogResearchWorker(supabase: SupabaseClient): Promis
         checks: { model: research.model },
       });
 
-      await supabase.from("catalog_research_job").update({ state: "needs_review", updated_at: new Date().toISOString() }).eq("id", jobId);
-      await supabase.rpc("catalog_research_log_event", {
+      await supabaseUpdate(supabase, "catalog_research_job", { state: "needs_review", updated_at: new Date().toISOString() }, (q) => q.eq("id", jobId));
+      await supabaseRpc(supabase, "catalog_research_log_event", {
         p_job_id: jobId,
         p_step: "route",
         p_outcome: "needs_review",
         p_detail: { vehicle: true },
       });
-      await supabase.rpc("catalog_research_complete_msg", { p_msg_id: msgId, p_queue: queue });
-      await supabase.from("catalog_research_settings").update({ last_run_ms: Date.now() - started, consecutive_failures: 0 }).eq("id", 1);
+      await supabaseRpc(supabase, "catalog_research_complete_msg", { p_msg_id: msgId, p_queue: queue });
+      await supabaseUpdate(supabase, "catalog_research_settings", { last_run_ms: Date.now() - started, consecutive_failures: 0 }, (q) => q.eq("id", 1));
       return { ok: true, jobId, vehicleReview: true };
     }
 
@@ -140,7 +225,7 @@ export async function runCatalogResearchWorker(supabase: SupabaseClient): Promis
 
     const noteLines = (notes || []).map((n) => [n.need_text, n.looking_note, n.old_part_number].filter(Boolean).join(" · ")).join("\n");
 
-    await supabase.from("catalog_research_job").update({ state: "researching" }).eq("id", jobId);
+    await supabaseUpdate(supabase, "catalog_research_job", { state: "researching" }, (q) => q.eq("id", jobId));
 
     const research = await runCatalogPartResearch({
       promptContext: [
@@ -153,16 +238,17 @@ export async function runCatalogResearchWorker(supabase: SupabaseClient): Promis
       ].join("\n"),
     });
 
-    await supabase.rpc("catalog_research_log_event", {
+    await supabaseRpc(supabase, "catalog_research_log_event", {
       p_job_id: jobId,
       p_step: "research",
       p_outcome: "ok",
       p_detail: { model: research.model, count: research.candidates.length },
     });
 
-    await supabase.from("catalog_research_job").update({ state: "checking" }).eq("id", jobId);
+    await supabaseUpdate(supabase, "catalog_research_job", { state: "checking" }, (q) => q.eq("id", jobId));
 
     const trusted = await loadTrustedDomains(supabase);
+    const knownManufacturers = await loadKnownManufacturers(supabase);
     const proposalRows: Array<Record<string, unknown>> = [];
     const routeInput: Array<{
       id: string;
@@ -175,28 +261,49 @@ export async function runCatalogResearchWorker(supabase: SupabaseClient): Promis
 
     let pageFetches = 0;
     for (const cand of research.candidates.slice(0, 5)) {
-      const partNumberNorm = normalizePartNumberNorm(cand.partNumber);
-      const shape = checkPartNumberShape(cand.brand, cand.partNumber);
+      const normalized = normalizeResearchCandidate(cand.brand, cand.partNumber, knownManufacturers);
+      const partNumberNorm = normalized.partNumberNorm;
+      const shape = checkPartNumberShape(normalized.brand, normalized.partNumber);
       const verifiedSources: Array<Record<string, unknown>> = [];
       const passedDomains: string[] = [];
 
       for (const src of (cand.sources || []).slice(0, 3)) {
         if (pageFetches >= 6) break;
         pageFetches += 1;
-        const fetched = await fetchCatalogSourcePage(src.url);
+        const requestedUrl = String(src.url || "");
+        const fetched = await fetchCatalogSourcePage(requestedUrl);
         const domain = domainFromUrl(fetched.finalUrl);
+        const fetchMeta = catalogSourceFetchMeta(fetched);
         const sourceBase: Record<string, unknown> = {
-          url: fetched.finalUrl,
+          url: requestedUrl,
+          ...fetchMeta,
           domain,
         };
         if (fetched.redirectUrl) sourceBase.redirect_url = fetched.redirectUrl;
+
+        if (fetched.redirectFailed) {
+          verifiedSources.push({ ...sourceBase, dropped: true, reason: "redirect_failed" });
+          continue;
+        }
+
+        if (isTrustedDomain(domain, trusted)) {
+          await recordTrustedSourceFetch(supabase, {
+            domain,
+            jobId,
+            requestedUrl,
+            fetched,
+            reason: null,
+          });
+        }
+
         if (!isTrustedDomain(domain, trusted)) {
           verifiedSources.push({ ...sourceBase, dropped: true, reason: "untrusted" });
           continue;
         }
+
         const check = verifySourcePage({
           html: fetched.html,
-          partNumber: cand.partNumber,
+          partNumber: normalized.partNumber,
           chassisCode: vc?.chassis_code,
           model: vc?.model,
           engineCode: vc?.engine_code,
@@ -206,12 +313,15 @@ export async function runCatalogResearchWorker(supabase: SupabaseClient): Promis
         verifiedSources.push({
           ...sourceBase,
           quote: src.quote,
-          fetched_ok: fetched.html.length > 0,
+          fetched_ok: fetched.byteCount > 0 && fetched.httpStatus >= 200 && fetched.httpStatus < 400,
           number_found: check.numberFound,
           car_found: check.carFound,
           position_found: check.positionFound,
         });
-        if (check.passed) passedDomains.push(domain);
+        if (check.passed) {
+          passedDomains.push(domain);
+          await bumpPagesConfirmed(supabase, domain);
+        }
       }
 
       const matchType = String(cand.matchType || job.match_type || "");
@@ -219,8 +329,8 @@ export async function runCatalogResearchWorker(supabase: SupabaseClient): Promis
       proposalRows.push({
         id: propId,
         job_id: jobId,
-        brand: cand.brand,
-        part_number: cand.partNumber,
+        brand: normalized.brand,
+        part_number: normalized.partNumber,
         part_number_norm: partNumberNorm,
         part_name: cand.partName,
         match_type: matchType,
@@ -255,13 +365,12 @@ export async function runCatalogResearchWorker(supabase: SupabaseClient): Promis
     }
 
     if (proposalRows.length) {
-      const { error: insErr } = await supabase.from("catalog_part_proposal").insert(proposalRows);
-      if (insErr) throw insErr;
+      await supabaseInsert(supabase, "catalog_part_proposal", proposalRows);
     }
 
     for (const r of routes) {
       if (r.route === "auto") {
-        await supabase.rpc("promote_part_proposal", { p_proposal_id: r.id, p_actor: null });
+        await supabaseRpc(supabase, "promote_part_proposal", { p_proposal_id: r.id, p_actor: null });
       }
     }
 
@@ -271,21 +380,21 @@ export async function runCatalogResearchWorker(supabase: SupabaseClient): Promis
       const { data: refreshed } = await supabase.from("catalog_research_job").select("state").eq("id", jobId).single();
       nextState = refreshed?.state || "auto_added";
     } else {
-      await supabase.from("catalog_research_job").update({ state: nextState, updated_at: new Date().toISOString() }).eq("id", jobId);
+      await supabaseUpdate(supabase, "catalog_research_job", { state: nextState, updated_at: new Date().toISOString() }, (q) => q.eq("id", jobId));
     }
 
-    await supabase.rpc("catalog_research_log_event", {
+    await supabaseRpc(supabase, "catalog_research_log_event", {
       p_job_id: jobId,
       p_step: "route",
       p_outcome: nextState,
       p_detail: { proposals: routes.length, anyAuto },
     });
 
-    await supabase.rpc("catalog_research_complete_msg", { p_msg_id: msgId, p_queue: queue });
-    await supabase.from("catalog_research_settings").update({
+    await supabaseRpc(supabase, "catalog_research_complete_msg", { p_msg_id: msgId, p_queue: queue });
+    await supabaseUpdate(supabase, "catalog_research_settings", {
       last_run_ms: Date.now() - started,
       consecutive_failures: 0,
-    }).eq("id", 1);
+    }, (q) => q.eq("id", 1));
 
     return { ok: true, jobId, state: nextState };
   } catch (e) {
@@ -294,8 +403,8 @@ export async function runCatalogResearchWorker(supabase: SupabaseClient): Promis
       return await handleGeminiProviderFault(supabase, { jobId, msgId, queue, provider });
     }
     const msg = e instanceof Error ? e.message : String(e);
-    await supabase.from("catalog_research_job").update({ last_error: msg, state: "queued" }).eq("id", jobId);
-    await supabase.rpc("catalog_research_log_event", {
+    await supabaseUpdate(supabase, "catalog_research_job", { last_error: msg, state: "queued" }, (q) => q.eq("id", jobId));
+    await supabaseRpc(supabase, "catalog_research_log_event", {
       p_job_id: jobId,
       p_step: "worker",
       p_outcome: "error",
@@ -316,14 +425,14 @@ export async function runCatalogResearchWorker(supabase: SupabaseClient): Promis
       } else {
         patch.auto_resume_at = new Date(Date.now() + minutes * 60_000).toISOString();
       }
-      await supabase.rpc("catalog_research_log_event", {
+      await supabaseRpc(supabase, "catalog_research_log_event", {
         p_job_id: jobId,
         p_step: "recovery",
         p_outcome: "paused",
         p_detail: { minutes, attempt },
       });
     }
-    await supabase.from("catalog_research_settings").update(patch).eq("id", 1);
+    await supabaseUpdate(supabase, "catalog_research_settings", patch, (q) => q.eq("id", 1));
     throw e;
   }
 }

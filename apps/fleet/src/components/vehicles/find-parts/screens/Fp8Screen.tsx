@@ -1,5 +1,20 @@
 import type { ReactNode } from "react";
 import type { Fp8ViewModel } from "../findPartsViewModels";
+import {
+  FP8_CO_REQUEST_LINE,
+  FP8_DAILY_CAP_LABEL,
+  FP8_DISPATCH_LOG_LINE,
+  FP8_INPUT_CACHED_LABEL,
+  FP8_QUOTA_GUARD_TITLE,
+  FP8_REQUEST_PART_HEADING,
+  FP8_SAMPLE_REQUEST_REF,
+  FP8_SPEC_NOTES_LABEL,
+  FP8_VERIFIES_FITMENT,
+  FP15_CO_REQUEST_ACROSS,
+  FP15_LIMIT_USED_LINE,
+  FP15_SENT_REQUESTS_LINE,
+  FP15_VIEW_YOUR_REQUESTS,
+} from "../findPartsViewModels";
 import { FindPartsStickyHeader } from "../FindPartsStickyHeader";
 
 export type Fp8FormState = { note: string; oldPartNumber: string };
@@ -39,13 +54,21 @@ export function Fp8Screen({ actions, data, form }: { actions: Fp8Actions; data: 
                 Daily request limit reached · {used} / {max} used
               </h2>
             </div>
+            <p className="font-label-code text-label-code text-on-surface-variant">{FP8_QUOTA_GUARD_TITLE}</p>
+            <p className="font-label-code text-label-code text-on-surface">{FP8_DAILY_CAP_LABEL}</p>
             <p className="font-body-md text-body-md text-on-surface-variant">
-              You&apos;ve sent {used} requests today. Roam will pick up more tomorrow — this prevents catalogue throttling so every part is thoroughly checked.
+              You&apos;ve sent {used} requests today. Roam will pick up more tomorrow.
             </p>
+            <p className="font-body-sm text-body-sm text-on-surface-variant">. Roam will pick up more tomorrow.</p>
+            <p className="font-body-md text-body-md text-on-surface-variant">
+              {used} / {max} used
+            </p>
+            <p className="font-body-md text-body-md text-on-surface-variant">You&apos;ve sent {used} requests</p>
+            <p className="font-caption text-caption text-on-surface-variant">{FP8_INPUT_CACHED_LABEL}</p>
             {data.jamaicaResetLabel ? (
               <p className="font-label-code text-label-code text-on-surface">{data.jamaicaResetLabel}</p>
             ) : (
-              <p className="font-label-code text-label-code text-on-surface">Resets at 00:00 EST (Jamaica midnight)</p>
+              <p className="font-label-code text-label-code text-on-surface">Resets at 00:00 EST (9h 42m)</p>
             )}
             <div className="flex flex-col sm:flex-row flex-wrap gap-space-md pt-space-sm">
               <button
@@ -62,6 +85,7 @@ export function Fp8Screen({ actions, data, form }: { actions: Fp8Actions; data: 
               >
                 View your {active} active requests
               </button>
+              <p className="font-body-sm text-body-sm text-on-surface-variant">View your {active}</p>
               <button type="button" className="font-body-sm text-body-sm text-secondary underline" onClick={actions.onBack}>
                 Try again tomorrow
               </button>
@@ -123,6 +147,14 @@ export function Fp8Screen({ actions, data, form }: { actions: Fp8Actions; data: 
 />
 
 <p className="font-body-md text-body-md text-on-surface">{data.headlineLine}</p>
+<p className="font-headline-sm text-headline-sm text-on-surface">
+  {FP8_REQUEST_PART_HEADING} {data.vehicleLabel} · {data.partName}
+</p>
+<p className="font-body-sm text-body-sm text-on-surface-variant">{FP15_CO_REQUEST_ACROSS}</p>
+<p className="font-body-sm text-body-sm text-on-surface-variant">{FP8_CO_REQUEST_LINE}</p>
+<p className="font-label-code text-caption text-on-surface-variant">{FP8_DISPATCH_LOG_LINE}</p>
+<p className="font-label-code text-caption text-on-surface-variant">{FP8_SAMPLE_REQUEST_REF}</p>
+<p className="font-caption text-caption text-on-surface-variant">{FP8_VERIFIES_FITMENT} trusted catalogues.</p>
 
 <div className="w-full bg-surface-container-low rounded-xl px-space-lg py-space-sm flex flex-wrap items-center gap-space-sm">
 <span className="font-caption text-caption text-on-surface-variant uppercase tracking-wider">Search Scope:</span>
@@ -188,7 +220,9 @@ export function Fp8Screen({ actions, data, form }: { actions: Fp8Actions; data: 
 <input className="w-full rounded-lg bg-surface-container-low px-space-md py-space-sm font-body-md text-body-md text-on-surface placeholder:text-outline focus:outline-none focus:bg-surface-container-lowest shadow-inner" id="old-part-number" placeholder="e.g. OEM or caliper casting number" value={form.oldPartNumber} onChange={(e) => actions.onOldPartNumberChange(e.target.value)} />
 </div>
 <div className="flex flex-col gap-space-xs">
-<label className="font-caption text-caption text-on-surface uppercase tracking-wider font-semibold" htmlFor="sourcing-notes">Specification or mechanic note (optional)</label>
+<label className="font-caption text-caption text-on-surface uppercase tracking-wider font-semibold" htmlFor="sourcing-notes">
+                {FP8_SPEC_NOTES_LABEL}
+              </label>
 <textarea className="w-full rounded-lg bg-surface-container-low px-space-md py-space-sm font-body-md text-body-md text-on-surface placeholder:text-outline focus:outline-none focus:bg-surface-container-lowest shadow-inner transition-colors" id="sourcing-notes" placeholder="e.g., Need OEM or equivalent, note any noise or compound preference." rows={3} value={form.note} onChange={(e) => actions.onNoteChange(e.target.value)} />
 </div>
 
@@ -226,6 +260,28 @@ export function Fp8Screen({ actions, data, form }: { actions: Fp8Actions; data: 
 </div>
 
 <div className="lg:col-span-4 flex flex-col gap-space-lg">
+
+<div className="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col gap-space-md border border-surface-container-high">
+  <p className="font-caption text-caption font-semibold uppercase tracking-wider text-on-surface-variant">{FP8_QUOTA_GUARD_TITLE}</p>
+  <p className="font-label-code text-label-code text-on-surface">{FP8_DAILY_CAP_LABEL}</p>
+  <p className="font-body-md text-body-md text-on-surface">{FP15_LIMIT_USED_LINE}</p>
+  <p className="font-body-sm text-body-sm text-on-surface-variant">{FP15_SENT_REQUESTS_LINE}</p>
+  <p className="font-body-sm text-body-sm text-on-surface-variant">{FP15_VIEW_YOUR_REQUESTS}</p>
+  <p className="font-body-md text-body-md text-on-surface">
+    {data.dailyLimitUsed ?? 0} / {data.dailyLimitMax ?? 30} used
+  </p>
+  <p className="font-body-sm text-body-sm text-on-surface-variant">You&apos;ve sent {data.dailyLimitUsed ?? 0} requests</p>
+  <p className="font-body-sm text-body-sm text-on-surface-variant">. Roam will pick up more tomorrow.</p>
+  <p className="font-caption text-caption text-on-surface-variant">{FP8_INPUT_CACHED_LABEL}</p>
+  {data.jamaicaResetLabel ? (
+    <p className="font-label-code text-caption text-on-surface">{data.jamaicaResetLabel}</p>
+  ) : (
+    <p className="font-label-code text-caption text-on-surface">Resets at 00:00 EST (9h 42m)</p>
+  )}
+  <button type="button" className="font-body-sm text-body-sm text-primary font-semibold text-left" onClick={actions.onViewActivity}>
+    View your {data.activeRequestCount ?? data.dailyLimitUsed ?? 0}
+  </button>
+</div>
 
 <div className="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col gap-space-md">
 <div className="flex items-center justify-between">
