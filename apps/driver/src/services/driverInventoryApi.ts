@@ -32,10 +32,34 @@ export type DriverCarKitPayload = {
   organizationId?: string;
   vehicleId?: string | null;
   vehicleLabel?: string | null;
+  vehicleMakeModel?: string | null;
+  odometerKm?: number | null;
+  fuelLevelPct?: number | null;
   items?: DriverCarKitItem[];
   openReportCount?: number;
   lastCheckInAt?: string | null;
   state?: 'ready' | 'no_vehicle' | 'no_kit';
+};
+
+export type DriverReportRow = {
+  id?: string;
+  reportNo?: string;
+  issue?: string;
+  note?: string;
+  status?: string;
+  fleetReply?: string | null;
+  seenAt?: string | null;
+  fixedAt?: string | null;
+  createdAt?: string;
+  photoPaths?: string[];
+  itemLabel?: string;
+  displayName?: string;
+};
+
+export type DriverReportsListResponse = {
+  items: DriverReportRow[];
+  nextCursor?: string | null;
+  organizationId?: string;
 };
 
 export type DriverReportPayload = {
@@ -64,7 +88,7 @@ export const driverInventoryApi = {
     if (params?.limit != null) search.set('limit', String(params.limit));
     if (params?.offset != null) search.set('offset', String(params.offset));
     const q = search.toString();
-    return invFetch(`/driver/reports${q ? `?${q}` : ''}`);
+    return invFetch(`/driver/reports${q ? `?${q}` : ''}`) as Promise<DriverReportsListResponse>;
   },
 
   submitReport: (body: DriverReportPayload, idempotencyKey: string) =>

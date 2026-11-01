@@ -1,70 +1,42 @@
-# Roam Fleet · Find parts + Dominion Pending catalog — audit (Rev 43, 1 Nov 2026)
+# Roam Fleet · Find parts + Dominion Pending catalog — audit (Rev 44, 1 Nov 2026)
 
-**This is the only doc for this work.** It lists open items only. Don't mark anything done here or in the README; it is re-checked each round.
+**This is the only doc for this work.** It lists open items only. Don't mark anything done here or in the README.
 
 **Rules:**
 - Information only, parts only.
 - No fleet ids or plates in Dominion.
-- Port Stitch exactly; skip lists hold only sample values and strings the rules exclude.
+- Port Stitch exactly; skip lists hold only sample values and excluded strings.
 - Never invent catalog facts.
 
 **Verified this round:**
-- R22 is fixed and live: `complete_msg(bigint, text)`, the claim guard and the worker error checks.
-- The Drive belt job was researched again at 17:48 and **stayed** in `needs_review`.
-- Redirect links are followed: one landed on `partsouq.com`.
-- The FP14/FP15 skip lists were cleaned up, and the S10 screens are at 100%.
+- Pushed (174dcfe2), and the migration name matches production.
+- Sources record their HTTP status, failed redirects are labelled `redirect_failed`, and Research settings shows "Blocked".
+- Brands and numbers are cleaned (`Toyota 90048-31103`).
+- The FP13/FP14/FP16 text is built.
+- The Drive belt job ran again at 18:11 and stays in review.
 
 ---
 
 ## Open
 
-**R3 — Commit and push.** All of this round's work is uncommitted (HEAD is still 74cc821d).
+**R28 — No catalogue page has ever been checked.**
+- **Seen live (18:11 run):** all 3 Google source links returned **404** (`redirect_failed`). The only page that loaded was masuma.parts (200), which isn't on the trusted list. Across every run so far, **0 sources have been checked**, so nothing can be confirmed or added automatically.
+- **Cause:** the source links are taken from the model's written JSON. When the model copies Google's long redirect links into its answer it mangles them, so they 404. The exact links are only in `groundingMetadata.groundingChunks[].web.uri`.
+- **Fix:** in `catalog_research_gemini.ts`:
+  - take source URLs **only** from `groundingChunks[].web.uri`. Match them to candidates with `groundingSupports[].groundingChunkIndices`; a support whose text contains the candidate's part number belongs to that candidate;
+  - ignore any URL the model wrote itself;
+  - keep `web.title` (Google puts the site's domain there) as the fallback domain when a redirect fails;
+  - add `masuma.parts` to `catalog_trusted_source` as `aftermarket_catalog`, since it is the manufacturer's own catalogue.
+- **Test:** a Deno case built from a recorded Gemini response with `groundingChunks` and `groundingSupports`.
+- **Confirm:** Retry the Drive belt job. At least one source shows a real domain with HTTP 200 and `fetched_ok: true`.
 
-**R24 — The migration file name doesn't match production.**
-- `20261101170000_catalog_research_r22_msg_claim.sql` was recorded in production as `20261101174616`. Rename the file to match.
-
-**R25 — Trusted catalogue pages can't be read, so nothing can be confirmed.**
-- **Seen live (17:48 run):**
-  - the partsouq.com source came back `fetched_ok: false` (no number, no car);
-  - one Google link was dropped as "untrusted" under the domain `vertexaisearch.cloud.google.com`, because its redirect failed. It wasn't actually an untrusted site.
+**R29 — Built text is still on the Fleet skip lists.**
+- **Problem:** the FP13/FP14/FP16 text is now built, but its entries are still in `sample-labels.json`, so the checker isn't checking it. Also, FP13's help card ("Can't find a component in the standard parts catalog?" / "Simply trigger an OEM search …") is **not** built.
 - **Fix:**
-  - **Record why.** Save `http_status`, the byte count and `final_url` on every source. When a redirect fails, record `reason: "redirect_failed"`, not "untrusted".
-  - **Show it in Research settings (S10h).** Per trusted catalogue, show its last 10 fetch results. Mark a catalogue **"Blocked"** when its last 5 fetches all returned 403/429/503 or an empty page, so the owner can see which catalogues actually work.
-  - **Fetch like a browser.** Use normal browser request headers (`User-Agent`, `Accept`, `Accept-Language`), not `RoamCatalogResearch/1`.
-- **Confirm:** Retry the Drive belt job. Each source shows a real domain and an HTTP status.
-
-**R26 — Brand and part-number spelling aren't cleaned up.**
-- **Problem:** the 17:48 proposal has brand **"Toyota (OEM)"** and number **"9004831103"** (no dash). Promoting it would create a second Toyota spelling in the parts database, and the shape check can't recognise the number.
-- **Fix:** before the checks, clean the brand (strip "(OEM)", "Genuine" and the like, and map to the existing `part_master.manufacturer` spelling). Put Toyota/Daihatsu numbers back in `5-5` form (`90048-31103`) and Honda numbers in `5-3-3`.
-- **Test:** a Deno case for both.
-
-**R27 — The FP13/FP16 skip lists still hide text that has to be built.**
-- **FP13 skips** (all real Your-requests text):
-  - the "Add a note or photo" form text ("Provide vehicle chassis sub-code, existing part photo, or … casing stamping to refine match:") and its **"Send note to Roam"** button;
-  - the confirmation "✓ Additional metadata recorded and attached to …";
-  - the empty-state line;
-  - the help card ("Can't find a component in the standard parts catalog?" / "Simply trigger an OEM search …");
-  - the "Unresolved" timeline label;
-  - the "We'll try again on {date}" line.
-- **FP14 skips:** the notice sub-line ("Resolved from OEM parts catalogue lookup requested on {date}") and the "Ask Roam … to research an alternative OEM part number for your chassis" line.
-- **FP16 skips:** "Checking trusted catalogues. Usually identified within a day.", "What part?", "Catalog updated", "Assembly categories".
-- **Fix:** remove these entries and build the text. Only sample values (dates, ids, part numbers, car names) and the strings below may stay.
+  - remove the entries for built text: FP13's note-form text, "note to roam", "✓ additional metadata recorded …", the empty-state line, "unresolved", "we'll … on {date}"; FP14's "resolved from …" and "… research an alternative OEM part number …"; FP16's "…ing trusted catalogues. usually identified within a day.", "what part?", "catalog updated", "assembly categories";
+  - build the FP13 help card;
+  - re-run the checker to 100%.
 
 ---
 
-### Porting rules (FP13–FP16; S10 rows are done)
-- **All four:** the Fleet frame and footer. Not built: "Kingston Hub #01", "PARTS PROCUREMENT & TELEMETRY FITMENT · REGION JA-01", "EPC VERIFICATION PROTOCOL", the Kingston footer, the FP16 bottom tab bar, and the "Frame A / B / flow state" captions.
-- **FP13:** "Matched and verified against … OEM EPC Japan catalogue" becomes "Checked against {domains}"; the "dispatch query" id is the request short id.
-- **FP14:**
-  - Spec row values only when stored.
-  - "100% SPEC FIT" / "CERTIFIED" become "Fits this version".
-  - VIN only if stored.
-  - The area-card descriptions come from the existing page.
-  - "Request variant research" = "Ask Roam to find another option".
-- **FP15:**
-  - Not built: "regional distributors", "customs and freight fees", "18 Caribbean hub distributors", "Priority Tier 1", "Auto-querying EPC …", "EPC Engine: Active …", "Prioritized by Community Demand", "this prevents catalogue throttling … automated EPC team", "co-requests aggregate part demand …".
-  - "Compatibility: OEM …" = the Old part number field.
-
----
-
-**Builder prompt:** "Read docs/fleet-find-parts-audit.md. Fix R24–R27, commit and push (R3), deploy catalog-research and the fleet site, then Retry the Drive belt job and confirm each source shows a real domain and HTTP status. Don't mark anything done."
+**Builder prompt:** "Read docs/fleet-find-parts-audit.md. Fix R28 and R29, commit, push, deploy catalog-research and the fleet site, then Retry the Drive belt job and confirm a source shows HTTP 200 with fetched_ok true. Don't mark anything done."

@@ -1,10 +1,13 @@
 /** Ported from Stitch — do not simplify layout (audit §0.4). */
+import { useState } from 'react';
 import { useInventoryLive } from '../inventoryLive';
 import { useInventoryShell } from '../InventoryShellContext';
 import { firstAssetSerial, formatPlate, strField } from '../inventoryData';
+import { InventoryQrPrintDialog } from '../InventoryQrPrintDialog';
 export function In9AssetPage() {
   const shell = useInventoryShell();
   const live = useInventoryLive(shell);
+  const [qrOpen, setQrOpen] = useState(false);
   const asset = live.selectedAsset ?? live.assets[0] ?? null;
   const serial = asset
     ? strField(asset, 'serial_number', strField(asset, 'serial_no', '—'))
@@ -13,8 +16,14 @@ export function In9AssetPage() {
   const vehiclePlate = asset
     ? formatPlate(strField(asset, 'vehicle_plate', strField(asset, 'license_plate', live.primaryPlate)))
     : live.primaryPlate;
+  const assetId = asset ? strField(asset, 'id', '') : '';
   return (
     <div className="fleet-inventory-stitch inventory-stitch-root">
+      <InventoryQrPrintDialog
+        assetId={assetId || null}
+        open={qrOpen}
+        onClose={() => setQrOpen(false)}
+      />
       <div className="inventory-stitch-main"><div className="max-w-[1400px] mx-auto px-margin md:px-margin-desktop py-space-lg"><div className="flex flex-col w-full space-y-space-lg pb-space-xl">
 
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-space-sm pt-space-xs">
@@ -49,7 +58,7 @@ export function In9AssetPage() {
       <h1 className="font-headline-lg text-headline-lg text-on-surface tracking-tight font-bold">{assetName}</h1>
 
       <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-surface-container rounded-lg font-label-code text-label-code text-on-surface group">
-      <span data-stitch-id="serialDisplay">{serial}</span>
+      <span data-stitch-data-stitch-id="serialDisplay">{serial}</span>
       <button type="button" className="p-0.5 hover:text-primary transition-colors flex items-center justify-center"  title="Copy Serial">
       <span className="material-symbols-outlined text-[16px]">content_copy</span>
       </button>
@@ -85,7 +94,7 @@ export function In9AssetPage() {
       <span className="material-symbols-outlined text-[18px]">archive</span>
       <span>Retire</span>
       </button>
-      <button type="button" className="px-space-lg py-2 rounded-lg bg-primary hover:bg-surface-container-high text-on-primary hover:text-on-surface font-body-sm text-body-sm font-semibold transition-all flex items-center gap-2 shadow-md" >
+      <button type="button" className="px-space-lg py-2 rounded-lg bg-primary hover:bg-surface-container-high text-on-primary hover:text-on-surface font-body-sm text-body-sm font-semibold transition-all flex items-center gap-2 shadow-md" onClick={() => setQrOpen(true)}>
       <span className="material-symbols-outlined text-[18px]">qr_code_2</span>
       <span>Print QR label</span>
       </button>

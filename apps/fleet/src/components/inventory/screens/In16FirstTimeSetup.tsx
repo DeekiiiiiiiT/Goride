@@ -51,13 +51,13 @@ export function In16FirstTimeSetup() {
       </div>
       <div className="flex flex-col items-end gap-1">
       <div className="flex items-center gap-space-xs font-label-code text-caption text-secondary">
-      <span className="text-on-surface font-bold" data-stitch-id="step-counter-text">Step 1 of 3</span>
+      <span className="text-on-surface font-bold" data-stitch-data-stitch-id="step-counter-text">Step 1 of 3</span>
       <span className="text-surface-dim">|</span>
       <span className="text-surface-tint">33% completed</span>
       </div>
 
       <div className="w-32 h-1.5 bg-surface-container-highest rounded-full overflow-hidden flex gap-0.5">
-      <div className="h-full bg-primary flex-1 transition-all duration-500" data-stitch-id="progress-bar-segment"></div>
+      <div className="h-full bg-primary flex-1 transition-all duration-500" data-stitch-data-stitch-id="progress-bar-segment"></div>
       <div className="h-full bg-surface-container-high flex-1"></div>
       <div className="h-full bg-surface-container-high flex-1"></div>
       </div>
@@ -88,12 +88,12 @@ export function In16FirstTimeSetup() {
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-space-sm">
       <div className="relative flex-1">
       <span className="absolute left-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-[18px] text-secondary">warehouse</span>
-      <input className="w-full bg-surface-container-lowest text-on-surface font-body-md text-body-md pl-10 pr-28 py-2 rounded shadow-sm focus:outline-none focus:ring-1 focus:ring-primary" data-stitch-id="storeroom-input" placeholder="e.g. West Storage Bay, Dispatch Rack A" type="text" value="Main store — Kingston"/>
+      <input className="w-full bg-surface-container-lowest text-on-surface font-body-md text-body-md pl-10 pr-28 py-2 rounded shadow-sm focus:outline-none focus:ring-1 focus:ring-primary" data-stitch-data-stitch-id="storeroom-input" placeholder="e.g. West Storage Bay, Dispatch Rack A" type="text" value="Main store — Kingston"/>
       <span className="absolute right-3 top-1/2 -translate-y-1/2 font-caption text-caption text-secondary pointer-events-none">
                             Depot Hub #01 (Default)
                           </span>
       </div>
-      <button type="button" className="bg-primary hover:bg-surface-container-highest hover:text-on-surface text-on-primary font-body-md text-body-md font-medium px-space-lg py-2 rounded transition-all duration-200 active:scale-95 flex items-center justify-center gap-space-xs shadow-sm" data-stitch-id="add-location-btn">
+      <button type="button" className="bg-primary hover:bg-surface-container-highest hover:text-on-surface text-on-primary font-body-md text-body-md font-medium px-space-lg py-2 rounded transition-all duration-200 active:scale-95 flex items-center justify-center gap-space-xs shadow-sm" data-stitch-data-stitch-id="add-location-btn">
       <span className="material-symbols-outlined text-[16px]">add_location_alt</span>
       <span>Add location</span>
       </button>
@@ -133,7 +133,7 @@ export function In16FirstTimeSetup() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-space-md">
 
-      <div className="bg-surface-container-low rounded-lg p-space-md flex flex-col justify-between shadow-sm cursor-pointer hover:shadow-md transition-all duration-200" data-stitch-id="card-starter-pack">
+      <div className="bg-surface-container-low rounded-lg p-space-md flex flex-col justify-between shadow-sm cursor-pointer hover:shadow-md transition-all duration-200" data-stitch-data-stitch-id="card-starter-pack">
       <div className="flex flex-col gap-space-sm">
       <div className="flex items-center justify-between">
       <div className="flex items-center gap-space-xs">
@@ -161,7 +161,7 @@ export function In16FirstTimeSetup() {
       </div>
       <div className="pt-space-md mt-space-sm flex items-center justify-between">
       <span className="font-label-code text-caption text-secondary">10 catalog definitions</span>
-      <button type="button" className="bg-primary hover:bg-surface-container-highest hover:text-on-surface text-on-primary font-body-sm text-body-sm font-semibold px-space-md py-1.5 rounded transition-all duration-150 flex items-center gap-space-xs shadow-sm" data-stitch-id="load-starter-btn">
+      <button type="button" className="bg-primary hover:bg-surface-container-highest hover:text-on-surface text-on-primary font-body-sm text-body-sm font-semibold px-space-md py-1.5 rounded transition-all duration-150 flex items-center gap-space-xs shadow-sm" data-stitch-data-stitch-id="load-starter-btn">
       <span className="material-symbols-outlined text-[16px]">file_download_done</span>
       <span>Load starter list (10 items)</span>
       </button>
@@ -266,7 +266,7 @@ export function In16FirstTimeSetup() {
       <span className="material-symbols-outlined text-[18px]">verified_user</span>
       <span className="font-caption text-caption">Telemetry sync locked to {live.hubName} node</span>
       </div>
-      <button type="button" className="w-full sm:w-auto bg-primary hover:bg-surface-container-highest hover:text-on-surface text-on-primary font-headline-sm text-body-md font-semibold px-8 py-3 rounded-lg shadow-md transition-all duration-200 active:scale-95 flex items-center justify-center gap-space-sm" data-stitch-id="finish-setup-btn">
+      <button type="button" className="w-full sm:w-auto bg-primary hover:bg-surface-container-highest hover:text-on-surface text-on-primary font-headline-sm text-body-md font-semibold px-8 py-3 rounded-lg shadow-md transition-all duration-200 active:scale-95 flex items-center justify-center gap-space-sm" data-stitch-data-stitch-id="finish-setup-btn">
       <span>Finish setup</span>
       <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
       </button>

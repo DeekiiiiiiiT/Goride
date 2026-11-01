@@ -11,7 +11,7 @@ export function In8Assets() {
     <div className="fleet-inventory-stitch inventory-stitch-root">
       <div className="inventory-stitch-main"><div className="max-w-[1400px] mx-auto px-margin md:px-margin-desktop py-space-lg"><div className="flex flex-col w-full gap-space-lg">
 
-      <div className="relative overflow-hidden rounded-lg bg-surface-container-high p-space-md shadow-sm transition-all duration-300" data-stitch-id="telemetry-banner">
+      <div className="relative overflow-hidden rounded-lg bg-surface-container-high p-space-md shadow-sm transition-all duration-300" data-stitch-data-stitch-id="telemetry-banner">
       <div className="flex items-center justify-between gap-space-md">
       <div className="flex items-center gap-space-md min-w-0">
       <div className="w-8 h-8 rounded flex items-center justify-center bg-surface-container-lowest shrink-0 text-on-surface">
@@ -200,7 +200,7 @@ export function In8Assets() {
       <button type="button" className="w-8 h-8 rounded flex items-center justify-center text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors" >
       <span className="material-symbols-outlined text-base">more_horiz</span>
       </button>
-      <div className="hidden absolute right-0 mt-1 w-44 rounded-lg bg-surface-container-lowest shadow-xl z-20 py-1 text-left" data-stitch-id="menu-row-1">
+      <div className="hidden absolute right-0 mt-1 w-44 rounded-lg bg-surface-container-lowest shadow-xl z-20 py-1 text-left" data-stitch-data-stitch-id="menu-row-1">
       <a className="flex items-center gap-2 px-3 py-1.5 font-body-sm text-body-sm text-on-surface hover:bg-surface-container-low" href="#">
       <span className="material-symbols-outlined text-sm">visibility</span> View details
                         </a>
@@ -267,7 +267,7 @@ export function In8Assets() {
       <button type="button" className="w-8 h-8 rounded flex items-center justify-center text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors" >
       <span className="material-symbols-outlined text-base">more_horiz</span>
       </button>
-      <div className="hidden absolute right-0 mt-1 w-44 rounded-lg bg-surface-container-lowest shadow-xl z-20 py-1 text-left" data-stitch-id="menu-row-2">
+      <div className="hidden absolute right-0 mt-1 w-44 rounded-lg bg-surface-container-lowest shadow-xl z-20 py-1 text-left" data-stitch-data-stitch-id="menu-row-2">
       <a className="flex items-center gap-2 px-3 py-1.5 font-body-sm text-body-sm text-on-surface hover:bg-surface-container-low" href="#">
       <span className="material-symbols-outlined text-sm">visibility</span> View details
                         </a>

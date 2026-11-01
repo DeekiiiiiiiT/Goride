@@ -26,6 +26,15 @@ export function formatMaintenanceDisplayDate(isoOrYmd: string | null | undefined
   });
 }
 
+/** Service history when legacy import had no purchase date (R-02). */
+export function formatMaintenanceServiceDateLabel(
+  isoOrYmd: string | null | undefined,
+  dateUnknown?: boolean | null,
+): string {
+  if (dateUnknown) return "Fitted — date unknown";
+  return formatMaintenanceDisplayDate(isoOrYmd);
+}
+
 export function formatMaintenanceScheduledDate(isoOrYmd: string | null | undefined): string {
   if (!isoOrYmd) return "—";
   const ymd = isoOrYmd.slice(0, 10);

@@ -5,8 +5,17 @@ import {
   carKitProgressOffset,
   carKitVehicleLabel,
 } from '../carKitDisplay';
+import { Dk1KitItemRows } from '../Dk1KitItemRows';
 
-export function Dk1MyCarKit({ kit }: { kit?: DriverCarKitPayload | null }) {
+export function Dk1MyCarKit({
+  kit,
+  onReportItem,
+  onPreShiftInspection,
+}: {
+  kit?: DriverCarKitPayload | null;
+  onReportItem?: (itemName: string) => void;
+  onPreShiftInspection?: () => void;
+}) {
   const vehicleLabel = carKitVehicleLabel(kit);
   const { present, total } = carKitItemCounts(kit);
   const progressOffset = carKitProgressOffset(present, total);
@@ -25,6 +34,16 @@ export function Dk1MyCarKit({ kit }: { kit?: DriverCarKitPayload | null }) {
       </a>
       <div className="flex flex-wrap items-baseline justify-between gap-space-xs">
       <h1 className="font-headline-md text-headline-md text-on-surface tracking-tight">My car kit</h1>
+      <div className="flex items-center gap-2">
+      {onPreShiftInspection ? (
+        <button
+          type="button"
+          className="font-body-sm text-body-sm font-semibold text-primary underline min-h-[44px] px-2"
+          onClick={onPreShiftInspection}
+        >
+          Pre-shift inspection
+        </button>
+      ) : null}
       <div className="bg-surface-container-lowest px-space-xs py-0.5 rounded-lg shadow-sm">
       <span className="font-label-code text-label-code text-on-surface uppercase tracking-wider">{vehicleLabel}</span>
       </div>
@@ -61,9 +80,12 @@ export function Dk1MyCarKit({ kit }: { kit?: DriverCarKitPayload | null }) {
       <div className="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden flex flex-col">
       <div className="px-space-md py-space-sm bg-surface-container-low flex items-center justify-between">
       <span className="font-label-status text-label-status text-on-surface-variant uppercase tracking-wider">Required Inventory</span>
-      <span className="font-body-sm text-body-sm font-semibold text-primary">10 Checked</span>
+      <span className="font-body-sm text-body-sm font-semibold text-primary">{total > 0 ? `${present}/${total} present` : '—'}</span>
       </div>
 
+      {kit?.items?.length ? <Dk1KitItemRows items={kit.items} onReport={onReportItem} /> : null}
+
+      <div className={kit?.items?.length ? 'hidden' : ''}>
       <div className="p-space-md flex flex-col gap-space-xs bg-surface-container-lowest hover:bg-surface-container-low transition-colors">
       <div className="flex items-start justify-between gap-space-xs">
       <div className="flex items-center gap-space-sm min-w-0">
@@ -355,6 +377,7 @@ export function Dk1MyCarKit({ kit }: { kit?: DriverCarKitPayload | null }) {
       <span className="px-space-xs py-1 rounded-full bg-surface-container text-on-surface font-label-status text-label-status">
                 Standard fit
               </span>
+      </div>
       </div>
       </div>
 

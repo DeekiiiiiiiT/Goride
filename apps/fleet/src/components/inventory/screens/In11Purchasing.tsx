@@ -66,16 +66,16 @@ export function In11Purchasing() {
       <div className="flex flex-wrap items-center justify-between gap-space-md">
 
       <div className="flex items-center bg-surface-container-high p-1 rounded-lg">
-      <button type="button" className="px-space-lg py-1.5 rounded-md font-body-sm text-body-sm bg-primary text-on-primary font-semibold shadow-sm flex items-center gap-space-xs transition-all" data-stitch-id="sub-pill-orders">
+      <button type="button" className="px-space-lg py-1.5 rounded-md font-body-sm text-body-sm bg-primary text-on-primary font-semibold shadow-sm flex items-center gap-space-xs transition-all" data-stitch-data-stitch-id="sub-pill-orders">
       <span className="material-symbols-outlined text-[15px]">inventory</span>
       <span>Orders</span>
       </button>
-      <button type="button" className="px-space-lg py-1.5 rounded-md font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface flex items-center gap-space-xs transition-all" data-stitch-id="sub-pill-suggested">
+      <button type="button" className="px-space-lg py-1.5 rounded-md font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface flex items-center gap-space-xs transition-all" data-stitch-data-stitch-id="sub-pill-suggested">
       <span className="material-symbols-outlined text-[15px]">auto_fix_high</span>
       <span>Suggested</span>
       <span className="px-1.5 py-0.2 bg-tertiary-fixed text-on-tertiary-fixed font-label-code text-[11px] font-bold rounded-full">1</span>
       </button>
-      <button type="button" className="px-space-lg py-1.5 rounded-md font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface flex items-center gap-space-xs transition-all" data-stitch-id="sub-pill-vendors">
+      <button type="button" className="px-space-lg py-1.5 rounded-md font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface flex items-center gap-space-xs transition-all" data-stitch-data-stitch-id="sub-pill-vendors">
       <span className="material-symbols-outlined text-[15px]">storefront</span>
       <span>Vendors</span>
       <span className="px-1.5 py-0.2 bg-surface-container-lowest text-on-surface-variant font-label-code text-[11px] rounded-full">3</span>

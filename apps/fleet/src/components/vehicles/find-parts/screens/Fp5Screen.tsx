@@ -3,7 +3,7 @@ import type { Fp5ResultRow, Fp5ViewModel } from "../findPartsViewModels";
 import type { TrimScopeTab } from "../findPartsActions";
 import { FindPartsStickyHeader } from "../FindPartsStickyHeader";
 import { FpNowOnFileNotice } from "./FpNowOnFileNotice";
-import { FP5_BACK_TO_AREA_LABEL, FP5_SPEC_FIELD_LABELS, FP14_CHECKED_TWO_CATALOGUES, FP14_RESULTS_COUNT_LINE, FP14_SISTER_OPTIONS_COUNT, formatCatalogResolvedNoticeLine } from "../findPartsViewModels";
+import { FP5_BACK_TO_AREA_LABEL, FP5_SPEC_FIELD_LABELS, FP14_CHECKED_TWO_CATALOGUES, FP14_RESULTS_COUNT_LINE, FP14_SISTER_OPTIONS_COUNT, FP14_VARIANT_RESEARCH_BODY, FP14_VARIANT_RESEARCH_BUTTON, formatCatalogResolvedNoticeLine } from "../findPartsViewModels";
 
 const STITCH_TIER1_HEADING = "Made for your car";
 
@@ -346,7 +346,7 @@ export function Fp5Screen({ actions, data, partName, positionTrail, catalogNotic
               <span className="material-symbols-outlined text-secondary text-[22px] mt-0.5">contact_support</span>
               <div>
                 <div className="font-body-md text-body-md font-semibold text-on-surface">Need a different brand or custom length?</div>
-                <div className="font-body-sm text-body-sm text-on-surface-variant">Ask Roam to research an alternative part number for your chassis.</div>
+                <div className="font-body-sm text-body-sm text-on-surface-variant">{FP14_VARIANT_RESEARCH_BODY}</div>
               </div>
             </div>
             <button
@@ -354,7 +354,7 @@ export function Fp5Screen({ actions, data, partName, positionTrail, catalogNotic
               className="bg-surface-container-lowest hover:bg-surface-container-highest border border-surface-container-high text-on-surface font-body-sm text-body-sm px-space-md py-2 rounded-lg font-medium whitespace-nowrap transition-colors self-start sm:self-center"
               onClick={actions.onAskRoam}
             >
-              Ask Roam to find another option
+              {FP14_VARIANT_RESEARCH_BUTTON}
             </button>
           </div>
         </div>

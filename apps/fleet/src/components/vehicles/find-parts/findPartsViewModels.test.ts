@@ -111,3 +111,27 @@ describe("formatPartsVersionTag", () => {
     expect(vm.medianTurnaroundLabel).toBe("Avg dispatch turnaround: hidden until 5 resolves");
   });
 });
+
+describe("FP13/14 stitch formatters (R29)", () => {
+  it("formats cant-find retry and note confirmation", async () => {
+    const {
+      buildFp13ViewModel,
+      formatFp13CantFindWithRetry,
+      formatFp13NoteConfirmation,
+      FP13_EMPTY_BODY,
+      FP13_HELP_CARD_TITLE,
+    } = await import("./findPartsViewModels");
+    expect(formatFp13CantFindWithRetry("cabin filter", "GP5", "8 Nov")).toContain("GP5");
+    expect(formatFp13NoteConfirmation("kgnja774-0000-4000-8000-000000000000")).toContain("KGN-JA-774");
+    const vm = buildFp13ViewModel({ activity: { requests: { items: [] } } });
+    expect(vm.emptyBody).toBe(FP13_EMPTY_BODY);
+    expect(vm.helpCardTitle).toBe(FP13_HELP_CARD_TITLE);
+  });
+
+  it("formats resolved notice with en-GB date", async () => {
+    const { formatCatalogResolvedNoticeLine } = await import("./findPartsViewModels");
+    const line = formatCatalogResolvedNoticeLine("2026-10-28T12:00:00Z");
+    expect(line).toMatch(/28 Oct 2026/);
+    expect(line.toLowerCase()).toContain("resolved from oem parts catalogue lookup");
+  });
+});

@@ -1,5 +1,7 @@
 import { useEffect } from 'react';
 import type { CarKitDk6View } from '../carKitNavigation';
+import type { DriverCarKitPayload } from '../../../services/driverInventoryApi';
+import { carKitVehicleLabel } from '../carKitDisplay';
 
 const VIEW_IDS: Record<CarKitDk6View, string> = {
   loading: 'view-loading',
@@ -14,11 +16,26 @@ export function Dk6States({
   activeState,
   onRetry,
   showInspector = false,
+  kit,
+  failedDraft,
+  sendErrorRef,
+  onResend,
 }: {
   activeState?: CarKitDk6View;
   onRetry?: () => void;
   showInspector?: boolean;
+  kit?: DriverCarKitPayload | null;
+  failedDraft?: { itemLabel: string; issueLabel: string; note?: string } | null;
+  sendErrorRef?: string | null;
+  onResend?: () => void;
 }) {
+  const vehiclePlate = carKitVehicleLabel(kit);
+  const draftItem = failedDraft?.itemLabel ?? 'Kit item';
+  const draftIssue = failedDraft?.issueLabel ?? 'Reported issue';
+  const draftNote = failedDraft?.note?.trim() || 'No note saved with this report.';
+  const errorRef = sendErrorRef?.trim() || 'SEND_FAILED';
+  const odometerLabel =
+    kit?.odometerKm != null ? `${Number(kit.odometerKm).toLocaleString('en-JM')} km` : '—';
   useEffect(() => {
     if (!activeState) return;
     const activeId = VIEW_IDS[activeState];
@@ -176,7 +193,7 @@ export function Dk6States({
       <div className="bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex items-center justify-between">
       <div className="flex items-center gap-space-sm min-w-0">
       <div className="px-2 py-1 rounded-lg bg-surface-container-highest shadow-sm flex-shrink-0">
-      <span className="font-label-plate text-[16px] text-on-surface">1505LM</span>
+      <span className="font-label-plate text-[16px] text-on-surface">{vehiclePlate}</span>
       </div>
       <div className="flex flex-col min-w-0">
       <span className="font-headline-sm text-[16px] text-on-surface truncate">Honda Fit 2018</span>
@@ -215,7 +232,7 @@ export function Dk6States({
       </div>
       <div className="p-2.5 rounded-lg bg-surface-container-low">
       <span className="font-body-sm text-[12px] text-on-surface-variant block">Odometer</span>
-      <span className="font-label-button text-[14px] text-on-surface">74,210 km</span>
+      <span className="font-label-button text-[14px] text-on-surface">{odometerLabel}</span>
       </div>
       </div>
       </div>
@@ -240,7 +257,7 @@ export function Dk6States({
       <div className="flex items-center justify-between">
       <div className="flex items-center gap-2">
       <div className="px-2 py-0.5 rounded-md bg-surface-container-highest">
-      <span className="font-label-plate text-[14px] text-on-surface">5179KZ</span>
+      <span className="font-label-plate text-[14px] text-on-surface">{vehiclePlate}</span>
       </div>
       <span className="font-headline-sm text-[15px] text-on-surface">Toyota Probox</span>
       </div>
@@ -289,8 +306,8 @@ export function Dk6States({
       </div>
       </div>
       <div className="flex items-center justify-between pt-1">
-      <span className="font-label-code text-[11px] text-on-secondary/80">Ref: ERR_CONN_REFUSED_504</span>
-      <button type="button" className="px-3.5 py-1.5 rounded-lg bg-on-secondary text-secondary font-label-button text-[13px] active:scale-95 transition-transform font-bold" onclick="simulateSendRetry(this)">
+      <span className="font-label-code text-[11px] text-on-secondary/80">Ref: {errorRef}</span>
+      <button type="button" className="px-3.5 py-1.5 rounded-lg bg-on-secondary text-secondary font-label-button text-[13px] active:scale-95 transition-transform font-bold" onClick={() => onResend?.()}>
                     Try again
                   </button>
       </div>
@@ -306,19 +323,19 @@ export function Dk6States({
       <div className="rounded-xl bg-surface-container p-space-md flex flex-col gap-2">
       <div className="flex items-center justify-between">
       <span className="font-label-status text-[12px] text-on-surface-variant uppercase">Preserved Draft Payload</span>
-      <span className="font-label-code text-[12px] text-on-surface font-semibold">Kit #5179KZ</span>
+      <span className="font-label-code text-[12px] text-on-surface font-semibold">{vehiclePlate}</span>
       </div>
       <div className="flex items-center gap-3 py-1">
       <div className="w-9 h-9 rounded-lg bg-surface-container-highest flex items-center justify-center text-on-surface">
       <span className="material-symbols-outlined text-[20px]">build</span>
       </div>
       <div className="flex flex-col">
-      <span className="font-headline-sm text-[15px] text-on-surface">Hydraulic Jack</span>
-      <span className="font-body-sm text-[13px] text-secondary font-semibold">Marked: Missing / Broken</span>
+      <span className="font-headline-sm text-[15px] text-on-surface">{draftItem}</span>
+      <span className="font-body-sm text-[13px] text-secondary font-semibold">Marked: {draftIssue}</span>
       </div>
       </div>
       <div className="p-2.5 rounded-lg bg-surface-container-lowest text-on-surface-variant font-body-sm text-[13px]">
-                  “Handle pin is loose and cylinder leaks oil on footwell plate.”
+                  {draftNote}
                 </div>
       </div>
 
@@ -326,7 +343,7 @@ export function Dk6States({
       <button type="button" className="flex-1 h-[52px] rounded-xl bg-surface-container-high text-on-surface font-label-button text-label-button flex items-center justify-center active:scale-[0.98] transition-transform">
                   Edit note
                 </button>
-      <button type="button" className="flex-[1.5] h-[52px] rounded-xl bg-primary text-on-primary font-label-button text-label-button flex items-center justify-center gap-1.5 shadow-sm active:scale-[0.98] transition-transform" onclick="simulateSendRetry(this)">
+      <button type="button" className="flex-[1.5] h-[52px] rounded-xl bg-primary text-on-primary font-label-button text-label-button flex items-center justify-center gap-1.5 shadow-sm active:scale-[0.98] transition-transform" onClick={() => onResend?.()}>
       <span className="material-symbols-outlined text-[18px]">send</span>
                   Resend now
                 </button>

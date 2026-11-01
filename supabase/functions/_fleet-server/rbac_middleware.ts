@@ -48,6 +48,7 @@ export type Permission =
   | 'drivers.location.view'
   | 'vehicles.create' | 'vehicles.edit' | 'vehicles.delete' | 'vehicles.view'
   | 'vehicles.bypass_catalog_gate'
+  | 'maintenance.approve' | 'maintenance.inspect'
   | 'fuel.approve' | 'fuel.split_cash_override' | 'fuel.reject' | 'fuel.create_entry' | 'fuel.edit_entry'
   | 'fuel.delete_entry' | 'fuel.view' | 'fuel.export'
   | 'fuel.finalize' | 'fuel.configure' | 'fuel.reopen' | 'fuel.accept_unexplained' | 'fuel.second_approve'

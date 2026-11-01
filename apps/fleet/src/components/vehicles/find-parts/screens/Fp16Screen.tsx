@@ -1,6 +1,6 @@
 import type { Fp13Actions, Fp13ViewModel } from "./Fp13Screen";
 import type { Fp13RequestCard, Fp13RequestFilter, Fp13TimelineStep } from "../findPartsViewModels";
-import { FP16_ASSEMBLY_CATEGORIES } from "../findPartsViewModels";
+import { FP16_ASSEMBLY_CATEGORIES, FP16_ASSEMBLY_CATEGORIES_HEADING, FP16_ASSEMBLY_GROUPS_COUNT_LABEL, FP16_CATALOG_UPDATED_LABEL, FP16_ON_FILE_FOR_CAR, FP16_WAITING_STATUS_BLURB, FP16_WHAT_PART_HEADING } from "../findPartsViewModels";
 import { FpNowOnFileNotice } from "./FpNowOnFileNotice";
 
 function MobileTimeline({ steps }: { steps: Fp13TimelineStep[] }) {
@@ -60,9 +60,7 @@ function MobileCard({ card, actions }: { card: Fp13RequestCard; actions: Fp13Act
       ) : null}
       <MobileTimeline steps={card.timeline} />
       {card.filterCategory === "waiting" && card.statusLabel === "Roam is looking" && card.footerNote ? (
-        <p className="font-body-sm text-body-sm text-on-surface-variant">
-          Roam is checking trusted parts catalogues. Usually identified within a day.
-        </p>
+        <p className="font-body-sm text-body-sm text-on-surface-variant">{FP16_WAITING_STATUS_BLURB}</p>
       ) : card.footerNote && card.filterCategory !== "failed" ? (
         <p className="font-body-sm text-body-sm text-on-surface-variant">{card.footerNote}</p>
       ) : null}
@@ -152,20 +150,20 @@ export function Fp16Screen({
         <div className="px-3 pt-3 space-y-3">
           <FpNowOnFileNotice
             message={catalogNotice}
-            catalogUpdatedLabel="Catalog updated"
+            catalogUpdatedLabel={FP16_CATALOG_UPDATED_LABEL}
             onDismiss={onDismissNotice}
             onSeePart={onSeePartFromNotice}
           />
           <div className="rounded-xl bg-surface-container-lowest shadow-sm overflow-hidden">
             <div className="px-4 py-3 flex items-center justify-between border-b border-surface-container-high">
-              <h2 className="font-headline-sm text-headline-sm text-on-surface">What part?</h2>
+              <h2 className="font-headline-sm text-headline-sm text-on-surface">{FP16_WHAT_PART_HEADING}</h2>
               <button type="button" className="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center text-secondary" onClick={onOpenFindParts}>
                 <span className="material-symbols-outlined text-[18px]">search</span>
               </button>
             </div>
             <div className="px-4 pt-2 pb-1 flex items-center justify-between">
-              <span className="font-caption text-caption text-secondary uppercase font-bold tracking-wider">Assembly categories</span>
-              <span className="font-caption text-caption text-secondary">{FP16_ASSEMBLY_CATEGORIES.length} groups</span>
+              <span className="font-caption text-caption text-secondary uppercase font-bold tracking-wider">{FP16_ASSEMBLY_CATEGORIES_HEADING}</span>
+              <span className="font-caption text-caption text-secondary">{FP16_ASSEMBLY_GROUPS_COUNT_LABEL}</span>
             </div>
             <div className="px-3 pb-3 space-y-2">
               {FP16_ASSEMBLY_CATEGORIES.map((label, index) => (
@@ -177,7 +175,7 @@ export function Fp16Screen({
                 >
                   <span className="font-body-md text-body-md font-medium text-on-surface">{label}</span>
                   {index === 0 ? (
-                    <span className="font-caption text-caption text-emerald-700 font-semibold">1 on file for your car</span>
+                    <span className="font-caption text-caption text-emerald-700 font-semibold">{FP16_ON_FILE_FOR_CAR}</span>
                   ) : (
                     <span className="material-symbols-outlined text-secondary">chevron_right</span>
                   )}

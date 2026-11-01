@@ -97,6 +97,16 @@ AS $$
 DECLARE
   v_line_value numeric(14, 2);
 BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM fleet.inv_location loc
+    WHERE loc.id = NEW.location_id
+      AND loc.organization_id = NEW.organization_id
+      AND loc.kind = 'virtual'
+  ) THEN
+    RETURN NEW;
+  END IF;
+
   v_line_value := COALESCE(NEW.unit_cost, 0) * NEW.qty_delta;
 
   INSERT INTO fleet.inv_balance (

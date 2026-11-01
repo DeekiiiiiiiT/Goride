@@ -11,7 +11,7 @@ export function In6VehicleKits() {
     <div className="fleet-inventory-stitch inventory-stitch-root">
       <div className="inventory-stitch-main"><div className="flex flex-col w-full">
 
-      <div className="fixed inset-0 z-50 hidden items-center justify-center bg-primary/20 backdrop-blur-sm px-4" data-stitch-id="issue-modal">
+      <div className="fixed inset-0 z-50 hidden items-center justify-center bg-primary/20 backdrop-blur-sm px-4" data-stitch-data-stitch-id="issue-modal">
       <div className="bg-surface-container-lowest rounded-xl max-w-lg w-full p-space-xl shadow-xl flex flex-col gap-space-lg">
       <div className="flex items-center justify-between">
       <div className="flex items-center gap-space-sm">
@@ -30,11 +30,11 @@ export function In6VehicleKits() {
       <div className="bg-surface-container-low p-space-md rounded flex flex-col gap-space-xs">
       <div className="flex justify-between items-center">
       <span className="font-caption text-caption text-on-surface-variant uppercase">Target Vehicle</span>
-      <span className="font-label-plate text-label-plate bg-surface-container-lowest px-2 py-0.5 rounded text-on-surface" data-stitch-id="modal-vehicle-plate">{live.primaryPlate}</span>
+      <span className="font-label-plate text-label-plate bg-surface-container-lowest px-2 py-0.5 rounded text-on-surface" data-stitch-data-stitch-id="modal-vehicle-plate">{live.primaryPlate}</span>
       </div>
       <div className="flex justify-between items-center">
       <span className="font-caption text-caption text-on-surface-variant uppercase">Item Assignment</span>
-      <span className="font-body-md text-body-md font-semibold text-primary" data-stitch-id="modal-item-name">Tyre pump</span>
+      <span className="font-body-md text-body-md font-semibold text-primary" data-stitch-data-stitch-id="modal-item-name">Tyre pump</span>
       </div>
       </div>
       <div className="flex flex-col gap-space-md">
@@ -110,11 +110,11 @@ export function In6VehicleKits() {
       <div className="flex items-center gap-space-md flex-wrap">
 
       <div className="flex items-center bg-surface-container-high p-0.5 rounded">
-      <button type="button" className="flex items-center gap-space-xs px-space-md py-1 rounded bg-surface-container-lowest text-primary font-body-sm text-body-sm font-semibold shadow-xs transition-all" data-stitch-id="view-mode-matrix" >
+      <button type="button" className="flex items-center gap-space-xs px-space-md py-1 rounded bg-surface-container-lowest text-primary font-body-sm text-body-sm font-semibold shadow-xs transition-all" data-stitch-data-stitch-id="view-mode-matrix" >
       <span className="material-symbols-outlined text-[16px]">grid_view</span>
                   Matrix
                 </button>
-      <button type="button" className="flex items-center gap-space-xs px-space-md py-1 rounded text-on-surface-variant hover:text-on-surface font-body-sm text-body-sm transition-all" data-stitch-id="view-mode-cards" >
+      <button type="button" className="flex items-center gap-space-xs px-space-md py-1 rounded text-on-surface-variant hover:text-on-surface font-body-sm text-body-sm transition-all" data-stitch-data-stitch-id="view-mode-cards" >
       <span className="material-symbols-outlined text-[16px]">view_agenda</span>
                   Cards
                 </button>
@@ -140,7 +140,7 @@ export function In6VehicleKits() {
       <span className="font-label-code text-caption text-secondary shrink-0">Updated: Just now</span>
       </div>
 
-      <div className="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden flex flex-col" data-stitch-id="matrix-container">
+      <div className="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden flex flex-col" data-stitch-data-stitch-id="matrix-container">
       <div className="overflow-x-auto">
       <table className="w-full border-collapse text-left">
       <thead>
@@ -463,7 +463,7 @@ export function In6VehicleKits() {
       </div>
       </div>
 
-      <div className="flex flex-col gap-space-md" data-stitch-id="cards-container">
+      <div className="flex flex-col gap-space-md" data-stitch-data-stitch-id="cards-container">
       <div className="flex items-center justify-between">
       <div>
       <h3 className="font-headline-sm text-headline-sm text-on-surface">Vehicle Kit Cards Summary</h3>

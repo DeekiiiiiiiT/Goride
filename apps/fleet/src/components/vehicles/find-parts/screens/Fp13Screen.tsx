@@ -1,7 +1,12 @@
 import type { ReactNode } from "react";
 import { useState } from "react";
 import type { Fp13RequestCard, Fp13RequestFilter, Fp13TimelineStep, Fp13ViewModel } from "../findPartsViewModels";
-import { formatPartsRequestShortId } from "../findPartsViewModels";
+import {
+  FP13_ADD_NOTE_BUTTON,
+  FP13_NOTE_FIELD_LABEL,
+  FP13_SEND_NOTE_LABEL,
+  formatFp13NoteConfirmation,
+} from "../findPartsViewModels";
 
 export type Fp13Actions = {
   onBack: () => void;
@@ -166,14 +171,14 @@ function RequestCard({ card, actions }: { card: Fp13RequestCard; actions: Fp13Ac
                     }}
                   >
                     <span className="material-symbols-outlined text-[16px]">edit_note</span>
-                    <span>Add a note or photo</span>
+                    <span>{FP13_ADD_NOTE_BUTTON}</span>
                   </button>
                 </div>
               </div>
               {noteOpen ? (
                 <div className="flex flex-col gap-space-sm pt-space-sm border-t border-surface-container-highest">
                   <label className="font-body-sm text-body-sm text-on-surface-variant" htmlFor={`note-${card.id}`}>
-                    Provide vehicle chassis sub-code, existing part photo, or aftermarket casing stamping to refine match:
+                    {FP13_NOTE_FIELD_LABEL}
                   </label>
                   <div className="flex flex-col sm:flex-row gap-space-sm">
                     <input
@@ -189,14 +194,14 @@ function RequestCard({ card, actions }: { card: Fp13RequestCard; actions: Fp13Ac
                       className="bg-primary text-on-primary hover:bg-inverse-surface font-headline-sm text-body-sm px-space-lg py-2 rounded-lg transition-transform active:scale-95 shrink-0 flex items-center justify-center gap-1 disabled:opacity-50"
                       onClick={() => void sendNote()}
                     >
-                      <span>Send note to Roam</span>
+                      <span>{FP13_SEND_NOTE_LABEL}</span>
                     </button>
                   </div>
                 </div>
               ) : null}
               {noteSent ? (
                 <p className="font-label-code text-caption text-on-surface pt-1">
-                  {`✓ Additional metadata recorded and attached to dispatch query ${formatPartsRequestShortId(card.id)}.`}
+                  {formatFp13NoteConfirmation(card.id)}
                 </p>
               ) : null}
             </div>
@@ -275,12 +280,8 @@ export function Fp13Screen({ actions, data }: { actions: Fp13Actions; data: Fp13
               <span className="material-symbols-outlined text-[20px]">lightbulb</span>
             </div>
             <div className="flex flex-col gap-1">
-              <span className="font-headline-sm text-body-sm text-on-surface">
-                Can&apos;t find a component in the standard parts catalog?
-              </span>
-              <span className="font-body-sm text-body-sm text-on-surface-variant">
-                Simply trigger an OEM search from the main hub search bar using the vehicle plate or chassis prefix.
-              </span>
+              <span className="font-headline-sm text-body-sm text-on-surface">{data.helpCardTitle}</span>
+              <span className="font-body-sm text-body-sm text-on-surface-variant">{data.helpCardBody}</span>
             </div>
           </div>
           <div className="font-label-code text-caption text-secondary shrink-0 uppercase">{data.medianTurnaroundLabel}</div>

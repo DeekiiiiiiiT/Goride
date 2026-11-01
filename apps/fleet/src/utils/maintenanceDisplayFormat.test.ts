@@ -20,3 +20,11 @@ describe("formatMaintenanceScheduledDate", () => {
     expect(formatMaintenanceScheduledDate("2026-08-01")).toMatch(/1 Aug 2026/);
   });
 });
+
+describe("formatMaintenanceServiceDateLabel (R-02)", () => {
+  it("shows fitted date unknown when flagged", async () => {
+    const { formatMaintenanceServiceDateLabel } = await import("./maintenanceDisplayFormat");
+    expect(formatMaintenanceServiceDateLabel("2026-11-01", true)).toBe("Fitted — date unknown");
+    expect(formatMaintenanceServiceDateLabel("2026-10-14", false)).toMatch(/14 Oct 2026/);
+  });
+});

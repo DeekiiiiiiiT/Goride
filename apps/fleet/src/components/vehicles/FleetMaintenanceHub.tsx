@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
-import { Loader2, Wrench, Car, History, Package } from "lucide-react";
+import { Loader2, Wrench, Car, History, Package, ClipboardList, Kanban, CalendarRange, ShieldCheck } from "lucide-react";
 import { api } from "../../services/api";
 import { Button } from "../ui/button";
 import {
@@ -38,6 +38,10 @@ import type {
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { FindPartsTab } from "./find-parts/FindPartsTab";
+import { MaintenanceWorkOrdersTab } from "./maintenance-logging/MaintenanceWorkOrdersTab";
+import { MaintenanceRequestsTab } from "./maintenance-logging/MaintenanceRequestsTab";
+import { MaintenanceInspectionsTab } from "./maintenance-logging/MaintenanceInspectionsTab";
+import { MaintenanceScheduleTab } from "./maintenance-logging/MaintenanceScheduleTab";
 import { usePermissions } from "../../hooks/usePermissions";
 
 export interface FleetMaintenanceHubProps {
@@ -82,6 +86,9 @@ type FleetHubVehicleRow = {
   dueCounts?: { overdue: number; dueSoon: number };
   servicesAttention: Array<{ taskName: string; kind: "overdue" | "due_soon" }>;
   servicesAttentionTruncated: boolean;
+  doNotDrive?: boolean;
+  doNotDriveReason?: string | null;
+  doNotDriveSetAt?: string | null;
 };
 
 function vehicleLabel(row: {
@@ -124,6 +131,10 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
   const [partsRequisition, setPartsRequisition] = useState<{ status: string; detail: string } | null>(
     null,
   );
+  const [kpiMonth, setKpiMonth] = useState<{
+    costPerKmApprox?: number;
+    pmOnTimePct?: number;
+  } | null>(null);
 
   const [servicesDueView, setServicesDueView] = useState<FleetHubVehicleRow | null>(null);
   const [nightlyRun, setNightlyRun] = useState<Record<string, unknown> | null>(null);
@@ -142,9 +153,17 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
   const [driverRequests, setDriverRequests] = useState<DriverRequestRow[]>([]);
   const [requestsLoading, setRequestsLoading] = useState(false);
 
-  const [hubTab, setHubTab] = useState<"by-vehicle" | "service-ledger" | "find-parts">(() => {
+  const [hubTab, setHubTab] = useState<
+    "by-vehicle" | "service-ledger" | "find-parts" | "work-orders" | "requests" | "inspections" | "schedule"
+  >(() => {
     const tab = new URLSearchParams(window.location.search).get("tab");
-    return tab === "find-parts" ? "find-parts" : tab === "service-ledger" ? "service-ledger" : "by-vehicle";
+    if (tab === "find-parts") return "find-parts";
+    if (tab === "service-ledger") return "service-ledger";
+    if (tab === "work-orders") return "work-orders";
+    if (tab === "requests") return "requests";
+    if (tab === "inspections") return "inspections";
+    if (tab === "schedule") return "schedule";
+    return "by-vehicle";
   });
 
   const overviewAttentionCount = useMemo(
@@ -192,6 +211,20 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
       setPartsRequisition(
         (res as { partsRequisition?: { status: string; detail: string } | null }).partsRequisition ?? null,
       );
+      try {
+        const kpiRes = await api.getMaintenanceKpiMonthly();
+        const first = (kpiRes.items || [])[0] as Record<string, unknown> | undefined;
+        if (first) {
+          setKpiMonth({
+            costPerKmApprox: Number(first.cost_per_km_approx ?? first.costPerKmApprox ?? 0),
+            pmOnTimePct: Number(first.pm_on_time_pct ?? first.pmOnTimePct ?? 0),
+          });
+        } else {
+          setKpiMonth(null);
+        }
+      } catch {
+        setKpiMonth(null);
+      }
       setItems(
         ((res.items || []) as FleetHubVehicleRow[]).map((row) => ({
           ...row,
@@ -382,6 +415,8 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
           nextScheduledWindow={nextScheduledWindow}
           nextScheduledDateLine={nextScheduledDateLine}
           partsRequisition={partsRequisition}
+          costPerKmApprox={kpiMonth?.costPerKmApprox}
+          pmOnTimePct={kpiMonth?.pmOnTimePct}
         />
       ) : null}
 
@@ -430,6 +465,27 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
                 Find parts
               </TabsTrigger>
             ) : null}
+            <TabsTrigger value="work-orders" className="gap-1.5 px-3">
+              <Kanban className="w-4 h-4" />
+              Work orders
+            </TabsTrigger>
+            <TabsTrigger value="requests" className="gap-1.5 px-3">
+              <ClipboardList className="w-4 h-4" />
+              Requests
+              {driverRequests.length > 0 ? (
+                <span className="bg-amber-100 text-amber-900 font-mono text-[10px] px-1.5 py-0.5 rounded-full ml-0.5">
+                  {driverRequests.length}
+                </span>
+              ) : null}
+            </TabsTrigger>
+            <TabsTrigger value="inspections" className="gap-1.5 px-3">
+              <ShieldCheck className="w-4 h-4" />
+              Inspections
+            </TabsTrigger>
+            <TabsTrigger value="schedule" className="gap-1.5 px-3">
+              <CalendarRange className="w-4 h-4" />
+              Schedule
+            </TabsTrigger>
           </TabsList>
         </div>
 
@@ -452,76 +508,23 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
           ) : null}
         </TabsContent>
 
-        <TabsContent value="by-vehicle" className="mt-0 space-y-4">
-          {(driverRequests.length > 0 || requestsLoading) && !loading && !error ? (
-            <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20 shadow-sm overflow-hidden">
-              <div className="px-4 py-3 border-b border-amber-200 dark:border-amber-800 flex items-center justify-between gap-2">
-                <div>
-                  <h2 className="font-semibold text-slate-900 dark:text-slate-100">Driver requests</h2>
-                  <p className="text-xs text-slate-600 dark:text-slate-400">
-                    Open issues from drivers — complete with cost to post to books, or dismiss.
-                  </p>
-                </div>
-                {requestsLoading ? <Loader2 className="w-4 h-4 animate-spin text-slate-400" /> : null}
-              </div>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Vehicle</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Notes</TableHead>
-                    <TableHead className="w-[200px] text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {driverRequests.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={5} className="text-center text-slate-500 py-6 text-sm">
-                        No open driver requests.
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    driverRequests.map((row) => {
-                      const veh = items.find((i) => i.vehicleId === row.vehicle_id);
-                      return (
-                        <TableRow key={row.id}>
-                          <TableCell className="whitespace-nowrap">{row.performed_at_date}</TableCell>
-                          <TableCell>{veh ? vehicleLabel(veh) : row.vehicle_id}</TableCell>
-                          <TableCell>{row.service_type || "—"}</TableCell>
-                          <TableCell className="max-w-xs truncate" title={row.notes || undefined}>
-                            {row.notes || "—"}
-                          </TableCell>
-                          <TableCell className="text-right space-x-2">
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="default"
-                              className="h-8"
-                              onClick={() => void handleCompleteRequest(row)}
-                              disabled={scheduleLoading}
-                            >
-                              Complete
-                            </Button>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              className="h-8"
-                              onClick={() => void handleDismissRequest(row)}
-                            >
-                              Dismiss
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          ) : null}
+        <TabsContent value="work-orders" className="mt-0">
+          <MaintenanceWorkOrdersTab vehicles={items} onRefreshHub={() => void load()} />
+        </TabsContent>
 
+        <TabsContent value="requests" className="mt-0">
+          <MaintenanceRequestsTab vehicles={items} onApproved={() => void loadRequests()} />
+        </TabsContent>
+
+        <TabsContent value="inspections" className="mt-0">
+          <MaintenanceInspectionsTab />
+        </TabsContent>
+
+        <TabsContent value="schedule" className="mt-0">
+          <MaintenanceScheduleTab vehicles={items} />
+        </TabsContent>
+
+        <TabsContent value="by-vehicle" className="mt-0 space-y-4">
           {loading ? (
             <MaintenanceHubLoadingState />
           ) : error ? null : items.length === 0 ? (

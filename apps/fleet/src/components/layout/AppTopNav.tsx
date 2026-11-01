@@ -18,6 +18,7 @@ import {
   navItemsHaveActivePage,
 } from './fleetNavModel';
 import { NavCountBadge, NavNewBadge, useFleetNavModel } from './useFleetNavModel';
+import { FleetMaintenanceAlertsMenu } from './FleetMaintenanceAlertsMenu';
 import type { NavLeaf } from './nav/types';
 
 type Props = {
@@ -301,6 +302,11 @@ export function AppTopNav({
         </nav>
 
         <div className="flex shrink-0 items-center gap-2">
+          <FleetMaintenanceAlertsMenu
+            onOpenVehicle={() => {
+              go('maintenance');
+            }}
+          />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button

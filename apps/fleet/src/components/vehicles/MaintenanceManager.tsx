@@ -71,6 +71,16 @@ const MaintenanceManagerComponent: React.FC<MaintenanceManagerProps> = ({
         ]}
       />
 
+      <Card className="border-dashed opacity-80">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-medium text-slate-500">Live vehicle health</CardTitle>
+          <CardDescription>Coming soon — telematics will feed maintenance alerts here.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <p className="text-xs text-slate-500">No live health data yet.</p>
+        </CardContent>
+      </Card>
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Card className="bg-gradient-to-br from-white to-slate-50 border-slate-200">
           <CardHeader className="pb-2">

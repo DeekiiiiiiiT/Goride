@@ -300,6 +300,8 @@ export type Permission =
   | 'vehicles.edit'
   | 'vehicles.delete'
   | 'vehicles.view'
+  | 'maintenance.approve'
+  | 'maintenance.inspect'
   /** Allow operating on a fleet vehicle that has no catalog match (platform-only). */
   | 'vehicles.bypass_catalog_gate'
   // Fuel
@@ -423,7 +425,7 @@ const ALL_CUSTOMER_PERMISSIONS: Permission[] = [
   // Actions
   'drivers.create', 'drivers.edit', 'drivers.delete', 'drivers.view',
   'drivers.location.view',
-  'vehicles.create', 'vehicles.edit', 'vehicles.delete', 'vehicles.view',
+  'vehicles.create', 'vehicles.edit', 'vehicles.delete', 'vehicles.view', 'maintenance.approve', 'maintenance.inspect',
   // NOTE: 'vehicles.bypass_catalog_gate' is intentionally NOT granted to fleet
   // roles — only platform_owner gets it (added explicitly below).
   'fuel.approve', 'fuel.split_cash_override', 'fuel.reject', 'fuel.create_entry', 'fuel.edit_entry', 'fuel.delete_entry', 'fuel.view', 'fuel.export',
@@ -559,7 +561,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   unassigned: [],
 
   // Driver — car kit reports only (assigned vehicle enforced server-side)
-  driver: ['inventory.report'],
+  driver: ['inventory.report', 'maintenance.inspect'],
   hauler: [],
   explorer_user: [],
 };

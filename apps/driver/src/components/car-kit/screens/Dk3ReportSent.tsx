@@ -1,5 +1,18 @@
 /** Ported from Stitch — do not simplify layout (audit §0.4). */
-export function Dk3ReportSent() {
+import type { DriverReportRow } from '../../../services/driverInventoryApi';
+
+export function Dk3ReportSent({ report }: { report?: DriverReportRow | null }) {
+  const refLabel = report?.reportNo ? `#${report.reportNo}` : 'REF: pending';
+  const itemTitle = report?.displayName ?? report?.itemLabel ?? report?.note ?? 'Kit item';
+  const sentAt = report?.createdAt
+    ? new Date(report.createdAt).toLocaleString('en-JM', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    : 'Just now';
   return (
     <div className="driver-car-kit-stitch inventory-stitch-root">
       <div className="inventory-stitch-main">
@@ -24,7 +37,7 @@ export function Dk3ReportSent() {
                     Delivered
                   </span>
       </div>
-      <span className="font-mono text-xs font-bold text-slate-500 tracking-wide">REF: #RP-8842</span>
+      <span className="font-mono text-xs font-bold text-slate-500 tracking-wide">{refLabel}</span>
       </div>
       <div className="flex items-start gap-3">
 
@@ -33,14 +46,14 @@ export function Dk3ReportSent() {
       <div className="absolute bottom-0 inset-x-0 bg-slate-900/60 backdrop-blur-xs py-0.5 text-[9px] text-white text-center font-medium">Photo</div>
       </div>
       <div className="flex flex-col flex-1 min-w-0 justify-center">
-      <h3 className="text-base font-bold text-slate-900 truncate">Dash camera</h3>
+      <h3 className="text-base font-bold text-slate-900 truncate">{itemTitle}</h3>
       <div className="flex items-center gap-1.5 mt-0.5">
       <span className="inline-block w-2 h-2 rounded-full bg-red-500"></span>
       <span className="text-xs font-semibold text-red-600">Not working</span>
       </div>
       <div className="flex items-center gap-1 text-slate-500 text-xs mt-1.5">
       <span className="material-symbols-outlined text-[14px]">calendar_today</span>
-      <span>1 Nov 2026 · 08:20 AM</span>
+      <span>{sentAt}</span>
       </div>
       </div>
       </div>

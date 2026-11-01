@@ -37,6 +37,8 @@ export type MaintenanceOverviewVehicleRow = {
   lastService?: { date: string; miles: number | null } | null;
   dueCounts?: { overdue: number; dueSoon: number };
   servicesAttention: Array<{ taskName: string; kind: "overdue" | "due_soon" }>;
+  doNotDrive?: boolean;
+  doNotDriveReason?: string | null;
 };
 
 function vehicleTitle(row: MaintenanceOverviewVehicleRow): string {
@@ -204,7 +206,18 @@ export function MaintenanceOverviewPanel({
                         )}
                       </td>
                       <td className="py-4 px-3 align-top">
-                        {statusBadge(row.fleetStatus, primaryAttention)}
+                        <div className="flex flex-col gap-1">
+                          {row.doNotDrive ? (
+                            <span
+                              className="inline-flex items-center gap-1 bg-error text-on-error font-caption text-[11px] font-semibold px-2 py-1 rounded-full w-fit"
+                              title={row.doNotDriveReason ?? undefined}
+                            >
+                              <span className="material-symbols-outlined text-[12px]">block</span>
+                              Do not drive
+                            </span>
+                          ) : null}
+                          {statusBadge(row.fleetStatus, primaryAttention)}
+                        </div>
                       </td>
                       <td className="py-4 px-3 align-top">
                         {needsOdo && !row.nextDueSummary ? (
@@ -355,10 +368,10 @@ export function MaintenanceOverviewPanel({
             <span className="material-symbols-outlined text-[18px]">alt_route</span>
           </div>
           <div>
-            <h3 className="text-sm font-bold text-on-surface">Jamaica Parts Cross-Compatibility</h3>
+            <h3 className="text-sm font-bold text-on-surface">Find parts</h3>
             <p className="text-[11px] text-stitch-secondary mt-0.5">
-              Cross-model part lookups map standard Kingston inventory directly to Japanese Domestic Market
-              (JDM) chassis codes for prompt localized dispatch.
+              Look up compatible parts for your fleet vehicles using the catalog — then open the Find parts tab to
+              search by vehicle and component.
             </p>
           </div>
         </div>

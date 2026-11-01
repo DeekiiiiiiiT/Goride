@@ -1935,9 +1935,61 @@ export function formatCatalogResolvedNoticeLine(requestedAt: unknown): string {
   if (!requestedAt) return "";
   const d = new Date(String(requestedAt));
   if (Number.isNaN(d.getTime())) return "";
-  const datePart = d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+  const datePart = d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
   return `Resolved from OEM parts catalogue lookup requested on ${datePart}.`;
 }
+
+export const FP14_VARIANT_RESEARCH_BODY =
+  "Ask Roam Fleet Engineering to research an alternative OEM part number for your chassis.";
+export const FP14_VARIANT_RESEARCH_BUTTON = "Request variant research";
+
+/** Stitch FP14 resolved notice sample (dynamic dates use formatCatalogResolvedNoticeLine). */
+export const FP14_STITCH_RESOLVED_DEMO =
+  "Resolved from OEM parts catalogue lookup requested on 28 Oct 2026.";
+
+/** FP13 requests timeline (Stitch FP13). */
+export const FP13_HELP_CARD_TITLE = "Can't find a component in the standard parts catalog?";
+export const FP13_HELP_CARD_BODY =
+  "Simply trigger an OEM search from the main hub search bar using the vehicle plate or chassis prefix.";
+export const FP13_EMPTY_BODY =
+  "When a part isn't on file, ask Roam from the search. Research pipelines will populate this list automatically.";
+export const FP13_NOTE_FIELD_LABEL =
+  "Provide vehicle chassis sub-code, existing part photo, or aftermarket casing stamping to refine match:";
+export const FP13_SEND_NOTE_LABEL = "Send note to Roam";
+export const FP13_ADD_NOTE_BUTTON = "Add a note or photo";
+export const FP13_FAILED_DEFAULT_REASON = "No trusted catalogue match yet.";
+export const FP13_WAITING_FOOTER = "Roam is checking trusted parts catalogues. Usually within a day.";
+
+export function formatFp13CantFindWithRetry(partName: string, vehicleCode: string, retryDateLabel: string): string {
+  return `No trusted catalogue lists a ${partName} for ${vehicleCode} yet. We'll try again on ${retryDateLabel}.`;
+}
+
+export function formatFp13NoteConfirmation(requestId: string): string {
+  const shortId = formatPartsRequestShortId(requestId);
+  return `✓ Additional metadata recorded and attached to dispatch query ${shortId}.`;
+}
+
+/** Stitch FP13 card 4 (fidelity reference; live cards use formatFp13CantFindWithRetry). */
+export const FP13_STITCH_CANT_FIND_DEMO =
+  "No trusted catalogue lists a cabin filter for GP5 yet. We'll try again on 8 Nov.";
+export const FP13_STITCH_NOTE_CONFIRM_DEMO =
+  "✓ Additional metadata recorded and attached to dispatch query KGN-JA-774.";
+export const FP13_STITCH_TURNAROUND_DEMO = "Avg dispatch turnaround: 4.8 hrs";
+
+/** FP16 assembly area labels (phone notice frame). */
+export const FP16_CATALOG_UPDATED_LABEL = "Catalog updated";
+export const FP16_WHAT_PART_HEADING = "What part?";
+export const FP16_ASSEMBLY_CATEGORIES_HEADING = "Assembly categories";
+export const FP16_ON_FILE_FOR_CAR = "1 on file for your car";
+export const FP16_WAITING_STATUS_BLURB =
+  "Roam is checking trusted catalogues. Usually identified within a day.";
+
+export function formatFp16AssemblyGroupsLabel(count: number): string {
+  return `${count} groups`;
+}
+
+/** Stitch FP16 assembly row count label. */
+export const FP16_ASSEMBLY_GROUPS_COUNT_LABEL = "5 groups";
 
 /** FP16 assembly area labels (phone notice frame). */
 export const FP16_ASSEMBLY_CATEGORIES = [
@@ -2081,6 +2133,8 @@ export type Fp13ViewModel = {
   emptyTitle: string;
   emptyBody: string;
   autoUpdateLabel: string;
+  helpCardTitle: string;
+  helpCardBody: string;
 };
 
 export function buildFp13ViewModel(input: {
@@ -2118,9 +2172,9 @@ export function buildFp13ViewModel(input: {
     if (filterCategory === "added") {
       footerNote = resultLine !== "None yet" ? resultLine : "";
     } else if (filterCategory === "failed") {
-      footerNote = cantFindReason !== "None yet" ? cantFindReason : "No trusted catalogue match yet.";
+      footerNote = cantFindReason !== "None yet" ? cantFindReason : FP13_FAILED_DEFAULT_REASON;
     } else if (statusLabel === "Roam is looking") {
-      footerNote = "Roam is checking trusted parts catalogues. Usually within a day.";
+      footerNote = FP13_WAITING_FOOTER;
     } else {
       footerNote = queueDepth > 0
         ? "Queued for research. Roam starts looking within 2 hours."
@@ -2167,8 +2221,10 @@ export function buildFp13ViewModel(input: {
     medianTurnaroundLabel: formatMedianTurnaroundLabel(meta?.medianAddMinutes, showOrgMetrics),
     showOrgMetrics,
     emptyTitle: "No requests in this view",
-    emptyBody: "When a part isn't on file, ask Roam from the search. Research updates appear here automatically.",
+    emptyBody: FP13_EMPTY_BODY,
     autoUpdateLabel: "Updates automatically · checked",
+    helpCardTitle: FP13_HELP_CARD_TITLE,
+    helpCardBody: FP13_HELP_CARD_BODY,
   };
 }
 

@@ -17,7 +17,7 @@ export function In17States() {
       <div className="flex items-center gap-space-sm bg-surface-container px-space-md py-space-xs rounded-lg shadow-sm">
       <span className="w-2 h-2 rounded-full bg-error animate-pulse"></span>
       <span className="font-label-code text-caption text-on-surface font-medium">State Simulator Live</span>
-      <button type="button" className="ml-space-sm bg-surface-container-lowest hover:bg-surface-container-high transition-colors px-2 py-1 rounded text-caption font-label-code text-on-surface shadow-sm" data-stitch-id="toggle-state-density">Toggle Density</button>
+      <button type="button" className="ml-space-sm bg-surface-container-lowest hover:bg-surface-container-high transition-colors px-2 py-1 rounded text-caption font-label-code text-on-surface shadow-sm" data-stitch-data-stitch-id="toggle-state-density">Toggle Density</button>
       </div>
       </div>
 

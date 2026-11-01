@@ -8,6 +8,8 @@ export type MaintenanceHubKpiProps = {
   nextScheduledWindow?: { date: string; site: string } | null;
   nextScheduledDateLine?: string | null;
   partsRequisition?: { status: string; detail: string } | null;
+  costPerKmApprox?: number;
+  pmOnTimePct?: number;
 };
 
 function progressPct(value: number, total: number): number {
@@ -34,6 +36,8 @@ export function MaintenanceHubKpiCards({
   nextScheduledWindow,
   nextScheduledDateLine,
   partsRequisition,
+  costPerKmApprox,
+  pmOnTimePct,
 }: MaintenanceHubKpiProps) {
   const partsReady = partsRequisition?.status === "Ready";
   const nextLabel = nextScheduledWindow?.date
@@ -48,7 +52,32 @@ export function MaintenanceHubKpiCards({
   );
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-6 max-[390px]:grid-cols-1 max-[390px]:gap-2">
+    <div className="space-y-3 mb-6">
+      {costPerKmApprox != null || pmOnTimePct != null ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="bg-surface-container-lowest p-4 rounded-xl shadow-sm">
+            <div className="text-[11px] uppercase tracking-wider font-semibold text-stitch-secondary mb-1">
+              Cost / km (latest month)
+            </div>
+            <span className="font-mono text-xl font-bold text-on-surface">
+              {costPerKmApprox != null && Number.isFinite(costPerKmApprox)
+                ? `J$${costPerKmApprox.toFixed(2)}`
+                : "—"}
+            </span>
+          </div>
+          <div className="bg-surface-container-lowest p-4 rounded-xl shadow-sm">
+            <div className="text-[11px] uppercase tracking-wider font-semibold text-stitch-secondary mb-1">
+              PM on-time %
+            </div>
+            <span className="font-mono text-xl font-bold text-on-surface">
+              {pmOnTimePct != null && Number.isFinite(pmOnTimePct)
+                ? `${pmOnTimePct.toFixed(0)}%`
+                : "—"}
+            </span>
+          </div>
+        </div>
+      ) : null}
+    <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-0 max-[390px]:grid-cols-1 max-[390px]:gap-2">
       <div className="bg-surface-container-lowest p-4 rounded-xl shadow-sm flex flex-col justify-between">
         <div className="flex items-center justify-between text-stitch-secondary mb-2">
           <span className="text-[11px] uppercase tracking-wider font-semibold">Overdue Service</span>
@@ -65,12 +94,12 @@ export function MaintenanceHubKpiCards({
 
       <div className="bg-surface-container-lowest p-4 rounded-xl shadow-sm flex flex-col justify-between">
         <div className="flex items-center justify-between text-stitch-secondary mb-2">
-          <span className="text-[11px] uppercase tracking-wider font-semibold">Telemetry Missing</span>
+          <span className="text-[11px] uppercase tracking-wider font-semibold">No odometer reading</span>
           <span className="material-symbols-outlined text-on-surface-variant text-[18px]">speed</span>
         </div>
         <div className="flex items-baseline gap-1">
           <span className="font-mono text-2xl font-bold text-on-surface">{telemetryMissingCount}</span>
-          <span className="text-[11px] text-stitch-secondary">pending manual input</span>
+          <span className="text-[11px] text-stitch-secondary">vehicles without a recent odometer</span>
         </div>
         <KpiProgressBar pct={telemetryPct} barClass="bg-on-surface-variant" />
       </div>
@@ -107,6 +136,7 @@ export function MaintenanceHubKpiCards({
         </div>
         <KpiProgressBar pct={partsReady ? 100 : 40} barClass="bg-primary" />
       </div>
+    </div>
     </div>
   );
 }

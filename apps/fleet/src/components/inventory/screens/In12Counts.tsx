@@ -552,7 +552,7 @@ export function In12Counts() {
       <span className="material-symbols-outlined text-[18px]">close</span>
       <span>Reject audit</span>
       </button>
-      <button type="button" className="px-space-xl py-2.5 bg-primary text-on-primary font-body-sm text-body-sm font-bold rounded-lg shadow-sm hover:opacity-95 transition-all flex items-center gap-2" data-stitch-id="approveBtn">
+      <button type="button" className="px-space-xl py-2.5 bg-primary text-on-primary font-body-sm text-body-sm font-bold rounded-lg shadow-sm hover:opacity-95 transition-all flex items-center gap-2" data-stitch-data-stitch-id="approveBtn">
       <span className="material-symbols-outlined text-[18px]">check</span>
       <span>Approve & update stock</span>
       </button>

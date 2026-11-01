@@ -3,7 +3,11 @@
  */
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { formatSupabaseError } from "../_shared/formatSupabaseError.ts";
-import { runCatalogPartResearch, runCatalogVehicleResearch } from "./catalog_research_gemini.ts";
+import {
+  domainFromGroundingTitle,
+  runCatalogPartResearch,
+  runCatalogVehicleResearch,
+} from "./catalog_research_gemini.ts";
 import {
   checkPartNumberShape,
   normalizeResearchCandidate,
@@ -238,11 +242,16 @@ export async function runCatalogResearchWorker(supabase: SupabaseClient): Promis
       ].join("\n"),
     });
 
+    const groundingChunks = (research.raw?.candidates || []).reduce(
+      (n, c) => n + (c.groundingMetadata?.groundingChunks?.length || 0),
+      0,
+    );
+    const sourceUrls = research.candidates.reduce((n, c) => n + (c.sources?.length || 0), 0);
     await supabaseRpc(supabase, "catalog_research_log_event", {
       p_job_id: jobId,
       p_step: "research",
       p_outcome: "ok",
-      p_detail: { model: research.model, count: research.candidates.length },
+      p_detail: { model: research.model, count: research.candidates.length, groundingChunks, sourceUrls },
     });
 
     await supabaseUpdate(supabase, "catalog_research_job", { state: "checking" }, (q) => q.eq("id", jobId));
@@ -271,14 +280,23 @@ export async function runCatalogResearchWorker(supabase: SupabaseClient): Promis
         if (pageFetches >= 6) break;
         pageFetches += 1;
         const requestedUrl = String(src.url || "");
+        const groundingTitle = String((src as { grounding_title?: string }).grounding_title || "");
         const fetched = await fetchCatalogSourcePage(requestedUrl);
-        const domain = domainFromUrl(fetched.finalUrl);
+        let domain = domainFromUrl(fetched.finalUrl);
+        if (
+          (!domain || domain === "vertexaisearch.cloud.google.com")
+          && groundingTitle
+        ) {
+          const fromTitle = domainFromGroundingTitle(groundingTitle);
+          if (fromTitle) domain = fromTitle;
+        }
         const fetchMeta = catalogSourceFetchMeta(fetched);
         const sourceBase: Record<string, unknown> = {
           url: requestedUrl,
           ...fetchMeta,
           domain,
         };
+        if (groundingTitle) sourceBase.grounding_title = groundingTitle;
         if (fetched.redirectUrl) sourceBase.redirect_url = fetched.redirectUrl;
 
         if (fetched.redirectFailed) {

@@ -289,7 +289,7 @@ function fidelityIncludes(haystack, label) {
 }
 
 let fleetFailed = false;
-for (const row of fleetReadme.split('\n').filter((l) => /^\| (FP|IN)\d/.test(l))) {
+for (const row of fleetReadme.split('\n').filter((l) => /^\| FP\d/.test(l))) {
   const cells = row.split('|').map((c) => c.trim().replace(/^`|`$/g, ''));
   let num;
   let react;

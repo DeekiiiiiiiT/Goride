@@ -107,7 +107,7 @@ export function In10Movements() {
       </div>
       </div>
       <div className="flex items-center gap-space-sm shrink-0">
-      <button type="button" className="flex items-center gap-space-xs px-space-md py-2 rounded bg-surface-container-low hover:bg-surface-container text-on-surface font-body-sm text-body-sm font-medium transition-all shadow-sm" data-stitch-id="btn-export-csv">
+      <button type="button" className="flex items-center gap-space-xs px-space-md py-2 rounded bg-surface-container-low hover:bg-surface-container text-on-surface font-body-sm text-body-sm font-medium transition-all shadow-sm" data-stitch-data-stitch-id="btn-export-csv">
       <span className="material-symbols-outlined text-[16px]">download</span>
       <span>Export CSV</span>
       </button>
@@ -148,11 +148,11 @@ export function In10Movements() {
 
       <div className="flex-1 min-w-[240px] relative">
       <span className="material-symbols-outlined absolute left-3 top-2 text-[16px] text-on-surface-variant">search</span>
-      <input className="w-full bg-surface-container-low pl-9 pr-3 py-1.5 rounded font-body-sm text-body-sm text-on-surface focus:outline-none focus:bg-surface-container-lowest transition-all placeholder:text-on-surface-variant/60" data-stitch-id="movement-search" placeholder="Search item, SKU, reference or car..." type="text"/>
+      <input className="w-full bg-surface-container-low pl-9 pr-3 py-1.5 rounded font-body-sm text-body-sm text-on-surface focus:outline-none focus:bg-surface-container-lowest transition-all placeholder:text-on-surface-variant/60" data-stitch-data-stitch-id="movement-search" placeholder="Search item, SKU, reference or car..." type="text"/>
       </div>
       </div>
       <div className="flex items-center gap-space-md justify-end pt-space-xs lg:pt-0">
-      <button type="button" className="font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors underline decoration-outline-variant" data-stitch-id="clear-filters-btn">
+      <button type="button" className="font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors underline decoration-outline-variant" data-stitch-data-stitch-id="clear-filters-btn">
                 Clear filters
               </button>
       </div>
@@ -242,7 +242,7 @@ export function In10Movements() {
       </table>
       </div>
 
-      <div className="hidden absolute top-36 right-8 z-30 w-full max-w-md bg-surface-container-lowest rounded-xl shadow-xl p-space-lg animate-in fade-in zoom-in-95" data-stitch-id="reversal-specimen-dialog">
+      <div className="hidden absolute top-36 right-8 z-30 w-full max-w-md bg-surface-container-lowest rounded-xl shadow-xl p-space-lg animate-in fade-in zoom-in-95" data-stitch-data-stitch-id="reversal-specimen-dialog">
       <div className="flex items-start justify-between pb-space-sm">
       <div className="flex items-center gap-space-sm">
       <div className="w-7 h-7 rounded bg-error-container text-on-error-container flex items-center justify-center">
@@ -253,7 +253,7 @@ export function In10Movements() {
       <p className="font-caption text-caption text-on-surface-variant mt-0.5">Append-only correction action</p>
       </div>
       </div>
-      <button type="button" className="text-on-surface-variant hover:text-on-surface p-1 rounded hover:bg-surface-container" data-stitch-id="close-reversal-modal">
+      <button type="button" className="text-on-surface-variant hover:text-on-surface p-1 rounded hover:bg-surface-container" data-stitch-data-stitch-id="close-reversal-modal">
       <span className="material-symbols-outlined text-[18px]">close</span>
       </button>
       </div>
@@ -291,10 +291,10 @@ export function In10Movements() {
       </div>
       </div>
       <div className="pt-space-md flex items-center justify-end gap-space-sm">
-      <button type="button" className="px-space-md py-1.5 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container font-body-sm text-body-sm transition-colors" data-stitch-id="cancel-reversal-btn">
+      <button type="button" className="px-space-md py-1.5 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container font-body-sm text-body-sm transition-colors" data-stitch-data-stitch-id="cancel-reversal-btn">
                   Cancel
                 </button>
-      <button type="button" className="px-space-md py-1.5 rounded bg-primary text-on-primary font-body-sm text-body-sm font-semibold hover:bg-on-surface transition-all flex items-center gap-space-xs shadow-sm" data-stitch-id="confirm-reversal-btn">
+      <button type="button" className="px-space-md py-1.5 rounded bg-primary text-on-primary font-body-sm text-body-sm font-semibold hover:bg-on-surface transition-all flex items-center gap-space-xs shadow-sm" data-stitch-data-stitch-id="confirm-reversal-btn">
       <span className="material-symbols-outlined text-[16px]">verified</span>
                   Confirm Reversal
                 </button>

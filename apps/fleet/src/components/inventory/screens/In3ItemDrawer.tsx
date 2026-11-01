@@ -196,9 +196,9 @@ export function In3ItemDrawer() {
       </div>
       </div>
 
-      <div className="fixed inset-0 top-32 z-40 bg-on-surface/40 backdrop-blur-[2px] transition-opacity duration-200" data-stitch-id="drawerScrim" ></div>
+      <div className="fixed inset-0 top-32 z-40 bg-on-surface/40 backdrop-blur-[2px] transition-opacity duration-200" data-stitch-data-stitch-id="drawerScrim" ></div>
 
-      <aside aria-labelledby="drawerTitle" aria-modal="true" className="fixed top-32 right-0 bottom-0 z-50 w-full max-w-[570px] bg-surface-container-lowest shadow-2xl flex flex-col overflow-hidden text-on-surface transition-transform duration-200 ease-out" data-stitch-id="itemDrawer" role="dialog">
+      <aside aria-labelledby="drawerTitle" aria-modal="true" className="fixed top-32 right-0 bottom-0 z-50 w-full max-w-[570px] bg-surface-container-lowest shadow-2xl flex flex-col overflow-hidden text-on-surface transition-transform duration-200 ease-out" data-stitch-data-stitch-id="itemDrawer" role="dialog">
 
       <div className="p-space-lg bg-surface-container-lowest flex flex-col gap-space-sm shrink-0">
       <div className="flex items-center justify-between">
@@ -216,7 +216,7 @@ export function In3ItemDrawer() {
       <div className="flex items-start justify-between gap-space-md">
       <div className="flex flex-col">
       <div className="flex items-center gap-space-sm">
-      <h2 className="font-headline-lg text-headline-lg font-bold text-on-surface tracking-tight" data-stitch-id="drawerTitle">Phone Holder Mount</h2>
+      <h2 className="font-headline-lg text-headline-lg font-bold text-on-surface tracking-tight" data-stitch-data-stitch-id="drawerTitle">Phone Holder Mount</h2>
       <button type="button" className="p-1 rounded hover:bg-surface-container text-on-surface-variant hover:text-on-surface transition-colors" title="Edit item metadata — name, category, SKU, photo, reorder rule; quantities are immutable">
       <span className="material-symbols-outlined text-[18px]">edit</span>
       </button>

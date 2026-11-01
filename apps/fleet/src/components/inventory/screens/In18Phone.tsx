@@ -257,7 +257,7 @@ export function In18Phone() {
       </div>
       </div>
 
-      <div className="hidden fixed inset-0 z-50 flex flex-col bg-primary text-on-primary" data-stitch-id="scannerDrawer">
+      <div className="hidden fixed inset-0 z-50 flex flex-col bg-primary text-on-primary" data-stitch-data-stitch-id="scannerDrawer">
 
       <div className="h-14 px-margin flex items-center justify-between shrink-0 bg-primary-container">
       <button type="button" className="flex items-center gap-1 text-on-primary hover:opacity-80 transition-opacity font-caption text-body-sm font-medium" >
@@ -265,7 +265,7 @@ export function In18Phone() {
       <span>Back to Stock</span>
       </button>
       <div className="flex items-center gap-space-sm">
-      <button type="button" className="w-9 h-9 rounded-full bg-surface-container-highest/20 flex items-center justify-center text-on-primary" data-stitch-id="torchToggle" >
+      <button type="button" className="w-9 h-9 rounded-full bg-surface-container-highest/20 flex items-center justify-center text-on-primary" data-stitch-data-stitch-id="torchToggle" >
       <span className="material-symbols-outlined text-[20px]">flash_on</span>
       </button>
       <button type="button" className="w-9 h-9 rounded-full bg-surface-container-highest/20 flex items-center justify-center text-on-primary">

@@ -13,6 +13,12 @@ import { getOrgId } from "./org_scope.ts";
 import { invDb, invRpcName } from "./inventory_db.ts";
 import { safeErrorResponse } from "./safe_error.ts";
 import { registerInventoryExtendedRoutes } from "./inventory_controller_extended.ts";
+import {
+  handleDriverCarKitGet,
+  handleDriverKitCheckPost,
+  handleDriverReportPost,
+  handleDriverReportsGet,
+} from "./inventory_driver_portal.ts";
 
 type InvEnv = {
   Variables: {
@@ -499,35 +505,36 @@ app.get(`${PREFIX}/kits/compliance/timeline`, requirePermission("inventory.view"
 // ---------------------------------------------------------------------------
 
 app.get(`${PREFIX}/driver/car-kit`, requirePermission("inventory.report"), async (c) => {
-  const org = orgOrForbid(c);
-  if (org instanceof Response) return org;
-  return c.json({
-    stub: true,
-    organizationId: org,
-    vehicleId: c.req.query("vehicle_id") ?? null,
-    items: [],
-  });
+  try {
+    const org = orgOrForbid(c);
+    if (org instanceof Response) return org;
+    return await handleDriverCarKitGet(c, org);
+  } catch (e) {
+    return safeErrorResponse(c, e, "inventory.driver.car-kit");
+  }
 });
 
 app.get(`${PREFIX}/driver/reports`, requirePermission("inventory.report"), async (c) => {
-  const org = orgOrForbid(c);
-  if (org instanceof Response) return org;
-  const { limit, offset } = pageParams(c);
-  return c.json(pagedResponse([], offset, limit, { stub: true, organizationId: org }));
+  try {
+    const org = orgOrForbid(c);
+    if (org instanceof Response) return org;
+    const { limit, offset } = pageParams(c);
+    return await handleDriverReportsGet(c, org, offset, limit);
+  } catch (e) {
+    return safeErrorResponse(c, e, "inventory.driver.reports.list");
+  }
 });
 
 app.post(`${PREFIX}/driver/reports`, requirePermission("inventory.report"), async (c) => {
-  const org = orgOrForbid(c);
-  if (org instanceof Response) return org;
-  const idem = requireIdempotencyKey(c);
-  if (idem instanceof Response) return idem;
-  const body = await c.req.json();
-  return c.json({
-    stub: true,
-    idempotencyKey: idem,
-    report: body,
-    organizationId: org,
-  }, 202);
+  try {
+    const org = orgOrForbid(c);
+    if (org instanceof Response) return org;
+    const idem = requireIdempotencyKey(c);
+    if (idem instanceof Response) return idem;
+    return await handleDriverReportPost(c, org, idem);
+  } catch (e) {
+    return safeErrorResponse(c, e, "inventory.driver.reports.create");
+  }
 });
 
 app.post(`${PREFIX}/driver/reports/:id/updates`, requirePermission("inventory.report"), async (c) => {
@@ -537,17 +544,15 @@ app.post(`${PREFIX}/driver/reports/:id/updates`, requirePermission("inventory.re
 });
 
 app.post(`${PREFIX}/driver/kit-check`, requirePermission("inventory.report"), async (c) => {
-  const org = orgOrForbid(c);
-  if (org instanceof Response) return org;
-  const idem = requireIdempotencyKey(c);
-  if (idem instanceof Response) return idem;
-  const body = await c.req.json();
-  return c.json({
-    stub: true,
-    idempotencyKey: idem,
-    organizationId: org,
-    payload: body,
-  });
+  try {
+    const org = orgOrForbid(c);
+    if (org instanceof Response) return org;
+    const idem = requireIdempotencyKey(c);
+    if (idem instanceof Response) return idem;
+    return await handleDriverKitCheckPost(c, org, idem);
+  } catch (e) {
+    return safeErrorResponse(c, e, "inventory.driver.kit-check");
+  }
 });
 
 app.get(`${PREFIX}/assets/:id/diagnostics`, requirePermission("inventory.view"), async (c) => {

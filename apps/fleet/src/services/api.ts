@@ -2785,6 +2785,8 @@ export const api = {
 
   async updateWorkOrder(id: string, patch: Partial<{
     status: MaintenanceWorkOrderStatus;
+    vendorId: string | null;
+    priority: string | null;
     performedAtDate: string | null;
     odometer: number | null;
     provider: string | null;

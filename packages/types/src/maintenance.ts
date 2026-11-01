@@ -31,7 +31,16 @@ export const MAINTENANCE_LINE_ACTIONS: { value: MaintenanceLineAction; label: st
   { value: "other", label: "Other" },
 ];
 
-export type MaintenanceWorkOrderStatus = "draft" | "in_progress" | "completed" | "cancelled";
+export type MaintenanceWorkOrderStatus =
+  | "draft"
+  | "open"
+  | "scheduled"
+  | "in_shop"
+  | "awaiting_parts"
+  | "in_progress"
+  | "completed"
+  | "closed"
+  | "cancelled";
 
 export type MaintenanceInspectionStatus = "pass" | "attention" | "fail";
 

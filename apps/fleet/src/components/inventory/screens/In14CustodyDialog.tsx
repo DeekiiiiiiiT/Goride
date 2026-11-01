@@ -122,27 +122,27 @@ export function In14CustodyDialog() {
       <span className="w-1 h-1 rounded-full bg-outline"></span>
       <span className="font-label-code text-caption text-secondary font-semibold">Transaction #TRX-9481</span>
       </div>
-      <h2 className="font-headline-lg text-headline-lg text-on-surface tracking-tight" data-stitch-id="modal-title">Write off stock</h2>
+      <h2 className="font-headline-lg text-headline-lg text-on-surface tracking-tight" data-stitch-data-stitch-id="modal-title">Write off stock</h2>
       </div>
       </div>
       <button type="button" onClick={() => shell.closeModal()} aria-label="Close dialog" className="w-8 h-8 rounded-lg flex items-center justify-center text-secondary hover:bg-surface-variant transition-colors">
       <span className="material-symbols-outlined text-[20px]">close</span>
       </button>
       </div>
-      <p className="font-body-sm text-body-sm text-secondary -mt-1" data-stitch-id="modal-subtitle">
+      <p className="font-body-sm text-body-sm text-secondary -mt-1" data-stitch-data-stitch-id="modal-subtitle">
                 Remove damaged, lost, or stolen items from custody ledger permanently.
               </p>
 
       <div className="grid grid-cols-3 p-1 rounded-lg bg-surface-variant/70 gap-1 font-body-sm text-body-sm">
-      <button type="button" className="py-1.5 px-space-sm rounded font-medium text-secondary hover:text-on-surface flex items-center justify-center gap-space-xs transition-all" data-stitch-id="tab-move" >
+      <button type="button" className="py-1.5 px-space-sm rounded font-medium text-secondary hover:text-on-surface flex items-center justify-center gap-space-xs transition-all" data-stitch-data-stitch-id="tab-move" >
       <span className="material-symbols-outlined text-[16px]">swap_horiz</span>
       <span>Move stock</span>
       </button>
-      <button type="button" className="py-1.5 px-space-sm rounded font-medium text-secondary hover:text-on-surface flex items-center justify-center gap-space-xs transition-all" data-stitch-id="tab-return" >
+      <button type="button" className="py-1.5 px-space-sm rounded font-medium text-secondary hover:text-on-surface flex items-center justify-center gap-space-xs transition-all" data-stitch-data-stitch-id="tab-return" >
       <span className="material-symbols-outlined text-[16px]">assignment_return</span>
       <span>Return from car</span>
       </button>
-      <button type="button" className="py-1.5 px-space-sm rounded font-semibold text-on-surface bg-surface-container-lowest shadow-sm flex items-center justify-center gap-space-xs transition-all" data-stitch-id="tab-writeoff" >
+      <button type="button" className="py-1.5 px-space-sm rounded font-semibold text-on-surface bg-surface-container-lowest shadow-sm flex items-center justify-center gap-space-xs transition-all" data-stitch-data-stitch-id="tab-writeoff" >
       <span className="material-symbols-outlined text-[16px]">delete_sweep</span>
       <span>Write off</span>
       </button>
@@ -197,7 +197,7 @@ export function In14CustodyDialog() {
       </div>
       </div>
 
-      <div className="col-span-6 flex flex-col gap-1" data-stitch-id="field-from-container">
+      <div className="col-span-6 flex flex-col gap-1" data-stitch-data-stitch-id="field-from-container">
       <label className="font-caption text-caption uppercase tracking-wider text-secondary font-semibold">Source Custody (From)</label>
       <div className="h-9 px-space-md bg-surface-container-lowest rounded shadow-sm flex items-center gap-space-sm text-on-surface font-body-sm text-body-sm">
       <span className="material-symbols-outlined text-[16px] text-secondary">warehouse</span>
@@ -205,15 +205,15 @@ export function In14CustodyDialog() {
       </div>
       </div>
 
-      <div className="col-span-6 flex flex-col gap-1" data-stitch-id="field-to-container">
+      <div className="col-span-6 flex flex-col gap-1" data-stitch-data-stitch-id="field-to-container">
       <label className="font-caption text-caption uppercase tracking-wider text-secondary font-semibold">Target Custody (To)</label>
-      <div className="h-9 px-space-md bg-surface-container text-secondary font-body-sm text-body-sm rounded flex items-center gap-space-sm cursor-not-allowed" data-stitch-id="field-to-display">
+      <div className="h-9 px-space-md bg-surface-container text-secondary font-body-sm text-body-sm rounded flex items-center gap-space-sm cursor-not-allowed" data-stitch-data-stitch-id="field-to-display">
       <span className="material-symbols-outlined text-[16px] text-error">cancel</span>
       <span className="truncate italic text-[12px]">Permanently removed from storeroom</span>
       </div>
       </div>
 
-      <div className="col-span-12 flex flex-col gap-1" data-stitch-id="field-reason-container">
+      <div className="col-span-12 flex flex-col gap-1" data-stitch-data-stitch-id="field-reason-container">
       <div className="flex items-center justify-between">
       <label className="font-caption text-caption uppercase tracking-wider text-secondary font-semibold">Write-off Disposition Reason <span className="text-error">*</span></label>
       <span className="font-caption text-caption text-secondary">Mandatory regulatory attribution</span>
@@ -247,7 +247,7 @@ export function In14CustodyDialog() {
       </div>
       <span className="font-label-code text-[11px] text-secondary">Atomic Database Commit</span>
       </div>
-      <div className="flex flex-col gap-1.5 font-label-code text-caption" data-stitch-id="impact-preview-content">
+      <div className="flex flex-col gap-1.5 font-label-code text-caption" data-stitch-data-stitch-id="impact-preview-content">
       <div className="flex items-center justify-between bg-surface-container-lowest p-2 rounded">
       <span className="text-secondary">Main store — Kingston</span>
       <span className="font-semibold text-on-surface">Dash camera: 1 → 0 <span className="text-error">(-1 unit)</span></span>
@@ -263,7 +263,7 @@ export function In14CustodyDialog() {
       </div>
       </div>
 
-      <div className="p-space-md rounded-lg bg-tertiary-fixed/20 flex items-start gap-space-md" data-stitch-id="high-value-alert">
+      <div className="p-space-md rounded-lg bg-tertiary-fixed/20 flex items-start gap-space-md" data-stitch-data-stitch-id="high-value-alert">
       <div className="w-7 h-7 rounded-full bg-tertiary-fixed flex items-center justify-center shrink-0">
       <span className="material-symbols-outlined text-[18px] text-on-tertiary-fixed font-bold">gavel</span>
       </div>
@@ -285,9 +285,9 @@ export function In14CustodyDialog() {
               </button>
       <div className="flex items-center gap-space-sm">
       <span className="font-caption text-caption text-secondary">Logged as John Doe (JD-Kingston)</span>
-      <button type="button" className="h-9 px-space-lg bg-primary text-on-primary rounded font-body-sm text-body-sm font-semibold flex items-center gap-space-xs hover:bg-surface-tint active:scale-95 transition-all shadow-sm" data-stitch-id="primary-action-btn">
+      <button type="button" className="h-9 px-space-lg bg-primary text-on-primary rounded font-body-sm text-body-sm font-semibold flex items-center gap-space-xs hover:bg-surface-tint active:scale-95 transition-all shadow-sm" data-stitch-data-stitch-id="primary-action-btn">
       <span className="material-symbols-outlined text-[18px]">verified_user</span>
-      <span data-stitch-id="primary-action-label">Submit for Dual-Approval</span>
+      <span data-stitch-data-stitch-id="primary-action-label">Submit for Dual-Approval</span>
       </button>
       </div>
       </div>

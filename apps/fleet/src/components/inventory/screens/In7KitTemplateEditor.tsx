@@ -106,7 +106,7 @@ export function In7KitTemplateEditor() {
       <div className="flex flex-col gap-1.5">
       <label className="font-caption text-caption uppercase text-secondary font-bold tracking-wider" htmlFor="tpl-name">Template Name</label>
       <div className="relative">
-      <input className="w-full bg-surface-container-low text-on-surface font-body-md px-space-md py-2 rounded-lg focus:outline-none focus:bg-surface-container-lowest" data-stitch-id="tpl-name" type="text" value="Rideshare car kit"/>
+      <input className="w-full bg-surface-container-low text-on-surface font-body-md px-space-md py-2 rounded-lg focus:outline-none focus:bg-surface-container-lowest" data-stitch-data-stitch-id="tpl-name" type="text" value="Rideshare car kit"/>
       <span className="material-symbols-outlined absolute right-3 top-2.5 text-[16px] text-secondary">edit</span>
       </div>
       </div>
@@ -114,7 +114,7 @@ export function In7KitTemplateEditor() {
       <div className="flex flex-col gap-1.5">
       <label className="font-caption text-caption uppercase text-secondary font-bold tracking-wider" htmlFor="body-type">Target Body Type</label>
       <div className="relative">
-      <select className="w-full appearance-none bg-surface-container-low text-on-surface font-body-md px-space-md py-2 rounded-lg focus:outline-none focus:bg-surface-container-lowest cursor-pointer" data-stitch-id="body-type">
+      <select className="w-full appearance-none bg-surface-container-low text-on-surface font-body-md px-space-md py-2 rounded-lg focus:outline-none focus:bg-surface-container-lowest cursor-pointer" data-stitch-data-stitch-id="body-type">
       <option>Any body type</option>
       <option>Hatchback (5-Door)</option>
       <option>Sedan (Compact / Midsize)</option>
@@ -698,7 +698,7 @@ export function In7KitTemplateEditor() {
       </div>
       </div>
 
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-primary/40 backdrop-blur-[2px]" data-stitch-id="migration-modal">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-primary/40 backdrop-blur-[2px]" data-stitch-data-stitch-id="migration-modal">
       <div className="bg-surface-container-lowest max-w-md w-full rounded-xl p-space-xl shadow-2xl flex flex-col gap-space-lg transform transition-all">
       <div className="flex items-start gap-space-md">
       <div className="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center shrink-0 text-on-surface">

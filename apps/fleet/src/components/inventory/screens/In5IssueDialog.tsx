@@ -1,9 +1,14 @@
 /** Ported from Stitch — do not simplify layout (audit §0.4). */
 import { useInventoryLive } from '../inventoryLive';
 import { useInventoryShell } from '../InventoryShellContext';
+import { formatPlate, itemLabelById, numField, strField } from '../inventoryData';
 export function In5IssueDialog() {
   const shell = useInventoryShell();
   const live = useInventoryLive(shell);
+  const issueLines = shell.kitComplianceRows.filter((row) => {
+    const status = strField(row, 'line_status', '');
+    return status === 'missing' || status === 'short';
+  });
   return (
     <div className="fleet-inventory-stitch inventory-stitch-root">
       <div className="inventory-stitch-main"><div className="flex flex-col w-full relative">
@@ -48,7 +53,7 @@ export function In5IssueDialog() {
 
       <div className="fixed inset-0 z-40 bg-primary/45 backdrop-blur-sm transition-opacity flex items-center justify-center p-space-md overflow-y-auto">
 
-      <div className="relative w-full max-w-[848px] bg-surface-container-lowest rounded-xl shadow-xl my-auto overflow-hidden animate-in fade-in duration-150" data-stitch-id="issue-dialog">
+      <div className="relative w-full max-w-[848px] bg-surface-container-lowest rounded-xl shadow-xl my-auto overflow-hidden animate-in fade-in duration-150" data-stitch-data-stitch-id="issue-dialog">
 
       <div className="p-space-xl bg-surface-container-lowest">
       <div className="flex items-start justify-between gap-space-md">
@@ -260,7 +265,7 @@ export function In5IssueDialog() {
       <button type="button" className="px-space-md py-2 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface font-body-sm text-body-sm font-semibold transition-colors">
                   Back
                 </button>
-      <button type="button" className="px-space-lg py-2 rounded-lg bg-primary hover:bg-primary/90 text-on-primary font-body-sm text-body-sm font-semibold flex items-center gap-space-sm shadow-sm active:scale-[0.98] transition-all" data-stitch-id="issue-btn">
+      <button type="button" className="px-space-lg py-2 rounded-lg bg-primary hover:bg-primary/90 text-on-primary font-body-sm text-body-sm font-semibold flex items-center gap-space-sm shadow-sm active:scale-[0.98] transition-all" data-stitch-data-stitch-id="issue-btn">
       <span className="material-symbols-outlined text-[17px]">send</span>
       <span>Issue 1 item</span>
       </button>

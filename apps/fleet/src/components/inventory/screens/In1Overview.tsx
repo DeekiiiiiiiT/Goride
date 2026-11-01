@@ -178,7 +178,7 @@ export function In1Overview() {
             <button
               type="button"
               onClick={() => {
-                shell.setSelectedAssetId(strField(asset, 'id', null));
+                shell.setSelectedAssetId(strField(asset, 'id', '') || null);
                 shell.openModal('asset-page');
               }}
               className="shrink-0 h-8 px-space-md rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface transition-colors font-body-sm text-body-sm font-medium"

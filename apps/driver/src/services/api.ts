@@ -1511,6 +1511,27 @@ export const api = {
       return response.json();
   },
 
+  async listInspectionTemplates() {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetOps}/maintenance-inspection-templates`, {
+      headers: await getHeaders(null),
+    });
+    if (!response.ok) throw new Error("Failed to fetch inspection templates");
+    return response.json() as Promise<{ items?: unknown[] }>;
+  },
+
+  async saveInspectionFindings(payload: Record<string, unknown>) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetOps}/maintenance-inspection-findings`, {
+      method: "POST",
+      headers: await getHeaders(),
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error((err as { error?: string }).error || "Failed to save inspection");
+    }
+    return response.json();
+  },
+
   async getMaintenanceSchedule(vehicleId: string) {
       const response = await fetchWithRetry(`${API_ENDPOINTS.fleetOps}/maintenance-schedule/${vehicleId}`, {
           headers: await getHeaders(null),
@@ -1568,8 +1589,19 @@ export const api = {
           maxKmOverdue: number | null;
           servicesAttention: Array<{ taskName: string; kind: "overdue" | "due_soon" }>;
           servicesAttentionTruncated: boolean;
+          doNotDrive?: boolean;
+          doNotDriveReason?: string | null;
+          doNotDriveSetAt?: string | null;
         }>;
       }>;
+  },
+
+  async getMaintenanceDriverNotifications() {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetOps}/maintenance-driver-notifications`, {
+      headers: await getHeaders(null),
+    });
+    if (!response.ok) throw new Error("Failed to load maintenance notifications");
+    return response.json() as Promise<{ items: Array<Record<string, unknown>> }>;
   },
 
   async getCompatibleParts(vehicleId: string, categoryId?: string) {

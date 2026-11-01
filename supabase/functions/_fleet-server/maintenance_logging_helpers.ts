@@ -236,6 +236,17 @@ export async function findWorkOrderByIdempotency(
   return data;
 }
 
+/** Idempotency replay for completeNow (R-01). */
+export function idempotentCompleteNowAction(
+  existing: { status?: string | null } | null | undefined,
+): "return_completed" | "complete_in_progress" | null {
+  if (!existing?.status) return null;
+  const st = String(existing.status);
+  if (st === "completed") return "return_completed";
+  if (st === "in_progress") return "complete_in_progress";
+  return null;
+}
+
 export type OdometerReadingNeighbor = {
   reading: number;
   recordedAt: string;

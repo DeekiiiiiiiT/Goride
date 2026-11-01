@@ -2,6 +2,13 @@
  * Gemini catalog research (audit B3 step 1). Information only — no prices or stock.
  */
 import { trackedProviderCall } from "./api_usage_logger.ts";
+import { normalizePartNumberNorm } from "./catalog_research_number_shape.ts";
+
+export type ResearchSource = {
+  url: string;
+  quote: string;
+  grounding_title?: string;
+};
 
 export type ResearchCandidate = {
   brand: string;
@@ -9,52 +16,124 @@ export type ResearchCandidate = {
   partName: string;
   matchType: string;
   fits: Record<string, unknown>;
-  sources: Array<{ url: string; quote: string }>;
+  sources: ResearchSource[];
 };
 
 const MODEL = "gemini-2.5-flash";
 
+type GroundingMetadata = {
+  groundingChunks?: Array<{ web?: { uri?: string; title?: string } }>;
+  groundingSupports?: Array<{
+    segment?: { text?: string };
+    groundingChunkIndices?: number[];
+  }>;
+};
+
 type GeminiResponse = {
   candidates?: Array<{
     content?: { parts?: Array<{ text?: string }> };
+    groundingMetadata?: GroundingMetadata;
   }>;
   usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
 };
 
-export function mergeGroundingSources(
+function segmentMatchesPartNumber(segmentText: string, partNumber: string): boolean {
+  const norm = normalizePartNumberNorm(partNumber);
+  if (!norm) return false;
+  if (normalizePartNumberNorm(segmentText).includes(norm)) return true;
+  const raw = String(partNumber || "").trim().toLowerCase();
+  return Boolean(raw && segmentText.toLowerCase().includes(raw));
+}
+
+/** R28: source URLs only from groundingChunks; matched to candidates via groundingSupports + part number. */
+export function attachGroundingSourcesToCandidates(
   parsed: { candidates?: ResearchCandidate[] },
   geminiJson: GeminiResponse,
 ): ResearchCandidate[] {
   const base = Array.isArray(parsed.candidates) ? parsed.candidates : [];
-  const uris: string[] = [];
-  const meta = geminiJson as {
-    candidates?: Array<{
-      groundingMetadata?: { groundingChunks?: Array<{ web?: { uri?: string } }> };
-    }>;
-  };
-  for (const c of meta.candidates || []) {
-    for (const chunk of c.groundingMetadata?.groundingChunks || []) {
-      const uri = chunk.web?.uri;
-      if (uri) uris.push(uri);
-    }
+  const chunks: NonNullable<GroundingMetadata["groundingChunks"]> = [];
+  const supports: NonNullable<GroundingMetadata["groundingSupports"]> = [];
+  const rootMeta = (geminiJson as { groundingMetadata?: GroundingMetadata }).groundingMetadata;
+  if (rootMeta?.groundingChunks) chunks.push(...rootMeta.groundingChunks);
+  if (rootMeta?.groundingSupports) supports.push(...rootMeta.groundingSupports);
+  for (const c of geminiJson.candidates || []) {
+    const gm = c.groundingMetadata;
+    if (gm?.groundingChunks) chunks.push(...gm.groundingChunks);
+    if (gm?.groundingSupports) supports.push(...gm.groundingSupports);
   }
-  if (!uris.length) return base;
 
-  return base.map((cand, idx) => {
-    const sources = [...(cand.sources || [])];
-    const seen = new Set(sources.map((s) => s.url));
-    for (const url of uris) {
-      if (seen.has(url)) continue;
-      seen.add(url);
-      sources.push({ url, quote: sources[0]?.quote || "" });
-    }
-    if (idx === 0) {
-      for (const url of uris) {
-        if (!seen.has(url)) sources.push({ url, quote: "" });
+  if (!chunks.length) {
+    return base.map((c) => ({ ...c, sources: [] }));
+  }
+
+  function sourcesForCandidate(cand: ResearchCandidate, candidateIndex: number, candidateCount: number): ResearchSource[] {
+    const modelQuotes = (cand.sources || []).map((s) => String(s.quote || "").trim()).filter(Boolean);
+    const chunkIndices = new Set<number>();
+    const partNorm = normalizePartNumberNorm(cand.partNumber);
+    const partName = String(cand.partName || "").trim().toLowerCase();
+
+    for (const support of supports) {
+      const text = support.segment?.text || "";
+      const textLower = text.toLowerCase();
+      const numberHit = partNorm.length >= 4 && normalizePartNumberNorm(text).includes(partNorm);
+      const dashedHit = cand.partNumber.trim() && textLower.includes(cand.partNumber.trim().toLowerCase());
+      const nameHit = partName.length >= 4 && textLower.includes(partName);
+      if (!numberHit && !dashedHit && !nameHit) continue;
+      for (const idx of support.groundingChunkIndices || []) {
+        if (Number.isInteger(idx) && idx >= 0 && idx < chunks.length) chunkIndices.add(idx);
       }
     }
-    return { ...cand, sources };
-  });
+
+    if (!chunkIndices.size && supports.length === 0) {
+      for (let i = 0; i < chunks.length && chunkIndices.size < 3; i += 1) chunkIndices.add(i);
+    }
+    if (!chunkIndices.size && chunks.length > 0) {
+      for (let i = 0; i < Math.min(3, chunks.length); i += 1) {
+        chunkIndices.add((candidateIndex + i) % chunks.length);
+      }
+    }
+
+    const sources: ResearchSource[] = [];
+    const seenUrls = new Set<string>();
+    let quoteIdx = 0;
+    for (const idx of [...chunkIndices].sort((a, b) => a - b)) {
+      const chunk = chunks[idx];
+      const uri = chunk?.web?.uri?.trim();
+      if (!uri || seenUrls.has(uri)) continue;
+      seenUrls.add(uri);
+      const quote = modelQuotes[quoteIdx] || "";
+      if (quote) quoteIdx += 1;
+      sources.push({
+        url: uri,
+        quote,
+        grounding_title: chunk?.web?.title?.trim() || undefined,
+      });
+    }
+    return sources.slice(0, 3);
+  }
+
+  return base.map((cand, idx) => ({ ...cand, sources: sourcesForCandidate(cand, idx, base.length) }));
+}
+
+/** @deprecated Use attachGroundingSourcesToCandidates */
+export function mergeGroundingSources(
+  parsed: { candidates?: ResearchCandidate[] },
+  geminiJson: GeminiResponse,
+): ResearchCandidate[] {
+  return attachGroundingSourcesToCandidates(parsed, geminiJson);
+}
+
+/** Google grounding chunk titles are usually the catalogue domain. */
+export function domainFromGroundingTitle(title: string): string {
+  const t = String(title || "").trim().toLowerCase().replace(/^www\./, "");
+  if (!t) return "";
+  if (/^[a-z0-9.-]+\.[a-z]{2,}$/.test(t)) return t;
+  try {
+    if (t.includes("://")) return new URL(t).hostname.replace(/^www\./, "").toLowerCase();
+  } catch {
+    // ignore
+  }
+  return "";
 }
 
 export function parseCandidatesFromGeminiText(text: string): { candidates?: ResearchCandidate[] } {
@@ -75,8 +154,8 @@ export async function runCatalogPartResearch(input: {
   const prompt = `${input.promptContext}
 
 Return ONLY valid JSON:
-{"candidates":[{"brand":"","partNumber":"","partName":"","matchType":"","fits":{},"sources":[{"url":"","quote":""}]}]}
-Rules: up to 5 candidates; no prices, suppliers, stock, or quotes about buying; include source URLs with a short quoted line from each page.`;
+{"candidates":[{"brand":"","partNumber":"","partName":"","matchType":"","fits":{},"sources":[{"quote":""}]}]}
+Rules: up to 5 candidates; no prices, suppliers, stock, or quotes about buying; short quoted lines from each source page in sources[].quote (URLs are attached from search grounding — do not paste links).`;
 
   const body = {
     contents: [{ role: "user", parts: [{ text: prompt }] }],
@@ -111,7 +190,7 @@ Rules: up to 5 candidates; no prices, suppliers, stock, or quotes about buying; 
 
   const text = result?.candidates?.[0]?.content?.parts?.map((p) => p.text).join("") || "{}";
   const parsed = parseCandidatesFromGeminiText(text);
-  const merged = mergeGroundingSources(parsed, result);
+  const merged = attachGroundingSourcesToCandidates(parsed, result);
   return { model: MODEL, candidates: merged, raw: result };
 }
 

@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
-import { driverInventoryApi, type DriverCarKitPayload } from '../../services/driverInventoryApi';
+import {
+  driverInventoryApi,
+  type DriverCarKitPayload,
+  type DriverReportRow,
+} from '../../services/driverInventoryApi';
 import {
   type CarKitLoadState,
   type CarKitScreen,
@@ -24,7 +28,16 @@ export function useCarKitFlow(vehicleId?: string | null) {
   const [screen, setScreen] = useState<CarKitScreen>('dk1');
   const [reportItemLabel, setReportItemLabel] = useState<string | undefined>();
   const [sendError, setSendError] = useState(false);
+  const [sendErrorRef, setSendErrorRef] = useState<string | null>(null);
+  const [pendingDraft, setPendingDraft] = useState<{
+    itemLabel: string;
+    issueLabel: string;
+    note?: string;
+  } | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [lastReport, setLastReport] = useState<DriverReportRow | null>(null);
+  const [reports, setReports] = useState<DriverReportRow[]>([]);
+  const [reportsLoading, setReportsLoading] = useState(false);
 
   const reload = useCallback(() => {
     setRefreshKey((k) => k + 1);
@@ -52,6 +65,26 @@ export function useCarKitFlow(vehicleId?: string | null) {
     };
   }, [vehicleId, refreshKey]);
 
+  useEffect(() => {
+    if (screen !== 'dk4') return;
+    let cancelled = false;
+    setReportsLoading(true);
+    (async () => {
+      try {
+        const data = await driverInventoryApi.reports({ limit: 50 });
+        if (!cancelled) setReports(data.items ?? []);
+      } catch (err) {
+        console.error('reports load failed', err);
+        if (!cancelled) setReports([]);
+      } finally {
+        if (!cancelled) setReportsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [screen, refreshKey]);
+
   const dk6View = loadStateToDk6View(sendError ? 'send_failed' : loadState);
   const showDk6 = dk6View !== null && screen !== 'dk2' && screen !== 'dk3';
 
@@ -66,20 +99,31 @@ export function useCarKitFlow(vehicleId?: string | null) {
   };
 
   const submitReport = async () => {
+    const itemLabel = reportItemLabel?.trim() || 'Kit item';
+    setPendingDraft({
+      itemLabel,
+      issueLabel: 'Missing / Broken',
+      note: undefined,
+    });
     try {
-      await driverInventoryApi.submitReport(
+      const res = (await driverInventoryApi.submitReport(
         {
           itemNames: reportItemLabel ? [reportItemLabel] : undefined,
           issueType: 'driver_report',
+          vehicleId: kit?.vehicleId ?? vehicleId ?? undefined,
         },
         newIdempotencyKey('driver-report'),
-      );
+      )) as { report?: DriverReportRow };
       setSendError(false);
+      setSendErrorRef(null);
+      setLastReport(res.report ?? { itemLabel: reportItemLabel, displayName: reportItemLabel });
       setScreen('dk3');
     } catch (err) {
       console.error('report submit failed', err);
+      const msg = err instanceof Error ? err.message : String(err);
+      setSendErrorRef(msg.slice(0, 120) || 'SEND_FAILED');
       setSendError(true);
-      setScreen('dk6');
+      setScreen('dk1');
     }
   };
 
@@ -95,5 +139,10 @@ export function useCarKitFlow(vehicleId?: string | null) {
     closeReportSheet,
     submitReport,
     reload,
+    lastReport,
+    reports,
+    reportsLoading,
+    pendingDraft,
+    sendErrorRef,
   };
 }

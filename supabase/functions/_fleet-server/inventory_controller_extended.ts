@@ -796,7 +796,7 @@ export function registerInventoryExtendedRoutes(app: Hono<InvEnv>) {
     const org = orgOrForbid(c);
     if (org instanceof Response) return org;
     const body = await c.req.json();
-    const { error } = await fleetDb().from("fleet_inv_alert").update({ assignee_user_id: body.user_id })
+    const { error } = await fleetDb().from("fleet_inv_alert").update({ assignee_id: body.user_id })
       .eq("organization_id", org).eq("id", c.req.param("id"));
     if (error) return c.json({ error: error.message }, 500);
     return c.json({ ok: true });

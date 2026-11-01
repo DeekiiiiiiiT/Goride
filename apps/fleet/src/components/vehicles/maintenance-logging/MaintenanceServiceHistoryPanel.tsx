@@ -11,6 +11,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../../ui/select";
+import {
+  formatMaintenanceServiceDateLabel,
+} from "../../../utils/maintenanceDisplayFormat";
 
 type HistoryRow = Record<string, unknown>;
 
@@ -38,12 +41,9 @@ function formatMoney(currency: string | undefined, amount: unknown): string {
   return `${cur === "JMD" ? "J$" : cur} ${n.toLocaleString()}`;
 }
 
-function formatDate(iso: unknown): string {
-  const s = String(iso ?? "").slice(0, 10);
-  if (!s) return "—";
-  const d = new Date(`${s}T12:00:00`);
-  if (Number.isNaN(d.getTime())) return s;
-  return d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+function formatDate(iso: unknown, dateUnknown?: boolean): string {
+  if (dateUnknown) return formatMaintenanceServiceDateLabel(null, true);
+  return formatMaintenanceServiceDateLabel(String(iso ?? "").slice(0, 10) || null, false);
 }
 
 export function MaintenanceServiceHistoryPanel({ vehicles }: { vehicles: VehicleOption[] }) {
@@ -235,10 +235,13 @@ export function MaintenanceServiceHistoryPanel({ vehicles }: { vehicles: Vehicle
                 const currency = String(row.currency ?? "JMD");
                 const lineTotal = row.line_total ?? row.lineTotal;
                 const invoice = String(row.invoice_url ?? row.invoiceUrl ?? "").trim();
+                const dateUnknown =
+                  row.date_unknown === true
+                  || (row.payload_json as { dateUnknown?: boolean } | undefined)?.dateUnknown === true;
                 return (
                   <tr key={String(row.line_id ?? row.lineId ?? idx)} className="hover:bg-surface-container-low/60">
                     <td className="py-3 px-4 whitespace-nowrap font-medium">
-                      {formatDate(row.performed_at_date ?? row.performedAtDate)}
+                      {formatDate(row.performed_at_date ?? row.performedAtDate, dateUnknown)}
                     </td>
                     <td className="py-3 px-4 whitespace-nowrap">
                       <div className="flex items-center gap-2">
@@ -263,7 +266,12 @@ export function MaintenanceServiceHistoryPanel({ vehicles }: { vehicles: Vehicle
                     </td>
                     <td className="py-3 px-4 whitespace-nowrap font-mono text-stitch-secondary">
                       {row.performed_at_miles != null
-                        ? `${Number(row.performed_at_miles).toLocaleString()} km`
+                        ? `${Number(row.performed_at_miles).toLocaleString()} km${
+                          (row.payload_json as { odometerEstimated?: boolean } | undefined)?.odometerEstimated
+                          || (row as { odometerEstimated?: boolean }).odometerEstimated
+                            ? " est."
+                            : ""
+                        }`
                         : "—"}
                     </td>
                     <td className="py-3 px-4 whitespace-nowrap">{String(row.provider ?? "—")}</td>

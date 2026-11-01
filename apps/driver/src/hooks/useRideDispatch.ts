@@ -608,6 +608,23 @@ export function useRideDispatch() {
       toast.message('Loading your profile… try again in a moment.');
       return;
     }
+
+    const assignedVehicleId =
+      (driverProfile as { assignedVehicleId?: string } | null)?.assignedVehicleId?.trim() || "";
+    if (assignedVehicleId) {
+      try {
+        const { api } = await import("../services/api");
+        const summary = await api.getMaintenanceFleetSummary();
+        const row = summary.items.find((i) => i.vehicleId === assignedVehicleId);
+        if (row?.doNotDrive) {
+          toast.error(row.doNotDriveReason?.trim() || "This vehicle is not cleared to drive.");
+          return;
+        }
+      } catch {
+        /* fleet-ops unreachable — do not block dispatch solely on summary fetch failure */
+      }
+    }
+
     if (!navigator.geolocation && !isNativeCapacitorPlatform()) {
       toast.error('Location is not available on this device.');
       return;
@@ -653,7 +670,7 @@ export function useRideDispatch() {
     } finally {
       setGoingOnline(false);
     }
-  }, [vehicleReady, activeRide?.status, postPresenceFromCoords]);
+  }, [vehicleReady, activeRide?.status, postPresenceFromCoords, driverProfile]);
 
   useEffect(() => {
     if (!isNativeCapacitorPlatform()) return;

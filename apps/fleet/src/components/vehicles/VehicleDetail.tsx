@@ -1067,6 +1067,19 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
         onUpdate={onUpdate}
       />
 
+      <div
+        className="rounded-xl border border-outline-variant/30 bg-surface-container-low p-4 opacity-70 pointer-events-none select-none mb-4"
+        aria-disabled
+      >
+        <div className="flex items-center gap-3">
+          <span className="material-symbols-outlined text-stitch-secondary text-[22px]">sensors</span>
+          <div>
+            <p className="font-semibold text-sm text-on-surface">Live vehicle health</p>
+            <p className="text-xs text-stitch-secondary">Coming soon · Telematics</p>
+          </div>
+        </div>
+      </div>
+
       <Tabs defaultValue="performance" className="w-full">
           <TabsList>
               <TabsTrigger value="performance">Performance</TabsTrigger>

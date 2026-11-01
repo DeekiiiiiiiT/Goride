@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import './car-kit.css';
 import { CarKitNavHost } from './CarKitNavHost';
 import { type CarKitNavAction } from './carKitNavigation';
@@ -8,6 +8,7 @@ import { Dk2ReportSheet } from './screens/Dk2ReportSheet';
 import { Dk3ReportSent } from './screens/Dk3ReportSent';
 import { Dk4MyReports } from './screens/Dk4MyReports';
 import { Dk6States } from './screens/Dk6States';
+import { Dk7PreShiftDvir } from './screens/Dk7PreShiftDvir';
 
 /** Driver car kit — DK1–DK6 navigation (R5-08). */
 export function CarKitPage({
@@ -18,6 +19,7 @@ export function CarKitPage({
   vehicleId?: string | null;
 }) {
   const flow = useCarKitFlow(vehicleId);
+  const [showDvir, setShowDvir] = useState(false);
 
   const handleNav = useCallback(
     (action: CarKitNavAction) => {
@@ -54,16 +56,31 @@ export function CarKitPage({
 
   const mainScreen = (() => {
     if (flow.showDk6 && flow.dk6View) {
-      return <Dk6States activeState={flow.dk6View} onRetry={flow.reload} />;
+      return (
+        <Dk6States
+          activeState={flow.dk6View}
+          onRetry={flow.reload}
+          kit={flow.kit}
+          failedDraft={flow.pendingDraft}
+          sendErrorRef={flow.sendErrorRef}
+          onResend={() => void flow.submitReport()}
+        />
+      );
     }
     switch (flow.screen) {
       case 'dk4':
-        return <Dk4MyReports />;
+        return <Dk4MyReports reports={flow.reports} reportsLoading={flow.reportsLoading} />;
       case 'dk3':
-        return <Dk3ReportSent />;
+        return <Dk3ReportSent report={flow.lastReport} />;
       case 'dk1':
       default:
-        return <Dk1MyCarKit kit={flow.kit} />;
+        return (
+          <Dk1MyCarKit
+            kit={flow.kit}
+            onReportItem={(name) => flow.openReportSheet(name)}
+            onPreShiftInspection={vehicleId ? () => setShowDvir(true) : undefined}
+          />
+        );
     }
   })();
 
@@ -96,6 +113,12 @@ export function CarKitPage({
           <CarKitNavHost onAction={handleNav}>
             <Dk2ReportSheet kit={flow.kit} />
           </CarKitNavHost>
+        </div>
+      ) : null}
+
+      {showDvir && vehicleId ? (
+        <div className="fixed inset-0 z-50 bg-white overflow-y-auto">
+          <Dk7PreShiftDvir vehicleId={vehicleId} onDone={() => setShowDvir(false)} />
         </div>
       ) : null}
     </div>
