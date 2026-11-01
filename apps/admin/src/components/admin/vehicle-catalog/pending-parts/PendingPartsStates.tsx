@@ -135,5 +135,6 @@ export function PendingPartsStatesMatrixPreview({
         </div>
       </div>
     </div>
+    </div>
   );
 }
