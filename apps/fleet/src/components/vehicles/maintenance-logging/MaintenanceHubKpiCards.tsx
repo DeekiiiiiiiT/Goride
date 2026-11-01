@@ -1,10 +1,12 @@
 import React, { useMemo } from "react";
+import { formatMaintenanceScheduledDate } from "../../utils/maintenanceDisplayFormat";
 
 export type MaintenanceHubKpiProps = {
   overdueCount: number;
   telemetryMissingCount: number;
   fleetTotal: number;
   nextScheduledWindow?: { date: string; site: string } | null;
+  nextScheduledDateLine?: string | null;
   partsRequisition?: { status: string; detail: string } | null;
 };
 
@@ -14,12 +16,7 @@ function progressPct(value: number, total: number): number {
 }
 
 function formatScheduledLabel(isoDate: string): string {
-  const d = isoDate.slice(0, 10);
-  const today = new Date().toISOString().slice(0, 10);
-  if (d === today) return "Today";
-  const dt = new Date(`${d}T12:00:00`);
-  if (Number.isNaN(dt.getTime())) return d;
-  return dt.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+  return formatMaintenanceScheduledDate(isoDate);
 }
 
 function KpiProgressBar({ pct, barClass }: { pct: number; barClass: string }) {
@@ -35,6 +32,7 @@ export function MaintenanceHubKpiCards({
   telemetryMissingCount,
   fleetTotal,
   nextScheduledWindow,
+  nextScheduledDateLine,
   partsRequisition,
 }: MaintenanceHubKpiProps) {
   const partsReady = partsRequisition?.status === "Ready";
@@ -82,9 +80,14 @@ export function MaintenanceHubKpiCards({
           <span className="text-[11px] uppercase tracking-wider font-semibold">Next Scheduled Window</span>
           <span className="material-symbols-outlined text-stitch-secondary text-[18px]">event</span>
         </div>
-        <div className="flex items-baseline gap-1 flex-wrap">
-          <span className="font-mono text-lg font-bold text-on-surface">{nextLabel}</span>
-          <span className="text-[11px] text-stitch-secondary">{nextSite}</span>
+        <div className="flex flex-col gap-0.5">
+          <div className="flex items-baseline gap-1 flex-wrap">
+            <span className="font-mono text-lg font-bold text-on-surface">{nextLabel}</span>
+            <span className="text-[11px] text-stitch-secondary">{nextSite}</span>
+          </div>
+          {nextScheduledDateLine ? (
+            <span className="text-[11px] text-stitch-secondary">{nextScheduledDateLine}</span>
+          ) : null}
         </div>
         <KpiProgressBar pct={nextScheduledWindow ? 75 : 0} barClass="bg-stitch-secondary" />
       </div>

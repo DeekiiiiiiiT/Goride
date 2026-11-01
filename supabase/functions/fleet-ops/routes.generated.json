@@ -71,7 +71,6 @@
     "POST /admin/maintenance-templates/scoped",
     "POST /admin/migrate-maintenance-from-kv",
     "POST /admin/vehicle-catalog/:catalogId/maintenance-templates",
-    "POST /maintenance-fleet-bootstrap",
     "POST /maintenance-inspection-findings",
     "POST /maintenance-logs",
     "POST /maintenance-requests",

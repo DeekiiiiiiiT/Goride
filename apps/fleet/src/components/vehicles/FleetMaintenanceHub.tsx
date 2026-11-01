@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Loader2, ListChecks, Package, Wrench, Car, History } from "lucide-react";
+import { Loader2, Wrench, Car, History } from "lucide-react";
 import { api } from "../../services/api";
 import { Button } from "../ui/button";
 import {
@@ -24,6 +24,10 @@ import { MaintenanceServiceHistoryPanel } from "./maintenance-logging/Maintenanc
 import { LogOdometerDialog } from "./maintenance-logging/LogOdometerDialog";
 import { OdometerHistoryDrawer } from "./maintenance-logging/OdometerHistoryDrawer";
 import { LogServiceWhichCarDialog } from "./maintenance-logging/log-service";
+import type { LogServiceVehicleStrip } from "./maintenance-logging/log-service";
+import {
+  formatMaintenanceDisplayDate,
+} from "../../utils/maintenanceDisplayFormat";
 import { catalogOptionsFromScheduleRows } from "../../utils/maintenanceCatalogOptions";
 import type {
   CatalogMaintenanceTaskOption,
@@ -69,6 +73,7 @@ type FleetHubVehicleRow = {
   fleetStatus: string;
   nextDueOdometer: number | null;
   nextDueSummary?: string | null;
+  worstDueTaskName?: string | null;
   scheduleRowCount: number;
   maxCalendarDaysOverdue: number | null;
   maxKmOverdue: number | null;
@@ -107,14 +112,13 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
   const orgName = fleetOrgDisplayName();
 
   const [loading, setLoading] = useState(true);
-  const [fleetBootstrapping, setFleetBootstrapping] = useState(false);
-  const [fleetMessage, setFleetMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<FleetHubVehicleRow[]>([]);
   const [telemetryMissingCount, setTelemetryMissingCount] = useState(0);
   const [nextScheduledWindow, setNextScheduledWindow] = useState<{ date: string; site: string } | null>(
     null,
   );
+  const [nextScheduledDateLine, setNextScheduledDateLine] = useState<string | null>(null);
   const [partsRequisition, setPartsRequisition] = useState<{ status: string; detail: string } | null>(
     null,
   );
@@ -180,6 +184,9 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
       setNextScheduledWindow(
         (res as { nextScheduledWindow?: { date: string; site: string } | null }).nextScheduledWindow ?? null,
       );
+      setNextScheduledDateLine(
+        (res as { nextScheduledDateLine?: string | null }).nextScheduledDateLine ?? null,
+      );
       setPartsRequisition(
         (res as { partsRequisition?: { status: string; detail: string } | null }).partsRequisition ?? null,
       );
@@ -199,24 +206,6 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
       setLoading(false);
     }
   }, [loadRequests]);
-
-  const handleBootstrapFleet = useCallback(async () => {
-    setFleetBootstrapping(true);
-    setFleetMessage(null);
-    setError(null);
-    try {
-      const res = await api.bootstrapMaintenanceFleet();
-      const touched = res.results.filter((r) => r.created > 0).length;
-      setFleetMessage(
-        `Bootstrap complete: ${res.totalCreated} schedule row(s) created across ${touched} vehicle(s).`,
-      );
-      await load();
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Fleet bootstrap failed");
-    } finally {
-      setFleetBootstrapping(false);
-    }
-  }, [load]);
 
   useEffect(() => {
     load();
@@ -299,6 +288,24 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
 
   const findPartsActive = hubTab === "find-parts";
 
+  const logVehicleStrip = useMemo((): LogServiceVehicleStrip | undefined => {
+    if (!logVehicleId) return undefined;
+    const v = items.find((i) => i.vehicleId === logVehicleId);
+    if (!v) return { vehicleLabel: logVehicleId };
+    const name = [v.make, v.model, v.year ? `(${v.year})` : "", v.licensePlate]
+      .filter(Boolean)
+      .join(" ")
+      .trim();
+    return {
+      vehicleLabel: name || v.licensePlate || logVehicleId,
+      odometerKm: v.odometerMeta?.reading ?? v.odometer,
+      odometerDateLabel: v.odometerMeta?.recordedAt
+        ? formatMaintenanceDisplayDate(v.odometerMeta.recordedAt)
+        : null,
+      sourceLabel: v.odometerMeta?.sourceLabel ?? v.odometerMeta?.source ?? null,
+    };
+  }, [items, logVehicleId]);
+
   return (
     <div className="space-y-4 max-[390px]:px-2 max-[390px]:space-y-3">
       {nightlyMissed && !findPartsActive ? (
@@ -323,7 +330,7 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
         <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
           <div className="flex flex-col">
             <div className="flex items-center gap-2 mb-1">
-              <div className="w-8 h-8 rounded-lg bg-surface-container-high flex items-center justify-center text-on-tertiary-container">
+              <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center text-amber-600">
                 <Wrench className="w-5 h-5" />
               </div>
               <h1 className="text-2xl font-bold text-on-surface tracking-tight">Fleet maintenance</h1>
@@ -348,35 +355,6 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
             </Button>
             <Button
               type="button"
-              variant="outline"
-              onClick={() => void handleBootstrapFleet()}
-              disabled={loading || fleetBootstrapping}
-              className="shrink-0 gap-2 bg-surface-container-lowest"
-            >
-              {fleetBootstrapping ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <ListChecks className="w-4 h-4" />
-              )}
-              Bootstrap schedules
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                setHubTab("find-parts");
-                const url = new URL(window.location.href);
-                url.searchParams.set("tab", "find-parts");
-                window.history.replaceState(null, "", url);
-              }}
-              disabled={loading || items.length === 0}
-              className="shrink-0 gap-2 bg-surface-container-lowest"
-            >
-              <Package className="w-4 h-4" />
-              Compatible parts
-            </Button>
-            <Button
-              type="button"
               variant="default"
               onClick={handleOpenVehiclePicker}
               disabled={loading || items.length === 0}
@@ -386,12 +364,6 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
               Log service
             </Button>
           </div>
-        </div>
-      )}
-
-      {fleetMessage && (
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50 dark:bg-emerald-950/30 px-3 py-2 text-sm text-emerald-900 dark:text-emerald-100">
-          {fleetMessage}
         </div>
       )}
 
@@ -405,6 +377,7 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
           telemetryMissingCount={telemetryMissingCount}
           fleetTotal={items.length}
           nextScheduledWindow={nextScheduledWindow}
+          nextScheduledDateLine={nextScheduledDateLine}
           partsRequisition={partsRequisition}
         />
       ) : null}
@@ -632,6 +605,7 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
           vehicleId={logVehicleId}
           catalogTemplates={catalogForLog}
           defaultOdo={defaultOdoForLog}
+          vehicleStrip={logVehicleStrip}
           initialLog={initialLogForComplete}
           onSaved={handleLogSaved}
         />

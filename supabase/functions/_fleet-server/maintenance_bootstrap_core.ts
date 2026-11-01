@@ -130,35 +130,17 @@ export async function executeMaintenanceBootstrap(args: {
   }
 
   const today = todayIso();
-  let created = 0;
   const bootstrapErrors: string[] = [];
   for (const t of templates) {
     const computed = computeInitialScheduleRow(t as Record<string, unknown>, args.currentOdo, today);
     if (!computed.ok) {
       bootstrapErrors.push(`${(t as { task_name?: string }).task_name ?? t.id}: ${computed.reason}`);
-      continue;
     }
-    const row = {
-      organization_id: args.organizationId,
-      vehicle_id: args.vehicleId,
-      template_id: t.id,
-      last_performed_miles: args.currentOdo,
-      last_performed_date: today,
-      next_due_miles: computed.next_due_miles,
-      next_due_miles_max: computed.next_due_miles_max,
-      next_due_date: computed.next_due_date,
-      schedule_status: computed.schedule_status,
-      updated_at: new Date().toISOString(),
-    };
-    const { error } = await sb.from("vehicle_maintenance_schedule").upsert(row, {
-      onConflict: "organization_id,vehicle_id,template_id",
-    });
-    if (!error) created++;
   }
 
-  // Component / position schedules from Admin package membership
+  let created = 0;
   try {
-    await bootstrapVehicleComponentSchedules({
+    created = await bootstrapVehicleComponentSchedules({
       sb,
       organizationId: args.organizationId,
       vehicleId: args.vehicleId,

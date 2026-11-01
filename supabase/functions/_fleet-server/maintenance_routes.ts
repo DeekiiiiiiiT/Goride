@@ -25,6 +25,8 @@ import {
 import {
   analyzeMaintenanceScheduleRow,
   FLEET_SERVICES_ATTENTION_CAP,
+  formatWorstDueSummary,
+  pickWorstMaintenanceDueRow,
   sortFleetServiceAttention,
   type FleetServiceAttentionItem,
 } from "../../../packages/finance-core/src/maintenanceOverdueDetails.ts";
@@ -80,6 +82,7 @@ function aggregateFleetStatusFromDue(
   if (dueStatuses.includes("overdue")) return "Overdue";
   if (dueStatuses.includes("odometer_needed")) return "Odometer needed";
   if (dueStatuses.includes("due_soon")) return "Due Soon";
+  if (dueStatuses.every((s) => s === "no_record" || s === "ok")) return "Healthy";
   return "Healthy";
 }
 
@@ -2229,106 +2232,6 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
     },
   );
 
-  /** Bootstrap merged templates for every org vehicle that has no schedule rows yet (catalog match required). */
-  route.post(
-    "/maintenance-fleet-bootstrap",
-    requireAuth(),
-    requirePermission("vehicles.edit"),
-    async (c) => {
-      try {
-        const orgId = getOrgId(c);
-        if (!orgId) return c.json({ error: "Organization required" }, 400);
-
-        const { data: kvRows, error: kvErr } = await fromKvStore()
-          .select("value")
-          .like("key", "vehicle:%");
-        if (kvErr) throw kvErr;
-        const vehicles = filterByOrg(
-          (kvRows || []).map((r: { value: unknown }) => r.value as Record<string, unknown>).filter(Boolean),
-          c,
-        );
-
-        const odoMaps = await loadOdometerSupplementMaps(supabase, c);
-
-        const results: Array<{
-          vehicleId: string;
-          created: number;
-          skippedReason?: string;
-          catalogId?: string | null;
-        }> = [];
-        let totalCreated = 0;
-
-        // FIX: Pre-fetch all existing schedule rows in batch to avoid N queries
-        const vehicleIds = vehicles.map((v) => String(v.id ?? "")).filter(Boolean);
-        const { data: allScheduleRows } = await supabase
-          .from("vehicle_maintenance_schedule")
-          .select("vehicle_id, id")
-          .eq("organization_id", orgId)
-          .in("vehicle_id", vehicleIds);
-        
-        const hasScheduleSet = new Set(
-          (allScheduleRows || []).map((r) => r.vehicle_id as string)
-        );
-
-        for (const v of vehicles) {
-          const vehicleId = String(v.id ?? "");
-          if (!vehicleId) continue;
-
-          // Use pre-fetched set instead of per-vehicle query
-          if (hasScheduleSet.has(vehicleId)) {
-            results.push({ vehicleId, created: 0, skippedReason: "already_has_schedule" });
-            continue;
-          }
-
-          const catalogId = await resolveCatalogIdForKvVehicle(supabase, v);
-          if (!catalogId) {
-            results.push({ vehicleId, created: 0, skippedReason: "no_catalog_match" });
-            continue;
-          }
-
-          const metricsBase = Number((v.metrics as { odometer?: number })?.odometer ?? 0) || 0;
-          const currentOdo = canonicalOdometerFromMaps(vehicleId, metricsBase, odoMaps);
-          const run = await executeMaintenanceBootstrap({
-            supabase,
-            organizationId: orgId,
-            vehicleId,
-            currentOdo,
-            catalogId,
-          });
-
-          if (!run.ok) {
-            results.push({
-              vehicleId,
-              created: 0,
-              skippedReason: run.error,
-              catalogId: run.catalogId,
-            });
-            continue;
-          }
-          if (run.emptyTemplates) {
-            results.push({
-              vehicleId,
-              created: 0,
-              skippedReason: "no_templates",
-              catalogId: run.catalogId,
-            });
-            continue;
-          }
-          totalCreated += run.created;
-          results.push({
-            vehicleId,
-            created: run.created,
-            catalogId: run.catalogId,
-          });
-        }
-
-        return c.json({ totalCreated, results });
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : String(e);
-        return c.json({ error: msg }, 500);
-      }
-    },
-  );
 
   // Fleet summary for Maintenance hub (all vehicles in org with odometer + status)
   route.get(
@@ -2543,9 +2446,17 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
             : (hasAnySchedule
               ? aggregateFleetStatus(statuses.map((s) => ({ status: s })))
               : "No schedule");
-          const primaryOverdue = vehicleDue.find((r) => r.due_status === "overdue");
-          const nextDueSummary = primaryOverdue
-            ? `${primaryOverdue.category_name} — overdue ${Number(primaryOverdue.km_overdue ?? 0).toLocaleString()} km`
+          const worstDue = pickWorstMaintenanceDueRow(
+            vehicleDue.map((r) => ({
+              category_name: r.category_name,
+              due_status: r.due_status,
+              km_overdue: r.km_overdue,
+              days_overdue: r.days_overdue,
+            })),
+          );
+          const nextDueSummary = formatWorstDueSummary(worstDue);
+          const worstDueTaskName = worstDue?.category_name
+            ? String(worstDue.category_name)
             : null;
           const eligibleForNext = sch.filter((r) => String(r.schedule_status ?? "active") !== "fulfilled");
           const minPkg = eligibleForNext.length
@@ -2578,6 +2489,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
             fleetStatus: st,
             nextDueOdometer: nextOdo,
             nextDueSummary,
+            worstDueTaskName,
             scheduleRowCount: sch.length + compRows.length,
             maxCalendarDaysOverdue,
             maxKmOverdue,
@@ -2644,6 +2556,30 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           detail: partsReady ? "Catalogue linked" : "Add part numbers for due items",
         };
 
+        let nearestDateBasedDays: number | null = null;
+        const todayYmd = new Date().toISOString().slice(0, 10);
+        for (const row of dueRows) {
+          const st = String(row.due_status ?? "ok");
+          if (st === "overdue" || st === "no_record") continue;
+          const nd = row.next_due_date != null ? String(row.next_due_date).slice(0, 10) : null;
+          if (!nd) continue;
+          const daysUntil = Math.ceil(
+            (Date.UTC(Number(nd.slice(0, 4)), Number(nd.slice(5, 7)) - 1, Number(nd.slice(8, 10)))
+              - Date.UTC(
+                Number(todayYmd.slice(0, 4)),
+                Number(todayYmd.slice(5, 7)) - 1,
+                Number(todayYmd.slice(8, 10)),
+              )) / 86400000,
+          );
+          if (nearestDateBasedDays == null || daysUntil < nearestDateBasedDays) {
+            nearestDateBasedDays = Math.max(0, daysUntil);
+          }
+        }
+        const nextScheduledDateLine =
+          nearestDateBasedDays != null
+            ? `Time-based check due in ${nearestDateBasedDays} days`
+            : null;
+
         return c.json({
           items,
           nightlyRun: nightlyRun ?? null,
@@ -2651,6 +2587,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           dueSoonDays: dueSoonSettings.dueSoonDays,
           telemetryMissingCount,
           nextScheduledWindow,
+          nextScheduledDateLine,
           partsRequisition,
         });
       } catch (e: unknown) {

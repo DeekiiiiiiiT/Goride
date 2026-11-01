@@ -1,4 +1,5 @@
 import React from "react";
+import { formatNightlyCheckRanLabel } from "../../utils/maintenanceDisplayFormat";
 
 type NightlyRun = {
   started_at?: string;
@@ -36,10 +37,11 @@ export function MaintenanceNightlyStatusLine({
   }
   const alerts = Number(run.alerts_written ?? 0);
   const cars = Number(run.vehicles_checked ?? 0);
+  const ranLabel = formatNightlyCheckRanLabel(run.started_at ?? null);
   return (
     <div className="flex items-center gap-2 mt-2 font-mono text-[11px] text-stitch-secondary flex-wrap">
       <span className="w-2 h-2 rounded-full bg-emerald-600 shadow-sm animate-pulse" />
-      <span className="font-medium text-on-surface">Nightly check ran 02:00 today</span>
+      <span className="font-medium text-on-surface">{ranLabel}</span>
       <span className="text-outline-variant">·</span>
       <span>{cars} cars checked</span>
       {alerts > 0 ? (

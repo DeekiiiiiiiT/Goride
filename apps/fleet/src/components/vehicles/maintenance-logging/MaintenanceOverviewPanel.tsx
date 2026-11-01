@@ -1,6 +1,16 @@
 import React, { useMemo, useState } from "react";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, MoreHorizontal } from "lucide-react";
 import { Button } from "../../ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "../../ui/dropdown-menu";
+import {
+  formatMaintenanceDisplayDate,
+  formatOdometerMetaSubline,
+} from "../../../utils/maintenanceDisplayFormat";
 
 export { MaintenanceHubKpiCards } from "./MaintenanceHubKpiCards";
 export type { MaintenanceHubKpiProps } from "./MaintenanceHubKpiCards";
@@ -23,6 +33,7 @@ export type MaintenanceOverviewVehicleRow = {
   } | null;
   fleetStatus: string;
   nextDueSummary?: string | null;
+  worstDueTaskName?: string | null;
   lastService?: { date: string; miles: number | null } | null;
   dueCounts?: { overdue: number; dueSoon: number };
   servicesAttention: Array<{ taskName: string; kind: "overdue" | "due_soon" }>;
@@ -144,7 +155,9 @@ export function MaintenanceOverviewPanel({
               ) : (
                 filtered.map((row) => {
                   const primaryAttention =
-                    row.servicesAttention.find((a) => a.kind === "overdue") ?? row.servicesAttention[0];
+                    row.worstDueTaskName ??
+                    row.servicesAttention.find((a) => a.kind === "overdue")?.taskName ??
+                    row.servicesAttention[0]?.taskName;
                   const odo = row.odometerMeta?.reading ?? row.odometer;
                   const needsOdo = row.fleetStatus.toLowerCase().includes("odometer");
                   return (
@@ -174,9 +187,12 @@ export function MaintenanceOverviewPanel({
                         {odo > 0 ? (
                           <div className="flex flex-col">
                             <span className="font-mono text-sm font-bold">{odo.toLocaleString()} km</span>
-                            {row.odometerMeta?.sourceLabel ? (
+                            {row.odometerMeta?.sourceLabel || row.odometerMeta?.recordedAt ? (
                               <span className="text-[11px] text-stitch-secondary mt-0.5">
-                                {row.odometerMeta.sourceLabel}
+                                {formatOdometerMetaSubline(
+                                  row.odometerMeta?.recordedAt,
+                                  row.odometerMeta?.sourceLabel,
+                                )}
                               </span>
                             ) : null}
                           </div>
@@ -188,7 +204,7 @@ export function MaintenanceOverviewPanel({
                         )}
                       </td>
                       <td className="py-4 px-3 align-top">
-                        {statusBadge(row.fleetStatus, primaryAttention?.taskName)}
+                        {statusBadge(row.fleetStatus, primaryAttention)}
                       </td>
                       <td className="py-4 px-3 align-top">
                         {needsOdo && !row.nextDueSummary ? (
@@ -236,7 +252,7 @@ export function MaintenanceOverviewPanel({
                       <td className="py-4 px-3 align-top">
                         {row.lastService?.date ? (
                           <div className="flex flex-col">
-                            <span className="font-mono text-sm">{row.lastService.date}</span>
+                            <span className="font-mono text-sm">{formatMaintenanceDisplayDate(row.lastService.date)}</span>
                             {row.lastService.miles != null ? (
                               <span className="text-[11px] text-stitch-secondary">
                                 {row.lastService.miles.toLocaleString()} km
@@ -267,24 +283,25 @@ export function MaintenanceOverviewPanel({
                             Log service
                           </button>
                           {!needsOdo ? (
-                            <>
-                              <button
-                                type="button"
-                                className="w-8 h-8 rounded hover:bg-surface-container flex items-center justify-center text-on-surface-variant"
-                                title="Log odometer"
-                                onClick={() => onLogOdometer(row.vehicleId)}
-                              >
-                                <span className="material-symbols-outlined text-[18px]">speed</span>
-                              </button>
-                              <button
-                                type="button"
-                                className="w-8 h-8 rounded hover:bg-surface-container flex items-center justify-center text-on-surface-variant"
-                                title="Odometer history"
-                                onClick={() => onOdometerHistory(row.vehicleId)}
-                              >
-                                <span className="material-symbols-outlined text-[18px]">timeline</span>
-                              </button>
-                            </>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <button
+                                  type="button"
+                                  className="w-8 h-8 rounded hover:bg-surface-container flex items-center justify-center text-on-surface-variant"
+                                  title="More actions"
+                                >
+                                  <MoreHorizontal className="w-4 h-4" />
+                                </button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => onLogOdometer(row.vehicleId)}>
+                                  Log odometer
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => onOdometerHistory(row.vehicleId)}>
+                                  Odometer history
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                           ) : null}
                         </div>
                       </td>

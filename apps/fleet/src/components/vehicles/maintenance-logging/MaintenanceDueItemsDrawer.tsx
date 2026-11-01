@@ -109,7 +109,11 @@ export function MaintenanceDueItemsDrawer({
 
   const overdue = useMemo(() => items.filter((i) => i.due_status === "overdue"), [items]);
   const dueSoon = useMemo(() => items.filter((i) => i.due_status === "due_soon"), [items]);
-  const ok = useMemo(() => items.filter((i) => i.due_status === "ok"), [items]);
+  const noRecord = useMemo(() => items.filter((i) => i.due_status === "no_record"), [items]);
+  const ok = useMemo(
+    () => items.filter((i) => i.due_status === "ok" || i.due_status === "odometer_needed"),
+    [items],
+  );
 
   if (!vehicle) return null;
 
@@ -248,6 +252,28 @@ export function MaintenanceDueItemsDrawer({
                         </li>
                       );
                     })}
+                  </ul>
+                </section>
+              ) : null}
+
+              {noRecord.length > 0 ? (
+                <section>
+                  <h3 className="text-sm font-semibold text-on-surface-variant mb-2">No service on record</h3>
+                  <ul className="space-y-2">
+                    {noRecord.map((row, idx) => (
+                      <li
+                        key={`n-${idx}`}
+                        className="bg-surface-container-low rounded-lg p-3 flex items-center justify-between gap-2"
+                      >
+                        <span className="text-sm text-on-surface-variant">
+                          {row.category_name || row.category_code}
+                          {row.position ? ` · ${row.position}` : ""}
+                        </span>
+                        <span className="text-[10px] font-semibold uppercase text-outline px-2 py-0.5 rounded-full bg-surface-container-highest">
+                          No record
+                        </span>
+                      </li>
+                    ))}
                   </ul>
                 </section>
               ) : null}

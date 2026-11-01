@@ -2,9 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
   CheckCircle2,
-  ClipboardCheck,
   Loader2,
-  Scan,
 } from "lucide-react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -13,10 +11,6 @@ import { Textarea } from "../ui/textarea";
 import {
   ResponsiveDialog,
   ResponsiveDialogContent,
-  ResponsiveDialogHeader,
-  ResponsiveDialogTitle,
-  ResponsiveDialogDescription,
-  ResponsiveDialogFooter,
 } from '../ui/responsive-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { Checkbox } from "../ui/checkbox";
@@ -29,6 +23,16 @@ import { MAINTENANCE_SCHEDULE_PRESETS } from "../../constants/maintenanceSchedul
 import { inferPackageIconKey } from "../../constants/maintenanceCategoryIcons";
 import { MaintenanceIcon } from "./MaintenanceIcon";
 import { MaintenanceInspectionPanel } from "./MaintenanceInspectionPanel";
+import {
+  LogServiceDateMileageStep,
+  LogServiceWhatWasDoneStep,
+  LogServiceLineDetailsStep,
+  LogServiceReviewStep,
+  LogServiceWizardChrome,
+  LogServiceWizardContinueButton,
+  LOG_SERVICE_COPY,
+} from "./maintenance-logging/log-service";
+import type { LogServiceVehicleStrip, LogServiceWizardStep } from "./maintenance-logging/log-service";
 import type {
   CatalogMaintenanceTaskOption,
   MaintenanceCategoryFieldDef,
@@ -40,12 +44,18 @@ import type {
 import {
   formatMaintenanceLineLabel,
   groupCategoriesBySystem,
-  MAINTENANCE_LINE_ACTIONS,
   sumMaintenanceLogLines,
 } from "../../types/maintenance";
 import type { CompatiblePartsItem } from "../../types/partSourcing";
 
-type DialogStep = "when" | "pick" | "system" | "component" | "form" | "inspect" | "review";
+type DialogStep =
+  | "dateMileage"
+  | "whatWasDone"
+  | "lineDetails"
+  | "review"
+  | "system"
+  | "component"
+  | "inspect";
 type LogMode = "package" | "quick_job" | "inspect";
 
 type PackageChoice = {
@@ -67,6 +77,8 @@ export interface LogMaintenanceServiceDialogProps {
   catalogTemplates: CatalogMaintenanceTaskOption[];
   /** Prefill odometer (e.g. fleet canonical reading). */
   defaultOdo?: number;
+  /** Car strip + labels for Stitch wizard chrome. */
+  vehicleStrip?: LogServiceVehicleStrip;
   /** When set, PATCH this record (e.g. complete a driver Requested row). */
   initialLog?: Partial<MaintenanceLog> | null;
   onSaved?: () => void;
@@ -252,50 +264,11 @@ function categoryMatchLine(cat: MaintenanceServiceCategory, line: MaintenanceLog
   );
 }
 
-function stepTitle(step: DialogStep): string {
-  switch (step) {
-    case "when":
-      return "Log service";
-    case "pick":
-      return "Log service";
-    case "system":
-      return "Select Component";
-    case "component":
-      return "Select Components";
-    case "form":
-      return "Component Details";
-    case "inspect":
-      return "Digital Inspection";
-    case "review":
-      return "Review & Save";
-    default:
-      return "Add Service Log";
-  }
-}
-
-function stepDescription(step: DialogStep, packageLabel?: string, systemName?: string): string {
-  switch (step) {
-    case "when":
-      return "When and at what mileage? We use this to work out when each part is due next.";
-    case "pick":
-      return "Choose a service package, system quick job, or open a digital inspection.";
-    case "system":
-      return systemName
-        ? `Pick a component under ${systemName}.`
-        : "Pick a component under this system.";
-    case "component":
-      return packageLabel
-        ? `Select components to log for ${packageLabel}.`
-        : "Select the components worked on.";
-    case "form":
-      return "Choose an action and enter commercial details.";
-    case "inspect":
-      return "Mark each item pass, attention, or fail. Failures can add recommended work.";
-    case "review":
-      return "Confirm totals, odometer, and provider before saving.";
-    default:
-      return "";
-  }
+function dialogWizardStep(step: DialogStep): LogServiceWizardStep {
+  if (step === "dateMileage") return 1;
+  if (step === "lineDetails") return 3;
+  if (step === "review") return 4;
+  return 2;
 }
 
 export function LogMaintenanceServiceDialog({
@@ -304,10 +277,12 @@ export function LogMaintenanceServiceDialog({
   vehicleId,
   catalogTemplates,
   defaultOdo,
+  vehicleStrip,
   initialLog,
   onSaved,
 }: LogMaintenanceServiceDialogProps) {
-  const [step, setStep] = useState<DialogStep>("when");
+  const [odoTouched, setOdoTouched] = useState(false);
+  const [step, setStep] = useState<DialogStep>("dateMileage");
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
   const [isLoading, setIsLoading] = useState(false);
   const [scanLoading, setScanLoading] = useState(false);
@@ -391,6 +366,17 @@ export function LogMaintenanceServiceDialog({
 
   const draftLineTotal = draftLine ? lineTotalPreview(draftLine) : 0;
 
+  const strip: LogServiceVehicleStrip = useMemo(
+    () =>
+      vehicleStrip ?? {
+        vehicleLabel: vehicleId,
+        odometerKm: defaultOdo ?? (formMeta.odo > 0 ? formMeta.odo : null),
+      },
+    [vehicleStrip, vehicleId, defaultOdo, formMeta.odo],
+  );
+
+  const canContinueDateStep = Number(formMeta.odo) > 0 && Boolean(formMeta.date);
+
   // Reset + load systems / quick jobs when dialog opens
   useEffect(() => {
     if (!open) return;
@@ -453,7 +439,7 @@ export function LogMaintenanceServiceDialog({
         }));
       }
     } else {
-      setStep("when");
+      setStep("dateMileage");
     }
 
     let cancelled = false;
@@ -495,7 +481,7 @@ export function LogMaintenanceServiceDialog({
 
   // Load compatible parts when editing a component form
   useEffect(() => {
-    if (step !== "form" || !activeCategory || !vehicleId) {
+    if (step !== "lineDetails" || !activeCategory || !vehicleId) {
       setCompatibleParts([]);
       return;
     }
@@ -559,7 +545,7 @@ export function LogMaintenanceServiceDialog({
       supplierPartOfferId: (existing as { supplierPartOfferId?: string | null } | undefined)?.supplierPartOfferId || null,
       system,
     });
-    setStep("form");
+    setStep("lineDetails");
   };
 
   const handlePickPackage = (pkg: PackageChoice) => {
@@ -898,30 +884,30 @@ export function LogMaintenanceServiceDialog({
   };
 
   const handleBack = () => {
-    if (step === "pick") {
+    if (step === "dateMileage" || step === "whatWasDone") {
       onOpenChange(false);
       return;
     }
     if (step === "system") {
-      setStep("pick");
+      setStep("whatWasDone");
       return;
     }
     if (step === "component") {
-      setStep("pick");
+      setStep("whatWasDone");
       return;
     }
-    if (step === "form") {
+    if (step === "lineDetails") {
       setActiveCategory(null);
       if (logMode === "quick_job") setStep("system");
       else if (logMode === "package") setStep("component");
-      else setStep("pick");
+      else setStep("whatWasDone");
       return;
     }
     if (step === "inspect") {
-      if (logMode === "inspect") setStep("pick");
+      if (logMode === "inspect") setStep("whatWasDone");
       else if (logMode === "package") setStep("component");
       else if (logMode === "quick_job") setStep("system");
-      else setStep("pick");
+      else setStep("whatWasDone");
       return;
     }
     if (step === "review") {
@@ -1099,129 +1085,84 @@ export function LogMaintenanceServiceDialog({
 
   return (
     <ResponsiveDialog open={open} onOpenChange={onOpenChange}>
-      <ResponsiveDialogContent className="sm:max-w-[720px] max-h-[90vh] flex flex-col p-0 overflow-hidden">
-        <ResponsiveDialogHeader className="px-6 py-4 border-b">
-          <ResponsiveDialogTitle>{stepTitle(step)}</ResponsiveDialogTitle>
-          <ResponsiveDialogDescription>
-            {stepDescription(step, selectedPackage?.shortLabel, selectedSystem?.name)}
-          </ResponsiveDialogDescription>
-        </ResponsiveDialogHeader>
-
-        <div className="flex-1 overflow-y-auto px-6 py-6">
-          {step === "when" && (
-            <div className="space-y-6 max-w-md">
-              <div className="space-y-2">
-                <Label htmlFor="svc-date">Date of service</Label>
-                <Input
-                  id="svc-date"
-                  type="date"
-                  value={formMeta.date}
-                  onChange={(e) => setFormMeta((p) => ({ ...p, date: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="svc-odo">Odometer (km) *</Label>
-                <Input
-                  id="svc-odo"
-                  type="number"
-                  min={1}
-                  value={formMeta.odo || ""}
-                  onChange={(e) =>
-                    setFormMeta((p) => ({ ...p, odo: Number(e.target.value) || 0 }))
-                  }
-                />
-                {defaultOdo != null && defaultOdo > 0 ? (
-                  <p className="text-xs text-muted-foreground">
-                    Last trusted reading {defaultOdo.toLocaleString()} km
-                  </p>
+      <ResponsiveDialogContent className="sm:max-w-[720px] max-h-[90vh] flex flex-col p-0 overflow-hidden gap-0">
+        <LogServiceWizardChrome
+          activeStep={dialogWizardStep(step)}
+          vehicle={strip}
+          onClose={() => onOpenChange(false)}
+          footer={
+            <>
+              <Button variant="ghost" onClick={handleBack} className="text-on-surface">
+                {step === "whatWasDone" || step === "dateMileage" ? (
+                  LOG_SERVICE_COPY.cancelLabel
+                ) : (
+                  <>
+                    <ArrowLeft className="w-4 h-4 mr-2" /> Back
+                  </>
+                )}
+              </Button>
+              <div className="flex items-center gap-2">
+                {step === "dateMileage" ? (
+                  <LogServiceWizardContinueButton
+                    label={LOG_SERVICE_COPY.continueLabel}
+                    disabled={!canContinueDateStep}
+                    onClick={() => {
+                      setOdoTouched(true);
+                      if (canContinueDateStep) setStep("whatWasDone");
+                    }}
+                  />
+                ) : null}
+                {step === "component" && (selectedCategoryIds.length >= 1 || lines.length >= 1) ? (
+                  <>
+                    <Button type="button" variant="outline" onClick={goToInspectOrReview}>
+                      Inspect
+                    </Button>
+                    <LogServiceWizardContinueButton
+                      label={LOG_SERVICE_COPY.continueToReview}
+                      onClick={handleContinueFromComponents}
+                    />
+                  </>
+                ) : null}
+                {step === "lineDetails" ? (
+                  <LogServiceWizardContinueButton
+                    label={LOG_SERVICE_COPY.saveLineLabel}
+                    onClick={handleSaveCategory}
+                  />
+                ) : null}
+                {step === "review" ? (
+                  <LogServiceWizardContinueButton
+                    label={LOG_SERVICE_COPY.logServiceLabel}
+                    disabled={isLoading || lines.length < 1 || Number(formMeta.odo) <= 0}
+                    loading={isLoading}
+                    onClick={() => void handleSave()}
+                  />
                 ) : null}
               </div>
-              <Button
-                type="button"
-                className="w-full sm:w-auto"
-                disabled={Number(formMeta.odo) <= 0 || !formMeta.date}
-                onClick={() => setStep("pick")}
-              >
-                Continue
-              </Button>
-            </div>
+            </>
+          }
+        >
+          {step === "dateMileage" && (
+            <LogServiceDateMileageStep
+              date={formMeta.date}
+              odometer={formMeta.odo}
+              onDateChange={(date) => setFormMeta((p) => ({ ...p, date }))}
+              onOdometerChange={(odo) => {
+                setOdoTouched(true);
+                setFormMeta((p) => ({ ...p, odo }));
+              }}
+              lastTrustedReading={defaultOdo}
+              showOdometerError={odoTouched && Number(formMeta.odo) <= 0}
+            />
           )}
-          {step === "pick" && (
-            <div className="space-y-8">
-              <section className="space-y-3">
-                <h3 className="text-sm font-semibold text-slate-900">Service packages</h3>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  {packageChoices.map((pkg) => (
-                    <button
-                      key={pkg.id}
-                      type="button"
-                      onClick={() => handlePickPackage(pkg)}
-                      className="flex flex-col items-center gap-2 p-4 rounded-xl border border-slate-200 bg-white hover:border-indigo-300 hover:bg-indigo-50/40 transition-colors text-center min-h-[108px]"
-                    >
-                      <div className="bg-slate-100 p-3 rounded-xl text-indigo-600">
-                        <MaintenanceIcon iconKey={pkg.iconKey} className="w-6 h-6" />
-                      </div>
-                      <span className="text-sm font-medium text-slate-900 leading-tight">
-                        {pkg.shortLabel}
-                      </span>
-                      {pkg.dueKind ? (
-                        <span className="text-[10px] text-slate-500 uppercase tracking-wide">
-                          {pkg.dueKind.replace(/_/g, " ")}
-                        </span>
-                      ) : null}
-                    </button>
-                  ))}
-                </div>
-              </section>
-
-              <section className="space-y-3">
-                <h3 className="text-sm font-semibold text-slate-900">Quick jobs</h3>
-                <p className="text-xs text-slate-500">Pick a vehicle system, then a component.</p>
-                {quickJobsLoading ? (
-                  <div className="flex items-center gap-2 text-sm text-slate-500 py-6 justify-center">
-                    <Loader2 className="w-4 h-4 animate-spin" /> Loading systems…
-                  </div>
-                ) : quickJobs.length === 0 ? (
-                  <p className="text-sm text-slate-500 py-2">No systems available.</p>
-                ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    {quickJobs.map((sys) => (
-                      <button
-                        key={sys.id}
-                        type="button"
-                        onClick={() => handlePickSystem(sys)}
-                        className="flex flex-col items-center gap-2 p-4 rounded-xl border border-slate-200 bg-white hover:border-indigo-300 hover:bg-indigo-50/40 transition-colors text-center min-h-[108px]"
-                      >
-                        <div className="bg-slate-100 p-3 rounded-xl text-indigo-600">
-                          <MaintenanceIcon iconKey={sys.icon_key} className="w-6 h-6" />
-                        </div>
-                        <span className="text-sm font-medium text-slate-900 leading-tight">
-                          {sys.name}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </section>
-
-              <section>
-                <button
-                  type="button"
-                  onClick={handleOpenInspection}
-                  className="w-full flex items-center gap-3 p-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 hover:bg-indigo-50/40 hover:border-indigo-300 transition-colors text-left min-h-11"
-                >
-                  <div className="bg-white p-3 rounded-xl shadow-sm text-indigo-600">
-                    <ClipboardCheck className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-slate-900">Open digital inspection</p>
-                    <p className="text-xs text-slate-500">
-                      Walk systems pass / attention / fail and add recommended work.
-                    </p>
-                  </div>
-                </button>
-              </section>
-            </div>
+          {step === "whatWasDone" && (
+            <LogServiceWhatWasDoneStep
+              packages={packageChoices}
+              quickJobs={quickJobs}
+              quickJobsLoading={quickJobsLoading}
+              onPickPackage={handlePickPackage}
+              onPickSystem={handlePickSystem}
+              onOpenInspection={handleOpenInspection}
+            />
           )}
 
           {step === "system" && selectedSystem && (
@@ -1353,204 +1294,48 @@ export function LogMaintenanceServiceDialog({
             </div>
           )}
 
-          {step === "form" && activeCategory && (
-            <div className="space-y-6">
-              <div className="flex items-center gap-3">
-                <div className="bg-indigo-50 p-3 rounded-xl text-indigo-600">
-                  <MaintenanceIcon iconKey={activeCategory.icon_key} className="w-6 h-6" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-slate-900">{activeCategory.name}</h3>
-                  <p className="text-xs text-slate-500">
-                    {[lineExtras.system?.name, activeCategory.code].filter(Boolean).join(" · ")}
-                  </p>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Action</Label>
-                <Select
-                  value={lineExtras.action}
-                  onValueChange={(v: string) =>
-                    setLineExtras((prev) => ({ ...prev, action: v as MaintenanceLineAction }))
-                  }
-                >
-                  <SelectTrigger className="bg-slate-50 border-slate-200">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {MAINTENANCE_LINE_ACTIONS.map((a) => (
-                      <SelectItem key={a.value} value={a.value}>
-                        {a.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {(activeCategory.field_schema?.fields || defaultFieldSchema().fields).map(renderField)}
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="labor-hours">Labor hours</Label>
-                  <Input
-                    id="labor-hours"
-                    type="number"
-                    step="0.1"
-                    className="bg-slate-50 border-slate-200"
-                    value={lineExtras.laborHours ?? ""}
-                    onChange={(e) =>
-                      setLineExtras((prev) => ({
-                        ...prev,
-                        laborHours: e.target.value === "" ? null : Number(e.target.value),
-                      }))
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="labor-rate">Labor rate</Label>
-                  <Input
-                    id="labor-rate"
-                    type="number"
-                    className="bg-slate-50 border-slate-200"
-                    value={lineExtras.laborRate ?? ""}
-                    onChange={(e) =>
-                      setLineExtras((prev) => ({
-                        ...prev,
-                        laborRate: e.target.value === "" ? null : Number(e.target.value),
-                      }))
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="brand">Brand</Label>
-                  <Input
-                    id="brand"
-                    className="bg-slate-50 border-slate-200"
-                    value={lineExtras.brand}
-                    onChange={(e) =>
-                      setLineExtras((prev) => ({ ...prev, brand: e.target.value }))
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="part-number">Part number</Label>
-                  <Input
-                    id="part-number"
-                    className="bg-slate-50 border-slate-200"
-                    value={lineExtras.partNumber}
-                    onChange={(e) =>
-                      setLineExtras((prev) => ({ ...prev, partNumber: e.target.value }))
-                    }
-                  />
-                </div>
-              </div>
-
-              {needsPositions(activeCategory) && (
-                <div className="space-y-2">
-                  <Label>Positions</Label>
-                  <div className="flex flex-wrap gap-2">
-                    {TIRE_BRAKE_POSITIONS.map((pos) => {
-                      const on = lineExtras.positions.includes(pos);
-                      return (
-                        <button
-                          key={pos}
-                          type="button"
-                          onClick={() => togglePosition(pos)}
-                          className={`min-h-11 min-w-11 px-3 rounded-lg border text-sm font-semibold ${
-                            on
-                              ? "border-indigo-300 bg-indigo-50 text-indigo-800"
-                              : "border-slate-200 bg-white text-slate-700"
-                          }`}
-                        >
-                          {pos}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
+          {step === "lineDetails" && activeCategory && (
+            <LogServiceLineDetailsStep
+              category={activeCategory}
+              systemName={lineExtras.system?.name}
+              action={lineExtras.action}
+              onActionChange={(action) => setLineExtras((prev) => ({ ...prev, action }))}
+              categoryFields={(activeCategory.field_schema?.fields || defaultFieldSchema().fields).map(
+                renderField,
               )}
-
-              <div className="flex flex-col sm:flex-row gap-4">
-                <div className="flex items-center gap-3">
-                  <Checkbox
-                    id="warranty"
-                    checked={lineExtras.warranty}
-                    onCheckedChange={(checked: boolean | "indeterminate") =>
-                      setLineExtras((prev) => ({ ...prev, warranty: checked === true }))
-                    }
-                  />
-                  <Label htmlFor="warranty" className="cursor-pointer">
-                    Warranty
-                  </Label>
-                </div>
-                <div className="flex items-center gap-3">
-                  <Checkbox
-                    id="complimentary"
-                    checked={lineExtras.complimentary}
-                    onCheckedChange={(checked: boolean | "indeterminate") =>
-                      setLineExtras((prev) => ({ ...prev, complimentary: checked === true }))
-                    }
-                  />
-                  <Label htmlFor="complimentary" className="cursor-pointer">
-                    Complimentary labor
-                  </Label>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Link part (optional)</Label>
-                {partsLoading ? (
-                  <p className="text-xs text-slate-500 flex items-center gap-2">
-                    <Loader2 className="w-3 h-3 animate-spin" /> Loading compatible parts…
-                  </p>
-                ) : compatibleParts.length === 0 ? (
-                  <p className="text-xs text-slate-500">No compatible parts for this vehicle/component.</p>
-                ) : (
-                  <Select
-                    value={lineExtras.partId || "__none__"}
-                    onValueChange={(v: string) => {
-                      if (v === "__none__") {
-                        setLineExtras((prev) => ({ ...prev, partId: null, supplierPartOfferId: null }));
-                        return;
-                      }
-                      const item = compatibleParts.find((p) => p.part.id === v);
-                      const offerId = item?.offers?.[0]?.id ?? null;
-                      setLineExtras((prev) => ({
-                        ...prev,
-                        partId: v,
-                        supplierPartOfferId: offerId,
-                        brand: prev.brand || item?.part.name || prev.brand,
-                        partNumber:
-                          prev.partNumber || item?.part.oem_part_number || prev.partNumber,
-                      }));
-                    }}
-                  >
-                    <SelectTrigger className="bg-slate-50 border-slate-200">
-                      <SelectValue placeholder="Select a part…" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">None</SelectItem>
-                      {compatibleParts.map((item) => (
-                        <SelectItem key={item.part.id} value={item.part.id}>
-                          {item.part.name}
-                          {item.part.oem_part_number ? ` · ${item.part.oem_part_number}` : ""}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              </div>
-
-              <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 flex justify-between items-center">
-                <span className="text-sm text-slate-600">Line total</span>
-                <span className="font-semibold text-slate-900">
-                  {formMeta.currency || "JMD"} {draftLineTotal.toLocaleString()}
-                </span>
-              </div>
-            </div>
+              laborHours={lineExtras.laborHours}
+              laborRate={lineExtras.laborRate}
+              onLaborHoursChange={(v) => setLineExtras((prev) => ({ ...prev, laborHours: v }))}
+              onLaborRateChange={(v) => setLineExtras((prev) => ({ ...prev, laborRate: v }))}
+              brand={lineExtras.brand}
+              partNumber={lineExtras.partNumber}
+              onBrandChange={(brand) => setLineExtras((prev) => ({ ...prev, brand }))}
+              onPartNumberChange={(partNumber) => setLineExtras((prev) => ({ ...prev, partNumber }))}
+              showPositions={needsPositions(activeCategory)}
+              positions={lineExtras.positions}
+              onTogglePosition={togglePosition}
+              warranty={lineExtras.warranty}
+              complimentary={lineExtras.complimentary}
+              onWarrantyChange={(warranty) => setLineExtras((prev) => ({ ...prev, warranty }))}
+              onComplimentaryChange={(complimentary) =>
+                setLineExtras((prev) => ({ ...prev, complimentary }))
+              }
+              partsLoading={partsLoading}
+              compatibleParts={compatibleParts}
+              partId={lineExtras.partId}
+              onPartSelect={(partId, offerId, brand, partNumber) =>
+                setLineExtras((prev) => ({
+                  ...prev,
+                  partId,
+                  supplierPartOfferId: offerId,
+                  brand: prev.brand || brand || prev.brand,
+                  partNumber: prev.partNumber || partNumber || prev.partNumber,
+                }))
+              }
+              lineTotalLabel="Line total"
+              currency={formMeta.currency || "JMD"}
+              lineTotal={draftLineTotal}
+            />
           )}
 
           {step === "inspect" && (
@@ -1565,226 +1350,45 @@ export function LogMaintenanceServiceDialog({
           )}
 
           {step === "review" && (
-            <div className="space-y-6">
-              <div className="border-2 border-dashed border-slate-200 rounded-xl p-6 flex flex-col items-center justify-center bg-slate-50 relative group hover:bg-slate-100 transition-colors">
-                <Input
-                  type="file"
-                  accept="image/*,.pdf"
-                  onChange={handleServiceScan}
-                  disabled={scanLoading}
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-                />
-                <div className="bg-white p-3 rounded-xl shadow-sm mb-3">
-                  {scanLoading ? (
-                    <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
-                  ) : (
-                    <Scan className="w-6 h-6 text-indigo-600" />
-                  )}
-                </div>
-                <h3 className="font-semibold text-slate-900">Scan Invoice / Receipt</h3>
-                <p className="text-sm text-slate-500">Optional — upload image or PDF to auto-fill</p>
-                {formMeta.invoiceUrl && (
-                  <div className="absolute top-4 right-4 bg-emerald-100 text-emerald-700 text-xs px-2 py-1 rounded flex items-center">
-                    <CheckCircle2 className="w-3 h-3 mr-1" /> Uploaded
-                  </div>
-                )}
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Date</Label>
-                  <Input
-                    type="date"
-                    value={formMeta.date}
-                    onChange={(e) => setFormMeta({ ...formMeta, date: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Odometer (km)</Label>
-                  <Input
-                    type="number"
-                    className="bg-slate-50 font-medium"
-                    value={formMeta.odo || ""}
-                    onChange={(e) =>
-                      setFormMeta({ ...formMeta, odo: parseFloat(e.target.value) || 0 })
-                    }
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Service Provider</Label>
-                  <Input
-                    className="bg-slate-50"
-                    value={formMeta.provider}
-                    onChange={(e) => setFormMeta({ ...formMeta, provider: e.target.value })}
-                    placeholder="e.g. Whole-Heated Car Service LTD"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Currency</Label>
-                  <Select
-                    value={formMeta.currency || "JMD"}
-                    onValueChange={(v: string) => setFormMeta({ ...formMeta, currency: v })}
-                  >
-                    <SelectTrigger className="bg-slate-50 font-medium">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="JMD">JMD</SelectItem>
-                      <SelectItem value="USD">USD</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Notes</Label>
-                <Textarea
-                  className="bg-slate-50 border-slate-200 min-h-[80px]"
-                  placeholder="Inspection notes, recommendations…"
-                  value={formMeta.notes}
-                  onChange={(e) => setFormMeta({ ...formMeta, notes: e.target.value })}
-                />
-              </div>
-
-              <div className="space-y-3">
-                <Label className="font-semibold">Line items</Label>
-                <div className="border rounded-lg divide-y bg-white">
-                  {lines.map((line, idx) => {
-                    const muted = Boolean(line.declined);
-                    return (
-                      <div
-                        key={`${lineMatchKey(line)}-${idx}`}
-                        className={`flex items-center justify-between px-4 py-3 gap-3 ${
-                          muted ? "opacity-50" : ""
-                        }`}
-                      >
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium text-slate-900 truncate">
-                            {formatMaintenanceLineLabel(line)}
-                          </p>
-                          <p className="text-xs text-slate-500">
-                            {[
-                              line.recommended ? "Recommended" : null,
-                              line.declined ? "Declined" : null,
-                              line.qty != null ? `Qty ${line.qty}` : null,
-                              line.brand || null,
-                              line.positions?.length ? line.positions.join(" ") : null,
-                            ]
-                              .filter(Boolean)
-                              .join(" · ") || line.categoryCode}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-3 shrink-0">
-                          <span className="text-sm font-medium text-slate-900">
-                            {formMeta.currency || "JMD"}{" "}
-                            {muted ? "0" : lineTotalPreview(line).toLocaleString()}
-                          </span>
-                          {!line.recommended && (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              className="text-xs text-slate-500"
-                              onClick={() => {
-                                const pkgCat = selectedPackage?.categories.find(
-                                  (c) =>
-                                    c.id === line.categoryId ||
-                                    (c.code === line.categoryCode && c.name === line.categoryName),
-                                );
-                                const qj = systemComponents.find((c) => c.id === line.categoryId);
-                                const cat = pkgCat || qj || catalogById.get(line.categoryId || "");
-                                if (cat) openCategoryForm(cat);
-                              }}
-                            >
-                              Edit
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-                <div className="flex justify-between items-center px-1 pt-1">
-                  <span className="text-sm font-semibold text-slate-700">Total</span>
-                  <span className="text-base font-semibold text-slate-900">
-                    {formMeta.currency || "JMD"} {totalCost.toLocaleString()}
-                  </span>
-                </div>
-              </div>
-
-              {logMode === "package" && (
-                <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-                  <Checkbox
-                    id="mark-package-complete"
-                    checked={markPackageComplete}
-                    onCheckedChange={(checked: boolean | "indeterminate") =>
-                      setMarkPackageComplete(checked === true)
-                    }
-                  />
-                  <Label htmlFor="mark-package-complete" className="cursor-pointer">
-                    Mark package complete
-                    <span className="block text-xs font-normal text-slate-500 mt-0.5">
-                      Advances the vehicle maintenance schedule for this package.
-                    </span>
-                  </Label>
-                </div>
-              )}
-            </div>
+            <LogServiceReviewStep
+              baySessionLabel={idempotencyKey.slice(0, 8).toUpperCase()}
+              date={formMeta.date}
+              odometer={formMeta.odo}
+              provider={formMeta.provider}
+              currency={formMeta.currency || "JMD"}
+              notes={formMeta.notes}
+              invoiceUrl={formMeta.invoiceUrl}
+              scanLoading={scanLoading}
+              onDateChange={(date) => setFormMeta({ ...formMeta, date })}
+              onOdometerChange={(odo) => setFormMeta({ ...formMeta, odo })}
+              onProviderChange={(provider) => setFormMeta({ ...formMeta, provider })}
+              onCurrencyChange={(currency) => setFormMeta({ ...formMeta, currency })}
+              onNotesChange={(notes) => setFormMeta({ ...formMeta, notes })}
+              onScanFile={handleServiceScan}
+              lines={lines}
+              lineTotalPreview={lineTotalPreview}
+              totalCost={totalCost}
+              onEditLine={(line) => {
+                const pkgCat = selectedPackage?.categories.find(
+                  (c) =>
+                    c.id === line.categoryId ||
+                    (c.code === line.categoryCode && c.name === line.categoryName),
+                );
+                const qj = systemComponents.find((c) => c.id === line.categoryId);
+                const cat = pkgCat || qj || catalogById.get(line.categoryId || "");
+                if (cat) openCategoryForm(cat);
+              }}
+              showMarkPackageComplete={logMode === "package"}
+              markPackageComplete={markPackageComplete}
+              onMarkPackageCompleteChange={setMarkPackageComplete}
+              whatHappensNext={
+                <p className="text-sm text-secondary">
+                  Schedule rows update after save. Overdue counts refresh on the fleet overview.
+                </p>
+              }
+            />
           )}
-        </div>
-
-        <ResponsiveDialogFooter className="px-6 py-4 border-t bg-slate-50/50">
-          <Button variant="ghost" onClick={handleBack} className="mr-auto">
-            {step === "pick" ? (
-              "Cancel"
-            ) : (
-              <>
-                <ArrowLeft className="w-4 h-4 mr-2" /> Back
-              </>
-            )}
-          </Button>
-
-          {step === "component" && (selectedCategoryIds.length >= 1 || lines.length >= 1) && (
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={goToInspectOrReview}
-              >
-                Inspect
-              </Button>
-              <Button
-                onClick={handleContinueFromComponents}
-                className="bg-slate-900 text-white hover:bg-slate-800"
-              >
-                Continue
-              </Button>
-            </div>
-          )}
-
-          {step === "form" && (
-            <Button
-              onClick={handleSaveCategory}
-              className="bg-slate-900 text-white hover:bg-slate-800"
-            >
-              Save line
-            </Button>
-          )}
-
-          {step === "review" && (
-            <Button
-              onClick={handleSave}
-              disabled={isLoading || lines.length < 1 || Number(formMeta.odo) <= 0}
-              className="bg-slate-900 text-white hover:bg-slate-800"
-            >
-              {isLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-              Log service
-            </Button>
-          )}
-        </ResponsiveDialogFooter>
+        </LogServiceWizardChrome>
       </ResponsiveDialogContent>
     </ResponsiveDialog>
   );

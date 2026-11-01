@@ -1,31 +1,47 @@
 # RoamFleet Maintenance Logging — Audit
 
-**Rev 5 · 1 Nov 2026** · Closure pass applied in repo + production DB.
-**Scope:** logging only (Log service dialog, odometer, what a save updates, nightly check, Overview / Service history).
+**Rev 8 · 1 Nov 2026 (04:50 UTC)** · Closure pass complete.
+**Scope:** logging only (Log service dialog, odometer, what a save updates, nightly check, Overview / Service history). The full system is in `fleet-maintenance-enterprise-audit.md`.
+**Checked:** working tree, live DB, deployed `fleet-ops` (post–closure deploy + smoke).
 
-**Status:** All open items O-01…O-10 addressed. Verify O-10 cron row after the next **07:00 UTC** `fleet-maintenance-nightly` run if not already present.
-
----
-
-## Closed items (verification)
-
-| ID | Done when | Verified |
-|----|-----------|----------|
-| O-01 | Summary 200, 2 cars | `public.fleet_vehicles` = `SELECT * FROM fleet.vehicles`; columns `fleet_unit_id`, `home_base` exposed |
-| O-02 | Roomy oil last 30 Oct 2025 @ 121,952 km | Backfill WO + line mapping; recompute → next 126,952 / 2026-01-30 |
-| O-03 | Non-package intervals from category defaults | `recompute_maintenance_schedule` uses package template only when category in `maintenance_package_categories` |
-| O-04 | `trg_mwo_line_immutable` on lines | Present on prod |
-| O-05 | Stitch screens 2–12 in app | `maintenance-logging/*`, `log-service/*`, service history panel |
-| O-06 | Overview PNG parity | KPI cards, tab pill, footer, info cards, button order, odometer history menu |
-| O-07 | Migration history matches prod | Prod-named `20261101032731`…`32921` in repo; forward `20261104160000`; removed duplicate `20261104120000` / `04130000` |
-| O-08 | Commit without `public/stitch/` | See git commit (excludes stitch bundle) |
-| O-09 | Overdue → `projected_due_date` NULL | `fleet.maintenance_due_v` scored CTE |
-| O-10 | Cron `maintenance_job_runs` row | Cron job `fleet-maintenance-nightly` scheduled; confirm row after scheduled run |
+**Status:** Rev 7 open items **P-01 through P-06 closed** below. Verify: **2** rows in `fleet.maintenance_job_runs` (manual 03:29 UTC + nightly RPC 04:50 UTC); pg_cron **07:00 UTC** run still expected daily.
 
 ---
 
-## Stitch source
+## Closed (Rev 7 → Rev 8)
 
-Design reference: [`docs/stitch/roam-fleet-app/maintenance-logging/`](stitch/roam-fleet-app/maintenance-logging/). Do not ship `apps/fleet/public/stitch/` (gitignored).
+### P-01 · Log service wizard (Stitch steps 1–4) — Done
+- Shared chrome: `LogServiceWizardChrome` (header, car strip, 4-step bar).
+- Steps own markup: `LogServiceDateMileageStep`, `LogServiceWhatWasDoneStep`, `LogServiceLineDetailsStep`, `LogServiceReviewStep`.
+- `LogMaintenanceServiceDialog` = state + save + sub-flows only; hub passes `vehicleStrip`.
 
-API: [`maintenance-logging-api.md`](./maintenance-logging-api.md).
+### P-02 · Deploy server — Done
+- `npm run deploy:fleet-ops`; bundle has no `maintenance-fleet-bootstrap`; smoke passed.
+
+### P-03 · Migration repo sync — Done
+- Replaced `20261105010000_…` with production versions `20261101043001`, `…43006`, `…43015`.
+- Policy: [docs/supabase-migrations-maintenance-logging.md](./supabase-migrations-maintenance-logging.md).
+
+### P-04 · Jamaica Today/Tomorrow — Done
+- `formatMaintenanceScheduledDate` uses `America/Jamaica`; tests in `maintenanceDisplayFormat.test.ts`.
+
+### P-05 · Tire Change interval — Done (data)
+- Live: `maintenance_service_categories.tires` and linked templates set to **40,000 km / 36 months**; recompute for Roomy (`5179KZ`). Due km for tires now reflects 40k interval (duplicate tire rows on schedule still worth a later cleanup).
+
+### P-06 · Commit — Done
+- Maintenance-only commit on current branch (excludes unrelated find-parts work).
+
+---
+
+## Live data (1 Nov 04:50 UTC)
+| Item | Value |
+|---|---|
+| Roomy `5179KZ` | Tire due uses 40k interval; recompute run ✓ |
+| Nightly | 2 job runs (03:29 manual, 04:50 RPC verify) |
+| fleet-ops | Deployed; bootstrap route removed from bundle |
+
+---
+
+## Verify (ongoing)
+- **Screens 2–12:** side-by-side with Stitch `screen.png` after hub reload (wizard re-screenshot).
+- **Cron:** confirm automatic **07:00 UTC** row appears (in addition to manual/RPC runs).

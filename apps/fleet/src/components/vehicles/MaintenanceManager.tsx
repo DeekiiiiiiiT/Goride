@@ -101,8 +101,7 @@ const MaintenanceManagerComponent: React.FC<MaintenanceManagerProps> = ({
             </div>
             {maintenanceStatus.status === "No schedule" ? (
               <p className="text-sm text-slate-600">
-                No maintenance schedule yet. Bootstrap from Fleet maintenance or ensure this vehicle matches the motor
-                catalog.
+                No maintenance schedule yet. It&apos;s created automatically when this car matches a model in the vehicle catalogue.
               </p>
             ) : (
               <p className="text-sm text-slate-600">
