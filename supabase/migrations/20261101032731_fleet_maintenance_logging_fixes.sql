@@ -1,29 +1,39 @@
 -- Prod-applied: fleet_maintenance_logging_fixes (audit O-07 sync)
 
-UPDATE public.vehicle_component_schedule vcs
-SET
-  baseline_odometer = vcs.last_performed_miles,
-  baseline_date = vcs.last_performed_date,
-  baseline_source = 'bootstrap',
-  last_performed_miles = NULL,
-  last_performed_date = NULL,
-  updated_at = now()
-WHERE vcs.baseline_source IS NULL
-  AND vcs.last_performed_date IS NOT NULL
-  AND NOT EXISTS (
-    SELECT 1
-    FROM public.maintenance_work_order_lines l
-    JOIN public.maintenance_work_orders wo ON wo.id = l.work_order_id
-    WHERE wo.vehicle_id = vcs.vehicle_id
-      AND wo.status = 'completed'
-      AND wo.voided_at IS NULL
-      AND l.component_id = vcs.category_id
-      AND (
-        vcs.position IS NULL
-        OR l.positions @> ARRAY[vcs.position]::text[]
-        OR coalesce(array_length(l.positions, 1), 0) = 0
-      )
-  );
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'vehicle_component_schedule'
+      AND column_name = 'baseline_source'
+  ) THEN
+    UPDATE public.vehicle_component_schedule vcs
+    SET
+      baseline_odometer = vcs.last_performed_miles,
+      baseline_date = vcs.last_performed_date,
+      baseline_source = 'bootstrap',
+      last_performed_miles = NULL,
+      last_performed_date = NULL,
+      updated_at = now()
+    WHERE vcs.baseline_source IS NULL
+      AND vcs.last_performed_date IS NOT NULL
+      AND NOT EXISTS (
+        SELECT 1
+        FROM public.maintenance_work_order_lines l
+        JOIN public.maintenance_work_orders wo ON wo.id = l.work_order_id
+        WHERE wo.vehicle_id = vcs.vehicle_id
+          AND wo.status = 'completed'
+          AND wo.voided_at IS NULL
+          AND l.component_id = vcs.category_id
+          AND (
+            vcs.position IS NULL
+            OR l.positions @> ARRAY[vcs.position]::text[]
+            OR coalesce(array_length(l.positions, 1), 0) = 0
+          )
+      );
+  END IF;
+END $$;
 
 CREATE OR REPLACE FUNCTION fleet.recompute_maintenance_schedule(p_vehicle_id text)
 RETURNS integer
