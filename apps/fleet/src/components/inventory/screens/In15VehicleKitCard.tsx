@@ -1,9 +1,12 @@
 /** Ported from Stitch — do not simplify layout (audit §0.4). */
 import { useInventoryLive } from '../inventoryLive';
 import { useInventoryShell } from '../InventoryShellContext';
+import { firstAssetSerial, strField } from '../inventoryData';
 export function In15VehicleKitCard() {
   const shell = useInventoryShell();
   const live = useInventoryLive(shell);
+  const vehicle = live.primaryVehicle;
+  const serial = firstAssetSerial(live.assets);
   return (
     <div className="fleet-inventory-stitch inventory-stitch-root">
       <div className="inventory-stitch-main"><div className="flex flex-col w-full">
@@ -19,7 +22,7 @@ export function In15VehicleKitCard() {
       <span className="text-outline-variant font-caption text-caption">/</span>
       <div className="flex items-center gap-space-xs">
       <span className="font-label-plate text-label-plate px-space-xs py-0.5 rounded bg-surface-container-high text-on-surface font-bold">{live.primaryPlate}</span>
-      <span className="font-headline-sm text-headline-sm text-on-surface font-semibold tracking-tight">Toyota Roomy 2019</span>
+      <span className="font-headline-sm text-headline-sm text-on-surface font-semibold tracking-tight">{vehicle?.plate ?? live.primaryPlate}</span>
       </div>
       </div>
       <div className="flex flex-wrap items-center gap-space-sm">
@@ -231,7 +234,7 @@ export function In15VehicleKitCard() {
       <span className="font-label-code text-caption text-secondary">ELC-DCM-01</span>
       </div>
       <div className="flex items-center gap-space-xs font-caption text-caption text-secondary">
-      <span className="font-label-code">S/N: DC-70A-0042118</span>
+      <span className="font-label-code">S/N: {serial}</span>
       <span>· Windscreen</span>
       </div>
       </div>
@@ -301,7 +304,7 @@ export function In15VehicleKitCard() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-space-md">
       <div className="flex flex-col gap-0.5 p-space-sm rounded bg-surface-container-low">
       <span className="font-caption text-caption text-secondary uppercase">Make & Model</span>
-      <span className="font-body-md text-body-md font-semibold text-on-surface">Toyota Roomy G</span>
+      <span className="font-body-md text-body-md font-semibold text-on-surface">{vehicle?.plate ?? live.primaryPlate}</span>
       </div>
       <div className="flex flex-col gap-0.5 p-space-sm rounded bg-surface-container-low">
       <span className="font-caption text-caption text-secondary uppercase">Engine</span>

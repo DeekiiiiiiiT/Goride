@@ -1,9 +1,12 @@
 /** Ported from Stitch — do not simplify layout (audit §0.4). */
 import { useInventoryLive } from '../inventoryLive';
 import { useInventoryShell } from '../InventoryShellContext';
+import { firstAssetSerial, firstVendorName, strField } from '../inventoryData';
 export function In4ReceiveDialog() {
   const shell = useInventoryShell();
   const live = useInventoryLive(shell);
+  const vendorName = firstVendorName(live.vendors);
+  const assetSerial = firstAssetSerial(live.assets, 'No serial yet');
   return (
     <div className="fleet-inventory-stitch inventory-stitch-root">
       <div className="inventory-stitch-main"><div className="flex flex-col w-full relative">
@@ -126,7 +129,13 @@ export function In4ReceiveDialog() {
       <span className="font-caption text-[10px] text-secondary uppercase">Vendor</span>
       <div className="relative">
       <select className="w-full bg-surface-container-lowest text-on-surface font-body-sm text-body-sm rounded-lg px-space-md py-1.5 appearance-none focus:outline-none">
-      <option>Car Toys Jamaica</option>
+      {live.vendors.length === 0 ? (
+      <option>No vendors on file</option>
+      ) : (
+      live.vendors.map((v) => (
+      <option key={strField(v, 'id', strField(v, 'name', ''))}>{strField(v, 'name', 'Vendor')}</option>
+      ))
+      )}
       <option>KIG Parts Distribution</option>
       <option>Kingston Auto Electrical Ltd</option>
       </select>
@@ -247,7 +256,7 @@ export function In4ReceiveDialog() {
 
       <div className="col-span-3">
       <div className="flex items-center bg-surface-container-low rounded-lg px-2 py-1 gap-1">
-      <span className="font-label-code text-[11px] text-on-surface font-semibold tracking-wider">[ DC-70A-0042118 ]</span>
+      <span className="font-label-code text-[11px] text-on-surface font-semibold tracking-wider">[ {assetSerial} ]</span>
       <button type="button" className="ml-auto bg-surface-container-lowest px-1.5 py-0.5 rounded shadow-sm flex items-center gap-0.5 text-on-surface text-[11px] font-caption hover:bg-surface-container transition-colors" title="Scan Barcode / Serial">
       <span className="material-symbols-outlined text-[13px]">photo_camera</span>
       <span>Scan</span>
@@ -324,7 +333,7 @@ export function In4ReceiveDialog() {
       <li className="flex items-start gap-2">
       <span className="material-symbols-outlined text-[16px] text-on-surface mt-0.5">arrow_forward</span>
       <span>
-                      New dash camera <code className="font-label-code text-caption font-bold bg-surface-container-lowest px-1.5 py-0.5 rounded">DC-70A-0042118</code> added to Main store (1 unit)
+                      New asset <code className="font-label-code text-caption font-bold bg-surface-container-lowest px-1.5 py-0.5 rounded">{assetSerial}</code> added to {live.hubShort}
                     </span>
       </li>
       <li className="flex items-start gap-2">

@@ -117,3 +117,72 @@ export function stockStatusLabel(status: string): string {
 export function formatStockValue(amount: number | null | undefined): string {
   return formatJmd(amount);
 }
+
+export function firstVendorName(
+  vendors: Record<string, unknown>[],
+  fallback = 'No vendor on file',
+): string {
+  const v = vendors[0];
+  return v ? strField(v, 'name', fallback) : fallback;
+}
+
+export function firstOpenPoNumber(
+  orders: Record<string, unknown>[],
+  fallback = '—',
+): string {
+  const po = orders[0];
+  if (!po) return fallback;
+  return strField(po, 'number', strField(po, 'po_number', fallback));
+}
+
+export function firstAssetSerial(
+  assets: Record<string, unknown>[],
+  fallback = '—',
+): string {
+  for (const a of assets) {
+    const s = strField(a, 'serial_number', strField(a, 'serial_no', ''));
+    if (s && s !== '—') return s;
+  }
+  return fallback;
+}
+
+export function itemLabelById(
+  items: Record<string, unknown>[],
+  stockRows: Record<string, unknown>[],
+  itemId: string,
+): { name: string; sku: string } {
+  const fromStock = stockRows.find((r) => strField(r, 'item_id', '') === itemId);
+  if (fromStock) {
+    return {
+      name: strField(fromStock, 'name', 'Item'),
+      sku: strField(fromStock, 'sku', '—'),
+    };
+  }
+  const fromItems = items.find((r) => strField(r, 'id', '') === itemId);
+  if (fromItems) {
+    return {
+      name: strField(fromItems, 'name', 'Item'),
+      sku: strField(fromItems, 'sku', '—'),
+    };
+  }
+  return { name: 'Item', sku: '—' };
+}
+
+export function formatMovementWhen(iso: string): { date: string; time: string } {
+  if (!iso) return { date: '—', time: '—' };
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return { date: iso, time: '' };
+  return {
+    date: d.toLocaleDateString('en-JM', { day: 'numeric', month: 'short', year: 'numeric' }),
+    time: d.toLocaleTimeString('en-JM', { hour: '2-digit', minute: '2-digit' }),
+  };
+}
+
+export function movementTypeIcon(type: string): string {
+  const t = type.toLowerCase();
+  if (t.includes('revers')) return 'replay';
+  if (t.includes('receive')) return 'input';
+  if (t.includes('issue')) return 'output';
+  if (t.includes('transfer')) return 'sync_alt';
+  return 'swap_horiz';
+}

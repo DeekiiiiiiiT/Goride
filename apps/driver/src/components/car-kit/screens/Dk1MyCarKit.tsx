@@ -1,5 +1,19 @@
 /** Ported from Stitch — do not simplify layout (audit §0.4). */
-export function Dk1MyCarKit() {
+import type { DriverCarKitPayload } from '../../../services/driverInventoryApi';
+import {
+  carKitItemCounts,
+  carKitProgressOffset,
+  carKitVehicleLabel,
+} from '../carKitDisplay';
+
+export function Dk1MyCarKit({ kit }: { kit?: DriverCarKitPayload | null }) {
+  const vehicleLabel = carKitVehicleLabel(kit);
+  const { present, total } = carKitItemCounts(kit);
+  const progressOffset = carKitProgressOffset(present, total);
+  const missing = Math.max(0, total - present);
+  const checkInLabel = kit?.lastCheckInAt
+    ? `Weekly check-in completed ${new Date(kit.lastCheckInAt).toLocaleDateString('en-JM', { day: 'numeric', month: 'short', year: 'numeric' })}`
+    : 'No weekly check-in recorded yet';
   return (
     <div className="driver-car-kit-stitch inventory-stitch-root">
       <div className="inventory-stitch-main"><div className="flex flex-col w-full">
@@ -12,7 +26,7 @@ export function Dk1MyCarKit() {
       <div className="flex flex-wrap items-baseline justify-between gap-space-xs">
       <h1 className="font-headline-md text-headline-md text-on-surface tracking-tight">My car kit</h1>
       <div className="bg-surface-container-lowest px-space-xs py-0.5 rounded-lg shadow-sm">
-      <span className="font-label-code text-label-code text-on-surface uppercase tracking-wider">Toyota Roomy 2019 · 5179KZ</span>
+      <span className="font-label-code text-label-code text-on-surface uppercase tracking-wider">{vehicleLabel}</span>
       </div>
       </div>
       </div>
@@ -23,22 +37,24 @@ export function Dk1MyCarKit() {
       <div className="relative w-20 h-20 flex-shrink-0 flex items-center justify-center">
       <svg className="w-20 h-20 -rotate-90" viewbox="0 0 72 72">
       <circle className="text-surface-container-high" cx="36" cy="36" fill="transparent" r="30" stroke="currentColor" stroke-width="6"></circle>
-      <circle className="text-primary" cx="36" cy="36" fill="transparent" r="30" stroke="currentColor" stroke-dasharray="188.5" stroke-dashoffset="56.55" stroke-linecap="round" stroke-width="6"></circle>
+      <circle className="text-primary" cx="36" cy="36" fill="transparent" r="30" stroke="currentColor" stroke-dasharray="188.5" stroke-dashoffset={progressOffset} stroke-linecap="round" stroke-width="6"></circle>
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-      <span className="font-label-plate text-label-plate text-on-surface leading-none">7<span className="text-on-surface-variant font-body-sm text-body-sm">/10</span></span>
+      <span className="font-label-plate text-label-plate text-on-surface leading-none">{present}<span className="text-on-surface-variant font-body-sm text-body-sm">/{total || '—'}</span></span>
       </div>
       </div>
       <div className="flex flex-col min-w-0">
       <span className="font-headline-sm text-headline-sm text-on-surface leading-tight">Ready for the road</span>
       <p className="font-body-sm text-body-sm text-on-surface-variant mt-1 leading-snug">
-                  Your car has 7 of 10 kit items. 3 are not in the car — the fleet knows.
+                  {total > 0
+                    ? `Your car has ${present} of ${total} kit items. ${missing} are not in the car — the fleet knows.`
+                    : 'No kit items loaded yet.'}
                 </p>
       </div>
       </div>
       <div className="bg-surface-container-low rounded-lg px-space-sm py-2 flex items-center gap-2">
       <span className="material-symbols-outlined text-primary text-[18px]" style="font-variation-settings: 'FILL' 1;">verified</span>
-      <span className="font-body-sm text-body-sm text-on-surface-variant">Weekly check-in completed 1 Nov 2026</span>
+      <span className="font-body-sm text-body-sm text-on-surface-variant">{checkInLabel}</span>
       </div>
       </div>
 

@@ -131,14 +131,18 @@ export function InventoryShellProvider({
   const [readOnly] = useState(false);
 
   const refreshOverview = useCallback(async () => {
-    const [ov, stock, kits] = await Promise.all([
+    const [ov, stock, kits, assetPayload, alertPayload] = await Promise.all([
       inventoryApi.overview() as Promise<Record<string, unknown>>,
       inventoryApi.stock() as Promise<{ items?: Record<string, unknown>[] }>,
       inventoryApi.kitsCompliance() as Promise<{ items?: Record<string, unknown>[] }>,
+      inventoryApi.assets() as Promise<{ items?: Record<string, unknown>[] }>,
+      inventoryApi.alerts() as Promise<{ items?: Record<string, unknown>[] }>,
     ]);
     setOverview(ov);
     setStockRows(asPagedItems(stock));
     setKitComplianceRows(asPagedItems(kits));
+    setAssets(asPagedItems(assetPayload));
+    setAlerts(asPagedItems(alertPayload));
     const chainOk = (ov.chainCheck as { ok?: boolean } | undefined)?.ok;
     if (chainOk === false) {
       setDiscrepancyBanner('Ledger verification failed — review Movements before posting.');

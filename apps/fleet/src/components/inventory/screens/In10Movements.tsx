@@ -1,9 +1,20 @@
 /** Ported from Stitch — do not simplify layout (audit §0.4). */
 import { useInventoryLive } from '../inventoryLive';
 import { useInventoryShell } from '../InventoryShellContext';
+import {
+  firstOpenPoNumber,
+  firstVendorName,
+  formatMovementWhen,
+  movementTypeIcon,
+  strField,
+} from '../inventoryData';
 export function In10Movements() {
   const shell = useInventoryShell();
   const live = useInventoryLive(shell);
+  const vendorName = firstVendorName(live.vendors);
+  const poNumber = firstOpenPoNumber(live.purchaseOrders);
+  const movementCount = live.movementsTotal || live.movements.length;
+  const movementShown = live.movements.length;
   return (
     <div className="fleet-inventory-stitch inventory-stitch-root">
       <div className="inventory-stitch-main"><div className="flex flex-col w-full">
@@ -164,315 +175,59 @@ export function In10Movements() {
       </tr>
       </thead>
       <tbody className="divide-y divide-surface-container font-body-sm text-body-sm">
-
-      <tr className="hover:bg-surface-container-low/50 transition-colors bg-secondary-container/10">
-      <td className="py-space-md px-space-lg whitespace-nowrap">
-      <div className="font-label-code text-label-code font-semibold text-on-surface">1 Nov 2026</div>
-      <div className="font-caption text-caption text-on-surface-variant">08:35 AM EST</div>
-      </td>
-      <td className="py-space-md px-space-md whitespace-nowrap">
-      <span className="inline-flex items-center gap-1 font-label-code text-[11px] font-bold px-2 py-0.5 rounded bg-primary text-on-primary">
-      <span className="material-symbols-outlined text-[12px]">replay</span>
-                        REVERSAL
-                      </span>
-      </td>
-      <td className="py-space-md px-space-md">
-      <div className="font-medium text-on-surface">Phone Holder Mount</div>
-      <div className="font-label-code text-caption text-on-surface-variant tracking-wide">ACC-PHM-01</div>
-      </td>
-      <td className="py-space-md px-space-md text-right whitespace-nowrap">
-      <span className="font-label-price text-label-price font-bold text-on-surface bg-surface-container-high px-2 py-0.5 rounded">+1</span>
-      </td>
-      <td className="py-space-md px-space-lg whitespace-nowrap">
-      <div className="flex items-center gap-space-xs font-label-code text-caption">
-      <span className="bg-surface-container px-1.5 py-0.5 rounded font-bold font-label-plate text-on-surface">{live.secondaryPlate}</span>
-      <span className="material-symbols-outlined text-[14px] text-on-surface-variant">arrow_forward</span>
-      <span className="text-on-surface">Main store — Kingston</span>
-      </div>
-      </td>
-      <td className="py-space-md px-space-md whitespace-nowrap">
-      <div className="font-label-code text-label-code text-on-surface font-semibold">REV-2026-0042</div>
-      <div className="font-caption text-caption text-on-surface-variant">reverses MV-8824</div>
-      </td>
-      <td className="py-space-md px-space-md whitespace-nowrap">
-      <div className="flex items-center gap-space-xs">
-      <span className="w-5 h-5 rounded-full bg-primary-container text-on-primary font-label-code text-[10px] flex items-center justify-center font-bold">DT</span>
-      <span className="text-on-surface font-medium">Deeki T</span>
-      </div>
-      </td>
-      <td className="py-space-md px-space-lg">
-      <div className="text-on-surface max-w-xs truncate" title="Dispatched to wrong bay; re-issuing under revised work order">
-                        Dispatched to wrong bay; re-issuing under revised work order
-                      </div>
-      </td>
-      <td className="py-space-md px-space-md text-right whitespace-nowrap">
-      <button type="button" className="p-1 hover:bg-surface-container rounded text-on-surface-variant hover:text-on-surface transition-colors" title="View reversal audit certificate">
-      <span className="material-symbols-outlined text-[18px]">verified</span>
-      </button>
-      </td>
-      </tr>
-
-      <tr className="hover:bg-surface-container-low/40 transition-colors bg-surface-container-low/20">
-      <td className="py-space-md px-space-lg whitespace-nowrap line-through text-on-surface-variant opacity-75">
-      <div className="font-label-code text-label-code">1 Nov 2026</div>
-      <div className="font-caption text-caption">08:31 AM EST</div>
-      </td>
-      <td className="py-space-md px-space-md whitespace-nowrap">
-      <div className="flex items-center gap-1.5 flex-wrap">
-      <span className="font-label-code text-[11px] font-semibold px-2 py-0.5 rounded bg-surface-container-high text-on-surface-variant line-through opacity-75">ISSUE</span>
-      <span className="font-label-code text-[10px] font-semibold px-1.5 py-0.5 rounded bg-surface-variant text-on-surface-variant">Reversed 1 Nov 2026</span>
-      </div>
-      </td>
-      <td className="py-space-md px-space-md line-through text-on-surface-variant opacity-75">
-      <div className="font-medium">Phone Holder Mount</div>
-      <div className="font-label-code text-caption">ACC-PHM-01</div>
-      </td>
-      <td className="py-space-md px-space-md text-right whitespace-nowrap">
-      <span className="font-label-price text-label-price font-bold text-on-surface-variant line-through opacity-75">−1</span>
-      </td>
-      <td className="py-space-md px-space-lg whitespace-nowrap line-through text-on-surface-variant opacity-75">
-      <div className="flex items-center gap-space-xs font-label-code text-caption">
-      <span>Main store</span>
-      <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
-      <span className="bg-surface-container px-1 py-0.5 rounded font-label-plate">{live.secondaryPlate}</span>
-      </div>
-      </td>
-      <td className="py-space-md px-space-md whitespace-nowrap line-through text-on-surface-variant opacity-75">
-      <div className="font-label-code text-label-code">Kit: Rideshare car kit</div>
-      <div className="font-caption text-caption">alloc #MV-8824</div>
-      </td>
-      <td className="py-space-md px-space-md whitespace-nowrap line-through text-on-surface-variant opacity-75">
-      <div className="flex items-center gap-space-xs">
-      <span className="w-5 h-5 rounded-full bg-surface-container-high text-on-surface-variant font-label-code text-[10px] flex items-center justify-center">DT</span>
-      <span>Deeki T</span>
-      </div>
-      </td>
-      <td className="py-space-md px-space-lg text-on-surface-variant opacity-60">
-                      —
+      {live.movements.length === 0 ? (
+      <tr>
+      <td colSpan={9} className="py-space-xl px-space-lg font-body-sm text-body-sm text-on-surface-variant text-center">
+                      No movements recorded yet.
                     </td>
-      <td className="py-space-md px-space-md text-right whitespace-nowrap">
-      <button type="button" className="p-1 text-outline-variant cursor-not-allowed" disabled title="Already reversed">
-      <span className="material-symbols-outlined text-[18px]">more_horiz</span>
-      </button>
-      </td>
       </tr>
-
-      <tr className="hover:bg-surface-container-low transition-colors relative" data-stitch-id="row-rcv-8821">
+      ) : (
+      live.movements.map((m) => {
+        const rowKey = strField(m, 'id', strField(m, 'ref_no', String(Math.random())));
+        const when = formatMovementWhen(strField(m, 'created_at', ''));
+        const type = strField(m, 'type', 'movement');
+        const typeLabel = type.toUpperCase();
+        const icon = movementTypeIcon(type);
+        const refNo = strField(m, 'ref_no', '—');
+        const reason = strField(m, 'reason', strField(m, 'memo', '—'));
+        const refType = strField(m, 'reference_type', '');
+        const poRef = refType.includes('purchase') ? refNo : poNumber;
+        const fromLabel = type.toLowerCase().includes('receive') ? vendorName : live.hubShort;
+        const toLabel = live.hubName;
+        return (
+      <tr key={rowKey} className="hover:bg-surface-container-low transition-colors">
       <td className="py-space-md px-space-lg whitespace-nowrap">
-      <div className="font-label-code text-label-code font-semibold text-on-surface">1 Nov 2026</div>
-      <div className="font-caption text-caption text-on-surface-variant">08:10 AM EST</div>
+      <div className="font-label-code text-label-code font-semibold text-on-surface">{when.date}</div>
+      <div className="font-caption text-caption text-on-surface-variant">{when.time}</div>
       </td>
       <td className="py-space-md px-space-md whitespace-nowrap">
       <span className="inline-flex items-center gap-1 font-label-code text-[11px] font-bold px-2 py-0.5 rounded bg-surface-container-high text-on-surface">
-      <span className="material-symbols-outlined text-[12px]">input</span>
-                        RECEIVE
+      <span className="material-symbols-outlined text-[12px]">{icon}</span>
+                        {typeLabel}
                       </span>
       </td>
       <td className="py-space-md px-space-md">
-      <div className="font-medium text-on-surface">Phone Holder Mount</div>
-      <div className="font-label-code text-caption text-on-surface-variant tracking-wide">ACC-PHM-01</div>
+      <div className="font-medium text-on-surface">{refType || 'Movement'}</div>
+      <div className="font-label-code text-caption text-on-surface-variant tracking-wide">{refNo}</div>
       </td>
       <td className="py-space-md px-space-md text-right whitespace-nowrap">
-      <span className="font-label-price text-label-price font-bold text-on-surface">+5</span>
+      <span className="font-label-price text-label-price font-bold text-on-surface">—</span>
       </td>
       <td className="py-space-md px-space-lg whitespace-nowrap">
       <div className="flex items-center gap-space-xs font-label-code text-caption">
-      <span className="text-on-surface">Car Toys Jamaica</span>
+      <span className="text-on-surface">{fromLabel}</span>
       <span className="material-symbols-outlined text-[14px] text-on-surface-variant">arrow_forward</span>
-      <span className="text-on-surface font-semibold">Main store — Kingston</span>
+      <span className="text-on-surface font-semibold">{toLabel}</span>
       </div>
       </td>
       <td className="py-space-md px-space-md whitespace-nowrap">
-      <div className="font-label-code text-label-code text-on-surface font-semibold">PO-0001</div>
-      <div className="font-caption text-caption text-on-surface-variant">Audit ledger #RCV-8821</div>
+      <div className="font-label-code text-label-code text-on-surface font-semibold">{poRef}</div>
       </td>
       <td className="py-space-md px-space-md whitespace-nowrap">
-      <div className="flex items-center gap-space-xs">
-      <span className="w-5 h-5 rounded-full bg-primary-container text-on-primary font-label-code text-[10px] flex items-center justify-center font-bold">DT</span>
-      <span className="text-on-surface font-medium">Deeki T</span>
-      </div>
-      </td>
-      <td className="py-space-md px-space-lg">
-      <div className="text-on-surface">Stock replenishment</div>
-      </td>
-      <td className="py-space-md px-space-md text-right whitespace-nowrap relative">
-      <button type="button" className="p-1 hover:bg-surface-container rounded text-on-surface-variant hover:text-on-surface transition-colors" data-stitch-id="row-3-action-btn" title="Manage line record">
-      <span className="material-symbols-outlined text-[18px]">more_horiz</span>
-      </button>
-      </td>
-      </tr>
-
-      <tr className="hover:bg-surface-container-low transition-colors">
-      <td className="py-space-md px-space-lg whitespace-nowrap">
-      <div className="font-label-code text-label-code font-semibold text-on-surface">1 Nov 2026</div>
-      <div className="font-caption text-caption text-on-surface-variant">08:10 AM EST</div>
-      </td>
-      <td className="py-space-md px-space-md whitespace-nowrap">
-      <span className="inline-flex items-center gap-1 font-label-code text-[11px] font-bold px-2 py-0.5 rounded bg-surface-container-high text-on-surface">
-      <span className="material-symbols-outlined text-[12px]">input</span>
-                        RECEIVE
-                      </span>
-      </td>
-      <td className="py-space-md px-space-md">
-      <div className="font-medium text-on-surface">Dash camera (ELC-DCM-01)</div>
-      <div className="font-label-code text-caption text-on-surface-variant">S/N: <span className="text-on-surface font-medium">DC-70A-0042118</span></div>
-      </td>
-      <td className="py-space-md px-space-md text-right whitespace-nowrap">
-      <span className="font-label-price text-label-price font-bold text-on-surface">+1</span>
-      </td>
-      <td className="py-space-md px-space-lg whitespace-nowrap">
-      <div className="flex items-center gap-space-xs font-label-code text-caption">
-      <span className="text-on-surface">Car Toys Jamaica</span>
-      <span className="material-symbols-outlined text-[14px] text-on-surface-variant">arrow_forward</span>
-      <span className="text-on-surface font-semibold">Main store — Kingston</span>
-      </div>
-      </td>
-      <td className="py-space-md px-space-md whitespace-nowrap">
-      <div className="font-label-code text-label-code text-on-surface font-semibold">PO-0001</div>
-      </td>
-      <td className="py-space-md px-space-md whitespace-nowrap">
-      <div className="flex items-center gap-space-xs">
-      <span className="w-5 h-5 rounded-full bg-primary-container text-on-primary font-label-code text-[10px] flex items-center justify-center font-bold">DT</span>
-      <span className="text-on-surface font-medium">Deeki T</span>
-      </div>
-      </td>
-      <td className="py-space-md px-space-lg">
-      <div className="text-on-surface">Warranty replacement received</div>
-      </td>
-      <td className="py-space-md px-space-md text-right whitespace-nowrap">
-      <button type="button" className="p-1 hover:bg-surface-container rounded text-on-surface-variant hover:text-on-surface transition-colors">
-      <span className="material-symbols-outlined text-[18px]">more_horiz</span>
-      </button>
-      </td>
-      </tr>
-
-      <tr className="hover:bg-surface-container-low transition-colors">
-      <td className="py-space-md px-space-lg whitespace-nowrap">
-      <div className="font-label-code text-label-code font-semibold text-on-surface">11 Jan 2026</div>
-      <div className="font-caption text-caption text-on-surface-variant">09:00 AM EST</div>
-      </td>
-      <td className="py-space-md px-space-md whitespace-nowrap">
-      <span className="inline-flex items-center gap-1 font-label-code text-[11px] font-bold px-2 py-0.5 rounded bg-surface-container-high text-on-surface">
-      <span className="material-symbols-outlined text-[12px]">input</span>
-                        RECEIVE
-                      </span>
-      </td>
-      <td className="py-space-md px-space-md">
-      <div className="font-medium text-on-surface">Phone Holder Mount</div>
-      <div className="font-label-code text-caption text-on-surface-variant tracking-wide">ACC-PHM-01</div>
-      </td>
-      <td className="py-space-md px-space-md text-right whitespace-nowrap">
-      <span className="font-label-price text-label-price font-bold text-on-surface">+1</span>
-      </td>
-      <td className="py-space-md px-space-lg whitespace-nowrap">
-      <div className="flex items-center gap-space-xs font-label-code text-caption">
-      <span className="text-on-surface-variant italic">Opening balance</span>
-      <span className="material-symbols-outlined text-[14px] text-on-surface-variant">arrow_forward</span>
-      <span className="text-on-surface font-semibold">Main store — Kingston</span>
-      </div>
-      </td>
-      <td className="py-space-md px-space-md whitespace-nowrap">
-      <div className="font-label-code text-label-code text-on-surface">LEG-104</div>
-      <div className="font-caption text-caption text-on-surface-variant">System legacy migration</div>
-      </td>
-      <td className="py-space-md px-space-md whitespace-nowrap">
-      <div className="flex items-center gap-space-xs">
-      <span className="w-5 h-5 rounded-full bg-surface-variant text-on-surface font-label-code text-[10px] flex items-center justify-center font-bold">SYS</span>
-      <span className="text-on-surface font-medium">System (Automated)</span>
-      </div>
-      </td>
-      <td className="py-space-md px-space-lg">
-      <div className="text-on-surface-variant">Moved from old system during depot digitisation</div>
-      </td>
-      <td className="py-space-md px-space-md text-right whitespace-nowrap">
-      <button type="button" className="p-1 hover:bg-surface-container rounded text-on-surface-variant hover:text-on-surface transition-colors">
-      <span className="material-symbols-outlined text-[18px]">more_horiz</span>
-      </button>
-      </td>
-      </tr>
-
-      <tr className="hover:bg-surface-container-low transition-colors">
-      <td className="py-space-md px-space-lg whitespace-nowrap">
-      <div className="font-label-code text-label-code font-semibold text-on-surface">06 Jan 2026</div>
-      <div className="font-caption text-caption text-on-surface-variant">11:15 AM EST</div>
-      </td>
-      <td className="py-space-md px-space-md whitespace-nowrap">
-      <span className="inline-flex items-center gap-1 font-label-code text-[11px] font-bold px-2 py-0.5 rounded bg-surface-container-high text-on-surface">
-      <span className="material-symbols-outlined text-[12px]">output</span>
-                        ISSUE
-                      </span>
-      </td>
-      <td className="py-space-md px-space-md">
-      <div className="font-medium text-on-surface">Dash camera (ELC-DCM-01)</div>
-      <div className="font-label-code text-caption text-on-surface-variant">Kit Component</div>
-      </td>
-      <td className="py-space-md px-space-md text-right whitespace-nowrap">
-      <span className="font-label-price text-label-price font-bold text-on-surface">−1</span>
-      </td>
-      <td className="py-space-md px-space-lg whitespace-nowrap">
-      <div className="flex items-center gap-space-xs font-label-code text-caption">
-      <span className="text-on-surface">Main store</span>
-      <span className="material-symbols-outlined text-[14px] text-on-surface-variant">arrow_forward</span>
-      <span className="bg-surface-container px-1.5 py-0.5 rounded font-label-plate text-on-surface font-bold">{live.primaryPlate}</span>
-      <span className="font-caption text-caption text-on-surface-variant font-normal">(Toyota Roomy 2019)</span>
-      </div>
-      </td>
-      <td className="py-space-md px-space-md whitespace-nowrap">
-      <div className="font-body-sm text-body-sm text-on-surface">Rideshare vehicle kit rollout</div>
-      </td>
-      <td className="py-space-md px-space-md whitespace-nowrap">
-      <div className="flex items-center gap-space-xs">
-      <span className="w-5 h-5 rounded-full bg-primary-container text-on-primary font-label-code text-[10px] flex items-center justify-center font-bold">DT</span>
-      <span className="text-on-surface font-medium">Deeki T</span>
-      </div>
-      </td>
-      <td className="py-space-md px-space-lg">
-      <div className="text-on-surface">Mandatory fleet telematics install</div>
-      </td>
-      <td className="py-space-md px-space-md text-right whitespace-nowrap">
-      <button type="button" className="p-1 hover:bg-surface-container rounded text-on-surface-variant hover:text-on-surface transition-colors">
-      <span className="material-symbols-outlined text-[18px]">more_horiz</span>
-      </button>
-      </td>
-      </tr>
-
-      <tr className="hover:bg-surface-container-low transition-colors">
-      <td className="py-space-md px-space-lg whitespace-nowrap">
-      <div className="font-label-code text-label-code font-semibold text-on-surface">06 Jan 2026</div>
-      <div className="font-caption text-caption text-on-surface-variant">11:00 AM EST</div>
-      </td>
-      <td className="py-space-md px-space-md whitespace-nowrap">
-      <span className="inline-flex items-center gap-1 font-label-code text-[11px] font-bold px-2 py-0.5 rounded bg-surface-container-high text-on-surface">
-      <span className="material-symbols-outlined text-[12px]">sync_alt</span>
-                        TRANSFER
-                      </span>
-      </td>
-      <td className="py-space-md px-space-md">
-      <div className="font-medium text-on-surface">Tyre pump</div>
-      <div className="font-label-code text-caption text-on-surface-variant">TLS-PMP-01</div>
-      </td>
-      <td className="py-space-md px-space-md text-right whitespace-nowrap">
-      <span className="font-label-price text-label-price font-bold text-on-surface">0</span>
-      </td>
-      <td className="py-space-md px-space-lg whitespace-nowrap">
-      <div className="flex items-center gap-space-xs font-label-code text-caption">
-      <span className="text-on-surface">Montego Bay Hub</span>
-      <span className="material-symbols-outlined text-[14px] text-on-surface-variant">arrow_forward</span>
-      <span className="text-on-surface font-semibold">Main store — Kingston</span>
-      </div>
-      </td>
-      <td className="py-space-md px-space-md whitespace-nowrap">
-      <div className="font-label-code text-label-code text-on-surface font-semibold">TRF-5510</div>
-      <div className="font-caption text-caption text-on-surface-variant">Inter-hub transfer</div>
-      </td>
-      <td className="py-space-md px-space-md whitespace-nowrap">
-      <div className="flex items-center gap-space-xs">
-      <span className="w-5 h-5 rounded-full bg-surface-container-highest text-on-surface font-label-code text-[10px] flex items-center justify-center font-bold">DC</span>
       <span className="text-on-surface font-medium">—</span>
-      </div>
       </td>
       <td className="py-space-md px-space-lg">
-      <div className="text-on-surface">Balance stock across depots</div>
+      <div className="text-on-surface">{reason}</div>
       </td>
       <td className="py-space-md px-space-md text-right whitespace-nowrap">
       <button type="button" className="p-1 hover:bg-surface-container rounded text-on-surface-variant hover:text-on-surface transition-colors">
@@ -480,6 +235,9 @@ export function In10Movements() {
       </button>
       </td>
       </tr>
+        );
+      })
+      )}
       </tbody>
       </table>
       </div>
@@ -545,7 +303,7 @@ export function In10Movements() {
 
       <div className="px-space-lg py-space-md bg-surface-container-low flex flex-col sm:flex-row items-center justify-between gap-space-md">
       <div className="flex items-center gap-space-md">
-      <span className="font-body-sm text-body-sm text-on-surface-variant">Showing <strong className="text-on-surface">1–7</strong> of <strong className="text-on-surface">48</strong> movements</span>
+      <span className="font-body-sm text-body-sm text-on-surface-variant">Showing <strong className="text-on-surface">{movementShown ? `1–${movementShown}` : '0'}</strong> of <strong className="text-on-surface">{movementCount}</strong> movements</span>
       <span className="text-surface-variant hidden sm:inline">|</span>
       <div className="flex items-center gap-space-xs font-label-code text-caption text-on-surface-variant">
       <span className="material-symbols-outlined text-[14px]">lock_clock</span>

@@ -8751,9 +8751,30 @@ export function registerResidualMonolithRoutes(app: Hono) {
     }
   });
 
-  // Equipment Endpoints
+  async function legacyFleetInventoryApiRetired(c: Context): Promise<Response | null> {
+    try {
+      const { isFleetInventoryPhaseEnabled } = await import("./platform_inventory_flags.ts");
+      const on = await isFleetInventoryPhaseEnabled("fleet_inventory_phase2_stock");
+      if (on) {
+        return c.json(
+          {
+            error:
+              "Legacy fleet inventory/equipment API retired. Use /make-server-37f42386/inventory/*.",
+          },
+          410,
+        );
+      }
+    } catch {
+      /* flag read failed — allow legacy */
+    }
+    return null;
+  }
+
+  // Equipment Endpoints (410 when inv_* phase 2 is on — R6-10)
   app.get("/make-server-37f42386/equipment/:vehicleId", requireAuth(), async (c) => {
     try {
+      const blocked = await legacyFleetInventoryApiRetired(c);
+      if (blocked) return blocked;
       const vehicleId = c.req.param("vehicleId");
       // Get all equipment items for this vehicle. We assume keys are formatted as equipment:{vehicleId}:{itemId}
       const items = await kv.getByPrefix(`equipment:${vehicleId}:`);
@@ -8777,6 +8798,8 @@ export function registerResidualMonolithRoutes(app: Hono) {
     }),
     async (c) => {
     try {
+      const blocked = await legacyFleetInventoryApiRetired(c);
+      if (blocked) return blocked;
       const item = (c.get("__cachedRequestBody") as Record<string, unknown> | null) ?? (await c.req.json());
       if (!item.id) {
           item.id = crypto.randomUUID();
@@ -8800,6 +8823,8 @@ export function registerResidualMonolithRoutes(app: Hono) {
     const vehicleId = c.req.param("vehicleId");
     const id = c.req.param("id");
     try {
+      const blocked = await legacyFleetInventoryApiRetired(c);
+      if (blocked) return blocked;
       await kv.del(`equipment:${vehicleId}:${id}`);
       return c.json({ success: true });
     } catch (e: any) {
@@ -9238,6 +9263,8 @@ export function registerResidualMonolithRoutes(app: Hono) {
   /** Alias: UI/docs historically guessed `/equipment` — same payload as all-equipment list. */
   app.get("/make-server-37f42386/equipment", requireAuth(), async (c) => {
     try {
+      const blocked = await legacyFleetInventoryApiRetired(c);
+      if (blocked) return blocked;
       const res = await queryFleet("equipment", { limit: 5000 });
       if (res.error) throw res.error;
       return c.json(filterByOrg(res.data as Record<string, unknown>[], c));
@@ -9248,6 +9275,8 @@ export function registerResidualMonolithRoutes(app: Hono) {
 
   app.get("/make-server-37f42386/fleet/equipment/all", requireAuth(), async (c) => {
       try {
+          const blocked = await legacyFleetInventoryApiRetired(c);
+          if (blocked) return blocked;
           const res = await queryFleet("equipment", { limit: 5000 });
           if (res.error) throw res.error;
           const equipment = filterByOrg(res.data as Record<string, unknown>[], c);
@@ -9277,6 +9306,8 @@ export function registerResidualMonolithRoutes(app: Hono) {
     }),
     async (c) => {
       try {
+          const blocked = await legacyFleetInventoryApiRetired(c);
+          if (blocked) return blocked;
           const items = (c.get("__cachedRequestBody") as unknown) ?? (await c.req.json());
           if (!Array.isArray(items)) {
               return c.json({ error: "Expected array of items" }, 400);
@@ -9327,24 +9358,10 @@ export function registerResidualMonolithRoutes(app: Hono) {
   });
 
   // Inventory Endpoints
-  async function legacyInventoryWritesDisabled(c: Context): Promise<Response | null> {
-    try {
-      const { isFleetInventoryPhaseEnabled } = await import("./platform_inventory_flags.ts");
-      const on = await isFleetInventoryPhaseEnabled("fleet_inventory_phase2_stock");
-      if (on) {
-        return c.json(
-          { error: "Legacy inventory API retired. Use /make-server-37f42386/inventory/*." },
-          410,
-        );
-      }
-    } catch {
-      /* flag read failed — allow legacy */
-    }
-    return null;
-  }
-
   app.get("/make-server-37f42386/inventory", requireAuth(), async (c) => {
       try {
+          const blocked = await legacyFleetInventoryApiRetired(c);
+          if (blocked) return blocked;
           const { data, error } = await fromKvStore()
               .select("value")
               .like("key", "inventory:%");
@@ -9363,7 +9380,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
     requirePermission("vehicles.edit"),
     async (c) => {
       try {
-          const blocked = await legacyInventoryWritesDisabled(c);
+          const blocked = await legacyFleetInventoryApiRetired(c);
           if (blocked) return blocked;
           const item = await c.req.json();
           if (!item.id) item.id = crypto.randomUUID();
@@ -9386,6 +9403,8 @@ export function registerResidualMonolithRoutes(app: Hono) {
     requirePermission("vehicles.edit"),
     async (c) => {
       try {
+          const blocked = await legacyFleetInventoryApiRetired(c);
+          if (blocked) return blocked;
           const items = await c.req.json();
           if (!Array.isArray(items)) return c.json({ error: "Expected array" }, 400);
 
@@ -9421,6 +9440,8 @@ export function registerResidualMonolithRoutes(app: Hono) {
     requirePermission("vehicles.edit"),
     async (c) => {
       try {
+          const blocked = await legacyFleetInventoryApiRetired(c);
+          if (blocked) return blocked;
           const id = c.req.param("id");
           const existing = await kv.get(`inventory:${id}`);
           if (!existing) return c.json({ error: "Not found" }, 404);
@@ -9437,6 +9458,8 @@ export function registerResidualMonolithRoutes(app: Hono) {
   // Templates Endpoints
   app.get("/make-server-37f42386/templates", requireAuth(), async (c) => {
       try {
+          const blocked = await legacyFleetInventoryApiRetired(c);
+          if (blocked) return blocked;
           const templates = await kv.getByPrefix("template:equipment:");
           return c.json(filterByOrg(templates || [], c));
       } catch(e: any) {
@@ -9450,6 +9473,8 @@ export function registerResidualMonolithRoutes(app: Hono) {
     requirePermission("inventory.kits.manage"),
     async (c) => {
       try {
+          const blocked = await legacyFleetInventoryApiRetired(c);
+          if (blocked) return blocked;
           const t = await c.req.json();
           if (!t.id) t.id = crypto.randomUUID();
           const stamped = stampOrgRequired(t, c);

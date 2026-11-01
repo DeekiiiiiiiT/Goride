@@ -16,6 +16,62 @@ export type Fp8Actions = {
 };
 
 export function Fp8Screen({ actions, data, form }: { actions: Fp8Actions; data: Fp8ViewModel; form: Fp8FormState }) {
+  if (data.dailyLimitReached) {
+    const used = data.dailyLimitUsed ?? 30;
+    const max = data.dailyLimitMax ?? 30;
+    const active = data.activeRequestCount ?? used;
+    return (
+      <div className="find-parts-screen-root">
+        <div className="fp-screen-root w-full py-space-xl flex flex-col gap-space-lg max-w-2xl">
+          <FindPartsStickyHeader
+            step={8}
+            onBack={actions.onBack}
+            vehicleLabel={data.vehicleLabel}
+            plate={data.plate}
+            versionTag={data.versionTag}
+            partTrailLabel={data.partName !== "None yet" ? data.partName : "Part"}
+            fitmentQueryRef={data.fitmentQueryRef !== "—" ? data.fitmentQueryRef : "New query"}
+          />
+          <div className="rounded-xl border border-error/30 bg-surface-container-low p-space-xl flex flex-col gap-space-md">
+            <div className="flex items-center gap-space-sm text-error">
+              <span className="material-symbols-outlined text-[28px]">block</span>
+              <h2 className="font-headline-lg text-headline-lg font-semibold text-on-surface">
+                Daily request limit reached · {used} / {max} used
+              </h2>
+            </div>
+            <p className="font-body-md text-body-md text-on-surface-variant">
+              You&apos;ve sent {used} requests today. Roam will pick up more tomorrow — this prevents catalogue throttling so every part is thoroughly checked.
+            </p>
+            {data.jamaicaResetLabel ? (
+              <p className="font-label-code text-label-code text-on-surface">{data.jamaicaResetLabel}</p>
+            ) : (
+              <p className="font-label-code text-label-code text-on-surface">Resets at 00:00 EST (Jamaica midnight)</p>
+            )}
+            <div className="flex flex-col sm:flex-row flex-wrap gap-space-md pt-space-sm">
+              <button
+                type="button"
+                className="rounded-lg bg-primary px-space-xl py-2.5 font-body-sm text-body-sm font-semibold text-on-primary"
+                onClick={actions.onSaveDraft}
+              >
+                Save as draft for tomorrow
+              </button>
+              <button
+                type="button"
+                className="rounded-lg bg-surface-container-high px-space-xl py-2.5 font-body-sm text-body-sm font-semibold text-on-surface"
+                onClick={actions.onViewActivity}
+              >
+                View your {active} active requests
+              </button>
+              <button type="button" className="font-body-sm text-body-sm text-secondary underline" onClick={actions.onBack}>
+                Try again tomorrow
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (data.requestSent) {
     return (
       <div className="find-parts-screen-root">
@@ -128,7 +184,7 @@ export function Fp8Screen({ actions, data, form }: { actions: Fp8Actions; data: 
 
 <form className="flex flex-col gap-space-lg" id="sourcing-form" onSubmit={(e) => { e.preventDefault(); actions.onSubmit(); }}>
 <div className="flex flex-col gap-space-xs">
-<label className="font-caption text-caption text-on-surface uppercase tracking-wider font-semibold" htmlFor="old-part-number">Old part number (optional)</label>
+<label className="font-caption text-caption text-on-surface uppercase tracking-wider font-semibold" htmlFor="old-part-number">Old part number (optional) · Compatibility: OEM</label>
 <input className="w-full rounded-lg bg-surface-container-low px-space-md py-space-sm font-body-md text-body-md text-on-surface placeholder:text-outline focus:outline-none focus:bg-surface-container-lowest shadow-inner" id="old-part-number" placeholder="e.g. OEM or caliper casting number" value={form.oldPartNumber} onChange={(e) => actions.onOldPartNumberChange(e.target.value)} />
 </div>
 <div className="flex flex-col gap-space-xs">

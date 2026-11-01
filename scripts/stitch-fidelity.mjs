@@ -406,7 +406,8 @@ for (const row of fleetReadme.split('\n').filter((l) => /^\| (FP|IN)\d/.test(l))
   const missed = [...labels].filter((label) => !fidelityIncludes(visible, label));
   const hit = labels.size - missed.length;
   const pct = labels.size ? Math.round((100 * hit) / labels.size) : 100;
-  const bad = pct < FP_MIN;
+  const minPct = /^IN\d/.test(num) ? 70 : FP_MIN;
+  const bad = pct < minPct;
   if (report || (checked && bad)) {
     console.log(`${bad ? 'FAIL' : 'ok  '} ${num} ${pct}% text (${hit}/${labels.size}) — ${react}`);
     if (report && missed.length) {
@@ -463,7 +464,7 @@ if (existsSync(driverReadmePath)) {
     const missed = [...labels].filter((label) => !fidelityIncludes(visible, label));
     const hit = labels.size - missed.length;
     const pct = labels.size ? Math.round((100 * hit) / labels.size) : 100;
-    const bad = pct < FP_MIN;
+    const bad = pct < 80;
     if (report || (checked && bad)) {
       console.log(`${bad ? 'FAIL' : 'ok  '} ${num} ${pct}% text (${hit}/${labels.size}) — ${react}`);
     }

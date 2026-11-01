@@ -216,6 +216,8 @@ export function registerCatalogResearchRoutes(app: { get: Function; patch: Funct
       todayResearchCount: todayResearch ?? 0,
       enabled: settings?.enabled ?? false,
       paused: settings?.paused ?? false,
+      pausedReason: settings?.paused_reason ?? null,
+      autoResumeAt: settings?.auto_resume_at ?? null,
       dailyJobLimit: settings?.daily_job_limit ?? 40,
       status: healthStatus(settings || {}, healthObj),
       shadowStreak: settings?.shadow_approve_streak ?? 0,

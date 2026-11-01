@@ -32,8 +32,12 @@ for (const file of files) {
 
 // R5 follow-up migrations from supabase/migrations
 const follow = [
-  '20261101180000_fleet_inventory_r5_verify_chain.sql',
-  '20261101180100_fleet_inventory_r5_data_migration.sql',
+  '20261101165324_fleet_inventory_r5_verify_chain.sql',
+  '20261101165346_fleet_inventory_r5_data_migration_a.sql',
+  '20261101165352_fleet_inventory_r5_data_migration_b.sql',
+  '20261101165415_fleet_inventory_r5_data_migration_c.sql',
+  '20261101171948_fleet_inventory_engine_rpcs_ext.sql',
+  '20261101171958_fleet_inv_public_bridge.sql',
 ];
 for (const file of follow) {
   const path = join(root, 'supabase', 'migrations', file);

@@ -2995,10 +2995,25 @@ export const api = {
       return response.json() as Promise<CompatiblePartsResponse>;
   },
 
-  async setOrgPartStock(body: { partId?: string; universalPartId?: string; qty: number }) {
+  async setOrgPartStock(body: {
+    partId?: string;
+    universalPartId?: string;
+    qty: number;
+    location?: string | null;
+    reorderPoint?: number | null;
+  }) {
+      const { orgPartStockIdempotencyKey } = await import('../utils/orgPartStockIdempotency');
+      const idempotencyKey = orgPartStockIdempotencyKey(
+        body.partId,
+        body.universalPartId,
+        body.location ?? null,
+        body.qty,
+      );
+      const headers = await getHeaders();
+      headers['Idempotency-Key'] = idempotencyKey;
       const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/org-part-stock`, {
         method: "POST",
-        headers: await getHeaders(),
+        headers,
         body: JSON.stringify(body),
       });
       if (!response.ok) {

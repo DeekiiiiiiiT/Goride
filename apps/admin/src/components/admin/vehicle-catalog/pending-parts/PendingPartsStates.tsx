@@ -94,7 +94,9 @@ export function PendingPartsStatesMatrixPreview({
   traceId?: string | null;
 }) {
   return (
-    <div className="grid grid-cols-1 gap-space-lg xl:grid-cols-2">
+    <div className="flex flex-col gap-space-lg">
+      <h1 className="font-headline-xl text-headline-xl font-semibold text-on-surface">Queue Lifecycle & Edge States</h1>
+      <div className="grid grid-cols-1 gap-space-lg xl:grid-cols-2">
       <div className="rounded-xl bg-surface-container-lowest shadow-sm overflow-hidden">
         <div className="bg-surface-container-low px-space-lg py-space-sm font-mono-sm text-label-xs font-semibold uppercase">
           State 1: Empty
@@ -126,7 +128,8 @@ export function PendingPartsStatesMatrixPreview({
         </div>
         <div className="p-space-lg">
           <PendingResearchStrip token={token} />
-          <p className="mt-space-md font-body-sm text-body-sm text-on-surface-variant">
+          <p className="mt-space-md font-body-sm text-body-sm font-semibold text-primary">Turn on</p>
+          <p className="mt-space-xs font-body-sm text-body-sm text-on-surface-variant">
             Queued rows show — for result part numbers while the crawler is paused.
           </p>
         </div>

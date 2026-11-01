@@ -1,9 +1,12 @@
 /** Ported from Stitch — do not simplify layout (audit §0.4). */
 import { useInventoryLive } from '../inventoryLive';
 import { useInventoryShell } from '../InventoryShellContext';
+import { firstAssetSerial, strField } from '../inventoryData';
 export function In12Counts() {
   const shell = useInventoryShell();
   const live = useInventoryLive(shell);
+  const sessions = live.countSessions;
+  const assetSerial = firstAssetSerial(live.assets);
   return (
     <div className="fleet-inventory-stitch inventory-stitch-root">
       <div className="inventory-stitch-main"><div className="flex flex-col w-full">
@@ -83,7 +86,7 @@ export function In12Counts() {
       <span className="material-symbols-outlined text-primary text-[20px]">assignment_turned_in</span>
       <span className="font-headline-sm text-headline-sm text-on-surface">Recent Count Batches</span>
       </div>
-      <span className="font-label-code text-caption text-on-surface-variant">Q4 Periodic Ledger · 3 Recorded Sessions</span>
+      <span className="font-label-code text-caption text-on-surface-variant">Q4 Periodic Ledger · {sessions.length} Recorded Sessions</span>
       </div>
       <div className="flex flex-col gap-space-sm">
 
@@ -93,7 +96,7 @@ export function In12Counts() {
       <div className="min-w-0">
       <div className="flex items-center gap-space-sm flex-wrap">
       <span className="font-headline-sm text-body-lg font-semibold text-on-surface">Main store — Kingston</span>
-      <span className="font-label-code text-caption px-2 py-0.5 bg-surface-container-highest rounded text-on-surface-variant">#CNT-2026-11</span>
+      <span className="font-label-code text-caption px-2 py-0.5 bg-surface-container-highest rounded text-on-surface-variant">#{strField(sessions[0] ?? {}, 'code', '—')}</span>
       <span className="bg-surface-container-lowest text-on-tertiary-container font-label-code text-caption font-semibold px-2 py-0.5 rounded shadow-sm flex items-center gap-1">
       <span className="w-1.5 h-1.5 rounded-full bg-on-tertiary-container"></span>
                           Submitted — 2 differences
@@ -118,7 +121,7 @@ export function In12Counts() {
       <div className="min-w-0">
       <div className="flex items-center gap-space-sm flex-wrap">
       <span className="font-body-lg text-body-lg font-medium text-on-surface">Kingston Gate 2 Bay</span>
-      <span className="font-label-code text-caption px-2 py-0.5 bg-surface-container rounded text-on-surface-variant">#CNT-2026-08</span>
+      <span className="font-label-code text-caption px-2 py-0.5 bg-surface-container rounded text-on-surface-variant">#{strField(sessions[1] ?? {}, 'code', '—')}</span>
       <span className="bg-surface-container text-on-surface font-label-code text-caption font-medium px-2 py-0.5 rounded flex items-center gap-1">
       <span className="material-symbols-outlined text-[14px]">check_circle</span>
                           Reconciled — 0 differences
@@ -143,7 +146,7 @@ export function In12Counts() {
       <div className="min-w-0">
       <div className="flex items-center gap-space-sm flex-wrap">
       <span className="font-body-lg text-body-lg font-medium text-on-surface">Main store — Kingston</span>
-      <span className="font-label-code text-caption px-2 py-0.5 bg-surface-container rounded text-on-surface-variant">#CNT-2026-04</span>
+      <span className="font-label-code text-caption px-2 py-0.5 bg-surface-container rounded text-on-surface-variant">#{strField(sessions[2] ?? {}, 'code', '—')}</span>
       <span className="bg-surface-container text-secondary font-label-code text-caption px-2 py-0.5 rounded">
                           Closed · Approved by Deeki T
                         </span>
@@ -210,7 +213,7 @@ export function In12Counts() {
       <div>
       <div className="flex items-center gap-space-sm flex-wrap">
       <span className="font-headline-sm text-headline-sm text-on-primary">Main store — Kingston // Bay A & B Storeroom</span>
-      <span className="bg-surface-container-highest/30 text-surface-dim font-label-code text-caption px-2 py-0.5 rounded">Session #CNT-2026-11</span>
+      <span className="bg-surface-container-highest/30 text-surface-dim font-label-code text-caption px-2 py-0.5 rounded">Session #{strField(sessions[0] ?? {}, 'code', '—')}</span>
       </div>
       <p className="font-body-sm text-body-sm text-on-primary-container mt-0.5">
                   Blind Count Mode: Expected quantities were hidden during the physical count to ensure impartial verification. Quantities revealed automatically upon floor supervisor submission.
@@ -460,7 +463,7 @@ export function In12Counts() {
       <div className="font-label-code text-caption text-on-surface-variant">ELC-DCM-01 · 4K Dual Sensor Fleet Cam</div>
       <div className="font-label-code text-[11px] text-primary flex items-center gap-1 mt-0.5">
       <span className="material-symbols-outlined text-[12px]">qr_code_2</span>
-                            S/N: DC-70A-0042118 verified
+                            S/N: {assetSerial} verified
                           </div>
       </div>
       </div>

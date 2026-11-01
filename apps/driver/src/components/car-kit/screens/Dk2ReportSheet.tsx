@@ -1,5 +1,9 @@
 /** Ported from Stitch — do not simplify layout (audit §0.4). */
-export function Dk2ReportSheet() {
+import type { DriverCarKitPayload } from '../../../services/driverInventoryApi';
+import { carKitVehicleLabel } from '../carKitDisplay';
+
+export function Dk2ReportSheet({ kit }: { kit?: DriverCarKitPayload | null }) {
+  const vehicleLabel = carKitVehicleLabel(kit);
   return (
     <div className="driver-car-kit-stitch inventory-stitch-root">
       <div className="inventory-stitch-main"><div className="flex flex-col w-full relative">
@@ -53,7 +57,7 @@ export function Dk2ReportSheet() {
       <div className="flex items-center gap-2 mt-1.5">
       <span className="inline-flex items-center gap-1 font-label-code text-[12px] font-bold text-slate-700 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-md uppercase tracking-wider">
       <span className="material-symbols-outlined text-[14px] text-slate-500">directions_car</span>
-      5179KZ · Toyota Roomy
+      {vehicleLabel}
       </span>
       </div>
       </div>

@@ -1,9 +1,16 @@
 /** Ported from Stitch — do not simplify layout (audit §0.4). */
 import { useInventoryLive } from '../inventoryLive';
 import { useInventoryShell } from '../InventoryShellContext';
+import { firstOpenPoNumber, firstVendorName, strField } from '../inventoryData';
 export function In3ItemDrawer() {
   const shell = useInventoryShell();
   const live = useInventoryLive(shell);
+  const vendorName = firstVendorName(live.vendors);
+  const poNumber = firstOpenPoNumber(live.purchaseOrders);
+  const item = live.selectedItem;
+  const primarySub = live.primaryVehicle
+    ? `${live.primaryPlate} · ${strField(item ?? {}, 'name', 'Kit item')}`
+    : live.primaryPlate;
   return (
     <div className="fleet-inventory-stitch inventory-stitch-root">
       <div className="inventory-stitch-main"><div className="flex flex-col w-full relative">
@@ -325,7 +332,7 @@ export function In3ItemDrawer() {
       <span className="font-label-plate text-label-plate text-on-surface">{live.primaryPlate}</span>
       <span className="font-caption text-caption text-on-surface-variant">(on car)</span>
       </div>
-      <span className="font-caption text-caption text-on-surface-variant">Toyota Roomy 2019 · Rideshare</span>
+      <span className="font-caption text-caption text-on-surface-variant">{primarySub}</span>
       </div>
       </div>
       </td>
@@ -371,7 +378,7 @@ export function In3ItemDrawer() {
       <span className="material-symbols-outlined text-[16px] text-primary">check_circle</span>
       <span className="font-body-sm text-body-sm font-medium text-on-surface">On 1 car:</span>
       <span className="font-label-plate text-label-plate text-on-surface">{live.primaryPlate}</span>
-      <span className="font-caption text-caption text-on-surface-variant">(Toyota Roomy 2019)</span>
+      <span className="font-caption text-caption text-on-surface-variant">({live.primaryPlate})</span>
       </div>
       <span className="font-caption text-caption text-surface-tint font-semibold">Active</span>
       </div>
@@ -380,7 +387,7 @@ export function In3ItemDrawer() {
       <span className="material-symbols-outlined text-[16px] text-error">warning</span>
       <span className="font-body-sm text-body-sm font-semibold text-on-surface">Missing on 1 car:</span>
       <span className="font-label-plate text-label-plate text-on-surface">{live.secondaryPlate}</span>
-      <span className="font-caption text-caption text-on-surface-variant">(Honda Fit 2018)</span>
+      <span className="font-caption text-caption text-on-surface-variant">({live.secondaryPlate})</span>
       </div>
       <button type="button" className="font-caption text-caption font-bold text-on-surface hover:underline flex items-center gap-0.5">
       <span>Issue to {live.secondaryPlate}</span>
@@ -406,7 +413,7 @@ export function In3ItemDrawer() {
       </div>
       <div className="flex flex-col">
       <span className="font-body-sm text-body-sm font-bold text-on-surface">Reorder at 3 units · Buy 5 units</span>
-      <span className="font-caption text-caption text-on-surface-variant">Preferred supplier: Car Toys Jamaica (Supplier ID: SUP-092) · 7 days typical lead time</span>
+      <span className="font-caption text-caption text-on-surface-variant">Preferred supplier: {vendorName}</span>
       </div>
       </div>
 
@@ -477,7 +484,7 @@ export function In3ItemDrawer() {
       <span className="text-outline-variant font-caption">·</span>
       <span className="font-caption text-caption text-on-surface-variant truncate">Deeki T</span>
       </div>
-      <span className="font-caption text-caption text-on-surface-variant truncate">PO #PO-2025-089 (Car Toys Jamaica)</span>
+      <span className="font-caption text-caption text-on-surface-variant truncate">PO #{poNumber} ({vendorName})</span>
       </div>
       </div>
       <div className="flex flex-col items-end shrink-0">

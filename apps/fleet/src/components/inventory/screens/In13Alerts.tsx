@@ -1,9 +1,13 @@
 /** Ported from Stitch — do not simplify layout (audit §0.4). */
 import { useInventoryLive } from '../inventoryLive';
 import { useInventoryShell } from '../InventoryShellContext';
+import { firstVendorName } from '../inventoryData';
 export function In13Alerts() {
   const shell = useInventoryShell();
   const live = useInventoryLive(shell);
+  const vendorName = firstVendorName(live.vendors);
+  const secondary = live.secondaryVehicle;
+  const lowStockLabel = live.lowStockLabel;
   return (
     <div className="fleet-inventory-stitch inventory-stitch-root">
       <div className="inventory-stitch-main"><div className="flex flex-col w-full">
@@ -163,14 +167,14 @@ export function In13Alerts() {
       <span className="bg-error-container text-on-error-container font-label-code text-[11px] font-bold px-2 py-0.5 rounded">ROAD CLEARANCE BLOCKED</span>
       <span className="bg-surface-container text-on-surface-variant font-label-plate text-caption px-2 py-0.5 rounded tracking-widest font-bold">{live.secondaryPlate}</span>
       </div>
-      <p className="font-body-md text-body-md text-on-surface-variant">Honda Fit 2018 · Rideshare standard kit (10 items unassigned). Vehicle cannot be road-cleared for dispatch.</p>
+      <p className="font-body-md text-body-md text-on-surface-variant">{live.secondaryPlate} · {secondary ? `${secondary.missingLines + secondary.shortLines} kit gaps` : 'Kit compliance gap'}. Vehicle cannot be road-cleared for dispatch.</p>
       <div className="flex items-center flex-wrap gap-x-space-lg gap-y-1 font-caption text-caption text-secondary mt-1">
       <span className="flex items-center gap-1">
       <span className="material-symbols-outlined text-[14px]">schedule</span>
       <span className="font-label-code text-caption">2 days ago</span>
       </span>
       <span>•</span>
-      <span>Target: Honda Fit 2018 ({live.secondaryPlate})</span>
+      <span>Target: {live.secondaryPlate}</span>
       <span>•</span>
       <span>Depot Bay: Kingston Gate 1</span>
       </div>
@@ -204,18 +208,18 @@ export function In13Alerts() {
       </div>
       <div className="flex flex-col gap-1 min-w-0">
       <div className="flex items-center flex-wrap gap-space-sm">
-      <span className="font-headline-sm text-headline-sm text-on-surface font-bold tracking-tight">Phone Holder Mount is low (1 of 3)</span>
+      <span className="font-headline-sm text-headline-sm text-on-surface font-bold tracking-tight">{lowStockLabel !== '—' ? `${lowStockLabel} is low` : 'Low stock alert'}</span>
       <span className="bg-tertiary-fixed text-on-tertiary-fixed-variant font-label-code text-[11px] font-bold px-2 py-0.5 rounded">REORDER LEVEL MET</span>
       <span className="bg-surface-container text-on-surface-variant font-label-code text-caption px-2 py-0.5 rounded font-medium">SKU: ACC-PHM-01</span>
       </div>
-      <p className="font-body-md text-body-md text-on-surface-variant">Main store — Kingston has 1 unit on hand. Reorder threshold trigger is 3 units. Estimated lead time from Car Toys Jamaica is 7 days.</p>
+      <p className="font-body-md text-body-md text-on-surface-variant">{live.hubName} has low stock on {lowStockLabel}. Preferred supplier: {vendorName}.</p>
       <div className="flex items-center flex-wrap gap-x-space-lg gap-y-1 font-caption text-caption text-secondary mt-1">
       <span className="flex items-center gap-1">
       <span className="material-symbols-outlined text-[14px]">schedule</span>
       <span className="font-label-code text-caption">1 hour ago</span>
       </span>
       <span>•</span>
-      <span>Preferred Supplier: Car Toys Jamaica</span>
+      <span>Preferred Supplier: {vendorName}</span>
       <span>•</span>
       <span>Unit Cost: J$ 2,850</span>
       </div>
@@ -253,7 +257,7 @@ export function In13Alerts() {
       <span className="bg-tertiary-fixed text-on-tertiary-fixed-variant font-label-code text-[11px] font-bold px-2 py-0.5 rounded">UNREGISTERED SERIAL</span>
       <span className="bg-surface-container text-on-surface-variant font-label-plate text-caption px-2 py-0.5 rounded tracking-widest font-bold">{live.primaryPlate}</span>
       </div>
-      <p className="font-body-md text-body-md text-on-surface-variant">Toyota Roomy 2019 has an installed telematics unit without registered serial barcode in the asset ledger. Annual audit compliance at risk.</p>
+      <p className="font-body-md text-body-md text-on-surface-variant">{live.primaryPlate} has an installed unit without a registered serial in the asset ledger. Annual audit compliance at risk.</p>
       <div className="flex items-center flex-wrap gap-x-space-lg gap-y-1 font-caption text-caption text-secondary mt-1">
       <span className="flex items-center gap-1">
       <span className="material-symbols-outlined text-[14px]">schedule</span>

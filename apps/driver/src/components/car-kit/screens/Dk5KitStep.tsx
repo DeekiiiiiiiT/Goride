@@ -1,13 +1,20 @@
 /** Ported from Stitch — do not simplify layout (audit §0.4). */
+import type { DriverCarKitPayload } from '../../../services/driverInventoryApi';
+import { carKitItemCounts, carKitVehicleLabel } from '../carKitDisplay';
+
 export function Dk5KitStep({
+  kit,
   onConfirmAll,
   onReportIssue,
   busy = false,
 }: {
+  kit?: DriverCarKitPayload | null;
   onConfirmAll?: () => void;
   onReportIssue?: () => void;
   busy?: boolean;
 }) {
+  const vehicleLabel = carKitVehicleLabel(kit);
+  const { present, total } = carKitItemCounts(kit);
   return (
     <div className="driver-car-kit-stitch inventory-stitch-root">
       <div className="inventory-stitch-main"><div className="flex flex-col w-full px-margin pb-space-xl">
@@ -34,14 +41,14 @@ export function Dk5KitStep({
       </div>
       <div className="flex flex-col">
       <h2 className="font-headline-sm text-headline-sm text-on-surface leading-tight">Is everything in your kit?</h2>
-      <p className="font-body-sm text-body-sm text-on-surface-variant mt-0.5">Quick 30-second check for Toyota Roomy 2019 · 5179KZ.</p>
+      <p className="font-body-sm text-body-sm text-on-surface-variant mt-0.5">Quick 30-second check for {vehicleLabel}.</p>
       </div>
       </div>
       </div>
 
       <div className="bg-surface-container-lowest rounded-xl overflow-hidden shadow-sm mb-space-md">
       <div className="bg-surface-container-low px-space-md py-space-xs flex items-center justify-between">
-      <span className="font-label-code text-label-code text-on-surface-variant uppercase tracking-wider">Present in Vehicle (7 Items)</span>
+      <span className="font-label-code text-label-code text-on-surface-variant uppercase tracking-wider">Present in Vehicle ({present} Items)</span>
       <span className="material-symbols-outlined text-primary text-[18px]">verified</span>
       </div>
       <div className="divide-none flex flex-col p-space-xs">

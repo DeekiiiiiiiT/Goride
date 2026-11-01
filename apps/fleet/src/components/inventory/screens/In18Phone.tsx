@@ -1,9 +1,13 @@
 /** Ported from Stitch — do not simplify layout (audit §0.4). */
 import { useInventoryLive } from '../inventoryLive';
 import { useInventoryShell } from '../InventoryShellContext';
+import { firstAssetSerial } from '../inventoryData';
 export function In18Phone() {
   const shell = useInventoryShell();
   const live = useInventoryLive(shell);
+  const primary = live.primaryVehicle;
+  const secondary = live.secondaryVehicle;
+  const assetSerial = firstAssetSerial(live.assets);
   return (
     <div className="fleet-inventory-stitch inventory-stitch-root">
       <div className="inventory-stitch-main"><div className="flex flex-col w-full px-margin space-y-space-lg">
@@ -186,20 +190,20 @@ export function In18Phone() {
                   5179
                 </div>
       <div className="min-w-0 flex flex-col">
-      <span className="font-headline-sm text-body-md font-semibold text-on-surface">Toyota Roomy</span>
+      <span className="font-headline-sm text-body-md font-semibold text-on-surface">{primary?.plate ?? live.primaryPlate}</span>
       <span className="font-label-plate text-caption text-on-surface-variant uppercase">{live.primaryPlate}</span>
       </div>
       </div>
-      <span className="font-label-code text-caption font-bold text-on-surface">70%</span>
+      <span className="font-label-code text-caption font-bold text-on-surface">{primary ? `${primary.pct}%` : '—'}</span>
       </div>
 
       <div className="w-full bg-surface-container rounded-full h-2 overflow-hidden">
-      <div className="bg-primary h-full rounded-full" style={{ width: "70%" }}></div>
+      <div className="bg-primary h-full rounded-full" style={{ width: `${primary?.pct ?? 0}%` }}></div>
       </div>
       <div className="flex items-center justify-between text-on-surface-variant">
       <span className="font-caption text-caption flex items-center gap-1 text-error font-medium">
       <span className="material-symbols-outlined text-[14px]">error</span>
-                3 items missing (Jack, Kit, Cable)
+                {primary ? `${primary.missingLines + primary.shortLines} items missing` : 'No kit data'}
               </span>
       <button type="button" className="px-space-sm py-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-caption text-caption font-semibold transition-colors">
                 Fulfill
@@ -214,15 +218,15 @@ export function In18Phone() {
                   1505
                 </div>
       <div className="min-w-0 flex flex-col">
-      <span className="font-headline-sm text-body-md font-semibold text-on-surface">Honda Fit</span>
+      <span className="font-headline-sm text-body-md font-semibold text-on-surface">{secondary?.plate ?? live.secondaryPlate}</span>
       <span className="font-label-plate text-caption text-on-surface-variant uppercase">{live.secondaryPlate}</span>
       </div>
       </div>
-      <span className="font-label-code text-caption font-bold text-on-surface-variant">0%</span>
+      <span className="font-label-code text-caption font-bold text-on-surface-variant">{secondary ? `${secondary.pct}%` : '—'}</span>
       </div>
 
       <div className="w-full bg-surface-container rounded-full h-2 overflow-hidden">
-      <div className="bg-primary h-full rounded-full" style={{ width: "0%" }}></div>
+      <div className="bg-primary h-full rounded-full" style={{ width: `${secondary?.pct ?? 0}%` }}></div>
       </div>
       <div className="flex items-center justify-between pt-0.5">
       <span className="font-caption text-caption text-on-surface-variant">Unassigned package</span>
@@ -302,7 +306,7 @@ export function In18Phone() {
       <div className="min-w-0">
       <span className="px-space-xs py-0.5 rounded bg-surface-container text-on-surface font-label-code text-caption font-bold">MATCH FOUND</span>
       <h4 className="font-headline-sm text-body-md font-bold text-on-surface truncate mt-1">Dash camera ELC-DCM-01</h4>
-      <p className="font-label-code text-caption text-on-surface-variant truncate">Serial: DC-70A-0042118</p>
+      <p className="font-label-code text-caption text-on-surface-variant truncate">Serial: {assetSerial}</p>
       </div>
       </div>
       <span className="px-space-sm py-0.5 rounded bg-surface-container-low text-on-surface font-caption text-caption font-semibold">Bin A-04</span>

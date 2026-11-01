@@ -142,11 +142,19 @@ export function Fp5Screen({ actions, data, partName, positionTrail, catalogNotic
           </div>
 
           {best && best.id !== "empty" ? (
+            <>
+            <div className="flex flex-col gap-space-xs">
+              <h2 className="font-headline-sm text-headline-sm text-on-surface">Target component specifications</h2>
+              <p className="font-caption text-caption text-on-surface-variant">
+                Results: {data.filterAllCount} / {Math.max(data.filterAllCount, data.filterOemCount) || data.filterAllCount} alternates
+              </p>
+            </div>
             <div className="relative bg-surface-container-lowest rounded-xl shadow-md p-space-lg md:p-space-xl overflow-hidden">
               <div className="absolute left-0 top-0 bottom-0 w-2 bg-primary" />
               <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-space-xl pl-space-xs">
                 <div className="flex flex-col gap-space-md flex-1">
                   <div className="flex flex-wrap items-center gap-space-sm">
+                    <span className="font-caption text-caption font-semibold uppercase tracking-wider text-on-surface-variant">Best OEM match</span>
                     <span className="inline-flex items-center gap-1 bg-surface-container-highest text-primary font-label-code text-caption font-semibold px-2.5 py-1 rounded">
                       <span className="material-symbols-outlined text-[14px]">star</span>
                       Top recommended
@@ -156,7 +164,12 @@ export function Fp5Screen({ actions, data, partName, positionTrail, catalogNotic
                         <span className="material-symbols-outlined text-[14px] text-emerald-700">verified</span>
                         {data.checkedCataloguesLabel}
                       </span>
-                    ) : null}
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-emerald-900 font-label-code text-caption font-medium border border-emerald-300 bg-emerald-100/50 px-2 py-0.5 rounded-full">
+                        <span className="material-symbols-outlined text-[14px] text-emerald-700">verified</span>
+                        Checked against catalogues
+                      </span>
+                    )}
                     <span className="inline-flex items-center gap-1 bg-surface-container-high text-on-surface font-label-code text-caption font-semibold px-2.5 py-1 rounded">
                       {data.fitsVersionBadge}
                     </span>
@@ -181,7 +194,18 @@ export function Fp5Screen({ actions, data, partName, positionTrail, catalogNotic
                 </div>
               </div>
             </div>
+            </>
           ) : null}
+
+          {sections.some((s) => s.tier > 1 && !s.isEmpty) ? (
+            <div className="flex items-center justify-between gap-space-md">
+              <h3 className="font-headline-sm text-headline-sm text-on-surface">
+                Sister &amp; aftermarket options ({sections.filter((s) => s.tier > 1 && !s.isEmpty).reduce((n, s) => n + s.count, 0)})
+              </h3>
+            </div>
+          ) : (
+            <h3 className="font-headline-sm text-headline-sm text-on-surface">Sister &amp; aftermarket options</h3>
+          )}
 
           <div className="flex items-center justify-between mb-space-md">
             <div className="flex items-center gap-space-sm">

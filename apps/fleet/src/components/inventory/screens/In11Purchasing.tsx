@@ -1,9 +1,13 @@
 /** Ported from Stitch — do not simplify layout (audit §0.4). */
 import { useInventoryLive } from '../inventoryLive';
 import { useInventoryShell } from '../InventoryShellContext';
+import { firstOpenPoNumber, firstVendorName, strField } from '../inventoryData';
 export function In11Purchasing() {
   const shell = useInventoryShell();
   const live = useInventoryLive(shell);
+  const vendorName = firstVendorName(live.vendors);
+  const featuredPo = live.purchaseOrders[0];
+  const poNumber = featuredPo ? strField(featuredPo, 'number', firstOpenPoNumber(live.purchaseOrders)) : firstOpenPoNumber(live.purchaseOrders);
   return (
     <div className="fleet-inventory-stitch inventory-stitch-root">
       <div className="inventory-stitch-main"><div className="flex flex-col w-full">
@@ -115,11 +119,11 @@ export function In11Purchasing() {
 
       <div className="bg-surface-container-lowest rounded-lg p-space-md shadow-sm flex flex-col gap-space-sm cursor-pointer hover:shadow-md transition-all">
       <div className="flex items-center justify-between">
-      <span className="font-label-code text-label-code font-bold text-on-surface bg-surface-container-low px-1.5 py-0.5 rounded">PO-0002</span>
+      <span className="font-label-code text-label-code font-bold text-on-surface bg-surface-container-low px-1.5 py-0.5 rounded">{poNumber}</span>
       <span className="font-caption text-caption px-2 py-0.5 rounded bg-surface-container-high text-on-surface-variant font-semibold">Draft</span>
       </div>
       <div className="flex flex-col">
-      <span className="font-body-md text-body-md font-semibold text-on-surface truncate">Car Toys Jamaica</span>
+      <span className="font-body-md text-body-md font-semibold text-on-surface truncate">{vendorName}</span>
       <span className="font-caption text-caption text-on-surface-variant flex items-center gap-1">
       <span className="material-symbols-outlined text-[13px]">location_on</span>
                       {live.hubShort}
@@ -183,7 +187,7 @@ export function In11Purchasing() {
 
       <div className="bg-surface-container-lowest rounded-lg p-space-md shadow-sm flex flex-col gap-space-sm opacity-90 hover:opacity-100 transition-opacity">
       <div className="flex items-center justify-between">
-      <span className="font-label-code text-label-code font-bold text-on-surface bg-surface-container px-1.5 py-0.5 rounded">PO-0001</span>
+      <span className="font-label-code text-label-code font-bold text-on-surface bg-surface-container px-1.5 py-0.5 rounded">{live.purchaseOrders[1] ? strField(live.purchaseOrders[1], 'number', '—') : '—'}</span>
       <span className="font-caption text-caption px-2 py-0.5 rounded bg-secondary-fixed text-on-secondary-fixed font-semibold">Staged</span>
       </div>
       <div className="flex flex-col">
@@ -202,7 +206,7 @@ export function In11Purchasing() {
 
       <div className="bg-surface-container-lowest rounded-lg p-space-md shadow-sm flex flex-col gap-space-sm opacity-90 hover:opacity-100 transition-opacity">
       <div className="flex items-center justify-between">
-      <span className="font-label-code text-label-code font-bold text-on-surface bg-surface-container px-1.5 py-0.5 rounded">PO-0000-X</span>
+      <span className="font-label-code text-label-code font-bold text-on-surface bg-surface-container px-1.5 py-0.5 rounded">{live.purchaseOrders[2] ? strField(live.purchaseOrders[2], 'number', '—') : '—'}</span>
       <span className="font-caption text-caption px-2 py-0.5 rounded bg-secondary-fixed text-on-secondary-fixed font-semibold">Staged</span>
       </div>
       <div className="flex flex-col">
@@ -241,7 +245,7 @@ export function In11Purchasing() {
       <span className="font-label-code text-caption font-bold text-on-surface-variant">PO-1894</span>
       <span className="font-caption text-[10px] text-on-surface-variant">Archived 18 Oct</span>
       </div>
-      <span className="font-body-sm text-body-sm text-on-surface truncate">Car Toys Jamaica</span>
+      <span className="font-body-sm text-body-sm text-on-surface truncate">{vendorName}</span>
       <div className="flex items-center justify-between text-on-surface-variant font-label-price text-caption">
       <span>Settled</span>
       <span>J$ 24,500.00</span>
@@ -262,7 +266,7 @@ export function In11Purchasing() {
       <span className="material-symbols-outlined text-[12px]">chevron_right</span>
       <span>Purchasing</span>
       <span className="material-symbols-outlined text-[12px]">chevron_right</span>
-      <span className="font-label-code text-label-code font-bold text-on-surface">PO-0002</span>
+      <span className="font-label-code text-label-code font-bold text-on-surface">{poNumber}</span>
       </div>
       <div className="flex flex-wrap items-center justify-between gap-space-md mt-1">
 
@@ -272,7 +276,7 @@ export function In11Purchasing() {
       </div>
       <div>
       <div className="flex items-center gap-space-sm">
-      <h3 className="font-headline-sm text-headline-sm text-on-surface">PO-0002 · Car Toys Jamaica</h3>
+      <h3 className="font-headline-sm text-headline-sm text-on-surface">{poNumber} · {vendorName}</h3>
       <span className="px-2.5 py-0.5 rounded-full font-caption text-caption bg-surface-container-highest text-on-surface font-semibold">Draft Voucher</span>
       <span className="px-2.5 py-0.5 rounded-full font-caption text-caption bg-tertiary-fixed text-on-tertiary-fixed font-bold flex items-center gap-1">
       <span className="w-1.5 h-1.5 rounded-full bg-on-tertiary-container animate-pulse"></span>
@@ -572,7 +576,7 @@ export function In11Purchasing() {
       <span className="px-2 py-0.5 rounded font-label-code text-caption font-bold bg-secondary-fixed text-on-secondary-fixed">+5 units</span>
       </td>
       <td className="py-space-md px-space-lg text-on-surface font-medium">
-                      Car Toys Jamaica
+                      {vendorName}
                     </td>
       <td className="py-space-md px-space-md text-center font-caption text-caption text-on-surface-variant">
                       7 days
@@ -608,7 +612,7 @@ export function In11Purchasing() {
       <div className="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col justify-between gap-space-md hover:shadow-md transition-all">
       <div className="flex flex-col gap-space-xs">
       <div className="flex items-center justify-between">
-      <span className="font-headline-sm text-[16px] font-bold text-on-surface">Car Toys Jamaica</span>
+      <span className="font-headline-sm text-[16px] font-bold text-on-surface">{vendorName}</span>
       <span className="w-2 h-2 rounded-full bg-on-surface"></span>
       </div>
       <span className="font-label-code text-caption text-on-surface-variant">876-928-1144</span>

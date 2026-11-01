@@ -1423,6 +1423,10 @@ export type Fp8ViewModel = {
   showOrgMetrics?: boolean;
   jamaicaResetLabel?: string;
   showHubChip?: boolean;
+  dailyLimitReached?: boolean;
+  dailyLimitUsed?: number;
+  dailyLimitMax?: number;
+  activeRequestCount?: number;
 };
 
 export function buildFp8ViewModel(input: {
@@ -1449,6 +1453,10 @@ export function buildFp8ViewModel(input: {
   showOrgMetrics?: boolean;
   jamaicaResetLabel?: string;
   showHubChip?: boolean;
+  dailyLimitReached?: boolean;
+  dailyLimitUsed?: number;
+  dailyLimitMax?: number;
+  activeRequestCount?: number;
 }): Fp8ViewModel {
   const wins = (input.sourcingWins || []).map((row) => ({
     label: orNoneYet(row.label),
@@ -1488,6 +1496,10 @@ export function buildFp8ViewModel(input: {
     showOrgMetrics: Boolean(input.showOrgMetrics),
     jamaicaResetLabel: input.jamaicaResetLabel || "",
     showHubChip: Boolean(input.showHubChip),
+    dailyLimitReached: Boolean(input.dailyLimitReached),
+    dailyLimitUsed: input.dailyLimitUsed ?? 30,
+    dailyLimitMax: input.dailyLimitMax ?? 30,
+    activeRequestCount: input.activeRequestCount ?? 30,
   };
 }
 
@@ -1890,12 +1902,12 @@ function formatActivityAskedLabel(value: unknown): string {
 }
 
 function formatMedianTurnaroundLabel(minutes: number | null | undefined, show: boolean): string {
-  if (!show || minutes == null || !Number.isFinite(minutes)) return "";
+  if (!show || minutes == null || !Number.isFinite(minutes)) return "Avg dispatch turnaround: hidden until 5 resolves";
   if (minutes >= 60) {
     const hrs = Math.round((minutes / 60) * 10) / 10;
-    return `30-day median turnaround: ${hrs} hrs`;
+    return `Avg dispatch turnaround: ${hrs} hrs`;
   }
-  return `30-day median turnaround: ${minutes} min`;
+  return `Avg dispatch turnaround: ${minutes} min`;
 }
 
 function requestStatusCategory(raw: string): "waiting" | "added" | "failed" {
@@ -2074,7 +2086,7 @@ export function buildFp13ViewModel(input: {
     showOrgMetrics,
     emptyTitle: "No requests in this view",
     emptyBody: "When a part isn't on file, ask Roam from the search. Research updates appear here automatically.",
-    autoUpdateLabel: "Updates automatically",
+    autoUpdateLabel: "Updates automatically · checked",
   };
 }
 

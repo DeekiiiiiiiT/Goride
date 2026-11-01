@@ -99,7 +99,7 @@ export function ResearchSettingsPage() {
         <div className="flex flex-wrap items-center justify-between gap-space-sm">
           <div>
             <h1 className="font-headline-xl text-headline-xl font-semibold tracking-tight text-on-surface">
-              Research Settings &amp; Health
+              Research Settings & Health
             </h1>
             <p className="mt-0.5 max-w-4xl font-body-md text-body-md text-on-surface-variant">
               Configure autonomous catalog ingestion, throttling limits, trusted catalogues, and monitor cluster health.
@@ -132,6 +132,11 @@ export function ResearchSettingsPage() {
                 STATE: {settings?.enabled ? (settings.paused ? "PAUSED" : "ACTIVE") : "OFF"}
               </span>
             </div>
+            {settings?.paused && (settings as { paused_reason?: string | null }).paused_reason ? (
+              <p className="border-t border-surface-container-high px-space-lg py-space-sm font-body-sm text-body-sm text-error">
+                {(settings as { paused_reason?: string }).paused_reason}
+              </p>
+            ) : null}
             <div className="space-y-space-lg p-space-lg">
               <div className="flex items-center justify-between rounded-lg bg-surface-container-lowest p-space-md">
                 <div>
@@ -258,15 +263,40 @@ export function ResearchSettingsPage() {
                       </td>
                       <td className="px-space-md py-space-md text-right font-mono-md">—</td>
                       <td className="px-space-lg py-space-md text-right">
-                        <input
-                          type="checkbox"
-                          checked={row.active}
-                          disabled={busy || !token}
-                          onChange={(e) =>
-                            token &&
-                            void patchCatalogTrustedSource(token, row.domain, e.target.checked).then(() => load())
-                          }
-                        />
+                        <div className="inline-flex items-center justify-end gap-2">
+                          <button
+                            type="button"
+                            className="inline-flex h-8 items-center gap-1 rounded px-2 font-label-xs font-semibold uppercase text-on-surface-variant hover:bg-surface-container"
+                            disabled={busy || !token || !row.active}
+                            aria-label={`remove ${row.domain}`}
+                            onClick={() =>
+                              token &&
+                              void patchCatalogTrustedSource(token, row.domain, false).then(() => load())
+                            }
+                          >
+                            <span className="material-symbols-outlined text-[16px]">remove</span>
+                            remove
+                          </button>
+                          <button
+                            type="button"
+                            className="inline-flex h-8 items-center gap-1 rounded px-2 font-label-xs font-semibold uppercase text-on-surface-variant hover:bg-surface-container"
+                            disabled={busy}
+                            aria-label={`close ${row.domain}`}
+                            onClick={() => setShowAddDomain(false)}
+                          >
+                            <span className="material-symbols-outlined text-[16px]">close</span>
+                            close
+                          </button>
+                          <input
+                            type="checkbox"
+                            checked={row.active}
+                            disabled={busy || !token}
+                            onChange={(e) =>
+                              token &&
+                              void patchCatalogTrustedSource(token, row.domain, e.target.checked).then(() => load())
+                            }
+                          />
+                        </div>
                       </td>
                     </tr>
                   ))}

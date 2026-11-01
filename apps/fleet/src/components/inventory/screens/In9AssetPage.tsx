@@ -1,9 +1,18 @@
 /** Ported from Stitch — do not simplify layout (audit §0.4). */
 import { useInventoryLive } from '../inventoryLive';
 import { useInventoryShell } from '../InventoryShellContext';
+import { firstAssetSerial, formatPlate, strField } from '../inventoryData';
 export function In9AssetPage() {
   const shell = useInventoryShell();
   const live = useInventoryLive(shell);
+  const asset = live.selectedAsset ?? live.assets[0] ?? null;
+  const serial = asset
+    ? strField(asset, 'serial_number', strField(asset, 'serial_no', '—'))
+    : firstAssetSerial(live.assets);
+  const assetName = asset ? strField(asset, 'name', 'Asset') : 'No asset selected';
+  const vehiclePlate = asset
+    ? formatPlate(strField(asset, 'vehicle_plate', strField(asset, 'license_plate', live.primaryPlate)))
+    : live.primaryPlate;
   return (
     <div className="fleet-inventory-stitch inventory-stitch-root">
       <div className="inventory-stitch-main"><div className="max-w-[1400px] mx-auto px-margin md:px-margin-desktop py-space-lg"><div className="flex flex-col w-full space-y-space-lg pb-space-xl">
@@ -37,10 +46,10 @@ export function In9AssetPage() {
       </div>
       <div className="space-y-1">
       <div className="flex flex-wrap items-center gap-space-sm">
-      <h1 className="font-headline-lg text-headline-lg text-on-surface tracking-tight font-bold">Dash camera</h1>
+      <h1 className="font-headline-lg text-headline-lg text-on-surface tracking-tight font-bold">{assetName}</h1>
 
       <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-surface-container rounded-lg font-label-code text-label-code text-on-surface group">
-      <span data-stitch-id="serialDisplay">DC-70A-0042118</span>
+      <span data-stitch-id="serialDisplay">{serial}</span>
       <button type="button" className="p-0.5 hover:text-primary transition-colors flex items-center justify-center"  title="Copy Serial">
       <span className="material-symbols-outlined text-[16px]">content_copy</span>
       </button>
@@ -203,7 +212,7 @@ export function In9AssetPage() {
       <span className="font-label-code text-caption">Depot Kingston Gate 2</span>
       </div>
       <p className="mt-space-sm font-body-sm text-body-sm text-on-surface leading-relaxed bg-surface-container-lowest/80 p-space-sm rounded-lg">
-                      Manual serial entry verified against hardware barcode <code className="font-label-code text-caption px-1.5 py-0.5 rounded bg-surface-container font-bold text-on-surface">DC-70A-0042118</code> at Kingston Main Store staging bay during quarterly asset reconciliation.
+                      Manual serial entry verified against hardware barcode <code className="font-label-code text-caption px-1.5 py-0.5 rounded bg-surface-container font-bold text-on-surface">{serial}</code> at Kingston Main Store staging bay during quarterly asset reconciliation.
                     </p>
       </div>
       </div>
@@ -276,7 +285,7 @@ export function In9AssetPage() {
       <span>Actor: <strong className="text-on-surface">Deeki T</strong> (Certified Installer)</span>
       </div>
       <p className="mt-space-sm font-body-sm text-body-sm text-on-surface bg-surface-container-lowest/80 p-space-sm rounded-lg">
-                      Provisioned as part of standard Rideshare car kit upgrade on <strong>Toyota Roomy ({live.primaryPlate})</strong>. Hardwired bracket fitted behind rearview mirror with 64GB high-endurance SD module initialized.
+                      Provisioned as part of standard Rideshare car kit upgrade on <strong>{vehiclePlate}</strong>. Hardwired bracket fitted behind rearview mirror with 64GB high-endurance SD module initialized.
                     </p>
       </div>
       </div>
@@ -446,7 +455,7 @@ export function In9AssetPage() {
 
       <div className="min-w-0 space-y-0.5">
       <div className="font-label-code text-caption font-bold text-on-surface truncate">ROAM FLEET SYS</div>
-      <div className="font-label-code text-label-code font-bold text-primary truncate">DC-70A-0042118</div>
+      <div className="font-label-code text-label-code font-bold text-primary truncate">{serial}</div>
       <div className="font-label-plate text-caption text-on-surface">VEH: {live.primaryPlate}</div>
       <div className="font-caption text-caption text-on-surface-variant flex items-center gap-1">
       <span className="material-symbols-outlined text-[12px]">location_on</span>
@@ -463,7 +472,7 @@ export function In9AssetPage() {
       </div>
       <div className="min-w-0">
       <div className="font-caption text-caption uppercase text-on-surface-variant font-semibold">Assigned Vehicle</div>
-      <div className="font-body-md text-body-md font-bold text-on-surface truncate">Toyota Roomy 2019</div>
+      <div className="font-body-md text-body-md font-bold text-on-surface truncate">{vehiclePlate}</div>
       <div className="font-label-plate text-label-code text-primary font-bold">Plate: {live.primaryPlate}</div>
       </div>
       </div>

@@ -297,5 +297,46 @@
     "air filter · engine intake",
     "asked by 3 fleets",
     "no existing air filters are registered in the master catalog for this powertrain version."
+  ],
+  "S10e": [
+    "All 6",
+    "Needs review 2",
+    "Researching 1",
+    "Queued 2",
+    "Added automatically 5",
+    "Added 7",
+    "Couldn't find 1",
+    "Failed 0"
+  ],
+  "S10f": [
+    "Drive belt",
+    "Pending Catalog",
+    "Parts Queue (14)",
+    "Vehicles (3)",
+    "Cross-Refs (8)",
+    "Filter"
+  ],
+  "S10g": [
+    "Air filter",
+    "Pending Catalog Resolution",
+    "Parts Requests 48",
+    "Discrepant OEM Fits 12",
+    "Autonomous Ingestion Log 184",
+    "Re-run Scrapers",
+    "Export CSV"
+  ],
+  "S10h": [],
+  "S10i": [
+    "Toyota Passo 2016–2023",
+    "Pending catalog",
+    "Vehicles 1",
+    "Parts 6",
+    "Demanding Fleets"
+  ],
+  "S10j": [
+    "Queue Lifecycle & Edge States",
+    "Vehicles (1)",
+    "Parts (0)",
+    "Parts (6)"
   ]
 }

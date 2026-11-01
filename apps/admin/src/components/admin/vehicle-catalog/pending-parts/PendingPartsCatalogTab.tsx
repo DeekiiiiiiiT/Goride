@@ -290,9 +290,8 @@ export function PendingPartsCatalogTab({ onSyncSeconds }: { onSyncSeconds?: (sec
         }`}
         onClick={() => setStatusFilter(id)}
       >
-        <span>{label}</span>
-        <span className={`font-mono-sm text-mono-sm ${active ? "opacity-80" : "rounded bg-surface-container px-1 text-on-surface"}`}>
-          {count}
+        <span>
+          {label} {count}
         </span>
       </button>
     );
@@ -300,6 +299,7 @@ export function PendingPartsCatalogTab({ onSyncSeconds }: { onSyncSeconds?: (sec
 
   return (
     <div className="flex flex-col">
+      <h1 className="mb-space-md font-headline-lg text-headline-lg font-semibold text-on-surface">Pending catalog</h1>
       <PendingResearchHeaderActions
         token={token}
         strip={strip}

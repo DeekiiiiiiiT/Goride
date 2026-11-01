@@ -118,15 +118,31 @@ export function PendingVehicleReviewDrawer({
             </button>
           </div>
           <h2 className="font-headline-xl text-headline-xl font-bold text-on-surface">{headline}</h2>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              className="inline-flex items-center gap-1 rounded bg-surface-container px-2 py-0.5 font-mono-sm text-label-xs font-medium text-on-surface hover:bg-surface-container-high"
+              onClick={() => {
+                const q = [row.proposed_make, row.proposed_model, proposal?.chassis_code].filter(Boolean).join(" ");
+                void navigator.clipboard.writeText(q);
+              }}
+            >
+              <span className="material-symbols-outlined text-[13px]">content_copy</span>
+              Copy for search
+            </button>
+          </div>
           <p className="font-body-sm text-body-sm text-on-surface-variant">from {row.source}</p>
         </div>
 
         <div className="flex-1 space-y-space-lg overflow-y-auto p-space-lg">
           <div className="flex items-start gap-space-md rounded-lg bg-surface-container-low p-space-md">
             <span className="material-symbols-outlined text-primary">verified_user</span>
-            <p className="font-body-sm text-body-sm text-on-surface-variant">
-              Cars are never added automatically. Check what Roam found and approve. Once confirmed, this version becomes the canonical anchor for parts search.
-            </p>
+            <div>
+              <p className="font-label-md font-semibold text-on-surface">Strict Dominion Catalog Policy</p>
+              <p className="font-body-sm text-body-sm text-on-surface-variant">
+                Cars are never added automatically. Check what Roam found and approve. Once confirmed, this version becomes the canonical anchor for parts search.
+              </p>
+            </div>
           </div>
 
           <section className="space-y-space-sm">
@@ -158,7 +174,7 @@ export function PendingVehicleReviewDrawer({
             {excerpt?.quote ? (
               <details className="rounded-lg bg-surface-container-lowest p-space-md shadow-sm">
                 <summary className="cursor-pointer font-label-md font-semibold text-on-surface">
-                  Catalogue raw excerpt ({excerpt.domain})
+                  Catalogue Raw Excerpt ({excerpt.domain})
                 </summary>
                 <pre className="mt-space-md whitespace-pre-wrap rounded bg-surface-container-low p-space-md font-mono-sm text-[11px] leading-relaxed text-on-surface-variant">
                   {excerpt.quote}
@@ -174,7 +190,7 @@ export function PendingVehicleReviewDrawer({
           </section>
 
           <section className="space-y-space-sm">
-            <h3 className="font-label-md font-bold uppercase tracking-wide text-on-surface">Audit checks</h3>
+            <h3 className="font-label-md font-bold uppercase tracking-wide text-on-surface">Audit Checks</h3>
             <div className="space-y-1 rounded-lg bg-surface-container-lowest p-space-sm shadow-sm">
               <div className="flex items-start gap-2 p-space-xs">
                 <span className="material-symbols-outlined text-[#006e31]">check_circle</span>
@@ -226,7 +242,7 @@ export function PendingVehicleReviewDrawer({
               disabled={busy}
               onClick={onReject}
             >
-              Couldn&apos;t find it
+              {"Couldn't find it"}
             </button>
             <button
               type="button"

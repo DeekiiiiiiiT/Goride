@@ -644,7 +644,7 @@ export function In7KitTemplateEditor() {
       <div className="flex items-center gap-space-sm">
       <span className="material-symbols-outlined text-[20px] text-secondary">directions_car</span>
       <div>
-      <div className="font-body-sm font-semibold text-on-surface">Toyota Roomy</div>
+      <div className="font-body-sm font-semibold text-on-surface">{live.primaryPlate}</div>
       <div className="font-label-plate text-caption text-secondary">{live.primaryPlate}</div>
       </div>
       </div>
@@ -660,7 +660,7 @@ export function In7KitTemplateEditor() {
       <div className="flex items-center gap-space-sm">
       <span className="material-symbols-outlined text-[20px] text-secondary">directions_car</span>
       <div>
-      <div className="font-body-sm font-semibold text-on-surface">Honda Fit</div>
+      <div className="font-body-sm font-semibold text-on-surface">{live.secondaryPlate}</div>
       <div className="font-label-plate text-caption text-secondary">{live.secondaryPlate}</div>
       </div>
       </div>
@@ -710,7 +710,7 @@ export function In7KitTemplateEditor() {
       </div>
       </div>
       <p className="font-body-sm text-body-sm text-on-surface-variant leading-relaxed">
-              Publishing revision <strong>v3</strong> will flag <strong>Toyota Roomy ({live.primaryPlate})</strong> and <strong>Honda Fit ({live.secondaryPlate})</strong> with updated equipment check requirements (adding Warning triangle). Hub dispatchers will receive an inspection notice.
+              Publishing revision <strong>v3</strong> will flag <strong>{live.primaryPlate}</strong> and <strong>{live.secondaryPlate}</strong> with updated equipment check requirements. Hub dispatchers will receive an inspection notice.
             </p>
       <div className="bg-surface-container-low p-space-md rounded-lg space-y-1">
       <div className="flex justify-between font-label-code text-caption text-on-surface">

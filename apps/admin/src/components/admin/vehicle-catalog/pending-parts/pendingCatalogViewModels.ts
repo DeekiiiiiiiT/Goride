@@ -10,6 +10,7 @@ export { CATALOG_RESEARCH_ENGINE_REV };
 
 export type S10eStripViewModel = {
   researchStatusLabel: string;
+  pauseReasonLabel: string;
   todayJobsLabel: string;
   dispatcherLabel: string;
   shadowLine: string;
@@ -22,6 +23,7 @@ export function buildS10eStripViewModel(strip: CatalogResearchStrip): S10eStripV
       ? "Research paused"
       : "Research is on"
     : "Research is off";
+  const pauseReasonLabel = strip.paused && strip.pausedReason ? strip.pausedReason : "";
   const todayJobsLabel = `Today ${strip.todayResearchCount ?? 0} / ${strip.dailyJobLimit} jobs`;
   const dispatcherLabel = !strip.enabled
     ? "Turn on"
@@ -33,7 +35,7 @@ export function buildS10eStripViewModel(strip: CatalogResearchStrip): S10eStripV
       ? `Shadow mode · streak ${strip.shadowStreak ?? 0} / 20`
       : "Shadow mode off";
   const showPing = Boolean(strip.enabled && !strip.paused);
-  return { researchStatusLabel, todayJobsLabel, dispatcherLabel, shadowLine, showPing };
+  return { researchStatusLabel, pauseReasonLabel, todayJobsLabel, dispatcherLabel, shadowLine, showPing };
 }
 
 export type ResearchQueueFilter =

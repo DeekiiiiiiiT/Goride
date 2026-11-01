@@ -18,6 +18,7 @@ import {
 } from '../../utils/nativePhotoCapture';
 import { toast } from 'sonner';
 import { Dk5KitStep } from '../car-kit/screens/Dk5KitStep';
+import { useCarKitFlow } from '../car-kit/useCarKitFlow';
 import { driverInventoryApi } from '../../services/driverInventoryApi';
 import '../car-kit/car-kit.css';
 
@@ -59,6 +60,7 @@ export function WeeklyCheckInModal({
     const scanAbortRef = useRef<AbortController | null>(null);
     const scanGenerationRef = useRef(0);
     const [kitBusy, setKitBusy] = useState(false);
+    const carKitFlow = useCarKitFlow(vehicleId);
     const [pendingSubmit, setPendingSubmit] = useState<{
         method: 'ai_verified' | 'manual_override';
         review: 'auto_approved' | 'pending_review';
@@ -408,6 +410,7 @@ export function WeeklyCheckInModal({
                                 </div>
                             )}
                             <Dk5KitStep
+                                kit={carKitFlow.kit}
                                 busy={kitBusy || isLoading}
                                 onConfirmAll={() => void completeKitAndSubmit(true)}
                                 onReportIssue={() => void completeKitAndSubmit(false)}

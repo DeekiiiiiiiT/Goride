@@ -173,7 +173,7 @@ export function Fp13Screen({ actions, data }: { actions: Fp13Actions; data: Fp13
             Added ({data.filterCounts.added})
           </button>
           <button type="button" className={filterPillClass(data.filter === "failed")} onClick={() => actions.onFilter("failed")}>
-            Couldn&apos;t find ({data.filterCounts.failed})
+            {"Couldn't find"} ({data.filterCounts.failed})
           </button>
         </div>
 
@@ -181,7 +181,7 @@ export function Fp13Screen({ actions, data }: { actions: Fp13Actions; data: Fp13
           <div className="flex items-start sm:items-center gap-space-sm">
             <span className="material-symbols-outlined text-surface-tint text-[20px]">manage_search</span>
             <p className="font-body-sm text-body-sm text-on-surface-variant">
-              Roam researches each request automatically across verified parts catalogues. Status updates without needing to refresh.
+              Roam researches each request automatically across Caribbean and Japanese OEM parts catalogues. Status updates without needing to refresh.
             </p>
           </div>
         </div>
@@ -202,20 +202,20 @@ export function Fp13Screen({ actions, data }: { actions: Fp13Actions; data: Fp13
           )}
         </div>
 
-        {data.medianTurnaroundLabel ? (
-          <div className="w-full bg-surface-container-low rounded-xl p-space-lg mt-space-xl flex flex-col md:flex-row items-center justify-between gap-space-md">
-            <div className="flex items-center gap-space-md">
-              <div className="w-10 h-10 rounded-lg bg-surface-container-lowest flex items-center justify-center text-primary shrink-0 shadow-sm">
-                <span className="material-symbols-outlined text-[20px]">lightbulb</span>
-              </div>
-              <div className="flex flex-col">
-                <span className="font-headline-sm text-body-sm text-on-surface">Can&apos;t find a component in the standard parts catalog?</span>
-                <span className="font-body-sm text-body-sm text-on-surface-variant">Ask Roam from the main Find parts search using the vehicle plate or chassis prefix.</span>
-              </div>
+        <div className="w-full bg-surface-container-low rounded-xl p-space-lg mt-space-xl flex flex-col md:flex-row items-center justify-between gap-space-md">
+          <div className="flex items-center gap-space-md">
+            <div className="w-10 h-10 rounded-lg bg-surface-container-lowest flex items-center justify-center text-primary shrink-0 shadow-sm">
+              <span className="material-symbols-outlined text-[20px]">lightbulb</span>
             </div>
-            <div className="font-label-code text-caption text-secondary shrink-0 uppercase">{data.medianTurnaroundLabel}</div>
+            <div className="flex flex-col gap-1">
+              <span className="font-headline-sm text-body-sm text-on-surface">When a part isn&apos;t on file, ask Roam from the search.</span>
+              <span className="font-body-sm text-body-sm text-on-surface-variant">
+                Research pipelines will populate this list automatically. Trigger an OEM search from the main hub search bar using the vehicle plate or chassis prefix.
+              </span>
+            </div>
           </div>
-        ) : null}
+          <div className="font-label-code text-caption text-secondary shrink-0 uppercase">{data.medianTurnaroundLabel}</div>
+        </div>
       </div>
     </div>
   );

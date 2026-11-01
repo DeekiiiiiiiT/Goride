@@ -1,9 +1,14 @@
 /** Ported from Stitch — do not simplify layout (audit §0.4). */
 import { useInventoryLive } from '../inventoryLive';
 import { useInventoryShell } from '../InventoryShellContext';
+import { firstAssetSerial, strField } from '../inventoryData';
 export function In14CustodyDialog() {
   const shell = useInventoryShell();
   const live = useInventoryLive(shell);
+  const asset = live.selectedAsset ?? live.assets[0] ?? null;
+  const serial = asset
+    ? strField(asset, 'serial_number', strField(asset, 'serial_no', '—'))
+    : firstAssetSerial(live.assets);
   return (
     <div className="fleet-inventory-stitch inventory-stitch-root">
       <div className="inventory-stitch-main"><div className="flex flex-col w-full relative">
@@ -51,7 +56,7 @@ export function In14CustodyDialog() {
       <div className="font-label-code text-caption text-secondary">ELC-DCM-01</div>
       </div>
       </div>
-      <div className="col-span-2 font-label-code text-label-code text-on-surface">DC-70A-0042118</div>
+      <div className="col-span-2 font-label-code text-label-code text-on-surface">{serial}</div>
       <div className="col-span-2 font-body-sm text-body-sm text-secondary">Main Store — Cage A</div>
       <div className="col-span-1 text-right font-label-code text-label-code font-bold text-on-surface">1 ea</div>
       <div className="col-span-2 text-right font-label-price text-label-price text-on-surface">J$ 44,500.00</div>
@@ -163,7 +168,7 @@ export function In14CustodyDialog() {
       <div className="flex items-center gap-space-xs font-label-code text-caption text-secondary">
       <span>ELC-DCM-01</span>
       <span>·</span>
-      <span className="text-on-surface font-semibold">S/N: DC-70A-0042118</span>
+      <span className="text-on-surface font-semibold">S/N: {serial}</span>
       </div>
       </div>
       </div>
@@ -249,7 +254,7 @@ export function In14CustodyDialog() {
       </div>
       <div className="flex items-center justify-between bg-surface-container-lowest p-2 rounded">
       <span className="text-secondary">Serialized Asset Registry</span>
-      <span className="font-semibold text-on-surface">DC-70A-0042118 → <span className="text-error">RETIRED / SCRAPPED</span></span>
+      <span className="font-semibold text-on-surface">{serial} → <span className="text-error">RETIRED / SCRAPPED</span></span>
       </div>
       <div className="flex items-center justify-between bg-surface-container-lowest p-2 rounded">
       <span className="text-secondary">P&L Financial Ledger</span>

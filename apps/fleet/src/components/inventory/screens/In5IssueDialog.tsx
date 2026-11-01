@@ -168,143 +168,56 @@ export function In5IssueDialog() {
       </thead>
       <tbody className="divide-y divide-surface-container-low font-body-sm text-body-sm">
 
-      <tr className="hover:bg-surface-container-lowest/80 transition-colors">
+      {issueLines.length === 0 ? (
+      <tr>
+      <td colSpan={6} className="py-space-lg px-space-md font-body-sm text-body-sm text-on-surface-variant text-center">
+                      No kit gaps to issue right now.
+                    </td>
+      </tr>
+      ) : (
+      issueLines.map((row) => {
+        const plate = formatPlate(strField(row, 'license_plate', ''));
+        const itemId = strField(row, 'item_id', '');
+        const { name, sku } = itemLabelById(shell.items, shell.stockRows, itemId);
+        const needs = numField(row, 'qty_required', 1);
+        const status = strField(row, 'line_status', '');
+        const isLinked = strField(row, 'line_type', '') !== 'item';
+        const short = status === 'missing' || status === 'short';
+        return (
+      <tr key={`${plate}-${itemId}-${status}`} className="hover:bg-surface-container-lowest/80 transition-colors">
       <td className="py-space-sm px-space-md">
-      <span className="font-label-plate text-[13px] text-on-surface bg-surface-container-low px-1.5 py-0.5 rounded">{live.secondaryPlate}</span>
-      <span className="block font-caption text-caption text-on-surface-variant">Honda Fit 2018</span>
+      <span className="font-label-plate text-[13px] text-on-surface bg-surface-container-low px-1.5 py-0.5 rounded">{plate}</span>
+      <span className="block font-caption text-caption text-on-surface-variant">{strField(row, 'kit_code', 'Kit')}</span>
       </td>
       <td className="py-space-sm px-space-md">
-      <div className="font-body-md font-medium text-on-surface">Spare tyre</div>
-      <div className="font-label-code text-[11px] text-secondary">TYR-SPR-01</div>
+      <div className="font-body-md font-medium text-on-surface">{name}</div>
+      <div className="font-label-code text-[11px] text-secondary">{sku}</div>
       </td>
-      <td className="py-space-sm px-space-sm text-right font-label-code text-on-surface">1</td>
-      <td className="py-space-sm px-space-sm text-right font-label-code text-error font-medium">0</td>
-      <td className="py-space-sm px-space-sm text-right font-label-code text-secondary">0</td>
+      <td className="py-space-sm px-space-sm text-right font-label-code text-on-surface">{needs}</td>
+      <td className="py-space-sm px-space-sm text-right font-label-code text-on-surface-variant">—</td>
+      <td className="py-space-sm px-space-sm text-right font-label-code text-secondary">{short ? 0 : needs}</td>
       <td className="py-space-sm px-space-md text-right">
+      {isLinked ? (
+      <span className="inline-flex items-center gap-1 font-caption text-caption text-secondary bg-surface-container px-2 py-0.5 rounded-full">
+      <span className="material-symbols-outlined text-[12px]">link</span>
+                            Linked item
+                          </span>
+      ) : short ? (
       <span className="inline-flex items-center gap-1 font-caption text-caption text-error bg-error-container/50 px-2 py-0.5 rounded-full font-semibold">
       <span className="w-1.5 h-1.5 rounded-full bg-error"></span>
-                            Short 1
+                            Short {needs}
                           </span>
-      </td>
-      </tr>
-
-      <tr className="bg-surface-container-lowest hover:bg-surface-container-low/40 transition-colors">
-      <td className="py-space-sm px-space-md">
-      <span className="font-label-plate text-[13px] text-on-surface bg-surface-container-low px-1.5 py-0.5 rounded">{live.secondaryPlate}</span>
-      <span className="block font-caption text-caption text-on-surface-variant">Honda Fit 2018</span>
-      </td>
-      <td className="py-space-sm px-space-md">
-      <div className="font-body-md font-medium text-on-surface">Phone Holder Mount</div>
-      <div className="font-label-code text-[11px] text-secondary">ACC-PHM-01</div>
-      </td>
-      <td className="py-space-sm px-space-sm text-right font-label-code text-on-surface">1</td>
-      <td className="py-space-sm px-space-sm text-right font-label-code text-on-surface font-semibold">6</td>
-      <td className="py-space-sm px-space-sm text-right font-label-code text-primary font-bold">1</td>
-      <td className="py-space-sm px-space-md text-right">
+      ) : (
       <span className="inline-flex items-center gap-1 font-caption text-caption text-primary bg-primary-fixed px-2 py-0.5 rounded-full font-bold">
       <span className="material-symbols-outlined text-[12px]">check</span>
                             OK
                           </span>
+      )}
       </td>
       </tr>
-
-      <tr className="hover:bg-surface-container-lowest/80 transition-colors">
-      <td className="py-space-sm px-space-md">
-      <span className="font-label-plate text-[13px] text-on-surface bg-surface-container-low px-1.5 py-0.5 rounded">{live.primaryPlate}</span>
-      <span className="block font-caption text-caption text-on-surface-variant">Toyota Roomy 2019</span>
-      </td>
-      <td className="py-space-sm px-space-md">
-      <div className="font-body-md font-medium text-on-surface">Tyre pump</div>
-      <div className="font-label-code text-[11px] text-secondary">TLS-PMP-01</div>
-      </td>
-      <td className="py-space-sm px-space-sm text-right font-label-code text-on-surface">1</td>
-      <td className="py-space-sm px-space-sm text-right font-label-code text-error font-medium">0</td>
-      <td className="py-space-sm px-space-sm text-right font-label-code text-secondary">0</td>
-      <td className="py-space-sm px-space-md text-right">
-      <span className="inline-flex items-center gap-1 font-caption text-caption text-error bg-error-container/50 px-2 py-0.5 rounded-full font-semibold">
-      <span className="w-1.5 h-1.5 rounded-full bg-error"></span>
-                            Short 1
-                          </span>
-      </td>
-      </tr>
-
-      <tr className="hover:bg-surface-container-lowest/80 transition-colors">
-      <td className="py-space-sm px-space-md">
-      <span className="font-label-plate text-[13px] text-on-surface bg-surface-container-low px-1.5 py-0.5 rounded">{live.secondaryPlate}</span>
-      <span className="block font-caption text-caption text-on-surface-variant">Honda Fit 2018</span>
-      </td>
-      <td className="py-space-sm px-space-md">
-      <div className="font-body-md font-medium text-on-surface">Car jack</div>
-      <div className="font-label-code text-[11px] text-secondary">TLS-JCK-01</div>
-      </td>
-      <td className="py-space-sm px-space-sm text-right font-label-code text-on-surface">1</td>
-      <td className="py-space-sm px-space-sm text-right font-label-code text-error font-medium">0</td>
-      <td className="py-space-sm px-space-sm text-right font-label-code text-secondary">0</td>
-      <td className="py-space-sm px-space-md text-right">
-      <span className="inline-flex items-center gap-1 font-caption text-caption text-error bg-error-container/50 px-2 py-0.5 rounded-full font-semibold">
-      <span className="w-1.5 h-1.5 rounded-full bg-error"></span>
-                            Short 1
-                          </span>
-      </td>
-      </tr>
-
-      <tr className="hover:bg-surface-container-lowest/80 transition-colors">
-      <td className="py-space-sm px-space-md">
-      <span className="font-label-plate text-[13px] text-on-surface bg-surface-container-low px-1.5 py-0.5 rounded">{live.secondaryPlate}</span>
-      <span className="block font-caption text-caption text-on-surface-variant">Honda Fit 2018</span>
-      </td>
-      <td className="py-space-sm px-space-md">
-      <div className="font-body-md font-medium text-on-surface">First-aid kit</div>
-      <div className="font-label-code text-[11px] text-secondary">SAF-FAK-01</div>
-      </td>
-      <td className="py-space-sm px-space-sm text-right font-label-code text-on-surface">1</td>
-      <td className="py-space-sm px-space-sm text-right font-label-code text-error font-medium">0</td>
-      <td className="py-space-sm px-space-sm text-right font-label-code text-secondary">0</td>
-      <td className="py-space-sm px-space-md text-right">
-      <span className="inline-flex items-center gap-1 font-caption text-caption text-error bg-error-container/50 px-2 py-0.5 rounded-full font-semibold">
-      <span className="w-1.5 h-1.5 rounded-full bg-error"></span>
-                            Short 1
-                          </span>
-      </td>
-      </tr>
-
-      <tr className="bg-surface-container-low/30 hover:bg-surface-container-low/60 transition-colors">
-      <td className="py-space-sm px-space-md">
-      <span className="font-label-plate text-[13px] text-on-surface bg-surface-container-low px-1.5 py-0.5 rounded">{live.secondaryPlate}</span>
-      </td>
-      <td className="py-space-sm px-space-md">
-      <div className="font-body-md font-medium text-on-surface">Toll tag</div>
-      <div className="font-label-code text-[11px] text-secondary">KGN-TOLL-88</div>
-      </td>
-      <td className="py-space-sm px-space-sm text-right font-label-code text-on-surface">1</td>
-      <td className="py-space-sm px-space-sm text-right font-label-code text-secondary">—</td>
-      <td className="py-space-sm px-space-sm text-right font-label-code text-secondary">—</td>
-      <td className="py-space-sm px-space-md text-right">
-      <span className="inline-flex items-center gap-1 font-caption text-caption text-secondary bg-surface-container px-2 py-0.5 rounded-full">
-      <span className="material-symbols-outlined text-[12px]">link</span>
-                            Linked — managed in Toll tags / Fuel cards
-                          </span>
-      </td>
-      </tr>
-
-      <tr className="bg-surface-container-low/30 hover:bg-surface-container-low/60 transition-colors">
-      <td className="py-space-sm px-space-md">
-      <span className="font-label-plate text-[13px] text-on-surface bg-surface-container-low px-1.5 py-0.5 rounded">{live.secondaryPlate}</span>
-      </td>
-      <td className="py-space-sm px-space-md">
-      <div className="font-body-md font-medium text-on-surface">Fuel card</div>
-      <div className="font-label-code text-[11px] text-secondary">PETRO-JM-91</div>
-      </td>
-      <td className="py-space-sm px-space-sm text-right font-label-code text-on-surface">1</td>
-      <td className="py-space-sm px-space-sm text-right font-label-code text-secondary">—</td>
-      <td className="py-space-sm px-space-sm text-right font-label-code text-secondary">—</td>
-      <td className="py-space-sm px-space-md text-right">
-      <span className="inline-flex items-center gap-1 font-caption text-caption text-secondary bg-surface-container px-2 py-0.5 rounded-full">
-      <span className="material-symbols-outlined text-[12px]">credit_card</span>
-                            Linked — managed in Toll tags / Fuel cards
-                          </span>
-      </td>
-      </tr>
+        );
+      })
+      )}
       </tbody>
       </table>
       </div>

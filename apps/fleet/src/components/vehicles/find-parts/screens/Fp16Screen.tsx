@@ -1,5 +1,5 @@
 import type { Fp13Actions, Fp13ViewModel } from "./Fp13Screen";
-import type { Fp13RequestCard, Fp13TimelineStep } from "../findPartsViewModels";
+import type { Fp13RequestCard, Fp13RequestFilter, Fp13TimelineStep } from "../findPartsViewModels";
 import { FpNowOnFileNotice } from "./FpNowOnFileNotice";
 
 function MobileTimeline({ steps }: { steps: Fp13TimelineStep[] }) {
@@ -78,6 +78,13 @@ export function Fp16Screen({
   catalogNotice?: string;
   onDismissNotice?: () => void;
 }) {
+  const filters: Array<{ key: Fp13RequestFilter; label: string }> = [
+    { key: "all", label: "All" },
+    { key: "waiting", label: "Waiting" },
+    { key: "added", label: "Added" },
+    { key: "failed", label: "Couldn't find" },
+  ];
+
   return (
     <div className="find-parts-screen-root max-w-[390px] mx-auto w-full pb-6">
       <div className="h-14 px-4 bg-surface-container-lowest flex items-center justify-between sticky top-0 z-20 shadow-sm">
@@ -101,6 +108,28 @@ export function Fp16Screen({
           <span className="font-caption text-caption text-secondary">{data.autoUpdateLabel}</span>
         </div>
         <span className="font-label-code text-caption text-secondary">{data.queueAheadLabel}</span>
+      </div>
+
+      <div className="px-4 py-2 flex flex-wrap gap-2 border-b border-surface-container-high">
+        {filters.map(({ key, label }) => (
+          <button
+            key={key}
+            type="button"
+            className={`px-3 py-1 rounded-full font-body-sm text-body-sm ${
+              data.filter === key ? "bg-primary text-on-primary" : "bg-surface-container-high text-on-surface-variant"
+            }`}
+            onClick={() => actions.onFilter(key)}
+          >
+            {label} ({data.filterCounts[key]})
+          </button>
+        ))}
+      </div>
+
+      <div className="px-4 py-2 flex flex-col gap-1 bg-surface-container-low/50">
+        <p className="font-caption text-caption text-on-surface-variant">Have an OEM code or photo?</p>
+        <button type="button" className="self-start font-body-sm text-body-sm text-primary font-medium" onClick={() => actions.onAddNote("")}>
+          Add note or photo
+        </button>
       </div>
 
       {catalogNotice ? (

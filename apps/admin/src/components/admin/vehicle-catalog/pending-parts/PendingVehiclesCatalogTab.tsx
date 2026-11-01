@@ -103,6 +103,16 @@ export function PendingVehiclesCatalogTab({
 
   return (
     <div className="flex flex-col">
+      <h1 className="font-headline-xl text-headline-xl font-semibold tracking-tight text-on-surface">Pending catalog</h1>
+      <p className="mb-space-md font-body-sm text-body-sm text-on-surface-variant">Cars and parts that apps have asked us to add.</p>
+      <div className="mb-space-md flex flex-wrap items-center gap-space-sm">
+        <span className="font-mono-sm text-label-xs rounded bg-surface-container px-2 py-1 text-on-surface-variant">
+          Jurisdiction: All (JDM / Export)
+        </span>
+        <span className="font-mono-sm text-label-xs rounded bg-surface-container px-2 py-1 text-on-surface-variant">
+          Status: Pending Verification
+        </span>
+      </div>
       <div className="mb-space-xl grid grid-cols-1 gap-gutter sm:grid-cols-2 lg:grid-cols-4">
         <div className="flex flex-col justify-between rounded-xl bg-surface-container-lowest p-space-md shadow-sm">
           <div className="flex items-center justify-between">
@@ -221,11 +231,17 @@ export function PendingVehiclesCatalogTab({
             <table className="w-full border-collapse text-left">
               <thead>
                 <tr className="bg-surface font-label-xs text-label-xs uppercase text-on-surface-variant">
+                  <th className="min-w-[100px] px-space-md py-2.5 font-semibold">Request ID</th>
+                  <th className="min-w-[140px] px-space-md py-2.5 font-semibold">Make & Model</th>
+                  <th className="min-w-[120px] px-space-md py-2.5 font-semibold">Chassis / Series</th>
+                  <th className="min-w-[110px] px-space-md py-2.5 font-semibold">Asked by</th>
+                  <th className="min-w-[120px] px-space-md py-2.5 font-semibold">Target Spec Match</th>
+                  <th className="min-w-[100px] px-space-md py-2.5 font-semibold">Discovered</th>
+                  <th className="min-w-[110px] px-space-md py-2.5 font-semibold">Status</th>
                   <th className="min-w-[120px] px-space-md py-2.5 font-semibold">Make</th>
                   <th className="min-w-[120px] px-space-md py-2.5 font-semibold">Model</th>
                   <th className="min-w-[80px] px-space-md py-2.5 font-semibold">Year</th>
                   <th className="min-w-[140px] px-space-md py-2.5 font-semibold">Requested</th>
-                  <th className="min-w-[110px] px-space-md py-2.5 font-semibold">Status</th>
                   <th className="min-w-[200px] px-space-md py-2.5 text-right font-semibold">Actions</th>
                 </tr>
               </thead>

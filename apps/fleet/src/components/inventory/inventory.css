@@ -17,3 +17,99 @@
 .fleet-inventory-stitch .bg-surface { background-color: #f7f9fb; }
 .fleet-inventory-stitch .text-on-surface { color: #191c1e; }
 .fleet-inventory-stitch .text-on-surface-variant { color: #47464c; }
+
+/* Stitch typography + spacing (fleet_operational_engine/DESIGN.md) */
+.fleet-inventory-stitch .font-label-plate,
+.fleet-inventory-stitch .font-label-code,
+.fleet-inventory-stitch .font-label-price {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+}
+.fleet-inventory-stitch .text-headline-xl,
+.fleet-inventory-stitch .font-headline-xl {
+  font-size: 30px;
+  line-height: 38px;
+  letter-spacing: -0.02em;
+  font-weight: 600;
+}
+.fleet-inventory-stitch .text-headline-lg,
+.fleet-inventory-stitch .font-headline-lg {
+  font-size: 24px;
+  line-height: 32px;
+  letter-spacing: -0.015em;
+  font-weight: 600;
+}
+.fleet-inventory-stitch .text-headline-sm,
+.fleet-inventory-stitch .font-headline-sm {
+  font-size: 18px;
+  line-height: 26px;
+  letter-spacing: -0.01em;
+  font-weight: 600;
+}
+.fleet-inventory-stitch .text-body-lg,
+.fleet-inventory-stitch .font-body-lg {
+  font-size: 16px;
+  line-height: 24px;
+  letter-spacing: -0.005em;
+  font-weight: 400;
+}
+.fleet-inventory-stitch .text-body-md,
+.fleet-inventory-stitch .font-body-md {
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 400;
+}
+.fleet-inventory-stitch .text-body-sm,
+.fleet-inventory-stitch .font-body-sm {
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 400;
+}
+.fleet-inventory-stitch .text-caption,
+.fleet-inventory-stitch .font-caption {
+  font-size: 11px;
+  line-height: 14px;
+  letter-spacing: 0.02em;
+  font-weight: 500;
+}
+.fleet-inventory-stitch .text-label-plate,
+.fleet-inventory-stitch .font-label-plate {
+  font-size: 14px;
+  line-height: 18px;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+}
+.fleet-inventory-stitch .text-label-code,
+.fleet-inventory-stitch .font-label-code {
+  font-size: 13px;
+  line-height: 18px;
+  letter-spacing: -0.01em;
+  font-weight: 500;
+}
+.fleet-inventory-stitch .text-label-price,
+.fleet-inventory-stitch .font-label-price {
+  font-size: 14px;
+  line-height: 20px;
+  letter-spacing: -0.02em;
+  font-weight: 600;
+}
+.fleet-inventory-stitch .gap-space-xs { gap: 0.25rem; }
+.fleet-inventory-stitch .gap-space-sm { gap: 0.5rem; }
+.fleet-inventory-stitch .gap-space-md { gap: 0.75rem; }
+.fleet-inventory-stitch .gap-space-lg { gap: 1rem; }
+.fleet-inventory-stitch .gap-space-xl { gap: 1.5rem; }
+.fleet-inventory-stitch .p-space-xs { padding: 0.25rem; }
+.fleet-inventory-stitch .p-space-sm { padding: 0.5rem; }
+.fleet-inventory-stitch .p-space-md { padding: 0.75rem; }
+.fleet-inventory-stitch .p-space-lg { padding: 1rem; }
+.fleet-inventory-stitch .p-space-xl { padding: 1.5rem; }
+.fleet-inventory-stitch .px-space-xs { padding-left: 0.25rem; padding-right: 0.25rem; }
+.fleet-inventory-stitch .px-space-sm { padding-left: 0.5rem; padding-right: 0.5rem; }
+.fleet-inventory-stitch .px-space-md { padding-left: 0.75rem; padding-right: 0.75rem; }
+.fleet-inventory-stitch .px-space-lg { padding-left: 1rem; padding-right: 1rem; }
+.fleet-inventory-stitch .py-space-xl { padding-top: 1.5rem; padding-bottom: 1.5rem; }
+.fleet-inventory-stitch .mt-space-xs { margin-top: 0.25rem; }
+.fleet-inventory-stitch .px-margin { padding-left: 1rem; padding-right: 1rem; }
+.fleet-inventory-stitch .px-margin-desktop { padding-left: 2rem; padding-right: 2rem; }
+.fleet-inventory-stitch .-mx-margin { margin-left: -1rem; margin-right: -1rem; }
+.fleet-inventory-stitch .pb-space-xs { padding-bottom: 0.25rem; }
+.fleet-inventory-stitch .pt-space-xs { padding-top: 0.25rem; }

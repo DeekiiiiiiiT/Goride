@@ -104,7 +104,7 @@ export function buildInventoryLive(shell: InventoryShellState): InventoryLive {
 
   const assets = shell.assets;
   const devicesNeedingAttention = assets.filter((a) => {
-    const serial = strField(a, 'serial_no', '');
+    const serial = strField(a, 'serial_number', strField(a, 'serial_no', ''));
     const status = strField(a, 'status', '');
     return !serial || status === 'faulty' || status === 'repair';
   }).length;

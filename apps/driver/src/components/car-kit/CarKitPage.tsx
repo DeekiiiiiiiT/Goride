@@ -63,7 +63,7 @@ export function CarKitPage({
         return <Dk3ReportSent />;
       case 'dk1':
       default:
-        return <Dk1MyCarKit />;
+        return <Dk1MyCarKit kit={flow.kit} />;
     }
   })();
 
@@ -94,7 +94,7 @@ export function CarKitPage({
       {flow.screen === 'dk2' && !flow.showDk6 ? (
         <div className="fixed inset-0 z-50 flex flex-col justify-end bg-inverse-surface/65 backdrop-blur-[2px]">
           <CarKitNavHost onAction={handleNav}>
-            <Dk2ReportSheet />
+            <Dk2ReportSheet kit={flow.kit} />
           </CarKitNavHost>
         </div>
       ) : null}

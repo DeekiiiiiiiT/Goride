@@ -41,6 +41,7 @@ export function RequestPartPanel({
   const [note, setNote] = useState("");
   const [oldPartNumber, setOldPartNumber] = useState("");
   const [sentId, setSentId] = useState("");
+  const [limitReached, setLimitReached] = useState(false);
   const ctxData = (ctx.data || {}) as Record<string, unknown>;
   const specs = (ctxData.specs || {}) as Record<string, unknown>;
   const versionParts = [
@@ -89,26 +90,36 @@ export function RequestPartPanel({
         : "",
     showOrgMetrics,
     jamaicaResetLabel: formatJamaicaMidnightCountdown(),
+    dailyLimitReached: limitReached,
+    dailyLimitUsed: 30,
+    dailyLimitMax: 30,
+    activeRequestCount: 30,
   });
 
   async function submit(photoUrl?: string) {
     const ctxVariant = String((ctxData as { variantId?: string }).variantId || "");
-    const res = await api.requestFindPart(
-      buildAddPartInfoRequestBody({
-        vehicleId,
-        componentId,
-        partName,
-        note,
-        oldPartNumber,
-        matchType,
-        fitParam,
-        position,
-        vehicleCatalogId: ctxVariant || undefined,
-        photoUrl,
-      }),
-    );
-    const id = String((res as { item?: { id?: string } }).item?.id || "");
-    setSentId(id);
+    try {
+      const res = await api.requestFindPart(
+        buildAddPartInfoRequestBody({
+          vehicleId,
+          componentId,
+          partName,
+          note,
+          oldPartNumber,
+          matchType,
+          fitParam,
+          position,
+          vehicleCatalogId: ctxVariant || undefined,
+          photoUrl,
+        }),
+      );
+      const id = String((res as { item?: { id?: string } }).item?.id || "");
+      setSentId(id);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (/30 requests|daily|limit/i.test(msg)) setLimitReached(true);
+      throw e;
+    }
   }
 
   async function saveDraft() {

@@ -5,6 +5,8 @@ import { useInventoryShell } from '../InventoryShellContext';
 export function In6VehicleKits() {
   const shell = useInventoryShell();
   const live = useInventoryLive(shell);
+  const primary = live.primaryVehicle;
+  const secondary = live.secondaryVehicle;
   return (
     <div className="fleet-inventory-stitch inventory-stitch-root">
       <div className="inventory-stitch-main"><div className="flex flex-col w-full">
@@ -250,7 +252,7 @@ export function In6VehicleKits() {
       <td className="p-space-lg bg-surface-container-lowest sticky left-0 z-10 shadow-[2px_0_4px_rgba(0,0,0,0.02)]">
       <div className="flex flex-col gap-space-xs">
       <div className="flex items-center justify-between gap-space-sm">
-      <span className="font-headline-sm text-headline-sm text-on-surface font-bold tracking-tight">Toyota Roomy 2019</span>
+      <span className="font-headline-sm text-headline-sm text-on-surface font-bold tracking-tight">{primary?.plate ?? live.primaryPlate}</span>
       <span className="font-label-plate text-label-plate px-2 py-0.5 bg-surface-container-high rounded text-on-surface">{live.primaryPlate}</span>
       </div>
       <div className="flex items-center justify-between gap-space-xs">
@@ -258,7 +260,7 @@ export function In6VehicleKits() {
 
       <span className="font-label-code text-[11px] font-semibold text-on-tertiary-container bg-tertiary-fixed/30 px-2 py-0.5 rounded flex items-center gap-1">
       <span className="w-1.5 h-1.5 rounded-full bg-on-tertiary-container"></span>
-                            70% · 7 of 10 complete
+                            {primary ? `${primary.pct}% · ${primary.okLines} of ${primary.requiredLines} complete` : 'No kit data'}
                           </span>
       </div>
 
@@ -349,7 +351,7 @@ export function In6VehicleKits() {
       <td className="p-space-lg bg-surface-container-lowest sticky left-0 z-10 shadow-[2px_0_4px_rgba(0,0,0,0.02)]">
       <div className="flex flex-col gap-space-xs">
       <div className="flex items-center justify-between gap-space-sm">
-      <span className="font-headline-sm text-headline-sm text-on-surface font-bold tracking-tight">Honda Fit 2018</span>
+      <span className="font-headline-sm text-headline-sm text-on-surface font-bold tracking-tight">{secondary?.plate ?? live.secondaryPlate}</span>
       <span className="font-label-plate text-label-plate px-2 py-0.5 bg-surface-container-high rounded text-on-surface">{live.secondaryPlate}</span>
       </div>
       <div className="flex items-center justify-between gap-space-xs">
@@ -357,7 +359,7 @@ export function In6VehicleKits() {
 
       <span className="font-label-code text-[11px] font-semibold text-error bg-error-container/60 px-2 py-0.5 rounded flex items-center gap-1">
       <span className="w-1.5 h-1.5 rounded-full bg-error"></span>
-                            0% · 0 of 10 complete
+                            {secondary ? `${secondary.pct}% · ${secondary.okLines} of ${secondary.requiredLines} complete` : 'No second vehicle'}
                           </span>
       </div>
 
@@ -456,7 +458,7 @@ export function In6VehicleKits() {
       </div>
       </div>
       <div className="font-label-code text-caption">
-                Showing 2 active vehicles · Total equipment lines: 22
+                Showing {live.kitVehicleCount} active vehicles · Total equipment lines: {live.complianceRows.length}
               </div>
       </div>
       </div>
@@ -467,49 +469,55 @@ export function In6VehicleKits() {
       <h3 className="font-headline-sm text-headline-sm text-on-surface">Vehicle Kit Cards Summary</h3>
       <p className="font-body-sm text-body-sm text-on-surface-variant">Detailed status breakdown per registered asset with instant kit deployment triggers.</p>
       </div>
-      <span className="font-caption text-caption text-on-surface-variant uppercase tracking-wider bg-surface-container px-2.5 py-1 rounded">2 Units Monitored</span>
+      <span className="font-caption text-caption text-on-surface-variant uppercase tracking-wider bg-surface-container px-2.5 py-1 rounded">{live.kitVehicleCount} Units Monitored</span>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-space-lg">
-
-      <div className="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col justify-between gap-space-lg hover:shadow-md transition-shadow relative overflow-hidden">
-      <div className="w-1.5 absolute left-0 top-0 bottom-0 bg-tertiary-container"></div>
+      {live.kitVehicles.length === 0 ? (
+      <p className="font-body-sm text-body-sm text-on-surface-variant md:col-span-2">No vehicle kits configured yet.</p>
+      ) : (
+      live.kitVehicles.map((vehicle) => (
+      <div key={vehicle.vehicleId} className="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col justify-between gap-space-lg hover:shadow-md transition-shadow relative overflow-hidden">
+      <div className={`w-1.5 absolute left-0 top-0 bottom-0 ${vehicle.pct >= 100 ? 'bg-tertiary-container' : vehicle.pct > 0 ? 'bg-tertiary-container' : 'bg-error'}`}></div>
       <div className="flex flex-col gap-space-md pl-1">
       <div className="flex items-start justify-between">
       <div>
       <div className="flex items-center gap-space-sm">
-      <h4 className="font-headline-sm text-headline-sm text-on-surface">Toyota Roomy 2019</h4>
-      <span className="font-label-plate text-label-plate px-2 py-0.5 bg-surface-container rounded text-on-surface">{live.primaryPlate}</span>
+      <h4 className="font-headline-sm text-headline-sm text-on-surface">{vehicle.plate}</h4>
+      <span className="font-label-plate text-label-plate px-2 py-0.5 bg-surface-container rounded text-on-surface">{vehicle.plate}</span>
       </div>
-      <p className="font-caption text-caption text-on-surface-variant mt-0.5">Template: Rideshare standard car kit (10 requirements)</p>
+      <p className="font-caption text-caption text-on-surface-variant mt-0.5">{vehicle.requiredLines} kit requirements tracked</p>
       </div>
-      <span className="font-label-code text-caption font-bold text-on-tertiary-container bg-tertiary-fixed/30 px-2 py-0.5 rounded">70% Complete</span>
+      <span className={`font-label-code text-caption font-bold px-2 py-0.5 rounded ${vehicle.pct >= 100 ? 'text-on-tertiary-container bg-tertiary-fixed/30' : 'text-error bg-error-container/60'}`}>{vehicle.pct}% Complete</span>
       </div>
 
       <div className="flex flex-col gap-1">
       <div className="flex justify-between items-center font-caption text-caption">
       <span className="text-on-surface-variant">Kit items on board</span>
-      <span className="font-label-code font-semibold text-on-surface">7 / 10 items</span>
+      <span className="font-label-code font-semibold text-on-surface">{vehicle.okLines} / {vehicle.requiredLines} items</span>
       </div>
       <div className="w-full h-2 rounded-full bg-surface-container-high overflow-hidden">
-      <div className="h-full bg-on-tertiary-container rounded-full" style={{ width: "70%" }}></div>
+      <div className={`h-full rounded-full ${vehicle.pct >= 100 ? 'bg-on-tertiary-container' : vehicle.pct > 0 ? 'bg-on-tertiary-container' : 'bg-error'}`} style={{ width: `${vehicle.pct}%` }}></div>
       </div>
       </div>
 
       <div className="flex flex-col gap-space-sm pt-space-xs">
+      {vehicle.missingLabels.length > 0 ? (
       <div className="bg-error-container/20 p-space-sm rounded flex items-start gap-space-sm">
       <span className="material-symbols-outlined text-error text-[18px] shrink-0 mt-0.5">error</span>
       <div className="flex flex-col">
       <span className="font-caption text-caption uppercase font-semibold text-error">Missing items required</span>
-      <p className="font-body-sm text-body-sm font-semibold text-error">Tyre pump, First-aid kit, Warning triangle</p>
+      <p className="font-body-sm text-body-sm font-semibold text-error">{vehicle.missingLabels.join(', ') || `${vehicle.missingLines + vehicle.shortLines} gaps`}</p>
       </div>
       </div>
+      ) : (
       <div className="bg-surface-container-low p-space-sm rounded flex items-start gap-space-sm">
       <span className="material-symbols-outlined text-primary text-[18px] shrink-0 mt-0.5">check_circle</span>
       <div className="flex flex-col">
-      <span className="font-caption text-caption uppercase font-semibold text-primary">Present & Inspected</span>
-      <p className="font-body-sm text-body-sm text-on-surface">7 items verified on board (Spare tyre, Jack, Lug wrench, Phone holder, Dash cam, Toll tag, Fuel card)</p>
+      <span className="font-caption text-caption uppercase font-semibold text-primary">Kit complete</span>
+      <p className="font-body-sm text-body-sm text-on-surface">All required items allocated for {vehicle.plate}.</p>
       </div>
       </div>
+      )}
       </div>
       </div>
 
@@ -517,69 +525,15 @@ export function In6VehicleKits() {
       <span className="font-label-code text-caption text-on-surface-variant">Depot: {live.hubName}</span>
       <div className="flex items-center gap-space-sm">
       <button type="button" className="h-9 px-space-md rounded bg-surface-container-low text-on-surface hover:bg-surface-container font-body-sm text-body-sm font-medium transition-colors">Report</button>
-      <button type="button" className="h-9 px-space-md rounded bg-primary text-on-primary font-body-sm text-body-sm font-semibold hover:bg-inverse-surface transition-colors flex items-center gap-1 shadow-xs" >
+      <button type="button" onClick={() => shell.openModal('issue')} className="h-9 px-space-md rounded bg-primary text-on-primary font-body-sm text-body-sm font-semibold hover:bg-inverse-surface transition-colors flex items-center gap-1 shadow-xs" >
       <span className="material-symbols-outlined text-[16px]">add_box</span>
                       Issue missing
                     </button>
       </div>
       </div>
       </div>
-
-      <div className="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col justify-between gap-space-lg hover:shadow-md transition-shadow relative overflow-hidden">
-      <div className="w-1.5 absolute left-0 top-0 bottom-0 bg-error"></div>
-      <div className="flex flex-col gap-space-md pl-1">
-      <div className="flex items-start justify-between">
-      <div>
-      <div className="flex items-center gap-space-sm">
-      <h4 className="font-headline-sm text-headline-sm text-on-surface">Honda Fit 2018</h4>
-      <span className="font-label-plate text-label-plate px-2 py-0.5 bg-surface-container rounded text-on-surface">{live.secondaryPlate}</span>
-      </div>
-      <p className="font-caption text-caption text-on-surface-variant mt-0.5">Template: Rideshare standard car kit (10 requirements)</p>
-      </div>
-      <span className="font-label-code text-caption font-bold text-error bg-error-container/60 px-2 py-0.5 rounded">0% Complete</span>
-      </div>
-
-      <div className="flex flex-col gap-1">
-      <div className="flex justify-between items-center font-caption text-caption">
-      <span className="text-on-surface-variant">Kit items on board</span>
-      <span className="font-label-code font-semibold text-error">0 / 10 items</span>
-      </div>
-      <div className="w-full h-2 rounded-full bg-surface-container-high overflow-hidden">
-      <div className="h-full bg-error rounded-full" style={{ width: "0%" }}></div>
-      </div>
-      </div>
-
-      <div className="flex flex-col gap-space-sm pt-space-xs">
-      <div className="bg-error-container/30 p-space-sm rounded flex items-start gap-space-sm">
-      <span className="material-symbols-outlined text-error text-[18px] shrink-0 mt-0.5">warning</span>
-      <div className="flex flex-col">
-      <span className="font-caption text-caption uppercase font-semibold text-error">Critical Incomplete State</span>
-      <p className="font-body-sm text-body-sm font-semibold text-error">Missing entire standard kit (10 items)</p>
-      <p className="font-caption text-caption text-on-error-container mt-1">Car is not road-cleared for dispatch until mandatory safety & emergency kit is equipped.</p>
-      </div>
-      </div>
-      <div className="bg-surface-container-low p-space-sm rounded flex items-start gap-space-sm">
-      <span className="material-symbols-outlined text-on-surface-variant text-[18px] shrink-0 mt-0.5">link</span>
-      <div className="flex flex-col">
-      <span className="font-caption text-caption uppercase font-semibold text-on-surface-variant">Digital Telematics Only</span>
-      <p className="font-body-sm text-body-sm text-on-surface-variant">Toll tag & Fuel card associated via central vehicle cloud account.</p>
-      </div>
-      </div>
-      </div>
-      </div>
-
-      <div className="flex items-center justify-between pt-space-md gap-space-sm pl-1">
-      <span className="font-label-code text-caption text-on-surface-variant">Depot: {live.hubName}</span>
-      <div className="flex items-center gap-space-sm">
-      <button type="button" className="h-9 px-space-md rounded bg-surface-container-low text-on-surface hover:bg-surface-container font-body-sm text-body-sm font-medium transition-colors">Report</button>
-      <button type="button" className="h-9 px-space-md rounded bg-primary text-on-primary font-body-sm text-body-sm font-semibold hover:bg-inverse-surface transition-colors flex items-center gap-1 shadow-xs" >
-      <span className="material-symbols-outlined text-[16px]">inventory_2</span>
-                      Issue whole kit
-                    </button>
-      </div>
-      </div>
-      </div>
-      </div>
+      ))
+      )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-space-lg">
@@ -645,7 +599,7 @@ export function In6VehicleKits() {
       </div>
       </div>
 
-
+      </div>
       </div></div>
     </div>
   );

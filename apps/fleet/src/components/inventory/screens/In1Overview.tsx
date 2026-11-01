@@ -1,6 +1,7 @@
 /** Ported from Stitch — do not simplify layout (audit §0.4). */
 import { InventoryPrimaryTabs } from '../InventoryPrimaryTabs';
 import { useInventoryLive } from '../inventoryLive';
+import { firstVendorName, strField } from '../inventoryData';
 import { useInventoryShell } from '../InventoryShellContext';
 
 export function In1Overview() {
@@ -105,105 +106,94 @@ export function In1Overview() {
 
       <div className="flex flex-col">
 
-      <div className="p-space-lg flex flex-col sm:flex-row sm:items-center justify-between gap-space-md bg-surface-container-lowest hover:bg-surface-container-low transition-colors">
-      <div className="flex items-center gap-space-md min-w-0">
-      <div className="relative shrink-0 w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center text-on-surface">
-      <span className="material-symbols-outlined text-[20px]">directions_car</span>
-      <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-error ring-2 ring-surface-container-lowest"></span>
-      </div>
-      <div className="flex flex-col min-w-0">
-      <span className="font-body-sm text-body-sm text-on-surface font-medium truncate">
-                        Honda Fit 2018 · <span className="font-label-plate text-label-plate tracking-wider">{live.secondaryPlate}</span> is missing its whole kit
-                      </span>
-      <span className="font-label-code text-caption text-error font-medium">Missing 10 items</span>
-      </div>
-      </div>
-      <button type="button" onClick={() => shell.openModal('issue')} className="shrink-0 h-8 px-space-md rounded-lg bg-primary text-on-primary hover:bg-primary/90 transition-all font-body-sm text-body-sm font-medium active:scale-95 shadow-sm">
-                    Issue kit
-                  </button>
-      </div>
+      {live.kitVehicles.filter((v) => v.missingLines + v.shortLines > 0).map((vehicle, idx) => (
+        <div key={vehicle.vehicleId}>
+          {idx > 0 ? <div className="h-px w-full bg-surface-container-low"></div> : null}
+          <div className="p-space-lg flex flex-col sm:flex-row sm:items-center justify-between gap-space-md bg-surface-container-lowest hover:bg-surface-container-low transition-colors">
+            <div className="flex items-center gap-space-md min-w-0">
+              <div className="relative shrink-0 w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center text-on-surface">
+                <span className="material-symbols-outlined text-[20px]">directions_car</span>
+                <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-error ring-2 ring-surface-container-lowest"></span>
+              </div>
+              <div className="flex flex-col min-w-0">
+                <span className="font-body-sm text-body-sm text-on-surface font-medium truncate">
+                  <span className="font-label-plate text-label-plate tracking-wider">{vehicle.plate}</span>
+                  {vehicle.missingLines + vehicle.shortLines >= vehicle.requiredLines
+                    ? ' is missing its whole kit'
+                    : ` is missing ${vehicle.missingLines + vehicle.shortLines} item${vehicle.missingLines + vehicle.shortLines === 1 ? '' : 's'}`}
+                </span>
+                <span className="font-label-code text-caption text-error font-medium">
+                  {vehicle.missingLines + vehicle.shortLines} missing · {vehicle.okLines} of {vehicle.requiredLines} OK
+                </span>
+              </div>
+            </div>
+            <button type="button" onClick={() => shell.openModal('issue')} className="shrink-0 h-8 px-space-md rounded-lg bg-primary text-on-primary hover:bg-primary/90 transition-all font-body-sm text-body-sm font-medium active:scale-95 shadow-sm">
+              Issue kit
+            </button>
+          </div>
+        </div>
+      ))}
 
-      <div className="h-px w-full bg-surface-container-low"></div>
+      {live.lowStockCount > 0 && live.lowStockLabel !== '—' ? (
+        <>
+          <div className="h-px w-full bg-surface-container-low"></div>
+          <div className="p-space-lg flex flex-col sm:flex-row sm:items-center justify-between gap-space-md bg-surface-container-lowest hover:bg-surface-container-low transition-colors">
+            <div className="flex items-center gap-space-md min-w-0">
+              <div className="shrink-0 w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center text-on-surface">
+                <span className="material-symbols-outlined text-[20px]">inventory_2</span>
+              </div>
+              <div className="flex flex-col min-w-0">
+                <span className="font-body-sm text-body-sm text-on-surface font-medium truncate">
+                  {live.lowStockLabel} is low or out
+                </span>
+                <span className="font-label-code text-caption text-secondary">
+                  {live.lowStockCount} item{live.lowStockCount === 1 ? '' : 's'} need attention
+                </span>
+              </div>
+            </div>
+            <button type="button" onClick={() => shell.setTab('purchasing')} className="shrink-0 h-8 px-space-md rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface transition-colors font-body-sm text-body-sm font-medium">
+              Reorder
+            </button>
+          </div>
+        </>
+      ) : null}
 
-      <div className="p-space-lg flex flex-col sm:flex-row sm:items-center justify-between gap-space-md bg-surface-container-lowest hover:bg-surface-container-low transition-colors">
-      <div className="flex items-center gap-space-md min-w-0">
-      <div className="relative shrink-0 w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center text-on-surface">
-      <span className="material-symbols-outlined text-[20px]">directions_car</span>
-      <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-tertiary-container ring-2 ring-surface-container-lowest"></span>
-      </div>
-      <div className="flex flex-col min-w-0">
-      <span className="font-body-sm text-body-sm text-on-surface font-medium truncate">
-                        Toyota Roomy 2019 · <span className="font-label-plate text-label-plate tracking-wider">{live.primaryPlate}</span> is missing 3 items
-                      </span>
-      <span className="font-body-sm text-caption text-secondary">
-                        Tyre pump, First-aid kit, Warning triangle
-                      </span>
-      </div>
-      </div>
-      <button type="button" onClick={() => shell.openModal('issue')} className="shrink-0 h-8 px-space-md rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface transition-colors font-body-sm text-body-sm font-medium">
-                    Issue missing
-                  </button>
-      </div>
-      <div className="h-px w-full bg-surface-container-low"></div>
+      {live.assets.filter((a) => !strField(a, 'serial_number', '')).slice(0, 1).map((asset) => (
+        <div key={strField(asset, 'id', 'asset')}>
+          <div className="h-px w-full bg-surface-container-low"></div>
+          <div className="p-space-lg flex flex-col sm:flex-row sm:items-center justify-between gap-space-md bg-surface-container-lowest hover:bg-surface-container-low transition-colors">
+            <div className="flex items-center gap-space-md min-w-0">
+              <div className="shrink-0 w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center text-on-surface">
+                <span className="material-symbols-outlined text-[20px]">videocam</span>
+              </div>
+              <div className="flex flex-col min-w-0">
+                <span className="font-body-sm text-body-sm text-on-surface font-medium truncate">
+                  {strField(asset, 'name', 'Asset')} has no serial number
+                </span>
+                <span className="font-body-sm text-caption text-secondary">
+                  Tag {strField(asset, 'asset_tag', '—')}
+                </span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                shell.setSelectedAssetId(strField(asset, 'id', null));
+                shell.openModal('asset-page');
+              }}
+              className="shrink-0 h-8 px-space-md rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface transition-colors font-body-sm text-body-sm font-medium"
+            >
+              Add serial
+            </button>
+          </div>
+        </div>
+      ))}
 
-      <div className="p-space-lg flex flex-col sm:flex-row sm:items-center justify-between gap-space-md bg-surface-container-lowest hover:bg-surface-container-low transition-colors">
-      <div className="flex items-center gap-space-md min-w-0">
-      <div className="shrink-0 w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center text-on-surface">
-      <span className="material-symbols-outlined text-[20px]">inventory_2</span>
-      </div>
-      <div className="flex flex-col min-w-0">
-      <span className="font-body-sm text-body-sm text-on-surface font-medium truncate">
-                        Phone Holder Mount is low
-                      </span>
-      <span className="font-label-code text-caption text-secondary">
-                        1 in store · reorder trigger set at 3
-                      </span>
-      </div>
-      </div>
-      <button type="button" onClick={() => shell.setTab('purchasing')} className="shrink-0 h-8 px-space-md rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface transition-colors font-body-sm text-body-sm font-medium">
-                    Reorder
-                  </button>
-      </div>
-      <div className="h-px w-full bg-surface-container-low"></div>
-
-      <div className="p-space-lg flex flex-col sm:flex-row sm:items-center justify-between gap-space-md bg-surface-container-lowest hover:bg-surface-container-low transition-colors">
-      <div className="flex items-center gap-space-md min-w-0">
-      <div className="shrink-0 w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center text-on-surface">
-      <span className="material-symbols-outlined text-[20px]">videocam</span>
-      </div>
-      <div className="flex flex-col min-w-0">
-      <span className="font-body-sm text-body-sm text-on-surface font-medium truncate">
-                        Dash camera on <span className="font-label-plate text-label-plate">{live.primaryPlate}</span> has no serial number
-                      </span>
-      <span className="font-body-sm text-caption text-secondary">
-                        Required for insurance compliance verification
-                      </span>
-      </div>
-      </div>
-      <button type="button" onClick={() => { shell.setSelectedAssetId(live.assets[0] ? String(live.assets[0].id ?? '') : null); shell.openModal('asset-page'); }} className="shrink-0 h-8 px-space-md rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface transition-colors font-body-sm text-body-sm font-medium">
-                    Add serial
-                  </button>
-      </div>
-      <div className="h-px w-full bg-surface-container-low"></div>
-
-      <div className="p-space-lg flex flex-col sm:flex-row sm:items-center justify-between gap-space-md bg-surface-container-lowest hover:bg-surface-container-low transition-colors">
-      <div className="flex items-center gap-space-md min-w-0">
-      <div className="shrink-0 w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center text-on-surface">
-      <span className="material-symbols-outlined text-[20px]">fact_check</span>
-      </div>
-      <div className="flex flex-col min-w-0">
-      <span className="font-body-sm text-body-sm text-on-surface font-medium truncate">
-                        Confirm the second spare tyre found on <span className="font-label-plate text-label-plate">{live.primaryPlate}</span>
-      </span>
-      <span className="font-body-sm text-caption text-secondary">
-                        Audited count discrepancy pending dispatch confirmation
-                      </span>
-      </div>
-      </div>
-      <button type="button" onClick={() => shell.setTab('counts')} className="shrink-0 h-8 px-space-md rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface transition-colors font-body-sm text-body-sm font-medium">
-                    Count now
-                  </button>
-      </div>
+      {live.openAlertCount === 0 &&
+      live.kitVehicles.every((v) => v.missingLines + v.shortLines === 0) &&
+      live.lowStockCount === 0 ? (
+        <div className="p-space-lg font-body-sm text-body-sm text-on-surface-variant">Nothing needs action right now.</div>
+      ) : null}
       </div>
       </div>
 
@@ -263,7 +253,7 @@ export function In1Overview() {
       <div className="flex flex-col gap-0.5 text-caption font-body-sm text-secondary">
       <div className="flex items-center gap-space-xs">
       <span className="material-symbols-outlined text-[14px]">storefront</span>
-      <span>Car Toys Jamaica</span>
+      <span>{firstVendorName(live.vendors)}</span>
       </div>
       <div className="flex items-center gap-space-xs">
       <span className="material-symbols-outlined text-[14px]">schedule</span>

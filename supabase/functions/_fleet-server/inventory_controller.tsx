@@ -10,7 +10,7 @@ import {
   type RbacUser,
 } from "./rbac_middleware.ts";
 import { getOrgId } from "./org_scope.ts";
-import { getServiceClientWithSchema } from "./service_client.ts";
+import { invDb, invRpcName } from "./inventory_db.ts";
 import { safeErrorResponse } from "./safe_error.ts";
 import { registerInventoryExtendedRoutes } from "./inventory_controller_extended.ts";
 
@@ -28,7 +28,7 @@ const PREFIX = "/make-server-37f42386/inventory";
 const PAGE = 50;
 
 function fleetDb() {
-  return getServiceClientWithSchema("fleet");
+  return invDb();
 }
 
 function platformUser(c: InvCtx): boolean {
@@ -82,7 +82,7 @@ async function rpcJson(
   fn: string,
   args: Record<string, unknown>,
 ): Promise<Response | Record<string, unknown>> {
-  const { data, error } = await fleetDb().rpc(fn, args);
+  const { data, error } = await fleetDb().rpc(invRpcName(fn), args);
   if (error) {
     const msg = error.message || String(error);
     if (/not found|forbidden org/i.test(msg)) {
@@ -108,13 +108,13 @@ app.get(`${PREFIX}/overview`, requirePermission("inventory.view"), async (c) => 
     const db = fleetDb();
 
     const [stockKpis, alerts, chain] = await Promise.all([
-      db.from("v_inv_stock_kpis").select("*").eq("organization_id", org).maybeSingle(),
-      db.from("v_inv_alerts_tiles").select("*").eq("organization_id", org).maybeSingle(),
-      db.from("inv_chain_check").select("*").eq("organization_id", org)
+      db.from("fleet_inv_v_stock_kpis").select("*").eq("organization_id", org).maybeSingle(),
+      db.from("fleet_inv_v_alerts_tiles").select("*").eq("organization_id", org).maybeSingle(),
+      db.from("fleet_inv_chain_check").select("*").eq("organization_id", org)
         .order("checked_at", { ascending: false }).limit(1).maybeSingle(),
     ]);
 
-    const { data: compliance } = await db.from("v_inv_kit_compliance").select("vehicle_id, line_status")
+    const { data: compliance } = await db.from("fleet_inv_v_kit_compliance").select("vehicle_id, line_status")
       .eq("organization_id", org);
 
     const vehicles = new Set((compliance ?? []).map((r) => String(r.vehicle_id)));
@@ -144,7 +144,7 @@ app.get(`${PREFIX}/stock`, requirePermission("inventory.view"), async (c) => {
     const locationId = c.req.query("location_id");
     const q = c.req.query("q");
 
-    let query = fleetDb().from("v_inv_stock").select("*", { count: "exact" })
+    let query = fleetDb().from("fleet_inv_v_stock").select("*", { count: "exact" })
       .eq("organization_id", org)
       .order("sku", { ascending: true })
       .range(offset, offset + limit - 1);
@@ -165,7 +165,7 @@ app.get(`${PREFIX}/stock/kpis`, requirePermission("inventory.view"), async (c) =
   try {
     const org = orgOrForbid(c);
     if (org instanceof Response) return org;
-    const { data, error } = await fleetDb().from("v_inv_stock_kpis").select("*")
+    const { data, error } = await fleetDb().from("fleet_inv_v_stock_kpis").select("*")
       .eq("organization_id", org).maybeSingle();
     if (error) return c.json({ error: error.message }, 500);
     return c.json({ kpis: data ?? null });
@@ -185,7 +185,7 @@ app.get(`${PREFIX}/items`, requirePermission("inventory.view"), async (c) => {
     const { limit, offset } = pageParams(c);
     const q = c.req.query("q");
 
-    let query = fleetDb().from("inv_item").select("*", { count: "exact" })
+    let query = fleetDb().from("fleet_inv_item").select("*", { count: "exact" })
       .eq("organization_id", org)
       .is("archived_at", null)
       .order("updated_at", { ascending: false })
@@ -206,7 +206,7 @@ app.get(`${PREFIX}/items/:id`, requirePermission("inventory.view"), async (c) =>
     const org = orgOrForbid(c);
     if (org instanceof Response) return org;
     const id = c.req.param("id");
-    const { data, error } = await fleetDb().from("inv_item").select("*")
+    const { data, error } = await fleetDb().from("fleet_inv_item").select("*")
       .eq("organization_id", org).eq("id", id).maybeSingle();
     if (error) return c.json({ error: error.message }, 500);
     if (!data) return c.json({ error: "Not found" }, 404);
@@ -235,7 +235,7 @@ app.post(`${PREFIX}/items`, requirePermission("inventory.move"), async (c) => {
     if (!row.sku || !row.name) {
       return c.json({ error: "sku and name required" }, 400);
     }
-    const { data, error } = await fleetDb().from("inv_item").insert(row).select("*").single();
+    const { data, error } = await fleetDb().from("fleet_inv_item").insert(row).select("*").single();
     if (error) return c.json({ error: error.message }, 409);
     return c.json({ item: data }, 201);
   } catch (e) {
@@ -253,7 +253,7 @@ app.patch(`${PREFIX}/items/:id`, requirePermission("inventory.move"), async (c) 
     for (const key of ["name", "description", "tracking", "category_id", "min_qty", "reorder_qty"]) {
       if (body[key] !== undefined) patch[key] = body[key];
     }
-    const { data, error } = await fleetDb().from("inv_item").update(patch)
+    const { data, error } = await fleetDb().from("fleet_inv_item").update(patch)
       .eq("organization_id", org).eq("id", id).select("*").maybeSingle();
     if (error) return c.json({ error: error.message }, 500);
     if (!data) return c.json({ error: "Not found" }, 404);
@@ -268,7 +268,7 @@ app.delete(`${PREFIX}/items/:id`, requirePermission("inventory.adjust"), async (
     const org = orgOrForbid(c);
     if (org instanceof Response) return org;
     const id = c.req.param("id");
-    const { data, error } = await fleetDb().from("inv_item").update({
+    const { data, error } = await fleetDb().from("fleet_inv_item").update({
       archived_at: new Date().toISOString(),
     }).eq("organization_id", org).eq("id", id).select("id").maybeSingle();
     if (error) return c.json({ error: error.message }, 500);
@@ -290,7 +290,7 @@ app.get(`${PREFIX}/movements`, requirePermission("inventory.view"), async (c) =>
     const { limit, offset } = pageParams(c);
     const type = c.req.query("type");
 
-    let query = fleetDb().from("inv_movement").select("*", { count: "exact" })
+    let query = fleetDb().from("fleet_inv_movement").select("*", { count: "exact" })
       .eq("organization_id", org)
       .order("created_at", { ascending: false })
       .range(offset, offset + limit - 1);
@@ -476,7 +476,7 @@ app.get(`${PREFIX}/kits/compliance`, requirePermission("inventory.view"), async 
   const org = orgOrForbid(c);
   if (org instanceof Response) return org;
   const { limit, offset } = pageParams(c);
-  const { data, error } = await fleetDb().from("v_inv_kit_compliance").select("*")
+  const { data, error } = await fleetDb().from("fleet_inv_v_kit_compliance").select("*")
     .eq("organization_id", org)
     .range(offset, offset + limit - 1);
   if (error) return c.json({ error: error.message }, 500);

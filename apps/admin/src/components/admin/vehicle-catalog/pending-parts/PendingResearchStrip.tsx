@@ -88,6 +88,9 @@ export function PendingResearchStrip({
             {vm.researchStatusLabel}
           </span>
         </div>
+        {vm.pauseReasonLabel ? (
+          <span className="font-body-sm text-body-sm font-medium text-error">{vm.pauseReasonLabel}</span>
+        ) : null}
         {strip.shadowMode !== false ? (
           <>
             <span className="hidden h-4 w-px bg-surface-container-high sm:block" />

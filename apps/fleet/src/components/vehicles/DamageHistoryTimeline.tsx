@@ -1,5 +1,5 @@
 import React from 'react';
-import { DamageReport } from '../../types/equipment';
+import type { DamageReport } from '@roam/types';
 import { Badge } from '../ui/badge';
 import { ScrollArea } from '../ui/scroll-area';
 

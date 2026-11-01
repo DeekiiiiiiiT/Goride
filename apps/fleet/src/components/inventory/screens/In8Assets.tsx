@@ -1,9 +1,12 @@
 /** Ported from Stitch — do not simplify layout (audit §0.4). */
 import { useInventoryLive } from '../inventoryLive';
 import { useInventoryShell } from '../InventoryShellContext';
+import { firstAssetSerial, formatPlate, strField } from '../inventoryData';
 export function In8Assets() {
   const shell = useInventoryShell();
   const live = useInventoryLive(shell);
+  const featuredAsset = live.assets[0];
+  const featuredSerial = firstAssetSerial(live.assets);
   return (
     <div className="fleet-inventory-stitch inventory-stitch-root">
       <div className="inventory-stitch-main"><div className="max-w-[1400px] mx-auto px-margin md:px-margin-desktop py-space-lg"><div className="flex flex-col w-full gap-space-lg">
@@ -173,7 +176,7 @@ export function In8Assets() {
       <td className="py-space-md px-space-md align-middle">
       <div className="flex items-center gap-space-xs">
       <span className="material-symbols-outlined text-secondary text-base">directions_car</span>
-      <span className="font-body-sm text-body-sm text-on-surface">Toyota Roomy 2019</span>
+      <span className="font-body-sm text-body-sm text-on-surface">{formatPlate(strField(featuredAsset ?? {}, 'vehicle_plate', live.primaryPlate))}</span>
       <span className="px-1.5 py-0.5 rounded bg-surface-container-high font-label-plate text-caption text-on-surface font-bold">{live.primaryPlate}</span>
       </div>
       </td>
@@ -219,7 +222,7 @@ export function In8Assets() {
       <td className="py-space-md px-space-md align-middle">
       <a className="font-label-code text-label-code font-semibold text-on-surface hover:underline flex items-center gap-1 group" href="#">
       <span className="material-symbols-outlined text-sm text-surface-tint group-hover:text-on-surface">qr_code_2</span>
-      <span>DC-70A-0042118</span>
+      <span>{featuredSerial}</span>
       </a>
       </td>
       <td className="py-space-md px-space-md align-middle">

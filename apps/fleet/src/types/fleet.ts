@@ -1,4 +1,4 @@
-import { EquipmentItem } from './equipment';
+import type { DamageReport, EquipmentItem } from '@roam/types';
 
 export interface FleetMetric {
     totalAssetValue: number;

@@ -240,6 +240,8 @@ export type CatalogResearchStrip = {
   todayResearchCount?: number;
   enabled: boolean;
   paused: boolean;
+  pausedReason?: string | null;
+  autoResumeAt?: string | null;
   dailyJobLimit: number;
   status?: string;
   shadowStreak?: number;

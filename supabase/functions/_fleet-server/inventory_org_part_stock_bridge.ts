@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
-import { getServiceClient, getServiceClientWithSchema } from "./service_client.ts";
+import { getServiceClient } from "./service_client.ts";
+import { invDb, invRpcName } from "./inventory_db.ts";
 
 type FleetDb = SupabaseClient<any, any, any>;
 
@@ -12,12 +13,12 @@ export async function upsertOrgPartStockViaEngine(
   reorderPoint: number | null,
   idempotencyKey: string,
 ): Promise<{ item: Record<string, unknown> }> {
-  const fleet = getServiceClientWithSchema("fleet");
+  const fleet = invDb();
   const itemId = await ensureInvItem(fleet, orgId, partId, universalPartId);
   const locationId = await resolveLocationId(fleet, orgId, locationCode);
 
   const { data: balances } = await fleet
-    .from("inv_balance")
+    .from("fleet_inv_balance")
     .select("on_hand")
     .eq("organization_id", orgId)
     .eq("item_id", itemId)
@@ -27,7 +28,7 @@ export async function upsertOrgPartStockViaEngine(
   const currentQty = Number((balances?.[0] as { on_hand?: number } | undefined)?.on_hand ?? 0);
 
   if (currentQty === 0 && targetQty > 0) {
-    const { data, error } = await fleet.rpc("inv_opening_balance", {
+    const { data, error } = await fleet.rpc(invRpcName("inv_opening_balance"), {
       p_org_id: orgId,
       p_lines: [
         {
@@ -43,7 +44,7 @@ export async function upsertOrgPartStockViaEngine(
     void data;
   } else if (targetQty !== currentQty) {
     const delta = targetQty - currentQty;
-    const { error } = await fleet.rpc("inv_adjust", {
+    const { error } = await fleet.rpc(invRpcName("inv_adjust"), {
       p_org_id: orgId,
       p_item_id: itemId,
       p_location_id: locationId,
@@ -57,7 +58,7 @@ export async function upsertOrgPartStockViaEngine(
   }
 
   if (reorderPoint != null) {
-    await fleet.from("inv_reorder_policy").upsert(
+    await fleet.from("fleet_inv_reorder_policy").upsert(
       {
         organization_id: orgId,
         item_id: itemId,
@@ -86,14 +87,14 @@ async function ensureInvItem(
   partId: string | null,
   universalPartId: string | null,
 ): Promise<string> {
-  let q = fleet.from("inv_item").select("id").eq("organization_id", orgId);
+  let q = fleet.from("fleet_inv_item").select("id").eq("organization_id", orgId);
   q = partId ? q.eq("part_master_id", partId) : q.eq("universal_part_id", universalPartId!);
   const { data: existing } = await q.maybeSingle();
   if (existing?.id) return String(existing.id);
 
   const skuPrefix = partId ? `PM-${partId.slice(0, 8)}` : `UP-${universalPartId!.slice(0, 8)}`;
   const { data: created, error } = await fleet
-    .from("inv_item")
+    .from("fleet_inv_item")
     .insert({
       organization_id: orgId,
       sku: skuPrefix,
@@ -116,14 +117,14 @@ async function resolveLocationId(
 ): Promise<string> {
   if (locationCode) {
     const { data } = await fleet
-      .from("inv_location")
+      .from("fleet_inv_location")
       .select("id")
       .eq("organization_id", orgId)
       .eq("code", locationCode)
       .maybeSingle();
     if (data?.id) return String(data.id);
     const { data: created, error } = await fleet
-      .from("inv_location")
+      .from("fleet_inv_location")
       .insert({
         organization_id: orgId,
         code: locationCode,
@@ -138,7 +139,7 @@ async function resolveLocationId(
   }
 
   const { data: def } = await fleet
-    .from("inv_location")
+    .from("fleet_inv_location")
     .select("id")
     .eq("organization_id", orgId)
     .eq("is_default", true)
@@ -146,7 +147,7 @@ async function resolveLocationId(
   if (def?.id) return String(def.id);
 
   const { data: created, error } = await fleet
-    .from("inv_location")
+    .from("fleet_inv_location")
     .insert({
       organization_id: orgId,
       code: "JM-KIN-ST01",

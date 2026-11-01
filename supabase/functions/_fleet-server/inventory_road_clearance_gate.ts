@@ -1,7 +1,8 @@
 /**
  * Rush delivery dispatch gate when inv_road_clearance_gate is enabled (audit §6.4).
  */
-import { getServiceClient, getServiceClientWithSchema } from "./service_client.ts";
+import { getServiceClient } from "./service_client.ts";
+import { invDb } from "./inventory_db.ts";
 
 export async function fleetVehicleRoadClear(
   organizationId: string,
@@ -17,9 +18,9 @@ export async function fleetVehicleRoadClear(
     return { roadClear: true };
   }
 
-  const fleet = getServiceClientWithSchema("fleet");
+  const fleet = invDb();
   const { data: rows, error } = await fleet
-    .from("v_inv_kit_compliance")
+    .from("fleet_inv_v_kit_compliance")
     .select("line_status, blocks_road_clearance")
     .eq("organization_id", organizationId)
     .eq("vehicle_id", vehicleId);

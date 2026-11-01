@@ -408,33 +408,63 @@ export function PendingPartRequestDrawer({
 
         <div className="flex-none space-y-2 border-t border-surface-variant bg-surface-container-lowest p-space-lg">
           {variant === "needs_review" && proposal ? (
+            <div className="flex flex-col gap-2">
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  disabled={busy || researchBusy}
+                  className="h-10 rounded-xl border border-outline-variant font-label-md font-semibold text-on-surface-variant"
+                  onClick={() => void onPatch({ action: "looking" })}
+                >
+                  Edit and add
+                </button>
+                <button
+                  type="button"
+                  disabled={busy || researchBusy}
+                  className="h-10 rounded-xl bg-primary-container font-label-md font-semibold text-white"
+                  onClick={() => void researchAct("looks-right", { proposalId: proposal.id })}
+                >
+                  Approve and add
+                </button>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  disabled={busy || researchBusy}
+                  className="h-10 rounded-xl border border-outline-variant font-label-md font-semibold text-on-surface-variant"
+                  onClick={() => void researchAct("not-found")}
+                >
+                  {"Couldn't find it"}
+                </button>
+                <button
+                  type="button"
+                  disabled={busy || researchBusy}
+                  className="h-10 rounded-xl border border-primary/30 font-label-md font-semibold text-primary"
+                  onClick={() => void researchAct("looks-right", { proposalId: proposal.id })}
+                >
+                  Looks right
+                </button>
+              </div>
+            </div>
+          ) : variant === "auto_added" ? (
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
                 disabled={busy || researchBusy}
-                className="h-10 rounded-xl border border-outline-variant font-label-md font-semibold text-on-surface-variant"
-                onClick={() => void researchAct("not-found")}
+                className="h-10 rounded-xl border border-outline-variant font-label-md font-semibold text-on-surface"
+                onClick={() => void researchAct("undo")}
               >
-                Couldn&apos;t find it
+                Undo
               </button>
               <button
                 type="button"
                 disabled={busy || researchBusy}
                 className="h-10 rounded-xl bg-primary-container font-label-md font-semibold text-white"
-                onClick={() => void researchAct("looks-right", { proposalId: proposal.id })}
+                onClick={() => void researchAct("looks-right", { proposalId: proposal?.id })}
               >
                 Looks right
               </button>
             </div>
-          ) : variant === "auto_added" ? (
-            <button
-              type="button"
-              disabled={busy || researchBusy}
-              className="h-10 w-full rounded-xl border border-outline-variant font-label-md font-semibold text-on-surface"
-              onClick={() => void researchAct("undo")}
-            >
-              Undo auto-add
-            </button>
           ) : (
             <div className="grid grid-cols-12 gap-2">
               <button

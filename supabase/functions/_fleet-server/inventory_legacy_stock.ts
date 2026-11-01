@@ -2,7 +2,7 @@
  * Interim stock draw for POST /fleet/equipment/bulk (Phase 0) until inv_issue_to_vehicles ships.
  */
 import type { Context } from "npm:hono@4.3.11";
-import { getServiceClientWithSchema } from "./service_client.ts";
+import { invDb, invRpcName } from "./inventory_db.ts";
 import { getOrgId, stampOrgRequired } from "./org_scope.ts";
 
 export async function legacyDrawInventoryQuantity(
@@ -18,9 +18,9 @@ export async function legacyDrawInventoryQuantity(
     return { ok: false, status: 403, body: { error: "Organization required" } };
   }
 
-  const sb = getServiceClientWithSchema("fleet");
+  const sb = invDb();
   const { data: row, error: readErr } = await sb
-    .from("inventory")
+    .from("fleet_inv_inventory")
     .select("id, organization_id, payload_json")
     .eq("id", inventoryId)
     .maybeSingle();
@@ -51,7 +51,7 @@ export async function legacyDrawInventoryQuantity(
     };
   }
 
-  const { data: nextPayload, error: drawErr } = await sb.rpc("legacy_inventory_draw", {
+  const { data: nextPayload, error: drawErr } = await sb.rpc(invRpcName("legacy_inventory_draw"), {
     p_inventory_id: inventoryId,
     p_org_id: orgId,
     p_draw: draw,

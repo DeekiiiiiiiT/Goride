@@ -107,6 +107,7 @@ describe("formatPartsVersionTag", () => {
         meta: { queueDepth: 0, medianAddMinutes: 90, resolvedCount30d: 4 },
       },
     });
-    expect(vm.medianTurnaroundLabel).toBe("");
+    expect(vm.showOrgMetrics).toBe(false);
+    expect(vm.medianTurnaroundLabel).toBe("Avg dispatch turnaround: hidden until 5 resolves");
   });
 });

@@ -7,9 +7,11 @@ import { runCatalogPartResearch, runCatalogVehicleResearch } from "./catalog_res
 import { normalizePartNumberNorm, checkPartNumberShape } from "./catalog_research_number_shape.ts";
 import {
   domainFromUrl,
+  fetchCatalogSourcePage,
   isTrustedDomain,
   verifySourcePage,
 } from "./catalog_research_verify.ts";
+import { classifyGeminiProviderError } from "./catalog_research_provider.ts";
 import { routeProposals } from "./catalog_research_route.ts";
 
 export const ENGINE_REV = "catalog-research-1";
@@ -20,19 +22,47 @@ async function loadTrustedDomains(supabase: SupabaseClient): Promise<Set<string>
   return new Set((data || []).map((r) => String((r as { domain: string }).domain).toLowerCase()));
 }
 
-async function fetchPage(url: string): Promise<{ html: string; finalUrl: string }> {
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), 10_000);
-  try {
-    const res = await fetch(url, { signal: ctrl.signal, headers: { "User-Agent": "RoamCatalogResearch/1" } });
-    if (!res.ok) return { html: "", finalUrl: url };
-    const html = await res.text();
-    return { html, finalUrl: res.url || url };
-  } catch {
-    return { html: "", finalUrl: url };
-  } finally {
-    clearTimeout(t);
+async function handleGeminiProviderFault(
+  supabase: SupabaseClient,
+  input: {
+    jobId: string;
+    msgId: number;
+    queue: string;
+    provider: ReturnType<typeof classifyGeminiProviderError>;
+  },
+): Promise<Record<string, unknown>> {
+  const provider = input.provider!;
+  await supabase.rpc("catalog_research_complete_msg", { p_msg_id: input.msgId, p_queue: input.queue });
+  await supabase.rpc("catalog_research_enqueue_job", { p_job_id: input.jobId });
+  await supabase.from("catalog_research_job").update({
+    state: "queued",
+    last_error: provider.pausedReason,
+    pgmq_msg_id: null,
+    pgmq_queue: null,
+    pgmq_read_ct: null,
+    updated_at: new Date().toISOString(),
+  }).eq("id", input.jobId);
+
+  const patch: Record<string, unknown> = {
+    paused: true,
+    paused_reason: provider.pausedReason,
+    consecutive_failures: 0,
+  };
+  if (provider.autoResumeMinutes != null) {
+    patch.auto_resume_at = new Date(Date.now() + provider.autoResumeMinutes * 60_000).toISOString();
+    const { data: settings } = await supabase.from("catalog_research_settings").select("auto_resume_attempt").eq("id", 1).single();
+    patch.auto_resume_attempt = (settings?.auto_resume_attempt || 0) + 1;
+  } else {
+    patch.auto_resume_at = null;
   }
+  await supabase.from("catalog_research_settings").update(patch).eq("id", 1);
+  await supabase.rpc("catalog_research_log_event", {
+    p_job_id: input.jobId,
+    p_step: "recovery",
+    p_outcome: "paused_provider",
+    p_detail: { httpStatus: provider.httpStatus, reason: provider.pausedReason },
+  });
+  return { ok: true, paused: true, reason: provider.pausedReason, jobId: input.jobId };
 }
 
 export async function runCatalogResearchWorker(supabase: SupabaseClient): Promise<Record<string, unknown>> {
@@ -153,10 +183,15 @@ export async function runCatalogResearchWorker(supabase: SupabaseClient): Promis
       for (const src of (cand.sources || []).slice(0, 3)) {
         if (pageFetches >= 6) break;
         pageFetches += 1;
-        const fetched = await fetchPage(src.url);
+        const fetched = await fetchCatalogSourcePage(src.url);
         const domain = domainFromUrl(fetched.finalUrl);
+        const sourceBase: Record<string, unknown> = {
+          url: fetched.finalUrl,
+          domain,
+        };
+        if (fetched.redirectUrl) sourceBase.redirect_url = fetched.redirectUrl;
         if (!isTrustedDomain(domain, trusted)) {
-          verifiedSources.push({ url: fetched.finalUrl, domain, dropped: true, reason: "untrusted" });
+          verifiedSources.push({ ...sourceBase, dropped: true, reason: "untrusted" });
           continue;
         }
         const check = verifySourcePage({
@@ -169,8 +204,7 @@ export async function runCatalogResearchWorker(supabase: SupabaseClient): Promis
           axle: job.fit_descriptor?.includes("rear") ? "rear" : job.fit_descriptor?.includes("front") ? "front" : null,
         });
         verifiedSources.push({
-          url: fetched.finalUrl,
-          domain,
+          ...sourceBase,
           quote: src.quote,
           fetched_ok: fetched.html.length > 0,
           number_found: check.numberFound,
@@ -255,6 +289,10 @@ export async function runCatalogResearchWorker(supabase: SupabaseClient): Promis
 
     return { ok: true, jobId, state: nextState };
   } catch (e) {
+    const provider = classifyGeminiProviderError(e);
+    if (provider) {
+      return await handleGeminiProviderFault(supabase, { jobId, msgId, queue, provider });
+    }
     const msg = e instanceof Error ? e.message : String(e);
     await supabase.from("catalog_research_job").update({ last_error: msg, state: "queued" }).eq("id", jobId);
     await supabase.rpc("catalog_research_log_event", {

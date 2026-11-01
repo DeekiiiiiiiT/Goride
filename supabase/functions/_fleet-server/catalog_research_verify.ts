@@ -67,3 +67,44 @@ export function isTrustedDomain(domain: string, trusted: Set<string>): boolean {
   }
   return false;
 }
+
+/** Google Search grounding links must be fetched before trust/domain checks. */
+export function isGoogleGroundingRedirectUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    return u.hostname === "vertexaisearch.cloud.google.com" && u.pathname.includes("/grounding-api-redirect/");
+  } catch {
+    return false;
+  }
+}
+
+export type CatalogSourceFetch = {
+  html: string;
+  finalUrl: string;
+  /** Original URL when it was a grounding redirect. */
+  redirectUrl: string | null;
+};
+
+export async function fetchCatalogSourcePage(
+  url: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<CatalogSourceFetch> {
+  const redirectUrl = isGoogleGroundingRedirectUrl(url) ? url : null;
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 10_000);
+  try {
+    const res = await fetchImpl(url, {
+      signal: ctrl.signal,
+      redirect: "follow",
+      headers: { "User-Agent": "RoamCatalogResearch/1" },
+    });
+    const finalUrl = res.url || url;
+    if (!res.ok) return { html: "", finalUrl, redirectUrl };
+    const html = await res.text();
+    return { html, finalUrl, redirectUrl };
+  } catch {
+    return { html: "", finalUrl: url, redirectUrl };
+  } finally {
+    clearTimeout(t);
+  }
+}
