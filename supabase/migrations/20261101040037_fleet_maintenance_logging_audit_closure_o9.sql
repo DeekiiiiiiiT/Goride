@@ -1,4 +1,4 @@
-# Prod-applied: fleet_maintenance_logging_audit_closure_o9
+-- Prod-applied: fleet_maintenance_logging_audit_closure_o9
 -- ---------------------------------------------------------------------------
 -- O-09: projected_due_date NULL when overdue
 -- ---------------------------------------------------------------------------
