@@ -1,4 +1,4 @@
-﻿-- Prod-applied: fleet_maintenance_logging_audit_closure_o2 (audit O-02)
+-- Prod-applied: fleet_maintenance_logging_audit_closure_o2 (audit O-02)
 
 -- ---------------------------------------------------------------------------
 -- O-02: Legacy fleet.maintenance_logs → completed work orders + lines

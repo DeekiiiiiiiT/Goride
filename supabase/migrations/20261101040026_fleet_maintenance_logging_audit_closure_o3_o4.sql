@@ -1,4 +1,4 @@
-﻿# Prod-applied: fleet_maintenance_logging_audit_closure_o3_o4
+# Prod-applied: fleet_maintenance_logging_audit_closure_o3_o4
 -- ---------------------------------------------------------------------------
 -- O-03: Package-only template intervals in recompute
 -- ---------------------------------------------------------------------------
