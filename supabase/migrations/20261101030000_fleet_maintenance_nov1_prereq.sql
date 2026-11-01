@@ -1,4 +1,4 @@
--- Nov 1 prod-applied sync migrations (32731+) sort before 20261103120000 but depend on
+-- Nov 1 prod-applied sync migrations (32731+) sort before 20261101030856 but depend on
 -- the same columns and views. Idempotent subset so fresh DB replay can reach Parts SQL checks.
 
 ALTER TABLE fleet.organization_settings

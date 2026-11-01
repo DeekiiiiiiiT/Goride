@@ -10,8 +10,39 @@ const MIGRATIONS = join(import.meta.dirname, '..', 'supabase', 'migrations');
 const NO_TRIP_ID_TABLES = ['fleet.fuel_entries', 'fleet.expense_journal'];
 const VERSION_PREFIX = /^(\d{14})_/;
 
+/** Intentional sort anchors already on main (see docs/ci-red-root-cause.md). */
+const GRANDFATHERED_FUTURE_PREFIXES = new Set([
+  '20261105020000',
+  '20261105030000',
+]);
+
+function parseMigrationPrefixUtc(prefix) {
+  return Date.UTC(
+    Number(prefix.slice(0, 4)),
+    Number(prefix.slice(4, 6)) - 1,
+    Number(prefix.slice(6, 8)),
+    Number(prefix.slice(8, 10)),
+    Number(prefix.slice(10, 12)),
+    Number(prefix.slice(12, 14)),
+  );
+}
+
 const files = readdirSync(MIGRATIONS).filter((f) => f.endsWith('.sql')).sort();
 let failed = false;
+
+const futureSlackMs = 5 * 60 * 1000;
+const nowUtc = Date.now() + futureSlackMs;
+for (const file of files) {
+  const m = VERSION_PREFIX.exec(file);
+  if (!m) continue;
+  if (GRANDFATHERED_FUTURE_PREFIXES.has(m[1])) continue;
+  if (parseMigrationPrefixUtc(m[1]) > nowUtc) {
+    console.error(
+      `${file}: migration timestamp is in the future (use \`supabase migration new <name>\`)`,
+    );
+    failed = true;
+  }
+}
 
 /** Same timestamp prefix → only one migration applies; reject collisions (GoRide period table miss). */
 const byPrefix = new Map();
@@ -47,4 +78,6 @@ for (const file of files) {
 }
 
 if (failed) process.exit(1);
-console.log('OK — migration SQL validated (trip_id + unique version prefixes)');
+console.log(
+  'OK — migration SQL validated (trip_id + unique version prefixes + migration dates)',
+);

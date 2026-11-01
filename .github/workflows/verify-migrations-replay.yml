@@ -4,14 +4,15 @@
 # can currently ship silently. This is exactly the class of bug tracked in
 # docs/adr/0001-migration-reorder-decision.md.
 #
-# Parts checks have their own workflow. This full-stack replay stays manual.
+# Parts checks have their own workflow. Full-stack replay also runs on migration PRs (ADR 0001).
 name: Verify Migrations Replay
 
-# on:
-#   pull_request:
-#     paths:
-#       - 'supabase/migrations/**'
-on: workflow_dispatch
+on:
+  pull_request:
+    paths:
+      - 'supabase/migrations/**'
+      - '.github/workflows/verify-migrations-replay.yml'
+  workflow_dispatch:
 
 jobs:
   replay:

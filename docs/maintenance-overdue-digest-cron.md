@@ -14,7 +14,7 @@ Headers:
 
 ## Suggested schedule
 
-**07:00 UTC daily** (`0 7 * * *`) — applied via migration `20261103120000_fleet_maintenance_logging.sql` when `pg_cron` is enabled.
+**07:00 UTC daily** (`0 7 * * *`) — applied via migration `20261101030856_fleet_maintenance_logging.sql` when `pg_cron` is enabled.
 
 Legacy note: older docs suggested 13:00 UTC; Jamaica 02:00 aligns with 07:00 UTC.
 
