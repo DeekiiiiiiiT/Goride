@@ -1,27 +1,5 @@
 import React from "react";
 
-export function PendingPartsEmpty() {
-  return (
-    <div className="flex flex-col gap-space-md">
-      <div className="flex items-center justify-between">
-        <h3 className="font-headline-lg text-headline-lg text-on-surface">State 1: Empty State (Zero Requests)</h3>
-        <span className="font-mono-sm text-mono-sm font-medium text-on-surface-variant">TAB: PARTS REQUEST QUEUE</span>
-      </div>
-    <div className="rounded-xl bg-surface-container-lowest p-space-xl shadow-sm flex flex-col items-center justify-center text-center">
-      <div className="relative z-10 flex max-w-xl flex-col items-center py-space-md">
-        <div className="mb-space-lg flex h-16 w-16 items-center justify-center rounded-full bg-surface-container-low text-on-surface-variant">
-          <span className="material-symbols-outlined text-[32px] text-secondary">inbox</span>
-        </div>
-        <h4 className="font-headline-xl text-headline-xl text-on-surface mb-space-sm">No part requests.</h4>
-        <p className="font-body-md text-body-md text-on-surface-variant max-w-md leading-relaxed">
-          When a fleet asks for a part we don't have, it shows here.
-        </p>
-      </div>
-    </div>
-    </div>
-  );
-}
-
 export function PendingPartsLoading() {
   return (
     <div className="flex flex-col gap-space-lg rounded-xl bg-surface-container-lowest p-space-lg shadow-sm">

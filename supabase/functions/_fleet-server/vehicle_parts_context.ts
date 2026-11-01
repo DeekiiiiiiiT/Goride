@@ -6,7 +6,7 @@ import { variantCodeLine, type VariantLabelRow } from "../../../packages/types/s
 import { resolveCatalogIdForKvVehicle } from "./vehicle_catalog_resolve.ts";
 
 const VARIANT_COLUMNS =
-  "id, make, model, production_start_year, production_end_year, chassis_code, engine_code, engine_displacement_l, fuel_type, fuel_category, engine_type, drivetrain, transmission, body_type, trim_series";
+  "id, make, model, production_start_year, production_end_year, chassis_code, engine_code, engine_displacement_l, fuel_type, fuel_category, engine_type, drivetrain, transmission, body_type, trim_series, front_brake_type, rear_brake_type, brake_size_mm, bolt_pattern";
 
 /** Columns loaded from part_repeat_alert when ledger notes are empty. */
 export const PART_REPEAT_ALERT_NOTE_COLUMNS = "detail, created_at";
@@ -143,6 +143,18 @@ export async function loadVehiclePartsContextExtras(
 
   const trim = formatTrimStepLabel(catalogRow);
   const chassis_code = catalogRow?.chassis_code != null ? String(catalogRow.chassis_code) : null;
+  const frontBrake = catalogRow && "front_brake_type" in catalogRow
+    ? String((catalogRow as { front_brake_type?: string | null }).front_brake_type ?? "").trim()
+    : "";
+  const rearBrake = catalogRow && "rear_brake_type" in catalogRow
+    ? String((catalogRow as { rear_brake_type?: string | null }).rear_brake_type ?? "").trim()
+    : "";
+  const brakeSize = catalogRow && "brake_size_mm" in catalogRow
+    ? (catalogRow as { brake_size_mm?: number | null }).brake_size_mm
+    : null;
+  const boltPattern = catalogRow && "bolt_pattern" in catalogRow
+    ? String((catalogRow as { bolt_pattern?: string | null }).bolt_pattern ?? "").trim()
+    : "";
 
   let orgShortCode: string | null = null;
   let orgName: string | null = null;
@@ -225,5 +237,12 @@ export async function loadVehiclePartsContextExtras(
     orgShortCode,
     latestNote,
     alternateTrimsLine,
+    brake_front_type: frontBrake || null,
+    brake_rear_type: rearBrake || null,
+    brake_front_rotor_mm: brakeSize != null && Number.isFinite(Number(brakeSize)) ? String(brakeSize) : null,
+    brake_rear_drum_mm: rearBrake && /drum/i.test(rearBrake) && brakeSize != null && Number.isFinite(Number(brakeSize))
+      ? String(brakeSize)
+      : null,
+    hub_bolt_pattern: boltPattern || null,
   };
 }

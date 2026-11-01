@@ -160,7 +160,11 @@ async function installStitchVisualMocks(page: import("@playwright/test").Page) {
 
 async function prepareFindPartsCapture(page: import("@playwright/test").Page) {
   await page.addStyleTag({
-    content: "main, .overflow-y-auto, [data-app-scroll], .app-layout-scroll { overflow: visible !important; height: auto !important; max-height: none !important; }",
+    content: [
+      "main, .overflow-y-auto, [data-app-scroll], .app-layout-scroll { overflow: visible !important; height: auto !important; max-height: none !important; }",
+      ".group\\/sidebar-wrapper, [data-slot=\"sidebar-wrapper\"] { height: auto !important; max-height: none !important; min-height: 0 !important; overflow: visible !important; }",
+      ".group\\/sidebar-wrapper > div, [data-slot=\"sidebar-wrapper\"] > div { height: auto !important; max-height: none !important; overflow: visible !important; }",
+    ].join(" "),
   });
 }
 
@@ -185,7 +189,7 @@ test.describe("Fleet find parts stitch live PNGs", () => {
   test("FP4 position at 1440px", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(`/maintenance?tab=find-parts&vehicle=${STITCH_VISUAL_VEHICLE_ID}&part=${STITCH_VISUAL_COMPONENT_ID}`);
-    await page.getByRole("heading", { name: /Which front brake pad set/i }).waitFor({ timeout: 20_000 });
+    await page.getByRole("heading", { name: /Which brake pads\?/i }).waitFor({ timeout: 20_000 });
     await prepareFindPartsCapture(page);
     await page.screenshot({
       path: "docs/stitch/roam-fleet-app/screenshots/FP4-live.png",

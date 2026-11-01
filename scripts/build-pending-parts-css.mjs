@@ -13,7 +13,8 @@ const htmlFiles = [
 const configs = htmlFiles.map((f) => parseTailwindConfigFromHtml(join(htmlDir, f)));
 const theme = mergeThemeExtend(configs);
 
-const manualTail = `.pending-parts-stitch .material-symbols-outlined { vertical-align: middle; }
+const manualTail = `.pending-parts-stitch .text-headline-sm, .pending-parts-stitch .font-headline-sm { font-size: 18px; line-height: 26px; letter-spacing: -0.01em; font-weight: 600; }
+.pending-parts-stitch .material-symbols-outlined { vertical-align: middle; }
 `;
 
 const generated = generateScopedStitchCss('pending-parts-stitch', theme, {

@@ -27,6 +27,24 @@ function brakeTypeTag(specs: Record<string, unknown>, axle: "front" | "rear"): s
   return raw.toUpperCase().slice(0, 12);
 }
 
+function brakeSpecTitle(axle: "front" | "rear", specs: Record<string, unknown>): string {
+  const prefix = axle === "front" ? "FRONT" : "REAR";
+  const key = axle === "front" ? "brake_front_type" : "brake_rear_type";
+  const raw = String(specs[key] ?? "").trim();
+  return raw ? `${prefix} · ${raw}` : `${prefix} · —`;
+}
+
+function axlePartTitle(
+  axle: "front" | "rear" | "both",
+  componentName: string,
+  hints: ComponentFitHints | null | undefined,
+): string {
+  if (axle === "both") return componentName;
+  const fromHints = axle === "front" ? hints?.labelsByPosition?.front : hints?.labelsByPosition?.rear;
+  if (fromHints?.trim()) return fromHints.trim();
+  return componentName;
+}
+
 function specOrNone(value: unknown): string {
   const text = String(value ?? "").trim();
   return text ? text : "None yet";
@@ -48,8 +66,17 @@ function diagramBadgeLabel(selectedAxle: string, selectedSide: string, frontSide
   return `${axle} AXLE · ${sideLabel(selectedSide)}`;
 }
 
+/** FP4 page title: sentence case for the part name (audit F3). */
+export function fp4PageTitle(partLabel: string): string {
+  const raw = String(partLabel || "").trim();
+  if (!raw || raw === "None yet") return "Which part?";
+  return `Which ${raw.toLowerCase()}?`;
+}
+
 export function buildFp4ViewModel(input: {
   ctx?: Record<string, unknown> | null;
+  /** Component plain name for page title and trail (e.g. Brake pads). */
+  componentName?: string;
   partName?: string;
   fitHints?: ComponentFitHints | null;
   selectedAxle?: string;
@@ -60,7 +87,8 @@ export function buildFp4ViewModel(input: {
   const ctx = input.ctx || {};
   const specs = readPartsVehicleSpecs(ctx);
   const hints = input.fitHints;
-  const partLabel = orNoneYet(input.partName || String(ctx.part_label || ctx.partName || "parts"));
+  const componentRaw = input.componentName || input.partName || String(ctx.part_label || ctx.partName || "parts");
+  const partLabel = orNoneYet(componentRaw);
   const versionTag = formatPartsVersionTag(ctx);
   const selectedAxle = input.selectedAxle || "front";
   const selectedSide = input.selectedSide || "both";
@@ -74,7 +102,7 @@ export function buildFp4ViewModel(input: {
       id: "front",
       title: "Front",
       typeTag: brakeTypeTag(specs as Record<string, unknown>, "front"),
-      partTitle: partLabel,
+      partTitle: axlePartTitle("front", partLabel, hints),
       onFileLabel: fp4OnFileLabel(counts.front),
       selected: selectedAxle === "front",
     },
@@ -82,7 +110,7 @@ export function buildFp4ViewModel(input: {
       id: "rear",
       title: "Back (rear)",
       typeTag: brakeTypeTag(specs as Record<string, unknown>, "rear"),
-      partTitle: partLabel,
+      partTitle: axlePartTitle("rear", partLabel, hints),
       onFileLabel: fp4OnFileLabel(counts.rear),
       selected: selectedAxle === "rear",
     },
@@ -90,7 +118,7 @@ export function buildFp4ViewModel(input: {
       id: "both",
       title: "Both (front & back)",
       typeTag: totalOnFile > 0 ? "FULL SET" : "—",
-      partTitle: partLabel,
+      partTitle: axlePartTitle("both", partLabel, hints),
       onFileLabel: fp4OnFileLabel(totalOnFile),
       selected: selectedAxle === "both",
     },
@@ -101,10 +129,10 @@ export function buildFp4ViewModel(input: {
     { id: "both", label: "Both sides", selected: selectedSide === "both" },
   ];
   const labourDefault = Number(ctx.labour_minutes ?? ctx.labourMinutes);
-  const options: Fp4OptionRow[] = ["front", "rear", "both"].map((id) => ({
+  const options: Fp4OptionRow[] = (["front", "rear", "both"] as const).map((id) => ({
     id,
     heading: fp4Heading(id),
-    title: partLabel,
+    title: axlePartTitle(id, partLabel, hints),
     subtitle: "None yet",
     replacementTimeLabel: formatLabourMinutes(labourDefault || undefined),
     offerLabel: id === "both" ? "Full set" : "—",
@@ -126,14 +154,14 @@ export function buildFp4ViewModel(input: {
     diagramBadge: diagramBadgeLabel(selectedAxle, selectedSide, frontSide, rearSide),
     scaleLabel: "SCALE 1:32",
     frontSpec: {
-      title: "FRONT · Disc brakes",
+      title: brakeSpecTitle("front", specs as Record<string, unknown>),
       tag: brakeTypeTag(specs as Record<string, unknown>, "front"),
       description: "None yet",
       rotor: specOrNone(specs.brake_front_rotor_mm),
       piston: specOrNone(specs.brake_front_piston),
     },
     rearSpec: {
-      title: "REAR · Drum brakes",
+      title: brakeSpecTitle("rear", specs as Record<string, unknown>),
       tag: brakeTypeTag(specs as Record<string, unknown>, "rear"),
       description: "None yet",
       drum: specOrNone(specs.brake_rear_drum_mm),

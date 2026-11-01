@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { Fp4ViewModel } from "../findPartsViewModels";
+import { fp4PageTitle } from "../findPartsBuildFp4";
 import { FindPartsStickyHeader } from "../FindPartsStickyHeader";
 import { Fp4VehicleDiagram } from "../Fp4VehicleDiagram";
 
@@ -39,7 +40,7 @@ export function Fp4Screen({ actions, data }: { actions: Fp4Actions; data: Fp4Vie
                 {data.fitmentEyebrow}
               </span>
             </div>
-            <h1 className="font-headline-xl text-headline-xl text-on-surface tracking-tight font-bold">Which {data.partLabel}?</h1>
+            <h1 className="font-headline-xl text-headline-xl text-on-surface tracking-tight font-bold">{fp4PageTitle(data.partLabel)}</h1>
             <p className="font-body-md text-body-md text-on-surface-variant mt-1">Pick the axle, then the side when this part is sold per wheel.</p>
           </div>
 
@@ -55,11 +56,9 @@ export function Fp4Screen({ actions, data }: { actions: Fp4Actions; data: Fp4Vie
                 </div>
                 <div className="relative w-full min-h-[280px] bg-surface-container-low rounded-xl flex items-center justify-center p-space-sm">
                   <Fp4VehicleDiagram frontActive={frontActive} rearActive={rearActive} />
-                  <div className="absolute bottom-3 left-3 bg-surface-container-lowest/95 backdrop-blur-sm px-2.5 py-1 rounded shadow-sm flex items-center gap-1.5 font-label-code text-caption">
-                    <span className="w-1.5 h-1.5 rounded-full bg-primary"></span>
-                    <span className="font-semibold text-on-surface">{data.diagramBadge.split(" · ")[0]}</span>
-                    <span className="text-on-surface-variant font-normal">·</span>
-                    <span className="text-on-surface-variant">{data.diagramBadge.includes("BOTH") ? "BOTH SIDES" : "Both sides"}</span>
+                  <div className="absolute bottom-3 left-3 bg-surface-container-lowest/95 backdrop-blur-sm px-2.5 py-1 rounded shadow-sm flex items-center gap-1.5 font-label-code text-caption max-w-[min(100%,20rem)]">
+                    <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0"></span>
+                    <span className="font-semibold text-on-surface leading-snug">{data.diagramBadge}</span>
                   </div>
                 </div>
               </div>

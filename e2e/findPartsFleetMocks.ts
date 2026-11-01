@@ -16,6 +16,7 @@ import {
   stitchVisualActivity,
   stitchVisualBrowse,
   stitchVisualFindSections,
+  stitchVisualFitHints,
   stitchVisualVehicleContext,
 } from "./findPartsStitchVisualFixtures";
 
@@ -109,6 +110,11 @@ export function fleetCorePartsFixtures(cars: FleetCar[] = []) {
     browse: findPartsFixtureBrowse,
     symptoms: { problems: [{ id: "sym-1", name: "Fixture squeal", positionAware: true }] },
     savedSearches: { items: [] },
+    fitHints: {
+      hasSideSpecificListings: false,
+      countsByPosition: { front: 2, rear: 0 },
+      labelsByPosition: { front: "Front brake pad set" },
+    },
   };
 }
 
@@ -147,6 +153,7 @@ export function fleetCoreStitchVisualFixtures() {
       askVariant: false,
       pickedVariantId: stitchVisualVehicleContext().variantId,
     },
+    fitHints: stitchVisualFitHints(),
   };
 }
 
@@ -162,6 +169,13 @@ export async function mockFleetCoreRoute(url: string, method: string, fixtures: 
   if (path.endsWith("/parts/browse")) return fixtures.browse;
   if (path.endsWith("/parts/symptoms")) return fixtures.symptoms;
   if (path.endsWith("/parts/saved-searches")) return fixtures.savedSearches;
+  if (path.includes("/parts/component-fit-hints")) {
+    return (fixtures as { fitHints?: unknown }).fitHints ?? {
+      hasSideSpecificListings: false,
+      countsByPosition: { front: 0, rear: 0 },
+      labelsByPosition: {},
+    };
+  }
   if (path.includes("/parts/find")) {
     return {
       ...fixtures.find,
@@ -186,6 +200,15 @@ export async function installFleetCoreMockRoutes(
     }
     await route.fulfill({ json: {} });
   };
+  await page.route("**/functions/v1/fleet-ops/**/maintenance-fleet-summary**", async (route) => {
+    await route.fulfill({ json: { vehicles: [], summary: {} } });
+  });
+  await page.route("**/__sb/functions/v1/fleet-ops/**/maintenance-fleet-summary**", async (route) => {
+    await route.fulfill({ json: { vehicles: [], summary: {} } });
+  });
+  await page.route("**/fleet-ops/**/maintenance-fleet-summary**", async (route) => {
+    await route.fulfill({ json: { vehicles: [], summary: {} } });
+  });
   await page.route("**/functions/v1/fleet-core/**", fulfillFleetCore);
   await page.route("**/__sb/functions/v1/fleet-core/**", fulfillFleetCore);
   await page.route("**/fleet-core/**", fulfillFleetCore);

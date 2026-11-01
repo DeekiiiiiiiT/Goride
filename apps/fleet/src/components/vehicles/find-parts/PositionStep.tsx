@@ -28,16 +28,18 @@ export function PositionStep({
   const [selectedFrontSide, setSelectedFrontSide] = useState("both");
   const [selectedRearSide, setSelectedRearSide] = useState("both");
 
-  const resolvedPartName = useMemo(() => {
+  const componentName = useMemo(() => {
+    const fromBrowse = partNameForComponent(browse.data as Parameters<typeof partNameForComponent>[0], componentId);
+    if (fromBrowse.trim()) return fromBrowse;
     if (partName?.trim()) return partName;
-    return partNameForComponent(browse.data as Parameters<typeof partNameForComponent>[0], componentId);
+    return "";
   }, [partName, browse.data, componentId]);
 
   const fitHints = (hintsQuery.data || null) as ComponentFitHints | null;
 
   const data = buildFp4ViewModel({
     ctx: (ctx.data as Record<string, unknown> | undefined) ?? null,
-    partName: resolvedPartName,
+    componentName,
     fitHints,
     selectedAxle,
     selectedSide,

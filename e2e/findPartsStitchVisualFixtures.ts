@@ -31,9 +31,9 @@ export function stitchVisualBrowse() {
       components: row.id === "sys-brakes"
         ? [{
           id: STITCH_VISUAL_COMPONENT_ID,
-          plainName: "Front brake pad set",
-          name: "Front brake pad set",
-          count: 8,
+          plainName: "Brake pads",
+          name: "Brake pads",
+          count: 6,
           positionAware: true,
         }]
         : [],
@@ -65,6 +65,11 @@ export function stitchVisualVehicleContext() {
       drivetrain: "2WD",
       chassis_code: "M900A-BGBGE",
       engineFilterLine: "1KR-FE (996 cc I3)",
+      brake_front_type: "Ventilated Disc",
+      brake_rear_type: "Drum",
+      brake_front_rotor_mm: "255",
+      brake_rear_drum_mm: "180",
+      hub_bolt_pattern: "4x100",
     },
     latestNote: null,
     alternateTrimsLine: "",
@@ -94,6 +99,17 @@ export function stitchVisualActivity() {
     repeatAlerts: { total: 0, items: [] },
     warrantyClaims: { total: 0, items: [] },
     cores: { total: 0, items: [] },
+  };
+}
+
+export function stitchVisualFitHints() {
+  return {
+    hasSideSpecificListings: false,
+    countsByPosition: { front: 4, rear: 2 },
+    labelsByPosition: {
+      front: "Front brake pad set",
+      rear: "Rear brake pad set",
+    },
   };
 }
 
