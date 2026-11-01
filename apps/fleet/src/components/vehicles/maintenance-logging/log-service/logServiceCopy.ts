@@ -48,4 +48,11 @@ export const LOG_SERVICE_COPY = {
   fixReadingLabel: "Fix the number",
   keepReadingLabel: "Keep it and continue",
   scanInvoiceHint: "Optional — upload image or PDF to auto-fill",
+  mechanicNoteLabel: "Mechanic Note / Work Order Reference",
+  mechanicNoteOptionalHint: (homeBase?: string | null) =>
+    homeBase?.trim() ? `Optional · ${homeBase.trim()}` : "Optional",
+  mechanicNotePlaceholder: "e.g., WO-…: what was done",
+  oemMatchClearedSuffix: "ALL OEM MATCH CRITERIA CLEARED",
+  linesWithoutVerifiedPartSuffix: (n: number) =>
+    `${n} LINE${n === 1 ? "" : "S"} WITHOUT A VERIFIED PART`,
 } as const;

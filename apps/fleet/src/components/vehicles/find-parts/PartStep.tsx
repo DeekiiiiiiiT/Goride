@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Fp3Screen } from "./screens/Fp3Screen";
-import { Fp3AreaOverlay } from "./screens/Fp3AreaOverlay";
+import { Fp3AreaOverlay, FP3_OPENING_SIDE_LABEL } from "./screens/Fp3AreaOverlay";
 import { buildFp3OverlayViewModel, buildFp3ViewModel, type Fp3OverlayRow, type Fp3SearchHit } from "./findPartsViewModels";
 import { usePartsBrowse, usePartsSymptoms, usePartsTerm, usePartsVehicleContext } from "./findPartsQueries";
 import { onFileCountForComponent, partNameForComponent, positionAwareForComponent, stepAfterPartPick } from "./findPartsRoute";
@@ -161,7 +161,7 @@ export function PartStep({
     setPickedRowId(row.id);
     selectPart(row.id, row.name, row.positionAware);
     const nextStep = stepAfterPartPick(Number(String(row.onFileLabel).match(/^\d+/)?.[0] || 0), Boolean(row.positionAware));
-    setOpeningSideLabel(nextStep === "position" ? "Opening Which side? …" : nextStep === "results" ? "Opening Results …" : "Opening request …");
+    setOpeningSideLabel(nextStep === "position" ? FP3_OPENING_SIDE_LABEL : nextStep === "results" ? "Opening Results …" : "Opening request …");
     window.setTimeout(() => {
       setOverlayAreaId(null);
       setOpeningSideLabel("");

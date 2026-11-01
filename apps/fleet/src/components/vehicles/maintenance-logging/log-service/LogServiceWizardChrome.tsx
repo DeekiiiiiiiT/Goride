@@ -9,6 +9,7 @@ export type LogServiceVehicleStrip = {
   odometerKm?: number | null;
   odometerDateLabel?: string | null;
   sourceLabel?: string | null;
+  homeBase?: string | null;
 };
 
 const STEP_LABELS = LOG_SERVICE_COPY.stepBarLabels;
@@ -39,7 +40,7 @@ function StepBar({ activeStep }: { activeStep: LogServiceWizardStep }) {
                       ? "font-bold text-on-surface"
                       : isComplete
                         ? "text-on-surface"
-                        : "text-secondary"
+                        : "text-stitch-secondary"
                   }`}
                 >
                   {stepNum} {label}
@@ -89,7 +90,7 @@ export function LogServiceWizardChrome({
           type="button"
           aria-label="Close"
           onClick={onClose}
-          className="w-8 h-8 rounded-lg flex items-center justify-center text-secondary hover:bg-surface-container hover:text-on-surface transition-colors"
+          className="w-8 h-8 rounded-lg flex items-center justify-center text-stitch-secondary hover:bg-surface-container hover:text-on-surface transition-colors"
         >
           <X className="w-5 h-5" />
         </button>
@@ -155,7 +156,7 @@ export function LogServiceWizardContinueButton({
       onClick={onClick}
       className={`px-6 py-2 rounded-lg font-medium text-sm flex items-center gap-1.5 transition-all ${
         disabled || loading
-          ? "bg-surface-container-highest text-secondary cursor-not-allowed"
+          ? "bg-surface-container-highest text-stitch-secondary cursor-not-allowed"
           : "bg-primary text-on-primary hover:opacity-90 active:scale-[0.98] shadow-sm"
       }`}
     >

@@ -55,7 +55,7 @@ export function LogServiceDateMileageStep({
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-0.5">
         <h3 className="text-lg font-semibold text-on-surface">{LOG_SERVICE_COPY.dateMileageHeading}</h3>
-        <p className="text-sm text-secondary">{LOG_SERVICE_COPY.dateMileageSubtitle}</p>
+        <p className="text-sm text-stitch-secondary">{LOG_SERVICE_COPY.dateMileageSubtitle}</p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
@@ -71,10 +71,10 @@ export function LogServiceDateMileageStep({
               onChange={(e) => onDateChange(e.target.value)}
               className="w-full h-9 bg-surface-container-lowest text-on-surface text-sm pl-3 pr-9 rounded-lg shadow-sm focus:outline-none focus:ring-1 focus:ring-primary"
             />
-            <Calendar className="absolute right-2.5 w-[18px] h-[18px] text-secondary pointer-events-none" />
+            <Calendar className="absolute right-2.5 w-[18px] h-[18px] text-stitch-secondary pointer-events-none" />
           </div>
           {displayDate ? (
-            <p className="text-xs text-secondary sr-only">{displayDate}</p>
+            <p className="text-xs text-stitch-secondary sr-only">{displayDate}</p>
           ) : null}
         </div>
 
@@ -89,7 +89,7 @@ export function LogServiceDateMileageStep({
             <span className="text-error font-bold">*</span>
           </label>
           <div className="relative flex items-center">
-            <span className="absolute left-3 text-secondary text-[11px] font-medium uppercase">km</span>
+            <span className="absolute left-3 text-stitch-secondary text-[11px] font-medium uppercase">km</span>
             <input
               id="svc-odo"
               type="number"
@@ -106,7 +106,7 @@ export function LogServiceDateMileageStep({
               placeholder="e.g. 195,192"
             />
             {checkLoading ? (
-              <Loader2 className="absolute right-2 w-4 h-4 animate-spin text-secondary" />
+              <Loader2 className="absolute right-2 w-4 h-4 animate-spin text-stitch-secondary" />
             ) : null}
           </div>
           {showOdometerError || odoEmpty ? (
@@ -114,12 +114,12 @@ export function LogServiceDateMileageStep({
               <span className="text-xs font-semibold">{LOG_SERVICE_COPY.odometerRequired}</span>
             </div>
           ) : checkResult?.expected != null && showAnomaly ? (
-            <p className="text-xs text-secondary mt-0.5">
+            <p className="text-xs text-stitch-secondary mt-0.5">
               {LOG_SERVICE_COPY.expectedReadingPrefix}
               {checkResult.expected.toLocaleString()} km for this time period
             </p>
           ) : lastTrustedReading != null && lastTrustedReading > 0 ? (
-            <p className="text-xs text-secondary mt-0.5">
+            <p className="text-xs text-stitch-secondary mt-0.5">
               Last trusted reading {lastTrustedReading.toLocaleString()} km
               {lastTrustedMeta ? ` · ${lastTrustedMeta}` : ""}
             </p>
@@ -170,7 +170,7 @@ export function LogServiceDateMileageStep({
       ) : null}
 
       <div className="p-4 bg-surface-container rounded-lg flex items-start gap-4">
-        <Info className="w-[18px] h-[18px] text-secondary shrink-0 mt-0.5" />
+        <Info className="w-[18px] h-[18px] text-stitch-secondary shrink-0 mt-0.5" />
         <p className="text-sm text-on-surface-variant leading-relaxed">
           {LOG_SERVICE_COPY.mileageHelper}
         </p>

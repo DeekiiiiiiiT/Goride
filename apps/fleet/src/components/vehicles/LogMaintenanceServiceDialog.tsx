@@ -41,6 +41,7 @@ import {
   writeLogServiceDraft,
 } from "./maintenance-logging/log-service/logServiceDraft";
 import type { LogServiceVehicleStrip, LogServiceWizardStep } from "./maintenance-logging/log-service";
+import { logServiceOemMatchSummary } from "./maintenance-logging/log-service/logServiceOemMatchSummary";
 import type {
   CatalogMaintenanceTaskOption,
   MaintenanceCategoryFieldDef,
@@ -194,6 +195,7 @@ type LineExtras = {
   complimentary: boolean;
   partId: string | null;
   supplierPartOfferId: string | null;
+  partConfirmedFit: boolean;
   system: MaintenanceServiceCategory | null;
 };
 
@@ -209,6 +211,7 @@ function defaultExtras(system: MaintenanceServiceCategory | null = null): LineEx
     complimentary: false,
     partId: null,
     supplierPartOfferId: null,
+    partConfirmedFit: false,
     system,
   };
 }
@@ -253,6 +256,7 @@ function lineFromCategoryValues(
     complimentary: extras.complimentary || undefined,
     partId: extras.partId || undefined,
     supplierPartOfferId: extras.supplierPartOfferId || undefined,
+    partConfirmedFit: extras.partId ? extras.partConfirmedFit : undefined,
     notes: typeof values.notes === "string" ? values.notes : undefined,
     values: { ...values },
   };
@@ -300,7 +304,6 @@ export function LogMaintenanceServiceDialog({
     ReturnType<typeof api.getLogServiceContext>
   > | null>(null);
   const [lineDetailCategories, setLineDetailCategories] = useState<MaintenanceServiceCategory[]>([]);
-  const [workOrderRef, setWorkOrderRef] = useState("");
   const [step, setStep] = useState<DialogStep>("dateMileage");
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
   const [isLoading, setIsLoading] = useState(false);
@@ -693,7 +696,8 @@ export function LogMaintenanceServiceDialog({
       warranty: Boolean(existing?.warranty),
       complimentary: Boolean(existing?.complimentary),
       partId: existing?.partId || null,
-      supplierPartOfferId: (existing as { supplierPartOfferId?: string | null } | undefined)?.supplierPartOfferId || null,
+      supplierPartOfferId: existing?.supplierPartOfferId ?? null,
+      partConfirmedFit: existing?.partConfirmedFit === true,
       system,
     });
     setStep("lineDetails");
@@ -1430,10 +1434,10 @@ export function LogMaintenanceServiceDialog({
               baySessionLabel={idempotencyKey.slice(0, 8).toUpperCase()}
               configuredCount={lineDetailCategories.filter((c) => categoryHasLine(c)).length}
               subtotalLabel={`${formMeta.currency || "JMD"} ${totalCost.toLocaleString()}`}
+              oemMatch={logServiceOemMatchSummary(lines)}
+              homeBase={vehicleStrip?.homeBase}
               mechanicNote={formMeta.notes}
-              workOrderRef={workOrderRef}
               onMechanicNoteChange={(notes) => setFormMeta((p) => ({ ...p, notes }))}
-              onWorkOrderRefChange={setWorkOrderRef}
             >
               {lineDetailCategories.map((cat) => (
                 <div
@@ -1471,11 +1475,12 @@ export function LogMaintenanceServiceDialog({
                       partsLoading={partsLoading}
                       compatibleParts={compatibleParts}
                       partId={lineExtras.partId}
-                      onPartSelect={(partId, offerId, brand, partNumber) =>
+                      onPartSelect={(partId, offerId, brand, partNumber, partConfirmedFit) =>
                         setLineExtras((prev) => ({
                           ...prev,
                           partId,
                           supplierPartOfferId: offerId,
+                          partConfirmedFit: partConfirmedFit === true,
                           brand: prev.brand || brand || prev.brand,
                           partNumber: prev.partNumber || partNumber || prev.partNumber,
                         }))
@@ -1489,7 +1494,7 @@ export function LogMaintenanceServiceDialog({
                     <div className="flex items-center justify-between gap-3">
                       <div>
                         <p className="font-semibold text-on-surface">{cat.name}</p>
-                        <p className="text-xs text-secondary">
+                        <p className="text-xs text-stitch-secondary">
                           {categoryHasLine(cat) ? "Saved" : "Needs details"}
                         </p>
                       </div>
@@ -1540,11 +1545,12 @@ export function LogMaintenanceServiceDialog({
               partsLoading={partsLoading}
               compatibleParts={compatibleParts}
               partId={lineExtras.partId}
-              onPartSelect={(partId, offerId, brand, partNumber) =>
+              onPartSelect={(partId, offerId, brand, partNumber, partConfirmedFit) =>
                 setLineExtras((prev) => ({
                   ...prev,
                   partId,
                   supplierPartOfferId: offerId,
+                  partConfirmedFit: partConfirmedFit === true,
                   brand: prev.brand || brand || prev.brand,
                   partNumber: prev.partNumber || partNumber || prev.partNumber,
                 }))

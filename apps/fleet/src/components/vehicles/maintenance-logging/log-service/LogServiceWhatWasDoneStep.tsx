@@ -119,7 +119,7 @@ export function LogServiceWhatWasDoneStep({
       <div className="flex flex-col gap-4">
         <div className="flex justify-between items-end gap-4">
           <div>
-            <span className="text-[11px] text-secondary uppercase tracking-wider font-semibold">
+            <span className="text-[11px] text-stitch-secondary uppercase tracking-wider font-semibold">
               {LOG_SERVICE_COPY.wizardEyebrow}
             </span>
             <h2 className="text-2xl font-semibold text-on-surface mt-0.5">
@@ -135,7 +135,7 @@ export function LogServiceWhatWasDoneStep({
 
         <div className="relative w-full">
           <div className="bg-surface-container-low rounded-lg p-1 flex items-center shadow-sm">
-            <div className="px-2 text-secondary flex items-center">
+            <div className="px-2 text-stitch-secondary flex items-center">
               <Search className="w-5 h-5" />
             </div>
             <input
@@ -155,7 +155,7 @@ export function LogServiceWhatWasDoneStep({
           </div>
           {searchOpen && searchHits.length > 0 ? (
             <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-30 bg-surface-container-lowest rounded-lg shadow-xl overflow-hidden p-1 flex flex-col gap-0.5">
-              <div className="px-3 py-1 text-[10px] text-secondary uppercase font-semibold">
+              <div className="px-3 py-1 text-[10px] text-stitch-secondary uppercase font-semibold">
                 {LOG_SERVICE_COPY.suggestedOperations}
               </div>
               {searchHits.map((op) => (
@@ -188,7 +188,7 @@ export function LogServiceWhatWasDoneStep({
                         Due
                       </span>
                     ) : null}
-                    <ArrowRight className="w-4 h-4 text-secondary opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <ArrowRight className="w-4 h-4 text-stitch-secondary opacity-0 group-hover:opacity-100 transition-opacity" />
                   </div>
                 </button>
               ))}
@@ -203,7 +203,7 @@ export function LogServiceWhatWasDoneStep({
             <Package className="w-[18px] h-[18px] text-primary" />
             <h3 className="text-lg font-semibold text-on-surface">{LOG_SERVICE_COPY.servicePackages}</h3>
           </div>
-          <span className="text-xs text-secondary">{LOG_SERVICE_COPY.sortedByPriority}</span>
+          <span className="text-xs text-stitch-secondary">{LOG_SERVICE_COPY.sortedByPriority}</span>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-3">
           {sortedPackages.map((pkg) => (
@@ -239,7 +239,7 @@ export function LogServiceWhatWasDoneStep({
                 {pkg.intervalText ? (
                   <span className="text-[10px] text-on-surface-variant">{pkg.intervalText}</span>
                 ) : pkg.dueKind ? (
-                  <span className="text-[10px] text-secondary uppercase tracking-wide">
+                  <span className="text-[10px] text-stitch-secondary uppercase tracking-wide">
                     {pkg.dueKind.replace(/_/g, " ")}
                   </span>
                 ) : null}
@@ -248,7 +248,7 @@ export function LogServiceWhatWasDoneStep({
                 {pkg.kmLabel ? (
                   <span
                     className={`font-mono text-[10px] font-semibold ${
-                      pkg.status === "overdue" ? "text-error" : "text-secondary"
+                      pkg.status === "overdue" ? "text-error" : "text-stitch-secondary"
                     }`}
                   >
                     {pkg.kmLabel}
@@ -267,13 +267,13 @@ export function LogServiceWhatWasDoneStep({
 
       <section className="flex flex-col gap-3">
         <h3 className="text-lg font-semibold text-on-surface">{LOG_SERVICE_COPY.quickJobs}</h3>
-        <p className="text-xs text-secondary">{LOG_SERVICE_COPY.quickJobsHint}</p>
+        <p className="text-xs text-stitch-secondary">{LOG_SERVICE_COPY.quickJobsHint}</p>
         {quickJobsLoading ? (
-          <div className="flex items-center gap-2 text-sm text-secondary py-6 justify-center">
+          <div className="flex items-center gap-2 text-sm text-stitch-secondary py-6 justify-center">
             <Loader2 className="w-4 h-4 animate-spin" /> Loading systems…
           </div>
         ) : quickJobs.length === 0 ? (
-          <p className="text-sm text-secondary py-2">No systems available.</p>
+          <p className="text-sm text-stitch-secondary py-2">No systems available.</p>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {quickJobs.map((sys) => (
@@ -310,7 +310,7 @@ export function LogServiceWhatWasDoneStep({
                   {inspectionPointCount}-point
                 </span>
               </div>
-              <p className="text-xs text-secondary">{LOG_SERVICE_COPY.digitalInspectionHint}</p>
+              <p className="text-xs text-stitch-secondary">{LOG_SERVICE_COPY.digitalInspectionHint}</p>
             </div>
           </div>
           <span className="text-sm font-semibold text-primary shrink-0 flex items-center gap-0.5">

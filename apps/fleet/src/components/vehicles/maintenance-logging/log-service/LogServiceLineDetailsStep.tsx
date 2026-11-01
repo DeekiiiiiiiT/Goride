@@ -42,7 +42,13 @@ export type LogServiceLineDetailsStepProps = {
   partsLoading: boolean;
   compatibleParts: CompatiblePartsItem[];
   partId: string | null;
-  onPartSelect: (partId: string | null, offerId: string | null, brand?: string, partNumber?: string) => void;
+  onPartSelect: (
+    partId: string | null,
+    offerId: string | null,
+    brand?: string,
+    partNumber?: string,
+    partConfirmedFit?: boolean,
+  ) => void;
   lineTotalLabel: string;
   currency: string;
   lineTotal: number;
@@ -82,11 +88,11 @@ export function LogServiceLineDetailsStep(props: LogServiceLineDetailsStepProps)
   return (
     <div className="space-y-6">
       <div>
-        <span className="text-[11px] text-secondary uppercase tracking-wider font-semibold">
+        <span className="text-[11px] text-stitch-secondary uppercase tracking-wider font-semibold">
           {LOG_SERVICE_COPY.wizardEyebrow}
         </span>
         <h2 className="text-2xl font-semibold text-on-surface mt-0.5">{LOG_SERVICE_COPY.lineDetailsTitle}</h2>
-        <p className="text-sm text-secondary mt-1">{LOG_SERVICE_COPY.lineDetailsSubtitle}</p>
+        <p className="text-sm text-stitch-secondary mt-1">{LOG_SERVICE_COPY.lineDetailsSubtitle}</p>
       </div>
 
       <div className="flex items-center gap-3">
@@ -95,7 +101,7 @@ export function LogServiceLineDetailsStep(props: LogServiceLineDetailsStepProps)
         </div>
         <div>
           <h3 className="font-semibold text-on-surface">{category.name}</h3>
-          <p className="text-xs text-secondary">
+          <p className="text-xs text-stitch-secondary">
             {[systemName, category.code].filter(Boolean).join(" · ")}
           </p>
         </div>
@@ -220,22 +226,28 @@ export function LogServiceLineDetailsStep(props: LogServiceLineDetailsStepProps)
       <div className="space-y-2">
         <Label>Link part (optional)</Label>
         {partsLoading ? (
-          <p className="text-xs text-secondary flex items-center gap-2">
+          <p className="text-xs text-stitch-secondary flex items-center gap-2">
             <Loader2 className="w-3 h-3 animate-spin" /> Loading compatible parts…
           </p>
         ) : compatibleParts.length === 0 ? (
-          <p className="text-xs text-secondary">No compatible parts for this vehicle/component.</p>
+          <p className="text-xs text-stitch-secondary">No compatible parts for this vehicle/component.</p>
         ) : (
           <Select
             value={partId || "__none__"}
             onValueChange={(v: string) => {
               if (v === "__none__") {
-                onPartSelect(null, null);
+                onPartSelect(null, null, undefined, undefined, false);
                 return;
               }
               const item = compatibleParts.find((p) => p.part.id === v);
               const offerId = item?.offers?.[0]?.id ?? null;
-              onPartSelect(v, offerId, item?.part.name, item?.part.oem_part_number ?? undefined);
+              onPartSelect(
+                v,
+                offerId,
+                item?.part.name,
+                item?.part.oem_part_number ?? undefined,
+                item?.confirmedFit === true,
+              );
             }}
           >
             <SelectTrigger className="bg-surface-container-lowest border-outline-variant/40">
@@ -255,7 +267,7 @@ export function LogServiceLineDetailsStep(props: LogServiceLineDetailsStepProps)
       </div>
 
       <div className="rounded-lg border border-outline-variant/40 bg-surface-container-low px-4 py-3 flex justify-between items-center">
-        <span className="text-sm text-secondary">{lineTotalLabel}</span>
+        <span className="text-sm text-stitch-secondary">{lineTotalLabel}</span>
         <span className="font-semibold text-on-surface">
           {currency} {lineTotal.toLocaleString()}
         </span>

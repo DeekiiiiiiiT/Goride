@@ -305,6 +305,7 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
         ? formatMaintenanceDisplayDate(v.odometerMeta.recordedAt)
         : null,
       sourceLabel: v.odometerMeta?.sourceLabel ?? v.odometerMeta?.source ?? null,
+      homeBase: v.homeBase ?? null,
     };
   }, [items, logVehicleId]);
 

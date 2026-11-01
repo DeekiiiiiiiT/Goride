@@ -1,5 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import type { Fp3OverlayRow, Fp3OverlayViewModel } from "../findPartsViewModels";
+
+/** Shown under a picked overlay row; PartStep sets the same string when advancing. */
+export const FP3_OPENING_SIDE_LABEL = "Opening Which side? …";
 
 export type Fp3OverlayActions = {
   onClose: () => void;
@@ -14,16 +17,22 @@ export type Fp3OverlayActions = {
   openingSideLabel: string;
 };
 
+type OverlayRowMeta = {
+  requestRouteLine: string;
+  targetEngineLine: string;
+  catalogAddAvgMinutes: number | null;
+};
+
 function OverlayRowButton({
   row,
   actions,
-  sheet,
   expandedNotOnFileId,
+  overlayMeta,
 }: {
   row: Fp3OverlayRow;
   actions: Fp3OverlayActions;
-  sheet?: boolean;
   expandedNotOnFileId: string;
+  overlayMeta: OverlayRowMeta;
 }) {
   const expanded = (expandedNotOnFileId === row.id || actions.focusedRowId === row.id) && !row.onFile;
   const picked = actions.pickedRowId === row.id;
@@ -77,6 +86,11 @@ function OverlayRowButton({
           <p className="font-body-sm text-body-sm text-on-surface">
             We don&apos;t have {row.name} info for your {actions.vehicleDescriptor} yet.
           </p>
+          {overlayMeta.catalogAddAvgMinutes != null ? (
+            <p className="font-body-sm text-body-sm text-on-surface-variant">
+              Roam usually adds missing parts within approximately {overlayMeta.catalogAddAvgMinutes} minutes.
+            </p>
+          ) : null}
           <div className="flex flex-wrap gap-space-sm">
             <button type="button" className="px-space-md py-2 rounded-lg bg-primary text-on-primary font-body-sm text-body-sm font-semibold" onClick={() => actions.onAskRoam(row)}>
               Ask Roam to add it
@@ -84,6 +98,10 @@ function OverlayRowButton({
             <button type="button" className="px-space-md py-2 rounded-lg bg-surface-container-high text-on-surface font-body-sm text-body-sm font-medium" onClick={actions.onCollapseNotOnFile}>
               Pick another part
             </button>
+          </div>
+          <div className="px-space-xs flex items-center justify-between font-label-code text-caption text-on-surface-variant tracking-wider uppercase">
+            <span>{overlayMeta.requestRouteLine}</span>
+            <span>{overlayMeta.targetEngineLine}</span>
           </div>
         </div>
       ) : null}
@@ -93,7 +111,21 @@ function OverlayRowButton({
           <span>{actions.openingSideLabel}</span>
         </div>
       ) : null}
-      {sheet ? null : null}
+    </div>
+  );
+}
+
+function Fp3OverlaySearchFooter({ onSearchInstead }: { onSearchInstead: () => void }) {
+  return (
+    <div className="px-space-xl py-space-md bg-surface-container-low flex items-center justify-between shrink-0">
+      <span className="font-body-sm text-body-sm text-on-surface-variant">Can&apos;t see your part? Search for it by name.</span>
+      <button
+        type="button"
+        className="font-body-sm text-body-sm font-semibold text-primary underline underline-offset-4 hover:opacity-80 transition-opacity"
+        onClick={onSearchInstead}
+      >
+        Search instead
+      </button>
     </div>
   );
 }
@@ -108,7 +140,12 @@ export function Fp3AreaOverlay({
   sheet?: boolean;
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
-  const [hoverHelp] = useState(true);
+
+  const overlayMeta: OverlayRowMeta = {
+    requestRouteLine: data.requestRouteLine,
+    targetEngineLine: data.targetEngineLine,
+    catalogAddAvgMinutes: data.catalogAddAvgMinutes,
+  };
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -158,7 +195,7 @@ export function Fp3AreaOverlay({
       <div className={`px-space-xl pb-space-lg flex flex-col gap-space-md ${sheet ? "max-h-[70vh] overflow-y-auto" : ""}`}>
         <div className="flex flex-col gap-space-sm">
           {data.rowsOnFile.map((row) => (
-            <OverlayRowButton key={row.id} row={row} actions={actions} sheet={sheet} expandedNotOnFileId={data.expandedNotOnFileId} />
+            <OverlayRowButton key={row.id} row={row} actions={actions} expandedNotOnFileId={data.expandedNotOnFileId} overlayMeta={overlayMeta} />
           ))}
         </div>
         {data.rowsNotOnFile.length ? (
@@ -173,23 +210,14 @@ export function Fp3AreaOverlay({
             </div>
             <div className="flex flex-col gap-space-sm">
               {data.rowsNotOnFile.map((row) => (
-                <OverlayRowButton key={row.id} row={row} actions={actions} sheet={sheet} expandedNotOnFileId={data.expandedNotOnFileId} />
+                <OverlayRowButton key={row.id} row={row} actions={actions} expandedNotOnFileId={data.expandedNotOnFileId} overlayMeta={overlayMeta} />
               ))}
             </div>
           </>
         ) : null}
       </div>
-      <div className="px-space-xl pb-space-lg pt-space-sm border-t border-surface-container-high flex flex-col gap-1 font-label-code text-caption text-on-surface-variant">
-        <span>{data.requestRouteLine}</span>
-        <span>{data.targetEngineLine}</span>
-        {data.catalogAddAvgMinutes != null ? (
-          <span className="font-body-sm text-body-sm text-on-surface-variant normal-case font-body-md">
-            Roam usually adds missing parts within approximately {data.catalogAddAvgMinutes} minutes when we have supplier confirmation.
-          </span>
-        ) : null}
-      </div>
-      {hoverHelp ? (
-        <div className="px-space-xl pb-space-md font-caption text-caption text-on-surface-variant flex flex-col gap-1">
+      {!sheet ? (
+        <div className="px-space-xl pb-space-sm font-caption text-caption text-on-surface-variant max-md:hidden">
           <div className="flex items-center gap-space-md flex-wrap">
             <span>↑ ↓ move between rows</span>
             <span>·</span>
@@ -197,12 +225,9 @@ export function Fp3AreaOverlay({
             <span>·</span>
             <span>Esc closes</span>
           </div>
-          <p className="font-body-sm text-body-sm">Can&apos;t see your part? Search for it by name.</p>
-          <button type="button" className="text-left font-body-sm text-body-sm font-semibold text-primary underline-offset-2 hover:underline" onClick={actions.onClose}>
-            Search instead
-          </button>
         </div>
       ) : null}
+      <Fp3OverlaySearchFooter onSearchInstead={actions.onClose} />
     </>
   );
 

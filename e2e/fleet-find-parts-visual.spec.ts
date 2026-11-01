@@ -176,6 +176,7 @@ test.describe("Fleet find parts stitch live PNGs", () => {
     await page.getByRole("heading", { name: /What part do you need/i }).first().waitFor({ timeout: 20_000 });
     await expect(page.getByText(STITCH_VISUAL_PLATE).first()).toBeVisible();
     await expect(page.getByText("SYSTEM MODULES", { exact: false }).first()).toBeVisible();
+    await expect(page.getByText("Water pump, Ignition coil, Oil filter").first()).toBeVisible();
     await prepareFindPartsCapture(page);
     await page.screenshot({
       path: "docs/stitch/roam-fleet-app/screenshots/FP3-live.png",

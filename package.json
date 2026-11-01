@@ -70,6 +70,7 @@
     "build:courier": "pnpm --filter @roam/dash-courier build",
     "test": "pnpm -r test",
     "check:edge-imports": "node scripts/check-no-edge-fleet-imports.mjs",
+    "check:log-service-text-tokens": "node scripts/check-log-service-text-tokens.mjs",
     "check:admin-fleet-imports": "node scripts/check-no-admin-fleet-imports.mjs",
     "check:toll-core-parity": "node scripts/check-toll-core-parity.mjs",
     "check:rush-settings-parity": "node scripts/check-rush-settings-parity.mjs",

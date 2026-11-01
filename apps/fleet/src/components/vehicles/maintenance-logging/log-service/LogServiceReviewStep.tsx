@@ -69,11 +69,11 @@ export function LogServiceReviewStep({
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2">
         <div>
-          <span className="text-[11px] text-secondary uppercase tracking-wider font-semibold">
+          <span className="text-[11px] text-stitch-secondary uppercase tracking-wider font-semibold">
             {LOG_SERVICE_COPY.wizardEyebrow}
           </span>
           <h2 className="text-2xl font-semibold text-on-surface mt-0.5">{LOG_SERVICE_COPY.reviewHeading}</h2>
-          <p className="text-sm text-secondary mt-1">{LOG_SERVICE_COPY.reviewSubtitle}</p>
+          <p className="text-sm text-stitch-secondary mt-1">{LOG_SERVICE_COPY.reviewSubtitle}</p>
         </div>
       </div>
 
@@ -93,7 +93,7 @@ export function LogServiceReviewStep({
           )}
         </div>
         <h3 className="font-semibold text-on-surface">{LOG_SERVICE_COPY.scanInvoiceTitle}</h3>
-        <p className="text-sm text-secondary">{LOG_SERVICE_COPY.scanInvoiceHint}</p>
+        <p className="text-sm text-stitch-secondary">{LOG_SERVICE_COPY.scanInvoiceHint}</p>
         {invoiceUrl ? (
           <div className="absolute top-4 right-4 bg-secondary-container text-on-secondary-container text-xs px-2 py-1 rounded flex items-center">
             <CheckCircle2 className="w-3 h-3 mr-1" /> Uploaded
@@ -164,7 +164,7 @@ export function LogServiceReviewStep({
                   <p className="text-sm font-medium text-on-surface truncate">
                     {formatMaintenanceLineLabel(line)}
                   </p>
-                  <p className="text-xs text-secondary">
+                  <p className="text-xs text-stitch-secondary">
                     {[
                       line.recommended ? "Recommended" : null,
                       line.declined ? "Declined" : null,
@@ -185,7 +185,7 @@ export function LogServiceReviewStep({
                       type="button"
                       variant="ghost"
                       size="sm"
-                      className="text-xs text-secondary"
+                      className="text-xs text-stitch-secondary"
                       onClick={() => onEditLine(line)}
                     >
                       Edit
@@ -215,7 +215,7 @@ export function LogServiceReviewStep({
           />
           <Label htmlFor="mark-package-complete" className="cursor-pointer">
             Mark package complete
-            <span className="block text-xs font-normal text-secondary mt-0.5">
+            <span className="block text-xs font-normal text-stitch-secondary mt-0.5">
               Advances the vehicle maintenance schedule for this package.
             </span>
           </Label>

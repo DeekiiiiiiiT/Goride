@@ -29,7 +29,7 @@ export function LogServiceComponentPicker({
 
   return (
     <div className="space-y-5">
-      <p className="text-sm text-secondary">
+      <p className="text-sm text-stitch-secondary">
         {packageLabel}: {selectedCount} selected · {loggedCount} logged
       </p>
       {grouped.length === 0 ? (

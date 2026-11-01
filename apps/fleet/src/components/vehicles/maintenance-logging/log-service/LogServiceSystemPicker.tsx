@@ -23,15 +23,15 @@ export function LogServiceSystemPicker({
         </div>
         <div>
           <h3 className="font-semibold text-on-surface">{system.name}</h3>
-          <p className="text-xs text-secondary">{system.code}</p>
+          <p className="text-xs text-stitch-secondary">{system.code}</p>
         </div>
       </div>
       {loading ? (
-        <div className="flex items-center gap-2 text-sm text-secondary py-8 justify-center">
+        <div className="flex items-center gap-2 text-sm text-stitch-secondary py-8 justify-center">
           <Loader2 className="w-4 h-4 animate-spin" /> Loading components…
         </div>
       ) : components.length === 0 ? (
-        <p className="text-sm text-secondary py-4">No components under this system.</p>
+        <p className="text-sm text-stitch-secondary py-4">No components under this system.</p>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
           {components.map((cat) => (

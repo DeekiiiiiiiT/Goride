@@ -20,6 +20,95 @@ const AREA_ROWS: Array<{ id: string; plainName: string; count: number; icon: str
   { id: "sys-transmission", plainName: "Transmission", count: 3, icon: "gears" },
 ];
 
+/** Part-type plain names aligned with Roomy maintenance catalog (browse shape for FP3 subtitles). */
+const STITCH_AREA_COMPONENTS: Record<string, Array<Record<string, unknown>>> = {
+  "sys-battery": [
+    { id: "cmp-battery", plainName: "Battery", name: "Battery", count: 1, positionAware: false },
+    { id: "cmp-alternator", plainName: "Alternator", name: "Alternator", count: 1, positionAware: false },
+    { id: "cmp-starter", plainName: "Starter motor", name: "Starter motor", count: 0, positionAware: false },
+  ],
+  "sys-belts": [
+    { id: "cmp-serp-belt", plainName: "Serpentine belt", name: "Serpentine belt", count: 1, positionAware: false },
+    { id: "cmp-timing-belt", plainName: "Timing belt", name: "Timing belt", count: 0, positionAware: false },
+    { id: "cmp-rad-hose", plainName: "Radiator hose", name: "Radiator hose", count: 0, positionAware: false },
+  ],
+  "sys-brakes": [
+    {
+      id: STITCH_VISUAL_COMPONENT_ID,
+      plainName: "Brake pads",
+      name: "Brake pads",
+      count: 4,
+      positionAware: true,
+      opCode: "BRK-PAD",
+      description: "Pad set for ventilated front disc and rear drum fitment.",
+      iconKey: "disc_full",
+      bestOemPartNumber: "04465-BZ010",
+      bestListingPosition: "front",
+    },
+    {
+      id: "cmp-brake-shoe",
+      plainName: "Brake shoes",
+      name: "Brake shoes",
+      count: 2,
+      positionAware: true,
+      opCode: "BRK-SHOES",
+      description: "Rear drum shoe kit.",
+      iconKey: "disc_full",
+      bestOemPartNumber: "04495-BZ010",
+      bestListingPosition: "rear",
+    },
+    {
+      id: "cmp-brake-fluid",
+      plainName: "Brake fluid",
+      name: "Brake fluid",
+      count: 0,
+      positionAware: false,
+      opCode: "BRK-FLUID",
+      description: "",
+      iconKey: "water_drop",
+    },
+  ],
+  "sys-engine": [
+    { id: "cmp-water-pump", plainName: "Water pump", name: "Water pump", count: 1, positionAware: false },
+    { id: "cmp-ignition-coil", plainName: "Ignition coil", name: "Ignition coil", count: 0, positionAware: false },
+    { id: "cmp-oil-filter-eng", plainName: "Oil filter", name: "Oil filter", count: 1, positionAware: false },
+  ],
+  "sys-filters": [
+    { id: "cmp-air-filter", plainName: "Engine air filter", name: "Engine air filter", count: 1, positionAware: false },
+    { id: "cmp-cabin-filter", plainName: "Cabin filter", name: "Cabin filter", count: 1, positionAware: false },
+    { id: "cmp-oil-cart", plainName: "Oil filter cartridge", name: "Oil filter cartridge", count: 1, positionAware: false },
+  ],
+  "sys-fluids": [
+    { id: "cmp-engine-oil", plainName: "Engine oil", name: "Engine oil", count: 2, positionAware: false },
+    { id: "cmp-coolant", plainName: "Coolant", name: "Coolant", count: 1, positionAware: false },
+    { id: "cmp-brake-fluid-sys", plainName: "Brake fluid", name: "Brake fluid", count: 0, positionAware: false },
+  ],
+  "sys-hvac": [
+    { id: "cmp-ac-compressor", plainName: "A/C compressor", name: "A/C compressor", count: 0, positionAware: false },
+    { id: "cmp-blower", plainName: "Blower motor", name: "Blower motor", count: 0, positionAware: false },
+  ],
+  "sys-lighting": [
+    { id: "cmp-headlight", plainName: "Headlight bulb", name: "Headlight bulb", count: 2, positionAware: false },
+    { id: "cmp-wiper", plainName: "Wiper blades", name: "Wiper blades", count: 1, positionAware: false },
+    { id: "cmp-fuse", plainName: "Fuse", name: "Fuse", count: 0, positionAware: false },
+  ],
+  "sys-suspension": [
+    { id: "cmp-shock", plainName: "Shock absorber", name: "Shock absorber", count: 1, positionAware: false },
+    { id: "cmp-strut", plainName: "Strut mount", name: "Strut mount", count: 0, positionAware: false },
+    { id: "cmp-tie-rod", plainName: "Tie rod", name: "Tie rod", count: 0, positionAware: false },
+  ],
+  "sys-tires": [
+    { id: "cmp-tire", plainName: "Tires", name: "Tires", count: 0, positionAware: false },
+    { id: "cmp-wheel", plainName: "Wheels", name: "Wheels", count: 0, positionAware: false },
+    { id: "cmp-lug", plainName: "Lug nuts", name: "Lug nuts", count: 0, positionAware: false },
+  ],
+  "sys-transmission": [
+    { id: "cmp-cvt-fluid", plainName: "CVT fluid", name: "CVT fluid", count: 1, positionAware: false },
+    { id: "cmp-trans-filter", plainName: "Transmission filter", name: "Transmission filter", count: 0, positionAware: false },
+    { id: "cmp-drive-shaft", plainName: "Drive shaft", name: "Drive shaft", count: 0, positionAware: false },
+  ],
+};
+
 export function stitchVisualBrowse() {
   return {
     systems: AREA_ROWS.map((row) => ({
@@ -28,49 +117,7 @@ export function stitchVisualBrowse() {
       name: row.plainName,
       count: row.count,
       icon: row.icon,
-      components: row.id === "sys-brakes"
-        ? [
-          {
-            id: STITCH_VISUAL_COMPONENT_ID,
-            plainName: "Brake pads",
-            name: "Brake pads",
-            count: 4,
-            positionAware: true,
-            opCode: "BRK-PAD",
-            description: "Pad set for ventilated front disc and rear drum fitment.",
-            iconKey: "disc_full",
-            bestOemPartNumber: "04465-BZ010",
-            bestListingPosition: "front",
-          },
-          {
-            id: "cmp-brake-shoe",
-            plainName: "Brake shoes",
-            name: "Brake shoes",
-            count: 2,
-            positionAware: true,
-            opCode: "BRK-SHOES",
-            description: "Rear drum shoe kit.",
-            iconKey: "disc_full",
-            bestOemPartNumber: "04495-BZ010",
-            bestListingPosition: "rear",
-          },
-          {
-            id: "cmp-brake-fluid",
-            plainName: "Brake fluid",
-            name: "Brake fluid",
-            count: 0,
-            positionAware: false,
-            opCode: "BRK-FLUID",
-            description: "",
-            iconKey: "water_drop",
-          },
-        ]
-        : row.id === "sys-tires"
-          ? [
-            { id: "cmp-tire", plainName: "Tires", name: "Tires", count: 0, positionAware: false },
-            { id: "cmp-wheel", plainName: "Wheels", name: "Wheels", count: 0, positionAware: false },
-          ]
-          : [],
+      components: STITCH_AREA_COMPONENTS[row.id] || [],
     })),
     common: [
       { id: "cmp-oil", plainName: "Oil filter cartridge", name: "Oil filter cartridge", count: 2, positionAware: false },

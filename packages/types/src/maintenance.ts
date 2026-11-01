@@ -158,6 +158,8 @@ export interface MaintenanceLogLine {
   warranty?: boolean;
   complimentary?: boolean;
   partId?: string;
+  /** Set when the user picks a compatible part with confirmedFit from catalog. */
+  partConfirmedFit?: boolean;
   notes?: string;
   recommended?: boolean;
   declined?: boolean;
