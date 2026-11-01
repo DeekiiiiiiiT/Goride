@@ -15,6 +15,14 @@ import { analyzeMaintenanceScheduleRow } from "../../../packages/finance-core/sr
 import { upsertPendingFromKvVehicle } from "./vehicle_catalog_pending_queries.ts";
 import { loadVehiclePartsContextExtras, vehiclePlateFromKv } from "./vehicle_parts_context.ts";
 import { buildPartsSourcingInsert, normalizeMatchType } from "./parts_sourcing_request_build.ts";
+import {
+  countOrgRequestsToday,
+  DAILY_LIMIT_MESSAGE,
+  DAILY_REQUEST_LIMIT,
+  ensureCatalogResearchJob,
+  findDedupedOpenRequest,
+  researchGroupKeyFromRow,
+} from "./catalog_research_intake.ts";
 import { readComponentFitHints } from "./parts_component_fit_hints.ts";
 import { resolvePartsFitPairs } from "../../../packages/types/src/partsFitParam.ts";
 
@@ -100,6 +108,7 @@ export function vehicleContextStatus(foundInKv: boolean, inOrg: boolean): 200 | 
 type RouteApp = {
   get: (path: string, ...handlers: unknown[]) => void;
   post: (path: string, ...handlers: unknown[]) => void;
+  put: (path: string, ...handlers: unknown[]) => void;
 };
 
 async function ownVehicle(c: Context, vehicleId: string) {
@@ -120,7 +129,36 @@ export async function loadPartsActivity(supabase: SupabaseClient, orgId: string)
     newest("parts_sourcing_requests"),
     newest("part_repeat_alert"),
   ]);
-  return { requests, repeatAlerts };
+  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const { data: recent } = await supabase
+    .from("parts_sourcing_requests")
+    .select("status, sent_at, created_at, added_at")
+    .eq("organization_id", orgId)
+    .eq("kind", "add_part_info")
+    .gte("created_at", since)
+    .limit(500);
+  const rows = recent || [];
+  const resolved = rows.filter((r) => String((r as { status?: string }).status) === "resolved");
+  const medianMinutes = await readCatalogAddAvgMinutes(supabase, orgId);
+  const batchMatchRate = rows.length
+    ? Math.round((resolved.length / rows.length) * 100)
+    : null;
+  const { count: queueAhead } = await supabase
+    .from("parts_sourcing_requests")
+    .select("id", { count: "exact", head: true })
+    .eq("kind", "add_part_info")
+    .in("status", ["open", "in_progress"])
+    .lt("created_at", new Date().toISOString());
+  return {
+    requests,
+    repeatAlerts,
+    meta: {
+      medianAddMinutes: medianMinutes,
+      batchMatchRate,
+      resolvedCount30d: resolved.length,
+      queueDepth: queueAhead ?? 0,
+    },
+  };
 }
 
 export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseClient) {
@@ -281,7 +319,37 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
         photoUrl: body.photoUrl ? String(body.photoUrl).slice(0, 2000) : null,
         sentAt,
         replyDueAt: urgency ? replyDueAt(urgency) : null,
+        oldPartNumber: body.oldPartNumber ?? body.old_part_number ?? null,
       });
+
+      if (isAddPart) {
+        const groupKey = researchGroupKeyFromRow(insertRow as Record<string, unknown>);
+        const dup = await findDedupedOpenRequest(supabase, orgId, groupKey);
+        if (dup) return c.json({ item: dup, deduped: true });
+
+        const todayCount = await countOrgRequestsToday(supabase, orgId);
+        if (todayCount >= DAILY_REQUEST_LIMIT) {
+          return c.json({ error: DAILY_LIMIT_MESSAGE }, 429);
+        }
+
+        const jobId = await ensureCatalogResearchJob(supabase, {
+          vehicle_catalog_id: insertRow.vehicle_catalog_id as string | null,
+          maintenance_component_id: insertRow.maintenance_component_id as string | null,
+          fit_descriptor: insertRow.fit_descriptor as string | null,
+          install_side: insertRow.install_side as string | null,
+          match_type: insertRow.match_type as string | null,
+        }, groupKey);
+
+        const rowToInsert = {
+          ...insertRow,
+          research_group_key: groupKey,
+          catalog_research_job_id: jobId,
+        };
+        const { data, error } = await supabase.from("parts_sourcing_requests").insert(rowToInsert).select("*").single();
+        if (error) throw error;
+        return c.json({ item: data });
+      }
+
       const { data, error } = await supabase.from("parts_sourcing_requests").insert(insertRow).select("*").single();
       if (error) throw error;
       return c.json({ item: data });
@@ -590,6 +658,48 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
           "x-organization-id": orgId,
         },
       });
+    } catch (error) {
+      return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+    }
+  });
+
+  app.get(`${PREFIX}/request-draft`, ...view, async (c: Context) => {
+    try {
+      const orgId = String(getOrgId(c) || "");
+      const user = c.get("rbacUser") as { id?: string } | undefined;
+      if (!orgId || !user?.id) return c.json({ error: "Organization required" }, 400);
+      const { data, error } = await supabase
+        .from("fleet_parts_request_draft")
+        .select("payload, updated_at")
+        .eq("organization_id", orgId)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (error) throw error;
+      return c.json({ draft: data?.payload ?? null, updatedAt: data?.updated_at ?? null });
+    } catch (error) {
+      return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+    }
+  });
+
+  app.put(`${PREFIX}/request-draft`, ...view, async (c: Context) => {
+    try {
+      const orgId = String(getOrgId(c) || "");
+      const user = c.get("rbacUser") as { id?: string } | undefined;
+      if (!orgId || !user?.id) return c.json({ error: "Organization required" }, 400);
+      const body = await c.req.json() as { payload?: Record<string, unknown> };
+      const payload = body.payload && typeof body.payload === "object" ? body.payload : {};
+      const { data, error } = await supabase
+        .from("fleet_parts_request_draft")
+        .upsert({
+          organization_id: orgId,
+          user_id: user.id,
+          payload,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: "organization_id,user_id" })
+        .select("payload, updated_at")
+        .single();
+      if (error) throw error;
+      return c.json({ draft: data.payload, updatedAt: data.updated_at });
     } catch (error) {
       return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
     }

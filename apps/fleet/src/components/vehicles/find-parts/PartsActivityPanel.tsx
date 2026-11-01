@@ -6,6 +6,12 @@ export type PartsActivity = {
   repeatAlerts: ActivityList;
   warrantyClaims: ActivityList;
   cores: ActivityList;
+  meta?: {
+    medianAddMinutes?: number | null;
+    batchMatchRate?: number | null;
+    resolvedCount30d?: number;
+    queueDepth?: number;
+  };
 };
 
 function newestLine(list: ActivityList | undefined) {

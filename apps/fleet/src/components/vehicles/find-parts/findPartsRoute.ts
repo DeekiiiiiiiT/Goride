@@ -99,6 +99,7 @@ export type AddPartInfoRequestInput = {
   componentId: string;
   partName?: string;
   note?: string;
+  oldPartNumber?: string;
   matchType?: string | null;
   fitParam?: string;
   position?: string | null;
@@ -120,6 +121,7 @@ export function buildAddPartInfoRequestBody(input: AddPartInfoRequestInput): Rec
     vehicleCatalogId: input.vehicleCatalogId || undefined,
     photoUrl: input.photoUrl,
   };
+  if (input.oldPartNumber?.trim()) body.old_part_number = input.oldPartNumber.trim();
   if (input.fitParam) body.fit = input.fitParam;
   if (position === "left" || position === "right") body.side = position;
   else if (position && !["left", "right", "both"].includes(position)) body.position = position;

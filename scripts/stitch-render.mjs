@@ -45,7 +45,7 @@ const APPS = {
       { id: 'FP7', html: 'html/find-parts-quote.html', width: 1280 },
       { id: 'FP8', html: 'html/find-parts-request.html', width: 1280 },
       { id: 'FP9', html: 'html/find-parts-link-car.html', width: 1280 },
-      { id: 'FP10', html: 'html/find-parts-activity.html', width: 1280 },
+      { id: 'FP13', html: 'html/find-parts-requests-timeline.html', width: 1280 },
       { id: 'FP11', html: 'html/find-parts-states.html', width: 1280 },
       { id: 'FP12', html: 'html/find-parts-phone.html', width: 390 },
     ],

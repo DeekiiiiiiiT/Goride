@@ -85,5 +85,7 @@ export async function readCatalogAddAvgMinutes(
     minutes.push(Math.round((end - start) / 60_000));
   }
   if (!minutes.length) return null;
-  return Math.round(minutes.reduce((a, b) => a + b, 0) / minutes.length);
+  minutes.sort((a, b) => a - b);
+  const mid = Math.floor(minutes.length / 2);
+  return minutes.length % 2 === 1 ? minutes[mid] : Math.round((minutes[mid - 1] + minutes[mid]) / 2);
 }

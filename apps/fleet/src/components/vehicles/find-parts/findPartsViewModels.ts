@@ -875,6 +875,9 @@ export type Fp5ViewModel = {
   chassisCodeLabel: string;
   catalogSpecLabel: string;
   matchRevisionLine: string;
+  vinLabel: string;
+  checkedCataloguesLabel: string;
+  fitsVersionBadge: string;
 };
 
 function tierMeta(tier: number) {
@@ -884,6 +887,53 @@ function tierMeta(tier: number) {
     description: row.plainReason.replace(/\{[^}]+\}/g, "").replace(/\s+/g, " ").trim() || row.plainReason,
     tag: row.tag,
   };
+}
+
+function readRowNum(row: Record<string, unknown>, ...keys: string[]): number | null {
+  for (const key of keys) {
+    const raw = row[key];
+    if (raw == null || raw === "") continue;
+    const n = Number(raw);
+    if (Number.isFinite(n)) return n;
+  }
+  return null;
+}
+
+function specLinesFromPartRecord(item: Record<string, unknown>): Array<{ label: string; value: string }> {
+  const part = (item.part || {}) as Record<string, unknown>;
+  const meta = part.metadata as { specs?: unknown } | undefined;
+  const raw = meta?.specs ?? item.specs;
+  if (Array.isArray(raw)) {
+    const lines = raw
+      .map((entry) => {
+        const row = entry as { key?: string; label?: string; value?: string };
+        const label = String(row.key || row.label || "").trim();
+        const value = String(row.value || "").trim();
+        if (!label || !value) return null;
+        return { label: orNoneYet(label), value: orNoneYet(value) };
+      })
+      .filter(Boolean) as Array<{ label: string; value: string }>;
+    return lines.slice(0, 6);
+  }
+  if (raw && typeof raw === "object") {
+    return Object.entries(raw as Record<string, unknown>)
+      .map(([key, val]) => {
+        const value = String(val ?? "").trim();
+        if (!value) return null;
+        return { label: orNoneYet(key), value: orNoneYet(value) };
+      })
+      .filter(Boolean)
+      .slice(0, 6) as Array<{ label: string; value: string }>;
+  }
+  return [];
+}
+
+function formatCheckedCataloguesLabel(item?: Record<string, unknown>): string {
+  const part = (item?.part || {}) as Record<string, unknown>;
+  const n = readRowNum(item || {}, "checked_catalog_count", "catalogs_checked", "domains_checked")
+    ?? readRowNum(part, "checked_catalog_count", "catalogs_checked", "domains_checked");
+  if (n != null && n > 0) return `Checked against ${n} catalogues`;
+  return "";
 }
 
 function formatResultPositionLabel(item: Record<string, unknown>): string | null {
@@ -913,13 +963,7 @@ function rowFromItem(
     : matchPctRaw != null && matchPctRaw > 0
       ? formatPercent(matchPctRaw)
       : "—";
-  const specs = Array.isArray(item.specs) ? item.specs as Array<{ key?: string; value?: string }> : [];
-  const specLines = specs.length
-    ? specs.slice(0, 4).map((s) => ({ label: orNoneYet(s.key), value: orNoneYet(s.value) }))
-    : [
-        { label: "Height", value: orDash(String((item as { height_mm?: string }).height_mm || "—")) },
-        { label: "Material", value: orDash(String((item as { material?: string }).material || "—")) },
-      ];
+  const specLines = specLinesFromPartRecord(item);
   const interchangeRaw = (item.interchange ?? item.sisterNames ?? "") as string;
   const schedule = String(item.maintenance_schedule || item.service_schedule || "").trim();
   return {
@@ -1053,7 +1097,7 @@ export function buildFp5ViewModel(input: {
       rows: sectionRows,
       isEmpty: sectionRows.length === 0,
       emptyLine: sectionRows.length === 0 ? "None on file for your car yet." : "",
-      askLabel: sectionRows.length === 0 ? `Ask Roam to find a ${tierRow.tag} option` : "",
+      askLabel: sectionRows.length === 0 ? "Ask Roam to find another option" : "",
     });
   }
   const specs = readPartsVehicleSpecs(ctx);
@@ -1128,6 +1172,9 @@ export function buildFp5ViewModel(input: {
     chassisCodeLabel,
     catalogSpecLabel,
     matchRevisionLine,
+    vinLabel: orDash(String(ctx.vin || ctx.vin_number || "").trim()),
+    checkedCataloguesLabel: formatCheckedCataloguesLabel(bestItem),
+    fitsVersionBadge: "Fits this version",
   };
 }
 
@@ -1368,6 +1415,14 @@ export type Fp8ViewModel = {
   sourcingWins: Array<{ label: string; priceLabel: string }>;
   fitmentQueryRef: string;
   versionTag: string;
+  requestSent?: boolean;
+  requestRefLabel?: string;
+  queueAheadLabel?: string;
+  medianDispatchLabel?: string;
+  batchMatchRateLabel?: string;
+  showOrgMetrics?: boolean;
+  jamaicaResetLabel?: string;
+  showHubChip?: boolean;
 };
 
 export function buildFp8ViewModel(input: {
@@ -1386,6 +1441,14 @@ export function buildFp8ViewModel(input: {
   sourcingWins?: Array<{ label: string; foundPriceJmd?: number | null }>;
   fitmentQueryRef?: string;
   versionTag?: string;
+  requestSent?: boolean;
+  requestRefLabel?: string;
+  queueAheadLabel?: string;
+  medianDispatchLabel?: string;
+  batchMatchRateLabel?: string;
+  showOrgMetrics?: boolean;
+  jamaicaResetLabel?: string;
+  showHubChip?: boolean;
 }): Fp8ViewModel {
   const wins = (input.sourcingWins || []).map((row) => ({
     label: orNoneYet(row.label),
@@ -1417,7 +1480,34 @@ export function buildFp8ViewModel(input: {
     sourcingWins: wins.length ? wins : [{ label: "None yet", priceLabel: "No price yet" }],
     fitmentQueryRef: orDash(input.fitmentQueryRef),
     versionTag: orNoneYet(input.versionTag || input.trimLabel),
+    requestSent: Boolean(input.requestSent),
+    requestRefLabel: orDash(input.requestRefLabel),
+    queueAheadLabel: input.queueAheadLabel || "",
+    medianDispatchLabel: input.medianDispatchLabel || "",
+    batchMatchRateLabel: input.batchMatchRateLabel || "",
+    showOrgMetrics: Boolean(input.showOrgMetrics),
+    jamaicaResetLabel: input.jamaicaResetLabel || "",
+    showHubChip: Boolean(input.showHubChip),
   };
+}
+
+/** Countdown copy for daily request limit (America/Jamaica midnight). */
+export function formatJamaicaMidnightCountdown(now = new Date()): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Jamaica",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).formatToParts(now);
+  const h = Number(parts.find((p) => p.type === "hour")?.value || 0);
+  const m = Number(parts.find((p) => p.type === "minute")?.value || 0);
+  const s = Number(parts.find((p) => p.type === "second")?.value || 0);
+  const elapsed = h * 3600 + m * 60 + s;
+  const remaining = Math.max(0, 86400 - elapsed);
+  const rh = Math.floor(remaining / 3600);
+  const rm = Math.floor((remaining % 3600) / 60);
+  return `Resets at 00:00 EST (${rh}h ${rm}m)`;
 }
 
 export type Fp9TrimRow = {
@@ -1652,6 +1742,10 @@ export type Fp10ViewModel = {
   plateSecondary: string;
   requestRef: string;
   orgShortCode: string;
+  queueAheadLabel: string;
+  medianDispatchLabel: string;
+  batchMatchRateLabel: string;
+  showOrgMetrics: boolean;
 };
 
 export function buildFp10ViewModel(input: {
@@ -1661,6 +1755,12 @@ export function buildFp10ViewModel(input: {
     repeatAlerts?: { items?: ActivityRow[]; total?: number };
     warrantyClaims?: { items?: ActivityRow[]; total?: number };
     cores?: { items?: ActivityRow[]; total?: number };
+    meta?: {
+      medianAddMinutes?: number | null;
+      batchMatchRate?: number | null;
+      resolvedCount30d?: number;
+      queueDepth?: number;
+    };
   } | null;
   feedConnected?: number;
   activityFilter?: Fp10ActivityFilter;
@@ -1706,6 +1806,14 @@ export function buildFp10ViewModel(input: {
     return !status || status === "open" || status === "sourcing" || status === "looking";
   }).length;
   const activityCountLabel = `(${filterCounts.all})`;
+  const meta = input.activity?.meta;
+  const resolvedCount = meta?.resolvedCount30d ?? 0;
+  const showOrgMetrics = resolvedCount >= 5;
+  const queueDepth = meta?.queueDepth ?? 0;
+  const primaryRequest = requestItems[0];
+  const reqShort = primaryRequest ? formatPartsRequestShortId(String(primaryRequest.id || "")) : "";
+  const medianMin = meta?.medianAddMinutes;
+  const batchRate = meta?.batchMatchRate;
   return {
     cards,
     requestRows,
@@ -1750,8 +1858,223 @@ export function buildFp10ViewModel(input: {
     vehicleLabel: "Vehicle",
     vehicleLabelSecondary: orNoneYet(activityStr(primaryAlert || {}, "vehicle_label", "vehicle_id")),
     plateSecondary: orDash(activityStr(primaryAlert || {}, "plate", "license_plate")),
-    requestRef: orDash(mapRequestCard(requestItems[0] || {}, 0).title),
+    requestRef: orDash(reqShort || mapRequestCard(requestItems[0] || {}, 0).title),
     orgShortCode: orNoneYet(String(input.orgShortCode || "").trim() || "Fleet"),
+    queueAheadLabel: queueDepth > 0 ? `In line · ${queueDepth} requests ahead` : "In line · next up",
+    medianDispatchLabel: showOrgMetrics && medianMin != null ? `${medianMin} min median` : "",
+    batchMatchRateLabel: showOrgMetrics && batchRate != null ? `${batchRate}% added in 30 days` : "",
+    showOrgMetrics,
+  };
+}
+
+/** Short request id (audit FP13 / FP15), e.g. KGN-JA-774 from uuid. */
+export function formatPartsRequestShortId(id: string): string {
+  const core = String(id || "").replace(/-/g, "").slice(0, 8).toUpperCase();
+  if (!core) return "—";
+  if (core.length < 6) return core;
+  return `${core.slice(0, 3)}-${core.slice(3, 5)}-${core.slice(5, 8)}`;
+}
+
+function formatActivityTimeShort(value: unknown): string {
+  if (!value) return "—";
+  const d = new Date(String(value));
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", hour12: false });
+}
+
+function formatActivityAskedLabel(value: unknown): string {
+  if (!value) return "None yet";
+  const d = new Date(String(value));
+  if (Number.isNaN(d.getTime())) return orNoneYet(String(value));
+  return `Asked ${d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}, ${d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", hour12: false })} EST`;
+}
+
+function formatMedianTurnaroundLabel(minutes: number | null | undefined, show: boolean): string {
+  if (!show || minutes == null || !Number.isFinite(minutes)) return "";
+  if (minutes >= 60) {
+    const hrs = Math.round((minutes / 60) * 10) / 10;
+    return `30-day median turnaround: ${hrs} hrs`;
+  }
+  return `30-day median turnaround: ${minutes} min`;
+}
+
+function requestStatusCategory(raw: string): "waiting" | "added" | "failed" {
+  const s = raw.trim().toLowerCase();
+  if (s === "resolved" || s === "found" || s === "added" || s === "closed") return "added";
+  if (s === "rejected" || s === "cant_find" || s === "failed") return "failed";
+  return "waiting";
+}
+
+function requestStatusLabel(raw: string, row: ActivityRow): string {
+  const s = raw.trim().toLowerCase();
+  if (s === "resolved" || s === "added") return "Added";
+  if (s === "rejected" || s === "cant_find" || s === "failed") return "Couldn't find";
+  if (s === "in_progress" || s === "sourcing" || s === "looking" || row.looking_at) return "Roam is looking";
+  if (s === "open" || s === "pending") return "Sent";
+  return raw.trim() || "Sent";
+}
+
+function buildRequestTimeline(row: ActivityRow, category: "waiting" | "added" | "failed"): Fp13TimelineStep[] {
+  const sentAt = row.sent_at || row.created_at;
+  const lookingAt = row.looking_at;
+  const addedAt = row.added_at || (category === "added" ? row.resolved_at : null);
+  const checkedAt = row.checked_at || (addedAt ? lookingAt || addedAt : null);
+  const activeIndex = category === "added"
+    ? 3
+    : category === "failed"
+      ? 2
+      : lookingAt
+        ? 1
+        : 0;
+  const steps: Array<{ key: Fp13TimelineStep["key"]; label: string; at: unknown }> = [
+    { key: "sent", label: "Sent", at: sentAt },
+    { key: "looking", label: "Roam looking", at: lookingAt },
+    { key: "checked", label: "Checked", at: checkedAt },
+    { key: "added", label: "Added", at: addedAt },
+  ];
+  return steps.map((step, index) => {
+    let state: Fp13TimelineStep["state"] = "pending";
+    if (category === "added" || index < activeIndex) state = "done";
+    else if (index === activeIndex) state = "active";
+    const timeLabel = state === "done" ? formatActivityTimeShort(step.at) : state === "active" ? "In progress" : "—";
+    return { key: step.key, label: step.label, timeLabel, state };
+  });
+}
+
+function checkedDomainsLabelFromRow(row: ActivityRow): string {
+  const n = activityNum(row, "checked_catalog_count", "catalogs_checked", "domains_checked");
+  if (n != null && n > 0) return `Checked against ${n} catalogues`;
+  const domains = activityStr(row, "checked_domains", "catalog_domains");
+  if (domains) return `Checked against ${domains}`;
+  return "";
+}
+
+export type Fp13RequestFilter = "all" | "waiting" | "added" | "failed";
+
+export type Fp13TimelineStep = {
+  key: "sent" | "looking" | "checked" | "added";
+  label: string;
+  timeLabel: string;
+  state: "done" | "active" | "pending";
+};
+
+export type Fp13RequestCard = {
+  id: string;
+  shortId: string;
+  title: string;
+  vehicleLine: string;
+  plate: string;
+  askedLabel: string;
+  statusLabel: string;
+  filterCategory: "waiting" | "added" | "failed";
+  accent: "primary" | "tint" | "muted" | "error";
+  timeline: Fp13TimelineStep[];
+  footerNote: string;
+  resultLine: string;
+  checkedDomainsLabel: string;
+  showSeePart: boolean;
+  cantFindReason: string;
+  retryLabel: string;
+};
+
+export type Fp13ViewModel = {
+  cards: Fp13RequestCard[];
+  filter: Fp13RequestFilter;
+  filterCounts: { all: number; waiting: number; added: number; failed: number };
+  queueAheadLabel: string;
+  medianTurnaroundLabel: string;
+  showOrgMetrics: boolean;
+  emptyTitle: string;
+  emptyBody: string;
+  autoUpdateLabel: string;
+};
+
+export function buildFp13ViewModel(input: {
+  activity?: {
+    requests?: { items?: ActivityRow[]; total?: number };
+    meta?: {
+      medianAddMinutes?: number | null;
+      batchMatchRate?: number | null;
+      resolvedCount30d?: number;
+      queueDepth?: number;
+    };
+  } | null;
+  filter?: Fp13RequestFilter;
+}): Fp13ViewModel {
+  const requestItems = input.activity?.requests?.items || [];
+  const meta = input.activity?.meta;
+  const resolvedCount = meta?.resolvedCount30d ?? 0;
+  const showOrgMetrics = resolvedCount >= 5;
+  const queueDepth = meta?.queueDepth ?? 0;
+  const filter = input.filter || "all";
+  const cards = requestItems.map((row, index) => {
+    const statusRaw = activityStr(row, "status");
+    const filterCategory = requestStatusCategory(statusRaw);
+    const statusLabel = requestStatusLabel(statusRaw, row);
+    const title = orNoneYet(activityStr(row, "need_text", "title"));
+    const vehicleLine = orNoneYet(activityStr(row, "vehicle_label", "car_label"));
+    const plate = orDash(activityStr(row, "plate", "license_plate"));
+    const resultLine = orNoneYet(activityStr(row, "resolution_note", "resolved_part_label", "part_number"));
+    const cantFindReason = orNoneYet(activityStr(row, "cant_find_reason", "resolution_note"));
+    const retryRaw = row.retry_at || row.next_retry_at;
+    const retryLabel = retryRaw
+      ? `We'll try again on ${formatActivityDate(retryRaw)}.`
+      : "";
+    let footerNote = "";
+    if (filterCategory === "added") {
+      footerNote = resultLine !== "None yet" ? resultLine : "";
+    } else if (filterCategory === "failed") {
+      footerNote = cantFindReason !== "None yet" ? cantFindReason : "No trusted catalogue match yet.";
+    } else if (statusLabel === "Roam is looking") {
+      footerNote = "Roam is checking trusted parts catalogues. Usually within a day.";
+    } else {
+      footerNote = queueDepth > 0
+        ? "Queued for research. Roam starts looking within 2 hours."
+        : "In line · next up";
+    }
+    const accent: Fp13RequestCard["accent"] = filterCategory === "added"
+      ? "primary"
+      : filterCategory === "failed"
+        ? "error"
+        : statusLabel === "Roam is looking"
+          ? "tint"
+          : "muted";
+    return {
+      id: String(row.id || `req-${index}`),
+      shortId: formatPartsRequestShortId(String(row.id || "")),
+      title,
+      vehicleLine,
+      plate,
+      askedLabel: formatActivityAskedLabel(row.sent_at || row.created_at),
+      statusLabel,
+      filterCategory,
+      accent,
+      timeline: buildRequestTimeline(row, filterCategory),
+      footerNote,
+      resultLine,
+      checkedDomainsLabel: checkedDomainsLabelFromRow(row),
+      showSeePart: filterCategory === "added" && resultLine !== "None yet",
+      cantFindReason,
+      retryLabel,
+    };
+  });
+  const filterCounts = {
+    all: cards.length,
+    waiting: cards.filter((c) => c.filterCategory === "waiting").length,
+    added: cards.filter((c) => c.filterCategory === "added").length,
+    failed: cards.filter((c) => c.filterCategory === "failed").length,
+  };
+  const visible = filter === "all" ? cards : cards.filter((c) => c.filterCategory === filter);
+  return {
+    cards: visible,
+    filter,
+    filterCounts,
+    queueAheadLabel: queueDepth > 0 ? `In line · ${queueDepth} requests ahead` : "In line · next up",
+    medianTurnaroundLabel: formatMedianTurnaroundLabel(meta?.medianAddMinutes, showOrgMetrics),
+    showOrgMetrics,
+    emptyTitle: "No requests in this view",
+    emptyBody: "When a part isn't on file, ask Roam from the search. Research updates appear here automatically.",
+    autoUpdateLabel: "Updates automatically",
   };
 }
 

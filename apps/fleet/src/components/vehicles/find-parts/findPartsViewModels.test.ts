@@ -83,4 +83,30 @@ describe("formatPartsVersionTag", () => {
     });
     expect(vm.versionTag).toBe("Pre-Facelift · 1KR-FE · 2WD");
   });
+
+  it("buildFp13 queue, short id, and median turnaround", async () => {
+    const { buildFp13ViewModel, formatPartsRequestShortId } = await import("./findPartsViewModels");
+    expect(formatPartsRequestShortId("abc12345-6789-4def-9012-345678901234")).toBe("ABC-12-345");
+    const vm = buildFp13ViewModel({
+      activity: {
+        requests: { items: [{ id: "abc12345-6789-4def-9012-345678901234", status: "open", need_text: "Pads", created_at: "2026-11-01T12:00:00Z" }], total: 1 },
+        meta: { queueDepth: 2, medianAddMinutes: 90, batchMatchRate: 40, resolvedCount30d: 6 },
+      },
+    });
+    expect(vm.queueAheadLabel).toContain("2 requests ahead");
+    expect(vm.showOrgMetrics).toBe(true);
+    expect(vm.medianTurnaroundLabel).toContain("1.5 hrs");
+    expect(vm.cards[0]?.shortId).toBe("ABC-12-345");
+  });
+
+  it("hides org median turnaround under five resolved requests", async () => {
+    const { buildFp13ViewModel } = await import("./findPartsViewModels");
+    const vm = buildFp13ViewModel({
+      activity: {
+        requests: { items: [{ id: "x", status: "open", need_text: "Pads" }], total: 1 },
+        meta: { queueDepth: 0, medianAddMinutes: 90, resolvedCount30d: 4 },
+      },
+    });
+    expect(vm.medianTurnaroundLabel).toBe("");
+  });
 });

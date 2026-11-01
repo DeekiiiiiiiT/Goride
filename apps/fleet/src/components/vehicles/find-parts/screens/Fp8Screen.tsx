@@ -2,18 +2,55 @@ import type { ReactNode } from "react";
 import type { Fp8ViewModel } from "../findPartsViewModels";
 import { FindPartsStickyHeader } from "../FindPartsStickyHeader";
 
-export type Fp8FormState = { note: string };
+export type Fp8FormState = { note: string; oldPartNumber: string };
 
 export type Fp8Actions = {
   onBack: () => void;
   onViewActivity: () => void;
   onNoteChange: (note: string) => void;
+  onOldPartNumberChange: (value: string) => void;
   onSubmit: () => void;
+  onSaveDraft: () => void;
   onPhotoSelected: (file: File) => void;
   children?: ReactNode;
 };
 
 export function Fp8Screen({ actions, data, form }: { actions: Fp8Actions; data: Fp8ViewModel; form: Fp8FormState }) {
+  if (data.requestSent) {
+    return (
+      <div className="find-parts-screen-root">
+        <div className="fp-screen-root w-full py-space-xl flex flex-col gap-space-lg max-w-2xl">
+          <div className="rounded-xl bg-surface-container-low p-space-xl text-center flex flex-col items-center gap-space-md">
+            <span className="material-symbols-outlined text-[48px] text-primary">check_circle</span>
+            <h2 className="font-headline-lg text-headline-lg text-on-surface font-semibold">Request sent</h2>
+            <p className="font-body-md text-body-md text-on-surface-variant">
+              Roam is checking trusted parts catalogues for your exact car. Usually within a day.
+            </p>
+            <p className="font-label-code text-label-code text-on-surface">{data.requestRefLabel}</p>
+            <p className="font-body-sm text-body-sm text-on-surface">{data.queueAheadLabel}</p>
+            {data.showOrgMetrics ? (
+              <div className="flex flex-wrap gap-space-md font-caption text-caption text-on-surface-variant justify-center">
+                {data.medianDispatchLabel ? <span>Average resolution: {data.medianDispatchLabel}</span> : null}
+                {data.batchMatchRateLabel ? <span>Batch match rate: {data.batchMatchRateLabel}</span> : null}
+              </div>
+            ) : null}
+            {data.jamaicaResetLabel ? (
+              <p className="font-caption text-caption text-on-surface-variant">{data.jamaicaResetLabel}</p>
+            ) : null}
+          </div>
+          <div className="flex flex-wrap gap-space-md">
+            <button type="button" className="rounded-lg bg-primary px-space-xl py-2 font-body-sm text-body-sm font-semibold text-on-primary" onClick={actions.onViewActivity}>
+              View your requests
+            </button>
+            <button type="button" className="font-body-sm text-body-sm text-secondary underline" onClick={actions.onBack}>
+              Search a different part
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="find-parts-screen-root">
 <div className="fp-screen-root"><div className="flex flex-col w-full">
@@ -91,6 +128,10 @@ export function Fp8Screen({ actions, data, form }: { actions: Fp8Actions; data: 
 
 <form className="flex flex-col gap-space-lg" id="sourcing-form" onSubmit={(e) => { e.preventDefault(); actions.onSubmit(); }}>
 <div className="flex flex-col gap-space-xs">
+<label className="font-caption text-caption text-on-surface uppercase tracking-wider font-semibold" htmlFor="old-part-number">Old part number (optional)</label>
+<input className="w-full rounded-lg bg-surface-container-low px-space-md py-space-sm font-body-md text-body-md text-on-surface placeholder:text-outline focus:outline-none focus:bg-surface-container-lowest shadow-inner" id="old-part-number" placeholder="e.g. OEM or caliper casting number" value={form.oldPartNumber} onChange={(e) => actions.onOldPartNumberChange(e.target.value)} />
+</div>
+<div className="flex flex-col gap-space-xs">
 <label className="font-caption text-caption text-on-surface uppercase tracking-wider font-semibold" htmlFor="sourcing-notes">Specification or mechanic note (optional)</label>
 <textarea className="w-full rounded-lg bg-surface-container-low px-space-md py-space-sm font-body-md text-body-md text-on-surface placeholder:text-outline focus:outline-none focus:bg-surface-container-lowest shadow-inner transition-colors" id="sourcing-notes" placeholder="e.g., Need OEM or equivalent, note any noise or compound preference." rows={3} value={form.note} onChange={(e) => actions.onNoteChange(e.target.value)} />
 </div>
@@ -114,6 +155,9 @@ export function Fp8Screen({ actions, data, form }: { actions: Fp8Actions; data: 
 <div className="flex flex-col sm:flex-row items-center justify-between gap-space-md pt-space-sm">
 <button className="w-full sm:w-auto font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors py-2" type="button" onClick={actions.onBack}>
                 ← Search a different part or return to categories
+              </button>
+<button className="w-full sm:w-auto font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors py-2" type="button" onClick={actions.onSaveDraft}>
+                Save as draft for tomorrow
               </button>
 <button className="w-full sm:w-auto inline-flex items-center justify-center gap-space-sm px-space-xl py-2.5 rounded-lg bg-primary hover:bg-inverse-surface text-on-primary font-body-md text-body-md font-semibold transition-all shadow-md active:scale-[0.98]" type="submit">
 <span>Ask Roam to add this part</span>
@@ -142,7 +186,9 @@ export function Fp8Screen({ actions, data, form }: { actions: Fp8Actions; data: 
 </div>
 <div className="flex flex-col min-w-0">
 <span className="font-body-md text-body-md font-semibold text-on-surface truncate">{data.vehicleLabel}</span>
+{data.showHubChip ? (
 <span className="font-caption text-caption text-on-surface-variant">{data.hubLabel}</span>
+) : null}
 </div>
 </div>
 <div className="grid grid-cols-2 gap-space-sm pt-space-xs font-label-code text-caption">
@@ -176,24 +222,7 @@ export function Fp8Screen({ actions, data, form }: { actions: Fp8Actions; data: 
 </div>
 </div>
 
-<div className="w-full bg-surface-container-lowest rounded-xl px-space-lg py-space-md shadow-sm flex flex-col md:flex-row items-center justify-between gap-space-sm font-label-code text-caption text-on-surface-variant">
-<div className="flex items-center gap-space-lg">
-<span className="flex items-center gap-1.5 text-on-surface font-semibold">
-<span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-          SYS LATENCY: 24ms (KIN)
-        </span>
-<span className="hidden sm:inline text-outline-variant">|</span>
-<span>STATUS: ALL SYSTEMS NOMINAL</span>
-</div>
-<div className="flex items-center gap-space-lg">
-<span>INVENTORY PROTOCOL: KIN-V2-ROAM</span>
-<span className="hidden sm:inline text-outline-variant">|</span>
-<span className="text-on-surface font-semibold">Jamaican Fleet hub</span>
-</div>
-</div>
-</div>
-
-</div></div>
+</div></div></div>
 
     </div>
   );

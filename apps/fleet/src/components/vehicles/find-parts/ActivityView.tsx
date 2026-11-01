@@ -1,50 +1,46 @@
 import { useMemo, useState } from "react";
-import { api } from "../../../services/api";
-import { Fp10Screen } from "./screens/Fp10Screen";
-import { PartsActivityPanel } from "./PartsActivityPanel";
+import { Fp13Screen } from "./screens/Fp13Screen";
+import { Fp16Screen } from "./screens/Fp16Screen";
 import type { PartsActivity } from "./PartsActivityPanel";
-import { buildFp10ViewModel, type Fp10ActivityFilter } from "./findPartsViewModels";
+import { buildFp13ViewModel, type Fp13RequestFilter } from "./findPartsViewModels";
 
 export function ActivityView({
   activity,
   onBack,
-  orgShortCode,
+  catalogNotice,
+  onDismissNotice,
 }: {
   activity: PartsActivity | null;
   onBack: () => void;
   orgShortCode?: string;
+  catalogNotice?: string;
+  onDismissNotice?: () => void;
 }) {
-  const [activityFilter, setActivityFilter] = useState<Fp10ActivityFilter>("all");
+  const [filter, setFilter] = useState<Fp13RequestFilter>("all");
+  const phone = typeof window !== "undefined" && window.matchMedia("(max-width: 768px)").matches;
 
   const data = useMemo(
-    () => buildFp10ViewModel({ activity: activity ?? undefined, activityFilter, orgShortCode }),
-    [activity, activityFilter, orgShortCode],
+    () => buildFp13ViewModel({ activity: activity ?? undefined, filter }),
+    [activity, filter],
   );
 
-  function scrollToSection(id: string) {
-    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  const actions = {
+    onBack,
+    onFilter: setFilter,
+    onSeePart: () => onBack(),
+    onAddNote: () => undefined,
+  };
+
+  if (phone) {
+    return (
+      <Fp16Screen
+        data={data}
+        actions={actions}
+        catalogNotice={catalogNotice}
+        onDismissNotice={onDismissNotice}
+      />
+    );
   }
 
-  return (
-    <div>
-      <PartsActivityPanel activity={activity} onSeeAll={() => scrollToSection("section-requests")} onAsk={onBack} />
-      <p className="font-body-sm text-caption text-on-surface-variant mb-space-sm">{data.regionLabel} · {data.anomalyLine}</p>
-      <Fp10Screen
-        data={data}
-        actions={{
-          onBack,
-          onDismissAlert: () => {
-            const id = activity?.repeatAlerts.items?.[0]?.id;
-            if (id) void api.dismissPartRepeatAlert(String(id)).catch(() => undefined);
-          },
-          onInspect: () => scrollToSection("section-alerts"),
-          onInvestigate: () => scrollToSection("section-alerts"),
-          onOpenCatalogSearch: onBack,
-          onFilterTab: setActivityFilter,
-          onSeeAllRequests: () => { setActivityFilter("requests"); scrollToSection("section-requests"); },
-          onSeeAllAlerts: () => { setActivityFilter("alerts"); scrollToSection("section-alerts"); },
-        }}
-      />
-    </div>
-  );
+  return <Fp13Screen data={data} actions={actions} />;
 }

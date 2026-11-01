@@ -2,6 +2,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import type { Fp5ResultRow, Fp5ViewModel } from "../findPartsViewModels";
 import type { TrimScopeTab } from "../findPartsActions";
 import { FindPartsStickyHeader } from "../FindPartsStickyHeader";
+import { FpNowOnFileNotice } from "./FpNowOnFileNotice";
 
 const STITCH_TIER1_HEADING = "Made for your car";
 
@@ -44,7 +45,7 @@ export type Fp5Actions = {
   children?: ReactNode;
 };
 
-export function Fp5Screen({ actions, data, partName, positionTrail }: { actions: Fp5Actions; data: Fp5ViewModel; partName?: string; positionTrail?: string }) {
+export function Fp5Screen({ actions, data, partName, positionTrail, catalogNotice }: { actions: Fp5Actions; data: Fp5ViewModel; partName?: string; positionTrail?: string; catalogNotice?: string }) {
   const titlePart = partName || data.componentTitle || "Part";
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const best = data.rows.find((row) => row.isBest) || data.rows[0];
@@ -69,6 +70,13 @@ export function Fp5Screen({ actions, data, partName, positionTrail }: { actions:
             onSaveSearch={actions.onSaveQuery}
             onDownloadFitmentReport={actions.onDownloadReport}
           />
+          <FpNowOnFileNotice message={catalogNotice || ""} />
+
+          {data.vinLabel !== "—" ? (
+            <p className="font-label-code text-caption text-on-surface-variant -mt-space-md">
+              VIN: {data.vinLabel}
+            </p>
+          ) : null}
 
           <section className="flex flex-col md:flex-row md:items-end justify-between gap-space-md">
             <div className="flex flex-col gap-1">
@@ -143,11 +151,15 @@ export function Fp5Screen({ actions, data, partName, positionTrail }: { actions:
                       <span className="material-symbols-outlined text-[14px]">star</span>
                       Top recommended
                     </span>
-                    {best.verified ? (
-                      <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-800 font-body-sm text-caption px-2.5 py-1 rounded font-semibold">
-                        Verified fit
+                    {data.checkedCataloguesLabel ? (
+                      <span className="inline-flex items-center gap-1 text-emerald-900 font-label-code text-caption font-medium border border-emerald-300 bg-emerald-100/50 px-2 py-0.5 rounded-full">
+                        <span className="material-symbols-outlined text-[14px] text-emerald-700">verified</span>
+                        {data.checkedCataloguesLabel}
                       </span>
                     ) : null}
+                    <span className="inline-flex items-center gap-1 bg-surface-container-high text-on-surface font-label-code text-caption font-semibold px-2.5 py-1 rounded">
+                      {data.fitsVersionBadge}
+                    </span>
                   </div>
                   <div className="font-label-code text-headline-sm md:text-headline-lg font-bold text-on-surface tracking-tight">
                     {best.brandLabel} {best.partNumber} — {best.partName}
@@ -253,6 +265,7 @@ export function Fp5Screen({ actions, data, partName, positionTrail }: { actions:
                       </button>
                       {open ? (
                         <div className="px-space-lg pb-space-lg bg-surface-container-low/20 flex flex-col gap-space-sm">
+                          {row.specLines.length ? (
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-space-sm">
                             {row.specLines.map((spec) => (
                               <div key={`${row.id}-${spec.label}`} className="font-body-sm text-body-sm text-on-surface-variant">
@@ -260,6 +273,7 @@ export function Fp5Screen({ actions, data, partName, positionTrail }: { actions:
                               </div>
                             ))}
                           </div>
+                          ) : null}
                           <p className="font-body-sm text-body-sm text-on-surface-variant">
                             <span className="font-semibold text-on-surface">Interchange:</span> {row.interchangeLine}
                           </p>
@@ -280,6 +294,23 @@ export function Fp5Screen({ actions, data, partName, positionTrail }: { actions:
           {data.matchRevisionLine !== "None yet" ? (
             <p className="font-label-code text-caption text-on-surface-variant text-center pt-space-md">{data.matchRevisionLine}</p>
           ) : null}
+
+          <div className="rounded-xl p-space-md bg-surface-container-low border border-surface-container-high flex flex-col sm:flex-row sm:items-center justify-between gap-space-md mt-space-lg">
+            <div className="flex items-start gap-space-sm">
+              <span className="material-symbols-outlined text-secondary text-[22px] mt-0.5">contact_support</span>
+              <div>
+                <div className="font-body-md text-body-md font-semibold text-on-surface">Need a different brand or custom length?</div>
+                <div className="font-body-sm text-body-sm text-on-surface-variant">Ask Roam to research an alternative part number for your chassis.</div>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="bg-surface-container-lowest hover:bg-surface-container-highest border border-surface-container-high text-on-surface font-body-sm text-body-sm px-space-md py-2 rounded-lg font-medium whitespace-nowrap transition-colors self-start sm:self-center"
+              onClick={actions.onAskRoam}
+            >
+              Ask Roam to find another option
+            </button>
+          </div>
         </div>
       </div>
     </div>

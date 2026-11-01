@@ -9,7 +9,7 @@ const htmlFiles = [
   'find-parts-position.html',
   'find-parts-results.html',
   'find-parts-request.html',
-  'find-parts-activity.html',
+  'find-parts-requests-timeline.html',
   'find-parts-phone.html',
   'find-parts-car.html',
   'find-parts-variant.html',

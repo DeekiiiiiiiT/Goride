@@ -6,6 +6,7 @@
 import { createFleetFunction } from "../../_shared/edgeKernel.ts";
 import { assertRequiredEnv } from "../../_fleet-server/env_boot.ts";
 import { registerResidualMonolithRoutes } from "../../_fleet-server/register_residual_monolith_routes.tsx";
+import inventoryApp from "../../_fleet-server/inventory_controller.tsx";
 import { extractionStatus } from "../../_shared/extractionStatus.generated.ts";
 
 assertRequiredEnv();
@@ -22,6 +23,7 @@ const app = createFleetFunction({
   },
 });
 
+app.route("/", inventoryApp);
 registerResidualMonolithRoutes(app);
 
 Deno.serve({

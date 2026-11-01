@@ -438,6 +438,12 @@ export function FindPartsTab({
               position={position}
               fitParam={fitParam}
               matchType={requestMatchType}
+              activityMeta={(activity.data as { meta?: Record<string, unknown> } | undefined)?.meta as {
+                medianAddMinutes?: number | null;
+                batchMatchRate?: number | null;
+                resolvedCount30d?: number;
+                queueDepth?: number;
+              }}
               onBack={() => setStep("part")}
               onViewActivity={() => { setView("activity"); writeUrl({ view: "activity" }); }}
             />

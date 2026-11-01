@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { api } from "../../../services/api";
 import { Fp8Screen } from "./screens/Fp8Screen";
-import { buildFp8ViewModel } from "./findPartsViewModels";
+import { buildFp8ViewModel, formatJamaicaMidnightCountdown, formatPartsRequestShortId } from "./findPartsViewModels";
 import { orDash, orNoneYet } from "./findPartsFormat";
 import { buildAddPartInfoRequestBody, findPartsPositionLabel } from "./findPartsRoute";
 import { usePartsVehicleContext } from "./findPartsQueries";
@@ -15,6 +16,7 @@ export function RequestPartPanel({
   position,
   fitParam,
   matchType,
+  activityMeta,
   onBack,
   onViewActivity,
 }: {
@@ -26,12 +28,19 @@ export function RequestPartPanel({
   position?: string | null;
   fitParam?: string;
   matchType?: string | null;
+  activityMeta?: {
+    medianAddMinutes?: number | null;
+    batchMatchRate?: number | null;
+    resolvedCount30d?: number;
+    queueDepth?: number;
+  };
   onBack: () => void;
   onViewActivity: () => void;
 }) {
   const ctx = usePartsVehicleContext(vehicleId || "", componentId, Boolean(vehicleId));
   const [note, setNote] = useState("");
-  const [sent, setSent] = useState("");
+  const [oldPartNumber, setOldPartNumber] = useState("");
+  const [sentId, setSentId] = useState("");
   const ctxData = (ctx.data || {}) as Record<string, unknown>;
   const specs = (ctxData.specs || {}) as Record<string, unknown>;
   const versionParts = [
@@ -39,6 +48,23 @@ export function RequestPartPanel({
     String(specs.engine_code || "").trim(),
     String(specs.drivetrain || "").trim(),
   ].filter(Boolean);
+  const hubRaw = String(ctxData.hub_label || ctxData.hubLabel || "").trim();
+  const meta = activityMeta;
+  const resolvedCount = meta?.resolvedCount30d ?? 0;
+  const showOrgMetrics = resolvedCount >= 5;
+  const queueDepth = meta?.queueDepth ?? 0;
+  const reqShort = sentId ? formatPartsRequestShortId(sentId) : "";
+
+  useEffect(() => {
+    void api.partsRequestDraftGet().then((res) => {
+      const draft = (res as { draft?: Record<string, unknown> }).draft;
+      if (!draft) return;
+      if (typeof draft.note === "string") setNote(draft.note);
+      if (typeof draft.old_part_number === "string") setOldPartNumber(draft.old_part_number);
+      else if (typeof draft.oldPartNumber === "string") setOldPartNumber(draft.oldPartNumber);
+    }).catch(() => undefined);
+  }, []);
+
   const data = buildFp8ViewModel({
     plate,
     vehicleLabel: carLabel || "Vehicle",
@@ -46,12 +72,23 @@ export function RequestPartPanel({
     positionLabel: findPartsPositionLabel(position),
     trimLabel: orNoneYet(String(ctxData.trim || ctxData.variant || "")),
     chassisLabel: orDash(String(specs.chassis_code || ctxData.chassis_code || ctxData.chassis || "")),
-    hubLabel: orNoneYet(String(ctxData.hub_label || ctxData.hubLabel || "Fleet hub")),
+    hubLabel: hubRaw || "Fleet hub",
+    showHubChip: Boolean(hubRaw),
     targetKm: Number(ctxData.odometer),
     healthPct: Number(ctxData.health_pct),
     vehiclePhotoUrl: String(ctxData.photo_url || ctxData.vehicle_photo_url || ""),
-    fitmentQueryRef: sent ? sent.toUpperCase() : undefined,
+    fitmentQueryRef: sentId ? reqShort : undefined,
     versionTag: versionParts.length ? versionParts.join(" · ") : orNoneYet(String(ctxData.trim || "")),
+    requestSent: Boolean(sentId),
+    requestRefLabel: reqShort || undefined,
+    queueAheadLabel: queueDepth > 0 ? `In line · ${queueDepth} requests ahead` : "In line · next up",
+    medianDispatchLabel: showOrgMetrics && meta?.medianAddMinutes != null ? `${meta.medianAddMinutes} min median` : "",
+    batchMatchRateLabel:
+      showOrgMetrics && meta?.batchMatchRate != null
+        ? `${meta.batchMatchRate}% added in 30 days`
+        : "",
+    showOrgMetrics,
+    jamaicaResetLabel: formatJamaicaMidnightCountdown(),
   });
 
   async function submit(photoUrl?: string) {
@@ -62,6 +99,7 @@ export function RequestPartPanel({
         componentId,
         partName,
         note,
+        oldPartNumber,
         matchType,
         fitParam,
         position,
@@ -69,20 +107,40 @@ export function RequestPartPanel({
         photoUrl,
       }),
     );
-    setSent(String((res as { item?: { id?: string } }).item?.id || "").slice(0, 8));
+    const id = String((res as { item?: { id?: string } }).item?.id || "");
+    setSentId(id);
+  }
+
+  async function saveDraft() {
+    try {
+      await api.partsRequestDraftSave({
+        note,
+        old_part_number: oldPartNumber,
+        componentId,
+        vehicleId,
+        partName,
+        matchType,
+        position,
+        fitParam,
+      });
+      toast.success("Saved for tomorrow");
+    } catch {
+      toast.error("Could not save draft");
+    }
   }
 
   return (
     <div>
-      {sent ? <p className="mb-space-md">Ticket {sent}</p> : null}
       <Fp8Screen
         data={data}
-        form={{ note }}
+        form={{ note, oldPartNumber }}
         actions={{
           onBack,
           onViewActivity,
           onNoteChange: setNote,
-          onSubmit: () => { void submit().catch(() => undefined); },
+          onOldPartNumberChange: setOldPartNumber,
+          onSubmit: () => { void submit().catch(() => toast.error("Could not send request")); },
+          onSaveDraft: () => { void saveDraft(); },
           onPhotoSelected: (file) => {
             void api.uploadPartRequestPhoto(file).then((res) => submit(res.photo_url)).catch(() => undefined);
           },

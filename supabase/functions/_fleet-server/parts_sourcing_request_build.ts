@@ -73,6 +73,7 @@ export async function buildPartsSourcingInsert(
     photoUrl: string | null;
     sentAt: string | null;
     replyDueAt: string | null;
+    oldPartNumber?: string | null;
   },
 ) {
   const { vehicle_catalog_id, platform_id } = await resolveCatalogAndPlatform(supabase, input.vehicleCatalogId);
@@ -97,5 +98,8 @@ export async function buildPartsSourcingInsert(
     fit_descriptor: fitFields.fitDescriptor,
     match_type: input.matchType,
     sent_at: input.sentAt,
+    old_part_number: input.oldPartNumber
+      ? String(input.oldPartNumber).replace(/[^A-Za-z0-9-]/g, "").slice(0, 80)
+      : null,
   };
 }

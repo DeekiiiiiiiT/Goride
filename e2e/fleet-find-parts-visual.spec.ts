@@ -118,10 +118,10 @@ test.describe("Fleet find parts live fixtures", () => {
     await assertNoSamples(page)();
   });
 
-  test("FP10 activity view", async ({ page }) => {
+  test("FP13 activity view", async ({ page }) => {
     await page.goto("/maintenance?tab=find-parts&view=activity");
-    await page.getByText("Your parts activity", { exact: false }).waitFor({ timeout: 20_000 });
-    await expect(page.getByText("Fixture request", { exact: false })).toBeVisible();
+    await page.getByRole("heading", { name: "Your requests" }).waitFor({ timeout: 20_000 });
+    await expect(page.getByText("Fixture front pads", { exact: false })).toBeVisible();
     await assertNoSamples(page)();
   });
 
@@ -217,13 +217,13 @@ test.describe("Fleet find parts stitch live PNGs", () => {
     });
   });
 
-  test("FP10 activity at 1440px", async ({ page }) => {
+  test("FP13 activity at 1440px", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto("/maintenance?tab=find-parts&view=activity");
-    await page.getByRole("heading", { name: "Your parts activity" }).waitFor({ timeout: 20_000 });
+    await page.getByRole("heading", { name: "Your requests" }).waitFor({ timeout: 20_000 });
     await prepareFindPartsCapture(page);
     await page.screenshot({
-      path: "docs/stitch/roam-fleet-app/screenshots/FP10-live.png",
+      path: "docs/stitch/roam-fleet-app/screenshots/FP13-live.png",
       fullPage: true,
     });
   });
