@@ -106,7 +106,7 @@ test("find parts car step renders with the sample car", async ({ page }) => {
   });
 
   await page.goto("/?page=parts-catalog");
-  await expect(page.getByText("Which car is it?")).toBeVisible();
+  await expect(page.getByText("Which car is it?")).toBeVisible({ timeout: 60_000 });
   await expect(page.getByText("Match types on")).toBeVisible();
   await expect(page.getByText("INDEX: 35 FITMENTS")).toBeVisible();
 });

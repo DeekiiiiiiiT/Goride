@@ -5,6 +5,8 @@ on:
   pull_request:
     paths:
       - 'e2e/dominion-places.spec.ts'
+      - 'e2e/dominion-find-parts-visual.spec.ts'
+      - 'e2e/dominion-pending-parts-visual.spec.ts'
       - 'playwright.dominion.config.ts'
       - 'packages/platform-ops-ui/src/places/**'
       - 'apps/admin/src/components/admin/places/**'
@@ -14,6 +16,8 @@ on:
     branches: [main]
     paths:
       - 'e2e/dominion-places.spec.ts'
+      - 'e2e/dominion-find-parts-visual.spec.ts'
+      - 'e2e/dominion-pending-parts-visual.spec.ts'
       - 'playwright.dominion.config.ts'
       - 'packages/platform-ops-ui/src/places/**'
       - 'apps/admin/src/components/admin/places/**'

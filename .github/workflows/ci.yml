@@ -50,6 +50,9 @@ jobs:
       - name: Check ledger view invoker
         run: node scripts/assert-ledger-view-invoker.mjs
 
+      - name: Check migration files are UTF-8
+        run: node scripts/assert-migrations-utf8.mjs
+
       - name: Check public function revoke from anon
         run: node scripts/assert-public-fn-revoke-anon.mjs
 

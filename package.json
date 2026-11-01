@@ -76,6 +76,7 @@
     "check:rush-settings-parity": "node scripts/check-rush-settings-parity.mjs",
     "lint": "pnpm -r lint",
     "check:ledger-view-invoker": "node scripts/assert-ledger-view-invoker.mjs && node scripts/assert-fleet-view-invoker.mjs && node scripts/assert-public-fn-revoke-anon.mjs",
+    "check:migrations-utf8": "node scripts/assert-migrations-utf8.mjs",
     "check:ledger-sort-whitelist": "node scripts/assert-ledger-sort-whitelist.mjs",
     "check:fuel-entries-unwrap": "node scripts/assert-fuel-entries-unwrap.mjs",
     "verify:split-cash-enable": "node scripts/verify-split-cash-enable.mjs",

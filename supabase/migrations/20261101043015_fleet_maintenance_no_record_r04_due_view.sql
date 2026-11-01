@@ -1,5 +1,5 @@
 -- Fleet maintenance logging audit R-04 (part 3): due view + Roomy recompute
--- Production version: 20261101043015 — already applied; repo sync only.
+-- Production version: 20261101043015 - already applied; repo sync only.
 
 DROP VIEW IF EXISTS public.fleet_maintenance_due_v CASCADE;
 DROP VIEW IF EXISTS fleet.maintenance_due_v CASCADE;
