@@ -1,4 +1,5 @@
 // Stitch: dominion-redesign/S42b
+// Stitch: dominion-redesign/find_parts_which_one_is_yours
 import type { FindPartsCandidate } from "../partsDatabaseApi";
 import { MatchTypeStrip } from "./MatchTypeStrip";
 

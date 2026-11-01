@@ -361,7 +361,7 @@ export function ImportAdvancedTab({
           <div className="grid grid-cols-6 text-xs font-semibold text-on-surface-variant">
             <span>Part ID</span><span>Category</span><span>Name</span><span>Base OEM number</span><span>Created</span><span>Actions</span>
           </div>
-          {(tables.data?.parts.rows ?? []).map((row) => (
+          {(tables.data?.parts?.rows ?? []).map((row) => (
             <div key={String(row.id)} className="grid grid-cols-6 text-xs py-1">
               <span className="truncate">{String(row.id)}</span>
               <span className="truncate">{String(row.category_id ?? "")}</span>
@@ -374,7 +374,7 @@ export function ImportAdvancedTab({
           <div className="grid grid-cols-5 text-xs font-semibold text-on-surface-variant pt-3">
             <span>Link ID</span><span>Master part</span><span>Aftermarket brand</span><span>Replacement number</span><span>Cross type</span>
           </div>
-          {(tables.data?.brands.rows ?? []).map((row) => (
+          {(tables.data?.brands?.rows ?? []).map((row) => (
             <div key={String(row.id)} className="grid grid-cols-5 text-xs py-1">
               <span className="truncate">{String(row.interchange_group_id ?? "")}</span>
               <span className="truncate">{String(row.id)}</span>
@@ -386,7 +386,7 @@ export function ImportAdvancedTab({
           <div className="grid grid-cols-5 text-xs font-semibold text-on-surface-variant pt-3">
             <span>Listing ID</span><span>Vehicle variant</span><span>Part</span><span>Match kind</span><span>Source confidence</span>
           </div>
-          {(tables.data?.listings.rows ?? []).map((row) => (
+          {(tables.data?.listings?.rows ?? []).map((row) => (
             <div key={String(row.id)} className="grid grid-cols-5 text-xs py-1">
               <span className="truncate">{String(row.id)}</span>
               <span className="truncate">{String(row.vehicle_catalog_id ?? "")}</span>

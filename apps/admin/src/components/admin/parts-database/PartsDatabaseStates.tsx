@@ -1,4 +1,5 @@
-// Stitch: find_parts_loading_error_switched_off · dominion-redesign state cards
+// Stitch: dominion-redesign/e8cd9a893717485ca09e80c931cb25e3
+// Stitch: dominion-redesign/find_parts_loading_error_switched_off
 import { useState } from "react";
 import { PART_MATCH_TIERS } from "../../../../../../packages/types/src/partsResolution";
 

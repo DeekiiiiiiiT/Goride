@@ -1,4 +1,5 @@
 // Stitch: dominion-redesign/S42c (find_parts_what_part/code.html)
+// Stitch: dominion-redesign/find_parts_what_part
 import { useEffect, useState } from "react";
 
 export type BrowseComponent = { id: string; plainName: string; positionAware: boolean; count: number };

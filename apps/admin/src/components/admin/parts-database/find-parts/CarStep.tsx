@@ -1,3 +1,4 @@
+// Stitch: dominion-redesign/find_parts_pick_the_car
 import { MatchTypeStrip } from "./MatchTypeStrip";
 
 export type RecentSearch = { make: string; model: string; year: string };

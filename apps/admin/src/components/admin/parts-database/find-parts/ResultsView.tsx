@@ -1,4 +1,6 @@
 // Stitch: dominion-redesign/S42e
+// Stitch: dominion-redesign/find_parts_results_in_five_match_types
+// Stitch: dominion-redesign/find_parts_mobile_390px
 import { PART_MATCH_TIERS } from "../../../../../../../packages/types/src/partsResolution";
 import type { FindPartsCandidate, FindPartsResult, FoundPartRow, PlainSection } from "../partsDatabaseApi";
 import { PartsMatchTypesOff } from "../PartsDatabaseStates";

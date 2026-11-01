@@ -16,7 +16,7 @@ export const extractionStatus = {
     "ops": {
       "slug": "fleet-ops",
       "cutover": "done",
-      "routeCount": 81
+      "routeCount": 93
     },
     "claims": {
       "slug": "fleet-claims",

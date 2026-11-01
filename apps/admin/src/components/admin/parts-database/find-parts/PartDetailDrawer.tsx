@@ -1,4 +1,5 @@
 // Stitch: dominion-redesign/S42f · find_parts_part_detail_drawer
+// Stitch: dominion-redesign/find_parts_part_detail_drawer
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { PART_MATCH_TIERS } from "../../../../../../../packages/types/src/partsResolution";

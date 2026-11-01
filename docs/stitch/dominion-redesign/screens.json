@@ -85,6 +85,20 @@
     "categories_brands_tab",
     "categories_retire_dialog_blocked_allowed_states",
     "S42l",
-    "034344e3c28e4921b5336c46787240ce"
+    "034344e3c28e4921b5336c46787240ce",
+    "pending_catalog_parts_tab",
+    "pending_catalog_part_request_detail_drawer",
+    "pending_catalog_empty_loading_error_states",
+    "find_parts_pick_the_car",
+    "find_parts_which_one_is_yours",
+    "find_parts_what_part",
+    "find_parts_front_or_back",
+    "find_parts_results_in_five_match_types",
+    "find_parts_part_detail_drawer",
+    "find_parts_not_on_file_yet",
+    "find_parts_everything_for_this_car",
+    "find_parts_problems_list_and_drawer",
+    "find_parts_loading_error_switched_off",
+    "find_parts_mobile_390px"
   ]
 }
