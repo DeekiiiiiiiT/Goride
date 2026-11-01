@@ -3,6 +3,7 @@ import { api } from "../../../services/api";
 import { Fp8Screen } from "./screens/Fp8Screen";
 import { buildFp8ViewModel } from "./findPartsViewModels";
 import { orDash, orNoneYet } from "./findPartsFormat";
+import { buildAddPartInfoRequestBody, findPartsPositionLabel } from "./findPartsRoute";
 import { usePartsVehicleContext } from "./findPartsQueries";
 
 export function RequestPartPanel({
@@ -42,7 +43,7 @@ export function RequestPartPanel({
     plate,
     vehicleLabel: carLabel || "Vehicle",
     partName: partName || "Part",
-    positionLabel: position === "rear" ? "Rear axle" : position === "both" ? "Front and rear" : "Front axle",
+    positionLabel: findPartsPositionLabel(position),
     trimLabel: orNoneYet(String(ctxData.trim || ctxData.variant || "")),
     chassisLabel: orDash(String(specs.chassis_code || ctxData.chassis_code || ctxData.chassis || "")),
     hubLabel: orNoneYet(String(ctxData.hub_label || ctxData.hubLabel || "Fleet hub")),
@@ -55,20 +56,19 @@ export function RequestPartPanel({
 
   async function submit(photoUrl?: string) {
     const ctxVariant = String((ctxData as { variantId?: string }).variantId || "");
-    const res = await api.requestFindPart({
-      kind: "add_part_info",
-      vehicleId,
-      componentId: componentId || undefined,
-      maintenanceComponentId: componentId || undefined,
-      partName: partName || undefined,
-      note,
-      matchType: matchType || undefined,
-      fit: fitParam || undefined,
-      side: position === "left" || position === "right" ? position : undefined,
-      position: position && !["left", "right", "both"].includes(position) ? position : undefined,
-      vehicleCatalogId: ctxVariant || undefined,
-      photoUrl,
-    });
+    const res = await api.requestFindPart(
+      buildAddPartInfoRequestBody({
+        vehicleId,
+        componentId,
+        partName,
+        note,
+        matchType,
+        fitParam,
+        position,
+        vehicleCatalogId: ctxVariant || undefined,
+        photoUrl,
+      }),
+    );
     setSent(String((res as { item?: { id?: string } }).item?.id || "").slice(0, 8));
   }
 

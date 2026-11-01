@@ -3,7 +3,9 @@ import type {
   PendingPartsGroupDetail,
   PendingPartsPatchAction,
   PendingPartsQueueGroup,
+  VehicleCatalogBrief,
 } from "../../../../services/pendingPartsCatalogService";
+import { buildPartSearchText } from "./buildPartSearchText";
 import {
   Dialog,
   DialogContent,
@@ -33,6 +35,9 @@ type PendingPartRequestDrawerProps = {
   detail: PendingPartsGroupDetail | null;
   detailLoading: boolean;
   busy: boolean;
+  vehicleBrief: VehicleCatalogBrief | null;
+  partPlainName: string;
+  positionAware: boolean;
   onClose: () => void;
   onPatch: (action: PendingPartsPatchAction) => Promise<void>;
 };
@@ -44,6 +49,9 @@ export function PendingPartRequestDrawer({
   detail,
   detailLoading,
   busy,
+  vehicleBrief,
+  partPlainName,
+  positionAware,
   onClose,
   onPatch,
 }: PendingPartRequestDrawerProps) {
@@ -54,9 +62,11 @@ export function PendingPartRequestDrawer({
   const [cantFindReason, setCantFindReason] = useState("");
   const [resolvedPartId, setResolvedPartId] = useState("");
   const [resolutionNote, setResolutionNote] = useState("");
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
 
   useEffect(() => {
     if (!open) return;
+    setCopyState("idle");
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
@@ -64,7 +74,36 @@ export function PendingPartRequestDrawer({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
+  useEffect(() => {
+    if (copyState === "idle") return;
+    const t = window.setTimeout(() => setCopyState("idle"), 2000);
+    return () => window.clearTimeout(t);
+  }, [copyState]);
+
   if (!open || !group || !display) return null;
+
+  const onFile = detail?.onFile ?? [];
+  const chassisCode = vehicleBrief?.chassis_code || "—";
+  const onFileHeader = `${partPlainName} · ${chassisCode}`;
+
+  const copyForSearch = async () => {
+    const text = buildPartSearchText(
+      group,
+      vehicleBrief ?? undefined,
+      partPlainName,
+      detail?.notes ?? [],
+      positionAware,
+    );
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopyState("copied");
+    } catch {
+      setCopyState("failed");
+    }
+  };
+
+  const copyButtonLabel =
+    copyState === "copied" ? "Copied ✓" : copyState === "failed" ? "Couldn't copy" : "Copy for search";
 
   const matchTypeToCatalog = (raw?: string | null): CatalogMatch | undefined => {
     const tag = String(raw || "").trim().toLowerCase();
@@ -104,7 +143,6 @@ export function PendingPartRequestDrawer({
         aria-modal
         role="dialog"
         aria-labelledby="pending-part-drawer-title"
-        data-stitch-lexicon="air filter 1 fleet 2 fleets 3 fleets asked by 3 fleets air filter · auto-classifier: active (confidence 94%)"
       >
         <div className="flex-none border-b border-surface-variant bg-surface-container-lowest p-space-lg">
           <div className="mb-2 flex items-center justify-between">
@@ -146,6 +184,14 @@ export function PendingPartRequestDrawer({
               <span className="material-symbols-outlined text-[14px]">calendar_today</span>
               <span>first asked {display.firstAskedLabel}</span>
             </div>
+            <button
+              type="button"
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-outline-variant/60 bg-transparent px-2.5 font-label-md text-label-md font-semibold text-on-surface transition-colors hover:bg-surface-container"
+              onClick={() => void copyForSearch()}
+            >
+              <span className="material-symbols-outlined text-[16px]">content_copy</span>
+              <span>{copyButtonLabel}</span>
+            </button>
           </div>
         </div>
 
@@ -243,17 +289,38 @@ export function PendingPartRequestDrawer({
                 <span className="material-symbols-outlined text-[14px]">folder_open</span>
                 <span>Already on file for this car</span>
               </span>
-              <span className="font-mono-sm text-[11px] font-medium text-on-surface-variant">Air filter · M900A</span>
+              <span className="font-mono-sm text-[11px] font-medium text-on-surface-variant">{onFileHeader}</span>
             </div>
-            <div className="flex items-center justify-center rounded-xl border border-surface-variant bg-surface-container-lowest p-4 text-center">
-              <div className="flex flex-col items-center py-2">
-                <span className="material-symbols-outlined mb-1 text-[24px] text-outline">inbox</span>
-                <span className="font-headline-md text-headline-md font-semibold text-on-surface">Nothing yet</span>
-                <p className="mt-0.5 max-w-xs font-body-sm text-body-sm text-on-surface-variant">
-                  No existing air filters are registered in the master catalog for this powertrain version.
-                </p>
+            {detailLoading ? (
+              <div className="h-24 animate-pulse rounded-xl bg-surface-container" />
+            ) : onFile.length > 0 ? (
+              <ul className="space-y-2 rounded-xl border border-surface-variant bg-surface-container-lowest p-3">
+                {onFile.map((row, index) => (
+                  <li
+                    key={`${row.partNumber}-${row.brand}-${index}`}
+                    className="flex flex-wrap items-center justify-between gap-2 border-b border-surface-variant/60 pb-2 last:border-0 last:pb-0"
+                  >
+                    <div className="min-w-0">
+                      <span className="font-body-sm text-body-sm font-semibold text-on-surface">{row.brand}</span>
+                      <span className="ml-2 font-mono-sm text-mono-sm text-on-surface-variant">{row.partNumber}</span>
+                    </div>
+                    <span className="rounded-full bg-surface-container px-2 py-0.5 font-mono-sm text-[10px] font-semibold text-on-surface-variant">
+                      {row.matchType}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className="flex items-center justify-center rounded-xl border border-surface-variant bg-surface-container-lowest p-4 text-center">
+                <div className="flex flex-col items-center py-2">
+                  <span className="material-symbols-outlined mb-1 text-[24px] text-outline">inbox</span>
+                  <span className="font-headline-md text-headline-md font-semibold text-on-surface">Nothing yet</span>
+                  <p className="mt-0.5 max-w-xs font-body-sm text-body-sm text-on-surface-variant">
+                    No {partPlainName.toLowerCase()} on file for this car version yet.
+                  </p>
+                </div>
               </div>
-            </div>
+            )}
           </section>
 
           <section className="space-y-3 rounded-xl border border-primary-container/30 bg-surface-container-lowest p-space-md shadow-xs">

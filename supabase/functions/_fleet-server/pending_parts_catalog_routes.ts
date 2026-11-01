@@ -7,6 +7,8 @@ import { assertPlatformStaffResponse } from "./rbac_middleware.ts";
 import { dominionCan } from "../../../packages/auth-client/src/dominionPermissions.ts";
 import { getPlatformSettingsCached } from "./platform_settings.ts";
 import { applyPendingPartsGroupFilters, pendingPartsGroupKey } from "./pending_parts_group.ts";
+import { getCatalogParts } from "./catalog_api.ts";
+import { mapPendingOnFileParts } from "./pending_parts_on_file.ts";
 
 const PREFIX = "/make-server-37f42386/admin/pending-catalog/parts-queue";
 const FORBIDDEN_RESPONSE_KEYS = new Set([
@@ -129,25 +131,47 @@ export function registerPendingPartsCatalogRoutes(app: { get: Function; patch: F
       const groupId = c.req.param("groupId");
       let query = supabase
         .from("parts_sourcing_requests")
-        .select("id, platform_id, vehicle_catalog_id, maintenance_component_id, install_side, fit_descriptor, match_type, need_text, photo_url, created_at, status, looking_note, resolution_note, kind")
+        .select("id, platform_id, vehicle_catalog_id, maintenance_component_id, install_side, install_position, fit_descriptor, match_type, need_text, photo_url, created_at, status, looking_note, resolution_note, kind")
         .eq("kind", "add_part_info");
       applyPendingPartsGroupFilters(query, groupId);
       const { data, error } = await query.order("created_at", { ascending: true });
       if (error) throw error;
-      const notes = (data || []).map((row, index) => stripPii({
+      const rows = data || [];
+      const notes = rows.map((row, index) => stripPii({
         id: row.id,
         logRef: `${String(row.id).slice(0, 8).toUpperCase()}-${String.fromCharCode(65 + (index % 26))}`,
         text: String((row as { need_text?: string }).need_text || ""),
         at: (row as { created_at?: string }).created_at,
       } as Record<string, unknown>));
+      let onFile: ReturnType<typeof mapPendingOnFileParts> = [];
+      const first = rows[0] as {
+        vehicle_catalog_id?: string | null;
+        maintenance_component_id?: string | null;
+      } | undefined;
+      const catalogId = first?.vehicle_catalog_id ? String(first.vehicle_catalog_id) : "";
+      const componentId = first?.maintenance_component_id ? String(first.maintenance_component_id) : "";
+      if (catalogId && componentId) {
+        const { data: vcRow } = await supabase
+          .from("vehicle_catalog")
+          .select("production_start_year")
+          .eq("id", catalogId)
+          .maybeSingle();
+        const vehicleYear = (vcRow as { production_start_year?: number | null } | null)?.production_start_year ?? null;
+        const catalog = await getCatalogParts(supabase, catalogId, {
+          componentId,
+          vehicleYear,
+        });
+        onFile = mapPendingOnFileParts(catalog.items);
+      }
       return c.json({
         groupId,
         fleetCount: notes.length,
         notes,
-        photos: (data || []).filter((row) => (row as { photo_url?: string }).photo_url).map((row) => stripPii({
+        photos: rows.filter((row) => (row as { photo_url?: string }).photo_url).map((row) => stripPii({
           url: (row as { photo_url?: string }).photo_url,
           requestId: (row as { id?: string }).id,
         } as Record<string, unknown>)),
+        onFile,
       });
     } catch (err) {
       return c.json({ error: err instanceof Error ? err.message : String(err) }, 500);

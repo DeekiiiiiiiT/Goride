@@ -40,11 +40,18 @@ export type PendingPartsGroupPhoto = {
   requestId: string;
 };
 
+export type PendingPartsOnFileRow = {
+  brand: string;
+  partNumber: string;
+  matchType: string;
+};
+
 export type PendingPartsGroupDetail = {
   groupId: string;
   fleetCount: number;
   notes: PendingPartsGroupNote[];
   photos: PendingPartsGroupPhoto[];
+  onFile?: PendingPartsOnFileRow[];
 };
 
 export type PendingPartsPatchAction =
@@ -132,7 +139,7 @@ export async function fetchVehicleCatalogBriefs(
   return out;
 }
 
-export type PartsBrowseNameMap = Map<string, { plainName: string; areaName?: string }>;
+export type PartsBrowseNameMap = Map<string, { plainName: string; areaName?: string; positionAware?: boolean }>;
 
 export async function fetchPartsBrowseNameMap(accessToken: string): Promise<PartsBrowseNameMap> {
   const res = await fetch(`${API_ENDPOINTS.admin}/admin/catalog/parts/browse`, {
@@ -147,11 +154,15 @@ export async function fetchPartsBrowseNameMap(accessToken: string): Promise<Part
       out.set(String(component.id), {
         plainName: component.plainName || component.name || "Part",
         areaName,
+        positionAware: Boolean(component.positionAware),
       });
     }
   }
   for (const row of data.common || []) {
-    out.set(String(row.id), { plainName: row.plainName || row.name || "Part" });
+    out.set(String(row.id), {
+      plainName: row.plainName || row.name || "Part",
+      positionAware: Boolean(row.positionAware),
+    });
   }
   return out;
 }
@@ -184,6 +195,16 @@ export function formatVehicleHeadline(v: VehicleCatalogBrief | undefined): strin
 export function formatVehicleSubline(v: VehicleCatalogBrief | undefined): string {
   if (!v) return "";
   return [v.chassis_code, v.transmission].filter(Boolean).join(" · ");
+}
+
+export function partPlainName(componentId: string | null, names: PartsBrowseNameMap): string {
+  if (!componentId) return "Part";
+  return names.get(componentId)?.plainName || "Requested part";
+}
+
+export function componentPositionAware(componentId: string | null, names: PartsBrowseNameMap): boolean {
+  if (!componentId) return false;
+  return Boolean(names.get(componentId)?.positionAware);
 }
 
 export function formatPartLabel(

@@ -53,6 +53,9 @@ const mockGroupDetail = {
   fleetCount: 1,
   notes: [{ id: "n1", logRef: "RF-8092", text: "Cross-reference JDM chassis microfiche." }],
   photos: [],
+  onFile: [
+    { brand: "Denso", partNumber: "17801-B0010", matchType: "Made for your car" },
+  ],
 };
 
 const mockBrowseNames = {

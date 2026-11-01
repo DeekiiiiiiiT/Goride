@@ -19,7 +19,12 @@ import { Fp11Screen, type Fp11Actions } from "./screens/Fp11Screen";
 import { buildFp11ViewModel, type Fp11PreviewTab } from "./findPartsViewModels";
 import { clearFleetMaintenanceSearch, navigateFleetMaintenanceTab, notifyPartsAdmin } from "./findPartsActions";
 import { fleetCoreErrorDetails, formatFindPartsVehicleChip, findPartsConnectionLatencyMs } from "./findPartsErrors";
-import { stepAfterPartPick, stepFromPartDeepLink } from "./findPartsRoute";
+import {
+  clearFindPartsFitState,
+  findPartsUrlAfterNewPartPick,
+  stepAfterPartPick,
+  stepFromPartDeepLink,
+} from "./findPartsRoute";
 import "./findParts.css";
 
 type Step = "car" | "version" | "part" | "position" | "results" | "request" | "link" | "missing";
@@ -86,7 +91,9 @@ export function FindPartsTab({
     if (next.vehicle) url.searchParams.set("vehicle", next.vehicle);
     if (next.part) url.searchParams.set("part", next.part);
     if (next.pos) url.searchParams.set("pos", next.pos);
+    else if (next.pos === "") url.searchParams.delete("pos");
     if (next.side) url.searchParams.set("side", next.side);
+    else if (next.side === "") url.searchParams.delete("side");
     if (next.fit) url.searchParams.set("fit", next.fit);
     else if (next.fit === "") url.searchParams.delete("fit");
     if (next.view) url.searchParams.set("view", next.view);
@@ -333,16 +340,24 @@ export function FindPartsTab({
               initialPartName={partName}
               onBack={() => setStep(vehicleId ? "car" : "version")}
               onPick={(id, positionAware, name, onFileCount) => {
+                const cleared = clearFindPartsFitState();
+                setPosition(cleared.position);
+                setSide(cleared.side);
+                setFitParam(cleared.fitParam);
                 setComponentId(id);
                 setPartName(name);
-                writeUrl({ vehicle: vehicleId, part: id });
+                writeUrl(findPartsUrlAfterNewPartPick(vehicleId, id));
                 const next = stepAfterPartPick(onFileCount, positionAware);
                 setStep(next);
               }}
               onAskRoam={(id, name) => {
+                const cleared = clearFindPartsFitState();
+                setPosition(cleared.position);
+                setSide(cleared.side);
+                setFitParam(cleared.fitParam);
                 setComponentId(id);
                 setPartName(name);
-                writeUrl({ vehicle: vehicleId, part: id });
+                writeUrl(findPartsUrlAfterNewPartPick(vehicleId, id));
                 setStep("request");
               }}
             />

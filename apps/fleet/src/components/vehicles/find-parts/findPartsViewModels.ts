@@ -382,10 +382,7 @@ export function buildFp3OverlayViewModel(input: {
   rows.sort((a, b) => (a.onFile === b.onFile ? a.name.localeCompare(b.name) : a.onFile ? -1 : 1));
   const rowsOnFile = rows.filter((r) => r.onFile);
   const rowsNotOnFile = rows.filter((r) => !r.onFile);
-  const onFileForCar = rowsOnFile.reduce((sum, row) => {
-    const n = Number(String(row.onFileLabel).match(/^\d+/)?.[0] || 0);
-    return sum + n;
-  }, 0);
+  const onFileForCar = rowsOnFile.length;
   return {
     areaName: area.name,
     areaIcon: area.icon,
@@ -1396,7 +1393,9 @@ export function buildFp8ViewModel(input: {
   }));
   const health = input.healthPct;
   const partName = orNoneYet(input.partName);
-  const positionLabel = orNoneYet(input.positionLabel || "front");
+  const positionLabel = input.positionLabel != null && input.positionLabel !== ""
+    ? orNoneYet(input.positionLabel)
+    : orNoneYet("—");
   return {
     plate: orDash(input.plate),
     vehicleLabel: orNoneYet(input.vehicleLabel),

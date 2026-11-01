@@ -5,6 +5,8 @@ import { useAuth } from "../../../auth/AuthContext";
 import {
   fetchPartsBrowseNameMap,
   fetchVehicleCatalogBriefs,
+  componentPositionAware,
+  partPlainName,
   formatPartLabel,
   formatStatusLabel,
   formatVehicleHeadline,
@@ -197,6 +199,19 @@ export function PendingPartsCatalogTab({ onSyncSeconds }: { onSyncSeconds?: (sec
       reqShortId,
     };
   }, [drawerGroup, rows]);
+
+  const drawerVehicleBrief = useMemo(() => {
+    if (!drawerGroup) return null;
+    const id = drawerGroup.vehicleCatalogId || drawerGroup.platformId;
+    return id ? vehicles.get(id) ?? null : null;
+  }, [drawerGroup, vehicles]);
+
+  const drawerPartPlainName = drawerGroup
+    ? partPlainName(drawerGroup.componentId, partNames)
+    : "Part";
+  const drawerPositionAware = drawerGroup
+    ? componentPositionAware(drawerGroup.componentId, partNames)
+    : false;
 
   const handlePatch = async (body: PendingPartsPatchAction) => {
     if (!token || !drawerGroup) return;
@@ -546,6 +561,9 @@ export function PendingPartsCatalogTab({ onSyncSeconds }: { onSyncSeconds?: (sec
         detail={drawerDetail}
         detailLoading={drawerLoading}
         busy={actionBusy}
+        vehicleBrief={drawerVehicleBrief}
+        partPlainName={drawerPartPlainName}
+        positionAware={drawerPositionAware}
         onClose={closeDrawer}
         onPatch={handlePatch}
       />

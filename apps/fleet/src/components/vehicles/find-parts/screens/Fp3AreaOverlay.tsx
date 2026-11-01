@@ -180,10 +180,10 @@ export function Fp3AreaOverlay({
   }, [actions, data.rowsNotOnFile, data.rowsOnFile]);
 
   const headerMeta = (
-    <div className="mt-space-lg pt-space-sm flex items-center justify-between font-label-code text-caption text-on-surface-variant tracking-wider uppercase">
-      <span>{data.partsInArea} parts in this area</span>
-      <span>·</span>
-      <span>{data.onFileForCar} on file for your car</span>
+    <div className="mt-space-lg pt-space-sm font-label-code text-caption text-on-surface-variant tracking-wider uppercase">
+      <span>
+        {data.partsInArea} parts in this area · {data.onFileForCar} on file for your car
+      </span>
     </div>
   );
 

@@ -41,6 +41,29 @@ describe("fp3 area numbering", () => {
   });
 });
 
+describe("buildFp3OverlayViewModel on-file count", () => {
+  it("counts part types on file not listing totals", async () => {
+    const { buildFp3OverlayViewModel } = await import("./findPartsViewModels");
+    const vm = buildFp3OverlayViewModel({
+      area: { id: "brakes", name: "Brakes", icon: "disc_full", count: 6 },
+      browse: {
+        systems: [{
+          id: "brakes",
+          plainName: "Brakes",
+          components: [
+            { id: "pads", plainName: "Brake pads", count: 4, positionAware: true },
+            { id: "shoes", plainName: "Brake shoes", count: 2, positionAware: true },
+            { id: "rotors", plainName: "Brake rotors", count: 0 },
+            { id: "lines", plainName: "Brake lines", count: 0 },
+          ],
+        }],
+      },
+    });
+    expect(vm?.partsInArea).toBe(4);
+    expect(vm?.onFileForCar).toBe(2);
+  });
+});
+
 describe("formatPartsVersionTag", () => {
   it("reads version field from vehicle-context shape", async () => {
     const { formatPartsVersionTag } = await import("@roam/types/partsVehicleContext");
