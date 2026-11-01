@@ -339,7 +339,12 @@ export function FindPartsTab({
                 const next = stepAfterPartPick(onFileCount, positionAware);
                 setStep(next);
               }}
-              onSkip={() => setStep("results")}
+              onAskRoam={(id, name) => {
+                setComponentId(id);
+                setPartName(name);
+                writeUrl({ vehicle: vehicleId, part: id });
+                setStep("request");
+              }}
             />
           ) : null}
           {step === "position" ? (

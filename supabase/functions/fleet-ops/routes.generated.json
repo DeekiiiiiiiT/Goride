@@ -1,7 +1,7 @@
 {
   "slug": "fleet-ops",
   "generatedAt": "2026-10-24T22:05:35.873Z",
-  "routeCount": 81,
+  "routeCount": 83,
   "routes": [
     "DELETE ${ADMIN_CAT}/:id",
     "DELETE ${ADMIN}/:id",
@@ -28,6 +28,7 @@
     "GET /maintenance-categories/quick-jobs",
     "GET /maintenance-categories/systems/:systemId/components",
     "GET /maintenance-fleet-summary",
+    "GET /maintenance/log-service-context/:vehicleId",
     "GET /maintenance-inspection-templates",
     "GET /maintenance-logs",
     "GET /maintenance-logs/:vehicleId",
@@ -72,6 +73,7 @@
     "POST /admin/migrate-maintenance-from-kv",
     "POST /admin/vehicle-catalog/:catalogId/maintenance-templates",
     "POST /maintenance-inspection-findings",
+    "POST /maintenance/odometer/check",
     "POST /maintenance-logs",
     "POST /maintenance-requests",
     "POST /maintenance-schedule/:vehicleId/bootstrap",

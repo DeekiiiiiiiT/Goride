@@ -27,6 +27,10 @@ export function positionAwareForComponent(browse: BrowseShape | undefined, compo
     const match = system.components?.find((row) => row.id === componentId);
     if (match) return Boolean(match.positionAware);
   }
+  for (const area of browse.areas || []) {
+    const match = area.parts?.find((row) => row.id === componentId);
+    if (match) return Boolean(match.positionAware);
+  }
   const common = browse.common?.find((row) => row.id === componentId);
   if (common) return Boolean(common.positionAware);
   return false;
@@ -48,6 +52,10 @@ export function onFileCountForComponent(browse: BrowseShape | undefined, compone
   if (!componentId || !browse) return 0;
   for (const system of browse.systems || []) {
     const match = system.components?.find((row) => row.id === componentId);
+    if (match) return Number(match.count ?? 0);
+  }
+  for (const area of browse.areas || []) {
+    const match = area.parts?.find((row) => row.id === componentId);
     if (match) return Number(match.count ?? 0);
   }
   const common = browse.common?.find((row) => row.id === componentId);

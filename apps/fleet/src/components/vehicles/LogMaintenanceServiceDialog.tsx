@@ -1,8 +1,6 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
-  CheckCircle2,
-  Loader2,
 } from "lucide-react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -27,11 +25,21 @@ import {
   LogServiceDateMileageStep,
   LogServiceWhatWasDoneStep,
   LogServiceLineDetailsStep,
+  LogServiceLineDetailsMultiStep,
   LogServiceReviewStep,
+  LogServiceSystemPicker,
+  LogServiceComponentPicker,
   LogServiceWizardChrome,
   LogServiceWizardContinueButton,
   LOG_SERVICE_COPY,
 } from "./maintenance-logging/log-service";
+import type { OdometerCheckResult } from "./maintenance-logging/log-service/LogServiceDateMileageStep";
+import type { LogServiceSuggestedOp } from "./maintenance-logging/log-service/LogServiceWhatWasDoneStep";
+import {
+  clearLogServiceDraft,
+  readLogServiceDraft,
+  writeLogServiceDraft,
+} from "./maintenance-logging/log-service/logServiceDraft";
 import type { LogServiceVehicleStrip, LogServiceWizardStep } from "./maintenance-logging/log-service";
 import type {
   CatalogMaintenanceTaskOption,
@@ -81,6 +89,8 @@ export interface LogMaintenanceServiceDialogProps {
   vehicleStrip?: LogServiceVehicleStrip;
   /** When set, PATCH this record (e.g. complete a driver Requested row). */
   initialLog?: Partial<MaintenanceLog> | null;
+  /** Supabase user id for draft storage key. */
+  draftUserId?: string;
   onSaved?: () => void;
 }
 
@@ -279,9 +289,18 @@ export function LogMaintenanceServiceDialog({
   defaultOdo,
   vehicleStrip,
   initialLog,
+  draftUserId,
   onSaved,
 }: LogMaintenanceServiceDialogProps) {
   const [odoTouched, setOdoTouched] = useState(false);
+  const [anomalyAcknowledged, setAnomalyAcknowledged] = useState(false);
+  const [odometerCheckLoading, setOdometerCheckLoading] = useState(false);
+  const [odometerCheck, setOdometerCheck] = useState<OdometerCheckResult | null>(null);
+  const [logServiceContext, setLogServiceContext] = useState<Awaited<
+    ReturnType<typeof api.getLogServiceContext>
+  > | null>(null);
+  const [lineDetailCategories, setLineDetailCategories] = useState<MaintenanceServiceCategory[]>([]);
+  const [workOrderRef, setWorkOrderRef] = useState("");
   const [step, setStep] = useState<DialogStep>("dateMileage");
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
   const [isLoading, setIsLoading] = useState(false);
@@ -326,11 +345,36 @@ export function LogMaintenanceServiceDialog({
   const [pendingInvoiceFile, setPendingInvoiceFile] = useState<File | null>(null);
 
   const packageChoices = useMemo((): PackageChoice[] => {
-    if (catalogTemplates.length > 0) {
-      return catalogTemplates.map(packageFromCatalog);
-    }
-    return MAINTENANCE_SCHEDULE_PRESETS.map(packageFromPreset);
-  }, [catalogTemplates]);
+    const base =
+      catalogTemplates.length > 0
+        ? catalogTemplates.map(packageFromCatalog)
+        : MAINTENANCE_SCHEDULE_PRESETS.map(packageFromPreset);
+    if (!logServiceContext?.packages?.length) return base;
+    const ctxByTpl = new Map(logServiceContext.packages.map((p) => [p.templateId, p]));
+    return base.map((pkg) => {
+      const ctx = pkg.templateId ? ctxByTpl.get(pkg.templateId) : undefined;
+      if (!ctx) return pkg;
+      return {
+        ...pkg,
+        dueKind: ctx.status,
+        intervalText: ctx.intervalText ?? undefined,
+        status: ctx.status,
+        kmLabel: ctx.kmLabel,
+      } as PackageChoice & { intervalText?: string; status?: string; kmLabel?: string | null };
+    });
+  }, [catalogTemplates, logServiceContext]);
+
+  const packageChoicesForStep = useMemo((): import("./maintenance-logging/log-service/LogServiceWhatWasDoneStep").LogServicePackageChoice[] => {
+    return packageChoices.map((p) => ({
+      id: p.id,
+      shortLabel: p.shortLabel,
+      iconKey: p.iconKey,
+      dueKind: p.dueKind,
+      intervalText: (p as { intervalText?: string }).intervalText ?? null,
+      status: (p as { status?: "overdue" | "due_soon" | "ok" | "mandatory" }).status,
+      kmLabel: (p as { kmLabel?: string | null }).kmLabel ?? null,
+    }));
+  }, [packageChoices]);
 
   const catalogById = useMemo(() => {
     const m = new Map<string, MaintenanceServiceCategory>();
@@ -375,7 +419,93 @@ export function LogMaintenanceServiceDialog({
     [vehicleStrip, vehicleId, defaultOdo, formMeta.odo],
   );
 
-  const canContinueDateStep = Number(formMeta.odo) > 0 && Boolean(formMeta.date);
+  const canContinueDateStep =
+    Number(formMeta.odo) > 0 &&
+    Boolean(formMeta.date) &&
+    (!odometerCheck?.isAnomaly || anomalyAcknowledged);
+
+  const odometerCheckTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!open || step !== "dateMileage") return;
+    const odo = Number(formMeta.odo);
+    if (!formMeta.date || !Number.isFinite(odo) || odo <= 0) {
+      setOdometerCheck(null);
+      return;
+    }
+    if (odometerCheckTimer.current) clearTimeout(odometerCheckTimer.current);
+    odometerCheckTimer.current = setTimeout(() => {
+      setOdometerCheckLoading(true);
+      api
+        .checkMaintenanceOdometer({ vehicleId, date: formMeta.date, reading: odo })
+        .then((res) => {
+          setOdometerCheck(res);
+          if (!res.isAnomaly) setAnomalyAcknowledged(false);
+        })
+        .catch(() => setOdometerCheck(null))
+        .finally(() => setOdometerCheckLoading(false));
+    }, 400);
+    return () => {
+      if (odometerCheckTimer.current) clearTimeout(odometerCheckTimer.current);
+    };
+  }, [open, step, formMeta.date, formMeta.odo, vehicleId]);
+
+  useEffect(() => {
+    if (!open || !vehicleId) return;
+    let cancelled = false;
+    api
+      .getLogServiceContext(vehicleId)
+      .then((ctx) => {
+        if (!cancelled) setLogServiceContext(ctx);
+      })
+      .catch(() => {
+        if (!cancelled) setLogServiceContext(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, vehicleId]);
+
+  const persistDraft = useCallback(() => {
+    if (!draftUserId || !open) return;
+    writeLogServiceDraft(draftUserId, vehicleId, {
+      version: 1,
+      savedAt: new Date().toISOString(),
+      step,
+      formMeta: { ...formMeta },
+      lines,
+      logMode,
+      selectedPackageId: selectedPackage?.id ?? null,
+      selectedSystemId: selectedSystem?.id ?? null,
+      selectedCategoryIds,
+      idempotencyKey,
+      anomalyAcknowledged,
+    });
+  }, [
+    draftUserId,
+    open,
+    vehicleId,
+    step,
+    formMeta,
+    lines,
+    logMode,
+    selectedPackage,
+    selectedSystem,
+    selectedCategoryIds,
+    idempotencyKey,
+    anomalyAcknowledged,
+  ]);
+
+  useEffect(() => {
+    if (!open) return;
+    const t = setTimeout(() => persistDraft(), 500);
+    return () => clearTimeout(t);
+  }, [open, persistDraft]);
+
+  const clearDraftAndClose = useCallback(() => {
+    if (draftUserId) clearLogServiceDraft(draftUserId, vehicleId);
+    onOpenChange(false);
+  }, [draftUserId, vehicleId, onOpenChange]);
 
   // Reset + load systems / quick jobs when dialog opens
   useEffect(() => {
@@ -406,40 +536,61 @@ export function LogMaintenanceServiceDialog({
     setSystemComponents([]);
     setFormQueue([]);
     setCompatibleParts([]);
+    setLineDetailCategories([]);
+    setAnomalyAcknowledged(false);
+    setOdometerCheck(null);
+    setWorkOrderRef("");
 
-    const existingLines = initialLog?.lines?.length ? [...initialLog.lines] : [];
-    setLines(existingLines);
+    const existingDraft =
+      draftUserId && !initialLog?.id ? readLogServiceDraft(draftUserId, vehicleId) : null;
 
-    const hasTemplate = Boolean(initialLog?.templateId);
-    const mode: LogMode =
-      initialLog?.logMode === "quick_job"
-        ? "quick_job"
-        : hasTemplate || initialLog?.logMode === "package"
-          ? "package"
-          : existingLines.length
-            ? "quick_job"
-            : "package";
-    setLogMode(mode);
-
-    if (hasTemplate) {
-      const pkg =
-        packageChoices.find((p) => p.templateId === initialLog?.templateId) ||
-        null;
+    if (existingDraft && !initialLog?.id) {
+      setFormMeta({ ...existingDraft.formMeta });
+      setLines(existingDraft.lines);
+      setLogMode(existingDraft.logMode);
+      setSelectedCategoryIds(existingDraft.selectedCategoryIds);
+      setIdempotencyKey(existingDraft.idempotencyKey);
+      setAnomalyAcknowledged(existingDraft.anomalyAcknowledged);
+      setStep(existingDraft.step as DialogStep);
+      const pkg = packageChoices.find((p) => p.id === existingDraft.selectedPackageId) ?? null;
       setSelectedPackage(pkg);
+      const sys = allSystems.find((s) => s.id === existingDraft.selectedSystemId) ?? null;
+      setSelectedSystem(sys);
     } else {
-      setSelectedPackage(null);
-    }
+      const existingLines = initialLog?.lines?.length ? [...initialLog.lines] : [];
+      setLines(existingLines);
 
-    if (existingLines.length > 0) {
-      setStep("review");
-      if (existingLines.length === 1 && mode === "quick_job") {
-        setFormMeta((prev) => ({
-          ...prev,
-          type: existingLines[0].categoryName || prev.type,
-        }));
+      const hasTemplate = Boolean(initialLog?.templateId);
+      const mode: LogMode =
+        initialLog?.logMode === "quick_job"
+          ? "quick_job"
+          : hasTemplate || initialLog?.logMode === "package"
+            ? "package"
+            : existingLines.length
+              ? "quick_job"
+              : "package";
+      setLogMode(mode);
+
+      if (hasTemplate) {
+        const pkg =
+          packageChoices.find((p) => p.templateId === initialLog?.templateId) ||
+          null;
+        setSelectedPackage(pkg);
+      } else {
+        setSelectedPackage(null);
       }
-    } else {
-      setStep("dateMileage");
+
+      if (existingLines.length > 0) {
+        setStep("review");
+        if (existingLines.length === 1 && mode === "quick_job") {
+          setFormMeta((prev) => ({
+            ...prev,
+            type: existingLines[0].categoryName || prev.type,
+          }));
+        }
+      } else {
+        setStep("dateMileage");
+      }
     }
 
     let cancelled = false;
@@ -548,6 +699,18 @@ export function LogMaintenanceServiceDialog({
     setStep("lineDetails");
   };
 
+  const enterLineDetailsForCategories = (
+    cats: MaintenanceServiceCategory[],
+    systemOverride?: MaintenanceServiceCategory | null,
+  ) => {
+    setLineDetailCategories(cats);
+    setFormQueue([]);
+    const first =
+      cats.find((c) => !lines.some((l) => categoryMatchLine(c, l))) ?? cats[0];
+    if (first) openCategoryForm(first, systemOverride ?? null);
+    else setStep("lineDetails");
+  };
+
   const handlePickPackage = (pkg: PackageChoice) => {
     setLogMode("package");
     setSelectedPackage(pkg);
@@ -598,7 +761,7 @@ export function LogMaintenanceServiceDialog({
 
   const handlePickQuickComponent = (cat: MaintenanceServiceCategory) => {
     setSelectedCategoryIds([cat.id]);
-    openCategoryForm(cat, selectedSystem);
+    enterLineDetailsForCategories([cat], selectedSystem);
   };
 
   const handleComponentTap = (cat: MaintenanceServiceCategory) => {
@@ -640,31 +803,66 @@ export function LogMaintenanceServiceDialog({
   const handleSaveCategory = () => {
     if (!activeCategory) return;
     const line = lineFromCategoryValues(activeCategory, fieldValues, lineExtras);
-    setLines((prev) => {
-      const without = prev.filter((l) => !categoryMatchLine(activeCategory, l));
+    const newLines = (() => {
+      const without = lines.filter((l) => !categoryMatchLine(activeCategory, l));
       return [...without, line];
-    });
+    })();
+    setLines(newLines);
     setSelectedCategoryIds((prev) =>
       prev.includes(activeCategory.id) ? prev : [...prev, activeCategory.id],
     );
+    if (lineDetailCategories.length > 0) {
+      const next = lineDetailCategories.find(
+        (c) =>
+          c.id !== activeCategory.id &&
+          !newLines.some((l) => categoryMatchLine(c, l)),
+      );
+      if (next) openCategoryForm(next, lineExtras.system);
+      else setActiveCategory(null);
+      return;
+    }
     advanceAfterForm(activeCategory);
   };
 
   const handleContinueFromComponents = () => {
     if (!selectedPackage || selectedCategoryIds.length < 1) return;
-    const cats = selectedPackage.categories;
-    const needingForm = selectedCategoryIds
-      .map((id) => cats.find((c) => c.id === id))
-      .filter((cat): cat is MaintenanceServiceCategory => Boolean(cat))
-      .filter((cat) => !lines.some((l) => categoryMatchLine(cat, l)));
+    const cats = selectedCategoryIds
+      .map((id) => selectedPackage.categories.find((c) => c.id === id))
+      .filter((cat): cat is MaintenanceServiceCategory => Boolean(cat));
+    if (cats.length === 0) return;
+    enterLineDetailsForCategories(cats);
+  };
 
-    if (needingForm.length > 0) {
-      const [first, ...rest] = needingForm;
-      setFormQueue(rest);
-      openCategoryForm(first);
+  const handleContinueFromLineDetails = () => {
+    const pending = lineDetailCategories.filter(
+      (c) => !lines.some((l) => categoryMatchLine(c, l)),
+    );
+    if (pending.length > 0) {
+      toast.error("Save each line before continuing");
+      openCategoryForm(pending[0], resolveSystemForComponent(pending[0]));
       return;
     }
     setStep("review");
+  };
+
+  const handlePickSuggested = (op: LogServiceSuggestedOp) => {
+    const pkg = packageChoices.find(
+      (p) => p.templateId === op.categoryId || p.id === op.categoryId,
+    );
+    if (pkg) {
+      handlePickPackage(pkg);
+      return;
+    }
+    const sys = quickJobs.find((s) => s.id === op.categoryId);
+    if (sys) {
+      void handlePickSystem(sys);
+      return;
+    }
+    const cat = catalogById.get(op.categoryId);
+    if (cat) {
+      setLogMode("quick_job");
+      enterLineDetailsForCategories([cat], resolveSystemForComponent(cat));
+    }
   };
 
   const goToInspectOrReview = () => {
@@ -849,6 +1047,7 @@ export function LogMaintenanceServiceDialog({
         );
       }
       onSaved?.();
+      if (draftUserId) clearLogServiceDraft(draftUserId, vehicleId);
       const saved = result as {
         warrantyPrompts?: Array<{ partId?: string; supplierId?: string | null; workOrderLineId?: string }>;
         stockWarnings?: Array<{ partName?: string; shortBy?: number }>;
@@ -911,7 +1110,8 @@ export function LogMaintenanceServiceDialog({
       return;
     }
     if (step === "review") {
-      setStep("inspect");
+      if (lineDetailCategories.length > 0) setStep("lineDetails");
+      else setStep("inspect");
     }
   };
 
@@ -960,7 +1160,7 @@ export function LogMaintenanceServiceDialog({
             value={selectVal}
             onValueChange={(v: string) => setFieldValue(field.key, v)}
           >
-            <SelectTrigger id={id} className="bg-slate-50 border-slate-200">
+            <SelectTrigger id={id} className="bg-surface-container-lowest border-outline-variant/40">
               <SelectValue placeholder="Select…" />
             </SelectTrigger>
             <SelectContent>
@@ -985,7 +1185,7 @@ export function LogMaintenanceServiceDialog({
           <Input
             id={id}
             type="number"
-            className="bg-slate-50 border-slate-200"
+            className="bg-surface-container-lowest border-outline-variant/40"
             value={raw == null || raw === "" ? "" : String(raw)}
             onChange={(e) => {
               const v = e.target.value;
@@ -1005,7 +1205,7 @@ export function LogMaintenanceServiceDialog({
         <Input
           id={id}
           type="text"
-          className="bg-slate-50 border-slate-200"
+          className="bg-surface-container-lowest border-outline-variant/40"
           value={raw == null ? "" : String(raw)}
           onChange={(e) => setFieldValue(field.key, e.target.value)}
         />
@@ -1118,24 +1318,40 @@ export function LogMaintenanceServiceDialog({
                       Inspect
                     </Button>
                     <LogServiceWizardContinueButton
-                      label={LOG_SERVICE_COPY.continueToReview}
+                      label={LOG_SERVICE_COPY.stepFooterPattern(2, 4, LOG_SERVICE_COPY.continueToDetails)}
                       onClick={handleContinueFromComponents}
                     />
                   </>
                 ) : null}
-                {step === "lineDetails" ? (
+                {step === "lineDetails" && lineDetailCategories.length > 0 ? (
+                  <LogServiceWizardContinueButton
+                    label={LOG_SERVICE_COPY.continueToReview}
+                    onClick={handleContinueFromLineDetails}
+                  />
+                ) : null}
+                {step === "lineDetails" && lineDetailCategories.length === 0 ? (
                   <LogServiceWizardContinueButton
                     label={LOG_SERVICE_COPY.saveLineLabel}
                     onClick={handleSaveCategory}
                   />
                 ) : null}
                 {step === "review" ? (
-                  <LogServiceWizardContinueButton
-                    label={LOG_SERVICE_COPY.logServiceLabel}
-                    disabled={isLoading || lines.length < 1 || Number(formMeta.odo) <= 0}
-                    loading={isLoading}
-                    onClick={() => void handleSave()}
-                  />
+                  <>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="text-on-surface-variant hover:text-on-surface"
+                      onClick={clearDraftAndClose}
+                    >
+                      {LOG_SERVICE_COPY.discardDraft}
+                    </Button>
+                    <LogServiceWizardContinueButton
+                      label={LOG_SERVICE_COPY.logServiceLabel}
+                      disabled={isLoading || lines.length < 1 || Number(formMeta.odo) <= 0}
+                      loading={isLoading}
+                      onClick={() => void handleSave()}
+                    />
+                  </>
                 ) : null}
               </div>
             </>
@@ -1145,156 +1361,157 @@ export function LogMaintenanceServiceDialog({
             <LogServiceDateMileageStep
               date={formMeta.date}
               odometer={formMeta.odo}
-              onDateChange={(date) => setFormMeta((p) => ({ ...p, date }))}
+              onDateChange={(date) => {
+                setAnomalyAcknowledged(false);
+                setFormMeta((p) => ({ ...p, date }));
+              }}
               onOdometerChange={(odo) => {
                 setOdoTouched(true);
+                setAnomalyAcknowledged(false);
                 setFormMeta((p) => ({ ...p, odo }));
               }}
-              lastTrustedReading={defaultOdo}
+              lastTrustedReading={vehicleStrip?.odometerKm ?? defaultOdo}
+              lastTrustedMeta={
+                vehicleStrip?.odometerDateLabel && vehicleStrip?.sourceLabel
+                  ? `${vehicleStrip.odometerDateLabel} · ${vehicleStrip.sourceLabel}`
+                  : vehicleStrip?.odometerDateLabel ?? null
+              }
               showOdometerError={odoTouched && Number(formMeta.odo) <= 0}
+              checkLoading={odometerCheckLoading}
+              checkResult={odometerCheck}
+              anomalyAcknowledged={anomalyAcknowledged}
+              onAcknowledgeAnomaly={() => setAnomalyAcknowledged(true)}
             />
           )}
           {step === "whatWasDone" && (
             <LogServiceWhatWasDoneStep
-              packages={packageChoices}
+              packages={packageChoicesForStep}
               quickJobs={quickJobs}
               quickJobsLoading={quickJobsLoading}
-              onPickPackage={handlePickPackage}
+              suggestedOperations={logServiceContext?.suggestedOperations}
+              inspectionPointCount={logServiceContext?.inspectionPointCount}
+              onPickPackage={(p) => {
+                const full = packageChoices.find((x) => x.id === p.id);
+                if (full) handlePickPackage(full);
+              }}
               onPickSystem={handlePickSystem}
+              onPickSuggested={handlePickSuggested}
               onOpenInspection={handleOpenInspection}
             />
           )}
 
           {step === "system" && selectedSystem && (
-            <div className="space-y-4">
-              <div className="flex items-center gap-3">
-                <div className="bg-indigo-50 p-3 rounded-xl text-indigo-600">
-                  <MaintenanceIcon iconKey={selectedSystem.icon_key} className="w-6 h-6" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-slate-900">{selectedSystem.name}</h3>
-                  <p className="text-xs text-slate-500">{selectedSystem.code}</p>
-                </div>
-              </div>
-              {systemComponentsLoading ? (
-                <div className="flex items-center gap-2 text-sm text-slate-500 py-8 justify-center">
-                  <Loader2 className="w-4 h-4 animate-spin" /> Loading components…
-                </div>
-              ) : systemComponents.length === 0 ? (
-                <p className="text-sm text-slate-500 py-4">No components under this system.</p>
-              ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {systemComponents.map((cat) => (
-                    <button
-                      key={cat.id}
-                      type="button"
-                      onClick={() => handlePickQuickComponent(cat)}
-                      className="flex flex-col items-center gap-2 p-4 rounded-xl border border-slate-200 bg-white hover:border-indigo-300 hover:bg-indigo-50/40 transition-colors text-center min-h-[108px]"
-                    >
-                      <div className="bg-slate-100 p-3 rounded-xl text-indigo-600">
-                        <MaintenanceIcon iconKey={cat.icon_key} className="w-6 h-6" />
-                      </div>
-                      <span className="text-sm font-medium text-slate-900 leading-tight">
-                        {cat.name}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+            <LogServiceSystemPicker
+              system={selectedSystem}
+              components={systemComponents}
+              loading={systemComponentsLoading}
+              onPickComponent={handlePickQuickComponent}
+            />
           )}
 
           {step === "component" && selectedPackage && (
-            <div className="space-y-5">
-              <p className="text-sm text-slate-500">
-                Selected: {selectedCategoryIds.length} · Logged:{" "}
-                {lines.filter((l) => !l.recommended).length}
-              </p>
-              {packageGrouped.length === 0 ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {selectedPackage.categories.map((cat) => {
-                    const selected = selectedCategoryIds.includes(cat.id);
-                    const logged = categoryHasLine(cat);
-                    return (
-                      <button
-                        key={cat.id}
-                        type="button"
-                        onClick={() => handleComponentTap(cat)}
-                        className={`relative flex flex-col items-center gap-2 p-4 rounded-xl border transition-colors text-center min-h-[108px] ${
-                          selected || logged
-                            ? "border-indigo-300 bg-indigo-50/50"
-                            : "border-slate-200 bg-white hover:border-indigo-200 hover:bg-slate-50"
-                        }`}
-                      >
-                        {(selected || logged) && (
-                          <span
-                            role="presentation"
-                            onClick={(e) => toggleCategorySelected(cat.id, e)}
-                            className="absolute top-2 right-2 text-indigo-600"
-                          >
-                            <CheckCircle2 className="w-4 h-4" />
-                          </span>
-                        )}
-                        <div className="bg-white p-3 rounded-xl shadow-sm text-indigo-600">
-                          <MaintenanceIcon iconKey={cat.icon_key} className="w-6 h-6" />
-                        </div>
-                        <span className="text-sm font-medium text-slate-900 leading-tight">
-                          {cat.name}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              ) : (
-                packageGrouped.map(({ system, components }) =>
-                  components.length === 0 ? null : (
-                    <section key={system.id} className="space-y-3">
-                      <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
-                        <MaintenanceIcon iconKey={system.icon_key} className="w-4 h-4 text-indigo-600" />
-                        {system.name}
-                      </h3>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                        {components.map((cat) => {
-                          const selected = selectedCategoryIds.includes(cat.id);
-                          const logged = categoryHasLine(cat);
-                          return (
-                            <button
-                              key={cat.id}
-                              type="button"
-                              onClick={() => handleComponentTap(cat)}
-                              className={`relative flex flex-col items-center gap-2 p-4 rounded-xl border transition-colors text-center min-h-[108px] ${
-                                selected || logged
-                                  ? "border-indigo-300 bg-indigo-50/50"
-                                  : "border-slate-200 bg-white hover:border-indigo-200 hover:bg-slate-50"
-                              }`}
-                            >
-                              {(selected || logged) && (
-                                <span
-                                  role="presentation"
-                                  onClick={(e) => toggleCategorySelected(cat.id, e)}
-                                  className="absolute top-2 right-2 text-indigo-600"
-                                >
-                                  <CheckCircle2 className="w-4 h-4" />
-                                </span>
-                              )}
-                              <div className="bg-white p-3 rounded-xl shadow-sm text-indigo-600">
-                                <MaintenanceIcon iconKey={cat.icon_key} className="w-6 h-6" />
-                              </div>
-                              <span className="text-sm font-medium text-slate-900 leading-tight">
-                                {cat.name}
-                              </span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </section>
-                  ),
-                )
-              )}
-            </div>
+            <LogServiceComponentPicker
+              packageLabel={selectedPackage.shortLabel}
+              selectedCount={selectedCategoryIds.length}
+              loggedCount={lines.filter((l) => !l.recommended).length}
+              categories={selectedPackage.categories}
+              systems={allSystems}
+              selectedCategoryIds={selectedCategoryIds}
+              categoryHasLine={categoryHasLine}
+              onComponentTap={handleComponentTap}
+              onToggleCategorySelected={toggleCategorySelected}
+            />
           )}
 
-          {step === "lineDetails" && activeCategory && (
+          {step === "lineDetails" && lineDetailCategories.length > 0 && (
+            <LogServiceLineDetailsMultiStep
+              packageLabel={selectedPackage?.shortLabel ?? null}
+              componentCount={lineDetailCategories.length}
+              baySessionLabel={idempotencyKey.slice(0, 8).toUpperCase()}
+              configuredCount={lineDetailCategories.filter((c) => categoryHasLine(c)).length}
+              subtotalLabel={`${formMeta.currency || "JMD"} ${totalCost.toLocaleString()}`}
+              mechanicNote={formMeta.notes}
+              workOrderRef={workOrderRef}
+              onMechanicNoteChange={(notes) => setFormMeta((p) => ({ ...p, notes }))}
+              onWorkOrderRefChange={setWorkOrderRef}
+            >
+              {lineDetailCategories.map((cat) => (
+                <div
+                  key={cat.id}
+                  className={`rounded-xl border bg-surface-container-lowest p-4 shadow-sm ${
+                    activeCategory?.id === cat.id ? "border-primary/50 ring-1 ring-primary/20" : "border-outline-variant/40"
+                  }`}
+                >
+                  {activeCategory?.id === cat.id && (
+                    <LogServiceLineDetailsStep
+                      category={cat}
+                      systemName={lineExtras.system?.name}
+                      action={lineExtras.action}
+                      onActionChange={(action) => setLineExtras((prev) => ({ ...prev, action }))}
+                      categoryFields={(cat.field_schema?.fields || defaultFieldSchema().fields).map(
+                        renderField,
+                      )}
+                      laborHours={lineExtras.laborHours}
+                      laborRate={lineExtras.laborRate}
+                      onLaborHoursChange={(v) => setLineExtras((prev) => ({ ...prev, laborHours: v }))}
+                      onLaborRateChange={(v) => setLineExtras((prev) => ({ ...prev, laborRate: v }))}
+                      brand={lineExtras.brand}
+                      partNumber={lineExtras.partNumber}
+                      onBrandChange={(brand) => setLineExtras((prev) => ({ ...prev, brand }))}
+                      onPartNumberChange={(partNumber) => setLineExtras((prev) => ({ ...prev, partNumber }))}
+                      showPositions={needsPositions(cat)}
+                      positions={lineExtras.positions}
+                      onTogglePosition={togglePosition}
+                      warranty={lineExtras.warranty}
+                      complimentary={lineExtras.complimentary}
+                      onWarrantyChange={(warranty) => setLineExtras((prev) => ({ ...prev, warranty }))}
+                      onComplimentaryChange={(complimentary) =>
+                        setLineExtras((prev) => ({ ...prev, complimentary }))
+                      }
+                      partsLoading={partsLoading}
+                      compatibleParts={compatibleParts}
+                      partId={lineExtras.partId}
+                      onPartSelect={(partId, offerId, brand, partNumber) =>
+                        setLineExtras((prev) => ({
+                          ...prev,
+                          partId,
+                          supplierPartOfferId: offerId,
+                          brand: prev.brand || brand || prev.brand,
+                          partNumber: prev.partNumber || partNumber || prev.partNumber,
+                        }))
+                      }
+                      lineTotalLabel="Line total"
+                      currency={formMeta.currency || "JMD"}
+                      lineTotal={draftLineTotal}
+                    />
+                  )}
+                  {activeCategory?.id !== cat.id && (
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="font-semibold text-on-surface">{cat.name}</p>
+                        <p className="text-xs text-secondary">
+                          {categoryHasLine(cat) ? "Saved" : "Needs details"}
+                        </p>
+                      </div>
+                      <Button type="button" size="sm" variant="outline" onClick={() => openCategoryForm(cat)}>
+                        {categoryHasLine(cat) ? "Edit" : "Configure"}
+                      </Button>
+                    </div>
+                  )}
+                  {activeCategory?.id === cat.id && (
+                    <div className="mt-4 flex justify-end">
+                      <LogServiceWizardContinueButton
+                        label={LOG_SERVICE_COPY.saveLineLabel}
+                        onClick={handleSaveCategory}
+                      />
+                    </div>
+                  )}
+                </div>
+              ))}
+            </LogServiceLineDetailsMultiStep>
+          )}
+
+          {step === "lineDetails" && lineDetailCategories.length === 0 && activeCategory && (
             <LogServiceLineDetailsStep
               category={activeCategory}
               systemName={lineExtras.system?.name}

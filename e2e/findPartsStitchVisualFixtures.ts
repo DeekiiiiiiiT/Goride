@@ -29,14 +29,48 @@ export function stitchVisualBrowse() {
       count: row.count,
       icon: row.icon,
       components: row.id === "sys-brakes"
-        ? [{
-          id: STITCH_VISUAL_COMPONENT_ID,
-          plainName: "Brake pads",
-          name: "Brake pads",
-          count: 6,
-          positionAware: true,
-        }]
-        : [],
+        ? [
+          {
+            id: STITCH_VISUAL_COMPONENT_ID,
+            plainName: "Brake pads",
+            name: "Brake pads",
+            count: 4,
+            positionAware: true,
+            opCode: "BRK-PAD",
+            description: "Pad set for ventilated front disc and rear drum fitment.",
+            iconKey: "disc_full",
+            bestOemPartNumber: "04465-BZ010",
+            bestListingPosition: "front",
+          },
+          {
+            id: "cmp-brake-shoe",
+            plainName: "Brake shoes",
+            name: "Brake shoes",
+            count: 2,
+            positionAware: true,
+            opCode: "BRK-SHOES",
+            description: "Rear drum shoe kit.",
+            iconKey: "disc_full",
+            bestOemPartNumber: "04495-BZ010",
+            bestListingPosition: "rear",
+          },
+          {
+            id: "cmp-brake-fluid",
+            plainName: "Brake fluid",
+            name: "Brake fluid",
+            count: 0,
+            positionAware: false,
+            opCode: "BRK-FLUID",
+            description: "",
+            iconKey: "water_drop",
+          },
+        ]
+        : row.id === "sys-tires"
+          ? [
+            { id: "cmp-tire", plainName: "Tires", name: "Tires", count: 0, positionAware: false },
+            { id: "cmp-wheel", plainName: "Wheels", name: "Wheels", count: 0, positionAware: false },
+          ]
+          : [],
     })),
     common: [
       { id: "cmp-oil", plainName: "Oil filter cartridge", name: "Oil filter cartridge", count: 2, positionAware: false },
@@ -71,7 +105,7 @@ export function stitchVisualVehicleContext() {
       brake_rear_drum_mm: "180",
       hub_bolt_pattern: "4x100",
     },
-    latestNote: null,
+    catalogAddAvgMinutes: 40,
     alternateTrimsLine: "",
   };
 }

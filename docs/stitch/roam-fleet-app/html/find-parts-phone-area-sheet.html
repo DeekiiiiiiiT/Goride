@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/><meta content="mobile_tab" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&amp;family=JetBrains+Mono:wght@100..900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{width:100vw;margin:0;padding:0;background-color:#f7f9fb;}body{overscroll-behavior:none;-webkit-tap-highlight-color:transparent;}::-webkit-scrollbar{display:none;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { colors: { "error-container": "#ffdad6", "on-tertiary-fixed-variant": "#783200", "surface-variant": "#e0e3e5", "outline": "#78767d", "on-tertiary-fixed": "#341100", "on-secondary-container": "#616172", "on-primary-fixed-variant": "#46445b", "inverse-on-surface": "#eff1f3", "secondary-fixed": "#e2e1f4", "surface-container-high": "#e6e8ea", "error": "#ba1a1a", "on-secondary": "#ffffff", "secondary-fixed-dim": "#c6c5d8", "on-error": "#ffffff", "on-tertiary-container": "#d95f00", "inverse-surface": "#2d3133", "primary-container": "#1b192e", "on-primary-container": "#84819a", "outline-variant": "#c9c5cd", "secondary-container": "#dfdef1", "background": "#f7f9fb", "on-primary-fixed": "#1b192e", "tertiary-fixed": "#ffdbca", "on-surface": "#191c1e", "surface-container-highest": "#e0e3e5", "on-background": "#191c1e", "surface-bright": "#f7f9fb", "surface": "#f7f9fb", "surface-tint": "#5e5c74", "on-error-container": "#93000a", "secondary": "#5d5d6d", "primary-fixed-dim": "#c8c3df", "on-tertiary": "#ffffff", "tertiary": "#000000", "tertiary-container": "#341100", "on-surface-variant": "#47464c", "on-secondary-fixed-variant": "#454555", "surface-container": "#eceef0", "surface-container-low": "#f2f4f6", "surface-dim": "#d8dadc", "surface-container-lowest": "#ffffff", "primary-fixed": "#e4dffc", "primary": "#000000", "inverse-primary": "#c8c3df", "on-primary": "#ffffff", "on-secondary-fixed": "#1a1a28", "tertiary-fixed-dim": "#ffb690" }, borderRadius: { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, spacing: { "space-xs": "0.25rem", "gutter-desktop": "1.5rem", "space-lg": "1rem", "gutter": "1rem", "space-sm": "0.5rem", "margin": "1rem", "space-xl": "1.5rem", "space-md": "0.75rem", "margin-desktop": "2rem" }, fontFamily: { "headline-xl": ["Inter"], "caption": ["Inter"], "label-code": ["JetBrains Mono"], "headline-sm": ["Inter"], "label-plate": ["JetBrains Mono"], "body-sm": ["Inter"], "label-price": ["JetBrains Mono"], "body-md": ["Inter"], "body-lg": ["Inter"], "headline-lg": ["Inter"] }, fontSize: { "headline-xl": ["30px", { "lineHeight": "38px", "letterSpacing": "-0.02em", "fontWeight": "600" }], "caption": ["11px", { "lineHeight": "14px", "letterSpacing": "0.02em", "fontWeight": "500" }], "label-code": ["13px", { "lineHeight": "18px", "letterSpacing": "-0.01em", "fontWeight": "500" }], "headline-sm": ["18px", { "lineHeight": "26px", "letterSpacing": "-0.01em", "fontWeight": "600" }], "label-plate": ["14px", { "lineHeight": "18px", "letterSpacing": "0.08em", "fontWeight": "700" }], "body-sm": ["13px", { "lineHeight": "18px", "letterSpacing": "0em", "fontWeight": "400" }], "label-price": ["14px", { "lineHeight": "20px", "letterSpacing": "-0.02em", "fontWeight": "600" }], "body-md": ["14px", { "lineHeight": "20px", "letterSpacing": "0em", "fontWeight": "400" }], "body-lg": ["16px", { "lineHeight": "24px", "letterSpacing": "-0.005em", "fontWeight": "400" }], "headline-lg": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.015em", "fontWeight": "600" }] } } } };</script><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head><body class="bg-surface font-body-md text-on-surface antialiased"><header class="fixed top-0 w-full z-50 pt-safe bg-surface/90 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="h-28 flex flex-col justify-between"><div class="h-14 px-margin bg-primary flex items-center justify-between"><div class="flex items-center gap-space-sm"><div class="flex items-center justify-center bg-surface-container-lowest text-primary px-space-sm py-space-xs rounded-lg font-label-code text-caption font-bold tracking-wider">ROAM FLEET</div><span class="font-label-code text-caption text-surface-container-high/80">Kingston Hub #01</span></div><div class="flex items-center gap-space-xs"><button aria-label="Search" class="w-11 h-11 flex items-center justify-center text-on-primary hover:text-surface-variant transition-colors"><span class="material-symbols-outlined text-[20px]">search</span></button><button aria-label="Notifications" class="w-11 h-11 flex items-center justify-center text-on-primary hover:text-surface-variant transition-colors relative"><span class="material-symbols-outlined text-[20px]">notifications</span><span class="absolute top-2.5 right-2.5 w-1.5 h-1.5 rounded-full bg-error"></span></button><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center ml-space-xs"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div><div class="h-14 px-margin bg-surface-container-lowest/80 backdrop-blur-md flex items-center justify-between"><div class="flex items-center gap-space-sm"><div class="w-7 h-7 rounded-lg bg-tertiary-fixed flex items-center justify-center"><span class="material-symbols-outlined text-on-tertiary-container text-[18px]">build</span></div><h1 class="font-headline-sm text-headline-sm text-on-surface leading-tight">Fleet Maintenance</h1></div><div class="flex items-center"><button aria-label="Filter Options" class="w-11 h-11 flex items-center justify-center text-on-surface-variant hover:text-on-surface transition-colors"><span class="material-symbols-outlined text-[20px]">tune</span></button></div></div></div></header><main class="flex flex-col relative w-full pt-28 pb-24 bg-surface min-h-screen"><div class="flex flex-col w-full px-margin py-space-md gap-space-xl">
+<!-- Interactive View Switcher for Handheld Mobile Display -->
+<div class="flex items-center justify-between bg-surface-container p-space-xs rounded-xl shadow-sm">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-on-surface-variant text-[18px] ml-space-xs">devices</span>
+<span class="font-caption text-caption text-on-surface-variant uppercase tracking-wider font-semibold">Dual Mobile Flow Simulator</span>
+</div>
+<div class="flex gap-1 bg-surface-container-high p-0.5 rounded-lg">
+<button class="px-space-md py-1 rounded-md text-caption font-caption bg-surface-container-lowest text-primary font-bold shadow-sm transition-all" id="btn-toggle-left" onclick="showMobileView('left')">State 1: Grid</button>
+<button class="px-space-md py-1 rounded-md text-caption font-caption text-on-surface-variant hover:text-on-surface transition-all" id="btn-toggle-right" onclick="showMobileView('right')">State 2: Sheet</button>
+<button class="hidden md:inline-block px-space-md py-1 rounded-md text-caption font-caption text-on-surface-variant hover:text-on-surface transition-all" id="btn-toggle-both" onclick="showMobileView('both')">Side-by-Side</button>
+</div>
+</div>
+<!-- Workspace Container: Responsive Mobile Side-by-Side -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-space-xl w-full justify-items-center">
+<!-- ========================================== -->
+<!-- FRAME 1: PHONE · WHAT PART? (BRAKES SELECTED) -->
+<!-- ========================================== -->
+<div class="w-full max-w-[390px] bg-surface-container-low rounded-[28px] overflow-hidden shadow-md flex flex-col relative transition-all duration-300" id="frame-left">
+<!-- Frame Top Indicator Bar -->
+<div class="bg-surface-container-high px-space-md py-space-xs flex items-center justify-between">
+<span class="font-label-code text-caption text-on-surface-variant tracking-tight font-medium">FRAME 1 · STATE REST</span>
+<span class="font-caption text-caption text-on-surface-variant font-semibold">390 × 844</span>
+</div>
+<!-- Compact Sticky Header -->
+<div class="sticky top-0 z-20 bg-surface-container-lowest px-space-md py-space-sm flex items-center justify-between shadow-sm">
+<button aria-label="Go Back" class="w-11 h-11 rounded-lg flex items-center justify-center text-on-surface hover:bg-surface-container transition-colors">
+<span class="material-symbols-outlined text-[20px]">arrow_back</span>
+</button>
+<div class="flex flex-col items-center">
+<span class="font-label-code text-caption text-on-surface-variant font-medium">Step 3 of 4</span>
+<span class="font-headline-sm text-headline-sm text-on-surface leading-tight">Select Part</span>
+</div>
+<button class="h-11 px-space-md rounded-lg flex items-center justify-center font-body-sm text-body-sm font-semibold text-primary hover:bg-surface-container transition-colors">
+          Next →
+        </button>
+</div>
+<!-- Screen Body -->
+<div class="p-space-md flex flex-col gap-space-md">
+<!-- Vehicle Selected Chip -->
+<div class="bg-surface-container-lowest p-space-sm rounded-xl flex items-center justify-between shadow-sm">
+<div class="flex items-center gap-space-sm min-w-0">
+<div class="w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-primary text-[20px]">directions_car</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-body-sm text-body-sm font-semibold text-on-surface truncate">Toyota Roomy 2019</span>
+<span class="font-label-plate text-caption text-on-surface-variant tracking-wider">5179KZ</span>
+</div>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant text-[18px]">verified</span>
+</div>
+<!-- Section: Common Parts Horizontal Chips -->
+<div class="flex flex-col gap-space-xs">
+<div class="flex items-center justify-between">
+<span class="font-caption text-caption uppercase text-on-surface-variant font-semibold tracking-wider">Frequently Dispatched</span>
+<span class="font-caption text-caption text-on-surface-variant">Fast Pick</span>
+</div>
+<div class="flex gap-space-xs overflow-x-auto pb-space-xs scrollbar-none">
+<button class="shrink-0 h-11 px-space-md bg-surface-container-lowest text-on-surface rounded-full flex items-center gap-1.5 font-body-sm text-body-sm shadow-sm hover:bg-surface-container transition-colors">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">oil_barrel</span>
+              Oil Filter
+            </button>
+<button class="shrink-0 h-11 px-space-md bg-surface-container-lowest text-on-surface rounded-full flex items-center gap-1.5 font-body-sm text-body-sm shadow-sm hover:bg-surface-container transition-colors">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">air</span>
+              Cabin Air Filter
+            </button>
+<button class="shrink-0 h-11 px-space-md bg-surface-container-lowest text-on-surface rounded-full flex items-center gap-1.5 font-body-sm text-body-sm shadow-sm hover:bg-surface-container transition-colors">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">bolt</span>
+              Spark Plugs
+            </button>
+<button class="shrink-0 h-11 px-space-md bg-surface-container-lowest text-on-surface rounded-full flex items-center gap-1.5 font-body-sm text-body-sm shadow-sm hover:bg-surface-container transition-colors">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">cloud_download</span>
+              Wiper Blades
+            </button>
+</div>
+</div>
+<!-- Section: By Area (11 Modules Grid) -->
+<div class="flex flex-col gap-space-xs">
+<div class="flex items-center justify-between">
+<span class="font-caption text-caption uppercase text-on-surface-variant font-semibold tracking-wider">Browse by System Area</span>
+<span class="font-label-code text-caption text-on-surface-variant">11 Areas</span>
+</div>
+<div class="grid grid-cols-2 gap-space-sm">
+<!-- 1. Brakes (SELECTED ACTIVE STATE) -->
+<button class="relative bg-surface-container-lowest p-space-md rounded-xl text-left shadow-sm flex flex-col justify-between h-32 hover:bg-surface-container transition-colors group">
+<div class="flex items-center justify-between w-full">
+<div class="w-10 h-10 rounded-lg bg-surface-container-highest flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[22px]">disc_full</span>
+</div>
+<div class="flex items-center gap-1 bg-primary text-on-primary px-2 py-0.5 rounded-full font-caption text-caption font-semibold shadow-sm">
+<span class="material-symbols-outlined text-[13px]">check</span>
+                  Selected
+                </div>
+</div>
+<div>
+<span class="font-headline-sm text-body-lg font-bold text-on-surface block">Brakes</span>
+<span class="font-caption text-caption text-on-surface-variant">4 parts categorized</span>
+</div>
+</button>
+<!-- 2. Engine & Fluids -->
+<button class="bg-surface-container-lowest p-space-md rounded-xl text-left shadow-sm flex flex-col justify-between h-32 hover:bg-surface-container transition-colors">
+<div class="w-10 h-10 rounded-lg bg-surface-container flex items-center justify-center text-on-surface-variant">
+<span class="material-symbols-outlined text-[22px]">engineering</span>
+</div>
+<div>
+<span class="font-body-lg text-body-lg font-semibold text-on-surface block">Engine &amp; Oil</span>
+<span class="font-caption text-caption text-on-surface-variant">Filters, belts, gaskets</span>
+</div>
+</button>
+<!-- 3. Suspension & Steering -->
+<button class="bg-surface-container-lowest p-space-md rounded-xl text-left shadow-sm flex flex-col justify-between h-32 hover:bg-surface-container transition-colors">
+<div class="w-10 h-10 rounded-lg bg-surface-container flex items-center justify-center text-on-surface-variant">
+<span class="material-symbols-outlined text-[22px]">settings_input_component</span>
+</div>
+<div>
+<span class="font-body-lg text-body-lg font-semibold text-on-surface block">Suspension</span>
+<span class="font-caption text-caption text-on-surface-variant">Shocks, ball joints</span>
+</div>
+</button>
+<!-- 4. Electrical & Battery -->
+<button class="bg-surface-container-lowest p-space-md rounded-xl text-left shadow-sm flex flex-col justify-between h-32 hover:bg-surface-container transition-colors">
+<div class="w-10 h-10 rounded-lg bg-surface-container flex items-center justify-center text-on-surface-variant">
+<span class="material-symbols-outlined text-[22px]">battery_charging_full</span>
+</div>
+<div>
+<span class="font-body-lg text-body-lg font-semibold text-on-surface block">Electrical</span>
+<span class="font-caption text-caption text-on-surface-variant">12V battery, fuses</span>
+</div>
+</button>
+<!-- 5. Cooling & Heating -->
+<button class="bg-surface-container-lowest p-space-md rounded-xl text-left shadow-sm flex flex-col justify-between h-32 hover:bg-surface-container transition-colors">
+<div class="w-10 h-10 rounded-lg bg-surface-container flex items-center justify-center text-on-surface-variant">
+<span class="material-symbols-outlined text-[22px]">mode_fan</span>
+</div>
+<div>
+<span class="font-body-lg text-body-lg font-semibold text-on-surface block">Cooling</span>
+<span class="font-caption text-caption text-on-surface-variant">Radiator, thermostat</span>
+</div>
+</button>
+<!-- 6. Transmission & Drivetrain -->
+<button class="bg-surface-container-lowest p-space-md rounded-xl text-left shadow-sm flex flex-col justify-between h-32 hover:bg-surface-container transition-colors">
+<div class="w-10 h-10 rounded-lg bg-surface-container flex items-center justify-center text-on-surface-variant">
+<span class="material-symbols-outlined text-[22px]">minor_crash</span>
+</div>
+<div>
+<span class="font-body-lg text-body-lg font-semibold text-on-surface block">Drivetrain</span>
+<span class="font-caption text-caption text-on-surface-variant">CV axle, CVT fluid</span>
+</div>
+</button>
+<!-- 7. Fuel & Exhaust -->
+<button class="bg-surface-container-lowest p-space-md rounded-xl text-left shadow-sm flex flex-col justify-between h-32 hover:bg-surface-container transition-colors">
+<div class="w-10 h-10 rounded-lg bg-surface-container flex items-center justify-center text-on-surface-variant">
+<span class="material-symbols-outlined text-[22px]">local_gas_station</span>
+</div>
+<div>
+<span class="font-body-lg text-body-lg font-semibold text-on-surface block">Fuel &amp; Exhaust</span>
+<span class="font-caption text-caption text-on-surface-variant">Pumps, injectors</span>
+</div>
+</button>
+<!-- 8. Tires & Wheels -->
+<button class="bg-surface-container-lowest p-space-md rounded-xl text-left shadow-sm flex flex-col justify-between h-32 hover:bg-surface-container transition-colors">
+<div class="w-10 h-10 rounded-lg bg-surface-container flex items-center justify-center text-on-surface-variant">
+<span class="material-symbols-outlined text-[22px]">adjust</span>
+</div>
+<div>
+<span class="font-body-lg text-body-lg font-semibold text-on-surface block">Tires &amp; Rims</span>
+<span class="font-caption text-caption text-on-surface-variant">165/65 R14 sets</span>
+</div>
+</button>
+<!-- 9. Lighting & Signals -->
+<button class="bg-surface-container-lowest p-space-md rounded-xl text-left shadow-sm flex flex-col justify-between h-32 hover:bg-surface-container transition-colors">
+<div class="w-10 h-10 rounded-lg bg-surface-container flex items-center justify-center text-on-surface-variant">
+<span class="material-symbols-outlined text-[22px]">light_mode</span>
+</div>
+<div>
+<span class="font-body-lg text-body-lg font-semibold text-on-surface block">Lighting</span>
+<span class="font-caption text-caption text-on-surface-variant">LED bulbs, assemblies</span>
+</div>
+</button>
+<!-- 10. Body & Mirrors -->
+<button class="bg-surface-container-lowest p-space-md rounded-xl text-left shadow-sm flex flex-col justify-between h-32 hover:bg-surface-container transition-colors">
+<div class="w-10 h-10 rounded-lg bg-surface-container flex items-center justify-center text-on-surface-variant">
+<span class="material-symbols-outlined text-[22px]">unfold_more_double</span>
+</div>
+<div>
+<span class="font-body-lg text-body-lg font-semibold text-on-surface block">Body &amp; Trim</span>
+<span class="font-caption text-caption text-on-surface-variant">Panels, wing mirrors</span>
+</div>
+</button>
+<!-- 11. Cabin & Interior (Spans full width for clean odd grid wrap) -->
+<button class="col-span-2 bg-surface-container-lowest p-space-md rounded-xl text-left shadow-sm flex items-center justify-between hover:bg-surface-container transition-colors">
+<div class="flex items-center gap-space-md">
+<div class="w-10 h-10 rounded-lg bg-surface-container flex items-center justify-center text-on-surface-variant">
+<span class="material-symbols-outlined text-[22px]">airline_seat_recline_normal</span>
+</div>
+<div>
+<span class="font-body-lg text-body-lg font-semibold text-on-surface block">Cabin &amp; Interior</span>
+<span class="font-caption text-caption text-on-surface-variant">Switches, mats, wiper arms</span>
+</div>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant text-[20px]">chevron_right</span>
+</button>
+</div>
+</div>
+<!-- Persistent Navigation Bottom Helper -->
+<div class="pt-space-sm pb-space-lg flex justify-center">
+<span class="font-caption text-caption text-on-surface-variant">Tap an area to open available component catalog</span>
+</div>
+</div>
+</div>
+<!-- ========================================== -->
+<!-- FRAME 2: PHONE · AREA BOTTOM SHEET OPEN (75% HEIGHT) -->
+<!-- ========================================== -->
+<div class="w-full max-w-[390px] bg-surface-container-low rounded-[28px] overflow-hidden shadow-xl flex flex-col relative transition-all duration-300" id="frame-right">
+<!-- Frame Top Indicator Bar -->
+<div class="bg-surface-container-high px-space-md py-space-xs flex items-center justify-between z-30">
+<span class="font-label-code text-caption text-on-surface-variant tracking-tight font-medium">FRAME 2 · BOTTOM SHEET OPEN</span>
+<span class="font-caption text-caption text-on-surface-variant font-semibold">390 × 844</span>
+</div>
+<!-- Simulated Background Canvas Behind Scrim -->
+<div class="relative w-full overflow-hidden flex flex-col min-h-[780px]">
+<!-- Dimmed Top Header visible behind scrim -->
+<div class="bg-surface-container-lowest px-space-md py-space-sm flex items-center justify-between opacity-50">
+<div class="w-11 h-11 flex items-center justify-center text-on-surface">
+<span class="material-symbols-outlined text-[20px]">arrow_back</span>
+</div>
+<div class="flex flex-col items-center">
+<span class="font-label-code text-caption text-on-surface-variant">Step 3 of 4</span>
+<span class="font-headline-sm text-headline-sm text-on-surface">Select Part</span>
+</div>
+<div class="h-11 px-space-md flex items-center font-body-sm text-body-sm font-semibold text-primary">
+            Next →
+          </div>
+</div>
+<!-- Dimmed Background Grid Preview -->
+<div class="p-space-md flex flex-col gap-space-sm opacity-35 filter blur-[0.5px]">
+<div class="bg-surface-container-lowest p-space-sm rounded-xl flex items-center justify-between">
+<div class="flex items-center gap-space-sm">
+<div class="w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center">
+<span class="material-symbols-outlined text-primary text-[20px]">directions_car</span>
+</div>
+<div>
+<div class="font-body-sm text-body-sm font-semibold text-on-surface">Toyota Roomy 2019</div>
+<div class="font-label-plate text-caption text-on-surface-variant">5179KZ</div>
+</div>
+</div>
+</div>
+<div class="grid grid-cols-2 gap-space-sm">
+<div class="bg-surface-container-lowest p-space-md rounded-xl h-28"></div>
+<div class="bg-surface-container-lowest p-space-md rounded-xl h-28"></div>
+</div>
+</div>
+<!-- 40% Dark Scrim Overlay -->
+<div class="absolute inset-0 bg-primary/40 backdrop-blur-[1px] z-10"></div>
+<!-- 75% Height Bottom Sheet Modal Container -->
+<div class="absolute inset-x-0 bottom-0 top-[22%] bg-surface-container-lowest rounded-t-[28px] shadow-2xl z-20 flex flex-col overflow-hidden">
+<!-- Top Centered Drag Handle -->
+<div class="w-full flex items-center justify-center pt-3 pb-1 cursor-grab">
+<div class="w-12 h-1.5 rounded-full bg-outline-variant"></div>
+</div>
+<!-- Sheet Header Bar -->
+<div class="px-space-lg pt-space-xs pb-space-sm flex items-start justify-between">
+<div class="flex items-center gap-space-sm">
+<div class="w-11 h-11 rounded-xl bg-surface-container-high flex items-center justify-center text-primary shrink-0 shadow-sm">
+<span class="material-symbols-outlined text-[24px]">disc_full</span>
+</div>
+<div class="flex flex-col">
+<div class="flex items-center gap-space-xs">
+<h2 class="font-headline-lg text-headline-sm font-bold text-on-surface">Brakes</h2>
+<span class="w-2 h-2 rounded-full bg-surface-tint"></span>
+<span class="font-label-code text-caption text-on-surface-variant">Sys-04</span>
+</div>
+<p class="font-caption text-caption text-on-surface-variant">Pick the part you need for your 2019 Toyota Roomy</p>
+</div>
+</div>
+<!-- Close "X" Button -->
+<button aria-label="Close Bottom Sheet" class="w-11 h-11 -mr-2 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container transition-colors">
+<span class="material-symbols-outlined text-[20px]">close</span>
+</button>
+</div>
+<!-- Meta Count Sub-strip -->
+<div class="mx-space-lg mb-space-sm px-space-md py-1.5 bg-surface-container-low rounded-lg flex items-center justify-between">
+<span class="font-label-code text-caption text-on-surface font-semibold tracking-wide">4 parts cataloged</span>
+<div class="flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-surface-tint"></span>
+<span class="font-label-code text-caption text-on-surface-variant">2 on file in Hub</span>
+</div>
+</div>
+<!-- Scrollable Part Rows Content -->
+<div class="flex-1 overflow-y-auto px-space-lg divide-y divide-transparent flex flex-col gap-1.5 pb-space-md">
+<!-- ROW 1: BRAKE PADS (ON FILE) -->
+<button class="w-full min-h-[64px] py-space-sm px-space-md bg-surface-container-low hover:bg-surface-container rounded-xl flex items-center justify-between text-left transition-colors group">
+<div class="flex flex-col pr-space-sm min-w-0">
+<div class="flex items-center gap-space-sm">
+<span class="font-body-lg text-body-md font-semibold text-on-surface group-hover:text-primary transition-colors">Brake pads</span>
+<!-- Emerald/Approved Pill -->
+<span class="inline-flex items-center gap-1 bg-surface-container-highest text-on-surface px-2 py-0.5 rounded-full font-label-code text-caption font-semibold">
+<span class="w-1.5 h-1.5 rounded-full bg-on-surface"></span>
+                    4 on file
+                  </span>
+</div>
+<p class="font-body-sm text-caption text-on-surface-variant line-clamp-1 mt-0.5">
+                  The pads that press on the disc to stop the front wheels
+                </p>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant group-hover:translate-x-0.5 transition-transform text-[20px] shrink-0">chevron_right</span>
+</button>
+<!-- ROW 2: BRAKE SHOES / DRUMS (ON FILE) -->
+<button class="w-full min-h-[64px] py-space-sm px-space-md bg-surface-container-low hover:bg-surface-container rounded-xl flex items-center justify-between text-left transition-colors group">
+<div class="flex flex-col pr-space-sm min-w-0">
+<div class="flex items-center gap-space-sm">
+<span class="font-body-lg text-body-md font-semibold text-on-surface group-hover:text-primary transition-colors">Brake shoes / drums</span>
+<!-- Emerald/Approved Pill -->
+<span class="inline-flex items-center gap-1 bg-surface-container-highest text-on-surface px-2 py-0.5 rounded-full font-label-code text-caption font-semibold">
+<span class="w-1.5 h-1.5 rounded-full bg-on-surface"></span>
+                    2 on file
+                  </span>
+</div>
+<p class="font-body-sm text-caption text-on-surface-variant line-clamp-1 mt-0.5">
+                  Friction shoes inside the rear brake drums
+                </p>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant group-hover:translate-x-0.5 transition-transform text-[20px] shrink-0">chevron_right</span>
+</button>
+<!-- Subtle Section Label Divider -->
+<div class="pt-space-md pb-space-xs px-1 flex items-center gap-space-sm">
+<span class="font-caption text-caption text-on-surface-variant uppercase tracking-wider font-semibold">Not on file for your car yet</span>
+<div class="flex-1 h-[1px] bg-surface-container-high"></div>
+</div>
+<!-- ROW 3: BRAKE FLUID -->
+<button class="w-full min-h-[64px] py-space-sm px-space-md bg-surface-container-lowest hover:bg-surface-container-low rounded-xl flex items-center justify-between text-left transition-colors group">
+<div class="flex flex-col pr-space-sm min-w-0">
+<div class="flex items-center gap-space-sm">
+<span class="font-body-lg text-body-md font-medium text-on-surface group-hover:text-primary transition-colors">Brake fluid</span>
+<!-- Grey Pill -->
+<span class="inline-flex items-center bg-surface-container text-on-surface-variant px-2 py-0.5 rounded-full font-label-code text-caption">
+                    Not on file yet
+                  </span>
+</div>
+<p class="font-body-sm text-caption text-on-surface-variant line-clamp-1 mt-0.5">
+                  Hydraulic DOT 3 / DOT 4 fluid
+                </p>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant group-hover:translate-x-0.5 transition-transform text-[20px] shrink-0">chevron_right</span>
+</button>
+<!-- ROW 4: BRAKE ROTOR -->
+<button class="w-full min-h-[64px] py-space-sm px-space-md bg-surface-container-lowest hover:bg-surface-container-low rounded-xl flex items-center justify-between text-left transition-colors group">
+<div class="flex flex-col pr-space-sm min-w-0">
+<div class="flex items-center gap-space-sm">
+<span class="font-body-lg text-body-md font-medium text-on-surface group-hover:text-primary transition-colors">Brake rotor</span>
+<!-- Grey Pill -->
+<span class="inline-flex items-center bg-surface-container text-on-surface-variant px-2 py-0.5 rounded-full font-label-code text-caption">
+                    Not on file yet
+                  </span>
+</div>
+<p class="font-body-sm text-caption text-on-surface-variant line-clamp-1 mt-0.5">
+                  Vented front iron discs
+                </p>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant group-hover:translate-x-0.5 transition-transform text-[20px] shrink-0">chevron_right</span>
+</button>
+</div>
+<!-- Bottom Sheet Footer -->
+<div class="p-space-md bg-surface-container-lowest shadow-[0_-4px_12px_rgba(0,0,0,0.03)] flex flex-col items-center gap-space-xs">
+<button class="h-11 px-space-lg rounded-xl flex items-center justify-center gap-space-xs text-on-surface hover:text-primary font-body-sm text-body-sm font-semibold transition-colors">
+<span class="material-symbols-outlined text-[18px]">keyboard</span>
+<span>Don't see what you need? <span class="underline underline-offset-4 decoration-primary">Search instead</span></span>
+</button>
+<div class="w-32 h-1 bg-surface-container-highest rounded-full mt-1"></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Operational Context Footer Pill -->
+<div class="flex items-center justify-between bg-surface-container-lowest p-space-md rounded-xl shadow-sm text-on-surface-variant">
+<div class="flex items-center gap-space-sm">
+<span class="material-symbols-outlined text-on-surface text-[20px]">touch_app</span>
+<span class="font-body-sm text-body-sm font-medium">All touch targets sized ≥44px for warehouse rugged handhelds.</span>
+</div>
+<span class="font-label-code text-caption text-on-surface-variant hidden sm:inline">ROAM-UX-SPEC-v4.2</span>
+</div>
+</div>
+<script>
+  function showMobileView(view) {
+    var leftFrame = document.getElementById('frame-left');
+    var rightFrame = document.getElementById('frame-right');
+    var btnLeft = document.getElementById('btn-toggle-left');
+    var btnRight = document.getElementById('btn-toggle-right');
+    var btnBoth = document.getElementById('btn-toggle-both');
+
+    if (!leftFrame || !rightFrame) return;
+
+    if (view === 'left') {
+      leftFrame.classList.remove('hidden');
+      rightFrame.classList.add('hidden');
+      btnLeft.className = "px-space-md py-1 rounded-md text-caption font-caption bg-surface-container-lowest text-primary font-bold shadow-sm transition-all";
+      btnRight.className = "px-space-md py-1 rounded-md text-caption font-caption text-on-surface-variant hover:text-on-surface transition-all";
+      if (btnBoth) btnBoth.className = "hidden md:inline-block px-space-md py-1 rounded-md text-caption font-caption text-on-surface-variant hover:text-on-surface transition-all";
+    } else if (view === 'right') {
+      leftFrame.classList.add('hidden');
+      rightFrame.classList.remove('hidden');
+      btnLeft.className = "px-space-md py-1 rounded-md text-caption font-caption text-on-surface-variant hover:text-on-surface transition-all";
+      btnRight.className = "px-space-md py-1 rounded-md text-caption font-caption bg-surface-container-lowest text-primary font-bold shadow-sm transition-all";
+      if (btnBoth) btnBoth.className = "hidden md:inline-block px-space-md py-1 rounded-md text-caption font-caption text-on-surface-variant hover:text-on-surface transition-all";
+    } else {
+      leftFrame.classList.remove('hidden');
+      rightFrame.classList.remove('hidden');
+      btnLeft.className = "px-space-md py-1 rounded-md text-caption font-caption text-on-surface-variant hover:text-on-surface transition-all";
+      btnRight.className = "px-space-md py-1 rounded-md text-caption font-caption text-on-surface-variant hover:text-on-surface transition-all";
+      if (btnBoth) btnBoth.className = "hidden md:inline-block px-space-md py-1 rounded-md text-caption font-caption bg-surface-container-lowest text-primary font-bold shadow-sm transition-all";
+    }
+  }
+</script></main><nav class="fixed bottom-0 w-full z-50 pb-safe bg-surface-container-lowest/90 backdrop-blur-xl shadow-[0_-1px_8px_rgba(0,0,0,0.04)]" data-active-classes="text-primary font-bold"><div class="flex justify-around items-center h-16 px-space-xs"><a class="flex flex-col items-center justify-center gap-space-xs w-16 h-12 text-on-surface-variant hover:text-on-surface transition-colors" data-path="fleet-maintenance" href="#"><span class="material-symbols-outlined text-[22px]">build_circle</span><span class="font-caption text-caption">Maint</span></a><a class="flex flex-col items-center justify-center gap-space-xs w-16 h-12 text-on-surface-variant hover:text-on-surface transition-colors" data-path="vehicles-registry" href="#"><span class="material-symbols-outlined text-[22px]">local_shipping</span><span class="font-caption text-caption">Vehicles</span></a><a class="flex flex-col items-center justify-center gap-space-xs w-16 h-12 text-on-surface-variant hover:text-on-surface transition-colors" data-path="driver-ops" href="#"><span class="material-symbols-outlined text-[22px]">badge</span><span class="font-caption text-caption">Drivers</span></a><a class="flex flex-col items-center justify-center gap-space-xs w-16 h-12 text-on-surface-variant hover:text-on-surface transition-colors" data-path="fleet-reports" href="#"><span class="material-symbols-outlined text-[22px]">monitoring</span><span class="font-caption text-caption">Reports</span></a></div></nav></body></html>

@@ -43,6 +43,7 @@ import { commitPartsUsage } from "./parts_match.ts";
 import { ledgerAllowedAfterParts } from "../../../packages/types/src/partsResolution.ts";
 import {
   assessOdometerAnomaly,
+  checkMaintenanceOdometerReading,
   findWorkOrderByIdempotency,
   formatOdometerSourceLabel,
   insertMaintenanceAuditLog,
@@ -58,6 +59,7 @@ import {
   reserveMaintenanceLogNumber,
 } from "./maintenance_logging_helpers.ts";
 import { fleetDb } from "./repos/baseRepo.ts";
+import { buildLogServiceContext } from "./maintenance_log_service_context.ts";
 
 // Wave 5: DRY — use shared assertPlatformStaffResponse from rbac_middleware
 const assertVehicleCatalogPlatformAccess = assertPlatformStaffResponse;
@@ -3742,6 +3744,66 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         if (msg.includes("cannot be edited")) {
           return c.json({ error: "Completed services can't be changed — void it and log again." }, 409);
         }
+        return c.json({ error: msg }, 500);
+      }
+    },
+  );
+
+  route.get(
+    "/maintenance/log-service-context/:vehicleId",
+    requireAuth(),
+    async (c) => {
+      try {
+        const orgId = getOrgId(c);
+        if (!orgId) return c.json({ error: "Organization required" }, 400);
+        const vehicleId = c.req.param("vehicleId")?.trim() ?? "";
+        if (!vehicleId) return c.json({ error: "vehicleId is required" }, 400);
+        const vehicle = await loadFleetVehicleForOrg(orgId, vehicleId);
+        if (!vehicle) return c.json({ error: "Vehicle not found" }, 404);
+        const payload = await buildLogServiceContext({
+          supabase,
+          c,
+          orgId,
+          vehicleId,
+        });
+        return c.json(payload);
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return c.json({ error: msg }, 500);
+      }
+    },
+  );
+
+  route.post(
+    "/maintenance/odometer/check",
+    requireAuth(),
+    async (c) => {
+      try {
+        const orgId = getOrgId(c);
+        if (!orgId) return c.json({ error: "Organization required" }, 400);
+        const body = (await c.req.json()) as Record<string, unknown>;
+        const vehicleId = String(body.vehicleId ?? body.vehicle_id ?? "").trim();
+        const date = String(body.date ?? body.serviceDate ?? "").slice(0, 10);
+        const reading = Number(body.reading ?? body.odometer ?? body.odo);
+        if (!vehicleId) return c.json({ error: "vehicleId is required" }, 400);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+          return c.json({ error: "date must be YYYY-MM-DD" }, 400);
+        }
+        if (!Number.isFinite(reading) || reading <= 0) {
+          return c.json({ error: "reading must be greater than zero", code: "odometer_required" }, 400);
+        }
+        const vehicle = await loadFleetVehicleForOrg(orgId, vehicleId);
+        if (!vehicle) return c.json({ error: "Vehicle not found" }, 404);
+        const result = await checkMaintenanceOdometerReading({
+          supabase,
+          orgId,
+          vehicleId,
+          serviceDateYmd: date,
+          reading,
+        });
+        return c.json(result);
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
         return c.json({ error: msg }, 500);
       }
     },

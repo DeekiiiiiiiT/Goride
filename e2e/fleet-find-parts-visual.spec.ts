@@ -5,6 +5,7 @@ import {
   fleetCorePartsFixtures,
   fleetCoreStitchVisualFixtures,
   installFleetCoreMockRoutes,
+  seedFleetAuthSession,
 } from "./findPartsFleetMocks";
 import {
   STITCH_VISUAL_COMPONENT_ID,
@@ -14,9 +15,7 @@ import {
 
 async function installFleetMocks(page: import("@playwright/test").Page) {
   const session = fleetAuthSession();
-  await page.addInitScript((stored) => {
-    localStorage.setItem("sb-example-auth-token", JSON.stringify(stored));
-  }, session);
+  await seedFleetAuthSession(page, session);
   await page.route("**/auth/v1/**", async (route) => {
     await route.fulfill({ json: session });
   });
@@ -149,9 +148,7 @@ test.describe("Fleet find parts live fixtures", () => {
 
 async function installStitchVisualMocks(page: import("@playwright/test").Page) {
   const session = fleetAuthSession();
-  await page.addInitScript((stored) => {
-    localStorage.setItem("sb-example-auth-token", JSON.stringify(stored));
-  }, session);
+  await seedFleetAuthSession(page, session);
   await page.route("**/auth/v1/**", async (route) => {
     await route.fulfill({ json: session });
   });
@@ -178,7 +175,7 @@ test.describe("Fleet find parts stitch live PNGs", () => {
     await page.goto(`/maintenance?tab=find-parts&vehicle=${STITCH_VISUAL_VEHICLE_ID}`);
     await page.getByRole("heading", { name: /What part do you need/i }).first().waitFor({ timeout: 20_000 });
     await expect(page.getByText(STITCH_VISUAL_PLATE).first()).toBeVisible();
-    await expect(page.getByText("8 parts on file", { exact: false }).first()).toBeVisible();
+    await expect(page.getByText("SYSTEM MODULES", { exact: false }).first()).toBeVisible();
     await prepareFindPartsCapture(page);
     await page.screenshot({
       path: "docs/stitch/roam-fleet-app/screenshots/FP3-live.png",
@@ -237,6 +234,68 @@ test.describe("Fleet find parts stitch live PNGs", () => {
     await prepareFindPartsCapture(page);
     await page.screenshot({
       path: "docs/stitch/roam-fleet-app/screenshots/FP12-live.png",
+      fullPage: true,
+    });
+  });
+
+  async function openBrakesOverlay(page: import("@playwright/test").Page) {
+    await page.getByRole("button", { name: /Brakes/i }).first().click();
+    const dialog = page.getByRole("dialog").filter({ hasText: "Pick the part you need" }).first();
+    await dialog.getByRole("heading", { name: "Brakes" }).waitFor({ timeout: 15_000 });
+    return dialog;
+  }
+
+  test("FP3b area overlay at 1440px", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(`/maintenance?tab=find-parts&vehicle=${STITCH_VISUAL_VEHICLE_ID}`);
+    await page.getByRole("heading", { name: /What part do you need/i }).first().waitFor({ timeout: 20_000 });
+    const dialog = await openBrakesOverlay(page);
+    await expect(dialog.getByText("Brake pads", { exact: false }).first()).toBeVisible();
+    await prepareFindPartsCapture(page);
+    await page.screenshot({
+      path: "docs/stitch/roam-fleet-app/screenshots/FP3b-live.png",
+      fullPage: true,
+    });
+  });
+
+  test("FP3c overlay picked row at 1440px", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(`/maintenance?tab=find-parts&vehicle=${STITCH_VISUAL_VEHICLE_ID}`);
+    await page.getByRole("heading", { name: /What part do you need/i }).first().waitFor({ timeout: 20_000 });
+    const dialog = await openBrakesOverlay(page);
+    await dialog.locator(`[data-fp3-overlay-row="${STITCH_VISUAL_COMPONENT_ID}"]`).first().hover();
+    await expect(dialog.getByText("Choose →", { exact: false }).first()).toBeVisible({ timeout: 10_000 });
+    await prepareFindPartsCapture(page);
+    await page.screenshot({
+      path: "docs/stitch/roam-fleet-app/screenshots/FP3c-live.png",
+      fullPage: true,
+    });
+  });
+
+  test("FP3d not-on-file expand at 1440px", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(`/maintenance?tab=find-parts&vehicle=${STITCH_VISUAL_VEHICLE_ID}`);
+    await page.getByRole("heading", { name: /What part do you need/i }).first().waitFor({ timeout: 20_000 });
+    const dialog = await openBrakesOverlay(page);
+    await dialog.locator('[data-fp3-overlay-row="cmp-brake-fluid"]').first().click();
+    await expect(dialog.getByRole("button", { name: /Ask Roam to add it/i }).first()).toBeVisible({ timeout: 10_000 });
+    await prepareFindPartsCapture(page);
+    await page.screenshot({
+      path: "docs/stitch/roam-fleet-app/screenshots/FP3d-live.png",
+      fullPage: true,
+    });
+  });
+
+  test("FP12b phone area sheet at 390px", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`/maintenance?tab=find-parts&vehicle=${STITCH_VISUAL_VEHICLE_ID}`);
+    await page.getByRole("heading", { name: /What part do you need/i }).first().waitFor({ timeout: 20_000 });
+    await page.getByRole("button", { name: /Brakes/i }).first().click();
+    const sheet = page.getByRole("dialog").filter({ hasText: "Pick the part you need" }).first();
+    await sheet.getByText("Pick the part you need").waitFor({ timeout: 15_000 });
+    await prepareFindPartsCapture(page);
+    await page.screenshot({
+      path: "docs/stitch/roam-fleet-app/screenshots/FP12b-live.png",
       fullPage: true,
     });
   });

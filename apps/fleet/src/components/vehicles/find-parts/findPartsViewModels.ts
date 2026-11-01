@@ -141,9 +141,41 @@ export type Fp3AreaRow = {
   areaIndex: string;
   partCount: number;
   onFileLabel: string;
+  /** Short label for v3 area cards, e.g. "28 on file". */
+  onFileShortLabel: string;
+  /** First three component names in the area. */
+  partTypesLine: string;
   icon: string;
   selected?: boolean;
   subChips: Fp3SubChip[];
+};
+
+export type Fp3OverlayRow = {
+  id: string;
+  name: string;
+  opCode: string;
+  descriptionLine: string;
+  onFileLabel: string;
+  onFile: boolean;
+  iconKey: string;
+  oemPartNumber: string;
+  axleNote: string;
+  positionAware?: boolean;
+};
+
+export type Fp3OverlayViewModel = {
+  areaName: string;
+  areaIcon: string;
+  partsInArea: number;
+  onFileForCar: number;
+  rowsOnFile: Fp3OverlayRow[];
+  rowsNotOnFile: Fp3OverlayRow[];
+  areaEmptyNote: string;
+  catalogAddAvgMinutes: number | null;
+  targetEngineLine: string;
+  requestRouteLine: string;
+  vehicleLabel: string;
+  expandedNotOnFileId: string;
 };
 
 export type Fp3SymptomPart = {
@@ -234,12 +266,18 @@ export type Fp3ViewModel = {
   chassisCode: string;
   versionTag: string;
   nextHint?: string;
+  brakeFrontType: string;
+  brakeRearType: string;
+  locationChip: string;
+  chosenOnFileCount: number;
+  chosenOpCode: string;
+  catalogAddAvgMinutes: number | null;
 };
 
 type Fp3BrowseInput = {
-  areas?: Array<{ id?: string; name?: string; parts?: Array<{ id: string; name: string; priceJmd?: number; positionAware?: boolean; count?: number }> }>;
-  systems?: Array<{ id: string; plainName?: string; name?: string; areaIndex?: string; count?: number; icon?: string | null; components?: Array<{ id: string; plainName?: string; name?: string; count?: number; positionAware?: boolean }> }>;
-  common?: Array<{ id: string; name?: string; plainName?: string; priceJmd?: number; positionAware?: boolean; description?: string; count?: number }>;
+  areas?: Array<{ id?: string; name?: string; parts?: Array<{ id: string; name: string; priceJmd?: number; positionAware?: boolean; count?: number; opCode?: string | null; description?: string | null; bestOemPartNumber?: string | null; bestListingPosition?: string | null }> }>;
+  systems?: Array<{ id: string; plainName?: string; name?: string; areaIndex?: string; count?: number; icon?: string | null; components?: Array<{ id: string; plainName?: string; name?: string; count?: number; positionAware?: boolean; opCode?: string | null; description?: string | null; iconKey?: string | null; bestOemPartNumber?: string | null; bestListingPosition?: string | null }> }>;
+  common?: Array<{ id: string; name?: string; plainName?: string; priceJmd?: number; positionAware?: boolean; description?: string; count?: number; opCode?: string | null }>;
 };
 
 export function fp3OnFileAreaLabel(count: number): string {
@@ -254,9 +292,116 @@ export function fp3ChipOnFileLabel(count: number): string {
 }
 
 export function fp3CommonStatusLabel(count: number, active: boolean): string {
+  if (active && count > 0) return `${count} TYPES`;
   if (active) return "Active";
   if (count > 0) return "On file";
   return "None";
+}
+
+export function fp3AreaOnFileShort(count: number): string {
+  if (count <= 0) return "None on file yet";
+  if (count === 1) return "1 on file";
+  return `${count} on file`;
+}
+
+function fp3PartTypesLine(names: string[]): string {
+  const slice = names.filter(Boolean).slice(0, 3);
+  return slice.length ? slice.join(", ") : "—";
+}
+
+function fp3AxleNote(
+  position: string | null | undefined,
+  brakeFront: string,
+  brakeRear: string,
+): string {
+  const pos = String(position || "").toLowerCase();
+  const type = pos === "rear" ? brakeRear : pos === "front" ? brakeFront : "";
+  const axle = pos === "rear" ? "Rear axle" : pos === "front" ? "Front axle" : "";
+  if (axle && type && type !== "—") return `${axle} (${type})`;
+  if (axle) return axle;
+  return "";
+}
+
+function fp3OverlayRowFromComponent(
+  row: {
+    id: string;
+    plainName?: string;
+    name?: string;
+    count?: number;
+    positionAware?: boolean;
+    opCode?: string | null;
+    description?: string | null;
+    iconKey?: string | null;
+    bestOemPartNumber?: string | null;
+    bestListingPosition?: string | null;
+  },
+  brakeFront: string,
+  brakeRear: string,
+): Fp3OverlayRow {
+  const count = Number(row.count ?? 0);
+  const onFile = count > 0;
+  const name = orNoneYet(row.plainName || row.name);
+  const desc = String(row.description || "").trim();
+  return {
+    id: row.id,
+    name,
+    opCode: orDash(String(row.opCode || "").trim() || "—"),
+    descriptionLine: desc,
+    onFileLabel: fp3ChipOnFileLabel(count),
+    onFile,
+    iconKey: fp3AreaIcon(name, row.iconKey),
+    oemPartNumber: onFile ? orDash(String(row.bestOemPartNumber || "").trim() || "—") : "",
+    axleNote: onFile ? fp3AxleNote(row.bestListingPosition, brakeFront, brakeRear) : "",
+    positionAware: row.positionAware,
+  };
+}
+
+export function buildFp3OverlayViewModel(input: {
+  area?: Fp3AreaRow;
+  browse?: Fp3BrowseInput;
+  ctx?: Record<string, unknown> | null;
+  catalogAddAvgMinutes?: number | null;
+  expandedNotOnFileId?: string;
+}): Fp3OverlayViewModel | null {
+  const area = input.area;
+  if (!area) return null;
+  const ctx = input.ctx || {};
+  const specs = (ctx.specs || {}) as Record<string, unknown>;
+  const brakeFront = orDash(String(specs.brake_front_type || specs.brakeFrontType || ""));
+  const brakeRear = orDash(String(specs.brake_rear_type || specs.brakeRearType || ""));
+  const engineCode = orDash(String(specs.engine_code || ""));
+  const disp = specs.engine_displacement_l != null ? String(specs.engine_displacement_l) : "";
+  const engineLine = engineCode !== "—"
+    ? `${engineCode}${disp ? ` (${disp}L)` : ""}`
+    : "—";
+  const system = input.browse?.systems?.find((s) => s.id === area.id);
+  const components = system?.components || input.browse?.areas?.find((a) => String(a.id) === area.id)?.parts || [];
+  const rows = (components as Array<Parameters<typeof fp3OverlayRowFromComponent>[0]>).map((row) =>
+    fp3OverlayRowFromComponent(row, brakeFront, brakeRear)
+  );
+  rows.sort((a, b) => (a.onFile === b.onFile ? a.name.localeCompare(b.name) : a.onFile ? -1 : 1));
+  const rowsOnFile = rows.filter((r) => r.onFile);
+  const rowsNotOnFile = rows.filter((r) => !r.onFile);
+  const onFileForCar = rowsOnFile.reduce((sum, row) => {
+    const n = Number(String(row.onFileLabel).match(/^\d+/)?.[0] || 0);
+    return sum + n;
+  }, 0);
+  return {
+    areaName: area.name,
+    areaIcon: area.icon,
+    partsInArea: rows.length,
+    onFileForCar,
+    rowsOnFile,
+    rowsNotOnFile,
+    areaEmptyNote: onFileForCar <= 0
+      ? `Roam doesn't have any ${area.name} parts on file for this car yet. You can still ask Roam to add what you need.`
+      : "",
+    catalogAddAvgMinutes: input.catalogAddAvgMinutes ?? null,
+    targetEngineLine: `TARGET ENGINE: ${engineLine}`,
+    requestRouteLine: "REQUEST ROUTE: Fleet catalog intake → Dominion parts desk → catalog publish",
+    vehicleLabel: orNoneYet(String(ctx.label || "")),
+    expandedNotOnFileId: input.expandedNotOnFileId || "",
+  };
 }
 
 const FP3_DB_ICON_SLUGS = new Set(["brakes", "oil", "droplet", "wind", "suspension", "tires", "gears", "belt"]);
@@ -342,12 +487,15 @@ function fp3AreasFromBrowse(browse: Fp3BrowseInput | undefined, selectedAreaId?:
       const partCount = subChips.reduce((sum, row) => sum + (row.disabled ? 0 : Number(String(row.onFileLabel).match(/^\d+/)?.[0] || 0)), 0)
         || subChips.length;
       const areaCount = (area.parts || []).reduce((sum, part) => sum + Number(part.count ?? 0), 0);
+      const typeNames = (area.parts || []).map((p) => orNoneYet(p.name));
       return {
         id: String(area.id || area.name || "area"),
         name: orNoneYet(area.name),
         areaIndex: String(index + 1).padStart(2, "0"),
         partCount: areaCount || partCount,
         onFileLabel: fp3OnFileAreaLabel(areaCount),
+        onFileShortLabel: fp3AreaOnFileShort(areaCount),
+        partTypesLine: fp3PartTypesLine(typeNames),
         icon: fp3AreaIcon(orNoneYet(area.name)),
         selected: selectedAreaId === String(area.id || area.name),
         subChips,
@@ -369,12 +517,15 @@ function fp3AreasFromBrowse(browse: Fp3BrowseInput | undefined, selectedAreaId?:
         };
       });
       const areaCount = Number(system.count ?? subChips.reduce((sum, row) => sum + Number(String(row.onFileLabel).match(/^\d+/)?.[0] || 0), 0));
+      const typeNames = (system.components || []).map((row) => orNoneYet(row.plainName || row.name));
       return {
         id: system.id,
         name: orNoneYet(system.plainName || system.name),
         areaIndex: String(index + 1).padStart(2, "0"),
         partCount: areaCount,
         onFileLabel: fp3OnFileAreaLabel(areaCount),
+        onFileShortLabel: fp3AreaOnFileShort(areaCount),
+        partTypesLine: fp3PartTypesLine(typeNames),
         icon: fp3AreaIcon(orNoneYet(system.plainName || system.name), system.icon),
         selected: selectedAreaId === system.id,
         subChips,
@@ -396,6 +547,8 @@ function fp3StitchFallbackAreas(): Fp3AreaRow[] {
     areaIndex: String(index + 1).padStart(2, "0"),
     partCount: row.count,
     onFileLabel: fp3OnFileAreaLabel(row.count),
+    onFileShortLabel: fp3AreaOnFileShort(row.count),
+    partTypesLine: "—",
     icon: row.icon,
     selected: index === 0,
     subChips: [],
@@ -545,6 +698,23 @@ export function buildFp3ViewModel(input: {
   const versionTag = formatPartsVersionTag(ctx);
   const hasBrowseAreas = Boolean(input.browse?.areas?.length || input.browse?.systems?.length);
   const categoryTotal = hasBrowseAreas ? areaRows.length : 11;
+  const specs = (ctx.specs || {}) as Record<string, unknown>;
+  const brakeFrontType = orDash(String(specs.brake_front_type || ctx.brake_front_type || ""));
+  const brakeRearType = orDash(String(specs.brake_rear_type || ctx.brake_rear_type || ""));
+  const locationChip = orNoneYet(String(ctx.hub_label || ctx.hubLabel || hubLabel));
+  const catalogAddAvgMinutes = typeof ctx.catalogAddAvgMinutes === "number" ? ctx.catalogAddAvgMinutes : null;
+  let chosenOnFileCount = 0;
+  let chosenOpCode = "—";
+  if (selectedChipId) {
+    for (const system of input.browse?.systems || []) {
+      const match = system.components?.find((c) => c.id === selectedChipId);
+      if (match) {
+        chosenOnFileCount = Number(match.count ?? 0);
+        chosenOpCode = orDash(String(match.opCode || "").trim() || "—");
+        break;
+      }
+    }
+  }
   return {
     plate: orDash(String(ctx.plate || "")),
     vehicleLabel: orNoneYet(String(ctx.label || "")),
@@ -554,7 +724,7 @@ export function buildFp3ViewModel(input: {
     priceAltLabel: formatPriceJmd(Number((input.browse?.common?.[1] as { priceJmd?: number } | undefined)?.priceJmd)),
     partTiles: tiles.length ? tiles : [{ id: "empty", name: "None yet", priceLabel: "—", meta: "None", statusLabel: "None", icon: "inventory_2" }],
     areaLabels: areaLabels.length ? areaLabels : ["None yet"],
-    areas: areaRows.length ? areaRows : [{ id: "empty", name: "None yet", areaIndex: "01", partCount: 0, onFileLabel: "None on file yet", icon: "category", subChips: [] }],
+    areas: areaRows.length ? areaRows : [{ id: "empty", name: "None yet", areaIndex: "01", partCount: 0, onFileLabel: "None on file yet", onFileShortLabel: "None on file yet", partTypesLine: "—", icon: "category", subChips: [] }],
     symptoms: symptomRows.length ? symptomRows : [{ id: "empty", name: "None yet", weightLabel: "—", answerText: "None yet", parts: [] }],
     categoryTotal,
     selectedPartName: orNoneYet(input.selectedPartName || selectedChip?.name || ""),
@@ -565,9 +735,15 @@ export function buildFp3ViewModel(input: {
     hubLabel,
     orgShortCode,
     telematicsLine: fp3TelematicsLine(ctx),
-    chassisCode: orDash(String(ctx.chassis_code || "")),
+    chassisCode: orDash(String(ctx.chassis_code || specs.chassis_code || "")),
     versionTag: formatPartsVersionTag(ctx),
     nextHint: input.nextHint || "",
+    brakeFrontType,
+    brakeRearType,
+    locationChip,
+    chosenOnFileCount,
+    chosenOpCode,
+    catalogAddAvgMinutes,
   };
 }
 

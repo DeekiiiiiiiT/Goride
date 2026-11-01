@@ -3,8 +3,14 @@
  */
 import type { Context } from "npm:hono@4.3.11";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
+import {
+  interpolateExpectedOdometer,
+  maintenanceServiceRecordedAt,
+} from "../../../packages/finance-core/src/maintenanceOdometerExpected.ts";
 import { fleetDb } from "./repos/baseRepo.ts";
 import { getOrgId } from "./org_scope.ts";
+
+export { maintenanceServiceRecordedAt };
 
 export type OdometerRequiredError = { code: "odometer_required" };
 
@@ -228,4 +234,91 @@ export async function findWorkOrderByIdempotency(
     .eq("idempotency_key", idempotencyKey)
     .maybeSingle();
   return data;
+}
+
+export type OdometerReadingNeighbor = {
+  reading: number;
+  recordedAt: string;
+  sourceLabel: string;
+};
+
+async function loadNeighborReading(
+  vehicleId: string,
+  orgId: string,
+  reading: number | null,
+  recordedAt: string | null,
+): Promise<OdometerReadingNeighbor | null> {
+  if (reading == null || !recordedAt) return null;
+  const { data } = await fleetDb()
+    .from("odometer_readings")
+    .select("reading, recorded_at, source")
+    .eq("vehicle_id", vehicleId)
+    .eq("organization_id", orgId)
+    .eq("is_voided", false)
+    .eq("reading", reading)
+    .eq("recorded_at", recordedAt)
+    .maybeSingle();
+  if (!data) {
+    return {
+      reading,
+      recordedAt,
+      sourceLabel: "reading",
+    };
+  }
+  const row = data as Record<string, unknown>;
+  return {
+    reading: Number(row.reading) || reading,
+    recordedAt: String(row.recorded_at ?? recordedAt),
+    sourceLabel: formatOdometerSourceLabel(String(row.source ?? "manual")),
+  };
+}
+
+export async function checkMaintenanceOdometerReading(args: {
+  supabase: SupabaseClient;
+  orgId: string;
+  vehicleId: string;
+  serviceDateYmd: string;
+  reading: number;
+}): Promise<{
+  expected: number | null;
+  before: OdometerReadingNeighbor | null;
+  after: OdometerReadingNeighbor | null;
+  isAnomaly: boolean;
+  anomalyReason: string | null;
+}> {
+  const recordedAt = maintenanceServiceRecordedAt(args.serviceDateYmd);
+  const assessment = await assessOdometerAnomaly(
+    args.supabase,
+    args.vehicleId,
+    args.reading,
+    recordedAt,
+  );
+  const expected = interpolateExpectedOdometer({
+    serviceDateYmd: args.serviceDateYmd,
+    priorReading: assessment.priorReading,
+    priorRecordedAt: assessment.priorRecordedAt,
+    nextReading: assessment.nextReading,
+    nextRecordedAt: assessment.nextRecordedAt,
+  });
+  const [before, after] = await Promise.all([
+    loadNeighborReading(
+      args.vehicleId,
+      args.orgId,
+      assessment.priorReading,
+      assessment.priorRecordedAt,
+    ),
+    loadNeighborReading(
+      args.vehicleId,
+      args.orgId,
+      assessment.nextReading,
+      assessment.nextRecordedAt,
+    ),
+  ]);
+  return {
+    expected,
+    before,
+    after,
+    isAnomaly: assessment.isAnomaly,
+    anomalyReason: assessment.anomalyReason,
+  };
 }

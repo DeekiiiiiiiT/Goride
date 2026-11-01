@@ -1,0 +1,120 @@
+ROAM FLEET — FIND PARTS · AREA PART PICKER OVERLAY — FULL DESIGN PROMPT (GOOGLE STITCH)
+
+
+
+
+Roam Fleet - Find Parts, area part picker (Desktop Web App, for fleet managers and their staff):
+
+Design high-fidelity screens for one change to the "What part do you need?" step of the Find parts tab in Fleet maintenance in the Roam Fleet app. Today, when a person clicks an area card such as "Brakes", the parts inside that area appear in a strip far below the cards, and the Next button stays grey until they find and click one of them. Most people never notice the strip, so they think the page is broken. The new design opens an overlay the moment an area card is clicked. The overlay lists the parts inside that area, shows whether Roam has each one on file for this car, and picking one moves the person straight on. Find parts is an information tool: it tells people which parts fit their car. It never shows prices, suppliers, stock or quotes. The tone is calm, plain and obvious: one click on an area, one click on a part, done.
+
+BRAND IDENTITY:
+- Match the existing Roam Fleet Find parts screens exactly:
+  - black top bar with the "Roam Fleet" tile and the white nav row (Dashboard, Fleet Operations, Driver Operations, Money, Vehicle Operations active and underlined, Delivery Operations, Analytics, Reports, Business Finance), avatar on the right
+  - the dark status strip: "Switch vehicle or search hub…" on the left; "11:22 PM EST", "America/Jamaica", "JM (JMD)", "DE · Deeki T · platform_owner" on the right
+  - the white card heading "Fleet Maintenance" with the orange wrench icon, and the tabs on the right: Overview (badge 2), Service history, Find parts (active)
+  - the sticky Find parts header: "← Back" on the left; step trail "✓ 1. Pick car / ✓ 2. Version / ● 3. Part / 4. Side"; car chip "2019 Toyota Roomy · 5179KZ · PRE-FACELIFT · 1KR-FE · 2WD"; "Next →" on the right
+- LIGHT MODE (default):
+  - Primary: near-black #030213
+  - Background: white #FFFFFF; page wash: #f8fafc
+  - Card border: rgba(0,0,0,0.1)
+  - Text: #0a0a0a; muted text: #717182
+  - Success / on file: #059669
+  - Muted chip fill: #f1f5f9
+  - Overlay scrim: #0a0a0a at 40% opacity
+  - Orange #f97316, only for the page icon
+- DARK MODE:
+  - Background #252525, surface #2e2e2e, border #444444
+  - Text #fafafa, muted #b4b4b4, primary #fafafa
+  - Success #34d399
+  - Scrim: black at 60%
+- Chips:
+  - "{n} on file": emerald outline with a small dot
+  - "Not on file yet": grey outline
+  - "Selected": black fill with a white tick
+- Typography: Inter for text; a mono font with tabular numerals for counts, plates and step numbers.
+- No prices, suppliers, stock, quotes or maintenance schedules anywhere.
+- No gradients, glassmorphism or 3D.
+- Sample data (Toyota Roomy 2019 · 5179KZ):
+  - Brakes area: "Brake pads · 4 on file", "Brake shoes / drums · 2 on file", "Brake fluid · Not on file yet", "Brake rotor · Not on file yet"
+  - Engine area: "Oil filter · 1 on file", "Spark plugs · Not on file yet", "Timing belt · Not on file yet"
+
+DESIGN PRINCIPLES:
+- Desktop-first (1440px wide), with one phone screen
+- Clicking an area always gives a visible next step: the overlay opens on top, centred, not below the fold
+- Picking a part is the last click on this step: the overlay closes and the flow moves on by itself
+- A part with nothing on file is never a dead end: it says so and offers "Ask Roam to add it"
+- The page behind stays visible but dimmed, so people know where they are
+- Escape, the close button or a click on the dimmed page closes the overlay without changing anything
+
+SCREEN 1: WHAT PART? — AREA OVERLAY OPEN (BRAKES)
+- The whole Find parts "What part do you need?" page from Brand Identity sits behind, dimmed by the scrim:
+  - search box
+  - "By area" grid of 11 numbered area cards (01–11) with icons and "{n} parts on file for your car" / "None on file yet"
+  - the "Common parts" row below
+  - The Brakes card behind the scrim shows the "Selected" chip
+- Centred overlay card, 640px wide, white, 16px radius, soft shadow:
+  - header: the Brakes icon in a black rounded square, title "Brakes", sub line "Pick the part you need for your 2019 Toyota Roomy", close "×" button top right
+  - a small mono line under the header: "4 PARTS IN THIS AREA · 2 ON FILE FOR YOUR CAR"
+  - a list of large tappable rows, one per part, each with:
+    - a part icon on the left
+    - the part name ("Brake pads")
+    - a plain one-line description ("The pads that press on the disc to stop the front wheels")
+    - on the right, a chip "4 on file" (emerald) or "Not on file yet" (grey), and a chevron "›"
+  - rows with parts on file come first; "Not on file yet" rows sit below a thin divider with the label "NOT ON FILE FOR YOUR CAR YET"
+  - footer: muted text "Can't see your part? Search for it by name." with a text link "Search instead", which closes the overlay and focuses the search box
+- The header's "Next →" stays grey behind the scrim; the overlay is the obvious next step
+
+SCREEN 2: AREA OVERLAY — HOVER AND PICKED STATE
+- Same as Screen 1, two frames side by side:
+  - Frame A, hover: the "Brake pads · 4 on file" row has a light grey fill, a 2px near-black outline, and the chevron turns into "Choose →"
+  - Frame B, just picked: the "Brake pads" row shows a black "Selected" chip with a tick, and a small loading bar under the overlay header with the line "Opening Which side? …"
+- Caption under the frames: "Picking a part closes the overlay and goes to the next step: Which side? for brakes, otherwise Results."
+
+SCREEN 3: AREA OVERLAY — PART NOT ON FILE
+- Same overlay, Engine area, with the "Spark plugs · Not on file yet" row expanded in place:
+  - the row grows to show: "We don't have spark plug info for your 2019 Toyota Roomy yet."
+  - a primary black button "Ask Roam to add it", which opens the existing "Not on file yet" request screen pre-filled with the car and part
+  - a secondary text link "Pick another part"
+- An area where nothing is on file at all (e.g. Tires & wheels) shows every row as "Not on file yet". Above the list, a calm note: "Roam doesn't have any tires & wheels parts on file for this car yet. Pick one to ask us to add it."
+
+SCREEN 4: WHAT PART? — AFTER PICKING (BACK ON THE PAGE)
+- The page without the overlay, after the person picked "Brake pads" and then came back with ← Back:
+  - the Brakes area card shows "Selected"
+  - a slim summary bar sits directly under the "By area" heading: "Chosen: Brake pads · 4 on file" with a "Change" link (reopens the overlay) and a black "Next →" button
+  - the header "Next →" is black (enabled)
+- The old "Sub-assemblies inside Brakes" strip below the cards is gone
+
+SCREEN 5: PHONE (390px) — AREA BOTTOM SHEET
+- Two phone frames side by side
+- Frame 1: the "By area" grid in two columns; the Brakes card shows "Selected"
+- Frame 2: the parts list opens as a bottom sheet:
+  - drag handle on top
+  - title "Brakes" and the close "×"
+  - the same rows as Screen 1, full width, 56px tall, chips under the part name
+  - "Not on file yet" rows below the divider
+  - the sheet covers 75% of the screen height; the page above is dimmed
+
+ADDITIONAL UI COMPONENTS:
+- Area parts overlay (desktop: centred dialog; phone: bottom sheet)
+- Part row: icon, name, one-line description, on-file chip, chevron; hover, focus and selected states
+- "Not on file yet" expanded row with "Ask Roam to add it"
+- "Chosen: {part}" summary bar with Change and Next →
+- Scrim over the page
+
+INTERACTIONS:
+- Clicking any area card opens the overlay for that area, with focus on the first part row
+- Clicking a part row closes the overlay and goes straight to the next step: Which side? for parts that have sides (brakes, shocks, lights), otherwise Results
+- Clicking a "Not on file yet" row expands it in place with "Ask Roam to add it"; that button opens the request screen pre-filled
+- Escape, "×" or a click on the scrim closes the overlay with nothing chosen; the Brakes card keeps "Selected" so the person can reopen it
+- Keyboard: up and down arrows move between rows; Enter picks; Tab reaches "Search instead"
+- The Common parts tiles keep working as today: one click picks the part and moves on
+- Search results keep working as today
+
+Spec screens / Area
+| Screen | Area |
+|---|---|
+| 1 | What part? — area overlay open (Brakes) |
+| 2 | Area overlay — hover and picked states |
+| 3 | Area overlay — part not on file |
+| 4 | What part? — after picking, back on the page |
+| 5 | Phone — area bottom sheet |

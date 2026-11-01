@@ -75,10 +75,6 @@ export function LogServiceReviewStep({
           <h2 className="text-2xl font-semibold text-on-surface mt-0.5">{LOG_SERVICE_COPY.reviewHeading}</h2>
           <p className="text-sm text-secondary mt-1">{LOG_SERVICE_COPY.reviewSubtitle}</p>
         </div>
-        <span className="text-xs font-mono text-on-surface-variant bg-surface-container px-2 py-1 rounded">
-          {LOG_SERVICE_COPY.baySessionLabel}
-          {baySessionLabel}
-        </span>
       </div>
 
       <div className="border-2 border-dashed border-outline-variant/50 rounded-xl p-6 flex flex-col items-center justify-center bg-surface-container-low relative group hover:bg-surface-container transition-colors">

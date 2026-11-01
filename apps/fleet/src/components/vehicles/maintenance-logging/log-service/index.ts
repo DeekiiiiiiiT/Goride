@@ -10,4 +10,8 @@ export {
   LogServiceWizardContinueButton,
 } from "./LogServiceWizardChrome";
 export type { LogServiceVehicleStrip, LogServiceWizardStep } from "./LogServiceWizardChrome";
-export type { LogServicePackageChoice } from "./LogServiceWhatWasDoneStep";
+export { LogServiceLineDetailsMultiStep } from "./LogServiceLineDetailsMultiStep";
+export { LogServiceSystemPicker } from "./LogServiceSystemPicker";
+export { LogServiceComponentPicker } from "./LogServiceComponentPicker";
+export type { OdometerCheckResult } from "./LogServiceDateMileageStep";
+export type { LogServicePackageChoice, LogServiceSuggestedOp } from "./LogServiceWhatWasDoneStep";

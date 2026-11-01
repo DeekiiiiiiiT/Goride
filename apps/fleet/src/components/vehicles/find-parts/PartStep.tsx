@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { Fp3Screen } from "./screens/Fp3Screen";
-import { buildFp3ViewModel, type Fp3SearchHit } from "./findPartsViewModels";
+import { Fp3AreaOverlay } from "./screens/Fp3AreaOverlay";
+import { buildFp3OverlayViewModel, buildFp3ViewModel, type Fp3OverlayRow, type Fp3SearchHit } from "./findPartsViewModels";
 import { usePartsBrowse, usePartsSymptoms, usePartsTerm, usePartsVehicleContext } from "./findPartsQueries";
-import { onFileCountForComponent, partNameForComponent, positionAwareForComponent } from "./findPartsRoute";
+import { onFileCountForComponent, partNameForComponent, positionAwareForComponent, stepAfterPartPick } from "./findPartsRoute";
 
 type SpeechRecognitionCtor = new () => {
   lang: string;
@@ -38,28 +39,37 @@ export function PartStep({
   initialPartName,
   onBack,
   onPick,
-  onSkip,
+  onAskRoam,
 }: {
   vehicleId: string;
   initialComponentId?: string;
   initialPartName?: string;
   onBack: () => void;
   onPick: (componentId: string, positionAware: boolean, name: string, onFileCount: number) => void;
-  onSkip: () => void;
+  onAskRoam: (componentId: string, name: string) => void;
 }) {
   const ctx = usePartsVehicleContext(vehicleId);
   const variantId = String((ctx.data as { variantId?: string | null } | undefined)?.variantId || "");
   const browse = usePartsBrowse(variantId || undefined, Boolean(vehicleId));
   const symptoms = usePartsSymptoms(variantId || undefined, Boolean(vehicleId));
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedAreaId, setSelectedAreaId] = useState("");
   const [selectedChipId, setSelectedChipId] = useState(initialComponentId || "");
   const [selectedPartName, setSelectedPartName] = useState(initialPartName || "");
   const [selectedPositionAware, setSelectedPositionAware] = useState(false);
-  const [openSymptomId, setOpenSymptomId] = useState("");
+  const [overlayAreaId, setOverlayAreaId] = useState<string | null>(null);
+  const [expandedNotOnFileId, setExpandedNotOnFileId] = useState("");
+  const [focusedRowId, setFocusedRowId] = useState("");
+  const [pickedRowId, setPickedRowId] = useState("");
+  const [openingSideLabel, setOpeningSideLabel] = useState("");
   const term = usePartsTerm(searchQuery, searchQuery.trim().length >= 2);
 
   const browseData = browse.data as Parameters<typeof buildFp3ViewModel>[0]["browse"];
+  const ctxRecord = useMemo(() => {
+    const base = (ctx.data as Record<string, unknown> | undefined) ?? {};
+    const avg = (base as { catalogAddAvgMinutes?: number | null }).catalogAddAvgMinutes;
+    return { ...base, catalogAddAvgMinutes: avg ?? null };
+  }, [ctx.data]);
+
   const searchHits: Fp3SearchHit[] = useMemo(() => {
     const hits = (term.data as { hits?: Array<{ id: string; plainName: string; kind?: string; note?: string; tag?: string; componentId?: string }> } | undefined)?.hits || [];
     const areas = browseData?.areas || [];
@@ -105,30 +115,30 @@ export function PartStep({
     setSelectedPositionAware(resolved.positionAware);
   }, [initialComponentId, browseData]);
 
-  const nextHint = selectedAreaId && !selectedChipId ? "Pick a part below" : "";
-
   const data = buildFp3ViewModel({
-    ctx: (ctx.data as Record<string, unknown> | undefined) ?? null,
+    ctx: ctxRecord,
     browse: browseData,
     symptoms: symptoms.data as Parameters<typeof buildFp3ViewModel>[0]["symptoms"],
-    selectedAreaId,
     selectedChipId,
     selectedPartName,
     searchHits,
-    nextHint,
+    nextHint: "",
+  });
+
+  const overlayArea = data.areas.find((a) => a.id === overlayAreaId) || null;
+  const overlayData = buildFp3OverlayViewModel({
+    area: overlayArea || undefined,
+    browse: browseData,
+    ctx: ctxRecord,
+    catalogAddAvgMinutes: data.catalogAddAvgMinutes,
+    expandedNotOnFileId,
   });
 
   useEffect(() => {
-    function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape") setSearchQuery("");
+    if (overlayAreaId && overlayData?.rowsOnFile[0]) {
+      setFocusedRowId(overlayData.rowsOnFile[0].id);
     }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
-
-  useEffect(() => {
-    if (!selectedAreaId && data.areas[0]?.id) setSelectedAreaId(data.areas[0].id);
-  }, [data.areas, selectedAreaId]);
+  }, [overlayAreaId, overlayData?.rowsOnFile]);
 
   function selectPart(id: string, name: string, positionAware?: boolean) {
     setSelectedChipId(id);
@@ -147,6 +157,19 @@ export function PartStep({
     commitPart(selectedChipId, selectedPartName, selectedPositionAware);
   }
 
+  function pickFromOverlay(row: Fp3OverlayRow) {
+    setPickedRowId(row.id);
+    selectPart(row.id, row.name, row.positionAware);
+    const nextStep = stepAfterPartPick(Number(String(row.onFileLabel).match(/^\d+/)?.[0] || 0), Boolean(row.positionAware));
+    setOpeningSideLabel(nextStep === "position" ? "Opening Which side? …" : nextStep === "results" ? "Opening Results …" : "Opening request …");
+    window.setTimeout(() => {
+      setOverlayAreaId(null);
+      setOpeningSideLabel("");
+      setPickedRowId("");
+      commitPart(row.id, row.name, row.positionAware);
+    }, 600);
+  }
+
   function startVoiceSearch() {
     if (typeof window === "undefined") return;
     const Ctor = (window as unknown as { SpeechRecognition?: SpeechRecognitionCtor; webkitSpeechRecognition?: SpeechRecognitionCtor }).SpeechRecognition
@@ -163,13 +186,14 @@ export function PartStep({
     recognition.start();
   }
 
-  const activeArea = data.areas.find((a) => a.id === selectedAreaId) || data.areas[0];
+  const vehicleDescriptor = data.vehicleLabel.startsWith("2019")
+    ? data.vehicleLabel
+    : `2019 ${data.vehicleLabel}`;
 
   return (
     <div>
       <Fp3Screen
         data={data}
-        activeArea={activeArea}
         actions={{
           onBack,
           onNext: advanceNext,
@@ -177,19 +201,71 @@ export function PartStep({
           nextHint: data.nextHint,
           onPickPart: selectPart,
           onPickProblem: (id, name, positionAware) => commitPart(id, name, positionAware),
-          onSelectArea: (id) => setSelectedAreaId(id),
-          onSelectSubChip: (chipId, name, positionAware) => selectPart(chipId, name, positionAware),
-          onToggleSymptom: (id) => setOpenSymptomId((prev) => (prev === id ? "" : id)),
+          onOpenArea: (id) => {
+            setOverlayAreaId(id);
+            setExpandedNotOnFileId("");
+          },
+          onChangePart: () => {
+            const sys = browseData?.systems?.find((s) => s.components?.some((c) => c.id === selectedChipId));
+            setOverlayAreaId(sys?.id || data.areas[0]?.id || null);
+          },
           onSearchChange: setSearchQuery,
           onSearchClear: () => setSearchQuery(""),
           onSearchHit: (id, name, positionAware) => commitPart(id, name, positionAware),
           onStartVoiceSearch: startVoiceSearch,
           searchQuery,
-          selectedAreaId: selectedAreaId || activeArea?.id || "",
-          openSymptomId,
+          selectedChipId,
           speechSupported: speechSupported(),
         }}
       />
+      {overlayData && overlayAreaId ? (
+        <>
+          <Fp3AreaOverlay
+            data={overlayData}
+            sheet={false}
+            actions={{
+              onClose: () => setOverlayAreaId(null),
+              onPickRow: pickFromOverlay,
+              onAskRoam: (row) => {
+                setOverlayAreaId(null);
+                onAskRoam(row.id, row.name);
+              },
+              onExpandNotOnFile: (id) => {
+                setExpandedNotOnFileId(id);
+                setFocusedRowId(id);
+              },
+              onCollapseNotOnFile: () => setExpandedNotOnFileId(""),
+              vehicleDescriptor,
+              focusedRowId,
+              onFocusRow: setFocusedRowId,
+              pickedRowId,
+              openingSideLabel,
+            }}
+          />
+          <Fp3AreaOverlay
+            data={overlayData}
+            sheet
+            actions={{
+              onClose: () => setOverlayAreaId(null),
+              onPickRow: pickFromOverlay,
+              onAskRoam: (row) => {
+                setOverlayAreaId(null);
+                onAskRoam(row.id, row.name);
+              },
+              onExpandNotOnFile: (id) => {
+                setExpandedNotOnFileId(id);
+                setFocusedRowId(id);
+              },
+              onCollapseNotOnFile: () => setExpandedNotOnFileId(""),
+              vehicleDescriptor,
+              focusedRowId,
+              onFocusRow: setFocusedRowId,
+              pickedRowId,
+              openingSideLabel,
+            }}
+          />
+        </>
+      ) : null}
     </div>
   );
 }

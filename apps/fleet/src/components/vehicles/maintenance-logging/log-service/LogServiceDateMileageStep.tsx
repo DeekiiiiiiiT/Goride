@@ -1,7 +1,15 @@
 import React from "react";
-import { Calendar, Info } from "lucide-react";
+import { AlertTriangle, Calendar, Info, Loader2 } from "lucide-react";
 import { LOG_SERVICE_COPY } from "./logServiceCopy";
 import { formatMaintenanceDisplayDate } from "../../../../utils/maintenanceDisplayFormat";
+
+export type OdometerCheckResult = {
+  expected: number | null;
+  before: { reading: number; recordedAt: string; sourceLabel: string } | null;
+  after: { reading: number; recordedAt: string; sourceLabel: string } | null;
+  isAnomaly: boolean;
+  anomalyReason: string | null;
+};
 
 export type LogServiceDateMileageStepProps = {
   date: string;
@@ -11,7 +19,19 @@ export type LogServiceDateMileageStepProps = {
   lastTrustedReading?: number | null;
   lastTrustedMeta?: string | null;
   showOdometerError?: boolean;
+  checkLoading?: boolean;
+  checkResult?: OdometerCheckResult | null;
+  anomalyAcknowledged?: boolean;
+  onAcknowledgeAnomaly?: () => void;
 };
+
+function formatNeighborLine(
+  neighbor: { reading: number; recordedAt: string; sourceLabel: string } | null,
+): string | null {
+  if (!neighbor) return null;
+  const d = formatMaintenanceDisplayDate(neighbor.recordedAt.slice(0, 10));
+  return `${d}: ${neighbor.reading.toLocaleString()} km (${neighbor.sourceLabel})`;
+}
 
 export function LogServiceDateMileageStep({
   date,
@@ -21,9 +41,15 @@ export function LogServiceDateMileageStep({
   lastTrustedReading,
   lastTrustedMeta,
   showOdometerError,
+  checkLoading,
+  checkResult,
+  anomalyAcknowledged,
+  onAcknowledgeAnomaly,
 }: LogServiceDateMileageStepProps) {
   const displayDate = date ? formatMaintenanceDisplayDate(date) : "";
   const odoEmpty = !odometer || odometer <= 0;
+  const showAnomaly =
+    checkResult?.isAnomaly === true && !anomalyAcknowledged && !odoEmpty && Boolean(date);
 
   return (
     <div className="flex flex-col gap-6">
@@ -71,15 +97,27 @@ export function LogServiceDateMileageStep({
               value={odometer || ""}
               onChange={(e) => onOdometerChange(Number(e.target.value) || 0)}
               className={`w-full h-9 bg-surface-container-lowest text-on-surface font-mono text-sm pl-10 pr-3 rounded-lg shadow-sm text-right focus:outline-none focus:ring-1 focus:ring-primary ${
-                showOdometerError || odoEmpty ? "ring-2 ring-error bg-error-container/20" : ""
+                showAnomaly
+                  ? "ring-1 ring-tertiary-container font-bold"
+                  : showOdometerError || odoEmpty
+                    ? "ring-2 ring-error bg-error-container/20"
+                    : ""
               }`}
               placeholder="e.g. 195,192"
             />
+            {checkLoading ? (
+              <Loader2 className="absolute right-2 w-4 h-4 animate-spin text-secondary" />
+            ) : null}
           </div>
           {showOdometerError || odoEmpty ? (
             <div className="flex items-center gap-1 text-error">
               <span className="text-xs font-semibold">{LOG_SERVICE_COPY.odometerRequired}</span>
             </div>
+          ) : checkResult?.expected != null && showAnomaly ? (
+            <p className="text-xs text-secondary mt-0.5">
+              {LOG_SERVICE_COPY.expectedReadingPrefix}
+              {checkResult.expected.toLocaleString()} km for this time period
+            </p>
           ) : lastTrustedReading != null && lastTrustedReading > 0 ? (
             <p className="text-xs text-secondary mt-0.5">
               Last trusted reading {lastTrustedReading.toLocaleString()} km
@@ -88,6 +126,48 @@ export function LogServiceDateMileageStep({
           ) : null}
         </div>
       </div>
+
+      {showAnomaly ? (
+        <div className="p-4 bg-tertiary-fixed rounded-xl flex flex-col gap-3 shadow-sm">
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 rounded-full bg-tertiary-container flex items-center justify-center shrink-0">
+              <AlertTriangle className="w-5 h-5 text-on-tertiary" />
+            </div>
+            <div className="flex flex-col gap-1 min-w-0">
+              <span className="text-base font-bold text-on-tertiary-fixed">
+                {LOG_SERVICE_COPY.checkReadingTitle}
+              </span>
+              <p className="text-sm text-on-tertiary-fixed-variant leading-relaxed">
+                {LOG_SERVICE_COPY.checkReadingBody}
+              </p>
+              {(formatNeighborLine(checkResult?.before ?? null) ||
+                formatNeighborLine(checkResult?.after ?? null)) && (
+                <span className="font-mono text-xs font-semibold text-on-tertiary-fixed block mt-1">
+                  {[formatNeighborLine(checkResult?.before ?? null), formatNeighborLine(checkResult?.after ?? null)]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-3 pt-1 pl-11 flex-wrap">
+            <button
+              type="button"
+              className="px-4 py-1.5 rounded-lg bg-surface-container-lowest text-on-surface text-sm font-semibold shadow-sm hover:bg-surface-container transition-colors"
+              onClick={() => document.getElementById("svc-odo")?.focus()}
+            >
+              {LOG_SERVICE_COPY.fixReadingLabel}
+            </button>
+            <button
+              type="button"
+              className="px-4 py-1.5 rounded-lg bg-tertiary-container text-on-tertiary text-sm font-medium hover:opacity-90 transition-opacity"
+              onClick={() => onAcknowledgeAnomaly?.()}
+            >
+              {LOG_SERVICE_COPY.keepReadingLabel}
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       <div className="p-4 bg-surface-container rounded-lg flex items-start gap-4">
         <Info className="w-[18px] h-[18px] text-secondary shrink-0 mt-0.5" />

@@ -66,6 +66,15 @@ export function fleetAuthSession() {
   };
 }
 
+/** Supabase storage key varies with VITE_SUPABASE_URL — seed common keys for local + CI. */
+export async function seedFleetAuthSession(page: Page, session: ReturnType<typeof fleetAuthSession>) {
+  await page.addInitScript((stored) => {
+    const payload = JSON.stringify(stored);
+    localStorage.setItem("sb-example-auth-token", payload);
+    localStorage.setItem("sb-csfllzzastacofsvcdsc-auth-token", payload);
+  }, session);
+}
+
 export function fleetCorePartsFixtures(cars: FleetCar[] = []) {
   const vehicle = findPartsFixtureVehicle;
   return {

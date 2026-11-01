@@ -2,6 +2,7 @@
  * Shared read of the parts browser. Dominion and Fleet both call these.
  */
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
+import { readComponentListingHints } from "./parts_find_parts_overlay_meta.ts";
 
 export function shapeBrowse(rows: Array<Record<string, unknown>>) {
   const parts = rows.filter((row) => row.is_part !== false);
@@ -18,19 +19,29 @@ export function shapeBrowse(rows: Array<Record<string, unknown>>) {
           id: row.id,
           plainName: row.plain_name || row.name,
           positionAware: Boolean(row.position_aware),
+          opCode: row.op_code ? String(row.op_code) : null,
+          description: row.description ? String(row.description).trim() : null,
+          iconKey: row.icon_key ? String(row.icon_key) : null,
         })),
     })),
     common: parts
       .filter((row) => Number(row.common_rank) >= 1 && Number(row.common_rank) <= 8)
       .sort((a, b) => Number(a.common_rank) - Number(b.common_rank))
-      .map((row) => ({ id: row.id, plainName: row.plain_name || row.name })),
+      .map((row) => ({
+        id: row.id,
+        plainName: row.plain_name || row.name,
+        positionAware: Boolean(row.position_aware),
+        opCode: row.op_code ? String(row.op_code) : null,
+        description: row.description ? String(row.description).trim() : null,
+        iconKey: row.icon_key ? String(row.icon_key) : null,
+      })),
   };
 }
 
 export async function readPartsBrowse(supabase: SupabaseClient) {
   const { data, error } = await supabase
     .from("maintenance_service_categories")
-    .select("id, name, plain_name, icon_key, parent_id, is_part, common_rank, position_aware, kind")
+    .select("id, name, plain_name, icon_key, parent_id, is_part, common_rank, position_aware, kind, op_code, description")
     .order("name");
   if (error) throw error;
   return shapeBrowse((data || []) as Array<Record<string, unknown>>);
@@ -78,7 +89,21 @@ export async function readPartsBrowseForVariant(supabase: SupabaseClient, varian
   const browse = await readPartsBrowse(supabase);
   if (!variantId) return browse;
   const coverage = await readFindPartsCoverage(supabase, variantId);
-  return mergeBrowseCoverage(browse, coverage.areas);
+  const merged = mergeBrowseCoverage(browse, coverage.areas);
+  const componentIds = merged.systems.flatMap((s) => s.components.map((c) => c.id));
+  const hints = await readComponentListingHints(supabase, variantId, componentIds);
+  const systems = merged.systems.map((system) => ({
+    ...system,
+    components: system.components.map((row) => {
+      const hint = hints.get(row.id);
+      return {
+        ...row,
+        bestOemPartNumber: hint?.oemPartNumber ?? null,
+        bestListingPosition: hint?.position ?? null,
+      };
+    }),
+  }));
+  return { ...merged, systems };
 }
 
 export type TermComponent = { id: string; name?: string | null; plain_name?: string | null };

@@ -2900,6 +2900,54 @@ export const api = {
     return response.json() as Promise<{ items: Array<Record<string, unknown>>; page: number; total: number }>;
   },
 
+  async checkMaintenanceOdometer(input: {
+    vehicleId: string;
+    date: string;
+    reading: number;
+  }) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetOps}/maintenance/odometer/check`, {
+      method: "POST",
+      headers: await getHeaders(),
+      body: JSON.stringify(input),
+    });
+    if (!response.ok) throw new Error("Failed to check odometer reading");
+    return response.json() as Promise<{
+      expected: number | null;
+      before: { reading: number; recordedAt: string; sourceLabel: string } | null;
+      after: { reading: number; recordedAt: string; sourceLabel: string } | null;
+      isAnomaly: boolean;
+      anomalyReason: string | null;
+    }>;
+  },
+
+  async getLogServiceContext(vehicleId: string) {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fleetOps}/maintenance/log-service-context/${encodeURIComponent(vehicleId)}`,
+      { headers: await getHeaders(null) },
+    );
+    if (!response.ok) throw new Error("Failed to fetch log service context");
+    return response.json() as Promise<{
+      vehicleId: string;
+      odometer: number;
+      packages: Array<{
+        templateId: string;
+        label: string;
+        intervalText: string | null;
+        status: "overdue" | "due_soon" | "ok" | "mandatory";
+        kmLabel: string | null;
+        sortScore: number;
+      }>;
+      suggestedOperations: Array<{
+        categoryId: string;
+        categoryName: string;
+        systemName: string | null;
+        iconKey: string | null;
+        status: "overdue" | "due_soon";
+      }>;
+      inspectionPointCount: number;
+    }>;
+  },
+
   async getMaintenanceOdometerHistory(vehicleId: string, filters?: { source?: string; flagged?: boolean }) {
     const qs = new URLSearchParams();
     if (filters?.source) qs.set("source", filters.source);

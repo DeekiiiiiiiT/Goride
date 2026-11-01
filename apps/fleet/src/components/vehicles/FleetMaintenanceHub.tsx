@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Loader2, Wrench, Car, History } from "lucide-react";
+import { useAuth } from "../auth/AuthContext";
+import { Loader2, Wrench, Car, History, Package } from "lucide-react";
 import { api } from "../../services/api";
 import { Button } from "../ui/button";
 import {
@@ -107,6 +108,7 @@ function fleetOrgDisplayName(): string | undefined {
 }
 
 export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
+  const { user } = useAuth();
   const { can } = usePermissions();
   const canViewParts = can("vehicles.view");
   const orgName = fleetOrgDisplayName();
@@ -607,6 +609,7 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
           defaultOdo={defaultOdoForLog}
           vehicleStrip={logVehicleStrip}
           initialLog={initialLogForComplete}
+          draftUserId={user?.id}
           onSaved={handleLogSaved}
         />
       ) : null}

@@ -1,47 +1,37 @@
 # RoamFleet Maintenance Logging — Audit
 
-**Rev 8 · 1 Nov 2026 (04:50 UTC)** · Closure pass complete.
-**Scope:** logging only (Log service dialog, odometer, what a save updates, nightly check, Overview / Service history). The full system is in `fleet-maintenance-enterprise-audit.md`.
-**Checked:** working tree, live DB, deployed `fleet-ops` (post–closure deploy + smoke).
+**Rev 10 · 1 Nov 2026** · Closes open items from Rev 9 (commit `07227be9` hygiene + follow-up implementation).
+**Scope:** logging only. The full system is in `fleet-maintenance-enterprise-audit.md`.
 
-**Status:** Rev 7 open items **P-01 through P-06 closed** below. Verify: **2** rows in `fleet.maintenance_job_runs` (manual 03:29 UTC + nightly RPC 04:50 UTC); pg_cron **07:00 UTC** run still expected daily.
-
----
-
-## Closed (Rev 7 → Rev 8)
-
-### P-01 · Log service wizard (Stitch steps 1–4) — Done
-- Shared chrome: `LogServiceWizardChrome` (header, car strip, 4-step bar).
-- Steps own markup: `LogServiceDateMileageStep`, `LogServiceWhatWasDoneStep`, `LogServiceLineDetailsStep`, `LogServiceReviewStep`.
-- `LogMaintenanceServiceDialog` = state + save + sub-flows only; hub passes `vehicleStrip`.
-
-### P-02 · Deploy server — Done
-- `npm run deploy:fleet-ops`; bundle has no `maintenance-fleet-bootstrap`; smoke passed.
-
-### P-03 · Migration repo sync — Done
-- Replaced `20261105010000_…` with production versions `20261101043001`, `…43006`, `…43015`.
-- Policy: [docs/supabase-migrations-maintenance-logging.md](./supabase-migrations-maintenance-logging.md).
-
-### P-04 · Jamaica Today/Tomorrow — Done
-- `formatMaintenanceScheduledDate` uses `America/Jamaica`; tests in `maintenanceDisplayFormat.test.ts`.
-
-### P-05 · Tire Change interval — Done (data)
-- Live: `maintenance_service_categories.tires` and linked templates set to **40,000 km / 36 months**; recompute for Roomy (`5179KZ`). Due km for tires now reflects 40k interval (duplicate tire rows on schedule still worth a later cleanup).
-
-### P-06 · Commit — Done
-- Maintenance-only commit on current branch (excludes unrelated find-parts work).
+**Status:** Q-01 through Q-03 addressed in code/docs. Q-03 cron job **`fleet-maintenance-nightly`** is registered (`0 7 * * *`, active); first automatic run after **07:00 UTC 1 Nov** should appear in `fleet.maintenance_job_runs` (manual runs at 03:29 and 04:50 UTC precede it).
 
 ---
 
-## Live data (1 Nov 04:50 UTC)
+## Fixed in Rev 10
+
+### Q-01 · Log service dialog Stitch parity
+- **API:** `POST /maintenance/odometer/check`, `GET /maintenance/log-service-context/:vehicleId` ([`docs/maintenance-logging-api.md`](maintenance-logging-api.md)).
+- **Step 1:** Debounced odometer check, amber “Check reading” panel, acknowledge gate.
+- **Step 2:** Search, suggested operations, package overdue/km labels, inspection point chip, component copy.
+- **Step 3:** Multi-line cards, bay session in header, mechanic note / WO ref, subtotal strip.
+- **Step 4:** Discard draft, Stitch review copy; bay session moved off review.
+- **Draft:** `localStorage` per user + vehicle; cleared on save or discard.
+- **Pickers:** System/component tiles use M3 surface tokens (no slate/indigo blocks).
+
+*Done when:* each step screenshots next to Stitch `screen.png` (PO sign-off in browser).
+
+### Q-02 · Maintenance-only commit
+- Landed in **`07227be9`** (hub KPIs, nightly line, overdue helpers, closure migrations `20261101040004`–`40444`). Find-parts work excluded.
+
+### Q-03 · Nightly cron
+- Live: `SELECT … FROM cron.job WHERE jobname = 'fleet-maintenance-nightly'` → schedule **`0 7 * * *`**, **active = true**.
+- Verify after 07:00 UTC: new row in `fleet.maintenance_job_runs` with `started_at` ~07:00 (not 03:29/04:50 manual tests).
+
+---
+
+## Live data (Rev 9 snapshot, unchanged)
 | Item | Value |
 |---|---|
-| Roomy `5179KZ` | Tire due uses 40k interval; recompute run ✓ |
-| Nightly | 2 job runs (03:29 manual, 04:50 RPC verify) |
-| fleet-ops | Deployed; bootstrap route removed from bundle |
-
----
-
-## Verify (ongoing)
-- **Screens 2–12:** side-by-side with Stitch `screen.png` after hub reload (wizard re-screenshot).
-- **Cron:** confirm automatic **07:00 UTC** row appears (in addition to manual/RPC runs).
+| Roomy `5179KZ` | overdue: oil & filter 68,240 km · air + cabin filter 63,240 · tire change ×2 32,192 (next 163,000) · 8 no record |
+| Fit `1505LM` | odometer needed ✓ |
+| Nightly | Cron scheduled; await first 07:00 UTC automatic run |

@@ -14,6 +14,10 @@ const htmlFiles = [
   'find-parts-car.html',
   'find-parts-variant.html',
   'find-parts-states.html',
+  'find-parts-area-overlay.html',
+  'find-parts-area-overlay-states.html',
+  'find-parts-area-not-on-file.html',
+  'find-parts-phone-area-sheet.html',
 ];
 
 const configs = htmlFiles.map((f) => parseTailwindConfigFromHtml(join(htmlDir, f)));

@@ -9,6 +9,7 @@ import { filterByOrg, getOrgId } from "./org_scope.ts";
 import { resolveCatalogIdForKvVehicle } from "./vehicle_catalog_resolve.ts";
 import { findParts } from "./parts_finder.ts";
 import { readPartTerm, readPartsBrowseForVariant, readSymptoms } from "./parts_catalog_read.ts";
+import { readCatalogAddAvgMinutes, readComponentListingHints } from "./parts_find_parts_overlay_meta.ts";
 import { canonicalOdometerForVehicle } from "./canonical_vehicle_odometer.ts";
 import { analyzeMaintenanceScheduleRow } from "../../../packages/finance-core/src/maintenanceOverdueDetails.ts";
 import { upsertPendingFromKvVehicle } from "./vehicle_catalog_pending_queries.ts";
@@ -333,11 +334,13 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
       const vehicle = access.vehicle!;
       const extras = await loadVehiclePartsContextExtras(supabase, orgId, vehicleId, vehicle as Record<string, unknown>);
       const catalogId = (await resolveCatalogIdForKvVehicle(supabase, vehicle)) || "";
+      const catalogAddAvgMinutes = await readCatalogAddAvgMinutes(supabase, orgId);
       return c.json({
         label: extras.label,
         plate: extras.plate,
         version: extras.trim || extras.variant,
         variantId: catalogId || null,
+        catalogAddAvgMinutes,
         specs: {
           trim_series: extras.trim_series,
           engine_code: extras.engine_code,

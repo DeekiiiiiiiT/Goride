@@ -8,7 +8,6 @@ const MOVE_PREFIXES = [
   "maintenance-logs",
   "maintenance-schedule",
   "maintenance-fleet-summary",
-  "maintenance-fleet-bootstrap",
   "toll-plazas",
   "toll-tags",
   "odometer-history",

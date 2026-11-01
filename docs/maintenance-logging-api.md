@@ -39,6 +39,21 @@ Completed work-order lines from `maintenance_service_history_v`. Filters: `vehic
 
 Trusted readings. Query: `source`, `flagged=true`.
 
+### `GET /maintenance/log-service-context/:vehicleId`
+
+Log service wizard context for one vehicle: sorted **packages** (template id, label, interval, status, km label), **suggestedOperations** (due components), **inspectionPointCount**.
+
+### `POST /maintenance/odometer/check`
+
+Pre-save odometer sanity check for the log-service wizard.
+
+Body: `{ vehicleId, date, reading }` where `date` is service date `YYYY-MM-DD`. Server maps to `recorded_at = ${date}T12:00:00.000Z` (same as `completeNow`).
+
+Response: `{ expected, before, after, isAnomaly, anomalyReason? }`
+
+- `before` / `after`: `{ reading, recordedAt, sourceLabel } | null` from trusted neighbor readings.
+- `expected`: linear interpolation between neighbors at service time; if only one neighbor, that reading; prefixed with `~` in UI.
+
 ### `POST /maintenance/odometer/:id/accept`
 
 Clears anomaly; sets verifier fields.
