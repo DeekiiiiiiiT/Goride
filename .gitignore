@@ -100,3 +100,5 @@ supabase/functions/fleet-core/index.ts
 
 # Ephemeral prod migration export (scripts/decode-prod-b64-export.mjs)
 scripts/tmp-migrations/
+scripts/.fp-replay*.json
+scripts/mismatch-versions.json

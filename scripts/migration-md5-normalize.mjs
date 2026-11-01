@@ -8,12 +8,17 @@ export const MIGRATION_SYNC_VERSION_MIN = '20261029140000';
 export const MIGRATION_SYNC_VERSION_MAX = '20261101190448';
 
 /** Prod recorded placeholder-only rows; keep repo file as-is. */
+/** Replay guard — repo body differs from prod on purpose (safe empty-DB replay). */
 export const MIGRATION_SYNC_SKIP_VERSIONS = new Set([
   '20261030022441',
   '20261031000834',
   '20261101032731',
   '20261101172128',
   '20261101174625',
+  '20261029210000',
+  '20261101181057',
+  '20261101181109',
+  '20261101181112',
 ]);
 
 export function normalizeMigrationSqlForMd5(sql) {

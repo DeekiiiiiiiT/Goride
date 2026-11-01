@@ -4,6 +4,10 @@ DECLARE
   v_mount uuid := 'ca661367-4e4e-4d2a-9cfb-774ae21c4120';
   v_vehicle_loc uuid := 'b62780a6-c9b8-4de3-8bff-3ce1e55faea3';
 BEGIN
+  IF NOT EXISTS (SELECT 1 FROM fleet.inv_item WHERE id = v_mount) THEN
+    RETURN;
+  END IF;
+
   DELETE FROM fleet.inv_balance b
   WHERE b.organization_id = v_org
     AND b.item_id = v_mount

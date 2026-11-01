@@ -5,4 +5,6 @@ WHERE NOT EXISTS (
   WHERE b.organization_id = '8cfa606a-f6ea-4ccb-a2b2-1d2cc323a823'
     AND b.item_id = '5129bef3-8bab-4793-b84d-fa62f9557c5e'
     AND b.location_id = 'b62780a6-c9b8-4de3-8bff-3ce1e55faea3'
-);;
+)
+  AND EXISTS (SELECT 1 FROM fleet.inv_item WHERE id = '5129bef3-8bab-4793-b84d-fa62f9557c5e')
+  AND EXISTS (SELECT 1 FROM fleet.inv_location WHERE id = 'b62780a6-c9b8-4de3-8bff-3ce1e55faea3');;
