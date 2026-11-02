@@ -7,7 +7,7 @@ Capture side-by-side screenshots after staging sign-off:
 
 Run `node scripts/stitch-fidelity.mjs --report` before committing proof assets.
 
-**Status:** R23 — gap modals wired and CI gates green; run signed-in capture after deploy:
+**Status:** R25 — assert + typecheck green; fleet-core deployed. **R15-01:** refresh `playwright/.auth/fleet.json` (file not in repo), then run capture below.
 
 ```bash
 # Fleet + Driver dev with phase2 / car kit, then:
