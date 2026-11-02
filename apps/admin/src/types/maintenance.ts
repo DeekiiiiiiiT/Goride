@@ -65,6 +65,8 @@ export interface MaintenanceServiceCategory {
   /** Fallback interval when component is not in a package. */
   default_interval_miles?: number | null;
   default_interval_months?: number | null;
+  /** Optional long-form copy for admin category editor. */
+  description?: string | null;
   created_at: string;
   updated_at: string;
   /** Populated when listing tree. */

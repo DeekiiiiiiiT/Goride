@@ -52,7 +52,7 @@ export function DkUpdateReportedItemSheet({
   const issueLabel = report.issue ?? 'Missing';
   const urgentSafety =
     /warning triangle|safety|emergency/i.test(itemLabel) || /missing|safety/i.test(issueLabel);
-  const plateLabel = report.reportNo ? report.reportNo.replace(/^#?/i, '') : '5179KZ';
+  const plateLabel = report.reportNo ? report.reportNo.replace(/^#?/i, '') : '';
 
   return (
     <div className="driver-car-kit-stitch fixed inset-0 z-[60] flex flex-col justify-end bg-inverse-surface/65 backdrop-blur-[2px]">
@@ -185,9 +185,11 @@ export function DkUpdateReportedItemSheet({
                         Sent → Seen by fleet
                       </span>
                     </div>
-                    <span className="font-label-code text-label-code text-xs font-bold text-outline">
-                      {plateLabel}
-                    </span>
+                    {plateLabel ? (
+                      <span className="font-label-code text-label-code text-xs font-bold text-outline">
+                        {plateLabel}
+                      </span>
+                    ) : null}
                   </div>
                   {report.fleetReply ? (
                     <div className="flex items-start gap-space-sm rounded-xl bg-surface-container-low p-space-sm">

@@ -98,16 +98,16 @@ export function PendingResearchJobPanel({
           {proposal ? (
             <div className="space-y-2 rounded-lg border border-surface-variant bg-surface-container-lowest p-3">
               <div className="font-body-sm text-body-sm font-semibold text-on-surface">
-                {proposal.part_number || "—"} · {proposal.brand || "—"}
+                {String(proposal.part_number || "—")} · {String(proposal.brand || "—")}
               </div>
               <div className="font-caption text-caption text-on-surface-variant">
                 Route: {String(proposal.route || "—")}
                 {shadowWouldAuto ? " · would auto-add in live mode" : ""}
               </div>
               <ul className="max-h-24 overflow-y-auto font-mono-sm text-[10px] text-on-surface-variant">
-                {(proposal.sources || []).slice(0, 5).map((s, i) => (
+                {((proposal.sources as Array<{ url?: string }> | undefined) ?? []).slice(0, 5).map((s, i) => (
                   <li key={i} className="truncate">
-                    {(s as { url?: string }).url || "—"}
+                    {s.url || "—"}
                   </li>
                 ))}
               </ul>

@@ -3,10 +3,8 @@ import { toast } from "sonner";
 import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
 import { Label } from "../../ui/label";
-import { Textarea } from "../../ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../ui/table";
 import { partsEnterpriseApi } from "../../../services/partSourcingService";
-import { parsePartsCatalogCsv } from "@roam/types/partsCatalogCsvImport";
 
 function itemsOf(data: Record<string, unknown> | null): Record<string, unknown>[] {
   const items = data?.items;
@@ -118,49 +116,6 @@ export function PartsGroupsPanel({ token }: { token: string }) {
           </TableBody>
         </Table>
       </div>
-    </div>
-  );
-}
-
-export function PartsImportPanel({ token }: { token: string }) {
-  const [text, setText] = useState("interchange_code,manufacturer,part_number,part_name,part_kind,fit_scope,target_kind,target_code,component_op_code,category_slug,supersedes\n");
-  const [batchId, setBatchId] = useState("");
-  const [message, setMessage] = useState("");
-
-  return (
-    <div className="space-y-3">
-      <p className="text-sm text-slate-500">Paste real part numbers only. The importer will not invent OEM numbers.</p>
-      <Textarea className="min-h-[160px] font-mono text-xs" value={text} onChange={(e) => setText(e.target.value)} />
-      <div className="flex gap-2">
-        <Button type="button" onClick={async () => {
-          const parsed = parsePartsCatalogCsv(text);
-          if (parsed.errors.length) {
-            setMessage(parsed.errors.slice(0, 5).join(" "));
-            return;
-          }
-          if (!parsed.rows.length) {
-            setMessage("No rows to import.");
-            return;
-          }
-          try {
-            const result = await partsEnterpriseApi.importRows(token, parsed.rows);
-            const body = result.result as { batchId?: string; applied?: number; errors?: string[] } | undefined;
-            setBatchId(body?.batchId ?? "");
-            setMessage(`Imported ${body?.applied ?? 0}. ${(body?.errors ?? []).join(" ")}`);
-          } catch (err) {
-            setMessage(err instanceof Error ? err.message : "Import failed");
-          }
-        }}>Import</Button>
-        <Button type="button" variant="outline" disabled={!batchId} onClick={async () => {
-          try {
-            await partsEnterpriseApi.undoImport(token, batchId);
-            setMessage("Last import removed.");
-          } catch (err) {
-            setMessage(err instanceof Error ? err.message : "Undo failed");
-          }
-        }}>Undo last import</Button>
-      </div>
-      {message ? <p className="text-sm">{message}</p> : null}
     </div>
   );
 }

@@ -23,7 +23,7 @@ import {
   updatePartMaster,
   partsEnterpriseApi,
 } from "../../../services/partSourcingService";
-import { PartsGroupsPanel, PartsImportPanel } from "./PartsEnterprisePanels";
+import { PartsGroupsPanel } from "./PartsEnterprisePanels";
 import type {
   PartCategoryRecord,
   PartFitmentRecord,
@@ -91,7 +91,7 @@ const adminTableWrap = cn(
   "dark:border-slate-700 dark:bg-slate-900/90",
 );
 
-type MainTab = "categories" | "parts" | "suppliers" | "fitment" | "offers" | "groups" | "import";
+type MainTab = "categories" | "parts" | "suppliers" | "fitment" | "offers" | "groups";
 type Area = "catalog" | "vehicles" | "supply" | "queue";
 
 export function PartsSourcingManager({ mode = "catalog" }: { mode?: "catalog" | "supply" }) {
@@ -496,9 +496,6 @@ export function PartsSourcingManager({ mode = "catalog" }: { mode?: "catalog" | 
           <TabsTrigger value="groups" className={area === "catalog" ? "gap-1.5 data-[state=active]:bg-amber-500/20" : "hidden"}>
             Groups
           </TabsTrigger>
-          <TabsTrigger value="import" className={area === "catalog" ? "gap-1.5 data-[state=active]:bg-amber-500/20" : "hidden"}>
-            Import
-          </TabsTrigger>
           <TabsTrigger value="categories" className={area === "catalog" ? "gap-1.5 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-950 dark:data-[state=active]:text-amber-50" : "hidden"}>
             <Tags className="w-4 h-4" />
             Categories
@@ -878,9 +875,6 @@ export function PartsSourcingManager({ mode = "catalog" }: { mode?: "catalog" | 
 
         <TabsContent value="groups" className="mt-4">
           {token ? <PartsGroupsPanel token={token} /> : null}
-        </TabsContent>
-        <TabsContent value="import" className="mt-4">
-          {token ? <PartsImportPanel token={token} /> : null}
         </TabsContent>
       </Tabs>
 

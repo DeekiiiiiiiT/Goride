@@ -169,8 +169,16 @@ BEGIN
     RAISE EXCEPTION 'Import must write a pending listing';
   END IF;
 
-  INSERT INTO public.org_part_stock (organization_id, part_id, qty)
-  VALUES ('rev2-org', '66666666-6666-4666-8666-666666666666', 5);
+  INSERT INTO fleet.inv_location (id, organization_id, code, name, kind)
+  VALUES ('66666666-6666-4666-8666-666666666601', 'rev2-org', 'REV2-SHELF', 'Rev2 shelf', 'warehouse')
+  ON CONFLICT (id) DO NOTHING;
+  INSERT INTO fleet.inv_item (id, organization_id, sku, name, part_master_id)
+  VALUES ('66666666-6666-4666-8666-666666666602', 'rev2-org', 'REV2-OIL-1', 'Rev2 oil filter', '66666666-6666-4666-8666-666666666666')
+  ON CONFLICT (id) DO NOTHING;
+  PERFORM fleet.inv_opening_balance('rev2-org', jsonb_build_array(jsonb_build_object(
+    'item_id', '66666666-6666-4666-8666-666666666602',
+    'location_id', '66666666-6666-4666-8666-666666666601',
+    'qty', 5, 'unit_cost', 100)), 'rev2-opening');
 
   INSERT INTO public.maintenance_work_orders (id, organization_id, vehicle_id, status, closed_at, odometer)
   VALUES (wo1, 'rev2-org', 'rev2-veh', 'completed', now(), 1000);
