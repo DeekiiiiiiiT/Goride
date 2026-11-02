@@ -1,8 +1,10 @@
 /** Ported from Stitch — do not simplify layout (audit §0.4). */
+import { useIn5IssueForm } from './hooks/useIn5IssueForm';
 import { useInventoryLive } from '../inventoryLive';
 import { useInventoryShell } from '../InventoryShellContext';
 import { formatPlate, itemLabelById, numField, strField } from '../inventoryData';
 export function In5IssueDialog() {
+  const form = useIn5IssueForm();
   const shell = useInventoryShell();
   const live = useInventoryLive(shell);
   const issueLines = shell.kitComplianceRows.filter((row) => {
@@ -23,7 +25,7 @@ export function In5IssueDialog() {
       </div>
       <div className="bg-surface-container-lowest p-space-lg rounded-xl shadow-sm">
       <div className="font-caption text-caption text-secondary uppercase tracking-wider mb-1">Storeroom Reserve</div>
-      <div className="font-label-price text-headline-lg text-on-surface">J$ 1,482,900</div>
+      <div className="font-label-price text-headline-lg text-on-surface">{form.storeReserveLabel}</div>
       <div className="font-body-sm text-body-sm text-on-surface-variant mt-1">Main Store — {live.hubName}</div>
       </div>
       <div className="bg-surface-container-lowest p-space-lg rounded-xl shadow-sm">
@@ -34,7 +36,7 @@ export function In5IssueDialog() {
       <div className="bg-surface-container-lowest p-space-lg rounded-xl shadow-sm">
       <div className="font-caption text-caption text-secondary uppercase tracking-wider mb-1">SKU Stockouts</div>
       <div className="font-label-price text-headline-lg text-error">7 line items</div>
-      <div className="font-body-sm text-body-sm text-on-surface-variant mt-1">PO-2025-084 in transit from Montego Bay</div>
+      <div className="font-body-sm text-body-sm text-on-surface-variant mt-1">{live.lowStockLabel}</div>
       </div>
       </div>
 
@@ -135,7 +137,7 @@ export function In5IssueDialog() {
       <span className="text-caption text-on-surface-variant">(Roomy · 70%)</span>
       </div>
       </div>
-      <button type="button" className="font-caption text-caption text-primary hover:underline font-semibold whitespace-nowrap self-end md:self-auto">
+      <button type="button" className="font-caption text-caption text-primary hover:underline font-semibold whitespace-nowrap self-end md:self-auto" onClick={() => form.editCarsOrItems()}>
                   Edit cars or items
                 </button>
       </div>
@@ -145,15 +147,17 @@ export function In5IssueDialog() {
       <span className="material-symbols-outlined text-[20px] text-on-tertiary-fixed-variant mt-0.5" style={{ fontVariationSettings: "'FILL' 1" }}>warning</span>
       <div>
       <div className="font-body-md text-body-md font-semibold text-on-tertiary-fixed">
-                      Can issue 1 of 11 items now. 10 are short in store.
+                      {form.shortCount > 0
+                        ? `${form.shortCount} item${form.shortCount === 1 ? '' : 's'} short in store.`
+                        : 'All requested items appear available in store.'}
                     </div>
       <p className="font-body-sm text-body-sm text-on-tertiary-fixed-variant mt-0.5">
                       Only the dashboard mount is currently stocked in Kingston Main Hub. Cabs will remain in incomplete kit state until restocked.
                     </p>
       </div>
       </div>
-      <button type="button" className="font-caption text-caption font-bold text-on-tertiary-fixed-variant hover:text-on-tertiary-fixed bg-surface-container-lowest px-space-md py-1.5 rounded-lg whitespace-nowrap shadow-sm hover:shadow transition-all flex items-center gap-1 shrink-0">
-      <span>Create draft order for 10 short items</span>
+      <button type="button" className="font-caption text-caption font-bold text-on-tertiary-fixed-variant hover:text-on-tertiary-fixed bg-surface-container-lowest px-space-md py-1.5 rounded-lg whitespace-nowrap shadow-sm hover:shadow transition-all flex items-center gap-1 shrink-0 disabled:opacity-50" disabled={form.shortCount <= 0} onClick={() => form.openDraftOrder()}>
+      <span>Create draft order for {form.shortCount} short item{form.shortCount === 1 ? '' : 's'}</span>
       <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
       </button>
       </div>
@@ -262,12 +266,12 @@ export function In5IssueDialog() {
                 Step 3 of 4: Allocation check
               </div>
       <div className="flex items-center gap-space-sm">
-      <button type="button" className="px-space-md py-2 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface font-body-sm text-body-sm font-semibold transition-colors">
+      <button type="button" className="px-space-md py-2 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface font-body-sm text-body-sm font-semibold transition-colors" onClick={() => form.close()}>
                   Back
                 </button>
-      <button type="button" className="px-space-lg py-2 rounded-lg bg-primary hover:bg-primary/90 text-on-primary font-body-sm text-body-sm font-semibold flex items-center gap-space-sm shadow-sm active:scale-[0.98] transition-all" data-stitch-data-stitch-id="issue-btn">
-      <span className="material-symbols-outlined text-[17px]">send</span>
-      <span>Issue 1 item</span>
+      <button type="button" className="px-space-lg py-2 rounded-lg bg-primary hover:bg-primary/90 text-on-primary font-body-sm text-body-sm font-semibold flex items-center gap-space-sm shadow-sm active:scale-[0.98] transition-all disabled:opacity-60" data-stitch-data-stitch-id="issue-btn" disabled={!form.canIssue || form.submit.saving} onClick={() => void form.issue()}>
+      <span className="material-symbols-outlined text-[17px]">{form.submit.saving ? 'progress_activity' : 'send'}</span>
+      <span>{form.submit.saving ? 'Issuing…' : 'Issue 1 item'}</span>
       </button>
       </div>
       </div>

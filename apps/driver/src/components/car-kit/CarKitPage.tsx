@@ -49,6 +49,13 @@ export function CarKitPage({
           flow.reload();
           flow.setScreen('dk1');
           break;
+        case 'retry-offline-send':
+          void flow.submitReport();
+          break;
+        case 'dismiss-offline':
+        case 'dismiss':
+          flow.dismissOfflineNotice();
+          break;
         default:
           break;
       }
@@ -79,7 +86,14 @@ export function CarKitPage({
           />
         );
       case 'dk3':
-        return <Dk3ReportSent report={flow.lastReport} />;
+        return (
+          <Dk3ReportSent
+            report={flow.lastReport}
+            onBack={() => flow.setScreen('dk1')}
+            onRetry={() => void flow.submitReport()}
+            onDismiss={flow.dismissOfflineNotice}
+          />
+        );
       case 'dk1':
       default:
         return (
@@ -124,7 +138,13 @@ export function CarKitPage({
       {flow.screen === 'dk2' && !flow.showDk6 ? (
         <div className="fixed inset-0 z-50 flex flex-col justify-end bg-inverse-surface/65 backdrop-blur-[2px]">
           <CarKitNavHost onAction={handleNav}>
-            <Dk2ReportSheet kit={flow.kit} onClose={flow.closeReportSheet} onSend={() => void flow.submitReport()} />
+            <Dk2ReportSheet
+              kit={flow.kit}
+              onClose={flow.closeReportSheet}
+              sending={flow.sending}
+              sendError={flow.sendErrorRef}
+              onSend={(payload) => void flow.submitReport(payload)}
+            />
           </CarKitNavHost>
         </div>
       ) : null}

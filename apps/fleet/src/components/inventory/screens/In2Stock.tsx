@@ -1,13 +1,15 @@
 /** Ported from Stitch — do not simplify layout (audit §0.4). */
+import { useIn2StockForm } from './hooks/useIn2StockForm';
 import { In2StockTable } from '../In2StockTable';
 import { useInventoryLive } from '../inventoryLive';
 import { useInventoryShell } from '../InventoryShellContext';
 
 export function In2Stock() {
+  const form = useIn2StockForm();
   const shell = useInventoryShell();
   const live = useInventoryLive(shell);
-  const rows = shell.stockRows;
-  const count = rows.length;
+  const count = form.filteredCount;
+  const rows = form.pagedRows;
 
   return (
     <div className="fleet-inventory-stitch inventory-stitch-root">
@@ -49,7 +51,7 @@ export function In2Stock() {
       </div>
 
       <div className="bg-surface-container-high p-1 rounded-lg flex items-center gap-1 shadow-sm">
-      <button type="button" className="bg-surface-container-lowest text-primary shadow-sm px-space-md py-1.5 rounded font-body-sm text-body-sm font-semibold transition-all">
+      <button type="button" className="bg-surface-container-lowest text-primary shadow-sm px-space-md py-1.5 rounded font-body-sm text-body-sm font-semibold transition-all" onClick={() => shell.setTab('stock')}>
                 Stock
               </button>
       <button type="button" onClick={() => shell.setTab('movements')} className="text-on-surface-variant hover:text-on-surface px-space-md py-1.5 rounded font-body-sm text-body-sm font-medium transition-colors">
@@ -58,7 +60,7 @@ export function In2Stock() {
       <button type="button" onClick={() => shell.setTab('purchasing')} className="text-on-surface-variant hover:text-on-surface px-space-md py-1.5 rounded font-body-sm text-body-sm font-medium transition-colors">
                 Purchase Orders
               </button>
-      <button type="button" className="text-on-surface-variant hover:text-on-surface px-space-md py-1.5 rounded font-body-sm text-body-sm font-medium transition-colors">
+      <button type="button" className="text-on-surface-variant hover:text-on-surface px-space-md py-1.5 rounded font-body-sm text-body-sm font-medium transition-colors" onClick={() => form.openSuppliers()}>
                 Suppliers
               </button>
       <button type="button" onClick={() => shell.setTab('vehicle-kits')} className="text-on-surface-variant hover:text-on-surface px-space-md py-1.5 rounded font-body-sm text-body-sm font-medium transition-colors">
@@ -74,12 +76,19 @@ export function In2Stock() {
       </div>
       <div className="flex items-center gap-space-sm w-full sm:w-auto">
 
-      <div className="relative group">
-      <button type="button" className="h-9 px-space-md bg-surface-container-lowest text-on-surface rounded font-body-sm text-body-sm font-medium flex items-center gap-space-sm shadow-sm hover:bg-surface-container-low transition-colors">
-      <span className="material-symbols-outlined text-[16px] text-secondary">location_on</span>
-      <span>All locations</span>
-      <span className="material-symbols-outlined text-[16px] text-secondary">arrow_drop_down</span>
-      </button>
+      <div className="relative min-w-[160px]">
+      <span className="material-symbols-outlined absolute left-3 top-2.5 text-[16px] text-secondary pointer-events-none">location_on</span>
+      <select
+        className="w-full h-9 pl-9 pr-8 bg-surface-container-lowest text-on-surface rounded font-body-sm text-body-sm font-medium shadow-sm appearance-none cursor-pointer focus:outline-none"
+        value={form.locationFilter}
+        onChange={(e) => form.setLocationFilter(e.target.value)}
+      >
+      <option value="all">All locations</option>
+      {form.locationOptions.map((loc) => (
+        <option key={loc.id} value={loc.id}>{loc.label}</option>
+      ))}
+      </select>
+      <span className="material-symbols-outlined absolute right-2.5 top-2.5 text-[16px] text-secondary pointer-events-none">arrow_drop_down</span>
       </div>
 
       <div className="relative group">
@@ -102,14 +111,14 @@ export function In2Stock() {
 
       <div className="relative flex-1">
       <span className="material-symbols-outlined absolute left-3 top-2.5 text-[18px] text-secondary">search</span>
-      <input className="w-full h-9 pl-9 pr-space-md bg-surface-container-low text-on-surface rounded font-body-sm text-body-sm placeholder:text-outline focus:outline-none focus:bg-surface-container-lowest transition-all" placeholder="Search name, SKU or serial..." type="text"/>
+      <input className="w-full h-9 pl-9 pr-space-md bg-surface-container-low text-on-surface rounded font-body-sm text-body-sm placeholder:text-outline focus:outline-none focus:bg-surface-container-lowest transition-all" placeholder="Search name, SKU or serial..." type="text" value={form.searchQuery} onChange={(e) => form.setSearchQuery(e.target.value)}/>
       </div>
 
       <div className="flex flex-wrap sm:flex-nowrap items-center gap-space-sm">
 
       <div className="relative min-w-[170px] flex-1 sm:flex-initial">
-      <select className="w-full h-9 px-space-md pr-8 bg-surface-container-low text-on-surface rounded font-body-sm text-body-sm font-medium appearance-none cursor-pointer focus:outline-none">
-      <option>All categories</option>
+      <select className="w-full h-9 px-space-md pr-8 bg-surface-container-low text-on-surface rounded font-body-sm text-body-sm font-medium appearance-none cursor-pointer focus:outline-none" value={form.categoryFilter} onChange={(e) => form.setCategoryFilter(e.target.value)}>
+      <option value="">All categories</option>
       <option>Electronics</option>
       <option>Tires & wheels</option>
       <option>Tools & roadside</option>
@@ -120,24 +129,24 @@ export function In2Stock() {
       </div>
 
       <div className="relative min-w-[190px] flex-1 sm:flex-initial">
-      <select className="w-full h-9 px-space-md pr-8 bg-surface-container-low text-on-surface rounded font-body-sm text-body-sm font-medium appearance-none cursor-pointer focus:outline-none">
-      <option>All statuses (OK, Low, Out)</option>
-      <option>Status: OK</option>
-      <option>Status: Low</option>
-      <option>Status: Out</option>
+      <select className="w-full h-9 px-space-md pr-8 bg-surface-container-low text-on-surface rounded font-body-sm text-body-sm font-medium appearance-none cursor-pointer focus:outline-none" value={form.statusFilter} onChange={(e) => form.setStatusFilter(e.target.value)}>
+      <option value="">All statuses (OK, Low, Out)</option>
+      <option value="ok">Status: OK</option>
+      <option value="low">Status: Low</option>
+      <option value="out">Status: Out</option>
       </select>
       <span className="material-symbols-outlined absolute right-2.5 top-2.5 text-[16px] text-secondary pointer-events-none">arrow_drop_down</span>
       </div>
 
       <div className="relative min-w-[210px] flex-1 sm:flex-initial">
-      <select className="w-full h-9 px-space-md pr-8 bg-surface-container-low text-on-surface rounded font-body-sm text-body-sm font-medium appearance-none cursor-pointer focus:outline-none">
-      <option>All types (Quantity / Tracked)</option>
-      <option>Type: Quantity Batch</option>
-      <option>Type: Tracked by Serial</option>
+      <select className="w-full h-9 px-space-md pr-8 bg-surface-container-low text-on-surface rounded font-body-sm text-body-sm font-medium appearance-none cursor-pointer focus:outline-none" value={form.typeFilter} onChange={(e) => form.setTypeFilter(e.target.value)}>
+      <option value="">All types (Quantity / Tracked)</option>
+      <option value="quantity">Type: Quantity Batch</option>
+      <option value="serial">Type: Tracked by Serial</option>
       </select>
       <span className="material-symbols-outlined absolute right-2.5 top-2.5 text-[16px] text-secondary pointer-events-none">arrow_drop_down</span>
       </div>
-      <button type="button" className="h-9 px-space-md bg-surface-container-high hover:bg-surface-container-highest text-on-surface rounded font-body-sm text-body-sm font-medium flex items-center gap-1 transition-colors">
+      <button type="button" className="h-9 px-space-md bg-surface-container-high hover:bg-surface-container-highest text-on-surface rounded font-body-sm text-body-sm font-medium flex items-center gap-1 transition-colors" onClick={() => form.resetFilters()}>
       <span className="material-symbols-outlined text-[16px]">filter_alt_off</span>
       <span>Reset</span>
       </button>
@@ -170,14 +179,14 @@ export function In2Stock() {
 
       <div className="px-space-lg py-space-md bg-surface-container-low flex flex-col sm:flex-row items-center justify-between gap-space-md">
       <div className="flex items-center gap-space-md font-body-sm text-body-sm text-on-surface-variant">
-      <span>Showing <strong className="text-on-surface font-semibold">{count ? `1–${count}` : '0'}</strong> of <strong className="text-on-surface font-semibold">{count}</strong> items</span>
+      <span>Showing <strong className="text-on-surface font-semibold">{form.pageStart ? `${form.pageStart}–${form.pageEnd}` : '0'}</strong> of <strong className="text-on-surface font-semibold">{count}</strong> items</span>
       <div className="h-4 w-px bg-outline-variant/40"></div>
       <div className="flex items-center gap-1">
-      <button type="button" className="h-7 w-7 rounded flex items-center justify-center text-outline/50 bg-surface-container-lowest cursor-not-allowed">
+      <button type="button" className="h-7 w-7 rounded flex items-center justify-center text-outline/50 bg-surface-container-lowest disabled:opacity-50" disabled={form.page <= 0} onClick={() => form.setPage(Math.max(0, form.page - 1))}>
       <span className="material-symbols-outlined text-[16px]">chevron_left</span>
       </button>
-      <span className="px-2 font-label-code text-caption text-on-surface font-bold">Page 1 of 1</span>
-      <button type="button" className="h-7 w-7 rounded flex items-center justify-center text-outline/50 bg-surface-container-lowest cursor-not-allowed">
+      <span className="px-2 font-label-code text-caption text-on-surface font-bold">Page {form.page + 1} of {form.pageCount}</span>
+      <button type="button" className="h-7 w-7 rounded flex items-center justify-center text-outline/50 bg-surface-container-lowest disabled:opacity-50" disabled={form.page >= form.pageCount - 1} onClick={() => form.setPage(Math.min(form.pageCount - 1, form.page + 1))}>
       <span className="material-symbols-outlined text-[16px]">chevron_right</span>
       </button>
       </div>

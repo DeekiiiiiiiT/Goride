@@ -1,8 +1,12 @@
 /** Ported from Stitch — do not simplify layout (audit §0.4). */
+import { useIn13AlertsForm } from './hooks/useIn13AlertsForm';
 import { useInventoryLive } from '../inventoryLive';
 import { useInventoryShell } from '../InventoryShellContext';
+import { InventoryPrimaryTabs } from '../InventoryPrimaryTabs';
+import { InventoryOverflowMenu } from '../InventoryOverflowMenu';
 import { firstVendorName, strField } from '../inventoryData';
 export function In13Alerts() {
+  const form = useIn13AlertsForm();
   const shell = useInventoryShell();
   const live = useInventoryLive(shell);
   const openApprovalDrawer = () => {
@@ -19,6 +23,15 @@ export function In13Alerts() {
   const vendorName = firstVendorName(live.vendors);
   const secondary = live.secondaryVehicle;
   const lowStockLabel = live.lowStockLabel;
+  const alertRow = (i: number) => shell.alerts[i] ?? {};
+  const alertMenu = (i: number) => {
+    const a = alertRow(i);
+    const id = strField(a, 'id', '');
+    return [
+      { label: 'Mark done', onClick: () => id && form.markDone(id) },
+      { label: 'Open record', onClick: () => form.openRelated(a) },
+    ];
+  };
   return (
     <div className="fleet-inventory-stitch inventory-stitch-root">
       <div className="inventory-stitch-main"><div className="flex flex-col w-full">
@@ -42,7 +55,7 @@ export function In13Alerts() {
       <span className="material-symbols-outlined text-[18px]">verified</span>
       <span className="font-label-code text-caption font-semibold">Ledger Sync: Operational</span>
       </div>
-      <button type="button" className="flex items-center gap-space-xs bg-primary text-on-primary px-space-lg py-2 rounded-lg font-body-sm text-body-sm font-semibold hover:bg-primary/90 transition-colors shadow-sm">
+      <button type="button" className="flex items-center gap-space-xs bg-primary text-on-primary px-space-lg py-2 rounded-lg font-body-sm text-body-sm font-semibold hover:bg-primary/90 transition-colors shadow-sm" onClick={() => form.newRequisition()}>
       <span className="material-symbols-outlined text-[16px]">add</span>
       <span>New Requisition</span>
       </button>
@@ -79,13 +92,13 @@ export function In13Alerts() {
       <div className="flex flex-wrap items-center gap-space-sm">
       <div className="relative min-w-[240px]">
       <span className="material-symbols-outlined absolute left-space-md top-1/2 -translate-y-1/2 text-on-surface-variant text-[18px]">search</span>
-      <input className="w-full bg-surface-container-low pl-9 pr-space-md py-2 rounded-lg font-body-sm text-body-sm text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:bg-surface-container-lowest transition-colors" placeholder="Search alerts..." type="text"/>
+      <input className="w-full bg-surface-container-low pl-9 pr-space-md py-2 rounded-lg font-body-sm text-body-sm text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:bg-surface-container-lowest transition-colors" placeholder="Search alerts..." type="text" value={form.searchQuery} onChange={(e) => form.setSearchQuery(e.target.value)}/>
       </div>
       <button type="button" onClick={() => shell.openModal('snooze-settings')} className="flex items-center gap-space-xs bg-surface-container-low hover:bg-surface-container text-on-surface px-space-md py-2 rounded-lg font-body-sm text-body-sm font-semibold transition-colors">
       <span className="material-symbols-outlined text-[18px] text-on-surface-variant">schedule</span>
       <span>Snooze settings</span>
       </button>
-      <button type="button" className="flex items-center gap-space-xs bg-surface-container-low hover:bg-surface-container text-on-surface px-space-md py-2 rounded-lg font-body-sm text-body-sm font-semibold transition-colors">
+      <button type="button" className="flex items-center gap-space-xs bg-surface-container-low hover:bg-surface-container text-on-surface px-space-md py-2 rounded-lg font-body-sm text-body-sm font-semibold transition-colors" onClick={() => form.markAllViewed()}>
       <span className="material-symbols-outlined text-[18px] text-on-surface-variant">done_all</span>
       <span>Mark all viewed</span>
       </button>
@@ -96,7 +109,7 @@ export function In13Alerts() {
       <div className="bg-surface-container-lowest p-space-lg rounded-xl shadow-sm flex items-center justify-between">
       <div>
       <span className="font-caption text-caption text-on-surface-variant uppercase tracking-wider font-semibold">Active Deficits</span>
-      <div className="font-headline-lg text-headline-lg font-bold text-on-surface mt-1">J$ 48,200</div>
+      <div className="font-headline-lg text-headline-lg font-bold text-on-surface mt-1">{form.live.totalStockValue}</div>
       <span className="font-caption text-caption text-error font-medium">Kit & telemetry assets missing</span>
       </div>
       <div className="w-10 h-10 rounded-lg bg-error-container text-on-error-container flex items-center justify-center">
@@ -137,21 +150,21 @@ export function In13Alerts() {
 
       <div className="flex items-center justify-between flex-wrap gap-space-md">
       <div className="flex items-center gap-space-xs bg-surface-container p-1 rounded-lg">
-      <button type="button" className="flex items-center gap-space-xs bg-surface-container-lowest text-on-surface px-space-md py-1.5 rounded font-body-sm text-body-sm font-semibold shadow-sm transition-all">
+      <button type="button" className={`flex items-center gap-space-xs px-space-md py-1.5 rounded font-body-sm text-body-sm transition-all ${form.tab === 'open' ? 'bg-surface-container-lowest text-on-surface font-semibold shadow-sm' : 'text-on-surface-variant hover:text-on-surface font-medium'}`} onClick={() => form.setTab('open')}>
       <span>Open</span>
-      <span className="bg-primary text-on-primary font-label-code text-[11px] px-1.5 py-0.2 rounded-full">5</span>
+      <span className="bg-primary text-on-primary font-label-code text-[11px] px-1.5 py-0.2 rounded-full">{form.tabCounts.open}</span>
       </button>
-      <button type="button" className="flex items-center gap-space-xs text-on-surface-variant hover:text-on-surface px-space-md py-1.5 rounded font-body-sm text-body-sm font-medium transition-colors">
+      <button type="button" className={`flex items-center gap-space-xs px-space-md py-1.5 rounded font-body-sm text-body-sm transition-colors ${form.tab === 'assigned' ? 'bg-surface-container-lowest text-on-surface font-semibold shadow-sm' : 'text-on-surface-variant hover:text-on-surface font-medium'}`} onClick={() => form.setTab('assigned')}>
       <span>Assigned to me</span>
-      <span className="bg-surface-container-high text-on-surface-variant font-label-code text-[11px] px-1.5 py-0.2 rounded-full">3</span>
+      <span className="bg-surface-container-high text-on-surface-variant font-label-code text-[11px] px-1.5 py-0.2 rounded-full">{form.tabCounts.assigned}</span>
       </button>
-      <button type="button" className="flex items-center gap-space-xs text-on-surface-variant hover:text-on-surface px-space-md py-1.5 rounded font-body-sm text-body-sm font-medium transition-colors">
+      <button type="button" className={`flex items-center gap-space-xs px-space-md py-1.5 rounded font-body-sm text-body-sm transition-colors ${form.tab === 'snoozed' ? 'bg-surface-container-lowest text-on-surface font-semibold shadow-sm' : 'text-on-surface-variant hover:text-on-surface font-medium'}`} onClick={() => form.setTab('snoozed')}>
       <span>Snoozed</span>
-      <span className="bg-surface-container-high text-on-surface-variant font-label-code text-[11px] px-1.5 py-0.2 rounded-full">0</span>
+      <span className="bg-surface-container-high text-on-surface-variant font-label-code text-[11px] px-1.5 py-0.2 rounded-full">{form.tabCounts.snoozed}</span>
       </button>
-      <button type="button" className="flex items-center gap-space-xs text-on-surface-variant hover:text-on-surface px-space-md py-1.5 rounded font-body-sm text-body-sm font-medium transition-colors">
+      <button type="button" className={`flex items-center gap-space-xs px-space-md py-1.5 rounded font-body-sm text-body-sm transition-colors ${form.tab === 'done' ? 'bg-surface-container-lowest text-on-surface font-semibold shadow-sm' : 'text-on-surface-variant hover:text-on-surface font-medium'}`} onClick={() => form.setTab('done')}>
       <span>Done</span>
-      <span className="bg-surface-container-high text-on-surface-variant font-label-code text-[11px] px-1.5 py-0.2 rounded-full">18</span>
+      <span className="bg-surface-container-high text-on-surface-variant font-label-code text-[11px] px-1.5 py-0.2 rounded-full">{form.tabCounts.done}</span>
       </button>
       </div>
       <div className="flex items-center gap-space-sm">
@@ -203,9 +216,7 @@ export function In13Alerts() {
       <span className="material-symbols-outlined text-[16px]">build_circle</span>
       <span>Issue kit</span>
       </button>
-      <button type="button" className="w-9 h-9 rounded-lg hover:bg-surface-container flex items-center justify-center text-on-surface-variant transition-colors" title="More options">
-      <span className="material-symbols-outlined text-[20px]">more_vert</span>
-      </button>
+      <InventoryOverflowMenu icon="more_vert" title="More options" items={alertMenu(0)} className="shrink-0" />
       </div>
       </div>
       </div>
@@ -232,7 +243,7 @@ export function In13Alerts() {
       <span>•</span>
       <span>Preferred Supplier: {vendorName}</span>
       <span>•</span>
-      <span>Unit Cost: J$ 2,850</span>
+      <span>Unit Cost: {form.live.totalStockValue}</span>
       </div>
       </div>
       </div>
@@ -244,13 +255,11 @@ export function In13Alerts() {
       </div>
 
       <div className="flex items-center gap-space-xs">
-      <button type="button" className="bg-surface-container hover:bg-surface-container-high text-on-surface px-space-lg py-2 rounded-lg font-body-sm text-body-sm font-semibold transition-colors flex items-center gap-1">
+      <button type="button" className="bg-surface-container hover:bg-surface-container-high text-on-surface px-space-lg py-2 rounded-lg font-body-sm text-body-sm font-semibold transition-colors flex items-center gap-1" onClick={() => form.reorder(alertRow(1))}>
       <span className="material-symbols-outlined text-[16px]">shopping_cart</span>
       <span>Reorder</span>
       </button>
-      <button type="button" className="w-9 h-9 rounded-lg hover:bg-surface-container flex items-center justify-center text-on-surface-variant transition-colors" title="More options">
-      <span className="material-symbols-outlined text-[20px]">more_vert</span>
-      </button>
+      <InventoryOverflowMenu icon="more_vert" title="More options" items={alertMenu(1)} className="shrink-0" />
       </div>
       </div>
       </div>
@@ -289,13 +298,11 @@ export function In13Alerts() {
       </div>
 
       <div className="flex items-center gap-space-xs">
-      <button type="button" className="bg-surface-container hover:bg-surface-container-high text-on-surface px-space-lg py-2 rounded-lg font-body-sm text-body-sm font-semibold transition-colors flex items-center gap-1">
+      <button type="button" className="bg-surface-container hover:bg-surface-container-high text-on-surface px-space-lg py-2 rounded-lg font-body-sm text-body-sm font-semibold transition-colors flex items-center gap-1" onClick={() => form.addSerial(alertRow(2))}>
       <span className="material-symbols-outlined text-[16px]">qr_code_scanner</span>
       <span>Add serial</span>
       </button>
-      <button type="button" className="w-9 h-9 rounded-lg hover:bg-surface-container flex items-center justify-center text-on-surface-variant transition-colors" title="More options">
-      <span className="material-symbols-outlined text-[20px]">more_vert</span>
-      </button>
+      <InventoryOverflowMenu icon="more_vert" title="More options" items={alertMenu(2)} className="shrink-0" />
       </div>
       </div>
       </div>
@@ -341,13 +348,11 @@ export function In13Alerts() {
       </div>
 
       <div className="flex items-center gap-space-xs">
-      <button type="button" className="bg-surface-container hover:bg-surface-container-high text-on-surface px-space-lg py-2 rounded-lg font-body-sm text-body-sm font-semibold transition-colors flex items-center gap-1">
+      <button type="button" className="bg-surface-container hover:bg-surface-container-high text-on-surface px-space-lg py-2 rounded-lg font-body-sm text-body-sm font-semibold transition-colors flex items-center gap-1" onClick={() => form.reviewApproval(alertRow(3))}>
       <span className="material-symbols-outlined text-[16px]">rule</span>
       <span>Review</span>
       </button>
-      <button type="button" className="w-9 h-9 rounded-lg hover:bg-surface-container flex items-center justify-center text-on-surface-variant transition-colors" title="More options">
-      <span className="material-symbols-outlined text-[20px]">more_vert</span>
-      </button>
+      <InventoryOverflowMenu icon="more_vert" title="More options" items={alertMenu(3)} className="shrink-0" />
       </div>
       </div>
       </div>
@@ -374,13 +379,13 @@ export function In13Alerts() {
       <span>•</span>
       <span>Depot: Main store — Kingston</span>
       <span>•</span>
-      <span className="text-error font-medium">Variance: -1 Unit (Value: J$ 14,500)</span>
+      <span className="text-error font-medium">Variance: -1 Unit (Value: {form.live.totalStockValue})</span>
       </div>
       </div>
       </div>
       <div className="flex items-center justify-between lg:justify-end gap-space-md shrink-0 pt-space-sm lg:pt-0">
 
-      <button type="button" className="flex items-center gap-space-xs bg-surface-container-low hover:bg-surface-container px-space-md py-1.5 rounded-full text-on-surface-variant hover:text-on-surface transition-colors">
+      <button type="button" className="flex items-center gap-space-xs bg-surface-container-low hover:bg-surface-container px-space-md py-1.5 rounded-full text-on-surface-variant hover:text-on-surface transition-colors" onClick={() => { const id = strField(alertRow(4), 'id', ''); if (id) form.assignToMe(id); }}>
       <span className="material-symbols-outlined text-[16px]">person_add</span>
       <span className="font-body-sm text-body-sm font-medium">Unassigned</span>
       </button>
@@ -390,9 +395,7 @@ export function In13Alerts() {
       <span className="material-symbols-outlined text-[16px]">sync_alt</span>
       <span>Open</span>
       </button>
-      <button type="button" className="w-9 h-9 rounded-lg hover:bg-surface-container flex items-center justify-center text-on-surface-variant transition-colors" title="More options">
-      <span className="material-symbols-outlined text-[20px]">more_vert</span>
-      </button>
+      <InventoryOverflowMenu icon="more_vert" title="More options" items={alertMenu(4)} className="shrink-0" />
       </div>
       </div>
       </div>

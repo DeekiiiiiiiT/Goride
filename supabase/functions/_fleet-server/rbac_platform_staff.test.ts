@@ -22,6 +22,7 @@ function user(partial: Partial<RbacUser> & Pick<RbacUser, "resolvedRole" | "rawR
 
 Deno.test("PLATFORM_RESOLVED_ROLES is owner + support + analyst", () => {
   assertEquals([...PLATFORM_RESOLVED_ROLES].sort().join(","), "platform_analyst,platform_owner,platform_support");
+  assertEquals(PLATFORM_RESOLVED_ROLES.has("platform_catalog_editor"), false);
 });
 
 Deno.test("PLATFORM_STAFF_RAW_ROLES includes legacy superadmin + analyst", () => {

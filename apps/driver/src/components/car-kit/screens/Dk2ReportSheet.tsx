@@ -5,12 +5,23 @@ const ISSUE_OPTIONS = ['Damaged', 'Missing', 'Not working'] as const;
 import type { DriverCarKitPayload } from '../../../services/driverInventoryApi';
 import { carKitVehicleLabel } from '../carKitDisplay';
 
-export function Dk2ReportSheet({ kit, onClose, onSend }: { kit?: DriverCarKitPayload | null; onClose?: () => void; onSend?: () => void }) {
+export function Dk2ReportSheet({
+  kit,
+  onClose,
+  onSend,
+  sending,
+  sendError,
+}: {
+  kit?: DriverCarKitPayload | null;
+  onClose?: () => void;
+  onSend?: (payload: { issueType: string; notes: string; hasPhoto: boolean }) => void;
+  sending?: boolean;
+  sendError?: string | null;
+}) {
   const vehicleLabel = carKitVehicleLabel(kit);
   const [reportNotes, setReportNotes] = useState('');
   const [issueType, setIssueType] = useState<(typeof ISSUE_OPTIONS)[number]>('Not working');
   const [hasPhoto, setHasPhoto] = useState(true);
-  const [showSendingDemo, setShowSendingDemo] = useState(false);
   return (
     <div className="driver-car-kit-stitch inventory-stitch-root">
       <div className="inventory-stitch-main"><div className="flex flex-col w-full relative">
@@ -154,29 +165,14 @@ export function Dk2ReportSheet({ kit, onClose, onSend }: { kit?: DriverCarKitPay
       </div>
 
       <div className="pt-2 space-y-2.5 pb-2">
+      {sendError ? (
+      <p className="text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2" role="alert">{sendError}</p>
+      ) : null}
 
-      <button type="button" className="w-full h-[52px] min-h-[50px] rounded-xl bg-emerald-600 text-white font-label-button text-base font-semibold shadow-md hover:bg-emerald-700 active:scale-[0.99] transition-all flex items-center justify-center gap-2" id="submitReportBtn" type="button" onClick={() => onSend?.()}>
-      <span className="material-symbols-outlined text-[20px]">send</span>
-      <span>Send report</span>
+      <button type="button" className="w-full h-[52px] min-h-[50px] rounded-xl bg-emerald-600 text-white font-label-button text-base font-semibold shadow-md hover:bg-emerald-700 active:scale-[0.99] transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:pointer-events-none" id="submitReportBtn" disabled={sending} onClick={() => onSend?.({ issueType, notes: reportNotes, hasPhoto })}>
+      <span className={`material-symbols-outlined text-[20px]${sending ? ' animate-spin' : ''}`}>{sending ? 'progress_activity' : 'send'}</span>
+      <span>{sending ? 'Sending report…' : 'Send report'}</span>
       </button>
-
-      <div className="flex items-center justify-between px-1 pt-1">
-      <span className="text-xs text-slate-500 font-medium">Demo button states</span>
-      <button type="button" className="text-xs text-emerald-700 hover:text-emerald-800 font-semibold underline" id="toggleStateBtn" type="button" onClick={() => setShowSendingDemo((v) => !v)}>
-                  Simulate "Sending" state
-                </button>
-      </div>
-
-      <div className={`${showSendingDemo ? 'flex' : 'hidden'} p-2.5 rounded-xl bg-slate-100 border border-slate-200 transition-all flex-col`} id="sendingStateDemoBox">
-      <div className="flex items-center justify-between text-xs text-slate-600 mb-1.5 font-medium">
-      <span>Sending State (Preview)</span>
-      <span className="text-[11px] bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded">Disabled</span>
-      </div>
-      <button type="button" aria-disabled="true" className="w-full h-[50px] rounded-xl bg-emerald-600/70 text-white/90 font-semibold text-sm flex items-center justify-center gap-2 cursor-not-allowed shadow-inner" disabled="" type="button">
-      <span className="material-symbols-outlined animate-spin text-[18px]">progress_activity</span>
-      <span>Sending report... (cannot be tapped twice)</span>
-      </button>
-      </div>
       </div>
       </div>
       </div>

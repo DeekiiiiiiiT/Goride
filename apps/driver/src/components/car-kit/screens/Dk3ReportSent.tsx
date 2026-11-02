@@ -1,7 +1,17 @@
 /** Ported from Stitch — do not simplify layout (audit §0.4). */
 import type { DriverReportRow } from '../../../services/driverInventoryApi';
 
-export function Dk3ReportSent({ report }: { report?: DriverReportRow | null }) {
+export function Dk3ReportSent({
+  report,
+  onBack,
+  onRetry,
+  onDismiss,
+}: {
+  report?: DriverReportRow | null;
+  onBack?: () => void;
+  onRetry?: () => void;
+  onDismiss?: () => void;
+}) {
   const refLabel = report?.reportNo ? `#${report.reportNo}` : 'REF: pending';
   const itemTitle = report?.displayName ?? report?.itemLabel ?? report?.note ?? 'Kit item';
   const sentAt = report?.createdAt
@@ -107,7 +117,7 @@ export function Dk3ReportSent({ report }: { report?: DriverReportRow | null }) {
       </div>
 
       <div className="mt-auto pt-3 pb-safe">
-      <button type="button" className="w-full min-h-[48px] h-12 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-semibold text-base flex items-center justify-center gap-2 shadow-sm transition-all active:scale-[0.99]" onclick="window.history.back()">
+      <button type="button" data-car-kit-action="back-kit" onClick={() => onBack?.()} className="w-full min-h-[48px] h-12 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-semibold text-base flex items-center justify-center gap-2 shadow-sm transition-all active:scale-[0.99]">
       <span className="material-symbols-outlined text-[20px]">arrow_back</span>
       <span>Back to my kit</span>
       </button>
@@ -158,11 +168,11 @@ export function Dk3ReportSent({ report }: { report?: DriverReportRow | null }) {
       </div>
       </div>
       <div className="pt-2 flex items-center gap-2">
-      <button type="button" className="flex-1 min-h-[48px] h-12 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-semibold text-sm flex items-center justify-center gap-1.5 shadow-sm transition active:scale-[0.98]" id="offline-retry-btn" onclick="triggerRetryAnimation()">
+      <button type="button" className="flex-1 min-h-[48px] h-12 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-semibold text-sm flex items-center justify-center gap-1.5 shadow-sm transition active:scale-[0.98]" id="offline-retry-btn" onClick={() => onRetry?.()}>
       <span className="material-symbols-outlined text-[18px]" id="offline-retry-icon">sync</span>
       <span id="offline-retry-label">Retry now</span>
       </button>
-      <button type="button" className="min-h-[48px] h-12 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-700 font-semibold text-sm flex items-center justify-center gap-1 transition" onclick="cancelQueuedReport()">
+      <button type="button" className="min-h-[48px] h-12 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-700 font-semibold text-sm flex items-center justify-center gap-1 transition" onClick={() => onDismiss?.()}>
       <span className="material-symbols-outlined text-[18px]">close</span>
       <span>Dismiss</span>
       </button>
@@ -170,7 +180,7 @@ export function Dk3ReportSent({ report }: { report?: DriverReportRow | null }) {
       </div>
 
       <div className="mt-auto pt-3 pb-safe">
-      <button type="button" className="w-full min-h-[48px] h-12 rounded-xl border border-slate-300 hover:bg-slate-50 text-slate-800 font-semibold text-base flex items-center justify-center gap-2 shadow-xs transition-all active:scale-[0.99]" onclick="window.history.back()">
+      <button type="button" data-car-kit-action="back-kit" onClick={() => onBack?.()} className="w-full min-h-[48px] h-12 rounded-xl border border-slate-300 hover:bg-slate-50 text-slate-800 font-semibold text-base flex items-center justify-center gap-2 shadow-xs transition-all active:scale-[0.99]">
       <span className="material-symbols-outlined text-[20px]">arrow_back</span>
       <span>Back to my kit</span>
       </button>

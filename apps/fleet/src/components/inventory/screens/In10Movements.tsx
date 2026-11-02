@@ -1,4 +1,5 @@
 /** Ported from Stitch — do not simplify layout (audit §0.4). */
+import { useIn10MovementsForm } from './hooks/useIn10MovementsForm';
 import { useInventoryLive } from '../inventoryLive';
 import { useInventoryShell } from '../InventoryShellContext';
 import {
@@ -8,13 +9,29 @@ import {
   movementTypeIcon,
   strField,
 } from '../inventoryData';
+import { InventoryPagination } from '../InventoryPagination';
+
 export function In10Movements() {
+  const form = useIn10MovementsForm();
   const shell = useInventoryShell();
   const live = useInventoryLive(shell);
   const vendorName = firstVendorName(live.vendors);
   const poNumber = firstOpenPoNumber(live.purchaseOrders);
-  const movementCount = live.movementsTotal || live.movements.length;
-  const movementShown = live.movements.length;
+  const movementCount = form.total || live.movementsTotal || live.movements.length;
+  const pageSize = 25;
+  const rangeStart = form.paged.length ? form.page * pageSize + 1 : 0;
+  const rangeEnd = form.page * pageSize + form.paged.length;
+  const selectedMovement = form.selectedMovementId
+    ? shell.movements.find((m) => strField(m, 'id', '') === form.selectedMovementId)
+    : null;
+  const selectedRef = selectedMovement
+    ? strField(selectedMovement, 'ref_no', form.selectedMovementId ?? '—')
+    : '—';
+
+  const closeReversal = () => {
+    form.setSelectedMovementId(null);
+    form.setReverseReason('');
+  };
   return (
     <div className="fleet-inventory-stitch inventory-stitch-root">
       <div className="inventory-stitch-main"><div className="flex flex-col w-full">
@@ -107,11 +124,11 @@ export function In10Movements() {
       </div>
       </div>
       <div className="flex items-center gap-space-sm shrink-0">
-      <button type="button" className="flex items-center gap-space-xs px-space-md py-2 rounded bg-surface-container-low hover:bg-surface-container text-on-surface font-body-sm text-body-sm font-medium transition-all shadow-sm" data-stitch-data-stitch-id="btn-export-csv">
+      <button type="button" className="flex items-center gap-space-xs px-space-md py-2 rounded bg-surface-container-low hover:bg-surface-container text-on-surface font-body-sm text-body-sm font-medium transition-all shadow-sm" data-stitch-data-stitch-id="btn-export-csv" onClick={() => form.exportCsv()}>
       <span className="material-symbols-outlined text-[16px]">download</span>
       <span>Export CSV</span>
       </button>
-      <button type="button" className="flex items-center gap-space-xs px-space-md py-2 rounded bg-primary text-on-primary font-body-sm text-body-sm font-medium transition-all shadow-sm">
+      <button type="button" className="flex items-center gap-space-xs px-space-md py-2 rounded bg-primary text-on-primary font-body-sm text-body-sm font-medium transition-all shadow-sm" onClick={() => form.recordMovement()}>
       <span className="material-symbols-outlined text-[16px]">add_circle</span>
       <span>Record Movement</span>
       </button>
@@ -148,11 +165,11 @@ export function In10Movements() {
 
       <div className="flex-1 min-w-[240px] relative">
       <span className="material-symbols-outlined absolute left-3 top-2 text-[16px] text-on-surface-variant">search</span>
-      <input className="w-full bg-surface-container-low pl-9 pr-3 py-1.5 rounded font-body-sm text-body-sm text-on-surface focus:outline-none focus:bg-surface-container-lowest transition-all placeholder:text-on-surface-variant/60" data-stitch-data-stitch-id="movement-search" placeholder="Search item, SKU, reference or car..." type="text"/>
+      <input className="w-full bg-surface-container-low pl-9 pr-3 py-1.5 rounded font-body-sm text-body-sm text-on-surface focus:outline-none focus:bg-surface-container-lowest transition-all placeholder:text-on-surface-variant/60" data-stitch-data-stitch-id="movement-search" placeholder="Search item, SKU, reference or car..." type="text" value={form.searchQuery} onChange={(e) => form.setSearchQuery(e.target.value)}/>
       </div>
       </div>
       <div className="flex items-center gap-space-md justify-end pt-space-xs lg:pt-0">
-      <button type="button" className="font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors underline decoration-outline-variant" data-stitch-data-stitch-id="clear-filters-btn">
+      <button type="button" className="font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors underline decoration-outline-variant" data-stitch-data-stitch-id="clear-filters-btn" onClick={() => form.clearFilters()}>
                 Clear filters
               </button>
       </div>
@@ -175,15 +192,16 @@ export function In10Movements() {
       </tr>
       </thead>
       <tbody className="divide-y divide-surface-container font-body-sm text-body-sm">
-      {live.movements.length === 0 ? (
+      {form.paged.length === 0 ? (
       <tr>
       <td colSpan={9} className="py-space-xl px-space-lg font-body-sm text-body-sm text-on-surface-variant text-center">
                       No movements recorded yet.
                     </td>
       </tr>
       ) : (
-      live.movements.map((m) => {
-        const rowKey = strField(m, 'id', strField(m, 'ref_no', String(Math.random())));
+      form.paged.map((m) => {
+        const movementId = strField(m, 'id', '');
+        const rowKey = movementId || strField(m, 'ref_no', String(Math.random()));
         const when = formatMovementWhen(strField(m, 'created_at', ''));
         const type = strField(m, 'type', 'movement');
         const typeLabel = type.toUpperCase();
@@ -230,7 +248,7 @@ export function In10Movements() {
       <div className="text-on-surface">{reason}</div>
       </td>
       <td className="py-space-md px-space-md text-right whitespace-nowrap">
-      <button type="button" className="p-1 hover:bg-surface-container rounded text-on-surface-variant hover:text-on-surface transition-colors">
+      <button type="button" className="p-1 hover:bg-surface-container rounded text-on-surface-variant hover:text-on-surface transition-colors" onClick={() => form.setSelectedMovementId(movementId || null)}>
       <span className="material-symbols-outlined text-[18px]">more_horiz</span>
       </button>
       </td>
@@ -242,18 +260,19 @@ export function In10Movements() {
       </table>
       </div>
 
-      <div className="hidden absolute top-36 right-8 z-30 w-full max-w-md bg-surface-container-lowest rounded-xl shadow-xl p-space-lg animate-in fade-in zoom-in-95" data-stitch-data-stitch-id="reversal-specimen-dialog">
+      <div className={`${form.selectedMovementId ? 'fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-space-md' : 'hidden'}`}>
+      <div className={`${form.selectedMovementId ? 'w-full max-w-md bg-surface-container-lowest rounded-xl shadow-xl p-space-lg animate-in fade-in zoom-in-95' : ''}`} data-stitch-data-stitch-id="reversal-specimen-dialog">
       <div className="flex items-start justify-between pb-space-sm">
       <div className="flex items-center gap-space-sm">
       <div className="w-7 h-7 rounded bg-error-container text-on-error-container flex items-center justify-center">
       <span className="material-symbols-outlined text-[16px]">undo</span>
       </div>
       <div>
-      <h3 className="font-headline-sm text-[16px] leading-5 text-on-surface font-bold">Reverse movement #MV-8821?</h3>
+      <h3 className="font-headline-sm text-[16px] leading-5 text-on-surface font-bold">Reverse movement #{selectedRef}?</h3>
       <p className="font-caption text-caption text-on-surface-variant mt-0.5">Append-only correction action</p>
       </div>
       </div>
-      <button type="button" className="text-on-surface-variant hover:text-on-surface p-1 rounded hover:bg-surface-container" data-stitch-data-stitch-id="close-reversal-modal">
+      <button type="button" className="text-on-surface-variant hover:text-on-surface p-1 rounded hover:bg-surface-container" data-stitch-data-stitch-id="close-reversal-modal" onClick={closeReversal}>
       <span className="material-symbols-outlined text-[18px]">close</span>
       </button>
       </div>
@@ -278,32 +297,34 @@ export function In10Movements() {
 
       <div className="flex flex-col gap-space-xs">
       <label className="font-caption text-caption uppercase text-on-surface-variant font-semibold tracking-wider">Reason for reversal <span className="text-error">*</span></label>
-      <select className="w-full bg-surface-container-low px-3 py-1.5 rounded font-body-sm text-body-sm text-on-surface focus:outline-none">
-      <option>Incorrect quantity entered / Vendor delivery discrepancy</option>
-      <option>Duplicate receipt logged</option>
-      <option>Damaged in transit upon final inspection</option>
-      <option>Administrative clerical correction</option>
+      <select className="w-full bg-surface-container-low px-3 py-1.5 rounded font-body-sm text-body-sm text-on-surface focus:outline-none" value={form.reverseReason} onChange={(e) => form.setReverseReason(e.target.value)}>
+      <option value="">Select a reason…</option>
+      <option value="Incorrect quantity entered / Vendor delivery discrepancy">Incorrect quantity entered / Vendor delivery discrepancy</option>
+      <option value="Duplicate receipt logged">Duplicate receipt logged</option>
+      <option value="Damaged in transit upon final inspection">Damaged in transit upon final inspection</option>
+      <option value="Administrative clerical correction">Administrative clerical correction</option>
       </select>
       </div>
       <div className="flex flex-col gap-space-xs">
       <label className="font-caption text-caption uppercase text-on-surface-variant font-semibold tracking-wider">Audit notes <span className="text-error">*</span></label>
-      <textarea className="w-full bg-surface-container-low p-2 rounded font-body-sm text-body-sm text-on-surface focus:outline-none placeholder:text-on-surface-variant/60" placeholder="E.g. Dispatched with bill of lading #004-B revision by —." rows={2}></textarea>
+      <textarea className="w-full bg-surface-container-low p-2 rounded font-body-sm text-body-sm text-on-surface focus:outline-none placeholder:text-on-surface-variant/60" placeholder="E.g. Dispatched with bill of lading #004-B revision by —." rows={2} value={form.reverseReason} onChange={(e) => form.setReverseReason(e.target.value)}></textarea>
       </div>
       </div>
       <div className="pt-space-md flex items-center justify-end gap-space-sm">
-      <button type="button" className="px-space-md py-1.5 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container font-body-sm text-body-sm transition-colors" data-stitch-data-stitch-id="cancel-reversal-btn">
+      <button type="button" className="px-space-md py-1.5 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container font-body-sm text-body-sm transition-colors" data-stitch-data-stitch-id="cancel-reversal-btn" onClick={closeReversal}>
                   Cancel
                 </button>
-      <button type="button" className="px-space-md py-1.5 rounded bg-primary text-on-primary font-body-sm text-body-sm font-semibold hover:bg-on-surface transition-all flex items-center gap-space-xs shadow-sm" data-stitch-data-stitch-id="confirm-reversal-btn">
+      <button type="button" className="px-space-md py-1.5 rounded bg-primary text-on-primary font-body-sm text-body-sm font-semibold hover:bg-on-surface transition-all flex items-center gap-space-xs shadow-sm disabled:opacity-50" data-stitch-data-stitch-id="confirm-reversal-btn" disabled={!form.reverseReason.trim() || form.submit.saving} onClick={() => void form.confirmReversal()}>
       <span className="material-symbols-outlined text-[16px]">verified</span>
                   Confirm Reversal
                 </button>
       </div>
       </div>
+      </div>
 
       <div className="px-space-lg py-space-md bg-surface-container-low flex flex-col sm:flex-row items-center justify-between gap-space-md">
       <div className="flex items-center gap-space-md">
-      <span className="font-body-sm text-body-sm text-on-surface-variant">Showing <strong className="text-on-surface">{movementShown ? `1–${movementShown}` : '0'}</strong> of <strong className="text-on-surface">{movementCount}</strong> movements</span>
+      <span className="font-body-sm text-body-sm text-on-surface-variant">Showing <strong className="text-on-surface">{rangeStart ? `${rangeStart}–${rangeEnd}` : '0'}</strong> of <strong className="text-on-surface">{movementCount}</strong> movements</span>
       <span className="text-surface-variant hidden sm:inline">|</span>
       <div className="flex items-center gap-space-xs font-label-code text-caption text-on-surface-variant">
       <span className="material-symbols-outlined text-[14px]">lock_clock</span>
@@ -311,19 +332,7 @@ export function In10Movements() {
       </div>
       </div>
 
-      <div className="flex items-center gap-space-xs">
-      <button type="button" className="px-2.5 py-1 rounded bg-surface-container-lowest text-on-surface-variant hover:text-on-surface disabled:opacity-40 transition-colors shadow-sm font-body-sm text-body-sm" disabled>
-      <span className="material-symbols-outlined text-[16px] align-middle">chevron_left</span>
-      </button>
-      <button type="button" className="px-3 py-1 rounded bg-primary text-on-primary font-label-code text-caption font-bold shadow-sm">1</button>
-      <button type="button" className="px-3 py-1 rounded bg-surface-container-lowest text-on-surface hover:bg-surface-container font-label-code text-caption transition-colors shadow-sm">2</button>
-      <button type="button" className="px-3 py-1 rounded bg-surface-container-lowest text-on-surface hover:bg-surface-container font-label-code text-caption transition-colors shadow-sm">3</button>
-      <span className="px-1 text-on-surface-variant font-label-code text-caption">...</span>
-      <button type="button" className="px-3 py-1 rounded bg-surface-container-lowest text-on-surface hover:bg-surface-container font-label-code text-caption transition-colors shadow-sm">7</button>
-      <button type="button" className="px-2.5 py-1 rounded bg-surface-container-lowest text-on-surface hover:text-on-surface hover:bg-surface-container transition-colors shadow-sm font-body-sm text-body-sm">
-      <span className="material-symbols-outlined text-[16px] align-middle">chevron_right</span>
-      </button>
-      </div>
+      <InventoryPagination page={form.page} pageCount={form.pageCount} setPage={form.setPage} />
       </div>
       </div>
 

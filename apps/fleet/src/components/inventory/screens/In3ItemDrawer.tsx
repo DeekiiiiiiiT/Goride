@@ -1,8 +1,10 @@
 /** Ported from Stitch — do not simplify layout (audit §0.4). */
+import { useIn3ItemDrawerForm } from './hooks/useIn3ItemDrawerForm';
 import { useInventoryLive } from '../inventoryLive';
 import { useInventoryShell } from '../InventoryShellContext';
 import { firstOpenPoNumber, firstVendorName, strField } from '../inventoryData';
 export function In3ItemDrawer() {
+  const form = useIn3ItemDrawerForm();
   const shell = useInventoryShell();
   const live = useInventoryLive(shell);
   const vendorName = firstVendorName(live.vendors);
@@ -42,11 +44,11 @@ export function In3ItemDrawer() {
       <p className="font-body-sm text-body-sm text-on-surface-variant">Real-time stock valuation, fleet kit deployments, and serial tracking across {live.hubShort} nodes.</p>
       </div>
       <div className="flex items-center gap-space-sm">
-      <button type="button" className="px-space-md py-1.5 rounded bg-surface-container text-on-surface hover:bg-surface-container-high transition-colors font-body-sm text-body-sm font-semibold flex items-center gap-space-xs">
+      <button type="button" className="px-space-md py-1.5 rounded bg-surface-container text-on-surface hover:bg-surface-container-high transition-colors font-body-sm text-body-sm font-semibold flex items-center gap-space-xs" onClick={() => form.exportMovements()}>
       <span className="material-symbols-outlined text-[16px]">file_download</span>
       <span>Export CSV</span>
       </button>
-      <button type="button" className="px-space-md py-1.5 rounded bg-primary text-on-primary hover:bg-primary/90 transition-colors font-body-sm text-body-sm font-semibold flex items-center gap-space-xs">
+      <button type="button" className="px-space-md py-1.5 rounded bg-primary text-on-primary hover:bg-primary/90 transition-colors font-body-sm text-body-sm font-semibold flex items-center gap-space-xs" onClick={() => form.openNewStockItem()}>
       <span className="material-symbols-outlined text-[16px]">add</span>
       <span>New Stock Item</span>
       </button>
@@ -54,20 +56,20 @@ export function In3ItemDrawer() {
       </div>
 
       <div className="flex items-center gap-space-xs bg-surface-container-low p-1 rounded-lg w-fit">
-      <button type="button" className="px-space-md py-1.5 rounded bg-surface-container-lowest text-on-surface font-body-sm text-body-sm font-bold shadow-sm flex items-center gap-space-xs">
+      <button type="button" className="px-space-md py-1.5 rounded bg-surface-container-lowest text-on-surface font-body-sm text-body-sm font-bold shadow-sm flex items-center gap-space-xs" onClick={() => form.goToInventoryTab('stock')}>
       <span className="material-symbols-outlined text-[16px]">inventory_2</span>
-      <span>Stock (128)</span>
+      <span>Stock ({form.stockTabCount})</span>
       </button>
-      <button type="button" className="px-space-md py-1.5 rounded text-on-surface-variant hover:text-on-surface font-body-sm text-body-sm font-medium transition-colors">
+      <button type="button" className="px-space-md py-1.5 rounded text-on-surface-variant hover:text-on-surface font-body-sm text-body-sm font-medium transition-colors" onClick={() => form.goToInventoryTab('movements')}>
               Movements & Audits
             </button>
-      <button type="button" className="px-space-md py-1.5 rounded text-on-surface-variant hover:text-on-surface font-body-sm text-body-sm font-medium transition-colors">
+      <button type="button" className="px-space-md py-1.5 rounded text-on-surface-variant hover:text-on-surface font-body-sm text-body-sm font-medium transition-colors" onClick={() => form.goToInventoryTab('pos')}>
               Purchase Orders
             </button>
-      <button type="button" className="px-space-md py-1.5 rounded text-on-surface-variant hover:text-on-surface font-body-sm text-body-sm font-medium transition-colors">
+      <button type="button" className="px-space-md py-1.5 rounded text-on-surface-variant hover:text-on-surface font-body-sm text-body-sm font-medium transition-colors" onClick={() => form.goToInventoryTab('suppliers')}>
               Suppliers
             </button>
-      <button type="button" className="px-space-md py-1.5 rounded text-on-surface-variant hover:text-on-surface font-body-sm text-body-sm font-medium transition-colors">
+      <button type="button" className="px-space-md py-1.5 rounded text-on-surface-variant hover:text-on-surface font-body-sm text-body-sm font-medium transition-colors" onClick={() => form.goToInventoryTab('kits')}>
               Fleet Kit Sets
             </button>
       </div>
@@ -75,7 +77,7 @@ export function In3ItemDrawer() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-space-md">
       <div className="bg-surface-container-lowest p-space-md rounded-lg flex flex-col gap-1">
       <span className="font-caption text-caption uppercase tracking-wider text-on-surface-variant font-semibold">Total Inventory Value</span>
-      <span className="font-headline-sm text-headline-sm text-on-surface font-bold">J$ 4,892,120.00</span>
+      <span className="font-headline-sm text-headline-sm text-on-surface font-bold">{form.valueLabels.stockValue}</span>
       <span className="font-caption text-caption text-secondary font-medium">1,412 active units in custody</span>
       </div>
       <div className="bg-surface-container-lowest p-space-md rounded-lg flex flex-col gap-1">
@@ -102,7 +104,7 @@ export function In3ItemDrawer() {
       <div className="p-space-md bg-surface-container-low flex flex-wrap items-center justify-between gap-space-md">
       <div className="flex items-center gap-space-sm flex-1 max-w-md">
       <span className="material-symbols-outlined text-[18px] text-on-surface-variant">search</span>
-      <input className="bg-surface-container-lowest px-space-md py-1.5 rounded text-on-surface font-body-sm text-body-sm w-full outline-none focus:bg-surface-container-lowest" placeholder="Search by SKU, item name, chassis, kit..." type="text" value="Phone Holder Mount"/>
+      <input className="bg-surface-container-lowest px-space-md py-1.5 rounded text-on-surface font-body-sm text-body-sm w-full outline-none focus:bg-surface-container-lowest" placeholder="Search by SKU, item name, chassis, kit..." type="text" value={form.drawerSearch} onChange={(e) => form.setDrawerSearch(e.target.value)}/>
       </div>
       <div className="flex items-center gap-space-sm">
       <span className="font-caption text-caption text-on-surface-variant">Filter category:</span>
@@ -139,7 +141,7 @@ export function In3ItemDrawer() {
       <td className="py-space-md px-space-md text-on-surface-variant">Vehicle Cabin Access</td>
       <td className="py-space-md px-space-md font-label-code text-label-code font-bold text-on-surface">1 in store</td>
       <td className="py-space-md px-space-md font-label-code text-label-code text-on-surface-variant">1 on fleet</td>
-      <td className="py-space-md px-space-md font-label-price text-label-price text-on-surface">J$ 5,400.00</td>
+      <td className="py-space-md px-space-md font-label-price text-label-price text-on-surface">{form.valueLabels.stockValue}</td>
       <td className="py-space-md px-space-md">
       <span className="px-space-sm py-0.5 rounded-full bg-tertiary-container/10 text-on-tertiary-container font-caption text-caption font-bold">● Low stock</span>
       </td>
@@ -154,7 +156,7 @@ export function In3ItemDrawer() {
       <td className="py-space-md px-space-md text-on-surface-variant">Telematics Hardware</td>
       <td className="py-space-md px-space-md font-label-code text-label-code">14 in store</td>
       <td className="py-space-md px-space-md font-label-code text-label-code">72 on fleet</td>
-      <td className="py-space-md px-space-md font-label-price text-label-price">J$ 18,200.00</td>
+      <td className="py-space-md px-space-md font-label-price text-label-price">{form.valueLabels.stockValue}</td>
       <td className="py-space-md px-space-md">
       <span className="px-space-sm py-0.5 rounded-full bg-surface-container text-on-surface font-caption text-caption font-medium">Optimal</span>
       </td>
@@ -168,7 +170,7 @@ export function In3ItemDrawer() {
       <td className="py-space-md px-space-md text-on-surface-variant">Tyres & Wheels</td>
       <td className="py-space-md px-space-md font-label-code text-label-code">8 in store</td>
       <td className="py-space-md px-space-md font-label-code text-label-code">344 on fleet</td>
-      <td className="py-space-md px-space-md font-label-price text-label-price">J$ 13,950.00</td>
+      <td className="py-space-md px-space-md font-label-price text-label-price">{form.valueLabels.stockValue}</td>
       <td className="py-space-md px-space-md">
       <span className="px-space-sm py-0.5 rounded-full bg-surface-container text-on-surface font-caption text-caption font-medium">Optimal</span>
       </td>
@@ -182,7 +184,7 @@ export function In3ItemDrawer() {
       <td className="py-space-md px-space-md text-on-surface-variant">Electrical</td>
       <td className="py-space-md px-space-md font-label-code text-label-code">2 in store</td>
       <td className="py-space-md px-space-md font-label-code text-label-code">86 on fleet</td>
-      <td className="py-space-md px-space-md font-label-price text-label-price">J$ 16,800.00</td>
+      <td className="py-space-md px-space-md font-label-price text-label-price">{form.valueLabels.stockValue}</td>
       <td className="py-space-md px-space-md">
       <span className="px-space-sm py-0.5 rounded-full bg-tertiary-container/10 text-on-tertiary-container font-caption text-caption font-bold">● Low stock</span>
       </td>
@@ -208,7 +210,7 @@ export function In3ItemDrawer() {
       <span className="font-label-code text-[11px] text-on-surface-variant">ID: 884-FLT</span>
       </div>
 
-      <button type="button" className="flex items-center gap-space-xs px-2 py-1 rounded hover:bg-surface-container transition-colors text-on-surface-variant hover:text-on-surface"  title="Close drawer (Esc)">
+      <button type="button" className="flex items-center gap-space-xs px-2 py-1 rounded hover:bg-surface-container transition-colors text-on-surface-variant hover:text-on-surface"  title="Close drawer (Esc)" onClick={() => form.close()}>
       <span className="font-label-code text-[10px] bg-surface-container px-1.5 py-0.5 rounded text-on-surface-variant">ESC</span>
       <span className="material-symbols-outlined text-[20px]">close</span>
       </button>
@@ -217,7 +219,7 @@ export function In3ItemDrawer() {
       <div className="flex flex-col">
       <div className="flex items-center gap-space-sm">
       <h2 className="font-headline-lg text-headline-lg font-bold text-on-surface tracking-tight" data-stitch-data-stitch-id="drawerTitle">Phone Holder Mount</h2>
-      <button type="button" className="p-1 rounded hover:bg-surface-container text-on-surface-variant hover:text-on-surface transition-colors" title="Edit item metadata — name, category, SKU, photo, reorder rule; quantities are immutable">
+      <button type="button" className="p-1 rounded hover:bg-surface-container text-on-surface-variant hover:text-on-surface transition-colors" title="Edit item metadata — name, category, SKU, photo, reorder rule; quantities are immutable" onClick={() => form.openEditItem()}>
       <span className="material-symbols-outlined text-[18px]">edit</span>
       </button>
       </div>
@@ -268,7 +270,7 @@ export function In3ItemDrawer() {
       <span className="material-symbols-outlined text-[16px] text-on-surface-variant">payments</span>
       </div>
       <div className="my-space-xs">
-      <span className="font-label-price text-headline-sm font-bold text-on-surface">J$ 5,400.00</span>
+      <span className="font-label-price text-headline-sm font-bold text-on-surface">{form.valueLabels.stockValue}</span>
       </div>
       <span className="font-caption text-caption text-secondary font-medium">FIFO weighted landed</span>
       </div>
@@ -278,7 +280,7 @@ export function In3ItemDrawer() {
       <span className="material-symbols-outlined text-[16px] text-on-surface-variant">account_balance_wallet</span>
       </div>
       <div className="my-space-xs">
-      <span className="font-label-price text-headline-sm font-bold text-on-surface">J$ 5,400.00</span>
+      <span className="font-label-price text-headline-sm font-bold text-on-surface">{form.valueLabels.stockValue}</span>
       </div>
       <span className="font-caption text-caption text-secondary font-medium">Current asset base</span>
       </div>
@@ -389,7 +391,7 @@ export function In3ItemDrawer() {
       <span className="font-label-plate text-label-plate text-on-surface">{live.secondaryPlate}</span>
       <span className="font-caption text-caption text-on-surface-variant">({live.secondaryPlate})</span>
       </div>
-      <button type="button" className="font-caption text-caption font-bold text-on-surface hover:underline flex items-center gap-0.5">
+      <button type="button" className="font-caption text-caption font-bold text-on-surface hover:underline flex items-center gap-0.5" onClick={() => form.openIssue()}>
       <span>Issue to {live.secondaryPlate}</span>
       <span className="material-symbols-outlined text-[13px]">arrow_forward</span>
       </button>
@@ -404,7 +406,7 @@ export function In3ItemDrawer() {
       <span className="material-symbols-outlined text-[18px] text-primary">tune</span>
       <h3 className="font-headline-sm text-body-lg font-bold text-on-surface">Reorder rule</h3>
       </div>
-      <button type="button" className="font-caption text-caption font-bold text-on-surface hover:underline">Edit rule</button>
+      <button type="button" className="font-caption text-caption font-bold text-on-surface hover:underline" onClick={() => form.openEditRule()}>Edit rule</button>
       </div>
       <div className="bg-surface-container-low p-space-md rounded-lg flex flex-col gap-space-md">
       <div className="flex items-start gap-space-sm">
@@ -529,8 +531,8 @@ export function In3ItemDrawer() {
       </div>
       </div>
       </div>
-      <button type="button" className="w-full py-space-sm text-center font-caption text-caption font-bold text-on-surface hover:bg-surface-container-low rounded transition-colors flex items-center justify-center gap-1">
-      <span>View all 14 movements in Movements log</span>
+      <button type="button" className="w-full py-space-sm text-center font-caption text-caption font-bold text-on-surface hover:bg-surface-container-low rounded transition-colors flex items-center justify-center gap-1" onClick={() => form.openMovementsTab()}>
+      <span>View all {form.movementCount} movements in Movements log</span>
       <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
       </button>
       </div>
@@ -538,15 +540,15 @@ export function In3ItemDrawer() {
 
       <div className="p-space-lg bg-surface-container-lowest shadow-[0_-4px_16px_rgba(0,0,0,0.04)] flex flex-col gap-space-sm shrink-0">
       <div className="grid grid-cols-3 gap-space-sm">
-      <button type="button" className="px-space-md py-2.5 rounded bg-surface-container text-on-surface hover:bg-surface-container-high font-body-sm text-body-sm font-bold flex items-center justify-center gap-space-xs transition-colors">
+      <button type="button" className="px-space-md py-2.5 rounded bg-surface-container text-on-surface hover:bg-surface-container-high font-body-sm text-body-sm font-bold flex items-center justify-center gap-space-xs transition-colors" onClick={() => form.openReceive()}>
       <span className="material-symbols-outlined text-[18px]">move_to_inbox</span>
       <span>Receive</span>
       </button>
-      <button type="button" className="px-space-md py-2.5 rounded bg-surface-container text-on-surface hover:bg-surface-container-high font-body-sm text-body-sm font-bold flex items-center justify-center gap-space-xs transition-colors">
+      <button type="button" className="px-space-md py-2.5 rounded bg-surface-container text-on-surface hover:bg-surface-container-high font-body-sm text-body-sm font-bold flex items-center justify-center gap-space-xs transition-colors" onClick={() => form.openTransfer()}>
       <span className="material-symbols-outlined text-[18px]">sync_alt</span>
       <span>Transfer</span>
       </button>
-      <button type="button" className="px-space-md py-2.5 rounded bg-primary text-on-primary hover:bg-primary/90 font-body-sm text-body-sm font-bold flex items-center justify-center gap-space-xs transition-colors shadow-sm">
+      <button type="button" className="px-space-md py-2.5 rounded bg-primary text-on-primary hover:bg-primary/90 font-body-sm text-body-sm font-bold flex items-center justify-center gap-space-xs transition-colors shadow-sm" onClick={() => form.openIssue()}>
       <span className="material-symbols-outlined text-[18px]">send</span>
       <span>Issue</span>
       </button>

@@ -452,6 +452,26 @@ export function registerInventoryExtendedRoutes(app: Hono<InvEnv>) {
     }
   });
 
+  app.post(`${PREFIX}/assets/:id/events`, requirePermission("inventory.move"), async (c) => {
+    try {
+      const org = orgOrForbid(c);
+      if (org instanceof Response) return org;
+      const assetId = c.req.param("id");
+      const loaded = await loadAsset(c, org, assetId);
+      if ("response" in loaded) return loaded.response;
+      const body = await c.req.json();
+      const type = String(body.type ?? "incident").trim() || "incident";
+      const note = String(body.body ?? body.note ?? body.text ?? "").trim();
+      if (!note) return c.json({ error: "body text required" }, 400);
+      const title = String(body.title ?? (type === "incident" ? "Incident note" : "Asset event")).trim();
+      const { data, error } = await insertAssetEvent(org, assetId, type, title, { body: note });
+      if (error) return c.json({ error: error.message }, 500);
+      return c.json({ event: data }, 201);
+    } catch (e) {
+      return safeErrorResponse(c, e, "inventory.assets.events.create");
+    }
+  });
+
   app.get(`${PREFIX}/assets/:id/documents`, requirePermission("inventory.view"), async (c) => {
     try {
       const org = orgOrForbid(c);

@@ -1,8 +1,11 @@
 /** Ported from Stitch — do not simplify layout (audit §0.4). */
+import { useIn12CountsForm } from './hooks/useIn12CountsForm';
 import { useInventoryLive } from '../inventoryLive';
 import { useInventoryShell } from '../InventoryShellContext';
+import { InventoryPrimaryTabs } from '../InventoryPrimaryTabs';
 import { firstAssetSerial, strField } from '../inventoryData';
 export function In12Counts() {
+  const form = useIn12CountsForm();
   const shell = useInventoryShell();
   const live = useInventoryLive(shell);
   const sessions = live.countSessions;
@@ -37,22 +40,7 @@ export function In12Counts() {
       </div>
       </div>
 
-      <div className="flex items-center gap-space-xs overflow-x-auto pt-space-xs">
-      <button type="button" className="px-space-lg py-2 rounded-md font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors whitespace-nowrap">Overview</button>
-      <button type="button" className="px-space-lg py-2 rounded-md font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors whitespace-nowrap">Stock</button>
-      <button type="button" className="px-space-lg py-2 rounded-md font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors whitespace-nowrap">Vehicle kits</button>
-      <button type="button" className="px-space-lg py-2 rounded-md font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors whitespace-nowrap">Assets</button>
-      <button type="button" className="px-space-lg py-2 rounded-md font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors whitespace-nowrap">Movements</button>
-      <button type="button" className="px-space-lg py-2 rounded-md font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors whitespace-nowrap">Purchasing</button>
-      <button type="button" className="px-space-lg py-2 rounded-md font-body-sm text-body-sm bg-primary text-on-primary font-semibold shadow-sm whitespace-nowrap flex items-center gap-space-xs">
-      <span>Counts</span>
-      <span className="w-1.5 h-1.5 rounded-full bg-on-tertiary-container animate-pulse"></span>
-      </button>
-      <button type="button" className="px-space-lg py-2 rounded-md font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors whitespace-nowrap flex items-center gap-space-xs">
-      <span>Alerts</span>
-      <span className="bg-error-container text-on-error-container font-label-code text-caption font-semibold px-1.5 py-0.2 rounded-full">5</span>
-      </button>
-      </div>
+      <InventoryPrimaryTabs variant="pill" />
       </div>
       </div>
 
@@ -105,13 +93,13 @@ export function In12Counts() {
       <div className="font-body-sm text-body-sm text-on-surface-variant mt-1 flex items-center gap-space-sm">
       <span>Conducted 1 Nov 2026 by Deeki T</span>
       <span>·</span>
-      <span className="font-label-price text-on-error font-medium">Needs Approval (Valuation drift: −J$ 15,000.00)</span>
+      <span className="font-label-price text-on-error font-medium">Needs Approval (Valuation drift: −{form.valueLabel})</span>
       </div>
       </div>
       </div>
       <div className="flex items-center gap-space-sm self-end md:self-center shrink-0">
       <span className="font-label-code text-caption text-on-surface-variant bg-surface-container-lowest px-2 py-1 rounded">Under Audit</span>
-      <button type="button" className="px-space-md py-1.5 bg-primary text-on-primary font-body-sm text-caption font-semibold rounded shadow-sm hover:opacity-90">Open Sheet</button>
+      <button type="button" className="px-space-md py-1.5 bg-primary text-on-primary font-body-sm text-caption font-semibold rounded shadow-sm hover:opacity-90" onClick={() => form.sessions[0] && form.openSheet(strField(form.sessions[0], 'id', ''))}>Open Sheet</button>
       </div>
       </div>
 
@@ -130,13 +118,13 @@ export function In12Counts() {
       <div className="font-body-sm text-body-sm text-on-surface-variant mt-1 flex items-center gap-space-sm">
       <span>Conducted 15 Oct 2026 by —</span>
       <span>·</span>
-      <span className="font-label-price text-on-surface-variant">J$ 0.00 drift</span>
+      <span className="font-label-price text-on-surface-variant">{form.valueLabel} drift</span>
       </div>
       </div>
       </div>
       <div className="flex items-center gap-space-sm self-end md:self-center shrink-0">
       <span className="font-label-code text-caption text-on-surface-variant">Reconciled</span>
-      <button type="button" className="px-space-md py-1.5 bg-surface-container-low text-on-surface font-body-sm text-caption rounded hover:bg-surface-container transition-colors">Audit Hash</button>
+      <button type="button" className="px-space-md py-1.5 bg-surface-container-low text-on-surface font-body-sm text-caption rounded hover:bg-surface-container transition-colors" onClick={() => form.sessions[1] && form.copyAuditHash(strField(form.sessions[1], 'id', ''))}>Audit Hash</button>
       </div>
       </div>
 
@@ -160,7 +148,7 @@ export function In12Counts() {
       </div>
       <div className="flex items-center gap-space-sm self-end md:self-center shrink-0">
       <span className="font-label-code text-caption text-on-surface-variant">Settled</span>
-      <button type="button" className="px-space-md py-1.5 bg-surface-container-low text-on-surface font-body-sm text-caption rounded hover:bg-surface-container transition-colors">View Record</button>
+      <button type="button" className="px-space-md py-1.5 bg-surface-container-low text-on-surface font-body-sm text-caption rounded hover:bg-surface-container transition-colors" onClick={() => form.sessions[2] && form.viewRecord(strField(form.sessions[2], 'id', ''))}>View Record</button>
       </div>
       </div>
       </div>
@@ -294,15 +282,15 @@ export function In12Counts() {
                       </span>
       </td>
       <td className="py-space-md px-space-md text-right font-label-price text-on-surface">
-                      J$ 20,000.00
+                      {form.valueLabel}
                     </td>
       <td className="py-space-md px-space-md text-right font-label-price text-on-error font-bold">
-                      −J$ 20,000.00
+                      −{form.valueLabel}
                     </td>
       <td className="py-space-md px-space-lg">
       <div className="flex items-center gap-space-xs">
       <span className="material-symbols-outlined text-on-error text-[16px]">warning</span>
-      <select className="bg-surface-container-low text-on-surface font-body-sm text-caption px-space-sm py-1 rounded shadow-sm focus:outline-none focus:ring-1 focus:ring-primary w-full max-w-[220px]">
+      <select className="bg-surface-container-low text-on-surface font-body-sm text-caption px-space-sm py-1 rounded shadow-sm focus:outline-none focus:ring-1 focus:ring-primary w-full max-w-[220px]" value={form.lineAction} onChange={(e) => form.setLineAction(e.target.value)}>
       <option>Lost / Missing from depot</option>
       <option>Damaged & Scrapped in bay</option>
       <option>Dispatched without invoice</option>
@@ -313,7 +301,7 @@ export function In12Counts() {
       <td className="py-space-md px-space-lg text-right">
       <span className="inline-flex items-center gap-1 font-caption text-caption px-2 py-1 rounded bg-tertiary-container text-on-tertiary-fixed font-semibold">
       <span className="w-1.5 h-1.5 rounded-full bg-on-tertiary-container"></span>
-                        Needs approval ({'>'}J$ 20k)
+                        Needs approval ({'>'}{form.valueLabel}k)
                       </span>
       </td>
       </tr>
@@ -345,15 +333,15 @@ export function In12Counts() {
                       </span>
       </td>
       <td className="py-space-md px-space-md text-right font-label-price text-on-surface">
-                      J$ 5,400.00
+                      {form.valueLabel}
                     </td>
       <td className="py-space-md px-space-md text-right font-label-price text-secondary font-bold">
-                      +J$ 5,400.00
+                      +{form.valueLabel}
                     </td>
       <td className="py-space-md px-space-lg">
       <div className="flex items-center gap-space-xs">
       <span className="material-symbols-outlined text-secondary text-[16px]">info</span>
-      <select className="bg-surface-container-low text-on-surface font-body-sm text-caption px-space-sm py-1 rounded shadow-sm focus:outline-none focus:ring-1 focus:ring-primary w-full max-w-[220px]">
+      <select className="bg-surface-container-low text-on-surface font-body-sm text-caption px-space-sm py-1 rounded shadow-sm focus:outline-none focus:ring-1 focus:ring-primary w-full max-w-[220px]" value={form.lineAction} onChange={(e) => form.setLineAction(e.target.value)}>
       <option>Found / Unlogged return</option>
       <option>Over-delivery by supplier</option>
       <option>Recovered from loan fleet</option>
@@ -363,7 +351,7 @@ export function In12Counts() {
       <td className="py-space-md px-space-lg text-right">
       <span className="inline-flex items-center gap-1 font-caption text-caption px-2 py-1 rounded bg-surface-container text-on-surface font-medium">
       <span className="material-symbols-outlined text-[14px]">done</span>
-                        Pre-approved ({'<'}{'J$ 20k'})
+                        Pre-approved ({'<'}{'{form.valueLabel}k'})
                       </span>
       </td>
       </tr>
@@ -394,10 +382,10 @@ export function In12Counts() {
                       </span>
       </td>
       <td className="py-space-md px-space-md text-right font-label-price text-on-surface">
-                      J$ 11,200.00
+                      {form.valueLabel}
                     </td>
       <td className="py-space-md px-space-md text-right font-label-price text-on-surface-variant">
-                      J$ 0.00
+                      {form.valueLabel}
                     </td>
       <td className="py-space-md px-space-lg font-label-code text-caption text-on-surface-variant">
                       —
@@ -436,10 +424,10 @@ export function In12Counts() {
                       </span>
       </td>
       <td className="py-space-md px-space-md text-right font-label-price text-on-surface">
-                      J$ 3,100.00
+                      {form.valueLabel}
                     </td>
       <td className="py-space-md px-space-md text-right font-label-price text-on-surface-variant">
-                      J$ 0.00
+                      {form.valueLabel}
                     </td>
       <td className="py-space-md px-space-lg font-label-code text-caption text-on-surface-variant">
                       —
@@ -482,10 +470,10 @@ export function In12Counts() {
                       </span>
       </td>
       <td className="py-space-md px-space-md text-right font-label-price text-on-surface">
-                      J$ 34,500.00
+                      {form.valueLabel}
                     </td>
       <td className="py-space-md px-space-md text-right font-label-price text-on-surface-variant">
-                      J$ 0.00
+                      {form.valueLabel}
                     </td>
       <td className="py-space-md px-space-lg font-label-code text-caption text-on-surface-variant">
                       —
@@ -509,7 +497,7 @@ export function In12Counts() {
       </div>
       <div className="flex items-center gap-space-sm font-label-code">
       <span>Net Raw Variance:</span>
-      <span className="font-label-price text-on-error font-bold">−J$ 14,600.00</span>
+      <span className="font-label-price text-on-error font-bold">−{form.valueLabel}</span>
       </div>
       </div>
       </div>
@@ -519,10 +507,10 @@ export function In12Counts() {
       <div className="max-w-3xl">
       <div className="flex items-center gap-space-sm mb-space-xs">
       <span className="w-3 h-3 rounded-full bg-on-tertiary-container shrink-0"></span>
-      <h3 className="font-headline-sm text-headline-sm text-on-surface">Approve 2 inventory changes · Net valuation impact: −J$ 14,600.00</h3>
+      <h3 className="font-headline-sm text-headline-sm text-on-surface">Approve 2 inventory changes · Net valuation impact: −{form.valueLabel}</h3>
       </div>
       <p className="font-body-md text-body-md text-on-surface-variant mt-1">
-                  Write-off of 1× Spare tyre (<span className="font-label-price text-on-error font-semibold">−J$ 20,000.00</span>) meets statutory approval threshold. Approval will generate permanent <span className="font-label-code text-caption px-1.5 py-0.5 bg-surface-container rounded font-bold text-on-surface">COUNT</span> movement records with non-reversible audit hashes across the Jamaica Fleet Asset Register.
+                  Write-off of 1× Spare tyre (<span className="font-label-price text-on-error font-semibold">−{form.valueLabel}</span>) meets statutory approval threshold. Approval will generate permanent <span className="font-label-code text-caption px-1.5 py-0.5 bg-surface-container rounded font-bold text-on-surface">COUNT</span> movement records with non-reversible audit hashes across the Jamaica Fleet Asset Register.
                 </p>
 
       <div className="mt-space-md flex flex-wrap items-center gap-space-md">
@@ -544,15 +532,15 @@ export function In12Counts() {
       </div>
 
       <div className="flex flex-wrap lg:flex-nowrap items-center gap-space-sm self-start lg:self-center shrink-0">
-      <button type="button" className="px-space-md py-2.5 bg-surface-container-low hover:bg-surface-container text-on-surface font-body-sm text-body-sm font-medium rounded-lg transition-colors flex items-center gap-1.5">
+      <button type="button" className="px-space-md py-2.5 bg-surface-container-low hover:bg-surface-container text-on-surface font-body-sm text-body-sm font-medium rounded-lg transition-colors flex items-center gap-1.5" onClick={() => form.pendingSessionId && form.recount(form.pendingSessionId)}>
       <span className="material-symbols-outlined text-[18px]">replay</span>
       <span>Recount line</span>
       </button>
-      <button type="button" className="px-space-md py-2.5 bg-surface-container hover:bg-surface-container-high text-on-error font-body-sm text-body-sm font-medium rounded-lg transition-colors flex items-center gap-1.5">
+      <button type="button" className="px-space-md py-2.5 bg-surface-container hover:bg-surface-container-high text-on-error font-body-sm text-body-sm font-medium rounded-lg transition-colors flex items-center gap-1.5" onClick={() => form.pendingSessionId && form.reject(form.pendingSessionId)}>
       <span className="material-symbols-outlined text-[18px]">close</span>
       <span>Reject audit</span>
       </button>
-      <button type="button" className="px-space-xl py-2.5 bg-primary text-on-primary font-body-sm text-body-sm font-bold rounded-lg shadow-sm hover:opacity-95 transition-all flex items-center gap-2" data-stitch-data-stitch-id="approveBtn">
+      <button type="button" className="px-space-xl py-2.5 bg-primary text-on-primary font-body-sm text-body-sm font-bold rounded-lg shadow-sm hover:opacity-95 transition-all flex items-center gap-2" data-stitch-data-stitch-id="approveBtn" onClick={() => form.pendingSessionId && form.approve(form.pendingSessionId)}>
       <span className="material-symbols-outlined text-[18px]">check</span>
       <span>Approve & update stock</span>
       </button>

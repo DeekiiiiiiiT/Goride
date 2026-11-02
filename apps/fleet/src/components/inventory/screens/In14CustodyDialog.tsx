@@ -1,8 +1,10 @@
 /** Ported from Stitch — do not simplify layout (audit §0.4). */
+import { useIn14CustodyForm } from './hooks/useIn14CustodyForm';
 import { useInventoryLive } from '../inventoryLive';
 import { useInventoryShell } from '../InventoryShellContext';
 import { firstAssetSerial, strField } from '../inventoryData';
 export function In14CustodyDialog() {
+  const form = useIn14CustodyForm();
   const shell = useInventoryShell();
   const live = useInventoryLive(shell);
   const asset = live.selectedAsset ?? live.assets[0] ?? null;
@@ -59,7 +61,7 @@ export function In14CustodyDialog() {
       <div className="col-span-2 font-label-code text-label-code text-on-surface">{serial}</div>
       <div className="col-span-2 font-body-sm text-body-sm text-secondary">Main Store — Cage A</div>
       <div className="col-span-1 text-right font-label-code text-label-code font-bold text-on-surface">1 ea</div>
-      <div className="col-span-2 text-right font-label-price text-label-price text-on-surface">J$ 44,500.00</div>
+      <div className="col-span-2 text-right font-label-price text-label-price text-on-surface">{form.valueLabel}</div>
       <div className="col-span-2 flex justify-end gap-space-xs">
       <span className="px-space-sm py-0.5 rounded bg-surface-container font-label-code text-caption text-secondary">Write-off</span>
       </div>
@@ -78,7 +80,7 @@ export function In14CustodyDialog() {
       <div className="col-span-2 font-label-code text-label-code text-on-surface">LOT-24-9042</div>
       <div className="col-span-2 font-body-sm text-body-sm text-secondary">Rack B-03 (Tyres)</div>
       <div className="col-span-1 text-right font-label-code text-label-code font-bold text-on-surface">8 ea</div>
-      <div className="col-span-2 text-right font-label-price text-label-price text-on-surface">J$ 16,800.00</div>
+      <div className="col-span-2 text-right font-label-price text-label-price text-on-surface">{form.valueLabel}</div>
       <div className="col-span-2 flex justify-end gap-space-xs">
       <span className="px-space-sm py-0.5 rounded bg-surface-container font-label-code text-caption text-secondary">Move stock</span>
       </div>
@@ -97,7 +99,7 @@ export function In14CustodyDialog() {
       <div className="col-span-2 font-label-code text-label-code text-on-surface">HAR-88190-JM</div>
       <div className="col-span-2 font-body-sm text-body-sm text-secondary">Vehicle: {live.primaryPlate}</div>
       <div className="col-span-1 text-right font-label-code text-label-code font-bold text-on-surface">1 ea</div>
-      <div className="col-span-2 text-right font-label-price text-label-price text-on-surface">J$ 9,200.00</div>
+      <div className="col-span-2 text-right font-label-price text-label-price text-on-surface">{form.valueLabel}</div>
       <div className="col-span-2 flex justify-end gap-space-xs">
       <span className="px-space-sm py-0.5 rounded bg-surface-container font-label-code text-caption text-secondary">Return</span>
       </div>
@@ -134,15 +136,15 @@ export function In14CustodyDialog() {
               </p>
 
       <div className="grid grid-cols-3 p-1 rounded-lg bg-surface-variant/70 gap-1 font-body-sm text-body-sm">
-      <button type="button" className="py-1.5 px-space-sm rounded font-medium text-secondary hover:text-on-surface flex items-center justify-center gap-space-xs transition-all" data-stitch-data-stitch-id="tab-move" >
+      <button type="button" className="py-1.5 px-space-sm rounded font-medium text-secondary hover:text-on-surface flex items-center justify-center gap-space-xs transition-all" data-stitch-data-stitch-id="tab-move"  onClick={() => form.setMode('transfer')}>
       <span className="material-symbols-outlined text-[16px]">swap_horiz</span>
       <span>Move stock</span>
       </button>
-      <button type="button" className="py-1.5 px-space-sm rounded font-medium text-secondary hover:text-on-surface flex items-center justify-center gap-space-xs transition-all" data-stitch-data-stitch-id="tab-return" >
+      <button type="button" className="py-1.5 px-space-sm rounded font-medium text-secondary hover:text-on-surface flex items-center justify-center gap-space-xs transition-all" data-stitch-data-stitch-id="tab-return"  onClick={() => form.setMode('return')}>
       <span className="material-symbols-outlined text-[16px]">assignment_return</span>
       <span>Return from car</span>
       </button>
-      <button type="button" className="py-1.5 px-space-sm rounded font-semibold text-on-surface bg-surface-container-lowest shadow-sm flex items-center justify-center gap-space-xs transition-all" data-stitch-data-stitch-id="tab-writeoff" >
+      <button type="button" className="py-1.5 px-space-sm rounded font-semibold text-on-surface bg-surface-container-lowest shadow-sm flex items-center justify-center gap-space-xs transition-all" data-stitch-data-stitch-id="tab-writeoff"  onClick={() => form.setMode('writeoff')}>
       <span className="material-symbols-outlined text-[16px]">delete_sweep</span>
       <span>Write off</span>
       </button>
@@ -174,7 +176,7 @@ export function In14CustodyDialog() {
       </div>
       <div className="text-right">
       <div className="font-caption text-caption text-secondary">Current Unit Book Valuation</div>
-      <div className="font-label-price text-label-price text-on-surface font-bold text-[15px]">J$ 44,500.00</div>
+      <div className="font-label-price text-label-price text-on-surface font-bold text-[15px]">{form.valueLabel}</div>
       </div>
       </div>
       </div>
@@ -184,7 +186,7 @@ export function In14CustodyDialog() {
       <div className="col-span-4 flex flex-col gap-1">
       <label className="font-caption text-caption uppercase tracking-wider text-secondary font-semibold">Quantity to write off</label>
       <div className="relative flex items-center">
-      <input className="w-full h-9 px-space-md bg-surface-container-low text-on-surface font-label-code text-label-code rounded focus:outline-none cursor-not-allowed" readOnly type="text" value="1 ea"/>
+      <input className="w-full h-9 px-space-md bg-surface-container-low text-on-surface font-label-code text-label-code rounded focus:outline-none" type="text" inputMode="numeric" value={form.qty} onChange={(e) => form.setQty(e.target.value)}/>
       <span className="absolute right-3 font-caption text-caption text-secondary uppercase">Fixed S/N</span>
       </div>
       </div>
@@ -193,7 +195,7 @@ export function In14CustodyDialog() {
       <label className="font-caption text-caption uppercase tracking-wider text-secondary font-semibold">Accounting Valuation Subtotal</label>
       <div className="h-9 px-space-md bg-surface-container-low text-on-surface font-label-price text-label-price rounded flex items-center justify-between">
       <span>Depot Book Value (Landed JMD)</span>
-      <span className="font-bold">J$ 44,500.00</span>
+      <span className="font-bold">{form.valueLabel}</span>
       </div>
       </div>
 
@@ -219,7 +221,7 @@ export function In14CustodyDialog() {
       <span className="font-caption text-caption text-secondary">Mandatory regulatory attribution</span>
       </div>
       <div className="relative">
-      <select className="w-full h-9 px-space-md bg-surface-container-lowest text-on-surface font-body-md text-body-md rounded shadow-sm focus:outline-none appearance-none cursor-pointer">
+      <select className="w-full h-9 px-space-md bg-surface-container-lowest text-on-surface font-body-md text-body-md rounded shadow-sm focus:outline-none appearance-none cursor-pointer" value={form.reason} onChange={(e) => form.setReason(e.target.value)}>
       <option value="damaged">Damaged — Internal hardware failure / physical defect</option>
       <option value="lost">Lost — Unaccounted during physical cycle count</option>
       <option value="stolen">Stolen — Police report / security breach reported</option>
@@ -235,7 +237,7 @@ export function In14CustodyDialog() {
       <label className="font-caption text-caption uppercase tracking-wider text-secondary font-semibold">Incident Memo & Technical Report <span className="text-error">*</span></label>
       <span className="font-label-code text-caption text-secondary">DEPOT LOG ENTRY #904</span>
       </div>
-      <textarea className="w-full p-space-md bg-surface-container-lowest text-on-surface font-body-sm text-body-sm rounded shadow-sm focus:outline-none resize-none leading-relaxed" rows={2}>Internal lens inverter cracked and casing scorched during depot vehicle wiring test. Non-repairable per Kingston depot technician inspection report #REP-904.</textarea>
+      <textarea className="w-full p-space-md bg-surface-container-lowest text-on-surface font-body-sm text-body-sm rounded shadow-sm focus:outline-none resize-none leading-relaxed" rows={2} value={form.memo} onChange={(e) => form.setMemo(e.target.value)}></textarea>
       </div>
       </div>
 
@@ -258,7 +260,7 @@ export function In14CustodyDialog() {
       </div>
       <div className="flex items-center justify-between bg-surface-container-lowest p-2 rounded">
       <span className="text-secondary">P&L Financial Ledger</span>
-      <span className="font-semibold text-error">-J$ 44,500.00 (Depot write-off expense)</span>
+      <span className="font-semibold text-error">-{form.valueLabel} (Depot write-off expense)</span>
       </div>
       </div>
       </div>
@@ -273,21 +275,21 @@ export function In14CustodyDialog() {
       <span className="font-label-code text-caption uppercase px-1.5 py-0.2 rounded bg-tertiary-fixed-dim/40 text-on-tertiary-fixed font-bold">Rule SEC-402</span>
       </div>
       <p className="font-body-sm text-body-sm text-on-surface-variant pt-0.5 leading-snug">
-                    This write-off exceeds Jamaica Depot Statutory limit of <strong className="font-label-price text-on-surface">J$ 20,000.00</strong>. It will be routed to the <strong>Admin Dual-Approval Queue</strong> and queued in Alerts until confirmed by the Hub Director.
+                    This write-off exceeds Jamaica Depot Statutory limit of <strong className="font-label-price text-on-surface">{form.valueLabel}</strong>. It will be routed to the <strong>Admin Dual-Approval Queue</strong> and queued in Alerts until confirmed by the Hub Director.
                   </p>
       </div>
       </div>
       </div>
 
       <div className="px-space-lg py-space-md bg-surface-container-low flex items-center justify-between">
-      <button type="button" className="h-9 px-space-lg rounded font-body-sm text-body-sm font-medium text-secondary hover:text-on-surface hover:bg-surface-variant transition-colors">
+      <button type="button" className="h-9 px-space-lg rounded font-body-sm text-body-sm font-medium text-secondary hover:text-on-surface hover:bg-surface-variant transition-colors" onClick={() => form.close()}>
                 Cancel
               </button>
       <div className="flex items-center gap-space-sm">
       <span className="font-caption text-caption text-secondary">Logged as John Doe (JD-Kingston)</span>
-      <button type="button" className="h-9 px-space-lg bg-primary text-on-primary rounded font-body-sm text-body-sm font-semibold flex items-center gap-space-xs hover:bg-surface-tint active:scale-95 transition-all shadow-sm" data-stitch-data-stitch-id="primary-action-btn">
-      <span className="material-symbols-outlined text-[18px]">verified_user</span>
-      <span data-stitch-data-stitch-id="primary-action-label">Submit for Dual-Approval</span>
+      <button type="button" className="h-9 px-space-lg bg-primary text-on-primary rounded font-body-sm text-body-sm font-semibold flex items-center gap-space-xs hover:bg-surface-tint active:scale-95 transition-all shadow-sm disabled:opacity-60" data-stitch-data-stitch-id="primary-action-btn" disabled={!form.canSubmit || form.submit.saving} onClick={() => void form.submitCustody()}>
+      <span className="material-symbols-outlined text-[18px]">{form.submit.saving ? 'progress_activity' : 'verified_user'}</span>
+      <span data-stitch-data-stitch-id="primary-action-label">{form.submit.saving ? 'Submitting…' : 'Submit for Dual-Approval'}</span>
       </button>
       </div>
       </div>
@@ -298,9 +300,9 @@ export function In14CustodyDialog() {
       <span>Switch mode above or click preview:</span>
       </span>
       <div className="flex items-center gap-space-sm">
-      <button type="button" className="hover:text-on-surface underline font-label-code text-caption" >Preview "Move stock" (Depot → Car)</button>
+      <button type="button" className="hover:text-on-surface underline font-label-code text-caption"  onClick={() => form.setMode('transfer')}>Preview "Move stock" (Depot → Car)</button>
       <span>·</span>
-      <button type="button" className="hover:text-on-surface underline font-label-code text-caption" >Preview "Return from car" (Car → Depot)</button>
+      <button type="button" className="hover:text-on-surface underline font-label-code text-caption"  onClick={() => form.setMode('return')}>Preview "Return from car" (Car → Depot)</button>
       </div>
       </div>
       </div>

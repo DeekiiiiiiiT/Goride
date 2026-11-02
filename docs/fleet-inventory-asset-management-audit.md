@@ -1,35 +1,43 @@
 # Fleet Inventory & Asset Management — Audit
 
-**Rev 27 · 2 Nov 2026 · R26 closure (code + gates + chain).**
+**Rev 31 · 2 Nov 2026 · complete (automated gates green; R26-02 prod walk-through is the manual sign-off below).**
 **Scope:** Fleet → Vehicle Operations → Inventory & Asset Management, and the Roam Driver car kit. Admin is out of scope.
 
-**Closed and verified:**
-- Code is committed (R26 handler wiring in gap hooks + TSX, driver car-kit stubs removed).
-- `photo_paths` and all migrations up to `20261101223500` are in production.
-- Inventory type errors are 0 (`node scripts/typecheck-fleet-inventory.mjs`).
-- The ledger balances: 7 cost layers, stock value J$69,380, chain ok.
-- **R26-01:** All gap empty handlers replaced; `assert-inventory-gap-audit.mjs` fails on empty `onClick`/`onChange` bodies; driver car-kit screens wired for Update status / inspector tabs / demo toggles.
-- **R26-03:** Latest `fleet.inv_chain_check` row `ok = true` at `2026-11-02 01:41:09 UTC` (org `8cfa606a-f6ea-4ccb-a2b2-1d2cc323a823`). `broken_chain` integrity probe returns 0 rows.
+**Works today:**
+- All 15 gap screens, driver car-kit screens, and primary In* tabs/modals call real hook handlers and APIs (no `stitchChrome` / shared `stitchInput`).
+- Static gate: `node scripts/assert-inventory-gap-audit.mjs` (also in CI).
+- Behavioral sweep: `e2e/inventory-button-sweep.spec.ts` + `e2e/car-kit-button-sweep.spec.ts` (run with `INVENTORY_BUTTON_SWEEP=1` and fleet/driver base URLs; CI runs fleet sweep when `E2E_FLEET_*` + `FLEET_E2E_BASE_URL` are set).
+- Ledger baseline unchanged: 7 movements, J$69,380, chain ok (verify after any prod smoke).
 
 ---
 
-## 1. Open items
+## 1. Rev 31 — status
 
-### R26-02: authenticated production smoke + live PNGs
+| Item | Status | Verification |
+|------|--------|--------------|
+| **R31-01** Bind fields to hook state | **Done** | Assert script + receive field-isolation in sweep |
+| **R31-02** Wire 211 dead buttons | **Done** | [`fleet-inventory-button-spec.md`](fleet-inventory-button-spec.md); grep `stitchChrome` → 0 |
+| **R31-03** Real amounts, refs, counts | **Done** | Assert fails on `formatJmd(null)`, `REF-0` |
+| **R31-04** Button sweep + assert hardening | **Done** | Specs above + CI optional step after inventory Deno tests |
+| **R26-02** Production walk-through | **Pending (manual)** | Run only after R31-04 green on target deploy — see runbook below |
 
-Engineering and CI gates are green locally. Production still needs a **signed-in** walk through all 15 gap flows plus the driver update sheet, edge-log proof, live PNG capture, and cleanup of `TEST-R26-*` rows.
+**Removed:** `scripts/patch-in-*.mjs`, `stitchInput` / `stitchChrome` from [`useInShared.ts`](../apps/fleet/src/components/inventory/screens/hooks/useInShared.ts).
 
-**Runbook:** [`docs/inventory-r26-prod-smoke-runbook.md`](inventory-r26-prod-smoke-runbook.md)
-
-**Done when:**
-1. Edge logs show authenticated `/inventory/*` 200s for each route in the matrix (not unsigned probes only).
-2. `IN*-live.png` / `DK*-live.png` refreshed with valid `playwright/.auth/fleet.json`.
-3. Test rows archived; stock value back to J$69,380 baseline.
+**Backend added:** `POST /inventory/assets/:id/events` (incident notes) in [`inventory_controller_extended.ts`](../supabase/functions/_fleet-server/inventory_controller_extended.ts).
 
 ---
 
-## 2. Checks
+## 2. R26-02 — production walk-through (manual)
 
-1. `node scripts/assert-inventory-gap-audit.mjs` passes (includes R26 empty-handler rule).
-2. `node scripts/typecheck-fleet-inventory.mjs` reports 0 errors.
-3. Run [`scripts/sql/fleet_inventory_integrity_checks.sql`](../scripts/sql/fleet_inventory_integrity_checks.sql): every query returns 0 rows, and stock value is J$69,380 plus any test receipts before cleanup.
+Follow [`inventory-r26-prod-smoke-runbook.md`](inventory-r26-prod-smoke-runbook.md):
+
+1. Real Receive, Issue, Transfer, and Count with chosen values; confirm ledger rows match inputs.
+2. Capture `screen-live.png` signed in (`scripts/capture-inventory-screen-live.mjs`).
+3. Reverse test movements.
+4. Run [`scripts/sql/fleet_inventory_integrity_checks.sql`](../scripts/sql/fleet_inventory_integrity_checks.sql): every query returns 0 rows; stock value J$69,380.
+
+**Do not** run this on production until the R31-04 sweep passes against the same fleet-core build you are promoting.
+
+---
+
+When R26-02 is signed off in Notion, this audit section is fully closed.

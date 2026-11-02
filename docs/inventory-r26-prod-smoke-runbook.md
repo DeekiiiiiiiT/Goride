@@ -30,6 +30,21 @@ For each flow: open modal → one minimal save with `TEST-R26-*` names → confi
 | Driver report update | Fleet gap from driver report | Status update |
 | Driver car kit | Driver app → My car kit | Open update sheet |
 
+## Matrix — main In* screens (R28)
+
+After gap matrix passes, exercise **stock-moving** flows from the primary Stitch tabs/modals (`TEST-R28-*` refs only):
+
+| Flow | Open via | Minimal action |
+|------|----------|----------------|
+| Receive | Overview → Receive stock | One line qty 1 → **Receive** |
+| Issue | Overview → Issue to cars | One line → **Issue** |
+| Transfer / return / write-off | Overview or item → Custody modal | One tab → **Submit** (reverse in SQL if write-off) |
+| Count approve | Counts tab | Approve or open count gap → submit |
+| Movements export | Movements tab | **Export CSV** (no ledger change) |
+| Driver report | Driver → Report problem | **Send report** (sending state on button) |
+
+Then run live PNG capture and reverse all `TEST-R28-*` / test movements before integrity SQL.
+
 ## Evidence
 
 1. Supabase **Edge Functions → fleet-core** logs: filter authenticated `/make-server-*/inventory/` — expect 200s (not unsigned probes only).

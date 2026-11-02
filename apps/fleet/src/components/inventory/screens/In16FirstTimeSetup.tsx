@@ -1,7 +1,9 @@
 /** Ported from Stitch — do not simplify layout (audit §0.4). */
+import { useIn16SetupForm } from './hooks/useIn16SetupForm';
 import { useInventoryLive } from '../inventoryLive';
 import { useInventoryShell } from '../InventoryShellContext';
 export function In16FirstTimeSetup() {
+  const form = useIn16SetupForm();
   const shell = useInventoryShell();
   const live = useInventoryLive(shell);
   return (
@@ -88,12 +90,12 @@ export function In16FirstTimeSetup() {
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-space-sm">
       <div className="relative flex-1">
       <span className="absolute left-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-[18px] text-secondary">warehouse</span>
-      <input className="w-full bg-surface-container-lowest text-on-surface font-body-md text-body-md pl-10 pr-28 py-2 rounded shadow-sm focus:outline-none focus:ring-1 focus:ring-primary" data-stitch-data-stitch-id="storeroom-input" placeholder="e.g. West Storage Bay, Dispatch Rack A" type="text" value="Main store — Kingston"/>
+      <input className="w-full bg-surface-container-lowest text-on-surface font-body-md text-body-md pl-10 pr-28 py-2 rounded shadow-sm focus:outline-none focus:ring-1 focus:ring-primary" data-stitch-data-stitch-id="storeroom-input" placeholder="e.g. West Storage Bay, Dispatch Rack A" type="text" value={form.locationName} onChange={(e) => form.setLocationName(e.target.value)}/>
       <span className="absolute right-3 top-1/2 -translate-y-1/2 font-caption text-caption text-secondary pointer-events-none">
                             Depot Hub #01 (Default)
                           </span>
       </div>
-      <button type="button" className="bg-primary hover:bg-surface-container-highest hover:text-on-surface text-on-primary font-body-md text-body-md font-medium px-space-lg py-2 rounded transition-all duration-200 active:scale-95 flex items-center justify-center gap-space-xs shadow-sm" data-stitch-data-stitch-id="add-location-btn">
+      <button type="button" className="bg-primary hover:bg-surface-container-highest hover:text-on-surface text-on-primary font-body-md text-body-md font-medium px-space-lg py-2 rounded transition-all duration-200 active:scale-95 flex items-center justify-center gap-space-xs shadow-sm" data-stitch-data-stitch-id="add-location-btn" onClick={() => form.addLocation()}>
       <span className="material-symbols-outlined text-[16px]">add_location_alt</span>
       <span>Add location</span>
       </button>
@@ -161,7 +163,7 @@ export function In16FirstTimeSetup() {
       </div>
       <div className="pt-space-md mt-space-sm flex items-center justify-between">
       <span className="font-label-code text-caption text-secondary">10 catalog definitions</span>
-      <button type="button" className="bg-primary hover:bg-surface-container-highest hover:text-on-surface text-on-primary font-body-sm text-body-sm font-semibold px-space-md py-1.5 rounded transition-all duration-150 flex items-center gap-space-xs shadow-sm" data-stitch-data-stitch-id="load-starter-btn">
+      <button type="button" className="bg-primary hover:bg-surface-container-highest hover:text-on-surface text-on-primary font-body-sm text-body-sm font-semibold px-space-md py-1.5 rounded transition-all duration-150 flex items-center gap-space-xs shadow-sm" data-stitch-data-stitch-id="load-starter-btn" onClick={() => form.loadStarter()}>
       <span className="material-symbols-outlined text-[16px]">file_download_done</span>
       <span>Load starter list (10 items)</span>
       </button>
@@ -266,7 +268,7 @@ export function In16FirstTimeSetup() {
       <span className="material-symbols-outlined text-[18px]">verified_user</span>
       <span className="font-caption text-caption">Telemetry sync locked to {live.hubName} node</span>
       </div>
-      <button type="button" className="w-full sm:w-auto bg-primary hover:bg-surface-container-highest hover:text-on-surface text-on-primary font-headline-sm text-body-md font-semibold px-8 py-3 rounded-lg shadow-md transition-all duration-200 active:scale-95 flex items-center justify-center gap-space-sm" data-stitch-data-stitch-id="finish-setup-btn">
+      <button type="button" className="w-full sm:w-auto bg-primary hover:bg-surface-container-highest hover:text-on-surface text-on-primary font-headline-sm text-body-md font-semibold px-8 py-3 rounded-lg shadow-md transition-all duration-200 active:scale-95 flex items-center justify-center gap-space-sm" data-stitch-data-stitch-id="finish-setup-btn" onClick={() => form.finishSetup()}>
       <span>Finish setup</span>
       <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
       </button>
@@ -291,7 +293,7 @@ export function In16FirstTimeSetup() {
       </div>
       </div>
       <div className="flex flex-col items-stretch sm:items-end gap-space-sm w-full md:w-auto flex-shrink-0">
-      <button type="button" className="bg-primary hover:bg-surface-container-highest hover:text-on-surface text-on-primary font-body-md text-body-md font-semibold px-space-xl py-2.5 rounded-lg shadow-sm transition-all duration-200 active:scale-95 flex items-center justify-center gap-space-xs">
+      <button type="button" className="bg-primary hover:bg-surface-container-highest hover:text-on-surface text-on-primary font-body-md text-body-md font-semibold px-space-xl py-2.5 rounded-lg shadow-sm transition-all duration-200 active:scale-95 flex items-center justify-center gap-space-xs" onClick={() => form.startCount()}>
       <span className="material-symbols-outlined text-[18px]">fact_check</span>
       <span>+ Start a count</span>
       </button>

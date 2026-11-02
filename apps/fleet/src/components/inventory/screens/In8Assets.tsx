@@ -1,14 +1,23 @@
 /** Ported from Stitch — do not simplify layout (audit §0.4). */
+import { useIn8AssetsForm } from './hooks/useIn8AssetsForm';
+import { InventoryOverflowMenu } from '../InventoryOverflowMenu';
+import { InventoryPagination } from '../InventoryPagination';
+import { useState } from 'react';
 import { useInventoryLive } from '../inventoryLive';
 import { useInventoryShell } from '../InventoryShellContext';
 import { firstAssetSerial, formatPlate, strField } from '../inventoryData';
+import { InventoryQrPrintDialog } from '../InventoryQrPrintDialog';
 export function In8Assets() {
+  const form = useIn8AssetsForm();
+  const [qrOpen, setQrOpen] = useState(false);
   const shell = useInventoryShell();
   const live = useInventoryLive(shell);
   const featuredAsset = live.assets[0];
   const featuredSerial = firstAssetSerial(live.assets);
+  const qrAssetId = form.paged[0] ? form.strField(form.paged[0], 'id', '') : null;
   return (
     <div className="fleet-inventory-stitch inventory-stitch-root">
+      <InventoryQrPrintDialog assetId={qrAssetId} open={qrOpen} onClose={() => setQrOpen(false)} />
       <div className="inventory-stitch-main"><div className="max-w-[1400px] mx-auto px-margin md:px-margin-desktop py-space-lg"><div className="flex flex-col w-full gap-space-lg">
 
       <div className="relative overflow-hidden rounded-lg bg-surface-container-high p-space-md shadow-sm transition-all duration-300" data-stitch-data-stitch-id="telemetry-banner">
@@ -24,7 +33,7 @@ export function In8Assets() {
       <a className="font-body-sm text-body-sm font-semibold text-on-surface underline underline-offset-2 hover:opacity-75 transition-opacity" href="#">Learn inspection workflow</a>
       </div>
       </div>
-      <button type="button" className="w-7 h-7 flex items-center justify-center rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors shrink-0" >
+      <button type="button" className="w-7 h-7 flex items-center justify-center rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors shrink-0"  onClick={() => form.close()}>
       <span className="material-symbols-outlined text-lg">close</span>
       </button>
       </div>
@@ -44,17 +53,21 @@ export function In8Assets() {
       </div>
 
       <div className="flex items-center flex-wrap gap-space-xs shrink-0">
-      <button type="button" className="w-9 h-9 rounded flex items-center justify-center bg-surface-container-lowest text-on-surface hover:bg-surface-container-high transition-colors shadow-sm" title="Settings">
+      <button type="button" className="w-9 h-9 rounded flex items-center justify-center bg-surface-container-lowest text-on-surface hover:bg-surface-container-high transition-colors shadow-sm" title="Settings" onClick={() => shell.openModal('inventory-settings')}>
       <span className="material-symbols-outlined text-lg">settings</span>
       </button>
-      <button type="button" className="w-9 h-9 rounded flex items-center justify-center bg-surface-container-lowest text-on-surface hover:bg-surface-container-high transition-colors shadow-sm" title="More Operations">
-      <span className="material-symbols-outlined text-lg">more_horiz</span>
-      </button>
-      <button type="button" className="h-9 px-space-md rounded bg-surface-container-lowest text-on-surface hover:bg-surface-container-high font-body-sm text-body-sm font-semibold transition-colors shadow-sm flex items-center gap-space-xs">
+      <InventoryOverflowMenu
+        items={[
+          { label: 'Export assets', onClick: () => form.exportAssets() },
+          { label: 'Print QR labels', onClick: () => setQrOpen(true) },
+        ]}
+        title="More Operations"
+      />
+      <button type="button" className="h-9 px-space-md rounded bg-surface-container-lowest text-on-surface hover:bg-surface-container-high font-body-sm text-body-sm font-semibold transition-colors shadow-sm flex items-center gap-space-xs" onClick={() => shell.openModal('receive')}>
       <span className="material-symbols-outlined text-base">download</span>
       <span>Receive Stock</span>
       </button>
-      <button type="button" className="h-9 px-space-md rounded bg-primary text-on-primary hover:bg-primary/90 font-body-sm text-body-sm font-semibold transition-transform active:scale-95 shadow-sm flex items-center gap-space-xs">
+      <button type="button" className="h-9 px-space-md rounded bg-primary text-on-primary hover:bg-primary/90 font-body-sm text-body-sm font-semibold transition-transform active:scale-95 shadow-sm flex items-center gap-space-xs" onClick={() => shell.openModal('issue')}>
       <span className="material-symbols-outlined text-base">local_shipping</span>
       <span>Issue Asset</span>
       </button>
@@ -85,7 +98,7 @@ export function In8Assets() {
       <div>
       <h2 className="font-headline-sm text-headline-sm text-on-surface font-semibold flex items-center gap-space-xs">
       <span>Assets — items tracked by serial number</span>
-      <span className="font-label-code text-caption text-secondary bg-surface-container-high px-space-xs py-0.5 rounded font-medium">2 Total</span>
+      <span className="font-label-code text-caption text-secondary bg-surface-container-high px-space-xs py-0.5 rounded font-medium">{form.statusCounts.all} Total</span>
       </h2>
       <p className="font-caption text-caption text-on-surface-variant mt-0.5">
                 Individual device telemetry, warranty expiration, and maintenance lifecycle
@@ -94,7 +107,7 @@ export function In8Assets() {
       <div className="flex items-center gap-space-sm flex-wrap">
       <div className="relative min-w-[240px]">
       <span className="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-on-surface-variant text-base">search</span>
-      <input className="w-full bg-surface-container-lowest text-on-surface placeholder:text-on-surface-variant font-body-sm text-body-sm pl-8 pr-3 py-1.5 rounded-lg shadow-sm outline-none focus:bg-surface-container-lowest focus:ring-2 focus:ring-primary/20" placeholder="Search serial, asset or car..." type="text"/>
+      <input className="w-full bg-surface-container-lowest text-on-surface placeholder:text-on-surface-variant font-body-sm text-body-sm pl-8 pr-3 py-1.5 rounded-lg shadow-sm outline-none focus:bg-surface-container-lowest focus:ring-2 focus:ring-primary/20" placeholder="Search serial, asset or car..." type="text" value={form.searchQuery} onChange={(e) => form.setSearchQuery(e.target.value)}/>
       </div>
       <button type="button" onClick={() => shell.openModal('register-asset')} className="h-9 px-space-md rounded-lg bg-surface-container-lowest text-on-surface hover:bg-surface-container-high font-body-sm text-body-sm font-semibold transition-colors shadow-sm flex items-center gap-space-xs">
       <span className="material-symbols-outlined text-base">add</span>
@@ -104,29 +117,29 @@ export function In8Assets() {
       </div>
 
       <div className="flex items-center gap-space-xs overflow-x-auto pb-1">
-      <button type="button" className="px-3 py-1.5 rounded-lg bg-primary text-on-primary font-body-sm text-body-sm font-medium flex items-center gap-space-xs shadow-sm">
+      <button type="button" className={`px-3 py-1.5 rounded-lg font-body-sm text-body-sm font-medium flex items-center gap-space-xs shadow-sm ${form.statusFilter === 'all' ? 'bg-primary text-on-primary' : 'bg-surface-container-lowest text-secondary hover:text-on-surface transition-colors'}`} onClick={() => form.setStatusFilter('all')}>
       <span>All</span>
-      <span className="font-label-code text-caption px-1.5 py-0.2 rounded bg-surface-container-highest/20 font-bold">2</span>
+      <span className="font-label-code text-caption px-1.5 py-0.2 rounded bg-surface-container-highest/20 font-bold">{form.statusCounts.all}</span>
       </button>
-      <button type="button" className="px-3 py-1.5 rounded-lg bg-surface-container-lowest text-secondary hover:text-on-surface font-body-sm text-body-sm font-medium flex items-center gap-space-xs shadow-sm transition-colors">
+      <button type="button" className={`px-3 py-1.5 rounded-lg font-body-sm text-body-sm font-medium flex items-center gap-space-xs shadow-sm ${form.statusFilter === 'installed' ? 'bg-primary text-on-primary' : 'bg-surface-container-lowest text-secondary hover:text-on-surface transition-colors'}`} onClick={() => form.setStatusFilter('installed')}>
       <span>Installed</span>
-      <span className="font-label-code text-caption px-1.5 py-0.2 rounded bg-surface-container font-semibold">1</span>
+      <span className="font-label-code text-caption px-1.5 py-0.2 rounded bg-surface-container font-semibold">{form.statusCounts.installed}</span>
       </button>
-      <button type="button" className="px-3 py-1.5 rounded-lg bg-surface-container-lowest text-secondary hover:text-on-surface font-body-sm text-body-sm font-medium flex items-center gap-space-xs shadow-sm transition-colors">
+      <button type="button" className={`px-3 py-1.5 rounded-lg font-body-sm text-body-sm font-medium flex items-center gap-space-xs shadow-sm ${form.statusFilter === 'in_store' ? 'bg-primary text-on-primary' : 'bg-surface-container-lowest text-secondary hover:text-on-surface transition-colors'}`} onClick={() => form.setStatusFilter('in_store')}>
       <span>In store</span>
-      <span className="font-label-code text-caption px-1.5 py-0.2 rounded bg-surface-container font-semibold">1</span>
+      <span className="font-label-code text-caption px-1.5 py-0.2 rounded bg-surface-container font-semibold">{form.statusCounts.in_store}</span>
       </button>
-      <button type="button" className="px-3 py-1.5 rounded-lg bg-surface-container-lowest text-secondary hover:text-on-surface font-body-sm text-body-sm font-medium flex items-center gap-space-xs shadow-sm transition-colors">
+      <button type="button" className={`px-3 py-1.5 rounded-lg font-body-sm text-body-sm font-medium flex items-center gap-space-xs shadow-sm ${form.statusFilter === 'in_repair' ? 'bg-primary text-on-primary' : 'bg-surface-container-lowest text-secondary hover:text-on-surface transition-colors'}`} onClick={() => form.setStatusFilter('in_repair')}>
       <span>In repair</span>
-      <span className="font-label-code text-caption px-1.5 py-0.2 rounded bg-surface-container font-semibold">0</span>
+      <span className="font-label-code text-caption px-1.5 py-0.2 rounded bg-surface-container font-semibold">{form.statusCounts.in_repair}</span>
       </button>
-      <button type="button" className="px-3 py-1.5 rounded-lg bg-surface-container-lowest text-secondary hover:text-on-surface font-body-sm text-body-sm font-medium flex items-center gap-space-xs shadow-sm transition-colors">
+      <button type="button" className={`px-3 py-1.5 rounded-lg font-body-sm text-body-sm font-medium flex items-center gap-space-xs shadow-sm ${form.statusFilter === 'faulty' ? 'bg-primary text-on-primary' : 'bg-surface-container-lowest text-secondary hover:text-on-surface transition-colors'}`} onClick={() => form.setStatusFilter('faulty')}>
       <span>Faulty</span>
-      <span className="font-label-code text-caption px-1.5 py-0.2 rounded bg-surface-container font-semibold">0</span>
+      <span className="font-label-code text-caption px-1.5 py-0.2 rounded bg-surface-container font-semibold">{form.statusCounts.faulty}</span>
       </button>
-      <button type="button" className="px-3 py-1.5 rounded-lg bg-surface-container-lowest text-secondary hover:text-on-surface font-body-sm text-body-sm font-medium flex items-center gap-space-xs shadow-sm transition-colors">
+      <button type="button" className={`px-3 py-1.5 rounded-lg font-body-sm text-body-sm font-medium flex items-center gap-space-xs shadow-sm ${form.statusFilter === 'warranty_ending' ? 'bg-primary text-on-primary' : 'bg-surface-container-lowest text-secondary hover:text-on-surface transition-colors'}`} onClick={() => form.setStatusFilter('warranty_ending')}>
       <span>Warranty ending</span>
-      <span className="font-label-code text-caption px-1.5 py-0.2 rounded bg-surface-container font-semibold">0</span>
+      <span className="font-label-code text-caption px-1.5 py-0.2 rounded bg-surface-container font-semibold">{form.statusCounts.warranty_ending}</span>
       </button>
       </div>
       </div>
@@ -156,7 +169,7 @@ export function In8Assets() {
       <span className="w-1.5 h-1.5 rounded-full bg-on-tertiary-container animate-pulse"></span>
       <span>No serial yet</span>
       </span>
-      <button type="button" className="text-on-surface font-body-sm text-caption underline font-semibold hover:text-secondary underline-offset-2">
+      <button type="button" className="text-on-surface font-body-sm text-caption underline font-semibold hover:text-secondary underline-offset-2" onClick={() => form.registerAsset()}>
                         Add serial
                       </button>
       </div>
@@ -197,9 +210,7 @@ export function In8Assets() {
       </td>
       <td className="py-space-md px-space-md align-middle text-right">
       <div className="relative inline-block text-left">
-      <button type="button" className="w-8 h-8 rounded flex items-center justify-center text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors" >
-      <span className="material-symbols-outlined text-base">more_horiz</span>
-      </button>
+      <InventoryOverflowMenu items={form.rowMenuItems(form.paged[0] ? form.strField(form.paged[0], 'id', '') : '')} />
       <div className="hidden absolute right-0 mt-1 w-44 rounded-lg bg-surface-container-lowest shadow-xl z-20 py-1 text-left" data-stitch-data-stitch-id="menu-row-1">
       <a className="flex items-center gap-2 px-3 py-1.5 font-body-sm text-body-sm text-on-surface hover:bg-surface-container-low" href="#">
       <span className="material-symbols-outlined text-sm">visibility</span> View details
@@ -264,9 +275,7 @@ export function In8Assets() {
       </td>
       <td className="py-space-md px-space-md align-middle text-right">
       <div className="relative inline-block text-left">
-      <button type="button" className="w-8 h-8 rounded flex items-center justify-center text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors" >
-      <span className="material-symbols-outlined text-base">more_horiz</span>
-      </button>
+      <InventoryOverflowMenu items={form.rowMenuItems(form.paged[1] ? form.strField(form.paged[1], 'id', '') : form.paged[0] ? form.strField(form.paged[0], 'id', '') : '')} />
       <div className="hidden absolute right-0 mt-1 w-44 rounded-lg bg-surface-container-lowest shadow-xl z-20 py-1 text-left" data-stitch-data-stitch-id="menu-row-2">
       <a className="flex items-center gap-2 px-3 py-1.5 font-body-sm text-body-sm text-on-surface hover:bg-surface-container-low" href="#">
       <span className="material-symbols-outlined text-sm">visibility</span> View details
@@ -290,14 +299,12 @@ export function In8Assets() {
 
       <div className="p-space-md bg-surface-container-lowest flex flex-col sm:flex-row items-center justify-between gap-space-md">
       <div className="font-body-sm text-body-sm text-on-surface-variant flex items-center gap-space-xs">
-      <span>Showing 2 of 2 operational assets</span>
+      <span>Showing {form.paged.length} of {form.filteredCount} operational assets</span>
       <span className="text-outline-variant">•</span>
       <span className="font-label-code text-caption">Depot partition: REGION_01_KIN</span>
       </div>
       <div className="flex items-center gap-space-xs">
-      <button type="button" className="px-space-md py-1 rounded bg-surface-container text-secondary text-caption font-semibold cursor-not-allowed opacity-50">Previous</button>
-      <span className="px-2 font-label-code text-caption font-semibold text-on-surface">Page 1 of 1</span>
-      <button type="button" className="px-space-md py-1 rounded bg-surface-container text-secondary text-caption font-semibold cursor-not-allowed opacity-50">Next</button>
+      <InventoryPagination page={form.page} pageCount={form.pageCount} setPage={form.setPage} />
       </div>
       </div>
       </div>
@@ -357,7 +364,7 @@ export function In8Assets() {
       </div>
       <div className="mt-space-md">
       <div className="flex items-baseline gap-space-xs">
-      <span className="font-headline-lg text-headline-lg font-bold text-on-surface font-label-price">J$ 45,998.85</span>
+      <span className="font-headline-lg text-headline-lg font-bold text-on-surface font-label-price">{form.live.totalStockValue}</span>
       </div>
       <div className="mt-space-xs flex items-center gap-1 text-secondary font-label-code text-caption font-medium">
       <span className="material-symbols-outlined text-sm">schedule</span>

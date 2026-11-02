@@ -1,12 +1,16 @@
 /** Ported from Stitch — do not simplify layout (audit §0.4). */
+import { useIn11PurchasingForm } from './hooks/useIn11PurchasingForm';
 import { useInventoryLive } from '../inventoryLive';
 import { useInventoryShell } from '../InventoryShellContext';
+import { InventoryPrimaryTabs } from '../InventoryPrimaryTabs';
 import { firstOpenPoNumber, firstVendorName, strField } from '../inventoryData';
 export function In11Purchasing() {
+  const form = useIn11PurchasingForm();
   const shell = useInventoryShell();
   const live = useInventoryLive(shell);
   const vendorName = firstVendorName(live.vendors);
   const featuredPo = live.purchaseOrders[0];
+  const featuredPoId = featuredPo ? strField(featuredPo, 'id', '') : '';
   const poNumber = featuredPo ? strField(featuredPo, 'number', firstOpenPoNumber(live.purchaseOrders)) : firstOpenPoNumber(live.purchaseOrders);
   const firstVendorId = live.vendors[0] ? strField(live.vendors[0], 'id', '') || null : null;
   const openVendorEditor = () => shell.openGap('vendor-editor', { vendorId: firstVendorId });
@@ -34,7 +38,7 @@ export function In11Purchasing() {
       <div className="flex items-center gap-space-lg bg-surface-container-low px-space-lg py-space-sm rounded-lg">
       <div className="flex flex-col text-right">
       <span className="font-caption text-caption uppercase text-on-surface-variant">Procurement Cap</span>
-      <span className="font-label-price text-label-price text-on-surface">J$ 250,000.00 / Mo</span>
+      <span className="font-label-price text-label-price text-on-surface">{form.totals} / Mo</span>
       </div>
       <div className="w-px h-8 bg-surface-container-highest"></div>
       <div className="flex flex-col text-right">
@@ -44,23 +48,7 @@ export function In11Purchasing() {
       </div>
       </div>
 
-      <div className="flex items-center gap-space-xs overflow-x-auto pb-1">
-      <button type="button" className="px-space-lg py-space-sm rounded font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-all">Overview</button>
-      <button type="button" className="px-space-lg py-space-sm rounded font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-all">Stock</button>
-      <button type="button" className="px-space-lg py-space-sm rounded font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-all">Vehicle kits</button>
-      <button type="button" className="px-space-lg py-space-sm rounded font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-all">Assets</button>
-      <button type="button" className="px-space-lg py-space-sm rounded font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-all">Movements</button>
-
-      <button type="button" className="px-space-lg py-space-sm rounded font-body-sm text-body-sm bg-primary text-on-primary font-semibold shadow-sm flex items-center gap-space-xs">
-      <span className="material-symbols-outlined text-[16px]">shopping_cart</span>
-                Purchasing
-              </button>
-      <button type="button" className="px-space-lg py-space-sm rounded font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-all">Counts</button>
-      <button type="button" className="px-space-lg py-space-sm rounded font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-all flex items-center gap-space-xs">
-      <span>Alerts</span>
-      <span className="px-1.5 py-0.5 rounded-full bg-error-container text-on-error-container font-label-code text-[10px] font-bold">5</span>
-      </button>
-      </div>
+      <InventoryPrimaryTabs variant="pill" />
       </div>
       </div>
 
@@ -69,24 +57,24 @@ export function In11Purchasing() {
       <div className="flex flex-wrap items-center justify-between gap-space-md">
 
       <div className="flex items-center bg-surface-container-high p-1 rounded-lg">
-      <button type="button" className="px-space-lg py-1.5 rounded-md font-body-sm text-body-sm bg-primary text-on-primary font-semibold shadow-sm flex items-center gap-space-xs transition-all" data-stitch-data-stitch-id="sub-pill-orders">
+      <button type="button" className="px-space-lg py-1.5 rounded-md font-body-sm text-body-sm bg-primary text-on-primary font-semibold shadow-sm flex items-center gap-space-xs transition-all" data-stitch-data-stitch-id="sub-pill-orders" onClick={() => form.setTab('orders')}>
       <span className="material-symbols-outlined text-[15px]">inventory</span>
       <span>Orders</span>
       </button>
-      <button type="button" className="px-space-lg py-1.5 rounded-md font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface flex items-center gap-space-xs transition-all" data-stitch-data-stitch-id="sub-pill-suggested">
+      <button type="button" className="px-space-lg py-1.5 rounded-md font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface flex items-center gap-space-xs transition-all" data-stitch-data-stitch-id="sub-pill-suggested" onClick={() => form.setTab('suggested')}>
       <span className="material-symbols-outlined text-[15px]">auto_fix_high</span>
       <span>Suggested</span>
-      <span className="px-1.5 py-0.2 bg-tertiary-fixed text-on-tertiary-fixed font-label-code text-[11px] font-bold rounded-full">1</span>
+      <span className="px-1.5 py-0.2 bg-tertiary-fixed text-on-tertiary-fixed font-label-code text-[11px] font-bold rounded-full">{form.suggestedCount}</span>
       </button>
-      <button type="button" className="px-space-lg py-1.5 rounded-md font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface flex items-center gap-space-xs transition-all" data-stitch-data-stitch-id="sub-pill-vendors">
+      <button type="button" className="px-space-lg py-1.5 rounded-md font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface flex items-center gap-space-xs transition-all" data-stitch-data-stitch-id="sub-pill-vendors" onClick={() => form.setTab('vendors')}>
       <span className="material-symbols-outlined text-[15px]">storefront</span>
       <span>Vendors</span>
-      <span className="px-1.5 py-0.2 bg-surface-container-lowest text-on-surface-variant font-label-code text-[11px] rounded-full">3</span>
+      <span className="px-1.5 py-0.2 bg-surface-container-lowest text-on-surface-variant font-label-code text-[11px] rounded-full">{form.vendorCount}</span>
       </button>
       </div>
 
       <div className="flex items-center gap-space-md">
-      <button type="button" className="h-9 px-space-lg bg-surface-container-lowest text-on-surface font-body-sm text-body-sm rounded shadow-sm hover:bg-surface-container transition-all flex items-center gap-space-xs">
+      <button type="button" className="h-9 px-space-lg bg-surface-container-lowest text-on-surface font-body-sm text-body-sm rounded shadow-sm hover:bg-surface-container transition-all flex items-center gap-space-xs" onClick={() => form.exportPurchasing()}>
       <span className="material-symbols-outlined text-[16px]">file_download</span>
                 Export Audit Ledger
               </button>
@@ -134,7 +122,7 @@ export function In11Purchasing() {
       </div>
       <div className="bg-surface-container-low p-2 rounded flex items-center justify-between">
       <span className="font-caption text-caption text-on-surface-variant">3 lines</span>
-      <span className="font-label-price text-label-price text-on-surface">J$ 31,600.00</span>
+      <span className="font-label-price text-label-price text-on-surface">{form.totals}</span>
       </div>
       <div className="text-on-surface-variant font-caption text-caption flex items-center gap-1">
       <span className="material-symbols-outlined text-[14px]">event</span>
@@ -199,7 +187,7 @@ export function In11Purchasing() {
       </div>
       <div className="bg-surface-container-low p-2 rounded flex items-center justify-between">
       <span className="font-caption text-caption text-on-surface-variant">4 lines</span>
-      <span className="font-label-price text-label-price text-on-surface">J$ 68,400.00</span>
+      <span className="font-label-price text-label-price text-on-surface">{form.totals}</span>
       </div>
       <div className="text-on-surface-variant font-caption text-caption flex items-center gap-1">
       <span className="material-symbols-outlined text-[14px]">check_circle</span>
@@ -218,7 +206,7 @@ export function In11Purchasing() {
       </div>
       <div className="bg-surface-container-low p-2 rounded flex items-center justify-between">
       <span className="font-caption text-caption text-on-surface-variant">1 line</span>
-      <span className="font-label-price text-label-price text-on-surface">J$ 14,200.00</span>
+      <span className="font-label-price text-label-price text-on-surface">{form.totals}</span>
       </div>
       </div>
       </div>
@@ -232,31 +220,36 @@ export function In11Purchasing() {
       <span className="font-label-code text-caption font-bold text-on-surface-variant bg-surface-container-lowest px-2 py-0.5 rounded">4</span>
       </div>
 
-      <div className="bg-surface-container-lowest rounded-lg p-space-md shadow-sm flex flex-col gap-1.5">
+      {form.allOrders
+        .filter((po) => {
+          const st = form.strField(po, 'status', '').toLowerCase();
+          return st === 'closed' || st === 'cancelled' || st === 'canceled';
+        })
+        .slice(0, form.showArchived ? undefined : 2)
+        .map((po) => {
+          const id = form.strField(po, 'id', '');
+          const ref = form.strField(po, 'number', form.strField(po, 'po_number', '—'));
+          const vendor = form.strField(po, 'vendor_name', vendorName);
+          const total = form.formatJmd(Number(form.strField(po, 'total_jmd', form.strField(po, 'total', '0'))));
+          return (
+      <div key={id || ref} className="bg-surface-container-lowest rounded-lg p-space-md shadow-sm flex flex-col gap-1.5">
       <div className="flex items-center justify-between">
-      <span className="font-label-code text-caption font-bold text-on-surface-variant">PO-1899</span>
-      <span className="font-caption text-[10px] text-on-surface-variant">Archived 22 Oct</span>
+      <span className="font-label-code text-caption font-bold text-on-surface-variant">{ref}</span>
+      <span className="font-caption text-[10px] text-on-surface-variant">{form.strField(po, 'closed_at', form.strField(po, 'updated_at', ''))}</span>
       </div>
-      <span className="font-body-sm text-body-sm text-on-surface truncate">Dominion Auto Parts Ltd</span>
+      <span className="font-body-sm text-body-sm text-on-surface truncate">{vendor}</span>
       <div className="flex items-center justify-between text-on-surface-variant font-label-price text-caption">
       <span>Settled</span>
-      <span>J$ 118,200.00</span>
+      <span>{total}</span>
       </div>
       </div>
-      <div className="bg-surface-container-lowest rounded-lg p-space-md shadow-sm flex flex-col gap-1.5 opacity-70">
-      <div className="flex items-center justify-between">
-      <span className="font-label-code text-caption font-bold text-on-surface-variant">PO-1894</span>
-      <span className="font-caption text-[10px] text-on-surface-variant">Archived 18 Oct</span>
-      </div>
-      <span className="font-body-sm text-body-sm text-on-surface truncate">{vendorName}</span>
-      <div className="flex items-center justify-between text-on-surface-variant font-label-price text-caption">
-      <span>Settled</span>
-      <span>J$ 24,500.00</span>
-      </div>
-      </div>
-      <button type="button" className="py-1 text-center font-caption text-caption text-on-surface-variant hover:text-on-surface transition-colors">
-                  + 2 more archived orders
+          );
+        })}
+      {form.archivedCount > 2 ? (
+      <button type="button" className="py-1 text-center font-caption text-caption text-on-surface-variant hover:text-on-surface transition-colors" onClick={() => form.setShowArchived(!form.showArchived)}>
+                  + {form.archivedCount - 2} more archived orders
                 </button>
+      ) : null}
       </div>
       </div>
       </div>
@@ -297,14 +290,14 @@ export function In11Purchasing() {
       </div>
 
       <div className="flex items-center flex-wrap gap-space-sm">
-      <button type="button" className="h-9 px-space-md bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm rounded transition-all">
+      <button type="button" className="h-9 px-space-md bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm rounded transition-all" onClick={() => featuredPoId && form.poAction(featuredPoId, 'cancel')}>
                     Cancel order
                   </button>
-      <button type="button" className="h-9 px-space-md bg-surface-container-highest hover:bg-surface-dim text-on-surface font-body-sm text-body-sm rounded font-medium transition-all flex items-center gap-1">
+      <button type="button" className="h-9 px-space-md bg-surface-container-highest hover:bg-surface-dim text-on-surface font-body-sm text-body-sm rounded font-medium transition-all flex items-center gap-1" onClick={() => featuredPoId && form.poAction(featuredPoId, 'submit')}>
       <span className="material-symbols-outlined text-[16px]">verified</span>
                     Send for approval
                   </button>
-      <button type="button" className="h-9 px-space-lg bg-primary text-on-primary font-body-sm text-body-sm rounded font-semibold shadow-sm hover:bg-primary-container transition-all flex items-center gap-space-xs">
+      <button type="button" className="h-9 px-space-lg bg-primary text-on-primary font-body-sm text-body-sm rounded font-semibold shadow-sm hover:bg-primary-container transition-all flex items-center gap-space-xs" onClick={() => featuredPoId && form.poAction(featuredPoId, 'order')}>
       <span className="material-symbols-outlined text-[16px]">local_shipping</span>
                     Mark ordered
                   </button>
@@ -320,7 +313,7 @@ export function In11Purchasing() {
       <div className="flex items-center gap-space-sm">
       <span className="material-symbols-outlined text-[20px] text-on-tertiary-container">info</span>
       <span className="font-body-sm text-body-sm">
-      <strong>Spending Threshold Policy:</strong> This order total exceeds the local dispatcher threshold of <strong>J$ 20,000.00</strong>. Authorization token from Kingston platform administrator is required prior to invoice dispatch.
+      <strong>Spending Threshold Policy:</strong> This order total exceeds the local dispatcher threshold of <strong>{form.totals}</strong>. Authorization token from Kingston platform administrator is required prior to invoice dispatch.
                 </span>
       </div>
       <span className="font-label-code text-caption font-bold bg-surface-container-lowest px-2 py-1 rounded text-on-surface">Rule REG-801-JMD</span>
@@ -364,13 +357,13 @@ export function In11Purchasing() {
       <span className="font-label-code text-caption px-2 py-0.5 rounded bg-surface-container text-on-surface-variant">0 ea</span>
       </td>
       <td className="py-space-md px-space-md text-right font-label-price text-label-price text-on-surface">
-                        J$ 5,200.00
+                        {form.totals}
                       </td>
       <td className="py-space-md px-space-lg text-right font-label-price text-label-price font-bold text-on-surface">
-                        J$ 26,000.00
+                        {form.totals}
                       </td>
       <td className="py-space-md px-space-md text-center">
-      <button type="button" className="p-1 rounded hover:bg-surface-container text-on-surface-variant hover:text-error transition-colors" title="Delete Line">
+      <button type="button" className="p-1 rounded hover:bg-surface-container text-on-surface-variant hover:text-error transition-colors" title="Delete Line" onClick={() => featuredPoId && form.removePoLine(featuredPoId, 'line-stub')}>
       <span className="material-symbols-outlined text-[16px]">delete</span>
       </button>
       </td>
@@ -395,13 +388,13 @@ export function In11Purchasing() {
       <span className="font-label-code text-caption px-2 py-0.5 rounded bg-surface-container text-on-surface-variant">0 ea</span>
       </td>
       <td className="py-space-md px-space-md text-right font-label-price text-label-price text-on-surface">
-                        J$ 6,500.00
+                        {form.totals}
                       </td>
       <td className="py-space-md px-space-lg text-right font-label-price text-label-price font-bold text-on-surface">
-                        J$ 13,000.00
+                        {form.totals}
                       </td>
       <td className="py-space-md px-space-md text-center">
-      <button type="button" className="p-1 rounded hover:bg-surface-container text-on-surface-variant hover:text-error transition-colors" title="Delete Line">
+      <button type="button" className="p-1 rounded hover:bg-surface-container text-on-surface-variant hover:text-error transition-colors" title="Delete Line" onClick={() => featuredPoId && form.removePoLine(featuredPoId, 'line-stub')}>
       <span className="material-symbols-outlined text-[16px]">delete</span>
       </button>
       </td>
@@ -426,13 +419,13 @@ export function In11Purchasing() {
       <span className="font-label-code text-caption px-2 py-0.5 rounded bg-surface-container text-on-surface-variant">0 ea</span>
       </td>
       <td className="py-space-md px-space-md text-right font-label-price text-label-price text-on-surface">
-                        J$ 2,100.00
+                        {form.totals}
                       </td>
       <td className="py-space-md px-space-lg text-right font-label-price text-label-price font-bold text-on-surface">
-                        J$ 2,100.00
+                        {form.totals}
                       </td>
       <td className="py-space-md px-space-md text-center">
-      <button type="button" className="p-1 rounded hover:bg-surface-container text-on-surface-variant hover:text-error transition-colors" title="Delete Line">
+      <button type="button" className="p-1 rounded hover:bg-surface-container text-on-surface-variant hover:text-error transition-colors" title="Delete Line" onClick={() => featuredPoId && form.removePoLine(featuredPoId, 'line-stub')}>
       <span className="material-symbols-outlined text-[16px]">delete</span>
       </button>
       </td>
@@ -460,14 +453,14 @@ export function In11Purchasing() {
       <span className="font-caption text-caption text-on-surface-variant uppercase">Local Drayage / Courier</span>
       <div className="flex items-center justify-between">
       <span className="font-body-sm text-body-sm font-medium text-on-surface">Kingston Express Delivery</span>
-      <span className="font-label-price text-label-price font-bold text-on-surface">J$ 2,500.00</span>
+      <span className="font-label-price text-label-price font-bold text-on-surface">{form.totals}</span>
       </div>
       </div>
       <div className="bg-surface-container-lowest p-space-md rounded-lg flex flex-col gap-1 shadow-sm">
       <span className="font-caption text-caption text-on-surface-variant uppercase">Port / Processing Duty</span>
       <div className="flex items-center justify-between">
       <span className="font-body-sm text-body-sm font-medium text-on-surface">Consolidated Wharf Surcharge</span>
-      <span className="font-label-price text-label-price font-bold text-on-surface">J$ 1,500.00</span>
+      <span className="font-label-price text-label-price font-bold text-on-surface">{form.totals}</span>
       </div>
       </div>
       </div>
@@ -482,17 +475,17 @@ export function In11Purchasing() {
       <div className="flex flex-col gap-space-xs font-body-sm text-body-sm text-on-surface">
       <div className="flex justify-between py-1">
       <span className="text-on-surface-variant">Item Catalog Subtotal:</span>
-      <span className="font-label-price text-label-price text-on-surface font-medium">J$ 41,100.00</span>
+      <span className="font-label-price text-label-price text-on-surface font-medium">{form.totals}</span>
       </div>
       <div className="flex justify-between py-1">
       <span className="text-on-surface-variant">Freight, Port Handling & Taxes:</span>
-      <span className="font-label-price text-label-price text-on-surface font-medium">J$ 4,000.00</span>
+      <span className="font-label-price text-label-price text-on-surface font-medium">{form.totals}</span>
       </div>
       <div className="h-px bg-surface-container-highest my-1"></div>
       <div className="flex justify-between items-baseline py-1">
       <span className="font-headline-sm text-headline-sm font-bold text-on-surface">Total PO Value:</span>
       <div className="text-right">
-      <div className="font-headline-sm text-headline-sm font-bold font-label-price text-on-surface">J$ 45,100.00</div>
+      <div className="font-headline-sm text-headline-sm font-bold font-label-price text-on-surface">{form.totals}</div>
       <div className="font-caption text-caption text-on-surface-variant">Currency: Jamaican Dollar (JMD)</div>
       </div>
       </div>
@@ -503,8 +496,8 @@ export function In11Purchasing() {
       <span className="font-caption text-caption text-on-primary-container uppercase font-bold">Authorized Sign-off</span>
       <span className="font-body-sm text-body-sm">Deeki T · Platform Owner</span>
       </div>
-      <button type="button" className="px-space-md py-1 bg-surface-container-lowest text-primary rounded font-body-sm text-body-sm font-bold hover:bg-surface-container transition-all">
-                    Authorize J$ 45.1k
+      <button type="button" className="px-space-md py-1 bg-surface-container-lowest text-primary rounded font-body-sm text-body-sm font-bold hover:bg-surface-container transition-all" onClick={() => featuredPoId && form.poAction(featuredPoId, 'authorize')}>
+                    Authorize {form.totals}
                   </button>
       </div>
       </div>
@@ -526,7 +519,7 @@ export function In11Purchasing() {
       </div>
       </div>
       <div className="flex items-center gap-space-sm">
-      <button type="button" className="px-space-md py-1.5 bg-surface-container-low text-on-surface rounded font-body-sm text-body-sm hover:bg-surface-container transition-colors">
+      <button type="button" className="px-space-md py-1.5 bg-surface-container-low text-on-surface rounded font-body-sm text-body-sm hover:bg-surface-container transition-colors" onClick={() => form.recomputeThresholds()}>
                   Recompute Thresholds
                 </button>
       </div>
@@ -585,7 +578,7 @@ export function In11Purchasing() {
                       7 days
                     </td>
       <td className="py-space-md px-space-lg text-right font-label-price text-label-price font-bold text-on-surface">
-                      J$ 26,000.00
+                      {form.totals}
                     </td>
       <td className="py-space-md px-space-lg text-right">
       <button type="button" onClick={openRequisition} className="px-space-md py-1.5 bg-primary text-on-primary font-body-sm text-body-sm rounded font-medium hover:bg-primary-container shadow-sm transition-all whitespace-nowrap">

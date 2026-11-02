@@ -134,6 +134,12 @@ export const inventoryApi = {
       body: JSON.stringify(body),
     }),
   exportCsv: () => invFetchRaw('/export.csv').then((r) => r.text()),
+  reverseMovement: (body: unknown, idempotencyKey: string) =>
+    invFetch('/reverse', {
+      method: 'POST',
+      headers: idempotencyHeaders(idempotencyKey),
+      body: JSON.stringify(body),
+    }),
   alerts: () => invFetch('/alerts'),
   alertSnooze: (id: string, body: { days?: number; until?: string; reason?: string; assignee?: string }) =>
     invFetch(`/alerts/${encodeURIComponent(id)}/snooze`, {
@@ -145,8 +151,21 @@ export const inventoryApi = {
     invFetch(`/alerts/${encodeURIComponent(id)}/done`, { method: 'POST' }),
   alertViewed: (id: string) =>
     invFetch(`/alerts/${encodeURIComponent(id)}/viewed`, { method: 'POST' }),
+  alertAssign: (id: string, userId: string) =>
+    invFetch(`/alerts/${encodeURIComponent(id)}/assign`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: userId }),
+    }),
+  reorderRecompute: () => invFetch('/reorder/recompute', { method: 'POST' }),
   assets: () => invFetch('/assets'),
   assetEvents: (id: string) => invFetch(`/assets/${encodeURIComponent(id)}/events`),
+  assetAddEvent: (id: string, body: unknown) =>
+    invFetch(`/assets/${encodeURIComponent(id)}/events`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
   assetDocuments: (id: string) => invFetch(`/assets/${encodeURIComponent(id)}/documents`),
   assetAddDocument: (id: string, body: unknown) =>
     invFetch(`/assets/${encodeURIComponent(id)}/documents`, {
@@ -366,6 +385,13 @@ export const inventoryApi = {
     }),
   kitsCompare: (params?: URLSearchParams) =>
     invFetch(`/kits/compare${params?.toString() ? `?${params}` : ''}`),
+  kitsTemplates: () => invFetch('/kits/templates'),
+  createKitTemplate: (body: unknown) =>
+    invFetch('/kits/templates', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
   publishKitTemplate: (templateId: string, body: unknown) =>
     invFetch(`/kits/templates/${encodeURIComponent(templateId)}/publish`, {
       method: 'POST',

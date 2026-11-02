@@ -38,9 +38,16 @@ export function useCarKitFlow(vehicleId?: string | null) {
   const [lastReport, setLastReport] = useState<DriverReportRow | null>(null);
   const [reports, setReports] = useState<DriverReportRow[]>([]);
   const [reportsLoading, setReportsLoading] = useState(false);
+  const [sending, setSending] = useState(false);
 
   const reload = useCallback(() => {
     setRefreshKey((k) => k + 1);
+  }, []);
+
+  const dismissOfflineNotice = useCallback(() => {
+    setPendingDraft(null);
+    setSendError(false);
+    setScreen('dk1');
   }, []);
 
   useEffect(() => {
@@ -98,18 +105,24 @@ export function useCarKitFlow(vehicleId?: string | null) {
     setScreen('dk1');
   };
 
-  const submitReport = async () => {
+  const submitReport = async (payload?: {
+    issueType?: string;
+    notes?: string;
+    hasPhoto?: boolean;
+  }) => {
     const itemLabel = reportItemLabel?.trim() || 'Kit item';
     setPendingDraft({
       itemLabel,
-      issueLabel: 'Missing / Broken',
-      note: undefined,
+      issueLabel: payload?.issueType ?? 'Missing / Broken',
+      note: payload?.notes,
     });
+    setSending(true);
     try {
       const res = (await driverInventoryApi.submitReport(
         {
           itemNames: reportItemLabel ? [reportItemLabel] : undefined,
-          issueType: 'driver_report',
+          issueType: payload?.issueType ?? 'driver_report',
+          notes: payload?.notes?.trim() || undefined,
           vehicleId: kit?.vehicleId ?? vehicleId ?? undefined,
         },
         newIdempotencyKey('driver-report'),
@@ -124,6 +137,8 @@ export function useCarKitFlow(vehicleId?: string | null) {
       setSendErrorRef(msg.slice(0, 120) || 'SEND_FAILED');
       setSendError(true);
       setScreen('dk1');
+    } finally {
+      setSending(false);
     }
   };
 
@@ -138,11 +153,13 @@ export function useCarKitFlow(vehicleId?: string | null) {
     openReportSheet,
     closeReportSheet,
     submitReport,
+    sending,
     reload,
     lastReport,
     reports,
     reportsLoading,
     pendingDraft,
     sendErrorRef,
+    dismissOfflineNotice,
   };
 }

@@ -36,10 +36,18 @@ export default defineConfig({
   projects: [
     {
       name: 'fleet',
-      testMatch: /fleet-rush-integration\.spec\.ts|fuel-recon-wizard\.spec\.ts|fuel-recon-shadow-soak\.spec\.ts|driver-settlements-desk\.spec\.ts|driver-detail-smoke\.spec\.ts|fleet-find-parts-visual\.spec\.ts/,
+      testMatch: /fleet-rush-integration\.spec\.ts|fuel-recon-wizard\.spec\.ts|fuel-recon-shadow-soak\.spec\.ts|driver-settlements-desk\.spec\.ts|driver-detail-smoke\.spec\.ts|fleet-find-parts-visual\.spec\.ts|inventory-button-sweep\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         baseURL: process.env.FLEET_BASE_URL?.trim() || 'http://localhost:3000',
+      },
+    },
+    {
+      name: 'driver-car-kit',
+      testMatch: /car-kit-button-sweep\.spec\.ts/,
+      use: {
+        ...devices['Pixel 7'],
+        baseURL: process.env.DRIVER_BASE_URL?.trim() || 'http://localhost:5174',
       },
     },
     {

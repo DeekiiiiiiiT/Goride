@@ -296,6 +296,21 @@ jobs:
           supabase/functions/_fleet-server/inventory_approvals.test.ts
           supabase/functions/_fleet-server/inventory_driver_reports.test.ts
           supabase/functions/_fleet-server/inventory_integration.test.ts
+          supabase/functions/_fleet-server/inventory_asset_events.test.ts
+
+      - name: Fleet inventory button sweep (optional E2E)
+        env:
+          INVENTORY_BUTTON_SWEEP: "1"
+          E2E_FLEET_EMAIL: ${{ secrets.E2E_FLEET_EMAIL }}
+          E2E_FLEET_PASSWORD: ${{ secrets.E2E_FLEET_PASSWORD }}
+          FLEET_BASE_URL: ${{ vars.FLEET_E2E_BASE_URL }}
+        run: |
+          if [ -z "$E2E_FLEET_EMAIL" ] || [ -z "$FLEET_BASE_URL" ]; then
+            echo "Skipping inventory button sweep (set secrets E2E_FLEET_* and vars.FLEET_E2E_BASE_URL)"
+            exit 0
+          fi
+          npx playwright install --with-deps chromium
+          npx playwright test --project=fleet e2e/inventory-button-sweep.spec.ts
 
       - name: Deno test ledger read API parity
         run: >

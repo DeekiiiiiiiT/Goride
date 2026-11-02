@@ -272,6 +272,18 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
     [items],
   );
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const vehicleId = params.get("vehicle_id");
+    if (!vehicleId || loading || items.length === 0) return;
+    setHubTab("work-orders");
+    void prepareLogForVehicle(vehicleId);
+    params.delete("vehicle_id");
+    const url = new URL(window.location.href);
+    url.search = params.toString();
+    window.history.replaceState(null, "", url.pathname + (url.search ? url.search : ""));
+  }, [items, loading, prepareLogForVehicle]);
+
   const handleCompleteRequest = useCallback(
     async (row: DriverRequestRow) => {
       await prepareLogForVehicle(row.vehicle_id, {

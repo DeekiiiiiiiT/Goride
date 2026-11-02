@@ -1,2 +1,2 @@
 vehicle,part_type,brand,part_number,part_name,match_type,year_from,year_to,source_url,position,side
-00000000-0000-4000-8000-000000000001,BRK-PADS,Toyota,04465-TEST,Pad,oem,2018,2024,https://example.com/p,Front,Left
+8f066ebd-062a-47fb-915f-5cbcd2bb2945,BRK-PADS,Toyota,04465-TEST,Pad,oem,2018,2024,https://example.com/p,Front,Left

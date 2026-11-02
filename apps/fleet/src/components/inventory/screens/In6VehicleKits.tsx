@@ -1,17 +1,23 @@
 /** Ported from Stitch — do not simplify layout (audit §0.4). */
+import { useIn6VehicleKitsForm } from './hooks/useIn6VehicleKitsForm';
 import { InventoryPrimaryTabs } from '../InventoryPrimaryTabs';
 import { useInventoryLive } from '../inventoryLive';
 import { useInventoryShell } from '../InventoryShellContext';
 export function In6VehicleKits() {
+  const form = useIn6VehicleKitsForm();
   const shell = useInventoryShell();
   const live = useInventoryLive(shell);
   const primary = live.primaryVehicle;
   const secondary = live.secondaryVehicle;
+  const issueMissingFromMatrix = () => {
+    const pair = form.firstMissingPair();
+    if (pair?.vehicleId && pair?.itemId) void form.issueMissing(pair.vehicleId, pair.itemId);
+  };
   return (
     <div className="fleet-inventory-stitch inventory-stitch-root">
       <div className="inventory-stitch-main"><div className="flex flex-col w-full">
 
-      <div className="fixed inset-0 z-50 hidden items-center justify-center bg-primary/20 backdrop-blur-sm px-4" data-stitch-data-stitch-id="issue-modal">
+      <div className={`fixed inset-0 z-50 ${form.confirmIssue ? 'flex' : 'hidden'} items-center justify-center bg-primary/20 backdrop-blur-sm px-4`} data-stitch-data-stitch-id="issue-modal">
       <div className="bg-surface-container-lowest rounded-xl max-w-lg w-full p-space-xl shadow-xl flex flex-col gap-space-lg">
       <div className="flex items-center justify-between">
       <div className="flex items-center gap-space-sm">
@@ -23,7 +29,7 @@ export function In6VehicleKits() {
       <p className="font-caption text-caption text-on-surface-variant">Kingston Depot Central Logistics</p>
       </div>
       </div>
-      <button type="button" className="w-7 h-7 rounded hover:bg-surface-container-high flex items-center justify-center text-on-surface-variant transition-colors" >
+      <button type="button" className="w-7 h-7 rounded hover:bg-surface-container-high flex items-center justify-center text-on-surface-variant transition-colors"  onClick={() => form.closeConfirmIssue()}>
       <span className="material-symbols-outlined text-[18px]">close</span>
       </button>
       </div>
@@ -41,18 +47,18 @@ export function In6VehicleKits() {
       <div>
       <label className="block font-caption text-caption text-on-surface-variant uppercase mb-1">Stock Source / Serial</label>
       <div className="relative">
-      <input className="w-full h-9 px-space-md bg-surface-container-lowest rounded text-on-surface font-label-code text-label-code focus:outline-none" type="text" value="SKU-PUMP-2024-089 (Central Shelf B3)"/>
+      <input className="w-full h-9 px-space-md bg-surface-container-lowest rounded text-on-surface font-label-code text-label-code focus:outline-none" type="text" value={form.confirmPlate} onChange={(e) => form.setConfirmPlate(e.target.value)}/>
       <span className="absolute right-2.5 top-2 material-symbols-outlined text-[18px] text-on-surface-variant">qr_code_scanner</span>
       </div>
       </div>
       <div>
       <label className="block font-caption text-caption text-on-surface-variant uppercase mb-1">Technician / Installer</label>
-      <input className="w-full h-9 px-space-md bg-surface-container-lowest rounded text-on-surface font-body-sm text-body-sm focus:outline-none" type="text" value="JD - Jason Dawkins ({live.hubName})"/>
+      <input className="w-full h-9 px-space-md bg-surface-container-lowest rounded text-on-surface font-body-sm text-body-sm focus:outline-none" type="text" value={form.confirmNote} onChange={(e) => form.setConfirmNote(e.target.value)}/>
       </div>
       </div>
       <div className="flex items-center justify-end gap-space-sm pt-space-sm">
-      <button type="button" className="h-9 px-space-lg rounded bg-surface-container-high text-on-surface font-body-sm text-body-sm font-medium hover:bg-surface-container-highest transition-colors" >Cancel</button>
-      <button type="button" className="h-9 px-space-lg rounded bg-primary text-on-primary font-body-sm text-body-sm font-semibold flex items-center gap-space-xs shadow-sm" >
+      <button type="button" className="h-9 px-space-lg rounded bg-surface-container-high text-on-surface font-body-sm text-body-sm font-medium hover:bg-surface-container-highest transition-colors"  onClick={() => form.closeConfirmIssue()}>Cancel</button>
+      <button type="button" className="h-9 px-space-lg rounded bg-primary text-on-primary font-body-sm text-body-sm font-semibold flex items-center gap-space-xs shadow-sm"  onClick={() => { void form.issueKits(); form.closeConfirmIssue(); }}>
       <span className="material-symbols-outlined text-[16px]">check</span>
                 Confirm & Issue
               </button>
@@ -102,7 +108,7 @@ export function In6VehicleKits() {
       </div>
       <div className="h-4 w-px bg-outline-variant/50"></div>
       <div className="flex items-center bg-surface-container-high p-0.5 rounded">
-      <button type="button" className="px-space-md py-1 rounded bg-surface-container-lowest text-primary font-body-sm text-body-sm font-semibold shadow-xs">Cars</button>
+      <button type="button" className="px-space-md py-1 rounded bg-surface-container-lowest text-primary font-body-sm text-body-sm font-semibold shadow-xs" onClick={() => form.setView('cars')}>Cars</button>
       <button type="button" onClick={() => shell.openGap('kit-compare')} className="px-space-md py-1 rounded text-on-surface-variant hover:text-on-surface font-body-sm text-body-sm transition-colors">Kit templates</button>
       </div>
       </div>
@@ -110,20 +116,20 @@ export function In6VehicleKits() {
       <div className="flex items-center gap-space-md flex-wrap">
 
       <div className="flex items-center bg-surface-container-high p-0.5 rounded">
-      <button type="button" className="flex items-center gap-space-xs px-space-md py-1 rounded bg-surface-container-lowest text-primary font-body-sm text-body-sm font-semibold shadow-xs transition-all" data-stitch-data-stitch-id="view-mode-matrix" >
+      <button type="button" className="flex items-center gap-space-xs px-space-md py-1 rounded bg-surface-container-lowest text-primary font-body-sm text-body-sm font-semibold shadow-xs transition-all" data-stitch-data-stitch-id="view-mode-matrix"  onClick={() => form.setView('matrix')}>
       <span className="material-symbols-outlined text-[16px]">grid_view</span>
                   Matrix
                 </button>
-      <button type="button" className="flex items-center gap-space-xs px-space-md py-1 rounded text-on-surface-variant hover:text-on-surface font-body-sm text-body-sm transition-all" data-stitch-data-stitch-id="view-mode-cards" >
+      <button type="button" className="flex items-center gap-space-xs px-space-md py-1 rounded text-on-surface-variant hover:text-on-surface font-body-sm text-body-sm transition-all" data-stitch-data-stitch-id="view-mode-cards"  onClick={() => form.setView('cards')}>
       <span className="material-symbols-outlined text-[16px]">view_agenda</span>
                   Cards
                 </button>
       </div>
-      <button type="button" className="h-9 px-space-md rounded bg-surface-container-lowest text-on-surface font-body-sm text-body-sm font-medium hover:bg-surface-container transition-colors flex items-center gap-space-xs shadow-xs">
+      <button type="button" className="h-9 px-space-md rounded bg-surface-container-lowest text-on-surface font-body-sm text-body-sm font-medium hover:bg-surface-container transition-colors flex items-center gap-space-xs shadow-xs" onClick={() => form.exportMatrix()}>
       <span className="material-symbols-outlined text-[16px]">download</span>
                 Export matrix
               </button>
-      <button type="button" className="h-9 px-space-md rounded bg-primary text-on-primary font-body-sm text-body-sm font-semibold hover:bg-inverse-surface transition-colors flex items-center gap-space-xs shadow-sm" >
+      <button type="button" className="h-9 px-space-md rounded bg-primary text-on-primary font-body-sm text-body-sm font-semibold hover:bg-inverse-surface transition-colors flex items-center gap-space-xs shadow-sm"  onClick={() => form.openConfirmIssue()}>
       <span className="material-symbols-outlined text-[16px]">inventory</span>
                 Issue kits
               </button>
@@ -294,7 +300,7 @@ export function In6VehicleKits() {
       </td>
 
       <td className="p-space-sm text-center">
-      <button type="button" className="group relative inline-flex items-center justify-center gap-1 px-2 py-1 rounded bg-error-container/40 text-error hover:bg-error hover:text-on-error transition-all font-label-code text-caption font-bold w-full max-w-[95px]" >
+      <button type="button" className="group relative inline-flex items-center justify-center gap-1 px-2 py-1 rounded bg-error-container/40 text-error hover:bg-error hover:text-on-error transition-all font-label-code text-caption font-bold w-full max-w-[95px]"  onClick={issueMissingFromMatrix}>
       <span className="group-hover:hidden">Missing</span>
       <span className="hidden group-hover:inline text-[10px]">Issue →</span>
       </button>
@@ -308,14 +314,14 @@ export function In6VehicleKits() {
       </td>
 
       <td className="p-space-sm text-center">
-      <button type="button" className="group relative inline-flex items-center justify-center gap-1 px-2 py-1 rounded bg-error-container/40 text-error hover:bg-error hover:text-on-error transition-all font-label-code text-caption font-bold w-full max-w-[95px]" >
+      <button type="button" className="group relative inline-flex items-center justify-center gap-1 px-2 py-1 rounded bg-error-container/40 text-error hover:bg-error hover:text-on-error transition-all font-label-code text-caption font-bold w-full max-w-[95px]"  onClick={issueMissingFromMatrix}>
       <span className="group-hover:hidden">Missing</span>
       <span className="hidden group-hover:inline text-[10px]">Issue →</span>
       </button>
       </td>
 
       <td className="p-space-sm text-center">
-      <button type="button" className="group relative inline-flex items-center justify-center gap-1 px-2 py-1 rounded bg-error-container/40 text-error hover:bg-error hover:text-on-error transition-all font-label-code text-caption font-bold w-full max-w-[95px]" >
+      <button type="button" className="group relative inline-flex items-center justify-center gap-1 px-2 py-1 rounded bg-error-container/40 text-error hover:bg-error hover:text-on-error transition-all font-label-code text-caption font-bold w-full max-w-[95px]"  onClick={issueMissingFromMatrix}>
       <span className="group-hover:hidden">Missing</span>
       <span className="hidden group-hover:inline text-[10px]">Issue →</span>
       </button>
@@ -372,49 +378,49 @@ export function In6VehicleKits() {
       </td>
 
       <td className="p-space-sm text-center">
-      <button type="button" className="group relative inline-flex items-center justify-center gap-1 px-2 py-1 rounded bg-error-container/40 text-error hover:bg-error hover:text-on-error transition-all font-label-code text-caption font-bold w-full max-w-[95px]" >
+      <button type="button" className="group relative inline-flex items-center justify-center gap-1 px-2 py-1 rounded bg-error-container/40 text-error hover:bg-error hover:text-on-error transition-all font-label-code text-caption font-bold w-full max-w-[95px]"  onClick={issueMissingFromMatrix}>
       <span className="group-hover:hidden">Missing</span>
       <span className="hidden group-hover:inline text-[10px]">Issue →</span>
       </button>
       </td>
       <td className="p-space-sm text-center">
-      <button type="button" className="group relative inline-flex items-center justify-center gap-1 px-2 py-1 rounded bg-error-container/40 text-error hover:bg-error hover:text-on-error transition-all font-label-code text-caption font-bold w-full max-w-[95px]" >
+      <button type="button" className="group relative inline-flex items-center justify-center gap-1 px-2 py-1 rounded bg-error-container/40 text-error hover:bg-error hover:text-on-error transition-all font-label-code text-caption font-bold w-full max-w-[95px]"  onClick={issueMissingFromMatrix}>
       <span className="group-hover:hidden">Missing</span>
       <span className="hidden group-hover:inline text-[10px]">Issue →</span>
       </button>
       </td>
       <td className="p-space-sm text-center">
-      <button type="button" className="group relative inline-flex items-center justify-center gap-1 px-2 py-1 rounded bg-error-container/40 text-error hover:bg-error hover:text-on-error transition-all font-label-code text-caption font-bold w-full max-w-[95px]" >
+      <button type="button" className="group relative inline-flex items-center justify-center gap-1 px-2 py-1 rounded bg-error-container/40 text-error hover:bg-error hover:text-on-error transition-all font-label-code text-caption font-bold w-full max-w-[95px]"  onClick={issueMissingFromMatrix}>
       <span className="group-hover:hidden">Missing</span>
       <span className="hidden group-hover:inline text-[10px]">Issue →</span>
       </button>
       </td>
       <td className="p-space-sm text-center">
-      <button type="button" className="group relative inline-flex items-center justify-center gap-1 px-2 py-1 rounded bg-error-container/40 text-error hover:bg-error hover:text-on-error transition-all font-label-code text-caption font-bold w-full max-w-[95px]" >
+      <button type="button" className="group relative inline-flex items-center justify-center gap-1 px-2 py-1 rounded bg-error-container/40 text-error hover:bg-error hover:text-on-error transition-all font-label-code text-caption font-bold w-full max-w-[95px]"  onClick={issueMissingFromMatrix}>
       <span className="group-hover:hidden">Missing</span>
       <span className="hidden group-hover:inline text-[10px]">Issue →</span>
       </button>
       </td>
       <td className="p-space-sm text-center">
-      <button type="button" className="group relative inline-flex items-center justify-center gap-1 px-2 py-1 rounded bg-error-container/40 text-error hover:bg-error hover:text-on-error transition-all font-label-code text-caption font-bold w-full max-w-[95px]" >
+      <button type="button" className="group relative inline-flex items-center justify-center gap-1 px-2 py-1 rounded bg-error-container/40 text-error hover:bg-error hover:text-on-error transition-all font-label-code text-caption font-bold w-full max-w-[95px]"  onClick={issueMissingFromMatrix}>
       <span className="group-hover:hidden">Missing</span>
       <span className="hidden group-hover:inline text-[10px]">Issue →</span>
       </button>
       </td>
       <td className="p-space-sm text-center">
-      <button type="button" className="group relative inline-flex items-center justify-center gap-1 px-2 py-1 rounded bg-error-container/40 text-error hover:bg-error hover:text-on-error transition-all font-label-code text-caption font-bold w-full max-w-[95px]" >
+      <button type="button" className="group relative inline-flex items-center justify-center gap-1 px-2 py-1 rounded bg-error-container/40 text-error hover:bg-error hover:text-on-error transition-all font-label-code text-caption font-bold w-full max-w-[95px]"  onClick={issueMissingFromMatrix}>
       <span className="group-hover:hidden">Missing</span>
       <span className="hidden group-hover:inline text-[10px]">Issue →</span>
       </button>
       </td>
       <td className="p-space-sm text-center">
-      <button type="button" className="group relative inline-flex items-center justify-center gap-1 px-2 py-1 rounded bg-error-container/40 text-error hover:bg-error hover:text-on-error transition-all font-label-code text-caption font-bold w-full max-w-[95px]" >
+      <button type="button" className="group relative inline-flex items-center justify-center gap-1 px-2 py-1 rounded bg-error-container/40 text-error hover:bg-error hover:text-on-error transition-all font-label-code text-caption font-bold w-full max-w-[95px]"  onClick={issueMissingFromMatrix}>
       <span className="group-hover:hidden">Missing</span>
       <span className="hidden group-hover:inline text-[10px]">Issue →</span>
       </button>
       </td>
       <td className="p-space-sm text-center">
-      <button type="button" className="group relative inline-flex items-center justify-center gap-1 px-2 py-1 rounded bg-error-container/40 text-error hover:bg-error hover:text-on-error transition-all font-label-code text-caption font-bold w-full max-w-[95px]" >
+      <button type="button" className="group relative inline-flex items-center justify-center gap-1 px-2 py-1 rounded bg-error-container/40 text-error hover:bg-error hover:text-on-error transition-all font-label-code text-caption font-bold w-full max-w-[95px]"  onClick={issueMissingFromMatrix}>
       <span className="group-hover:hidden">Missing</span>
       <span className="hidden group-hover:inline text-[10px]">Issue →</span>
       </button>
@@ -524,7 +530,7 @@ export function In6VehicleKits() {
       <div className="flex items-center justify-between pt-space-md gap-space-sm pl-1">
       <span className="font-label-code text-caption text-on-surface-variant">Depot: {live.hubName}</span>
       <div className="flex items-center gap-space-sm">
-      <button type="button" className="h-9 px-space-md rounded bg-surface-container-low text-on-surface hover:bg-surface-container font-body-sm text-body-sm font-medium transition-colors">Report</button>
+      <button type="button" className="h-9 px-space-md rounded bg-surface-container-low text-on-surface hover:bg-surface-container font-body-sm text-body-sm font-medium transition-colors" onClick={() => form.openKitCard(vehicle.vehicleId)}>Report</button>
       <button type="button" onClick={() => shell.openModal('issue')} className="h-9 px-space-md rounded bg-primary text-on-primary font-body-sm text-body-sm font-semibold hover:bg-inverse-surface transition-colors flex items-center gap-1 shadow-xs" >
       <span className="material-symbols-outlined text-[16px]">add_box</span>
                       Issue missing
@@ -557,7 +563,7 @@ export function In6VehicleKits() {
       <span className="font-headline-sm text-headline-sm text-on-surface">22</span>
       </div>
       </div>
-      <button type="button" className="h-8 w-full rounded bg-surface-container text-on-surface font-body-sm text-body-sm hover:bg-surface-container-high transition-colors font-medium">
+      <button type="button" className="h-8 w-full rounded bg-surface-container text-on-surface font-body-sm text-body-sm hover:bg-surface-container-high transition-colors font-medium" onClick={() => form.openCentralStore()}>
                 Open Central Store Inventory
               </button>
       </div>
@@ -592,7 +598,7 @@ export function In6VehicleKits() {
       </div>
       <span className="w-2 h-2 rounded-full bg-primary animate-ping"></span>
       </div>
-      <button type="button" className="h-8 w-full rounded bg-primary text-on-primary font-body-sm text-body-sm hover:bg-inverse-surface transition-colors font-medium">
+      <button type="button" className="h-8 w-full rounded bg-primary text-on-primary font-body-sm text-body-sm hover:bg-inverse-surface transition-colors font-medium" onClick={() => shell.openModal('scanner-pair')}>
                 Pair Mobile Scanner
               </button>
       </div>

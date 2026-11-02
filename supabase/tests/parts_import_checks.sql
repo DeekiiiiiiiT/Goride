@@ -33,6 +33,7 @@ DECLARE
   v_bad int;
   v_part uuid;
   v_decision text;
+  v_undo jsonb;
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM public.maintenance_service_categories WHERE id = v_area) THEN
     RAISE EXCEPTION 'Brakes system row missing — run full migration replay';
@@ -67,16 +68,20 @@ BEGIN
     jsonb_build_object('line_no', 1, 'raw', jsonb_build_object(
       'vehicle', '33333333-3333-4333-8333-333333333331', 'part_type', 'BRK-PADS', 'brand', 'Toyota',
       'part_number', 'PI-04465-A', 'part_name', 'Pad', 'match_type', 'oem', 'year_from', '2018', 'year_to', '2024',
-      'source_url', 'https://example.com/a', 'position', 'Front', 'side', 'Left')),
+      'source_url', 'https://example.com/a', 'position', 'Front', 'side', 'left')),
     jsonb_build_object('line_no', 2, 'raw', jsonb_build_object(
       'vehicle', '33333333-3333-4333-8333-333333333332', 'part_type', 'BRK-PADS', 'brand', 'Toyota',
       'part_number', 'PI-04465-A', 'part_name', 'Pad', 'match_type', 'oem', 'year_from', '2018', 'year_to', '2024',
-      'source_url', 'https://example.com/a', 'position', 'Front', 'side', 'Left')),
+      'source_url', 'https://example.com/a', 'position', 'Front', 'side', 'left')),
     jsonb_build_object('line_no', 3, 'raw', jsonb_build_object(
       'vehicle', '33333333-3333-4333-8333-333333333333', 'part_type', 'BRK-PADS', 'brand', 'Toyota',
       'part_number', 'PI-04465-A', 'part_name', 'Pad', 'match_type', 'oem', 'year_from', '2018', 'year_to', '2024',
-      'source_url', 'https://example.com/a', 'position', 'Front', 'side', 'Left'))
+      'source_url', 'https://example.com/a', 'position', 'Front', 'side', 'left'))
   ));
+
+  UPDATE public.part_import_row
+  SET vehicle_catalog_id = (raw->>'vehicle')::uuid
+  WHERE batch_id = v_batch1;
 
   PERFORM public.part_import_validate(v_batch1);
 
@@ -90,16 +95,20 @@ BEGIN
     jsonb_build_object('line_no', 1, 'raw', jsonb_build_object(
       'vehicle', '33333333-3333-4333-8333-333333333331', 'part_type', 'BRK-PADS', 'brand', 'Toyota',
       'part_number', 'PI-04465-A', 'part_name', 'Pad', 'match_type', 'oem', 'year_from', '2018', 'year_to', '2024',
-      'source_url', 'https://example.com/a', 'position', 'Front', 'side', 'Left')),
+      'source_url', 'https://example.com/a', 'position', 'Front', 'side', 'left')),
     jsonb_build_object('line_no', 2, 'raw', jsonb_build_object(
       'vehicle', '33333333-3333-4333-8333-333333333332', 'part_type', 'BRK-PADS', 'brand', 'Toyota',
       'part_number', 'PI-04465-A', 'part_name', 'Pad', 'match_type', 'oem', 'year_from', '2018', 'year_to', '2024',
-      'source_url', 'https://example.com/a', 'position', 'Front', 'side', 'Left')),
+      'source_url', 'https://example.com/a', 'position', 'Front', 'side', 'left')),
     jsonb_build_object('line_no', 3, 'raw', jsonb_build_object(
       'vehicle', '33333333-3333-4333-8333-333333333333', 'part_type', 'BRK-PADS', 'brand', 'Toyota',
       'part_number', 'PI-04465-A', 'part_name', 'Pad', 'match_type', 'oem', 'year_from', '2018', 'year_to', '2024',
-      'source_url', 'https://example.com/a', 'position', 'Front', 'side', 'Left'))
+      'source_url', 'https://example.com/a', 'position', 'Front', 'side', 'left'))
   ));
+  UPDATE public.part_import_row
+  SET vehicle_catalog_id = (raw->>'vehicle')::uuid
+  WHERE batch_id = v_batch2;
+
   PERFORM public.part_import_validate(v_batch2);
 
   IF (SELECT count(*) FROM public.part_import_row WHERE batch_id = v_batch2 AND status = 'unchanged') <> 3 THEN
@@ -114,8 +123,12 @@ BEGIN
     jsonb_build_object('line_no', 2, 'raw', jsonb_build_object(
       'vehicle', '33333333-3333-4333-8333-333333333331', 'part_type', 'ENG-OIL', 'brand', 'Toyota',
       'part_number', 'PI-FILTER-1', 'part_name', 'Oil filter', 'match_type', 'oem', 'year_from', '2018', 'year_to', '2024',
-      'source_url', 'https://example.com/c', 'position', 'Front', 'side', 'Left'))
+      'source_url', 'https://example.com/c', 'position', 'Front', 'side', 'left'))
   ));
+  UPDATE public.part_import_row
+  SET vehicle_catalog_id = (raw->>'vehicle')::uuid
+  WHERE batch_id = v_batch3;
+
   PERFORM public.part_import_validate(v_batch3);
 
   SELECT issues INTO v_issues FROM public.part_import_row WHERE batch_id = v_batch3 AND line_no = 1;
@@ -155,6 +168,11 @@ BEGIN
     RAISE EXCEPTION 'undo preflight should fail after manual fit edit';
   END IF;
 
+  v_undo := public.part_import_undo(v_batch1, NULL);
+  IF coalesce(v_undo->>'ok', 'false')::boolean THEN
+    RAISE EXCEPTION 'undo should not succeed when preflight fails, got %', v_undo;
+  END IF;
+
   IF (SELECT count(*) FROM public.part_listing pl JOIN public.part_master pm ON pm.interchange_group_id = pl.interchange_group_id WHERE pm.id = v_part) <> 3 THEN
     RAISE EXCEPTION 'undo blocked should leave 3 fits on catalog';
   END IF;
@@ -168,9 +186,14 @@ BEGIN
     jsonb_build_object('line_no', 1, 'raw', jsonb_build_object(
       'vehicle', '33333333-3333-4333-8333-333333333331', 'part_type', 'BRK-PADS', 'brand', 'Toyota',
       'part_number', 'PI-04465-A', 'part_name', 'Different import name', 'match_type', 'oem',
-      'year_from', '2018', 'year_to', '2024', 'source_url', 'https://example.com/a', 'position', 'Front', 'side', 'Left'))
+      'year_from', '2018', 'year_to', '2024', 'source_url', 'https://example.com/a', 'position', 'Front', 'side', 'left'))
   ));
+  UPDATE public.part_import_row
+  SET vehicle_catalog_id = (raw->>'vehicle')::uuid
+  WHERE batch_id = '44444444-4444-4444-8444-444444444444'::uuid;
+
   PERFORM public.part_import_validate('44444444-4444-4444-8444-444444444444'::uuid);
+  PERFORM public.part_import_promote('44444444-4444-4444-8444-444444444444'::uuid, NULL);
 
   SELECT catalog_decision INTO v_decision FROM public.part_master WHERE id = v_part;
   IF v_decision IS DISTINCT FROM 'confirmed' THEN

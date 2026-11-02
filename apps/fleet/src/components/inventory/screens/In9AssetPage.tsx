@@ -1,10 +1,12 @@
 /** Ported from Stitch — do not simplify layout (audit §0.4). */
+import { useIn9AssetPageForm } from './hooks/useIn9AssetPageForm';
 import { useState } from 'react';
 import { useInventoryLive } from '../inventoryLive';
 import { useInventoryShell } from '../InventoryShellContext';
 import { firstAssetSerial, formatPlate, strField } from '../inventoryData';
 import { InventoryQrPrintDialog } from '../InventoryQrPrintDialog';
 export function In9AssetPage() {
+  const form = useIn9AssetPageForm();
   const shell = useInventoryShell();
   const live = useInventoryLive(shell);
   const [qrOpen, setQrOpen] = useState(false);
@@ -44,7 +46,7 @@ export function In9AssetPage() {
 
       <div className="flex items-center gap-space-xs font-label-code text-caption text-on-surface-variant px-space-sm py-1 bg-surface-container-low rounded-lg shadow-sm">
       <span className="inline-block w-2 h-2 rounded-full bg-surface-tint animate-pulse"></span>
-      <span>LEDGER RECORD ID: <span className="text-on-surface font-semibold">AST-99042</span></span>
+      <span>LEDGER RECORD ID: <span className="text-on-surface font-semibold">{form.strField(form.asset ?? {}, 'reference', form.assetId || '—')}</span></span>
       </div>
       </div>
 
@@ -59,7 +61,7 @@ export function In9AssetPage() {
 
       <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-surface-container rounded-lg font-label-code text-label-code text-on-surface group">
       <span data-stitch-data-stitch-id="serialDisplay">{serial}</span>
-      <button type="button" className="p-0.5 hover:text-primary transition-colors flex items-center justify-center"  title="Copy Serial">
+      <button type="button" className="p-0.5 hover:text-primary transition-colors flex items-center justify-center"  title="Copy Serial" onClick={() => void form.copySerial()}>
       <span className="material-symbols-outlined text-[16px]">content_copy</span>
       </button>
       </div>
@@ -78,19 +80,19 @@ export function In9AssetPage() {
       </div>
 
       <div className="flex flex-wrap items-center gap-space-xs sm:gap-space-sm">
-      <button type="button" className="px-space-md py-2 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface font-body-sm text-body-sm font-semibold transition-colors flex items-center gap-1.5 shadow-sm">
+      <button type="button" className="px-space-md py-2 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface font-body-sm text-body-sm font-semibold transition-colors flex items-center gap-1.5 shadow-sm" onClick={() => form.moveAssetConfirmed()}>
       <span className="material-symbols-outlined text-[18px]">drive_file_move</span>
       <span>Move</span>
       </button>
-      <button type="button" className="px-space-md py-2 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface font-body-sm text-body-sm font-semibold transition-colors flex items-center gap-1.5 shadow-sm">
+      <button type="button" className="px-space-md py-2 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface font-body-sm text-body-sm font-semibold transition-colors flex items-center gap-1.5 shadow-sm" onClick={() => form.sendRepairConfirmed()}>
       <span className="material-symbols-outlined text-[18px]">build</span>
       <span>Send to repair</span>
       </button>
-      <button type="button" className="px-space-md py-2 rounded-lg bg-surface-container-low hover:bg-error-container hover:text-on-error-container text-on-surface font-body-sm text-body-sm font-semibold transition-colors flex items-center gap-1.5 shadow-sm">
+      <button type="button" className="px-space-md py-2 rounded-lg bg-surface-container-low hover:bg-error-container hover:text-on-error-container text-on-surface font-body-sm text-body-sm font-semibold transition-colors flex items-center gap-1.5 shadow-sm" onClick={() => form.markFaultyConfirmed()}>
       <span className="material-symbols-outlined text-[18px]">report_problem</span>
       <span>Mark faulty</span>
       </button>
-      <button type="button" className="px-space-md py-2 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface-variant hover:text-on-surface font-body-sm text-body-sm font-semibold transition-colors flex items-center gap-1.5 shadow-sm">
+      <button type="button" className="px-space-md py-2 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface-variant hover:text-on-surface font-body-sm text-body-sm font-semibold transition-colors flex items-center gap-1.5 shadow-sm" onClick={() => form.retireConfirmed()}>
       <span className="material-symbols-outlined text-[18px]">archive</span>
       <span>Retire</span>
       </button>
@@ -120,7 +122,7 @@ export function In9AssetPage() {
       <span className="material-symbols-outlined text-sm">payments</span>
       </div>
       <div>
-      <div className="font-label-price text-headline-sm text-on-surface font-bold">J$ 45,998.85</div>
+      <div className="font-label-price text-headline-sm text-on-surface font-bold">{form.valueLabel}</div>
       <div className="font-caption text-caption text-on-surface-variant mt-0.5">FIFO Landed valuation</div>
       </div>
       </div>
@@ -192,9 +194,9 @@ export function In9AssetPage() {
                   </p>
       </div>
       <div className="flex items-center gap-1.5 bg-surface-container p-1 rounded-lg self-start sm:self-auto font-caption text-caption">
-      <button type="button" className="px-2.5 py-1 rounded bg-surface-container-lowest text-on-surface font-semibold shadow-sm">All Logs (4)</button>
-      <button type="button" className="px-2.5 py-1 rounded hover:bg-surface-container-lowest text-on-surface-variant transition-colors">Incident</button>
-      <button type="button" className="px-2.5 py-1 rounded hover:bg-surface-container-lowest text-on-surface-variant transition-colors">Custody</button>
+      <button type="button" className="px-2.5 py-1 rounded bg-surface-container-lowest text-on-surface font-semibold shadow-sm" onClick={() => form.setLogFilter('all')}>All Logs ({form.logCounts.all})</button>
+      <button type="button" className="px-2.5 py-1 rounded hover:bg-surface-container-lowest text-on-surface-variant transition-colors" onClick={() => form.setLogFilter('incident')}>Incident ({form.logCounts.incident})</button>
+      <button type="button" className="px-2.5 py-1 rounded hover:bg-surface-container-lowest text-on-surface-variant transition-colors" onClick={() => form.setLogFilter('custody')}>Custody ({form.logCounts.custody})</button>
       </div>
       </div>
 
@@ -318,7 +320,7 @@ export function In9AssetPage() {
       <span>Actor: <strong className="text-on-surface">Deeki T</strong></span>
       </div>
       <p className="mt-space-sm font-body-sm text-body-sm text-on-surface bg-surface-container-lowest/80 p-space-sm rounded-lg">
-                      Received from Amazon (via shipping agent). Landed cost booked at <strong className="font-label-price text-on-surface font-semibold">J$ 45,998.85</strong> under Ledger Entry <span className="font-label-code font-bold">#RCV-8821</span>. Packaging intact, all secondary harnesses accounted for.
+                      Received from Amazon (via shipping agent). Landed cost booked at <strong className="font-label-price text-on-surface font-semibold">{form.valueLabel}</strong> under Ledger Entry <span className="font-label-code font-bold">#RCV-8821</span>. Packaging intact, all secondary harnesses accounted for.
                     </p>
       </div>
       </div>
@@ -333,7 +335,7 @@ export function In9AssetPage() {
       <span className="text-on-surface-variant"> Log depot physical inspection or swap cable check.</span>
       </div>
       </div>
-      <button type="button" className="px-space-md py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm font-semibold transition-colors flex items-center gap-1.5">
+      <button type="button" className="px-space-md py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm font-semibold transition-colors flex items-center gap-1.5" onClick={() => form.addIncidentNote()}>
       <span className="material-symbols-outlined text-[16px]">edit_note</span>
       <span>Add Incident Note</span>
       </button>
@@ -359,14 +361,14 @@ export function In9AssetPage() {
       </div>
       <div className="min-w-0">
       <div className="font-body-md text-body-md text-on-surface font-bold truncate group-hover:text-primary">Invoice.pdf</div>
-      <div className="font-label-code text-caption text-on-surface-variant truncate">J$ 45,998.85 • 240 KB</div>
+      <div className="font-label-code text-caption text-on-surface-variant truncate">{form.valueLabel} • 240 KB</div>
       </div>
       </div>
       <div className="flex items-center gap-1 shrink-0">
-      <button type="button" className="w-8 h-8 rounded hover:bg-surface-container-highest text-on-surface-variant hover:text-on-surface flex items-center justify-center transition-colors" title="View Document">
+      <button type="button" className="w-8 h-8 rounded hover:bg-surface-container-highest text-on-surface-variant hover:text-on-surface flex items-center justify-center transition-colors" title="View Document" onClick={() => form.openDocument(form.documents[-1] ?? {})}>
       <span className="material-symbols-outlined text-[18px]">visibility</span>
       </button>
-      <button type="button" className="w-8 h-8 rounded hover:bg-surface-container-highest text-on-surface-variant hover:text-on-surface flex items-center justify-center transition-colors" title="Download">
+      <button type="button" className="w-8 h-8 rounded hover:bg-surface-container-highest text-on-surface-variant hover:text-on-surface flex items-center justify-center transition-colors" title="Download" onClick={() => form.downloadDocument(form.documents[-1] ?? {})}>
       <span className="material-symbols-outlined text-[18px]">download</span>
       </button>
       </div>
@@ -383,17 +385,17 @@ export function In9AssetPage() {
       </div>
       </div>
       <div className="flex items-center gap-1 shrink-0">
-      <button type="button" className="w-8 h-8 rounded hover:bg-surface-container-highest text-on-surface-variant hover:text-on-surface flex items-center justify-center transition-colors" title="View Document">
+      <button type="button" className="w-8 h-8 rounded hover:bg-surface-container-highest text-on-surface-variant hover:text-on-surface flex items-center justify-center transition-colors" title="View Document" onClick={() => form.openDocument(form.documents[0] ?? {})}>
       <span className="material-symbols-outlined text-[18px]">visibility</span>
       </button>
-      <button type="button" className="w-8 h-8 rounded hover:bg-surface-container-highest text-on-surface-variant hover:text-on-surface flex items-center justify-center transition-colors" title="Download">
+      <button type="button" className="w-8 h-8 rounded hover:bg-surface-container-highest text-on-surface-variant hover:text-on-surface flex items-center justify-center transition-colors" title="Download" onClick={() => form.downloadDocument(form.documents[0] ?? {})}>
       <span className="material-symbols-outlined text-[18px]">download</span>
       </button>
       </div>
       </div>
       </div>
 
-      <button type="button" className="w-full py-2 px-space-md rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm font-semibold transition-colors flex items-center justify-center gap-2">
+      <button type="button" className="w-full py-2 px-space-md rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm font-semibold transition-colors flex items-center justify-center gap-2" onClick={() => form.uploadDocument()}>
       <span className="material-symbols-outlined text-[18px]">upload_file</span>
       <span>+ Upload document</span>
       </button>

@@ -8,8 +8,35 @@ import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const gapDir = join(root, 'apps', 'fleet', 'src', 'components', 'inventory', 'gap');
+const screensDir = join(root, 'apps', 'fleet', 'src', 'components', 'inventory', 'screens');
+const inventoryPageFile = join(
+  root,
+  'apps',
+  'fleet',
+  'src',
+  'components',
+  'inventory',
+  'InventoryPage.tsx',
+);
+const in2StockTableFile = join(
+  root,
+  'apps',
+  'fleet',
+  'src',
+  'components',
+  'inventory',
+  'In2StockTable.tsx',
+);
 const fleetDir = join(root, 'apps', 'fleet');
 const driverCarKitDir = join(root, 'apps', 'driver', 'src', 'components', 'car-kit');
+
+const forbiddenDemoStrings = [
+  'Demo button states',
+  'Simulate "Sending" state',
+  '(Preview)',
+  'sendingStateDemoBox',
+  'toggleStateBtn',
+];
 
 const forbiddenSamples = [
   '64,200',
@@ -102,6 +129,14 @@ function stripBlockComments(text) {
 const emptyHandlerRe =
   /\bon(?:Click|Change)\s*=\s*\{\s*\(\s*\)\s*=>\s*(?:\{\s*\}|undefined|null)\s*\}/g;
 
+function scanForbiddenDemo(file, text, label) {
+  for (const needle of forbiddenDemoStrings) {
+    if (text.includes(needle)) {
+      fail(label, file, `forbidden demo string "${needle}"`);
+    }
+  }
+}
+
 function scanR26EmptyHandlers(file, text, label) {
   if (!/\.tsx$/i.test(file)) return;
   const lines = text.split('\n');
@@ -148,18 +183,98 @@ function scanR24Rules(file, text, label) {
 
 function scanDir(dir, label) {
   for (const file of walkFiles(dir)) {
+    if (/In17States\.tsx$/i.test(file)) continue;
     const text = readFileSync(file, 'utf8');
     if (text.includes('GapActionDock')) {
       fail(label, file, 'GapActionDock');
     }
+    scanForbiddenDemo(file, text, label);
     scanR22UiRules(file, text, label);
     scanR24Rules(file, text, label);
     scanR26EmptyHandlers(file, text, label);
   }
 }
 
+function scanFile(file, label) {
+  const text = readFileSync(file, 'utf8');
+  if (text.includes('GapActionDock')) {
+    fail(label, file, 'GapActionDock');
+  }
+  scanForbiddenDemo(file, text, label);
+  scanR22UiRules(file, text, label);
+  scanR24Rules(file, text, label);
+  scanR26EmptyHandlers(file, text, label);
+}
+
 scanDir(gapDir, 'gap');
+scanDir(screensDir, 'inventory-screens');
+scanFile(inventoryPageFile, 'inventory-page');
+scanFile(in2StockTableFile, 'in2-stock-table');
 scanDir(driverCarKitDir, 'driver car-kit');
+
+const hooksDir = join(screensDir, 'hooks');
+
+function scanR31ForbiddenTokens(file, text, label) {
+  for (const token of ['stitchChrome', 'stitchInput', 'setStitchInput']) {
+    if (text.includes(token)) {
+      fail(label, file, `forbidden ${token} (R31-01)`);
+    }
+  }
+  if (text.includes('formatJmd(null)')) {
+    fail(label, file, 'formatJmd(null) — bind real amount (R31-03)');
+  }
+  if (/\bREF-0\b/.test(text)) {
+    fail(label, file, 'REF-0 placeholder — use loaded reference (R31-03)');
+  }
+}
+
+function scanR31HookEmptyBodies(file, text, label) {
+  if (!/useIn\w+Form\.ts$/i.test(file)) return;
+  const fnRe = /^\s*(export\s+)?(?:async\s+)?function\s+\w+|^\s*(const|let)\s+(\w+)\s*=\s*(?:async\s*)?\([^)]*\)\s*=>\s*\{/gm;
+  const lines = text.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const arrowOnlyComment = /^\s*\w+\s*:\s*\([^)]*\)\s*=>\s*\{\s*\/\*[\s\S]*?\*\/\s*\},?\s*$/;
+    if (arrowOnlyComment.test(line)) {
+      fail(label, file, `hook handler is only a comment (R31-04): line ${i + 1}`);
+    }
+  }
+}
+
+function scanR31HookExportsUsed(file, text, label) {
+  if (!/^useIn\w+Form\.ts$/i.test(file)) return;
+  const screenName = file.replace(/^useIn(\d+.*)Form\.ts$/i, 'In$1.tsx').replace(/SetupForm/, 'FirstTimeSetup.tsx');
+  const screenPath = join(screensDir, screenName);
+  let screenText = '';
+  try {
+    screenText = readFileSync(screenPath, 'utf8');
+  } catch {
+    return;
+  }
+  const exportRe = /^\s{2}(set[A-Z]\w+|add[A-Z]\w+|open[A-Z]\w+|confirm\w+|issue\w*|receive\w*|export\w+|mark\w+|reset\w+|clear\w+|select\w+|save\w+|publish\w*|delete\w*|recount\w*|approve\w*|reject\w*|submit\w*|scan\w*|enter\w*|fulfill\w*|compare\w*|new\w*|load\w*|finish\w*|start\w*|poAction|recordMovement|registerAsset|moveAsset|sendRepair|markFaulty|retire|uploadDocument|saveSerial|setLogFilter|addIncidentNote|showArchived|setView|setMode|setTab|setPage|setSort|setLocationFilter|setStatusFilter|setTypeFilter|setSelectedMovementId|setReverseReason|setSettingsSection|setLocationName|setManualCode|setPoId|setVendorId|setLocationId|setReceivedOn|setFreightCost|setDutyCost|updateLine|removeLine|addLine|setItemId|setFromLocationId|setToLocationId|setVehicleId|setQty|setReason|setMemo|setSerial|setDocName|issueMissing|issueKits|openKitCard|exportMatrix|exportSpec|exportCsv|exportPurchasing|exportMovements|openMoreOptions|openSuppliers|openItem|openReceive|openIssue|openTransfer|openMovementsTab|openEditRule|openPo|openVendor|openSheet|reviewApproval|newRequisition|quickReceive|issueToCar|issueWholeKit|reportProblem|returnItem|issueItem|issueKit|runPreview|issue|receive|submitCustody|confirmReversal|poReceive|selectTemplate|saveDraft|dismissOfflineNotice|retryOfflineSend)\s*[,:]/gm;
+  let m;
+  while ((m = exportRe.exec(text)) !== null) {
+    const name = m[1];
+    if (name === 'formatJmd' || name === 'strField' || name === 'close' || name === 'shell' || name === 'live' || name === 'submit' || name === 'load' || name === 'finishSuccess') continue;
+    if (!screenText.includes(name)) {
+      fail(label, file, `exported "${name}" never referenced in ${screenName} (R31-04)`);
+    }
+  }
+}
+
+for (const file of walkFiles(screensDir)) {
+  if (!/\.tsx$/i.test(file)) continue;
+  const text = readFileSync(file, 'utf8');
+  scanR31ForbiddenTokens(file, text, 'inventory-screens');
+}
+
+for (const file of walkFiles(hooksDir)) {
+  if (!/useIn\w+Form\.ts$/i.test(file)) continue;
+  const text = readFileSync(file, 'utf8');
+  scanR31ForbiddenTokens(file, text, 'inventory-hooks');
+  scanR31HookEmptyBodies(file, text, 'inventory-hooks');
+  scanR31HookExportsUsed(file, text, 'inventory-hooks');
+}
 
 for (const file of walkFiles(fleetDir)) {
   const text = readFileSync(file, 'utf8');
@@ -169,5 +284,5 @@ for (const file of walkFiles(fleetDir)) {
 }
 
 if (failed) process.exit(1);
-console.log('OK — inventory gap audit checks passed.');
+console.log('OK — inventory audit checks passed.');
 process.exit(0);

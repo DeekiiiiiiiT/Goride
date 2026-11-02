@@ -1,7 +1,9 @@
 /** Ported from Stitch — do not simplify layout (audit §0.4). */
+import { useIn7KitTemplateForm } from './hooks/useIn7KitTemplateForm';
 import { useInventoryLive } from '../inventoryLive';
 import { useInventoryShell } from '../InventoryShellContext';
 export function In7KitTemplateEditor() {
+  const form = useIn7KitTemplateForm();
   const shell = useInventoryShell();
   const live = useInventoryLive(shell);
   return (
@@ -27,7 +29,7 @@ export function In7KitTemplateEditor() {
       <span className="font-label-code text-body-sm font-semibold text-on-surface">Deeki T</span>
       <span className="font-caption text-caption text-secondary uppercase tracking-tight">(platform_owner)</span>
       </div>
-      <button type="button" className="bg-primary text-on-primary font-body-sm px-space-md py-1.5 rounded-lg flex items-center gap-space-xs shadow-sm hover:opacity-90 transition-opacity">
+      <button type="button" className="bg-primary text-on-primary font-body-sm px-space-md py-1.5 rounded-lg flex items-center gap-space-xs shadow-sm hover:opacity-90 transition-opacity" onClick={() => form.newTemplate()}>
       <span className="material-symbols-outlined text-[16px]">add</span>
       <span>New kit template</span>
       </button>
@@ -35,17 +37,17 @@ export function In7KitTemplateEditor() {
       </div>
 
       <div className="flex items-center gap-space-xs overflow-x-auto py-1">
-      <button type="button" className="px-space-md py-1.5 rounded-lg font-body-sm text-secondary hover:text-on-surface hover:bg-surface-container transition-colors">Overview</button>
-      <button type="button" className="px-space-md py-1.5 rounded-lg font-body-sm text-secondary hover:text-on-surface hover:bg-surface-container transition-colors">Stock</button>
-      <button type="button" className="px-space-md py-1.5 rounded-lg font-body-sm font-semibold text-on-primary bg-primary shadow-sm flex items-center gap-space-xs">
+      <button type="button" className="px-space-md py-1.5 rounded-lg font-body-sm text-secondary hover:text-on-surface hover:bg-surface-container transition-colors" onClick={() => form.goTab('overview')}>Overview</button>
+      <button type="button" className="px-space-md py-1.5 rounded-lg font-body-sm text-secondary hover:text-on-surface hover:bg-surface-container transition-colors" onClick={() => form.goTab('stock')}>Stock</button>
+      <button type="button" className="px-space-md py-1.5 rounded-lg font-body-sm font-semibold text-on-primary bg-primary shadow-sm flex items-center gap-space-xs" onClick={() => form.goTab('vehicle-kits')}>
       <span className="material-symbols-outlined text-[16px]">inventory_2</span>
       <span>Vehicle kits</span>
       </button>
-      <button type="button" className="px-space-md py-1.5 rounded-lg font-body-sm text-secondary hover:text-on-surface hover:bg-surface-container transition-colors">Assets</button>
-      <button type="button" className="px-space-md py-1.5 rounded-lg font-body-sm text-secondary hover:text-on-surface hover:bg-surface-container transition-colors">Movements</button>
-      <button type="button" className="px-space-md py-1.5 rounded-lg font-body-sm text-secondary hover:text-on-surface hover:bg-surface-container transition-colors">Purchasing</button>
-      <button type="button" className="px-space-md py-1.5 rounded-lg font-body-sm text-secondary hover:text-on-surface hover:bg-surface-container transition-colors">Counts</button>
-      <button type="button" className="px-space-md py-1.5 rounded-lg font-body-sm text-secondary hover:text-on-surface hover:bg-surface-container transition-colors flex items-center gap-space-xs">
+      <button type="button" className="px-space-md py-1.5 rounded-lg font-body-sm text-secondary hover:text-on-surface hover:bg-surface-container transition-colors" onClick={() => form.goTab('assets')}>Assets</button>
+      <button type="button" className="px-space-md py-1.5 rounded-lg font-body-sm text-secondary hover:text-on-surface hover:bg-surface-container transition-colors" onClick={() => form.goTab('movements')}>Movements</button>
+      <button type="button" className="px-space-md py-1.5 rounded-lg font-body-sm text-secondary hover:text-on-surface hover:bg-surface-container transition-colors" onClick={() => form.goTab('purchasing')}>Purchasing</button>
+      <button type="button" className="px-space-md py-1.5 rounded-lg font-body-sm text-secondary hover:text-on-surface hover:bg-surface-container transition-colors" onClick={() => form.goTab('counts')}>Counts</button>
+      <button type="button" className="px-space-md py-1.5 rounded-lg font-body-sm text-secondary hover:text-on-surface hover:bg-surface-container transition-colors flex items-center gap-space-xs" onClick={() => form.goTab('alerts')}>
       <span>Alerts</span>
       <span className="bg-error text-on-error font-label-code text-[10px] font-bold px-1.5 py-0.2 rounded-full">5</span>
       </button>
@@ -53,8 +55,8 @@ export function In7KitTemplateEditor() {
 
       <div className="flex items-center gap-space-sm pt-space-xs">
       <div className="inline-flex p-1 bg-surface-container rounded-lg">
-      <button type="button" className="px-space-md py-1 rounded font-body-sm text-secondary hover:text-on-surface transition-colors">Cars</button>
-      <button type="button" className="px-space-md py-1 rounded bg-surface-container-lowest font-body-sm font-semibold text-on-surface shadow-sm">Kit templates</button>
+      <button type="button" className="px-space-md py-1 rounded font-body-sm text-secondary hover:text-on-surface transition-colors" onClick={() => form.goTab('vehicle-kits')}>Cars</button>
+      <button type="button" className="px-space-md py-1 rounded bg-surface-container-lowest font-body-sm font-semibold text-on-surface shadow-sm" onClick={() => form.goTab('vehicle-kits')}>Kit templates</button>
       </div>
       <span className="font-caption text-caption text-secondary">Editing Master Specifications</span>
       </div>
@@ -81,11 +83,11 @@ export function In7KitTemplateEditor() {
       </div>
       </div>
       <div className="flex items-center gap-space-sm">
-      <button type="button" className="bg-surface-container text-on-surface hover:bg-surface-container-high font-body-sm px-space-md py-2 rounded-lg flex items-center gap-space-xs transition-colors">
+      <button type="button" className="bg-surface-container text-on-surface hover:bg-surface-container-high font-body-sm px-space-md py-2 rounded-lg flex items-center gap-space-xs transition-colors" onClick={() => form.compare()}>
       <span className="material-symbols-outlined text-[16px]">history</span>
-      <span>Compare with v2</span>
+      <span>Compare with v{form.versionLabel}</span>
       </button>
-      <button type="button" className="bg-surface-container text-on-surface hover:bg-surface-container-high font-body-sm px-space-md py-2 rounded-lg flex items-center gap-space-xs transition-colors">
+      <button type="button" className="bg-surface-container text-on-surface hover:bg-surface-container-high font-body-sm px-space-md py-2 rounded-lg flex items-center gap-space-xs transition-colors" onClick={() => form.exportSpec()}>
       <span className="material-symbols-outlined text-[16px]">file_download</span>
       <span>Export Spec (PDF)</span>
       </button>
@@ -106,7 +108,7 @@ export function In7KitTemplateEditor() {
       <div className="flex flex-col gap-1.5">
       <label className="font-caption text-caption uppercase text-secondary font-bold tracking-wider" htmlFor="tpl-name">Template Name</label>
       <div className="relative">
-      <input className="w-full bg-surface-container-low text-on-surface font-body-md px-space-md py-2 rounded-lg focus:outline-none focus:bg-surface-container-lowest" data-stitch-data-stitch-id="tpl-name" type="text" value="Rideshare car kit"/>
+      <input className="w-full bg-surface-container-low text-on-surface font-body-md px-space-md py-2 rounded-lg focus:outline-none focus:bg-surface-container-lowest" data-stitch-data-stitch-id="tpl-name" type="text" readOnly value={form.strField(form.selectedTemplate ?? {}, 'name', '')}/>
       <span className="material-symbols-outlined absolute right-3 top-2.5 text-[16px] text-secondary">edit</span>
       </div>
       </div>
@@ -114,7 +116,7 @@ export function In7KitTemplateEditor() {
       <div className="flex flex-col gap-1.5">
       <label className="font-caption text-caption uppercase text-secondary font-bold tracking-wider" htmlFor="body-type">Target Body Type</label>
       <div className="relative">
-      <select className="w-full appearance-none bg-surface-container-low text-on-surface font-body-md px-space-md py-2 rounded-lg focus:outline-none focus:bg-surface-container-lowest cursor-pointer" data-stitch-data-stitch-id="body-type">
+      <select className="w-full appearance-none bg-surface-container-low text-on-surface font-body-md px-space-md py-2 rounded-lg focus:outline-none focus:bg-surface-container-lowest cursor-pointer" data-stitch-data-stitch-id="body-type" value={form.strField(form.selectedTemplate ?? {}, 'body_type', 'any')} onChange={(e) => form.selectTemplate(form.selectedTemplateId)}>
       <option>Any body type</option>
       <option>Hatchback (5-Door)</option>
       <option>Sedan (Compact / Midsize)</option>
@@ -128,15 +130,15 @@ export function In7KitTemplateEditor() {
       <div className="md:col-span-2 flex flex-col gap-1.5">
       <label className="font-caption text-caption uppercase text-secondary font-bold tracking-wider">Service Allocation Type</label>
       <div className="flex items-center gap-space-sm flex-wrap">
-      <button type="button" className="bg-primary text-on-primary font-body-sm font-semibold px-space-lg py-2 rounded-lg shadow-sm flex items-center gap-space-xs">
+      <button type="button" className="bg-primary text-on-primary font-body-sm font-semibold px-space-lg py-2 rounded-lg shadow-sm flex items-center gap-space-xs" onClick={() => form.selectTemplateByService('rideshare')}>
       <span className="material-symbols-outlined text-[16px]">local_taxi</span>
       <span>Rideshare</span>
       </button>
-      <button type="button" className="bg-surface-container text-on-surface font-body-sm px-space-lg py-2 rounded-lg hover:bg-surface-container-high transition-colors flex items-center gap-space-xs">
+      <button type="button" className="bg-surface-container text-on-surface font-body-sm px-space-lg py-2 rounded-lg hover:bg-surface-container-high transition-colors flex items-center gap-space-xs" onClick={() => form.selectTemplateByService('delivery')}>
       <span className="material-symbols-outlined text-[16px]">local_shipping</span>
       <span>Delivery</span>
       </button>
-      <button type="button" className="bg-surface-container text-on-surface font-body-sm px-space-lg py-2 rounded-lg hover:bg-surface-container-high transition-colors flex items-center gap-space-xs">
+      <button type="button" className="bg-surface-container text-on-surface font-body-sm px-space-lg py-2 rounded-lg hover:bg-surface-container-high transition-colors flex items-center gap-space-xs" onClick={() => form.selectTemplateByService('executive')}>
       <span className="material-symbols-outlined text-[16px]">shield_person</span>
       <span>Executive</span>
       </button>
@@ -153,8 +155,8 @@ export function In7KitTemplateEditor() {
       <p className="font-body-sm text-body-sm text-on-surface-variant">Mandatory and auxiliary hardware provisioned to driver handoff.</p>
       </div>
       <div className="flex items-center gap-space-sm">
-      <span className="font-label-code text-caption bg-surface-container px-2.5 py-1 rounded text-on-surface">9 Lines Configured</span>
-      <span className="font-label-code text-caption bg-surface-container-high px-2.5 py-1 rounded text-on-surface">J$ 41,200 Total Landed Val</span>
+      <span className="font-label-code text-caption bg-surface-container px-2.5 py-1 rounded text-on-surface">{form.linesCount} Lines Configured</span>
+      <span className="font-label-code text-caption bg-surface-container-high px-2.5 py-1 rounded text-on-surface">{form.live.totalStockValue} Total Landed Val</span>
       </div>
       </div>
 
@@ -202,7 +204,7 @@ export function In7KitTemplateEditor() {
       </div>
       </td>
       <td className="py-3 px-3 text-center">
-      <button type="button" className="text-secondary hover:text-error transition-colors p-1 rounded">
+      <button type="button" className="text-secondary hover:text-error transition-colors p-1 rounded" onClick={() => form.lines[0] && form.deleteLine(form.lines[0].key)}>
       <span className="material-symbols-outlined text-[18px]">delete</span>
       </button>
       </td>
@@ -238,7 +240,7 @@ export function In7KitTemplateEditor() {
       </div>
       </td>
       <td className="py-3 px-3 text-center">
-      <button type="button" className="text-secondary hover:text-error transition-colors p-1 rounded">
+      <button type="button" className="text-secondary hover:text-error transition-colors p-1 rounded" onClick={() => form.lines[1] && form.deleteLine(form.lines[1].key)}>
       <span className="material-symbols-outlined text-[18px]">delete</span>
       </button>
       </td>
@@ -274,7 +276,7 @@ export function In7KitTemplateEditor() {
       </div>
       </td>
       <td className="py-3 px-3 text-center">
-      <button type="button" className="text-secondary hover:text-error transition-colors p-1 rounded">
+      <button type="button" className="text-secondary hover:text-error transition-colors p-1 rounded" onClick={() => form.lines[2] && form.deleteLine(form.lines[2].key)}>
       <span className="material-symbols-outlined text-[18px]">delete</span>
       </button>
       </td>
@@ -310,7 +312,7 @@ export function In7KitTemplateEditor() {
       </div>
       </td>
       <td className="py-3 px-3 text-center">
-      <button type="button" className="text-secondary hover:text-error transition-colors p-1 rounded">
+      <button type="button" className="text-secondary hover:text-error transition-colors p-1 rounded" onClick={() => form.lines[3] && form.deleteLine(form.lines[3].key)}>
       <span className="material-symbols-outlined text-[18px]">delete</span>
       </button>
       </td>
@@ -346,7 +348,7 @@ export function In7KitTemplateEditor() {
       </div>
       </td>
       <td className="py-3 px-3 text-center">
-      <button type="button" className="text-secondary hover:text-error transition-colors p-1 rounded">
+      <button type="button" className="text-secondary hover:text-error transition-colors p-1 rounded" onClick={() => form.lines[4] && form.deleteLine(form.lines[4].key)}>
       <span className="material-symbols-outlined text-[18px]">delete</span>
       </button>
       </td>
@@ -382,7 +384,7 @@ export function In7KitTemplateEditor() {
       </div>
       </td>
       <td className="py-3 px-3 text-center">
-      <button type="button" className="text-secondary hover:text-error transition-colors p-1 rounded">
+      <button type="button" className="text-secondary hover:text-error transition-colors p-1 rounded" onClick={() => form.lines[5] && form.deleteLine(form.lines[5].key)}>
       <span className="material-symbols-outlined text-[18px]">delete</span>
       </button>
       </td>
@@ -418,7 +420,7 @@ export function In7KitTemplateEditor() {
       </div>
       </td>
       <td className="py-3 px-3 text-center">
-      <button type="button" className="text-secondary hover:text-error transition-colors p-1 rounded">
+      <button type="button" className="text-secondary hover:text-error transition-colors p-1 rounded" onClick={() => form.lines[6] && form.deleteLine(form.lines[6].key)}>
       <span className="material-symbols-outlined text-[18px]">delete</span>
       </button>
       </td>
@@ -454,7 +456,7 @@ export function In7KitTemplateEditor() {
       </div>
       </td>
       <td className="py-3 px-3 text-center">
-      <button type="button" className="text-secondary hover:text-error transition-colors p-1 rounded">
+      <button type="button" className="text-secondary hover:text-error transition-colors p-1 rounded" onClick={() => form.lines[7] && form.deleteLine(form.lines[7].key)}>
       <span className="material-symbols-outlined text-[18px]">delete</span>
       </button>
       </td>
@@ -490,7 +492,7 @@ export function In7KitTemplateEditor() {
       </div>
       </td>
       <td className="py-3 px-3 text-center">
-      <button type="button" className="text-secondary hover:text-error transition-colors p-1 rounded">
+      <button type="button" className="text-secondary hover:text-error transition-colors p-1 rounded" onClick={() => form.lines[8] && form.deleteLine(form.lines[8].key)}>
       <span className="material-symbols-outlined text-[18px]">delete</span>
       </button>
       </td>
@@ -500,7 +502,7 @@ export function In7KitTemplateEditor() {
       </div>
 
       <div className="p-space-md bg-surface-container-low/30 flex items-center justify-between">
-      <button type="button" className="bg-surface-container-lowest text-on-surface hover:bg-surface-container font-body-sm font-medium px-space-md py-2 rounded-lg shadow-sm flex items-center gap-space-xs transition-colors">
+      <button type="button" className="bg-surface-container-lowest text-on-surface hover:bg-surface-container font-body-sm font-medium px-space-md py-2 rounded-lg shadow-sm flex items-center gap-space-xs transition-colors" onClick={() => form.addLine()}>
       <span className="material-symbols-outlined text-[18px]">add_circle</span>
       <span>Add equipment line</span>
       </button>
@@ -560,13 +562,13 @@ export function In7KitTemplateEditor() {
       <span className="font-caption text-caption">Saving creates an immutable revision hash on Kingston Cluster #01</span>
       </div>
       <div className="flex items-center gap-space-md">
-      <button type="button" className="text-secondary hover:text-on-surface font-body-sm px-space-md py-2 transition-colors">
+      <button type="button" className="text-secondary hover:text-on-surface font-body-sm px-space-md py-2 transition-colors" onClick={() => form.close()}>
                       Cancel
                     </button>
-      <button type="button" className="bg-surface-container text-on-surface hover:bg-surface-container-high font-body-sm font-semibold px-space-lg py-2 rounded-lg transition-colors">
+      <button type="button" className="bg-surface-container text-on-surface hover:bg-surface-container-high font-body-sm font-semibold px-space-lg py-2 rounded-lg transition-colors" onClick={() => form.saveDraft()}>
                       Save as draft
                     </button>
-      <button type="button" className="bg-primary text-on-primary font-body-sm font-semibold px-space-xl py-2 rounded-lg shadow-sm hover:opacity-90 transition-opacity flex items-center gap-space-xs" >
+      <button type="button" className="bg-primary text-on-primary font-body-sm font-semibold px-space-xl py-2 rounded-lg shadow-sm hover:opacity-90 transition-opacity flex items-center gap-space-xs"  onClick={() => form.publish()}>
       <span className="material-symbols-outlined text-[16px]">save</span>
       <span>Save as new version</span>
       </button>
@@ -723,12 +725,12 @@ export function In7KitTemplateEditor() {
       </div>
       </div>
       <div className="flex items-center justify-end gap-space-md pt-space-xs">
-      <button type="button" className="bg-surface-container text-on-surface hover:bg-surface-container-high font-body-sm font-semibold px-space-lg py-2 rounded-lg transition-colors" >
+      <button type="button" className="bg-surface-container text-on-surface hover:bg-surface-container-high font-body-sm font-semibold px-space-lg py-2 rounded-lg transition-colors"  onClick={() => form.close()}>
                 Not now
               </button>
-      <button type="button" className="bg-primary text-on-primary font-body-sm font-semibold px-space-xl py-2 rounded-lg shadow-sm hover:opacity-90 transition-opacity flex items-center gap-space-xs" >
+      <button type="button" className="bg-primary text-on-primary font-body-sm font-semibold px-space-xl py-2 rounded-lg shadow-sm hover:opacity-90 transition-opacity flex items-center gap-space-xs"  onClick={() => form.publish()}>
       <span className="material-symbols-outlined text-[16px]">check_circle</span>
-      <span>Move 2 cars</span>
+      <span>Move {form.applyVehicleCount} cars</span>
       </button>
       </div>
       </div>

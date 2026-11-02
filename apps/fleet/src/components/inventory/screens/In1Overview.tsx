@@ -1,10 +1,13 @@
 /** Ported from Stitch — do not simplify layout (audit §0.4). */
+import { useIn1OverviewForm } from './hooks/useIn1OverviewForm';
+import { InventoryOverflowMenu } from '../InventoryOverflowMenu';
 import { InventoryPrimaryTabs } from '../InventoryPrimaryTabs';
 import { useInventoryLive } from '../inventoryLive';
 import { firstVendorName, strField } from '../inventoryData';
 import { useInventoryShell } from '../InventoryShellContext';
 
 export function In1Overview() {
+  const form = useIn1OverviewForm();
   const shell = useInventoryShell();
   const live = useInventoryLive(shell);
   return (
@@ -37,9 +40,11 @@ export function In1Overview() {
       <button type="button" onClick={() => shell.openModal('inventory-settings')} aria-label="Settings" className="h-9 px-space-md flex items-center justify-center rounded-lg bg-surface-container-lowest text-on-surface hover:bg-surface-container transition-colors shadow-sm" title="Settings">
       <span className="material-symbols-outlined text-[18px]">settings</span>
       </button>
-      <button type="button" aria-label="More Options" className="h-9 px-space-md flex items-center justify-center rounded-lg bg-surface-container-lowest text-on-surface hover:bg-surface-container transition-colors shadow-sm" title="More Options">
-      <span className="material-symbols-outlined text-[18px]">more_horiz</span>
-      </button>
+      <InventoryOverflowMenu
+        items={form.headerMoreMenuItems}
+        className="h-9 px-space-md flex items-center justify-center rounded-lg bg-surface-container-lowest shadow-sm"
+        title="More Options"
+      />
       <button type="button" onClick={() => shell.openModal('receive')} className="h-9 px-space-lg flex items-center gap-space-xs rounded-lg bg-surface-container-lowest text-on-surface hover:bg-surface-container transition-colors shadow-sm font-body-sm text-body-sm font-medium">
       <span className="material-symbols-outlined text-[16px]">move_to_inbox</span>
       <span>Receive</span>

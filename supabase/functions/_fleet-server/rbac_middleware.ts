@@ -109,7 +109,6 @@ const PLATFORM_RAW_ROLES = [
 export const PLATFORM_RESOLVED_ROLES: ReadonlySet<Role> = new Set([
   'platform_owner',
   'platform_support',
-  'platform_catalog_editor',
   'platform_analyst',
 ]);
 

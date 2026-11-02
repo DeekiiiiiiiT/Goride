@@ -1,12 +1,19 @@
 /** Ported from Stitch — do not simplify layout (audit §0.4). */
+import { useIn15VehicleKitCardForm } from './hooks/useIn15VehicleKitCardForm';
 import { useInventoryLive } from '../inventoryLive';
 import { useInventoryShell } from '../InventoryShellContext';
 import { firstAssetSerial, strField } from '../inventoryData';
-export function In15VehicleKitCard() {
+export function In15VehicleKitCard({ vehicleId }: { vehicleId?: string | null }) {
+  const form = useIn15VehicleKitCardForm(vehicleId);
   const shell = useInventoryShell();
   const live = useInventoryLive(shell);
-  const vehicle = live.primaryVehicle;
+  const vehicle = form.vehicle ?? live.primaryVehicle;
   const serial = firstAssetSerial(live.assets);
+  const issueBySku = (sku: string) => {
+    const row = shell.stockRows.find((r) => strField(r, 'sku', '') === sku);
+    const itemId = row ? strField(row, 'item_id', '') : '';
+    if (itemId) void form.issueItem(itemId);
+  };
   return (
     <div className="fleet-inventory-stitch inventory-stitch-root">
       <div className="inventory-stitch-main"><div className="flex flex-col w-full">
@@ -38,7 +45,7 @@ export function In15VehicleKitCard() {
       <span className="material-symbols-outlined text-sm text-secondary">speed</span>
       <span>64,820 km</span>
       </div>
-      <button type="button" className="flex items-center gap-space-xs px-space-sm py-1 rounded bg-primary text-on-primary font-body-sm text-body-sm hover:opacity-90 transition-opacity">
+      <button type="button" className="flex items-center gap-space-xs px-space-sm py-1 rounded bg-primary text-on-primary font-body-sm text-body-sm hover:opacity-90 transition-opacity" onClick={() => form.focusVehicleKits()}>
       <span className="material-symbols-outlined text-base">tune</span>
       <span>Manage Status</span>
       </button>
@@ -120,7 +127,7 @@ export function In15VehicleKitCard() {
       </div>
       <span className="font-caption text-caption text-error font-medium">Needs 1 unit</span>
       </div>
-      <button type="button" className="px-space-sm py-1 rounded bg-surface-container-lowest hover:bg-surface-container text-on-surface font-body-sm text-body-sm font-medium shadow-sm transition-colors flex items-center gap-space-xs">
+      <button type="button" className="px-space-sm py-1 rounded bg-surface-container-lowest hover:bg-surface-container text-on-surface font-body-sm text-body-sm font-medium shadow-sm transition-colors flex items-center gap-space-xs" onClick={() => issueBySku('TLS-PMP-01')}>
       <span className="material-symbols-outlined text-sm">add_box</span>
       <span>Issue</span>
       </button>
@@ -140,7 +147,7 @@ export function In15VehicleKitCard() {
       </div>
       <span className="font-caption text-caption text-error font-medium">Needs 1 unit (Sealed)</span>
       </div>
-      <button type="button" className="px-space-sm py-1 rounded bg-surface-container-lowest hover:bg-surface-container text-on-surface font-body-sm text-body-sm font-medium shadow-sm transition-colors flex items-center gap-space-xs">
+      <button type="button" className="px-space-sm py-1 rounded bg-surface-container-lowest hover:bg-surface-container text-on-surface font-body-sm text-body-sm font-medium shadow-sm transition-colors flex items-center gap-space-xs" onClick={() => issueBySku('SAF-FAK-01')}>
       <span className="material-symbols-outlined text-sm">add_box</span>
       <span>Issue</span>
       </button>
@@ -160,7 +167,7 @@ export function In15VehicleKitCard() {
       </div>
       <span className="font-caption text-caption text-error font-medium">Needs 1 unit (Reflective)</span>
       </div>
-      <button type="button" className="px-space-sm py-1 rounded bg-surface-container-lowest hover:bg-surface-container text-on-surface font-body-sm text-body-sm font-medium shadow-sm transition-colors flex items-center gap-space-xs">
+      <button type="button" className="px-space-sm py-1 rounded bg-surface-container-lowest hover:bg-surface-container text-on-surface font-body-sm text-body-sm font-medium shadow-sm transition-colors flex items-center gap-space-xs" onClick={() => issueBySku('SAF-TRG-01')}>
       <span className="material-symbols-outlined text-sm">add_box</span>
       <span>Issue</span>
       </button>
@@ -272,16 +279,16 @@ export function In15VehicleKitCard() {
 
       <div className="flex flex-wrap items-center justify-between gap-space-sm pt-space-sm mt-space-xs">
       <div className="flex flex-wrap items-center gap-space-sm">
-      <button type="button" className="px-space-lg py-2 rounded-lg bg-primary hover:opacity-90 text-on-primary font-body-sm text-body-sm font-semibold flex items-center gap-space-xs shadow-sm transition-opacity">
+      <button type="button" className="px-space-lg py-2 rounded-lg bg-primary hover:opacity-90 text-on-primary font-body-sm text-body-sm font-semibold flex items-center gap-space-xs shadow-sm transition-opacity" onClick={() => form.issueKit()}>
       <span className="material-symbols-outlined text-base">outgoing_mail</span>
-      <span>Issue missing (3)</span>
+      <span>Issue missing ({form.missingCount})</span>
       </button>
-      <button type="button" className="px-space-lg py-2 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm font-medium transition-colors flex items-center gap-space-xs">
+      <button type="button" className="px-space-lg py-2 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm font-medium transition-colors flex items-center gap-space-xs" onClick={() => form.returnItem('')}>
       <span className="material-symbols-outlined text-base">keyboard_return</span>
       <span>Return item</span>
       </button>
       </div>
-      <button type="button" className="px-space-md py-2 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface-variant hover:text-on-surface font-body-sm text-body-sm transition-colors flex items-center gap-space-xs">
+      <button type="button" className="px-space-md py-2 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface-variant hover:text-on-surface font-body-sm text-body-sm transition-colors flex items-center gap-space-xs" onClick={() => form.reportProblem()}>
       <span className="material-symbols-outlined text-base text-secondary">report_problem</span>
       <span>Report problem</span>
       </button>
@@ -387,7 +394,7 @@ export function In15VehicleKitCard() {
       <span className="font-label-code text-on-surface font-semibold">Valid (JM-KGN-990)</span>
       </div>
       </div>
-      <button type="button" className="w-full py-2 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm font-medium transition-colors flex items-center justify-center gap-space-xs">
+      <button type="button" className="w-full py-2 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm font-medium transition-colors flex items-center justify-center gap-space-xs" onClick={() => form.bookMaintenance()}>
       <span className="material-symbols-outlined text-base">calendar_month</span>
       <span>Book Early Service Slot</span>
       </button>

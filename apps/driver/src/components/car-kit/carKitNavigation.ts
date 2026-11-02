@@ -36,6 +36,9 @@ export type CarKitNavAction =
   | 'send-report'
   | 'back-kit'
   | 'retry-load'
+  | 'retry-offline-send'
+  | 'dismiss-offline'
+  | 'dismiss'
   | 'view-reports-from-sent';
 
 /** Match Stitch button copy / ids for event delegation (minimal HTML edits). */
@@ -52,7 +55,8 @@ export function resolveCarKitAction(target: EventTarget | null): CarKitNavAction
   if (text === 'my reports' || text.startsWith('my reports')) return 'open-reports';
   if (text.includes('report a problem') || text.includes('report something else')) return 'open-report-sheet';
   if (text.includes('send report')) return 'send-report';
-  if (text.includes('retry now')) return 'retry-load';
+  if (text.includes('retry now')) return 'retry-offline-send';
+  if (text.includes('dismiss')) return 'dismiss';
   if (el.id === 'btn-open-issue-sheet') return 'open-report-sheet';
   return null;
 }
