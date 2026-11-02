@@ -58,6 +58,20 @@ export const inventoryApi = {
   items: (params?: URLSearchParams) =>
     invFetch(`/items${params?.toString() ? `?${params}` : ''}`),
   item: (id: string) => invFetch(`/items/${encodeURIComponent(id)}`),
+  createItem: (body: unknown, idempotencyKey: string) =>
+    invFetch('/items', {
+      method: 'POST',
+      headers: idempotencyHeaders(idempotencyKey),
+      body: JSON.stringify(body),
+    }),
+  patchItem: (id: string, body: unknown) =>
+    invFetch(`/items/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+  deleteItem: (id: string) =>
+    invFetch(`/items/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   movements: (params?: URLSearchParams) =>
     invFetch(`/movements${params?.toString() ? `?${params}` : ''}`),
   receive: (body: unknown, idempotencyKey: string) =>
@@ -121,7 +135,7 @@ export const inventoryApi = {
     }),
   exportCsv: () => invFetchRaw('/export.csv').then((r) => r.text()),
   alerts: () => invFetch('/alerts'),
-  alertSnooze: (id: string, body: { days?: number; until?: string }) =>
+  alertSnooze: (id: string, body: { days?: number; until?: string; reason?: string; assignee?: string }) =>
     invFetch(`/alerts/${encodeURIComponent(id)}/snooze`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -352,10 +366,24 @@ export const inventoryApi = {
     }),
   kitsCompare: (params?: URLSearchParams) =>
     invFetch(`/kits/compare${params?.toString() ? `?${params}` : ''}`),
+  publishKitTemplate: (templateId: string, body: unknown) =>
+    invFetch(`/kits/templates/${encodeURIComponent(templateId)}/publish`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+  driverReportUpdate: (id: string, body: unknown, idempotencyKey: string) =>
+    invFetch(`/driver/reports/${encodeURIComponent(id)}/updates`, {
+      method: 'POST',
+      headers: idempotencyHeaders(idempotencyKey),
+      body: JSON.stringify(body),
+    }),
   resolveDriverReport: (id: string, body: unknown) =>
     invFetch(`/driver/reports/${encodeURIComponent(id)}/resolve`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     }),
+  driverReports: (params?: URLSearchParams) =>
+    invFetch(`/driver/reports${params?.toString() ? `?${params}` : ''}`),
 };

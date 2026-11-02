@@ -289,3 +289,110 @@ export async function handleDriverKitCheckPost(c: InvCtx, org: string, idem: str
     payload: body,
   });
 }
+
+const DRIVER_UPDATE_KINDS = new Set([
+  "found_it",
+  "got_replacement",
+  "still_missing",
+  "replacement_en_route",
+  "hub_collection_ready",
+  "urgent_safety_item",
+]);
+
+export async function handleDriverReportUpdatePost(
+  c: InvCtx,
+  org: string,
+  reportId: string,
+  idem: string,
+) {
+  const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+  const kind = String(body.kind ?? "");
+  if (!DRIVER_UPDATE_KINDS.has(kind)) {
+    return c.json({ error: "Invalid update kind" }, 400);
+  }
+
+  const byRoleRaw = String(body.by_role ?? body.byRole ?? "").toLowerCase();
+  const isFleetUpdate = byRoleRaw === "fleet" || body.fleet === true;
+
+  let report: Record<string, unknown> | null = null;
+  if (isFleetUpdate) {
+    const { data, error: loadErr } = await db()
+      .from("fleet_inv_driver_report")
+      .select("*")
+      .eq("organization_id", org)
+      .eq("id", reportId)
+      .maybeSingle();
+    if (loadErr) return c.json({ error: loadErr.message }, 500);
+    if (!data) return c.json({ error: "Not found" }, 404);
+    report = data as Record<string, unknown>;
+  } else {
+    const assignment = await resolveDriverVehicleAssignment(driverId(c), {
+      organizationId: org,
+      hintVehicleId: (body.vehicleId ?? body.vehicle_id) as string | null ?? null,
+    });
+    if (!assignment.vehicleId) {
+      return c.json({ error: "No vehicle assigned" }, 409);
+    }
+
+    const { data, error: loadErr } = await db()
+      .from("fleet_inv_driver_report")
+      .select("*")
+      .eq("organization_id", org)
+      .eq("id", reportId)
+      .eq("vehicle_id", assignment.vehicleId)
+      .maybeSingle();
+    if (loadErr) return c.json({ error: loadErr.message }, 500);
+    if (!data) return c.json({ error: "Not found" }, 404);
+    report = data as Record<string, unknown>;
+  }
+
+  const note = body.note != null ? String(body.note) : null;
+  const photoPaths = Array.isArray(body.photoPaths ?? body.photo_paths)
+    ? (body.photoPaths ?? body.photo_paths).map(String).filter(Boolean)
+    : [];
+
+  if (!isFleetUpdate && kind === "got_replacement" && photoPaths.length === 0) {
+    return c.json({ error: "Photo required for replacement updates" }, 400);
+  }
+
+  const byRole = isFleetUpdate ? "fleet" : "driver";
+
+  const { data: updateRow, error: insErr } = await db()
+    .from("fleet_inv_driver_report_update")
+    .insert({
+      organization_id: org,
+      report_id: reportId,
+      by_role: byRole,
+      kind,
+      note,
+      photo_paths: photoPaths,
+    })
+    .select("*")
+    .single();
+  if (insErr) return c.json({ error: insErr.message }, 500);
+
+  const now = new Date().toISOString();
+  const patch: Record<string, unknown> = {};
+  if (note) patch.note = note;
+  if (photoPaths.length) patch.photo_paths = photoPaths;
+  if (kind === "found_it" || kind === "got_replacement") {
+    patch.status = "fixed";
+    patch.fixed_at = now;
+  }
+
+  const { data: updatedReport, error: updErr } = await db()
+    .from("fleet_inv_driver_report")
+    .update(patch)
+    .eq("organization_id", org)
+    .eq("id", reportId)
+    .select("*")
+    .maybeSingle();
+  if (updErr) return c.json({ error: updErr.message }, 500);
+
+  return c.json({
+    stub: false,
+    idempotencyKey: idem,
+    update: updateRow,
+    report: updatedReport,
+  }, 202);
+}

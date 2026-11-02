@@ -119,7 +119,7 @@ export function CarKitPage({
       {flow.screen === 'dk2' && !flow.showDk6 ? (
         <div className="fixed inset-0 z-50 flex flex-col justify-end bg-inverse-surface/65 backdrop-blur-[2px]">
           <CarKitNavHost onAction={handleNav}>
-            <Dk2ReportSheet kit={flow.kit} />
+            <Dk2ReportSheet kit={flow.kit} onClose={flow.closeReportSheet} onSend={() => void flow.submitReport()} />
           </CarKitNavHost>
         </div>
       ) : null}
@@ -129,6 +129,10 @@ export function CarKitPage({
           report={activeReport}
           offline={!navigator.onLine}
           onClose={() => setActiveReport(null)}
+          onSent={() => {
+            flow.reload();
+            setActiveReport(null);
+          }}
         />
       ) : null}
 

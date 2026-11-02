@@ -1,11 +1,15 @@
 /** Ported from Stitch gap screen — panel only (audit R16-01). */
+import { formatJmd } from '../inventoryFormat';
+import { GapLoadState, GapSubmitError } from './GapLoadState';
 import { GapModalShell } from './GapModalShell';
-import { useGapCompliance } from './useGapCompliance';
+import { useGapImportItemsForm } from './useGapImportItemsForm';
 
 export function GapImportItems(p: { onClose?: () => void }) {
-  const compliance = useGapCompliance();
+  const form = useGapImportItemsForm(p.onClose);
   return (
     <GapModalShell onClose={p.onClose} ariaLabel="ImportItems">
+      <GapSubmitError message={form.submit.error} />
+      <GapLoadState loading={form.load.loading} error={form.load.error} onRetry={form.load.reload}>
       <div className="fleet-inventory-stitch inventory-stitch-root">
         <div className="inventory-stitch-main"><div className="flex flex-col w-full relative">
 
@@ -37,30 +41,16 @@ export function GapImportItems(p: { onClose?: () => void }) {
         <span className="text-right">Primary Vendor</span>
         </div>
         <div className="divide-y divide-surface-container">
-        <div className="grid grid-cols-6 px-space-lg py-space-md font-body-sm text-body-sm items-center">
-        <span className="font-label-code text-label-code font-bold">INV-0004-JA</span>
-        <span>Oil Filter Heavy-Duty D4D</span>
-        <span>Powertrain</span>
-        <span className="font-label-code text-label-code">42 units</span>
-        <span className="font-label-price text-label-price">J$ 3,850.00</span>
-        <span className="text-right text-on-surface-variant">Toyota Jamaica Ltd</span>
+        {form.catalog.slice(0, 6).map((row) => (
+        <div key={String(row.id)} className="grid grid-cols-6 px-space-lg py-space-md font-body-sm text-body-sm items-center">
+        <span className="font-label-code text-label-code font-bold">{String(row.sku ?? '—')}</span>
+        <span>{String(row.name ?? '—')}</span>
+        <span>{String(row.category_name ?? row.category ?? '—')}</span>
+        <span className="font-label-code text-label-code">{String(row.qty_on_hand ?? 0)} units</span>
+        <span className="font-label-price text-label-price">{formatJmd(Number(row.default_cost_jmd ?? 0))}</span>
+        <span className="text-right text-on-surface-variant">{String(row.vendor_name ?? '—')}</span>
         </div>
-        <div className="grid grid-cols-6 px-space-lg py-space-md font-body-sm text-body-sm items-center">
-        <span className="font-label-code text-label-code font-bold">INV-0005-JA</span>
-        <span>Brake Pads Ceramic Front Set</span>
-        <span>Braking Systems</span>
-        <span className="font-label-code text-label-code">18 sets</span>
-        <span className="font-label-price text-label-price">J$ 9,200.00</span>
-        <span className="text-right text-on-surface-variant">Kingston Auto Supplies</span>
-        </div>
-        <div className="grid grid-cols-6 px-space-lg py-space-md font-body-sm text-body-sm items-center">
-        <span className="font-label-code text-label-code font-bold">INV-0007</span>
-        <span>Phone Holder Mount Pro</span>
-        <span>Cabin Accessories</span>
-        <span className="font-label-code text-label-code">6 units</span>
-        <span className="font-label-price text-label-price">J$ 4,800.00</span>
-        <span className="text-right text-on-surface-variant">Car Toys Jamaica</span>
-        </div>
+        ))}
         </div>
         </div>
         </div>
@@ -80,7 +70,7 @@ export function GapImportItems(p: { onClose?: () => void }) {
                     Bulk upload parts and accessories into your catalog. Quantities must come from Opening balances or Receive.
                   </p>
         </div>
-        <button type="button" aria-label="Close dialog" className="w-8 h-8 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface-variant hover:text-on-surface flex items-center justify-center transition-colors" type="button">
+        <button aria-label="Close dialog" className="w-8 h-8 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface-variant hover:text-on-surface flex items-center justify-center transition-colors" type="button" onClick={() => p.onClose?.()}>
         <span className="material-symbols-outlined text-[20px]">close</span>
         </button>
         </div>
@@ -128,14 +118,15 @@ export function GapImportItems(p: { onClose?: () => void }) {
         <div className="flex items-center gap-space-xs">
         <span className="material-symbols-outlined text-secondary text-[18px]">description</span>
         <span className="font-body-sm text-body-sm text-on-surface font-medium">Uploaded:</span>
-        <span className="font-label-code text-label-code text-primary font-semibold bg-surface-container px-2 py-0.5 rounded">roam_fleet_catalog_nov2026.csv</span>
-        <span className="font-body-sm text-body-sm text-secondary">(16 rows detected)</span>
+        <span className="font-label-code text-label-code text-primary font-semibold bg-surface-container px-2 py-0.5 rounded">{form.fileName || 'No file selected'}</span>
+        <span className="font-body-sm text-body-sm text-secondary">({form.rowCount} rows detected)</span>
         </div>
         <div className="flex items-center gap-space-md">
-        <a className="font-caption text-caption text-primary font-semibold hover:underline flex items-center gap-0.5" href="#">
+        <label className="font-caption text-caption text-primary font-semibold hover:underline flex items-center gap-0.5 cursor-pointer">
         <span className="material-symbols-outlined text-[14px]">sync</span>
                         Replace file
-                      </a>
+                        <input type="file" accept=".csv,.tsv,.xlsx" className="sr-only" onChange={(e) => void form.onFile(e.target.files?.[0] ?? null)} />
+                      </label>
         <span className="text-secondary/30 text-caption">•</span>
         <a className="font-caption text-caption text-secondary font-semibold hover:text-on-surface hover:underline flex items-center gap-0.5" href="#">
         <span className="material-symbols-outlined text-[14px]">download</span>
@@ -204,8 +195,11 @@ export function GapImportItems(p: { onClose?: () => void }) {
         <span className="col-span-1 text-right">Vendor</span>
         </div>
         <div className="divide-y divide-surface-container">
-
-        <div className="grid grid-cols-12 px-space-md py-space-md items-center hover:bg-surface-container-low transition-colors">
+        {form.previewRows.length === 0 ? (
+        <div className="px-space-md py-space-md font-body-sm text-body-sm text-on-surface-variant">Upload a CSV to preview intake rows.</div>
+        ) : (
+        form.previewRows.map((row, index) => (
+        <div key={`${index}-${Object.values(row).join('-')}`} className="grid grid-cols-12 px-space-md py-space-md items-center hover:bg-surface-container-low transition-colors">
         <div className="col-span-2 flex items-center">
         <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-surface-container-highest text-on-surface flex items-center gap-1">
         <span className="w-1.5 h-1.5 rounded-full bg-primary"></span>
@@ -213,99 +207,23 @@ export function GapImportItems(p: { onClose?: () => void }) {
                         </span>
         </div>
         <div className="col-span-3 font-body-sm text-body-sm font-semibold text-on-surface truncate">
-                        Hydraulic Jack 3-Ton
+                        {row.Name || row['Part Name'] || row.name || '—'}
                       </div>
         <div className="col-span-2 font-label-code text-label-code text-secondary font-medium">
-                        TLS-HJK-03
+                        {row.SKU || row['Item Code'] || row.sku || '—'}
                       </div>
         <div className="col-span-2 font-body-sm text-body-sm text-on-surface-variant truncate">
-                        Workshop Tools
+                        {row.Category || row.Cat || row.category || '—'}
                       </div>
         <div className="col-span-2 font-label-price text-label-price text-right text-on-surface">
-                        J$ 5,600.00
+                        {row['Unit Price'] || row['Default cost'] || row.cost || '—'}
                       </div>
-        <div className="col-span-1 font-body-sm text-body-sm text-right text-on-surface-variant truncate" title="Kingston Auto Supplies">
-                        Kgn Auto
-                      </div>
-        </div>
-
-        <div className="grid grid-cols-12 px-space-md py-space-md items-center hover:bg-surface-container-low transition-colors">
-        <div className="col-span-2 flex items-center">
-        <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-surface-container-highest text-on-surface flex items-center gap-1">
-        <span className="w-1.5 h-1.5 rounded-full bg-primary"></span>
-                          New
-                        </span>
-        </div>
-        <div className="col-span-3 font-body-sm text-body-sm font-semibold text-on-surface truncate">
-                        Warning Triangle Reflector
-                      </div>
-        <div className="col-span-2 font-label-code text-label-code text-secondary font-medium">
-                        SFT-TRG-01
-                      </div>
-        <div className="col-span-2 font-body-sm text-body-sm text-on-surface-variant truncate">
-                        Safety
-                      </div>
-        <div className="col-span-2 font-label-price text-label-price text-right text-on-surface">
-                        J$ 2,100.00
-                      </div>
-        <div className="col-span-1 font-body-sm text-body-sm text-right text-on-surface-variant truncate" title="Kingston Auto Supplies">
-                        Kgn Auto
-                      </div>
-        </div>
-
-        <div className="grid grid-cols-12 px-space-md py-space-md items-center bg-surface-container-low/50 hover:bg-surface-container-low transition-colors">
-        <div className="col-span-2 flex items-center">
-        <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-secondary-container text-on-secondary-fixed flex items-center gap-1" title="Matches existing INV-0007 in Kingston database">
-        <span className="w-1.5 h-1.5 rounded-full bg-secondary"></span>
-                          Updates
-                        </span>
-        </div>
-        <div className="col-span-3 font-body-sm text-body-sm font-semibold text-on-surface truncate">
-                        Phone Holder Mount
-                        <span className="block font-caption text-caption text-secondary font-normal">Replaces base catalog spec</span>
-        </div>
-        <div className="col-span-2 font-label-code text-label-code text-primary font-bold">
-                        INV-0007
-                      </div>
-        <div className="col-span-2 font-body-sm text-body-sm text-on-surface-variant truncate">
-                        Accessories
-                      </div>
-        <div className="col-span-2 font-label-price text-label-price text-right text-on-surface">
-                        J$ 5,400.00
-                      </div>
-        <div className="col-span-1 font-body-sm text-body-sm text-right text-on-surface-variant truncate" title="Car Toys Jamaica">
-                        Car Toys
-                      </div>
-        </div>
-
-        <div className="grid grid-cols-12 px-space-md py-space-md items-center bg-error-container/20">
-        <div className="col-span-2 flex items-center">
-        <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-error-container text-on-error-container flex items-center gap-1">
-        <span className="material-symbols-outlined text-[13px] text-error">error</span>
-                          Problem
-                        </span>
-        </div>
-        <div className="col-span-3 font-body-sm text-body-sm font-semibold text-on-surface truncate">
-                        OBD-II Dongle CANbus
-                      </div>
-        <div className="col-span-2 font-label-code text-label-code text-secondary font-medium">
-                        TEL-OBD-V4
-                      </div>
-        <div className="col-span-2 font-body-sm text-body-sm text-on-surface-variant truncate">
-                        Telematics
-                      </div>
-        <div className="col-span-2 text-right">
-        <span className="inline-block px-2 py-0.5 rounded bg-error-container text-on-error-container font-label-code text-[12px] font-bold">
-                          Call for price
-                        </span>
-        <span className="block font-caption text-[10px] text-error mt-0.5 leading-tight">
-                          Must be numeric (e.g. 12000.00)
-                        </span>
-        </div>
         <div className="col-span-1 font-body-sm text-body-sm text-right text-on-surface-variant truncate">
-                        Amazon
+                        {row.Vendor || row.Distributor || row.vendor || '—'}
                       </div>
         </div>
+        ))
+        )}
         </div>
         </div>
 
@@ -324,18 +242,18 @@ export function GapImportItems(p: { onClose?: () => void }) {
 
         <div className="px-space-xl py-space-lg bg-surface-container-low flex flex-wrap items-center justify-between gap-space-md">
 
-        <button type="button" className="flex items-center gap-space-xs font-body-sm text-body-sm text-error font-medium hover:underline" type="button">
+        <button className="flex items-center gap-space-xs font-body-sm text-body-sm text-error font-medium hover:underline" type="button" onClick={() => form.downloadProblemRows()}>
         <span className="material-symbols-outlined text-[18px]">download_for_offline</span>
         <span>Download 1 problem row (.csv)</span>
         </button>
 
         <div className="flex items-center gap-space-md">
-        <button type="button" className="h-10 px-space-lg rounded-lg bg-surface-container-lowest text-on-surface font-body-sm text-body-sm font-semibold shadow-sm hover:bg-surface-container transition-all" type="button">
+        <button className="h-10 px-space-lg rounded-lg bg-surface-container-lowest text-on-surface font-body-sm text-body-sm font-semibold shadow-sm hover:bg-surface-container transition-all" type="button" onClick={() => p.onClose?.()}>
                     Back to mapping
                   </button>
-        <button type="button" className="h-10 px-space-xl rounded-lg bg-primary text-on-primary font-body-sm text-body-sm font-semibold hover:opacity-95 active:scale-[0.99] transition-all flex items-center gap-space-xs shadow-sm" id="importActionBtn" type="button">
+        <button type="button" disabled={!form.canSubmit || form.submit.saving} onClick={() => void form.importItems()} className="h-10 px-space-xl rounded-lg bg-primary text-on-primary font-body-sm text-body-sm font-semibold hover:opacity-95 active:scale-[0.99] transition-all flex items-center gap-space-xs shadow-sm disabled:opacity-60" id="importActionBtn">
         <span className="material-symbols-outlined text-[18px]">cloud_upload</span>
-        <span>Import 15 items (skip 1 error)</span>
+        <span>{form.submit.saving ? 'Importing…' : form.fileName ? `Import ${form.fileName}` : 'Import items'}</span>
         </button>
         </div>
         </div>
@@ -343,12 +261,8 @@ export function GapImportItems(p: { onClose?: () => void }) {
         </div>
 
         </div></div>
-        {compliance.safetyNotice ? (
-          <div className="mt-space-md rounded-lg border border-outline-variant/30 bg-surface-container-low p-space-md font-body-sm text-body-sm text-on-surface-variant">
-            {compliance.safetyNotice}
-          </div>
-        ) : null}
       </div>
+      </GapLoadState>
     </GapModalShell>
   );
 }

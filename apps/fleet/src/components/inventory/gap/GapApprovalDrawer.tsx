@@ -1,11 +1,21 @@
 /** Ported from Stitch gap screen — panel only (audit R16-01). */
+import { GapLoadState, GapSubmitError } from './GapLoadState';
 import { GapModalShell } from './GapModalShell';
-import { useGapCompliance } from './useGapCompliance';
+import { useGapApprovalDrawerForm } from './useGapApprovalDrawerForm';
+import { formatJmd } from '../inventoryFormat';
 
-export function GapApprovalDrawer(p: { onClose?: () => void }) {
-  const compliance = useGapCompliance();
+export function GapApprovalDrawer(p: { approvalId?: string | null; onClose?: () => void }) {
+  const form = useGapApprovalDrawerForm(p.approvalId, p.onClose);
+  const approval = form.approval;
+  const approvalTitle = approval
+    ? String(approval.rule_name ?? approval.subject_type ?? approval.id ?? '—')
+    : '—';
+  const approvalAmount = approval ? formatJmd(Number(approval.amount) || null) : '—';
+  const approvalRef = approval ? String(approval.rule_code ?? approval.id ?? '—') : '—';
   return (
     <GapModalShell onClose={p.onClose} ariaLabel="ApprovalDrawer">
+      <GapSubmitError message={form.submit.error} />
+      <GapLoadState loading={form.load.loading} error={form.load.error} onRetry={form.load.reload}>
       <div className="fleet-inventory-stitch inventory-stitch-root">
         <div className="inventory-stitch-main"><div className="flex flex-col w-full relative">
 
@@ -14,12 +24,12 @@ export function GapApprovalDrawer(p: { onClose?: () => void }) {
         <div className="flex items-center justify-between mb-space-lg">
         <div className="flex items-center gap-space-md">
         <span className="font-headline-lg text-headline-lg text-on-surface">Asset Alerts & Variances</span>
-        <span className="px-space-sm py-0.5 rounded-full bg-surface-container-high font-label-code text-label-code text-on-surface-variant">7 pending reviews</span>
+        <span className="px-space-sm py-0.5 rounded-full bg-surface-container-high font-label-code text-label-code text-on-surface-variant">{form.pendingCount} pending reviews</span>
         </div>
         <div className="flex items-center gap-space-sm">
         <div className="h-9 px-space-md bg-surface-container rounded-lg flex items-center gap-space-sm text-body-sm font-body-sm text-on-surface-variant">
         <span className="material-symbols-outlined text-[18px]">filter_list</span>
-        <span>Filter: Discrepancies > J$ 5,000</span>
+        <span>Filter: Discrepancies {'>'} {form.thresholdLabel}</span>
         </div>
         <div className="h-9 px-space-md bg-primary text-on-primary rounded-lg flex items-center gap-space-sm font-body-sm text-body-sm font-semibold">
         <span className="material-symbols-outlined text-[18px]">add</span>
@@ -38,42 +48,32 @@ export function GapApprovalDrawer(p: { onClose?: () => void }) {
         <span className="w-36 text-right">Impact Value</span>
         <span className="w-36">Status</span>
         </div>
-        <span className="text-caption font-caption text-on-surface-variant">Depot: Kingston Yard #01</span>
+        <span className="text-caption font-caption text-on-surface-variant">Pending queue</span>
         </div>
         <div className="divide-y divide-surface-container-low">
-        <div className="px-space-lg py-space-md flex items-center justify-between bg-surface-container-low/40">
+        {form.pendingItems.length === 0 ? (
+        <div className="px-space-lg py-space-xl text-center font-body-sm text-body-sm text-on-surface-variant">No pending approvals.</div>
+        ) : form.pendingItems.map((row) => {
+          const ref = String(row.rule_code ?? row.id ?? '—');
+          const when = row.created_at ? new Date(String(row.created_at)).toLocaleString('en-JM') : '—';
+          const label = String(row.rule_name ?? row.subject_type ?? '—');
+          const amount = formatJmd(Number(row.amount) || null);
+          const status = String(row.status ?? 'pending');
+          const selected = approval && String(row.id) === String(approval.id);
+          return (
+        <div key={String(row.id ?? ref)} className={`px-space-lg py-space-md flex items-center justify-between ${selected ? 'bg-surface-container-low/40' : ''}`}>
         <div className="flex items-center gap-space-lg text-body-sm font-body-sm text-on-surface">
-        <span className="w-24 font-label-code text-label-code text-on-surface-variant">WO-0003</span>
-        <span className="w-36 font-label-code text-label-code text-on-surface-variant">01 Nov 08:20</span>
-        <span className="w-48 font-semibold truncate">AST-0001 (Dashcam)</span>
-        <span className="w-32">Write-off</span>
-        <span className="w-36 text-right font-label-price text-label-price text-error">-J$ 45,998.85</span>
-        <span className="w-36 flex items-center gap-1.5 text-on-tertiary-container"><span className="w-2 h-2 rounded-full bg-on-tertiary-container"></span>In Review</span>
+        <span className="w-24 font-label-code text-label-code text-on-surface-variant truncate">{ref}</span>
+        <span className="w-36 font-label-code text-label-code text-on-surface-variant truncate">{when}</span>
+        <span className="w-48 font-semibold truncate">{label}</span>
+        <span className="w-32 truncate">{String(row.subject_type ?? '—')}</span>
+        <span className="w-36 text-right font-label-price text-label-price text-error">{amount}</span>
+        <span className="w-36 flex items-center gap-1.5 text-on-tertiary-container"><span className="w-2 h-2 rounded-full bg-on-tertiary-container"></span>{status}</span>
         </div>
         <span className="material-symbols-outlined text-on-surface-variant text-[20px]">chevron_right</span>
         </div>
-        <div className="px-space-lg py-space-md flex items-center justify-between">
-        <div className="flex items-center gap-space-lg text-body-sm font-body-sm text-on-surface">
-        <span className="w-24 font-label-code text-label-code text-on-surface-variant">CNT-1142</span>
-        <span className="w-36 font-label-code text-label-code text-on-surface-variant">31 Oct 16:45</span>
-        <span className="w-48 truncate">Main Store Bin C-12</span>
-        <span className="w-32">Count Diff</span>
-        <span className="w-36 text-right font-label-price text-label-price text-error">-J$ 960.00</span>
-        <span className="w-36 flex items-center gap-1.5 text-secondary"><span className="w-2 h-2 rounded-full bg-secondary"></span>Pending Count</span>
-        </div>
-        <span className="material-symbols-outlined text-on-surface-variant text-[20px]">chevron_right</span>
-        </div>
-        <div className="px-space-lg py-space-md flex items-center justify-between">
-        <div className="flex items-center gap-space-lg text-body-sm font-body-sm text-on-surface">
-        <span className="w-24 font-label-code text-label-code text-on-surface-variant">ADJ-0904</span>
-        <span className="w-36 font-label-code text-label-code text-on-surface-variant">30 Oct 11:15</span>
-        <span className="w-48 truncate">Hydraulic Jack 3T</span>
-        <span className="w-32">Adjustment</span>
-        <span className="w-36 text-right font-label-price text-label-price text-on-surface">+J$ 12,400.00</span>
-        <span className="w-36 flex items-center gap-1.5 text-secondary"><span className="w-2 h-2 rounded-full bg-secondary"></span>Authorized</span>
-        </div>
-        <span className="material-symbols-outlined text-on-surface-variant text-[20px]">chevron_right</span>
-        </div>
+          );
+        })}
         </div>
         </div>
         </div>
@@ -89,16 +89,16 @@ export function GapApprovalDrawer(p: { onClose?: () => void }) {
         </div>
         <div>
         <div className="flex items-center gap-space-sm">
-        <h2 className="font-headline-sm text-headline-sm text-on-surface">Approval needed · Write-off</h2>
+        <h2 className="font-headline-sm text-headline-sm text-on-surface">Approval needed · {approvalTitle}</h2>
         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-tertiary-fixed text-on-tertiary-fixed text-caption font-caption font-semibold">
-        <span className="material-symbols-outlined text-[13px] text-on-tertiary-container animate-spin" style="animation-duration: 4s;">schedule</span>
+        <span className="material-symbols-outlined text-[13px] text-on-tertiary-container animate-spin" style={{ animationDuration: "4s" }}>schedule</span>
                         Needs approval
                       </span>
         </div>
-        <p className="font-caption text-caption text-on-surface-variant mt-0.5">Asset Registry · Write-off Request Reference #WO-0003</p>
+        <p className="font-caption text-caption text-on-surface-variant mt-0.5">Reference #{approvalRef}</p>
         </div>
         </div>
-        <button type="button" aria-label="Close drawer" className="w-8 h-8 rounded-lg bg-surface-container-low hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface flex items-center justify-center transition-colors" type="button">
+        <button aria-label="Close drawer" className="w-8 h-8 rounded-lg bg-surface-container-low hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface flex items-center justify-center transition-colors" type="button" onClick={() => p.onClose?.()}>
         <span className="material-symbols-outlined text-[18px]">close</span>
         </button>
         </div>
@@ -110,7 +110,7 @@ export function GapApprovalDrawer(p: { onClose?: () => void }) {
         <div className="flex items-center gap-space-sm">
         <div className="w-7 h-7 rounded-full bg-primary-container text-on-primary font-label-code text-caption flex items-center justify-center font-bold">DT</div>
         <div>
-        <span className="font-body-sm text-body-sm font-semibold text-on-surface">Requested by Deeki T</span>
+        <span className="font-body-sm text-body-sm font-semibold text-on-surface">Requested by {approval?.requested_by ? String(approval.requested_by).slice(0, 8) : '—'}</span>
         <span className="text-caption font-caption text-on-surface-variant ml-1.5">· 1 Nov 2026, 08:20 AM EST</span>
         </div>
         </div>
@@ -118,19 +118,16 @@ export function GapApprovalDrawer(p: { onClose?: () => void }) {
         </div>
         <div className="p-space-sm rounded-lg bg-tertiary-fixed/30 flex items-start gap-space-sm text-caption font-caption text-on-tertiary-fixed-variant leading-relaxed">
         <span className="material-symbols-outlined text-[16px] text-on-tertiary-container mt-0.5 flex-shrink-0">gavel</span>
-        <span><strong className="font-semibold text-on-surface">Rule:</strong> Write-offs over <strong className="font-label-code text-on-surface">J$ 5,000.00</strong> require secondary authorization from an independent fleet manager or admin. The creator cannot approve their own submission.</span>
+        <span><strong className="font-semibold text-on-surface">Rule:</strong> Write-offs over <strong className="font-label-code text-on-surface">{form.thresholdLabel}</strong> require secondary authorization from an independent fleet manager or admin. The creator cannot approve their own submission.</span>
         </div>
 
         <div className="pt-space-xs">
         <span className="text-caption font-caption uppercase tracking-wider text-on-surface-variant font-semibold block mb-1.5">Variant Schema Preview</span>
         <div className="grid grid-cols-4 gap-1 p-1 bg-surface-container-high/60 rounded-lg text-center font-body-sm text-body-sm">
-        <button type="button" className="py-1 px-2 rounded bg-surface-container-lowest font-semibold text-on-surface shadow-sm transition-all flex items-center justify-center gap-1" type="button">
+        <span className="py-1 px-2 rounded bg-surface-container-lowest font-semibold text-on-surface shadow-sm transition-all flex items-center justify-center gap-1 col-span-4">
         <span className="w-1.5 h-1.5 rounded-full bg-on-tertiary-container"></span>
-        <span>Write-off</span>
-        </button>
-        <button type="button" className="py-1 px-2 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-lowest/50 transition-all" type="button">Adjustment</button>
-        <button type="button" className="py-1 px-2 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-lowest/50 transition-all" type="button">Count diff</button>
-        <button type="button" className="py-1 px-2 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-lowest/50 transition-all" type="button">Purchase Order</button>
+        <span>{form.activeTypeLabel}</span>
+        </span>
         </div>
         </div>
         </div>
@@ -140,12 +137,12 @@ export function GapApprovalDrawer(p: { onClose?: () => void }) {
         <div className="flex items-start justify-between">
         <div>
         <span className="text-caption font-caption uppercase tracking-wider text-on-surface-variant font-semibold">Asset Identification</span>
-        <h3 className="font-headline-sm text-headline-sm text-on-surface mt-0.5">Dash camera AST-0001</h3>
+        <h3 className="font-headline-sm text-headline-sm text-on-surface mt-0.5">{form.headline}</h3>
         <p className="font-label-code text-label-code text-on-surface-variant">SN: DC70-88412118 · Rev B5 Dual-Lens</p>
         </div>
         <div className="text-right">
         <span className="text-caption font-caption uppercase tracking-wider text-on-surface-variant font-semibold block">Book Value (Loss)</span>
-        <span className="font-label-price text-[20px] leading-6 font-bold text-error">J$ 45,998.85</span>
+        <span className="font-label-price text-[20px] leading-6 font-bold text-error">{form.impactAmountLabel}</span>
         <span className="text-caption font-caption text-on-surface-variant block mt-0.5">Quantity: 1 each</span>
         </div>
         </div>
@@ -154,9 +151,9 @@ export function GapApprovalDrawer(p: { onClose?: () => void }) {
         <span className="text-caption font-caption text-on-surface-variant block mb-1">Current Assigned Location</span>
         <div className="flex items-center gap-space-xs font-body-sm text-body-sm font-semibold text-on-surface">
         <span className="material-symbols-outlined text-[18px] text-on-surface-variant">directions_car</span>
-        <span>Vehicle — 5179KZ</span>
+        <span>{form.vehicleLabel}</span>
         </div>
-        <span className="text-caption font-caption text-on-surface-variant ml-6">Toyota Roomy 2019 (Fleet Van)</span>
+        <span className="text-caption font-caption text-on-surface-variant ml-6">{form.assetTag}</span>
         </div>
         <div className="p-space-sm bg-surface-container-low rounded-lg">
         <span className="text-caption font-caption text-on-surface-variant block mb-1">Taxonomy Classification</span>
@@ -171,10 +168,10 @@ export function GapApprovalDrawer(p: { onClose?: () => void }) {
         <div className="p-space-md bg-surface-container-low/70 rounded-lg flex flex-col gap-1">
         <div className="flex items-center justify-between text-caption font-caption">
         <span className="font-semibold text-on-surface uppercase tracking-wider">Requester Memo & Field Telemetry</span>
-        <span className="text-on-surface-variant">Inspector: Damion C. (Lead Tech)</span>
+        <span className="text-on-surface-variant">Inspector: {form.inspectorName}</span>
         </div>
         <p className="font-body-sm text-body-sm text-on-surface leading-relaxed">
-                      "Internal sensor board cracked following windscreen impact on Spanish Town Rd. Camera no longer boots or pairs with telemetry node. Inspected by Lead Tech Damion C. Capacitor leakage verified on optical sub-array."
+                      {form.memo || '—'}
                     </p>
         </div>
 
@@ -211,19 +208,19 @@ export function GapApprovalDrawer(p: { onClose?: () => void }) {
         <div className="space-y-2 text-body-sm font-body-sm text-on-surface-variant pl-1">
         <div className="flex items-start gap-2">
         <span className="text-primary font-bold leading-none mt-1">•</span>
-        <span><strong className="text-on-surface font-label-code">AST-0001</strong> lifecycle status moves irreversibly from <span className="px-1.5 py-0.5 rounded bg-surface-container font-label-code text-caption text-on-surface">Installed</span> to <span className="px-1.5 py-0.5 rounded bg-error-container font-label-code text-caption text-on-error-container">Disposed / Scrapped</span>.</span>
+        <span><strong className="text-on-surface font-label-code">{form.assetTag}</strong> lifecycle status moves irreversibly from <span className="px-1.5 py-0.5 rounded bg-surface-container font-label-code text-caption text-on-surface">Installed</span> to <span className="px-1.5 py-0.5 rounded bg-error-container font-label-code text-caption text-on-error-container">Disposed / Scrapped</span>.</span>
         </div>
         <div className="flex items-start gap-2">
         <span className="text-primary font-bold leading-none mt-1">•</span>
-        <span>Total fleet storeroom book value decreases by <strong className="font-label-price text-on-surface">J$ 45,998.85</strong> in Kingston Yard depot ledger.</span>
+        <span>Total fleet storeroom book value decreases by <strong className="font-label-price text-on-surface">{form.impactAmountLabel}</strong> in depot ledger.</span>
         </div>
         <div className="flex items-start gap-2">
         <span className="text-primary font-bold leading-none mt-1">•</span>
-        <span>Recorded as permanent immutable write-off entry <strong className="text-on-surface font-label-code">WO-0003</strong> in Central Movements journal.</span>
+        <span>Recorded as permanent immutable write-off entry <strong className="text-on-surface font-label-code">{approvalRef}</strong> in Central Movements journal.</span>
         </div>
         <div className="flex items-start gap-2">
         <span className="text-primary font-bold leading-none mt-1">•</span>
-        <span><strong className="text-on-surface font-label-code">5179KZ</strong> vehicle kit checklist flagged: <span className="text-error font-medium">Dash camera missing</span> (overall telemetry kit completeness drops to 60%).</span>
+        <span>Linked vehicle kit compliance may change when this approval is authorized.</span>
         </div>
         </div>
         </div>
@@ -234,20 +231,14 @@ export function GapApprovalDrawer(p: { onClose?: () => void }) {
         <span className="material-symbols-outlined text-[15px]">compare_arrows</span>
                       Cross-Variant Sample (Count Audit Context)
                     </span>
-        <span className="text-caption font-label-code text-caption text-on-surface-variant">Ref: CNT-1142</span>
+        <span className="text-caption font-label-code text-caption text-on-surface-variant">Ref: {approvalRef}</span>
         </div>
         <div className="p-space-sm rounded-lg bg-surface-container-low text-caption font-caption text-on-surface-variant space-y-1">
         <p className="text-body-sm font-body-sm text-on-surface font-medium">Main store Kingston count audit variance preview:</p>
-        <div className="flex flex-wrap gap-x-3 gap-y-1 font-label-code text-caption text-on-surface">
-        <span>Lug wrench <strong className="text-error">(−2 · −J$ 5,610.00)</strong></span>
-        <span>·</span>
-        <span>Tyre pump <strong className="text-on-surface font-semibold">(+1 · +J$ 6,500.00)</strong></span>
-        <span>·</span>
-        <span>Oil filter <strong className="text-error">(−1 · −J$ 1,850.00)</strong></span>
-        </div>
+        <p className="font-body-sm text-body-sm text-on-surface">{form.varianceSummary}</p>
         <div className="pt-1 flex items-center justify-between text-body-sm font-body-sm">
         <span className="text-on-surface-variant">Audit Net Variance:</span>
-        <span className="font-label-price text-label-price text-error font-bold">−J$ 960.00</span>
+        <span className="font-label-price text-label-price text-error font-bold">{form.varianceAmountLabel}</span>
         </div>
         </div>
         </div>
@@ -257,7 +248,7 @@ export function GapApprovalDrawer(p: { onClose?: () => void }) {
         <div className="flex flex-col gap-0.5">
         <span className="font-body-sm text-body-sm font-semibold text-on-surface">Self-Approval Governance Lock Engaged</span>
         <p className="text-caption font-caption text-on-surface-variant leading-relaxed">
-                      You created this request (<strong className="text-on-surface">Deeki T</strong>). In compliance with internal asset audit protocols, approval must be granted by another supervisor with <code className="px-1 py-0.5 rounded bg-surface-container text-caption font-label-code text-on-surface">fleet_manager</code> or <code className="px-1 py-0.5 rounded bg-surface-container text-caption font-label-code text-on-surface">admin</code> credentials. Decision buttons below are disabled in your active session.
+                      Self-approval is blocked when you created this request. Another supervisor with <code className="px-1 py-0.5 rounded bg-surface-container text-caption font-label-code text-on-surface">fleet_manager</code> or <code className="px-1 py-0.5 rounded bg-surface-container text-caption font-label-code text-on-surface">admin</code> credentials must decide.
                     </p>
         </div>
         </div>
@@ -267,13 +258,13 @@ export function GapApprovalDrawer(p: { onClose?: () => void }) {
         <label className="text-caption font-caption uppercase tracking-wider text-on-surface font-semibold" htmlFor="rejectReason">Reviewer Justification</label>
         <span className="text-caption font-caption text-error font-medium">Mandatory if rejecting</span>
         </div>
-        <textarea className="w-full p-space-sm rounded-lg bg-surface-container text-body-sm font-body-sm text-on-surface-variant placeholder:text-outline cursor-not-allowed resize-none" disabled="" id="rejectReason" placeholder="Provide clear operational reason if rejecting this request..." rows="2"></textarea>
+        <textarea className="w-full p-space-sm rounded-lg bg-surface-container text-body-sm font-body-sm text-on-surface placeholder:text-outline resize-none" id="rejectReason" placeholder="Provide clear operational reason if rejecting this request..." rows={2} value={form.rejectReason} onChange={(e) => form.setRejectReason(e.target.value)} />
         <div className="flex items-center gap-space-md pt-space-xs">
-        <button type="button" className="flex-1 py-2.5 px-space-md rounded-lg bg-surface-container-low text-outline font-body-sm text-body-sm font-semibold cursor-not-allowed flex items-center justify-center gap-space-xs" disabled="" type="button">
+        <button type="button" disabled={!form.canReject || form.submit.saving} onClick={() => void form.reject()} className="flex-1 py-2.5 px-space-md rounded-lg bg-surface-container-low text-on-surface font-body-sm text-body-sm font-semibold flex items-center justify-center gap-space-xs disabled:opacity-60">
         <span className="material-symbols-outlined text-[18px]">cancel</span>
         <span>Reject write-off</span>
         </button>
-        <button type="button" className="flex-1 py-2.5 px-space-md rounded-lg bg-surface-container-high text-outline font-body-sm text-body-sm font-semibold cursor-not-allowed flex items-center justify-center gap-space-xs" disabled="" type="button">
+        <button type="button" disabled={!form.canApprove || form.submit.saving} onClick={() => void form.approve()} className="flex-1 py-2.5 px-space-md rounded-lg bg-primary text-on-primary font-body-sm text-body-sm font-semibold flex items-center justify-center gap-space-xs disabled:opacity-60">
         <span className="material-symbols-outlined text-[18px]">check_circle</span>
         <span>Approve write-off</span>
         </button>
@@ -285,23 +276,19 @@ export function GapApprovalDrawer(p: { onClose?: () => void }) {
         <div className="flex items-center gap-1.5 overflow-hidden">
         <span className="material-symbols-outlined text-[15px] text-on-surface flex-shrink-0">history</span>
         <span className="truncate">
-                    Requested <strong className="text-on-surface font-label-code">08:20 AM</strong> (Deeki T) · <span className="text-on-tertiary-container font-semibold">Waiting for 2nd Approver</span> · Approved by — · Rejected by —
+                    Reference <strong className="text-on-surface font-label-code">{approvalRef}</strong> · <span className="text-on-tertiary-container font-semibold">{approval ? String(approval.status ?? 'pending') : '—'}</span>
                   </span>
         </div>
         <div className="flex items-center gap-1 text-on-surface font-label-code text-caption flex-shrink-0 pl-2">
         <span>SLA:</span>
-        <span>< 24h</span>
+        <span>{'< 24h'}</span>
         </div>
         </div>
         </div>
         </div>
         </div></div><aside className="fixed left-0 top-28 bottom-0 w-64 bg-surface-container-lowest shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-40 flex flex-col justify-between py-space-lg"><div className="flex flex-col gap-space-xs px-space-md"><div className="px-space-md py-space-xs text-caption font-caption uppercase tracking-wider text-on-surface-variant font-semibold">Inventory & Asset Scope</div><nav className="flex flex-col gap-1" data-active-classes="bg-surface-container text-on-surface font-semibold"><a className="flex items-center gap-space-md px-space-md py-space-sm rounded-lg text-body-sm font-body-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="inventory-catalog" href="#"><span className="material-symbols-outlined text-[20px]">category</span>Inventory Stock</a><a className="flex items-center gap-space-md px-space-md py-space-sm rounded-lg text-body-sm font-body-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="parts-fitment-crossref" href="#"><span className="material-symbols-outlined text-[20px]">manufacturing</span>Fitment & Compatibility</a><a className="flex items-center gap-space-md px-space-md py-space-sm rounded-lg text-body-sm font-body-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="work-orders-repairs" href="#"><span className="material-symbols-outlined text-[20px]">build</span>Work Orders</a><a className="flex items-center gap-space-md px-space-md py-space-sm rounded-lg text-body-sm font-body-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="asset-depreciation-tracker" href="#"><span className="material-symbols-outlined text-[20px]">account_balance_wallet</span>Asset Valuation</a><a className="flex items-center gap-space-md px-space-md py-space-sm rounded-lg text-body-sm font-body-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="procurement-suppliers" href="#"><span className="material-symbols-outlined text-[20px]">storefront</span>Suppliers & POs</a><a className="flex items-center gap-space-md px-space-md py-space-sm rounded-lg text-body-sm font-body-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="telemetry-diagnostics" href="#"><span className="material-symbols-outlined text-[20px]">sensors</span>Diagnostic Logs</a></nav></div><div className="px-space-lg pt-space-md"><div className="p-space-md rounded-lg bg-surface-container-low shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div className="flex items-center justify-between text-caption font-caption text-on-surface-variant mb-1"><span>Active Depot Stock</span><span className="font-label-code text-label-code text-on-surface font-semibold">84.6%</span></div><div className="w-full h-1.5 rounded-full bg-surface-container-high overflow-hidden"><div className="h-full bg-primary rounded-full w-[84.6%]"></div></div><div className="mt-space-xs text-caption font-caption text-on-surface-variant">Warehouse A & Yard Kingston</div></div></div></aside>
-        {compliance.safetyNotice ? (
-          <div className="mt-space-md rounded-lg border border-outline-variant/30 bg-surface-container-low p-space-md font-body-sm text-body-sm text-on-surface-variant">
-            {compliance.safetyNotice}
-          </div>
-        ) : null}
       </div>
+      </GapLoadState>
     </GapModalShell>
   );
 }

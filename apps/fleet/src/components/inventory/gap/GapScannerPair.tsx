@@ -1,29 +1,18 @@
 /** Ported from Stitch gap screen — panel only (audit R16-01). */
-import { useEffect, useState } from 'react';
-import { inventoryApi } from '../inventoryApi';
+import { GapLoadState, GapSubmitError } from './GapLoadState';
 import { GapModalShell } from './GapModalShell';
-import { useGapCompliance } from './useGapCompliance';
+import { useGapScannerPairForm } from './useGapScannerPairForm';
 
 export function GapScannerPair(p: { onClose?: () => void }) {
-  const compliance = useGapCompliance();
-  const [device, setDevice] = useState<Record<string, unknown> | null>(null);
-  useEffect(() => {
-    void inventoryApi.scanners().then((payload) => {
-      const items = (payload as { items?: Record<string, unknown>[] }).items ?? [];
-      setDevice(items[0] ?? null);
-    });
-  }, []);
-  const locationCode = device?.location_id ? String(device.location_id).slice(0, 8) : '—';
-  const lastSeen = device?.last_seen_at ? new Date(String(device.last_seen_at)).toLocaleString('en-JM') : '—';
-  const readsOk = device?.reads_ok ?? '—';
+  const form = useGapScannerPairForm(p.onClose);
+
+  const formatLastSeen = (raw: unknown) =>
+    raw ? new Date(String(raw)).toLocaleString('en-JM') : '—';
   return (
     <GapModalShell onClose={p.onClose} ariaLabel="ScannerPair">
+      <GapSubmitError message={form.submit.error} />
+      <GapLoadState loading={form.load.loading} error={form.load.error} onRetry={form.load.reload}>
       <div className="fleet-inventory-stitch inventory-stitch-root">
-        <div className="mb-space-md flex flex-wrap gap-2 font-label-code text-caption text-on-surface-variant">
-          <span className="rounded bg-surface-container px-2 py-1">Loc {locationCode}</span>
-          <span className="rounded bg-surface-container px-2 py-1">Last seen {lastSeen}</span>
-          <span className="rounded bg-surface-container px-2 py-1">Reads {String(readsOk)}</span>
-        </div>
         <div className="inventory-stitch-main"><div className="flex flex-col w-full">
         <div className="px-margin-desktop py-space-xl max-w-[1440px] mx-auto w-full">
 
@@ -58,7 +47,7 @@ export function GapScannerPair(p: { onClose?: () => void }) {
                     Use a phone or handheld scanner to count, issue, and receive stock faster.
                   </p>
         </div>
-        <button type="button" className="p-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors" id="modal-close-icon">
+        <button type="button" className="p-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors" id="modal-close-icon" onClick={() => p.onClose?.()}>
         <span className="material-symbols-outlined text-[20px]">close</span>
         </button>
         </div>
@@ -86,7 +75,7 @@ export function GapScannerPair(p: { onClose?: () => void }) {
         <span className="w-5 h-5 rounded-full bg-surface-container-highest text-on-surface font-label-code text-[11px] font-bold flex items-center justify-center">3</span>
         <div className="flex flex-col min-w-0">
         <span className="font-caption text-caption font-semibold truncate">Location & Naming</span>
-        <span className="font-caption text-[10px] text-on-surface-variant/70 leading-none">Kingston Main Hub</span>
+        <span className="font-caption text-[10px] text-on-surface-variant/70 leading-none">{form.deviceLabel || 'Assign after pair'}</span>
         </div>
         </div>
         </div>
@@ -103,7 +92,7 @@ export function GapScannerPair(p: { onClose?: () => void }) {
 
         <div className="device-card relative p-3 rounded-lg bg-surface-container-low cursor-pointer transition-all flex flex-col justify-between h-32" data-device="phone">
         <div className="flex items-center justify-between">
-        <span className="material-symbols-outlined text-[22px] text-primary" style="font-variation-settings: 'FILL' 1;">smartphone</span>
+        <span className="material-symbols-outlined text-[22px] text-primary" style={{ fontVariationSettings: "'FILL' 1" }}>smartphone</span>
         <span className="material-symbols-outlined text-[16px] text-primary">check_circle</span>
         </div>
         <div>
@@ -160,7 +149,7 @@ export function GapScannerPair(p: { onClose?: () => void }) {
         <div className="col-span-5 flex flex-col items-center justify-center p-space-md bg-surface-container-lowest rounded-xl shadow-sm">
         <div className="relative w-44 h-44 bg-surface-container-lowest p-2 flex items-center justify-center">
 
-        <svg className="w-full h-full text-primary" fill="currentColor" viewbox="0 0 100 100">
+        <svg className="w-full h-full text-primary" fill="currentColor" viewBox="0 0 100 100">
 
         <rect height="28" rx="2" width="28" x="5" y="5"></rect>
         <rect fill="#ffffff" height="20" rx="1" width="20" x="9" y="9"></rect>
@@ -239,7 +228,7 @@ export function GapScannerPair(p: { onClose?: () => void }) {
         <p className="font-caption text-caption text-on-surface-variant uppercase tracking-wider mb-1 font-semibold">DIRECT URL LINK</p>
         <div className="flex items-center justify-between p-2 rounded bg-surface-container-lowest px-3">
         <span className="font-label-code text-label-code text-on-surface font-medium select-all">roamfleet.co/scan</span>
-        <button type="button" className="flex items-center gap-1 font-caption text-caption text-on-surface hover:text-primary font-semibold">
+        <button type="button" className="flex items-center gap-1 font-caption text-caption text-on-surface hover:text-primary font-semibold" onClick={() => p.onClose?.()}>
         <span className="material-symbols-outlined text-[14px]">content_copy</span>
                             COPY
                           </button>
@@ -249,9 +238,7 @@ export function GapScannerPair(p: { onClose?: () => void }) {
         <div className="my-space-sm">
         <p className="font-caption text-caption text-on-surface-variant uppercase tracking-wider mb-1 font-semibold">ONE-TIME PAIRING PIN</p>
         <div className="bg-surface-container-lowest rounded-lg p-3 flex items-baseline justify-between shadow-sm">
-        <div className="font-label-plate text-[28px] tracking-[0.25em] text-on-surface font-bold">
-                            482<span className="text-on-surface-variant/40 mx-2">·</span>913
-                          </div>
+        <input className="w-full bg-transparent font-label-plate text-[28px] tracking-[0.25em] text-on-surface font-bold focus:outline-none uppercase" value={form.pairingCode} onChange={(e) => form.setPairingCode(e.target.value.toUpperCase())} aria-label="Pairing code"/>
         <span className="font-label-code text-[11px] text-on-surface-variant bg-surface-container px-2 py-1 rounded font-semibold uppercase"></span>
         </div>
         </div>
@@ -259,10 +246,10 @@ export function GapScannerPair(p: { onClose?: () => void }) {
         <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5 font-label-code text-body-sm text-on-surface font-medium">
-        <span className="material-symbols-outlined text-[16px] text-on-surface animate-spin" style="animation-duration: 4s;">schedule</span>
+        <span className="material-symbols-outlined text-[16px] text-on-surface animate-spin" style={{ animationDuration: "4s" }}>schedule</span>
                             Code expires in <span className="font-bold text-primary" id="countdown-timer">09:41</span>
         </div>
-        <button type="button" className="font-caption text-caption text-on-surface-variant hover:text-on-surface flex items-center gap-1 transition-colors" id="refresh-code-btn">
+        <button type="button" disabled={form.submit.saving} onClick={() => void form.regenerateScanner()} className="font-caption text-caption text-on-surface-variant hover:text-on-surface flex items-center gap-1 transition-colors disabled:opacity-60" id="refresh-code-btn">
         <span className="material-symbols-outlined text-[13px]">refresh</span>
                             Regenerate PIN
                           </button>
@@ -292,7 +279,7 @@ export function GapScannerPair(p: { onClose?: () => void }) {
         <div className="flex flex-col gap-1.5">
         <label className="font-caption text-caption text-on-surface font-medium">Device Name</label>
         <div className="relative">
-        <input className="w-full h-9 px-3 rounded bg-surface-container text-on-surface font-body-md text-body-md focus:outline-none focus:bg-surface-container-low transition-colors" type="text" value="Store phone 1"/>
+        <input className="w-full h-9 px-3 rounded bg-surface-container text-on-surface font-body-md text-body-md focus:outline-none focus:bg-surface-container-low transition-colors" type="text" value={form.deviceLabel} onChange={(e) => form.setDeviceLabel(e.target.value)}/>
         <span className="absolute right-2.5 top-2 material-symbols-outlined text-[18px] text-on-surface-variant">edit</span>
         </div>
         </div>
@@ -300,12 +287,11 @@ export function GapScannerPair(p: { onClose?: () => void }) {
         <div className="flex flex-col gap-1.5">
         <label className="font-caption text-caption text-on-surface font-medium">Assigned Location</label>
         <div className="relative">
-        <select className="w-full h-9 px-3 pr-8 rounded bg-surface-container text-on-surface font-body-md text-body-md appearance-none focus:outline-none focus:bg-surface-container-low cursor-pointer">
-        <option selected="">Main store — Kingston</option>
-        <option>Main store — Bay 2</option>
-        <option>Main store — Check-in desk</option>
-        <option>North Depot — Montego Bay</option>
-        <option>Transit Compound — Spanish Town</option>
+        <select className="w-full h-9 px-3 pr-8 rounded bg-surface-container text-on-surface font-body-md text-body-md appearance-none focus:outline-none focus:bg-surface-container-low cursor-pointer" value={form.binLocationId} onChange={(e) => form.setBinLocationId(e.target.value)}>
+        <option value="">Set on device after pair</option>
+        {form.locations.map((loc) => (
+          <option key={String(loc.id)} value={String(loc.id)}>{String(loc.name ?? loc.code ?? '—')}</option>
+        ))}
         </select>
         <span className="absolute right-2.5 top-2 pointer-events-none material-symbols-outlined text-[18px] text-on-surface-variant">expand_more</span>
         </div>
@@ -318,9 +304,9 @@ export function GapScannerPair(p: { onClose?: () => void }) {
         <div className="flex items-center justify-between mb-space-md">
         <div className="flex items-center gap-space-sm">
         <span className="material-symbols-outlined text-[18px] text-on-surface">devices</span>
-        <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold">Paired Scanners & Devices at Kingston Hub</h3>
+        <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold">Paired scanners & devices</h3>
         </div>
-        <span className="font-label-code text-[11px] px-2 py-0.5 rounded bg-surface-container text-on-surface font-semibold">3 ACTIVE</span>
+        <span className="font-label-code text-[11px] px-2 py-0.5 rounded bg-surface-container text-on-surface font-semibold">{form.pairedCount} ACTIVE</span>
         </div>
         <div className="overflow-x-auto">
         <table className="w-full text-left font-body-sm text-body-sm">
@@ -335,69 +321,33 @@ export function GapScannerPair(p: { onClose?: () => void }) {
         </tr>
         </thead>
         <tbody className="divide-y-0">
-
-        <tr className="hover:bg-surface-container-low transition-colors group">
+        {form.scanners.length === 0 ? (
+        <tr><td colSpan={6} className="py-6 px-3 text-center text-on-surface-variant font-body-sm">No scanners paired yet.</td></tr>
+        ) : form.scanners.map((row) => (
+        <tr key={String(row.id)} className={`hover:bg-surface-container-low transition-colors group cursor-pointer ${form.selectedDeviceId === String(row.id) ? 'bg-surface-container-low' : ''}`} onClick={() => form.setSelectedDeviceId(String(row.id))}>
         <td className="py-2.5 px-3 font-semibold text-on-surface flex items-center gap-2">
-        <span className="w-2 h-2 rounded-full bg-primary"></span>
-                          Store phone 1
+        <span className={`w-2 h-2 rounded-full ${row.paired_at ? 'bg-primary' : 'bg-outline-variant'}`}></span>
+                          {String(row.label ?? row.device_type ?? 'Device')}
                         </td>
         <td className="py-2.5 px-3 text-on-surface-variant">
-        <span className="font-label-code text-[12px] bg-surface-container px-1.5 py-0.5 rounded text-on-surface">Mobile (iPhone 14)</span>
+        <span className="font-label-code text-[12px] bg-surface-container px-1.5 py-0.5 rounded text-on-surface">{String(row.device_type ?? '—')}</span>
         </td>
-        <td className="py-2.5 px-3 text-on-surface">Main store — Kingston</td>
-        <td className="py-2.5 px-3 font-label-code text-[12px] text-on-surface font-medium">Just now</td>
+        <td className="py-2.5 px-3 text-on-surface">{String(row.location_id ?? '—').slice(0, 8)}</td>
+        <td className="py-2.5 px-3 font-label-code text-[12px] text-on-surface font-medium">{formatLastSeen(row.last_seen_at)}</td>
         <td className="py-2.5 px-3">
         <div className="flex items-center gap-2">
-        <span className="font-label-code text-label-code font-bold text-on-surface">98%</span>
-        <span className="font-caption text-[11px] text-on-surface-variant">(98/100 scans)</span>
+        <span className="font-label-code text-label-code font-bold text-on-surface">{String(row.reads_ok ?? '—')}</span>
         </div>
         </td>
         <td className="py-2.5 px-3 text-right">
-        <button type="button" className="unpair-btn font-caption text-caption text-error hover:text-on-error-container uppercase font-bold tracking-wider hover:underline transition-all">Unpair</button>
+        {row.paired_at ? (
+        <button type="button" disabled={form.submit.saving} onClick={(e) => { e.stopPropagation(); form.setSelectedDeviceId(String(row.id)); void form.unpairScanner(); }} className="font-caption text-caption text-error font-semibold hover:underline disabled:opacity-60">Unpair</button>
+        ) : (
+        <span className="font-caption text-caption text-on-surface-variant">Pending</span>
+        )}
         </td>
         </tr>
-
-        <tr className="hover:bg-surface-container-low transition-colors group">
-        <td className="py-2.5 px-3 font-semibold text-on-surface flex items-center gap-2">
-        <span className="w-2 h-2 rounded-full bg-surface-tint"></span>
-                          Depot Zebra TC26
-                        </td>
-        <td className="py-2.5 px-3 text-on-surface-variant">
-        <span className="font-label-code text-[12px] bg-surface-container px-1.5 py-0.5 rounded text-on-surface">Rugged Handheld</span>
-        </td>
-        <td className="py-2.5 px-3 text-on-surface">Main store — Bay 2</td>
-        <td className="py-2.5 px-3 font-label-code text-[12px] text-on-surface-variant">2 hours ago</td>
-        <td className="py-2.5 px-3">
-        <div className="flex items-center gap-2">
-        <span className="font-label-code text-label-code font-bold text-on-surface">100%</span>
-        <span className="font-caption text-[11px] text-on-surface-variant">(142/142 scans)</span>
-        </div>
-        </td>
-        <td className="py-2.5 px-3 text-right">
-        <button type="button" className="unpair-btn font-caption text-caption text-error hover:text-on-error-container uppercase font-bold tracking-wider hover:underline transition-all">Unpair</button>
-        </td>
-        </tr>
-
-        <tr className="hover:bg-surface-container-low transition-colors group">
-        <td className="py-2.5 px-3 font-semibold text-on-surface flex items-center gap-2">
-        <span className="w-2 h-2 rounded-full bg-outline-variant"></span>
-                          Counter USB Laser
-                        </td>
-        <td className="py-2.5 px-3 text-on-surface-variant">
-        <span className="font-label-code text-[12px] bg-surface-container px-1.5 py-0.5 rounded text-on-surface">USB Tethered</span>
-        </td>
-        <td className="py-2.5 px-3 text-on-surface">Main store — Check-in desk</td>
-        <td className="py-2.5 px-3 font-label-code text-[12px] text-on-surface-variant">Yesterday</td>
-        <td className="py-2.5 px-3">
-        <div className="flex items-center gap-2">
-        <span className="font-label-code text-label-code font-bold text-on-surface">99.6%</span>
-        <span className="font-caption text-[11px] text-on-surface-variant">(512/514 scans)</span>
-        </div>
-        </td>
-        <td className="py-2.5 px-3 text-right">
-        <button type="button" className="unpair-btn font-caption text-caption text-error hover:text-on-error-container uppercase font-bold tracking-wider hover:underline transition-all">Unpair</button>
-        </td>
-        </tr>
+        ))}
         </tbody>
         </table>
         </div>
@@ -409,11 +359,11 @@ export function GapScannerPair(p: { onClose?: () => void }) {
         <span>End-to-end telemetry verified via Jamaica Hub Keyring</span>
         </div>
         <div className="flex items-center gap-space-sm">
-        <button type="button" className="px-4 py-2 rounded-lg bg-surface-container text-on-surface font-body-md text-body-md font-medium hover:bg-surface-container-high transition-colors" id="modal-close-footer">
+        <button type="button" className="px-4 py-2 rounded-lg bg-surface-container text-on-surface font-body-md text-body-md font-medium hover:bg-surface-container-high transition-colors" id="modal-close-footer" onClick={() => p.onClose?.()}>
                     Close
                   </button>
-        <button type="button" className="px-5 py-2 rounded-lg bg-primary text-on-primary font-body-md text-body-md font-semibold hover:bg-primary/90 active:scale-95 transition-all shadow-sm flex items-center gap-1.5" id="modal-done-footer">
-        <span>Done</span>
+        <button type="button" disabled={!form.canPair || form.submit.saving} onClick={() => void form.pair()} className="px-5 py-2 rounded-lg bg-primary text-on-primary font-body-md text-body-md font-semibold hover:bg-primary/90 active:scale-95 transition-all shadow-sm flex items-center gap-1.5 disabled:opacity-60" id="modal-done-footer">
+        <span>{form.submit.saving ? 'Pairing…' : 'Pair scanner'}</span>
         <span className="material-symbols-outlined text-[16px]">check</span>
         </button>
         </div>
@@ -432,7 +382,7 @@ export function GapScannerPair(p: { onClose?: () => void }) {
         <span className="material-symbols-outlined text-primary text-[24px]">inventory_2</span>
         <div>
         <p className="font-caption text-caption text-on-surface-variant uppercase font-semibold">Active Cycle Count</p>
-        <p className="font-headline-sm text-[15px] font-bold text-on-surface">#CC-2025-04A (Kingston)</p>
+        <p className="font-headline-sm text-[15px] font-bold text-on-surface">{form.scanners.length} devices</p>
         </div>
         </div>
         <div className="p-space-md rounded-lg bg-surface-container flex items-center gap-space-md">
@@ -446,12 +396,8 @@ export function GapScannerPair(p: { onClose?: () => void }) {
         </div>
         </div>
         </div>
-        {compliance.safetyNotice ? (
-          <div className="mt-space-md rounded-lg border border-outline-variant/30 bg-surface-container-low p-space-md font-body-sm text-body-sm text-on-surface-variant">
-            {compliance.safetyNotice}
-          </div>
-        ) : null}
       </div>
+      </GapLoadState>
     </GapModalShell>
   );
 }

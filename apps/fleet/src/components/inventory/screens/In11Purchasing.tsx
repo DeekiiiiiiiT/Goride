@@ -8,6 +8,9 @@ export function In11Purchasing() {
   const vendorName = firstVendorName(live.vendors);
   const featuredPo = live.purchaseOrders[0];
   const poNumber = featuredPo ? strField(featuredPo, 'number', firstOpenPoNumber(live.purchaseOrders)) : firstOpenPoNumber(live.purchaseOrders);
+  const firstVendorId = live.vendors[0] ? strField(live.vendors[0], 'id', '') || null : null;
+  const openVendorEditor = () => shell.openGap('vendor-editor', { vendorId: firstVendorId });
+  const openRequisition = () => shell.openGap('requisition');
   return (
     <div className="fleet-inventory-stitch inventory-stitch-root">
       <div className="inventory-stitch-main"><div className="flex flex-col w-full">
@@ -585,7 +588,7 @@ export function In11Purchasing() {
                       J$ 26,000.00
                     </td>
       <td className="py-space-md px-space-lg text-right">
-      <button type="button" className="px-space-md py-1.5 bg-primary text-on-primary font-body-sm text-body-sm rounded font-medium hover:bg-primary-container shadow-sm transition-all whitespace-nowrap">
+      <button type="button" onClick={openRequisition} className="px-space-md py-1.5 bg-primary text-on-primary font-body-sm text-body-sm rounded font-medium hover:bg-primary-container shadow-sm transition-all whitespace-nowrap">
                         Create draft order
                       </button>
       </td>
@@ -602,7 +605,7 @@ export function In11Purchasing() {
       <h3 className="font-headline-sm text-headline-sm text-on-surface tracking-tight">Active Vendor Directory</h3>
       <span className="font-caption text-caption bg-surface-container-high px-2 py-0.5 rounded text-on-surface-variant">3 Active Partners</span>
       </div>
-      <button type="button" className="font-body-sm text-body-sm text-on-surface font-semibold hover:underline flex items-center gap-1">
+      <button type="button" onClick={openVendorEditor} className="font-body-sm text-body-sm text-on-surface font-semibold hover:underline flex items-center gap-1">
                 Manage all vendors
                 <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
       </button>

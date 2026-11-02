@@ -107,7 +107,7 @@ export function In2StockTable({
                   type="button"
                   onClick={() => {
                     shell.setSelectedItemId(itemId || null);
-                    shell.openModal('item-drawer');
+                    shell.openGap('item-editor', { itemId: itemId || null });
                   }}
                   className="p-1 rounded text-secondary hover:text-on-surface hover:bg-surface-container-high transition-colors"
                   title="Item details"

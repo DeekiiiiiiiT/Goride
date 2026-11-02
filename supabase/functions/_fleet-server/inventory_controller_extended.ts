@@ -359,14 +359,48 @@ export function registerInventoryExtendedRoutes(app: Hono<InvEnv>) {
   app.post(`${PREFIX}/assets`, requirePermission("inventory.move"), async (c) => {
     const org = orgOrForbid(c);
     if (org instanceof Response) return org;
-    const body = await c.req.json();
-    const { data, error } = await fleetDb().from("fleet_inv_asset").insert({
+    const body = await c.req.json() as Record<string, unknown>;
+    const itemId = body.item_id ?? body.itemId;
+    if (!itemId) return c.json({ error: "item_id required" }, 400);
+    const serial =
+      body.serial_number ?? body.serial_no ?? body.serialNumber ?? null;
+    const tagRaw = body.asset_tag ?? body.assetTag ?? body.tag;
+    const assetTag =
+      tagRaw != null && String(tagRaw).trim()
+        ? String(tagRaw).trim()
+        : `AST-${Date.now().toString(36).toUpperCase().slice(-8)}`;
+    const parseDate = (v: unknown) => {
+      if (v == null || v === "") return null;
+      const d = new Date(String(v));
+      return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
+    };
+    const parseMoney = (v: unknown) => {
+      if (v == null || v === "") return null;
+      const n = Number(String(v).replace(/[^0-9.-]/g, ""));
+      return Number.isFinite(n) ? n : null;
+    };
+    const row = {
       organization_id: org,
-      item_id: body.item_id,
-      serial_no: body.serial_no,
-      status: body.status ?? "in_stock",
-      location_id: body.location_id,
-    }).select("*").single();
+      asset_tag: assetTag,
+      item_id: itemId,
+      serial_number: serial != null ? String(serial).trim() || null : null,
+      imei: body.imei != null ? String(body.imei).trim() || null : null,
+      status: body.status ?? "in_store",
+      location_id: body.location_id ?? body.locationId ?? null,
+      bin_id: body.bin_id ?? body.binId ?? null,
+      purchase_cost: parseMoney(body.purchase_cost ?? body.purchaseCost ?? body.cost),
+      warranty_ends_on: parseDate(body.warranty_ends_on ?? body.warrantyEndsOn ?? body.warranty),
+      next_inspection_due: parseDate(
+        body.next_inspection_due ?? body.nextInspectionDue ?? body.inspection_due,
+      ),
+      provider: body.provider != null ? String(body.provider).trim() || null : null,
+      external_device_id:
+        body.external_device_id ?? body.externalDeviceId ?? body.device_id ?? null,
+      insurer_name: body.insurer_name ?? body.insurerName ?? null,
+      insurance_policy_ref:
+        body.insurance_policy_ref ?? body.insurancePolicyRef ?? null,
+    };
+    const { data, error } = await fleetDb().from("fleet_inv_asset").insert(row).select("*").single();
     if (error) return c.json({ error: error.message }, 500);
     return c.json({ asset: data });
   });

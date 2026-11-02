@@ -67,9 +67,9 @@ export function In12Counts() {
       <p className="font-body-sm text-body-sm text-on-surface-variant mt-1">Blind cycle counts prevent bias. Expected storeroom quantities remain masked until submission.</p>
       </div>
       <div className="flex items-center gap-space-sm">
-      <button type="button" className="px-space-lg py-2 bg-surface-container-lowest text-on-surface font-body-sm text-body-sm font-medium rounded-lg shadow-sm hover:bg-surface-container transition-colors flex items-center gap-space-xs">
-      <span className="material-symbols-outlined text-[18px]">history</span>
-      <span>Count history & logs</span>
+      <button type="button" onClick={() => shell.openGap('scanner-pair')} className="px-space-lg py-2 bg-surface-container-lowest text-on-surface font-body-sm text-body-sm font-medium rounded-lg shadow-sm hover:bg-surface-container transition-colors flex items-center gap-space-xs">
+      <span className="material-symbols-outlined text-[18px]">barcode_scanner</span>
+      <span>Pair count scanner</span>
       </button>
       <button type="button" onClick={() => shell.openModal('count-session')} className="px-space-lg py-2 bg-primary text-on-primary font-body-sm text-body-sm font-semibold rounded-lg shadow-sm hover:opacity-95 transition-all flex items-center gap-space-xs">
       <span className="material-symbols-outlined text-[18px]">add</span>

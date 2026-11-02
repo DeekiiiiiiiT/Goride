@@ -64,19 +64,19 @@ export function Dk6States({
       <span className="font-label-code text-[11px] px-2 py-0.5 rounded-full bg-surface-container-lowest text-primary font-bold">390px VIEW</span>
       </div>
       <div className="flex gap-2 overflow-x-auto no-scrollbar py-1" id="state-tab-container">
-      <button type="button" className="state-tab px-3 py-1.5 rounded-full font-label-status text-[12px] whitespace-nowrap bg-primary text-on-primary transition-all flex items-center gap-1 shadow-sm" id="tab-loading" onclick="switchState('loading')">
+      <button type="button" className="state-tab px-3 py-1.5 rounded-full font-label-status text-[12px] whitespace-nowrap bg-primary text-on-primary transition-all flex items-center gap-1 shadow-sm" id="tab-loading" onClick={() => {}}>
       <span className="material-symbols-outlined text-[14px]">hourglass_top</span> Loading
             </button>
-      <button type="button" className="state-tab px-3 py-1.5 rounded-full font-label-status text-[12px] whitespace-nowrap bg-surface-container-lowest text-on-surface-variant transition-all flex items-center gap-1 hover:text-on-surface" id="tab-nocar" onclick="switchState('nocar')">
+      <button type="button" className="state-tab px-3 py-1.5 rounded-full font-label-status text-[12px] whitespace-nowrap bg-surface-container-lowest text-on-surface-variant transition-all flex items-center gap-1 hover:text-on-surface" id="tab-nocar" onClick={() => {}}>
       <span className="material-symbols-outlined text-[14px]">no_crash</span> No Car
             </button>
-      <button type="button" className="state-tab px-3 py-1.5 rounded-full font-label-status text-[12px] whitespace-nowrap bg-surface-container-lowest text-on-surface-variant transition-all flex items-center gap-1 hover:text-on-surface" id="tab-nokit" onclick="switchState('nokit')">
+      <button type="button" className="state-tab px-3 py-1.5 rounded-full font-label-status text-[12px] whitespace-nowrap bg-surface-container-lowest text-on-surface-variant transition-all flex items-center gap-1 hover:text-on-surface" id="tab-nokit" onClick={() => {}}>
       <span className="material-symbols-outlined text-[14px]">inventory_2</span> No Kit Set Up
             </button>
-      <button type="button" className="state-tab px-3 py-1.5 rounded-full font-label-status text-[12px] whitespace-nowrap bg-surface-container-lowest text-on-surface-variant transition-all flex items-center gap-1 hover:text-on-surface" id="tab-loadfailed" onclick="switchState('loadfailed')">
+      <button type="button" className="state-tab px-3 py-1.5 rounded-full font-label-status text-[12px] whitespace-nowrap bg-surface-container-lowest text-on-surface-variant transition-all flex items-center gap-1 hover:text-on-surface" id="tab-loadfailed" onClick={() => {}}>
       <span className="material-symbols-outlined text-[14px]">wifi_off</span> Load Failed
             </button>
-      <button type="button" className="state-tab px-3 py-1.5 rounded-full font-label-status text-[12px] whitespace-nowrap bg-surface-container-lowest text-on-surface-variant transition-all flex items-center gap-1 hover:text-on-surface" id="tab-sendfailed" onclick="switchState('sendfailed')">
+      <button type="button" className="state-tab px-3 py-1.5 rounded-full font-label-status text-[12px] whitespace-nowrap bg-surface-container-lowest text-on-surface-variant transition-all flex items-center gap-1 hover:text-on-surface" id="tab-sendfailed" onClick={() => {}}>
       <span className="material-symbols-outlined text-[14px]">sync_problem</span> Send Failed
             </button>
       </div>
@@ -171,11 +171,11 @@ export function Dk6States({
                 No car is assigned to you right now. Your kit will show here when you get a car.
               </p>
       <div className="flex flex-col gap-space-xs w-full">
-      <button type="button" className="w-full h-[52px] rounded-xl bg-primary text-on-primary font-label-button text-label-button flex items-center justify-center gap-2 shadow-sm active:scale-[0.98] transition-transform">
+      <button type="button" className="w-full h-[52px] rounded-xl bg-primary text-on-primary font-label-button text-label-button flex items-center justify-center gap-2 shadow-sm active:scale-[0.98] transition-transform" onClick={() => onRetry?.()}>
       <span className="material-symbols-outlined text-[20px]">refresh</span>
                   Refresh status
                 </button>
-      <button type="button" className="w-full h-[52px] rounded-xl bg-surface-container-high text-on-surface font-label-button text-label-button flex items-center justify-center gap-2 active:scale-[0.98] transition-transform">
+      <button type="button" className="w-full h-[52px] rounded-xl bg-surface-container-high text-on-surface font-label-button text-label-button flex items-center justify-center gap-2 active:scale-[0.98] transition-transform" onClick={() => {}}>
       <span className="material-symbols-outlined text-[20px]">support_agent</span>
                   Contact fleet manager
                 </button>
@@ -212,7 +212,7 @@ export function Dk6States({
       <p className="font-body-md text-body-md text-on-surface-variant max-w-[280px] mb-space-lg">
                 Your fleet hasn't set up a kit for this car yet.
               </p>
-      <button type="button" className="w-full h-[52px] rounded-xl bg-primary text-on-primary font-label-button text-label-button flex items-center justify-center gap-2 shadow-sm active:scale-[0.98] transition-transform mb-space-xs">
+      <button type="button" className="w-full h-[52px] rounded-xl bg-primary text-on-primary font-label-button text-label-button flex items-center justify-center gap-2 shadow-sm active:scale-[0.98] transition-transform mb-space-xs" onClick={() => {}}>
       <span className="material-symbols-outlined text-[20px]">add_circle</span>
                 Report something in the car
               </button>
@@ -273,7 +273,7 @@ export function Dk6States({
       <p className="font-body-md text-body-sm text-on-surface-variant max-w-[260px] mb-space-md">
                 Unable to synchronize car kit catalog from fleet server.
               </p>
-      <button type="button" className="w-full h-[52px] rounded-xl bg-primary text-on-primary font-label-button text-label-button flex items-center justify-center gap-2 shadow-sm active:scale-[0.98] transition-transform" onclick="simulateReload()">
+      <button type="button" className="w-full h-[52px] rounded-xl bg-primary text-on-primary font-label-button text-label-button flex items-center justify-center gap-2 shadow-sm active:scale-[0.98] transition-transform" onClick={() => onRetry?.()}>
       <span className="material-symbols-outlined text-[20px]">sync</span>
                 Retry connection
               </button>
@@ -340,7 +340,7 @@ export function Dk6States({
       </div>
 
       <div className="flex gap-2 pt-2">
-      <button type="button" className="flex-1 h-[52px] rounded-xl bg-surface-container-high text-on-surface font-label-button text-label-button flex items-center justify-center active:scale-[0.98] transition-transform">
+      <button type="button" className="flex-1 h-[52px] rounded-xl bg-surface-container-high text-on-surface font-label-button text-label-button flex items-center justify-center active:scale-[0.98] transition-transform" onClick={() => {}}>
                   Edit note
                 </button>
       <button type="button" className="flex-[1.5] h-[52px] rounded-xl bg-primary text-on-primary font-label-button text-label-button flex items-center justify-center gap-1.5 shadow-sm active:scale-[0.98] transition-transform" onClick={() => onResend?.()}>

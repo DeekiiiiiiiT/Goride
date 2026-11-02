@@ -26,10 +26,7 @@ export function GapModalShell({
             <span className="material-symbols-outlined text-[20px]">close</span>
           </button>
         ) : null}
-        <div
-          data-gap-root="true"
-          className="min-h-0 flex-1 overflow-y-auto p-space-md md:p-space-lg"
-        >
+        <div className="min-h-0 flex-1 overflow-y-auto p-space-md md:p-space-lg">
           {children}
         </div>
       </div>

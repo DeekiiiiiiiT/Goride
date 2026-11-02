@@ -1,10 +1,21 @@
 /** Ported from Stitch — do not simplify layout (audit §0.4). */
 import { useInventoryLive } from '../inventoryLive';
 import { useInventoryShell } from '../InventoryShellContext';
-import { firstVendorName } from '../inventoryData';
+import { firstVendorName, strField } from '../inventoryData';
 export function In13Alerts() {
   const shell = useInventoryShell();
   const live = useInventoryLive(shell);
+  const openApprovalDrawer = () => {
+    const pending =
+      shell.alerts.find((a) => strField(a, 'status', '') === 'pending') ??
+      shell.alerts.find((a) => strField(a, 'kind', '').includes('approval')) ??
+      shell.alerts[0];
+    const approvalId = pending
+      ? strField(pending, 'approval_id', strField(pending, 'id', '')) || null
+      : null;
+    shell.setSelectedApprovalId(approvalId);
+    shell.openModal('approval-drawer');
+  };
   const vendorName = firstVendorName(live.vendors);
   const secondary = live.secondaryVehicle;
   const lowStockLabel = live.lowStockLabel;
@@ -188,7 +199,7 @@ export function In13Alerts() {
       </div>
 
       <div className="flex items-center gap-space-xs">
-      <button type="button" onClick={() => shell.openModal('approval-drawer')} className="flex items-center gap-space-xs bg-primary hover:bg-primary/90 text-on-primary px-space-lg py-2 rounded-lg font-body-sm text-body-sm font-semibold shadow-sm transition-transform active:scale-95 flex items-center gap-1">
+      <button type="button" onClick={openApprovalDrawer} className="flex items-center gap-space-xs bg-primary hover:bg-primary/90 text-on-primary px-space-lg py-2 rounded-lg font-body-sm text-body-sm font-semibold shadow-sm transition-transform active:scale-95 flex items-center gap-1">
       <span className="material-symbols-outlined text-[16px]">build_circle</span>
       <span>Issue kit</span>
       </button>
@@ -375,7 +386,7 @@ export function In13Alerts() {
       </button>
 
       <div className="flex items-center gap-space-xs">
-      <button type="button" onClick={() => shell.openModal('approval-drawer')} className="flex items-center gap-space-xs bg-primary hover:bg-primary/90 text-on-primary px-space-lg py-2 rounded-lg font-body-sm text-body-sm font-semibold shadow-sm transition-transform active:scale-95 flex items-center gap-1">
+      <button type="button" onClick={openApprovalDrawer} className="flex items-center gap-space-xs bg-primary hover:bg-primary/90 text-on-primary px-space-lg py-2 rounded-lg font-body-sm text-body-sm font-semibold shadow-sm transition-transform active:scale-95 flex items-center gap-1">
       <span className="material-symbols-outlined text-[16px]">sync_alt</span>
       <span>Open</span>
       </button>

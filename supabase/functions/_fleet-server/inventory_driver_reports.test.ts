@@ -29,3 +29,33 @@ Deno.test("driver portal is wired (not stub-only)", () => {
     throw new Error("driver reports must not use doubled inv_ bridge name");
   }
 });
+
+Deno.test("driver report update handler exists", () => {
+  if (!PORTAL.includes("handleDriverReportUpdatePost")) {
+    throw new Error("missing handleDriverReportUpdatePost");
+  }
+  if (CTRL.includes('return c.json({ stub: true, reportId: c.req.param("id")')) {
+    throw new Error("driver report updates route still stub");
+  }
+  assertEquals(true, true);
+});
+
+Deno.test("driver report update stores photo_paths on update row", () => {
+  if (!PORTAL.includes("photo_paths: photoPaths")) {
+    throw new Error("driver report update insert must set photo_paths");
+  }
+  if (!PORTAL.includes("Photo required for replacement updates")) {
+    throw new Error("got_replacement must require photo");
+  }
+  assertEquals(true, true);
+});
+
+Deno.test("fleet report updates use by_role fleet without driver vehicle gate", () => {
+  if (!PORTAL.includes('byRoleRaw === "fleet"') && !PORTAL.includes("by_role === \"fleet\"")) {
+    throw new Error("fleet updates must accept by_role fleet");
+  }
+  if (!PORTAL.includes('by_role: byRole')) {
+    throw new Error("update insert must set by_role from fleet/driver path");
+  }
+  assertEquals(true, true);
+});

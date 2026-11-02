@@ -1,11 +1,17 @@
 /** Ported from Stitch gap screen — panel only (audit R16-01). */
+import { GapLoadState, GapSubmitError } from './GapLoadState';
 import { GapModalShell } from './GapModalShell';
-import { useGapCompliance } from './useGapCompliance';
+import { useGapInventorySettingsForm } from './useGapInventorySettingsForm';
+import { useInventoryShell } from '../InventoryShellContext';
+import { formatJmd } from '../inventoryFormat';
 
 export function GapInventorySettings(p: { onClose?: () => void }) {
-  const compliance = useGapCompliance();
+  const shell = useInventoryShell();
+  const form = useGapInventorySettingsForm(p.onClose);
   return (
     <GapModalShell onClose={p.onClose} ariaLabel="InventorySettings">
+      <GapSubmitError message={form.submit.error} />
+      <GapLoadState loading={form.load.loading} error={form.load.error} onRetry={form.load.reload}>
       <div className="fleet-inventory-stitch inventory-stitch-root">
         <div className="inventory-stitch-main"><div className="flex flex-col w-full">
         <div className="max-w-[1440px] w-full mx-auto px-margin-desktop py-space-xl">
@@ -29,9 +35,9 @@ export function GapInventorySettings(p: { onClose?: () => void }) {
         <div className="flex items-center gap-space-sm self-start md:self-auto">
         <div className="inline-flex items-center gap-space-xs px-space-md py-1.5 rounded-lg bg-surface-container text-on-surface-variant font-label-code text-caption">
         <span className="w-2 h-2 rounded-full bg-surface-tint"></span>
-        <span>Hub Policy Config #JM-9021</span>
+        <span>{form.categoryCount} categories</span>
         </div>
-        <button type="button" className="px-space-md py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-high transition-colors text-on-surface font-body-sm text-body-sm font-medium flex items-center gap-space-xs shadow-sm" type="button">
+        <button className="px-space-md py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-high transition-colors text-on-surface font-body-sm text-body-sm font-medium flex items-center gap-space-xs shadow-sm" type="button" onClick={() => shell.openGap('import-items')}>
         <span className="material-symbols-outlined text-[16px]">history</span>
         <span>Audit Log</span>
         </button>
@@ -46,7 +52,7 @@ export function GapInventorySettings(p: { onClose?: () => void }) {
         <span className="font-caption text-caption text-secondary uppercase font-semibold tracking-wider">Configuration Tree</span>
         </div>
 
-        <button type="button" className="w-full flex items-center justify-between px-space-md py-2.5 rounded-lg bg-primary text-on-primary transition-all text-left font-body-sm text-body-sm font-semibold group" type="button">
+        <button className="w-full flex items-center justify-between px-space-md py-2.5 rounded-lg bg-primary text-on-primary transition-all text-left font-body-sm text-body-sm font-semibold group" type="button" onClick={() => form.setSettingsSection('general')}>
         <div className="flex items-center gap-space-sm min-w-0">
         <span className="material-symbols-outlined text-[18px]">tune</span>
         <span className="truncate">General</span>
@@ -54,28 +60,32 @@ export function GapInventorySettings(p: { onClose?: () => void }) {
         <span className="material-symbols-outlined text-[16px] text-surface-dim opacity-75">chevron_right</span>
         </button>
 
-        <button type="button" className="w-full flex items-center justify-between px-space-md py-2.5 rounded-lg text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-all text-left font-body-sm text-body-sm group" type="button">
+        <button className="w-full flex items-center justify-between px-space-md py-2.5 rounded-lg text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-all text-left font-body-sm text-body-sm group" type="button" onClick={() => form.setSettingsSection('approvals')}>
         <div className="flex items-center gap-space-sm min-w-0">
         <span className="material-symbols-outlined text-[18px]">verified_user</span>
         <span className="truncate">Approvals & Governance</span>
         </div>
-        <span className="font-label-code text-caption px-1.5 py-0.5 rounded bg-surface-container text-on-surface-variant font-medium">3 rules</span>
+        <span className="font-label-code text-caption px-1.5 py-0.5 rounded bg-surface-container text-on-surface-variant font-medium">{form.governanceLimitCount} limits</span>
         </button>
 
-        <a className="w-full flex items-center justify-between px-space-md py-2.5 rounded-lg text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-all text-left font-body-sm text-body-sm group" href="#">
+        <button
+          type="button"
+          className="w-full flex items-center justify-between px-space-md py-2.5 rounded-lg text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-all text-left font-body-sm text-body-sm group"
+          onClick={() => shell.openGap('locations-bins')}
+        >
         <div className="flex items-center gap-space-sm min-w-0">
         <span className="material-symbols-outlined text-[18px]">warehouse</span>
         <span className="truncate">Locations & Bins</span>
         </div>
-        <span className="font-label-code text-caption px-1.5 py-0.5 rounded bg-surface-container-high text-primary font-semibold">Screen 14 ↗</span>
-        </a>
+        <span className="font-label-code text-caption px-1.5 py-0.5 rounded bg-surface-container-high text-primary font-semibold">Open ↗</span>
+        </button>
 
-        <button type="button" className="w-full flex items-center justify-between px-space-md py-2.5 rounded-lg text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-all text-left font-body-sm text-body-sm group" type="button">
+        <button className="w-full flex items-center justify-between px-space-md py-2.5 rounded-lg text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-all text-left font-body-sm text-body-sm group" type="button" onClick={() => form.setSettingsSection('categories')}>
         <div className="flex items-center gap-space-sm min-w-0">
         <span className="material-symbols-outlined text-[18px]">category</span>
         <span className="truncate">Item Categories</span>
         </div>
-        <span className="font-label-code text-caption text-secondary">4 root</span>
+        <span className="font-label-code text-caption text-secondary">{form.categoryCount} root</span>
         </button>
 
         <a className="w-full flex items-center justify-between px-space-md py-2.5 rounded-lg text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-all text-left font-body-sm text-body-sm group" href="#">
@@ -102,7 +112,7 @@ export function GapInventorySettings(p: { onClose?: () => void }) {
         <span className="font-label-code text-caption px-1.5 py-0.5 rounded bg-surface-container-high text-primary font-semibold">Screen 1 ↗</span>
         </a>
 
-        <button type="button" className="w-full flex items-center justify-between px-space-md py-2.5 rounded-lg text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-all text-left font-body-sm text-body-sm group" type="button">
+        <button className="w-full flex items-center justify-between px-space-md py-2.5 rounded-lg text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-all text-left font-body-sm text-body-sm group" type="button" onClick={() => form.setSettingsSection('scrap')}>
         <div className="flex items-center gap-space-sm min-w-0">
         <span className="material-symbols-outlined text-[18px]">delete_sweep</span>
         <span className="truncate">Write-off & Scrap Notes</span>
@@ -146,7 +156,7 @@ export function GapInventorySettings(p: { onClose?: () => void }) {
                       </label>
         <div className="relative flex items-center">
         <span className="absolute left-3 material-symbols-outlined text-[18px] text-secondary">call</span>
-        <input className="w-full pl-10 pr-space-md py-2 rounded-lg bg-surface font-label-code text-label-code text-on-surface outline-none focus:bg-surface-container-lowest focus:ring-1 focus:ring-primary transition-all" id="fleet-phone" type="text" value="876-555-0100"/>
+        <input className="w-full pl-10 pr-space-md py-2 rounded-lg bg-surface font-label-code text-label-code text-on-surface outline-none focus:bg-surface-container-lowest focus:ring-1 focus:ring-primary transition-all" id="fleet-phone" type="text" value={form.fleetPhone} onChange={(e) => form.setFleetPhone(e.target.value)}/>
         </div>
         <p className="font-body-sm text-body-sm text-on-surface-variant">
                         Displayed on mobile driver kit check screen for rapid depot dispatch.
@@ -159,11 +169,11 @@ export function GapInventorySettings(p: { onClose?: () => void }) {
                       </label>
         <div className="relative flex items-center">
         <span className="absolute left-3 material-symbols-outlined text-[18px] text-secondary">calendar_today</span>
-        <select className="w-full pl-10 pr-10 py-2 rounded-lg bg-surface font-body-md text-body-md text-on-surface outline-none focus:bg-surface-container-lowest focus:ring-1 focus:ring-primary appearance-none cursor-pointer" id="fiscal-year">
-        <option selected="">January</option>
-        <option>April (UK/Carib Standard)</option>
-        <option>July</option>
-        <option>October</option>
+        <select className="w-full pl-10 pr-10 py-2 rounded-lg bg-surface font-body-md text-body-md text-on-surface outline-none focus:bg-surface-container-lowest focus:ring-1 focus:ring-primary appearance-none cursor-pointer" id="fiscal-year" value={form.fiscalYear} onChange={(e) => { form.setFiscalYear(e.target.value); void form.saveFiscalYear(); }}>
+        <option value="1">January</option>
+        <option value="4">April (UK/Carib Standard)</option>
+        <option value="7">July</option>
+        <option value="10">October</option>
         </select>
         <span className="absolute right-3 material-symbols-outlined text-[18px] text-secondary pointer-events-none">expand_more</span>
         </div>
@@ -179,7 +189,7 @@ export function GapInventorySettings(p: { onClose?: () => void }) {
                         </label>
         <span className="font-caption text-caption text-secondary">Markdown supported</span>
         </div>
-        <textarea className="w-full p-space-md rounded-lg bg-surface font-body-md text-body-md text-on-surface outline-none focus:bg-surface-container-lowest focus:ring-1 focus:ring-primary transition-all resize-none leading-relaxed" id="safety-prompt" rows="3">All safety gear (Spare tyre, Warning triangle, First-aid kit) must be verified prior to vehicle dispatch.</textarea>
+        <textarea className="w-full p-space-md rounded-lg bg-surface font-body-md text-body-md text-on-surface outline-none focus:bg-surface-container-lowest focus:ring-1 focus:ring-primary transition-all resize-none leading-relaxed" id="safety-prompt" rows={3} value={form.safetyNotice} onChange={(e) => form.setSafetyNotice(e.target.value)} />
         <div className="flex items-center gap-space-xs mt-1 text-on-surface-variant font-caption text-caption">
         <span className="material-symbols-outlined text-[14px]">info</span>
         <span>Mandatory gate sign-off requirement presented during morning handheld scan-out.</span>
@@ -192,9 +202,9 @@ export function GapInventorySettings(p: { onClose?: () => void }) {
         <span className="material-symbols-outlined text-[16px] text-primary">check_circle</span>
         <span id="general-save-status">Saved 08:20 AM</span>
         </div>
-        <button type="button" className="px-space-lg py-2 rounded-lg bg-primary hover:bg-inverse-surface active:scale-[0.98] transition-all text-on-primary font-body-sm text-body-sm font-medium shadow-sm flex items-center gap-space-xs" onclick="const el = document.getElementById('general-save-status'); el.textContent = 'Saved just now'; el.classList.add('text-primary');" type="button">
-        <span className="material-symbols-outlined text-[16px]">save</span>
-        <span>Save General</span>
+        <button type="button" disabled={!form.canSaveGeneral || form.submit.saving} className="px-space-lg py-2 rounded-lg bg-primary hover:bg-inverse-surface active:scale-[0.98] transition-all text-on-primary font-body-sm text-body-sm font-medium shadow-sm flex items-center gap-space-xs" onClick={() => void form.saveGeneral()}>
+        <span className="material-symbols-outlined text-[16px]">{form.submit.saving ? 'progress_activity' : 'save'}</span>
+        <span>{form.submit.saving ? 'Saving…' : 'Save General'}</span>
         </button>
         </div>
         </section>
@@ -220,7 +230,7 @@ export function GapInventorySettings(p: { onClose?: () => void }) {
         </label>
         <div className="relative flex items-center">
         <span className="absolute left-3 font-label-code text-caption font-bold text-on-surface-variant">J$</span>
-        <input className="w-full pl-9 pr-space-md py-2 rounded-lg bg-surface font-label-price text-label-price text-on-surface outline-none focus:bg-surface-container-lowest focus:ring-1 focus:ring-primary transition-all tabular-nums" id="approval-threshold" type="text" value="20,000.00"/>
+        <input className="w-full pl-9 pr-space-md py-2 rounded-lg bg-surface font-label-price text-label-price text-on-surface outline-none focus:bg-surface-container-lowest focus:ring-1 focus:ring-primary transition-all tabular-nums" id="approval-threshold" type="text" value={form.approvalThreshold} onChange={(e) => form.setApprovalThreshold(e.target.value)}/>
         </div>
         <p className="font-body-sm text-body-sm text-on-surface-variant">
                         Part purchase requisitions exceeding this amount require dispatch manager counter-signature.
@@ -234,7 +244,7 @@ export function GapInventorySettings(p: { onClose?: () => void }) {
         </label>
         <div className="relative flex items-center">
         <span className="absolute left-3 font-label-code text-caption font-bold text-on-surface-variant">J$</span>
-        <input className="w-full pl-9 pr-space-md py-2 rounded-lg bg-surface font-label-price text-label-price text-on-surface outline-none focus:bg-surface-container-lowest focus:ring-1 focus:ring-primary transition-all tabular-nums" id="monthly-cap" type="text" value="150,000.00"/>
+        <input className="w-full pl-9 pr-space-md py-2 rounded-lg bg-surface font-label-price text-label-price text-on-surface outline-none focus:bg-surface-container-lowest focus:ring-1 focus:ring-primary transition-all tabular-nums" id="monthly-cap" type="text" value={form.monthlyCap} onChange={(e) => form.setMonthlyCap(e.target.value)}/>
         </div>
         <p className="font-body-sm text-body-sm text-on-surface-variant">
                         Exceeding this requires CFO review and regional procurement board authorization.
@@ -248,7 +258,7 @@ export function GapInventorySettings(p: { onClose?: () => void }) {
         </div>
         <div>
         <h4 className="font-body-md text-body-md font-semibold text-on-surface">Write-off Threshold Rule</h4>
-        <p className="font-body-sm text-body-sm text-on-surface-variant">Write-offs exceeding <span className="font-label-price text-body-sm font-bold text-on-surface">J$ 5,000.00</span> require secondary manager sign-off prior to stock ledger removal.</p>
+        <p className="font-body-sm text-body-sm text-on-surface-variant">Write-offs exceeding <span className="font-label-price text-body-sm font-bold text-on-surface">{formatJmd(Number(String(form.approvalThreshold).replace(/,/g, '')) || null)}</span> require secondary manager sign-off prior to stock ledger removal.</p>
         </div>
         </div>
         <div className="flex items-center gap-space-sm shrink-0">
@@ -262,9 +272,9 @@ export function GapInventorySettings(p: { onClose?: () => void }) {
         <span className="material-symbols-outlined text-[16px] text-primary">check_circle</span>
         <span id="approvals-save-status">Saved 08:15 AM</span>
         </div>
-        <button type="button" className="px-space-lg py-2 rounded-lg bg-primary hover:bg-inverse-surface active:scale-[0.98] transition-all text-on-primary font-body-sm text-body-sm font-medium shadow-sm flex items-center gap-space-xs" onclick="const el = document.getElementById('approvals-save-status'); el.textContent = 'Saved just now'; el.classList.add('text-primary');" type="button">
-        <span className="material-symbols-outlined text-[16px]">save</span>
-        <span>Save Approvals</span>
+        <button type="button" disabled={!form.canSaveApprovals || form.submit.saving} className="px-space-lg py-2 rounded-lg bg-primary hover:bg-inverse-surface active:scale-[0.98] transition-all text-on-primary font-body-sm text-body-sm font-medium shadow-sm flex items-center gap-space-xs" onClick={() => void form.saveApprovals()}>
+        <span className="material-symbols-outlined text-[16px]">{form.submit.saving ? 'progress_activity' : 'save'}</span>
+        <span>{form.submit.saving ? 'Saving…' : 'Save Approvals'}</span>
         </button>
         </div>
         </section>
@@ -280,7 +290,8 @@ export function GapInventorySettings(p: { onClose?: () => void }) {
         <h2 className="font-headline-sm text-headline-sm text-on-surface font-semibold tracking-tight">Item Categories & Asset Classification</h2>
         </div>
         <div className="flex items-center gap-space-sm">
-        <button type="button" className="px-space-md py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-high transition-colors text-on-surface font-body-sm text-body-sm font-medium flex items-center gap-space-xs" type="button">
+        <input className="px-space-md py-1.5 rounded-lg bg-surface-container-low text-on-surface font-body-sm text-body-sm" placeholder="New category name" value={form.newCategoryName} onChange={(e) => form.setNewCategoryName(e.target.value)} />
+        <button className="px-space-md py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-high transition-colors text-on-surface font-body-sm text-body-sm font-medium flex items-center gap-space-xs disabled:opacity-60" type="button" disabled={!form.newCategoryName.trim() || form.submit.saving} onClick={() => void form.createCategory()}>
         <span className="material-symbols-outlined text-[16px]">add</span>
         <span>+ Add category</span>
         </button>
@@ -288,127 +299,38 @@ export function GapInventorySettings(p: { onClose?: () => void }) {
         </div>
 
         <div className="flex flex-col gap-space-xs">
-
-        <div className="flex items-center justify-between p-space-md rounded-lg bg-surface hover:bg-surface-container transition-colors group">
+        {form.categories.length === 0 ? (
+        <div className="p-space-md rounded-lg bg-surface font-body-sm text-body-sm text-on-surface-variant">No categories yet.</div>
+        ) : form.categories.map((cat) => {
+          const id = String(cat.id ?? cat.name ?? '');
+          const active = cat.archived !== true && cat.is_active !== false;
+          const itemCount = Number(cat.item_count ?? cat.items_count ?? 0);
+          return (
+        <div key={id} className="flex items-center justify-between p-space-md rounded-lg bg-surface hover:bg-surface-container transition-colors group">
         <div className="flex items-center gap-space-md min-w-0">
-        <button type="button" className="cursor-grab active:cursor-grabbing text-secondary hover:text-primary transition-colors flex items-center" title="Drag to reorder" type="button">
+        <button className="cursor-grab active:cursor-grabbing text-secondary hover:text-primary transition-colors flex items-center" title="Drag to reorder" type="button" onClick={() => {}}>
         <span className="material-symbols-outlined text-[18px]">drag_indicator</span>
         </button>
         <div className="w-8 h-8 rounded bg-surface-container-highest flex items-center justify-center text-primary shrink-0">
-        <span className="material-symbols-outlined text-[18px]">emergency</span>
+        <span className="material-symbols-outlined text-[18px]">category</span>
         </div>
         <div className="flex items-center gap-space-sm min-w-0">
-        <span className="font-body-md text-body-md font-semibold text-on-surface truncate">Vehicle Safety</span>
-        <span className="font-label-code text-caption px-1.5 py-0.5 rounded bg-surface-container-high text-secondary">3 items</span>
+        <span className="font-body-md text-body-md font-semibold text-on-surface truncate">{String(cat.name ?? '—')}</span>
+        <span className="font-label-code text-caption px-1.5 py-0.5 rounded bg-surface-container-high text-secondary">{itemCount} items</span>
         </div>
         </div>
         <div className="flex items-center gap-space-md">
-        <label className="flex items-center gap-space-xs cursor-pointer select-none">
-        <input checked="" className="sr-only peer" type="checkbox"/>
-        <div className="w-7 h-4 bg-surface-variant peer-checked:bg-primary rounded-full relative transition-colors after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-on-primary after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:after:translate-x-3"></div>
-        <span className="font-caption text-caption text-on-surface-variant">Active</span>
-        </label>
+        <span className="font-caption text-caption text-on-surface-variant">{active ? 'Active' : 'Archived'}</span>
         <div className="h-4 w-px bg-surface-variant"></div>
-        <button type="button" className="text-on-surface-variant hover:text-primary transition-colors font-body-sm text-body-sm" title="Archive category" type="button">
+        <button className="text-on-surface-variant hover:text-primary transition-colors font-body-sm text-body-sm" title="Archive category" type="button" onClick={() => void form.toggleCategory(id, active)}>
                           Archive
                         </button>
         </div>
         </div>
-
-        <div className="flex items-center justify-between p-space-md pl-12 rounded-lg bg-surface/60 hover:bg-surface-container transition-colors group">
-        <div className="flex items-center gap-space-md min-w-0">
-        <button type="button" className="cursor-grab active:cursor-grabbing text-secondary hover:text-primary transition-colors flex items-center" title="Drag to reorder" type="button">
-        <span className="material-symbols-outlined text-[16px]">drag_indicator</span>
-        </button>
-        <div className="w-2 h-2 rounded-full bg-secondary shrink-0"></div>
-        <div className="flex items-center gap-space-sm min-w-0">
-        <span className="font-body-sm text-body-sm text-on-surface font-medium truncate">Mandatory Incident Kits</span>
-        <span className="font-label-code text-caption text-secondary">Sub-tier</span>
-        </div>
-        </div>
-        <div className="flex items-center gap-space-sm">
-        <span className="font-label-code text-caption text-secondary">SKU-SAF-01..03</span>
-        </div>
+          );
+        })}
         </div>
 
-        <div className="flex items-center justify-between p-space-md rounded-lg bg-surface hover:bg-surface-container transition-colors group">
-        <div className="flex items-center gap-space-md min-w-0">
-        <button type="button" className="cursor-grab active:cursor-grabbing text-secondary hover:text-primary transition-colors flex items-center" title="Drag to reorder" type="button">
-        <span className="material-symbols-outlined text-[18px]">drag_indicator</span>
-        </button>
-        <div className="w-8 h-8 rounded bg-surface-container-highest flex items-center justify-center text-primary shrink-0">
-        <span className="material-symbols-outlined text-[18px]">airline_seat_recline_normal</span>
-        </div>
-        <div className="flex items-center gap-space-sm min-w-0">
-        <span className="font-body-md text-body-md font-semibold text-on-surface truncate">In-Cabin Accessories</span>
-        <span className="font-label-code text-caption px-1.5 py-0.5 rounded bg-surface-container-high text-secondary">4 items</span>
-        </div>
-        </div>
-        <div className="flex items-center gap-space-md">
-        <label className="flex items-center gap-space-xs cursor-pointer select-none">
-        <input checked="" className="sr-only peer" type="checkbox"/>
-        <div className="w-7 h-4 bg-surface-variant peer-checked:bg-primary rounded-full relative transition-colors after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-on-primary after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:after:translate-x-3"></div>
-        <span className="font-caption text-caption text-on-surface-variant">Active</span>
-        </label>
-        <div className="h-4 w-px bg-surface-variant"></div>
-        <button type="button" className="text-on-surface-variant hover:text-primary transition-colors font-body-sm text-body-sm" title="Archive category" type="button">
-                          Archive
-                        </button>
-        </div>
-        </div>
-
-        <div className="flex items-center justify-between p-space-md rounded-lg bg-surface hover:bg-surface-container transition-colors group">
-        <div className="flex items-center gap-space-md min-w-0">
-        <button type="button" className="cursor-grab active:cursor-grabbing text-secondary hover:text-primary transition-colors flex items-center" title="Drag to reorder" type="button">
-        <span className="material-symbols-outlined text-[18px]">drag_indicator</span>
-        </button>
-        <div className="w-8 h-8 rounded bg-surface-container-highest flex items-center justify-center text-primary shrink-0">
-        <span className="material-symbols-outlined text-[18px]">build</span>
-        </div>
-        <div className="flex items-center gap-space-sm min-w-0">
-        <span className="font-body-md text-body-md font-semibold text-on-surface truncate">Mechanical Spares & Maintenance</span>
-        <span className="font-label-code text-caption px-1.5 py-0.5 rounded bg-surface-container-high text-secondary">8 items</span>
-        </div>
-        </div>
-        <div className="flex items-center gap-space-md">
-        <label className="flex items-center gap-space-xs cursor-pointer select-none">
-        <input checked="" className="sr-only peer" type="checkbox"/>
-        <div className="w-7 h-4 bg-surface-variant peer-checked:bg-primary rounded-full relative transition-colors after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-on-primary after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:after:translate-x-3"></div>
-        <span className="font-caption text-caption text-on-surface-variant">Active</span>
-        </label>
-        <div className="h-4 w-px bg-surface-variant"></div>
-        <button type="button" className="text-on-surface-variant hover:text-primary transition-colors font-body-sm text-body-sm" title="Archive category" type="button">
-                          Archive
-                        </button>
-        </div>
-        </div>
-
-        <div className="flex items-center justify-between p-space-md rounded-lg bg-surface hover:bg-surface-container transition-colors group">
-        <div className="flex items-center gap-space-md min-w-0">
-        <button type="button" className="cursor-grab active:cursor-grabbing text-secondary hover:text-primary transition-colors flex items-center" title="Drag to reorder" type="button">
-        <span className="material-symbols-outlined text-[18px]">drag_indicator</span>
-        </button>
-        <div className="w-8 h-8 rounded bg-surface-container-highest flex items-center justify-center text-primary shrink-0">
-        <span className="material-symbols-outlined text-[18px]">sensors</span>
-        </div>
-        <div className="flex items-center gap-space-sm min-w-0">
-        <span className="font-body-md text-body-md font-semibold text-on-surface truncate">Telematics & Hardware</span>
-        <span className="font-label-code text-caption px-1.5 py-0.5 rounded bg-surface-container-high text-secondary">2 items</span>
-        </div>
-        </div>
-        <div className="flex items-center gap-space-md">
-        <label className="flex items-center gap-space-xs cursor-pointer select-none">
-        <input checked="" className="sr-only peer" type="checkbox"/>
-        <div className="w-7 h-4 bg-surface-variant peer-checked:bg-primary rounded-full relative transition-colors after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-on-primary after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:after:translate-x-3"></div>
-        <span className="font-caption text-caption text-on-surface-variant">Active</span>
-        </label>
-        <div className="h-4 w-px bg-surface-variant"></div>
-        <button type="button" className="text-on-surface-variant hover:text-primary transition-colors font-body-sm text-body-sm" title="Archive category" type="button">
-                          Archive
-                        </button>
-        </div>
-        </div>
-        </div>
         <div className="flex items-center justify-between pt-space-xs text-on-surface-variant font-caption text-caption">
         <span>Reordering category tree automatically syncs POS hand terminal catalog hierarchy.</span>
         <span className="font-label-code">Synced: 4/4 nodes</span>
@@ -427,7 +349,7 @@ export function GapInventorySettings(p: { onClose?: () => void }) {
         </div>
         <h3 className="font-headline-sm text-headline-sm text-on-surface font-semibold tracking-tight mt-space-xs">Locations & Bins</h3>
         <p className="font-body-sm text-body-sm text-on-surface-variant">
-                        Manage 3 storage depots and 24 bins distributed across Kingston Central Hub, Spanish Town Staging Yard, and Montego Bay Outpost.
+                        Manage storage depots and bins across your fleet locations.
                       </p>
         </div>
         <div className="pt-space-xs">
@@ -448,7 +370,7 @@ export function GapInventorySettings(p: { onClose?: () => void }) {
         </div>
         <h3 className="font-headline-sm text-headline-sm text-on-surface font-semibold tracking-tight mt-space-xs">Mobile Scanners</h3>
         <p className="font-body-sm text-body-sm text-on-surface-variant">
-                        3 paired terminals (1 phone, 2 laser scanners) actively polling Kingston Hub bay reception point.
+                        Pair phones and laser scanners for depot receiving and bin scans.
                       </p>
         </div>
         <div className="pt-space-xs">
@@ -475,7 +397,7 @@ export function GapInventorySettings(p: { onClose?: () => void }) {
         <label className="font-body-sm text-body-sm font-semibold text-on-surface" htmlFor="default-scrap-note">
                         Standard Decommission & Disposal Boilerplate
                       </label>
-        <textarea className="w-full p-space-md rounded-lg bg-surface font-label-code text-label-code text-on-surface outline-none focus:bg-surface-container-lowest focus:ring-1 focus:ring-primary transition-all resize-none leading-relaxed" id="default-scrap-note" rows="3">Device verified damaged beyond economical repair. Certified scrap.</textarea>
+        <textarea className="w-full p-space-md rounded-lg bg-surface font-label-code text-label-code text-on-surface outline-none focus:bg-surface-container-lowest focus:ring-1 focus:ring-primary transition-all resize-none leading-relaxed" id="default-scrap-note" rows={3} value={form.scrapNote} onChange={(e) => form.setScrapNote(e.target.value)} />
         <p className="font-body-sm text-body-sm text-on-surface-variant">
                         Pre-populated into the audit trail certificate when a lead technician flags an asset as decommissioned or scrap tier 5.
                       </p>
@@ -485,8 +407,8 @@ export function GapInventorySettings(p: { onClose?: () => void }) {
         <span className="material-symbols-outlined text-[16px] text-primary">verified</span>
         <span>Mandatory regulatory phrase lock enabled</span>
         </div>
-        <button type="button" className="px-space-md py-1.5 rounded-lg bg-primary hover:bg-inverse-surface transition-colors text-on-primary font-body-sm text-body-sm font-medium shadow-sm flex items-center gap-space-xs" type="button">
-        <span>Save Template</span>
+        <button type="button" disabled={!form.canSaveScrapNote || form.submit.saving} onClick={() => void form.saveApprovals()} className="px-space-md py-1.5 rounded-lg bg-primary hover:bg-inverse-surface transition-colors text-on-primary font-body-sm text-body-sm font-medium shadow-sm flex items-center gap-space-xs disabled:opacity-60">
+        <span>{form.submit.saving ? 'Saving…' : 'Save Template'}</span>
         </button>
         </div>
         </div>
@@ -495,12 +417,8 @@ export function GapInventorySettings(p: { onClose?: () => void }) {
         </div>
         </div>
         </div></div>
-        {compliance.safetyNotice ? (
-          <div className="mt-space-md rounded-lg border border-outline-variant/30 bg-surface-container-low p-space-md font-body-sm text-body-sm text-on-surface-variant">
-            {compliance.safetyNotice}
-          </div>
-        ) : null}
       </div>
+      </GapLoadState>
     </GapModalShell>
   );
 }

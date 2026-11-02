@@ -569,9 +569,16 @@ app.post(`${PREFIX}/driver/reports/:id/resolve`, requirePermission("inventory.ap
 });
 
 app.post(`${PREFIX}/driver/reports/:id/updates`, requirePermission("inventory.report"), async (c) => {
-  const org = orgOrForbid(c);
-  if (org instanceof Response) return org;
-  return c.json({ stub: true, reportId: c.req.param("id"), organizationId: org });
+  try {
+    const org = orgOrForbid(c);
+    if (org instanceof Response) return org;
+    const idem = requireIdempotencyKey(c);
+    if (idem instanceof Response) return idem;
+    const { handleDriverReportUpdatePost } = await import("./inventory_driver_portal.ts");
+    return await handleDriverReportUpdatePost(c, org, c.req.param("id"), idem);
+  } catch (e) {
+    return safeErrorResponse(c, e, "inventory.driver.reports.updates");
+  }
 });
 
 app.post(`${PREFIX}/driver/kit-check`, requirePermission("inventory.report"), async (c) => {

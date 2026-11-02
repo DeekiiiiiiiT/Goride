@@ -36,18 +36,14 @@ export type InventoryModalId =
   | 'kit-compare'
   | 'driver-report-update';
 
-export type InventoryGapDraft = {
-  safetyNotice?: string | null;
-  openingBalance?: Record<string, unknown>;
-  importFile?: unknown;
-  countSession?: Record<string, unknown>;
-  purchaseOrder?: Record<string, unknown>;
-  vendor?: Record<string, unknown>;
-  requisition?: Record<string, unknown>;
-  asset?: Record<string, unknown>;
-  pairingCode?: string;
-  alertRules?: unknown[];
-  reportResolve?: Record<string, unknown>;
+export type InventoryGapContext = {
+  itemId?: string | null;
+  assetId?: string | null;
+  approvalId?: string | null;
+  reportId?: string | null;
+  vendorId?: string | null;
+  poId?: string | null;
+  countSessionId?: string | null;
 };
 
 export type InventoryShellState = {
@@ -55,7 +51,9 @@ export type InventoryShellState = {
   setTab: (tab: InventoryTabId) => void;
   modal: InventoryModalId;
   openModal: (modal: InventoryModalId) => void;
+  openGap: (modal: InventoryModalId, ctx?: InventoryGapContext) => void;
   closeModal: () => void;
+  closeAndGoToTab: (next: InventoryTabId) => void;
   selectedItemId: string | null;
   setSelectedItemId: (id: string | null) => void;
   selectedAssetId: string | null;
@@ -64,8 +62,12 @@ export type InventoryShellState = {
   setSelectedApprovalId: (id: string | null) => void;
   selectedReportId: string | null;
   setSelectedReportId: (id: string | null) => void;
-  gapDraft: InventoryGapDraft;
-  setGapDraft: (draft: InventoryGapDraft) => void;
+  selectedVendorId: string | null;
+  setSelectedVendorId: (id: string | null) => void;
+  selectedPoId: string | null;
+  setSelectedPoId: (id: string | null) => void;
+  selectedCountSessionId: string | null;
+  setSelectedCountSessionId: (id: string | null) => void;
   setErrorBanner: (message: string | null) => void;
   readOnly: boolean;
   errorBanner: string | null;
@@ -151,7 +153,9 @@ export function InventoryShellProvider({
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [selectedApprovalId, setSelectedApprovalId] = useState<string | null>(null);
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
-  const [gapDraft, setGapDraft] = useState<InventoryGapDraft>({});
+  const [selectedVendorId, setSelectedVendorId] = useState<string | null>(null);
+  const [selectedPoId, setSelectedPoId] = useState<string | null>(null);
+  const [selectedCountSessionId, setSelectedCountSessionId] = useState<string | null>(null);
   const [overview, setOverview] = useState<Record<string, unknown> | null>(null);
   const [stockRows, setStockRows] = useState<Record<string, unknown>[]>([]);
   const [items, setItems] = useState<Record<string, unknown>[]>([]);
@@ -246,13 +250,36 @@ export function InventoryShellProvider({
     void refreshTab();
   }, [refreshTab]);
 
+  const closeModal = useCallback(() => setModal('none'), []);
+
+  const closeAndGoToTab = useCallback(
+    (next: InventoryTabId) => {
+      setModal('none');
+      setTab(next);
+    },
+    [setTab],
+  );
+
+  const openGap = useCallback((next: InventoryModalId, ctx?: InventoryGapContext) => {
+    if (ctx?.itemId !== undefined) setSelectedItemId(ctx.itemId);
+    if (ctx?.assetId !== undefined) setSelectedAssetId(ctx.assetId);
+    if (ctx?.approvalId !== undefined) setSelectedApprovalId(ctx.approvalId);
+    if (ctx?.reportId !== undefined) setSelectedReportId(ctx.reportId);
+    if (ctx?.vendorId !== undefined) setSelectedVendorId(ctx.vendorId);
+    if (ctx?.poId !== undefined) setSelectedPoId(ctx.poId);
+    if (ctx?.countSessionId !== undefined) setSelectedCountSessionId(ctx.countSessionId);
+    setModal(next);
+  }, []);
+
   const value = useMemo<InventoryShellState>(
     () => ({
       tab,
       setTab,
       modal,
       openModal: setModal,
-      closeModal: () => setModal('none'),
+      openGap,
+      closeModal,
+      closeAndGoToTab,
       selectedItemId,
       setSelectedItemId,
       selectedAssetId,
@@ -261,8 +288,12 @@ export function InventoryShellProvider({
       setSelectedApprovalId,
       selectedReportId,
       setSelectedReportId,
-      gapDraft,
-      setGapDraft,
+      selectedVendorId,
+      setSelectedVendorId,
+      selectedPoId,
+      setSelectedPoId,
+      selectedCountSessionId,
+      setSelectedCountSessionId,
       setErrorBanner,
       readOnly,
       errorBanner,
@@ -292,7 +323,9 @@ export function InventoryShellProvider({
       selectedAssetId,
       selectedApprovalId,
       selectedReportId,
-      gapDraft,
+      selectedVendorId,
+      selectedPoId,
+      selectedCountSessionId,
       readOnly,
       errorBanner,
       discrepancyBanner,
@@ -312,6 +345,9 @@ export function InventoryShellProvider({
       refresh,
       refreshTab,
       verifyLedger,
+      openGap,
+      closeModal,
+      closeAndGoToTab,
     ],
   );
 

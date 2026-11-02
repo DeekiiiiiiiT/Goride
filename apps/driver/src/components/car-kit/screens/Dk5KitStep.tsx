@@ -244,7 +244,7 @@ export function Dk5KitStep({
       <h3 className="font-headline-sm text-headline-sm text-on-surface">Select items with a problem</h3>
       <span className="font-body-sm text-body-sm text-on-surface-variant">Check all that are missing or damaged</span>
       </div>
-      <button type="button" aria-label="Close dialog" className="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center text-on-surface hover:bg-surface-container-high transition-colors" id="btn-close-modal">
+      <button type="button" aria-label="Close dialog" className="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center text-on-surface hover:bg-surface-container-high transition-colors" id="btn-close-modal" onClick={() => onClose?.()}>
       <span className="material-symbols-outlined text-[20px]">close</span>
       </button>
       </div>

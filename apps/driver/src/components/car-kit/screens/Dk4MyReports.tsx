@@ -44,6 +44,7 @@ export function Dk4MyReports({
             >
               <button
                 type="button"
+                onClick={() => setReportFilter('all')}
                 aria-selected="true"
                 className="filter-tab py-2.5 px-space-xs rounded-lg font-label-button text-[14px] text-center transition-all bg-surface-container-lowest text-on-surface shadow-sm font-semibold"
                 role="tab"
@@ -53,6 +54,7 @@ export function Dk4MyReports({
               </button>
               <button
                 type="button"
+                onClick={() => setReportFilter('open')}
                 aria-selected="false"
                 className="filter-tab py-2.5 px-space-xs rounded-lg font-label-button text-[14px] text-center text-on-surface-variant transition-all hover:text-on-surface font-semibold"
                 role="tab"
@@ -61,6 +63,7 @@ export function Dk4MyReports({
               </button>
               <button
                 type="button"
+                onClick={() => setReportFilter('resolved')}
                 aria-selected="false"
                 className="filter-tab py-2.5 px-space-xs rounded-lg font-label-button text-[14px] text-center text-on-surface-variant transition-all hover:text-on-surface font-semibold"
                 role="tab"

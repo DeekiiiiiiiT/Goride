@@ -1,8 +1,11 @@
-import type { InventoryModalId } from './InventoryShellContext';
-import type { InventoryShellState } from './InventoryShellContext';
+import type { InventoryGapContext, InventoryModalId, InventoryShellState } from './InventoryShellContext';
 
-export function openInventoryGap(shell: InventoryShellState, modal: InventoryModalId) {
-  shell.openModal(modal);
+export function openInventoryGap(
+  shell: InventoryShellState,
+  modal: InventoryModalId,
+  ctx?: InventoryGapContext,
+) {
+  shell.openGap(modal, ctx);
 }
 
 export const inventoryGapEntryPoints = {

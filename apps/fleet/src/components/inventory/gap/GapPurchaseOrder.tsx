@@ -1,11 +1,16 @@
 /** Ported from Stitch gap screen — panel only (audit R16-01). */
+import { formatJmd } from '../inventoryFormat';
+import { GapLoadState, GapSubmitError } from './GapLoadState';
 import { GapModalShell } from './GapModalShell';
-import { useGapCompliance } from './useGapCompliance';
+import { useGapPurchaseOrderForm } from './useGapPurchaseOrderForm';
 
-export function GapPurchaseOrder(p: { onClose?: () => void }) {
-  const compliance = useGapCompliance();
+export function GapPurchaseOrder(p: { poId?: string | null; onClose?: () => void }) {
+  const form = useGapPurchaseOrderForm(p.poId, p.onClose);
+  const closePo = () => p.onClose?.();
   return (
     <GapModalShell onClose={p.onClose} ariaLabel="PurchaseOrder">
+      <GapSubmitError message={form.submit.error} />
+      <GapLoadState loading={form.load.loading} error={form.load.error} onRetry={form.load.reload}>
       <div className="fleet-inventory-stitch inventory-stitch-root">
         <div className="inventory-stitch-main"><div className="flex flex-col w-full">
 
@@ -22,10 +27,10 @@ export function GapPurchaseOrder(p: { onClose?: () => void }) {
         <h1 className="font-headline-lg text-headline-lg text-on-surface">New Purchase Order</h1>
         <div className="flex items-center gap-space-xs bg-surface-container px-space-sm py-0.5 rounded">
         <span className="material-symbols-outlined text-[15px] text-on-surface-variant">tag</span>
-        <span className="font-label-code text-label-code text-on-surface font-bold tracking-tight">PO-0004</span>
+        <span className="font-label-code text-label-code text-on-surface font-bold tracking-tight">{form.poNumber}</span>
         </div>
         <span className="bg-surface-container-high text-on-surface font-caption text-caption uppercase px-space-sm py-0.5 rounded font-semibold tracking-wider">
-                    Draft
+                    {form.poStatus}
                   </span>
         </div>
 
@@ -126,19 +131,29 @@ export function GapPurchaseOrder(p: { onClose?: () => void }) {
                         Vendor <span className="text-error">*</span>
         </label>
         <div className="bg-surface-container-low rounded-lg p-space-md flex flex-col gap-space-xs">
-        <div className="flex items-center justify-between">
-        <span className="font-body-sm text-body-sm text-on-surface font-semibold">Kingston Auto Supplies</span>
-        <span className="material-symbols-outlined text-[16px] text-on-surface-variant">expand_more</span>
-        </div>
+        <select
+          className="w-full bg-transparent font-body-sm text-body-sm text-on-surface font-semibold focus:outline-none cursor-pointer"
+          value={form.vendorId}
+          onChange={(e) => form.setVendorId(e.target.value)}
+        >
+        <option value="">Select vendor…</option>
+        {form.vendors.map((v) => (
+          <option key={String(v.id)} value={String(v.id)}>{String(v.name ?? '—')}</option>
+        ))}
+        </select>
+        {form.selectedVendor ? (
         <div className="flex items-center justify-between text-on-surface-variant font-label-code text-caption">
         <span className="flex items-center gap-1">
         <span className="material-symbols-outlined text-[13px]">call</span>
-                            876-555-0142
+        {String(form.selectedVendor.phone ?? '—')}
                           </span>
+        {form.selectedVendor.lead_time_days != null ? (
         <span className="bg-surface-container-high text-on-surface font-caption text-[10px] px-1.5 py-0.5 rounded font-medium">
-                            Usually 5 days
+                            Usually {String(form.selectedVendor.lead_time_days)} days
                           </span>
+        ) : null}
         </div>
+        ) : null}
         </div>
         </div>
 
@@ -147,13 +162,21 @@ export function GapPurchaseOrder(p: { onClose?: () => void }) {
                         Ship To Location <span className="text-error">*</span>
         </label>
         <div className="bg-surface-container-low rounded-lg p-space-md flex flex-col gap-space-xs">
-        <div className="flex items-center justify-between">
-        <span className="font-body-sm text-body-sm text-on-surface font-semibold">Main store — Kingston</span>
-        <span className="material-symbols-outlined text-[16px] text-on-surface-variant">warehouse</span>
-        </div>
+        <select
+          className="w-full bg-transparent font-body-sm text-body-sm text-on-surface font-semibold focus:outline-none cursor-pointer"
+          value={form.locationId}
+          onChange={(e) => form.setLocationId(e.target.value)}
+        >
+        <option value="">Select location…</option>
+        {form.locations.map((loc) => (
+          <option key={String(loc.id)} value={String(loc.id)}>{String(loc.name ?? '—')}</option>
+        ))}
+        </select>
+        {form.selectedLocation?.address ? (
         <p className="font-caption text-caption text-on-surface-variant truncate">
-                          Terminal 3, Marcus Garvey Dr, Kingston 11
+                          {String(form.selectedLocation.address)}
                         </p>
+        ) : null}
         </div>
         </div>
 
@@ -167,7 +190,7 @@ export function GapPurchaseOrder(p: { onClose?: () => void }) {
         <div className="bg-surface-container-low rounded-lg p-space-md flex items-center justify-between">
         <div className="flex items-center gap-space-xs">
         <span className="material-symbols-outlined text-[16px] text-on-surface-variant">event</span>
-        <input className="bg-transparent font-label-code text-body-sm text-on-surface focus:outline-none w-full font-semibold cursor-pointer" readOnly="" type="text" value="6 Nov 2026"/>
+        <input className="bg-transparent font-label-code text-body-sm text-on-surface focus:outline-none w-full font-semibold cursor-pointer" type="date" value={form.expectedDelivery} onChange={(e) => form.setExpectedDelivery(e.target.value)}/>
         </div>
         <span className="font-caption text-[11px] text-on-surface-variant bg-surface-container-highest px-1.5 py-0.5 rounded font-mono">Fri</span>
         </div>
@@ -188,9 +211,14 @@ export function GapPurchaseOrder(p: { onClose?: () => void }) {
         <div className="flex items-center gap-space-sm">
         <div className="flex items-center gap-space-xs bg-surface-container-low px-space-md py-1.5 rounded-lg">
         <span className="material-symbols-outlined text-[16px] text-on-surface-variant">search</span>
-        <input className="bg-transparent font-body-sm text-body-sm text-on-surface placeholder:text-on-surface-variant/60 focus:outline-none w-48" placeholder="Lookup part SKU or barcode..." type="text"/>
+        <select className="bg-transparent font-body-sm text-body-sm text-on-surface focus:outline-none w-48" value={form.itemId} onChange={(e) => form.setItemId(e.target.value)}>
+        <option value="">Lookup part SKU…</option>
+        {form.items.map((it) => (
+          <option key={String(it.id)} value={String(it.id)}>{String(it.sku ?? it.name ?? '—')}</option>
+        ))}
+        </select>
         </div>
-        <button type="button" className="bg-primary text-on-primary hover:bg-on-surface font-body-sm text-body-sm font-medium px-space-md py-1.5 rounded-lg flex items-center gap-space-xs transition-colors">
+        <button type="button" className="bg-primary text-on-primary hover:bg-on-surface font-body-sm text-body-sm font-medium px-space-md py-1.5 rounded-lg flex items-center gap-space-xs transition-colors" onClick={() => {}}>
         <span className="material-symbols-outlined text-[18px]">add</span>
         <span>Add Item</span>
         </button>
@@ -209,92 +237,61 @@ export function GapPurchaseOrder(p: { onClose?: () => void }) {
         </tr>
         </thead>
         <tbody className="divide-y divide-surface-container">
-
-        <tr className="hover:bg-surface-container-low/50 transition-colors">
+        {form.lineRows.length === 0 ? (
+        <tr>
+        <td colSpan={5} className="py-space-lg px-space-xl font-body-sm text-body-sm text-on-surface-variant">
+                          Select a line item above to add to this purchase order.
+                        </td>
+        </tr>
+        ) : (
+        form.lineRows.map((row) => (
+        <tr key={row.id} className="hover:bg-surface-container-low/50 transition-colors">
         <td className="py-space-lg px-space-xl">
         <div className="flex items-center gap-space-md">
         <div className="w-9 h-9 rounded bg-surface-container flex items-center justify-center text-on-surface">
-        <span className="material-symbols-outlined text-[20px]">air</span>
+        <span className="material-symbols-outlined text-[20px]">inventory_2</span>
         </div>
         <div className="flex flex-col">
-        <span className="font-body-md text-body-md text-on-surface font-semibold">Tyre pump</span>
+        <span className="font-body-md text-body-md text-on-surface font-semibold">{row.name}</span>
         <div className="flex items-center gap-space-xs mt-0.5">
-        <span className="font-label-code text-caption text-on-surface-variant bg-surface-container px-1 rounded">ACC-TYP-01</span>
-        <span className="font-caption text-caption text-on-surface-variant">· Heavy duty 12V</span>
+        <span className="font-label-code text-caption text-on-surface-variant bg-surface-container px-1 rounded">{row.sku}</span>
         </div>
         </div>
         </div>
         </td>
         <td className="py-space-lg px-space-md text-center">
         <div className="inline-flex items-center gap-space-xs bg-surface-container-low rounded p-1">
-        <button type="button" className="w-6 h-6 rounded flex items-center justify-center text-on-surface-variant hover:bg-surface-container hover:text-on-surface">
+        <button type="button" className="w-6 h-6 rounded flex items-center justify-center text-on-surface-variant hover:bg-surface-container hover:text-on-surface" onClick={() => form.setQty(String(Math.max(1, row.qty - 1)))}>
         <span className="material-symbols-outlined text-[14px]">remove</span>
         </button>
-        <span className="font-label-code text-body-sm font-semibold text-on-surface px-space-xs">2</span>
-        <button type="button" className="w-6 h-6 rounded flex items-center justify-center text-on-surface-variant hover:bg-surface-container hover:text-on-surface">
+        <input className="w-10 bg-transparent font-label-code text-body-sm font-semibold text-on-surface text-center focus:outline-none" value={form.qty} onChange={(e) => form.setQty(e.target.value)} />
+        <button type="button" className="w-6 h-6 rounded flex items-center justify-center text-on-surface-variant hover:bg-surface-container hover:text-on-surface" onClick={() => form.setQty(String(row.qty + 1))}>
         <span className="material-symbols-outlined text-[14px]">add</span>
         </button>
         </div>
         </td>
         <td className="py-space-lg px-space-lg text-right font-label-price text-label-price text-on-surface">
-                            J$ 6,500.00
+                            {formatJmd(row.unit)}
                           </td>
         <td className="py-space-lg px-space-xl text-right font-label-price text-label-price text-on-surface font-bold">
-                            J$ 13,000.00
+                            {formatJmd(row.lineTotal)}
                           </td>
         <td className="py-space-lg px-space-md text-center">
-        <button type="button" className="text-on-surface-variant hover:text-error transition-colors p-1 rounded hover:bg-surface-container">
+        <button type="button" className="text-on-surface-variant hover:text-error transition-colors p-1 rounded hover:bg-surface-container" onClick={() => { form.setItemId(''); form.setQty('1'); }}>
         <span className="material-symbols-outlined text-[18px]">delete</span>
         </button>
         </td>
         </tr>
-
-        <tr className="hover:bg-surface-container-low/50 transition-colors">
-        <td className="py-space-lg px-space-xl">
-        <div className="flex items-center gap-space-md">
-        <div className="w-9 h-9 rounded bg-surface-container flex items-center justify-center text-on-surface">
-        <span className="material-symbols-outlined text-[20px]">medical_services</span>
-        </div>
-        <div className="flex flex-col">
-        <span className="font-body-md text-body-md text-on-surface font-semibold">First-aid kit</span>
-        <div className="flex items-center gap-space-xs mt-0.5">
-        <span className="font-label-code text-caption text-on-surface-variant bg-surface-container px-1 rounded">SAF-FAK-01</span>
-        <span className="font-caption text-caption text-on-surface-variant">· Carib Standard Compliant</span>
-        </div>
-        </div>
-        </div>
-        </td>
-        <td className="py-space-lg px-space-md text-center">
-        <div className="inline-flex items-center gap-space-xs bg-surface-container-low rounded p-1">
-        <button type="button" className="w-6 h-6 rounded flex items-center justify-center text-on-surface-variant hover:bg-surface-container hover:text-on-surface">
-        <span className="material-symbols-outlined text-[14px]">remove</span>
-        </button>
-        <span className="font-label-code text-body-sm font-semibold text-on-surface px-space-xs">2</span>
-        <button type="button" className="w-6 h-6 rounded flex items-center justify-center text-on-surface-variant hover:bg-surface-container hover:text-on-surface">
-        <span className="material-symbols-outlined text-[14px]">add</span>
-        </button>
-        </div>
-        </td>
-        <td className="py-space-lg px-space-lg text-right font-label-price text-label-price text-on-surface">
-                            J$ 3,200.00
-                          </td>
-        <td className="py-space-lg px-space-xl text-right font-label-price text-label-price text-on-surface font-bold">
-                            J$ 6,400.00
-                          </td>
-        <td className="py-space-lg px-space-md text-center">
-        <button type="button" className="text-on-surface-variant hover:text-error transition-colors p-1 rounded hover:bg-surface-container">
-        <span className="material-symbols-outlined text-[18px]">delete</span>
-        </button>
-        </td>
-        </tr>
+        ))
+        )}
         </tbody>
         </table>
         </div>
         <div className="p-space-lg bg-surface-container-low flex items-center justify-between">
-        <span className="font-caption text-caption text-on-surface-variant">Total Units: 4 items across 2 SKUs</span>
+        <span className="font-caption text-caption text-on-surface-variant">{form.lineRows.length === 0 ? 'No line items yet' : `${form.lineRows.reduce((n, r) => n + r.qty, 0)} units across ${form.lineRows.length} SKU(s)`}</span>
         <div className="flex items-center gap-space-sm font-body-sm text-body-sm">
         <span className="text-on-surface-variant">Items Subtotal:</span>
-        <span className="font-label-price font-bold text-on-surface">J$ 19,400.00</span>
+        <span className="font-label-price font-bold text-on-surface">{form.itemsSubtotalLabel}</span>
         </div>
         </div>
         </div>
@@ -308,7 +305,7 @@ export function GapPurchaseOrder(p: { onClose?: () => void }) {
         </div>
         <p className="font-body-sm text-caption text-on-surface-variant mt-0.5">Customs duties, wharfage, carrier freight, and clearing agent brokerage fees.</p>
         </div>
-        <button type="button" className="bg-surface-container-high hover:bg-surface-variant text-on-surface font-body-sm text-body-sm font-medium px-space-md py-1.5 rounded-lg flex items-center gap-space-xs transition-colors">
+        <button type="button" className="bg-surface-container-high hover:bg-surface-variant text-on-surface font-body-sm text-body-sm font-medium px-space-md py-1.5 rounded-lg flex items-center gap-space-xs transition-colors" onClick={() => {}}>
         <span className="material-symbols-outlined text-[18px]">add_circle</span>
         <span>+ Add Extra Cost</span>
         </button>
@@ -347,10 +344,10 @@ export function GapPurchaseOrder(p: { onClose?: () => void }) {
                             Jamaica Customs Agency
                           </td>
         <td className="py-space-md px-space-lg text-right font-label-price text-label-price text-on-surface font-bold">
-                            J$ 2,400.00
+                            {form.poTotalLabel}
                           </td>
         <td className="py-space-md px-space-md text-center">
-        <button type="button" className="text-on-surface-variant hover:text-error transition-colors p-1 rounded hover:bg-surface-container">
+        <button type="button" className="text-on-surface-variant hover:text-error transition-colors p-1 rounded hover:bg-surface-container" onClick={() => {}}>
         <span className="material-symbols-outlined text-[18px]">close</span>
         </button>
         </td>
@@ -374,14 +371,14 @@ export function GapPurchaseOrder(p: { onClose?: () => void }) {
         <div className="flex flex-col gap-space-sm text-body-sm">
         <div className="flex items-center justify-between text-on-surface-variant">
         <span>Items Subtotal</span>
-        <span className="font-label-price text-label-price text-on-surface">J$ 19,400.00</span>
+        <span className="font-label-price text-label-price text-on-surface">{form.itemsSubtotalLabel}</span>
         </div>
         <div className="flex items-center justify-between text-on-surface-variant">
         <span className="flex items-center gap-1">
         <span>Landed Surcharge</span>
         <span className="material-symbols-outlined text-[14px] text-surface-tint">help_outline</span>
         </span>
-        <span className="font-label-price text-label-price text-on-surface">+ J$ 2,400.00</span>
+        <span className="font-label-price text-label-price text-on-surface">+ {form.poTotalLabel}</span>
         </div>
         <div className="flex items-center justify-between text-on-surface-variant">
         <span>Estimated Tax (GCT 15%)</span>
@@ -394,7 +391,7 @@ export function GapPurchaseOrder(p: { onClose?: () => void }) {
         <span className="font-caption text-[11px] text-on-surface-variant">Landed liability (JMD)</span>
         </div>
         <span className="font-label-price text-headline-lg font-bold text-on-surface tracking-tight">
-                        J$ 21,800.00
+                        {form.poTotalLabel}
                       </span>
         </div>
 
@@ -415,30 +412,30 @@ export function GapPurchaseOrder(p: { onClose?: () => void }) {
         <div className="bg-surface-container-lowest rounded p-space-sm flex flex-col gap-1 shadow-sm">
         <div className="flex items-center justify-between">
         <span className="font-body-sm text-body-sm text-on-surface font-medium truncate">Tyre pump</span>
-        <span className="font-label-price text-body-sm font-bold text-on-surface">J$ 7,304.12</span>
+        <span className="font-label-price text-body-sm font-bold text-on-surface">{form.poTotalLabel}</span>
         </div>
         <div className="flex items-center justify-between font-caption text-[11px] text-on-surface-variant">
-        <span>Base J$ 6,500.00</span>
-        <span>+ Surcharge J$ 804.12</span>
+        <span>Base {form.poTotalLabel}</span>
+        <span>+ Surcharge {form.poTotalLabel}</span>
         </div>
 
         <div className="w-full bg-surface-container h-1.5 rounded-full overflow-hidden mt-1">
-        <div className="bg-primary h-full rounded-full" style="width: 89%;"></div>
+        <div className="bg-primary h-full rounded-full" style={{ width: `${form.receiveProgressPct}%` }}></div>
         </div>
         </div>
 
         <div className="bg-surface-container-lowest rounded p-space-sm flex flex-col gap-1 shadow-sm">
         <div className="flex items-center justify-between">
         <span className="font-body-sm text-body-sm text-on-surface font-medium truncate">First-aid kit</span>
-        <span className="font-label-price text-body-sm font-bold text-on-surface">J$ 3,595.88</span>
+        <span className="font-label-price text-body-sm font-bold text-on-surface">{form.poTotalLabel}</span>
         </div>
         <div className="flex items-center justify-between font-caption text-[11px] text-on-surface-variant">
-        <span>Base J$ 3,200.00</span>
-        <span>+ Surcharge J$ 395.88</span>
+        <span>Base {form.poTotalLabel}</span>
+        <span>+ Surcharge {form.poTotalLabel}</span>
         </div>
 
         <div className="w-full bg-surface-container h-1.5 rounded-full overflow-hidden mt-1">
-        <div className="bg-primary h-full rounded-full" style="width: 89%;"></div>
+        <div className="bg-primary h-full rounded-full" style={{ width: `${form.receiveProgressPct}%` }}></div>
         </div>
         </div>
         <p className="font-caption text-[11px] text-on-surface-variant leading-relaxed">
@@ -451,22 +448,22 @@ export function GapPurchaseOrder(p: { onClose?: () => void }) {
         <div className="flex flex-col">
         <span className="font-body-sm text-body-sm text-on-tertiary-fixed font-semibold">Approval Required</span>
         <span className="font-caption text-caption text-on-tertiary-fixed mt-0.5 leading-snug">
-                        Over J$ 20,000 — this PO needs managerial approval before it is transmitted to the vendor.
+                        Over {form.poTotalLabel} — this PO needs managerial approval before it is transmitted to the vendor.
                       </span>
         </div>
         </div>
 
         <div className="flex flex-col gap-space-sm pt-space-xs">
-        <button type="button" className="w-full bg-primary hover:bg-on-surface text-on-primary font-body-sm text-body-sm font-semibold py-space-md rounded-lg flex items-center justify-center gap-space-xs shadow transition-all active:scale-[0.99]">
+        <button type="button" disabled={!form.canSubmit || form.submit.saving} onClick={() => void form.submitForApproval()} className="w-full bg-primary hover:bg-on-surface text-on-primary font-body-sm text-body-sm font-semibold py-space-md rounded-lg flex items-center justify-center gap-space-xs shadow transition-all active:scale-[0.99] disabled:opacity-60">
         <span className="material-symbols-outlined text-[18px]">verified_user</span>
-        <span>Send for Approval</span>
+        <span>{form.submit.saving ? 'Submitting…' : 'Send for Approval'}</span>
         </button>
         <div className="grid grid-cols-2 gap-space-sm">
-        <button type="button" className="bg-surface-container hover:bg-surface-variant text-on-surface font-body-sm text-body-sm font-medium py-space-sm rounded-lg flex items-center justify-center gap-space-xs transition-colors">
+        <button type="button" disabled={!form.canSave || form.submit.saving} onClick={() => void form.saveDraft()} className="bg-surface-container hover:bg-surface-variant text-on-surface font-body-sm text-body-sm font-medium py-space-sm rounded-lg flex items-center justify-center gap-space-xs transition-colors disabled:opacity-60">
         <span className="material-symbols-outlined text-[16px]">save</span>
-        <span>Save Draft</span>
+        <span>{form.submit.saving ? 'Saving…' : 'Save Draft'}</span>
         </button>
-        <button type="button" className="bg-surface-container hover:bg-error-container hover:text-error text-on-surface font-body-sm text-body-sm font-medium py-space-sm rounded-lg flex items-center justify-center gap-space-xs transition-colors">
+        <button type="button" className="bg-surface-container hover:bg-error-container hover:text-error text-on-surface font-body-sm text-body-sm font-medium py-space-sm rounded-lg flex items-center justify-center gap-space-xs transition-colors" onClick={() => {}}>
         <span className="material-symbols-outlined text-[16px]">delete_sweep</span>
         <span>Discard</span>
         </button>
@@ -497,12 +494,8 @@ export function GapPurchaseOrder(p: { onClose?: () => void }) {
         </div>
         </div>
         </div></div>
-        {compliance.safetyNotice ? (
-          <div className="mt-space-md rounded-lg border border-outline-variant/30 bg-surface-container-low p-space-md font-body-sm text-body-sm text-on-surface-variant">
-            {compliance.safetyNotice}
-          </div>
-        ) : null}
       </div>
+      </GapLoadState>
     </GapModalShell>
   );
 }

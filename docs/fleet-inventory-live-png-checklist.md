@@ -7,4 +7,11 @@ Capture side-by-side screenshots after staging sign-off:
 
 Run `node scripts/stitch-fidelity.mjs --report` before committing proof assets.
 
-**Status:** R14 — prod FIFO + chain KPI fixed (`20261101205000`, `20261101205100`). `screen-live.png` captured via [`scripts/capture-inventory-screen-live.mjs`](../../scripts/capture-inventory-screen-live.mjs) (local Fleet, phase 2 flag). Re-capture on signed-in prod when ready.
+**Status:** R23 — gap modals wired and CI gates green; run signed-in capture after deploy:
+
+```bash
+# Fleet + Driver dev with phase2 / car kit, then:
+npx playwright codegen http://127.0.0.1:5199 --save-storage=playwright/.auth/fleet.json
+node scripts/capture-inventory-screen-live.mjs --base http://127.0.0.1:5199 --driver-base http://127.0.0.1:5174 --storage playwright/.auth/fleet.json
+node scripts/stitch-fidelity.mjs --report
+```

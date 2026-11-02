@@ -103,7 +103,7 @@ export function In6VehicleKits() {
       <div className="h-4 w-px bg-outline-variant/50"></div>
       <div className="flex items-center bg-surface-container-high p-0.5 rounded">
       <button type="button" className="px-space-md py-1 rounded bg-surface-container-lowest text-primary font-body-sm text-body-sm font-semibold shadow-xs">Cars</button>
-      <button type="button" className="px-space-md py-1 rounded text-on-surface-variant hover:text-on-surface font-body-sm text-body-sm transition-colors">Kit templates</button>
+      <button type="button" onClick={() => shell.openGap('kit-compare')} className="px-space-md py-1 rounded text-on-surface-variant hover:text-on-surface font-body-sm text-body-sm transition-colors">Kit templates</button>
       </div>
       </div>
 

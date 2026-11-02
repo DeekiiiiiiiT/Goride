@@ -21,7 +21,7 @@ export function Dk3ReportSent({ report }: { report?: DriverReportRow | null }) {
 
       <div className="flex flex-col items-center text-center my-2">
       <div className="w-20 h-20 rounded-full bg-emerald-50 border-4 border-emerald-100 flex items-center justify-center shadow-sm text-emerald-600 mb-3 animate-[pulse_2.5s_infinite]">
-      <span className="material-symbols-outlined text-[44px]" style="font-variation-settings: 'FILL' 1, 'wght' 700;">check_circle</span>
+      <span className="material-symbols-outlined text-[44px]" style={{ fontVariationSettings: "'FILL' 1, 'wght' 700" }}>check_circle</span>
       </div>
       <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Report sent</h2>
       <p className="text-slate-500 text-sm mt-1 max-w-xs leading-relaxed">
@@ -33,7 +33,7 @@ export function Dk3ReportSent({ report }: { report?: DriverReportRow | null }) {
       <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-3">
       <div className="flex items-center gap-2">
       <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-xs font-semibold border border-emerald-200">
-      <span className="material-symbols-outlined text-[14px]" style="font-variation-settings: 'FILL' 1;">done_all</span>
+      <span className="material-symbols-outlined text-[14px]" style={{ fontVariationSettings: "'FILL' 1" }}>done_all</span>
                     Delivered
                   </span>
       </div>
@@ -66,7 +66,7 @@ export function Dk3ReportSent({ report }: { report?: DriverReportRow | null }) {
 
       <div className="relative flex items-start gap-2.5">
       <div className="absolute -left-7 top-0 w-6 h-6 rounded-full bg-emerald-600 text-white flex items-center justify-center ring-4 ring-white shadow-xs">
-      <span className="material-symbols-outlined text-[15px]" style="font-variation-settings: 'FILL' 1, 'wght' 700;">check</span>
+      <span className="material-symbols-outlined text-[15px]" style={{ fontVariationSettings: "'FILL' 1, 'wght' 700" }}>check</span>
       </div>
       <div>
       <p className="text-xs font-bold text-slate-900">Sent</p>

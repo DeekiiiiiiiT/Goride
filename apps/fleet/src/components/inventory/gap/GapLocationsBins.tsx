@@ -1,11 +1,26 @@
 /** Ported from Stitch gap screen — panel only (audit R16-01). */
+import { useState } from 'react';
+import { GapLoadState, GapSubmitError } from './GapLoadState';
 import { GapModalShell } from './GapModalShell';
-import { useGapCompliance } from './useGapCompliance';
+import { useGapLocationsBinsForm } from './useGapLocationsBinsForm';
+import { formatJmd } from '../inventoryFormat';
+import { useInventoryShell } from '../InventoryShellContext';
 
 export function GapLocationsBins(p: { onClose?: () => void }) {
-  const compliance = useGapCompliance();
+  const shell = useInventoryShell();
+  const form = useGapLocationsBinsForm(p.onClose);
+  const [showNewLocation, setShowNewLocation] = useState(false);
+  const [showNewBin, setShowNewBin] = useState(false);
+  const hubLabel = shell.overview?.hub_code ? String(shell.overview.hub_code) : '—';
+  const selected = form.selectedLocation;
+  const totalValue = form.locations.reduce(
+    (sum: number, row: Record<string, unknown>) => sum + Number(row.value_jmd ?? row.total_value ?? 0),
+    0,
+  );
   return (
     <GapModalShell onClose={p.onClose} ariaLabel="LocationsBins">
+      <GapSubmitError message={form.submit.error} />
+      <GapLoadState loading={form.load.loading} error={form.load.error} onRetry={form.load.reload}>
       <div className="fleet-inventory-stitch inventory-stitch-root">
         <div className="inventory-stitch-main"><div className="flex flex-col w-full">
 
@@ -21,7 +36,7 @@ export function GapLocationsBins(p: { onClose?: () => void }) {
         </div>
         <div className="flex items-baseline gap-space-md">
         <h1 className="font-headline-lg text-headline-lg text-primary tracking-tight">Locations & Bins</h1>
-        <span className="font-label-code text-[11px] text-secondary bg-surface-container px-2 py-0.5 rounded">HUB: KIN-01</span>
+        <span className="font-label-code text-[11px] text-secondary bg-surface-container px-2 py-0.5 rounded">HUB: {hubLabel}</span>
         </div>
         <p className="font-body-sm text-body-sm text-secondary">
                 Manage storage depots, vehicle inventory lockers, and physical warehouse bins across the fleet network.
@@ -29,11 +44,11 @@ export function GapLocationsBins(p: { onClose?: () => void }) {
         </div>
 
         <div className="flex items-center gap-space-sm shrink-0">
-        <button type="button" className="px-space-md py-2 rounded-lg bg-surface-container-lowest text-primary shadow-sm hover:bg-surface-container transition-all flex items-center gap-1.5 font-body-sm text-body-sm font-semibold" onclick="document.getElementById('modal-new-location').classList.toggle('hidden')">
+        <button type="button" onClick={() => setShowNewLocation(true)} className="px-space-md py-2 rounded-lg bg-surface-container-lowest text-primary shadow-sm hover:bg-surface-container transition-all flex items-center gap-1.5 font-body-sm text-body-sm font-semibold">
         <span className="material-symbols-outlined text-[18px]">add_location_alt</span>
                 + New location
               </button>
-        <button type="button" className="px-space-lg py-2 rounded-lg bg-primary text-on-primary shadow-md hover:bg-primary/90 transition-all flex items-center gap-1.5 font-body-sm text-body-sm font-semibold" onclick="document.getElementById('modal-new-bin').classList.toggle('hidden')">
+        <button type="button" onClick={() => setShowNewBin(true)} className="px-space-lg py-2 rounded-lg bg-primary text-on-primary shadow-md hover:bg-primary/90 transition-all flex items-center gap-1.5 font-body-sm text-body-sm font-semibold">
         <span className="material-symbols-outlined text-[18px] text-on-primary">inventory_2</span>
                 + New bin
               </button>
@@ -47,11 +62,11 @@ export function GapLocationsBins(p: { onClose?: () => void }) {
         <div className="bg-surface-container-lowest p-space-md rounded-xl shadow-sm flex flex-col gap-space-sm">
         <div className="relative w-full">
         <span className="material-symbols-outlined text-secondary absolute left-3 top-2.5 text-[18px]">search</span>
-        <input className="w-full pl-9 pr-space-md py-2 bg-surface-container-low rounded-lg font-body-sm text-body-sm text-on-surface focus:outline-none focus:bg-surface-container-lowest transition-colors" placeholder="Search code, plate, or depot..." type="text"/>
+        <input className="w-full pl-9 pr-space-md py-2 bg-surface-container-low rounded-lg font-body-sm text-body-sm text-on-surface focus:outline-none focus:bg-surface-container-lowest transition-colors" placeholder="Search code, plate, or depot..." type="text" value={form.searchQuery} onChange={(e) => form.setSearchQuery(e.target.value)}/>
         </div>
         <div className="flex items-center justify-between font-caption text-caption text-secondary px-1">
-        <span>5 Active Storage Targets</span>
-        <span className="font-label-code text-caption font-semibold">TOTAL: J$ 93,185.00</span>
+        <span>{form.locations.length} Active Storage Targets</span>
+        <span className="font-label-code text-caption font-semibold">TOTAL: {formatJmd(totalValue)}</span>
         </div>
         </div>
 
@@ -59,110 +74,88 @@ export function GapLocationsBins(p: { onClose?: () => void }) {
 
         <div className="flex flex-col gap-space-xs">
         <div className="flex items-center justify-between px-space-xs py-1">
-        <span className="font-caption text-caption text-secondary font-bold tracking-wider uppercase">Warehouses & Depots (2)</span>
+        <span className="font-caption text-caption text-secondary font-bold tracking-wider uppercase">Warehouses & Depots ({form.warehouses.length})</span>
         <span className="material-symbols-outlined text-secondary text-[16px]">warehouse</span>
         </div>
 
-        <div className="bg-surface-container-lowest p-space-md rounded-xl shadow-md cursor-pointer transition-all relative overflow-hidden bg-gradient-to-r from-surface-container-high/40 to-surface-container-lowest">
-        <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-primary"></div>
+        {form.warehouses.length === 0 ? (
+        <p className="font-body-sm text-body-sm text-secondary px-space-xs">No warehouse locations yet.</p>
+        ) : form.warehouses.map((loc) => {
+          const id = String(loc.id);
+          const active = id === form.selectedLocationId;
+          return (
+        <button key={id} type="button" onClick={() => form.setSelectedLocationId(id)} className={`w-full text-left bg-surface-container-lowest p-space-md rounded-xl shadow-sm cursor-pointer transition-all relative overflow-hidden ${active ? 'bg-gradient-to-r from-surface-container-high/40 to-surface-container-lowest shadow-md' : 'hover:bg-surface-container-low'}`}>
+        {active ? <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-primary"></div> : null}
         <div className="flex items-start justify-between gap-space-sm pl-2">
         <div className="flex flex-col gap-0.5">
         <div className="flex items-center gap-space-xs">
-        <span className="font-label-code text-caption px-1.5 py-0.5 bg-primary text-on-primary rounded font-bold">MAIN</span>
-        <span className="font-body-md text-body-md text-primary font-semibold">Main store — Kingston</span>
+        <span className={`font-label-code text-caption px-1.5 py-0.5 rounded font-bold ${active ? 'bg-primary text-on-primary' : 'bg-surface-container-high text-secondary'}`}>{String(loc.code ?? '—')}</span>
+        <span className={`font-body-md text-body-md font-semibold ${active ? 'text-primary' : 'text-on-surface font-medium'}`}>{String(loc.name ?? '—')}</span>
         </div>
-        <span className="font-body-sm text-body-sm text-secondary">Terminal 3, Marcus Garvey Dr</span>
+        <span className="font-body-sm text-body-sm text-secondary">{loc.address ? String(loc.address) : '—'}</span>
         </div>
-        <span className="bg-secondary-container text-on-secondary-fixed text-[11px] font-caption px-2 py-0.5 rounded-full font-semibold shrink-0">Default depot</span>
+        {loc.is_default ? <span className="bg-secondary-container text-on-secondary-fixed text-[11px] font-caption px-2 py-0.5 rounded-full font-semibold shrink-0">Default depot</span> : null}
         </div>
-        <div className="mt-space-sm pt-space-xs flex items-center justify-between pl-2 font-caption text-caption">
-        <span className="text-secondary flex items-center gap-1 font-body-sm">
-        <span className="material-symbols-outlined text-[15px]">inventory_2</span> 2 items allocated
-                      </span>
-        <span className="font-label-price text-label-price text-on-surface">J$ 20,400.00</span>
-        </div>
-        </div>
-
-        <div className="bg-surface-container-lowest hover:bg-surface-container-low p-space-md rounded-xl shadow-sm cursor-pointer transition-all">
-        <div className="flex items-start justify-between gap-space-sm">
-        <div className="flex flex-col gap-0.5">
-        <div className="flex items-center gap-space-xs">
-        <span className="font-label-code text-caption px-1.5 py-0.5 bg-surface-container-high text-secondary rounded font-bold">MBY</span>
-        <span className="font-body-md text-body-md text-on-surface font-medium">Montego Bay Outpost</span>
-        </div>
-        <span className="font-body-sm text-body-sm text-secondary">Freeport Wharf Sector 4</span>
-        </div>
-        <span className="text-secondary font-caption text-caption">Standby</span>
-        </div>
-        <div className="mt-space-sm flex items-center justify-between font-caption text-caption text-secondary">
-        <span>0 items</span>
-        <span className="font-label-price text-label-price text-secondary">J$ 0.00</span>
-        </div>
-        </div>
+        </button>
+          );
+        })}
         </div>
 
         <div className="flex flex-col gap-space-xs">
         <div className="flex items-center justify-between px-space-xs py-1">
-        <span className="font-caption text-caption text-secondary font-bold tracking-wider uppercase">Vehicle Lockers (2 active cars)</span>
+        <span className="font-caption text-caption text-secondary font-bold tracking-wider uppercase">Vehicle Lockers ({form.vehicles.length} active)</span>
         <span className="material-symbols-outlined text-secondary text-[16px]">directions_car</span>
         </div>
 
-        <div className="bg-surface-container-lowest hover:bg-surface-container-low p-space-md rounded-xl shadow-sm cursor-pointer transition-all">
+        {form.vehicles.map((loc) => {
+          const id = String(loc.id);
+          return (
+        <button key={id} type="button" onClick={() => form.setSelectedLocationId(id)} className="bg-surface-container-lowest hover:bg-surface-container-low p-space-md rounded-xl shadow-sm cursor-pointer transition-all text-left w-full">
         <div className="flex items-start justify-between gap-space-sm">
         <div className="flex flex-col gap-0.5">
         <div className="flex items-center gap-space-xs">
-        <span className="font-label-plate text-caption px-1.5 py-0.5 bg-surface-container-highest text-primary rounded font-bold">5179KZ</span>
-        <span className="font-body-md text-body-md text-on-surface font-medium">Toyota Roomy</span>
+        <span className="font-label-plate text-caption px-1.5 py-0.5 bg-surface-container-highest text-primary rounded font-bold">{form.locationPlate(loc)}</span>
+        <span className="font-body-md text-body-md text-on-surface font-medium">{String(loc.name ?? '—')}</span>
         </div>
-        <span className="font-label-code text-caption text-secondary">Lockbox Trunk A & B</span>
+        <span className="font-label-code text-caption text-secondary">{form.locationSubtitle(loc)}</span>
         </div>
-        <span className="bg-surface-container text-secondary text-[11px] font-caption px-2 py-0.5 rounded-full font-medium">Route En Route</span>
-        </div>
-        <div className="mt-space-sm flex items-center justify-between font-caption text-caption">
-        <span className="text-secondary font-body-sm">6 items</span>
-        <span className="font-label-price text-label-price text-on-surface">J$ 48,980.00</span>
-        </div>
-        </div>
-
-        <div className="bg-surface-container-lowest hover:bg-surface-container-low p-space-md rounded-xl shadow-sm cursor-pointer transition-all">
-        <div className="flex items-start justify-between gap-space-sm">
-        <div className="flex flex-col gap-0.5">
-        <div className="flex items-center gap-space-xs">
-        <span className="font-label-plate text-caption px-1.5 py-0.5 bg-surface-container-highest text-primary rounded font-bold">1505LM</span>
-        <span className="font-body-md text-body-md text-on-surface font-medium">Honda Fit</span>
-        </div>
-        <span className="font-label-code text-caption text-secondary">Locker Tray #2</span>
-        </div>
-        <span className="bg-surface-container text-secondary text-[11px] font-caption px-2 py-0.5 rounded-full font-medium">Serviced</span>
+        <span className="bg-surface-container text-secondary text-[11px] font-caption px-2 py-0.5 rounded-full font-medium">{form.locationStatus(loc)}</span>
         </div>
         <div className="mt-space-sm flex items-center justify-between font-caption text-caption">
-        <span className="text-secondary font-body-sm">3 items</span>
-        <span className="font-label-price text-label-price text-on-surface">J$ 18,205.00</span>
+        <span className="text-secondary font-body-sm">{form.locationItemCount(loc)} items</span>
+        <span className="font-label-price text-label-price text-on-surface">{form.locationStockValueLabel(loc)}</span>
         </div>
-        </div>
+        </button>
+          );
+        })}
         </div>
 
         <div className="flex flex-col gap-space-xs">
         <div className="flex items-center justify-between px-space-xs py-1">
-        <span className="font-caption text-caption text-secondary font-bold tracking-wider uppercase">Custodians & Staff (1)</span>
+        <span className="font-caption text-caption text-secondary font-bold tracking-wider uppercase">Custodians & Staff ({form.people.length})</span>
         <span className="material-symbols-outlined text-secondary text-[16px]">badge</span>
         </div>
 
-        <div className="bg-surface-container-lowest hover:bg-surface-container-low p-space-md rounded-xl shadow-sm cursor-pointer transition-all">
+        {form.people.map((loc) => {
+          const id = String(loc.id);
+          return (
+        <button key={id} type="button" onClick={() => form.setSelectedLocationId(id)} className="bg-surface-container-lowest hover:bg-surface-container-low p-space-md rounded-xl shadow-sm cursor-pointer transition-all text-left w-full">
         <div className="flex items-start justify-between gap-space-sm">
         <div className="flex flex-col gap-0.5">
         <div className="flex items-center gap-space-xs">
-        <span className="font-label-code text-caption px-1.5 py-0.5 bg-surface-container text-on-surface rounded font-bold">STF-DEEKI</span>
-        <span className="font-body-md text-body-md text-on-surface font-medium">Deeki T (Field Kit)</span>
+        <span className="font-label-code text-caption px-1.5 py-0.5 bg-surface-container text-on-surface rounded font-bold">{form.locationPlate(loc)}</span>
+        <span className="font-body-md text-body-md text-on-surface font-medium">{String(loc.name ?? '—')}</span>
         </div>
-        <span className="font-body-sm text-body-sm text-secondary">Lead Mobile Tech · Kingston Core</span>
+        <span className="font-body-sm text-body-sm text-secondary">{form.locationSubtitle(loc)}</span>
         </div>
         </div>
         <div className="mt-space-sm flex items-center justify-between font-caption text-caption">
-        <span className="text-secondary font-body-sm">1 item</span>
-        <span className="font-label-price text-label-price text-on-surface">J$ 5,600.00</span>
+        <span className="text-secondary font-body-sm">{form.locationItemCount(loc)} items</span>
+        <span className="font-label-price text-label-price text-on-surface">{form.locationStockValueLabel(loc)}</span>
         </div>
-        </div>
+        </button>
+          );
+        })}
         </div>
         </div>
         </div>
@@ -178,21 +171,21 @@ export function GapLocationsBins(p: { onClose?: () => void }) {
         </div>
         <div className="flex flex-col gap-0.5">
         <div className="flex items-center gap-space-sm">
-        <span className="font-label-code text-caption px-2 py-0.5 rounded bg-primary text-on-primary font-bold">MAIN</span>
-        <h2 className="font-headline-sm text-headline-sm text-primary font-bold">Main store — Kingston</h2>
+        <span className="font-label-code text-caption px-2 py-0.5 rounded bg-primary text-on-primary font-bold">{selected ? String(selected.code ?? '—') : '—'}</span>
+        <h2 className="font-headline-sm text-headline-sm text-primary font-bold">{selected ? String(selected.name ?? '—') : '—'}</h2>
         </div>
-        <span className="font-body-sm text-body-sm text-secondary font-medium">Central Depot Warehouse · Primary Inbound Terminal</span>
+        <span className="font-body-sm text-body-sm text-secondary font-medium">{selected ? String(selected.kind ?? 'warehouse') : '—'}</span>
         <p className="font-body-sm text-body-sm text-on-surface mt-1 flex items-center gap-1">
         <span className="material-symbols-outlined text-[16px] text-secondary">pin_drop</span>
-                        Terminal 3, Marcus Garvey Drive, Kingston Port, Jamaica
+                        {selected?.address ? String(selected.address) : '—'}
                       </p>
         </div>
         </div>
         <div className="flex items-center gap-space-xs self-start shrink-0">
-        <button type="button" className="px-space-md py-1.5 rounded-lg bg-surface-container hover:bg-surface-variant font-body-sm text-body-sm text-on-surface font-medium transition-colors flex items-center gap-1">
+        <button type="button" disabled={!form.canPatchLocation || form.submit.saving} onClick={() => void form.patchLocation()} className="px-space-md py-1.5 rounded-lg bg-surface-container hover:bg-surface-variant font-body-sm text-body-sm text-on-surface font-medium transition-colors flex items-center gap-1 disabled:opacity-60">
         <span className="material-symbols-outlined text-[16px]">edit</span> Edit Details
                     </button>
-        <button type="button" className="px-space-md py-1.5 rounded-lg bg-surface-container hover:bg-surface-variant font-body-sm text-body-sm text-on-surface font-medium transition-colors flex items-center gap-1">
+        <button type="button" onClick={() => form.downloadLabelSheet()} className="px-space-md py-1.5 rounded-lg bg-surface-container hover:bg-surface-variant font-body-sm text-body-sm text-on-surface font-medium transition-colors flex items-center gap-1">
         <span className="material-symbols-outlined text-[16px]">print</span> Label Sheet
                     </button>
         </div>
@@ -200,11 +193,11 @@ export function GapLocationsBins(p: { onClose?: () => void }) {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-space-md">
 
-        <div className="md:col-span-2 relative rounded-lg overflow-hidden bg-surface-container-high h-40 shadow-sm flex flex-col justify-between p-3" data-location="Terminal 3 Marcus Garvey Drive Kingston Jamaica" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuCwbxy-kHvBb5RaTCU9H11JzSZEQbTOc246FvktoeJuKdukZelDfFc6qFn2JTZVz-2Dkrt9ojmeBC7fi2Ju-xH7m5hu47TDGK2DFlvr4K1uT-9I0LRHVSIBQNauH_D8xS8VoHncLHYfTVh-mL2YO_uH-PpyWshI67CAR_86hlgvGi8LuXfh3aZFPHSzylFLqFRmhRAnt_-raj7olE_6EyBtKwXT233cS2VzrmiB5Vs')">
+        <div className="md:col-span-2 relative rounded-lg overflow-hidden bg-surface-container-high h-40 shadow-sm flex flex-col justify-between p-3" data-location={form.selectedLocation ? String(form.selectedLocation.name ?? '—') : '—'} style={{ backgroundImage: "url('https://lh3.googleusercontent.com/aida-public/AB6AXuCwbxy-kHvBb5RaTCU9H11JzSZEQbTOc246FvktoeJuKdukZelDfFc6qFn2JTZVz-2Dkrt9ojmeBC7fi2Ju-xH7m5hu47TDGK2DFlvr4K1uT-9I0LRHVSIBQNauH_D8xS8VoHncLHYfTVh-mL2YO_uH-PpyWshI67CAR_86hlgvGi8LuXfh3aZFPHSzylFLqFRmhRAnt_-raj7olE_6EyBtKwXT233cS2VzrmiB5Vs')" }}>
         <div className="absolute inset-0 bg-primary/20 backdrop-blur-[1px]"></div>
         <div className="relative z-10 flex items-center justify-between">
         <span className="font-label-code text-caption px-2 py-0.5 bg-primary text-on-primary rounded font-semibold tracking-wide">GEO: 17.9714° N, 76.8118° W</span>
-        <span className="bg-surface-container-lowest text-primary font-caption text-caption px-2 py-0.5 rounded shadow-sm">Kingston Harbour Sector</span>
+        <span className="bg-surface-container-lowest text-primary font-caption text-caption px-2 py-0.5 rounded shadow-sm">— Harbour Sector</span>
         </div>
         <div className="relative z-10 bg-surface-container-lowest/95 p-2 rounded-lg backdrop-blur-sm self-start flex items-center gap-2 text-on-surface">
         <span className="material-symbols-outlined text-primary text-[18px]">navigation</span>
@@ -213,7 +206,7 @@ export function GapLocationsBins(p: { onClose?: () => void }) {
         </div>
 
         <div className="relative rounded-lg overflow-hidden h-40 shadow-sm group">
-        <img className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" data-alt="Modern concrete logistics warehouse depot exterior in Kingston Jamaica industrial port under tropical Caribbean sky with secure metal roller doors and commercial transport bay." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAJbbu4iOJmvIa0SeSCyoDXuukj3FnKrWKgMsyXEWiJPwQkiAl70rOnCwmsPmg8PNwGXqz6BjbHAEtnjNWZ5WBuNibFzOqPt9UaMQ03W4e8cOvrqL_sOa6dUxCrYpNW2Bn6B9wDN3X4dxnFqrtTzIEewroArk6Y5MQ8Shbaewh8loGRPjZyed-zJBg-i0R50FVxfcca3VHG1OodfLka4tMHiYN-2MJaOpZV-yjUemg"/>
+        <img className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" data-alt="Modern concrete logistics warehouse depot exterior in — Jamaica industrial port under tropical Caribbean sky with secure metal roller doors and commercial transport bay." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAJbbu4iOJmvIa0SeSCyoDXuukj3FnKrWKgMsyXEWiJPwQkiAl70rOnCwmsPmg8PNwGXqz6BjbHAEtnjNWZ5WBuNibFzOqPt9UaMQ03W4e8cOvrqL_sOa6dUxCrYpNW2Bn6B9wDN3X4dxnFqrtTzIEewroArk6Y5MQ8Shbaewh8loGRPjZyed-zJBg-i0R50FVxfcca3VHG1OodfLka4tMHiYN-2MJaOpZV-yjUemg"/>
         <div className="absolute inset-0 bg-gradient-to-t from-primary/80 via-transparent to-transparent flex items-end p-space-sm">
         <span className="font-caption text-caption text-on-primary font-medium flex items-center gap-1">
         <span className="material-symbols-outlined text-[14px]">photo_camera</span> Secure Facility Bay 3
@@ -225,7 +218,7 @@ export function GapLocationsBins(p: { onClose?: () => void }) {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-space-md">
         <div className="bg-surface-container p-space-md rounded-lg flex flex-col gap-0.5">
         <span className="font-caption text-caption text-secondary uppercase font-semibold">Total Stock Value</span>
-        <span className="font-label-price text-headline-sm text-primary">J$ 20,400.00</span>
+        <span className="font-label-price text-headline-sm text-primary">{form.selectedStockValueLabel}</span>
         <span className="font-caption text-caption text-secondary">Landed valuation</span>
         </div>
         <div className="bg-surface-container p-space-md rounded-lg flex flex-col gap-0.5">
@@ -243,7 +236,7 @@ export function GapLocationsBins(p: { onClose?: () => void }) {
         <div className="flex items-center gap-2 mt-0.5">
         <span className="font-label-code text-body-md text-primary font-bold">42%</span>
         <div className="flex-1 h-2 bg-surface-variant rounded-full overflow-hidden">
-        <div className="h-full bg-primary rounded-full" style="width: 42%;"></div>
+        <div className="h-full bg-primary rounded-full" style={{ width: `${form.utilizationPct}%` }}></div>
         </div>
         </div>
         <span className="font-caption text-caption text-secondary">Max vol: 57 units</span>
@@ -285,7 +278,7 @@ export function GapLocationsBins(p: { onClose?: () => void }) {
         </div>
 
         <div className="relative group shrink-0">
-        <button type="button" className="px-space-md py-2 rounded-lg bg-surface-variant text-on-surface-variant/40 font-body-sm text-body-sm font-semibold cursor-not-allowed flex items-center gap-1.5" disabled="">
+        <button type="button" disabled={!form.selectedLocationId || form.submit.saving} onClick={() => void form.archiveLocation()} className="px-space-md py-2 rounded-lg bg-surface-container-high text-on-surface font-body-sm text-body-sm font-semibold flex items-center gap-1.5 disabled:opacity-60">
         <span className="material-symbols-outlined text-[16px]">archive</span>
                       Archive location
                     </button>
@@ -304,15 +297,15 @@ export function GapLocationsBins(p: { onClose?: () => void }) {
 
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-space-md">
         <div className="flex flex-col">
-        <h3 className="font-headline-sm text-headline-sm text-primary font-bold">Physical Storage Bins in Main store — Kingston</h3>
-        <span className="font-body-sm text-body-sm text-secondary">5 registered bins configured for rack, shelf, and heavy store management</span>
+        <h3 className="font-headline-sm text-headline-sm text-primary font-bold">Physical Storage Bins in {selected ? String(selected.name ?? "—") : "—"}</h3>
+        <span className="font-body-sm text-body-sm text-secondary">{form.binsForSelected.length} registered bins</span>
         </div>
         <div className="flex items-center gap-space-sm shrink-0">
         <div className="relative">
         <span className="material-symbols-outlined text-secondary absolute left-2.5 top-2 text-[16px]">filter_list</span>
-        <input className="pl-8 pr-3 py-1.5 bg-surface-container-low rounded-lg font-body-sm text-body-sm text-on-surface focus:outline-none focus:bg-surface-container-lowest" placeholder="Filter bins..." type="text"/>
+        <input className="pl-8 pr-3 py-1.5 bg-surface-container-low rounded-lg font-body-sm text-body-sm text-on-surface focus:outline-none focus:bg-surface-container-lowest" placeholder="Filter bins..." type="text" value={form.binFilter} onChange={(e) => form.setBinFilter(e.target.value)}/>
         </div>
-        <button type="button" className="px-space-md py-1.5 rounded-lg bg-primary text-on-primary font-body-sm text-body-sm font-semibold hover:bg-primary/90 transition-all flex items-center gap-1" onclick="document.getElementById('modal-new-bin').classList.remove('hidden')">
+        <button type="button" onClick={() => setShowNewBin(true)} className="px-space-md py-1.5 rounded-lg bg-primary text-on-primary font-body-sm text-body-sm font-semibold hover:bg-primary/90 transition-all flex items-center gap-1">
         <span className="material-symbols-outlined text-[16px]">add</span> + Add bin
                     </button>
         </div>
@@ -331,160 +324,27 @@ export function GapLocationsBins(p: { onClose?: () => void }) {
         </tr>
         </thead>
         <tbody className="divide-y divide-surface-container-low">
-
-        <tr className="hover:bg-surface-container/50 transition-colors">
+        {form.binsForSelected.length === 0 ? (
+        <tr><td colSpan={6} className="py-6 px-space-md text-center text-secondary font-body-sm">No bins for this location.</td></tr>
+        ) : form.binsForSelected.map((bin) => (
+        <tr key={String(bin.id)} className="hover:bg-surface-container/50 transition-colors">
         <td className="py-3 px-space-md">
         <div className="flex items-center gap-2">
-        <span className="font-label-code text-label-code px-2 py-0.5 bg-surface-container-high rounded font-bold text-primary">A-01</span>
-        <span className="material-symbols-outlined text-[16px] text-secondary">pallet</span>
+        <span className="font-label-code text-label-code px-2 py-0.5 bg-surface-container-high rounded font-bold text-primary">{String(bin.code ?? '—')}</span>
         </div>
         </td>
         <td className="py-3 px-space-md">
-        <span className="font-body-sm text-body-sm font-medium text-on-surface">Tyres & Heavy Spares</span>
-        <div className="text-[11px] font-caption text-secondary">Ground Level Bay 1</div>
+        <span className="font-body-sm text-body-sm font-medium text-on-surface">{String(bin.zone ?? bin.name ?? '—')}</span>
         </td>
         <td className="py-3 px-space-md">
-        <span className="font-label-code text-body-sm text-secondary">4 units</span>
+        <span className="font-label-code text-body-sm text-secondary">{bin.capacity_units != null ? String(bin.capacity_units) : '—'} units</span>
         </td>
-        <td className="py-3 px-space-md">
-        <div className="flex flex-col">
-        <span className="font-body-sm text-body-sm font-semibold text-primary">1 item</span>
-        <span className="font-caption text-caption text-secondary">Spare tyre 195/65 R15 (OEM Dunlop)</span>
-        </div>
-        </td>
-        <td className="py-3 px-space-md text-right">
-        <span className="font-label-price text-label-price text-on-surface">J$ 15,000.00</span>
-        </td>
-        <td className="py-3 px-space-md text-right">
-        <div className="inline-flex items-center gap-2">
-        <span className="w-2 h-2 rounded-full bg-primary"></span>
-        <span className="font-caption text-caption font-semibold text-primary">Active</span>
-        </div>
-        </td>
+        <td className="py-3 px-space-md text-secondary">—</td>
+        <td className="py-3 px-space-md text-right"><span className="font-label-price text-label-price text-on-surface">—</span></td>
+        <td className="py-3 px-space-md text-right"><span className="font-caption text-caption font-semibold text-primary">Active</span></td>
         </tr>
-
-        <tr className="hover:bg-surface-container/50 transition-colors">
-        <td className="py-3 px-space-md">
-        <div className="flex items-center gap-2">
-        <span className="font-label-code text-label-code px-2 py-0.5 bg-surface-container-high rounded font-bold text-primary">A-02</span>
-        <span className="material-symbols-outlined text-[16px] text-secondary">shelves</span>
-        </div>
-        </td>
-        <td className="py-3 px-space-md">
-        <span className="font-body-sm text-body-sm font-medium text-on-surface">Cabin Accessories</span>
-        <div className="text-[11px] font-caption text-secondary">Shelf Tier 2</div>
-        </td>
-        <td className="py-3 px-space-md">
-        <span className="font-label-code text-body-sm text-secondary">20 units</span>
-        </td>
-        <td className="py-3 px-space-md">
-        <span className="font-body-sm text-body-sm text-secondary italic">0 items (Empty)</span>
-        </td>
-        <td className="py-3 px-space-md text-right">
-        <span className="font-label-price text-label-price text-secondary">J$ 0.00</span>
-        </td>
-        <td className="py-3 px-space-md text-right">
-        <div className="inline-flex items-center gap-2">
-        <button type="button" className="px-2 py-0.5 rounded bg-surface-container hover:bg-error-container hover:text-on-error-container text-secondary text-caption font-caption transition-colors">
-                              Archive Bin
-                            </button>
-        </div>
-        </td>
-        </tr>
-
-        <tr className="hover:bg-surface-container/50 transition-colors">
-        <td className="py-3 px-space-md">
-        <div className="flex items-center gap-2">
-        <span className="font-label-code text-label-code px-2 py-0.5 bg-surface-container-high rounded font-bold text-primary">B-12</span>
-        <span className="material-symbols-outlined text-[16px] text-secondary">grid_view</span>
-        </div>
-        </td>
-        <td className="py-3 px-space-md">
-        <span className="font-body-sm text-body-sm font-medium text-on-surface">Mobile Mounts</span>
-        <div className="text-[11px] font-caption text-secondary">Small Bin Carousel B</div>
-        </td>
-        <td className="py-3 px-space-md">
-        <span className="font-label-code text-body-sm text-secondary">15 units</span>
-        </td>
-        <td className="py-3 px-space-md">
-        <div className="flex flex-col">
-        <span className="font-body-sm text-body-sm font-semibold text-primary">1 item</span>
-        <span className="font-caption text-caption text-secondary">Phone Holder Mount (Magnetic Vent Clip)</span>
-        </div>
-        </td>
-        <td className="py-3 px-space-md text-right">
-        <span className="font-label-price text-label-price text-on-surface">J$ 5,400.00</span>
-        </td>
-        <td className="py-3 px-space-md text-right">
-        <div className="inline-flex items-center gap-2">
-        <span className="w-2 h-2 rounded-full bg-primary"></span>
-        <span className="font-caption text-caption font-semibold text-primary">Active</span>
-        </div>
-        </td>
-        </tr>
-
-        <tr className="hover:bg-surface-container/50 transition-colors">
-        <td className="py-3 px-space-md">
-        <div className="flex items-center gap-2">
-        <span className="font-label-code text-label-code px-2 py-0.5 bg-surface-container-high rounded font-bold text-primary">A-04</span>
-        <span className="material-symbols-outlined text-[16px] text-secondary">lock</span>
-        </div>
-        </td>
-        <td className="py-3 px-space-md">
-        <span className="font-body-sm text-body-sm font-medium text-on-surface">High-Value Telematics & Cameras</span>
-        <div className="text-[11px] font-caption text-secondary">Security Vault C-1</div>
-        </td>
-        <td className="py-3 px-space-md">
-        <span className="font-label-code text-body-sm text-secondary">10 units</span>
-        </td>
-        <td className="py-3 px-space-md">
-        <div className="flex items-center gap-1.5 text-on-tertiary-container font-caption text-caption bg-tertiary-fixed px-2 py-1 rounded inline-block">
-        <span className="material-symbols-outlined text-[14px]">lock_clock</span> Locked cage (0 pending audits)
-                          </div>
-        </td>
-        <td className="py-3 px-space-md text-right">
-        <span className="font-label-price text-label-price text-secondary">—</span>
-        </td>
-        <td className="py-3 px-space-md text-right">
-        <div className="inline-flex items-center gap-2">
-        <span className="w-2 h-2 rounded-full bg-primary"></span>
-        <span className="font-caption text-caption font-semibold text-primary">Active</span>
-        </div>
-        </td>
-        </tr>
-
-        <tr className="hover:bg-surface-container/50 transition-colors">
-        <td className="py-3 px-space-md">
-        <div className="flex items-center gap-2">
-        <span className="font-label-code text-label-code px-2 py-0.5 bg-surface-container-high rounded font-bold text-primary">A-05</span>
-        <span className="material-symbols-outlined text-[16px] text-secondary">output</span>
-        </div>
-        </td>
-        <td className="py-3 px-space-md">
-        <span className="font-body-sm text-body-sm font-medium text-on-surface">Road Safety Kits & Triangles</span>
-        <div className="text-[11px] font-caption text-secondary">Dispatch Staging Bay</div>
-        </td>
-        <td className="py-3 px-space-md">
-        <span className="font-label-code text-body-sm text-secondary">8 units</span>
-        </td>
-        <td className="py-3 px-space-md">
-        <div className="flex items-center gap-1 font-body-sm text-body-sm text-on-surface">
-        <span className="material-symbols-outlined text-[16px] text-secondary">outbound</span>
-        <span>Staged for vehicle</span>
-        <span className="font-label-plate text-caption px-1.5 py-0.2 bg-surface-container rounded font-bold">5179KZ</span>
-        </div>
-        </td>
-        <td className="py-3 px-space-md text-right">
-        <span className="font-label-price text-label-price text-secondary">—</span>
-        </td>
-        <td className="py-3 px-space-md text-right">
-        <div className="inline-flex items-center gap-2">
-        <span className="w-2 h-2 rounded-full bg-primary"></span>
-        <span className="font-caption text-caption font-semibold text-primary">Active</span>
-        </div>
-        </td>
-        </tr>
-        </tbody>
+        ))}
+</tbody>
         </table>
         </div>
 
@@ -502,7 +362,7 @@ export function GapLocationsBins(p: { onClose?: () => void }) {
         </div>
         </div>
 
-        <div className="fixed inset-0 z-50 bg-primary/40 backdrop-blur-sm hidden flex items-center justify-center p-4" id="modal-new-location">
+        <div className={`fixed inset-0 z-50 bg-primary/40 backdrop-blur-sm flex items-center justify-center p-4 ${showNewLocation ? "" : "hidden"}`} id="modal-new-location">
         <div className="bg-surface-container-lowest rounded-xl max-w-lg w-full p-space-xl shadow-2xl flex flex-col gap-space-md relative">
         <div className="flex items-center justify-between pb-space-xs">
         <div className="flex items-center gap-space-xs">
@@ -511,7 +371,7 @@ export function GapLocationsBins(p: { onClose?: () => void }) {
         </div>
         <h3 className="font-headline-sm text-headline-sm text-primary font-bold">Register Storage Depot</h3>
         </div>
-        <button type="button" className="w-8 h-8 rounded-full hover:bg-surface-container flex items-center justify-center text-secondary" onclick="document.getElementById('modal-new-location').classList.add('hidden')">
+        <button type="button" aria-label="Close dialog" className="w-8 h-8 rounded-full hover:bg-surface-container flex items-center justify-center text-secondary" onClick={() => setShowNewLocation(false)}>
         <span className="material-symbols-outlined text-[18px]">close</span>
         </button>
         </div>
@@ -519,17 +379,17 @@ export function GapLocationsBins(p: { onClose?: () => void }) {
         <div className="grid grid-cols-3 gap-space-sm">
         <div className="flex flex-col gap-1">
         <label className="font-caption text-caption text-secondary uppercase font-semibold">Location Code</label>
-        <input className="p-2 bg-surface-container-low rounded font-label-code text-label-code uppercase" placeholder="e.g. OCH" type="text"/>
+        <input className="p-2 bg-surface-container-low rounded font-label-code text-label-code uppercase" placeholder="e.g. OCH" type="text" value={form.locationCode} onChange={(e) => form.setLocationCode(e.target.value)}/>
         </div>
         <div className="col-span-2 flex flex-col gap-1">
         <label className="font-caption text-caption text-secondary uppercase font-semibold">Location Name</label>
-        <input className="p-2 bg-surface-container-low rounded" placeholder="e.g. Ocho Rios Outpost" type="text"/>
+        <input className="p-2 bg-surface-container-low rounded" placeholder="Location name" type="text" value={form.locationName} onChange={(e) => form.setLocationName(e.target.value)}/>
         </div>
         </div>
         <div className="flex flex-col gap-1">
         <label className="font-caption text-caption text-secondary uppercase font-semibold">Physical Type</label>
-        <select className="p-2 bg-surface-container-low rounded">
-        <option>Warehouse / Regional Depot</option>
+        <select className="p-2 bg-surface-container-low rounded" value={'warehouse'} onChange={() => {}}>
+        <option value="warehouse">Warehouse / Regional Depot</option>
         <option>Vehicle Locker Trunk</option>
         <option>Staff Field Bag / Custodian</option>
         <option>External Contractor Workshop</option>
@@ -537,7 +397,7 @@ export function GapLocationsBins(p: { onClose?: () => void }) {
         </div>
         <div className="flex flex-col gap-1">
         <label className="font-caption text-caption text-secondary uppercase font-semibold">Address / Port Bay</label>
-        <input className="p-2 bg-surface-container-low rounded" placeholder="Street or harbour terminal location..." type="text"/>
+        <input className="p-2 bg-surface-container-low rounded" placeholder="Address" type="text" value={form.locationAddress} onChange={(e) => form.setLocationAddress(e.target.value)}/>
         </div>
         <div className="flex items-center gap-space-md pt-2">
         <label className="flex items-center gap-2 cursor-pointer">
@@ -547,13 +407,13 @@ export function GapLocationsBins(p: { onClose?: () => void }) {
         </div>
         </div>
         <div className="flex items-center justify-end gap-space-sm pt-space-sm">
-        <button type="button" className="px-space-md py-2 rounded-lg bg-surface-container font-body-sm text-body-sm font-medium hover:bg-surface-variant" onclick="document.getElementById('modal-new-location').classList.add('hidden')">Cancel</button>
-        <button type="button" className="px-space-lg py-2 rounded-lg bg-primary text-on-primary font-body-sm text-body-sm font-semibold hover:bg-primary/90" onclick="document.getElementById('modal-new-location').classList.add('hidden')">Save Location</button>
+        <button type="button" className="px-space-md py-2 rounded-lg bg-surface-container font-body-sm text-body-sm font-medium hover:bg-surface-variant" onClick={() => setShowNewLocation(false)}>Cancel</button>
+        <button type="button" disabled={!form.canSaveLocation || form.submit.saving} onClick={() => void form.saveLocation().then(() => setShowNewLocation(false))} className="px-space-lg py-2 rounded-lg bg-primary text-on-primary font-body-sm text-body-sm font-semibold hover:bg-primary/90 disabled:opacity-60">{form.submit.saving ? "Saving…" : "Save Location"}</button>
         </div>
         </div>
         </div>
 
-        <div className="fixed inset-0 z-50 bg-primary/40 backdrop-blur-sm hidden flex items-center justify-center p-4" id="modal-new-bin">
+        <div className={`fixed inset-0 z-50 bg-primary/40 backdrop-blur-sm flex items-center justify-center p-4 ${showNewBin ? "" : "hidden"}`} id="modal-new-bin">
         <div className="bg-surface-container-lowest rounded-xl max-w-md w-full p-space-xl shadow-2xl flex flex-col gap-space-md relative">
         <div className="flex items-center justify-between pb-space-xs">
         <div className="flex items-center gap-space-xs">
@@ -562,51 +422,47 @@ export function GapLocationsBins(p: { onClose?: () => void }) {
         </div>
         <h3 className="font-headline-sm text-headline-sm text-primary font-bold">Register Storage Bin</h3>
         </div>
-        <button type="button" className="w-8 h-8 rounded-full hover:bg-surface-container flex items-center justify-center text-secondary" onclick="document.getElementById('modal-new-bin').classList.add('hidden')">
+        <button type="button" aria-label="Close dialog" className="w-8 h-8 rounded-full hover:bg-surface-container flex items-center justify-center text-secondary" onClick={() => setShowNewBin(false)}>
         <span className="material-symbols-outlined text-[18px]">close</span>
         </button>
         </div>
         <div className="flex flex-col gap-space-sm font-body-sm text-body-sm">
         <div className="flex flex-col gap-1">
         <label className="font-caption text-caption text-secondary uppercase font-semibold">Assign to Location</label>
-        <input className="p-2 bg-surface-container rounded text-secondary font-medium" disabled="" type="text" value="Main store — Kingston (MAIN)"/>
+        <select className="p-2 bg-surface-container rounded text-secondary font-medium" value={form.binLocationId} onChange={(e) => form.setBinLocationId(e.target.value)}>{form.locations.map((loc) => (<option key={String(loc.id)} value={String(loc.id)}>{String(loc.name ?? loc.code ?? "—")}</option>))}</select>
         </div>
         <div className="grid grid-cols-2 gap-space-sm">
         <div className="flex flex-col gap-1">
         <label className="font-caption text-caption text-secondary uppercase font-semibold">Bin Code</label>
-        <input className="p-2 bg-surface-container-low rounded font-label-code text-label-code uppercase" placeholder="e.g. C-08" type="text"/>
+        <input className="p-2 bg-surface-container-low rounded font-label-code text-label-code uppercase" placeholder="e.g. C-08" type="text" value={form.binCode} onChange={(e) => form.setBinCode(e.target.value)}/>
         </div>
         <div className="flex flex-col gap-1">
         <label className="font-caption text-caption text-secondary uppercase font-semibold">Unit Capacity</label>
-        <input className="p-2 bg-surface-container-low rounded font-label-code text-label-code" placeholder="25" type="number"/>
+        <input className="p-2 bg-surface-container-low rounded font-label-code text-label-code" placeholder="25" type="number" value="" readOnly aria-label="Unit capacity optional"/>
         </div>
         </div>
         <div className="flex flex-col gap-1">
         <label className="font-caption text-caption text-secondary uppercase font-semibold">Zone / Department</label>
-        <input className="p-2 bg-surface-container-low rounded" placeholder="e.g. Brake Pads & Fluid Hub" type="text"/>
+        <input className="p-2 bg-surface-container-low rounded" placeholder="Zone / department" type="text" value={form.binZone} onChange={(e) => form.setBinZone(e.target.value)}/>
         </div>
         <div className="flex flex-col gap-1">
         <label className="font-caption text-caption text-secondary uppercase font-semibold">Security Level</label>
-        <select className="p-2 bg-surface-container-low rounded">
-        <option>Standard Rack Storage</option>
-        <option>Locked Wire Cage (Double-auth)</option>
-        <option>Hazmat Certified Compartment</option>
+        <select className="p-2 bg-surface-container-low rounded" value={'standard'} onChange={() => {}}>
+        <option value="standard">Standard Rack Storage</option>
+        <option value="locked">Locked Wire Cage (Double-auth)</option>
+        <option value="hazmat">Hazmat Certified Compartment</option>
         </select>
         </div>
         </div>
         <div className="flex items-center justify-end gap-space-sm pt-space-sm">
-        <button type="button" className="px-space-md py-2 rounded-lg bg-surface-container font-body-sm text-body-sm font-medium hover:bg-surface-variant" onclick="document.getElementById('modal-new-bin').classList.add('hidden')">Cancel</button>
-        <button type="button" className="px-space-lg py-2 rounded-lg bg-primary text-on-primary font-body-sm text-body-sm font-semibold hover:bg-primary/90" onclick="document.getElementById('modal-new-bin').classList.add('hidden')">Add Storage Bin</button>
+        <button type="button" className="px-space-md py-2 rounded-lg bg-surface-container font-body-sm text-body-sm font-medium hover:bg-surface-variant" onClick={() => setShowNewBin(false)}>Cancel</button>
+        <button type="button" disabled={!form.canSaveBin || form.submit.saving} onClick={() => void form.saveBin().then(() => setShowNewBin(false))} className="px-space-lg py-2 rounded-lg bg-primary text-on-primary font-body-sm text-body-sm font-semibold hover:bg-primary/90 disabled:opacity-60">{form.submit.saving ? "Saving…" : "Add Storage Bin"}</button>
         </div>
         </div>
         </div>
         </div></div>
-        {compliance.safetyNotice ? (
-          <div className="mt-space-md rounded-lg border border-outline-variant/30 bg-surface-container-low p-space-md font-body-sm text-body-sm text-on-surface-variant">
-            {compliance.safetyNotice}
-          </div>
-        ) : null}
       </div>
+      </GapLoadState>
     </GapModalShell>
   );
 }

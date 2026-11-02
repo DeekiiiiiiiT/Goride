@@ -190,7 +190,7 @@ export function In16FirstTimeSetup() {
       </div>
       <div className="pt-space-md mt-space-sm flex items-center justify-between">
       <span className="font-label-code text-caption text-secondary">Blank catalog</span>
-      <button type="button" className="bg-surface-container-lowest hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm font-medium px-space-md py-1.5 rounded shadow-sm transition-all duration-150 flex items-center gap-space-xs">
+      <button type="button" onClick={() => shell.openGap('import-items')} className="bg-surface-container-lowest hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm font-medium px-space-md py-1.5 rounded shadow-sm transition-all duration-150 flex items-center gap-space-xs">
       <span className="material-symbols-outlined text-[16px]">edit_document</span>
       <span>Configure manually</span>
       </button>
@@ -295,7 +295,7 @@ export function In16FirstTimeSetup() {
       <span className="material-symbols-outlined text-[18px]">fact_check</span>
       <span>+ Start a count</span>
       </button>
-      <button type="button" className="text-secondary hover:text-on-surface font-body-sm text-body-sm transition-colors text-center sm:text-right px-1">
+      <button type="button" onClick={() => shell.openGap('opening-balances')} className="text-secondary hover:text-on-surface font-body-sm text-body-sm transition-colors text-center sm:text-right px-1">
                   I'll count later (enter opening balances manually)
                 </button>
       </div>

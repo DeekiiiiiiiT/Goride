@@ -1,11 +1,17 @@
 /** Ported from Stitch gap screen — panel only (audit R16-01). */
+import { formatJmd } from '../inventoryFormat';
+import { downloadInventoryExportCsv } from '../inventoryDownload';
+import { GapLoadState, GapSubmitError } from './GapLoadState';
 import { GapModalShell } from './GapModalShell';
-import { useGapCompliance } from './useGapCompliance';
+import { useGapItemEditorForm } from './useGapItemEditorForm';
 
-export function GapItemEditor(p: { onClose?: () => void }) {
-  const compliance = useGapCompliance();
+export function GapItemEditor(p: { itemId?: string | null; onClose?: () => void }) {
+  const form = useGapItemEditorForm(p.itemId, p.onClose);
+  const closeDrawer = () => p.onClose?.();
   return (
     <GapModalShell onClose={p.onClose} ariaLabel="ItemEditor">
+      <GapSubmitError message={form.submit.error} />
+      <GapLoadState loading={form.load.loading} error={form.load.error} onRetry={form.load.reload}>
       <div className="fleet-inventory-stitch inventory-stitch-root">
         <div className="inventory-stitch-main"><div className="flex flex-col w-full relative">
 
@@ -22,10 +28,10 @@ export function GapItemEditor(p: { onClose?: () => void }) {
                 </div>
         </div>
         <div className="flex items-center gap-space-sm">
-        <button type="button" className="px-space-md py-2 bg-surface-container-high rounded-lg text-body-sm font-body-sm text-on-surface flex items-center gap-space-xs">
+        <button type="button" className="px-space-md py-2 bg-surface-container-high rounded-lg text-body-sm font-body-sm text-on-surface flex items-center gap-space-xs" onClick={() => {}}>
         <span className="material-symbols-outlined text-[18px]">download</span> Export CSV
                 </button>
-        <button type="button" className="px-space-lg py-2 bg-primary text-on-primary rounded-lg text-body-sm font-body-sm flex items-center gap-space-xs shadow-sm">
+        <button type="button" className="px-space-lg py-2 bg-primary text-on-primary rounded-lg text-body-sm font-body-sm flex items-center gap-space-xs shadow-sm" onClick={() => {}}>
         <span className="material-symbols-outlined text-[18px]">add</span> + Add Stock Item
                 </button>
         </div>
@@ -41,48 +47,26 @@ export function GapItemEditor(p: { onClose?: () => void }) {
         <span className="col-span-1 text-right">Status</span>
         </div>
         <div className="divide-y divide-surface-container">
-        <div className="grid grid-cols-12 px-space-lg py-space-md items-center bg-surface-container/60">
+        {form.catalog.length === 0 ? (
+        <div className="px-space-lg py-space-md font-body-sm text-body-sm text-on-surface-variant">No catalog items loaded.</div>
+        ) : (
+        form.catalog.map((row) => (
+        <div key={String(row.id)} className="grid grid-cols-12 px-space-lg py-space-md items-center">
         <div className="col-span-3 flex items-center gap-space-sm">
-        <div className="w-8 h-8 rounded bg-surface-container flex items-center justify-center text-on-surface font-label-code text-label-code">PH</div>
+        <div className="w-8 h-8 rounded bg-surface-container flex items-center justify-center text-on-surface font-label-code text-label-code">{String(row.name ?? '?').slice(0, 2).toUpperCase()}</div>
         <div>
-        <p className="font-body-md text-body-md font-semibold text-on-surface">Phone Holder Mount</p>
-        <p className="font-caption text-caption text-on-surface-variant">PHM-PRO-V2 · Windscreen</p>
+        <p className="font-body-md text-body-md font-semibold text-on-surface">{String(row.name ?? '—')}</p>
+        <p className="font-caption text-caption text-on-surface-variant">{String(row.sku ?? '—')}</p>
         </div>
         </div>
-        <span className="col-span-2 font-label-code text-label-code text-on-surface">INV-0007</span>
-        <span className="col-span-2 font-body-sm text-body-sm text-on-surface-variant">Accessories</span>
-        <span className="col-span-2 font-label-code text-label-code text-on-surface font-semibold">2 each</span>
-        <span className="col-span-2 font-label-price text-label-price text-on-surface">J$ 9,075.00</span>
-        <span className="col-span-1 text-right"><span className="px-2 py-0.5 rounded text-caption font-caption bg-surface-container-high text-on-surface">Active</span></span>
+        <span className="col-span-2 font-label-code text-label-code text-on-surface">{String(row.sku ?? '—')}</span>
+        <span className="col-span-2 font-body-sm text-body-sm text-on-surface-variant">{String(row.category_name ?? row.category ?? '—')}</span>
+        <span className="col-span-2 font-label-code text-label-code text-on-surface font-semibold">{String(row.qty_on_hand ?? '—')} each</span>
+        <span className="col-span-2 font-label-price text-label-price text-on-surface">{formatJmd(Number(row.default_cost_jmd ?? row.unit_cost_jmd ?? 0))}</span>
+        <span className="col-span-1 text-right"><span className="px-2 py-0.5 rounded text-caption font-caption bg-surface-container-high text-on-surface">{String(row.status ?? 'Active')}</span></span>
         </div>
-        <div className="grid grid-cols-12 px-space-lg py-space-md items-center">
-        <div className="col-span-3 flex items-center gap-space-sm">
-        <div className="w-8 h-8 rounded bg-surface-container flex items-center justify-center text-on-surface font-label-code text-label-code">OB</div>
-        <div>
-        <p className="font-body-md text-body-md font-semibold text-on-surface">OBD-II CANbus Telematics Dongle</p>
-        <p className="font-caption text-caption text-on-surface-variant">TEL-OBD-V4 · 4G LTE-M</p>
-        </div>
-        </div>
-        <span className="col-span-2 font-label-code text-label-code text-on-surface">INV-0008</span>
-        <span className="col-span-2 font-body-sm text-body-sm text-on-surface-variant">Telemetry Hardware</span>
-        <span className="col-span-2 font-label-code text-label-code text-on-surface font-semibold">18 each</span>
-        <span className="col-span-2 font-label-price text-label-price text-on-surface">J$ 144,000.00</span>
-        <span className="col-span-1 text-right"><span className="px-2 py-0.5 rounded text-caption font-caption bg-surface-container-high text-on-surface">Active</span></span>
-        </div>
-        <div className="grid grid-cols-12 px-space-lg py-space-md items-center">
-        <div className="col-span-3 flex items-center gap-space-sm">
-        <div className="w-8 h-8 rounded bg-surface-container flex items-center justify-center text-on-surface font-label-code text-label-code">DF</div>
-        <div>
-        <p className="font-body-md text-body-md font-semibold text-on-surface">Dashcam Front/Cabin Dual 1080P</p>
-        <p className="font-caption text-caption text-on-surface-variant">CAM-DUO-IR · IR Night</p>
-        </div>
-        </div>
-        <span className="col-span-2 font-label-code text-label-code text-on-surface">INV-0009</span>
-        <span className="col-span-2 font-body-sm text-body-sm text-on-surface-variant">Surveillance</span>
-        <span className="col-span-2 font-label-code text-label-code text-on-surface font-semibold">5 each</span>
-        <span className="col-span-2 font-label-price text-label-price text-on-surface">J$ 72,500.00</span>
-        <span className="col-span-1 text-right"><span className="px-2 py-0.5 rounded text-caption font-caption bg-surface-container-high text-on-surface">Active</span></span>
-        </div>
+        ))
+        )}
         </div>
         </div>
         </div>
@@ -96,15 +80,15 @@ export function GapItemEditor(p: { onClose?: () => void }) {
         <div className="flex flex-col">
         <div className="flex items-center gap-space-sm">
         <span className="w-2 h-2 rounded-full bg-on-tertiary-container"></span>
-        <h2 className="font-headline-sm text-headline-sm text-on-surface font-semibold tracking-tight">Edit item · Phone Holder Mount</h2>
+        <h2 className="font-headline-sm text-headline-sm text-on-surface font-semibold tracking-tight">Edit item · {form.name.trim() || 'Untitled'}</h2>
         </div>
         <div className="flex items-center gap-space-xs mt-0.5">
-        <span className="font-caption text-caption text-on-surface-variant">Asset Identifier: <span className="font-label-code text-label-code text-on-surface">AST-PHM-889</span></span>
+        <span className="font-caption text-caption text-on-surface-variant">Asset Identifier: <span className="font-label-code text-label-code text-on-surface">{form.assetIdentifierLabel}</span></span>
         <span className="text-on-surface-variant text-caption font-caption">·</span>
-        <button type="button" className="font-caption text-caption text-secondary hover:text-on-surface underline" type="button">Or New item</button>
+        <button className="font-caption text-caption text-secondary hover:text-on-surface underline" type="button" onClick={() => {}}>Or New item</button>
         </div>
         </div>
-        <button type="button" aria-label="Close Drawer" className="w-8 h-8 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface flex items-center justify-center transition-colors" id="close-drawer-btn" type="button">
+        <button aria-label="Close Drawer" className="w-8 h-8 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface flex items-center justify-center transition-colors" id="close-drawer-btn" type="button" onClick={closeDrawer}>
         <span className="material-symbols-outlined text-[18px]">close</span>
         </button>
         </div>
@@ -115,7 +99,7 @@ export function GapItemEditor(p: { onClose?: () => void }) {
         <div className="flex flex-col sm:flex-row sm:items-center sm:gap-space-xs">
         <span className="font-body-sm text-body-sm text-on-surface font-semibold">On hand: 2 each across 2 locations</span>
         <span className="hidden sm:inline font-caption text-caption text-on-surface-variant">·</span>
-        <span className="font-label-price text-label-price text-on-surface">J$ 9,075.00</span>
+        <span className="font-label-price text-label-price text-on-surface">{form.stockValuePreviewLabel}</span>
         </div>
         </div>
         <a className="font-caption text-caption text-on-surface font-semibold hover:underline flex items-center gap-0.5" href="#">
@@ -145,7 +129,7 @@ export function GapItemEditor(p: { onClose?: () => void }) {
 
         <div className="col-span-12 flex flex-col gap-1">
         <label className="font-caption text-caption text-on-surface-variant font-medium">Item Name</label>
-        <input className="h-9 px-space-md bg-surface-container-low focus:bg-surface-container-lowest rounded-lg font-body-md text-body-md text-on-surface focus:outline-none focus:ring-1 focus:ring-primary shadow-sm" type="text" value="Phone Holder Mount"/>
+        <input className="h-9 px-space-md bg-surface-container-low focus:bg-surface-container-lowest rounded-lg font-body-md text-body-md text-on-surface focus:outline-none focus:ring-1 focus:ring-primary shadow-sm" type="text" value={form.name} onChange={(e) => form.setName(e.target.value)} />
         </div>
 
         <div className="col-span-4 flex flex-col gap-1">
@@ -156,7 +140,7 @@ export function GapItemEditor(p: { onClose?: () => void }) {
         </div>
         <div className="col-span-8 flex flex-col gap-1">
         <label className="font-caption text-caption text-on-surface-variant font-medium">SKU (Stock Keeping Unit)</label>
-        <input className="h-9 px-space-md bg-surface-container-low focus:bg-surface-container-lowest rounded-lg font-label-code text-label-code text-on-surface focus:outline-none focus:ring-1 focus:ring-primary shadow-sm" type="text" value="INV-0007"/>
+        <input className="h-9 px-space-md bg-surface-container-low focus:bg-surface-container-lowest rounded-lg font-label-code text-label-code text-on-surface focus:outline-none focus:ring-1 focus:ring-primary shadow-sm" type="text" value={form.sku} onChange={(e) => form.setSku(e.target.value)} />
         </div>
 
         <div className="col-span-12 flex flex-col gap-1">
@@ -173,30 +157,30 @@ export function GapItemEditor(p: { onClose?: () => void }) {
 
         <div className="col-span-12 flex flex-col gap-1">
         <label className="font-caption text-caption text-on-surface-variant font-medium">Description</label>
-        <textarea className="p-space-md bg-surface-container-low focus:bg-surface-container-lowest rounded-lg font-body-sm text-body-sm text-on-surface focus:outline-none focus:ring-1 focus:ring-primary resize-none shadow-sm" rows="2">Heavy-duty magnetic suction mount for dashboard / windscreen telematics.</textarea>
+        <textarea className="p-space-md bg-surface-container-low focus:bg-surface-container-lowest rounded-lg font-body-sm text-body-sm text-on-surface focus:outline-none focus:ring-1 focus:ring-primary resize-none shadow-sm" rows={2} value={form.description} onChange={(e) => form.setDescription(e.target.value)} />
         </div>
 
         <div className="col-span-6 flex flex-col gap-1">
         <label className="font-caption text-caption text-on-surface-variant font-medium">Model / Specification</label>
-        <input className="h-9 px-space-md bg-surface-container-low focus:bg-surface-container-lowest rounded-lg font-label-code text-label-code text-on-surface focus:outline-none focus:ring-1 focus:ring-primary shadow-sm" type="text" value="PHM-PRO-V2"/>
+        <input className="h-9 px-space-md bg-surface-container-low focus:bg-surface-container-lowest rounded-lg font-label-code text-label-code text-on-surface focus:outline-none focus:ring-1 focus:ring-primary shadow-sm" type="text" value={form.modelSpec} onChange={(e) => form.setModelSpec(e.target.value)} />
         </div>
 
         <div className="col-span-6 flex flex-col gap-1">
         <label className="font-caption text-caption text-on-surface-variant font-medium">Item Symbol</label>
         <div className="grid grid-cols-5 gap-1.5 h-9">
-        <button type="button" className="flex items-center justify-center rounded-lg bg-surface-container text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors" title="Bracket" type="button">
+        <button className="flex items-center justify-center rounded-lg bg-surface-container text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors" title="Bracket" type="button" onClick={() => form.setTracking('quantity')}>
         <span className="material-symbols-outlined text-[18px]">data_array</span>
         </button>
-        <button type="button" className="flex items-center justify-center rounded-lg bg-primary text-on-primary shadow-sm" title="Phone (Selected)" type="button">
+        <button className="flex items-center justify-center rounded-lg bg-primary text-on-primary shadow-sm" title="Phone (Selected)" type="button" onClick={() => form.setTracking('serial')}>
         <span className="material-symbols-outlined text-[18px]">smartphone</span>
         </button>
-        <button type="button" className="flex items-center justify-center rounded-lg bg-surface-container text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors" title="Camera" type="button">
+        <button className="flex items-center justify-center rounded-lg bg-surface-container text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors" title="Camera" type="button" onClick={() => form.setTracking('quantity')}>
         <span className="material-symbols-outlined text-[18px]">videocam</span>
         </button>
-        <button type="button" className="flex items-center justify-center rounded-lg bg-surface-container text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors" title="Wrench" type="button">
+        <button className="flex items-center justify-center rounded-lg bg-surface-container text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors" title="Wrench" type="button" onClick={() => form.setTracking('quantity')}>
         <span className="material-symbols-outlined text-[18px]">build</span>
         </button>
-        <button type="button" className="flex items-center justify-center rounded-lg bg-surface-container text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors" title="Box" type="button">
+        <button className="flex items-center justify-center rounded-lg bg-surface-container text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors" title="Box" type="button" onClick={() => form.setTracking('quantity')}>
         <span className="material-symbols-outlined text-[18px]">package_2</span>
         </button>
         </div>
@@ -212,7 +196,7 @@ export function GapItemEditor(p: { onClose?: () => void }) {
         <span className="font-caption text-caption text-on-surface-variant font-label-code">1.2 MB · 2048x1536 · Verified OEM</span>
         </div>
         </div>
-        <button type="button" className="px-space-md py-1.5 rounded-lg bg-surface-container-lowest hover:bg-surface-container text-on-surface font-body-sm text-body-sm font-semibold shadow-sm transition-colors" type="button">
+        <button className="px-space-md py-1.5 rounded-lg bg-surface-container-lowest hover:bg-surface-container text-on-surface font-body-sm text-body-sm font-semibold shadow-sm transition-colors" type="button" onClick={() => {}}>
                       Change photo
                     </button>
         </div>
@@ -229,11 +213,11 @@ export function GapItemEditor(p: { onClose?: () => void }) {
         </div>
 
         <div className="p-1 bg-surface-container rounded-lg grid grid-cols-2 gap-1">
-        <button type="button" className="py-2 px-space-md rounded bg-surface-container-lowest shadow-sm text-on-surface font-body-sm text-body-sm font-semibold flex items-center justify-center gap-space-xs transition-all" type="button">
+        <button className="py-2 px-space-md rounded bg-surface-container-lowest shadow-sm text-on-surface font-body-sm text-body-sm font-semibold flex items-center justify-center gap-space-xs transition-all" type="button" onClick={() => {}}>
         <span className="w-2 h-2 rounded-full bg-primary"></span>
                     Count by quantity
                   </button>
-        <button type="button" className="py-2 px-space-md rounded text-on-surface-variant hover:text-on-surface font-body-sm text-body-sm flex items-center justify-center gap-space-xs transition-all" type="button">
+        <button className="py-2 px-space-md rounded text-on-surface-variant hover:text-on-surface font-body-sm text-body-sm flex items-center justify-center gap-space-xs transition-all" type="button" onClick={() => {}}>
         <span className="w-2 h-2 rounded-full bg-surface-container-high"></span>
                     Track by serial number
                   </button>
@@ -249,12 +233,12 @@ export function GapItemEditor(p: { onClose?: () => void }) {
         <div className="flex flex-col gap-1">
         <label className="font-caption text-caption text-on-surface-variant font-medium">Unit of Measure</label>
         <div className="relative">
-        <select className="w-full h-9 px-space-md bg-surface-container-low focus:bg-surface-container-lowest rounded-lg font-body-sm text-body-sm text-on-surface appearance-none focus:outline-none focus:ring-1 focus:ring-primary shadow-sm cursor-pointer">
-        <option selected="">each</option>
-        <option>set</option>
-        <option>metre</option>
-        <option>litre</option>
-        <option>box</option>
+        <select className="w-full h-9 px-space-md bg-surface-container-low focus:bg-surface-container-lowest rounded-lg font-body-sm text-body-sm text-on-surface appearance-none focus:outline-none focus:ring-1 focus:ring-primary shadow-sm cursor-pointer" value={form.unitOfMeasure} onChange={(e) => form.setUnitOfMeasure(e.target.value)}>
+        <option value="each">each</option>
+        <option value="set">set</option>
+        <option value="metre">metre</option>
+        <option value="litre">litre</option>
+        <option value="box">box</option>
         </select>
         <span className="material-symbols-outlined text-[18px] text-on-surface-variant absolute right-3 top-2.5 pointer-events-none">expand_more</span>
         </div>
@@ -274,7 +258,7 @@ export function GapItemEditor(p: { onClose?: () => void }) {
         <div className="col-span-5 flex flex-col gap-1">
         <label className="font-caption text-caption text-on-surface-variant font-medium">Default Unit Cost</label>
         <div className="relative">
-        <input className="w-full h-9 pl-space-md pr-space-md bg-surface-container-low focus:bg-surface-container-lowest rounded-lg font-label-price text-label-price text-on-surface font-semibold focus:outline-none focus:ring-1 focus:ring-primary shadow-sm" type="text" value="J$ 5,400.00"/>
+        <input className="w-full h-9 pl-space-md pr-space-md bg-surface-container-low focus:bg-surface-container-lowest rounded-lg font-label-price text-label-price text-on-surface font-semibold focus:outline-none focus:ring-1 focus:ring-primary shadow-sm" type="text" value={form.unitCost} onChange={(e) => form.setUnitCost(e.target.value)} />
         </div>
         <span className="font-caption text-caption text-on-surface-variant">Landed depot cost excl. GCT</span>
         </div>
@@ -293,7 +277,7 @@ export function GapItemEditor(p: { onClose?: () => void }) {
         </div>
         <span className="material-symbols-outlined text-[18px] text-on-surface-variant">unfold_more</span>
         </div>
-        <span className="font-caption text-caption text-on-surface-variant">Net 30 · Kingston Hub direct transit</span>
+        <span className="font-caption text-caption text-on-surface-variant">Vendor terms from catalog</span>
         </div>
         </div>
         </section>
@@ -316,41 +300,26 @@ export function GapItemEditor(p: { onClose?: () => void }) {
         </div>
 
         <div className="divide-y divide-surface-container-high/60 bg-surface-container-lowest">
-
-        <div className="grid grid-cols-12 px-space-md py-space-sm items-center">
+        {form.reorderRules.map((rule) => (
+        <div key={rule.location_id} className="grid grid-cols-12 px-space-md py-space-sm items-center">
         <div className="col-span-6 flex items-center gap-space-xs">
         <span className="material-symbols-outlined text-[16px] text-on-surface-variant">warehouse</span>
-        <span className="font-body-sm text-body-sm font-semibold text-on-surface">Main store — Kingston</span>
+        <span className="font-body-sm text-body-sm font-semibold text-on-surface">{rule.location_name}</span>
         </div>
         <div className="col-span-2 flex justify-center">
-        <input className="w-10 h-7 text-center rounded bg-surface-container-low font-label-code text-label-code text-on-surface font-semibold focus:outline-none focus:bg-surface-container-lowest focus:ring-1 focus:ring-primary" type="text" value="1"/>
+        <input className="w-10 h-7 text-center rounded bg-surface-container-low font-label-code text-label-code text-on-surface font-semibold focus:outline-none focus:bg-surface-container-lowest focus:ring-1 focus:ring-primary" type="text" value={rule.reorder_at} onChange={(e) => form.setReorderField(rule.location_id, 'reorder_at', e.target.value)} />
         </div>
         <div className="col-span-2 flex justify-center">
-        <input className="w-10 h-7 text-center rounded bg-surface-container-low font-label-code text-label-code text-on-surface font-semibold focus:outline-none focus:bg-surface-container-lowest focus:ring-1 focus:ring-primary" type="text" value="2"/>
+        <input className="w-10 h-7 text-center rounded bg-surface-container-low font-label-code text-label-code text-on-surface font-semibold focus:outline-none focus:bg-surface-container-lowest focus:ring-1 focus:ring-primary" type="text" value={rule.order_qty} onChange={(e) => form.setReorderField(rule.location_id, 'order_qty', e.target.value)} />
         </div>
         <div className="col-span-2 flex justify-end">
-        <input className="w-10 h-7 text-center rounded bg-surface-container-low font-label-code text-label-code text-on-surface font-semibold focus:outline-none focus:bg-surface-container-lowest focus:ring-1 focus:ring-primary" type="text" value="1"/>
+        <input className="w-10 h-7 text-center rounded bg-surface-container-low font-label-code text-label-code text-on-surface font-semibold focus:outline-none focus:bg-surface-container-lowest focus:ring-1 focus:ring-primary" type="text" value={rule.safety_stock} onChange={(e) => form.setReorderField(rule.location_id, 'safety_stock', e.target.value)} />
         </div>
         </div>
-
-        <div className="grid grid-cols-12 px-space-md py-space-sm items-center">
-        <div className="col-span-6 flex items-center gap-space-xs">
-        <span className="material-symbols-outlined text-[16px] text-on-surface-variant">local_shipping</span>
-        <span className="font-body-sm text-body-sm font-semibold text-on-surface">Depot Hub 02 — Montego Bay</span>
-        </div>
-        <div className="col-span-2 flex justify-center">
-        <input className="w-10 h-7 text-center rounded bg-surface-container-low font-label-code text-label-code text-on-surface font-semibold focus:outline-none focus:bg-surface-container-lowest focus:ring-1 focus:ring-primary" type="text" value="0"/>
-        </div>
-        <div className="col-span-2 flex justify-center">
-        <input className="w-10 h-7 text-center rounded bg-surface-container-low font-label-code text-label-code text-on-surface font-semibold focus:outline-none focus:bg-surface-container-lowest focus:ring-1 focus:ring-primary" type="text" value="1"/>
-        </div>
-        <div className="col-span-2 flex justify-end">
-        <input className="w-10 h-7 text-center rounded bg-surface-container-low font-label-code text-label-code text-on-surface font-semibold focus:outline-none focus:bg-surface-container-lowest focus:ring-1 focus:ring-primary" type="text" value="0"/>
+        ))}
         </div>
         </div>
-        </div>
-        </div>
-        <button type="button" className="self-start px-space-md py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm font-semibold flex items-center gap-1 transition-colors" type="button">
+        <button className="self-start px-space-md py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm font-semibold flex items-center gap-1 transition-colors" type="button" onClick={() => {}}>
         <span className="material-symbols-outlined text-[16px]">add</span> Add location rule
                 </button>
         </section>
@@ -423,7 +392,7 @@ export function GapItemEditor(p: { onClose?: () => void }) {
         <p className="font-label-code text-label-code text-on-surface-variant">OEM Ref: ACC-889 · Heavy Duty Dual-Lever</p>
         </div>
         </div>
-        <button type="button" className="ml-space-md px-space-md py-1.5 rounded-lg bg-surface-container-lowest hover:bg-error-container hover:text-on-error-container text-on-surface font-body-sm text-body-sm font-semibold transition-colors flex-shrink-0 shadow-sm" type="button">
+        <button className="ml-space-md px-space-md py-1.5 rounded-lg bg-surface-container-lowest hover:bg-error-container hover:text-on-error-container text-on-surface font-body-sm text-body-sm font-semibold transition-colors flex-shrink-0 shadow-sm" type="button" onClick={() => {}}>
                     Unlink
                   </button>
         </div>
@@ -440,7 +409,7 @@ export function GapItemEditor(p: { onClose?: () => void }) {
         <div className="flex flex-col gap-space-xs">
 
         <label className="p-space-md rounded-xl bg-surface-container-low flex items-start gap-space-md cursor-pointer hover:bg-surface-container transition-colors">
-        <input checked="" className="mt-1 w-4 h-4 accent-primary" name="lifecycle_status" type="radio"/>
+        <input checked={!form.isNew} className="mt-1 w-4 h-4 accent-primary" name="lifecycle_status" type="radio" readOnly />
         <div className="flex flex-col">
         <span className="font-body-sm text-body-sm font-semibold text-on-surface">Active (in regular fleet distribution)</span>
         <span className="font-caption text-caption text-on-surface-variant">Available for depot technicians and dispatch fulfillment</span>
@@ -448,7 +417,7 @@ export function GapItemEditor(p: { onClose?: () => void }) {
         </label>
 
         <label className="p-space-md rounded-xl bg-surface-container-low flex items-start gap-space-md cursor-pointer hover:bg-surface-container transition-colors">
-        <input className="mt-1 w-4 h-4 accent-primary" name="lifecycle_status" type="radio"/>
+        <input checked={false} className="mt-1 w-4 h-4 accent-primary" name="lifecycle_status" type="radio" readOnly />
         <div className="flex flex-col w-full">
         <span className="font-body-sm text-body-sm font-semibold text-on-surface">Being replaced by…</span>
         <div className="mt-2 flex items-center gap-space-sm opacity-60">
@@ -461,7 +430,7 @@ export function GapItemEditor(p: { onClose?: () => void }) {
         </label>
 
         <label className="p-space-md rounded-xl bg-surface-container-low flex items-start gap-space-md cursor-pointer hover:bg-surface-container transition-colors">
-        <input className="mt-1 w-4 h-4 accent-primary" name="lifecycle_status" type="radio"/>
+        <input checked={false} className="mt-1 w-4 h-4 accent-primary" name="lifecycle_status" type="radio" readOnly />
         <div className="flex flex-col">
         <span className="font-body-sm text-body-sm font-semibold text-on-surface">Archived</span>
         <span className="font-caption text-caption text-on-surface-variant">Hidden from dispatch catalog; retained for audit logs</span>
@@ -474,16 +443,16 @@ export function GapItemEditor(p: { onClose?: () => void }) {
         <footer className="p-space-lg bg-surface-container-lowest flex flex-col gap-space-sm">
         <div className="flex items-center justify-between">
 
-        <button type="button" className="text-error hover:underline font-body-sm text-body-sm font-semibold flex items-center gap-1 transition-colors" id="archive-toggle-btn" type="button">
+        <button type="button" disabled={form.isNew || form.submit.saving} onClick={() => void form.archive()} className="text-error hover:underline font-body-sm text-body-sm font-semibold flex items-center gap-1 transition-colors disabled:opacity-60" id="archive-toggle-btn">
         <span className="material-symbols-outlined text-[16px]">archive</span>
                   Archive item
                 </button>
 
         <div className="flex items-center gap-space-sm">
-        <button type="button" className="px-space-lg py-2 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm font-semibold transition-colors" id="cancel-drawer-btn" type="button">
+        <button className="px-space-lg py-2 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm font-semibold transition-colors" id="cancel-drawer-btn" type="button" onClick={closeDrawer}>
                     Cancel
                   </button>
-        <button type="button" className="px-space-xl py-2 rounded-lg bg-primary text-on-primary font-body-sm text-body-sm font-semibold hover:bg-primary-container shadow-md active:scale-[0.99] transition-all flex items-center gap-space-xs" type="button">
+        <button type="button" disabled={!form.canSave || form.submit.saving} onClick={() => void form.save()} className="px-space-xl py-2 rounded-lg bg-primary text-on-primary font-body-sm text-body-sm font-semibold hover:bg-primary-container shadow-md active:scale-[0.99] transition-all flex items-center gap-space-xs disabled:opacity-60">
         <span className="material-symbols-outlined text-[18px]">check</span>
                     Save item
                   </button>
@@ -500,10 +469,10 @@ export function GapItemEditor(p: { onClose?: () => void }) {
                     It stays in history and can be restored at any time from the archived filters.
                   </p>
         <div className="flex items-center gap-space-sm mt-1">
-        <button type="button" className="px-space-md py-1 bg-error text-on-error rounded font-caption text-caption font-bold" type="button">
+        <button className="px-space-md py-1 bg-error text-on-error rounded font-caption text-caption font-bold" type="button" onClick={() => {}}>
                       Confirm Archive
                     </button>
-        <button type="button" className="font-caption text-caption text-on-surface-variant hover:text-on-surface" id="cancel-archive-warning" type="button">
+        <button className="font-caption text-caption text-on-surface-variant hover:text-on-surface" id="cancel-archive-warning" type="button" onClick={closeDrawer}>
                       Dismiss
                     </button>
         </div>
@@ -514,12 +483,8 @@ export function GapItemEditor(p: { onClose?: () => void }) {
 
 
         </div></div><aside className="fixed left-0 top-28 bottom-0 w-64 bg-surface-container-lowest shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-40 flex flex-col justify-between py-space-lg"><div className="flex flex-col gap-space-xs px-space-md"><div className="px-space-md py-space-xs text-caption font-caption uppercase tracking-wider text-on-surface-variant font-semibold">Inventory & Asset Scope</div><nav className="flex flex-col gap-1" data-active-classes="bg-surface-container text-on-surface font-semibold"><a className="flex items-center gap-space-md px-space-md py-space-sm rounded-lg text-body-sm font-body-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="inventory-catalog" href="#"><span className="material-symbols-outlined text-[20px]">category</span>Inventory Stock</a><a className="flex items-center gap-space-md px-space-md py-space-sm rounded-lg text-body-sm font-body-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="parts-fitment-crossref" href="#"><span className="material-symbols-outlined text-[20px]">manufacturing</span>Fitment & Compatibility</a><a className="flex items-center gap-space-md px-space-md py-space-sm rounded-lg text-body-sm font-body-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="work-orders-repairs" href="#"><span className="material-symbols-outlined text-[20px]">build</span>Work Orders</a><a className="flex items-center gap-space-md px-space-md py-space-sm rounded-lg text-body-sm font-body-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="asset-depreciation-tracker" href="#"><span className="material-symbols-outlined text-[20px]">account_balance_wallet</span>Asset Valuation</a><a className="flex items-center gap-space-md px-space-md py-space-sm rounded-lg text-body-sm font-body-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="procurement-suppliers" href="#"><span className="material-symbols-outlined text-[20px]">storefront</span>Suppliers & POs</a><a className="flex items-center gap-space-md px-space-md py-space-sm rounded-lg text-body-sm font-body-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="telemetry-diagnostics" href="#"><span className="material-symbols-outlined text-[20px]">sensors</span>Diagnostic Logs</a></nav></div><div className="px-space-lg pt-space-md"><div className="p-space-md rounded-lg bg-surface-container-low shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div className="flex items-center justify-between text-caption font-caption text-on-surface-variant mb-1"><span>Active Depot Stock</span><span className="font-label-code text-label-code text-on-surface font-semibold">84.6%</span></div><div className="w-full h-1.5 rounded-full bg-surface-container-high overflow-hidden"><div className="h-full bg-primary rounded-full w-[84.6%]"></div></div><div className="mt-space-xs text-caption font-caption text-on-surface-variant">Warehouse A & Yard Kingston</div></div></div></aside>
-        {compliance.safetyNotice ? (
-          <div className="mt-space-md rounded-lg border border-outline-variant/30 bg-surface-container-low p-space-md font-body-sm text-body-sm text-on-surface-variant">
-            {compliance.safetyNotice}
-          </div>
-        ) : null}
       </div>
+      </GapLoadState>
     </GapModalShell>
   );
 }

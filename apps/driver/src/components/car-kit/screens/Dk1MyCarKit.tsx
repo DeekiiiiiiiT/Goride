@@ -72,7 +72,7 @@ export function Dk1MyCarKit({
       </div>
       </div>
       <div className="bg-surface-container-low rounded-lg px-space-sm py-2 flex items-center gap-2">
-      <span className="material-symbols-outlined text-primary text-[18px]" style="font-variation-settings: 'FILL' 1;">verified</span>
+      <span className="material-symbols-outlined text-primary text-[18px]" style={{ fontVariationSettings: "'FILL' 1" }}>verified</span>
       <span className="font-body-sm text-body-sm text-on-surface-variant">{checkInLabel}</span>
       </div>
       </div>
@@ -107,7 +107,7 @@ export function Dk1MyCarKit({
                 </span>
       </div>
       <div className="flex justify-end pt-1">
-      <button type="button" className="font-body-sm text-body-sm font-semibold text-secondary hover:text-error transition-colors py-1.5 px-2 -mr-2 min-h-[48px] flex items-center" type="button">
+      <button type="button" onClick={() => onReportItem?.('Kit item')} className="font-body-sm text-body-sm font-semibold text-secondary hover:text-error transition-colors py-1.5 px-2 -mr-2 min-h-[48px] flex items-center" type="button">
                   Report a problem
                 </button>
       </div>
@@ -135,7 +135,7 @@ export function Dk1MyCarKit({
                 </span>
       </div>
       <div className="flex justify-end pt-1">
-      <button type="button" className="font-body-sm text-body-sm font-semibold text-secondary hover:text-error transition-colors py-1.5 px-2 -mr-2 min-h-[48px] flex items-center" type="button">
+      <button type="button" onClick={() => onReportItem?.('Kit item')} className="font-body-sm text-body-sm font-semibold text-secondary hover:text-error transition-colors py-1.5 px-2 -mr-2 min-h-[48px] flex items-center" type="button">
                   Report a problem
                 </button>
       </div>
@@ -161,7 +161,7 @@ export function Dk1MyCarKit({
                 </span>
       </div>
       <div className="flex justify-end pt-1">
-      <button type="button" className="font-body-sm text-body-sm font-semibold text-secondary hover:text-error transition-colors py-1.5 px-2 -mr-2 min-h-[48px] flex items-center" type="button">
+      <button type="button" onClick={() => onReportItem?.('Kit item')} className="font-body-sm text-body-sm font-semibold text-secondary hover:text-error transition-colors py-1.5 px-2 -mr-2 min-h-[48px] flex items-center" type="button">
                   Report a problem
                 </button>
       </div>
@@ -188,7 +188,7 @@ export function Dk1MyCarKit({
                 </span>
       </div>
       <div className="flex justify-end pt-1">
-      <button type="button" className="font-body-sm text-body-sm font-semibold text-secondary hover:text-error transition-colors py-1.5 px-2 -mr-2 min-h-[48px] flex items-center" type="button">
+      <button type="button" onClick={() => onReportItem?.('Kit item')} className="font-body-sm text-body-sm font-semibold text-secondary hover:text-error transition-colors py-1.5 px-2 -mr-2 min-h-[48px] flex items-center" type="button">
                   Report a problem
                 </button>
       </div>
@@ -215,7 +215,7 @@ export function Dk1MyCarKit({
                 </span>
       </div>
       <div className="flex justify-end pt-1">
-      <button type="button" className="font-body-sm text-body-sm font-semibold text-secondary hover:text-error transition-colors py-1.5 px-2 -mr-2 min-h-[48px] flex items-center" type="button">
+      <button type="button" onClick={() => onReportItem?.('Kit item')} className="font-body-sm text-body-sm font-semibold text-secondary hover:text-error transition-colors py-1.5 px-2 -mr-2 min-h-[48px] flex items-center" type="button">
                   Report a problem
                 </button>
       </div>
@@ -246,7 +246,7 @@ export function Dk1MyCarKit({
       <span className="material-symbols-outlined text-[16px] text-tertiary">schedule</span>
                   Replacement en route
                 </span>
-      <button type="button" className="font-body-sm text-body-sm font-semibold text-on-surface hover:text-primary transition-colors py-1.5 px-2 -mr-2 min-h-[48px] flex items-center" type="button">
+      <button type="button" className="font-body-sm text-body-sm font-semibold text-on-surface hover:text-primary transition-colors py-1.5 px-2 -mr-2 min-h-[48px] flex items-center" onClick={() => {}}>
                   Update status
                 </button>
       </div>
@@ -277,7 +277,7 @@ export function Dk1MyCarKit({
       <span className="material-symbols-outlined text-[16px] text-tertiary">inventory_2</span>
                   Hub collection ready
                 </span>
-      <button type="button" className="font-body-sm text-body-sm font-semibold text-on-surface hover:text-primary transition-colors py-1.5 px-2 -mr-2 min-h-[48px] flex items-center" type="button">
+      <button type="button" className="font-body-sm text-body-sm font-semibold text-on-surface hover:text-primary transition-colors py-1.5 px-2 -mr-2 min-h-[48px] flex items-center" onClick={() => {}}>
                   Update status
                 </button>
       </div>
@@ -309,7 +309,7 @@ export function Dk1MyCarKit({
       <span className="material-symbols-outlined text-[16px] text-tertiary">priority_high</span>
                   Urgent safety item
                 </span>
-      <button type="button" className="font-body-sm text-body-sm font-semibold text-on-surface hover:text-primary transition-colors py-1.5 px-2 -mr-2 min-h-[48px] flex items-center" type="button">
+      <button type="button" className="font-body-sm text-body-sm font-semibold text-on-surface hover:text-primary transition-colors py-1.5 px-2 -mr-2 min-h-[48px] flex items-center" onClick={() => {}}>
                   Update status
                 </button>
       </div>
@@ -381,7 +381,7 @@ export function Dk1MyCarKit({
       </div>
       </div>
 
-      <button type="button" className="w-full min-h-[52px] bg-surface-container-lowest hover:bg-surface-container-low text-on-surface font-label-button text-label-button rounded-xl flex items-center justify-center gap-2 shadow-sm active:bg-surface-container transition-colors mt-2" type="button">
+      <button type="button" onClick={() => onReportItem?.()} className="w-full min-h-[52px] bg-surface-container-lowest hover:bg-surface-container-low text-on-surface font-label-button text-label-button rounded-xl flex items-center justify-center gap-2 shadow-sm active:bg-surface-container transition-colors mt-2" type="button">
       <span className="material-symbols-outlined text-[22px]">add</span>
             Report something else
           </button>

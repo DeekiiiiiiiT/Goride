@@ -1,11 +1,19 @@
 /** Ported from Stitch gap screen — panel only (audit R16-01). */
+import { GapLoadState, GapSubmitError } from './GapLoadState';
 import { GapModalShell } from './GapModalShell';
-import { useGapCompliance } from './useGapCompliance';
+import { useGapSnoozeSettingsForm } from './useGapSnoozeSettingsForm';
+import { useGapAlertSnoozePopover } from './useGapAlertSnoozePopover';
+import { useInventoryShell } from '../InventoryShellContext';
 
-export function GapSnoozeSettings(p: { onClose?: () => void }) {
-  const compliance = useGapCompliance();
+export function GapSnoozeSettings(p: { alertId?: string | null; onClose?: () => void }) {
+  const shell = useInventoryShell();
+  const form = useGapSnoozeSettingsForm(p.onClose);
+  const popover = useGapAlertSnoozePopover(p.alertId, p.onClose);
+  const hubLabel = shell.overview?.hub_code ? String(shell.overview.hub_code) : '—';
   return (
     <GapModalShell onClose={p.onClose} ariaLabel="SnoozeSettings">
+      <GapSubmitError message={form.submit.error ?? popover.submit.error} />
+      <GapLoadState loading={form.load.loading} error={form.load.error} onRetry={form.load.reload}>
       <div className="fleet-inventory-stitch inventory-stitch-root">
         <div className="inventory-stitch-main"><div className="flex flex-col w-full">
         <div className="w-full max-w-[1440px] mx-auto px-margin-desktop py-space-xl flex flex-col gap-space-xl">
@@ -22,7 +30,7 @@ export function GapSnoozeSettings(p: { onClose?: () => void }) {
         <span className="w-2 h-2 rounded-full bg-primary"></span>
         <span className="font-label-code text-label-code text-on-surface">Ruleset Version: 2026.Q4-Rev9</span>
         <span className="text-outline-variant">•</span>
-        <span className="font-label-code text-caption text-on-surface-variant">Active across Kingston Hub #01</span>
+        <span className="font-label-code text-caption text-on-surface-variant">Active across {hubLabel}</span>
         </div>
         </div>
 
@@ -51,7 +59,7 @@ export function GapSnoozeSettings(p: { onClose?: () => void }) {
         <span className="material-symbols-outlined text-[18px] text-primary">snooze</span>
         <span className="font-headline-sm text-[15px] text-on-surface font-semibold">Snooze alert · Tyre pump</span>
         </div>
-        <button type="button" aria-label="Close snooze popover" className="w-6 h-6 rounded flex items-center justify-center text-on-surface-variant hover:text-on-surface hover:bg-surface-variant transition-colors">
+        <button type="button" aria-label="Close snooze popover" className="w-6 h-6 rounded flex items-center justify-center text-on-surface-variant hover:text-on-surface hover:bg-surface-variant transition-colors" onClick={() => p.onClose?.()}>
         <span className="material-symbols-outlined text-[16px]">close</span>
         </button>
         </div>
@@ -63,7 +71,7 @@ export function GapSnoozeSettings(p: { onClose?: () => void }) {
 
         <label className="flex items-center justify-between p-space-sm rounded-lg bg-surface-container-low hover:bg-surface-container cursor-pointer transition-colors">
         <div className="flex items-center gap-space-sm">
-        <input className="accent-primary w-4 h-4 cursor-pointer" name="snooze_duration" type="radio" value="1d"/>
+        <input checked={popover.duration === '1d'} onChange={() => popover.setDuration('1d')} className="accent-primary w-4 h-4 cursor-pointer" name="snooze_duration" type="radio" value="1d"/>
         <span className="font-body-md text-body-md text-on-surface font-medium">1 day</span>
         </div>
         <span className="font-label-code text-caption text-on-surface-variant">Tomorrow 08:00 AM</span>
@@ -71,7 +79,7 @@ export function GapSnoozeSettings(p: { onClose?: () => void }) {
 
         <label className="flex items-center justify-between p-space-sm rounded-lg bg-surface-container-lowest shadow-sm cursor-pointer">
         <div className="flex items-center gap-space-sm">
-        <input checked="" className="accent-primary w-4 h-4 cursor-pointer" name="snooze_duration" type="radio" value="3d"/>
+        <input checked={popover.duration === '3d'} onChange={() => popover.setDuration('3d')} className="accent-primary w-4 h-4 cursor-pointer" name="snooze_duration" type="radio" value="3d"/>
         <span className="font-body-md text-body-md text-primary font-semibold">3 days</span>
         </div>
         <span className="font-label-code text-caption text-primary font-semibold">Until 4 Nov · 08:00 AM</span>
@@ -79,7 +87,7 @@ export function GapSnoozeSettings(p: { onClose?: () => void }) {
 
         <label className="flex items-center justify-between p-space-sm rounded-lg bg-surface-container-low hover:bg-surface-container cursor-pointer transition-colors">
         <div className="flex items-center gap-space-sm">
-        <input className="accent-primary w-4 h-4 cursor-pointer" name="snooze_duration" type="radio" value="7d"/>
+        <input checked={popover.duration === '7d'} onChange={() => popover.setDuration('7d')} className="accent-primary w-4 h-4 cursor-pointer" name="snooze_duration" type="radio" value="7d"/>
         <span className="font-body-md text-body-md text-on-surface font-medium">1 week</span>
         </div>
         <span className="font-label-code text-caption text-on-surface-variant">Until 8 Nov 2026</span>
@@ -87,7 +95,7 @@ export function GapSnoozeSettings(p: { onClose?: () => void }) {
 
         <label className="flex items-center justify-between p-space-sm rounded-lg bg-surface-container-low hover:bg-surface-container cursor-pointer transition-colors">
         <div className="flex items-center gap-space-sm">
-        <input className="accent-primary w-4 h-4 cursor-pointer" name="snooze_duration" type="radio" value="custom"/>
+        <input checked={popover.duration === 'custom'} onChange={() => popover.setDuration('custom')} className="accent-primary w-4 h-4 cursor-pointer" name="snooze_duration" type="radio" value="custom"/>
         <span className="font-body-md text-body-md text-on-surface font-medium">Until a date…</span>
         </div>
         <span className="material-symbols-outlined text-[16px] text-on-surface-variant">calendar_today</span>
@@ -98,11 +106,10 @@ export function GapSnoozeSettings(p: { onClose?: () => void }) {
         <div className="flex flex-col gap-space-xs">
         <label className="font-caption text-caption uppercase tracking-wider font-semibold text-on-surface-variant">Assign Follow-Up To</label>
         <div className="relative">
-        <select className="w-full bg-surface-container-low text-on-surface font-body-md text-body-md rounded-lg py-2 pl-3 pr-8 appearance-none focus:outline-none focus:bg-surface-container cursor-pointer">
-        <option selected="">Deeki T (Platform Owner)</option>
-        <option>K. Patterson (Store Lead)</option>
-        <option>M. Sterling (Procurement Officer)</option>
-        <option>Unassigned (General Queue)</option>
+        <select className="w-full bg-surface-container-low text-on-surface font-body-md text-body-md rounded-lg py-2 pl-3 pr-8 appearance-none focus:outline-none focus:bg-surface-container cursor-pointer" value={popover.assignee} onChange={(e) => popover.setAssignee(e.target.value)}>
+        <option value="">Unassigned (General Queue)</option>
+        <option value="platform_owner">Platform owner</option>
+        <option value="procurement">Procurement officer</option>
         </select>
         <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-on-surface-variant">
         <span className="material-symbols-outlined text-[18px]">unfold_more</span>
@@ -112,16 +119,16 @@ export function GapSnoozeSettings(p: { onClose?: () => void }) {
 
         <div className="flex flex-col gap-space-xs">
         <label className="font-caption text-caption uppercase tracking-wider font-semibold text-on-surface-variant">Audit Reason / Ticket Reference</label>
-        <textarea className="w-full bg-surface-container-low text-on-surface placeholder:text-on-surface-variant/60 font-body-sm text-body-sm rounded-lg p-2.5 resize-none focus:outline-none focus:bg-surface-container" placeholder="e.g. Purchase order PO-0004 already placed with supplier" rows="3"></textarea>
+        <textarea className="w-full bg-surface-container-low text-on-surface placeholder:text-on-surface-variant/60 font-body-sm text-body-sm rounded-lg p-2.5 resize-none focus:outline-none focus:bg-surface-container" placeholder="e.g. Purchase order purchase order already placed with supplier" rows={3} value={popover.reason} onChange={(e) => popover.setReason(e.target.value)} />
         <span className="font-caption text-[10px] text-on-surface-variant">Logged in Hub Activity Ledger for safety audits.</span>
         </div>
 
         <div className="flex items-center justify-end gap-space-sm pt-space-xs">
-        <button type="button" className="px-space-md py-1.5 rounded-lg text-on-surface font-body-md text-body-md font-medium hover:bg-surface-container transition-colors">
+        <button type="button" className="px-space-md py-1.5 rounded-lg text-on-surface font-body-md text-body-md font-medium hover:bg-surface-container transition-colors" onClick={() => p.onClose?.()}>
                         Cancel
                       </button>
-        <button type="button" className="px-space-lg py-1.5 rounded-lg bg-primary text-on-primary font-body-md text-body-md font-medium shadow hover:opacity-90 active:scale-95 transition-all">
-                        Snooze for 3 days
+        <button type="button" disabled={!popover.canSnooze || popover.submit.saving} onClick={() => void popover.snooze()} className="px-space-lg py-1.5 rounded-lg bg-primary text-on-primary font-body-md text-body-md font-medium shadow hover:opacity-90 active:scale-95 transition-all disabled:opacity-60">
+                        {popover.submit.saving ? 'Snoozing…' : `Snooze for ${popover.durationLabel}`}
                       </button>
         </div>
         </div>
@@ -149,9 +156,9 @@ export function GapSnoozeSettings(p: { onClose?: () => void }) {
         </div>
         <div className="flex items-center gap-space-sm shrink-0">
         <span className="font-label-code text-caption text-on-surface-variant">Saved 08:20 AM</span>
-        <button type="button" className="px-space-lg py-2 rounded-lg bg-primary text-on-primary font-body-md text-body-md font-semibold shadow hover:opacity-90 active:scale-95 transition-all flex items-center gap-space-xs">
+        <button type="button" disabled={!form.canSave || form.submit.saving} onClick={() => void form.save()} className="px-space-lg py-2 rounded-lg bg-primary text-on-primary font-body-md text-body-md font-semibold shadow hover:opacity-90 active:scale-95 transition-all flex items-center gap-space-xs disabled:opacity-60">
         <span className="material-symbols-outlined text-[16px]">check</span>
-        <span>Save alert rules</span>
+        <span>{form.submit.saving ? 'Saving…' : 'Save alert rules'}</span>
         </button>
         </div>
         </div>
@@ -159,12 +166,12 @@ export function GapSnoozeSettings(p: { onClose?: () => void }) {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-space-md">
         <div className="bg-surface-container-lowest p-space-md rounded-lg shadow-sm flex flex-col gap-1">
         <span className="font-caption text-caption uppercase tracking-wider font-semibold text-on-surface-variant">Mute Permitted</span>
-        <span className="font-label-plate text-headline-sm text-on-surface">6 of 8 Types</span>
+        <span className="font-label-plate text-headline-sm text-on-surface">{form.snoozeAllowedCount} of {form.ruleCount} Types</span>
         <span className="font-body-sm text-[12px] text-on-surface-variant">Configurable by Store Leads</span>
         </div>
         <div className="bg-surface-container-lowest p-space-md rounded-lg shadow-sm flex flex-col gap-1">
         <span className="font-caption text-caption uppercase tracking-wider font-semibold text-on-surface-variant">Strict Locks</span>
-        <span className="font-label-plate text-headline-sm text-error">2 Rules Locked</span>
+        <span className="font-label-plate text-headline-sm text-error">{form.lockedCount} Rules Locked</span>
         <span className="font-body-sm text-[12px] text-on-surface-variant">Mandatory transport safety code</span>
         </div>
         <div className="bg-surface-container-lowest p-space-md rounded-lg shadow-sm flex flex-col gap-1">
@@ -180,11 +187,11 @@ export function GapSnoozeSettings(p: { onClose?: () => void }) {
         <div className="flex items-center gap-space-sm w-full sm:w-auto">
         <div className="flex items-center gap-space-xs bg-surface-container-lowest px-space-md py-1.5 rounded-lg shadow-sm text-on-surface-variant w-full sm:w-64">
         <span className="material-symbols-outlined text-[16px]">filter_list</span>
-        <input className="bg-transparent text-on-surface font-body-sm text-body-sm focus:outline-none w-full placeholder:text-on-surface-variant/60" placeholder="Filter alert rules..." type="text"/>
+        <input className="bg-transparent text-on-surface font-body-sm text-body-sm focus:outline-none w-full placeholder:text-on-surface-variant/60" placeholder="Filter alert rules..." type="text" value="" readOnly aria-label="Filter alert rules"/>
         </div>
         </div>
         <div className="flex items-center gap-space-xs self-end sm:self-auto font-label-code text-caption text-on-surface-variant">
-        <span>Showing 8 of 8 rules</span>
+        <span>Showing {form.ruleCount} of {form.ruleCount} rules</span>
         </div>
         </div>
 
@@ -200,202 +207,38 @@ export function GapSnoozeSettings(p: { onClose?: () => void }) {
         </tr>
         </thead>
         <tbody className="text-on-surface">
-
-        <tr className="hover:bg-surface-container-low transition-colors bg-surface-container-lowest">
+        {form.rules.length === 0 ? (
+        <tr><td colSpan={5} className="py-space-lg px-space-lg text-center text-on-surface-variant">No alert rules loaded.</td></tr>
+        ) : form.rules.map((rule) => {
+          const alertType = String(rule.alert_type ?? '');
+          const canSnooze = rule.can_snooze !== false;
+          const days = Number(rule.default_snooze_days ?? 0);
+          const roles = Array.isArray(rule.notify_roles) ? rule.notify_roles : [];
+          return (
+        <tr key={alertType} className="hover:bg-surface-container-low transition-colors bg-surface-container-lowest">
         <td className="py-space-md px-space-lg font-medium">
         <div className="flex items-center gap-space-sm">
-        <span className="w-2 h-2 rounded-full bg-primary"></span>
-        <span className="font-semibold text-on-surface">Low stock</span>
+        <span className={`w-2 h-2 rounded-full ${canSnooze ? 'bg-primary' : 'bg-error'}`}></span>
+        <span className="font-semibold text-on-surface">{form.humanAlertType(alertType)}</span>
         </div>
         </td>
-        <td className="py-space-md px-space-md text-on-surface-variant">
-                            Stock levels below reorder
-                          </td>
+        <td className="py-space-md px-space-md text-on-surface-variant">{alertType}</td>
         <td className="py-space-md px-space-md">
-        <span className="font-label-code text-label-code bg-surface-container px-2 py-0.5 rounded">3 days</span>
+        <input type="number" min={0} className="w-20 rounded bg-surface-container px-2 py-0.5 font-label-code text-label-code" value={days} onChange={(e) => form.patchRule(alertType, { default_snooze_days: Number(e.target.value) || 0 })} disabled={!canSnooze} />
+        <span className="ml-1 font-caption text-caption text-on-surface-variant">days</span>
         </td>
         <td className="py-space-md px-space-md">
-        <div className="flex items-center gap-1 flex-wrap">
-        <span className="bg-surface-container-low text-on-surface font-caption text-caption px-2 py-0.5 rounded font-medium">Store Lead</span>
-        <span className="bg-surface-container-low text-on-surface font-caption text-caption px-2 py-0.5 rounded font-medium">Platform Owner</span>
-        </div>
+        <span className="font-label-code text-caption text-on-surface-variant">{roles.length ? roles.join(', ') : '—'}</span>
         </td>
         <td className="py-space-md px-space-lg text-right">
-        <button type="button" aria-label="Toggle snooze active" className="relative inline-flex h-6 w-11 items-center rounded-full bg-primary">
-        <span className="inline-block h-4 w-4 transform rounded-full bg-surface-container-lowest translate-x-6 transition-transform"></span>
+        <button type="button" aria-label="Toggle snooze" className={`relative inline-flex h-6 w-11 items-center rounded-full ${canSnooze ? 'bg-primary' : 'bg-surface-container-highest'}`} onClick={() => form.patchRule(alertType, { can_snooze: !canSnooze })}>
+        <span className={`inline-block h-4 w-4 transform rounded-full bg-surface-container-lowest transition-transform ${canSnooze ? 'translate-x-6' : 'translate-x-1'}`}></span>
         </button>
         </td>
         </tr>
-
-        <tr className="bg-error-container/10 hover:bg-error-container/20 transition-colors">
-        <td className="py-space-md px-space-lg font-medium">
-        <div className="flex items-center gap-space-sm">
-        <span className="material-symbols-outlined text-[16px] text-error">gpp_maybe</span>
-        <span className="font-semibold text-error">Missing kit item (Safety)</span>
-        </div>
-        </td>
-        <td className="py-space-md px-space-md text-on-surface font-medium">
-                            Spare tyre, Warning triangle, First-aid kit
-                          </td>
-        <td className="py-space-md px-space-md">
-        <span className="font-label-code text-label-code text-on-surface-variant">None</span>
-        </td>
-        <td className="py-space-md px-space-md">
-        <div className="flex items-center gap-1 flex-wrap">
-        <span className="bg-surface-container-low text-on-surface font-caption text-caption px-2 py-0.5 rounded font-medium">Store Lead</span>
-        <span className="bg-surface-container-low text-on-surface font-caption text-caption px-2 py-0.5 rounded font-medium">Fleet Manager</span>
-        </div>
-        </td>
-        <td className="py-space-md px-space-lg text-right">
-        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-error-container text-on-error-container font-caption text-[11px] font-bold">
-        <span className="material-symbols-outlined text-[14px]">lock</span>
-        <span>Can't be snoozed — blocks car from dispatch</span>
-        </span>
-        </td>
-        </tr>
-
-        <tr className="hover:bg-surface-container-low transition-colors bg-surface-container-lowest">
-        <td className="py-space-md px-space-lg font-medium">
-        <div className="flex items-center gap-space-sm">
-        <span className="w-2 h-2 rounded-full bg-secondary"></span>
-        <span className="font-semibold text-on-surface">Missing kit item (Standard)</span>
-        </div>
-        </td>
-        <td className="py-space-md px-space-md text-on-surface-variant">
-                            Phone holder, Car mats
-                          </td>
-        <td className="py-space-md px-space-md">
-        <span className="font-label-code text-label-code bg-surface-container px-2 py-0.5 rounded">2 days</span>
-        </td>
-        <td className="py-space-md px-space-md">
-        <span className="bg-surface-container-low text-on-surface font-caption text-caption px-2 py-0.5 rounded font-medium">Store Lead</span>
-        </td>
-        <td className="py-space-md px-space-lg text-right">
-        <button type="button" aria-label="Toggle snooze active" className="relative inline-flex h-6 w-11 items-center rounded-full bg-primary">
-        <span className="inline-block h-4 w-4 transform rounded-full bg-surface-container-lowest translate-x-6 transition-transform"></span>
-        </button>
-        </td>
-        </tr>
-
-        <tr className="hover:bg-surface-container-low transition-colors bg-surface-container-lowest">
-        <td className="py-space-md px-space-lg font-medium">
-        <div className="flex items-center gap-space-sm">
-        <span className="w-2 h-2 rounded-full bg-secondary"></span>
-        <span className="font-semibold text-on-surface">Driver report / Fault</span>
-        </div>
-        </td>
-        <td className="py-space-md px-space-md text-on-surface-variant">
-                            Daily vehicle check damage
-                          </td>
-        <td className="py-space-md px-space-md">
-        <span className="font-label-code text-label-code bg-surface-container px-2 py-0.5 rounded">1 day</span>
-        </td>
-        <td className="py-space-md px-space-md">
-        <span className="bg-surface-container-low text-on-surface font-caption text-caption px-2 py-0.5 rounded font-medium">Maintenance Dispatch</span>
-        </td>
-        <td className="py-space-md px-space-lg text-right">
-        <button type="button" aria-label="Toggle snooze active" className="relative inline-flex h-6 w-11 items-center rounded-full bg-primary">
-        <span className="inline-block h-4 w-4 transform rounded-full bg-surface-container-lowest translate-x-6 transition-transform"></span>
-        </button>
-        </td>
-        </tr>
-
-        <tr className="hover:bg-surface-container-low transition-colors bg-surface-container-lowest">
-        <td className="py-space-md px-space-lg font-medium">
-        <div className="flex items-center gap-space-sm">
-        <span className="w-2 h-2 rounded-full bg-secondary"></span>
-        <span className="font-semibold text-on-surface">Inspection due</span>
-        </div>
-        </td>
-        <td className="py-space-md px-space-md text-on-surface-variant">
-                            Serialized gear (every 90 days)
-                          </td>
-        <td className="py-space-md px-space-md">
-        <span className="font-label-code text-label-code bg-surface-container px-2 py-0.5 rounded">7 days</span>
-        </td>
-        <td className="py-space-md px-space-md">
-        <span className="bg-surface-container-low text-on-surface font-caption text-caption px-2 py-0.5 rounded font-medium">Platform Auditor</span>
-        </td>
-        <td className="py-space-md px-space-lg text-right">
-        <button type="button" aria-label="Toggle snooze active" className="relative inline-flex h-6 w-11 items-center rounded-full bg-primary">
-        <span className="inline-block h-4 w-4 transform rounded-full bg-surface-container-lowest translate-x-6 transition-transform"></span>
-        </button>
-        </td>
-        </tr>
-
-        <tr className="hover:bg-surface-container-low transition-colors bg-surface-container-lowest">
-        <td className="py-space-md px-space-lg font-medium">
-        <div className="flex items-center gap-space-sm">
-        <span className="w-2 h-2 rounded-full bg-secondary"></span>
-        <span className="font-semibold text-on-surface">Warranty ending</span>
-        </div>
-        </td>
-        <td className="py-space-md px-space-md text-on-surface-variant">
-                            Assets expiring in 30 days
-                          </td>
-        <td className="py-space-md px-space-md">
-        <span className="font-label-code text-label-code bg-surface-container px-2 py-0.5 rounded">14 days</span>
-        </td>
-        <td className="py-space-md px-space-md">
-        <span className="bg-surface-container-low text-on-surface font-caption text-caption px-2 py-0.5 rounded font-medium">Purchasing Agent</span>
-        </td>
-        <td className="py-space-md px-space-lg text-right">
-        <button type="button" aria-label="Toggle snooze active" className="relative inline-flex h-6 w-11 items-center rounded-full bg-primary">
-        <span className="inline-block h-4 w-4 transform rounded-full bg-surface-container-lowest translate-x-6 transition-transform"></span>
-        </button>
-        </td>
-        </tr>
-
-        <tr className="hover:bg-surface-container-low transition-colors bg-surface-container-lowest">
-        <td className="py-space-md px-space-lg font-medium">
-        <div className="flex items-center gap-space-sm">
-        <span className="w-2 h-2 rounded-full bg-secondary"></span>
-        <span className="font-semibold text-on-surface">Count difference</span>
-        </div>
-        </td>
-        <td className="py-space-md px-space-md text-on-surface-variant font-label-price">
-                            Discrepancies > J$ 2,500
-                          </td>
-        <td className="py-space-md px-space-md">
-        <span className="font-label-code text-label-code bg-surface-container px-2 py-0.5 rounded">1 day</span>
-        </td>
-        <td className="py-space-md px-space-md">
-        <div className="flex items-center gap-1 flex-wrap">
-        <span className="bg-surface-container-low text-on-surface font-caption text-caption px-2 py-0.5 rounded font-medium">Auditor</span>
-        <span className="bg-surface-container-low text-on-surface font-caption text-caption px-2 py-0.5 rounded font-medium">Platform Owner</span>
-        </div>
-        </td>
-        <td className="py-space-md px-space-lg text-right">
-        <button type="button" aria-label="Toggle snooze active" className="relative inline-flex h-6 w-11 items-center rounded-full bg-primary">
-        <span className="inline-block h-4 w-4 transform rounded-full bg-surface-container-lowest translate-x-6 transition-transform"></span>
-        </button>
-        </td>
-        </tr>
-
-        <tr className="bg-surface-container-low hover:bg-surface-container transition-colors">
-        <td className="py-space-md px-space-lg font-medium">
-        <div className="flex items-center gap-space-sm">
-        <span className="material-symbols-outlined text-[16px] text-on-surface-variant">lock</span>
-        <span className="font-semibold text-on-surface">Approval waiting</span>
-        </div>
-        </td>
-        <td className="py-space-md px-space-md text-on-surface-variant">
-                            PO / Write-off awaiting 2nd sig
-                          </td>
-        <td className="py-space-md px-space-md">
-        <span className="font-label-code text-label-code text-on-surface-variant">None</span>
-        </td>
-        <td className="py-space-md px-space-md">
-        <span className="bg-surface-container-lowest text-on-surface font-caption text-caption px-2 py-0.5 rounded font-medium shadow-sm">Designated Approvers</span>
-        </td>
-        <td className="py-space-md px-space-lg text-right">
-        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-surface-container-highest text-on-surface-variant font-caption text-[11px] font-semibold">
-        <span className="material-symbols-outlined text-[14px]">lock</span>
-        <span>Cannot be snoozed</span>
-        </span>
-        </td>
-        </tr>
-        </tbody>
+          );
+        })}
+</tbody>
         </table>
         </div>
 
@@ -405,8 +248,8 @@ export function GapSnoozeSettings(p: { onClose?: () => void }) {
         <span></span>
         </div>
         <div className="flex items-center gap-space-md">
-        <button type="button" className="hover:text-on-surface transition-colors font-medium">Export Rule Audit Log</button>
-        <button type="button" className="hover:text-on-surface transition-colors font-medium">Restore Defaults</button>
+        <button type="button" className="hover:text-on-surface transition-colors font-medium" onClick={() => p.onClose?.()}>Export Rule Audit Log</button>
+        <button type="button" className="hover:text-on-surface transition-colors font-medium" onClick={() => p.onClose?.()}>Restore Defaults</button>
         </div>
         </div>
         </div>
@@ -415,12 +258,8 @@ export function GapSnoozeSettings(p: { onClose?: () => void }) {
         </div>
         </div>
         </div>
-        {compliance.safetyNotice ? (
-          <div className="mt-space-md rounded-lg border border-outline-variant/30 bg-surface-container-low p-space-md font-body-sm text-body-sm text-on-surface-variant">
-            {compliance.safetyNotice}
-          </div>
-        ) : null}
       </div>
+      </GapLoadState>
     </GapModalShell>
   );
 }

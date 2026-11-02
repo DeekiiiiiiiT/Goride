@@ -1,9 +1,15 @@
 /** Ported from Stitch — do not simplify layout (audit §0.4). */
+import { useState } from 'react';
+
+const ISSUE_OPTIONS = ['Damaged', 'Missing', 'Not working'] as const;
 import type { DriverCarKitPayload } from '../../../services/driverInventoryApi';
 import { carKitVehicleLabel } from '../carKitDisplay';
 
-export function Dk2ReportSheet({ kit }: { kit?: DriverCarKitPayload | null }) {
+export function Dk2ReportSheet({ kit, onClose, onSend }: { kit?: DriverCarKitPayload | null; onClose?: () => void; onSend?: () => void }) {
   const vehicleLabel = carKitVehicleLabel(kit);
+  const [reportNotes, setReportNotes] = useState('');
+  const [issueType, setIssueType] = useState<(typeof ISSUE_OPTIONS)[number]>('Not working');
+  const [hasPhoto, setHasPhoto] = useState(true);
   return (
     <div className="driver-car-kit-stitch inventory-stitch-root">
       <div className="inventory-stitch-main"><div className="flex flex-col w-full relative">
@@ -24,14 +30,14 @@ export function Dk2ReportSheet({ kit }: { kit?: DriverCarKitPayload | null }) {
       <span className="material-symbols-outlined text-emerald-600">tire_repair</span>
       <span className="font-body-md text-body-md text-slate-800 font-medium">Jack & Spare Tire</span>
       </div>
-      <span className="material-symbols-outlined text-emerald-600" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+      <span className="material-symbols-outlined text-emerald-600" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
       </div>
       <div className="bg-white border border-slate-200 p-space-md rounded-xl flex items-center justify-between shadow-sm">
       <div className="flex items-center gap-space-sm">
       <span className="material-symbols-outlined text-emerald-600">medical_services</span>
       <span className="font-body-md text-body-md text-slate-800 font-medium">First Aid Box</span>
       </div>
-      <span className="material-symbols-outlined text-emerald-600" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+      <span className="material-symbols-outlined text-emerald-600" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
       </div>
       <div className="bg-white border border-rose-300 p-space-md rounded-xl flex items-center justify-between shadow-sm">
       <div className="flex items-center gap-space-sm">
@@ -61,7 +67,7 @@ export function Dk2ReportSheet({ kit }: { kit?: DriverCarKitPayload | null }) {
       </span>
       </div>
       </div>
-      <button type="button" aria-label="Close dialog" className="w-10 h-10 -mr-1 flex items-center justify-center rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900 transition-colors flex-shrink-0" id="closeModalBtn">
+      <button type="button" aria-label="Close dialog" className="w-10 h-10 -mr-1 flex items-center justify-center rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900 transition-colors flex-shrink-0" id="closeModalBtn" onClick={() => onClose?.()}>
       <span className="material-symbols-outlined text-[22px]">close</span>
       </button>
       </div>
@@ -74,17 +80,17 @@ export function Dk2ReportSheet({ kit }: { kit?: DriverCarKitPayload | null }) {
       </label>
       <div aria-label="Issue type" className="grid grid-cols-3 gap-2" role="radiogroup">
 
-      <button type="button" aria-checked="false" className="issue-chip h-12 min-h-[48px] px-2 rounded-xl border border-slate-200 bg-slate-50 text-slate-700 font-semibold text-sm flex items-center justify-center gap-1.5 transition-all hover:bg-slate-100 active:scale-[0.98]" data-option="Damaged" role="radio" type="button">
+      <button type="button" aria-checked="false" className="issue-chip h-12 min-h-[48px] px-2 rounded-xl border border-slate-200 bg-slate-50 text-slate-700 font-semibold text-sm flex items-center justify-center gap-1.5 transition-all hover:bg-slate-100 active:scale-[0.98]" data-option="Damaged" role="radio" type="button" onClick={() => setIssueType('Damaged')}>
       <span className="material-symbols-outlined text-[18px] text-slate-500">broken_image</span>
       <span className="truncate">Damaged</span>
       </button>
 
-      <button type="button" aria-checked="false" className="issue-chip h-12 min-h-[48px] px-2 rounded-xl border border-slate-200 bg-slate-50 text-slate-700 font-semibold text-sm flex items-center justify-center gap-1.5 transition-all hover:bg-slate-100 active:scale-[0.98]" data-option="Missing" role="radio" type="button">
+      <button type="button" aria-checked="false" className="issue-chip h-12 min-h-[48px] px-2 rounded-xl border border-slate-200 bg-slate-50 text-slate-700 font-semibold text-sm flex items-center justify-center gap-1.5 transition-all hover:bg-slate-100 active:scale-[0.98]" data-option="Missing" role="radio" type="button" onClick={() => setIssueType('Missing')}>
       <span className="material-symbols-outlined text-[18px] text-slate-500">inventory_2</span>
       <span className="truncate">Missing</span>
       </button>
 
-      <button type="button" aria-checked="true" className="issue-chip h-12 min-h-[48px] px-2 rounded-xl border-2 border-emerald-600 bg-emerald-50 text-emerald-800 font-bold text-sm flex items-center justify-center gap-1.5 transition-all shadow-sm ring-1 ring-emerald-600/20 active:scale-[0.98]" data-option="Not working" role="radio" type="button">
+      <button type="button" aria-checked="true" className="issue-chip h-12 min-h-[48px] px-2 rounded-xl border-2 border-emerald-600 bg-emerald-50 text-emerald-800 font-bold text-sm flex items-center justify-center gap-1.5 transition-all shadow-sm ring-1 ring-emerald-600/20 active:scale-[0.98]" data-option="Not working" role="radio" type="button" onClick={() => setIssueType('Not working')}>
       <span className="material-symbols-outlined text-[18px] text-emerald-600 font-bold">check</span>
       <span className="truncate">Not working</span>
       </button>
@@ -105,18 +111,18 @@ export function Dk2ReportSheet({ kit }: { kit?: DriverCarKitPayload | null }) {
       <span className="material-symbols-outlined text-[13px]">photo_camera</span>
       </div>
 
-      <button type="button" aria-label="Remove attached photo" className="absolute top-1 right-1 w-6 h-6 rounded-full bg-slate-900/80 hover:bg-rose-600 text-white flex items-center justify-center transition-colors shadow-sm" type="button">
+      <button type="button" aria-label="Remove attached photo" className="absolute top-1 right-1 w-6 h-6 rounded-full bg-slate-900/80 hover:bg-rose-600 text-white flex items-center justify-center transition-colors shadow-sm" type="button" onClick={() => setHasPhoto(false)}>
       <span className="material-symbols-outlined text-[14px]">close</span>
       </button>
       </div>
 
       <div className="flex flex-col justify-center min-w-0">
       <div className="inline-flex items-center gap-1.5 text-emerald-700 font-bold text-sm">
-      <span className="material-symbols-outlined text-[18px]" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+      <span className="material-symbols-outlined text-[18px]" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
       <span>dashcam_proof.jpg</span>
       </div>
       <p className="text-xs text-slate-500 mt-0.5">Attached just now · 1.4 MB</p>
-      <button type="button" className="mt-2 inline-flex items-center gap-1 text-emerald-700 hover:text-emerald-800 text-xs font-semibold hover:underline w-fit" type="button">
+      <button type="button" className="mt-2 inline-flex items-center gap-1 text-emerald-700 hover:text-emerald-800 text-xs font-semibold hover:underline w-fit" onClick={() => setHasPhoto(true)}>
       <span className="material-symbols-outlined text-[15px]">autorenew</span>
                     Replace photo
                   </button>
@@ -135,7 +141,7 @@ export function Dk2ReportSheet({ kit }: { kit?: DriverCarKitPayload | null }) {
                 What happened? <span className="font-normal text-slate-500">(optional)</span>
       </label>
       <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 focus-within:bg-white focus-within:ring-2 focus-within:ring-emerald-600 focus-within:border-emerald-600 transition-all">
-      <textarea className="w-full bg-transparent font-body-md text-sm sm:text-base text-slate-900 placeholder:text-slate-400 resize-none focus:outline-none" id="reportNotes" placeholder="e.g. Screen flickers when the car starts" rows="3">Power cable loose and screen stays black when vehicle starts.</textarea>
+      <textarea className="w-full bg-transparent font-body-md text-sm sm:text-base text-slate-900 placeholder:text-slate-400 resize-none focus:outline-none" id="reportNotes" placeholder="e.g. Screen flickers when the car starts" rows={3} value={reportNotes} onChange={(e) => setReportNotes(e.target.value)} />
       </div>
       </div>
 
@@ -148,14 +154,14 @@ export function Dk2ReportSheet({ kit }: { kit?: DriverCarKitPayload | null }) {
 
       <div className="pt-2 space-y-2.5 pb-2">
 
-      <button type="button" className="w-full h-[52px] min-h-[50px] rounded-xl bg-emerald-600 text-white font-label-button text-base font-semibold shadow-md hover:bg-emerald-700 active:scale-[0.99] transition-all flex items-center justify-center gap-2" id="submitReportBtn" type="button">
+      <button type="button" className="w-full h-[52px] min-h-[50px] rounded-xl bg-emerald-600 text-white font-label-button text-base font-semibold shadow-md hover:bg-emerald-700 active:scale-[0.99] transition-all flex items-center justify-center gap-2" id="submitReportBtn" type="button" onClick={() => onSend?.()}>
       <span className="material-symbols-outlined text-[20px]">send</span>
       <span>Send report</span>
       </button>
 
       <div className="flex items-center justify-between px-1 pt-1">
       <span className="text-xs text-slate-500 font-medium">Demo button states</span>
-      <button type="button" className="text-xs text-emerald-700 hover:text-emerald-800 font-semibold underline" id="toggleStateBtn" type="button">
+      <button type="button" className="text-xs text-emerald-700 hover:text-emerald-800 font-semibold underline" id="toggleStateBtn" type="button" onClick={() => {}}>
                   Simulate "Sending" state
                 </button>
       </div>
