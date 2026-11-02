@@ -268,7 +268,7 @@ jobs:
       - name: Setup Supabase CLI
         uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: 2.99.0
 
       - name: Start Supabase and bootstrap inventory schema
         run: |

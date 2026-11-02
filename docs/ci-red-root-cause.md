@@ -16,7 +16,7 @@ Rev 20. Closed 2026-11-02 after `8b3055bd` + follow-up on `main`.
 
 Parts SQL reached work-order line inserts and hit `maintenance_audit_log_trigger_fn` assuming `NEW.organization_id` on lines. Fixed in `20261102132407_maintenance_audit_log_line_org.sql` (resolve org from parent work order).
 
-CI **Start Supabase** step failed on Supabase CLI 2.99 rejecting `[inbucket]`; renamed to `[local_smtp]` in `supabase/config.toml` (local dev only — not a production config push).
+CI **Start Supabase** failed when CI used CLI `latest` (rejects `[inbucket]`); Parts SQL uses CLI `2.99.0` (rejects `[local_smtp]`). Pinned CI to `2.99.0` and kept `[inbucket]` in `supabase/config.toml`.
 
 ## Verify
 
