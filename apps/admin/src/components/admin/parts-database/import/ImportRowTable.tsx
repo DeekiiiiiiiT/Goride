@@ -54,6 +54,7 @@ export function ImportRowTable({
   total,
   onPatchRow,
   onToggleAccepted,
+  onInspectLine,
   onPagePrev,
   onPageNext,
   pageOffset,
@@ -63,6 +64,7 @@ export function ImportRowTable({
   total?: number;
   onPatchRow?: (lineNo: number) => void;
   onToggleAccepted?: (lineNo: number, accepted: boolean) => void;
+  onInspectLine?: (lineNo: number) => void;
   onPagePrev?: () => void;
   onPageNext?: () => void;
   pageOffset?: number;
@@ -95,6 +97,7 @@ export function ImportRowTable({
             <th className="p-2">Position / Side</th>
             <th className="p-2">Status</th>
             <th className="p-2">Diagnostic Note</th>
+            <th className="p-2 w-10" aria-label="Inspect" />
           </tr>
         </thead>
         <tbody>
@@ -152,10 +155,20 @@ export function ImportRowTable({
                   <td className="p-2 max-w-[160px] truncate" title={issues?.[0]?.message}>
                     {issues?.[0]?.message ?? issues?.[0]?.code ?? "—"}
                   </td>
+                  <td className="p-2" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      type="button"
+                      className="text-secondary"
+                      aria-label={`Inspect line ${lineNo}`}
+                      onClick={() => onInspectLine?.(lineNo)}
+                    >
+                      <MaterialIcon name="manage_search" className="text-[18px]" />
+                    </button>
+                  </td>
                 </tr>
                 {expanded === lineNo && issues?.length ? (
                   <tr>
-                    <td colSpan={9}>
+                    <td colSpan={10}>
                       <ImportRowExpanded issues={issues} onCheckRow={() => onPatchRow?.(lineNo)} />
                     </td>
                   </tr>

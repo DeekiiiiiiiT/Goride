@@ -49,9 +49,23 @@ function changesCell(row: Record<string, unknown>) {
   return base;
 }
 
+function areaIconKey(iconKey?: string | null) {
+  const map: Record<string, string> = {
+    brakes: "album",
+    tires: "tire_repair",
+    belts: "cable",
+    suspension: "swap_driving_apps",
+    transmission: "motion_sensor_active",
+    hvac: "air",
+    lighting: "lightbulb",
+  };
+  return map[iconKey ?? ""] ?? "category";
+}
+
 export function ImportLedger({
   areas,
   items,
+  ledgerMeta,
   onBackToAreas,
   onNewBatch,
   onExportLedger,
@@ -65,6 +79,7 @@ export function ImportLedger({
 }: {
   areas?: ImportAreaSummary[];
   items: Array<Record<string, unknown>>;
+  ledgerMeta?: { engineVersion?: string | null; integrityRatio?: number | null; workspaceId?: string | null };
   onBackToAreas?: () => void;
   onNewBatch: () => void;
   onExportLedger?: () => void;
@@ -80,6 +95,7 @@ export function ImportLedger({
   const [undoOpen, setUndoOpen] = useState(false);
   const [undoTarget, setUndoTarget] = useState<Record<string, unknown> | null>(null);
   const [undoConfirming, setUndoConfirming] = useState(false);
+  const [undoError, setUndoError] = useState<string | null>(null);
   const [areaFilter, setAreaFilter] = useState<string>("");
   const [textFilter, setTextFilter] = useState("");
 
@@ -107,14 +123,18 @@ export function ImportLedger({
     return list;
   }, [items, areaFilter, textFilter]);
 
-  const integrityPct =
-    items.length === 0
-      ? 100
-      : Math.round(
-          (100 *
-            items.filter((r) => r.status === "imported").length) /
-            Math.max(1, items.filter((r) => r.status === "imported" || r.status === "undone").length),
-        );
+  const integrityLabel = useMemo(() => {
+    const ratio = ledgerMeta?.integrityRatio;
+    if (ratio == null || Number.isNaN(Number(ratio))) return "—";
+    return `${Math.round(Number(ratio) * 100)}%`;
+  }, [ledgerMeta?.integrityRatio]);
+
+  const workspaceLabel =
+    ledgerMeta?.workspaceId?.trim() ||
+    (import.meta.env.VITE_DOMINION_WORKSPACE_ID as string | undefined)?.trim() ||
+    "DOMINION";
+
+  const parserEngine = ledgerMeta?.engineVersion?.trim() || "—";
 
   function openDrawer(row: Record<string, unknown>) {
     setDrawer(row);
@@ -123,6 +143,7 @@ export function ImportLedger({
 
   function openUndo(batch: Record<string, unknown>) {
     setUndoTarget(batch);
+    setUndoError(null);
     setUndoOpen(true);
   }
 
@@ -155,7 +176,9 @@ export function ImportLedger({
         </div>
       </div>
       <div className="flex flex-wrap gap-2 text-xs font-mono">
-        <span className="px-3 py-2 rounded-xl bg-surface-container-low border border-outline-variant/40">ACTIVE WORKSPACE DOMINION</span>
+        <span className="px-3 py-2 rounded-xl bg-surface-container-low border border-outline-variant/40">
+          ACTIVE WORKSPACE {workspaceLabel}
+        </span>
         <span className="px-3 py-2 rounded-xl bg-surface-container-low border border-outline-variant/40">ROLLBACK WINDOW 72H ACTIVE</span>
       </div>
 
@@ -173,10 +196,10 @@ export function ImportLedger({
             <button
               key={area.id}
               type="button"
-              disabled={n === 0}
-              className={`px-3 py-1 rounded-full text-xs font-semibold ${areaFilter === area.id ? "bg-primary text-on-primary" : "bg-surface-container-low"} ${n === 0 ? "opacity-50" : ""}`}
+              className={`px-3 py-1 rounded-full text-xs font-semibold inline-flex items-center gap-1 ${areaFilter === area.id ? "bg-primary text-on-primary" : "bg-surface-container-low"}`}
               onClick={() => setAreaFilter(area.id)}
             >
+              <MaterialIcon name={areaIconKey(area.iconKey)} className="text-[14px]" />
               {area.name} {n}
             </button>
           );
@@ -252,7 +275,7 @@ export function ImportLedger({
             </tbody>
           </table>
           <p className="p-2 text-[10px] font-mono text-outline border-t border-outline-variant/20">
-            PARSER ENGINE: STRICT V2 · INTEGRITY VERIFIED: {integrityPct}% · Showing {filtered.length} of {items.length} batches
+            PARSER ENGINE: {parserEngine} · INTEGRITY VERIFIED: {integrityLabel} · Showing {filtered.length} of {items.length} batches
           </p>
         </div>
       )}
@@ -270,20 +293,42 @@ export function ImportLedger({
       <ImportUndoDialog
         open={undoOpen}
         areaName={String(undoTarget?.area_name ?? "Area")}
+        fileName={undoTarget?.file_name ? String(undoTarget.file_name) : undefined}
+        fileDateLabel={
+          undoTarget?.promoted_at
+            ? new Date(String(undoTarget.promoted_at)).toLocaleDateString()
+            : undoTarget?.created_at
+              ? new Date(String(undoTarget.created_at)).toLocaleDateString()
+              : undefined
+        }
         partsCount={Number(undoTarget?.parts_created ?? 0)}
         fitsCount={Number(undoTarget?.fits_created ?? 0)}
         previousBatchCode={undoTarget?.previous_batch_code ? String(undoTarget.previous_batch_code) : null}
+        errorMessage={undoError}
         confirming={undoConfirming}
-        onCancel={() => { setUndoOpen(false); setUndoTarget(null); }}
+        onCancel={() => {
+          if (undoConfirming) return;
+          setUndoOpen(false);
+          setUndoTarget(null);
+          setUndoError(null);
+        }}
         onConfirm={() => {
           if (!undoTarget) return;
           setUndoConfirming(true);
-          Promise.resolve(onUndoBatch?.(undoTarget)).finally(() => {
-            setUndoConfirming(false);
-            setUndoOpen(false);
-            setUndoTarget(null);
-            setDrawer(null);
-          });
+          setUndoError(null);
+          void Promise.resolve(onUndoBatch?.(undoTarget))
+            .then(() => {
+              setUndoOpen(false);
+              setUndoTarget(null);
+              setDrawer(null);
+              onSync?.();
+            })
+            .catch((e) => {
+              setUndoError(e instanceof Error ? e.message : "Undo failed");
+            })
+            .finally(() => {
+              setUndoConfirming(false);
+            });
         }}
       />
     </div>

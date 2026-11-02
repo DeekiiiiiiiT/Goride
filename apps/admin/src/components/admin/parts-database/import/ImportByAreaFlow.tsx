@@ -126,6 +126,11 @@ export function ImportByAreaFlow() {
     queryFn: () => fetchImportLedger(),
     enabled: view === "ledger" && canImport,
   });
+  const metaQuery = useQuery({
+    queryKey: ["parts-import-meta"],
+    queryFn: fetchImportMeta,
+    enabled: view === "ledger" && canImport,
+  });
 
   const importableCount = useMemo(
     () => batchSummary?.importableCount ?? countImportableRows(checkRows),
@@ -420,6 +425,7 @@ export function ImportByAreaFlow() {
         <ImportLedger
           areas={areasQuery.data?.areas ?? []}
           items={ledgerQuery.data?.items ?? []}
+          ledgerMeta={metaQuery.data}
           onBackToAreas={() => { setView("areas"); setStep(1); }}
           onNewBatch={() => { setView("areas"); setStep(1); }}
           onSync={() => { void ledgerQuery.refetch(); void areasQuery.refetch(); }}
@@ -439,6 +445,7 @@ export function ImportByAreaFlow() {
                 toast.success("Import undone");
                 void queryClient.invalidateQueries({ queryKey: ["parts-import-ledger"] });
                 void queryClient.invalidateQueries({ queryKey: ["parts-import-areas"] });
+                void queryClient.invalidateQueries({ queryKey: ["parts-import-meta"] });
               })
               .catch((e) => {
                 toast.error(e instanceof Error ? e.message : "Undo failed");
@@ -523,6 +530,7 @@ export function ImportByAreaFlow() {
 
       {view === "areas" && step === 3 && batchId ? (
         <ImportCheckStep
+          batchId={batchId}
           batchCode={batchCode}
           fileName={fileName}
           areaName={area?.name}

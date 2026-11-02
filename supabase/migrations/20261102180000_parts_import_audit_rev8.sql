@@ -417,7 +417,7 @@ RETURNS text
 LANGUAGE sql
 STABLE
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, extensions
 AS $$
   SELECT encode(
     digest(
@@ -445,7 +445,7 @@ CREATE OR REPLACE FUNCTION public.part_import_finalize_promote_meta(p_batch_id u
 RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, extensions
 AS $$
 DECLARE
   v_hash text;

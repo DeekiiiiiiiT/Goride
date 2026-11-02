@@ -1,14 +1,15 @@
 # Dominion · Parts import by area — audit (Rev 8, 2 Nov 2026)
 
-**Status: OPEN (Rev 8 implementation branch `parts-import-rev8`).** System fixes and API layer landed in repo; PI3/PI4/PI6 UI polish and production smoke (PI-01) remain.
+**Status: OPEN (Rev 8 on `parts-import-rev8`, PR #3).** Platform RPCs applied on production (via MCP slices + `202611022229*` migrations); fleet-core redeployed 2 Nov 2026. PI-01 production smoke still needs owner session on roamdominion.co.
 
-**Verified in Rev 8 (repo, 2 Nov 2026):**
+**Verified in Rev 8 (repo + prod DB, 2 Nov 2026):**
 - PI-16, PI-18 and PI-19 remain fixed. Deno CSV tests pass locally.
 - **PI-29:** `GET /batches/:id/progress` + SQL `part_import_list_rows`; poll uses progress only.
 - **PI-30:** `ImportStepper` param order + typed sync check body in `partsImportApi.ts`.
 - **PI-31 / PI-32:** Migration `20261102180000_parts_import_audit_rev8.sql` (72h purge, DISTINCT fits, batch_changes from change log).
-- **PI-20 (partial):** `e2e/parts-import-stitch.spec.ts` owner session + PI1/PI2/PI5 screenshots; Playwright `webServer` in config; workflow no `sleep 8`.
-- **PI-28:** Import-only commits on branch `parts-import-rev8` (see git); push when ready for CI.
+- **PI-20 (partial):** `e2e/parts-import-stitch.spec.ts` — PI1–PI6 screenshots + mocked PI3/PI4/PI6 flows; CI on PR #3.
+- **PI-28:** Branch pushed; [PR #3](https://github.com/DeekiiiiiiiT/Goride/pull/3).
+- **PI-26 (partial):** Ledger meta from `/meta`, undo dialog (Esc, error stays open, `delete_sweep`, file chip), zero-count area chips → PI6 empty; line inspector panel on PI3.
 
 ---
 
@@ -165,12 +166,12 @@ Spec: `docs/stitch/dominion-redesign/html/PI1…PI6` and `screenshots/PIn-stitch
 ---
 
 ## Done gate
-- [x] PI-28: committed on branch `parts-import-rev8` (import-only paths; push for CI).
-- [ ] Production has migrations through `20261102180000` and fleet-core built from that commit.
+- [x] PI-28: branch `parts-import-rev8` pushed; PR #3 open.
+- [x] Production Rev 8 RPCs (`part_import_list_rows`, ledger hash/meta, 72h purge, batch_changes) + fleet-core deploy (2 Nov 2026). Repo migration `20261102180000` not in `schema_migrations` (applied as MCP slices); local `db push` still blocked by remote-only versions — see [ci-red-root-cause.md](ci-red-root-cause.md).
 - [ ] PI-29: owner re-test — 25-row upload+check under 30s on roamdominion.co after deploy.
 - [ ] Parts SQL checks, Test Supabase Functions and Parts import Stitch e2e green on CI.
 - [x] PI-30: admin `tsc` — no errors under `import/` (verify in CI).
-- [ ] PI-20: full PI1–PI6 e2e + all `PIn-app.png` (PI3/PI4/PI6 specs still to extend).
+- [ ] PI-20: CI green for full PI1–PI6 spec (local Playwright needs workspace install).
 - [ ] PI-01: production Brakes import recorded below.
 
 ### PI-01 production smoke (owner — after deploy)

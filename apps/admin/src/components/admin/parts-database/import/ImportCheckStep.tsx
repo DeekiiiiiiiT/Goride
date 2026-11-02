@@ -1,9 +1,10 @@
 // Stitch: dominion-redesign/parts_import_check_results
 import { useMemo, useState } from "react";
 import { ImportCheckKpis } from "./ImportCheckKpis";
+import { ImportLineInspector, type ImportRowInspectPayload } from "./ImportLineInspector";
 import { ImportRowTable } from "./ImportRowTable";
 import { MaterialIcon } from "./MaterialIcon";
-import type { ImportBatchSummary } from "./partsImportApi";
+import { fetchImportRowInspect, type ImportBatchSummary } from "./partsImportApi";
 
 export { ImportCheckKpis } from "./ImportCheckKpis";
 export { ImportRowTable } from "./ImportRowTable";
@@ -29,6 +30,7 @@ const STATUS_TABS = [
 ] as const;
 
 export function ImportCheckStep({
+  batchId,
   batchCode,
   fileName,
   areaName,
@@ -55,6 +57,7 @@ export function ImportCheckStep({
   onPagePrev,
   onPageNext,
 }: {
+  batchId: string;
   batchCode: string;
   fileName?: string;
   areaName?: string;
@@ -84,6 +87,23 @@ export function ImportCheckStep({
   const [statusFilter, setStatusFilter] = useState("");
   const [issueFilter, setIssueFilter] = useState("");
   const [search, setSearch] = useState("");
+  const [inspectLine, setInspectLine] = useState<number | null>(null);
+  const [inspectPayload, setInspectPayload] = useState<ImportRowInspectPayload | null>(null);
+  const [inspectLoading, setInspectLoading] = useState(false);
+
+  async function openInspector(lineNo: number) {
+    setInspectLine(lineNo);
+    setInspectLoading(true);
+    setInspectPayload(null);
+    try {
+      const data = await fetchImportRowInspect(batchId, lineNo);
+      setInspectPayload(data as ImportRowInspectPayload);
+    } catch (e) {
+      setInspectPayload({ error: e instanceof Error ? e.message : "Inspect failed" });
+    } finally {
+      setInspectLoading(false);
+    }
+  }
 
   const counts = useMemo(() => {
     const sc = batchSummary?.statusCounts ?? {};
@@ -250,11 +270,23 @@ export function ImportCheckStep({
         total={total}
         onPatchRow={onPatchRow}
         onToggleAccepted={onToggleAccepted}
+        onInspectLine={(lineNo) => { void openInspector(lineNo); }}
         pageOffset={pageOffset}
         pageLimit={pageLimit}
         onPagePrev={onPagePrev}
         onPageNext={onPageNext}
       />
+      {inspectLine != null ? (
+        <ImportLineInspector
+          lineNo={inspectLine}
+          payload={inspectPayload}
+          loading={inspectLoading}
+          onDismiss={() => {
+            setInspectLine(null);
+            setInspectPayload(null);
+          }}
+        />
+      ) : null}
       <div className="sticky bottom-0 bg-surface-container-lowest border-t border-outline-variant/30 p-4 flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs text-on-surface-variant flex items-center gap-1 max-w-md">
           <MaterialIcon name="shield" className="text-[16px] text-primary" />
