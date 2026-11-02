@@ -56,6 +56,18 @@ jobs:
       - name: Check migration bodies match production fingerprints
         run: node scripts/compare-migration-md5-to-prod.mjs
 
+      - name: Check migration version list matches production
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: node scripts/assert-migration-versions-parity.mjs
+
+      - name: Check fleet inventory gap audit greps
+        run: node scripts/assert-inventory-gap-audit.mjs
+
+      - name: Check fleet inventory TypeScript
+        run: node scripts/typecheck-fleet-inventory.mjs
+
       - name: Check public function revoke from anon
         run: node scripts/assert-public-fn-revoke-anon.mjs
 
@@ -389,6 +401,12 @@ jobs:
         run: >
           deno test --allow-read
           supabase/functions/_fleet-server/evaluate_run_mirror.drift.test.ts
+
+      - name: Deno test parts import CSV and vehicle labels
+        run: >
+          deno test --allow-read
+          supabase/functions/_fleet-server/parts_import_csv.test.ts
+          supabase/functions/_fleet-server/parts_import_vehicle_resolve.test.ts
 
       - name: Deno test recon close volume + toll commit money
         run: >

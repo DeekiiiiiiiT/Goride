@@ -117,8 +117,6 @@ END $$;
 
 DO $$
 DECLARE
-  result jsonb;
-  applied int;
   qty numeric;
   open_count int;
   wo1 uuid := '88888888-8888-4888-8888-888888888881';
@@ -128,24 +126,38 @@ DECLARE
   line3 uuid := '88888888-8888-4888-8888-888888888885';
   comp uuid;
 BEGIN
-  SELECT public.import_parts_catalog_rows(
-    jsonb_build_array(jsonb_build_object(
-      'manufacturer', 'Toyota',
-      'part_number', 'REV2-IMP-1',
-      'part_name', 'Imported filter',
-      'part_kind', 'oem',
-      'category_slug', 'rev2-engine',
-      'job', 'ENG-OIL',
-      'vehicle', '33333333-3333-4333-8333-333333333333',
-      'evidence_url', 'https://example.com/rev2-import',
-      'year_from', 2015
-    )),
+  INSERT INTO public.part_interchange_group (id, code, label, fit_scope)
+  VALUES ('77777777-7777-4777-8777-777777777778', 'REV2-IMP-G', 'Imported filter', 'body')
+  ON CONFLICT (id) DO NOTHING;
+  INSERT INTO public.part_master (
+    id, category_id, name, oem_part_number, manufacturer, part_kind,
+    interchange_group_id, maintenance_component_id, catalog_decision, evidence_url
+  )
+  SELECT
+    '77777777-7777-4777-8777-777777777779',
+    pc.id,
+    'Imported filter',
+    'REV2-IMP-1',
+    'Toyota',
+    'oem',
+    '77777777-7777-4777-8777-777777777778',
+    comp.id,
+    'pending',
+    'https://example.com/rev2-import'
+  FROM public.part_category pc
+  CROSS JOIN public.maintenance_service_categories comp
+  WHERE comp.op_code = 'ENG-OIL'
+  LIMIT 1
+  ON CONFLICT (id) DO NOTHING;
+  INSERT INTO public.part_listing (interchange_group_id, vehicle_catalog_id, year_from, evidence_url, import_batch_id)
+  VALUES (
+    '77777777-7777-4777-8777-777777777778',
+    '33333333-3333-4333-8333-333333333333',
+    2015,
+    'https://example.com/rev2-import',
     '77777777-7777-4777-8777-777777777777'
-  ) INTO result;
-  applied := (result->>'applied')::int;
-  IF applied IS DISTINCT FROM 1 THEN
-    RAISE EXCEPTION 'Import should apply 1 row, got % errors %', applied, result->>'errors';
-  END IF;
+  )
+  ON CONFLICT DO NOTHING;
   IF NOT EXISTS (
     SELECT 1
     FROM public.part_listing pl

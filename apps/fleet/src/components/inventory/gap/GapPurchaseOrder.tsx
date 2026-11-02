@@ -218,7 +218,7 @@ export function GapPurchaseOrder(p: { poId?: string | null; onClose?: () => void
         ))}
         </select>
         </div>
-        <button type="button" className="bg-primary text-on-primary hover:bg-on-surface font-body-sm text-body-sm font-medium px-space-md py-1.5 rounded-lg flex items-center gap-space-xs transition-colors" onClick={() => {}}>
+        <button type="button" className="bg-primary text-on-primary hover:bg-on-surface font-body-sm text-body-sm font-medium px-space-md py-1.5 rounded-lg flex items-center gap-space-xs transition-colors" onClick={() => form.addCurrentLine()}>
         <span className="material-symbols-outlined text-[18px]">add</span>
         <span>Add Item</span>
         </button>
@@ -245,7 +245,7 @@ export function GapPurchaseOrder(p: { poId?: string | null; onClose?: () => void
         </tr>
         ) : (
         form.lineRows.map((row) => (
-        <tr key={row.id} className="hover:bg-surface-container-low/50 transition-colors">
+        <tr key={row.key} className="hover:bg-surface-container-low/50 transition-colors">
         <td className="py-space-lg px-space-xl">
         <div className="flex items-center gap-space-md">
         <div className="w-9 h-9 rounded bg-surface-container flex items-center justify-center text-on-surface">
@@ -274,10 +274,10 @@ export function GapPurchaseOrder(p: { poId?: string | null; onClose?: () => void
                             {formatJmd(row.unit)}
                           </td>
         <td className="py-space-lg px-space-xl text-right font-label-price text-label-price text-on-surface font-bold">
-                            {formatJmd(row.lineTotal)}
+                            {formatJmd(row.qty * row.unit)}
                           </td>
         <td className="py-space-lg px-space-md text-center">
-        <button type="button" className="text-on-surface-variant hover:text-error transition-colors p-1 rounded hover:bg-surface-container" onClick={() => { form.setItemId(''); form.setQty('1'); }}>
+        <button type="button" className="text-on-surface-variant hover:text-error transition-colors p-1 rounded hover:bg-surface-container" onClick={() => form.removeLine(row.key)}>
         <span className="material-symbols-outlined text-[18px]">delete</span>
         </button>
         </td>
@@ -305,7 +305,7 @@ export function GapPurchaseOrder(p: { poId?: string | null; onClose?: () => void
         </div>
         <p className="font-body-sm text-caption text-on-surface-variant mt-0.5">Customs duties, wharfage, carrier freight, and clearing agent brokerage fees.</p>
         </div>
-        <button type="button" className="bg-surface-container-high hover:bg-surface-variant text-on-surface font-body-sm text-body-sm font-medium px-space-md py-1.5 rounded-lg flex items-center gap-space-xs transition-colors" onClick={() => {}}>
+        <button type="button" className="bg-surface-container-high hover:bg-surface-variant text-on-surface font-body-sm text-body-sm font-medium px-space-md py-1.5 rounded-lg flex items-center gap-space-xs transition-colors" onClick={() => form.addExtraCost()}>
         <span className="material-symbols-outlined text-[18px]">add_circle</span>
         <span>+ Add Extra Cost</span>
         </button>
@@ -347,7 +347,7 @@ export function GapPurchaseOrder(p: { poId?: string | null; onClose?: () => void
                             {form.poTotalLabel}
                           </td>
         <td className="py-space-md px-space-md text-center">
-        <button type="button" className="text-on-surface-variant hover:text-error transition-colors p-1 rounded hover:bg-surface-container" onClick={() => {}}>
+        <button type="button" className="text-on-surface-variant hover:text-error transition-colors p-1 rounded hover:bg-surface-container" onClick={() => { const row = form.extraCosts[0]; if (row) form.removeExtraCost(row.key); }}>
         <span className="material-symbols-outlined text-[18px]">close</span>
         </button>
         </td>
@@ -463,7 +463,7 @@ export function GapPurchaseOrder(p: { poId?: string | null; onClose?: () => void
         <span className="material-symbols-outlined text-[16px]">save</span>
         <span>{form.submit.saving ? 'Saving…' : 'Save Draft'}</span>
         </button>
-        <button type="button" className="bg-surface-container hover:bg-error-container hover:text-error text-on-surface font-body-sm text-body-sm font-medium py-space-sm rounded-lg flex items-center justify-center gap-space-xs transition-colors" onClick={() => {}}>
+        <button type="button" className="bg-surface-container hover:bg-error-container hover:text-error text-on-surface font-body-sm text-body-sm font-medium py-space-sm rounded-lg flex items-center justify-center gap-space-xs transition-colors" onClick={() => form.discardDraft()}>
         <span className="material-symbols-outlined text-[16px]">delete_sweep</span>
         <span>Discard</span>
         </button>

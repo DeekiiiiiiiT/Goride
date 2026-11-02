@@ -31,6 +31,8 @@ export function useGapLocationsBinsForm(onClose?: () => void) {
   const [binLocationId, setBinLocationId] = useState('');
   const [binFilter, setBinFilter] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [locationKind, setLocationKind] = useState('warehouse');
+  const [locationIsSecure, setLocationIsSecure] = useState('standard');
 
   useEffect(() => {
     if (!locations.length) {
@@ -58,6 +60,8 @@ export function useGapLocationsBinsForm(onClose?: () => void) {
     setLocationName(String(selectedLocation.name ?? ''));
     setLocationCode(String(selectedLocation.code ?? ''));
     setLocationAddress(String(selectedLocation.address ?? ''));
+    setLocationKind(String(selectedLocation.kind ?? locKind(selectedLocation)));
+    setLocationIsSecure(selectedLocation.is_secure ? 'secure' : 'standard');
   }, [selectedLocation]);
 
   const selectedBin = useMemo(
@@ -143,6 +147,8 @@ export function useGapLocationsBinsForm(onClose?: () => void) {
         name: locationName.trim(),
         code: locationCode.trim(),
         address: locationAddress.trim() || null,
+        kind: locationKind,
+        is_secure: locationIsSecure !== 'standard',
       });
       await load.reload();
       await shell.refresh();
@@ -244,6 +250,10 @@ export function useGapLocationsBinsForm(onClose?: () => void) {
     setBinFilter,
     searchQuery,
     setSearchQuery,
+    locationKind,
+    setLocationKind,
+    locationIsSecure,
+    setLocationIsSecure,
     canSaveLocation,
     canSaveBin,
     canPatchLocation,

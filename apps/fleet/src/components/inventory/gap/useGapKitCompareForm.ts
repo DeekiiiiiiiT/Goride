@@ -127,6 +127,20 @@ export function useGapKitCompareForm() {
     Number((load.data as { valuation_jmd?: number })?.valuation_jmd ?? 0) || null,
   );
 
+  const affectedVehicleCount = Number(
+    (load.data as { affected_vehicle_count?: number })?.affected_vehicle_count ?? 0,
+  );
+  const affectedTemplateLabel = String(
+    (load.data as { affected_template_label?: string })?.affected_template_label ??
+      (load.data as { template_name?: string })?.template_name ??
+      '—',
+  );
+  const additionalUnitsLabel = String(
+    (load.data as { additional_units_required?: number })?.additional_units_required ?? 0,
+  );
+  const fleetReadinessLabel = `${Number((load.data as { fleet_readiness_pct?: number })?.fleet_readiness_pct ?? 0)}%`;
+  const projectedReadinessLabel = `${Number((load.data as { projected_readiness_pct?: number })?.projected_readiness_pct ?? 0)}% Projected`;
+
   const exportDiffManifest = () => {
     const header = 'sku,name,left_qty,right_qty,change_status\n';
     const body = allRows
@@ -153,6 +167,11 @@ export function useGapKitCompareForm() {
     publishKitTemplate,
     saveInactive,
     kitValuationLabel,
+    affectedVehicleCount,
+    affectedTemplateLabel,
+    additionalUnitsLabel,
+    fleetReadinessLabel,
+    projectedReadinessLabel,
     exportDiffManifest,
     formatJmd,
   };

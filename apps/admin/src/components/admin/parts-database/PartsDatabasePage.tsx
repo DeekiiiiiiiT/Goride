@@ -9,6 +9,7 @@ import { FindPartsTab } from "./FindPartsTab";
 import { FindPartsChrome } from "./find-parts/FindPartsChrome";
 import { FullDatabaseTab } from "./full-database/FullDatabaseTab";
 import { ImportAdvancedTab } from "./ImportAdvancedTab";
+import { ImportByAreaFlow } from "./import/ImportByAreaFlow";
 import { exportMasterCsv, fetchPartsOverview } from "./partsDatabaseApi";
 import {
   goDominionPage,
@@ -119,9 +120,10 @@ export function PartsDatabasePage() {
             onEditPart={(groupId) => { setEditGroup(groupId); setDialogMode("any"); setDialogOpen(true); }}
           />
         ) : null}
-        {tab === "Import" || tab === "Advanced" ? (
+        {tab === "Import" ? <ImportByAreaFlow /> : null}
+        {tab === "Advanced" ? (
           <ImportAdvancedTab
-            advanced={tab === "Advanced"}
+            advanced
             onOpenVehicle={openDatabase}
             onProblemsOpenChange={setProblemsOpen}
           />

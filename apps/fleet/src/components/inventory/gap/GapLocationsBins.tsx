@@ -388,7 +388,7 @@ export function GapLocationsBins(p: { onClose?: () => void }) {
         </div>
         <div className="flex flex-col gap-1">
         <label className="font-caption text-caption text-secondary uppercase font-semibold">Physical Type</label>
-        <select className="p-2 bg-surface-container-low rounded" value={'warehouse'} onChange={() => {}}>
+        <select className="p-2 bg-surface-container-low rounded" value={form.locationKind} onChange={(e) => form.setLocationKind(e.target.value)}>
         <option value="warehouse">Warehouse / Regional Depot</option>
         <option>Vehicle Locker Trunk</option>
         <option>Staff Field Bag / Custodian</option>
@@ -447,7 +447,7 @@ export function GapLocationsBins(p: { onClose?: () => void }) {
         </div>
         <div className="flex flex-col gap-1">
         <label className="font-caption text-caption text-secondary uppercase font-semibold">Security Level</label>
-        <select className="p-2 bg-surface-container-low rounded" value={'standard'} onChange={() => {}}>
+        <select className="p-2 bg-surface-container-low rounded" value={form.locationIsSecure} onChange={(e) => form.setLocationIsSecure(e.target.value)}>
         <option value="standard">Standard Rack Storage</option>
         <option value="locked">Locked Wire Cage (Double-auth)</option>
         <option value="hazmat">Hazmat Certified Compartment</option>

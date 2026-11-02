@@ -23,6 +23,7 @@ export type Role =
   // Platform-level (Super Admin side)
   | 'platform_owner'
   | 'platform_support'
+  | 'platform_catalog_editor'
   | 'platform_analyst'
   // Customer-level (Fleet Manager side)
   | 'fleet_owner'
@@ -62,6 +63,12 @@ export const ROLE_META: Record<Role, RoleMeta> = {
     level: 700,
     label: 'Platform Support',
     description: 'View customer accounts, stations, tolls. Cannot change platform settings.',
+    tier: 'platform',
+  },
+  platform_catalog_editor: {
+    level: 720,
+    label: 'Catalog editor',
+    description: 'Import and maintain Dominion parts catalog by area.',
     tier: 'platform',
   },
   platform_analyst: {
@@ -191,6 +198,7 @@ export type Permission =
   | 'users.remove'
   // Data
   | 'data.import'
+  | 'catalog.import'
   | 'data.export'
   | 'data.backfill';
 
@@ -303,7 +311,8 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   // Platform (empty for now — Phase 11)
   // platform_owner explicitly gets the catalog-gate bypass for emergency
   // overrides (e.g. backfill / migration tools). No customer role gets it.
-  platform_owner: [...ALL_CUSTOMER_PERMISSIONS, 'vehicles.bypass_catalog_gate'],
+  platform_owner: [...ALL_CUSTOMER_PERMISSIONS, 'vehicles.bypass_catalog_gate', 'catalog.import'],
+  platform_catalog_editor: ['catalog.import'],
   platform_support: [],
   platform_analyst: [],
 
@@ -332,7 +341,7 @@ const PRODUCT_ADMIN_ROLES = new Set([
 ]);
 
 const PLATFORM_RAW_ROLES = [
-  'superadmin', 'platform_owner', 'platform_support', 'platform_analyst',
+  'superadmin', 'platform_owner', 'platform_support', 'platform_catalog_editor', 'platform_analyst',
 ] as const;
 
 function readRolesArray(meta: Record<string, unknown> | undefined): string[] {

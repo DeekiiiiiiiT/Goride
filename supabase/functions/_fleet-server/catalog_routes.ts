@@ -270,7 +270,12 @@ export function registerCatalogRoutes(route: RouteApp, supabase: SupabaseClient)
         p_year: year,
       });
       if (error) throw error;
-      return staffJson(c, data ?? { rows: [], total: 0, chips: {}, facets: {} });
+      const payload = (data ?? { rows: [], total: 0, chips: {}, facets: {} }) as Record<string, unknown>;
+      const { data: areaFacets } = await supabase.rpc("admin_catalog_area_facets");
+      if (areaFacets && payload.facets && typeof payload.facets === "object") {
+        (payload.facets as Record<string, unknown>).areaCounts = areaFacets;
+      }
+      return staffJson(c, payload);
     } catch (error) {
       return fail(c, error);
     }
@@ -886,19 +891,6 @@ export function registerCatalogRoutes(route: RouteApp, supabase: SupabaseClient)
       const { error } = await supabase.from("universal_part").delete().eq("id", body.id);
       if (error) throw error;
       return staffJson(c, { ok: true });
-    } catch (error) {
-      return fail(c, error);
-    }
-  });
-
-  route.get("/make-server-37f42386/admin/catalog/import-batches", requireAuth(), async (c: Context) => {
-    const denied = assertPlatformStaffResponse(c);
-    if (denied) return denied;
-    try {
-      const { data, error } = await supabase.rpc("admin_recent_import_batches");
-      if (error) throw error;
-      const items = Array.isArray(data) ? data : [];
-      return staffJson(c, { items });
     } catch (error) {
       return fail(c, error);
     }

@@ -258,13 +258,43 @@ export function registerInventoryExtendedRoutes(app: Hono<InvEnv>) {
   });
 
   app.get(`${PREFIX}/kits/compare`, requirePermission("inventory.view"), async (c) => {
-    return c.json({
-      added: [],
-      removed: [],
-      changed: [],
-      leftVersion: c.req.query("left"),
-      rightVersion: c.req.query("right"),
-    });
+    try {
+      const org = orgOrForbid(c);
+      if (org instanceof Response) return org;
+      const left = c.req.query("left");
+      const right = c.req.query("right");
+      const { data: templates } = await fleetDb().from("fleet_inv_kit_template").select("id, code, name")
+        .eq("organization_id", org).limit(5);
+      const template = templates?.[0] ?? null;
+      const { data: compliance } = await fleetDb().from("fleet_inv_v_kit_compliance").select("*")
+        .eq("organization_id", org);
+      const rows = compliance ?? [];
+      const plates = [...new Set(rows.map((r: Record<string, unknown>) => String(r.license_plate ?? "")).filter(Boolean))];
+      const templateName = template?.name != null ? String(template.name) : "—";
+      const affectedVehicleCount = plates.length;
+      const addedUnits = rows.reduce((sum: number, r: Record<string, unknown>) =>
+        sum + Number(r.qty_required ?? 0), 0);
+      const roadClear = rows.filter((r: Record<string, unknown>) => r.road_clear).length;
+      const readinessPct = rows.length ? Math.round((roadClear / rows.length) * 100) : 0;
+      return c.json({
+        added: [],
+        removed: [],
+        changed: [],
+        leftVersion: left ?? null,
+        rightVersion: right ?? null,
+        template_id: template?.id ?? null,
+        template_name: templateName,
+        affected_vehicle_count: affectedVehicleCount,
+        affected_vehicle_plates: plates,
+        affected_template_label: templateName,
+        additional_units_required: addedUnits,
+        fleet_readiness_pct: readinessPct,
+        projected_readiness_pct: Math.max(0, readinessPct - 10),
+        valuation_jmd: 0,
+      });
+    } catch (e) {
+      return safeErrorResponse(c, e, "inventory.kits.compare");
+    }
   });
 
   app.get(`${PREFIX}/kits/compliance.csv`, requirePermission("inventory.export"), async (c) => {
@@ -927,18 +957,31 @@ export function registerInventoryExtendedRoutes(app: Hono<InvEnv>) {
   app.post(`${PREFIX}/requisitions`, requirePermission("inventory.move"), async (c) => {
     const org = orgOrForbid(c);
     if (org instanceof Response) return org;
-    const body = await c.req.json();
+    const body = await c.req.json() as Record<string, unknown>;
     const refNo = String(body.ref_no ?? `REQ-${crypto.randomUUID().slice(0, 8).toUpperCase()}`);
     const { data, error } = await fleetDb().from("fleet_inv_requisition").insert({
       organization_id: org,
       ref_no: refNo,
       requested_by: actorId(c),
       for_vehicle_id: body.for_vehicle_id ?? null,
+      for_user_id: body.for_user_id ?? null,
       needed_by: body.needed_by ?? null,
       note: body.note ?? null,
       status: "open",
     }).select("*").single();
     if (error) return c.json({ error: error.message }, 500);
+    const lines = Array.isArray(body.lines) ? body.lines as Record<string, unknown>[] : [];
+    if (lines.length) {
+      const { error: lineErr } = await fleetDb().from("fleet_inv_requisition_line").insert(
+        lines.map((line) => ({
+          organization_id: org,
+          requisition_id: data.id,
+          item_id: line.item_id,
+          qty: line.qty ?? line.qty_ordered ?? 1,
+        })),
+      );
+      if (lineErr) return c.json({ error: lineErr.message }, 500);
+    }
     return c.json({ requisition: data });
   });
 

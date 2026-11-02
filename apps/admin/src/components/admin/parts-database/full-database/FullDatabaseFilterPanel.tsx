@@ -9,20 +9,7 @@ const MATCHES: Array<{ id: CatalogMatch; label: string; tag?: string; dot?: stri
   { id: "universal", label: "Fits by size", tag: "Universal", dot: "#006e31" },
 ];
 
-const AREA_ICONS: Record<string, string> = {
-  Brakes: "album",
-  Engine: "settings_suggest",
-  Filters: "filter_alt",
-  "Lights & visibility": "lightbulb",
-  "Suspension & steering": "swap_driving_apps",
-  Cooling: "ac_unit",
-  "Battery & electrical": "battery_charging_full",
-  "A/C": "air",
-  Transmission: "motion_sensor_active",
-  "Tyres & wheels": "tire_repair",
-};
-
-const QUIET_AREAS = Object.keys(AREA_ICONS).filter((name) => name !== "Brakes" && name !== "Engine");
+const AREA_ICON_FALLBACK = "category";
 
 export function FullDatabaseFilterPanel({
   draft,
@@ -65,7 +52,7 @@ export function FullDatabaseFilterPanel({
   counts: Record<CatalogMatch, number>;
   onMatch: (value: CatalogMatch) => void;
   assembly: string;
-  areas: Array<{ name: string; count: number }>;
+  areas: Array<{ name: string; count: number; icon?: string }>;
   onAssembly: (value: string) => void;
   brands: string[];
   brandChoices: Array<{ name: string; count: number }>;
@@ -75,10 +62,7 @@ export function FullDatabaseFilterPanel({
   onStatus: (value: string) => void;
   onReset: () => void;
 }) {
-  const areaRows = [
-    ...areas,
-    ...QUIET_AREAS.filter((name) => !areas.some((area) => area.name === name)).map((name) => ({ name, count: 0 })),
-  ];
+  const areaRows = areas;
   const selectClass = "w-full appearance-none h-7 pl-2.5 pr-6 rounded-lg bg-surface-container-low border border-outline-variant/60 font-body-sm text-[12px] text-on-surface focus:outline-none focus:border-primary";
   return (
     <div className="flex flex-col gap-4">
@@ -153,7 +137,7 @@ export function FullDatabaseFilterPanel({
           return (
             <button key={area.name} type="button" className={`flex items-center justify-between px-2 py-1 rounded-md text-[12px] ${quiet ? "text-outline/70" : "hover:bg-surface-container-low text-on-surface"} ${on ? "bg-surface-container-low text-primary font-bold" : ""}`} onClick={() => onAssembly(on ? "" : area.name)}>
               <span className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-[15px] text-secondary">{AREA_ICONS[area.name] ?? "category"}</span>
+                <span className="material-symbols-outlined text-[15px] text-secondary">{area.icon ?? AREA_ICON_FALLBACK}</span>
                 <span>{area.name}</span>
               </span>
               <span className="px-1.5 py-0.2 rounded-full bg-surface-container text-secondary font-mono-sm text-[10px]">{area.count}</span>

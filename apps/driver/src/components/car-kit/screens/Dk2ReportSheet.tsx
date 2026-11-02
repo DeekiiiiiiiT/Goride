@@ -10,6 +10,7 @@ export function Dk2ReportSheet({ kit, onClose, onSend }: { kit?: DriverCarKitPay
   const [reportNotes, setReportNotes] = useState('');
   const [issueType, setIssueType] = useState<(typeof ISSUE_OPTIONS)[number]>('Not working');
   const [hasPhoto, setHasPhoto] = useState(true);
+  const [showSendingDemo, setShowSendingDemo] = useState(false);
   return (
     <div className="driver-car-kit-stitch inventory-stitch-root">
       <div className="inventory-stitch-main"><div className="flex flex-col w-full relative">
@@ -161,12 +162,12 @@ export function Dk2ReportSheet({ kit, onClose, onSend }: { kit?: DriverCarKitPay
 
       <div className="flex items-center justify-between px-1 pt-1">
       <span className="text-xs text-slate-500 font-medium">Demo button states</span>
-      <button type="button" className="text-xs text-emerald-700 hover:text-emerald-800 font-semibold underline" id="toggleStateBtn" type="button" onClick={() => {}}>
+      <button type="button" className="text-xs text-emerald-700 hover:text-emerald-800 font-semibold underline" id="toggleStateBtn" type="button" onClick={() => setShowSendingDemo((v) => !v)}>
                   Simulate "Sending" state
                 </button>
       </div>
 
-      <div className="hidden p-2.5 rounded-xl bg-slate-100 border border-slate-200 transition-all" id="sendingStateDemoBox">
+      <div className={`${showSendingDemo ? 'flex' : 'hidden'} p-2.5 rounded-xl bg-slate-100 border border-slate-200 transition-all flex-col`} id="sendingStateDemoBox">
       <div className="flex items-center justify-between text-xs text-slate-600 mb-1.5 font-medium">
       <span>Sending State (Preview)</span>
       <span className="text-[11px] bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded">Disabled</span>

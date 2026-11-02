@@ -203,7 +203,11 @@ export function FullDatabaseTab({
   const brandChoices = brandCounts?.length
     ? brandCounts
     : (search.data?.facets?.brands ?? []).map((name) => ({ name, count: 0 }));
-  const areas = search.data?.facets?.areaCounts ?? (search.data?.facets?.assemblies ?? []).map((name) => ({ name, count: 0 }));
+  const areas = (search.data?.facets?.areaCounts ?? []).map((row) => ({
+    name: row.name,
+    count: row.count,
+    icon: (row as { icon?: string }).icon,
+  }));
   const reportedStatus = search.data?.facets?.statusCounts;
   const statusCounts = reportedStatus
     ? {

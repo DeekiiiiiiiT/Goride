@@ -190,14 +190,14 @@ export function GapKitCompare(p: { onClose?: () => void }) {
         <div className="p-space-md rounded-lg bg-surface-container-low flex flex-col">
         <span className="font-caption text-caption uppercase text-on-surface-variant font-semibold tracking-wider">Affected Vehicles</span>
         <div className="flex items-baseline justify-between mt-1">
-        <span className="font-headline-sm text-headline-sm font-bold text-primary">2 active cars</span>
-        <span className="font-label-code text-caption text-on-surface-variant">Roomy & Fit</span>
+        <span className="font-headline-sm text-headline-sm font-bold text-primary">{form.affectedVehicleCount} active cars</span>
+        <span className="font-label-code text-caption text-on-surface-variant">{form.affectedTemplateLabel}</span>
         </div>
         </div>
         <div className="p-space-md rounded-lg bg-surface-container-low flex flex-col">
         <span className="font-caption text-caption uppercase text-on-surface-variant font-semibold tracking-wider">Additional Items Required</span>
         <div className="flex items-baseline justify-between mt-1">
-        <span className="font-headline-sm text-headline-sm font-bold text-primary">5 units</span>
+        <span className="font-headline-sm text-headline-sm font-bold text-primary">{form.additionalUnitsLabel} units</span>
         <span className="font-caption text-caption text-on-surface-variant">2 Triangles + Optional</span>
         </div>
         </div>
@@ -213,7 +213,7 @@ export function GapKitCompare(p: { onClose?: () => void }) {
         <div className="p-space-md rounded-lg bg-surface-container flex flex-col gap-space-sm">
         <div className="flex items-center justify-between font-caption text-caption">
         <span className="font-semibold text-primary">Average Fleet Kit Readiness</span>
-        <span className="font-label-code text-on-surface-variant font-medium">85% → 75% Projected</span>
+        <span className="font-label-code text-on-surface-variant font-medium">{form.fleetReadinessLabel} → {form.projectedReadinessLabel}</span>
         </div>
         <div className="w-full h-3 bg-surface-container-highest rounded-full overflow-hidden flex">
         <div className="h-full bg-primary" style={{ width: `${form.primaryBarPct}%` }}></div>

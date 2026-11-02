@@ -24,8 +24,8 @@ export function GapRegisterAsset(p: { onClose?: () => void }) {
         <h1 className="font-headline-lg text-headline-lg text-on-surface">Serialized Equipment & High-Value Assets</h1>
         </div>
         <div className="flex gap-space-sm">
-        <button type="button" className="px-space-md py-1.5 rounded-lg bg-surface-container-high text-on-surface text-body-sm font-body-sm" onClick={() => {}}>Export Ledger</button>
-        <button type="button" className="px-space-md py-1.5 rounded-lg bg-primary text-on-primary text-body-sm font-body-sm flex items-center gap-1" onClick={() => {}}>
+        <button type="button" className="px-space-md py-1.5 rounded-lg bg-surface-container-high text-on-surface text-body-sm font-body-sm" onClick={() => void form.exportLedger()}>Export Ledger</button>
+        <button type="button" className="px-space-md py-1.5 rounded-lg bg-primary text-on-primary text-body-sm font-body-sm flex items-center gap-1" onClick={() => form.scrollToRegisterForm()}>
         <span className="material-symbols-outlined text-[18px]">add</span> Register asset
                 </button>
         </div>
@@ -83,7 +83,7 @@ export function GapRegisterAsset(p: { onClose?: () => void }) {
         </button>
         </div>
 
-        <form className="px-space-xl py-space-sm flex flex-col gap-space-xl max-h-[calc(88vh-140px)] overflow-y-auto" onSubmit={(e) => e.preventDefault()}>
+        <form id="register-asset-form-root" className="px-space-xl py-space-sm flex flex-col gap-space-xl max-h-[calc(88vh-140px)] overflow-y-auto" onSubmit={(e) => e.preventDefault()}>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-space-xl">
 
@@ -223,7 +223,7 @@ export function GapRegisterAsset(p: { onClose?: () => void }) {
         </div>
 
         <div className="rounded-xl bg-surface-container-low overflow-hidden">
-        <button className="w-full px-space-md py-2.5 flex items-center justify-between text-left hover:bg-surface-container transition-colors" type="button" onClick={() => {}}>
+        <button className="w-full px-space-md py-2.5 flex items-center justify-between text-left hover:bg-surface-container transition-colors" type="button" onClick={() => form.sections.toggle('connectedDevice')}>
         <div className="flex items-center gap-1.5 font-body-sm text-body-sm font-semibold text-on-surface">
         <span className="material-symbols-outlined text-[18px] transition-transform duration-150 rotate-90 chevron-icon">chevron_right</span>
         <span>Connected device & telemetry</span>
@@ -231,6 +231,7 @@ export function GapRegisterAsset(p: { onClose?: () => void }) {
         </div>
         <span className="px-1.5 py-0.5 rounded bg-surface-container-lowest text-caption font-caption font-label-code text-on-surface">3 fields active</span>
         </button>
+        {form.sections.open.connectedDevice ? (
         <div className="px-space-md pb-space-md pt-1 flex flex-col gap-2.5">
         <div className="flex items-center justify-between text-body-sm">
         <span className="text-caption font-caption text-on-surface-variant">Provider</span>
@@ -245,17 +246,19 @@ export function GapRegisterAsset(p: { onClose?: () => void }) {
         <input className="w-48 h-8 px-2.5 rounded bg-surface-container-lowest font-label-code text-label-code text-on-surface focus:outline-none focus:ring-1 focus:ring-primary" type="text" value={form.provider} readOnly aria-label="Firmware placeholder"/>
         </div>
         </div>
+        ) : null}
         </div>
 
         <div className="rounded-xl bg-surface-container-low overflow-hidden">
-        <button className="w-full px-space-md py-2.5 flex items-center justify-between text-left hover:bg-surface-container transition-colors" type="button" onClick={() => {}}>
+        <button className="w-full px-space-md py-2.5 flex items-center justify-between text-left hover:bg-surface-container transition-colors" type="button" onClick={() => form.sections.toggle('insurance')}>
         <div className="flex items-center gap-1.5 font-body-sm text-body-sm font-semibold text-on-surface">
         <span className="material-symbols-outlined text-[18px] transition-transform duration-150 rotate-90 chevron-icon">chevron_right</span>
         <span>Insurance & coverage</span>
         <span className="text-caption font-caption text-on-surface-variant font-normal">(Optional)</span>
         </div>
-        <span className="px-1.5 py-0.5 rounded bg-surface-container-lowest text-caption font-caption font-label-code text-on-surface">GG-FLT</span>
+        <span className="px-1.5 py-0.5 rounded bg-surface-container-lowest text-caption font-caption font-label-code text-on-surface">Coverage</span>
         </button>
+        {form.sections.open.insurance ? (
         <div className="px-space-md pb-space-md pt-1 flex flex-col gap-2.5">
         <div className="flex items-center justify-between text-body-sm">
         <span className="text-caption font-caption text-on-surface-variant">Insurer</span>
@@ -266,6 +269,7 @@ export function GapRegisterAsset(p: { onClose?: () => void }) {
         <input className="w-48 h-8 px-2.5 rounded bg-surface-container-lowest font-label-code text-label-code text-on-surface focus:outline-none focus:ring-1 focus:ring-primary font-semibold" type="text" value={form.assetTag} onChange={(e) => form.setAssetTag(e.target.value)} aria-label="Policy number"/>
         </div>
         </div>
+        ) : null}
         </div>
         </div>
         </div>
@@ -296,7 +300,7 @@ export function GapRegisterAsset(p: { onClose?: () => void }) {
         </form>
 
         <div className="px-space-xl py-space-md bg-surface-container-lowest flex items-center justify-between mt-auto">
-        <button className="px-space-lg py-2 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm transition-colors" type="button" onClick={() => {}}>
+        <button className="px-space-lg py-2 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm transition-colors" type="button" onClick={() => form.cancel()}>
                   Cancel
                 </button>
         <div className="flex items-center gap-space-md">

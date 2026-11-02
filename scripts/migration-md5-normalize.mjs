@@ -5,7 +5,8 @@
 import { createHash } from 'node:crypto';
 
 export const MIGRATION_SYNC_VERSION_MIN = '20261029140000';
-export const MIGRATION_SYNC_VERSION_MAX = '20261101190448';
+/** No upper bound — new migrations must stay in MD5 sync checks (audit R20-03). */
+export const MIGRATION_SYNC_VERSION_MAX = '99999999999999';
 
 /** Prod recorded placeholder-only rows; keep repo file as-is. */
 /** Replay guard — repo body differs from prod on purpose (safe empty-DB replay). */

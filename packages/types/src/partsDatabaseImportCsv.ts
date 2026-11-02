@@ -55,8 +55,13 @@ export function parseImportVehicleLabel(raw: string): { make: string; model: str
   const make = rest.shift();
   if (!make) return null;
   let chassis: string | null = null;
-  if (rest.length >= 2 && /^[A-Za-z0-9][A-Za-z0-9-]*$/.test(rest[rest.length - 1])) {
-    chassis = rest.pop() ?? null;
+  if (rest.length >= 2) {
+    const last = rest[rest.length - 1] ?? "";
+    const looksLikeChassis =
+      /\d/.test(last) || /^[A-Z]{1,4}\d{2,}[A-Z0-9-]*$/i.test(last);
+    if (looksLikeChassis) {
+      chassis = rest.pop() ?? null;
+    }
   }
   const model = rest.join(" ").trim();
   if (!model) return null;

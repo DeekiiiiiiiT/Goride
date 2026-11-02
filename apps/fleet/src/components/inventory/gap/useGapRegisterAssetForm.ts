@@ -2,9 +2,11 @@ import { useMemo, useState } from 'react';
 import { inventoryApi } from '../inventoryApi';
 import { asPagedItems } from '../inventoryData';
 import { formatJmd } from '../inventoryFormat';
+import { downloadInventoryExportCsv } from '../inventoryDownload';
 import { useInventoryShell } from '../InventoryShellContext';
 import { useGapLoad } from './useGapLoad';
 import { useGapSubmit } from './useGapSubmit';
+import { useGapSectionOpen } from './useGapSectionOpen';
 
 function parseMoney(raw: string): number | null {
   const n = Number(String(raw).replace(/[^0-9.-]/g, ''));
@@ -79,6 +81,14 @@ export function useGapRegisterAssetForm(onClose?: () => void) {
       onClose?.();
     });
 
+  const exportLedger = () => void downloadInventoryExportCsv();
+
+  const scrollToRegisterForm = () => {
+    document.getElementById('register-asset-form-root')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  const sections = useGapSectionOpen({ connectedDevice: false, insurance: false });
+
   return {
     load,
     submit,
@@ -117,5 +127,9 @@ export function useGapRegisterAssetForm(onClose?: () => void) {
     previewAssetTag,
     previewItemName,
     formatJmd,
+    exportLedger,
+    scrollToRegisterForm,
+    sections,
+    cancel: () => onClose?.(),
   };
 }

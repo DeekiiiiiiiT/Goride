@@ -1,0 +1,205 @@
+ROAM DOMINION — PARTS DATABASE · IMPORT BY AREA — FULL DESIGN PROMPT (GOOGLE STITCH)
+
+
+
+
+Roam Dominion - Parts database, Import by area (Desktop Admin, for the owner and catalog editors):
+
+Design high-fidelity desktop screens that replace the Import tab of the Parts database in the Roam Dominion admin console. Today the owner drops any CSV into one box, it goes straight into the live catalogue, and nothing is checked. The new Import works one area at a time (Brakes, Engine, Filters and the rest). The owner picks an area, downloads that area's template, uploads the file, and sees every row checked before anything goes live: ready, ready with a label, errors with the line number, duplicates and unchanged. They fix or leave out bad rows, press "Import N rows", and every import is kept in an Import ledger per area with an exact Undo. Dominion is the master reference database: it never shows fleet names or plates. Parts are information only: no prices, suppliers, stock or quantities anywhere. The tone is a calm, careful control room: nothing goes live by surprise.
+
+BRAND IDENTITY:
+- Match the existing Dominion console and the current Parts database screens exactly:
+  - dark navy left sidebar with "Dominion · Roam Admin Console"; groups MASTER DATA (Overview, Vehicles active, Places and Maps, Fuel, Tolls, Tax and Vendors), ENGINES (Fuel Brain, Toll Brain, Matching Brain), DISTRIBUTION (Apps, Data API, Change requests), PLATFORM (Staff and roles, Activity log, Platform Ops, Global settings), BACK OFFICE (GCT registrations, Ledger, Remittance)
+  - top bar: search "Search entities, engines, routes…" with a ⌘K chip, moon icon, user "DT · Deeki T · Owner"
+  - breadcrumb in mono caps "DOMINION / MASTER DATA / VEHICLES / PARTS DATABASE"; on the right the chips "INDEX: 35 FITMENTS" and "SCHEMA V2.4"
+  - page title "Parts database" with a "LIVE CLUSTER" chip; sub line "Every part that fits a car, in five match types."; on the right "MATCH TYPES ON", an outlined "Advanced tune" button and a primary "+ Add a part" button
+  - tabs "Find parts", "Full database", "Import CSV" (Import selected, underlined); on the right "Catalog Level 0 · Audited" with a shield icon
+- LIGHT MODE (default):
+  - Primary: #0153dc; primary container: #dbe1ff
+  - Success: #006e31; warning: #8a5a00; error: #a83836
+  - Outline: #797a84
+  - Background: #faf8fe; cards white
+  - Text: #30323b; muted text: #5d5f68
+- DARK MODE:
+  - Background: #0b1220; cards #111a2e
+  - Text: #e2e8f0
+  - Primary: #5b8def
+  - Success: #4ade80; warning: #fbbf24; error: #f87171
+  - Outline: #94a3b8
+- Row status chips (one set, used everywhere):
+  - "Ready": solid green
+  - "Ready with label": green outline with a small tag icon
+  - "Error": red
+  - "Duplicate": grey with a copy icon
+  - "Unchanged": light grey
+  - "Left out": grey strike-through text
+- Batch status chips: "Checking" (blue, small spinning ring), "Checked" (blue outline), "Imported" (green), "Undone" (grey), "Failed" (red outline with a warning triangle)
+- Match type tags (as in Full database): OEM (blue dot), Sister (teal dot), Engine (amber dot), Aftermarket (purple dot), Universal (green dot)
+- Area icons (Material Symbols, outlined): Brakes "album", Engine "settings_suggest", Filters "filter_alt", Tires & wheels "tire_repair", Fluids "water_drop", Belts & hoses "cable", Lighting & visibility "lightbulb", Suspension & steering "swap_driving_apps", Transmission "motion_sensor_active", HVAC "air", Battery & electrical "battery_charging_full"
+- Typography: Inter. Line numbers, part numbers, vehicle ids, counts, file names, dates and error codes use a mono font with tabular numerals.
+- No prices, costs, suppliers, stock or quantities. No fleet names or plates. No gradients, glassmorphism or 3D. No confidence percentages.
+- Sample data:
+  - areas and what is on file: Brakes 9 parts · 30 fits; Engine 2 parts · 5 fits; every other area "Nothing imported yet"
+  - car versions: "Toyota Roomy 2016–2020 · Pre-Facelift · Custom G · 1KR-FE · M900A" (id 3cd9cbf3-…), "Honda Fit 2013–2020 · Hybrid · LEB · GP5", "Toyota Probox 2014–2021 · NCP160"
+  - brake rows: "Toyota 04465-B1010 · Brake pads · Front", "Akebono AN-761WK · Brake pads · Front", "Toyota 04495-B1010 · Brake shoes / drums · Rear", "Brembo P 83 152 · Brake pads · Front"
+  - file name "roomy-brakes-nov.csv", 25 rows
+
+DESIGN PRINCIPLES:
+- Desktop-first (1440px wide)
+- One area at a time: the area decides the template, the allowed part types and the checks
+- Nothing goes live until the owner presses "Import N rows"; uploading only checks
+- Bad rows never block good rows: errors are left out, good rows can still be imported
+- Every problem says the line, the column and what to do, in plain words
+- Every import is in the ledger, and Undo puts back exactly what was there before; when Undo isn't possible it says why
+- A 4-step stepper at the top of the Import tab: "1 Area · 2 Upload · 3 Check · 4 Done"; done steps get a tick, the current step is filled primary
+
+SCREEN 1: PICK AN AREA
+- Dominion frame and Parts database header as in Brand Identity, Import CSV tab selected
+- Stepper with step 1 "Area" current
+- Heading "Which area are you importing?"; sub line "Each area has its own template and checks. Pick one to start."
+- Right of the heading: text link "Import ledger →" with a small history icon
+- Grid of 11 area cards, 4 per row, white, 12px radius, thin border:
+  - area icon in a light primary-container rounded square, area name ("Brakes")
+  - one muted line with its part types ("Brake pads · Brake shoes / drums · Brake rotor · Brake fluid")
+  - mono counts: "9 parts · 30 fits"
+  - "Last import 30 Oct 2026" in mono, or "Nothing imported yet" in muted text
+  - when parts are waiting: an amber chip "Needs checking 7"
+- Cards for areas with nothing on file look the same, just with the muted "Nothing imported yet" line (they are not greyed out; every area can be imported)
+- Order: Brakes, Engine, Filters, Tires & wheels, Fluids, Belts & hoses, Lighting & visibility, Suspension & steering, Transmission, HVAC, Battery & electrical
+- Hover: card border turns primary and a "Start →" label appears bottom right
+
+SCREEN 2: TEMPLATE AND UPLOAD (BRAKES)
+- Stepper step 2 "Upload" current; back link "← All areas"
+- Heading with the Brakes icon: "Brakes import"; sub line "Part types: Brake pads, Brake shoes / drums, Brake rotor, Brake fluid"
+- Card "1. Get the template" with two outlined buttons side by side:
+  - "Download Brakes template" (download icon) with a muted line under it "Header row, 3 example rows and help notes"
+  - "Download vehicle list" with "Every car version with its id. Use ids to avoid wrong matches."
+- Card "2. Upload your file":
+  - a large dashed drop zone: upload icon, "Drop your Brakes .csv here", "or choose a file", muted "Up to 5,000 rows · 5 MB"
+  - a collapsed text link "Paste rows instead"
+- Card "Columns in this template", a compact two-column table: column name in mono, "Required" or "Optional" chip, and a plain help line:
+  - vehicle — Required — "Version id from the vehicle list, or make model chassis year"
+  - part_type — Required — "BRK-PADS, BRK-SHOES, BRK-ROTOR or BRK-FLUID"
+  - brand — Required
+  - part_number — Required
+  - part_name — Optional
+  - match_type — Required — "oem, sister, engine, aftermarket or universal"
+  - position — Required for pads, shoes and rotor — "Front or Rear"
+  - side — Optional — "Left, Right or Both"
+  - spec — Required for brake fluid — "DOT 3, DOT 4 or DOT 5.1"
+  - year_from, year_to — Optional
+  - source_url — Required — "A catalogue page that shows this part for this car"
+  - replaces_oem_number — Optional — "For other brands: the OEM number it replaces"
+  - note — Optional
+- Show a second frame of the same screen after a file with a wrong header was chosen:
+  - the file chip "roomy-brakes-nov.csv · 25 rows" with a remove "×"
+  - a red inline box: "The header doesn't match the Brakes template." then mono lines "Missing column: position" and "Not allowed: price — Dominion doesn't store prices"
+  - the primary "Upload and check" button disabled
+- Normal state: file chip shown, header OK line with a green tick "Header matches the Brakes template", primary button "Upload and check"
+
+SCREEN 3: CHECK RESULTS
+- Stepper step 3 "Check" current; heading "Check roomy-brakes-nov.csv"; mono sub line "Brakes · 25 rows · checked 01 Nov 2026 21:40"
+- Summary chips in a row, each clickable as a filter: "Ready 18", "Ready with label 2", "Error 3", "Duplicate 2", "Unchanged 0"
+- A plain sentence under the chips: "Will create 4 parts · add 20 fits · update 0"
+- Filter row: status chips (All, Ready, Ready with label, Error, Duplicate, Unchanged), a dropdown "Issue: All issues", search "Search car or part number…"
+- Table, columns:
+  - Line (mono, "4")
+  - Car (version text, two lines, truncated)
+  - Part type
+  - Brand and number (mono "Toyota 04465-B1010")
+  - Match type tag
+  - Position / side
+  - Status chip
+  - First issue (plain text, muted)
+  - a checkbox on the far left of each row, ticked by default; unticked rows show "Left out"
+- Sample rows:
+  - "4 · Roomy M900A · Brake pads · Toyota 04465-B1010 · OEM · Front · Ready"
+  - "7 · Roomy M900A · Brake pads · Akebono AN-761WK · Aftermarket · Front · Ready with label · Source not on trusted list"
+  - "9 · Toyota Vitz 2019 · Brake pads · Brembo P 83 152 · Aftermarket · Front · Error · Matches 3 car versions — use the version id"
+  - "12 · Roomy M900A · Oil filter · Toyota 90915-YZZE1 · OEM · — · Error · Oil filter is not a Brakes part"
+  - "15 · Roomy M900A · Brake shoes / drums · Toyota 04495-B1010 · OEM · — · Error · Position is required (Front or Rear)"
+  - "18 · Roomy M900A · Brake pads · Toyota 04465-B1010 · OEM · Front · Duplicate · Same as line 4"
+- One row expanded (line 9) showing:
+  - every issue as a list with a red dot, the column name in mono and a plain message
+  - for the vehicle issue, the 3 matching car versions with their ids in mono and a "Use this one" link on each
+  - a pencil "Fix" next to the vehicle cell that turns it into an input with "Check row"
+- A second expanded row example (line 7, Ready with label) showing a diff block "Differs from confirmed part": two columns "On file" / "In your file" for Name and Source, with a note "The fit will be added. The confirmed part is not changed."
+- Sticky footer bar:
+  - left: muted "Errors are left out. You can import the ready rows now and fix the rest later."
+  - right: outlined "Download failed rows (3)", text button "Check again", primary "Import 20 rows"
+- Above the table, an info strip that appears only when the same file was imported before: "This file was imported on 30 Oct 2026 · View that import"
+
+SCREEN 4: DONE
+- Stepper all ticked, step 4 "Done" current
+- Centred card: green tick in a circle, "Imported 20 rows into Brakes"
+- Mono summary list: "4 parts created", "16 fits added", "0 updated", "5 left out (3 errors, 2 duplicates)"
+- Muted line: "New parts show as Needs checking until you confirm them in Data quality."
+- Buttons: primary "View in Data quality", outlined "Import more Brakes parts", text "Back to areas"
+- A second small frame of the same card with an amber note at the bottom: "Find parts hasn't refreshed yet." and a "Refresh now" button
+
+SCREEN 5: IMPORT LEDGER AND BATCH DRAWER
+- Same frame, Import CSV tab; heading "Import ledger"; back link "← All areas"
+- Area filter chips in one scrollable row: "All areas", then the 11 areas each with its icon and a count
+- Table, newest first, columns:
+  - Date (mono "01 Nov 2026 21:42")
+  - Area (icon + name)
+  - File (mono "roomy-brakes-nov.csv")
+  - By ("Deeki T")
+  - Rows ("20 ready · 3 errors · 2 duplicates")
+  - Changes ("4 parts · 16 fits")
+  - Status chip
+  - Action: "Undo" text button
+- Sample rows:
+  - 01 Nov 2026 · Brakes · roomy-brakes-nov.csv · Imported · Undo
+  - 31 Oct 2026 · Engine · probox-engine.csv · Imported · Undo disabled, with the inline reason in muted text "3 fits changed later"
+  - 30 Oct 2026 · Brakes · roomy-brakes.csv · Undone
+  - 30 Oct 2026 · Filters · fit-filters.csv · Failed · "Could not read this file"
+- Right drawer (560px) over the table for the 01 Nov batch:
+  - header "Brakes · roomy-brakes-nov.csv", status chip "Imported", mono "Imported 01 Nov 2026 21:42 by Deeki T"
+  - counts grid: Rows 25 · Ready 18 · Ready with label 2 · Errors 3 · Duplicates 2
+  - section "What changed": "4 parts created", "16 fits added", each expandable to a mono list ("Toyota 04465-B1010 · Brake pads → Roomy M900A · Front")
+  - section "Left out": the 5 rows with line, issue and "Download failed rows"
+  - footer: destructive outlined "Undo this import" with the line "Removes the 4 parts and 16 fits this import added. Nothing older is touched."
+- Undo confirm dialog: "Undo this Brakes import?" body "4 parts and 16 fits will be removed. Parts used in service logs are kept." buttons "Cancel" and destructive "Undo import"
+
+SCREEN 6: STATES
+- Five small frames of the Import tab:
+  - Empty ledger for an area: area icon, "No Brakes imports yet", "Start a Brakes import" button
+  - Checking: stepper on step 3, a progress bar and mono "Checking 1,240 of 3,000 rows…", muted "You can leave this page; the check keeps running."
+  - File failed: red outline card "Could not read this file", mono reason "Line 1: the file isn't a CSV (looks like .xlsx)", buttons "Choose another file" and "Retry"
+  - Undo blocked: the batch drawer footer with Undo disabled and an amber box "Undo blocked — 3 fits were changed after this import (lines 4, 9, 12)" with links on the line numbers
+  - No permission: lock icon, "You don't have import access", "Ask the owner to give you the Catalog editor role."
+
+ADDITIONAL UI COMPONENTS:
+- 4-step stepper (Area · Upload · Check · Done)
+- Area card (icon, name, part types line, counts, last import, Needs checking chip)
+- Drop zone with file chip and inline header check
+- Template column table (column, Required/Optional chip, help line)
+- Row status chips and batch status chips
+- Check results table with checkbox, expandable row, issue list, in-place fix, diff block
+- Sticky footer action bar
+- Ledger table with area filter chips
+- Batch drawer with counts grid, What changed, Left out, Undo
+- Undo confirm dialog
+
+INTERACTIONS:
+- Clicking an area card opens Screen 2 for that area; "← All areas" goes back without losing anything
+- Choosing a file checks the header in the browser at once; "Upload and check" is enabled only when the header matches
+- After upload the page moves to Screen 3 and shows the checking progress until the check finishes
+- Clicking a summary chip filters the table to that status
+- Unticking a row marks it "Left out" and lowers the number on "Import N rows"
+- "Fix" turns a cell into an input; "Check row" re-checks only that row and updates the chips
+- "Download failed rows" saves a CSV with the original columns plus error_code and error_message
+- "Import N rows" asks nothing more, shows a short progress bar on the button, then opens Screen 4
+- "Undo" in the ledger opens the drawer on its footer; "Undo import" in the confirm dialog runs it and the row changes to "Undone"
+- Hover: rows highlight in the primary container colour; focus rings 2px primary
+
+Spec screens / Area
+| Screen | Area |
+|---|---|
+| PI1 | Import — pick an area |
+| PI2 | Import — template and upload (Brakes), with the wrong-header frame |
+| PI3 | Import — check results, expanded rows, fix in place, sticky footer |
+| PI4 | Import — done (and refresh warning frame) |
+| PI5 | Import ledger with area filter, batch drawer and undo confirm |
+| PI6 | States — empty, checking, file failed, undo blocked, no permission |

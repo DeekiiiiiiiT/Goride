@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import type { CarKitDk6View } from '../carKitNavigation';
 import type { DriverCarKitPayload } from '../../../services/driverInventoryApi';
 import { carKitVehicleLabel } from '../carKitDisplay';
@@ -36,9 +36,11 @@ export function Dk6States({
   const errorRef = sendErrorRef?.trim() || 'SEND_FAILED';
   const odometerLabel =
     kit?.odometerKm != null ? `${Number(kit.odometerKm).toLocaleString('en-JM')} km` : '—';
+  const [inspectorPreview, setInspectorPreview] = useState<CarKitDk6View | null>(null);
   useEffect(() => {
-    if (!activeState) return;
-    const activeId = VIEW_IDS[activeState];
+    const state = inspectorPreview ?? activeState;
+    if (!state) return;
+    const activeId = VIEW_IDS[state];
     Object.values(VIEW_IDS).forEach((id) => {
       const node = document.getElementById(id);
       if (!node) return;
@@ -50,7 +52,7 @@ export function Dk6States({
         node.classList.remove('flex');
       }
     });
-  }, [activeState]);
+  }, [activeState, inspectorPreview]);
 
   return (
     <div className="driver-car-kit-stitch inventory-stitch-root">
@@ -64,19 +66,19 @@ export function Dk6States({
       <span className="font-label-code text-[11px] px-2 py-0.5 rounded-full bg-surface-container-lowest text-primary font-bold">390px VIEW</span>
       </div>
       <div className="flex gap-2 overflow-x-auto no-scrollbar py-1" id="state-tab-container">
-      <button type="button" className="state-tab px-3 py-1.5 rounded-full font-label-status text-[12px] whitespace-nowrap bg-primary text-on-primary transition-all flex items-center gap-1 shadow-sm" id="tab-loading" onClick={() => {}}>
+      <button type="button" className="state-tab px-3 py-1.5 rounded-full font-label-status text-[12px] whitespace-nowrap bg-primary text-on-primary transition-all flex items-center gap-1 shadow-sm" id="tab-loading" onClick={() => setInspectorPreview('loading')}>
       <span className="material-symbols-outlined text-[14px]">hourglass_top</span> Loading
             </button>
-      <button type="button" className="state-tab px-3 py-1.5 rounded-full font-label-status text-[12px] whitespace-nowrap bg-surface-container-lowest text-on-surface-variant transition-all flex items-center gap-1 hover:text-on-surface" id="tab-nocar" onClick={() => {}}>
+      <button type="button" className="state-tab px-3 py-1.5 rounded-full font-label-status text-[12px] whitespace-nowrap bg-surface-container-lowest text-on-surface-variant transition-all flex items-center gap-1 hover:text-on-surface" id="tab-nocar" onClick={() => setInspectorPreview('nocar')}>
       <span className="material-symbols-outlined text-[14px]">no_crash</span> No Car
             </button>
-      <button type="button" className="state-tab px-3 py-1.5 rounded-full font-label-status text-[12px] whitespace-nowrap bg-surface-container-lowest text-on-surface-variant transition-all flex items-center gap-1 hover:text-on-surface" id="tab-nokit" onClick={() => {}}>
+      <button type="button" className="state-tab px-3 py-1.5 rounded-full font-label-status text-[12px] whitespace-nowrap bg-surface-container-lowest text-on-surface-variant transition-all flex items-center gap-1 hover:text-on-surface" id="tab-nokit" onClick={() => setInspectorPreview('nokit')}>
       <span className="material-symbols-outlined text-[14px]">inventory_2</span> No Kit Set Up
             </button>
-      <button type="button" className="state-tab px-3 py-1.5 rounded-full font-label-status text-[12px] whitespace-nowrap bg-surface-container-lowest text-on-surface-variant transition-all flex items-center gap-1 hover:text-on-surface" id="tab-loadfailed" onClick={() => {}}>
+      <button type="button" className="state-tab px-3 py-1.5 rounded-full font-label-status text-[12px] whitespace-nowrap bg-surface-container-lowest text-on-surface-variant transition-all flex items-center gap-1 hover:text-on-surface" id="tab-loadfailed" onClick={() => setInspectorPreview('loadfailed')}>
       <span className="material-symbols-outlined text-[14px]">wifi_off</span> Load Failed
             </button>
-      <button type="button" className="state-tab px-3 py-1.5 rounded-full font-label-status text-[12px] whitespace-nowrap bg-surface-container-lowest text-on-surface-variant transition-all flex items-center gap-1 hover:text-on-surface" id="tab-sendfailed" onClick={() => {}}>
+      <button type="button" className="state-tab px-3 py-1.5 rounded-full font-label-status text-[12px] whitespace-nowrap bg-surface-container-lowest text-on-surface-variant transition-all flex items-center gap-1 hover:text-on-surface" id="tab-sendfailed" onClick={() => setInspectorPreview('sendfailed')}>
       <span className="material-symbols-outlined text-[14px]">sync_problem</span> Send Failed
             </button>
       </div>
@@ -175,7 +177,7 @@ export function Dk6States({
       <span className="material-symbols-outlined text-[20px]">refresh</span>
                   Refresh status
                 </button>
-      <button type="button" className="w-full h-[52px] rounded-xl bg-surface-container-high text-on-surface font-label-button text-label-button flex items-center justify-center gap-2 active:scale-[0.98] transition-transform" onClick={() => {}}>
+      <button type="button" className="w-full h-[52px] rounded-xl bg-surface-container-high text-on-surface font-label-button text-label-button flex items-center justify-center gap-2 active:scale-[0.98] transition-transform" onClick={() => onRetry?.()}>
       <span className="material-symbols-outlined text-[20px]">support_agent</span>
                   Contact fleet manager
                 </button>
@@ -212,7 +214,7 @@ export function Dk6States({
       <p className="font-body-md text-body-md text-on-surface-variant max-w-[280px] mb-space-lg">
                 Your fleet hasn't set up a kit for this car yet.
               </p>
-      <button type="button" className="w-full h-[52px] rounded-xl bg-primary text-on-primary font-label-button text-label-button flex items-center justify-center gap-2 shadow-sm active:scale-[0.98] transition-transform mb-space-xs" onClick={() => {}}>
+      <button type="button" className="w-full h-[52px] rounded-xl bg-primary text-on-primary font-label-button text-label-button flex items-center justify-center gap-2 shadow-sm active:scale-[0.98] transition-transform mb-space-xs" onClick={() => onRetry?.()}>
       <span className="material-symbols-outlined text-[20px]">add_circle</span>
                 Report something in the car
               </button>
@@ -340,7 +342,7 @@ export function Dk6States({
       </div>
 
       <div className="flex gap-2 pt-2">
-      <button type="button" className="flex-1 h-[52px] rounded-xl bg-surface-container-high text-on-surface font-label-button text-label-button flex items-center justify-center active:scale-[0.98] transition-transform" onClick={() => {}}>
+      <button type="button" className="flex-1 h-[52px] rounded-xl bg-surface-container-high text-on-surface font-label-button text-label-button flex items-center justify-center active:scale-[0.98] transition-transform" onClick={() => onResend?.()}>
                   Edit note
                 </button>
       <button type="button" className="flex-[1.5] h-[52px] rounded-xl bg-primary text-on-primary font-label-button text-label-button flex items-center justify-center gap-1.5 shadow-sm active:scale-[0.98] transition-transform" onClick={() => onResend?.()}>

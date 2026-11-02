@@ -76,6 +76,25 @@ export function useGapInventorySettingsForm(onClose?: () => void) {
       await shell.refresh();
     });
 
+  const moveCategory = (id: string, direction: 'up' | 'down') =>
+    submit.run(async () => {
+      const sorted = [...categories].sort(
+        (a, b) => Number(a.sort_order ?? 0) - Number(b.sort_order ?? 0),
+      );
+      const idx = sorted.findIndex((c) => String(c.id) === id);
+      if (idx < 0) return;
+      const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+      if (swapIdx < 0 || swapIdx >= sorted.length) return;
+      const a = sorted[idx];
+      const b = sorted[swapIdx];
+      const aOrder = Number(a.sort_order ?? idx);
+      const bOrder = Number(b.sort_order ?? swapIdx);
+      await inventoryApi.patchCategory(String(a.id), { sort_order: bOrder });
+      await inventoryApi.patchCategory(String(b.id), { sort_order: aOrder });
+      await load.reload();
+      await shell.refresh();
+    });
+
   const saveFiscalYear = () =>
     submit.run(async () => {
       const month = Number.parseInt(fiscalYear, 10);
@@ -143,5 +162,6 @@ export function useGapInventorySettingsForm(onClose?: () => void) {
     newCategoryName,
     setNewCategoryName,
     createCategory,
+    moveCategory,
   };
 }

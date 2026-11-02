@@ -275,10 +275,6 @@ export function fetchAdvancedTables(offset = 0) {
   }>(`advanced-tables?offset=${offset}`);
 }
 
-export function fetchImportBatches() {
-  return getJson<{ items: Array<{ import_batch_id: string; row_count: number; imported_at: string }> }>("import-batches");
-}
-
 export function fetchSpecKeys() {
   return getJson<{ items: Array<{ key: string; label: string; unit: string | null }> }>("spec-keys");
 }

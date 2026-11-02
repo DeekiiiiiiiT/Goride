@@ -28,10 +28,10 @@ export function GapItemEditor(p: { itemId?: string | null; onClose?: () => void 
                 </div>
         </div>
         <div className="flex items-center gap-space-sm">
-        <button type="button" className="px-space-md py-2 bg-surface-container-high rounded-lg text-body-sm font-body-sm text-on-surface flex items-center gap-space-xs" onClick={() => {}}>
+        <button type="button" className="px-space-md py-2 bg-surface-container-high rounded-lg text-body-sm font-body-sm text-on-surface flex items-center gap-space-xs" onClick={() => void form.exportCsv()}>
         <span className="material-symbols-outlined text-[18px]">download</span> Export CSV
                 </button>
-        <button type="button" className="px-space-lg py-2 bg-primary text-on-primary rounded-lg text-body-sm font-body-sm flex items-center gap-space-xs shadow-sm" onClick={() => {}}>
+        <button type="button" className="px-space-lg py-2 bg-primary text-on-primary rounded-lg text-body-sm font-body-sm flex items-center gap-space-xs shadow-sm" onClick={() => form.openNewItem()}>
         <span className="material-symbols-outlined text-[18px]">add</span> + Add Stock Item
                 </button>
         </div>
@@ -85,7 +85,7 @@ export function GapItemEditor(p: { itemId?: string | null; onClose?: () => void 
         <div className="flex items-center gap-space-xs mt-0.5">
         <span className="font-caption text-caption text-on-surface-variant">Asset Identifier: <span className="font-label-code text-label-code text-on-surface">{form.assetIdentifierLabel}</span></span>
         <span className="text-on-surface-variant text-caption font-caption">·</span>
-        <button className="font-caption text-caption text-secondary hover:text-on-surface underline" type="button" onClick={() => {}}>Or New item</button>
+        <button className="font-caption text-caption text-secondary hover:text-on-surface underline" type="button" onClick={() => form.openNewItem()}>Or New item</button>
         </div>
         </div>
         <button aria-label="Close Drawer" className="w-8 h-8 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface flex items-center justify-center transition-colors" id="close-drawer-btn" type="button" onClick={closeDrawer}>
@@ -196,7 +196,7 @@ export function GapItemEditor(p: { itemId?: string | null; onClose?: () => void 
         <span className="font-caption text-caption text-on-surface-variant font-label-code">1.2 MB · 2048x1536 · Verified OEM</span>
         </div>
         </div>
-        <button className="px-space-md py-1.5 rounded-lg bg-surface-container-lowest hover:bg-surface-container text-on-surface font-body-sm text-body-sm font-semibold shadow-sm transition-colors" type="button" onClick={() => {}}>
+        <button className="px-space-md py-1.5 rounded-lg bg-surface-container-lowest hover:bg-surface-container text-on-surface font-body-sm text-body-sm font-semibold shadow-sm transition-colors" type="button" onClick={() => form.openPhotoPicker()}>
                       Change photo
                     </button>
         </div>
@@ -213,11 +213,12 @@ export function GapItemEditor(p: { itemId?: string | null; onClose?: () => void 
         </div>
 
         <div className="p-1 bg-surface-container rounded-lg grid grid-cols-2 gap-1">
-        <button className="py-2 px-space-md rounded bg-surface-container-lowest shadow-sm text-on-surface font-body-sm text-body-sm font-semibold flex items-center justify-center gap-space-xs transition-all" type="button" onClick={() => {}}>
+        <input ref={form.photoInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => form.onPhotoSelected(e.target.files?.[0] ?? null)} />
+        <button className={`py-2 px-space-md rounded font-body-sm text-body-sm flex items-center justify-center gap-space-xs transition-all ${form.tracking === 'quantity' ? 'bg-surface-container-lowest shadow-sm text-on-surface font-semibold' : 'text-on-surface-variant hover:text-on-surface'}`} type="button" onClick={() => form.setTracking('quantity')}>
         <span className="w-2 h-2 rounded-full bg-primary"></span>
                     Count by quantity
                   </button>
-        <button className="py-2 px-space-md rounded text-on-surface-variant hover:text-on-surface font-body-sm text-body-sm flex items-center justify-center gap-space-xs transition-all" type="button" onClick={() => {}}>
+        <button className={`py-2 px-space-md rounded font-body-sm text-body-sm flex items-center justify-center gap-space-xs transition-all ${form.tracking === 'serial' ? 'bg-surface-container-lowest shadow-sm text-on-surface font-semibold' : 'text-on-surface-variant hover:text-on-surface'}`} type="button" onClick={() => form.setTracking('serial')}>
         <span className="w-2 h-2 rounded-full bg-surface-container-high"></span>
                     Track by serial number
                   </button>
@@ -319,7 +320,7 @@ export function GapItemEditor(p: { itemId?: string | null; onClose?: () => void 
         ))}
         </div>
         </div>
-        <button className="self-start px-space-md py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm font-semibold flex items-center gap-1 transition-colors" type="button" onClick={() => {}}>
+        <button className="self-start px-space-md py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm font-semibold flex items-center gap-1 transition-colors" type="button" onClick={() => form.addReorderRule()}>
         <span className="material-symbols-outlined text-[16px]">add</span> Add location rule
                 </button>
         </section>
@@ -392,7 +393,7 @@ export function GapItemEditor(p: { itemId?: string | null; onClose?: () => void 
         <p className="font-label-code text-label-code text-on-surface-variant">OEM Ref: ACC-889 · Heavy Duty Dual-Lever</p>
         </div>
         </div>
-        <button className="ml-space-md px-space-md py-1.5 rounded-lg bg-surface-container-lowest hover:bg-error-container hover:text-on-error-container text-on-surface font-body-sm text-body-sm font-semibold transition-colors flex-shrink-0 shadow-sm" type="button" onClick={() => {}}>
+        <button className="ml-space-md px-space-md py-1.5 rounded-lg bg-surface-container-lowest hover:bg-error-container hover:text-on-error-container text-on-surface font-body-sm text-body-sm font-semibold transition-colors flex-shrink-0 shadow-sm" type="button" onClick={() => form.unlinkCatalog()}>
                     Unlink
                   </button>
         </div>
@@ -443,7 +444,7 @@ export function GapItemEditor(p: { itemId?: string | null; onClose?: () => void 
         <footer className="p-space-lg bg-surface-container-lowest flex flex-col gap-space-sm">
         <div className="flex items-center justify-between">
 
-        <button type="button" disabled={form.isNew || form.submit.saving} onClick={() => void form.archive()} className="text-error hover:underline font-body-sm text-body-sm font-semibold flex items-center gap-1 transition-colors disabled:opacity-60" id="archive-toggle-btn">
+        <button type="button" disabled={form.isNew || form.submit.saving} onClick={() => form.archiveSteps.openConfirm()} className="text-error hover:underline font-body-sm text-body-sm font-semibold flex items-center gap-1 transition-colors disabled:opacity-60" id="archive-toggle-btn">
         <span className="material-symbols-outlined text-[16px]">archive</span>
                   Archive item
                 </button>
@@ -459,7 +460,7 @@ export function GapItemEditor(p: { itemId?: string | null; onClose?: () => void 
         </div>
         </div>
 
-        <div className="hidden p-space-md rounded-lg bg-error-container/40 flex items-start gap-space-sm transition-all" id="archive-warning-box">
+        <div className={`${form.archiveSteps.confirmOpen ? 'flex' : 'hidden'} p-space-md rounded-lg bg-error-container/40 items-start gap-space-sm transition-all`} id="archive-warning-box">
         <span className="material-symbols-outlined text-[18px] text-error flex-shrink-0 mt-0.5">warning</span>
         <div className="flex flex-col gap-1">
         <p className="font-body-sm text-body-sm text-on-surface font-semibold">
@@ -469,10 +470,10 @@ export function GapItemEditor(p: { itemId?: string | null; onClose?: () => void 
                     It stays in history and can be restored at any time from the archived filters.
                   </p>
         <div className="flex items-center gap-space-sm mt-1">
-        <button className="px-space-md py-1 bg-error text-on-error rounded font-caption text-caption font-bold" type="button" onClick={() => {}}>
+        <button className="px-space-md py-1 bg-error text-on-error rounded font-caption text-caption font-bold" type="button" onClick={() => void form.confirmArchive()}>
                       Confirm Archive
                     </button>
-        <button className="font-caption text-caption text-on-surface-variant hover:text-on-surface" id="cancel-archive-warning" type="button" onClick={closeDrawer}>
+        <button className="font-caption text-caption text-on-surface-variant hover:text-on-surface" id="cancel-archive-warning" type="button" onClick={() => form.archiveSteps.closeConfirm()}>
                       Dismiss
                     </button>
         </div>

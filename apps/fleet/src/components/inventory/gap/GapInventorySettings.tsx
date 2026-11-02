@@ -308,7 +308,7 @@ export function GapInventorySettings(p: { onClose?: () => void }) {
           return (
         <div key={id} className="flex items-center justify-between p-space-md rounded-lg bg-surface hover:bg-surface-container transition-colors group">
         <div className="flex items-center gap-space-md min-w-0">
-        <button className="cursor-grab active:cursor-grabbing text-secondary hover:text-primary transition-colors flex items-center" title="Drag to reorder" type="button" onClick={() => {}}>
+        <button className="cursor-grab active:cursor-grabbing text-secondary hover:text-primary transition-colors flex items-center" title="Drag to reorder" type="button" onClick={() => void form.moveCategory(id, 'up')}>
         <span className="material-symbols-outlined text-[18px]">drag_indicator</span>
         </button>
         <div className="w-8 h-8 rounded bg-surface-container-highest flex items-center justify-center text-primary shrink-0">

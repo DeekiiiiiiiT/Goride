@@ -4,7 +4,19 @@ export type OfflineActionType =
   | 'SUBMIT_TRIP'
   | 'SUBMIT_FUEL_EXPENSE'
   | 'SUBMIT_GAS_CARD_ANCHOR'
-  | 'SUBMIT_SPLIT_FUEL_FILL';
+  | 'SUBMIT_SPLIT_FUEL_FILL'
+  | 'SUBMIT_DRIVER_REPORT_UPDATE';
+
+export interface SubmitDriverReportUpdatePayload {
+  reportId: string;
+  kind: 'found_it' | 'got_replacement' | 'still_missing';
+  note?: string;
+  photoBlobKey?: string;
+  photoFileName?: string;
+  photoMimeType?: string;
+  vehicleId?: string | null;
+  label?: string;
+}
 
 export interface SubmitTripPayload {
   tripData: Partial<TripSession>;
@@ -83,6 +95,14 @@ export type OfflineAction =
       id: string;
       type: 'SUBMIT_SPLIT_FUEL_FILL';
       payload: SubmitSplitFuelFillPayload;
+      timestamp: number;
+      retryCount: number;
+      lastError?: string;
+    }
+  | {
+      id: string;
+      type: 'SUBMIT_DRIVER_REPORT_UPDATE';
+      payload: SubmitDriverReportUpdatePayload;
       timestamp: number;
       retryCount: number;
       lastError?: string;

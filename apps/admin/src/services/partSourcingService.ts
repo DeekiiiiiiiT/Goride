@@ -384,8 +384,6 @@ export const partsEnterpriseApi = {
   createGroup: (token: string, body: Record<string, unknown>) => adminSend(token, "part-groups", "POST", body),
   rules: (token: string) => adminGet(token, "part-rules"),
   createRule: (token: string, body: Record<string, unknown>) => adminSend(token, "part-rules", "POST", body),
-  importRows: (token: string, rows: unknown[]) => adminSend(token, "part-import", "POST", { rows }),
-  undoImport: (token: string, batchId: string) => adminSend(token, "part-import/undo", "POST", { batchId }),
   supplierSearch: (token: string, partNumber: string) => adminSend(token, "part-supplier-search", "POST", { partNumber }),
   supersede: (token: string, body: { oldPartId: string; newPartId: string }) => adminSend(token, "part-supersession", "POST", body),
   search: (token: string, q: string) => adminGet(token, `part-search?q=${encodeURIComponent(q)}`),

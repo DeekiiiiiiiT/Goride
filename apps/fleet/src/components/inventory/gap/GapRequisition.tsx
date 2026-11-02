@@ -5,7 +5,11 @@ import { useGapRequisitionForm } from './useGapRequisitionForm';
 
 export function GapRequisition(p: { onClose?: () => void }) {
   const form = useGapRequisitionForm(p.onClose);
-  const closeReq = () => p.onClose?.();
+  const closeCreate = () => form.closeCreate();
+  const tabClass = (key: typeof form.statusFilter) =>
+    form.statusFilter === key
+      ? 'px-space-md py-1 rounded bg-surface-container-lowest shadow-sm font-body-sm text-body-sm font-semibold text-on-surface'
+      : 'px-space-md py-1 rounded hover:bg-surface-container-lowest/50 font-body-sm text-body-sm text-on-surface-variant transition-colors';
   return (
     <GapModalShell onClose={p.onClose} ariaLabel="Requisition">
       <GapSubmitError message={form.submit.error} />
@@ -37,7 +41,7 @@ export function GapRequisition(p: { onClose?: () => void }) {
         <span className="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
         <span className="font-label-code text-caption text-on-surface">Store Queue: Active</span>
         </div>
-        <button type="button" className="bg-primary hover:bg-inverse-surface text-on-primary font-body-sm text-body-sm font-semibold px-space-lg py-2 rounded shadow-sm flex items-center gap-space-xs transition-all" id="openModalBtn" onClick={() => {}}>
+        <button type="button" className="bg-primary hover:bg-inverse-surface text-on-primary font-body-sm text-body-sm font-semibold px-space-lg py-2 rounded shadow-sm flex items-center gap-space-xs transition-all" id="openModalBtn" onClick={() => form.openCreate()}>
         <span className="material-symbols-outlined text-[16px]">add</span>
         <span>New request</span>
         </button>
@@ -103,28 +107,28 @@ export function GapRequisition(p: { onClose?: () => void }) {
         <div className="p-space-lg bg-surface-container-lowest flex flex-col md:flex-row items-start md:items-center justify-between gap-space-md">
 
         <div className="flex items-center gap-1 bg-surface-container p-1 rounded">
-        <button type="button" className="px-space-md py-1 rounded bg-surface-container-lowest shadow-sm font-body-sm text-body-sm font-semibold text-on-surface" onClick={() => {}}>
+        <button type="button" className={tabClass('all')} onClick={() => form.setStatusFilter('all')}>
                     All requests <span className="font-label-code text-[11px] ml-1 px-1.5 py-0.2 rounded bg-surface-container text-on-surface-variant">{form.statusCounts.all}</span>
         </button>
-        <button type="button" className="px-space-md py-1 rounded hover:bg-surface-container-lowest/50 font-body-sm text-body-sm text-on-surface-variant transition-colors" onClick={() => {}}>
+        <button type="button" className={tabClass('open')} onClick={() => form.setStatusFilter('open')}>
                     Open <span className="font-label-code text-[11px] ml-1 px-1.5 py-0.2 rounded bg-surface-container-high text-on-surface">{form.statusCounts.open}</span>
         </button>
-        <button type="button" className="px-space-md py-1 rounded hover:bg-surface-container-lowest/50 font-body-sm text-body-sm text-on-surface-variant transition-colors" onClick={() => {}}>
-                    Approved <span className="font-label-code text-[11px] ml-1 px-1.5 py-0.2 rounded bg-surface-container-high text-on-surface">1</span>
+        <button type="button" className={tabClass('approved')} onClick={() => form.setStatusFilter('approved')}>
+                    Approved <span className="font-label-code text-[11px] ml-1 px-1.5 py-0.2 rounded bg-surface-container-high text-on-surface">{form.statusCounts.approved}</span>
         </button>
-        <button type="button" className="px-space-md py-1 rounded hover:bg-surface-container-lowest/50 font-body-sm text-body-sm text-on-surface-variant transition-colors" onClick={() => {}}>
-                    Issued <span className="font-label-code text-[11px] ml-1 px-1.5 py-0.2 rounded bg-surface-container-high text-on-surface">2</span>
+        <button type="button" className={tabClass('issued')} onClick={() => form.setStatusFilter('issued')}>
+                    Issued <span className="font-label-code text-[11px] ml-1 px-1.5 py-0.2 rounded bg-surface-container-high text-on-surface">{form.statusCounts.issued}</span>
         </button>
-        <button type="button" className="px-space-md py-1 rounded hover:bg-surface-container-lowest/50 font-body-sm text-body-sm text-on-surface-variant transition-colors" onClick={() => {}}>
-                    Rejected <span className="font-label-code text-[11px] ml-1 px-1.5 py-0.2 rounded bg-surface-container-high text-on-surface">1</span>
+        <button type="button" className={tabClass('rejected')} onClick={() => form.setStatusFilter('rejected')}>
+                    Rejected <span className="font-label-code text-[11px] ml-1 px-1.5 py-0.2 rounded bg-surface-container-high text-on-surface">{form.statusCounts.rejected}</span>
         </button>
         </div>
         <div className="flex items-center gap-space-sm w-full md:w-auto">
         <div className="relative flex-1 md:w-64">
         <span className="material-symbols-outlined absolute left-2.5 top-2 text-[16px] text-on-surface-variant">search</span>
-        <input className="w-full bg-surface-container-low pl-8 pr-3 py-1.5 rounded font-body-sm text-body-sm text-on-surface placeholder:text-on-surface-variant outline-none focus:bg-surface-container-lowest transition-all" placeholder="Filter ref, vehicle, or driver..." type="text" value={form.forVehicleId} onChange={(e) => form.setForVehicleId(e.target.value)} />
+        <input className="w-full bg-surface-container-low pl-8 pr-3 py-1.5 rounded font-body-sm text-body-sm text-on-surface placeholder:text-on-surface-variant outline-none focus:bg-surface-container-lowest transition-all" placeholder="Filter ref, vehicle, or driver..." type="text" value={form.searchQuery} onChange={(e) => form.setSearchQuery(e.target.value)} />
         </div>
-        <button type="button" className="p-1.5 rounded bg-surface-container hover:bg-surface-container-high text-on-surface-variant transition-colors" onClick={() => {}}>
+        <button type="button" className="p-1.5 rounded bg-surface-container hover:bg-surface-container-high text-on-surface-variant transition-colors" onClick={() => form.setStatusFilter('open')} aria-label="Show open requests only">
         <span className="material-symbols-outlined text-[18px]">tune</span>
         </button>
         </div>
@@ -150,12 +154,12 @@ export function GapRequisition(p: { onClose?: () => void }) {
         </tr>
         </thead>
         <tbody className="divide-y divide-surface-container-low font-body-sm text-body-sm">
-        {form.requisitions.length === 0 ? (
+        {form.filteredRequisitions.length === 0 ? (
         <tr>
         <td colSpan={7} className="py-space-lg px-space-lg text-on-surface-variant">No requisitions yet. Use New request to create one.</td>
         </tr>
         ) : (
-        form.requisitions.map((row) => (
+        form.pagedRequisitions.map((row) => (
         <tr key={String(row.id ?? row.ref_no)} className="hover:bg-surface-container-lowest/80 transition-colors">
         <td className="py-space-md px-space-lg whitespace-nowrap">
         <span className="font-label-code text-label-code text-on-surface font-semibold">{String(row.ref_no ?? row.number ?? row.id ?? '—')}</span>
@@ -197,18 +201,19 @@ export function GapRequisition(p: { onClose?: () => void }) {
 
         <div className="p-space-lg bg-surface-container-low flex flex-col sm:flex-row items-center justify-between gap-space-md text-on-surface-variant font-caption text-caption">
         <div className="flex items-center gap-space-sm">
-        <span>Showing 4 of 6 active requests</span>
+        <span>{form.paginationLabel}</span>
         <span className="text-outline-variant">·</span>
-        <span className="font-label-code">Filter: None</span>
+        <span className="font-label-code">Filter: {form.filterLabel}</span>
         </div>
         <div className="flex items-center gap-space-xs font-label-code">
-        <button type="button" className="px-2.5 py-1 rounded bg-surface-container text-on-surface-variant hover:text-on-surface transition-colors" disabled>Prev</button>
-        <span className="px-2 py-1 bg-surface-container-lowest rounded font-bold text-on-surface">01</span>
-        <button type="button" className="px-2.5 py-1 rounded bg-surface-container text-on-surface-variant hover:text-on-surface transition-colors" onClick={() => {}}>Next</button>
+        <button type="button" className="px-2.5 py-1 rounded bg-surface-container text-on-surface-variant hover:text-on-surface transition-colors" disabled={!form.canPrevPage} onClick={() => form.prevPage()}>Prev</button>
+        <span className="px-2 py-1 bg-surface-container-lowest rounded font-bold text-on-surface">{String(form.page + 1).padStart(2, '0')}</span>
+        <button type="button" className="px-2.5 py-1 rounded bg-surface-container text-on-surface-variant hover:text-on-surface transition-colors" disabled={!form.canNextPage} onClick={() => form.nextPage()}>Next</button>
         </div>
         </div>
         </div>
 
+        {form.createOpen ? (
         <div className="fixed inset-0 z-50 bg-primary/40 backdrop-blur-sm flex items-center justify-center p-space-md overflow-y-auto" id="modalBackdrop">
         <div className="w-full max-w-[740px] bg-surface-container-lowest rounded-xl shadow-2xl overflow-hidden my-space-lg transition-transform duration-200" id="modalCard">
 
@@ -224,7 +229,7 @@ export function GapRequisition(p: { onClose?: () => void }) {
                       Request parts or accessories for a vehicle or staff member before dispatch from Kingston Main.
                     </p>
         </div>
-        <button type="button" className="text-on-surface-variant hover:text-on-surface p-1 rounded hover:bg-surface-container transition-colors" id="closeModalBtn" onClick={closeReq}>
+        <button type="button" className="text-on-surface-variant hover:text-on-surface p-1 rounded hover:bg-surface-container transition-colors" id="closeModalBtn" onClick={closeCreate}>
         <span className="material-symbols-outlined text-[20px]">close</span>
         </button>
         </div>
@@ -240,16 +245,16 @@ export function GapRequisition(p: { onClose?: () => void }) {
         </label>
 
         <div className="bg-surface-container p-1 rounded flex gap-1 mb-2">
-        <button className="flex-1 py-1 px-2 rounded bg-surface-container-lowest font-body-sm text-body-sm font-semibold text-on-surface shadow-sm text-center" type="button" onClick={() => {}}>
+        <button className={`flex-1 py-1 px-2 rounded font-body-sm text-body-sm text-center ${form.targetKind === 'vehicle' ? 'bg-surface-container-lowest font-semibold text-on-surface shadow-sm' : 'text-on-surface-variant hover:text-on-surface transition-colors'}`} type="button" onClick={() => form.setTargetKind('vehicle')}>
                           Vehicle
                         </button>
-        <button className="flex-1 py-1 px-2 rounded font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors text-center" type="button" onClick={() => {}}>
+        <button className={`flex-1 py-1 px-2 rounded font-body-sm text-body-sm text-center ${form.targetKind === 'staff' ? 'bg-surface-container-lowest font-semibold text-on-surface shadow-sm' : 'text-on-surface-variant hover:text-on-surface transition-colors'}`} type="button" onClick={() => form.setTargetKind('staff')}>
                           Staff member
                         </button>
         </div>
 
         <div className="relative">
-        <input className="w-full bg-surface-container-low px-3 py-2 rounded font-body-md text-body-md text-on-surface outline-none focus:bg-surface-container transition-colors" placeholder="Vehicle plate or ID" value={form.forVehicleId} onChange={(e) => form.setForVehicleId(e.target.value)} />
+        <input className="w-full bg-surface-container-low px-3 py-2 rounded font-body-md text-body-md text-on-surface outline-none focus:bg-surface-container transition-colors" placeholder={form.targetKind === 'vehicle' ? 'Vehicle plate or ID' : 'Staff member ID'} value={form.targetKind === 'vehicle' ? form.forVehicleId : form.forStaffId} onChange={(e) => (form.targetKind === 'vehicle' ? form.setForVehicleId(e.target.value) : form.setForStaffId(e.target.value))} />
         <span className="material-symbols-outlined absolute right-2.5 top-2.5 pointer-events-none text-on-surface-variant text-[18px]">expand_more</span>
         </div>
         <div className="flex items-center gap-1 font-caption text-caption text-on-surface-variant mt-1">
@@ -283,65 +288,38 @@ export function GapRequisition(p: { onClose?: () => void }) {
         </div>
         <div className="bg-surface-container-low rounded overflow-hidden">
         <div className="divide-y divide-surface-container">
-
-        <div className="p-space-md flex flex-col md:flex-row md:items-center justify-between gap-space-md bg-surface-container-lowest">
+        {form.draftLines.map((line) => (
+        <div key={line.key} className="p-space-md flex flex-col md:flex-row md:items-center justify-between gap-space-md bg-surface-container-lowest">
         <div className="flex-1">
         <div className="flex items-center gap-space-xs">
-        <span className="font-body-md text-body-md font-semibold text-on-surface">Warning triangle reflector</span>
-        <span className="font-label-code text-[11px] bg-surface-container px-1.5 py-0.5 rounded text-on-surface-variant">SFT-TRG-01</span>
+        <span className="font-body-md text-body-md font-semibold text-on-surface">{line.name}</span>
+        <span className="font-label-code text-[11px] bg-surface-container px-1.5 py-0.5 rounded text-on-surface-variant">{line.sku}</span>
         </div>
         <div className="flex items-center gap-space-xs mt-1">
-        <span className="material-symbols-outlined text-[14px] text-on-surface">check_circle</span>
-        <span className="font-caption text-caption text-on-surface">28 in stock at Main store</span>
-        <span className="text-outline-variant">·</span>
-        <span className="font-label-price text-caption text-on-surface-variant">{form.selectedReqTotalLabel}</span>
+        <span className="font-label-price text-caption text-on-surface-variant">{form.formatJmd(line.unitJmd)}</span>
         </div>
         </div>
         <div className="flex items-center gap-space-md">
         <div className="flex items-center bg-surface-container-low rounded px-2 py-1">
         <span className="font-caption text-caption text-on-surface-variant mr-2">Qty</span>
-        <input className="w-12 bg-transparent text-center font-label-code text-label-code font-bold text-on-surface outline-none" max={28} min={1} type="number" value={1} readOnly aria-label="Line quantity placeholder"/>
+        <input className="w-12 bg-transparent text-center font-label-code text-label-code font-bold text-on-surface outline-none" min={1} type="number" value={line.qty} onChange={(e) => form.setDraftLineQty(line.key, Number(e.target.value))} aria-label={`Quantity for ${line.name}`}/>
         <span className="font-caption text-caption text-on-surface-variant ml-1">each</span>
         </div>
-        <button className="text-on-surface-variant hover:text-error transition-colors p-1" type="button" onClick={() => {}}>
+        <button className="text-on-surface-variant hover:text-error transition-colors p-1" type="button" onClick={() => form.removeDraftLine(line.key)}>
         <span className="material-symbols-outlined text-[18px]">delete</span>
         </button>
         </div>
         </div>
-
-        <div className="p-space-md flex flex-col md:flex-row md:items-center justify-between gap-space-md bg-surface-container-lowest">
-        <div className="flex-1">
-        <div className="flex items-center gap-space-xs">
-        <span className="font-body-md text-body-md font-semibold text-on-surface">Tyre pump heavy-duty 12V</span>
-        <span className="font-label-code text-[11px] bg-surface-container px-1.5 py-0.5 rounded text-on-surface-variant">ACC-TYP-01</span>
-        </div>
-        <div className="flex items-center gap-space-xs mt-1">
-        <span className="material-symbols-outlined text-[14px] text-on-tertiary-container">warning</span>
-        <span className="font-caption text-caption text-on-tertiary-container font-medium">2 in stock at Main store (Low inventory threshold)</span>
-        <span className="text-outline-variant">·</span>
-        <span className="font-label-price text-caption text-on-surface-variant">{form.selectedReqTotalLabel}</span>
-        </div>
-        </div>
-        <div className="flex items-center gap-space-md">
-        <div className="flex items-center bg-surface-container-low rounded px-2 py-1">
-        <span className="font-caption text-caption text-on-surface-variant mr-2">Qty</span>
-        <input className="w-12 bg-transparent text-center font-label-code text-label-code font-bold text-on-surface outline-none" max={2} min={1} type="number" value={1} readOnly aria-label="Line quantity placeholder"/>
-        <span className="font-caption text-caption text-on-surface-variant ml-1">each</span>
-        </div>
-        <button className="text-on-surface-variant hover:text-error transition-colors p-1" type="button" onClick={() => {}}>
-        <span className="material-symbols-outlined text-[18px]">delete</span>
-        </button>
-        </div>
-        </div>
+        ))}
         </div>
 
         <div className="p-space-md bg-surface-container-low flex items-center justify-between">
-        <button className="inline-flex items-center gap-1.5 font-body-sm text-body-sm font-semibold text-on-surface hover:text-on-surface-variant transition-colors" type="button" onClick={() => {}}>
+        <button className="inline-flex items-center gap-1.5 font-body-sm text-body-sm font-semibold text-on-surface hover:text-on-surface-variant transition-colors" type="button" onClick={() => form.addDraftLine()}>
         <span className="material-symbols-outlined text-[16px]">add_circle</span>
         <span>+ Add another item</span>
         </button>
         <div className="font-label-price text-caption text-on-surface-variant">
-                          Estimated value: <span className="text-on-surface font-bold">{form.selectedReqTotalLabel}</span>
+                          Estimated value: <span className="text-on-surface font-bold">{form.draftTotalLabel}</span>
         </div>
         </div>
         </div>
@@ -362,7 +340,7 @@ export function GapRequisition(p: { onClose?: () => void }) {
         <div className="flex-1 text-on-surface font-body-sm text-body-sm leading-relaxed">
         <span className="font-semibold text-on-surface">What will change: </span>
         <span className="text-on-surface-variant">
-                        2 items will be reserved for Vehicle {form.vehicleTargetLabel} once approved. Nothing leaves the Main store until an authorized storekeeper clicks <span className="font-semibold text-on-surface">Issue now</span>.
+                        {form.draftLines.length} items will be reserved for {form.targetKind === 'vehicle' ? 'Vehicle' : 'Staff'} {form.vehicleTargetLabel} once approved. Nothing leaves the Main store until an authorized storekeeper clicks <span className="font-semibold text-on-surface">Issue now</span>.
                       </span>
         </div>
         </div>
@@ -373,7 +351,7 @@ export function GapRequisition(p: { onClose?: () => void }) {
         <span>Logged by — (Auth #02)</span>
         </div>
         <div className="flex items-center gap-space-md">
-        <button className="px-space-lg py-2 rounded bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm font-medium transition-colors" id="cancelModalBtn" type="button" onClick={closeReq}>
+        <button className="px-space-lg py-2 rounded bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm font-medium transition-colors" id="cancelModalBtn" type="button" onClick={closeCreate}>
                         Cancel
                       </button>
         <button type="button" disabled={!form.canSubmit || form.submit.saving} onClick={() => void form.submitReq()} className="px-space-xl py-2 rounded bg-primary hover:bg-inverse-surface text-on-primary font-body-sm text-body-sm font-semibold transition-all shadow-sm flex items-center gap-1.5 disabled:opacity-60" id="submitRequestBtn">
@@ -385,7 +363,7 @@ export function GapRequisition(p: { onClose?: () => void }) {
         </form>
         </div>
         </div>
-        </div>
+        ) : null}
         </div>
         </div>
       </div>

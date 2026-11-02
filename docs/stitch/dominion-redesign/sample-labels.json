@@ -338,5 +338,58 @@
     "Vehicles (1)",
     "Parts (0)",
     "Parts (6)"
+  ],
+  "PI1": [
+    "battery & electrical",
+    "belts & hoses",
+    "brakes",
+    "engine",
+    "filters",
+    "fluids",
+    "hvac",
+    "lighting & visibility",
+    "suspension & steering",
+    "tires & wheels",
+    "transmission"
+  ],
+  "PI2": [
+    "brakes import",
+    "close"
+  ],
+  "PI3": [
+    "all (25)",
+    "check roomy-brakes-nov.csv",
+    "download failed rows (3)",
+    "duplicate (2)",
+    "error (3)",
+    "import 20 rows arrow_forward",
+    "ready (18)",
+    "ready with label (2)",
+    "unchanged (0)"
+  ],
+  "PI4": [
+    "import complete — brakes domain ingested",
+    "import more brakes parts",
+    "imported 20 rows into brakes"
+  ],
+  "PI5": [
+    "all areas 3",
+    "battery & electrical (0)",
+    "belts & hoses (0)",
+    "brakes 2",
+    "engine 1",
+    "filters 1",
+    "fluids (0)",
+    "hvac (0)",
+    "lighting & visibility (0)",
+    "suspension & steering (0)",
+    "tires & wheels (0)",
+    "transmission (0)",
+    "undo this brakes import?"
+  ],
+  "PI6": [
+    "checking roomy-brakes-nov.csv",
+    "no brakes imports yet",
+    "start a brakes import"
   ]
 }

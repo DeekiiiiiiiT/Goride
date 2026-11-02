@@ -5,6 +5,7 @@ import { offlineBlobStore } from '../../services/offlineBlobStore';
 import { OfflineAction } from '../../types/offline';
 import { useAuth } from '../../contexts/AuthContext';
 import { api } from '../../services/api';
+import { driverInventoryApi } from '../../services/driverInventoryApi';
 import { uploadEvidenceFile } from '../../services/uploadEvidence';
 import { createManualTrip } from '../../utils/tripFactory';
 import { mapMatchService } from '../../services/mapMatchService';
@@ -79,6 +80,42 @@ async function syncFuelExpense(action: Extract<OfflineAction, { type: 'SUBMIT_FU
 
   await api.saveTransaction(tx);
   await offlineBlobStore.removeMany([payload.odometerBlobKey, payload.receiptBlobKey]);
+}
+
+async function syncDriverReportUpdate(
+  action: Extract<OfflineAction, { type: 'SUBMIT_DRIVER_REPORT_UPDATE' }>,
+) {
+  const { payload } = action;
+  let photoPaths: string[] | undefined;
+  if (payload.photoBlobKey) {
+    const blob = await offlineBlobStore.get(payload.photoBlobKey);
+    if (blob) {
+      const file = new File(
+        [blob],
+        payload.photoFileName || 'report-update.jpg',
+        { type: payload.photoMimeType || blob.type || 'image/jpeg' },
+      );
+      const uploadRes = await uploadEvidenceFile(file, {
+        evidenceType: 'driver_report_update',
+        sourceType: 'driver_report',
+        sourceId: payload.reportId,
+        retentionClass: 'ephemeral',
+        parentStatus: 'Pending',
+      });
+      photoPaths = [uploadRes.url];
+    }
+  }
+  await driverInventoryApi.submitReportUpdate(
+    payload.reportId,
+    {
+      kind: payload.kind,
+      note: payload.note,
+      photoPaths,
+      vehicleId: payload.vehicleId,
+    },
+    `offline-${action.id}`,
+  );
+  await offlineBlobStore.removeMany([payload.photoBlobKey]);
 }
 
 async function syncGasCardAnchor(action: Extract<OfflineAction, { type: 'SUBMIT_GAS_CARD_ANCHOR' }>) {
@@ -293,6 +330,9 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
                   await syncSplitFuelFill(action);
                   processedIds.push(action.id);
                   fuelSuccess++;
+              } else if (action.type === 'SUBMIT_DRIVER_REPORT_UPDATE') {
+                  await syncDriverReportUpdate(action);
+                  processedIds.push(action.id);
               }
           } catch (e: any) {
               console.error("Sync failed for action", action.id, e);

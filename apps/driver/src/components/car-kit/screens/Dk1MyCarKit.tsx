@@ -11,10 +11,12 @@ export function Dk1MyCarKit({
   kit,
   onReportItem,
   onPreShiftInspection,
+  onUpdateStatus,
 }: {
   kit?: DriverCarKitPayload | null;
   onReportItem?: (itemName: string) => void;
   onPreShiftInspection?: () => void;
+  onUpdateStatus?: () => void;
 }) {
   const vehicleLabel = carKitVehicleLabel(kit);
   const { present, total } = carKitItemCounts(kit);
@@ -246,7 +248,7 @@ export function Dk1MyCarKit({
       <span className="material-symbols-outlined text-[16px] text-tertiary">schedule</span>
                   Replacement en route
                 </span>
-      <button type="button" className="font-body-sm text-body-sm font-semibold text-on-surface hover:text-primary transition-colors py-1.5 px-2 -mr-2 min-h-[48px] flex items-center" onClick={() => {}}>
+      <button type="button" className="font-body-sm text-body-sm font-semibold text-on-surface hover:text-primary transition-colors py-1.5 px-2 -mr-2 min-h-[48px] flex items-center" onClick={() => onUpdateStatus?.()}>
                   Update status
                 </button>
       </div>
@@ -277,7 +279,7 @@ export function Dk1MyCarKit({
       <span className="material-symbols-outlined text-[16px] text-tertiary">inventory_2</span>
                   Hub collection ready
                 </span>
-      <button type="button" className="font-body-sm text-body-sm font-semibold text-on-surface hover:text-primary transition-colors py-1.5 px-2 -mr-2 min-h-[48px] flex items-center" onClick={() => {}}>
+      <button type="button" className="font-body-sm text-body-sm font-semibold text-on-surface hover:text-primary transition-colors py-1.5 px-2 -mr-2 min-h-[48px] flex items-center" onClick={() => onUpdateStatus?.()}>
                   Update status
                 </button>
       </div>
@@ -309,7 +311,7 @@ export function Dk1MyCarKit({
       <span className="material-symbols-outlined text-[16px] text-tertiary">priority_high</span>
                   Urgent safety item
                 </span>
-      <button type="button" className="font-body-sm text-body-sm font-semibold text-on-surface hover:text-primary transition-colors py-1.5 px-2 -mr-2 min-h-[48px] flex items-center" onClick={() => {}}>
+      <button type="button" className="font-body-sm text-body-sm font-semibold text-on-surface hover:text-primary transition-colors py-1.5 px-2 -mr-2 min-h-[48px] flex items-center" onClick={() => onUpdateStatus?.()}>
                   Update status
                 </button>
       </div>

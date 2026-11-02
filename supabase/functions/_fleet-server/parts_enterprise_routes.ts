@@ -3,8 +3,7 @@ import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { requireAuth, requirePermission, assertPlatformStaffResponse } from "./rbac_middleware.ts";
 import { getOrgId } from "./org_scope.ts";
 import * as kv from "./kv_store.tsx";
-import { resolveCatalogIdForKvVehicle, resolveVehicleCatalogIdFromMakeModelYear } from "./vehicle_catalog_resolve.ts";
-import { isCatalogVariantUuid, parseImportVehicleLabel } from "../../../packages/types/src/partsDatabaseImportCsv.ts";
+import { resolveCatalogIdForKvVehicle } from "./vehicle_catalog_resolve.ts";
 import { FEATURE_FLAGS, isFeatureEnabled } from "./feature_flags.ts";
 import { decodeFrameBatch, decodeFrameNumber, engineFamilyPrefix } from "../../../packages/types/src/frameNumberDecode.ts";
 import { CacheOnlySupplierAdapter } from "./parts_supplier_adapter.ts";
@@ -30,46 +29,6 @@ function fail(c: Context, e: unknown) {
       ? (e as { message: string }).message
       : "Could not load parts.";
   return c.json({ error: message }, 500);
-}
-
-async function resolveImportVehicleCell(supabase: SupabaseClient, raw: string): Promise<string | null> {
-  const text = raw.trim();
-  if (!text) return null;
-  if (isCatalogVariantUuid(text)) return text;
-  const parsed = parseImportVehicleLabel(text);
-  if (parsed) {
-    return resolveVehicleCatalogIdFromMakeModelYear(
-      supabase,
-      parsed.make,
-      parsed.model,
-      parsed.year,
-      { chassis_code: parsed.chassis },
-    );
-  }
-  const q = text.replace(/[%_\\,]/g, "").slice(0, 80);
-  if (q.length < 2) return null;
-  const { data } = await supabase
-    .from("vehicle_catalog")
-    .select("id")
-    .or(`chassis_code.ilike.%${q}%,make.ilike.%${q}%,model.ilike.%${q}%`)
-    .limit(1)
-    .maybeSingle();
-  return (data as { id?: string } | null)?.id ?? null;
-}
-
-async function normalizePartImportRows(supabase: SupabaseClient, rows: unknown[]): Promise<Record<string, unknown>[]> {
-  const out: Record<string, unknown>[] = [];
-  for (const row of rows) {
-    if (!row || typeof row !== "object") continue;
-    const next = { ...(row as Record<string, unknown>) };
-    const vehicleRaw = String(next.vehicle ?? next.vehicle_catalog_id ?? next.vehicleId ?? "").trim();
-    if (vehicleRaw && !isCatalogVariantUuid(vehicleRaw)) {
-      const resolved = await resolveImportVehicleCell(supabase, vehicleRaw);
-      if (resolved) next.vehicle = resolved;
-    }
-    out.push(next);
-  }
-  return out;
 }
 
 export function registerPartsEnterpriseRoutes(route: RouteApp, supabase: SupabaseClient) {
@@ -242,42 +201,6 @@ export function registerPartsEnterpriseRoutes(route: RouteApp, supabase: Supabas
       }).select("*").single();
       if (error) throw error;
       return c.json({ item: data });
-    } catch (e) {
-      return fail(c, e);
-    }
-  });
-
-  route.post("/make-server-37f42386/admin/part-import", requireAuth(), async (c: Context) => {
-    const denied = staff(c);
-    if (denied) return denied;
-    try {
-      const body = await c.req.json() as { rows?: unknown[] };
-      const rows = Array.isArray(body.rows) ? body.rows : [];
-      if (!rows.length) return c.json({ error: "Add at least one data row below the header." }, 400);
-      const normalized = await normalizePartImportRows(supabase, rows);
-      const batchId = crypto.randomUUID();
-      const { data, error } = await supabase.rpc("import_parts_catalog_rows", {
-        p_rows: normalized,
-        p_batch_id: batchId,
-      });
-      if (error) throw error;
-      const refreshed = await supabase.rpc("refresh_variant_parts_readiness");
-      return c.json({ result: data, refreshError: refreshed.error?.message ?? null });
-    } catch (e) {
-      return fail(c, e);
-    }
-  });
-
-  route.post("/make-server-37f42386/admin/part-import/undo", requireAuth(), async (c: Context) => {
-    const denied = staff(c);
-    if (denied) return denied;
-    try {
-      const body = await c.req.json() as { batchId?: string };
-      if (!body.batchId || !isUuid(body.batchId)) return c.json({ error: "batchId required" }, 400);
-      const { data, error } = await supabase.rpc("undo_parts_catalog_batch", { p_batch_id: body.batchId });
-      if (error) throw error;
-      const refreshed = await supabase.rpc("refresh_variant_parts_readiness");
-      return c.json({ result: data, refreshError: refreshed.error?.message ?? null });
     } catch (e) {
       return fail(c, e);
     }

@@ -10,9 +10,14 @@ export type EvidenceType =
   | "fuel_receipt"
   | "toll_receipt"
   | "odometer_proof"
-  | "maintenance_invoice";
+  | "maintenance_invoice"
+  | "driver_report_update";
 
-export type EvidenceSourceType = "transaction" | "fuel_entry" | "maintenance_log";
+export type EvidenceSourceType =
+  | "transaction"
+  | "fuel_entry"
+  | "maintenance_log"
+  | "driver_report";
 
 export function isEvidenceTtlEnabled(): boolean {
   return Deno.env.get("EVIDENCE_TTL_ENABLED") === "true";

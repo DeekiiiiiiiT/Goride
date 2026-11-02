@@ -87,6 +87,11 @@ export function CarKitPage({
             kit={flow.kit}
             onReportItem={(name) => flow.openReportSheet(name)}
             onPreShiftInspection={vehicleId ? () => setShowDvir(true) : undefined}
+            onUpdateStatus={() => {
+              const first = flow.reports[0];
+              if (first) setActiveReport(first);
+              else flow.openReportSheet('Kit item');
+            }}
           />
         );
     }

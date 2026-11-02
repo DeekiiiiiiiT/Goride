@@ -173,7 +173,7 @@ export function registerInventoryR16Routes(app: Hono<InvEnv>) {
         }
       }
       const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
-      for (const key of ["name", "code", "address", "kind", "is_active"]) {
+      for (const key of ["name", "code", "address", "kind", "is_active", "is_secure"]) {
         if (key in body) patch[key] = body[key];
       }
       if (body.archive === true) patch.is_active = false;

@@ -256,7 +256,20 @@ app.patch(`${PREFIX}/items/:id`, requirePermission("inventory.move"), async (c) 
     const id = c.req.param("id");
     const body = await c.req.json();
     const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
-    for (const key of ["name", "description", "tracking", "category_id", "min_qty", "reorder_qty"]) {
+    for (const key of [
+      "name",
+      "description",
+      "tracking",
+      "category_id",
+      "min_qty",
+      "reorder_qty",
+      "sku",
+      "model",
+      "unit_of_measure",
+      "photo_paths",
+      "unit_cost_jmd",
+      "default_cost_jmd",
+    ]) {
       if (body[key] !== undefined) patch[key] = body[key];
     }
     const { data, error } = await fleetDb().from("fleet_inv_item").update(patch)

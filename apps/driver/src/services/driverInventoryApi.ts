@@ -77,6 +77,13 @@ export type DriverKitCheckPayload = {
   weeklyCheckInId?: string | null;
 };
 
+export type DriverReportUpdatePayload = {
+  kind: 'found_it' | 'got_replacement' | 'still_missing';
+  note?: string;
+  photoPaths?: string[];
+  vehicleId?: string | null;
+};
+
 export const driverInventoryApi = {
   carKit: (vehicleId?: string | null) => {
     const q = vehicleId ? `?vehicle_id=${encodeURIComponent(vehicleId)}` : '';
@@ -103,6 +110,16 @@ export const driverInventoryApi = {
 
   kitCheck: (body: DriverKitCheckPayload, idempotencyKey: string) =>
     invFetch('/driver/kit-check', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': idempotencyKey,
+      },
+      body: JSON.stringify(body),
+    }),
+
+  submitReportUpdate: (reportId: string, body: DriverReportUpdatePayload, idempotencyKey: string) =>
+    invFetch(`/driver/reports/${encodeURIComponent(reportId)}/updates`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

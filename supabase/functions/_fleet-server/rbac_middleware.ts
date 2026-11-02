@@ -25,6 +25,7 @@ import { runAsMasterActor } from "./master_actor.ts";
 export type Role =
   | 'platform_owner'
   | 'platform_support'
+  | 'platform_catalog_editor'
   | 'platform_analyst'
   | 'fleet_owner'
   | 'fleet_manager'
@@ -63,7 +64,7 @@ export type Permission =
   | 'users.view' | 'users.suspend' | 'users.send_reset_email'
   | 'workforce.approve' | 'workforce.pause' | 'workforce.remove'
   | 'fleet_tag.set'
-  | 'data.import' | 'data.export' | 'data.backfill'
+  | 'data.import' | 'catalog.import' | 'data.export' | 'data.backfill'
   | 'expenses.view' | 'expenses.export' | 'expenses.create' | 'expenses.manage_rules'
   | 'expenses.approve' | 'expenses.pay' | 'expenses.manage_vendors'
   | 'recon.view' | 'recon.prepare' | 'recon.approve' | 'recon.external_sources'
@@ -88,7 +89,7 @@ export interface RbacUser {
 // ---------------------------------------------------------------------------
 
 const VALID_ROLES = new Set<string>([
-  'platform_owner', 'platform_support', 'platform_analyst',
+  'platform_owner', 'platform_support', 'platform_catalog_editor', 'platform_analyst',
   'fleet_owner', 'fleet_manager', 'fleet_accountant', 'fleet_viewer',
   'driver', 'unassigned',
 ]);
@@ -108,6 +109,7 @@ const PLATFORM_RAW_ROLES = [
 export const PLATFORM_RESOLVED_ROLES: ReadonlySet<Role> = new Set([
   'platform_owner',
   'platform_support',
+  'platform_catalog_editor',
   'platform_analyst',
 ]);
 
@@ -315,6 +317,7 @@ export function effectiveRole(user: RbacUser): Role {
 const ROLE_LEVELS: Record<Role, number> = {
   platform_owner:   1000,
   platform_support: 700,
+  platform_catalog_editor: 720,
   platform_analyst: 500,
   fleet_owner:      900,
   fleet_manager:    700,
@@ -573,7 +576,7 @@ export function requireAuth(options?: RequireAuthOptions) {
       // Check if organizationId is required
       if (options?.requireOrg) {
         // Platform roles are exempt from org requirement (they see all orgs)
-        const isPlatformRole = ['platform_owner', 'platform_support', 'platform_analyst'].includes(rbacUser.resolvedRole);
+        const isPlatformRole = ['platform_owner', 'platform_support', 'platform_catalog_editor', 'platform_analyst'].includes(rbacUser.resolvedRole);
         
         if (!isPlatformRole && !rbacUser.organizationId) {
           console.warn(`[RBAC] requireOrg: User ${rbacUser.userId} (role=${rbacUser.resolvedRole}) has no organizationId`);

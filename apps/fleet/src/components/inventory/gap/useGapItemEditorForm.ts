@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { inventoryApi } from '../inventoryApi';
 import { asPagedItems } from '../inventoryData';
 import { formatJmd } from '../inventoryFormat';
+import { downloadInventoryExportCsv } from '../inventoryDownload';
 import { useInventoryShell } from '../InventoryShellContext';
 import { useGapLoad } from './useGapLoad';
 import { useGapSubmit } from './useGapSubmit';
+import { useGapModalSteps } from './useGapModalSteps';
 
 type Row = Record<string, unknown>;
 
@@ -49,6 +51,9 @@ export function useGapItemEditorForm(itemId: string | null | undefined, onClose?
   const [reorderRules, setReorderRules] = useState<ReorderRuleRow[]>([]);
   const [inspectionIntervalDays, setInspectionIntervalDays] = useState('');
   const [warrantyMonths, setWarrantyMonths] = useState('');
+  const [catalogLinkLabel, setCatalogLinkLabel] = useState<string | null>(null);
+  const photoInputRef = useRef<HTMLInputElement | null>(null);
+  const archiveSteps = useGapModalSteps();
 
   useEffect(() => {
     const row = load.data?.item;
@@ -173,6 +178,52 @@ export function useGapItemEditorForm(itemId: string | null | undefined, onClose?
     );
   };
 
+  const addReorderRule = () => {
+    const loc = load.data?.locations?.find(
+      (l) => !reorderRules.some((r) => r.location_id === String(l.id)),
+    );
+    if (!loc) return;
+    setReorderRules((prev) => [
+      ...prev,
+      {
+        location_id: String(loc.id),
+        location_name: String(loc.name ?? '—'),
+        reorder_at: '',
+        order_qty: '',
+        safety_stock: '',
+      },
+    ]);
+  };
+
+  const unlinkCatalog = () => setCatalogLinkLabel(null);
+
+  const exportCsv = () => void downloadInventoryExportCsv();
+
+  const openNewItem = () => {
+    shell.setSelectedItemId(null);
+    shell.openGap('item-editor');
+  };
+
+  const openPhotoPicker = () => photoInputRef.current?.click();
+
+  const onPhotoSelected = (file: File | null) => {
+    if (!file || !itemId) return;
+    submit.run(async () => {
+      const path = `inventory/items/${itemId}/${file.name}`;
+      await inventoryApi.patchItem(itemId, { photo_paths: [path] });
+      await load.reload();
+    });
+  };
+
+  const confirmArchive = () =>
+    submit.run(async () => {
+      if (!itemId) throw new Error('Nothing to archive');
+      await inventoryApi.deleteItem(itemId);
+      await shell.refresh();
+      archiveSteps.closeConfirm();
+      onClose?.();
+    });
+
   const reorderDisplay = useMemo(() => reorderRules, [reorderRules]);
 
   const assetIdentifierLabel = useMemo(() => {
@@ -214,6 +265,16 @@ export function useGapItemEditorForm(itemId: string | null | undefined, onClose?
     formatJmd,
     save,
     archive,
+    exportCsv,
+    openNewItem,
+    addReorderRule,
+    unlinkCatalog,
+    catalogLinkLabel,
+    openPhotoPicker,
+    onPhotoSelected,
+    photoInputRef,
+    archiveSteps,
+    confirmArchive,
     assetIdentifierLabel,
     stockValuePreviewLabel,
   };

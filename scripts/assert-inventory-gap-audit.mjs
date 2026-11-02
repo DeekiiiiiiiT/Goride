@@ -99,6 +99,22 @@ function stripBlockComments(text) {
   return text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
 }
 
+const emptyHandlerRe =
+  /\bon(?:Click|Change)\s*=\s*\{\s*\(\s*\)\s*=>\s*(?:\{\s*\}|undefined|null)\s*\}/g;
+
+function scanR26EmptyHandlers(file, text, label) {
+  if (!/\.tsx$/i.test(file)) return;
+  const lines = text.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (/audit:\s*intentional-noop/i.test(line)) continue;
+    emptyHandlerRe.lastIndex = 0;
+    if (emptyHandlerRe.test(line)) {
+      fail(label, file, `empty handler (R26-01): line ${i + 1}`);
+    }
+  }
+}
+
 function scanR24Rules(file, text, label) {
   if (!/\.tsx$/i.test(file)) return;
   const stripped = stripBlockComments(text);
@@ -138,6 +154,7 @@ function scanDir(dir, label) {
     }
     scanR22UiRules(file, text, label);
     scanR24Rules(file, text, label);
+    scanR26EmptyHandlers(file, text, label);
   }
 }
 

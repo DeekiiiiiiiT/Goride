@@ -30,7 +30,7 @@ const OLD_KIT = /from ['"](@roam\/ui|@\/components\/ui|(\.\.?\/)+ui)(\/|['"])/;
 const strip = (s) => s.replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/&[a-z]+;/g, ' ').replace(/\s+/g, ' ').trim();
 let failed = false;
 
-for (const row of readme.split('\n').filter((l) => /^\| S\d/.test(l))) {
+for (const row of readme.split('\n').filter((l) => /^\| (S\d|PI\d)/.test(l))) {
   const cells = row.split('|').map((c) => c.trim().replace(/^`|`$/g, ''));
   const [num, , , html, , react, status = ''] = cells.slice(1);
   if (SKIP.has(num)) continue;

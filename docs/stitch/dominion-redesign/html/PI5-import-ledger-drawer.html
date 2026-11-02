@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_dashboard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{colors:{"outline-variant":"#c3c6d7","surface-container":"#ededf9","on-tertiary-fixed-variant":"#3f465e","surface-container-high":"#e7e7f3","surface-container-low":"#f3f3ff","on-error":"#ffffff","surface-container-lowest":"#ffffff","primary-container":"#0153dc","on-secondary-container":"#5c647a","on-tertiary":"#ffffff","inverse-surface":"#2e3039","on-secondary-fixed-variant":"#3f465c","tertiary-fixed-dim":"#bfc5e2","on-error-container":"#93000a","surface-variant":"#e1e1ed","surface-container-highest":"#e1e1ed","inverse-primary":"#b4c5ff","secondary-fixed":"#dae2fd","tertiary":"#40465e","outline":"#737686","tertiary-container":"#575e77","on-primary-fixed":"#00174b","error":"#ba1a1a","on-tertiary-fixed":"#141b30","on-surface-variant":"#434655","on-primary-container":"#ced8ff","on-background":"#191b24","on-primary":"#ffffff","background":"#faf8ff","on-surface":"#191b24","secondary-fixed-dim":"#bec6e0","secondary-container":"#dae2fd","on-tertiary-container":"#d2d8f6","on-secondary-fixed":"#131b2e","tertiary-fixed":"#dbe1ff","surface-bright":"#faf8ff","surface-dim":"#d9d9e5","primary-fixed-dim":"#b4c5ff","surface":"#faf8ff","primary-fixed":"#dbe1ff","primary":"#003ea9","on-primary-fixed-variant":"#003ea8","error-container":"#ffdad6","secondary":"#565e74","inverse-on-surface":"#f0f0fc","surface-tint":"#0053db","on-secondary":"#ffffff"},borderRadius:{DEFAULT:"0.125rem",lg:"0.25rem",xl:"0.5rem",full:"0.75rem"},spacing:{gutter:"1rem","space-lg":"1rem",margin:"1.5rem","space-md":"0.75rem","space-sm":"0.5rem","gutter-dense":"0.5rem","space-xs":"0.25rem","margin-panel":"1rem","space-xl":"1.5rem"},fontFamily:{"label-xs":["Inter"],"headline-lg":["Inter"],"body-sm":["Inter"],"body-md":["Inter"],"headline-xl":["Inter"],"headline-md":["Inter"],"mono-sm":["JetBrains Mono"],"mono-lg":["JetBrains Mono"],"label-md":["Inter"],"mono-md":["JetBrains Mono"]},fontSize:{"label-xs":["11px",{lineHeight:"14px",letterSpacing:"0.04em",fontWeight:"600"}],"headline-lg":["20px",{lineHeight:"28px",letterSpacing:"-0.015em",fontWeight:"600"}],"body-sm":["13px",{lineHeight:"18px",letterSpacing:"0",fontWeight:"400"}],"body-md":["14px",{lineHeight:"20px",letterSpacing:"0",fontWeight:"400"}],"headline-xl":["24px",{lineHeight:"32px",letterSpacing:"-0.02em",fontWeight:"600"}],"headline-md":["16px",{lineHeight:"24px",letterSpacing:"-0.01em",fontWeight:"600"}],"mono-sm":["11px",{lineHeight:"14px",letterSpacing:"0.02em",fontWeight:"400"}],"mono-lg":["14px",{lineHeight:"20px",letterSpacing:"-0.01em",fontWeight:"500"}],"label-md":["12px",{lineHeight:"16px",letterSpacing:"0.01em",fontWeight:"500"}],"mono-md":["12px",{lineHeight:"16px",letterSpacing:"0",fontWeight:"500"}]}}}};</script></head><body class="bg-background font-body-md text-on-surface antialiased min-h-screen"><aside class="fixed left-0 top-0 h-full w-[260px] bg-[#0f172a] text-[#94a3b8] z-50 flex flex-col justify-between select-none"><div class="flex flex-col h-full"><div class="h-14 px-margin flex items-center gap-space-sm border-b border-[#1e293b]"><span class="material-symbols-outlined text-primary-fixed text-[22px]">precision_manufacturing</span><div class="flex flex-col"><span class="font-headline-md text-headline-md text-white tracking-tight leading-none">DOMINION</span><span class="font-mono-sm text-mono-sm text-[#64748b] tracking-wider uppercase leading-none mt-1">Enterprise OS</span></div></div><nav class="flex-1 overflow-y-auto px-space-sm py-space-md flex flex-col gap-space-xs" data-active-classes="bg-primary-container text-on-primary font-semibold rounded-lg"><div class="px-space-sm pt-space-xs pb-1 font-mono-sm text-mono-sm uppercase text-[#64748b] tracking-wider">Master Data</div><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-[#94a3b8] hover:bg-[#1e293b] hover:text-white transition-colors font-body-md text-body-md" data-path="overview" href="#"><span class="material-symbols-outlined text-[18px]">dashboard</span>Overview</a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-[#94a3b8] hover:bg-[#1e293b] hover:text-white transition-colors font-body-md text-body-md" data-path="parts-database-import" href="#"><span class="material-symbols-outlined text-[18px]">directions_car</span>Vehicles active</a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-[#94a3b8] hover:bg-[#1e293b] hover:text-white transition-colors font-body-md text-body-md" data-path="places-and-maps" href="#"><span class="material-symbols-outlined text-[18px]">map</span>Places and Maps</a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-[#94a3b8] hover:bg-[#1e293b] hover:text-white transition-colors font-body-md text-body-md" data-path="fuel" href="#"><span class="material-symbols-outlined text-[18px]">local_gas_station</span>Fuel</a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-[#94a3b8] hover:bg-[#1e293b] hover:text-white transition-colors font-body-md text-body-md" data-path="tolls" href="#"><span class="material-symbols-outlined text-[18px]">toll</span>Tolls</a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-[#94a3b8] hover:bg-[#1e293b] hover:text-white transition-colors font-body-md text-body-md" data-path="tax-and-vendors" href="#"><span class="material-symbols-outlined text-[18px]">receipt_long</span>Tax and Vendors</a><div class="px-space-sm pt-space-md pb-1 font-mono-sm text-mono-sm uppercase text-[#64748b] tracking-wider">Engines</div><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-[#94a3b8] hover:bg-[#1e293b] hover:text-white transition-colors font-body-md text-body-md" data-path="fuel-brain" href="#"><span class="material-symbols-outlined text-[18px]">psychology</span>Fuel Brain</a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-[#94a3b8] hover:bg-[#1e293b] hover:text-white transition-colors font-body-md text-body-md" data-path="toll-brain" href="#"><span class="material-symbols-outlined text-[18px]">hub</span>Toll Brain</a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-[#94a3b8] hover:bg-[#1e293b] hover:text-white transition-colors font-body-md text-body-md" data-path="matching-brain" href="#"><span class="material-symbols-outlined text-[18px]">alt_route</span>Matching Brain</a><div class="px-space-sm pt-space-md pb-1 font-mono-sm text-mono-sm uppercase text-[#64748b] tracking-wider">Distribution</div><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-[#94a3b8] hover:bg-[#1e293b] hover:text-white transition-colors font-body-md text-body-md" data-path="apps" href="#"><span class="material-symbols-outlined text-[18px]">apps</span>Apps</a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-[#94a3b8] hover:bg-[#1e293b] hover:text-white transition-colors font-body-md text-body-md" data-path="data-api" href="#"><span class="material-symbols-outlined text-[18px]">api</span>Data API</a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-[#94a3b8] hover:bg-[#1e293b] hover:text-white transition-colors font-body-md text-body-md" data-path="change-requests" href="#"><span class="material-symbols-outlined text-[18px]">swap_horiz</span>Change requests</a><div class="px-space-sm pt-space-md pb-1 font-mono-sm text-mono-sm uppercase text-[#64748b] tracking-wider">Platform</div><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-[#94a3b8] hover:bg-[#1e293b] hover:text-white transition-colors font-body-md text-body-md" data-path="staff-and-roles" href="#"><span class="material-symbols-outlined text-[18px]">group</span>Staff and roles</a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-[#94a3b8] hover:bg-[#1e293b] hover:text-white transition-colors font-body-md text-body-md" data-path="activity-log" href="#"><span class="material-symbols-outlined text-[18px]">history</span>Activity log</a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-[#94a3b8] hover:bg-[#1e293b] hover:text-white transition-colors font-body-md text-body-md" data-path="platform-ops" href="#"><span class="material-symbols-outlined text-[18px]">terminal</span>Platform Ops</a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-[#94a3b8] hover:bg-[#1e293b] hover:text-white transition-colors font-body-md text-body-md" data-path="global-settings" href="#"><span class="material-symbols-outlined text-[18px]">settings</span>Global settings</a><div class="px-space-sm pt-space-md pb-1 font-mono-sm text-mono-sm uppercase text-[#64748b] tracking-wider">Back Office</div><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-[#94a3b8] hover:bg-[#1e293b] hover:text-white transition-colors font-body-md text-body-md" data-path="gct-registrations" href="#"><span class="material-symbols-outlined text-[18px]">assignment</span>GCT registrations</a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-[#94a3b8] hover:bg-[#1e293b] hover:text-white transition-colors font-body-md text-body-md" data-path="ledger" href="#"><span class="material-symbols-outlined text-[18px]">account_balance</span>Ledger</a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg text-[#94a3b8] hover:bg-[#1e293b] hover:text-white transition-colors font-body-md text-body-md" data-path="remittance" href="#"><span class="material-symbols-outlined text-[18px]">payments</span>Remittance</a></nav></div></aside><div class="pl-[260px] min-h-screen flex flex-col justify-between"><header class="fixed top-0 left-[260px] right-0 h-14 bg-surface-container-lowest border-b border-[#e2e8f0] z-40 flex items-center justify-between px-margin"><div class="flex items-center gap-space-md"><div class="relative w-[420px] flex items-center"><span class="material-symbols-outlined absolute left-3 text-[#737686] text-[18px]">search</span><input class="w-full h-9 pl-9 pr-14 bg-surface rounded-xl border border-[#e2e8f0] text-body-md font-body-md text-on-surface focus:outline-none focus:border-primary-container focus:bg-surface-container-lowest transition-colors" placeholder="Search entities, engines, routes…" type="text"/><kbd class="absolute right-2.5 px-1.5 py-0.5 font-mono-sm text-mono-sm bg-surface-container text-on-surface-variant rounded border border-outline-variant">⌘K</kbd></div><div class="flex items-center gap-1.5 px-2.5 py-1 bg-surface-container-low border border-[#e2e8f0] rounded-full"><span class="w-2 h-2 rounded-full bg-[#006e31]"></span><span class="font-mono-sm text-mono-sm text-on-surface-variant font-medium">NODE: OK</span></div></div><div class="flex items-center gap-space-md"><button class="w-9 h-9 rounded-xl border border-[#e2e8f0] bg-surface flex items-center justify-center text-on-surface-variant hover:bg-surface-container-low transition-colors" title="Toggle theme"><span class="material-symbols-outlined text-[18px]">dark_mode</span></button><div class="flex items-center gap-space-sm pl-space-sm border-l border-[#e2e8f0]"><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div><div class="flex items-center gap-1.5 font-body-md text-body-md text-[#30323b]"><span class="font-mono-md text-mono-md text-primary font-semibold">DT</span><span class="text-outline">·</span><span class="font-medium">Deeki T</span><span class="text-outline">·</span><span class="font-mono-sm text-mono-sm px-1.5 py-0.5 rounded bg-surface-container text-on-surface-variant font-medium">Owner</span></div></div></div></header><main class="w-full pt-14 flex-1 bg-background"><div class="flex flex-col w-full relative">
+<!-- Top Context Breadcrumb & Architecture Badges -->
+<div class="px-margin pt-space-md pb-space-sm flex items-center justify-between bg-surface-container-lowest">
+<div class="flex items-center gap-space-sm flex-wrap">
+<div class="flex items-center gap-1.5 font-mono-sm text-mono-sm text-outline tracking-wider uppercase">
+<span>DOMINION</span>
+<span>/</span>
+<span>MASTER DATA</span>
+<span>/</span>
+<span>VEHICLES</span>
+<span>/</span>
+<span class="text-on-surface font-semibold">PARTS DATABASE</span>
+</div>
+<span class="inline-flex items-center px-2 py-0.5 rounded-full bg-secondary-container text-on-secondary-fixed text-mono-sm font-mono-sm uppercase font-medium">
+        INDEX: 35 FITMENTS
+      </span>
+<span class="inline-flex items-center px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant text-mono-sm font-mono-sm uppercase">
+        SCHEMA V2.4
+      </span>
+</div>
+<div class="flex items-center gap-space-sm">
+<div class="flex items-center gap-1.5 px-2.5 py-1 rounded bg-surface-container-low text-on-surface-variant text-label-xs font-label-xs">
+<span class="material-symbols-outlined text-primary text-[14px]">verified</span>
+<span>Catalog Level 0 · Audited</span>
+</div>
+</div>
+</div>
+<!-- Main Database Header & Navigation Tabs -->
+<div class="px-margin bg-surface-container-lowest shadow-sm">
+<div class="flex items-center justify-between py-space-sm">
+<div class="flex items-center gap-space-md">
+<h1 class="font-headline-xl text-headline-xl text-on-surface tracking-tight">Parts database</h1>
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#e8f5e9] text-[#006e31] font-mono-sm text-mono-sm font-semibold uppercase">
+<span class="w-1.5 h-1.5 rounded-full bg-[#006e31]"></span>
+          LIVE CLUSTER
+        </span>
+</div>
+<div class="flex items-center gap-2">
+<button class="h-9 px-3.5 rounded-xl bg-surface-container-low text-on-surface font-label-md text-label-md hover:bg-surface-container transition-colors flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[18px]">download</span>
+          Export Full Ledger
+        </button>
+<button class="h-9 px-3.5 rounded-xl bg-primary text-on-primary font-label-md text-label-md hover:bg-primary-container transition-colors shadow-sm flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[18px]">upload_file</span>
+          New Batch Import
+        </button>
+</div>
+</div>
+<!-- Screen Tabs -->
+<div class="flex items-center gap-space-lg">
+<a class="pb-3 text-on-surface-variant hover:text-on-surface font-label-md text-label-md flex items-center gap-1.5 transition-colors" href="#">
+<span class="material-symbols-outlined text-[18px]">search</span>
+        Find parts
+      </a>
+<a class="pb-3 text-on-surface-variant hover:text-on-surface font-label-md text-label-md flex items-center gap-1.5 transition-colors" href="#">
+<span class="material-symbols-outlined text-[18px]">dataset</span>
+        Full database
+      </a>
+<a class="pb-3 text-primary font-semibold font-label-md text-label-md flex items-center gap-1.5 relative" href="#">
+<span class="material-symbols-outlined text-[18px]">receipt_long</span>
+        Import CSV (Ledger)
+        <span class="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-full"></span>
+</a>
+</div>
+</div>
+<!-- Operational Subheader Banner -->
+<div class="px-margin py-space-md bg-surface flex flex-col md:flex-row md:items-center justify-between gap-space-sm">
+<div>
+<div class="flex items-center gap-2 mb-1">
+<a class="text-primary hover:underline font-label-md text-label-md flex items-center gap-1 font-medium" href="#">
+<span class="material-symbols-outlined text-[16px]">arrow_back</span>
+          All areas
+        </a>
+<span class="text-outline-variant font-mono-sm text-mono-sm">/</span>
+<span class="font-headline-md text-headline-md text-on-surface">Import ledger</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+        Audit trail of all domain imports with fitment verification and rollback capabilities. Zero mutation tolerance on verified logs.
+      </p>
+</div>
+<div class="flex items-center gap-3">
+<div class="bg-surface-container-lowest px-3 py-1.5 rounded-lg shadow-sm flex items-center gap-3">
+<div class="flex flex-col">
+<span class="font-mono-sm text-mono-sm text-on-surface-variant uppercase">ACTIVE WORKSPACE</span>
+<span class="font-mono-md text-mono-md font-semibold text-on-surface">DOM-JMD-PROD-01</span>
+</div>
+<div class="h-6 w-px bg-surface-container-high"></div>
+<div class="flex flex-col">
+<span class="font-mono-sm text-mono-sm text-on-surface-variant uppercase">ROLLBACK WINDOW</span>
+<span class="font-mono-md text-mono-md font-semibold text-[#006e31]">72H ACTIVE</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Area Filter Horizontal Rail -->
+<div class="px-margin py-space-sm bg-surface overflow-x-auto">
+<div class="flex items-center gap-1.5 min-w-max">
+<button class="px-3 py-1 rounded-full bg-primary text-on-primary font-mono-sm text-mono-sm font-semibold shadow-sm flex items-center gap-1.5">
+<span>All areas</span>
+<span class="bg-primary-container px-1.5 py-0.2 rounded-full text-white">3</span>
+</button>
+<button class="px-3 py-1 rounded-full bg-surface-container-lowest hover:bg-surface-container text-on-surface font-mono-sm text-mono-sm font-medium shadow-sm transition-colors flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[14px] text-primary">trip_origin</span>
+<span>Brakes</span>
+<span class="bg-surface-container px-1.5 py-0.2 rounded-full text-on-surface-variant">2</span>
+</button>
+<button class="px-3 py-1 rounded-full bg-surface-container-lowest hover:bg-surface-container text-on-surface font-mono-sm text-mono-sm font-medium shadow-sm transition-colors flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[14px] text-[#b45309]">settings_suggest</span>
+<span>Engine</span>
+<span class="bg-surface-container px-1.5 py-0.2 rounded-full text-on-surface-variant">1</span>
+</button>
+<button class="px-3 py-1 rounded-full bg-surface-container-lowest hover:bg-surface-container text-on-surface font-mono-sm text-mono-sm font-medium shadow-sm transition-colors flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[14px] text-[#0e7490]">filter_alt</span>
+<span>Filters</span>
+<span class="bg-surface-container px-1.5 py-0.2 rounded-full text-on-surface-variant">1</span>
+</button>
+<button class="px-3 py-1 rounded-full bg-surface-container-low text-on-surface-variant opacity-75 font-mono-sm text-mono-sm hover:opacity-100 transition-opacity">
+        Tires &amp; wheels (0)
+      </button>
+<button class="px-3 py-1 rounded-full bg-surface-container-low text-on-surface-variant opacity-75 font-mono-sm text-mono-sm hover:opacity-100 transition-opacity">
+        Fluids (0)
+      </button>
+<button class="px-3 py-1 rounded-full bg-surface-container-low text-on-surface-variant opacity-75 font-mono-sm text-mono-sm hover:opacity-100 transition-opacity">
+        Belts &amp; hoses (0)
+      </button>
+<button class="px-3 py-1 rounded-full bg-surface-container-low text-on-surface-variant opacity-75 font-mono-sm text-mono-sm hover:opacity-100 transition-opacity">
+        Lighting &amp; visibility (0)
+      </button>
+<button class="px-3 py-1 rounded-full bg-surface-container-low text-on-surface-variant opacity-75 font-mono-sm text-mono-sm hover:opacity-100 transition-opacity">
+        Suspension &amp; steering (0)
+      </button>
+<button class="px-3 py-1 rounded-full bg-surface-container-low text-on-surface-variant opacity-75 font-mono-sm text-mono-sm hover:opacity-100 transition-opacity">
+        Transmission (0)
+      </button>
+<button class="px-3 py-1 rounded-full bg-surface-container-low text-on-surface-variant opacity-75 font-mono-sm text-mono-sm hover:opacity-100 transition-opacity">
+        HVAC (0)
+      </button>
+<button class="px-3 py-1 rounded-full bg-surface-container-low text-on-surface-variant opacity-75 font-mono-sm text-mono-sm hover:opacity-100 transition-opacity">
+        Battery &amp; electrical (0)
+      </button>
+</div>
+</div>
+<!-- Operational Workspace: Ledger Table Area -->
+<div class="px-margin py-space-md">
+<div class="bg-surface-container-lowest rounded-xl shadow-md overflow-hidden">
+<!-- Ledger Action Control Strip -->
+<div class="px-space-md py-space-sm bg-surface-container-lowest flex items-center justify-between">
+<div class="flex items-center gap-space-sm">
+<span class="font-headline-md text-headline-md text-on-surface">Batch History</span>
+<span class="font-mono-sm text-mono-sm px-2 py-0.5 rounded bg-surface-container text-on-surface-variant">4 Records Displayed</span>
+</div>
+<div class="flex items-center gap-2">
+<div class="relative w-64">
+<span class="material-symbols-outlined absolute left-2.5 top-2 text-[#737686] text-[16px]">filter_list</span>
+<input class="w-full h-8 pl-8 pr-3 text-body-sm font-body-sm bg-surface rounded-lg text-on-surface focus:outline-none focus:bg-surface-container-lowest" placeholder="Filter batches or files…" type="text"/>
+</div>
+<button class="h-8 px-2.5 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface-variant font-mono-sm text-mono-sm flex items-center gap-1 transition-colors">
+<span class="material-symbols-outlined text-[16px]">refresh</span>
+            Sync
+          </button>
+</div>
+</div>
+<!-- Main Data Table -->
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface text-on-surface-variant font-label-xs text-label-xs uppercase tracking-wider h-9">
+<th class="px-4 py-2 font-semibold">Date / Time</th>
+<th class="px-4 py-2 font-semibold">Area</th>
+<th class="px-4 py-2 font-semibold">File Name</th>
+<th class="px-4 py-2 font-semibold">By</th>
+<th class="px-4 py-2 font-semibold">Rows Breakdown</th>
+<th class="px-4 py-2 font-semibold">Changes</th>
+<th class="px-4 py-2 font-semibold">Batch Status</th>
+<th class="px-4 py-2 font-semibold text-right">Action</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-surface-container font-body-sm text-body-sm">
+<!-- Row 1: Active Drawer / Highlighted -->
+<tr class="bg-secondary-container/40 transition-colors group">
+<td class="px-4 py-3 font-mono-md text-mono-md text-on-surface whitespace-nowrap">
+<div class="flex items-center gap-2">
+<span class="w-1.5 h-6 bg-primary rounded-full"></span>
+<span>01 Nov 2026 21:42</span>
+</div>
+</td>
+<td class="px-4 py-3 whitespace-nowrap">
+<span class="inline-flex items-center gap-1.5 font-medium text-on-surface">
+<span class="material-symbols-outlined text-[16px] text-primary">trip_origin</span>
+                  Brakes
+                </span>
+</td>
+<td class="px-4 py-3 font-mono-sm text-mono-sm text-on-surface font-medium whitespace-nowrap">
+                roomy-brakes-nov.csv
+              </td>
+<td class="px-4 py-3 text-on-surface-variant whitespace-nowrap font-medium">
+                Deeki T
+              </td>
+<td class="px-4 py-3 whitespace-nowrap">
+<div class="flex items-center gap-2 font-mono-sm text-mono-sm">
+<span class="text-[#006e31] font-medium">20 ready</span>
+<span class="text-outline-variant">·</span>
+<span class="text-[#ba1a1a] font-medium">3 errors</span>
+<span class="text-outline-variant">·</span>
+<span class="text-on-surface-variant">2 dupes</span>
+</div>
+</td>
+<td class="px-4 py-3 whitespace-nowrap">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-surface-container font-mono-sm text-mono-sm text-on-surface font-semibold">
+                  4 parts · 16 fits
+                </span>
+</td>
+<td class="px-4 py-3 whitespace-nowrap">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#e8f5e9] text-[#006e31] font-mono-sm text-mono-sm font-semibold">
+<span class="material-symbols-outlined text-[13px]">check_circle</span>
+                  Imported
+                </span>
+</td>
+<td class="px-4 py-3 text-right whitespace-nowrap">
+<div class="flex items-center justify-end gap-2">
+<button class="px-2.5 py-1 rounded bg-[#ffdad6] text-[#ba1a1a] hover:bg-[#ffb4ab] font-mono-sm text-mono-sm font-semibold transition-colors" onclick="document.getElementById('undoDialog').classList.remove('hidden')">
+                    Undo
+                  </button>
+<button class="px-2.5 py-1 rounded bg-primary text-on-primary font-mono-sm text-mono-sm font-semibold transition-colors shadow-sm">
+                    View drawer
+                  </button>
+</div>
+</td>
+</tr>
+<!-- Row 2: Imported with Disabled Undo -->
+<tr class="bg-surface-container-lowest hover:bg-surface-container-low transition-colors">
+<td class="px-4 py-3 font-mono-md text-mono-md text-on-surface whitespace-nowrap">
+<div class="flex items-center gap-2 pl-3.5">
+<span>31 Oct 2026 14:15</span>
+</div>
+</td>
+<td class="px-4 py-3 whitespace-nowrap">
+<span class="inline-flex items-center gap-1.5 font-medium text-on-surface">
+<span class="material-symbols-outlined text-[16px] text-[#b45309]">settings_suggest</span>
+                  Engine
+                </span>
+</td>
+<td class="px-4 py-3 font-mono-sm text-mono-sm text-on-surface font-medium whitespace-nowrap">
+                probox-engine.csv
+              </td>
+<td class="px-4 py-3 text-on-surface-variant whitespace-nowrap font-medium">
+                Deeki T
+              </td>
+<td class="px-4 py-3 whitespace-nowrap">
+<div class="flex items-center gap-2 font-mono-sm text-mono-sm">
+<span class="text-[#006e31] font-medium">5 ready</span>
+<span class="text-outline-variant">·</span>
+<span class="text-on-surface-variant">0 errors</span>
+<span class="text-outline-variant">·</span>
+<span class="text-on-surface-variant">0 dupes</span>
+</div>
+</td>
+<td class="px-4 py-3 whitespace-nowrap">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-surface-container font-mono-sm text-mono-sm text-on-surface">
+                  2 parts · 5 fits
+                </span>
+</td>
+<td class="px-4 py-3 whitespace-nowrap">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#e8f5e9] text-[#006e31] font-mono-sm text-mono-sm font-semibold">
+<span class="material-symbols-outlined text-[13px]">check_circle</span>
+                  Imported
+                </span>
+</td>
+<td class="px-4 py-3 text-right whitespace-nowrap">
+<div class="flex items-center justify-end gap-2">
+<span class="font-body-sm text-body-sm text-outline italic">3 fits changed later</span>
+<button class="px-2.5 py-1 rounded bg-surface-container text-outline opacity-60 font-mono-sm text-mono-sm cursor-not-allowed" disabled="">
+                    Undo
+                  </button>
+</div>
+</td>
+</tr>
+<!-- Row 3: Undone Batch -->
+<tr class="bg-surface-container-lowest hover:bg-surface-container-low transition-colors">
+<td class="px-4 py-3 font-mono-md text-mono-md text-on-surface whitespace-nowrap">
+<div class="flex items-center gap-2 pl-3.5">
+<span>30 Oct 2026 18:04</span>
+</div>
+</td>
+<td class="px-4 py-3 whitespace-nowrap">
+<span class="inline-flex items-center gap-1.5 font-medium text-on-surface">
+<span class="material-symbols-outlined text-[16px] text-primary">trip_origin</span>
+                  Brakes
+                </span>
+</td>
+<td class="px-4 py-3 font-mono-sm text-mono-sm text-on-surface-variant whitespace-nowrap">
+                roomy-brakes.csv
+              </td>
+<td class="px-4 py-3 text-on-surface-variant whitespace-nowrap font-medium">
+                Deeki T
+              </td>
+<td class="px-4 py-3 whitespace-nowrap">
+<div class="flex items-center gap-2 font-mono-sm text-mono-sm">
+<span class="text-on-surface-variant">18 ready</span>
+<span class="text-outline-variant">·</span>
+<span class="text-on-surface-variant">2 errors</span>
+<span class="text-outline-variant">·</span>
+<span class="text-on-surface-variant">0 dupes</span>
+</div>
+</td>
+<td class="px-4 py-3 whitespace-nowrap">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-surface-container-low font-mono-sm text-mono-sm text-on-surface-variant line-through">
+                  3 parts · 12 fits
+                </span>
+</td>
+<td class="px-4 py-3 whitespace-nowrap">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant font-mono-sm text-mono-sm font-semibold">
+<span class="material-symbols-outlined text-[13px]">history_toggle_off</span>
+                  Undone
+                </span>
+</td>
+<td class="px-4 py-3 text-right whitespace-nowrap text-outline">
+                —
+              </td>
+</tr>
+<!-- Row 4: Failed Batch -->
+<tr class="bg-surface-container-lowest hover:bg-surface-container-low transition-colors">
+<td class="px-4 py-3 font-mono-md text-mono-md text-on-surface whitespace-nowrap">
+<div class="flex items-center gap-2 pl-3.5">
+<span>30 Oct 2026 11:20</span>
+</div>
+</td>
+<td class="px-4 py-3 whitespace-nowrap">
+<span class="inline-flex items-center gap-1.5 font-medium text-on-surface">
+<span class="material-symbols-outlined text-[16px] text-[#0e7490]">filter_alt</span>
+                  Filters
+                </span>
+</td>
+<td class="px-4 py-3 font-mono-sm text-mono-sm text-on-surface font-medium whitespace-nowrap">
+                fit-filters.csv
+              </td>
+<td class="px-4 py-3 text-on-surface-variant whitespace-nowrap font-medium">
+                Deeki T
+              </td>
+<td class="px-4 py-3 whitespace-nowrap">
+<div class="flex items-center gap-2 font-mono-sm text-mono-sm">
+<span class="text-on-surface-variant">0 ready</span>
+<span class="text-outline-variant">·</span>
+<span class="text-[#ba1a1a] font-semibold">1 file error</span>
+</div>
+</td>
+<td class="px-4 py-3 whitespace-nowrap text-outline">
+                —
+              </td>
+<td class="px-4 py-3 whitespace-nowrap">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#ffdad6] text-[#ba1a1a] font-mono-sm text-mono-sm font-semibold">
+<span class="material-symbols-outlined text-[13px]">warning</span>
+                  Failed
+                </span>
+</td>
+<td class="px-4 py-3 text-right whitespace-nowrap font-mono-sm text-mono-sm text-[#ba1a1a]">
+                Could not read this file
+              </td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Ledger Summary Footing -->
+<div class="px-space-md py-space-sm bg-surface flex items-center justify-between text-on-surface-variant font-mono-sm text-mono-sm">
+<div class="flex items-center gap-3">
+<span>PARSER ENGINE: STRICT V2</span>
+<span>·</span>
+<span>INTEGRITY VERIFIED: 100%</span>
+</div>
+<div>
+<span>Showing 4 of 4 batches</span>
+</div>
+</div>
+</div>
+</div>
+<!-- DIMMED BACKDROP FOR BATCH DRAWER -->
+<div class="fixed inset-0 top-14 left-[260px] bg-inverse-surface/40 backdrop-blur-[1px] z-40 flex justify-end" id="drawerContainer">
+<!-- RIGHT DRAWER (560px WIDE) -->
+<div class="w-[560px] h-[calc(100vh-3.5rem)] bg-surface-container-lowest shadow-2xl flex flex-col justify-between overflow-hidden relative z-50">
+<!-- Drawer Header -->
+<div class="p-space-lg bg-surface-container-lowest shadow-sm flex items-start justify-between">
+<div class="flex flex-col gap-1">
+<div class="flex items-center gap-2">
+<span class="font-headline-lg text-headline-lg text-on-surface tracking-tight">Brakes · roomy-brakes-nov.csv</span>
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#e8f5e9] text-[#006e31] font-mono-sm text-mono-sm font-semibold">
+<span class="material-symbols-outlined text-[12px]">check_circle</span>
+              Imported
+            </span>
+</div>
+<div class="flex items-center gap-1 font-mono-sm text-mono-sm text-on-surface-variant">
+<span>Imported 01 Nov 2026 21:42</span>
+<span>·</span>
+<span>by Deeki T</span>
+<span>·</span>
+<span class="text-primary font-semibold">ID #BCH-8921-X</span>
+</div>
+</div>
+<button class="w-8 h-8 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant flex items-center justify-center transition-colors" onclick="document.getElementById('drawerContainer').classList.add('hidden')">
+<span class="material-symbols-outlined text-[20px]">close</span>
+</button>
+</div>
+<!-- Drawer Scrollable Content Canvas -->
+<div class="flex-1 overflow-y-auto p-space-lg flex flex-col gap-space-lg bg-surface">
+<!-- Counts Grid: 5 Metric Tiles in Mono -->
+<div class="grid grid-cols-5 gap-2">
+<div class="p-2.5 rounded-xl bg-surface-container-lowest shadow-sm flex flex-col">
+<span class="font-mono-sm text-mono-sm text-on-surface-variant uppercase">Rows</span>
+<span class="font-mono-lg text-mono-lg font-bold text-on-surface mt-1">25</span>
+</div>
+<div class="p-2.5 rounded-xl bg-surface-container-lowest shadow-sm flex flex-col">
+<span class="font-mono-sm text-mono-sm text-[#006e31] uppercase">Ready</span>
+<span class="font-mono-lg text-mono-lg font-bold text-[#006e31] mt-1">18</span>
+</div>
+<div class="p-2.5 rounded-xl bg-surface-container-lowest shadow-sm flex flex-col">
+<span class="font-mono-sm text-mono-sm text-primary uppercase">Ready w/ lbl</span>
+<span class="font-mono-lg text-mono-lg font-bold text-primary mt-1">2</span>
+</div>
+<div class="p-2.5 rounded-xl bg-surface-container-lowest shadow-sm flex flex-col">
+<span class="font-mono-sm text-mono-sm text-[#ba1a1a] uppercase">Errors</span>
+<span class="font-mono-lg text-mono-lg font-bold text-[#ba1a1a] mt-1">3</span>
+</div>
+<div class="p-2.5 rounded-xl bg-surface-container-lowest shadow-sm flex flex-col">
+<span class="font-mono-sm text-mono-sm text-on-surface-variant uppercase">Duplicates</span>
+<span class="font-mono-lg text-mono-lg font-bold text-on-surface-variant mt-1">2</span>
+</div>
+</div>
+<!-- Section: What Changed -->
+<div class="flex flex-col gap-space-sm">
+<div class="flex items-center justify-between">
+<span class="font-mono-sm text-mono-sm uppercase text-outline font-semibold tracking-wider">What changed in catalog</span>
+<span class="font-mono-sm text-mono-sm text-[#006e31] font-medium">+20 Mutations Applied</span>
+</div>
+<!-- Card 1: Parts Created -->
+<div class="rounded-xl bg-surface-container-lowest shadow-sm overflow-hidden">
+<div class="px-space-md py-2.5 bg-surface-container flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px] text-primary">add_circle</span>
+<span class="font-headline-md text-headline-md text-on-surface">4 parts created</span>
+</div>
+<span class="font-mono-sm text-mono-sm px-2 py-0.5 rounded bg-surface-container-lowest font-medium text-on-surface-variant">Tier 1 Fitments</span>
+</div>
+<div class="divide-y divide-surface-container p-space-sm">
+<div class="py-2 px-1 flex flex-col gap-1">
+<div class="flex items-center justify-between">
+<span class="font-mono-md text-mono-md font-semibold text-on-surface">Toyota 04465-B1010</span>
+<span class="inline-flex items-center px-1.5 py-0.5 rounded bg-surface-container-high text-on-surface-variant font-mono-sm text-mono-sm">Front</span>
+</div>
+<div class="flex items-center gap-2 font-body-sm text-body-sm text-on-surface-variant">
+<span>Brake pads</span>
+<span class="text-outline-variant">→</span>
+<span class="font-medium text-on-surface">Roomy M900A</span>
+</div>
+</div>
+<div class="py-2 px-1 flex flex-col gap-1">
+<div class="flex items-center justify-between">
+<span class="font-mono-md text-mono-md font-semibold text-on-surface">Akebono AN-761WK</span>
+<span class="inline-flex items-center px-1.5 py-0.5 rounded bg-surface-container-high text-on-surface-variant font-mono-sm text-mono-sm">Front</span>
+</div>
+<div class="flex items-center gap-2 font-body-sm text-body-sm text-on-surface-variant">
+<span>Brake pads</span>
+<span class="text-outline-variant">→</span>
+<span class="font-medium text-on-surface">Roomy M900A</span>
+</div>
+</div>
+<div class="py-2 px-1 flex flex-col gap-1">
+<div class="flex items-center justify-between">
+<span class="font-mono-md text-mono-md font-semibold text-on-surface">Toyota 04495-B1010</span>
+<span class="inline-flex items-center px-1.5 py-0.5 rounded bg-surface-container-high text-on-surface-variant font-mono-sm text-mono-sm">Rear</span>
+</div>
+<div class="flex items-center gap-2 font-body-sm text-body-sm text-on-surface-variant">
+<span>Brake shoes / drums</span>
+<span class="text-outline-variant">→</span>
+<span class="font-medium text-on-surface">Roomy M900A</span>
+</div>
+</div>
+<div class="py-2 px-1 flex flex-col gap-1">
+<div class="flex items-center justify-between">
+<span class="font-mono-md text-mono-md font-semibold text-on-surface">Advics SN953P</span>
+<span class="inline-flex items-center px-1.5 py-0.5 rounded bg-surface-container-high text-on-surface-variant font-mono-sm text-mono-sm">Front</span>
+</div>
+<div class="flex items-center gap-2 font-body-sm text-body-sm text-on-surface-variant">
+<span>Disc Brake Pad Kit</span>
+<span class="text-outline-variant">→</span>
+<span class="font-medium text-on-surface">Roomy M910A</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Card 2: 16 Fits Added -->
+<div class="rounded-xl bg-surface-container-lowest shadow-sm overflow-hidden">
+<div class="px-space-md py-2.5 bg-surface-container flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px] text-[#006e31]">alt_route</span>
+<span class="font-headline-md text-headline-md text-on-surface">16 fits added</span>
+</div>
+<span class="font-mono-sm text-mono-sm text-primary font-medium cursor-pointer hover:underline">Collapse</span>
+</div>
+<div class="p-space-sm flex flex-col gap-1.5 font-mono-sm text-mono-sm">
+<div class="flex items-center justify-between p-1.5 rounded bg-surface">
+<span class="text-on-surface">Toyota Roomy M900A (2016-2020)</span>
+<span class="text-on-surface-variant font-medium">Front &amp; Rear Calipers (8)</span>
+</div>
+<div class="flex items-center justify-between p-1.5 rounded bg-surface">
+<span class="text-on-surface">Toyota Roomy M910A 4WD (2016-2022)</span>
+<span class="text-on-surface-variant font-medium">Front Disc Brakes (4)</span>
+</div>
+<div class="flex items-center justify-between p-1.5 rounded bg-surface">
+<span class="text-on-surface">Daihatsu Thor M900S (Badge Twin)</span>
+<span class="text-on-surface-variant font-medium">Front Pad Assemblies (4)</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Section: Left Out (Errors and Duplicates) -->
+<div class="flex flex-col gap-space-sm">
+<div class="flex items-center justify-between">
+<span class="font-mono-sm text-mono-sm uppercase text-[#ba1a1a] font-semibold tracking-wider">Left out from catalog (5 rows)</span>
+<button class="h-7 px-2.5 rounded-lg bg-surface-container-lowest shadow-sm hover:bg-surface-container text-on-surface font-mono-sm text-mono-sm flex items-center gap-1.5 transition-colors">
+<span class="material-symbols-outlined text-[14px]">file_download</span>
+              Download failed rows (5)
+            </button>
+</div>
+<div class="rounded-xl bg-surface-container-lowest shadow-sm overflow-hidden divide-y divide-surface-container">
+<!-- Left out Item 1 -->
+<div class="p-3 flex items-start gap-3">
+<span class="font-mono-sm text-mono-sm px-1.5 py-0.5 rounded bg-error-container text-[#ba1a1a] font-bold">L9</span>
+<div class="flex-1">
+<div class="flex items-center justify-between">
+<span class="font-mono-md text-mono-md font-semibold text-on-surface">Brembo P 83 152</span>
+<span class="font-mono-sm text-mono-sm text-[#ba1a1a] font-medium">DISAMBIGUATION_REQ</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">Car disambiguation required: Chassis specified has 2 rotor diameters.</p>
+</div>
+</div>
+<!-- Left out Item 2 -->
+<div class="p-3 flex items-start gap-3">
+<span class="font-mono-sm text-mono-sm px-1.5 py-0.5 rounded bg-error-container text-[#ba1a1a] font-bold">L12</span>
+<div class="flex-1">
+<div class="flex items-center justify-between">
+<span class="font-mono-md text-mono-md font-semibold text-on-surface">Toyota 90915-YZZE1</span>
+<span class="font-mono-sm text-mono-sm text-[#ba1a1a] font-medium">DOMAIN_MISMATCH</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">Oil filter is not a Brakes part. Routed to Filters review bucket.</p>
+</div>
+</div>
+<!-- Left out Item 3 -->
+<div class="p-3 flex items-start gap-3">
+<span class="font-mono-sm text-mono-sm px-1.5 py-0.5 rounded bg-error-container text-[#ba1a1a] font-bold">L15</span>
+<div class="flex-1">
+<div class="flex items-center justify-between">
+<span class="font-mono-md text-mono-md font-semibold text-on-surface">Toyota 04495-B1010</span>
+<span class="font-mono-sm text-mono-sm text-[#ba1a1a] font-medium">PARAM_MISSING</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">Position required (Front vs Rear unspecified in input record).</p>
+</div>
+</div>
+<!-- Left out Item 4 -->
+<div class="p-3 flex items-start gap-3">
+<span class="font-mono-sm text-mono-sm px-1.5 py-0.5 rounded bg-surface-container text-on-surface-variant font-bold">L18</span>
+<div class="flex-1">
+<div class="flex items-center justify-between">
+<span class="font-mono-md text-mono-md font-semibold text-on-surface">Toyota 04465-B1010</span>
+<span class="font-mono-sm text-mono-sm text-on-surface-variant font-medium">DUPLICATE</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">Duplicate of line 4 in this file. Redundant fitment definition skipped.</p>
+</div>
+</div>
+<!-- Left out Item 5 -->
+<div class="p-3 flex items-start gap-3">
+<span class="font-mono-sm text-mono-sm px-1.5 py-0.5 rounded bg-error-container text-[#ba1a1a] font-bold">L22</span>
+<div class="flex-1">
+<div class="flex items-center justify-between">
+<span class="font-mono-md text-mono-md font-semibold text-on-surface">— Unknown Record —</span>
+<span class="font-mono-sm text-mono-sm text-[#ba1a1a] font-medium">SCHEMA_INVALID</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">Unrecognized OEM schema token; column delimiter misaligned at offset 41.</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Drawer Footer with Destructive Undo Action -->
+<div class="p-space-lg bg-surface-container-lowest shadow-md flex flex-col gap-2">
+<div class="flex items-center justify-between gap-3">
+<button class="w-full h-10 px-4 rounded-xl bg-error-container text-[#ba1a1a] hover:bg-[#ffb4ab] font-label-md text-label-md font-semibold flex items-center justify-center gap-2 transition-colors" onclick="document.getElementById('undoDialog').classList.remove('hidden')">
+<span class="material-symbols-outlined text-[18px]">undo</span>
+            Undo this import
+          </button>
+</div>
+<p class="font-mono-sm text-mono-sm text-center text-outline">
+          Removes the 4 parts and 16 fits this import added. Nothing older is touched.
+        </p>
+</div>
+</div>
+</div>
+<!-- FLOATING CONFIRMATION DIALOG / MODAL (Centered over interface) -->
+<div class="fixed inset-0 z-50 flex items-center justify-center bg-inverse-surface/60 backdrop-blur-sm p-4 hidden" id="undoDialog">
+<div class="w-full max-w-md bg-surface-container-lowest rounded-xl shadow-2xl overflow-hidden p-space-xl flex flex-col gap-space-md">
+<div class="flex items-start gap-space-md">
+<div class="w-10 h-10 rounded-xl bg-error-container flex items-center justify-center flex-shrink-0">
+<span class="material-symbols-outlined text-[#ba1a1a] text-[24px]">warning</span>
+</div>
+<div class="flex flex-col">
+<h3 class="font-headline-lg text-headline-lg text-on-surface">Undo this Brakes import?</h3>
+<p class="font-body-md text-body-md text-on-surface-variant mt-1">
+            4 parts and 16 fits will be removed. Parts used in service logs are kept.
+          </p>
+</div>
+</div>
+<!-- Import Target Pill -->
+<div class="p-3 rounded-lg bg-surface-container flex items-center gap-2 font-mono-sm text-mono-sm text-on-surface">
+<span class="material-symbols-outlined text-[16px] text-outline">description</span>
+<span class="font-semibold">roomy-brakes-nov.csv</span>
+<span class="text-outline">·</span>
+<span class="text-on-surface-variant">01 Nov 2026 21:42</span>
+</div>
+<!-- Safety Warnings List -->
+<div class="flex flex-col gap-1.5 font-body-sm text-body-sm text-on-surface-variant">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px] text-[#006e31]">check</span>
+<span>Zero historical logs will be orphaned</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px] text-[#006e31]">check</span>
+<span>Fitment graph will revert to BCH-8919 state</span>
+</div>
+</div>
+<!-- Action Buttons -->
+<div class="flex items-center justify-end gap-3 pt-2">
+<button class="h-9 px-4 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface font-label-md text-label-md font-medium transition-colors" onclick="document.getElementById('undoDialog').classList.add('hidden')">
+          Cancel
+        </button>
+<button class="h-9 px-4 rounded-xl bg-error text-on-error hover:bg-[#93000a] font-label-md text-label-md font-semibold transition-colors shadow-sm flex items-center gap-1.5" onclick="document.getElementById('undoDialog').classList.add('hidden')">
+<span class="material-symbols-outlined text-[16px]">delete_sweep</span>
+          Undo import
+        </button>
+</div>
+</div>
+</div>
+<script>
+    // Micro-interactions for drawer and modal handling
+    document.addEventListener('keydown', function(event) {
+      if (event.key === 'Escape') {
+        const dialog = document.getElementById('undoDialog');
+        if (dialog && !dialog.classList.contains('hidden')) {
+          dialog.classList.add('hidden');
+        }
+      }
+    });
+  </script>
+</div></main><footer class="w-full h-10 border-t border-[#e2e8f0] bg-surface-container-lowest px-margin flex items-center justify-between text-on-surface-variant font-mono-sm text-mono-sm"><div class="flex items-center gap-2"><span class="font-semibold text-on-surface">KGN-DC-01</span><span>·</span><span>JMD READY</span><span>·</span><span class="text-[#006e31] font-semibold">CLUSTER: ACTIVE</span><span>·</span><span>SYNCED</span></div><div>DOMINION AUTOMOTIVE DATA SYSTEM © 2025</div></footer></div></body></html>
