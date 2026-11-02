@@ -62,9 +62,42 @@ export async function sha256Hex(bytes: Uint8Array): Promise<string> {
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-export function detectBadUpload(bytes: Uint8Array): string | null {
+export type BadUploadDetail = {
+  message: string;
+  hexPrefix: string;
+  detectedType: string;
+};
+
+function hexPrefix4(bytes: Uint8Array): string {
+  const n = Math.min(4, bytes.length);
+  return [...bytes.slice(0, n)].map((b) => b.toString(16).padStart(2, "0")).join(" ").toUpperCase();
+}
+
+export function detectBadUploadDetail(bytes: Uint8Array): BadUploadDetail | null {
+  if (bytes.length < 1) return { message: "Empty file", hexPrefix: "", detectedType: "empty" };
+  const hex = hexPrefix4(bytes);
   if (bytes.length >= 4 && bytes[0] === 0x50 && bytes[1] === 0x4b && bytes[2] === 0x03 && bytes[3] === 0x04) {
-    return "ZIP/OOXML archive (looks like .xlsx)";
+    return { message: "ZIP/OOXML archive (looks like .xlsx)", hexPrefix: hex, detectedType: "ZIP/XLSX" };
+  }
+  if (bytes.length >= 4 && bytes[0] === 0xd0 && bytes[1] === 0xcf && bytes[2] === 0x11 && bytes[3] === 0xe0) {
+    return { message: "Legacy Excel binary (.xls)", hexPrefix: hex, detectedType: "XLS" };
+  }
+  if (bytes.length >= 4 && bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46) {
+    return { message: "PDF document", hexPrefix: hex, detectedType: "PDF" };
+  }
+  if (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe) {
+    return { message: "UTF-16 text (save as UTF-8 CSV)", hexPrefix: hex, detectedType: "UTF-16" };
+  }
+  if (bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff) {
+    return { message: "UTF-16 BE text (save as UTF-8 CSV)", hexPrefix: hex, detectedType: "UTF-16" };
+  }
+  const sample = new TextDecoder("utf-8", { fatal: false }).decode(bytes.slice(0, 256));
+  if (sample.includes("\0")) {
+    return { message: "Binary file (not plain CSV text)", hexPrefix: hex, detectedType: "binary" };
   }
   return null;
+}
+
+export function detectBadUpload(bytes: Uint8Array): string | null {
+  return detectBadUploadDetail(bytes)?.message ?? null;
 }

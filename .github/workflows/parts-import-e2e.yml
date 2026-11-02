@@ -1,0 +1,33 @@
+name: Parts import Stitch e2e
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/admin/src/components/admin/parts-database/import/**'
+      - 'e2e/parts-import-stitch.spec.ts'
+      - 'playwright.config.ts'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'apps/admin/src/components/admin/parts-database/import/**'
+      - 'e2e/parts-import-stitch.spec.ts'
+      - 'playwright.config.ts'
+  workflow_dispatch:
+
+jobs:
+  parts-import-stitch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install chromium --with-deps
+      - name: Build admin
+        run: pnpm --filter @roam/admin run build
+      - name: Parts import Stitch spec
+        run: pnpm exec playwright test e2e/parts-import-stitch.spec.ts --project=dominion-admin

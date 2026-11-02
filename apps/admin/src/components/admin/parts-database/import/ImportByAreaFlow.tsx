@@ -1,9 +1,10 @@
 // Stitch: dominion-redesign/parts_import_pick_area
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useAuth } from "../../../auth/AuthContext";
 import { hasPermission } from "../../../../utils/permissions";
+import { goDominionPage } from "../partsCatalogUrl";
 import { ImportAreaPicker } from "./ImportAreaPicker";
 import { ImportCheckStep } from "./ImportCheckStep";
 import { ImportDoneStep, ImportBatchRecordsTable } from "./ImportDoneStep";
@@ -12,24 +13,43 @@ import { ImportStates } from "./ImportStates";
 import { ImportStepper } from "./ImportStepper";
 import { ImportUploadStep } from "./ImportUploadStep";
 import {
+  cancelImportCheck,
   createImportBatch,
+  uploadImportBatchSource,
   failedCsvUrl,
   fetchImportAreas,
   fetchImportBatch,
+  fetchImportBatchChanges,
   fetchImportLedger,
+  fetchImportTemplateSchema,
+  fetchUndoPreflight,
   ledgerCsvUrl,
+  fetchImportBatchSummary,
+  fetchImportMeta,
+  patchImportRowsBulk,
   patchImportRow,
   pollImportBatchUntilChecked,
   promoteImportBatch,
+  refreshImportReadiness,
   requestImportAccess,
   runImportCheck,
   sourceCsvUrl,
   templateCsvUrl,
   type ImportAreaSummary,
+  type ImportPromoteResult,
+  type ImportBatchSummary,
   undoImportBatch,
   vehiclesCsvUrl,
 } from "./partsImportApi";
 import { supabase } from "../../../../utils/supabase/client";
+import {
+  buildImportColumnRows,
+  DEFAULT_IMPORT_TEMPLATE_COLUMNS,
+  headerAlignmentSummary,
+  parseImportCsvHeaders,
+  type ImportTemplateColumnDef,
+} from "./importCsvHeader";
+import { importErrorMessage, IMPORT_CHECK_FAILED_FALLBACK } from "./importErrorMessage";
 
 function goToDataQuality() {
   const url = new URL(window.location.href);
@@ -50,8 +70,12 @@ async function downloadAuthed(url: string, name: string) {
   URL.revokeObjectURL(link.href);
 }
 
+function countImportableRows(rows: Array<Record<string, unknown>>) {
+  return rows.filter((r) => r.status === "valid" && r.accepted !== false).length;
+}
+
 export function ImportByAreaFlow() {
-  const { role } = useAuth();
+  const { role, user } = useAuth();
   const queryClient = useQueryClient();
   const canImport = role !== null && hasPermission(role, "catalog.import");
   const pendingFile = useRef<File | null>(null);
@@ -59,17 +83,42 @@ export function ImportByAreaFlow() {
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [area, setArea] = useState<ImportAreaSummary | null>(null);
   const [batchId, setBatchId] = useState<string | null>(null);
+  const [batchMeta, setBatchMeta] = useState<Record<string, unknown>>({});
   const [batchCode, setBatchCode] = useState("");
   const [fileName, setFileName] = useState("");
+  const [parsedRowCount, setParsedRowCount] = useState<number | undefined>();
   const [checking, setChecking] = useState(false);
   const [checkProgress, setCheckProgress] = useState<{ checked: number; total: number } | null>(null);
   const [fileFailed, setFileFailed] = useState(false);
+  const [fileErrorDetail, setFileErrorDetail] = useState<string | null>(null);
+  const [headerBlocked, setHeaderBlocked] = useState(false);
   const [promoting, setPromoting] = useState(false);
   const [headerError, setHeaderError] = useState<string | null>(null);
   const [checkRows, setCheckRows] = useState<Array<Record<string, unknown>>>([]);
-  const [validCount, setValidCount] = useState(0);
+  const [checkTotal, setCheckTotal] = useState(0);
+  const [checkPage, setCheckPage] = useState({ offset: 0, limit: 25, status: "", issue: "", q: "" });
+  const [priorImport, setPriorImport] = useState<Record<string, unknown> | null>(null);
+  const [promoteResult, setPromoteResult] = useState<ImportPromoteResult | null>(null);
   const [refreshWarning, setRefreshWarning] = useState<string | null>(null);
   const [shaPrefix, setShaPrefix] = useState("");
+  const [drawerChanges, setDrawerChanges] = useState<Awaited<ReturnType<typeof fetchImportBatchChanges>> | null>(null);
+  const [drawerUndoBlocked, setDrawerUndoBlocked] = useState<{
+    batchCode: string;
+    conflictCount: number;
+    reasons: Array<{ line?: number | null; reason?: string }>;
+  } | undefined>();
+  const [undoPreflightForDone, setUndoPreflightForDone] = useState<Record<string, unknown> | null>(null);
+  const [batchSummary, setBatchSummary] = useState<ImportBatchSummary | null>(null);
+  const [fileBytes, setFileBytes] = useState<number | undefined>();
+  const [uploadFailMeta, setUploadFailMeta] = useState<{ hexPrefix?: string; detectedType?: string } | null>(null);
+  const [templateColumns, setTemplateColumns] = useState<ImportTemplateColumnDef[]>(DEFAULT_IMPORT_TEMPLATE_COLUMNS);
+  const [parsedCsvHeaders, setParsedCsvHeaders] = useState<{ mapped: string[]; raw: string[] } | null>(null);
+  const columnRows = useMemo(() => {
+    if (parsedCsvHeaders?.mapped.length) {
+      return buildImportColumnRows(templateColumns, parsedCsvHeaders.mapped, parsedCsvHeaders.raw);
+    }
+    return buildImportColumnRows(templateColumns, [], []);
+  }, [templateColumns, parsedCsvHeaders]);
 
   const areasQuery = useQuery({ queryKey: ["parts-import-areas"], queryFn: fetchImportAreas, enabled: canImport });
   const ledgerQuery = useQuery({
@@ -77,6 +126,11 @@ export function ImportByAreaFlow() {
     queryFn: () => fetchImportLedger(),
     enabled: view === "ledger" && canImport,
   });
+
+  const importableCount = useMemo(
+    () => batchSummary?.importableCount ?? countImportableRows(checkRows),
+    [batchSummary, checkRows],
+  );
 
   if (role === null || !canImport) {
     return (
@@ -99,41 +153,136 @@ export function ImportByAreaFlow() {
     }
   }
 
+  async function loadCheckPage(overrides?: Partial<typeof checkPage>) {
+    if (!batchId) return;
+    const params = { ...checkPage, ...overrides };
+    setCheckPage(params);
+    const detail = await fetchImportBatch(batchId, {
+      status: params.status || undefined,
+      issue: params.issue || undefined,
+      q: params.q || undefined,
+      limit: params.limit,
+      offset: params.offset,
+    });
+    setCheckRows(detail.rows ?? []);
+    setCheckTotal(Number(detail.total ?? detail.batch?.rows_total ?? detail.rows?.length ?? 0));
+    setBatchMeta(detail.batch as Record<string, unknown>);
+    try {
+      const summary = await fetchImportBatchSummary(batchId);
+      setBatchSummary(summary);
+    } catch {
+      setBatchSummary(null);
+    }
+  }
+
   async function runCheckForBatch(id: string) {
     const check = await runImportCheck(id);
+    if (check.priorImport) setPriorImport(check.priorImport);
     if (check.async) {
       const detail = await pollImportBatchUntilChecked(id, {
         onProgress: (batch) => {
           setCheckProgress({
             checked: Number(batch.rows_checked ?? 0),
-            total: Number(batch.row_count ?? batch.rows_total ?? 0),
+            total: Number(batch.rows_total ?? 0),
           });
         },
       });
       return detail;
     }
-    return fetchImportBatch(id, { limit: 500, offset: 0 });
+    return fetchImportBatch(id, { limit: checkPage.limit, offset: 0 });
   }
 
   async function applyBatchDetail(detail: Awaited<ReturnType<typeof fetchImportBatch>>) {
     const batch = detail.batch as Record<string, unknown>;
+    setBatchMeta(batch);
     if (String(batch.status) === "failed") {
-      setFileFailed(true);
-      setHeaderError(String(batch.failure_message ?? "Check failed"));
-      throw new Error(String(batch.failure_message ?? "Check failed"));
+      const msg = importErrorMessage(batch.failure_message) || IMPORT_CHECK_FAILED_FALLBACK;
+      setFileErrorDetail(msg);
+      setHeaderError(msg);
+      if (/parser|upload|xlsx|binary|header|schema|empty file/i.test(msg)) {
+        setFileFailed(true);
+        setHeaderBlocked(true);
+      }
+      throw new Error(msg);
     }
     setCheckRows(detail.rows ?? []);
-    const valid = (detail.rows ?? []).filter((r) => r.status === "valid" || r.status === "labelled").length;
-    setValidCount(valid);
+    setCheckTotal(Number(detail.total ?? batch.rows_total ?? detail.rows?.length ?? 0));
     setStep(3);
+    setCheckPage((p) => ({ ...p, offset: 0 }));
+    try {
+      const summary = await fetchImportBatchSummary(String(batch.id ?? batchId));
+      setBatchSummary(summary);
+    } catch {
+      setBatchSummary(null);
+    }
   }
 
-  async function onFile(file: File) {
-    if (!area) return;
+  function applyFileHeaderAnalysis(text: string, cols: ImportTemplateColumnDef[]) {
+    const { headers, mapped, headerErrors } = parseImportCsvHeaders(text, cols);
+    setParsedCsvHeaders({ mapped, raw: headers });
+    const rows = buildImportColumnRows(cols, mapped, headers);
+    const summary = headerAlignmentSummary(rows, mapped);
+    setHeaderBlocked(headerErrors.length > 0);
+    setHeaderError(headerErrors.length ? headerErrors.join("; ") : null);
+    return summary;
+  }
+
+  function refreshHeaderCompare() {
+    const file = pendingFile.current;
+    if (!file?.size) return;
+    void file
+      .text()
+      .then((text) => {
+        applyFileHeaderAnalysis(text, templateColumns);
+      })
+      .catch(() => {
+        setHeaderBlocked(true);
+        setHeaderError("Could not read file");
+      });
+  }
+
+  async function loadTemplateSchema(areaId: string) {
+    try {
+      const { columns } = await fetchImportTemplateSchema(areaId);
+      const cols = columns?.length ? columns : DEFAULT_IMPORT_TEMPLATE_COLUMNS;
+      setTemplateColumns(cols);
+      return cols;
+    } catch {
+      setTemplateColumns(DEFAULT_IMPORT_TEMPLATE_COLUMNS);
+      return DEFAULT_IMPORT_TEMPLATE_COLUMNS;
+    }
+  }
+
+  function assignFile(file: File, cols = templateColumns) {
+    if (!file.size && !file.name) {
+      pendingFile.current = null;
+      setFileName("");
+      setParsedRowCount(undefined);
+      setParsedCsvHeaders(null);
+      setHeaderBlocked(false);
+      setHeaderError(null);
+      return;
+    }
     pendingFile.current = file;
     setFileName(file.name);
-    setHeaderError(null);
+    setFileBytes(file.size);
     setFileFailed(false);
+    setFileErrorDetail(null);
+    void file.text().then((text) => {
+      const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+      setParsedRowCount(Math.max(0, lines.length - 1));
+      applyFileHeaderAnalysis(text, cols);
+    }).catch(() => {
+      setParsedRowCount(undefined);
+      setHeaderBlocked(true);
+      setHeaderError("Could not read file");
+    });
+  }
+
+  function pasteToFile(text: string) {
+    const date = new Date().toISOString().slice(0, 10);
+    const file = new File([text], `pasted-${date}.csv`, { type: "text/csv" });
+    assignFile(file);
   }
 
   async function onUploadAndCheck() {
@@ -144,18 +293,30 @@ export function ImportByAreaFlow() {
     setHeaderError(null);
     setFileFailed(false);
     try {
-      const { batch, uploadUrl } = await createImportBatch(area.id, file.name);
+      const { batch } = await createImportBatch(area.id, file.name);
       const id = String(batch.id);
       setBatchId(id);
       setBatchCode(String(batch.code ?? ""));
-      const put = await fetch(uploadUrl, { method: "PUT", body: file, headers: { "Content-Type": "text/csv" } });
-      if (!put.ok) throw new Error("Upload failed");
+      const upload = await uploadImportBatchSource(id, file);
+      setFileBytes(upload.bytes);
+      setUploadFailMeta(null);
       const detail = await runCheckForBatch(id);
       await applyBatchDetail(detail);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Check failed";
+      const err = e as Error & { status?: number; hexPrefix?: string; detectedType?: string };
+      if (err.hexPrefix || err.detectedType) {
+        setUploadFailMeta({ hexPrefix: err.hexPrefix, detectedType: err.detectedType });
+      }
+      const msg = importErrorMessage(e) || IMPORT_CHECK_FAILED_FALLBACK;
       setHeaderError(msg);
-      if (/parser|csv|header|422|read/i.test(msg)) setFileFailed(true);
+      setFileErrorDetail(msg);
+      if (err.status === 422 || uploadFailMeta || err.hexPrefix) {
+        setFileFailed(true);
+        setHeaderBlocked(true);
+      } else if (/parser|csv|header|422|read|schema|upload|xlsx|binary/i.test(msg)) {
+        setFileFailed(true);
+        setHeaderBlocked(true);
+      }
       toast.error(msg);
     } finally {
       setChecking(false);
@@ -183,14 +344,18 @@ export function ImportByAreaFlow() {
     setPromoting(true);
     try {
       const res = await promoteImportBatch(batchId);
-      setRefreshWarning((res.result as { refreshWarning?: string })?.refreshWarning ?? null);
-      const detail = await fetchImportBatch(batchId, { limit: 500 });
+      const result = res.result ?? null;
+      setPromoteResult(result);
+      setRefreshWarning(result?.refreshWarning ?? null);
+      const detail = await fetchImportBatch(batchId, { limit: 500, offset: 0 });
       setCheckRows(detail.rows ?? []);
+      setBatchMeta(detail.batch as Record<string, unknown>);
       const batch = detail.batch as Record<string, unknown>;
-      setShaPrefix(String(batch.file_sha256 ?? "").slice(0, 12));
+      setShaPrefix(String(batch.ledger_hash ?? batch.file_sha256 ?? "").slice(0, 12));
       setStep(4);
       void queryClient.invalidateQueries({ queryKey: ["parts-overview"] });
       void queryClient.invalidateQueries({ queryKey: ["parts-import-ledger"] });
+      void queryClient.invalidateQueries({ queryKey: ["parts-import-areas"] });
       toast.success("Import complete");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Promote failed");
@@ -199,107 +364,265 @@ export function ImportByAreaFlow() {
     }
   }
 
+  async function loadDrawer(batch: Record<string, unknown>) {
+    const id = String(batch.id ?? "");
+    setDrawerChanges(null);
+    setDrawerUndoBlocked(undefined);
+    try {
+      const [changes, preflight] = await Promise.all([
+        fetchImportBatchChanges(id),
+        fetchUndoPreflight(id),
+      ]);
+      setDrawerChanges(changes);
+      const ok = preflight.ok === true;
+      if (!ok) {
+        const reasons = (preflight.reasons as Array<{ line?: number | null; reason?: string }>) ?? [];
+        setDrawerUndoBlocked({
+          batchCode: String(batch.code ?? ""),
+          conflictCount: reasons.length,
+          reasons,
+        });
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not load batch detail");
+    }
+  }
+
+  async function runUndoPreflightForDone() {
+    if (!batchId) return;
+    try {
+      const preflight = await fetchUndoPreflight(batchId);
+      setUndoPreflightForDone(preflight);
+      if (preflight.ok === false) {
+        const reasons = (preflight.reasons as Array<{ line?: number | null; reason?: string }>) ?? [];
+        toast.error(`Undo blocked — ${reasons.length} conflicts`);
+        return;
+      }
+      toast.message("Undo preflight OK — use Import ledger to confirm");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Preflight failed");
+    }
+  }
+
+  const signedName =
+    user?.user_metadata?.name ??
+    user?.user_metadata?.full_name ??
+    user?.email?.split("@")[0] ??
+    "";
+
   return (
-    <div className="space-y-6">
-      <ImportStepper step={step} areaName={area?.name} fileName={fileName || undefined} />
-      {checking ? (
-        <ImportStates
-          mode="checking"
-          fileName={fileName}
-          checkProgress={checkProgress ?? { checked: 0, total: 0 }}
-          onViewJobs={() => toast.message("Open Platform Ops → background jobs")}
-        />
+    <div className="find-parts-flow space-y-6 px-space-xl pb-space-xl">
+      {view === "areas" ? (
+        <ImportStepper step={step} areaName={area?.name} fileName={fileName || undefined} />
       ) : null}
-      {fileFailed && step === 2 ? (
-        <ImportStates
-          mode="file-failed"
-          onRetry={() => { setFileFailed(false); void onUploadAndCheck(); }}
-          onChooseAnother={() => { setFileFailed(false); setHeaderError(null); pendingFile.current = null; setFileName(""); }}
-        />
-      ) : null}
+
       {view === "ledger" ? (
         <ImportLedger
+          areas={areasQuery.data?.areas ?? []}
           items={ledgerQuery.data?.items ?? []}
+          onBackToAreas={() => { setView("areas"); setStep(1); }}
           onNewBatch={() => { setView("areas"); setStep(1); }}
-          onSelect={() => undefined}
+          onSync={() => { void ledgerQuery.refetch(); void areasQuery.refetch(); }}
           onExportLedger={() => { void download(ledgerCsvUrl(), "parts-import-ledger.csv"); }}
+          onLoadDrawer={(batch) => { void loadDrawer(batch); }}
+          drawerChanges={drawerChanges}
+          drawerUndoBlocked={drawerUndoBlocked}
           onDownloadFailed={(batch) => {
             const id = String(batch.id ?? "");
             if (id) void download(failedCsvUrl(id), `${batch.file_name ?? "failed"}-errors.csv`);
           }}
           onUndoBatch={(batch) => {
             const id = String(batch.id ?? "");
-            if (!id) return;
-            void undoImportBatch(id)
+            if (!id) return Promise.resolve();
+            return undoImportBatch(id)
               .then(() => {
                 toast.success("Import undone");
                 void queryClient.invalidateQueries({ queryKey: ["parts-import-ledger"] });
+                void queryClient.invalidateQueries({ queryKey: ["parts-import-areas"] });
               })
-              .catch((e) => toast.error(e instanceof Error ? e.message : "Undo failed"));
+              .catch((e) => {
+                toast.error(e instanceof Error ? e.message : "Undo failed");
+                throw e;
+              });
           }}
         />
       ) : null}
+
       {view === "areas" && step === 1 ? (
         <ImportAreaPicker
           areas={areasQuery.data?.areas ?? []}
-          onPick={(picked) => { setArea(picked); setStep(2); }}
+          onPick={(picked) => {
+            setArea(picked);
+            setStep(2);
+            setPromoteResult(null);
+            void loadTemplateSchema(picked.id).then((cols) => {
+              if (pendingFile.current?.size) {
+                void pendingFile.current.text().then((text) => applyFileHeaderAnalysis(text, cols));
+              }
+            });
+          }}
           onOpenLedger={() => setView("ledger")}
         />
       ) : null}
+
       {view === "areas" && step === 2 && area ? (
-        <ImportUploadStep
-          areaName={area.name}
-          areaCode={area.opCode ?? "AREA"}
-          templateVersion={area.templateVersion}
-          checking={checking}
-          headerError={headerError}
-          fileName={fileName}
-          onDownloadTemplate={() => { void download(templateCsvUrl(area.id), `${area.name}-template.csv`); }}
-          onDownloadVehicles={() => { void download(vehiclesCsvUrl(), "vehicles.csv"); }}
-          onFile={(f) => { void onFile(f); }}
-          onUploadAndCheck={() => { void onUploadAndCheck(); }}
-        />
+        checking ? (
+          <ImportStates
+            mode="checking"
+            fileName={fileName}
+            checkProgress={checkProgress ?? { checked: 0, total: parsedRowCount ?? 0 }}
+            onViewJobs={() => goDominionPage("platform-ops")}
+            onCancelCheck={() => {
+              if (batchId) {
+                void cancelImportCheck(batchId)
+                  .then(() => { setChecking(false); toast.message("Check cancelled"); })
+                  .catch((e) => toast.error(e instanceof Error ? e.message : "Cancel failed"));
+              }
+            }}
+          />
+        ) : fileFailed ? (
+          <ImportStates
+            mode="file-failed"
+            fileName={fileName}
+            fileErrorDetail={fileErrorDetail ?? headerError ?? undefined}
+            onRetry={() => { setFileFailed(false); void onUploadAndCheck(); }}
+            onChooseAnother={() => {
+              setFileFailed(false);
+              setHeaderError(null);
+              setHeaderBlocked(false);
+              pendingFile.current = null;
+              setFileName("");
+            }}
+          />
+        ) : (
+          <ImportUploadStep
+            areaName={area.name}
+            areaCode={area.opCode ?? "AREA"}
+            iconKey={area.iconKey}
+            sortOrder={area.sortOrder}
+            partTypes={area.partTypes}
+            templateVersion={area.templateVersion}
+            columnRows={columnRows}
+            checking={checking}
+            headerError={headerError}
+            headerBlocked={headerBlocked}
+            fileName={fileName}
+            rowCount={parsedRowCount}
+            fileBytes={fileBytes}
+            onBackToAreas={() => { setStep(1); setArea(null); }}
+            onDownloadTemplate={() => { void download(templateCsvUrl(area.id), `${area.name}-template.csv`); }}
+            onDownloadVehicles={() => { void download(vehiclesCsvUrl(), "vehicles.csv"); }}
+            onFile={assignFile}
+            onClearFile={() => assignFile(new File([], ""))}
+            onPasteCsv={pasteToFile}
+            onRefreshHeaderCompare={refreshHeaderCompare}
+            onUploadAndCheck={() => { void onUploadAndCheck(); }}
+          />
+        )
       ) : null}
+
       {view === "areas" && step === 3 && batchId ? (
         <ImportCheckStep
           batchCode={batchCode}
           fileName={fileName}
           areaName={area?.name}
+          templateVersion={area?.templateVersion}
+          batch={batchMeta}
           rows={checkRows}
-          validCount={validCount}
+          total={checkTotal}
+          importableCount={importableCount}
+          batchSummary={batchSummary}
+          priorImport={priorImport}
+          onViewPriorImport={() => setView("ledger")}
+          onSelectAllAccepted={(accepted) => {
+            if (!batchId) return;
+            void patchImportRowsBulk(batchId, accepted)
+              .then(() => loadCheckPage())
+              .catch((e) => toast.error(e instanceof Error ? e.message : "Bulk update failed"));
+          }}
+          pageOffset={checkPage.offset}
+          pageLimit={checkPage.limit}
+          onFilterChange={(params) => {
+            void loadCheckPage({
+              status: params.status ?? "",
+              issue: params.issue ?? "",
+              q: params.q ?? "",
+              offset: 0,
+            });
+          }}
+          onPagePrev={() => { void loadCheckPage({ offset: Math.max(0, checkPage.offset - checkPage.limit) }); }}
+          onPageNext={() => { void loadCheckPage({ offset: checkPage.offset + checkPage.limit }); }}
           onPromote={() => { void onPromote(); }}
           promoting={promoting}
           onExportRaw={() => { void download(sourceCsvUrl(batchId), fileName || "source.csv"); }}
+          onAuditTrail={() => goDominionPage("activity-log")}
           onCheckAgain={() => { void onCheckAgain(); }}
           onDownloadFailed={() => { void download(failedCsvUrl(batchId), `${fileName || "import"}-failed.csv`); }}
+          onToggleAccepted={(line, accepted) => {
+            void patchImportRow(batchId, line, { accepted })
+              .then(() => loadCheckPage())
+              .catch((e) => toast.error(e instanceof Error ? e.message : "Row update failed"));
+          }}
           onPatchRow={(line) => {
             void patchImportRow(batchId, line, {})
-              .then(() => fetchImportBatch(batchId, { limit: 500 }))
-              .then((detail) => {
-                setCheckRows(detail.rows ?? []);
-                toast.success("Row updated");
-              })
+              .then(() => loadCheckPage())
               .catch((e) => toast.error(e instanceof Error ? e.message : "Row update failed"));
           }}
         />
       ) : null}
+
       {view === "areas" && step === 4 && area ? (
         <>
+          {undoPreflightForDone?.ok === false ? (
+            <ImportStates
+              mode="undo-blocked"
+              undoBlocked={{
+                batchCode,
+                conflictCount: ((undoPreflightForDone.reasons as unknown[]) ?? []).length,
+                reasons: (undoPreflightForDone.reasons as Array<{ line?: number | null; reason?: string }>) ?? [],
+              }}
+            />
+          ) : null}
           <ImportDoneStep
             areaName={area.name}
             batchCode={batchCode}
+            fileName={fileName}
             templateVersion={area.templateVersion}
             refreshWarning={refreshWarning}
-            importedCount={validCount}
-            rows={checkRows}
+            promoteResult={promoteResult}
+            batch={batchMeta}
             shaPrefix={shaPrefix}
-            onRefresh={() => { toast.message("Refresh queued"); }}
-            onLedger={() => setView("ledger")}
+            signedBy={signedName}
+            signedRole={role ?? undefined}
+            commitTime={batchMeta.promoted_at ? new Date(String(batchMeta.promoted_at)).toUTCString() : undefined}
+            onRefresh={() => {
+              void refreshImportReadiness(batchId ?? undefined)
+                .then(() => {
+                  setRefreshWarning(null);
+                  toast.success("Find parts refresh queued");
+                })
+                .catch((e) => toast.error(e instanceof Error ? e.message : "Refresh failed"));
+            }}
+            onLedger={() => { setView("ledger"); }}
             onDataQuality={goToDataQuality}
-            onImportMore={() => { setStep(2); setFileName(""); pendingFile.current = null; }}
-            onBackToAreas={() => { setStep(1); setArea(null); setBatchId(null); }}
+            onImportMore={() => {
+              setStep(2);
+              setFileName("");
+              pendingFile.current = null;
+              setParsedCsvHeaders(null);
+              setPromoteResult(null);
+            }}
+            onBackToAreas={() => { setStep(1); setArea(null); setBatchId(null); setPromoteResult(null); }}
+            onUndoIngestion={() => { void runUndoPreflightForDone(); }}
           />
-          <ImportBatchRecordsTable rows={checkRows} />
+          <ImportBatchRecordsTable
+            rows={checkRows}
+            fileName={fileName}
+            batchCode={batchCode}
+            shaPrefix={shaPrefix}
+            onLedger={() => setView("ledger")}
+            onUndoIngestion={() => { void runUndoPreflightForDone(); }}
+          />
         </>
       ) : null}
     </div>

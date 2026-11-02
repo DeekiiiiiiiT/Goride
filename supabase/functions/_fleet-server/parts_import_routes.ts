@@ -2,7 +2,7 @@ import type { Context } from "npm:hono@4.3.11";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { requireAuth, requirePermission } from "./rbac_middleware.ts";
 import { logAdminAction } from "./audit_log.ts";
-import { detectBadUpload, parsePartsImportCsv, sha256Hex } from "./parts_import_csv.ts";
+import { detectBadUpload, detectBadUploadDetail, parsePartsImportCsv, sha256Hex } from "./parts_import_csv.ts";
 import { resolveImportBatchVehicles } from "./parts_import_vehicle_resolve.ts";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -14,8 +14,16 @@ type RouteApp = {
 };
 
 function fail(c: Context, e: unknown, status = 500) {
-  const message = e instanceof Error ? e.message : String(e);
-  return c.json({ error: message }, status as 400 | 500);
+  return c.json({ error: errorMessage(e) }, status as 400 | 500);
+}
+
+function errorMessage(e: unknown): string {
+  if (e instanceof Error) return e.message.trim() || "Unknown error";
+  if (e && typeof e === "object" && "message" in e && typeof (e as { message: unknown }).message === "string") {
+    return ((e as { message: string }).message || "Unknown error").trim();
+  }
+  if (typeof e === "string") return e;
+  return String(e);
 }
 
 function actor(c: Context) {
@@ -23,10 +31,15 @@ function actor(c: Context) {
   return { id: u?.id ?? "", name: u?.name ?? u?.email ?? "Staff" };
 }
 
+async function setCheckStage(supabase: SupabaseClient, batchId: string, stage: string) {
+  await supabase.from("part_import_batch").update({ check_stage: stage }).eq("id", batchId);
+}
+
 async function runImportCheck(supabase: SupabaseClient, batchId: string, who: { id: string; name: string }) {
   const { data: batch, error: bErr } = await supabase.from("part_import_batch").select("*").eq("id", batchId).single();
   if (bErr || !batch) throw new Error("Batch not found");
 
+  await setCheckStage(supabase, batchId, "Reading file");
   const path = batch.storage_path as string;
   const { data: file, error: dErr } = await supabase.storage.from("parts-imports").download(path);
   if (dErr || !file) throw new Error("Upload the CSV first");
@@ -46,23 +59,32 @@ async function runImportCheck(supabase: SupabaseClient, batchId: string, who: { 
   }
   if (parsed.rows.length > 5000) throw new Error("Max 5000 rows per file");
 
+  await setCheckStage(supabase, batchId, "Staging rows");
   const staged = parsed.rows.map((row) => ({ line_no: row.line_no, raw: row.raw }));
   const { error: insErr } = await supabase.rpc("part_import_insert_staged_rows", {
     p_batch_id: batchId,
     p_rows: staged,
   });
-  if (insErr) throw insErr;
+  if (insErr) throw new Error(errorMessage(insErr));
 
-  await resolveImportBatchVehicles(supabase, batchId, async (checked, total) => {
-    await supabase.from("part_import_batch").update({ rows_checked: checked, rows_total: total }).eq("id", batchId);
-  });
+  await setCheckStage(supabase, batchId, "Resolving vehicles");
+  try {
+    await resolveImportBatchVehicles(supabase, batchId, async (checked, total) => {
+      await supabase.from("part_import_batch").update({ rows_checked: checked, rows_total: total }).eq("id", batchId);
+    });
+  } catch (e) {
+    console.error("[parts-import] vehicle pre-resolve skipped:", errorMessage(e));
+  }
 
+  await setCheckStage(supabase, batchId, "Validating");
   const { data: val, error: vErr } = await supabase.rpc("part_import_validate", { p_batch_id: batchId });
-  if (vErr) throw vErr;
+  if (vErr) throw new Error(errorMessage(vErr));
 
   await supabase.from("part_import_batch").update({
     file_sha256: hash,
     file_bytes: bytes.length,
+    check_stage: "Complete",
+    checked_at: new Date().toISOString(),
   }).eq("id", batchId);
 
   await logAdminAction({
@@ -102,58 +124,44 @@ export function registerPartsImportRoutes(route: RouteApp, supabase: SupabaseCli
 
   route.get("/make-server-37f42386/admin/parts-import/areas", ...guard, async (c: Context) => {
     try {
-      const { data: systems, error } = await supabase
-        .from("maintenance_service_categories")
-        .select("id, name, plain_name, op_code, icon_key, sort_order")
-        .eq("kind", "system")
+      const { data, error } = await supabase
+        .from("part_import_areas_summary")
+        .select("*")
         .order("sort_order");
       if (error) throw error;
-      const areas = [];
-      for (const sys of systems ?? []) {
-        const { data: childRows } = await supabase.from("maintenance_service_categories").select("id").eq("parent_id", sys.id);
-        const childIds = (childRows ?? []).map((r) => r.id);
-        let partsCount = 0;
-        if (childIds.length) {
-          const { count } = await supabase
-            .from("part_master")
-            .select("id", { count: "exact", head: true })
-            .in("maintenance_component_id", childIds);
-          partsCount = count ?? 0;
-        }
-        const { data: lastBatch } = await supabase
-          .from("part_import_batch")
-          .select("promoted_at, code")
-          .eq("area_id", sys.id)
-          .eq("status", "imported")
-          .order("promoted_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        const { count: reviewWaiting } = await supabase
-          .from("part_import_batch")
-          .select("id", { count: "exact", head: true })
-          .eq("area_id", sys.id)
-          .eq("status", "checked")
-          .not("source_batch_id", "is", null);
-        const { data: tmpl } = await supabase
-          .from("part_import_template")
-          .select("version")
-          .eq("area_id", sys.id)
-          .eq("active", true)
-          .order("version", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        areas.push({
-          id: sys.id,
-          name: sys.plain_name || sys.name,
-          opCode: sys.op_code,
-          iconKey: sys.icon_key,
-          partsOnFile: partsCount ?? 0,
-          lastImportAt: lastBatch?.promoted_at ?? null,
-          templateVersion: tmpl?.version ?? 1,
-          reviewRowsWaiting: reviewWaiting ?? 0,
-        });
-      }
+      const areas = (data ?? []).map((row) => ({
+        id: row.id,
+        name: row.name,
+        opCode: row.op_code,
+        iconKey: row.icon_key,
+        sortOrder: row.sort_order,
+        partsOnFile: row.parts_on_file ?? 0,
+        fitsOnFile: row.fits_on_file ?? 0,
+        partTypes: row.part_types ?? [],
+        needsChecking: row.needs_checking ?? 0,
+        lastImportAt: row.last_import_at ?? null,
+        templateVersion: row.template_version ?? 1,
+      }));
       return c.json({ areas });
+    } catch (e) {
+      return fail(c, e);
+    }
+  });
+
+  route.get("/make-server-37f42386/admin/parts-import/areas/:areaId/template-schema", ...guard, async (c: Context) => {
+    try {
+      const areaId = c.req.param("areaId");
+      const { data: tmpl, error } = await supabase
+        .from("part_import_template")
+        .select("columns")
+        .eq("area_id", areaId)
+        .eq("active", true)
+        .order("version", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      const columns = (tmpl?.columns as Array<{ name: string; required?: boolean; type?: string }> | null) ?? [];
+      return c.json({ columns });
     } catch (e) {
       return fail(c, e);
     }
@@ -246,10 +254,52 @@ export function registerPartsImportRoutes(route: RouteApp, supabase: SupabaseCli
         .single();
       if (error) throw error;
       const path = `${batch.id}/source.csv`;
-      const { data: signed, error: signErr } = await supabase.storage.from("parts-imports").createSignedUploadUrl(path);
-      if (signErr) throw signErr;
       await supabase.from("part_import_batch").update({ storage_path: path }).eq("id", batch.id);
-      return c.json({ batch, uploadUrl: signed.signedUrl, path });
+      return c.json({ batch: { ...batch, storage_path: path }, path });
+    } catch (e) {
+      return fail(c, e);
+    }
+  });
+
+  route.post("/make-server-37f42386/admin/parts-import/batches/:id/source", ...guard, async (c: Context) => {
+    try {
+      const batchId = c.req.param("id");
+      if (!UUID_RE.test(batchId)) return c.json({ error: "Invalid batch id" }, 400);
+      const { data: batch, error: bErr } = await supabase
+        .from("part_import_batch")
+        .select("id, storage_path, status")
+        .eq("id", batchId)
+        .single();
+      if (bErr || !batch) return c.json({ error: "Batch not found" }, 404);
+      if (String(batch.status) === "imported" || String(batch.status) === "checking") {
+        return c.json({ error: "This batch cannot accept a new file in its current state" }, 409);
+      }
+
+      const bytes = new Uint8Array(await c.req.arrayBuffer());
+      if (!bytes.length) return c.json({ error: "Empty file" }, 400);
+      if (bytes.length > 5 * 1024 * 1024) return c.json({ error: "Max 5 MB per file" }, 400);
+      const bad = detectBadUploadDetail(bytes);
+      if (bad) return c.json({ error: bad.message, hexPrefix: bad.hexPrefix, detectedType: bad.detectedType }, 422);
+
+      const path = (batch.storage_path as string | null) || `${batchId}/source.csv`;
+      const { error: upErr } = await supabase.storage.from("parts-imports").upload(path, bytes, {
+        contentType: "text/csv; charset=utf-8",
+        upsert: true,
+      });
+      if (upErr) throw upErr;
+
+      await supabase
+        .from("part_import_batch")
+        .update({
+          storage_path: path,
+          status: "uploaded",
+          failure_message: null,
+          file_bytes: null,
+          file_sha256: null,
+        })
+        .eq("id", batchId);
+
+      return c.json({ ok: true, bytes: bytes.length, path });
     } catch (e) {
       return fail(c, e);
     }
@@ -271,15 +321,24 @@ export function registerPartsImportRoutes(route: RouteApp, supabase: SupabaseCli
         .limit(1)
         .maybeSingle();
 
-      await supabase.from("part_import_batch").update({ status: "checking", rows_checked: 0, failure_message: null }).eq("id", batchId);
+      await supabase.from("part_import_batch").update({
+        status: "checking",
+        rows_checked: 0,
+        failure_message: null,
+        check_stage: "Starting",
+        check_started_at: new Date().toISOString(),
+      }).eq("id", batchId);
 
       const work = (async () => {
         try {
           await runImportCheck(supabase, batchId, who);
         } catch (e) {
-          const message = e instanceof Error ? e.message : String(e);
-          if (!/failed|Upload|PARSER|Max 5000|header/i.test(message)) {
+          const message = errorMessage(e);
+          const { data: current } = await supabase.from("part_import_batch").select("status").eq("id", batchId).maybeSingle();
+          if (current?.status !== "checked") {
             await supabase.from("part_import_batch").update({ status: "failed", failure_message: message }).eq("id", batchId);
+          } else {
+            console.error("[parts-import] post-check step failed:", message);
           }
         }
       })();
@@ -287,15 +346,15 @@ export function registerPartsImportRoutes(route: RouteApp, supabase: SupabaseCli
       const edge = (globalThis as { EdgeRuntime?: { waitUntil?: (x: Promise<unknown>) => void } }).EdgeRuntime;
       if (edge?.waitUntil) {
         edge.waitUntil(work);
-        return c.json({ status: "checking", batchId, priorImport: prior ?? null }, 202);
+      } else {
+        void work;
       }
-      await work;
-      const { data: updated } = await supabase.from("part_import_batch").select("*").eq("id", batchId).single();
-      return c.json({ batch: updated, priorImport: prior ?? null });
+      return c.json({ status: "checking", batchId, priorImport: prior ?? null }, 202);
     } catch (e) {
+      const message = errorMessage(e);
       await supabase.from("part_import_batch").update({
         status: "failed",
-        failure_message: e instanceof Error ? e.message : String(e),
+        failure_message: message,
       }).eq("id", batchId);
       return fail(c, e);
     }
@@ -306,7 +365,7 @@ export function registerPartsImportRoutes(route: RouteApp, supabase: SupabaseCli
       const batchId = c.req.param("id");
       const lineNo = Number(c.req.param("line"));
       if (!Number.isFinite(lineNo)) return c.json({ error: "Invalid line" }, 400);
-      const body = await c.req.json().catch(() => ({})) as { column?: string; value?: string; vehicle?: string };
+      const body = await c.req.json().catch(() => ({})) as { column?: string; value?: string; vehicle?: string; accepted?: boolean };
       const { data: row, error: rErr } = await supabase
         .from("part_import_row")
         .select("raw")
@@ -314,6 +373,11 @@ export function registerPartsImportRoutes(route: RouteApp, supabase: SupabaseCli
         .eq("line_no", lineNo)
         .maybeSingle();
       if (rErr || !row) return c.json({ error: "Row not found" }, 404);
+      if (typeof body.accepted === "boolean") {
+        await supabase.from("part_import_row").update({ accepted: body.accepted }).eq("batch_id", batchId).eq("line_no", lineNo);
+        const { data: updated } = await supabase.from("part_import_row").select("*").eq("batch_id", batchId).eq("line_no", lineNo).single();
+        return c.json({ row: updated });
+      }
       const raw = { ...(row.raw as Record<string, string>) };
       if (body.vehicle != null) raw.vehicle = body.vehicle;
       if (body.column && body.value != null) raw[body.column] = body.value;
@@ -343,19 +407,146 @@ export function registerPartsImportRoutes(route: RouteApp, supabase: SupabaseCli
     }
   });
 
+  route.get("/make-server-37f42386/admin/parts-import/batches/:id/progress", ...guard, async (c: Context) => {
+    try {
+      const batchId = c.req.param("id");
+      const { data: batch, error } = await supabase
+        .from("part_import_batch")
+        .select("id, status, check_stage, check_started_at, rows_total, rows_checked, checked_at, failure_message")
+        .eq("id", batchId)
+        .single();
+      if (error) throw error;
+      return c.json({ batch });
+    } catch (e) {
+      return fail(c, e);
+    }
+  });
+
+  route.get("/make-server-37f42386/admin/parts-import/batches/:id/summary", ...guard, async (c: Context) => {
+    try {
+      const batchId = c.req.param("id");
+      const { data, error } = await supabase.rpc("part_import_batch_summary", { p_batch_id: batchId });
+      if (error) throw error;
+      return c.json(data ?? {});
+    } catch (e) {
+      return fail(c, e);
+    }
+  });
+
+  route.get("/make-server-37f42386/admin/parts-import/batches/:id/rows/:line/inspect", ...guard, async (c: Context) => {
+    try {
+      const batchId = c.req.param("id");
+      const lineNo = Number(c.req.param("line"));
+      if (!Number.isFinite(lineNo)) return c.json({ error: "Invalid line" }, 400);
+      const { data, error } = await supabase.rpc("part_import_row_inspect", {
+        p_batch_id: batchId,
+        p_line_no: lineNo,
+      });
+      if (error) throw error;
+      return c.json(data ?? {});
+    } catch (e) {
+      return fail(c, e);
+    }
+  });
+
+  route.patch("/make-server-37f42386/admin/parts-import/batches/:id/rows", ...guard, async (c: Context) => {
+    try {
+      const batchId = c.req.param("id");
+      const body = await c.req.json().catch(() => ({})) as { accepted?: boolean; all?: boolean };
+      if (typeof body.accepted !== "boolean") return c.json({ error: "accepted boolean required" }, 400);
+      const { data, error } = await supabase.rpc("part_import_set_rows_accepted", {
+        p_batch_id: batchId,
+        p_accepted: body.accepted,
+        p_only_importable: body.all !== false,
+      });
+      if (error) throw error;
+      return c.json(data ?? { updated: 0 });
+    } catch (e) {
+      return fail(c, e);
+    }
+  });
+
+  route.get("/make-server-37f42386/admin/parts-import/meta", ...guard, async (c: Context) => {
+    try {
+      const { data: engine } = await supabase.rpc("part_import_engine_version");
+      const { data: integrity } = await supabase.rpc("part_import_ledger_integrity_ratio");
+      return c.json({
+        engineVersion: engine ?? null,
+        integrityRatio: integrity ?? null,
+        workspaceId: Deno.env.get("DOMINION_WORKSPACE_ID") ?? Deno.env.get("VITE_DOMINION_WORKSPACE_ID") ?? null,
+      });
+    } catch (e) {
+      return fail(c, e);
+    }
+  });
+
   route.get("/make-server-37f42386/admin/parts-import/batches/:id", ...guard, async (c: Context) => {
     try {
       const batchId = c.req.param("id");
       const status = c.req.query("status") ?? "";
+      const issue = c.req.query("issue") ?? "";
+      const q = (c.req.query("q") ?? "").trim();
       const limit = Math.min(Number(c.req.query("limit") ?? "25"), 100);
       const offset = Number(c.req.query("offset") ?? "0");
       const { data: batch, error } = await supabase.from("part_import_batch").select("*").eq("id", batchId).single();
       if (error) throw error;
-      let q = supabase.from("part_import_row").select("*", { count: "exact" }).eq("batch_id", batchId).order("line_no");
-      if (status) q = q.eq("status", status);
-      const { data: rows, count, error: rErr } = await q.range(offset, offset + limit - 1);
+      const { data: listed, error: rErr } = await supabase.rpc("part_import_list_rows", {
+        p_batch_id: batchId,
+        p_status: status || null,
+        p_issue_code: issue || null,
+        p_q: q || null,
+        p_limit: limit,
+        p_offset: offset,
+      });
       if (rErr) throw rErr;
-      return c.json({ batch, rows: rows ?? [], total: count ?? 0 });
+      const payload = (listed ?? {}) as { total?: number; rows?: unknown[] };
+      return c.json({ batch, rows: payload.rows ?? [], total: payload.total ?? 0 });
+    } catch (e) {
+      return fail(c, e);
+    }
+  });
+
+  route.get("/make-server-37f42386/admin/parts-import/batches/:id/changes", ...guard, async (c: Context) => {
+    try {
+      const batchId = c.req.param("id");
+      const { data, error } = await supabase.rpc("part_import_batch_changes", { p_batch_id: batchId });
+      if (error) throw error;
+      return c.json(data ?? { parts: [], fits: [], leftOut: [] });
+    } catch (e) {
+      return fail(c, e);
+    }
+  });
+
+  route.get("/make-server-37f42386/admin/parts-import/batches/:id/undo-preflight", ...guard, async (c: Context) => {
+    try {
+      const batchId = c.req.param("id");
+      const { data, error } = await supabase.rpc("part_import_undo_preflight", { p_batch_id: batchId });
+      if (error) throw error;
+      return c.json(data ?? { ok: false });
+    } catch (e) {
+      return fail(c, e);
+    }
+  });
+
+  route.post("/make-server-37f42386/admin/parts-import/refresh", ...guard, async (c: Context) => {
+    try {
+      const body = await c.req.json().catch(() => ({})) as { batch_id?: string };
+      const who = actor(c);
+      const { error: refreshErr } = await supabase.rpc("refresh_variant_parts_readiness");
+      if (refreshErr) throw refreshErr;
+      if (body.batch_id && UUID_RE.test(body.batch_id)) {
+        await supabase.from("part_import_batch").update({ refresh_warning: null }).eq("id", body.batch_id);
+      } else {
+        await supabase.from("part_import_batch").update({ refresh_warning: null }).not("refresh_warning", "is", null);
+      }
+      await logAdminAction({
+        actorId: who.id,
+        actorName: who.name,
+        action: "parts_import_refresh_readiness",
+        targetId: body.batch_id ?? "all",
+        targetEmail: who.name,
+      });
+      return c.json({ ok: true });
     } catch (e) {
       return fail(c, e);
     }
@@ -385,6 +576,8 @@ export function registerPartsImportRoutes(route: RouteApp, supabase: SupabaseCli
         if (/Already importing|must be checked|Rollback/i.test(msg)) return c.json({ error: msg }, 409);
         throw error;
       }
+      const { data: meta } = await supabase.rpc("part_import_finalize_promote_meta", { p_batch_id: batchId });
+      const merged = { ...(data as Record<string, unknown>), ...(meta as Record<string, unknown> | null) };
       const { data: batch } = await supabase.from("part_import_batch").select("code").eq("id", batchId).single();
       await logAdminAction({
         actorId: who.id,
@@ -392,9 +585,9 @@ export function registerPartsImportRoutes(route: RouteApp, supabase: SupabaseCli
         action: "parts_import_promoted",
         targetId: batchId,
         targetEmail: batch?.code ?? batchId,
-        details: JSON.stringify(data),
+        details: JSON.stringify(merged),
       });
-      return c.json({ result: data });
+      return c.json({ result: merged });
     } catch (e) {
       return fail(c, e);
     }
@@ -455,11 +648,22 @@ export function registerPartsImportRoutes(route: RouteApp, supabase: SupabaseCli
   route.get("/make-server-37f42386/admin/parts-import/ledger", ...guard, async (c: Context) => {
     try {
       const area = c.req.query("area") ?? "";
-      let q = supabase.from("part_import_ledger_by_area").select("*").order("created_at", { ascending: false }).limit(100);
+      const limit = Math.min(Number(c.req.query("limit") ?? "50"), 200);
+      const offset = Math.max(Number(c.req.query("offset") ?? "0"), 0);
+      let q = supabase.from("part_import_ledger_by_area").select("*", { count: "exact" }).order("created_at", { ascending: false });
       if (area && UUID_RE.test(area)) q = q.eq("area_id", area);
-      const { data, error } = await q;
+      const { data, error, count } = await q.range(offset, offset + limit - 1);
       if (error) throw error;
-      return c.json({ items: data ?? [] });
+      const { data: areas } = await supabase.from("part_import_areas_summary").select("id, name");
+      const perArea: Record<string, number> = {};
+      for (const a of areas ?? []) {
+        const { count: n } = await supabase
+          .from("part_import_ledger_by_area")
+          .select("*", { count: "exact", head: true })
+          .eq("area_id", a.id as string);
+        perArea[a.id as string] = n ?? 0;
+      }
+      return c.json({ items: data ?? [], total: count ?? 0, perArea });
     } catch (e) {
       return fail(c, e);
     }

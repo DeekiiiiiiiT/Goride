@@ -1,10 +1,41 @@
 // Stitch: dominion-redesign/parts_import_done
-export function ImportBatchRecordsTable({ rows }: { rows: Array<Record<string, unknown>> }) {
+export function ImportBatchRecordsTable({
+  rows,
+  fileName,
+  batchCode,
+  shaPrefix,
+  onLedger,
+  onUndoIngestion,
+}: {
+  rows: Array<Record<string, unknown>>;
+  fileName?: string;
+  batchCode?: string;
+  shaPrefix?: string;
+  onLedger?: () => void;
+  onUndoIngestion?: () => void;
+}) {
+  const sample = rows.slice(0, 8);
   return (
     <div className="rounded-xl border border-outline-variant/30 overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-surface-container-low">
-        <h3 className="text-sm font-semibold">Ingested Batch Records & Snapshot Audit</h3>
-        <button type="button" className="text-xs font-semibold text-error">Revert / undo ingestion</button>
+        <div>
+          <h3 className="text-sm font-semibold">Ingested Batch Records & Snapshot Audit</h3>
+          {fileName ? (
+            <p className="text-xs text-on-surface-variant">Showing sample of newly written items from {fileName}</p>
+          ) : null}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {batchCode && onLedger ? (
+            <button type="button" className="text-xs font-semibold text-primary" onClick={onLedger}>
+              View Import Ledger (Batch #{batchCode})
+            </button>
+          ) : null}
+          {onUndoIngestion ? (
+            <button type="button" className="text-xs font-semibold text-error" onClick={onUndoIngestion}>
+              Revert / Undo Ingestion
+            </button>
+          ) : null}
+        </div>
       </div>
       <table className="w-full text-xs text-left">
         <thead className="bg-surface-container-high font-mono uppercase text-outline">
@@ -18,21 +49,42 @@ export function ImportBatchRecordsTable({ rows }: { rows: Array<Record<string, u
           </tr>
         </thead>
         <tbody>
-          {rows.slice(0, 8).map((row) => {
+          {sample.map((row) => {
             const raw = row.raw as Record<string, string> | undefined;
+            const status = String(row.status ?? "");
+            const excluded = status === "error" || status === "duplicate";
+            const issues = row.issues as Array<{ message?: string }> | undefined;
             return (
               <tr key={String(row.line_no)} className="border-t border-outline-variant/20">
                 <td className="p-2">{String(row.line_no)}</td>
-                <td className="p-2">{raw?.part_name ?? raw?.part_number ?? "—"}</td>
+                <td className="p-2">
+                  <div>{raw?.part_name ?? raw?.part_number ?? "—"}</div>
+                  <div className="text-[10px] text-outline truncate">{raw?.vehicle}</div>
+                </td>
                 <td className="p-2">{raw?.replaces_oem_number ?? "—"}</td>
-                <td className="p-2">{raw?.match_type ?? "—"}</td>
+                <td className="p-2">
+                  <span className="px-1.5 py-0.5 rounded bg-surface-container-high font-mono text-[10px]">{raw?.match_type ?? "—"}</span>
+                </td>
                 <td className="p-2">{raw?.part_type ?? "—"}</td>
-                <td className="p-2 text-right">Commit status · {String(row.status)}</td>
+                <td className="p-2 text-right">
+                  {excluded ? (
+                    <div>
+                      <span className="text-error font-semibold">EXCLUDED</span>
+                      <div className="text-[10px] text-outline">{issues?.[0]?.message ?? status}</div>
+                    </div>
+                  ) : (
+                    <span className="text-[#166534] font-semibold">CREATED</span>
+                  )}
+                </td>
               </tr>
             );
           })}
         </tbody>
       </table>
+      <p className="p-2 text-[10px] font-mono text-outline border-t border-outline-variant/20">
+        Displaying {sample.length} of {rows.length} processed rows · Checksum: SHA256:{shaPrefix ?? "—"} · Auto-purge temporary
+        buffer: 72 hrs remaining
+      </p>
     </div>
   );
 }

@@ -62,7 +62,7 @@ export async function resolveVehicleForImport(
     .ilike("make", parsed.make)
     .ilike("model", parsed.model)
     .limit(50);
-  if (error) throw error;
+  if (error) throw new Error(error.message || "Vehicle catalog lookup failed");
 
   let matches = filterByChassisAndYear(broad ?? [], parsed.chassis, parsed.year);
   if (!matches.length) {
@@ -93,7 +93,7 @@ export async function resolveImportBatchVehicles(
     .select("line_no, raw, normalized")
     .eq("batch_id", batchId)
     .order("line_no");
-  if (error) throw error;
+  if (error) throw new Error(error.message || "Vehicle catalog lookup failed");
   const list = rows ?? [];
   const total = list.length;
   const byVehicle = new Map<string, number[]>();

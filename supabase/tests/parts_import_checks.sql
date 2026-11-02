@@ -6,6 +6,16 @@ INSERT INTO public.maintenance_service_categories (id, code, name, kind, icon_ke
 VALUES ('b1000000-0000-4000-8000-000000000004', 'pi-brakes-system', 'Brakes', 'system', 'brakes', 4)
 ON CONFLICT (id) DO NOTHING;
 
+INSERT INTO public.maintenance_service_categories (id, code, name, kind, icon_key, sort_order)
+VALUES ('b1000000-0000-4000-8000-000000000001', 'pi-engine-system', 'Engine', 'system', 'engine', 1)
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO public.maintenance_service_categories (id, code, name, kind, op_code, parent_id, icon_key, sort_order, is_part, position_aware)
+VALUES
+  ('c1000000-0000-4000-8000-000000000006', 'pi-brk-pads', 'Brake pads', 'component', 'BRK-PADS', 'b1000000-0000-4000-8000-000000000004', 'brakes', 60, true, true),
+  ('c1000000-0000-4000-8000-000000000001', 'pi-eng-oil', 'Oil filter', 'component', 'ENG-OIL', 'b1000000-0000-4000-8000-000000000001', 'engine', 10, true, false)
+ON CONFLICT (id) DO NOTHING;
+
 -- Minimal catalog + brakes area (uses seeded system id from migrations)
 INSERT INTO public.engine_family (id, code) VALUES
   ('11111111-1111-4111-8111-111111111101', 'PI-1NZ-FE')
@@ -39,6 +49,8 @@ DECLARE
   v_part uuid;
   v_decision text;
   v_undo jsonb;
+  v_side text;
+  v_batch_side uuid := '44444444-4444-4444-8444-444444444445'::uuid;
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM public.maintenance_service_categories WHERE id = v_area) THEN
     RAISE EXCEPTION 'Brakes system row missing — run full migration replay';
@@ -73,11 +85,11 @@ BEGIN
     jsonb_build_object('line_no', 1, 'raw', jsonb_build_object(
       'vehicle', '33333333-3333-4333-8333-333333333331', 'part_type', 'BRK-PADS', 'brand', 'Toyota',
       'part_number', 'PI-04465-A', 'part_name', 'Pad', 'match_type', 'oem', 'year_from', '2018', 'year_to', '2024',
-      'source_url', 'https://example.com/a', 'position', 'Front', 'side', 'left')),
+      'source_url', 'https://example.com/a', 'position', 'Front', 'side', 'Left')),
     jsonb_build_object('line_no', 2, 'raw', jsonb_build_object(
       'vehicle', '33333333-3333-4333-8333-333333333332', 'part_type', 'BRK-PADS', 'brand', 'Toyota',
       'part_number', 'PI-04465-A', 'part_name', 'Pad', 'match_type', 'oem', 'year_from', '2018', 'year_to', '2024',
-      'source_url', 'https://example.com/a', 'position', 'Front', 'side', 'left')),
+      'source_url', 'https://example.com/a', 'position', 'Front', 'side', 'Left')),
     jsonb_build_object('line_no', 3, 'raw', jsonb_build_object(
       'vehicle', '33333333-3333-4333-8333-333333333333', 'part_type', 'BRK-PADS', 'brand', 'Toyota',
       'part_number', 'PI-04465-A', 'part_name', 'Pad', 'match_type', 'oem', 'year_from', '2018', 'year_to', '2024',
@@ -90,21 +102,92 @@ BEGIN
 
   PERFORM public.part_import_validate(v_batch1);
 
+  FOR v_row IN
+    SELECT r.line_no, r.status, r.issues, r.normalized
+    FROM public.part_import_row r
+    WHERE r.batch_id = v_batch1 AND r.line_no IN (1, 2, 3)
+  LOOP
+    IF v_row.status IS DISTINCT FROM 'valid' THEN
+      RAISE EXCEPTION 'batch1 line % expected valid, got % issues %', v_row.line_no, v_row.status, v_row.issues;
+    END IF;
+    IF coalesce(v_row.normalized->>'side', '') <> 'left' THEN
+      RAISE EXCEPTION 'batch1 line % expected normalized side left, got %', v_row.line_no, v_row.normalized->>'side';
+    END IF;
+  END LOOP;
+
   v_promote := public.part_import_promote(v_batch1, NULL);
   IF coalesce((v_promote->>'partsCreated')::int, 0) <> 1
      OR coalesce((v_promote->>'fitsCreated')::int, 0) <> 3 THEN
     RAISE EXCEPTION 'promote batch1 expected 1 part / 3 fits, got %', v_promote;
   END IF;
 
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.part_listing pl
+    JOIN public.part_master pm ON pm.interchange_group_id = pl.interchange_group_id
+    WHERE pm.oem_part_number = 'PI-04465-A'
+      AND pl.side = 'left'
+  ) THEN
+    RAISE EXCEPTION 'PI-18: promoted fit should have side left';
+  END IF;
+
+  INSERT INTO public.part_import_batch (id, code, area_id, template_version, file_name, file_sha256, status)
+  VALUES (v_batch_side, 'PI-CHK-SIDE', v_area, 1, 'pi-side-mix.csv', 'pi-sha-side', 'uploaded');
+
+  PERFORM public.part_import_insert_staged_rows(v_batch_side, jsonb_build_array(
+    jsonb_build_object('line_no', 1, 'raw', jsonb_build_object(
+      'vehicle', '33333333-3333-4333-8333-333333333331', 'part_type', 'BRK-PADS', 'brand', 'Toyota',
+      'part_number', 'PI-SIDE-A', 'part_name', 'Pad A', 'match_type', 'oem', 'year_from', '2018', 'year_to', '2024',
+      'source_url', 'https://example.com/side-a', 'position', 'Front', 'side', 'Left')),
+    jsonb_build_object('line_no', 2, 'raw', jsonb_build_object(
+      'vehicle', '33333333-3333-4333-8333-333333333332', 'part_type', 'BRK-PADS', 'brand', 'Toyota',
+      'part_number', 'PI-SIDE-A', 'part_name', 'Pad A', 'match_type', 'oem', 'year_from', '2018', 'year_to', '2024',
+      'source_url', 'https://example.com/side-a', 'position', 'Front', 'side', 'left')),
+    jsonb_build_object('line_no', 3, 'raw', jsonb_build_object(
+      'vehicle', '33333333-3333-4333-8333-333333333333', 'part_type', 'BRK-PADS', 'brand', 'Toyota',
+      'part_number', 'PI-SIDE-A', 'part_name', 'Pad A', 'match_type', 'oem', 'year_from', '2018', 'year_to', '2024',
+      'source_url', 'https://example.com/side-a', 'position', 'Front', 'side', 'Up'))
+  ));
+  UPDATE public.part_import_row SET vehicle_catalog_id = (raw->>'vehicle')::uuid WHERE batch_id = v_batch_side;
+  PERFORM public.part_import_validate(v_batch_side);
+
+  IF NOT EXISTS (
+    SELECT 1 FROM public.part_import_row
+    WHERE batch_id = v_batch_side AND line_no = 3 AND status = 'error'
+  ) THEN
+    RAISE EXCEPTION 'PI-18: line 3 with side Up should be error';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM jsonb_array_elements(
+      (SELECT issues FROM public.part_import_row WHERE batch_id = v_batch_side AND line_no = 3)
+    ) elem WHERE elem->>'code' = 'SIDE_INVALID'
+  ) THEN
+    RAISE EXCEPTION 'PI-18: line 3 should have SIDE_INVALID';
+  END IF;
+  FOR v_row IN
+    SELECT line_no, status FROM public.part_import_row
+    WHERE batch_id = v_batch_side AND line_no IN (1, 2)
+  LOOP
+    IF v_row.status IS DISTINCT FROM 'valid' THEN
+      RAISE EXCEPTION 'PI-18: line % should stay valid beside Up row, got %', v_row.line_no, v_row.status;
+    END IF;
+  END LOOP;
+
+  v_promote := public.part_import_promote(v_batch_side, NULL);
+  IF coalesce((v_promote->>'partsCreated')::int, 0) <> 1
+     OR coalesce((v_promote->>'fitsCreated')::int, 0) <> 2 THEN
+    RAISE EXCEPTION 'PI-18: promote with Up row expected 1 part / 2 fits, got %', v_promote;
+  END IF;
+
   PERFORM public.part_import_insert_staged_rows(v_batch2, jsonb_build_array(
     jsonb_build_object('line_no', 1, 'raw', jsonb_build_object(
       'vehicle', '33333333-3333-4333-8333-333333333331', 'part_type', 'BRK-PADS', 'brand', 'Toyota',
       'part_number', 'PI-04465-A', 'part_name', 'Pad', 'match_type', 'oem', 'year_from', '2018', 'year_to', '2024',
-      'source_url', 'https://example.com/a', 'position', 'Front', 'side', 'left')),
+      'source_url', 'https://example.com/a', 'position', 'Front', 'side', 'Left')),
     jsonb_build_object('line_no', 2, 'raw', jsonb_build_object(
       'vehicle', '33333333-3333-4333-8333-333333333332', 'part_type', 'BRK-PADS', 'brand', 'Toyota',
       'part_number', 'PI-04465-A', 'part_name', 'Pad', 'match_type', 'oem', 'year_from', '2018', 'year_to', '2024',
-      'source_url', 'https://example.com/a', 'position', 'Front', 'side', 'left')),
+      'source_url', 'https://example.com/a', 'position', 'Front', 'side', 'Left')),
     jsonb_build_object('line_no', 3, 'raw', jsonb_build_object(
       'vehicle', '33333333-3333-4333-8333-333333333333', 'part_type', 'BRK-PADS', 'brand', 'Toyota',
       'part_number', 'PI-04465-A', 'part_name', 'Pad', 'match_type', 'oem', 'year_from', '2018', 'year_to', '2024',
@@ -115,6 +198,16 @@ BEGIN
   WHERE batch_id = v_batch2;
 
   PERFORM public.part_import_validate(v_batch2);
+
+  FOR v_row IN
+    SELECT r.line_no, r.status, r.issues
+    FROM public.part_import_row r
+    WHERE r.batch_id = v_batch2 AND r.line_no IN (1, 2, 3)
+  LOOP
+    IF v_row.status IS DISTINCT FROM 'unchanged' THEN
+      RAISE EXCEPTION 'batch2 line % expected unchanged, got % issues %', v_row.line_no, v_row.status, v_row.issues;
+    END IF;
+  END LOOP;
 
   IF (SELECT count(*) FROM public.part_import_row WHERE batch_id = v_batch2 AND status = 'unchanged') <> 3 THEN
     RAISE EXCEPTION 'second batch expected 3 unchanged rows';
@@ -135,6 +228,16 @@ BEGIN
   WHERE batch_id = v_batch3;
 
   PERFORM public.part_import_validate(v_batch3);
+
+  FOR v_row IN
+    SELECT r.line_no, r.status, r.issues
+    FROM public.part_import_row r
+    WHERE r.batch_id = v_batch3 AND r.line_no = 1
+  LOOP
+    IF v_row.status IS DISTINCT FROM 'error' THEN
+      RAISE EXCEPTION 'batch3 line 1 expected error, got %', v_row.status;
+    END IF;
+  END LOOP;
 
   SELECT issues INTO v_issues FROM public.part_import_row WHERE batch_id = v_batch3 AND line_no = 1;
   IF NOT EXISTS (
@@ -203,6 +306,21 @@ BEGIN
   SELECT catalog_decision INTO v_decision FROM public.part_master WHERE id = v_part;
   IF v_decision IS DISTINCT FROM 'confirmed' THEN
     RAISE EXCEPTION 'confirmed part should keep catalog_decision after re-import, got %', v_decision;
+  END IF;
+
+  -- Rev 8: engine version + summary RPC
+  IF public.part_import_engine_version() IS NULL OR length(public.part_import_engine_version()) < 3 THEN
+    RAISE EXCEPTION 'part_import_engine_version missing';
+  END IF;
+
+  SELECT public.part_import_batch_summary(v_batch1) INTO v_promote;
+  IF coalesce(v_promote->>'rowsTotal', '0')::int < 1 THEN
+    RAISE EXCEPTION 'batch summary should report rows';
+  END IF;
+
+  SELECT public.part_import_list_rows(v_batch1, NULL, NULL, NULL, 10, 0) INTO v_undo;
+  IF coalesce(v_undo->>'total', '0')::int < 1 THEN
+    RAISE EXCEPTION 'list_rows should return total';
   END IF;
 END $$;
 

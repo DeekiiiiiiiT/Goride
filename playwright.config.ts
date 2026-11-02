@@ -35,8 +35,25 @@ export default defineConfig({
   },
   projects: [
     {
+      name: 'dominion-admin',
+      testMatch: /parts-import-stitch\.spec\.ts/,
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1456, height: 900 },
+        baseURL: process.env.ADMIN_BASE_URL?.trim() || 'http://127.0.0.1:4173',
+      },
+      webServer: process.env.ADMIN_BASE_URL
+        ? undefined
+        : {
+            command: 'pnpm --filter @roam/admin exec vite preview --host 127.0.0.1 --port 4173',
+            url: 'http://127.0.0.1:4173',
+            reuseExistingServer: !process.env.CI,
+            timeout: 120_000,
+          },
+    },
+    {
       name: 'fleet',
-      testMatch: /fleet-rush-integration\.spec\.ts|fuel-recon-wizard\.spec\.ts|fuel-recon-shadow-soak\.spec\.ts|driver-settlements-desk\.spec\.ts|driver-detail-smoke\.spec\.ts|fleet-find-parts-visual\.spec\.ts|inventory-button-sweep\.spec\.ts/,
+      testMatch: /fleet-rush-integration\.spec\.ts|fuel-recon-wizard\.spec\.ts|fuel-recon-shadow-soak\.spec\.ts|driver-settlements-desk\.spec\.ts|driver-detail-smoke\.spec\.ts|fleet-find-parts-visual\.spec\.ts|inventory-button-sweep\.spec\.ts|parts-import-stitch\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         baseURL: process.env.FLEET_BASE_URL?.trim() || 'http://localhost:3000',
