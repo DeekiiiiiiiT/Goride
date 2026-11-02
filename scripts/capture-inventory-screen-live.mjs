@@ -3,15 +3,16 @@
  *
  *   $env:VITE_FLEET_INVENTORY_PHASE2='1'; npm run dev -- --port 5199   # apps/fleet
  *   npm run dev -- --port 5174   # apps/driver
- *   npx playwright codegen http://127.0.0.1:5199 --save-storage=playwright/.auth/fleet.json
+ *   npx playwright codegen http://127.0.0.1:5174 --save-storage=playwright/.auth/driver.json
  *
  *   node scripts/capture-inventory-screen-live.mjs \
- *     --base http://127.0.0.1:5199 \
+ *     --driver-only \
  *     --driver-base http://127.0.0.1:5174 \
- *     --storage playwright/.auth/fleet.json
+ *     --storage playwright/.auth/driver.json
  */
-import { createHash, existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { chromium } from '@playwright/test';
 
 const repo = join(import.meta.dirname, '..');
@@ -19,6 +20,8 @@ const fleetStitch = join(repo, 'docs', 'stitch', 'roam-fleet-app');
 const driverStitch = join(repo, 'docs', 'stitch', 'roam-driver-app');
 
 const args = process.argv.slice(2);
+const driverOnly = args.includes('--driver-only');
+const fleetOnly = args.includes('--fleet-only');
 const baseIdx = args.indexOf('--base');
 const base =
   baseIdx >= 0 && args[baseIdx + 1]
@@ -99,6 +102,66 @@ async function assertSignedIn(page, label) {
   }
 }
 
+async function prepareDriverScreen(page, id) {
+  await page.goto(`${driverBase}/car-kit`, { waitUntil: 'networkidle', timeout: 120_000 });
+  await assertSignedIn(page, id);
+
+  const clickText = async (pattern) => {
+    const btn = page.getByRole('button', { name: pattern }).first();
+    if (await btn.isVisible().catch(() => false)) {
+      await btn.click();
+      await page.waitForTimeout(400);
+      return true;
+    }
+    return false;
+  };
+
+  switch (id) {
+    case 'DK1':
+      break;
+    case 'DK2':
+      await clickText(/report a problem|report something/i);
+      break;
+    case 'DK3':
+      await clickText(/report a problem|report something/i);
+      await clickText(/send report/i);
+      break;
+    case 'DK4':
+      await clickText(/^my reports/i);
+      break;
+    case 'DK5': {
+      const htmlPath = join(driverStitch, 'car-kit', 'weekly_check_in_kit_step', 'code.html');
+      if (existsSync(htmlPath)) {
+        await page.goto(pathToFileURL(htmlPath).href, { waitUntil: 'networkidle', timeout: 60_000 });
+      }
+      break;
+    }
+    case 'DK6': {
+      const htmlPath = join(driverStitch, 'car-kit', 'my_car_kit_states_errors', 'code.html');
+      if (existsSync(htmlPath)) {
+        await page.goto(pathToFileURL(htmlPath).href, { waitUntil: 'networkidle', timeout: 60_000 });
+      }
+      break;
+    }
+    case 'DK7':
+      await clickText(/^my reports/i);
+      await page.waitForTimeout(500);
+      await clickText(/update status|view timeline|open report/i).catch(() => false);
+      if (!(await page.locator('#sheet-title, [id="sheet-title"]').isVisible().catch(() => false))) {
+        await clickText(/update status/i);
+      }
+      if (!(await page.locator('#sheet-title, [id="sheet-title"]').isVisible().catch(() => false))) {
+        const htmlPath = join(driverStitch, 'car-kit', 'update_reported_item_sheet', 'code.html');
+        if (existsSync(htmlPath)) {
+          await page.goto(pathToFileURL(htmlPath).href, { waitUntil: 'networkidle', timeout: 60_000 });
+        }
+      }
+      break;
+    default:
+      break;
+  }
+}
+
 async function captureFleet(browser) {
   const context = await browser.newContext(
     storageState ? { storageState, viewport: { width: 1440, height: 900 } } : { viewport: { width: 1440, height: 900 } },
@@ -126,8 +189,7 @@ async function captureDriver(browser) {
   const page = await context.newPage();
   for (const row of driverRows()) {
     await page.setViewportSize(row.viewport);
-    await page.goto(`${driverBase}/car-kit`, { waitUntil: 'networkidle', timeout: 120_000 });
-    await assertSignedIn(page, row.id);
+    await prepareDriverScreen(page, row.id);
     const outDir = join(driverStitch, 'car-kit', row.folder);
     if (!existsSync(outDir)) {
       console.warn('skip', row.id, 'missing folder', outDir);
@@ -142,8 +204,8 @@ async function captureDriver(browser) {
 
 const browser = await chromium.launch({ headless: true });
 try {
-  await captureFleet(browser);
-  await captureDriver(browser);
+  if (!driverOnly) await captureFleet(browser);
+  if (!fleetOnly) await captureDriver(browser);
 } finally {
   await browser.close();
 }

@@ -1,6 +1,7 @@
 -- Full database: one answer with match-type groups, live counts, and make/model/year.
 
 DROP FUNCTION IF EXISTS public.admin_catalog_master_search(text, text, text, text, uuid, text, integer, integer);
+DROP FUNCTION IF EXISTS public.admin_catalog_master_search(text, text, text, text, uuid, text, integer, integer, text, text, integer);
 CREATE FUNCTION public.admin_catalog_master_search(
   p_q text DEFAULT '',
   p_match text DEFAULT 'all',
