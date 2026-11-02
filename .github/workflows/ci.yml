@@ -272,7 +272,7 @@ jobs:
 
       - name: Start Supabase and bootstrap inventory schema
         run: |
-          supabase start -x imgproxy,logflare
+          supabase start -x gotrue,realtime,storage-api,imgproxy,mailpit,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
           supabase db reset --local
           node scripts/bootstrap-inventory-local-db.mjs
         env:
