@@ -15,7 +15,7 @@ function getServiceRoleKey() {
   if (process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()) {
     return process.env.SUPABASE_SERVICE_ROLE_KEY.trim();
   }
-  const out = execSync(`npx supabase projects api-keys --project-ref ${PROJECT_REF}`, {
+  const out = execSync(`npx supabase projects api-keys --remote=${PROJECT_REF}`, {
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
   });

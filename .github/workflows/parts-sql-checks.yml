@@ -44,15 +44,8 @@ jobs:
       - name: Check migration bodies match production fingerprints
         run: node scripts/compare-migration-md5-to-prod.mjs
 
-      - name: Install Supabase CLI
-        env:
-          SUPABASE_CLI_VERSION: "2.99.0"
-        run: |
-          set -euo pipefail
-          url="https://github.com/supabase/cli/releases/download/v${SUPABASE_CLI_VERSION}/supabase_${SUPABASE_CLI_VERSION}_linux_amd64.tar.gz"
-          curl -fsSL "$url" -o /tmp/supabase.tar.gz
-          sudo tar -xzf /tmp/supabase.tar.gz -C /usr/local/bin
-          supabase --version
+      - name: Setup Supabase CLI
+        uses: ./.github/actions/setup-supabase-cli
 
       - name: Start the database
         run: |

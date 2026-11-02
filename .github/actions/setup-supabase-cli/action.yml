@@ -1,0 +1,14 @@
+name: Setup Supabase CLI
+description: Install Supabase CLI version pinned in package.json devDependencies
+runs:
+  using: composite
+  steps:
+    - name: Install pinned Supabase CLI
+      shell: bash
+      run: |
+        set -euo pipefail
+        V="$(node -p "require('./package.json').devDependencies.supabase")"
+        url="https://github.com/supabase/cli/releases/download/v${V}/supabase_${V}_linux_amd64.tar.gz"
+        curl -fsSL "$url" -o /tmp/supabase.tar.gz
+        sudo tar -xzf /tmp/supabase.tar.gz -C /usr/local/bin
+        supabase --version

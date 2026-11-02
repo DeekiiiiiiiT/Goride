@@ -9,7 +9,7 @@
  * Connection (first match):
  *   1. DATABASE_URL / SUPABASE_DB_URL with a password → psql
  *   2. FUEL_STOP_HEALTH_VIA_CLI=1 or passwordless URL + SUPABASE_ACCESS_TOKEN
- *      → `npx supabase db query --linked` (CLI login role)
+ *      → `npx supabase db query --remote --read-only` (CLI login role)
  *   3. Else fail-closed (unless FORCE_FUEL_STOP_HEALTH_DRY=1)
  *
  * Usage:
@@ -45,7 +45,7 @@ Reports (warn only):      C4 C6 C7 C8
 
 Prefer a passworded DATABASE_URL / SUPABASE_DB_URL for psql.
 Or set SUPABASE_ACCESS_TOKEN (+ optional FUEL_STOP_HEALTH_VIA_CLI=1) to use
-\`npx supabase db query --linked\` (same login-role path as local CLI).
+\`npx supabase db query --remote --read-only\` (same login-role path as local CLI).
 
 Set FORCE_FUEL_STOP_HEALTH_DRY=1 to exit 0 without DB.
 `);
@@ -111,7 +111,7 @@ function runCheckPsql(id, sql) {
   return { id, ok: true, rows };
 }
 
-/** Parse `supabase db query --linked` JSON ({ rows: [...] }) from mixed stdout. */
+/** Parse `supabase db query --remote --read-only` JSON ({ rows: [...] }) from mixed stdout. */
 function countCliJsonRows(stdout) {
   const text = String(stdout || "");
   const start = text.indexOf("{");
@@ -156,7 +156,7 @@ function runCheckCli(id, sql) {
   // Newer CLI: SQL via stdin; force JSON so row counts are reliable (text tables false-pass).
   const result = spawnSync(
     "npx",
-    ["supabase", "db", "query", "--linked", "--output-format", "json"],
+    ["supabase", "db", "query", "--remote", "--read-only", "--output-format", "json"],
     {
       encoding: "utf8",
       shell: true,

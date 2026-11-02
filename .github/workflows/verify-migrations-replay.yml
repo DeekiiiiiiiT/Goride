@@ -22,17 +22,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # setup-cli@v1/v2 download URLs no longer match Supabase release asset names
-      # (same fix already applied in deploy-supabase-edge.yml).
-      - name: Install Supabase CLI
-        env:
-          SUPABASE_CLI_VERSION: "2.99.0"
-        run: |
-          set -euo pipefail
-          url="https://github.com/supabase/cli/releases/download/v${SUPABASE_CLI_VERSION}/supabase_${SUPABASE_CLI_VERSION}_linux_amd64.tar.gz"
-          curl -fsSL "$url" -o /tmp/supabase.tar.gz
-          sudo tar -xzf /tmp/supabase.tar.gz -C /usr/local/bin
-          supabase --version
+      - name: Setup Supabase CLI
+        uses: ./.github/actions/setup-supabase-cli
 
       - name: Start local Supabase stack (applies migrations in filename order)
         run: |
@@ -47,8 +38,8 @@ jobs:
       - name: Parts sourcing SQL checks
         run: |
           set -euo pipefail
-          supabase db query --local -f supabase/tests/parts_rev2_checks.sql
-          supabase db query --local -f supabase/tests/vehicle_database_rebuild_checks.sql
-          supabase db query --local -f supabase/tests/places_checks.sql
-          supabase db query --local -f supabase/tests/price_engine_checks.sql
-          supabase db query --local -f supabase/tests/catalog_research_claim_checks.sql
+          supabase db query -f supabase/tests/parts_rev2_checks.sql
+          supabase db query -f supabase/tests/vehicle_database_rebuild_checks.sql
+          supabase db query -f supabase/tests/places_checks.sql
+          supabase db query -f supabase/tests/price_engine_checks.sql
+          supabase db query -f supabase/tests/catalog_research_claim_checks.sql

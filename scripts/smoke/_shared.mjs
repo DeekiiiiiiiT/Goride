@@ -110,7 +110,7 @@ export function getApiKeys() {
   for (let attempt = 1; attempt <= 4; attempt += 1) {
     try {
       const out = execSync(
-        `npx supabase projects api-keys --project-ref ${PROJECT_REF} -o json`,
+        `npx supabase projects api-keys --remote=${PROJECT_REF} -o json`,
         {
           encoding: 'utf8',
           stdio: ['ignore', 'pipe', 'pipe'],

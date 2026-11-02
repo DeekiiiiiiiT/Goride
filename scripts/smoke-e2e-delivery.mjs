@@ -20,7 +20,7 @@ function getApiKeys() {
   if (process.env.SUPABASE_ANON_KEY?.trim()) {
     return { anonKey: process.env.SUPABASE_ANON_KEY.trim() };
   }
-  const out = execSync(`npx supabase projects api-keys --project-ref ${PROJECT_REF}`, {
+  const out = execSync(`npx supabase projects api-keys --remote=${PROJECT_REF}`, {
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
   });

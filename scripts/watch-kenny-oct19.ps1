@@ -4,7 +4,7 @@ param(
 )
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot\..
-$raw = npx supabase db query --linked -o json -f scripts/watch-kenny-oct19.sql
+$raw = npx supabase db query --remote --read-only -o json -f scripts/watch-kenny-oct19.sql
 $parsed = $raw | ConvertFrom-Json
 $row = $parsed.rows[0]
 if (-not $row) { throw "No Kenny Oct 19 period row" }

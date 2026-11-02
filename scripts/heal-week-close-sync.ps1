@@ -18,7 +18,7 @@ Set-Location $root
 
 function Get-ServiceRoleJwtFromCli {
   # Capture stdout only as plain text (2>&1 ErrorRecords break JSON regex).
-  $raw = & npx supabase projects api-keys --project-ref csfllzzastacofsvcdsc 2>$null
+  $raw = & npx supabase projects api-keys --remote=csfllzzastacofsvcdsc 2>$null
   if (-not $raw) {
     throw "Could not read api-keys. Run: npx supabase login"
   }

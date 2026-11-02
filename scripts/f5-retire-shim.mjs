@@ -148,8 +148,8 @@ console.log("Precheck: f5-external-callers-check");
   const p = path.join(ROOT, "package.json");
   let t = fs.readFileSync(p, "utf8");
   t = t.replace(
-    /npx supabase functions deploy make-server-37f42386 --use-api --project-ref csfllzzastacofsvcdsc && node scripts\/smoke-fleet-health\.mjs/,
-    "npx supabase functions deploy fleet-core --use-api --project-ref csfllzzastacofsvcdsc && node scripts/smoke-edge-fn.mjs fleet-core",
+    /npx supabase functions deploy make-server-37f42386 --use-api --remote=csfllzzastacofsvcdsc --yes && node scripts\/smoke-fleet-health\.mjs/,
+    "npx supabase functions deploy fleet-core --use-api --remote=csfllzzastacofsvcdsc --yes && node scripts/smoke-edge-fn.mjs fleet-core",
   );
   fs.writeFileSync(p, t);
   console.log("package.json deploy:edge → fleet-core");

@@ -6,7 +6,7 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
-$raw = npx supabase projects api-keys --project-ref csfllzzastacofsvcdsc 2>&1 | Out-String
+$raw = npx supabase projects api-keys --remote=csfllzzastacofsvcdsc 2>&1 | Out-String
 $m = [regex]::Match($raw, '"api_key"\s*:\s*"(eyJ[^"]+)"[^}]*"id"\s*:\s*"service_role"')
 if (-not $m.Success) {
   $m = [regex]::Match($raw, '"id"\s*:\s*"service_role"[\s\S]*?"api_key"\s*:\s*"(eyJ[^"]+)"')

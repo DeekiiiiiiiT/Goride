@@ -26,6 +26,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Check Supabase CLI pin and v3 flags
+        run: node scripts/assert-supabase-cli-pin.mjs
+
       - name: Check no edge→fleet imports
         run: node scripts/check-no-edge-fleet-imports.mjs
 
@@ -266,14 +269,12 @@ jobs:
           supabase/functions/_fleet-server/catalog_trusted_source_block.test.ts
 
       - name: Setup Supabase CLI
-        uses: supabase/setup-cli@v1
-        with:
-          version: 2.99.0
+        uses: ./.github/actions/setup-supabase-cli
 
       - name: Start Supabase and bootstrap inventory schema
         run: |
           supabase start -x gotrue,realtime,storage-api,imgproxy,mailpit,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
-          supabase db reset --local
+          supabase db reset
           node scripts/bootstrap-inventory-local-db.mjs
         env:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres

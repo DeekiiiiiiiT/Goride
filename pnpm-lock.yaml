@@ -26,6 +26,9 @@ importers:
       sharp:
         specifier: ^0.35.3
         version: 0.35.3(@types/node@20.19.40)
+      supabase:
+        specifier: 3.0.0
+        version: 3.0.0
       typescript:
         specifier: ^5.4.0
         version: 5.9.3
@@ -272,7 +275,7 @@ importers:
         version: 6.3.5(@types/node@20.19.40)(jiti@2.7.0)(lightningcss@1.30.1)(terser@5.49.0)
       vitest:
         specifier: ^3.2.4
-        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1)(lightningcss@1.30.1)(terser@5.49.0)
+        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1(@noble/hashes@1.8.0))(lightningcss@1.30.1)(terser@5.49.0)
 
   apps/dash-courier:
     dependencies:
@@ -393,7 +396,7 @@ importers:
         version: 6.3.5(@types/node@20.19.40)(jiti@2.7.0)(lightningcss@1.30.1)(terser@5.49.0)
       vitest:
         specifier: ^3.2.4
-        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1)(lightningcss@1.30.1)(terser@5.49.0)
+        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1(@noble/hashes@1.8.0))(lightningcss@1.30.1)(terser@5.49.0)
 
   apps/dash-customer:
     dependencies:
@@ -550,7 +553,7 @@ importers:
         version: 6.3.5(@types/node@20.19.40)(jiti@2.7.0)(lightningcss@1.30.1)(terser@5.49.0)
       vitest:
         specifier: ^3.2.4
-        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1)(lightningcss@1.30.1)(terser@5.49.0)
+        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1(@noble/hashes@1.8.0))(lightningcss@1.30.1)(terser@5.49.0)
 
   apps/dash-merchant:
     dependencies:
@@ -731,7 +734,7 @@ importers:
         version: 1.3.0(vite@6.3.5(@types/node@20.19.40)(jiti@2.7.0)(lightningcss@1.30.1)(terser@5.49.0))(workbox-build@7.4.1(@types/babel__core@7.20.5))(workbox-window@7.4.1)
       vitest:
         specifier: ^3.2.4
-        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1)(lightningcss@1.30.1)(terser@5.49.0)
+        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1(@noble/hashes@1.8.0))(lightningcss@1.30.1)(terser@5.49.0)
 
   apps/driver:
     dependencies:
@@ -942,7 +945,7 @@ importers:
         version: 6.3.5(@types/node@20.19.40)(jiti@2.7.0)(lightningcss@1.30.1)(terser@5.49.0)
       vitest:
         specifier: ^3.2.4
-        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1)(lightningcss@1.30.1)(terser@5.49.0)
+        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1(@noble/hashes@1.8.0))(lightningcss@1.30.1)(terser@5.49.0)
 
   apps/enterprise:
     dependencies:
@@ -1445,7 +1448,7 @@ importers:
         version: 4.1.12(vite@6.3.5(@types/node@20.19.40)(jiti@2.7.0)(lightningcss@1.30.1)(terser@5.49.0))
       '@testing-library/jest-dom':
         specifier: ^7.0.1
-        version: 7.0.1(@testing-library/dom@10.4.1)(vitest@3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1)(lightningcss@1.30.1)(terser@5.49.0))
+        version: 7.0.1(@testing-library/dom@10.4.1)(vitest@3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1(@noble/hashes@1.8.0))(lightningcss@1.30.1)(terser@5.49.0))
       '@testing-library/react':
         specifier: ^16.3.3
         version: 16.3.3(@testing-library/dom@10.4.1)(@types/react-dom@18.3.7(@types/react@18.3.28))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -1472,7 +1475,7 @@ importers:
         version: 4.7.0(vite@6.3.5(@types/node@20.19.40)(jiti@2.7.0)(lightningcss@1.30.1)(terser@5.49.0))
       jsdom:
         specifier: ^30.0.1
-        version: 30.0.1
+        version: 30.0.1(@noble/hashes@1.8.0)
       sharp:
         specifier: ^0.35.3
         version: 0.35.3(@types/node@20.19.40)
@@ -1487,7 +1490,7 @@ importers:
         version: 1.3.0(vite@6.3.5(@types/node@20.19.40)(jiti@2.7.0)(lightningcss@1.30.1)(terser@5.49.0))(workbox-build@7.4.1(@types/babel__core@7.20.5))(workbox-window@7.4.1)
       vitest:
         specifier: ^3.2.4
-        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1)(lightningcss@1.30.1)(terser@5.49.0)
+        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1(@noble/hashes@1.8.0))(lightningcss@1.30.1)(terser@5.49.0)
 
   apps/haul:
     dependencies:
@@ -1554,7 +1557,7 @@ importers:
         version: 6.3.5(@types/node@20.19.40)(jiti@2.7.0)(lightningcss@1.30.1)(terser@5.49.0)
       vitest:
         specifier: ^3.2.4
-        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1)(lightningcss@1.30.1)(terser@5.49.0)
+        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1(@noble/hashes@1.8.0))(lightningcss@1.30.1)(terser@5.49.0)
 
   apps/plug:
     dependencies:
@@ -1633,7 +1636,7 @@ importers:
         version: 6.3.5(@types/node@20.19.40)(jiti@2.7.0)(lightningcss@1.30.1)(terser@5.49.0)
       vitest:
         specifier: ^3.2.4
-        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1)(lightningcss@1.30.1)(terser@5.49.0)
+        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1(@noble/hashes@1.8.0))(lightningcss@1.30.1)(terser@5.49.0)
 
   apps/rides-passenger:
     dependencies:
@@ -1778,7 +1781,7 @@ importers:
         version: 6.3.5(@types/node@20.19.40)(jiti@2.7.0)(lightningcss@1.30.1)(terser@5.49.0)
       vitest:
         specifier: ^3.2.4
-        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1)(lightningcss@1.30.1)(terser@5.49.0)
+        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1(@noble/hashes@1.8.0))(lightningcss@1.30.1)(terser@5.49.0)
 
   apps/rush-command:
     dependencies:
@@ -1929,7 +1932,7 @@ importers:
         version: 6.3.5(@types/node@20.19.40)(jiti@2.7.0)(lightningcss@1.30.1)(terser@5.49.0)
       vitest:
         specifier: ^3.2.4
-        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1)(lightningcss@1.30.1)(terser@5.49.0)
+        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1(@noble/hashes@1.8.0))(lightningcss@1.30.1)(terser@5.49.0)
 
   packages/admin-core:
     dependencies:
@@ -1987,7 +1990,7 @@ importers:
         version: 18.3.7(@types/react@18.3.28)
       vitest:
         specifier: ^3.2.4
-        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1)(lightningcss@1.30.1)(terser@5.49.0)
+        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1(@noble/hashes@1.8.0))(lightningcss@1.30.1)(terser@5.49.0)
 
   packages/api-client:
     dependencies:
@@ -2015,7 +2018,7 @@ importers:
     devDependencies:
       vitest:
         specifier: ^3.2.4
-        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1)(lightningcss@1.30.1)(terser@5.49.0)
+        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1(@noble/hashes@1.8.0))(lightningcss@1.30.1)(terser@5.49.0)
 
   packages/business-config:
     dependencies:
@@ -2121,7 +2124,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^3.2.4
-        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1)(lightningcss@1.30.1)(terser@5.49.0)
+        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1(@noble/hashes@1.8.0))(lightningcss@1.30.1)(terser@5.49.0)
 
   packages/dash-admin-client:
     dependencies:
@@ -2148,7 +2151,7 @@ importers:
     devDependencies:
       vitest:
         specifier: ^3.2.4
-        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1)(lightningcss@1.30.1)(terser@5.49.0)
+        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1(@noble/hashes@1.8.0))(lightningcss@1.30.1)(terser@5.49.0)
 
   packages/dash-pricing:
     dependencies:
@@ -2158,7 +2161,7 @@ importers:
     devDependencies:
       vitest:
         specifier: ^3.2.4
-        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1)(lightningcss@1.30.1)(terser@5.49.0)
+        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1(@noble/hashes@1.8.0))(lightningcss@1.30.1)(terser@5.49.0)
 
   packages/design-tokens: {}
 
@@ -2166,7 +2169,7 @@ importers:
     devDependencies:
       vitest:
         specifier: ^3.2.4
-        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1)(lightningcss@1.30.1)(terser@5.49.0)
+        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1(@noble/hashes@1.8.0))(lightningcss@1.30.1)(terser@5.49.0)
 
   packages/fuel-core:
     dependencies:
@@ -2176,13 +2179,13 @@ importers:
     devDependencies:
       vitest:
         specifier: ^3.2.4
-        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1)(lightningcss@1.30.1)(terser@5.49.0)
+        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1(@noble/hashes@1.8.0))(lightningcss@1.30.1)(terser@5.49.0)
 
   packages/gct-core:
     devDependencies:
       vitest:
         specifier: ^3.2.4
-        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1)(lightningcss@1.30.1)(terser@5.49.0)
+        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1(@noble/hashes@1.8.0))(lightningcss@1.30.1)(terser@5.49.0)
 
   packages/geo-ui:
     dependencies:
@@ -2228,7 +2231,7 @@ importers:
     devDependencies:
       vitest:
         specifier: ^3.2.4
-        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1)(lightningcss@1.30.1)(terser@5.49.0)
+        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1(@noble/hashes@1.8.0))(lightningcss@1.30.1)(terser@5.49.0)
 
   packages/location:
     dependencies:
@@ -2262,13 +2265,13 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^3.2.4
-        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1)(lightningcss@1.30.1)(terser@5.49.0)
+        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1(@noble/hashes@1.8.0))(lightningcss@1.30.1)(terser@5.49.0)
 
   packages/menu-engine:
     devDependencies:
       vitest:
         specifier: ^3.2.4
-        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1)(lightningcss@1.30.1)(terser@5.49.0)
+        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1(@noble/hashes@1.8.0))(lightningcss@1.30.1)(terser@5.49.0)
 
   packages/merchant-ops:
     dependencies:
@@ -2284,13 +2287,13 @@ importers:
     devDependencies:
       vitest:
         specifier: ^3.2.4
-        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1)(lightningcss@1.30.1)(terser@5.49.0)
+        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1(@noble/hashes@1.8.0))(lightningcss@1.30.1)(terser@5.49.0)
 
   packages/payment-gateways:
     devDependencies:
       vitest:
         specifier: ^3.2.4
-        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1)(lightningcss@1.30.1)(terser@5.49.0)
+        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1(@noble/hashes@1.8.0))(lightningcss@1.30.1)(terser@5.49.0)
 
   packages/platform-ops-ui:
     dependencies:
@@ -2385,7 +2388,7 @@ importers:
     devDependencies:
       vitest:
         specifier: ^3.2.4
-        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1)(lightningcss@1.30.1)(terser@5.49.0)
+        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1(@noble/hashes@1.8.0))(lightningcss@1.30.1)(terser@5.49.0)
 
   packages/play-store-launch:
     dependencies:
@@ -2407,13 +2410,13 @@ importers:
     devDependencies:
       vitest:
         specifier: ^3.2.4
-        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1)(lightningcss@1.30.1)(terser@5.49.0)
+        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1(@noble/hashes@1.8.0))(lightningcss@1.30.1)(terser@5.49.0)
 
   packages/plug-core:
     devDependencies:
       vitest:
         specifier: ^3.2.4
-        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1)(lightningcss@1.30.1)(terser@5.49.0)
+        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1(@noble/hashes@1.8.0))(lightningcss@1.30.1)(terser@5.49.0)
 
   packages/ride-chat:
     dependencies:
@@ -2459,7 +2462,7 @@ importers:
         version: 18.3.7(@types/react@18.3.28)
       vitest:
         specifier: ^3.2.4
-        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1)(lightningcss@1.30.1)(terser@5.49.0)
+        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1(@noble/hashes@1.8.0))(lightningcss@1.30.1)(terser@5.49.0)
 
   packages/rush-app-config:
     devDependencies:
@@ -2471,7 +2474,7 @@ importers:
         version: 18.3.1
       vitest:
         specifier: ^3.2.4
-        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1)(lightningcss@1.30.1)(terser@5.49.0)
+        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1(@noble/hashes@1.8.0))(lightningcss@1.30.1)(terser@5.49.0)
 
   packages/rush-chat:
     dependencies:
@@ -2505,7 +2508,7 @@ importers:
     devDependencies:
       vitest:
         specifier: ^3.2.4
-        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1)(lightningcss@1.30.1)(terser@5.49.0)
+        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1(@noble/hashes@1.8.0))(lightningcss@1.30.1)(terser@5.49.0)
 
   packages/spatial:
     dependencies:
@@ -2515,13 +2518,13 @@ importers:
     devDependencies:
       vitest:
         specifier: ^3.2.4
-        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1)(lightningcss@1.30.1)(terser@5.49.0)
+        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1(@noble/hashes@1.8.0))(lightningcss@1.30.1)(terser@5.49.0)
 
   packages/toll-core:
     devDependencies:
       vitest:
         specifier: ^3.2.4
-        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1)(lightningcss@1.30.1)(terser@5.49.0)
+        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1(@noble/hashes@1.8.0))(lightningcss@1.30.1)(terser@5.49.0)
 
   packages/toll-ui:
     dependencies:
@@ -2702,7 +2705,7 @@ importers:
     devDependencies:
       vitest:
         specifier: ^3.2.4
-        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1)(lightningcss@1.30.1)(terser@5.49.0)
+        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1(@noble/hashes@1.8.0))(lightningcss@1.30.1)(terser@5.49.0)
 
 packages:
 
@@ -3437,6 +3440,12 @@ packages:
     peerDependencies:
       react: '>=16.8.0'
 
+  '@ecies/ciphers@0.2.6':
+    resolution: {integrity: sha512-patgsRPKGkhhoBjETV4XxD0En4ui5fbX0hzayqI3M8tvNMGUoUvmyYAIWwlxBc1KX5cturfqByYdj5bYGRpN9g==}
+    engines: {bun: '>=1', deno: '>=2.7.10', node: '>=16'}
+    peerDependencies:
+      '@noble/ciphers': ^1.0.0
+
   '@emnapi/runtime@1.11.3':
     resolution: {integrity: sha512-Xz4Tpyki7XyrpbUK1jR1AhdAdaXyhhY4lZ3neLodmhpuWfy2PAQN5B46sAiU4liOXGLkHypn/qU+jvfWSCYYLA==}
 
@@ -3904,6 +3913,18 @@ packages:
   '@napi-rs/canvas@0.1.100':
     resolution: {integrity: sha512-xglYA6q3XO5P3BNJYxVZ1IV7DLVjp1Py6nwag88YntrS+3vKHyYcMqXVS4ZztJmwz2uGvz1FWhI/4LgbR5uQDA==}
     engines: {node: '>= 10'}
+
+  '@noble/ciphers@1.3.0':
+    resolution: {integrity: sha512-2I0gnIVPtfnMw9ee9h1dJG7tp81+8Ob3OJb3Mv37rx5L40/b0i7djjCVvGOVqc9AEIQyvyu1i6ypKdFw8R8gQw==}
+    engines: {node: ^14.21.3 || >=16}
+
+  '@noble/curves@1.9.7':
+    resolution: {integrity: sha512-gbKGcRUYIjA3/zCCNaWDciTMFI0dCkvou3TL8Zmy5Nc7sJ47a0jtOeZoTaMxkuqRo9cRhjOdZJXegxYE5FN/xw==}
+    engines: {node: ^14.21.3 || >=16}
+
+  '@noble/hashes@1.8.0':
+    resolution: {integrity: sha512-jCs9ldd7NwzpgXDIf6P3+NrHh9/sD6CQdxHyjQI+h/6rDNo88ypBxxz45UDuZHz9r3tNz7N/VInSVoVdtXEI4A==}
+    engines: {node: ^14.21.3 || >=16}
 
   '@playwright/test@1.62.1':
     resolution: {integrity: sha512-DTcUc8qii+cpHvtOwggMtBRMjKZHXYWdw8syRYu2vtzuq4Wxphqq4NfCs5Zt44L6mA8rfDfj+PHnxFc/FeK6mQ==}
@@ -4820,6 +4841,46 @@ packages:
     resolution: {integrity: sha512-Ejfa37M5xoIwoxVebxRahnwubPo8g22qkXQ4p50+N9MIvU9UZoN+A8dwVPtczzGf8oV/YXN80ZPxK4aWXuSN/A==}
     engines: {node: '>=20.0.0'}
 
+  '@supabase/cli-darwin-arm64@3.0.0':
+    resolution: {integrity: sha512-6N/clanDjhKWcPsHBqXcSt7HCZ0bBTjkGGrHgM4834zFu/PBIVBS6u9YJVXxOdQnbwyw/rTwumSYvgwwJgoIug==}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@supabase/cli-darwin-x64@3.0.0':
+    resolution: {integrity: sha512-e2DKOLIqK82XRp/GSmm0oMXx2CLBSTWJGobro1POPhmn3o+NWRQPI1QvjLFYIeI/9ZfSuo5PUJN4KI9OSjzAng==}
+    cpu: [x64]
+    os: [darwin]
+
+  '@supabase/cli-linux-arm64-musl@3.0.0':
+    resolution: {integrity: sha512-Bxe2bggo4dLW6tvlA6Qmjzth3VPGNEzjEaxYZohalP+q4jynov6OE6ibeLEdBtalykDMRbUXQ9j7r1p10RI/hQ==}
+    cpu: [arm64]
+    os: [linux]
+
+  '@supabase/cli-linux-arm64@3.0.0':
+    resolution: {integrity: sha512-sjdzBJGa+zfXSxUczRkqAJpuVgE2PFWXJazYxOnrqYWVPiS9Q0e2m06JdUXwZz/GqxKuLuDQN1OyLFu8DLfQDA==}
+    cpu: [arm64]
+    os: [linux]
+
+  '@supabase/cli-linux-x64-musl@3.0.0':
+    resolution: {integrity: sha512-ANyJ6h2X4HgM8f3PAFLGNH1XzYNho2M4kev/z5Ryq6on3ArI9FA+4KrrUqs1SFGji8E5WGyx/H+CHxmcXf5rTg==}
+    cpu: [x64]
+    os: [linux]
+
+  '@supabase/cli-linux-x64@3.0.0':
+    resolution: {integrity: sha512-cR4S5e3nygMaBShbbt6FOiMumtrFJjwdKMXMimC1y7FpxITlwLv36BveaifQZ8aY+v1u+w8oYANU2H72Y4ibWA==}
+    cpu: [x64]
+    os: [linux]
+
+  '@supabase/cli-windows-arm64@3.0.0':
+    resolution: {integrity: sha512-Xox3X7BXpe+/X9XpAgo5/Qrv5qtJaItc3gLlAwJ2d2AcGrBnfh4/b0MvbNbyO7I2Fj1c7yrPmMI4lEicVvIGGw==}
+    cpu: [arm64]
+    os: [win32]
+
+  '@supabase/cli-windows-x64@3.0.0':
+    resolution: {integrity: sha512-nBfd1Rz8MwstIJXHo5fyIQgjmYgLxDbBIuCmuttYAQwTafc7jUOofIAAUUARkhalHu0kBOEyRuEqe2rfKr/l5w==}
+    cpu: [x64]
+    os: [win32]
+
   '@supabase/functions-js@2.105.4':
     resolution: {integrity: sha512-JVNKbBft3Qkja+WlGaE026AJ2AH9K0UTsxsfvEIHgd4zFrBor4BYRCrYFrv9IDsvVqkF72wKDsODJl5GY/C4tA==}
     engines: {node: '>=20.0.0'}
@@ -5514,6 +5575,10 @@ packages:
     resolution: {integrity: sha512-KIN/nDJBQRcXw0MLVhZE9iQHmG68qAVIBg9CqmUYjmQIhgij9U5MFvrqkUL5FbtyyzZuOeOt0zdeRe4UY7ct+A==}
     engines: {node: '>= 0.4'}
 
+  eciesjs@0.5.0:
+    resolution: {integrity: sha512-s0J9SEVYAEPg7J63GFMApLYzPH9VNIQIyC6s15JpnqVc0TqcKWdbgFlnAweEBRyMmko2dcs2sfC83Hj4J43tuA==}
+    engines: {bun: '>=1', deno: '>=2.7.10', node: '>=16'}
+
   ejs@3.1.10:
     resolution: {integrity: sha512-UeJmFfOrAQS8OJWPZ4qtgHyWExa088/MtK5UEyoJGFH67cDEXkZSviOiKRCZ4Xij0zxI3JECgYs3oKx+AizQBA==}
     engines: {node: '>=0.10.0'}
@@ -6005,6 +6070,9 @@ packages:
   jiti@2.7.0:
     resolution: {integrity: sha512-AC/7JofJvZGrrneWNaEnJeOLUx+JlGt7tNa0wZiRPT4MY1wmfKjt2+6O2p2uz2+skll8OZZmJMNqeke7kKbNgQ==}
     hasBin: true
+
+  jose@6.2.15:
+    resolution: {integrity: sha512-qdF6ewcZARtef63fJ9AKKZPgxw+t7USH6HLXYcD4CrdmSvDp79rpJSPFEKc90QBeGS63u1KQtN2MZQHC0yDIzA==}
 
   js-tokens@4.0.0:
     resolution: {integrity: sha512-RdJUflcE3cUzKiMqQgsCu06FPu9UdIJO0beYbPhHN4k6apgJtifcoCtT9bcxOpYBtpD2kCM6Sbzg4CausW/PKQ==}
@@ -6816,6 +6884,10 @@ packages:
   stripe@8.222.0:
     resolution: {integrity: sha512-hrA79fjmN2Eb6K3kxkDzU4ODeVGGjXQsuVaAPSUro6I9MM3X+BvIsVqdphm3BXWfimAGFvUqWtPtHy25mICY1w==}
     engines: {node: ^8.1 || >=10.*}
+
+  supabase@3.0.0:
+    resolution: {integrity: sha512-FB+V+RzXYTmCzbchaN3CUdxLPpcKzJd4RSOc/dAE6cAtI7TZE8J5OLJYXjJae9C/fbi2xxzZJLL/Y2N1zbzf9A==}
+    hasBin: true
 
   supports-preserve-symlinks-flag@1.0.0:
     resolution: {integrity: sha512-ot0WnXS9fgdkgIcePe6RHNk1WA8+muPa6cSjeR3V8K27q9BB1rTE3R1p7Hv0z1ZyAc8s6Vvv8DIyWf681MAt0w==}
@@ -8184,6 +8256,10 @@ snapshots:
       react: 18.3.1
       tslib: 2.8.1
 
+  '@ecies/ciphers@0.2.6(@noble/ciphers@1.3.0)':
+    dependencies:
+      '@noble/ciphers': 1.3.0
+
   '@emnapi/runtime@1.11.3':
     dependencies:
       tslib: 2.8.1
@@ -8267,7 +8343,9 @@ snapshots:
   '@esbuild/win32-x64@0.25.12':
     optional: true
 
-  '@exodus/bytes@1.15.1': {}
+  '@exodus/bytes@1.15.1(@noble/hashes@1.8.0)':
+    optionalDependencies:
+      '@noble/hashes': 1.8.0
 
   '@floating-ui/core@1.7.5':
     dependencies:
@@ -8567,6 +8645,14 @@ snapshots:
       '@napi-rs/canvas-win32-arm64-msvc': 0.1.100
       '@napi-rs/canvas-win32-x64-msvc': 0.1.100
     optional: true
+
+  '@noble/ciphers@1.3.0': {}
+
+  '@noble/curves@1.9.7':
+    dependencies:
+      '@noble/hashes': 1.8.0
+
+  '@noble/hashes@1.8.0': {}
 
   '@playwright/test@1.62.1':
     dependencies:
@@ -9459,6 +9545,30 @@ snapshots:
     dependencies:
       tslib: 2.8.1
 
+  '@supabase/cli-darwin-arm64@3.0.0':
+    optional: true
+
+  '@supabase/cli-darwin-x64@3.0.0':
+    optional: true
+
+  '@supabase/cli-linux-arm64-musl@3.0.0':
+    optional: true
+
+  '@supabase/cli-linux-arm64@3.0.0':
+    optional: true
+
+  '@supabase/cli-linux-x64-musl@3.0.0':
+    optional: true
+
+  '@supabase/cli-linux-x64@3.0.0':
+    optional: true
+
+  '@supabase/cli-windows-arm64@3.0.0':
+    optional: true
+
+  '@supabase/cli-windows-x64@3.0.0':
+    optional: true
+
   '@supabase/functions-js@2.105.4':
     dependencies:
       tslib: 2.8.1
@@ -9584,7 +9694,7 @@ snapshots:
       picocolors: 1.1.1
       pretty-format: 27.5.1
 
-  '@testing-library/jest-dom@7.0.1(@testing-library/dom@10.4.1)(vitest@3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1)(lightningcss@1.30.1)(terser@5.49.0))':
+  '@testing-library/jest-dom@7.0.1(@testing-library/dom@10.4.1)(vitest@3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1(@noble/hashes@1.8.0))(lightningcss@1.30.1)(terser@5.49.0))':
     dependencies:
       '@adobe/css-tools': 4.5.0
       '@testing-library/dom': 10.4.1
@@ -9594,7 +9704,7 @@ snapshots:
       picocolors: 1.1.1
       redent: 3.0.0
     optionalDependencies:
-      vitest: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1)(lightningcss@1.30.1)(terser@5.49.0)
+      vitest: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1(@noble/hashes@1.8.0))(lightningcss@1.30.1)(terser@5.49.0)
 
   '@testing-library/react@16.3.3(@testing-library/dom@10.4.1)(@types/react-dom@18.3.7(@types/react@18.3.28))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
     dependencies:
@@ -10062,10 +10172,10 @@ snapshots:
 
   d3-timer@3.0.1: {}
 
-  data-urls@7.0.0:
+  data-urls@7.0.0(@noble/hashes@1.8.0):
     dependencies:
       whatwg-mimetype: 5.0.0
-      whatwg-url: 16.0.1
+      whatwg-url: 16.0.1(@noble/hashes@1.8.0)
     transitivePeerDependencies:
       - '@noble/hashes'
 
@@ -10132,6 +10242,13 @@ snapshots:
       call-bind-apply-helpers: 1.0.2
       es-errors: 1.3.0
       gopd: 1.2.0
+
+  eciesjs@0.5.0:
+    dependencies:
+      '@ecies/ciphers': 0.2.6(@noble/ciphers@1.3.0)
+      '@noble/ciphers': 1.3.0
+      '@noble/curves': 1.9.7
+      '@noble/hashes': 1.8.0
 
   ejs@3.1.10:
     dependencies:
@@ -10485,9 +10602,9 @@ snapshots:
 
   hono@4.12.18: {}
 
-  html-encoding-sniffer@6.0.0:
+  html-encoding-sniffer@6.0.0(@noble/hashes@1.8.0):
     dependencies:
-      '@exodus/bytes': 1.15.1
+      '@exodus/bytes': 1.15.1(@noble/hashes@1.8.0)
     transitivePeerDependencies:
       - '@noble/hashes'
 
@@ -10672,21 +10789,23 @@ snapshots:
 
   jiti@2.7.0: {}
 
+  jose@6.2.15: {}
+
   js-tokens@4.0.0: {}
 
   js-tokens@9.0.1: {}
 
-  jsdom@30.0.1:
+  jsdom@30.0.1(@noble/hashes@1.8.0):
     dependencies:
       '@asamuzakjp/css-color': 6.0.7
       '@asamuzakjp/dom-selector': 8.3.2
       '@bramus/specificity': 2.4.2
       '@csstools/css-syntax-patches-for-csstree': 1.1.12(css-tree@3.2.1)
-      '@exodus/bytes': 1.15.1
+      '@exodus/bytes': 1.15.1(@noble/hashes@1.8.0)
       css-tree: 3.2.1
-      data-urls: 7.0.0
+      data-urls: 7.0.0(@noble/hashes@1.8.0)
       decimal.js: 10.6.0
-      html-encoding-sniffer: 6.0.0
+      html-encoding-sniffer: 6.0.0(@noble/hashes@1.8.0)
       is-potential-custom-element-name: 1.0.1
       lru-cache: 11.5.2
       parse5: 8.0.1
@@ -10697,7 +10816,7 @@ snapshots:
       w3c-xmlserializer: 5.0.0
       webidl-conversions: 8.0.1
       whatwg-mimetype: 5.0.0
-      whatwg-url: 17.1.0
+      whatwg-url: 17.1.0(@noble/hashes@1.8.0)
       xml-name-validator: 5.0.0
     transitivePeerDependencies:
       - '@noble/hashes'
@@ -11521,6 +11640,20 @@ snapshots:
       '@types/node': 20.19.40
       qs: 6.15.3
 
+  supabase@3.0.0:
+    dependencies:
+      eciesjs: 0.5.0
+      jose: 6.2.15
+    optionalDependencies:
+      '@supabase/cli-darwin-arm64': 3.0.0
+      '@supabase/cli-darwin-x64': 3.0.0
+      '@supabase/cli-linux-arm64': 3.0.0
+      '@supabase/cli-linux-arm64-musl': 3.0.0
+      '@supabase/cli-linux-x64': 3.0.0
+      '@supabase/cli-linux-x64-musl': 3.0.0
+      '@supabase/cli-windows-arm64': 3.0.0
+      '@supabase/cli-windows-x64': 3.0.0
+
   supports-preserve-symlinks-flag@1.0.0: {}
 
   symbol-tree@3.2.4: {}
@@ -11769,7 +11902,7 @@ snapshots:
       lightningcss: 1.30.1
       terser: 5.49.0
 
-  vitest@3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1)(lightningcss@1.30.1)(terser@5.49.0):
+  vitest@3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1(@noble/hashes@1.8.0))(lightningcss@1.30.1)(terser@5.49.0):
     dependencies:
       '@types/chai': 5.2.3
       '@vitest/expect': 3.2.4
@@ -11796,7 +11929,7 @@ snapshots:
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@types/node': 20.19.40
-      jsdom: 30.0.1
+      jsdom: 30.0.1(@noble/hashes@1.8.0)
     transitivePeerDependencies:
       - jiti
       - less
@@ -11825,17 +11958,17 @@ snapshots:
 
   whatwg-mimetype@5.0.0: {}
 
-  whatwg-url@16.0.1:
+  whatwg-url@16.0.1(@noble/hashes@1.8.0):
     dependencies:
-      '@exodus/bytes': 1.15.1
+      '@exodus/bytes': 1.15.1(@noble/hashes@1.8.0)
       tr46: 6.0.0
       webidl-conversions: 8.0.1
     transitivePeerDependencies:
       - '@noble/hashes'
 
-  whatwg-url@17.1.0:
+  whatwg-url@17.1.0(@noble/hashes@1.8.0):
     dependencies:
-      '@exodus/bytes': 1.15.1
+      '@exodus/bytes': 1.15.1(@noble/hashes@1.8.0)
       tr46: 6.0.0
       webidl-conversions: 8.0.1
     transitivePeerDependencies:
