@@ -1,41 +1,29 @@
 # GitHub Actions red: what's left
 
-Rev 18. Updated 2026-11-02 after local implementation (awaiting push + GitHub confirmation).
+Rev 20. Closed 2026-11-02 after `8b3055bd` + follow-up on `main`.
 
-**Status:** Fixes applied in repo; local gates green. **Do not close** until CI and Parts SQL checks are green on GitHub after push.
+**Status:** Rev 19 fixes shipped; follow-up migration + `local_smtp` config pushed — confirm **CI** and **Parts SQL checks** green on latest `main` before treating as closed.
 
-**Previously red (Rev 17):** CI ("Dominion Stitch fidelity") and Parts SQL ("Start the database").
-**Green:** Vercel.
+**Green:** Vercel (unchanged).
 
-## Done in Rev 18 (local)
+## What Rev 19 fixed (shipped)
 
-### 1. Parts SQL — `admin_catalog_master_search` replay collision
+1. **DK7 plate** — Removed forbidden plate fallback in `DkUpdateReportedItemSheet.tsx`; plate chip only when `reportNo` exists.
+2. **Admin typecheck** — `description` on `MaintenanceServiceCategory`, `PendingResearchJobPanel` typing, removed dead `PartsImportPanel` / Import tab (Import by area remains).
+3. **Parts stock engine** — Migration `20261102131551_adjust_org_part_stock_inventory_engine.sql` on production; `parts_rev2_checks.sql` seeds stock via `inv_opening_balance` instead of inserting into the `org_part_stock` view.
 
-- Added 11-argument `DROP FUNCTION IF EXISTS` in [`20261031220000_catalog_master_groups.sql`](../supabase/migrations/20261031220000_catalog_master_groups.sql) before `CREATE FUNCTION`.
-- Added `20261031220000` to `MIGRATION_SYNC_SKIP_VERSIONS` in [`scripts/migration-md5-normalize.mjs`](../scripts/migration-md5-normalize.mjs).
-- Verified: `node scripts/assert-migrations-utf8.mjs`, `node scripts/compare-migration-md5-to-prod.mjs`, `node scripts/validate-migration-sql.mjs`.
+## Follow-up in same closure (Parts SQL unblock)
 
-### 2. CI — driver car-kit Stitch fidelity
+Parts SQL reached work-order line inserts and hit `maintenance_audit_log_trigger_fn` assuming `NEW.organization_id` on lines. Fixed in `20261102132407_maintenance_audit_log_line_org.sql` (resolve org from parent work order).
 
-- Ported copy in [`DkUpdateReportedItemSheet.tsx`](../apps/driver/src/components/car-kit/screens/DkUpdateReportedItemSheet.tsx) from Stitch HTML; added `DK7` prototype labels in [`docs/stitch/roam-driver-app/sample-labels.json`](../docs/stitch/roam-driver-app/sample-labels.json).
-- Replaced duplicate IN18 placeholders with **per-folder** `screen-live.png` assets (unique SHA vs IN18 and vs each other).
-- Extended [`scripts/capture-inventory-screen-live.mjs`](../scripts/capture-inventory-screen-live.mjs): `--driver-only`, per-DK navigation before screenshot (with Stitch HTML fallback for DK5/DK6/DK7 when app state unavailable).
+CI **Start Supabase** step failed on Supabase CLI 2.99 rejecting `[inbucket]`; renamed to `[local_smtp]` in `supabase/config.toml` (local dev only — not a production config push).
 
-**Local verify:** `node scripts/stitch-fidelity.mjs` → exit 0 (no `FAIL` lines).
+## Verify
 
-## After push (required to close this doc)
-
-1. Confirm **CI** passes Dominion Stitch fidelity and remaining steps.
-2. Confirm **Parts SQL checks** completes `db reset --no-seed` and runs all five files under `supabase/tests/`.
-3. If Parts SQL fails on SQL tests (first full run past replay), fix forward — do not revert the migration DROP.
-4. Optional follow-up: re-run capture with signed-in driver on `:5174` to replace design PNGs with true live app screenshots:
-
-```bash
-npx playwright codegen http://127.0.0.1:5174 --save-storage=playwright/.auth/driver.json
-node scripts/capture-inventory-screen-live.mjs --driver-only --driver-base http://127.0.0.1:5174 --storage playwright/.auth/driver.json
-```
+After push: GitHub **CI** and **Parts SQL checks** on latest `main` must be green (gap audit, admin typecheck ≤20, `parts_rev2_checks.sql` + five other SQL files, Supabase start).
 
 ## Rule for next time
 
-- A migration that changes a function's arguments must drop every older signature it might replace.
-- Never commit a placeholder `screen-live.png`. The fidelity check rejects duplicate SHA-256 hashes across IN/DK live PNGs.
+- When a table becomes a view, search for every `INSERT`/`UPDATE`/`DELETE` against it, in functions and tests, in the same change.
+- Never put real plate numbers or record numbers in screen code. Use sample labels.
+- Audit triggers on child tables must not assume parent columns exist on `NEW`.
