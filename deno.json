@@ -21,6 +21,8 @@
   "fmt": {
     "exclude": ["node_modules", "apps", "packages", "build", "dist"]
   },
+  "//minimumDependencyAge": "Root package.json pins supabase@3.0.0 for the CLI; Deno nodeModulesDir pulls devDependencies and blocks same-day npm publishes by default.",
+  "minimumDependencyAge": 0,
   "imports": {
     "https://esm.sh/tslib@2.8.1/denonext/tslib.mjs": "npm:tslib@2.8.1"
   }

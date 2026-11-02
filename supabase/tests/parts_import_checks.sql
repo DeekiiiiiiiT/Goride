@@ -1,6 +1,11 @@
 -- Parts import by area — behavioral regression (audit PI-16). Rolls back.
 BEGIN;
 
+-- Schema-only CI has no garage seed; brakes system id is referenced by migrations but not inserted without prod seed.
+INSERT INTO public.maintenance_service_categories (id, code, name, kind, icon_key, sort_order)
+VALUES ('b1000000-0000-4000-8000-000000000004', 'pi-brakes-system', 'Brakes', 'system', 'brakes', 4)
+ON CONFLICT (id) DO NOTHING;
+
 -- Minimal catalog + brakes area (uses seeded system id from migrations)
 INSERT INTO public.engine_family (id, code) VALUES
   ('11111111-1111-4111-8111-111111111101', 'PI-1NZ-FE')
