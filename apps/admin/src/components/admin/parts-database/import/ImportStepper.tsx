@@ -8,12 +8,12 @@ export function ImportStepper({
   areaName?: string;
   fileName?: string;
 }) {
-  const items = [
+  const items: Array<{ n: 1 | 2 | 3 | 4; title: string; sub: string; detail?: string }> = [
     { n: 1, title: "Area", sub: "Select domain", detail: areaName ? `Area Selected: ${areaName}` : undefined },
     { n: 2, title: "Upload", sub: "Source file", detail: fileName ? `Upload ${fileName}` : undefined },
     { n: 3, title: "Check", sub: "Fitment matrix" },
     { n: 4, title: "Done", sub: "Commit cluster" },
-  ] as const;
+  ];
   return (
     <ol className="flex flex-wrap gap-2 text-[11px] font-mono uppercase tracking-wide">
       {items.map((item) => {

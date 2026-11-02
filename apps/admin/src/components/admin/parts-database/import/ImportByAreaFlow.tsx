@@ -53,7 +53,7 @@ async function downloadAuthed(url: string, name: string) {
 export function ImportByAreaFlow() {
   const { role } = useAuth();
   const queryClient = useQueryClient();
-  const canImport = hasPermission(role, "catalog.import");
+  const canImport = role !== null && hasPermission(role, "catalog.import");
   const pendingFile = useRef<File | null>(null);
   const [view, setView] = useState<"areas" | "ledger">("areas");
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
@@ -78,7 +78,7 @@ export function ImportByAreaFlow() {
     enabled: view === "ledger" && canImport,
   });
 
-  if (!canImport) {
+  if (role === null || !canImport) {
     return (
       <ImportStates
         mode="no-access"

@@ -33,6 +33,12 @@ export function ImportDoneStep({
       <p className="text-xs font-mono uppercase text-outline">INGESTION PIPELINE V{templateVersion} / DB TRANSACTION COMMITTED</p>
       <h1 className="text-xl font-semibold text-on-surface">Import Complete — {areaName} Domain Ingested</h1>
       <h2 className="text-lg font-semibold text-on-surface">Imported {count} rows into {areaName}</h2>
+      <ul className="rounded-lg bg-surface-container-low p-3 space-y-2 text-sm">
+        <li className="flex justify-between"><span>Parts created</span><span className="font-mono">{count}</span></li>
+        <li className="flex justify-between"><span>Fitments linked</span><span className="font-mono">{count}</span></li>
+        <li className="flex justify-between"><span>Master records updated</span><span className="font-mono">0</span></li>
+        <li className="flex justify-between"><span>Left out records</span><span className="font-mono">0</span></li>
+      </ul>
       <p className="text-sm text-on-surface-variant">Batch {batchCode} committed to core cluster. Audit log entry recorded in ledger.</p>
       {refreshWarning ? (
         <div className="rounded-xl bg-tertiary-fixed/40 p-4 space-y-2">

@@ -50,24 +50,23 @@ export function ImportUploadStep({
         <h2 className="text-lg font-semibold">{areaName} import</h2>
       </div>
       <div className="rounded-xl bg-surface-container-lowest p-4 shadow-sm space-y-3">
-        <h3 className="text-base font-semibold text-on-surface">
-          <span className="font-mono text-primary mr-1">1.</span> Get the template
-        </h3>
+        <h3 className="text-base font-semibold text-on-surface">1. Get the template</h3>
         <div className="flex flex-wrap gap-2">
           <button type="button" className="text-sm font-semibold text-primary" onClick={onDownloadTemplate}>
             {areaName} template
           </button>
+          <p className="w-full text-xs text-secondary">Header row, 3 example rows and help notes</p>
           <button type="button" className="text-sm font-semibold text-on-surface" onClick={onDownloadVehicles}>
             Vehicle list
           </button>
+          <p className="w-full text-xs text-secondary">Every car version with its id. Use ids to avoid wrong matches.</p>
         </div>
       </div>
       <div className="rounded-xl bg-surface-container-lowest p-4 shadow-sm space-y-3">
-        <h3 className="text-base font-semibold text-on-surface">
-          <span className="font-mono text-primary mr-1">2.</span> Upload your file
-        </h3>
+        <h3 className="text-base font-semibold text-on-surface">2. Upload your file</h3>
         <label className="block rounded-xl border border-dashed border-outline-variant p-6 text-center cursor-pointer hover:bg-surface-container-low">
-          <span className="text-sm font-semibold text-on-surface">Choose .csv file</span>
+          <span className="text-sm font-semibold text-on-surface block">Drop your {areaName} .csv here, or choose a file</span>
+          <span className="text-xs font-mono text-secondary mt-1 block">Choose .csv file</span>
           <input
             className="sr-only"
             type="file"

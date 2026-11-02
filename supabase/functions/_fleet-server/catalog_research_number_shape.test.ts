@@ -36,6 +36,13 @@ Deno.test("R26: Honda number formats to 5-3-3", () => {
   const num = formatOemPartNumber("Honda", "12345678901");
   assertEquals(num, "12345-678-901");
   assertEquals(checkPartNumberShape("Honda", num), "ok");
+  const oem = formatOemPartNumber("Honda", "45022-T5A-J01");
+  assertEquals(oem, "45022-T5A-J01");
+  assertEquals(checkPartNumberShape("Honda", oem), "ok");
+});
+
+Deno.test("aftermarket brand skips OEM shape review", () => {
+  assertEquals(checkPartNumberShape("Masuma", "ABC-123-XYZ"), "ok");
 });
 
 Deno.test("R26: strip OEM from brand", () => {

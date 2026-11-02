@@ -377,6 +377,7 @@
     "battery & electrical (0)",
     "belts & hoses (0)",
     "brakes 2",
+    "download failed rows (5)",
     "engine 1",
     "filters 1",
     "fluids (0)",
@@ -389,6 +390,7 @@
   ],
   "PI6": [
     "checking roomy-brakes-nov.csv",
+    "import lifecycle & operational states",
     "no brakes imports yet",
     "start a brakes import"
   ]

@@ -12,7 +12,7 @@ export function ImportTemplateColumns({ count }: { count: number }) {
             <tr>
               <th className="p-2">Column Name</th>
               <th className="p-2">Requirement</th>
-              <th className="p-2">Format &amp; Rules</th>
+              <th className="p-2">Format & Rules</th>
             </tr>
           </thead>
           <tbody className="text-on-surface-variant">

@@ -14,9 +14,9 @@ export function checkPartNumberShape(brand: string, partNumber: string): NumberS
     return /^\d{5}[A-Z0-9]{5}$/.test(norm) ? "ok" : "review";
   }
   if (b.includes("honda")) {
-    return /^\d{5}\d{3}\d{3}$/.test(norm) ? "ok" : "review";
+    return /^\d{5}[A-Z0-9]{6}$/.test(norm) ? "ok" : "review";
   }
-  return "review";
+  return "ok";
 }
 
 /** Strip marketing suffixes from Gemini brand strings. */
@@ -52,7 +52,7 @@ export function formatOemPartNumber(brand: string, partNumber: string): string {
   if ((b.includes("toyota") || b.includes("daihatsu")) && /^\d{5}[A-Z0-9]{5}$/.test(norm)) {
     return `${norm.slice(0, 5)}-${norm.slice(5)}`;
   }
-  if (b.includes("honda") && /^\d{11}$/.test(norm)) {
+  if (b.includes("honda") && /^\d{5}[A-Z0-9]{6}$/.test(norm)) {
     return `${norm.slice(0, 5)}-${norm.slice(5, 8)}-${norm.slice(8)}`;
   }
   return norm || raw.toUpperCase();

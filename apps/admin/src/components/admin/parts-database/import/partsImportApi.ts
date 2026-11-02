@@ -1,6 +1,6 @@
-import { API_ENDPOINTS } from "../../../services/apiConfig";
-import { publicAnonKey } from "../../../utils/supabase/info";
-import { supabase } from "../../../utils/supabase/client";
+import { API_ENDPOINTS } from "../../../../services/apiConfig";
+import { publicAnonKey } from "../../../../utils/supabase/info";
+import { supabase } from "../../../../utils/supabase/client";
 
 async function authHeaders(): Promise<HeadersInit> {
   const token = (await supabase.auth.getSession()).data.session?.access_token ?? "";

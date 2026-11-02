@@ -16,13 +16,13 @@ export function ImportRowTable({
         <thead className="bg-surface-container-low font-mono uppercase text-outline">
           <tr>
             <th className="p-2">Line</th>
-            <th className="p-2">Vehicle fitment</th>
+            <th className="p-2">Vehicle Fitment</th>
             <th className="p-2">Part type</th>
-            <th className="p-2">Brand &amp; number</th>
+            <th className="p-2">Brand & Number</th>
             <th className="p-2">Classification</th>
-            <th className="p-2">Position / side</th>
+            <th className="p-2">Position / Side</th>
             <th className="p-2">Status</th>
-            <th className="p-2">Diagnostic</th>
+            <th className="p-2">Diagnostic Note</th>
           </tr>
         </thead>
         <tbody>
