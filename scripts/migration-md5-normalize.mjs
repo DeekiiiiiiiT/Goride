@@ -11,8 +11,11 @@ export const MIGRATION_SYNC_VERSION_MAX = '99999999999999';
 /** Prod recorded placeholder-only rows; keep repo file as-is. */
 /** Replay guard — repo body differs from prod on purpose (safe empty-DB replay). */
 export const MIGRATION_SYNC_SKIP_VERSIONS = new Set([
+  '20261029214649',
   '20261030022441',
   '20261031000834',
+  '20261101022741',
+  '20261101024022',
   '20261101032731',
   '20261101172128',
   '20261101174625',

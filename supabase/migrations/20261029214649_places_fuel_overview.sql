@@ -266,8 +266,11 @@ begin
   end if;
 
   select score, failing into quality from fleet.dataset_quality where dataset = 'stations';
-  if (overview->'quality'->>'score')::int is distinct from quality.score
-     or (overview->'quality'->>'failing')::int is distinct from quality.failing then
+  if found
+     and (
+       (overview->'quality'->>'score')::int is distinct from quality.score
+       or (overview->'quality'->>'failing')::int is distinct from quality.failing
+     ) then
     raise exception 'T2 quality % vs %', overview->'quality', to_jsonb(quality);
   end if;
 

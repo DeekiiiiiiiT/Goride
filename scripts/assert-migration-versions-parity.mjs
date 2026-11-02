@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 /**
- * Fail CI when repo migration versions and linked production drift (audit R20-03).
- * Compares supabase/migrations/*.sql prefixes to `supabase migration list --linked -o json`.
+ * Fail CI when repo migration versions and production drift (audit R20-03).
+ * Compares supabase/migrations/*.sql prefixes to production
+ * supabase_migrations.schema_migrations via Management API.
  *
  * Env: SUPABASE_ACCESS_TOKEN, SUPABASE_PROJECT_REF (default csfllzzastacofsvcdsc)
  * Skip linked check when SKIP_LINKED_MIGRATION_PARITY=1 (local dev without token).
  */
-import { execFileSync } from 'node:child_process';
 import { readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { MIGRATION_SYNC_SKIP_VERSIONS } from './migration-md5-normalize.mjs';
@@ -25,7 +25,7 @@ function repoVersions() {
   return set;
 }
 
-function linkedVersions() {
+async function linkedVersions() {
   const token = process.env.SUPABASE_ACCESS_TOKEN?.trim();
   const projectRef = process.env.SUPABASE_PROJECT_REF?.trim() || 'csfllzzastacofsvcdsc';
   if (!token) {
@@ -36,32 +36,25 @@ function linkedVersions() {
     console.error('Missing SUPABASE_ACCESS_TOKEN for linked migration parity check.');
     process.exit(1);
   }
-  const out = execFileSync(
-    'npx',
-    ['supabase@2.99.0', 'migration', 'list', '--linked', '-o', 'json', '--project-ref', projectRef],
-    {
-      cwd: root,
-      env: { ...process.env, SUPABASE_ACCESS_TOKEN: token },
-      encoding: 'utf8',
-      maxBuffer: 20 * 1024 * 1024,
-    },
-  );
-  const data = JSON.parse(out.replace(/^\uFEFF/, '').trim());
-  const rows = data.migrations ?? data;
+  const res = await fetch(`https://api.supabase.com/v1/projects/${projectRef}/database/query`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query: 'select version from supabase_migrations.schema_migrations' }),
+  });
+  if (!res.ok) {
+    console.error('Production query failed:', res.status, await res.text());
+    process.exit(1);
+  }
   const set = new Set();
-  for (const row of rows) {
-    const local = String(row.local ?? '').trim();
-    const remote = String(row.remote ?? '').trim();
-    const version = local || remote;
-    if (!/^\d{14}$/.test(version)) continue;
-    if (MIGRATION_SYNC_SKIP_VERSIONS.has(version)) continue;
-    set.add(version);
+  for (const row of await res.json()) {
+    const v = String(row.version);
+    if (/^\d{14}$/.test(v) && !MIGRATION_SYNC_SKIP_VERSIONS.has(v)) set.add(v);
   }
   return set;
 }
 
 const repo = repoVersions();
-const linked = linkedVersions();
+const linked = await linkedVersions();
 
 const missingInRepo = [...linked].filter((v) => !repo.has(v));
 const missingInProd = [...repo].filter((v) => !linked.has(v));

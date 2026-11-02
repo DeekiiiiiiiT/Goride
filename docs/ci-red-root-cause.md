@@ -1,39 +1,68 @@
 # GitHub Actions red: what's left
 
-Rev 14. Checked 2026-11-01 20:20 UTC against `main` @ `9c1126b8`.
+Rev 15. Checked 2026-11-02 against `main` @ `faf0fcaf`.
 
-**Red:** CI ("Start Supabase and bootstrap inventory schema") and Parts SQL ("Start the database").
-**Green:** Vercel.
+**Red:** CI and Parts SQL.
+**Green:** Vercel, Deploy Edge Function, Test Supabase Functions, recon-worker.
 
-The production sync is right, and the repo now holds real bodies instead of `SELECT 1` stubs. What's left is 4 files where production's copy only works on production's own data. Rev 12's "overwrite every differing file" also removed a replay guard added in an earlier round (`fuel_refineries` T3). That's my mistake, and it's fixed below.
+The 4 Rev 14 guards worked. The replay now gets past `fuel_refineries` and stops 2 files later. Two more files further down will also fail. CI separately stops at a new check whose command line is wrong.
 
-## 1. Four migrations assume production data, which an empty database doesn't have
+## 1. CI: the version-list check calls the CLI with a flag that doesn't exist
 
 ```
-Applying migration 20261029210000_fuel_refineries.sql...
-ERROR: T3 e10_87 <NULL> (SQLSTATE P0001)
+Unrecognized flag: --project-ref in command supabase migration list
 ```
 
-I checked every migration from `20261029140000` onwards for (a) self-tests that compare against fixed production values and (b) data repairs that target hard-coded production rows. The other self-tests compare a table with itself, so they pass on an empty database. The other repairs look rows up first and do nothing when those rows are missing. Only these 4 fail:
+`scripts/assert-migration-versions-parity.mjs` stops CI before any other check runs. The two lists already agree: I compared them directly, and production and the repo both have 176 versions, all identical.
+
+**Fix:** in `linkedVersions()`, replace the `execFileSync('npx', ['supabase@2.99.0', 'migration', 'list', …])` call and the row loop below it with a direct read of production's history:
+
+```js
+async function linkedVersions() {
+  // keep the existing token / SKIP_LINKED_MIGRATION_PARITY lines above this
+  const res = await fetch(`https://api.supabase.com/v1/projects/${projectRef}/database/query`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query: 'select version from supabase_migrations.schema_migrations' }),
+  });
+  if (!res.ok) { console.error('Production query failed:', res.status, await res.text()); process.exit(1); }
+  const set = new Set();
+  for (const row of await res.json()) {
+    const v = String(row.version);
+    if (/^\d{14}$/.test(v) && !MIGRATION_SYNC_SKIP_VERSIONS.has(v)) set.add(v);
+  }
+  return set;
+}
+```
+
+Then change the call site to `const linked = await linkedVersions();`. Top-level `await` works in `.mjs`. This also fixes a hidden bug in the old version: it counted local-only rows as "in production", so the check could never fail.
+
+## 2. Three more migrations assume production data
+
+The Parts SQL replay now stops here:
+
+```
+Applying migration 20261029214649_places_fuel_overview.sql...
+ERROR: T2 quality {... "failing": 0 ...} vs {"score": null, "failing": null}
+```
 
 | File | Why it fails on an empty DB | Fix |
 |---|---|---|
-| `20261029210000_fuel_refineries.sql` (~line 934) | T3 expects production's 22 Oct Petrojam prices | Wrap the two T3 price checks (`e10_87`, `ulsd`) in `if exists (select 1 from fuel.petrojam_prices_legacy where price_date = '2026-10-22') then … end if;`. Leave the `2000-01-01` check outside the wrapper |
-| `20261101181057_fleet_inventory_r10_03a_phone_balance_seed.sql` | Inserts a balance for item `5129bef3-…` / location `b62780a6-…`, so the foreign key fails | Add `AND EXISTS (SELECT 1 FROM fleet.inv_item WHERE id = '5129bef3-8bab-4793-b84d-fa62f9557c5e') AND EXISTS (SELECT 1 FROM fleet.inv_location WHERE id = 'b62780a6-c9b8-4de3-8bff-3ce1e55faea3')` to its `WHERE` |
-| `20261101181109_fleet_inventory_r10_03b_phone_adjust.sql` | Calls `fleet.inv_adjust` on that same missing item | Put both statements inside `DO $$ BEGIN IF EXISTS (SELECT 1 FROM fleet.inv_item WHERE id = '5129bef3-8bab-4793-b84d-fa62f9557c5e') THEN PERFORM fleet.inv_adjust(…same args…); UPDATE …same…; END IF; END $$;` |
-| `20261101181112_fleet_inventory_r10_03c_mount_ledger.sql` | Calls `fleet.inv_opening_balance` for mount `ca661367-…`, which doesn't exist | Make the first line after `BEGIN`: `IF NOT EXISTS (SELECT 1 FROM fleet.inv_item WHERE id = v_mount) THEN RETURN; END IF;` |
+| `20261029214649_places_fuel_overview.sql` (~line 268) | There is no `stations` row in `fleet.dataset_quality`, so the comparison side is null | Change the T2 condition to `if found and ( …existing two conditions… ) then` |
+| `20261101022741_fleet_find_parts_f5_brake_components.sql` | Inserts components under Brakes `b1000000-…-000000000004`, which doesn't exist on an empty DB, so the `parent_id` foreign key fails | Turn `insert … values (…)` into `insert … select * from (values (…), (…)) v(id, code, name, plain_name, parent_id, icon_key, position_aware, sort_order) where exists (select 1 from public.maintenance_service_categories where id = 'b1000000-0000-4000-8000-000000000004')`. Keep the `on conflict` clause and both `update public.part_master` statements as they are |
+| `20261101024022_fleet_find_parts_f5_merge_brake_pads.sql` | Raises "canonical Brake pads not found" before checking whether there is anything to merge | Move the existing `IF NOT EXISTS (… WHERE id = v_duplicate) THEN RAISE NOTICE …; RETURN; END IF;` block up to be the first statement after `BEGIN` |
 
-None of this changes production. All 4 already ran there, and in production each guard is true.
+None of this changes production, because all 3 already ran there.
 
-Add these 4 versions to the skip list in `scripts/compare-migration-md5-to-prod.mjs`, with the reason "replay guard, differs from prod on purpose". Otherwise the compare reports them as drift.
+Add these 3 versions to `MIGRATION_SYNC_SKIP_VERSIONS` in `scripts/migration-md5-normalize.mjs`, next to the 4 from last round.
+
+I checked every self-test and every fixed-id insert from `20261029214649` onwards. The rest either look rows up first or compare a table with itself, so these 3 are the only ones left that I can find by reading the files.
 
 ## Verify
 
-After one push, CI and Parts SQL get through "Start the database". Parts SQL then has to pass the five `supabase/tests/` files, which have never run yet. Don't mark this doc closed until GitHub shows both green.
-
-Housekeeping: the untracked `scripts/.fp-replay*.json` and `scripts/mismatch-versions.json` are scratch output. Delete them, or add them to `.gitignore`.
+After one push, CI and Parts SQL should get through "Start the database". Parts SQL then runs the five `supabase/tests/` files, which have never run. Don't mark this doc closed until GitHub shows both green.
 
 ## Rule for next time
 
-- Copy a production migration body exactly, then add a guard only where it reads production-only rows or values.
-- When syncing from production, keep the skip list of guarded versions so a sync never removes a guard again.
+- A data repair or self-test in a migration must do nothing when its rows aren't there: check first, then act.
+- Copy production bodies exactly, and keep every guarded version in the skip list.
