@@ -94,6 +94,11 @@ DECLARE
   v_roomy uuid;
   v_thor uuid;
 BEGIN
+  IF NOT EXISTS (SELECT 1 FROM public.maintenance_service_categories WHERE op_code = 'ENG-OIL')
+     OR NOT EXISTS (SELECT 1 FROM public.spec_key WHERE key = 'engine_oil_grade') THEN
+    RETURN;
+  END IF;
+
   SELECT id INTO v_engine FROM public.engine_family WHERE upper(code) = '1KR-FE' LIMIT 1;
   IF v_engine IS NULL THEN
     INSERT INTO public.engine_family (code) VALUES ('1KR-FE') RETURNING id INTO v_engine;

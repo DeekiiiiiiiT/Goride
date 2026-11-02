@@ -23,6 +23,8 @@ export const MIGRATION_SYNC_SKIP_VERSIONS = new Set([
   '20261101181057',
   '20261101181109',
   '20261101181112',
+  '20261030130902',
+  '20261030210000',
 ]);
 
 export function normalizeMigrationSqlForMd5(sql) {
