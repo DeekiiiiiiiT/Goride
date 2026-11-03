@@ -122,6 +122,7 @@ Deno.test("supabaseErrorMessage prefers message and details", () => {
 
 Deno.test("escapePostgrestOrTerm strips or-breaking characters", () => {
   assertEquals(escapePostgrestOrTerm("abc,def(1)"), "abcdef1");
+  assertEquals(escapePostgrestOrTerm("1.5"), "1.5");
 });
 
 Deno.test("mapPartMatchSchedule aligns API field names", () => {

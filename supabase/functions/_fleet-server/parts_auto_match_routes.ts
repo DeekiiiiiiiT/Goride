@@ -99,17 +99,18 @@ function fail(c: Context, e: unknown, status = 500) {
 
 /** Strip characters that break PostgREST `.or()` filter lists. */
 export function escapePostgrestOrTerm(raw: string): string {
-  return raw.trim().replace(/[%_,().]/g, "");
+  return raw.trim().replace(/[%_,()]/g, "");
 }
 
 export function mapPartMatchSchedule(data: unknown): Record<string, unknown> {
   const raw = (data && typeof data === "object") ? data as Record<string, unknown> : {};
   const cron = String(raw.cron ?? raw.cronSchedule ?? "0 3 * * *");
+  const intervalLabel = String(raw.intervalLabel ?? "");
   return {
     nextRun: raw.nextRun ?? null,
     cron,
     jobname: String(raw.jobname ?? raw.jobName ?? "part-match-nightly"),
-    intervalLabel: cron === "0 3 * * *" ? "Daily at 03:00 UTC" : cron,
+    intervalLabel: intervalLabel || (cron === "0 3 * * *" ? "Daily at 03:00 UTC" : `Interval · ${cron}`),
   };
 }
 
@@ -179,6 +180,7 @@ function revisionDiffRows(rows: Array<Record<string, unknown>>): Array<Record<st
     const keys = new Set([...Object.keys(oldRow), ...Object.keys(newRow)]);
     let added = false;
     for (const field of keys) {
+      if (field === "updated_at" || field === "created_at") continue;
       if (JSON.stringify(oldRow[field]) === JSON.stringify(newRow[field])) continue;
       out.push({
         id: `${String(row.id)}:${field}`,
@@ -349,7 +351,7 @@ async function enrichVehicleOePayload(
       op_code: comp?.op_code ?? null,
       match_count: fitCounts.get(id) ?? 0,
       matching,
-      supersession_note: (row.reason_params as { supersession_note?: string } | undefined)?.supersession_note ?? null,
+      supersession_note: (row as { supersession_note?: string }).supersession_note ?? null,
     };
   });
   return { ...payload, rows: enrichedRows, platformCode };
@@ -357,12 +359,9 @@ async function enrichVehicleOePayload(
 
 async function enrichDerivedFitRows(supabase: SupabaseClient, vehicleId: string, rows: Array<Record<string, unknown>>) {
   const groupIds = [...new Set(rows.map((r) => String(r.interchange_group_id ?? "")).filter(Boolean))];
-  const [{ data: listings, error: listErr }, { data: conflicts, error: confErr }] = await Promise.all([
+  const [{ data: parts, error: partErr }, { data: conflicts, error: confErr }] = await Promise.all([
     groupIds.length
-      ? supabase.from("part_listing")
-        .select("interchange_group_id, part_master(id, name)")
-        .eq("vehicle_catalog_id", vehicleId)
-        .in("interchange_group_id", groupIds)
+      ? supabase.from("part_master").select("interchange_group_id, name").in("interchange_group_id", groupIds)
       : Promise.resolve({ data: [], error: null }),
     groupIds.length
       ? supabase.from("part_match_conflict")
@@ -372,13 +371,12 @@ async function enrichDerivedFitRows(supabase: SupabaseClient, vehicleId: string,
         .in("interchange_group_id", groupIds)
       : Promise.resolve({ data: [], error: null }),
   ]);
-  if (listErr) throw listErr;
+  if (partErr) throw partErr;
   if (confErr) throw confErr;
   const nameByGroup = new Map<string, string>();
-  for (const listing of (listings ?? []) as Array<Record<string, unknown>>) {
-    const gid = String(listing.interchange_group_id ?? "");
-    const pm = listing.part_master as { name?: string } | null;
-    if (gid && pm?.name && !nameByGroup.has(gid)) nameByGroup.set(gid, pm.name);
+  for (const part of (parts ?? []) as Array<{ interchange_group_id?: string; name?: string }>) {
+    const gid = String(part.interchange_group_id ?? "");
+    if (gid && part.name && !nameByGroup.has(gid)) nameByGroup.set(gid, part.name);
   }
   const conflictByGroup = new Map<string, string>();
   for (const conflict of (conflicts ?? []) as Array<{ id?: string; interchange_group_id?: string }>) {

@@ -152,7 +152,7 @@ test.describe("Dominion parts auto-match Stitch fidelity", () => {
     await expect(page.getByRole("heading", { name: "Auto-match health" })).toBeVisible();
     await expect(page.getByText("Live matches")).toBeVisible();
     await expect(page.getByText("12")).toBeVisible();
-    await expect(page.getByText(/Interval · 0 3 \* \* \*/)).toBeVisible();
+    await expect(page.getByText(/Interval · Daily at 03:00 UTC/)).toBeVisible();
     await assertNoForbidden(page, AM_DOMINION_FORBIDDEN);
     await page.screenshot({ path: join(dominionShotsDir, "AM-S6-app.png"), fullPage: true });
     await page.getByRole("button", { name: "Run catalog audit" }).click();

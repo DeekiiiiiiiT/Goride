@@ -57,7 +57,7 @@ VALUES
   ('a9000007-0000-4000-8000-000000000005', 'a9000004-0000-4000-8000-000000000001', 'Idx new', 'IDX-NEW-1', 'Test', 'aftermarket', 'a9000006-0000-4000-8000-000000000005', 'a9000003-0000-4000-8000-000000000002', 'confirmed', 'https://example.com/in'),
   ('a9000007-0000-4000-8000-000000000006', 'a9000004-0000-4000-8000-000000000001', 'Sensor A', 'SENS-A', 'Test', 'aftermarket', 'a9000006-0000-4000-8000-000000000006', 'a9000003-0000-4000-8000-000000000002', 'confirmed', 'https://example.com/sa'),
   ('a9000007-0000-4000-8000-000000000007', 'a9000004-0000-4000-8000-000000000001', 'Sensor B', 'SENS-B', 'Test', 'aftermarket', 'a9000006-0000-4000-8000-000000000007', 'a9000003-0000-4000-8000-000000000002', 'confirmed', 'https://example.com/sb'),
-  ('a9000007-0000-4000-8000-000000000008', 'a9000004-0000-4000-8000-000000000001', 'Fiesta twin OE', '04465-B1191', 'Toyota', 'oem', 'a9000006-0000-4000-8000-000000000002', 'a9000003-0000-4000-8000-000000000002', 'confirmed', 'https://example.com/ft'),
+  ('a9000007-0000-4000-8000-000000000008', 'a9000004-0000-4000-8000-000000000001', 'Fiesta twin OE', '04465-B1198', 'Toyota', 'oem', 'a9000006-0000-4000-8000-000000000002', 'a9000003-0000-4000-8000-000000000002', 'confirmed', 'https://example.com/ft'),
   ('a9000007-0000-4000-8000-000000000009', 'a9000004-0000-4000-8000-000000000001', 'WVA twin', 'WVA-24551', 'Test', 'aftermarket', 'a9000006-0000-4000-8000-000000000008', 'a9000003-0000-4000-8000-000000000002', 'confirmed', 'https://example.com/wt')
 ON CONFLICT (id) DO NOTHING;
 
@@ -952,6 +952,37 @@ DO $$
 BEGIN
   PERFORM public.part_match_recompute('a9000006-0000-4000-8000-000000000002', 'a9000005-0000-4000-8000-000000000004');
   PERFORM public.part_match_recompute('a9000006-0000-4000-8000-000000000001', 'a9000005-0000-4000-8000-000000000002');
+END $$;
+
+-- Proof 45: admin_platforms shape (AM-22 list)
+DO $$
+DECLARE v jsonb;
+BEGIN
+  v := public.admin_platforms();
+  IF NOT (v ? 'items') THEN RAISE EXCEPTION 'Proof 45 failed: admin_platforms missing items'; END IF;
+  IF jsonb_array_length(v->'items') > 0 THEN
+    IF NOT ((v->'items'->0) ? 'carCount') THEN RAISE EXCEPTION 'Proof 45 failed: carCount'; END IF;
+  END IF;
+END $$;
+
+-- Proof 46: admin_platform link status (A3)
+DO $$
+DECLARE v jsonb;
+BEGIN
+  v := public.admin_platform('a9000002-0000-4000-8000-000000000001');
+  IF v IS NULL THEN RAISE EXCEPTION 'Proof 46 failed: platform missing'; END IF;
+  IF jsonb_array_length(v->'links') < 1 THEN RAISE EXCEPTION 'Proof 46 failed: expected link'; END IF;
+  IF NOT ((v->'links'->0) ? 'conflict_status') THEN RAISE EXCEPTION 'Proof 46 failed: conflict_status'; END IF;
+END $$;
+
+-- Proof 47: catalog completeness keys (AM-25)
+DO $$
+DECLARE v jsonb;
+BEGIN
+  v := public.part_match_catalog_completeness();
+  IF NOT (v ? 'vehicleCount' AND v ? 'vehiclesWithOeNumbers' AND v ? 'platformLinkCount') THEN
+    RAISE EXCEPTION 'Proof 47 failed: completeness keys';
+  END IF;
 END $$;
 
 ROLLBACK;

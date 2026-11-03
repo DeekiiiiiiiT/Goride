@@ -314,7 +314,7 @@ export function PlatformsPage({ onNavigate }: { onNavigate: (page: string) => vo
                       onNavigate("motor-vehicles");
                     }}
                   >
-                    Inspect car ({String(car.id).slice(0, 8)})
+                    Inspect car
                   </button>
                 </div>
               )) : (

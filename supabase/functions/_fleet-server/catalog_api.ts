@@ -126,6 +126,9 @@ type TierRow = {
   part_badge_code?: string | null;
   part_badge_params?: Record<string, unknown> | null;
   side?: string | null;
+  derived_id?: string | null;
+  wva?: string | null;
+  checking_note?: string | null;
 };
 
 async function decisionsFor(supabase: SupabaseClient, partIds: string[]): Promise<Map<string, string>> {
@@ -180,6 +183,9 @@ async function loadTieredReferenceParts(
     partBadgeCode: row.part_badge_code ?? null,
     partBadgeParams: row.part_badge_params ?? null,
     side: row.side ?? null,
+    derivedId: row.derived_id ?? null,
+    wva: row.wva ?? null,
+    groupId: row.interchange_group_id ?? null,
     part: {
       id: row.part_id,
       category_id: row.category_id,

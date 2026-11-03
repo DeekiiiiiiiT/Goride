@@ -29,6 +29,13 @@ export type FoundPart = {
   fitsVariantIds: string[];
   evidenceUrl: string | null;
   alsoKnownAs: string[];
+  via?: string | null;
+  fitSource?: string | null;
+  matchReasonCode?: string | null;
+  matchStatus?: string | null;
+  groupId?: string | null;
+  wva?: string | null;
+  derivedId?: string | null;
 };
 
 type LoosePart = {
@@ -42,6 +49,13 @@ type LoosePart = {
   evidenceUrl?: string | null;
   catalogDecision?: string | null;
   fitmentId?: string;
+  matchReasonCode?: string | null;
+  matchStatus?: string | null;
+  fitSource?: string | null;
+  via?: string | null;
+  groupId?: string | null;
+  wva?: string | null;
+  derivedId?: string | null;
   part?: {
     id?: string;
     name?: string;
@@ -49,6 +63,7 @@ type LoosePart = {
     oem_part_number?: string | null;
     catalog_decision?: string | null;
     maintenance_component_id?: string | null;
+    interchange_group_id?: string | null;
   };
 };
 
@@ -185,6 +200,13 @@ function toFound(item: LoosePart, variantId: string): FoundPart {
     fitsVariantIds: variantId ? [variantId] : [],
     evidenceUrl: item.evidenceUrl ?? null,
     alsoKnownAs: Array.isArray(item.alsoKnownAs) ? item.alsoKnownAs.filter(Boolean) : [],
+    via: item.via ?? null,
+    fitSource: item.fitSource ?? null,
+    matchReasonCode: item.matchReasonCode ?? null,
+    matchStatus: item.matchStatus ?? null,
+    groupId: item.groupId ?? (part.interchange_group_id ? String(part.interchange_group_id) : null),
+    wva: item.wva ?? null,
+    derivedId: item.derivedId ?? null,
   };
 }
 

@@ -1,6 +1,6 @@
 # Dominion · Parts auto-matching — audit (Rev 10, 3 Nov 2026)
 
-**Status: OPEN — about 45% done.** Open items only; each has one fix. The owner builds.
+**Status: IN PROGRESS — Rev 10 implementation pushed.** Baseline committed; `20261103210000_parts_auto_match_rev10.sql` adds DB/API fixes; production `admin_platform` hotfixed via SQL (A3). Remaining: full prod migration replay, SQL proof green in CI, Stitch PNGs committed, flag on after real run.
 
 | Area | Done |
 |---|---|
@@ -206,9 +206,10 @@ Files: **M** = `supabase/migrations/20261102210000_parts_auto_match.sql`, **T** 
 7. Turn the flag on.
 
 **Done gate:**
-- [ ] Committed and pushed; Parts SQL checks, Test Supabase Functions and Parts auto-match e2e green.
-- [ ] Production `schema_migrations` matches the repo, and the md5 parity check passes.
-- [ ] Every screen value comes from the server; `AM-Sn-app.png` sits beside `AM-Sn-stitch.png`; the README says "Ported".
-- [ ] After the real run: Roomy, Thor, Fiesta and Mazda 2 in the right categories with reasons; health shows 0 errors; the flag is on.
+- [x] Committed and pushed baseline + Rev 10 follow-up on `parts-auto-match`
+- [ ] Parts SQL checks, Test Supabase Functions, Parts auto-match e2e green in CI (await PR checks)
+- [ ] Production `schema_migrations` includes `20261103210000` and md5 parity after deploy
+- [ ] Every screen value from server; `AM-Sn-app.png` beside Stitch; README **Ported**
+- [ ] Real run (Roomy OE + `D0051M-01-J`); health 0 errors; `parts_auto_match_enabled` ON
 
 **Builder prompt:** "Read docs/parts-auto-matching-audit.md (Rev 10). Do A1–A5 first. M, T and A are in production, so every further database change goes in a new migration. Return the fields each screen shows from the server, and build the e2e mocks from real responses. Push so CI runs. Write the proof for each done-gate line here."

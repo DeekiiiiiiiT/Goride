@@ -8,9 +8,7 @@ on:
   workflow_dispatch:
 
 env:
-  # Optional: point at an external preview instead of playwright webServer (see playwright.config.ts).
-  ADMIN_BASE_URL: http://127.0.0.1:4173
-  FLEET_BASE_URL: http://127.0.0.1:3000
+  CI: true
 
 jobs:
   changes:
@@ -46,7 +44,12 @@ jobs:
               apps/admin/src/components/admin/platforms/*|\
               apps/admin/src/components/admin/parts-database/find-parts/*|\
               apps/admin/src/components/admin/parts-database/full-database/*|\
+              apps/admin/src/services/partsAutoMatchApi.ts|\
               apps/fleet/src/components/vehicles/find-parts/*|\
+              supabase/functions/_fleet-server/parts_auto_match_routes.ts|\
+              supabase/functions/_fleet-server/parts_finder.ts|\
+              supabase/migrations/*parts_auto_match*|\
+              supabase/migrations/20261103210000_parts_auto_match_rev10.sql|\
               e2e/parts-auto-match-stitch.spec.ts|\
               e2e/partsAutoMatchMocks.ts|\
               playwright.config.ts|\
