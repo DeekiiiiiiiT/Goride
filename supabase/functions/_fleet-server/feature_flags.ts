@@ -95,6 +95,8 @@ export const FEATURE_FLAGS = {
   RECON_WIZARD: "recon_wizard",
   /** Tiered parts search (OEM / sister / engine / aftermarket). Default off. */
   PARTS_TIERED_SEARCH: "parts_tiered_search",
+  /** Dominion parts auto-match engine (OE numbers, derived fits, conflicts). Default off. */
+  PARTS_AUTO_MATCH_ENABLED: "parts_auto_match_enabled",
   /** Live supplier price/stock adapter. Default off until a vendor feed exists. */
   PARTS_SUPPLIER_API: "parts_supplier_api",
   /** Roam rider-app funnel on Trip Analytics. Off until requests can be tied to a fleet before accept. */

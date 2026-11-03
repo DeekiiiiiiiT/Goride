@@ -1,0 +1,268 @@
+ROAM DOMINION — PARTS AUTO-MATCHING — FULL DESIGN PROMPT (GOOGLE STITCH)
+
+
+
+
+Roam Dominion - Parts auto-matching (Desktop Admin, for the owner and catalog editors):
+
+Design high-fidelity desktop screens that let Dominion match parts to cars on its own, the way a parts catalogue does. Today a part only fits the cars someone typed in by hand. With these screens:
+- every car carries its factory part numbers;
+- every part carries the factory numbers it replaces, plus its industry index numbers (WVA, FMSI);
+- platforms record which parts they share with other platforms.
+
+Dominion then works out every match itself and sorts it into the five match types: Direct OEM, Sister vehicle, Component / engine compatible, Aftermarket cross-reference and Universal. Every match says why it matches. Matches Dominion isn't sure about are never hidden or blocked: they get a "Needs checking" label, and the owner decides with Keep or Remove.
+
+Dominion is the master reference database: it never shows fleet names or plates. Parts are information only: no prices, suppliers, stock or quantities anywhere. The tone is a calm, careful control room. Nothing changes by surprise, and every automatic decision can be explained and undone.
+
+These screens ADD to the existing Dominion screens. They don't replace them. The vehicle specification inspector (the eye overlay in Vehicle catalog), the Full database part drawer, Find parts and Pending catalog all keep everything they have today.
+
+
+BRAND IDENTITY:
+- Match the existing Dominion console and the current Parts database screens exactly:
+  - **Sidebar:** dark navy, with "Dominion · Roam Admin Console". Groups:
+    - MASTER DATA (Overview, Vehicles active, Places and Maps, Fuel, Tolls, Tax and Vendors)
+    - ENGINES (Fuel Brain, Toll Brain, Matching Brain)
+    - DISTRIBUTION (Apps, Data API, Change requests)
+    - PLATFORM (Staff and roles, Activity log, Platform Ops, Global settings)
+    - BACK OFFICE (GCT registrations, Ledger, Remittance)
+  - **Top bar:** search "Search entities, engines, routes…" with a ⌘K chip, a moon icon, and the user "DT · Deeki T · Owner".
+  - **Breadcrumb** in mono caps, "DOMINION / MASTER DATA / VEHICLES / …", with the chips "INDEX: 35 FITMENTS" and "SCHEMA V2.4" on the right.
+  - **Parts database header:** title "Parts database" with a "LIVE CLUSTER" chip; sub line "Every part that fits a car, in five match types."; tabs "Find parts", "Full database", "Import CSV"; "Catalog Level 0 · Audited" with a shield icon on the right.
+- LIGHT MODE (default):
+  - Primary: #0153dc; primary container: #dbe1ff
+  - Success: #006e31; warning: #8a5a00; error: #a83836
+  - Outline: #797a84
+  - Background: #faf8fe; cards white
+  - Text: #30323b; muted text: #5d5f68
+- DARK MODE:
+  - Background: #0b1220; cards #111a2e
+  - Text: #e2e8f0
+  - Primary: #5b8def
+  - Success: #4ade80; warning: #fbbf24; error: #f87171
+  - Outline: #94a3b8
+- Match type tags (the same as Full database), each a small dot plus a word:
+  - OEM (blue)
+  - Sister (teal)
+  - Component / Engine (amber)
+  - Aftermarket (purple)
+  - Universal (green)
+- Match status chips (one set, used everywhere):
+  - "Live": solid green dot
+  - "Needs checking": amber outline with a small eye icon
+  - "Hidden by your listing": grey, with a small person icon. A listing you entered covers this match, so the automatic one is kept only for the record.
+- Where a match came from (small grey tags):
+  - "Entered by hand" (person icon)
+  - "Kept by you" (check icon)
+  - "Auto-matched" (link icon)
+- How a match reached the car (small mono text after the reason): "direct", "via sister", "via shared part", "via engine", "universal".
+- Conflict status chips:
+  - "Open": amber
+  - "Kept": green
+  - "Removed": grey with strike-through
+  - "No longer applies": light grey italic (read-only)
+- Position and side are always shown as two short chips: position "Front" / "Rear", side "Left" / "Right" / "Both". Blank means "Any".
+- Typography: Inter. Part numbers, factory numbers, WVA/FMSI numbers, ids, counts, years and dates use a mono font with tabular numerals.
+- Icons: Material Symbols, outlined.
+- No prices, costs, suppliers, stock or quantities. No fleet names or plates. No gradients, glassmorphism or 3D. No confidence percentages, no AI badges.
+- Sample data:
+  - **Cars:**
+    - "Toyota Roomy 2016–2020 · Pre-Facelift · Custom G · 1KR-FE · M900A" (platform DAI-M900)
+    - "Daihatsu Thor 2016–2020 · M900S" (platform DAI-M900, sister)
+    - "Subaru Justy 2016–2020 · M900F" (platform DAI-M900, sister)
+    - "Mazda 2 / Demio 2007–2014 · DE"
+    - "Ford Fiesta 2008–2017 · 1.4L / 1.6L"
+  - **Factory numbers on cars:**
+    - Roomy front brake pads "Toyota 04465-B1190"
+    - Fiesta front brake pads "Ford 1 438 867"
+    - Mazda 2 front brake pads "Mazda DFY1-33-28ZA"
+  - **Part:** "MK Kashiyama D0051M-01-J · Brake pads". It replaces "Toyota 04465-B1191", "Mazda DFY1-33-28ZA" and "Ford 1 438 867"; WVA 24551; FMSI D1454; wear sensor none; ECE R90 "E1 90R-02A0123/1234".
+  - **Number change:** "Toyota 04465-B1190 → 04465-B1191 (fully interchangeable)".
+  - **Other parts:** "Brembo P 16 013 · WVA 24551 · no sensor"; "Bosch 0 986 494 999 · WVA 24551 · integrated sensor".
+  - **Shared part:** "Mazda DE ⇄ Ford Global B · Brake pads · Front · Both · 2008–2014".
+  - **Reasons, written out:**
+    - "Direct fit via factory OE number 04465-B1190 (changed to 04465-B1191)"
+    - "Sister of Toyota Roomy on platform DAI-M900"
+    - "Shares front brake pads with Mazda DE"
+    - "Same WVA 24551 as MK Kashiyama D0051M-01-J"
+
+
+DESIGN PRINCIPLES:
+- Desktop-first (1440px wide)
+- Add, never replace: each new section sits inside a screen the owner already uses
+- Every match explains itself in one plain sentence, with the numbers that made it
+- A person always wins: anything entered by hand, kept or removed by the owner beats an automatic match, and the screen says so
+- Nothing is blocked: unsure matches show "Needs checking", and the owner decides
+- Every value has a source: each number, link and index shows a "Source" link
+- Position and side always read the same way everywhere: two chips, Front/Rear and Left/Right/Both
+- Plain words first; codes (OE, WVA, FMSI) appear only next to their values
+
+
+SCREEN AM-S1: VEHICLE RECORD — FACTORY PART NUMBERS
+- The existing vehicle specification inspector (the eye overlay opened from Vehicle catalog), for "Toyota Roomy 2016–2020 · Pre-Facelift · Custom G · M900A". Keep its header and every existing section exactly: Production, Transmission, Body, Engine, Fuel, Dimensions.
+- Add a section tab row at the top of the inspector body: "Specification" (the existing content) and "Factory part numbers" (new, selected in this frame), with a small count chip "6".
+- Factory part numbers content:
+  - **Intro line:** "Numbers this car came with from the factory. Dominion uses them to match parts automatically."
+  - **Toolbar:**
+    - search box "Search part type or number…";
+    - a filter chip row for areas (Brakes, Engine, Filters, …) with counts;
+    - a primary button "+ Add number".
+  - **Table grouped by part type** (group headers like "Brake pads", "Brake shoes / drums", "Oil filter"). Columns:
+    - POSITION (chip), SIDE (chip);
+    - BRAND ("Toyota");
+    - FACTORY NUMBER (mono, "04465-B1190");
+    - YEARS (mono, "2016–2020", or "All years");
+    - SOURCE (small link icon + domain, e.g. "toyota-epc.jp");
+    - MATCHES (a small link "3 parts →" that opens Find parts for this car filtered to that part type);
+    - a row menu (Edit, Remove).
+  - **Number changes:** a row whose number was later changed by the maker shows a small grey line under it: "Changed to 04465-B1191 · fully interchangeable".
+  - **Bottom note:** "Numbers added here are matched within a minute. Removed numbers remove their automatic matches; your own listings are never touched."
+- Add / edit number dialog (a second frame of this screen):
+  - Title "Add factory part number".
+  - Fields:
+    - Part type (searchable select);
+    - Position (segmented: Front / Rear / Any);
+    - Side (segmented: Left / Right / Both / Any, disabled until a position is picked, with the hint "Pick a position first");
+    - Brand (text, prefilled with the car's make);
+    - Factory number (mono input; the cleaned value shows live underneath: "Saved as 04465B1190");
+    - Years from / to (optional, with the hint "Leave blank for every year this car was built");
+    - Source link (required).
+  - Buttons: "Cancel", "Save number".
+  - Inline error example under Factory number: "This number is already on this car for Brake pads · Front."
+- Empty state (a third small frame): "No factory numbers yet" with the text "Add the numbers from the maker's parts book, or import them in bulk from Import CSV → Vehicle OE numbers." and two buttons "+ Add number" and "Open Import CSV".
+
+
+SCREEN AM-S2: PART RECORD — CROSS-REFERENCES & INDEX NUMBERS
+- The existing Full database part drawer for "MK Kashiyama D0051M-01-J · Brake pads". Keep its header, status chips (Verified / Needs checking), the fits list, "Source on file", "Confirm fit", Edit and the staff view exactly as they are.
+- Add a section "Cross-references & index numbers" below the existing content, with three blocks:
+  - **"Replaces these factory numbers"**
+    - table: BRAND, FACTORY NUMBER (mono), TYPE ("Replaces" / "Cross-reference"), SOURCE, row menu;
+    - a line under a changed number: "04465-B1190 → 04465-B1191 · fully interchangeable";
+    - button "+ Add factory number".
+  - **"Industry index numbers"**
+    - table: INDEX (WVA / FMSI), NUMBER (mono), WEAR SENSOR (chip: None / Integrated / Separate), SOURCE, row menu;
+    - helper line "Parts with the same WVA or FMSI number and the same wear sensor are grouped together automatically.";
+    - button "+ Add index number".
+  - **"Approvals"**
+    - table: APPROVAL (ECE R90), NUMBER (mono), SOURCE;
+    - helper line in muted text "Approvals are shown for information only and are never used to match parts.";
+    - button "+ Add approval".
+- A small card at the top of the section: "Grouped with 2 other parts by WVA 24551", with mini chips for "Brembo P 16 013" and the group code, and a link "View group →".
+- Badge example in the drawer header, for a part that joined by index number: a purple outline chip "Same WVA 24551 as MK Kashiyama D0051M-01-J".
+
+
+SCREEN AM-S3: PLATFORM RECORD — SHARED COMPONENTS
+- A new page under Vehicles: breadcrumb "DOMINION / MASTER DATA / VEHICLES / PLATFORMS / DAI-M900". It is reached from a new "Platforms" link in the Vehicles home Modules list. Keep the existing Vehicles home cards and modules exactly; add one module row "Platforms · Car families and the parts they share with other families."
+- **Platforms list frame:**
+  - title "Platforms";
+  - search;
+  - table: PLATFORM CODE (mono), NAME, CARS (count), SISTER CARS (chips), SHARED WITH (count of linked platforms), and a chevron.
+- **Platform record frame (DAI-M900):**
+  - Header "DAI-M900 · Daihatsu M900 family" with a count chip "3 cars".
+  - **Card "Cars on this platform (sisters)":** Toyota Roomy M900A, Daihatsu Thor M900S, Subaru Justy M900F, each with years and an eye icon that opens the car's inspector. Helper line "Cars on one platform are sister vehicles. A part that fits one fits the others, unless excluded."
+  - **Card "Shared components":**
+    - table: SHARES WITH (platform code + name), PART TYPE, SCOPE (chip "Component" or "Whole system"), POSITION, SIDE, YEARS HERE, YEARS THERE (mono), SOURCE, STATUS, row menu;
+    - "Whole system" rows show a "Needs checking" chip with the tooltip "System-wide links are checked by a person before matches go live.";
+    - primary button "+ Add shared component".
+  - Use a second sample platform for the link example: "MZ-DE · Mazda DE ⇄ FD-GLOBAL-B · Ford Global B · Brake pads · Component · Front · Both · 2007–2014 / 2008–2017".
+- **Add shared component dialog:**
+  - fields: Other platform (searchable select), Part type, Scope (segmented: Component / Whole system, with the helper text "Whole system covers every part of that system and is marked Needs checking"), Position, Side, Years on this platform (from/to), Years on the other platform (from/to), Source link (required), Note;
+  - preview line: "Matches will apply to cars built 2008–2014 on both platforms.";
+  - buttons "Cancel", "Save link".
+
+
+SCREEN AM-S4: FIND PARTS — MATCH ROW WITH "WHY IT MATCHES" (DOMINION)
+- The existing Dominion Find parts results for "Toyota Roomy · Brake pads · Front". Keep the five match-type sections and their order exactly.
+- Each part row gets:
+  - **Line 1 (unchanged):** brand + part number (mono), part name, the match type tag, position/side chips.
+  - **Line 2 (new):** a small "why" line in muted text with a link icon. Examples:
+    - "Direct fit via factory OE number 04465-B1190 (changed to 04465-B1191)"
+    - "Sister of Toyota Roomy on platform DAI-M900"
+    - "Shares front brake pads with Mazda DE"
+    - "Aftermarket · fits via sister Daihatsu Thor · replaces 04465-B1191"
+  - **Right side:** the status chip ("Live" or "Needs checking") and the source tag ("Entered by hand" / "Kept by you" / "Auto-matched").
+  - **Optional badge:** "Same WVA 24551 as MK Kashiyama D0051M-01-J".
+- Show one "Needs checking" row in the Component / Engine section, with a small inline link "Review in Pending catalog →".
+- Hover on the why line shows a tooltip listing the exact numbers matched (mono): "Car: 04465-B1190 · Part: 04465-B1191 · Change: B1190 → B1191".
+- When auto-matching is switched off in Global settings, this screen looks exactly like today. Show no extra frame for that.
+
+
+SCREEN AM-S5: PENDING CATALOG — AUTO-MATCH CONFLICTS
+- The existing Pending catalog page. Keep its current table and tabs. Add a tab "Auto-match conflicts" with a count chip "4", selected in this frame.
+- **Top summary row:** chips by type with counts, each one a filter:
+  - "Same number, two parts" (2)
+  - "Wrong part type" (0)
+  - "Position or side differs" (1)
+  - "Wear sensor differs" (1)
+  - "Group merge suggested" (0)
+  - "Whole-system link" (0)
+- **Status filter:** "Open", "Kept", "Removed", "No longer applies".
+- **Table** columns:
+  - TYPE (plain words)
+  - CAR (car version, or "—" for part-only conflicts)
+  - PART / GROUP (mono)
+  - MATCHED NUMBER (mono)
+  - DETAIL (one plain sentence)
+  - FOUND (date)
+  - STATUS (chip)
+  - ACTIONS ("Keep" and "Remove" buttons, only on Open rows)
+- **Example rows:**
+  - "Same number, two parts · Toyota Roomy M900A · Group BRK-0012 and BRK-0031 · 04465-B1190 · This car's number matches two different part groups."
+  - "Position or side differs · Toyota Roomy M900A · BRK-0012 · 04465-B1190 · The number says Front · Both, your listing says Rear."
+  - "Wear sensor differs · — · Bosch 0 986 494 999 · WVA 24551 · Same WVA as MK Kashiyama D0051M-01-J but one has an integrated sensor."
+  - A "No longer applies" row (greyed, read-only): "You added a listing that covers this."
+- **Detail drawer** (opens on row click):
+  - the type;
+  - the car and parts involved, with eye icons;
+  - "Numbers involved" in mono, with source links;
+  - "What Keep does" / "What Remove does" in two short plain boxes. For "Same number, two parts":
+    - Keep → "Keeps BRK-0012 for this car and removes BRK-0031 from it.";
+    - Remove → "Removes BRK-0012 from this car. It won't be suggested again."
+  - a Note field (required for "Same number, two parts", "Group merge suggested" and "Whole-system link", with the label "Note (required)");
+  - buttons "Remove" (outlined) and "Keep" (primary).
+- Second drawer frame for the special case: "Group BRK-0031 already has a listing you entered for this car, so it stays. Both parts will show." Its only button is "Close".
+- **History:** resolved rows show who decided, when, and the note. "No longer applies" rows have no buttons.
+
+
+SCREEN AM-S6: DATA QUALITY — AUTO-MATCH HEALTH CARD
+- The existing Data quality page. Keep everything; add one card at the top: "Auto-match health".
+- **Card content:**
+  - **Four stat tiles:** "Live matches" (mono number), "Needs checking" (amber), "Hidden by your listings" (grey), "Open conflicts" (amber, with a link "Review →" to AM-S5).
+  - **Last run line:** "Last full run 03:00 · 2 min 14 s · 0 errors" with a green dot; in a second frame, "1 error in the last 24 h" in red, with a link "See run log".
+  - **Switch row:** "Auto-matching in Find parts", showing "Off" with the helper text "Matches are being worked out and can be reviewed. Find parts shows only your own listings until this is on." It links to Global settings.
+  - **Position clean-up row:** "3 old position values couldn't be read" with a link "Review →".
+- **Position clean-up list** (a second frame, opened from that link):
+  - table: TABLE, ROW (mono id), ORIGINAL VALUE (mono, e.g. "XYZ"), WHAT HAPPENED ("Couldn't be read → shown for all positions" or "Duplicate after clean-up → merged into row …"), FOUND, and a "Mark fixed" button;
+  - fixed rows show "Fixed by Deeki T · 2 Nov".
+
+
+ADDITIONAL UI COMPONENTS:
+- Position chip and side chip (one pair, used in every table and dialog)
+- Match status chip, source tag, "via" mono text
+- "Why it matches" line, with the tooltip listing exact numbers
+- Index badge chip ("Same WVA … as …")
+- Conflict type chips with counts, conflict status chips
+- Keep / Remove explanation boxes
+- Cleaned-number preview under number inputs ("Saved as …")
+- Source link cell (link icon + domain)
+
+
+INTERACTIONS:
+- **Saving a number:** after saving a factory number, cross-reference or shared component, the row shows a small "Matching…" spinner chip, which turns into the new match count when done.
+- **Side needs position:** Side stays disabled until a Position is picked; Side "Both" means left and right.
+- **Matches link:** "Matches →" links open Find parts filtered to that car and part type.
+- **Keep:** asks once (the drawer is the confirmation), then the row turns "Kept" and moves into the history.
+- **Remove:** the row turns "Removed", and the match never comes back on its own.
+- **Grouping rule:** removing a number or link removes only its automatic matches. Entries you made yourself are never changed.
+- **Eye icons:** they open the existing vehicle inspector; part names open the existing Full database drawer.
+- **Hover and focus:** rows highlight in the primary container colour; focus rings are 2px primary; Esc closes drawers and dialogs.
+
+
+Spec screens / Area
+| Screen | Area |
+|---|---|
+| AM-S1 | Vehicle inspector → Factory part numbers tab, add/edit dialog, empty state |
+| AM-S2 | Full database part drawer → Cross-references & index numbers (replaces, WVA/FMSI, approvals, group card, badge) |
+| AM-S3 | Platforms list + platform record with sister cars and shared components, add-link dialog |
+| AM-S4 | Find parts match row with "why it matches", status chip, source tag, index badge |
+| AM-S5 | Pending catalog → Auto-match conflicts tab, detail drawer with Keep/Remove, manual-fit special case, history |
+| AM-S6 | Data quality → Auto-match health card + position clean-up list |

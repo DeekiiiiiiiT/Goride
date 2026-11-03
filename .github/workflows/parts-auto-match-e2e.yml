@@ -1,0 +1,61 @@
+name: Parts auto-match Stitch e2e
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/admin/src/components/admin/vehicle-catalog/**'
+      - 'apps/admin/src/components/admin/parts-sourcing/CatalogQualityPage.tsx'
+      - 'apps/admin/src/components/admin/platforms/**'
+      - 'apps/admin/src/components/admin/parts-database/find-parts/**'
+      - 'apps/admin/src/components/admin/parts-database/full-database/**'
+      - 'apps/fleet/src/components/vehicles/find-parts/**'
+      - 'e2e/parts-auto-match-stitch.spec.ts'
+      - 'e2e/partsAutoMatchMocks.ts'
+      - 'playwright.config.ts'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'apps/admin/src/components/admin/vehicle-catalog/**'
+      - 'apps/admin/src/components/admin/parts-sourcing/CatalogQualityPage.tsx'
+      - 'apps/admin/src/components/admin/platforms/**'
+      - 'apps/admin/src/components/admin/parts-database/find-parts/**'
+      - 'apps/admin/src/components/admin/parts-database/full-database/**'
+      - 'apps/fleet/src/components/vehicles/find-parts/**'
+      - 'e2e/parts-auto-match-stitch.spec.ts'
+      - 'e2e/partsAutoMatchMocks.ts'
+      - 'playwright.config.ts'
+  workflow_dispatch:
+
+jobs:
+  dominion-auto-match-stitch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install chromium --with-deps
+      - name: Build admin
+        run: pnpm --filter @roam/admin run build
+      - name: Dominion auto-match Stitch spec
+        run: pnpm exec playwright test e2e/parts-auto-match-stitch.spec.ts --project=dominion-admin
+
+  fleet-auto-match-s4f:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install chromium --with-deps
+      - name: Build fleet
+        run: pnpm --filter @roam/fleet run build
+      - name: Fleet AM-S4F Stitch spec
+        run: pnpm exec playwright test e2e/parts-auto-match-stitch.spec.ts --project=fleet -g "AM-S4F"

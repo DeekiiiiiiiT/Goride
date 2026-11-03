@@ -1,0 +1,88 @@
+ROAM FLEET — FIND PARTS · "WHY IT FITS" — DESIGN PROMPT (GOOGLE STITCH)
+
+
+
+
+Roam Fleet - Find Parts, "why it fits" (Desktop Web App, for fleet managers and their staff):
+
+Design high-fidelity desktop screens that update the result rows of the "Find parts" tab inside Fleet maintenance in the Roam Fleet app. Roam now matches parts to cars automatically from factory part numbers, sister cars and parts shared between car families. Each result now says, in one plain sentence, why it fits the person's car, and shows when Roam is still checking a match.
+
+Find parts stays an information tool, not a shop: no prices, suppliers, stock, quotes or maintenance schedules. Everything already on the Find parts screens stays exactly as it is (the car picker, the part picker, the side question, the five sections, "Your requests" and the "Ask Roam to add it" flow). Only the result row gains a "why" line and a status chip. The tone is calm, plain and helpful: a parts encyclopedia for your own cars.
+
+
+BRAND IDENTITY:
+- Match the existing Roam Fleet web app:
+  - **Top:** a black top bar with the "Roam Fleet" app tile, then a white nav row: Dashboard, Fleet Operations, Driver Operations, Money, Vehicle Operations (active, underlined), Delivery Operations, Analytics, Reports, Business Finance, avatar "DT".
+  - **Status strip:** a thin dark strip under it, with the search box "Switch vehicle or search hub…" on the left, and on the right the clock "06:25 PM EST", "America/Jamaica", "JM (JMD)" and the user chip "DT · Deeki T".
+  - **Page title:** "Fleet Maintenance" with an orange wrench icon, then the tabs By vehicle, Service ledger, Find parts (active).
+- LIGHT MODE (default):
+  - Primary: near-black #030213
+  - Background: white #FFFFFF; page wash: #f8fafc
+  - Card border: rgba(0,0,0,0.1)
+  - Text: #0a0a0a; muted text: #717182
+  - Success: #059669; warning: #d97706; error: #d4183d
+  - Chip fill: #f1f5f9
+  - Orange #f97316, only for the page icon
+- DARK MODE:
+  - Background #252525, surface #2e2e2e, border #444444
+  - Text #fafafa, muted #b4b4b4, primary #fafafa
+  - Success #34d399, warning #f59e0b, error #f87171
+- Five match-type accent bars (4px left edge on result sections), the same as today:
+  - Made for your car #2563eb
+  - Same car, different badge #0e7490
+  - Fits your engine or shares parts #b45309 (this label now covers shared parts too)
+  - Other brands that replace it #7c3aed
+  - Fits by size #059669
+- New chips on result rows:
+  - "Confirmed": green dot. The match is live.
+  - "Roam is checking": amber outline with a small eye icon. The match is shown but not yet confirmed.
+  - a small grey tag for the match type ("OEM", "Sister", "Shared", "Engine", "Aftermarket", "Universal")
+- Typography: Inter. Part numbers, plates, counts and years use a mono font with tabular numerals.
+- No prices, no currency, no suppliers, no stock, no quotes, no maintenance schedules, no odometers, anywhere. No gradients, glassmorphism or 3D. No AI badges, no confidence percentages.
+- Jamaica sample data:
+  - **Fleet car:** "Toyota Roomy 2019 · 5179KZ" (version "Pre-Facelift · 1KR-FE · 2WD", chassis M900A, front disc brakes, rear drum brakes).
+  - **Parts for "Front brake pad set":**
+    - "Toyota 04465-B1191" (Made for your car), why: "Factory number for your Roomy (04465-B1190, now 04465-B1191)"
+    - "Daihatsu 04465-B1191" (Same car, different badge), why: "Same part as the Daihatsu Thor, the sister of your Roomy"
+    - "MK Kashiyama D0051M-01-J" (Other brands), why: "Replaces your factory number 04465-B1191"
+    - "Brembo P 16 013" (Other brands), why: "Same size as MK Kashiyama D0051M-01-J (WVA 24551)"
+    - one "Roam is checking" row in "Fits your engine or shares parts": "Mazda DFY1-33-28ZA", why: "Shares front brake pads with a related car family"
+
+
+DESIGN PRINCIPLES:
+- Desktop-first (1440px wide)
+- Change only the result row; everything else on Find parts stays exactly as it is
+- Every result says why it fits, in one short sentence a person who knows nothing about cars can read
+- Show trust plainly: "Confirmed", or "Roam is checking". Never hide a result
+- Numbers appear only to back up the sentence, never instead of it
+
+
+SCREEN AM-S4F: FIND PARTS — RESULT ROW WITH "WHY IT FITS"
+- The existing Find parts results for "Toyota Roomy 2019 · 5179KZ · Front brake pad set · Front". Keep the car summary card, the part summary, the five sections and their order, and the per-row "View details" link exactly as today.
+- Each result row:
+  - **Line 1 (unchanged):** part name, brand + part number (mono), the match type tag, side chip.
+  - **Line 2 (new):** the "why" sentence in muted text with a small link icon (examples in the sample data).
+  - **Right side:** the status chip ("Confirmed" or "Roam is checking").
+- Hover on the why line shows a small tooltip with the exact numbers in mono: "Your car: 04465-B1190 · This part: 04465-B1191".
+- A second frame shows the same list in dark mode.
+- A third small frame: a section where every row is "Roam is checking", with a muted note at the top of the section: "Roam found these from shared parts and is still confirming them."
+- Copy number button and "View details" stay where they are today.
+
+
+ADDITIONAL UI COMPONENTS:
+- "Why it fits" line, with the tooltip of exact numbers
+- "Confirmed" and "Roam is checking" chips
+- Updated section label "Fits your engine or shares parts"
+
+
+INTERACTIONS:
+- **Tooltip:** hovering or focusing the why line shows the numbers tooltip.
+- **"Roam is checking" chip:** shows a tooltip "Roam is confirming this match. You can still use the number."
+- **Copy:** clicking the part number copies it, as today.
+- **Focus:** focus rings follow the existing Fleet style.
+
+
+Spec screens / Area
+| Screen | Area |
+|---|---|
+| AM-S4F | Fleet Find parts result rows with "why it fits", Confirmed / Roam is checking chips, light + dark, all-checking section |

@@ -16,6 +16,8 @@ import { PositionStep } from "./PositionStep";
 import { ResultsView } from "./ResultsView";
 import { StepBar } from "./StepBar";
 import { VariantStep } from "./VariantStep";
+import { fetchPartMatchHealth, runFindPartsRematch } from "../../../../services/partsAutoMatchApi";
+import { toast } from "sonner";
 import {
   fetchFindParts,
   fetchFindPartsCoverage,
@@ -102,8 +104,9 @@ export function FindPartsFlow({
   onOpenVehicle?: (variantId: string) => void;
   onAdd: (variantId: string) => void;
 }) {
-  const { role } = useAuth();
+  const { role, session } = useAuth();
   const owner = role === "platform_owner";
+  const token = session?.access_token ?? "";
   const seeded = useState(() => initialFindPartsSearch(initialVariantId))[0];
   const [step, setStep] = useState<Step>("car");
   const [make, setMake] = useState(seeded.make);
@@ -199,6 +202,12 @@ export function FindPartsFlow({
       side: side || undefined,
     }),
     enabled: step === "results" || step === "missing" || step === "all",
+  });
+
+  const matchHealth = useQuery({
+    queryKey: ["find-parts-health", chosenId],
+    queryFn: () => fetchPartMatchHealth(token, chosenId || undefined),
+    enabled: Boolean(token) && step === "results" && Boolean(chosenId),
   });
 
   const variants = preview.data?.variants ?? [];
@@ -467,10 +476,19 @@ export function FindPartsFlow({
           candidates={candidates}
           result={result}
           owner={owner}
+          vehicleId={chosenId}
           onAdd={requestAdd}
           onBack={() => setStep(positionAware ? "position" : "part")}
           onOpen={setDetail}
           onOpenDatabase={() => { if (chosenId) onOpenVehicle?.(chosenId); }}
+          engineEnabled={Boolean(matchHealth.data?.enabled)}
+          health={matchHealth.data}
+          onRematch={() => {
+            if (!token || !owner) return;
+            void runFindPartsRematch(token, chosenId || undefined)
+              .then(() => { toast.success("Re-match started"); void search.refetch(); void matchHealth.refetch(); })
+              .catch((e) => toast.error(e instanceof Error ? e.message : "Could not re-match"));
+          }}
         />
       ) : null}
       {step === "all" && result ? (

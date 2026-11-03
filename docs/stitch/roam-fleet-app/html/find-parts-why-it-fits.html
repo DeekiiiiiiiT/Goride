@@ -1,0 +1,1064 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Find parts — Why it fits (Result rows)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            'roam-near-black': '#030213',
+            'match-made': '#2563eb',
+            'match-sister': '#0e7490',
+            'match-shared': '#b45309',
+            'match-replace': '#7c3aed',
+            'match-size': '#059669',
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    .font-mono-tabular {
+      font-family: 'JetBrains Mono', monospace;
+      font-variant-numeric: tabular-nums;
+    }
+    .tooltip-bubble {
+      visibility: hidden;
+      opacity: 0;
+      transition: opacity 0.15s ease, transform 0.15s ease;
+      transform: translateY(4px);
+    }
+    .has-tooltip:hover .tooltip-bubble,
+    .has-tooltip:focus-within .tooltip-bubble {
+      visibility: visible;
+      opacity: 1;
+      transform: translateY(0);
+    }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-900 min-h-screen">
+
+  <!-- ================= TOP APPLICATION HEADER (Roam Fleet standard) ================= -->
+  <header class="bg-black text-white px-6 py-2 flex items-center justify-between text-xs tracking-tight border-b border-neutral-800">
+    <div class="flex items-center space-x-3">
+      <div class="bg-neutral-900 border border-neutral-700 text-white px-2 py-0.5 rounded font-bold uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+        <svg class="w-3.5 h-3.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="1" y="3" width="15" height="13"></rect>
+          <polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon>
+          <circle cx="5.5" cy="18.5" r="2.5"></circle>
+          <circle cx="18.5" cy="18.5" r="2.5"></circle>
+        </svg>
+        <span>ROAM FLEET</span>
+      </div>
+      <span class="text-neutral-500">/</span>
+      <span class="text-neutral-300 font-medium">Fleet Maintenance OS</span>
+    </div>
+    <div class="flex items-center space-x-5 text-neutral-300">
+      <div class="flex items-center space-x-2">
+        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+        <span class="text-neutral-400">Kingston Hub #01</span>
+      </div>
+      <span class="text-neutral-600">|</span>
+      <div class="flex items-center space-x-2">
+        <div class="w-6 h-6 rounded-full bg-neutral-800 border border-neutral-700 flex items-center justify-center font-semibold text-[11px] text-white">DT</div>
+        <span class="text-neutral-300">Deeki T</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Navigation Bar -->
+  <nav class="bg-white border-b border-slate-200 px-6 py-0">
+    <div class="max-w-[1440px] mx-auto flex items-center justify-between">
+      <div class="flex items-center space-x-7 text-sm font-medium text-slate-600">
+        <a href="#" class="py-3.5 hover:text-slate-900 transition-colors">Dashboard</a>
+        <a href="#" class="py-3.5 hover:text-slate-900 transition-colors">Fleet Operations</a>
+        <a href="#" class="py-3.5 hover:text-slate-900 transition-colors">Driver Operations</a>
+        <a href="#" class="py-3.5 hover:text-slate-900 transition-colors">Money</a>
+        <a href="#" class="py-3.5 text-slate-900 border-b-2 border-slate-950 font-semibold flex items-center gap-1.5">
+          <span>Vehicle Operations</span>
+        </a>
+        <a href="#" class="py-3.5 hover:text-slate-900 transition-colors">Delivery Operations</a>
+        <a href="#" class="py-3.5 hover:text-slate-900 transition-colors">Analytics</a>
+        <a href="#" class="py-3.5 hover:text-slate-900 transition-colors">Reports</a>
+        <a href="#" class="py-3.5 hover:text-slate-900 transition-colors">Business Finance</a>
+      </div>
+      <div class="flex items-center gap-3">
+        <span class="text-xs text-slate-500">v3.18.4-carib</span>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Status Bar / Sub-bar (Dark navy) -->
+  <div class="bg-[#020817] text-slate-300 px-6 py-2 border-b border-slate-800 text-xs">
+    <div class="max-w-[1440px] mx-auto flex items-center justify-between">
+      <div class="flex items-center space-x-3 w-96">
+        <div class="relative w-full">
+          <svg class="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          <input type="text" readonly value="Switch vehicle or search hub…" class="w-full bg-slate-900/90 text-slate-300 text-xs rounded pl-8 pr-10 py-1.5 border border-slate-800 focus:outline-none placeholder-slate-500 cursor-default">
+          <span class="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-500 bg-slate-800 px-1 rounded font-mono">⌘K</span>
+        </div>
+      </div>
+      <div class="flex items-center space-x-3 text-slate-400 font-mono-tabular text-[11px]">
+        <span>06:25 PM EST</span>
+        <span>•</span>
+        <span>America/Jamaica</span>
+        <span>•</span>
+        <span>JM (JMD)</span>
+        <span>•</span>
+        <span class="inline-flex items-center px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 text-[10px] font-sans">DT · Deeki T · platform_owner</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Viewport Container (1440px target) -->
+  <div class="max-w-[1440px] mx-auto px-6 py-6 space-y-8">
+
+    <!-- PAGE TITLE & TABS -->
+    <div class="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-2 border-b border-slate-200">
+      <div>
+        <div class="flex items-center space-x-2 text-xs text-slate-500 mb-1">
+          <a href="#" class="hover:underline">Fleet</a>
+          <span>/</span>
+          <a href="#" class="hover:underline">Maintenance</a>
+          <span>/</span>
+          <span class="text-slate-800 font-medium">Parts Match Intelligence</span>
+        </div>
+        <div class="flex items-center space-x-3">
+          <div class="w-8 h-8 rounded-lg bg-orange-50 border border-orange-200 flex items-center justify-center text-orange-600">
+            <!-- Orange wrench icon (only permitted orange) -->
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>
+            </svg>
+          </div>
+          <div>
+            <h1 class="text-2xl font-bold tracking-tight text-slate-900">Fleet Maintenance</h1>
+            <p class="text-xs text-[#717182]">Parts catalog encyclopedia — factory part matches, sister vehicle interchange, and verification audit trails.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Fleet Tabs -->
+      <div class="flex items-center space-x-1 bg-slate-200/70 p-1 rounded-lg text-xs font-medium">
+        <a href="#" class="px-3.5 py-1.5 rounded-md text-slate-600 hover:text-slate-900 transition-colors">By vehicle</a>
+        <a href="#" class="px-3.5 py-1.5 rounded-md text-slate-600 hover:text-slate-900 transition-colors">Service ledger</a>
+        <a href="#" class="px-3.5 py-1.5 rounded-md bg-white text-slate-900 font-semibold shadow-sm flex items-center gap-1.5">
+          <svg class="w-3.5 h-3.5 text-slate-700" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          <span>Find parts</span>
+        </a>
+      </div>
+    </div>
+
+    <!-- VIEWPORT SWITCHER / LEGEND BANNER -->
+    <div class="bg-white rounded-xl border border-slate-200 p-4 shadow-sm flex flex-wrap items-center justify-between gap-4">
+      <div class="flex items-center space-x-3">
+        <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-slate-900 text-white tracking-wide uppercase">
+          SCREEN AM-S4F
+        </span>
+        <span class="text-sm font-semibold text-slate-900">Result Row with "Why it fits" Match Intelligence</span>
+        <span class="text-xs text-slate-500">• Information tool only (No prices, no stock, no quotes, no shop flow)</span>
+      </div>
+
+      <!-- Quick Nav anchors -->
+      <div class="flex items-center space-x-2 text-xs">
+        <a href="#light-mode-main" class="px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium">Frame 1: Light Mode (Full)</a>
+        <a href="#dark-mode-main" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium">Frame 2: Dark Mode</a>
+        <a href="#all-checking-section" class="px-2.5 py-1 rounded bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 font-medium">Frame 3: All-Checking Section</a>
+      </div>
+    </div>
+
+
+    <!-- ========================================================================= -->
+    <!-- FRAME 1: LIGHT MODE (DEFAULT PRIMARY SCREEN)                               -->
+    <!-- ========================================================================= -->
+    <section id="light-mode-main" class="space-y-6">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center space-x-2">
+          <span class="w-2.5 h-2.5 rounded-full bg-blue-600"></span>
+          <h2 class="text-base font-bold text-slate-900 tracking-tight">Frame 1 · Find Parts Results (Light Mode · 1440px Desktop)</h2>
+          <span class="text-xs text-slate-500 font-mono-tabular">Toyota Roomy 2019 · 5179KZ · Front brake pad set · Front</span>
+        </div>
+        <div class="text-xs text-slate-500 flex items-center gap-3">
+          <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-500"></span> Confirmed</span>
+          <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full border border-amber-500 bg-amber-100"></span> Roam is checking</span>
+        </div>
+      </div>
+
+      <!-- Standard Roam Fleet Vehicle Context & Selected Part Summary Card -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+
+        <!-- Left: Active Car Profile -->
+        <div class="lg:col-span-7 bg-white rounded-xl border border-black/10 p-5 shadow-sm space-y-4">
+          <div class="flex items-start justify-between">
+            <div class="flex items-center space-x-3.5">
+              <div class="w-12 h-12 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-800">
+                <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                  <path d="M5 17h14v-5l-2-4H7l-2 4v5z"></path>
+                  <circle cx="7.5" cy="17.5" r="2.5"></circle>
+                  <circle cx="16.5" cy="17.5" r="2.5"></circle>
+                </svg>
+              </div>
+              <div>
+                <div class="flex items-center space-x-2">
+                  <h3 class="text-base font-bold text-slate-950">Toyota Roomy 2019</h3>
+                  <span class="font-mono-tabular text-xs font-semibold px-2 py-0.5 bg-slate-100 border border-slate-300 rounded text-slate-800">5179KZ</span>
+                  <span class="text-[11px] font-medium px-2 py-0.5 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-full">Rideshare Fleet</span>
+                </div>
+                <p class="text-xs text-[#717182] mt-0.5">
+                  Pre-Facelift · 1KR-FE · 2WD · Chassis <span class="font-mono-tabular">M900A</span> · Front disc brakes, rear drum brakes
+                </p>
+              </div>
+            </div>
+            <button class="text-xs text-slate-600 hover:text-slate-900 border border-slate-200 rounded-lg px-2.5 py-1.5 hover:bg-slate-50 transition-colors font-medium">
+              Change car
+            </button>
+          </div>
+
+          <!-- Choice trail steps (Unchanged architecture) -->
+          <div class="pt-3 border-t border-slate-100 flex flex-wrap items-center gap-2 text-xs">
+            <span class="text-slate-400 font-medium">Choice trail:</span>
+            <span class="inline-flex items-center px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-medium">Toyota Roomy (5179KZ)</span>
+            <span class="text-slate-400">›</span>
+            <span class="inline-flex items-center px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-medium">Braking system</span>
+            <span class="text-slate-400">›</span>
+            <span class="inline-flex items-center px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-medium">Brake pads</span>
+            <span class="text-slate-400">›</span>
+            <span class="inline-flex items-center px-2 py-0.5 rounded bg-slate-900 text-white font-medium">Front</span>
+          </div>
+        </div>
+
+        <!-- Right: Part Query Card & "Your Requests" Quick Link -->
+        <div class="lg:col-span-5 bg-white rounded-xl border border-black/10 p-5 shadow-sm flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Identified Subsystem</span>
+              <a href="#" class="text-xs font-medium text-slate-700 hover:text-slate-950 flex items-center gap-1">
+                <span>Your requests</span>
+                <span class="w-4 h-4 rounded-full bg-slate-200 text-slate-700 text-[10px] font-mono-tabular flex items-center justify-center font-bold">2</span>
+              </a>
+            </div>
+            <h4 class="text-lg font-bold text-slate-950 mt-1">Front brake pad set</h4>
+            <p class="text-xs text-[#717182] mt-0.5">Showing confirmed OEM specs, sister platform cross-references, and compatible aftermarket substitutes.</p>
+          </div>
+
+          <div class="pt-3 mt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+            <span class="text-slate-500">Need a part not listed?</span>
+            <a href="#" class="text-slate-950 font-semibold hover:underline flex items-center gap-1">
+              <span>Ask Roam to add it</span>
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M5 12h14"></path>
+                <path d="M12 5l7 7-7 7"></path>
+              </svg>
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <!-- ================= THE FIVE MATCH-TYPE RESULT SECTIONS ================= -->
+      <div class="space-y-6">
+
+        <!-- 1. MADE FOR YOUR CAR (#2563eb left bar) -->
+        <div class="bg-white rounded-xl border border-black/10 shadow-sm overflow-hidden border-l-4 border-l-match-made">
+          <div class="px-5 py-3.5 bg-slate-50/80 border-b border-slate-100 flex items-center justify-between">
+            <div class="flex items-center space-x-2.5">
+              <span class="w-2.5 h-2.5 rounded-full bg-match-made"></span>
+              <h3 class="text-sm font-bold text-slate-900">Made for your car</h3>
+              <span class="text-xs text-[#717182]">• Exact factory assembly numbers for 5179KZ</span>
+            </div>
+            <span class="text-xs font-mono-tabular font-medium text-slate-500">1 exact match</span>
+          </div>
+
+          <div class="divide-y divide-slate-100">
+            <!-- Row: Toyota 04465-B1191 -->
+            <div class="p-5 hover:bg-slate-50/70 transition-colors">
+              <div class="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <!-- Left Details -->
+                <div class="space-y-1.5 flex-1">
+                  <!-- Line 1: Part name, brand + part number (mono), match tag, side chip -->
+                  <div class="flex flex-wrap items-center gap-2.5">
+                    <span class="font-semibold text-slate-950 text-sm">Front brake pad set</span>
+                    <button class="group inline-flex items-center gap-1.5 font-mono-tabular font-medium text-xs bg-slate-100 hover:bg-slate-200 text-slate-900 px-2 py-0.5 rounded border border-slate-300 transition-colors" title="Click to copy part number">
+                      <span>Toyota 04465-B1191</span>
+                      <svg class="w-3 h-3 text-slate-500 group-hover:text-slate-800" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                      </svg>
+                    </button>
+                    <!-- Match type tag -->
+                    <span class="text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-600 font-semibold">
+                      OEM
+                    </span>
+                    <!-- Side chip -->
+                    <span class="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-medium">
+                      Front axle
+                    </span>
+                  </div>
+
+                  <!-- Line 2: "Why it fits" sentence with hover tooltip -->
+                  <div class="relative inline-block has-tooltip">
+                    <div class="flex items-center space-x-1.5 text-xs text-[#717182] hover:text-slate-900 cursor-help transition-colors py-0.5">
+                      <svg class="w-3.5 h-3.5 text-slate-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+                      </svg>
+                      <span class="underline decoration-dotted decoration-slate-300 underline-offset-2">
+                        Factory number for your Roomy (04465-B1190, now 04465-B1191)
+                      </span>
+                    </div>
+
+                    <!-- Tooltip showing exact tabular numbers -->
+                    <div class="tooltip-bubble absolute left-0 top-full mt-1.5 z-30 bg-slate-950 text-white rounded-lg px-3 py-2 text-xs shadow-xl border border-slate-800 whitespace-nowrap">
+                      <div class="font-mono-tabular text-[11px] space-y-0.5">
+                        <div class="text-slate-400">Exact supersession verification:</div>
+                        <div><span class="text-slate-400">Your car:</span> 04465-B1190</div>
+                        <div><span class="text-slate-400">This part:</span> 04465-B1191 (superseded OEM)</div>
+                      </div>
+                      <div class="absolute -top-1 left-4 w-2 h-2 bg-slate-950 border-t border-l border-slate-800 rotate-45"></div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Right Side: Status Chip & View Details -->
+                <div class="flex items-center space-x-4 self-end md:self-center">
+                  <!-- Confirmed Status Chip (green dot) -->
+                  <div class="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-medium">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+                    <span>Confirmed</span>
+                  </div>
+
+                  <!-- Unchanged View Details Link -->
+                  <button class="text-xs text-slate-700 hover:text-slate-950 font-medium hover:underline flex items-center gap-1">
+                    <span>View details</span>
+                    <svg class="w-3.5 h-3.5 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M9 18l6-6-6-6"></path>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. SAME CAR, DIFFERENT BADGE (#0e7490 left bar) -->
+        <div class="bg-white rounded-xl border border-black/10 shadow-sm overflow-hidden border-l-4 border-l-match-sister">
+          <div class="px-5 py-3.5 bg-slate-50/80 border-b border-slate-100 flex items-center justify-between">
+            <div class="flex items-center space-x-2.5">
+              <span class="w-2.5 h-2.5 rounded-full bg-match-sister"></span>
+              <h3 class="text-sm font-bold text-slate-900">Same car, different badge</h3>
+              <span class="text-xs text-[#717182]">• Identical chassis built under partner brands</span>
+            </div>
+            <span class="text-xs font-mono-tabular font-medium text-slate-500">1 verified sister part</span>
+          </div>
+
+          <div class="divide-y divide-slate-100">
+            <!-- Row: Daihatsu 04465-B1191 -->
+            <div class="p-5 hover:bg-slate-50/70 transition-colors">
+              <div class="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div class="space-y-1.5 flex-1">
+                  <div class="flex flex-wrap items-center gap-2.5">
+                    <span class="font-semibold text-slate-950 text-sm">Front brake pad set</span>
+                    <button class="group inline-flex items-center gap-1.5 font-mono-tabular font-medium text-xs bg-slate-100 hover:bg-slate-200 text-slate-900 px-2 py-0.5 rounded border border-slate-300 transition-colors" title="Click to copy part number">
+                      <span>Daihatsu 04465-B1191</span>
+                      <svg class="w-3 h-3 text-slate-500 group-hover:text-slate-800" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                      </svg>
+                    </button>
+                    <span class="text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-600 font-semibold">
+                      Sister
+                    </span>
+                    <span class="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-medium">
+                      Front axle
+                    </span>
+                  </div>
+
+                  <!-- Line 2: "Why it fits" sentence with hover tooltip -->
+                  <div class="relative inline-block has-tooltip">
+                    <div class="flex items-center space-x-1.5 text-xs text-[#717182] hover:text-slate-900 cursor-help transition-colors py-0.5">
+                      <svg class="w-3.5 h-3.5 text-slate-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+                      </svg>
+                      <span class="underline decoration-dotted decoration-slate-300 underline-offset-2">
+                        Same part as the Daihatsu Thor, the sister of your Roomy
+                      </span>
+                    </div>
+
+                    <div class="tooltip-bubble absolute left-0 top-full mt-1.5 z-30 bg-slate-950 text-white rounded-lg px-3 py-2 text-xs shadow-xl border border-slate-800 whitespace-nowrap">
+                      <div class="font-mono-tabular text-[11px] space-y-0.5">
+                        <div class="text-slate-400">Cross-badge platform lineage:</div>
+                        <div><span class="text-slate-400">Your car:</span> Toyota Roomy (M900A)</div>
+                        <div><span class="text-slate-400">Sister model:</span> Daihatsu Thor (M900S) · Identical calliper 04465-B1191</div>
+                      </div>
+                      <div class="absolute -top-1 left-4 w-2 h-2 bg-slate-950 border-t border-l border-slate-800 rotate-45"></div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="flex items-center space-x-4 self-end md:self-center">
+                  <div class="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-medium">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+                    <span>Confirmed</span>
+                  </div>
+                  <button class="text-xs text-slate-700 hover:text-slate-950 font-medium hover:underline flex items-center gap-1">
+                    <span>View details</span>
+                    <svg class="w-3.5 h-3.5 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M9 18l6-6-6-6"></path>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. FITS YOUR ENGINE OR SHARES PARTS (#b45309 left bar - UPDATED LABEL) -->
+        <div class="bg-white rounded-xl border border-black/10 shadow-sm overflow-hidden border-l-4 border-l-match-shared">
+          <div class="px-5 py-3.5 bg-slate-50/80 border-b border-slate-100 flex items-center justify-between">
+            <div class="flex items-center space-x-2.5">
+              <span class="w-2.5 h-2.5 rounded-full bg-match-shared"></span>
+              <!-- Updated label covers shared parts too -->
+              <h3 class="text-sm font-bold text-slate-900">Fits your engine or shares parts</h3>
+              <span class="text-xs text-[#717182]">• Powertrain & shared architecture interchange</span>
+            </div>
+            <span class="text-xs font-mono-tabular font-medium text-slate-500">1 part being audited</span>
+          </div>
+
+          <div class="divide-y divide-slate-100">
+            <!-- Row: Mazda DFY1-33-28ZA with "Roam is checking" -->
+            <div class="p-5 hover:bg-slate-50/70 transition-colors">
+              <div class="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div class="space-y-1.5 flex-1">
+                  <div class="flex flex-wrap items-center gap-2.5">
+                    <span class="font-semibold text-slate-950 text-sm">Front brake pad set</span>
+                    <button class="group inline-flex items-center gap-1.5 font-mono-tabular font-medium text-xs bg-slate-100 hover:bg-slate-200 text-slate-900 px-2 py-0.5 rounded border border-slate-300 transition-colors" title="Click to copy part number">
+                      <span>Mazda DFY1-33-28ZA</span>
+                      <svg class="w-3 h-3 text-slate-500 group-hover:text-slate-800" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                      </svg>
+                    </button>
+                    <span class="text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-600 font-semibold">
+                      Shared
+                    </span>
+                    <span class="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-medium">
+                      Front axle
+                    </span>
+                  </div>
+
+                  <!-- Line 2: "Why it fits" sentence with hover tooltip -->
+                  <div class="relative inline-block has-tooltip">
+                    <div class="flex items-center space-x-1.5 text-xs text-[#717182] hover:text-slate-900 cursor-help transition-colors py-0.5">
+                      <svg class="w-3.5 h-3.5 text-slate-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+                      </svg>
+                      <span class="underline decoration-dotted decoration-slate-300 underline-offset-2">
+                        Shares front brake pads with a related car family
+                      </span>
+                    </div>
+
+                    <div class="tooltip-bubble absolute left-0 top-full mt-1.5 z-30 bg-slate-950 text-white rounded-lg px-3 py-2 text-xs shadow-xl border border-slate-800 whitespace-nowrap">
+                      <div class="font-mono-tabular text-[11px] space-y-0.5">
+                        <div class="text-slate-400">Interchange family mapping:</div>
+                        <div><span class="text-slate-400">Your car:</span> Toyota Roomy 1.0L 1KR-FE</div>
+                        <div><span class="text-slate-400">Shared match:</span> Mazda DFY1-33-28ZA · Akebono AN-608K dimension match</div>
+                      </div>
+                      <div class="absolute -top-1 left-4 w-2 h-2 bg-slate-950 border-t border-l border-slate-800 rotate-45"></div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="flex items-center space-x-4 self-end md:self-center">
+                  <!-- Roam is checking status chip (amber outline with small eye icon) with dedicated tooltip -->
+                  <div class="relative has-tooltip">
+                    <div class="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full border border-amber-500 bg-amber-50 text-amber-800 text-xs font-medium cursor-help">
+                      <svg class="w-3.5 h-3.5 text-amber-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                        <circle cx="12" cy="12" r="3"></circle>
+                      </svg>
+                      <span>Roam is checking</span>
+                    </div>
+
+                    <!-- Required chip tooltip -->
+                    <div class="tooltip-bubble absolute right-0 top-full mt-1.5 z-30 bg-slate-950 text-white rounded-lg px-3 py-2 text-xs shadow-xl border border-slate-800 whitespace-nowrap">
+                      <span>Roam is confirming this match. You can still use the number.</span>
+                      <div class="absolute -top-1 right-6 w-2 h-2 bg-slate-950 border-t border-l border-slate-800 rotate-45"></div>
+                    </div>
+                  </div>
+
+                  <button class="text-xs text-slate-700 hover:text-slate-950 font-medium hover:underline flex items-center gap-1">
+                    <span>View details</span>
+                    <svg class="w-3.5 h-3.5 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M9 18l6-6-6-6"></path>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 4. OTHER BRANDS THAT REPLACE IT (#7c3aed left bar) -->
+        <div class="bg-white rounded-xl border border-black/10 shadow-sm overflow-hidden border-l-4 border-l-match-replace">
+          <div class="px-5 py-3.5 bg-slate-50/80 border-b border-slate-100 flex items-center justify-between">
+            <div class="flex items-center space-x-2.5">
+              <span class="w-2.5 h-2.5 rounded-full bg-match-replace"></span>
+              <h3 class="text-sm font-bold text-slate-900">Other brands that replace it</h3>
+              <span class="text-xs text-[#717182]">• Certified aftermarket replacements and equivalent friction standards</span>
+            </div>
+            <span class="text-xs font-mono-tabular font-medium text-slate-500">2 direct replacements</span>
+          </div>
+
+          <div class="divide-y divide-slate-100">
+            <!-- Row 1: MK Kashiyama D0051M-01-J -->
+            <div class="p-5 hover:bg-slate-50/70 transition-colors">
+              <div class="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div class="space-y-1.5 flex-1">
+                  <div class="flex flex-wrap items-center gap-2.5">
+                    <span class="font-semibold text-slate-950 text-sm">Front brake pad set</span>
+                    <button class="group inline-flex items-center gap-1.5 font-mono-tabular font-medium text-xs bg-slate-100 hover:bg-slate-200 text-slate-900 px-2 py-0.5 rounded border border-slate-300 transition-colors" title="Click to copy part number">
+                      <span>MK Kashiyama D0051M-01-J</span>
+                      <svg class="w-3 h-3 text-slate-500 group-hover:text-slate-800" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                      </svg>
+                    </button>
+                    <span class="text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-600 font-semibold">
+                      Aftermarket
+                    </span>
+                    <span class="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-medium">
+                      Front axle
+                    </span>
+                  </div>
+
+                  <!-- Line 2: "Why it fits" sentence with hover tooltip -->
+                  <div class="relative inline-block has-tooltip">
+                    <div class="flex items-center space-x-1.5 text-xs text-[#717182] hover:text-slate-900 cursor-help transition-colors py-0.5">
+                      <svg class="w-3.5 h-3.5 text-slate-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+                      </svg>
+                      <span class="underline decoration-dotted decoration-slate-300 underline-offset-2">
+                        Replaces your factory number 04465-B1191
+                      </span>
+                    </div>
+
+                    <div class="tooltip-bubble absolute left-0 top-full mt-1.5 z-30 bg-slate-950 text-white rounded-lg px-3 py-2 text-xs shadow-xl border border-slate-800 whitespace-nowrap">
+                      <div class="font-mono-tabular text-[11px] space-y-0.5">
+                        <div class="text-slate-400">Direct cross-reference:</div>
+                        <div><span class="text-slate-400">Your car:</span> 04465-B1190 / 04465-B1191</div>
+                        <div><span class="text-slate-400">MK Spec:</span> D0051M-01-J (Japan standard friction match)</div>
+                      </div>
+                      <div class="absolute -top-1 left-4 w-2 h-2 bg-slate-950 border-t border-l border-slate-800 rotate-45"></div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="flex items-center space-x-4 self-end md:self-center">
+                  <div class="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-medium">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+                    <span>Confirmed</span>
+                  </div>
+                  <button class="text-xs text-slate-700 hover:text-slate-950 font-medium hover:underline flex items-center gap-1">
+                    <span>View details</span>
+                    <svg class="w-3.5 h-3.5 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M9 18l6-6-6-6"></path>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Row 2: Brembo P 16 013 -->
+            <div class="p-5 hover:bg-slate-50/70 transition-colors">
+              <div class="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div class="space-y-1.5 flex-1">
+                  <div class="flex flex-wrap items-center gap-2.5">
+                    <span class="font-semibold text-slate-950 text-sm">Front brake pad set</span>
+                    <button class="group inline-flex items-center gap-1.5 font-mono-tabular font-medium text-xs bg-slate-100 hover:bg-slate-200 text-slate-900 px-2 py-0.5 rounded border border-slate-300 transition-colors" title="Click to copy part number">
+                      <span>Brembo P 16 013</span>
+                      <svg class="w-3 h-3 text-slate-500 group-hover:text-slate-800" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                      </svg>
+                    </button>
+                    <span class="text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-600 font-semibold">
+                      Aftermarket
+                    </span>
+                    <span class="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-medium">
+                      Front axle
+                    </span>
+                  </div>
+
+                  <!-- Line 2: "Why it fits" sentence with hover tooltip -->
+                  <div class="relative inline-block has-tooltip">
+                    <div class="flex items-center space-x-1.5 text-xs text-[#717182] hover:text-slate-900 cursor-help transition-colors py-0.5">
+                      <svg class="w-3.5 h-3.5 text-slate-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+                      </svg>
+                      <span class="underline decoration-dotted decoration-slate-300 underline-offset-2">
+                        Same size as MK Kashiyama D0051M-01-J (WVA 24551)
+                      </span>
+                    </div>
+
+                    <div class="tooltip-bubble absolute left-0 top-full mt-1.5 z-30 bg-slate-950 text-white rounded-lg px-3 py-2 text-xs shadow-xl border border-slate-800 whitespace-nowrap">
+                      <div class="font-mono-tabular text-[11px] space-y-0.5">
+                        <div class="text-slate-400">Standardized WVA friction standard:</div>
+                        <div><span class="text-slate-400">Equivalent:</span> MK Kashiyama D0051M-01-J</div>
+                        <div><span class="text-slate-400">Friction Spec:</span> Brembo P 16 013 · WVA 24551 · 116.0 × 44.5 × 15.0 mm</div>
+                      </div>
+                      <div class="absolute -top-1 left-4 w-2 h-2 bg-slate-950 border-t border-l border-slate-800 rotate-45"></div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="flex items-center space-x-4 self-end md:self-center">
+                  <div class="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-medium">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+                    <span>Confirmed</span>
+                  </div>
+                  <button class="text-xs text-slate-700 hover:text-slate-950 font-medium hover:underline flex items-center gap-1">
+                    <span>View details</span>
+                    <svg class="w-3.5 h-3.5 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M9 18l6-6-6-6"></path>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 5. FITS BY SIZE (#059669 left bar) -->
+        <div class="bg-white rounded-xl border border-black/10 shadow-sm overflow-hidden border-l-4 border-l-match-size">
+          <div class="px-5 py-3.5 bg-slate-50/80 border-b border-slate-100 flex items-center justify-between">
+            <div class="flex items-center space-x-2.5">
+              <span class="w-2.5 h-2.5 rounded-full bg-match-size"></span>
+              <h3 class="text-sm font-bold text-slate-900">Fits by size</h3>
+              <span class="text-xs text-[#717182]">• Identical physical dimensions and mounting clip geometry</span>
+            </div>
+            <span class="text-xs font-mono-tabular font-medium text-slate-500">1 dimensionally verified part</span>
+          </div>
+
+          <div class="divide-y divide-slate-100">
+            <!-- Row: Advics SN145P -->
+            <div class="p-5 hover:bg-slate-50/70 transition-colors">
+              <div class="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div class="space-y-1.5 flex-1">
+                  <div class="flex flex-wrap items-center gap-2.5">
+                    <span class="font-semibold text-slate-950 text-sm">Front brake pad set</span>
+                    <button class="group inline-flex items-center gap-1.5 font-mono-tabular font-medium text-xs bg-slate-100 hover:bg-slate-200 text-slate-900 px-2 py-0.5 rounded border border-slate-300 transition-colors" title="Click to copy part number">
+                      <span>Advics SN145P</span>
+                      <svg class="w-3 h-3 text-slate-500 group-hover:text-slate-800" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                      </svg>
+                    </button>
+                    <span class="text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-600 font-semibold">
+                      Universal
+                    </span>
+                    <span class="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-medium">
+                      Front axle
+                    </span>
+                  </div>
+
+                  <!-- Line 2: "Why it fits" sentence with hover tooltip -->
+                  <div class="relative inline-block has-tooltip">
+                    <div class="flex items-center space-x-1.5 text-xs text-[#717182] hover:text-slate-900 cursor-help transition-colors py-0.5">
+                      <svg class="w-3.5 h-3.5 text-slate-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+                      </svg>
+                      <span class="underline decoration-dotted decoration-slate-300 underline-offset-2">
+                        Matches your factory pad width (116.0 mm), height (44.5 mm) and calliper clips
+                      </span>
+                    </div>
+
+                    <div class="tooltip-bubble absolute left-0 top-full mt-1.5 z-30 bg-slate-950 text-white rounded-lg px-3 py-2 text-xs shadow-xl border border-slate-800 whitespace-nowrap">
+                      <div class="font-mono-tabular text-[11px] space-y-0.5">
+                        <div class="text-slate-400">Pad geometry verification:</div>
+                        <div><span class="text-slate-400">Pad thickness:</span> 15.0 mm · Disc dia: 246 mm</div>
+                        <div><span class="text-slate-400">Mounting:</span> Twin retaining spring pin compatible</div>
+                      </div>
+                      <div class="absolute -top-1 left-4 w-2 h-2 bg-slate-950 border-t border-l border-slate-800 rotate-45"></div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="flex items-center space-x-4 self-end md:self-center">
+                  <div class="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-medium">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+                    <span>Confirmed</span>
+                  </div>
+                  <button class="text-xs text-slate-700 hover:text-slate-950 font-medium hover:underline flex items-center gap-1">
+                    <span>View details</span>
+                    <svg class="w-3.5 h-3.5 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M9 18l6-6-6-6"></path>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+
+    <!-- ========================================================================= -->
+    <!-- FRAME 3: DEDICATED SECTION WHERE EVERY ROW IS "ROAM IS CHECKING"           -->
+    <!-- ========================================================================= -->
+    <section id="all-checking-section" class="pt-6 border-t border-slate-200 space-y-4">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center space-x-2">
+          <span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+          <h2 class="text-base font-bold text-slate-900 tracking-tight">Frame 3 · Unconfirmed Shared Matches Section (All-Checking State)</h2>
+        </div>
+        <span class="text-xs text-amber-800 bg-amber-100 border border-amber-300 font-semibold px-2 py-0.5 rounded">
+          Non-blocking inspection queue
+        </span>
+      </div>
+
+      <div class="bg-white rounded-xl border border-black/10 shadow-sm overflow-hidden border-l-4 border-l-match-shared">
+        <!-- Section header with required note -->
+        <div class="px-5 py-4 bg-amber-50/60 border-b border-amber-100/80">
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <div class="flex items-center space-x-2">
+                <span class="w-2 h-2 rounded-full bg-match-shared"></span>
+                <h3 class="text-sm font-bold text-slate-900">Fits your engine or shares parts</h3>
+                <span class="text-xs text-slate-500">• Candidate interchange pool</span>
+              </div>
+              <!-- Required plain sentence note at top of section -->
+              <p class="text-xs text-[#717182] mt-1 font-medium flex items-center gap-1.5">
+                <svg class="w-3.5 h-3.5 text-amber-600 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <line x1="12" y1="8" x2="12" y2="12"></line>
+                  <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                </svg>
+                <span>Roam found these from shared parts and is still confirming them.</span>
+              </p>
+            </div>
+            <span class="text-xs font-mono-tabular px-2 py-0.5 rounded bg-white border border-amber-200 text-amber-900 font-semibold">
+              3 unconfirmed candidates
+            </span>
+          </div>
+        </div>
+
+        <div class="divide-y divide-slate-100">
+          <!-- Row 1: Mazda DFY1-33-28ZA -->
+          <div class="p-5 hover:bg-slate-50/70 transition-colors">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <div class="space-y-1.5 flex-1">
+                <div class="flex flex-wrap items-center gap-2.5">
+                  <span class="font-semibold text-slate-950 text-sm">Front brake pad set</span>
+                  <button class="group inline-flex items-center gap-1.5 font-mono-tabular font-medium text-xs bg-slate-100 hover:bg-slate-200 text-slate-900 px-2 py-0.5 rounded border border-slate-300 transition-colors">
+                    <span>Mazda DFY1-33-28ZA</span>
+                    <svg class="w-3 h-3 text-slate-500 group-hover:text-slate-800" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                    </svg>
+                  </button>
+                  <span class="text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-600 font-semibold">Shared</span>
+                  <span class="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-medium">Front axle</span>
+                </div>
+                <div class="relative inline-block has-tooltip">
+                  <div class="flex items-center space-x-1.5 text-xs text-[#717182] hover:text-slate-900 cursor-help transition-colors py-0.5">
+                    <svg class="w-3.5 h-3.5 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+                    <span class="underline decoration-dotted decoration-slate-300 underline-offset-2">Shares front brake pads with a related car family</span>
+                  </div>
+                  <div class="tooltip-bubble absolute left-0 top-full mt-1.5 z-30 bg-slate-950 text-white rounded-lg px-3 py-2 text-xs shadow-xl border border-slate-800 whitespace-nowrap">
+                    <div class="font-mono-tabular text-[11px]">Your car: M900A 1.0L · Candidate: Mazda Carol / Spiano platform interchange</div>
+                    <div class="absolute -top-1 left-4 w-2 h-2 bg-slate-950 border-t border-l border-slate-800 rotate-45"></div>
+                  </div>
+                </div>
+              </div>
+              <div class="flex items-center space-x-4 self-end md:self-center">
+                <div class="relative has-tooltip">
+                  <div class="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full border border-amber-500 bg-amber-50 text-amber-800 text-xs font-medium cursor-help">
+                    <svg class="w-3.5 h-3.5 text-amber-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                    <span>Roam is checking</span>
+                  </div>
+                  <div class="tooltip-bubble absolute right-0 top-full mt-1.5 z-30 bg-slate-950 text-white rounded-lg px-3 py-2 text-xs shadow-xl border border-slate-800 whitespace-nowrap">
+                    <span>Roam is confirming this match. You can still use the number.</span>
+                    <div class="absolute -top-1 right-6 w-2 h-2 bg-slate-950 border-t border-l border-slate-800 rotate-45"></div>
+                  </div>
+                </div>
+                <button class="text-xs text-slate-700 hover:text-slate-950 font-medium hover:underline flex items-center gap-1"><span>View details</span><svg class="w-3.5 h-3.5 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"></path></svg></button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Row 2: Subaru 26296-B0010 -->
+          <div class="p-5 hover:bg-slate-50/70 transition-colors">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <div class="space-y-1.5 flex-1">
+                <div class="flex flex-wrap items-center gap-2.5">
+                  <span class="font-semibold text-slate-950 text-sm">Front brake pad set</span>
+                  <button class="group inline-flex items-center gap-1.5 font-mono-tabular font-medium text-xs bg-slate-100 hover:bg-slate-200 text-slate-900 px-2 py-0.5 rounded border border-slate-300 transition-colors">
+                    <span>Subaru 26296-B0010</span>
+                    <svg class="w-3 h-3 text-slate-500 group-hover:text-slate-800" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                    </svg>
+                  </button>
+                  <span class="text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-600 font-semibold">Shared</span>
+                  <span class="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-medium">Front axle</span>
+                </div>
+                <div class="relative inline-block has-tooltip">
+                  <div class="flex items-center space-x-1.5 text-xs text-[#717182] hover:text-slate-900 cursor-help transition-colors py-0.5">
+                    <svg class="w-3.5 h-3.5 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+                    <span class="underline decoration-dotted decoration-slate-300 underline-offset-2">Shares front calliper brackets with Subaru Justy (Gen 5)</span>
+                  </div>
+                  <div class="tooltip-bubble absolute left-0 top-full mt-1.5 z-30 bg-slate-950 text-white rounded-lg px-3 py-2 text-xs shadow-xl border border-slate-800 whitespace-nowrap">
+                    <div class="font-mono-tabular text-[11px]">Your car: M900A · Subaru OEM reference awaiting physical depot calliper verification</div>
+                    <div class="absolute -top-1 left-4 w-2 h-2 bg-slate-950 border-t border-l border-slate-800 rotate-45"></div>
+                  </div>
+                </div>
+              </div>
+              <div class="flex items-center space-x-4 self-end md:self-center">
+                <div class="relative has-tooltip">
+                  <div class="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full border border-amber-500 bg-amber-50 text-amber-800 text-xs font-medium cursor-help">
+                    <svg class="w-3.5 h-3.5 text-amber-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                    <span>Roam is checking</span>
+                  </div>
+                  <div class="tooltip-bubble absolute right-0 top-full mt-1.5 z-30 bg-slate-950 text-white rounded-lg px-3 py-2 text-xs shadow-xl border border-slate-800 whitespace-nowrap">
+                    <span>Roam is confirming this match. You can still use the number.</span>
+                    <div class="absolute -top-1 right-6 w-2 h-2 bg-slate-950 border-t border-l border-slate-800 rotate-45"></div>
+                  </div>
+                </div>
+                <button class="text-xs text-slate-700 hover:text-slate-950 font-medium hover:underline flex items-center gap-1"><span>View details</span><svg class="w-3.5 h-3.5 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"></path></svg></button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Row 3: Aisin BPM-012 -->
+          <div class="p-5 hover:bg-slate-50/70 transition-colors">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <div class="space-y-1.5 flex-1">
+                <div class="flex flex-wrap items-center gap-2.5">
+                  <span class="font-semibold text-slate-950 text-sm">Front brake pad set</span>
+                  <button class="group inline-flex items-center gap-1.5 font-mono-tabular font-medium text-xs bg-slate-100 hover:bg-slate-200 text-slate-900 px-2 py-0.5 rounded border border-slate-300 transition-colors">
+                    <span>Aisin BPM-012</span>
+                    <svg class="w-3 h-3 text-slate-500 group-hover:text-slate-800" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                    </svg>
+                  </button>
+                  <span class="text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-600 font-semibold">Engine</span>
+                  <span class="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-medium">Front axle</span>
+                </div>
+                <div class="relative inline-block has-tooltip">
+                  <div class="flex items-center space-x-1.5 text-xs text-[#717182] hover:text-slate-900 cursor-help transition-colors py-0.5">
+                    <svg class="w-3.5 h-3.5 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+                    <span class="underline decoration-dotted decoration-slate-300 underline-offset-2">Engine cross-referenced to 1KR-FE brake booster trim</span>
+                  </div>
+                  <div class="tooltip-bubble absolute left-0 top-full mt-1.5 z-30 bg-slate-950 text-white rounded-lg px-3 py-2 text-xs shadow-xl border border-slate-800 whitespace-nowrap">
+                    <div class="font-mono-tabular text-[11px]">Your car: 1KR-FE non-turbo · Aisin catalog match pending vacuum sensor check</div>
+                    <div class="absolute -top-1 left-4 w-2 h-2 bg-slate-950 border-t border-l border-slate-800 rotate-45"></div>
+                  </div>
+                </div>
+              </div>
+              <div class="flex items-center space-x-4 self-end md:self-center">
+                <div class="relative has-tooltip">
+                  <div class="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full border border-amber-500 bg-amber-50 text-amber-800 text-xs font-medium cursor-help">
+                    <svg class="w-3.5 h-3.5 text-amber-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                    <span>Roam is checking</span>
+                  </div>
+                  <div class="tooltip-bubble absolute right-0 top-full mt-1.5 z-30 bg-slate-950 text-white rounded-lg px-3 py-2 text-xs shadow-xl border border-slate-800 whitespace-nowrap">
+                    <span>Roam is confirming this match. You can still use the number.</span>
+                    <div class="absolute -top-1 right-6 w-2 h-2 bg-slate-950 border-t border-l border-slate-800 rotate-45"></div>
+                  </div>
+                </div>
+                <button class="text-xs text-slate-700 hover:text-slate-950 font-medium hover:underline flex items-center gap-1"><span>View details</span><svg class="w-3.5 h-3.5 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"></path></svg></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+
+    <!-- ========================================================================= -->
+    <!-- FRAME 2: DARK MODE VARIANT (FULL EXACT SYSTEM COMPLIANCE)                  -->
+    <!-- ========================================================================= -->
+    <section id="dark-mode-main" class="pt-6 border-t border-slate-200 space-y-4">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center space-x-2">
+          <span class="w-2.5 h-2.5 rounded-full bg-slate-700"></span>
+          <h2 class="text-base font-bold text-slate-900 tracking-tight">Frame 2 · Find Parts Results (Dark Mode Variant #252525)</h2>
+        </div>
+        <span class="text-xs font-mono text-slate-500">Dark theme: Background #252525 · Surface #2e2e2e · Border #444444</span>
+      </div>
+
+      <!-- Dark Theme Canvas Frame Wrapper -->
+      <div class="bg-[#252525] text-[#fafafa] rounded-2xl p-6 border border-[#444444] shadow-xl space-y-6">
+
+        <!-- Vehicle strip in Dark mode -->
+        <div class="bg-[#2e2e2e] rounded-xl border border-[#444444] p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <div class="flex items-center space-x-3.5">
+            <div class="w-10 h-10 rounded-lg bg-[#3a3a3a] border border-[#4a4a4a] flex items-center justify-center text-slate-200">
+              <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 17h14v-5l-2-4H7l-2 4v5z"></path><circle cx="7.5" cy="17.5" r="2.5"></circle><circle cx="16.5" cy="17.5" r="2.5"></circle></svg>
+            </div>
+            <div>
+              <div class="flex items-center space-x-2">
+                <span class="font-bold text-sm text-[#fafafa]">Toyota Roomy 2019</span>
+                <span class="font-mono-tabular text-xs font-medium px-2 py-0.5 bg-[#383838] border border-[#555] rounded text-neutral-300">5179KZ</span>
+                <span class="text-[11px] font-medium px-2 py-0.5 bg-emerald-950 border border-emerald-800 text-emerald-400 rounded-full">Rideshare</span>
+              </div>
+              <p class="text-xs text-[#b4b4b4] mt-0.5">Pre-Facelift · 1KR-FE · Front brake pad set · Front axle</p>
+            </div>
+          </div>
+          <div class="flex items-center space-x-3 text-xs">
+            <a href="#" class="text-[#b4b4b4] hover:text-white">Your requests (2)</a>
+            <span class="text-[#555]">•</span>
+            <a href="#" class="text-white font-medium hover:underline">Ask Roam to add it</a>
+          </div>
+        </div>
+
+        <!-- Dark Mode Match Rows (Sampling key match types) -->
+        <div class="space-y-4">
+
+          <!-- 1. Made for your car (Dark) -->
+          <div class="bg-[#2e2e2e] rounded-xl border border-[#444444] overflow-hidden border-l-4 border-l-match-made">
+            <div class="px-5 py-3 bg-[#333333] border-b border-[#444444] flex items-center justify-between text-xs">
+              <div class="flex items-center space-x-2">
+                <span class="w-2 h-2 rounded-full bg-match-made"></span>
+                <span class="font-bold text-[#fafafa]">Made for your car</span>
+                <span class="text-[#b4b4b4]">• Factory assembly number</span>
+              </div>
+              <span class="text-[#94a3b8] font-mono-tabular">1 match</span>
+            </div>
+
+            <div class="p-4 hover:bg-[#343434] transition-colors">
+              <div class="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div class="space-y-1.5 flex-1">
+                  <div class="flex flex-wrap items-center gap-2.5">
+                    <span class="font-semibold text-sm text-[#fafafa]">Front brake pad set</span>
+                    <button class="inline-flex items-center gap-1.5 font-mono-tabular font-medium text-xs bg-[#3a3a3a] hover:bg-[#444] text-[#fafafa] px-2 py-0.5 rounded border border-[#555]">
+                      <span>Toyota 04465-B1191</span>
+                      <svg class="w-3 h-3 text-neutral-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                    </button>
+                    <span class="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-[#383838] border border-[#555] text-neutral-300 font-semibold">OEM</span>
+                    <span class="text-[10px] px-2 py-0.5 rounded-full bg-[#383838] text-neutral-300">Front</span>
+                  </div>
+
+                  <div class="relative inline-block has-tooltip">
+                    <div class="flex items-center space-x-1.5 text-xs text-[#b4b4b4] hover:text-white cursor-help py-0.5">
+                      <svg class="w-3.5 h-3.5 text-neutral-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+                      <span class="underline decoration-dotted decoration-neutral-500 underline-offset-2">Factory number for your Roomy (04465-B1190, now 04465-B1191)</span>
+                    </div>
+                    <div class="tooltip-bubble absolute left-0 top-full mt-1.5 z-30 bg-black text-white rounded-lg px-3 py-2 text-xs shadow-xl border border-neutral-700 whitespace-nowrap font-mono-tabular">
+                      Your car: 04465-B1190 · This part: 04465-B1191
+                      <div class="absolute -top-1 left-4 w-2 h-2 bg-black border-t border-l border-neutral-700 rotate-45"></div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="flex items-center space-x-4 self-end md:self-center">
+                  <div class="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-emerald-950/80 border border-emerald-700 text-emerald-400 text-xs font-medium">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                    <span>Confirmed</span>
+                  </div>
+                  <button class="text-xs text-neutral-300 hover:text-white font-medium hover:underline flex items-center gap-1"><span>View details</span><svg class="w-3.5 h-3.5 text-neutral-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"></path></svg></button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 2. Fits your engine or shares parts (Dark mode with Roam is checking) -->
+          <div class="bg-[#2e2e2e] rounded-xl border border-[#444444] overflow-hidden border-l-4 border-l-match-shared">
+            <div class="px-5 py-3 bg-[#333333] border-b border-[#444444] flex items-center justify-between text-xs">
+              <div class="flex items-center space-x-2">
+                <span class="w-2 h-2 rounded-full bg-match-shared"></span>
+                <span class="font-bold text-[#fafafa]">Fits your engine or shares parts</span>
+                <span class="text-[#b4b4b4]">• Roam is auditing interchange</span>
+              </div>
+              <span class="text-[#94a3b8] font-mono-tabular">1 checking</span>
+            </div>
+
+            <div class="p-4 hover:bg-[#343434] transition-colors">
+              <div class="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div class="space-y-1.5 flex-1">
+                  <div class="flex flex-wrap items-center gap-2.5">
+                    <span class="font-semibold text-sm text-[#fafafa]">Front brake pad set</span>
+                    <button class="inline-flex items-center gap-1.5 font-mono-tabular font-medium text-xs bg-[#3a3a3a] hover:bg-[#444] text-[#fafafa] px-2 py-0.5 rounded border border-[#555]">
+                      <span>Mazda DFY1-33-28ZA</span>
+                      <svg class="w-3 h-3 text-neutral-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                    </button>
+                    <span class="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-[#383838] border border-[#555] text-neutral-300 font-semibold">Shared</span>
+                    <span class="text-[10px] px-2 py-0.5 rounded-full bg-[#383838] text-neutral-300">Front</span>
+                  </div>
+
+                  <div class="relative inline-block has-tooltip">
+                    <div class="flex items-center space-x-1.5 text-xs text-[#b4b4b4] hover:text-white cursor-help py-0.5">
+                      <svg class="w-3.5 h-3.5 text-neutral-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+                      <span class="underline decoration-dotted decoration-neutral-500 underline-offset-2">Shares front brake pads with a related car family</span>
+                    </div>
+                    <div class="tooltip-bubble absolute left-0 top-full mt-1.5 z-30 bg-black text-white rounded-lg px-3 py-2 text-xs shadow-xl border border-neutral-700 whitespace-nowrap font-mono-tabular">
+                      Shared family mapping: M900A ↔ Mazda Carol / Spiano
+                      <div class="absolute -top-1 left-4 w-2 h-2 bg-black border-t border-l border-neutral-700 rotate-45"></div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="flex items-center space-x-4 self-end md:self-center">
+                  <div class="relative has-tooltip">
+                    <div class="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full border border-amber-500/80 bg-amber-950/40 text-amber-300 text-xs font-medium cursor-help">
+                      <svg class="w-3.5 h-3.5 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                      <span>Roam is checking</span>
+                    </div>
+                    <div class="tooltip-bubble absolute right-0 top-full mt-1.5 z-30 bg-black text-white rounded-lg px-3 py-2 text-xs shadow-xl border border-neutral-700 whitespace-nowrap">
+                      <span>Roam is confirming this match. You can still use the number.</span>
+                      <div class="absolute -top-1 right-6 w-2 h-2 bg-black border-t border-l border-neutral-700 rotate-45"></div>
+                    </div>
+                  </div>
+                  <button class="text-xs text-neutral-300 hover:text-white font-medium hover:underline flex items-center gap-1"><span>View details</span><svg class="w-3.5 h-3.5 text-neutral-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"></path></svg></button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- Operational Ledger Footer Guarantee -->
+    <footer class="pt-6 border-t border-slate-200 text-xs text-slate-500 flex flex-col md:flex-row items-center justify-between gap-3 pb-8">
+      <div class="flex items-center space-x-2">
+        <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+        <span>Roam Fleet Match Intelligence Engine • Kingston Hub #01</span>
+      </div>
+      <div>
+        <span>Non-commercial parts encyclopedia • Zero pricing or procurement bias</span>
+      </div>
+    </footer>
+
+  </div>
+
+</body>
+</html>

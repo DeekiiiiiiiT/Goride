@@ -118,6 +118,14 @@ type TierRow = {
   confirmed_installs: number | null;
   description: string | null;
   evidence_url?: string | null;
+  match_reason_code?: string | null;
+  match_reason_params?: Record<string, unknown> | null;
+  match_status?: string | null;
+  fit_source?: string | null;
+  via?: string | null;
+  part_badge_code?: string | null;
+  part_badge_params?: Record<string, unknown> | null;
+  side?: string | null;
 };
 
 async function decisionsFor(supabase: SupabaseClient, partIds: string[]): Promise<Map<string, string>> {
@@ -164,6 +172,14 @@ async function loadTieredReferenceParts(
     confirmedInstalls: row.confirmed_installs ?? 0,
     fitScope: row.fit_scope,
     evidenceUrl: row.evidence_url ?? null,
+    matchReasonCode: row.match_reason_code ?? null,
+    matchReasonParams: row.match_reason_params ?? null,
+    matchStatus: row.match_status ?? null,
+    fitSource: row.fit_source ?? null,
+    via: row.via ?? null,
+    partBadgeCode: row.part_badge_code ?? null,
+    partBadgeParams: row.part_badge_params ?? null,
+    side: row.side ?? null,
     part: {
       id: row.part_id,
       category_id: row.category_id,

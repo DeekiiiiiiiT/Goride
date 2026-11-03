@@ -1,5 +1,4 @@
-// Stitch: dominion-redesign/S42l
-// Stitch: dominion-redesign/find_parts_pick_the_car
+// Stitch: dominion-redesign/S42l + AM-S4
 import type { ReactNode } from "react";
 import { CATALOG_SECTION_TABS, type CatalogSectionTab } from "../partsCatalogUrl";
 
@@ -38,6 +37,7 @@ export function FindPartsChrome({
 }) {
   const indexed = fitmentCount == null ? "—" : fitmentCount.toLocaleString();
   const database = activeTab === "Full database";
+  const findParts = activeTab === "Find parts";
   const ownerTitle = owner ? undefined : "Only the owner can change parts.";
   const subtitle = database
     ? "Every part, car family and size-based part on file, in one searchable place. Direct catalog overview."
@@ -54,7 +54,9 @@ export function FindPartsChrome({
             <span className="text-outline/60">/</span>
             <button type="button" className={crumb} onClick={onNavigateVehicles}>VEHICLES</button>
             <span className="text-outline/60">/</span>
-            <span className={breadcrumbSuffix.length ? "text-on-surface-variant font-medium" : "text-primary font-semibold tracking-wide"}>PARTS DATABASE</span>
+            <span className={breadcrumbSuffix.length ? "text-on-surface-variant font-medium" : findParts ? "text-primary font-semibold tracking-wide" : "text-primary font-semibold tracking-wide"}>
+              {findParts ? "FIND PARTS" : "PARTS DATABASE"}
+            </span>
             {breadcrumbSuffix.map((label, index) => {
               const last = index === breadcrumbSuffix.length - 1;
               return (

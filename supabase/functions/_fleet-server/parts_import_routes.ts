@@ -7,6 +7,27 @@ import { resolveImportBatchVehicles } from "./parts_import_vehicle_resolve.ts";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+function specialTemplateLabel(kind: string) {
+  if (kind === "vehicle_oe") return "Vehicle OE numbers";
+  if (kind === "part_cross_ref") return "Part cross-references";
+  if (kind === "platform_link") return "Shared components";
+  return kind;
+}
+
+function specialTemplateIcon(kind: string) {
+  if (kind === "vehicle_oe") return "pin";
+  if (kind === "part_cross_ref") return "hub";
+  if (kind === "platform_link") return "share";
+  return "upload_file";
+}
+
+function specialTemplateSort(kind: string) {
+  if (kind === "vehicle_oe") return 1;
+  if (kind === "part_cross_ref") return 2;
+  if (kind === "platform_link") return 3;
+  return 99;
+}
+
 type RouteApp = {
   get: (path: string, ...handlers: unknown[]) => void;
   post: (path: string, ...handlers: unknown[]) => void;
@@ -122,6 +143,26 @@ function templateCsvBody(
 export function registerPartsImportRoutes(route: RouteApp, supabase: SupabaseClient) {
   const guard = [requireAuth(), requirePermission("catalog.import")];
 
+  route.get("/make-server-37f42386/admin/parts-import/special-templates", ...guard, async (c: Context) => {
+    try {
+      const { data, error } = await supabase.from("part_import_special_templates").select("*");
+      if (error) throw error;
+      const templates = (data ?? []).map((row) => ({
+        importKind: row.import_kind,
+        areaId: row.area_id,
+        templateVersion: row.template_version ?? 1,
+        hubName: row.hub_name,
+        name: specialTemplateLabel(String(row.import_kind ?? "")),
+        iconKey: specialTemplateIcon(String(row.import_kind ?? "")),
+        sortOrder: specialTemplateSort(String(row.import_kind ?? "")),
+      }));
+      templates.sort((a, b) => a.sortOrder - b.sortOrder);
+      return c.json({ templates });
+    } catch (e) {
+      return fail(c, e);
+    }
+  });
+
   route.get("/make-server-37f42386/admin/parts-import/areas", ...guard, async (c: Context) => {
     try {
       const { data, error } = await supabase
@@ -151,14 +192,16 @@ export function registerPartsImportRoutes(route: RouteApp, supabase: SupabaseCli
   route.get("/make-server-37f42386/admin/parts-import/areas/:areaId/template-schema", ...guard, async (c: Context) => {
     try {
       const areaId = c.req.param("areaId");
-      const { data: tmpl, error } = await supabase
+      const importKind = c.req.query("import_kind") || "area";
+      let q = supabase
         .from("part_import_template")
         .select("columns")
         .eq("area_id", areaId)
+        .eq("import_kind", importKind)
         .eq("active", true)
         .order("version", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+        .limit(1);
+      const { data: tmpl, error } = await q.maybeSingle();
       if (error) throw error;
       const columns = (tmpl?.columns as Array<{ name: string; required?: boolean; type?: string }> | null) ?? [];
       return c.json({ columns });
@@ -170,10 +213,12 @@ export function registerPartsImportRoutes(route: RouteApp, supabase: SupabaseCli
   route.get("/make-server-37f42386/admin/parts-import/template/:areaId.csv", ...guard, async (c: Context) => {
     try {
       const areaId = c.req.param("areaId");
+      const importKind = c.req.query("import_kind") || "area";
       const { data: tmpl } = await supabase
         .from("part_import_template")
         .select("columns, help_lines, example_rows")
         .eq("area_id", areaId)
+        .eq("import_kind", importKind)
         .eq("active", true)
         .order("version", { ascending: false })
         .limit(1)
@@ -227,24 +272,35 @@ export function registerPartsImportRoutes(route: RouteApp, supabase: SupabaseCli
 
   route.post("/make-server-37f42386/admin/parts-import/batches", ...guard, async (c: Context) => {
     try {
-      const body = await c.req.json().catch(() => ({})) as { area_id?: string; file_name?: string };
-      if (!body.area_id || !UUID_RE.test(body.area_id)) return c.json({ error: "area_id required" }, 400);
+      const body = await c.req.json().catch(() => ({})) as { area_id?: string; file_name?: string; import_kind?: string };
+      const importKind = (body.import_kind ?? "area").trim() || "area";
+      let areaId = body.area_id ?? "";
+      if (importKind !== "area") {
+        const { data: templateAreaId, error: areaErr } = await supabase.rpc("part_import_template_area_id", {
+          p_import_kind: importKind,
+        });
+        if (areaErr) throw areaErr;
+        areaId = String(templateAreaId ?? "");
+      }
+      if (!areaId || !UUID_RE.test(areaId)) return c.json({ error: "area_id required" }, 400);
       const { data: tmpl } = await supabase
         .from("part_import_template")
         .select("version")
-        .eq("area_id", body.area_id)
+        .eq("area_id", areaId)
+        .eq("import_kind", importKind)
         .eq("active", true)
         .order("version", { ascending: false })
         .limit(1)
         .maybeSingle();
-      const { data: code, error: codeErr } = await supabase.rpc("part_import_next_code", { p_area_id: body.area_id });
+      const { data: code, error: codeErr } = await supabase.rpc("part_import_next_code", { p_area_id: areaId });
       if (codeErr) throw codeErr;
       const batchCode = String(code ?? "");
       const { data: batch, error } = await supabase
         .from("part_import_batch")
         .insert({
           code: batchCode,
-          area_id: body.area_id,
+          area_id: areaId,
+          import_kind: importKind,
           template_version: tmpl?.version ?? 2,
           file_name: body.file_name ?? null,
           status: "uploaded",

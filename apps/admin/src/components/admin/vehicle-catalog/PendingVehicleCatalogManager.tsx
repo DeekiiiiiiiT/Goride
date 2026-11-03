@@ -37,6 +37,9 @@ import {
 import { PendingPartsCatalogTab, PendingPartsQueueCount } from "./pending-parts/PendingPartsCatalogTab";
 import { PendingCatalogShell, type PendingCatalogTabId } from "./pending-parts/PendingCatalogShell";
 import { PendingVehiclesCatalogTab } from "./pending-parts/PendingVehiclesCatalogTab";
+import { AutoMatchConflictsTab } from "./pending-parts/AutoMatchConflictsTab";
+import { ResearchSettingsPage } from "./pending-parts/ResearchSettingsPage";
+import { fetchAutoMatchConflicts } from "../../../services/partsAutoMatchApi";
 import { PendingVehicleReviewDrawer } from "./pending-parts/PendingVehicleReviewDrawer";
 import "./pending-parts/pendingParts.css";
 
@@ -45,7 +48,10 @@ type QueueFilter = "all_pending" | "needs_info";
 function readCatalogTabFromUrl(): PendingCatalogTabId {
   if (typeof window === "undefined") return "parts";
   const tab = new URLSearchParams(window.location.search).get("tab");
-  return tab === "vehicles" ? "vehicles" : "parts";
+  if (tab === "vehicles") return "vehicles";
+  if (tab === "conflicts") return "conflicts";
+  if (tab === "settings") return "settings";
+  return "parts";
 }
 
 function writeCatalogTabToUrl(tab: PendingCatalogTabId) {
@@ -87,6 +93,7 @@ export function PendingVehicleCatalogManager() {
   const [actionBusy, setActionBusy] = useState(false);
   const [catalogTab, setCatalogTab] = useState<PendingCatalogTabId>(() => readCatalogTabFromUrl());
   const [partsQueueCount, setPartsQueueCount] = useState(0);
+  const [conflictsCount, setConflictsCount] = useState(0);
   const [partsSyncSec, setPartsSyncSec] = useState(4);
   const [vehiclesSyncedAt, setVehiclesSyncedAt] = useState<number | null>(null);
   const [vehiclesSyncSec, setVehiclesSyncSec] = useState(4);
@@ -127,6 +134,13 @@ export function PendingVehicleCatalogManager() {
       .then((res) => setTotal((prev) => (catalogTab === "parts" ? res.total : prev)))
       .catch(() => {});
   }, [token, catalogTab, partsQueueCount]);
+
+  useEffect(() => {
+    if (!token) return;
+    void fetchAutoMatchConflicts(token, { status: "open" })
+      .then((res) => setConflictsCount(Number(res.totalCount ?? res.totalsByStatus?.open ?? res.rows?.length ?? 0)))
+      .catch(() => setConflictsCount(0));
+  }, [token, catalogTab]);
 
   useEffect(() => {
     if (catalogTab !== "vehicles" || !vehiclesSyncedAt) return;
@@ -254,12 +268,17 @@ export function PendingVehicleCatalogManager() {
         onTabChange={setCatalogTabPersisted}
         vehiclesCount={total}
         partsCount={partsQueueCount}
+        conflictsCount={conflictsCount}
         syncSeconds={activeSyncSec}
         onRefreshVehicles={() => void load()}
         vehiclesRefreshing={loading}
       >
         {catalogTab === "parts" ? (
           <PendingPartsCatalogTab onSyncSeconds={setPartsSyncSec} />
+        ) : catalogTab === "conflicts" ? (
+          <AutoMatchConflictsTab />
+        ) : catalogTab === "settings" ? (
+          <ResearchSettingsPage />
         ) : (
           <PendingVehiclesCatalogTab
             items={items}

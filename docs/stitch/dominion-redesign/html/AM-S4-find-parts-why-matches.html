@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_dashboard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base { html, body { margin: 0; padding: 0; } body { overscroll-behavior: none; } main > :first-child { margin-top: 0 !important; } main > :last-child { margin-bottom: 0 !important; } } ::-webkit-scrollbar { display: none; }</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "surface-container-high": "#e7e7f3", "on-primary-fixed-variant": "#003ea8", "surface-tint": "#0053db", "outline": "#737686", "tertiary-fixed-dim": "#bfc5e2", "primary": "#003ea9", "surface-container-low": "#f3f3ff", "on-secondary-fixed": "#131b2e", "on-primary-container": "#ced8ff", "primary-fixed-dim": "#b4c5ff", "tertiary-fixed": "#dbe1ff", "secondary": "#565e74", "surface-bright": "#faf8ff", "tertiary": "#40465e", "inverse-primary": "#b4c5ff", "on-tertiary-fixed": "#141b30", "on-surface-variant": "#434655", "on-error": "#ffffff", "background": "#faf8ff", "inverse-surface": "#2e3039", "primary-fixed": "#dbe1ff", "outline-variant": "#c3c6d7", "surface-container-lowest": "#ffffff", "on-secondary-fixed-variant": "#3f465c", "on-error-container": "#93000a", "error-container": "#ffdad6", "on-primary": "#ffffff", "primary-container": "#0153dc", "on-tertiary": "#ffffff", "on-tertiary-container": "#d2d8f6", "surface-dim": "#d9d9e5", "secondary-fixed-dim": "#bec6e0", "inverse-on-surface": "#f0f0fc", "on-surface": "#191b24", "surface": "#faf8ff", "secondary-fixed": "#dae2fd", "on-secondary-container": "#5c647a", "surface-variant": "#e1e1ed", "on-background": "#191b24", "on-primary-fixed": "#00174b", "on-tertiary-fixed-variant": "#3f465e", "secondary-container": "#dae2fd", "on-secondary": "#ffffff", "tertiary-container": "#575e77", "error": "#ba1a1a", "surface-container-highest": "#e1e1ed", "surface-container": "#ededf9" }, "borderRadius": { "DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem" }, "spacing": { "gutter": "1rem", "space-sm": "0.5rem", "space-lg": "1rem", "space-xs": "0.25rem", "margin": "1.5rem", "gutter-dense": "0.5rem", "margin-panel": "1rem", "space-md": "0.75rem", "space-xl": "1.5rem" }, "fontFamily": { "label-xs": [ "Inter" ], "headline-lg": [ "Inter" ], "mono-md": [ "JetBrains Mono" ], "headline-xl": [ "Inter" ], "body-sm": [ "Inter" ], "label-md": [ "Inter" ], "headline-md": [ "Inter" ], "body-md": [ "Inter" ], "mono-sm": [ "JetBrains Mono" ], "mono-lg": [ "JetBrains Mono" ] }, "fontSize": { "label-xs": [ "11px", { "lineHeight": "14px", "letterSpacing": "0.04em", "fontWeight": "600" } ], "headline-lg": [ "20px", { "lineHeight": "28px", "letterSpacing": "-0.015em", "fontWeight": "600" } ], "mono-md": [ "12px", { "lineHeight": "16px", "letterSpacing": "0", "fontWeight": "500" } ], "headline-xl": [ "24px", { "lineHeight": "32px", "letterSpacing": "-0.02em", "fontWeight": "600" } ], "body-sm": [ "13px", { "lineHeight": "18px", "letterSpacing": "0", "fontWeight": "400" } ], "label-md": [ "12px", { "lineHeight": "16px", "letterSpacing": "0.01em", "fontWeight": "500" } ], "headline-md": [ "16px", { "lineHeight": "24px", "letterSpacing": "-0.01em", "fontWeight": "600" } ], "body-md": [ "14px", { "lineHeight": "20px", "letterSpacing": "0", "fontWeight": "400" } ], "mono-sm": [ "11px", { "lineHeight": "14px", "letterSpacing": "0.02em", "fontWeight": "400" } ], "mono-lg": [ "14px", { "lineHeight": "20px", "letterSpacing": "-0.01em", "fontWeight": "500" } ] } } } };</script></head><body class="bg-surface text-on-surface antialiased"><aside class="fixed left-0 top-0 h-screen w-64 bg-slate-900 z-50 flex flex-col border-r border-slate-800"><div class="h-14 px-margin flex items-center justify-between border-b border-slate-800 bg-slate-950/60"><div class="flex items-center gap-space-sm"><div class="w-6 h-6 rounded-lg bg-primary-container flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[16px]">directions_car</span></div><span class="font-headline-md text-headline-md tracking-tight text-white font-bold">ROAM DOMINION</span></div><span class="font-mono-sm text-mono-sm px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">v4.8</span></div><div class="flex-1 overflow-y-auto px-space-sm py-space-md"><nav class="space-y-space-md" data-active-classes="bg-primary-container text-white font-semibold"><div class="space-y-0.5"><div class="px-space-sm py-1 font-mono-sm text-mono-sm tracking-wider text-slate-400 uppercase">MASTER DATA</div><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg font-body-sm text-body-sm text-slate-300 hover:bg-slate-800 hover:text-white transition-colors" data-path="overview" href="#"><span class="material-symbols-outlined text-[18px] text-slate-400">grid_view</span><span>Overview</span></a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg font-body-sm text-body-sm text-slate-300 hover:bg-slate-800 hover:text-white transition-colors" data-path="vehicles-active" href="#"><span class="material-symbols-outlined text-[18px] text-slate-400">local_shipping</span><span>Vehicles active</span></a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg font-body-sm text-body-sm text-slate-300 hover:bg-slate-800 hover:text-white transition-colors" data-path="places-and-maps" href="#"><span class="material-symbols-outlined text-[18px] text-slate-400">map</span><span>Places and Maps</span></a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg font-body-sm text-body-sm text-slate-300 hover:bg-slate-800 hover:text-white transition-colors" data-path="fuel" href="#"><span class="material-symbols-outlined text-[18px] text-slate-400">local_gas_station</span><span>Fuel</span></a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg font-body-sm text-body-sm text-slate-300 hover:bg-slate-800 hover:text-white transition-colors" data-path="tolls" href="#"><span class="material-symbols-outlined text-[18px] text-slate-400">toll</span><span>Tolls</span></a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg font-body-sm text-body-sm text-slate-300 hover:bg-slate-800 hover:text-white transition-colors" data-path="tax-and-vendors" href="#"><span class="material-symbols-outlined text-[18px] text-slate-400">receipt_long</span><span>Tax and Vendors</span></a></div><div class="space-y-0.5 pt-1"><div class="px-space-sm py-1 font-mono-sm text-mono-sm tracking-wider text-slate-400 uppercase">ENGINES</div><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg font-body-sm text-body-sm text-slate-300 hover:bg-slate-800 hover:text-white transition-colors" data-path="fuel-brain" href="#"><span class="material-symbols-outlined text-[18px] text-slate-400">neurology</span><span>Fuel Brain</span></a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg font-body-sm text-body-sm text-slate-300 hover:bg-slate-800 hover:text-white transition-colors" data-path="toll-brain" href="#"><span class="material-symbols-outlined text-[18px] text-slate-400">alt_route</span><span>Toll Brain</span></a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg font-body-sm text-body-sm text-slate-300 hover:bg-slate-800 hover:text-white transition-colors" data-path="matching-brain" href="#"><span class="material-symbols-outlined text-[18px] text-slate-400">hub</span><span>Matching Brain</span></a></div><div class="space-y-0.5 pt-1"><div class="px-space-sm py-1 font-mono-sm text-mono-sm tracking-wider text-slate-400 uppercase">DISTRIBUTION</div><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg font-body-sm text-body-sm text-slate-300 hover:bg-slate-800 hover:text-white transition-colors" data-path="apps" href="#"><span class="material-symbols-outlined text-[18px] text-slate-400">apps</span><span>Apps</span></a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg font-body-sm text-body-sm text-slate-300 hover:bg-slate-800 hover:text-white transition-colors" data-path="data-api" href="#"><span class="material-symbols-outlined text-[18px] text-slate-400">api</span><span>Data API</span></a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg font-body-sm text-body-sm text-slate-300 hover:bg-slate-800 hover:text-white transition-colors" data-path="change-requests" href="#"><span class="material-symbols-outlined text-[18px] text-slate-400">published_with_changes</span><span>Change requests</span></a></div><div class="space-y-0.5 pt-1"><div class="px-space-sm py-1 font-mono-sm text-mono-sm tracking-wider text-slate-400 uppercase">PLATFORM</div><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg font-body-sm text-body-sm text-slate-300 hover:bg-slate-800 hover:text-white transition-colors" data-path="staff-and-roles" href="#"><span class="material-symbols-outlined text-[18px] text-slate-400">badge</span><span>Staff and roles</span></a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg font-body-sm text-body-sm text-slate-300 hover:bg-slate-800 hover:text-white transition-colors" data-path="activity-log" href="#"><span class="material-symbols-outlined text-[18px] text-slate-400">history</span><span>Activity log</span></a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg font-body-sm text-body-sm text-slate-300 hover:bg-slate-800 hover:text-white transition-colors" data-path="platform-ops" href="#"><span class="material-symbols-outlined text-[18px] text-slate-400">monitoring</span><span>Platform Ops</span></a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg font-body-sm text-body-sm text-slate-300 hover:bg-slate-800 hover:text-white transition-colors" data-path="global-settings" href="#"><span class="material-symbols-outlined text-[18px] text-slate-400">settings</span><span>Global settings</span></a></div><div class="space-y-0.5 pt-1"><div class="px-space-sm py-1 font-mono-sm text-mono-sm tracking-wider text-slate-400 uppercase">BACK OFFICE</div><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg font-body-sm text-body-sm text-slate-300 hover:bg-slate-800 hover:text-white transition-colors" data-path="gct-registrations" href="#"><span class="material-symbols-outlined text-[18px] text-slate-400">app_registration</span><span>GCT registrations</span></a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg font-body-sm text-body-sm text-slate-300 hover:bg-slate-800 hover:text-white transition-colors" data-path="ledger" href="#"><span class="material-symbols-outlined text-[18px] text-slate-400">account_balance</span><span>Ledger</span></a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg font-body-sm text-body-sm text-slate-300 hover:bg-slate-800 hover:text-white transition-colors" data-path="remittance" href="#"><span class="material-symbols-outlined text-[18px] text-slate-400">payments</span><span>Remittance</span></a></div></nav></div><div class="p-space-md border-t border-slate-800 bg-slate-950/40 flex items-center justify-between"><div class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span><span class="font-mono-sm text-mono-sm text-slate-400">SECURE REPO 01</span></div><span class="font-mono-sm text-mono-sm text-slate-400">TLS 1.3</span></div></aside><div class="pl-64"><header class="fixed top-0 left-64 right-0 h-14 bg-surface-container-lowest z-40 flex items-center justify-between px-margin border-b border-surface-variant"><div class="flex items-center gap-space-md"><div class="relative w-[420px]"><span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[18px] text-on-surface-variant">search</span><input class="w-full h-9 pl-9 pr-14 bg-surface rounded-lg border border-outline-variant font-body-sm text-body-sm text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:border-primary-container transition-colors" placeholder="Search entities, engines, routes…" type="text"/><span class="absolute right-2.5 top-1/2 -translate-y-1/2 font-mono-sm text-mono-sm bg-surface-container-high text-on-surface-variant px-1.5 py-0.5 rounded border border-outline-variant">⌘K</span></div><div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-container-low border border-outline-variant"><span class="w-2 h-2 rounded-full bg-emerald-600"></span><span class="font-mono-sm text-mono-sm text-on-surface-variant font-medium">NODE: OK</span></div></div><div class="flex items-center gap-space-md"><button class="w-8 h-8 rounded-lg border border-outline-variant flex items-center justify-center text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors" title="Toggle dark mode" type="button"><span class="material-symbols-outlined text-[18px]">dark_mode</span></button><div class="h-6 w-px bg-outline-variant"></div><div class="flex items-center gap-space-sm pl-1"><div class="flex items-center gap-2 text-right"><span class="font-mono-sm text-mono-sm text-on-surface font-medium">DT · Deeki T · Owner</span></div><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="w-full pt-14 min-h-screen bg-surface px-margin py-margin"><div class="flex flex-col w-full">
+<!-- Sub-header / System Path & Metadata -->
+<div class="flex flex-wrap items-center justify-between gap-space-md py-space-sm mb-space-sm">
+<div class="flex items-center gap-2">
+<div class="flex items-center gap-1.5 font-mono-sm text-mono-sm text-on-surface-variant">
+<span>DOMINION</span>
+<span class="text-outline">/</span>
+<span>MASTER DATA</span>
+<span class="text-outline">/</span>
+<span>VEHICLES</span>
+<span class="text-outline">/</span>
+<span>PARTS DATABASE</span>
+<span class="text-outline">/</span>
+<span class="text-primary font-semibold">FIND PARTS</span>
+</div>
+<span class="h-3 w-px bg-outline-variant"></span>
+<span class="font-mono-sm text-mono-sm px-1.5 py-0.5 rounded bg-surface-container-high text-on-surface-variant font-medium">INDEX: 35 FITMENTS</span>
+<span class="font-mono-sm text-mono-sm px-1.5 py-0.5 rounded bg-surface-container text-outline">SCHEMA V2.4</span>
+</div>
+<div class="flex items-center gap-space-sm">
+<button class="h-8 px-2.5 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface flex items-center gap-1.5 font-label-md text-label-md transition-colors shadow-sm" type="button">
+<span class="material-symbols-outlined text-[16px]">tune</span>
+<span>Filter Tiers</span>
+</button>
+<button class="h-8 px-2.5 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface flex items-center gap-1.5 font-label-md text-label-md transition-colors shadow-sm" type="button">
+<span class="material-symbols-outlined text-[16px]">file_download</span>
+<span>Export Matrix</span>
+</button>
+<button class="h-8 px-3 rounded-lg bg-primary-container hover:bg-primary text-on-primary flex items-center gap-1.5 font-label-md text-label-md transition-colors shadow-sm" type="button">
+<span class="material-symbols-outlined text-[16px]">sync_alt</span>
+<span>Run Engine Re-match</span>
+</button>
+</div>
+</div>
+<!-- Selection Trail Ribbon -->
+<div class="bg-surface-container-lowest rounded-xl p-space-md mb-space-md shadow-sm">
+<div class="flex flex-wrap items-center justify-between gap-space-md">
+<div class="flex flex-wrap items-center gap-2">
+<span class="font-mono-sm text-mono-sm uppercase text-on-surface-variant tracking-wider font-semibold">ACTIVE QUERY</span>
+<div class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-surface-container-low text-on-surface">
+<span class="material-symbols-outlined text-[16px] text-primary">directions_car</span>
+<span class="font-headline-md text-headline-md">Toyota Roomy 2016–2020</span>
+<span class="font-mono-sm text-mono-sm text-primary font-semibold px-1 bg-surface-container rounded">M900A</span>
+</div>
+<span class="material-symbols-outlined text-[16px] text-outline">chevron_right</span>
+<div class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-surface-container-low text-on-surface">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">category</span>
+<span class="font-label-md text-label-md font-semibold">Brake pads</span>
+</div>
+<span class="material-symbols-outlined text-[16px] text-outline">chevron_right</span>
+<div class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-surface-container-low text-on-surface">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">vertical_align_top</span>
+<span class="font-label-md text-label-md font-semibold">Front</span>
+</div>
+<div class="flex items-center gap-1.5 ml-2 px-2 py-0.5 rounded-full bg-secondary-container text-on-secondary-container font-mono-sm text-mono-sm font-semibold">
+<span class="w-1.5 h-1.5 rounded-full bg-primary"></span>
+<span>18 FITS IDENTIFIED</span>
+</div>
+</div>
+<div class="flex items-center gap-space-md text-on-surface-variant font-mono-sm text-mono-sm">
+<span>PLATFORM: <strong class="text-on-surface font-semibold">DAI-M900 (SHARED 3X)</strong></span>
+<span>AXLE: <strong class="text-on-surface font-semibold">DISC / VENTILATED</strong></span>
+</div>
+</div>
+</div>
+<!-- Operational Info Banner -->
+<div class="bg-surface-container-low rounded-xl px-space-md py-space-sm mb-space-lg flex items-center justify-between shadow-sm">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-lg bg-primary-container text-on-primary flex items-center justify-center">
+<span class="material-symbols-outlined text-[18px]">neurology</span>
+</div>
+<div>
+<div class="flex items-center gap-2">
+<span class="font-headline-md text-headline-md font-semibold text-on-surface">Auto-matching engine active</span>
+<span class="px-2 py-0.5 rounded-full bg-surface-container-highest text-on-surface font-mono-sm text-mono-sm">Pass Rate: 94.4%</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+          Matched using factory OE numbers, platform twins, and industry cross-references. 1 item requires catalog architectural review.
+        </p>
+</div>
+</div>
+<div class="flex items-center gap-2 font-mono-sm text-mono-sm">
+<span class="px-2 py-1 rounded-lg bg-surface-container-highest text-on-surface-variant">Engine Hash: #F81-99A</span>
+<span class="px-2 py-1 rounded-lg bg-surface-container text-error font-medium flex items-center gap-1">
+<span class="w-2 h-2 rounded-full bg-error"></span>
+        1 Pending Inspect
+      </span>
+</div>
+</div>
+<!-- SECTION 1: Made for your car · OEM -->
+<section class="mb-space-lg">
+<div class="flex items-center justify-between pb-space-xs mb-space-xs">
+<div class="flex items-center gap-2">
+<span class="w-2.5 h-2.5 rounded-full bg-primary"></span>
+<h2 class="font-headline-md text-headline-md font-bold text-on-surface uppercase tracking-tight">1. Made for your car · OEM</h2>
+<span class="font-mono-sm text-mono-sm px-2 py-0.5 rounded-full bg-surface-container-high text-on-surface-variant font-semibold">Tier 1 · 2 Matches</span>
+</div>
+<span class="font-mono-sm text-mono-sm text-on-surface-variant">MATCH CRITERIA: FACTORY LINE SPECIFICATION</span>
+</div>
+<div class="space-y-1.5">
+<!-- Row 1: OEM Prime with Hover Tooltip active demonstration -->
+<div class="group relative bg-surface-container-lowest hover:bg-surface-container-low rounded-xl px-space-md py-space-sm transition-all shadow-sm">
+<div class="flex items-center justify-between">
+<!-- Left side: Part info -->
+<div class="flex-1 min-w-0 pr-space-md">
+<!-- Line 1 -->
+<div class="flex items-center flex-wrap gap-2 mb-1">
+<span class="font-mono-lg text-mono-lg font-bold text-on-surface tracking-tight">Toyota 04465-B1190</span>
+<span class="text-outline">·</span>
+<span class="font-headline-md text-headline-md text-on-surface font-semibold">Front Brake Pad Set</span>
+<!-- Tier 1 chip -->
+<span class="h-5 px-2 rounded-full bg-surface-container-high text-primary font-mono-sm text-mono-sm font-semibold flex items-center">
+                OEM Direct
+              </span>
+<!-- Position / Side -->
+<span class="h-5 px-1.5 rounded bg-surface-container text-on-surface-variant font-mono-sm text-mono-sm font-medium">Pos: Front</span>
+<span class="h-5 px-1.5 rounded bg-surface-container text-on-surface-variant font-mono-sm text-mono-sm font-medium">Side: Both</span>
+<span class="font-mono-sm text-mono-sm text-outline">WVA 24551</span>
+</div>
+<!-- Line 2: Why it Matches with Interactive Tooltip Mockup -->
+<div class="relative flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[15px] text-primary">link</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+                Direct fit via factory OE number <span class="font-mono-sm text-on-surface font-semibold">04465-B1190</span>
+<span class="text-outline">(superseded to 04465-B1191 in Q3 2019)</span>
+</p>
+<!-- Persistent Hover/Inspector Pill for prompt accuracy -->
+<div class="ml-2 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-surface-container-high text-on-surface shadow-sm">
+<span class="material-symbols-outlined text-[13px] text-primary">verified</span>
+<span class="font-mono-sm text-mono-sm">Car: <strong class="text-on-surface">04465-B1190</strong></span>
+<span class="text-outline">·</span>
+<span class="font-mono-sm text-mono-sm">Part: <strong class="text-on-surface">04465-B1191</strong></span>
+<span class="text-outline">·</span>
+<span class="font-mono-sm text-mono-sm text-primary font-bold">Change: B1190 → B1191</span>
+</div>
+</div>
+</div>
+<!-- Right side: Status, Source, CTA -->
+<div class="flex items-center gap-space-md shrink-0">
+<div class="flex items-center gap-1.5 px-2 py-1 rounded-full bg-surface-container text-on-surface font-mono-sm text-mono-sm font-semibold">
+<span class="w-2 h-2 rounded-full bg-emerald-600"></span>
+<span>Live</span>
+</div>
+<div class="flex items-center gap-1 text-on-surface-variant font-mono-sm text-mono-sm">
+<span class="material-symbols-outlined text-[15px]">smart_toy</span>
+<span>Auto-matched</span>
+</div>
+<button class="h-8 px-3 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-label-md text-label-md font-semibold flex items-center gap-1 transition-colors" type="button">
+<span>Inspect fit</span>
+<span class="material-symbols-outlined text-[15px]">arrow_forward</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Row 2: OEM Supersession -->
+<div class="group bg-surface-container-lowest hover:bg-surface-container-low rounded-xl px-space-md py-space-sm transition-all shadow-sm">
+<div class="flex items-center justify-between">
+<div class="flex-1 min-w-0 pr-space-md">
+<div class="flex items-center flex-wrap gap-2 mb-1">
+<span class="font-mono-lg text-mono-lg font-bold text-on-surface tracking-tight">Toyota 04465-B1191</span>
+<span class="text-outline">·</span>
+<span class="font-headline-md text-headline-md text-on-surface font-semibold">Brake Pad Kit, Disc Front</span>
+<span class="h-5 px-2 rounded-full bg-surface-container-high text-primary font-mono-sm text-mono-sm font-semibold flex items-center">
+                OEM Supersession
+              </span>
+<span class="h-5 px-1.5 rounded bg-surface-container text-on-surface-variant font-mono-sm text-mono-sm font-medium">Pos: Front</span>
+<span class="h-5 px-1.5 rounded bg-surface-container text-on-surface-variant font-mono-sm text-mono-sm font-medium">Side: Both</span>
+</div>
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[15px] text-primary">swap_horiz</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+                Direct OE successor part line; identical geometric pin spacing (114.5mm) and pad thickness (15.5mm).
+              </p>
+</div>
+</div>
+<div class="flex items-center gap-space-md shrink-0">
+<div class="flex items-center gap-1.5 px-2 py-1 rounded-full bg-surface-container text-on-surface font-mono-sm text-mono-sm font-semibold">
+<span class="w-2 h-2 rounded-full bg-emerald-600"></span>
+<span>Live</span>
+</div>
+<div class="flex items-center gap-1 text-on-surface-variant font-mono-sm text-mono-sm">
+<span class="material-symbols-outlined text-[15px]">check_circle</span>
+<span>Kept by you</span>
+</div>
+<button class="h-8 px-3 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-label-md text-label-md font-semibold flex items-center gap-1 transition-colors" type="button">
+<span>View drawer</span>
+<span class="material-symbols-outlined text-[15px]">arrow_forward</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- SECTION 2: Same car, diff. badge · Sister -->
+<section class="mb-space-lg">
+<div class="flex items-center justify-between pb-space-xs mb-space-xs">
+<div class="flex items-center gap-2">
+<span class="w-2.5 h-2.5 rounded-full bg-cyan-600"></span>
+<h2 class="font-headline-md text-headline-md font-bold text-on-surface uppercase tracking-tight">2. Same car, diff. badge · Sister</h2>
+<span class="font-mono-sm text-mono-sm px-2 py-0.5 rounded-full bg-surface-container-high text-cyan-700 font-semibold">Tier 2 · 3 Matches</span>
+</div>
+<span class="font-mono-sm text-mono-sm text-on-surface-variant">SHARED PLATFORM: DAIHATSU THOR / SUBARU JUSTY</span>
+</div>
+<div class="space-y-1.5">
+<!-- Row 1: Daihatsu Thor -->
+<div class="group bg-surface-container-lowest hover:bg-surface-container-low rounded-xl px-space-md py-space-sm transition-all shadow-sm">
+<div class="flex items-center justify-between">
+<div class="flex-1 min-w-0 pr-space-md">
+<div class="flex items-center flex-wrap gap-2 mb-1">
+<span class="font-mono-lg text-mono-lg font-bold text-on-surface tracking-tight">Daihatsu 04465-B1230</span>
+<span class="text-outline">·</span>
+<span class="font-headline-md text-headline-md text-on-surface font-semibold">Front Brake Pad Set (Thor Custom)</span>
+<span class="h-5 px-2 rounded-full bg-surface-container-high text-cyan-800 font-mono-sm text-mono-sm font-semibold flex items-center">
+                Platform Sister
+              </span>
+<span class="h-5 px-1.5 rounded bg-surface-container text-on-surface-variant font-mono-sm text-mono-sm font-medium">Pos: Front</span>
+<span class="h-5 px-1.5 rounded bg-surface-container text-on-surface-variant font-mono-sm text-mono-sm font-medium">Side: Both</span>
+</div>
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[15px] text-cyan-700">device_hub</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+                Sister of Toyota Roomy on platform <span class="font-mono-sm text-on-surface font-semibold">DAI-M900</span> (how: via sister architecture linkage)
+              </p>
+</div>
+</div>
+<div class="flex items-center gap-space-md shrink-0">
+<div class="flex items-center gap-1.5 px-2 py-1 rounded-full bg-surface-container text-on-surface font-mono-sm text-mono-sm font-semibold">
+<span class="w-2 h-2 rounded-full bg-emerald-600"></span>
+<span>Live</span>
+</div>
+<div class="flex items-center gap-1 text-on-surface-variant font-mono-sm text-mono-sm">
+<span class="material-symbols-outlined text-[15px]">link</span>
+<span>Auto-matched</span>
+</div>
+<button class="h-8 px-3 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-label-md text-label-md font-semibold flex items-center gap-1 transition-colors" type="button">
+<span>Inspect fit</span>
+<span class="material-symbols-outlined text-[15px]">arrow_forward</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Row 2: Subaru Justy -->
+<div class="group bg-surface-container-lowest hover:bg-surface-container-low rounded-xl px-space-md py-space-sm transition-all shadow-sm">
+<div class="flex items-center justify-between">
+<div class="flex-1 min-w-0 pr-space-md">
+<div class="flex items-center flex-wrap gap-2 mb-1">
+<span class="font-mono-lg text-mono-lg font-bold text-on-surface tracking-tight">Subaru 04465-B1270</span>
+<span class="text-outline">·</span>
+<span class="font-headline-md text-headline-md text-on-surface font-semibold">Disc Brake Pads (Justy M900F)</span>
+<span class="h-5 px-2 rounded-full bg-surface-container-high text-cyan-800 font-mono-sm text-mono-sm font-semibold flex items-center">
+                Badge Clone
+              </span>
+<span class="h-5 px-1.5 rounded bg-surface-container text-on-surface-variant font-mono-sm text-mono-sm font-medium">Pos: Front</span>
+<span class="h-5 px-1.5 rounded bg-surface-container text-on-surface-variant font-mono-sm text-mono-sm font-medium">Side: Both</span>
+</div>
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[15px] text-cyan-700">device_hub</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+                Sister clone via joint manufacturing program · OEM Akebono Caliper specification
+              </p>
+</div>
+</div>
+<div class="flex items-center gap-space-md shrink-0">
+<div class="flex items-center gap-1.5 px-2 py-1 rounded-full bg-surface-container text-on-surface font-mono-sm text-mono-sm font-semibold">
+<span class="w-2 h-2 rounded-full bg-emerald-600"></span>
+<span>Live</span>
+</div>
+<div class="flex items-center gap-1 text-on-surface-variant font-mono-sm text-mono-sm">
+<span class="material-symbols-outlined text-[15px]">edit</span>
+<span>Entered by hand</span>
+</div>
+<button class="h-8 px-3 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-label-md text-label-md font-semibold flex items-center gap-1 transition-colors" type="button">
+<span>View drawer</span>
+<span class="material-symbols-outlined text-[15px]">arrow_forward</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- SECTION 3: Fit the engine / Component -->
+<section class="mb-space-lg">
+<div class="flex items-center justify-between pb-space-xs mb-space-xs">
+<div class="flex items-center gap-2">
+<span class="w-2.5 h-2.5 rounded-full bg-amber-600"></span>
+<h2 class="font-headline-md text-headline-md font-bold text-on-surface uppercase tracking-tight">3. Fit the engine / Component</h2>
+<span class="font-mono-sm text-mono-sm px-2 py-0.5 rounded-full bg-surface-container-high text-amber-800 font-semibold">Tier 3 · 2 Matches (1 Needs Checking)</span>
+</div>
+<span class="font-mono-sm text-mono-sm text-on-surface-variant">CROSS-CHASSIS CALIPER BRACKET LINK</span>
+</div>
+<div class="space-y-1.5">
+<!-- Row 1: Attention Required / Needs checking -->
+<div class="group bg-surface-container-lowest hover:bg-surface-container-low rounded-xl px-space-md py-space-sm transition-all shadow-sm">
+<div class="flex items-center justify-between">
+<div class="flex-1 min-w-0 pr-space-md">
+<div class="flex items-center flex-wrap gap-2 mb-1">
+<span class="font-mono-lg text-mono-lg font-bold text-on-surface tracking-tight">Mazda D6Y1-33-28Z</span>
+<span class="text-outline">·</span>
+<span class="font-headline-md text-headline-md text-on-surface font-semibold">Pad Set, Disc Brake</span>
+<span class="h-5 px-2 rounded-full bg-surface-container-high text-amber-800 font-mono-sm text-mono-sm font-semibold flex items-center">
+                Shared Caliper Fit
+              </span>
+<span class="h-5 px-1.5 rounded bg-surface-container text-on-surface-variant font-mono-sm text-mono-sm font-medium">Pos: Front</span>
+<span class="h-5 px-1.5 rounded bg-surface-container text-on-surface-variant font-mono-sm text-mono-sm font-medium">Side: Any</span>
+</div>
+<div class="flex items-center flex-wrap gap-2">
+<span class="material-symbols-outlined text-[15px] text-amber-600">report_problem</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+                Shares front brake pads with Mazda DE (how: via shared part carrier geometry)
+              </p>
+<span class="h-3 w-px bg-outline-variant"></span>
+<a class="font-mono-sm text-mono-sm text-primary hover:underline font-semibold flex items-center gap-0.5" href="#">
+<span>Review in Pending catalog</span>
+<span class="material-symbols-outlined text-[13px]">north_east</span>
+</a>
+</div>
+</div>
+<div class="flex items-center gap-space-md shrink-0">
+<!-- Amber Needs checking status -->
+<div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-container text-amber-800 font-mono-sm text-mono-sm font-semibold">
+<span class="material-symbols-outlined text-[14px] text-amber-600">visibility</span>
+<span>Needs checking</span>
+</div>
+<div class="flex items-center gap-1 text-on-surface-variant font-mono-sm text-mono-sm">
+<span class="material-symbols-outlined text-[15px]">smart_toy</span>
+<span>Auto-matched</span>
+</div>
+<button class="h-8 px-3 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-label-md text-label-md font-semibold flex items-center gap-1 transition-colors" type="button">
+<span>Inspect fit</span>
+<span class="material-symbols-outlined text-[15px]">arrow_forward</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Row 2: Confirmed component share -->
+<div class="group bg-surface-container-lowest hover:bg-surface-container-low rounded-xl px-space-md py-space-sm transition-all shadow-sm">
+<div class="flex items-center justify-between">
+<div class="flex-1 min-w-0 pr-space-md">
+<div class="flex items-center flex-wrap gap-2 mb-1">
+<span class="font-mono-lg text-mono-lg font-bold text-on-surface tracking-tight">Daihatsu 04465-B1010</span>
+<span class="text-outline">·</span>
+<span class="font-headline-md text-headline-md text-on-surface font-semibold">Front Brake Shoe &amp; Liner</span>
+<span class="h-5 px-2 rounded-full bg-surface-container-high text-amber-800 font-mono-sm text-mono-sm font-semibold flex items-center">
+                Carrier Match
+              </span>
+<span class="h-5 px-1.5 rounded bg-surface-container text-on-surface-variant font-mono-sm text-mono-sm font-medium">Pos: Front</span>
+<span class="h-5 px-1.5 rounded bg-surface-container text-on-surface-variant font-mono-sm text-mono-sm font-medium">Side: Both</span>
+</div>
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[15px] text-on-surface-variant">check</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+                Component carrier identical to Passo/Boon 1KR-FE front knuckle assembly.
+              </p>
+</div>
+</div>
+<div class="flex items-center gap-space-md shrink-0">
+<div class="flex items-center gap-1.5 px-2 py-1 rounded-full bg-surface-container text-on-surface font-mono-sm text-mono-sm font-semibold">
+<span class="w-2 h-2 rounded-full bg-emerald-600"></span>
+<span>Live</span>
+</div>
+<div class="flex items-center gap-1 text-on-surface-variant font-mono-sm text-mono-sm">
+<span class="material-symbols-outlined text-[15px]">check_circle</span>
+<span>Kept by you</span>
+</div>
+<button class="h-8 px-3 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-label-md text-label-md font-semibold flex items-center gap-1 transition-colors" type="button">
+<span>View drawer</span>
+<span class="material-symbols-outlined text-[15px]">arrow_forward</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- SECTION 4: Other brands that replace it · Aftermarket -->
+<section class="mb-space-lg">
+<div class="flex items-center justify-between pb-space-xs mb-space-xs">
+<div class="flex items-center gap-2">
+<span class="w-2.5 h-2.5 rounded-full bg-purple-600"></span>
+<h2 class="font-headline-md text-headline-md font-bold text-on-surface uppercase tracking-tight">4. Other brands that replace it · Aftermarket</h2>
+<span class="font-mono-sm text-mono-sm px-2 py-0.5 rounded-full bg-surface-container-high text-purple-700 font-semibold">Tier 4 · 4 Matches</span>
+</div>
+<span class="font-mono-sm text-mono-sm text-on-surface-variant">OEM REPLACEMENT TIERS &amp; CROSS-CATALOG</span>
+</div>
+<div class="space-y-1.5">
+<!-- Row 1: MK Kashiyama with WVA badge -->
+<div class="group bg-surface-container-lowest hover:bg-surface-container-low rounded-xl px-space-md py-space-sm transition-all shadow-sm">
+<div class="flex items-center justify-between">
+<div class="flex-1 min-w-0 pr-space-md">
+<div class="flex items-center flex-wrap gap-2 mb-1">
+<span class="font-mono-lg text-mono-lg font-bold text-on-surface tracking-tight">MK Kashiyama D0051M-01-J</span>
+<span class="text-outline">·</span>
+<span class="font-headline-md text-headline-md text-on-surface font-semibold">Premium Ceramic Disc Pad Set</span>
+<span class="h-5 px-2 rounded-full bg-surface-container-high text-purple-700 font-mono-sm text-mono-sm font-semibold flex items-center">
+                Tier-1 Aftermarket
+              </span>
+<span class="h-5 px-1.5 rounded bg-surface-container text-on-surface-variant font-mono-sm text-mono-sm font-medium">Pos: Front</span>
+<span class="h-5 px-1.5 rounded bg-surface-container text-on-surface-variant font-mono-sm text-mono-sm font-medium">Side: Both</span>
+</div>
+<div class="flex items-center flex-wrap gap-2">
+<span class="material-symbols-outlined text-[15px] text-purple-600">alt_route</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+                Aftermarket · fits via sister Daihatsu Thor · replaces <span class="font-mono-sm text-on-surface font-semibold">04465-B1191</span> (how: via sister + cross-ref)
+              </p>
+<!-- Purple badge for WVA reference -->
+<span class="font-mono-sm text-mono-sm px-2 py-0.5 rounded-md bg-surface-container-high text-purple-700 font-medium">
+                Same WVA 24551 as MK Kashiyama D0051M-01-J
+              </span>
+</div>
+</div>
+<div class="flex items-center gap-space-md shrink-0">
+<div class="flex items-center gap-1.5 px-2 py-1 rounded-full bg-surface-container text-on-surface font-mono-sm text-mono-sm font-semibold">
+<span class="w-2 h-2 rounded-full bg-emerald-600"></span>
+<span>Live</span>
+</div>
+<div class="flex items-center gap-1 text-on-surface-variant font-mono-sm text-mono-sm">
+<span class="material-symbols-outlined text-[15px]">smart_toy</span>
+<span>Auto-matched</span>
+</div>
+<button class="h-8 px-3 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-label-md text-label-md font-semibold flex items-center gap-1 transition-colors" type="button">
+<span>Inspect fit</span>
+<span class="material-symbols-outlined text-[15px]">arrow_forward</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Row 2: Advics Japan -->
+<div class="group bg-surface-container-lowest hover:bg-surface-container-low rounded-xl px-space-md py-space-sm transition-all shadow-sm">
+<div class="flex items-center justify-between">
+<div class="flex-1 min-w-0 pr-space-md">
+<div class="flex items-center flex-wrap gap-2 mb-1">
+<span class="font-mono-lg text-mono-lg font-bold text-on-surface tracking-tight">Advics SN953P</span>
+<span class="text-outline">·</span>
+<span class="font-headline-md text-headline-md text-on-surface font-semibold">OEM Spec Front Brake Pads</span>
+<span class="h-5 px-2 rounded-full bg-surface-container-high text-purple-700 font-mono-sm text-mono-sm font-semibold flex items-center">
+                Direct Supplier OE
+              </span>
+<span class="h-5 px-1.5 rounded bg-surface-container text-on-surface-variant font-mono-sm text-mono-sm font-medium">Pos: Front</span>
+<span class="h-5 px-1.5 rounded bg-surface-container text-on-surface-variant font-mono-sm text-mono-sm font-medium">Side: Both</span>
+</div>
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[15px] text-purple-600">alt_route</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+                Direct cross reference to Toyota 04465-B1190 / B1191 line · High heat dissipation compound.
+              </p>
+</div>
+</div>
+<div class="flex items-center gap-space-md shrink-0">
+<div class="flex items-center gap-1.5 px-2 py-1 rounded-full bg-surface-container text-on-surface font-mono-sm text-mono-sm font-semibold">
+<span class="w-2 h-2 rounded-full bg-emerald-600"></span>
+<span>Live</span>
+</div>
+<div class="flex items-center gap-1 text-on-surface-variant font-mono-sm text-mono-sm">
+<span class="material-symbols-outlined text-[15px]">check_circle</span>
+<span>Kept by you</span>
+</div>
+<button class="h-8 px-3 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-label-md text-label-md font-semibold flex items-center gap-1 transition-colors" type="button">
+<span>View drawer</span>
+<span class="material-symbols-outlined text-[15px]">arrow_forward</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- SECTION 5: Fits by size · Universal -->
+<section class="mb-space-lg">
+<div class="flex items-center justify-between pb-space-xs mb-space-xs">
+<div class="flex items-center gap-2">
+<span class="w-2.5 h-2.5 rounded-full bg-emerald-600"></span>
+<h2 class="font-headline-md text-headline-md font-bold text-on-surface uppercase tracking-tight">5. Fits by size · Universal</h2>
+<span class="font-mono-sm text-mono-sm px-2 py-0.5 rounded-full bg-surface-container-high text-emerald-800 font-semibold">Tier 5 · 2 Matches</span>
+</div>
+<span class="font-mono-sm text-mono-sm text-on-surface-variant">MATCH CRITERIA: DIMENSIONS (L: 114.5mm · H: 48.0mm · THK: 15.5mm)</span>
+</div>
+<div class="space-y-1.5">
+<!-- Row 1: Universal Fit Hardware -->
+<div class="group bg-surface-container-lowest hover:bg-surface-container-low rounded-xl px-space-md py-space-sm transition-all shadow-sm">
+<div class="flex items-center justify-between">
+<div class="flex-1 min-w-0 pr-space-md">
+<div class="flex items-center flex-wrap gap-2 mb-1">
+<span class="font-mono-lg text-mono-lg font-bold text-on-surface tracking-tight">Seiken 500-0112</span>
+<span class="text-outline">·</span>
+<span class="font-headline-md text-headline-md text-on-surface font-semibold">Universal Caliper Slide Pin &amp; Shim Kit</span>
+<span class="h-5 px-2 rounded-full bg-surface-container-high text-emerald-800 font-mono-sm text-mono-sm font-semibold flex items-center">
+                Universal Spec
+              </span>
+<span class="h-5 px-1.5 rounded bg-surface-container text-on-surface-variant font-mono-sm text-mono-sm font-medium">Pos: Front</span>
+<span class="h-5 px-1.5 rounded bg-surface-container text-on-surface-variant font-mono-sm text-mono-sm font-medium">Side: Both</span>
+</div>
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[15px] text-emerald-600">square_foot</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+                Universal brake hardware specification · fits standard caliper bracket (pin pitch 78.0mm ±0.2)
+              </p>
+</div>
+</div>
+<div class="flex items-center gap-space-md shrink-0">
+<div class="flex items-center gap-1.5 px-2 py-1 rounded-full bg-surface-container text-on-surface font-mono-sm text-mono-sm font-semibold">
+<span class="w-2 h-2 rounded-full bg-emerald-600"></span>
+<span>Live</span>
+</div>
+<div class="flex items-center gap-1 text-on-surface-variant font-mono-sm text-mono-sm">
+<span class="material-symbols-outlined text-[15px]">smart_toy</span>
+<span>Auto-matched</span>
+</div>
+<button class="h-8 px-3 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-label-md text-label-md font-semibold flex items-center gap-1 transition-colors" type="button">
+<span>Inspect fit</span>
+<span class="material-symbols-outlined text-[15px]">arrow_forward</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Row 2: Friction Master Universal Pad -->
+<div class="group bg-surface-container-lowest hover:bg-surface-container-low rounded-xl px-space-md py-space-sm transition-all shadow-sm">
+<div class="flex items-center justify-between">
+<div class="flex-1 min-w-0 pr-space-md">
+<div class="flex items-center flex-wrap gap-2 mb-1">
+<span class="font-mono-lg text-mono-lg font-bold text-on-surface tracking-tight">Akebono UNV-24551</span>
+<span class="text-outline">·</span>
+<span class="font-headline-md text-headline-md text-on-surface font-semibold">Standard Dimension Replacement Set</span>
+<span class="h-5 px-2 rounded-full bg-surface-container-high text-emerald-800 font-mono-sm text-mono-sm font-semibold flex items-center">
+                Dimension Match
+              </span>
+<span class="h-5 px-1.5 rounded bg-surface-container text-on-surface-variant font-mono-sm text-mono-sm font-medium">Pos: Front</span>
+<span class="h-5 px-1.5 rounded bg-surface-container text-on-surface-variant font-mono-sm text-mono-sm font-medium">Side: Both</span>
+</div>
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[15px] text-emerald-600">square_foot</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+                Direct geometric dimensional match: W: 114.5mm, H: 48.0mm, Thickness: 15.5mm.
+              </p>
+</div>
+</div>
+<div class="flex items-center gap-space-md shrink-0">
+<div class="flex items-center gap-1.5 px-2 py-1 rounded-full bg-surface-container text-on-surface font-mono-sm text-mono-sm font-semibold">
+<span class="w-2 h-2 rounded-full bg-emerald-600"></span>
+<span>Live</span>
+</div>
+<div class="flex items-center gap-1 text-on-surface-variant font-mono-sm text-mono-sm">
+<span class="material-symbols-outlined text-[15px]">edit</span>
+<span>Entered by hand</span>
+</div>
+<button class="h-8 px-3 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-label-md text-label-md font-semibold flex items-center gap-1 transition-colors" type="button">
+<span>View drawer</span>
+<span class="material-symbols-outlined text-[15px]">arrow_forward</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Technical Footer Control Strip -->
+<div class="bg-surface-container-low rounded-xl p-space-md flex flex-wrap items-center justify-between gap-space-md shadow-sm">
+<div class="flex items-center gap-space-md font-mono-sm text-mono-sm text-on-surface-variant">
+<span>DATABASE NODES: <strong class="text-on-surface">5 CLUSTERS SYNCED</strong></span>
+<span class="text-outline">·</span>
+<span>AUTOMATCH TOLERANCE: <strong class="text-on-surface">0.05 MM GEOM</strong></span>
+<span class="text-outline">·</span>
+<span>ENGINE AUDIT: <strong class="text-on-surface">COMPLIANT (ISO/PAS 28000)</strong></span>
+</div>
+<div class="flex items-center gap-2">
+<button class="h-8 px-3 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-label-md text-label-md font-semibold transition-colors" type="button">
+        Batch Validation Mode
+      </button>
+<button class="h-8 px-3 rounded-lg bg-primary text-on-primary font-label-md text-label-md font-semibold hover:bg-primary-container transition-colors" type="button">
+        Commit Active Fitments
+      </button>
+</div>
+</div>
+</div></main></div></body></html>

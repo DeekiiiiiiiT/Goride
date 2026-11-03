@@ -3,6 +3,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { fetchPartDemand } from "./findPartsApi";
 
+import { formatAxleTag } from "@roam/types/partPositionNorm";
+
 function posCode(position: string, side: string) {
   const axle = position === "rear" ? "REAR" : position === "front" ? "FRONT" : "ALL";
   const sideCode = side === "left" ? "LH" : side === "right" ? "RH" : "LH_RH";
@@ -61,7 +63,7 @@ export function MissingPart({
     enabled: Boolean(variantId && componentId),
   });
   const ownerTitle = owner ? undefined : "Only the owner can change parts.";
-  const axleChip = position === "front" ? "Front axle" : position === "rear" ? "Rear axle" : sideLabel || "Both axles";
+  const axleChip = formatAxleTag(position);
   const placement = placementLabel(position, sideLabel);
   const classId = componentId ? componentId.slice(0, 8).toUpperCase() : "PENDING";
 

@@ -10,6 +10,7 @@ import { filterByOrg, getOrgId } from "./org_scope.ts";
 import { resolveCatalogIdForKvVehicle } from "./vehicle_catalog_resolve.ts";
 import { registerPartsEnterpriseRoutes } from "./parts_enterprise_routes.ts";
 import { registerPartsImportRoutes } from "./parts_import_routes.ts";
+import { registerPartsAutoMatchRoutes } from "./parts_auto_match_routes.ts";
 import { registerFleetFindPartsRoutes } from "./fleet_find_parts_routes.ts";
 import { registerCatalogRoutes } from "./catalog_routes.ts";
 import { registerFleetAdminPartsRoutes } from "./fleet_admin_parts_routes.ts";
@@ -736,4 +737,5 @@ export function registerPartSourcingRoutes(
   registerFleetAdminPartsRoutes(route, supabase);
   registerPartsEnterpriseRoutes(route, supabase);
   registerPartsImportRoutes(route, supabase);
+  registerPartsAutoMatchRoutes(route, supabase);
 }

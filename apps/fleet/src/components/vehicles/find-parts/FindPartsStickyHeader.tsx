@@ -179,6 +179,11 @@ export function FindPartsStickyHeader(props: FindPartsStickyHeaderProps) {
       <div className="sticky -top-4 pt-4 z-20 w-full bg-surface-container-lowest shadow-sm">
         <div className="w-full py-space-sm flex flex-wrap items-center justify-between gap-space-md">
           <div className="flex items-center gap-space-md">
+            <nav className="hidden md:flex items-center gap-1 text-caption text-on-surface-variant mr-2">
+              <span>Maintenance</span><span>/</span>
+              <span className="font-medium text-on-surface">Parts Match Intelligence</span>
+            </nav>
+            <span className="material-symbols-outlined text-primary text-[20px]" aria-hidden>build</span>
             <button type="button" className="group inline-flex items-center gap-space-xs text-on-surface hover:text-primary transition-colors py-1 px-2 -ml-2 rounded-lg hover:bg-surface-container" onClick={onBack}>
               <span className="material-symbols-outlined text-[18px]">arrow_back</span>
               <span className="font-body-sm text-body-sm font-semibold">Back</span>

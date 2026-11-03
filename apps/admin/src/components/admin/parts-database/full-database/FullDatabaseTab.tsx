@@ -267,6 +267,18 @@ export function FullDatabaseTab({
           />
         </aside>
         <div className="flex-1 flex flex-col gap-space-md min-w-0">
+          <div className="flex flex-wrap items-center justify-between gap-2 font-mono-sm text-mono-sm">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full bg-surface-container-high px-2 py-0.5 font-semibold text-on-surface">
+                INDEX: {(search.data?.total ?? 0).toLocaleString()} FITMENTS
+              </span>
+              <span className="rounded-full bg-secondary-container px-2 py-0.5 font-semibold text-on-secondary-fixed">SCHEMA V2.4</span>
+            </div>
+            <span className="text-on-surface-variant flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
+              REPO CACHE HOT ({latencyMs ?? "—"}ms)
+            </span>
+          </div>
           <FullDatabaseSummaryBar title={title} total={search.data?.total ?? 0} chips={chips} onRemove={removeChip} indexLabel={indexLabel} />
           {search.isLoading ? <PartsLoading /> : null}
           {search.isError ? <PartsError message="Could not load the catalogue. Nothing was changed." onRetry={() => { void search.refetch(); }} /> : null}

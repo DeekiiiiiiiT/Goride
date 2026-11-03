@@ -1,6 +1,8 @@
 import { formatKm, formatPercent, formatPriceJmd, orDash, orNoneYet, wearLifeBarPercent } from "./findPartsFormat";
 import type { PartsMyVehicleRow, PartsVehicleOptions } from "./findPartsTypes";
 import { PART_MATCH_TIERS } from "../../../../../../packages/types/src/partsResolution.ts";
+import { formatMatchWhyLine, fleetTypeTag, matchWhyTooltip, TIER_ACCENT, fleetSectionCountLabel } from "@roam/types/partMatchReason";
+import { formatPartPositionSideLabel, partSideCovers } from "@roam/types/partPositionNorm";
 import { formatPartsVersionTag, readPartsVehicleSpecs } from "@roam/types/partsVehicleContext";
 
 function catalogPhotoUrl(raw?: string | null): string {
@@ -211,12 +213,11 @@ export type Fp3ServiceDueRow = {
   name: string;
 };
 
-function fp3ServiceDueDisplayName(name: string, position?: string | null): string {
+function fp3ServiceDueDisplayName(name: string, position?: string | null, side?: string | null): string {
   const base = orNoneYet(name);
-  if (!position) return base;
-  const pos = String(position).toLowerCase();
-  const label = pos === "front" ? "Front" : pos === "rear" ? "Rear" : position;
-  return `${base} · ${label}`;
+  if (!position && !side) return base;
+  const label = formatPartPositionSideLabel(position, side);
+  return label === "Any position" ? base : `${base} · ${label}`;
 }
 
 function dedupeServiceDueRows(rows: Fp3ServiceDueRow[]): Fp3ServiceDueRow[] {
@@ -825,6 +826,13 @@ export type Fp5ResultRow = {
   scheduleLine: string;
   emptyGapNote: string;
   positionLabel?: string | null;
+  whyLine: string;
+  whyTooltipCar: string;
+  whyTooltipPart: string;
+  typeTag: string;
+  statusChip: "confirmed" | "checking";
+  accentColor: string;
+  matchStatus?: string | null;
 };
 
 export type Fp5TierSection = {
@@ -837,6 +845,9 @@ export type Fp5TierSection = {
   isEmpty?: boolean;
   emptyLine?: string;
   askLabel?: string;
+  accentColor?: string;
+  countLabel?: string;
+  allChecking?: boolean;
 };
 
 export type Fp5ViewModel = {
@@ -937,11 +948,13 @@ function formatCheckedCataloguesLabel(item?: Record<string, unknown>): string {
 }
 
 function formatResultPositionLabel(item: Record<string, unknown>): string | null {
-  const raw = String(item.position ?? (item.part as { position?: string } | undefined)?.position ?? "").trim().toLowerCase();
-  if (raw === "front") return "Front";
-  if (raw === "rear") return "Rear";
-  if (raw === "both") return "Front & rear";
-  return null;
+  const rawPos = item.position ?? (item.part as { position?: string } | undefined)?.position;
+  const rawSide = (item as { side?: string }).side ?? (item.part as { side?: string } | undefined)?.side;
+  const label = formatPartPositionSideLabel(
+    rawPos != null ? String(rawPos) : null,
+    rawSide != null ? String(rawSide) : null,
+  );
+  return label === "Any position" ? null : label;
 }
 
 function rowFromItem(
@@ -966,6 +979,14 @@ function rowFromItem(
   const specLines = specLinesFromPartRecord(item);
   const interchangeRaw = (item.interchange ?? item.sisterNames ?? "") as string;
   const schedule = String(item.maintenance_schedule || item.service_schedule || "").trim();
+  const reasonCode = String(item.matchReasonCode ?? item.match_reason_code ?? "");
+  const reasonParams = (item.matchReasonParams ?? item.match_reason_params) as Record<string, unknown> | null;
+  const matchStatus = String(item.matchStatus ?? item.match_status ?? "");
+  const via = String(item.via ?? "");
+  const partKind = String((part as { part_kind?: string }).part_kind ?? "");
+  const why = formatMatchWhyLine(reasonCode, reasonParams);
+  const tip = matchWhyTooltip(reasonCode, reasonParams, trimScopeLabel);
+  const checking = matchStatus === "needs_checking";
   return {
     id,
     tier,
@@ -986,6 +1007,13 @@ function rowFromItem(
     scheduleLine: schedule || "None yet",
     emptyGapNote: "",
     positionLabel: formatResultPositionLabel(item),
+    whyLine: why,
+    whyTooltipCar: tip.carLine,
+    whyTooltipPart: tip.partLine,
+    typeTag: fleetTypeTag(via, partKind),
+    statusChip: checking ? "checking" : "confirmed",
+    accentColor: TIER_ACCENT[tier] ?? TIER_ACCENT[1],
+    matchStatus: matchStatus || null,
   };
 }
 
@@ -1088,6 +1116,7 @@ export function buildFp5ViewModel(input: {
   }
   for (const tierRow of PART_MATCH_TIERS) {
     const sectionRows = tierMap.get(tierRow.tier) || [];
+    const allChecking = sectionRows.length > 0 && sectionRows.every((r) => r.statusChip === "checking");
     tierSections.push({
       tier: tierRow.tier,
       heading: tierRow.plainLabel,
@@ -1098,6 +1127,9 @@ export function buildFp5ViewModel(input: {
       isEmpty: sectionRows.length === 0,
       emptyLine: sectionRows.length === 0 ? "None on file for your car yet." : "",
       askLabel: sectionRows.length === 0 ? "Ask Roam to find another option" : "",
+      accentColor: TIER_ACCENT[tierRow.tier],
+      countLabel: fleetSectionCountLabel(tierRow.tier, sectionRows.map((r) => ({ matchStatus: r.matchStatus }))),
+      allChecking,
     });
   }
   const specs = readPartsVehicleSpecs(ctx);
@@ -1145,6 +1177,12 @@ export function buildFp5ViewModel(input: {
       interchangeLine: "—",
       scheduleLine: "—",
       emptyGapNote: "",
+      whyLine: "—",
+      whyTooltipCar: "—",
+      whyTooltipPart: "—",
+      typeTag: "OEM",
+      statusChip: "confirmed",
+      accentColor: TIER_ACCENT[1],
     }],
     interchange: orNoneYet(String(interchangeRaw || (input.result as { interchange?: string })?.interchange || "")),
     shelfSummary: "—",
