@@ -15,12 +15,12 @@ const GlobalPlatformSettingsPage = lazyNamed(() => import('@roam/admin-core/sett
 const ApiCommandCenter = lazyNamed(() => import('./api-center/ApiCommandCenter'), 'ApiCommandCenter');
 const VehicleCatalogManager = lazyNamed(() => import('./vehicle-catalog/VehicleCatalogManager'), 'VehicleCatalogManager');
 const PendingVehicleCatalogManager = lazyNamed(() => import('./vehicle-catalog/PendingVehicleCatalogManager'), 'PendingVehicleCatalogManager');
-const ResearchSettingsPage = lazyNamed(() => import('./vehicle-catalog/pending-parts/ResearchSettingsPage'), 'ResearchSettingsPage');
 const MaintenanceTemplatesManager = lazyNamed(() => import('./maintenance-templates/MaintenanceTemplatesManager'), 'MaintenanceTemplatesManager');
 const PartsSourcingManager = lazyNamed(() => import('./parts-sourcing/PartsSourcingManager'), 'PartsSourcingManager');
 const PartsDatabasePage = lazyNamed(() => import('./parts-database/PartsDatabasePage'), 'PartsDatabasePage');
 const VehiclesHomePage = lazyNamed(() => import('./parts-database/VehiclesHomePage'), 'VehiclesHomePage');
 const CatalogQualityPage = lazyNamed(() => import('./parts-sourcing/CatalogQualityPage'), 'CatalogQualityPage');
+const PlatformsPage = lazyNamed(() => import('./platforms/PlatformsPage'), 'PlatformsPage');
 const WorldMapsPage = lazyNamed(() => import('./world-maps/WorldMapsPage'), 'WorldMapsPage');
 const AccountingCatalogManager = lazyNamed(() => import('./accounting/AccountingCatalogManager'), 'AccountingCatalogManager');
 const PendingVendorRequestsManager = lazyNamed(() => import('./accounting/PendingVendorRequestsManager'), 'PendingVendorRequestsManager');
@@ -203,6 +203,7 @@ export function AdminPortal() {
       <Suspense fallback={<DominionLoading />}>
       {currentPage === 'dashboard' && <AdminDashboard onNavigate={setCurrentPage} />}
       {currentPage === 'vehicles-home' && <VehiclesHomePage onNavigate={setCurrentPage} />}
+      {currentPage === 'platforms' && <PlatformsPage onNavigate={setCurrentPage} />}
       {currentPage === 'places-home' && (
         <PlacesHomePage
           onNavigate={setCurrentPage}
@@ -279,7 +280,6 @@ export function AdminPortal() {
         </div>
       )}
       {currentPage === 'pending-motor-vehicles' && <PendingVehicleCatalogManager />}
-      {currentPage === 'pending-catalog-research' && <ResearchSettingsPage />}
       {currentPage === 'maintenance-templates' && (
         <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px] dark:bg-card">
           <MaintenanceTemplatesManager />

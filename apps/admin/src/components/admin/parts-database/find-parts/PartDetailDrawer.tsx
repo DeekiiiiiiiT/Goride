@@ -7,6 +7,7 @@ import { useAuth } from "../../../auth/AuthContext";
 import { supabase } from "../../../../utils/supabase/client";
 import { partsEnterpriseApi } from "../../../../services/partSourcingService";
 import type { FindPartsCandidate, FoundPartRow } from "../partsDatabaseApi";
+import { excludeListing } from "../partsDatabaseApi";
 import { savePartAlias } from "./findPartsApi";
 
 function evidenceLabel(url: string): string {
@@ -33,11 +34,13 @@ export function PartDetailDrawer({
   onEdit,
   onConfirmed,
   crossReferences = [],
+  vehicleVariantId,
 }: {
   part: FoundPartRow;
   candidates: FindPartsCandidate[];
   owner: boolean;
   componentId: string;
+  vehicleVariantId?: string;
   onClose: () => void;
   onEdit: () => void;
   onConfirmed?: () => void;
@@ -47,6 +50,7 @@ export function PartDetailDrawer({
   const [alias, setAlias] = useState("");
   const [status, setStatus] = useState(part.status);
   const [confirming, setConfirming] = useState(false);
+  const [excluding, setExcluding] = useState(false);
   const ownerTitle = owner ? undefined : "Only the owner can change parts.";
   const verified = status === "verified";
   const tierMeta = PART_MATCH_TIERS.find((row) => row.tier === part.tier);
@@ -96,6 +100,29 @@ export function PartDetailDrawer({
       toast.error(err instanceof Error ? err.message : "Could not confirm");
     } finally {
       setConfirming(false);
+    }
+  }
+
+  async function excludeFromCar() {
+    if (!owner) return;
+    const groupId = String((part as { groupId?: string }).groupId || "");
+    const variantId = vehicleVariantId || part.fitsVariantIds?.[0] || "";
+    if (!groupId || !variantId) {
+      toast.message("This part is not listed on the selected car yet.");
+      return;
+    }
+    const reason = window.prompt("Reason for excluding this part from the car:")?.trim();
+    if (!reason) return;
+    const evidenceUrl = window.prompt("Source link for the exclusion:")?.trim();
+    if (!evidenceUrl) return;
+    setExcluding(true);
+    try {
+      await excludeListing({ groupId, variantId, reason, evidenceUrl });
+      toast.success("Excluded from this car");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not exclude");
+    } finally {
+      setExcluding(false);
     }
   }
 
@@ -317,9 +344,9 @@ export function PartDetailDrawer({
             <button
               type="button"
               className="h-9 px-space-md rounded-xl text-error bg-error-container/30 hover:bg-error-container text-body-sm font-semibold transition-colors flex items-center gap-1.5 disabled:opacity-40"
-              disabled={!owner}
               title={ownerTitle ?? "Exclude from this car"}
-              onClick={() => toast.message("Open Full database to remove a listing from this car.")}
+              disabled={!owner || excluding}
+              onClick={() => { void excludeFromCar(); }}
             >
               <span className="material-symbols-outlined text-[16px]">block</span>
               <span>Exclude from this car</span>

@@ -4,7 +4,12 @@ import { toast } from "sonner";
 import { useAuth } from "../../../auth/AuthContext";
 import { partsEnterpriseApi } from "../../../../services/partSourcingService";
 import { supabase } from "../../../../utils/supabase/client";
-import { fetchPartReferenceTable } from "../../../../services/partsAutoMatchApi";
+import {
+  createPartReferenceRow,
+  deletePartReferenceRow,
+  fetchPartReferenceTable,
+} from "../../../../services/partsAutoMatchApi";
+import { goDominionPage, writeCatalogSearch } from "../partsCatalogUrl";
 import { excludeListing, fetchMasterPart } from "../partsDatabaseApi";
 import { TIER_META } from "./matchMeta";
 import { fitLinkBadge, type FitVia } from "@roam/types/partMatchReason";
@@ -59,6 +64,7 @@ export function FullDatabaseDrawer({
     enabled: Boolean(authToken && partId),
   });
   const [excluding, setExcluding] = useState(false);
+  const [excludeVariantId, setExcludeVariantId] = useState("");
   const [reason, setReason] = useState("");
   const [source, setSource] = useState("");
   const [busy, setBusy] = useState(false);
@@ -94,7 +100,8 @@ export function FullDatabaseDrawer({
 
   async function excludeFirst() {
     if (!owner || !part?.groupId) return;
-    const target = part.fits.find((fit) => fit.linkType === "DIRECT");
+    const target = part.fits.find((fit) => fit.variantId === excludeVariantId)
+      || part.fits.find((fit) => fit.linkType === "DIRECT");
     if (!target) {
       toast.message("This part is not listed on a car yet.");
       return;
@@ -165,6 +172,11 @@ export function FullDatabaseDrawer({
           {query.isError ? <p className="text-secondary">Could not load this part. Nothing was changed.</p> : null}
           {part ? (
             <>
+              <div className="grid grid-cols-3 gap-2 font-mono-sm text-mono-sm text-secondary">
+                {(part as { wva?: string }).wva ? <span>WVA {(part as { wva?: string }).wva}</span> : null}
+                <span>{((part as { fitCount?: number }).fitCount ?? part.fits.length)} FITMENTS</span>
+                <span>{(indexNums.data?.rows.length ?? 0) + (oeRefs.data?.rows.length ?? 0)} RECORDS LOADED</span>
+              </div>
               <div className="flex flex-col gap-space-sm">
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-mono-sm text-mono-sm uppercase tracking-wider text-secondary font-bold">
@@ -189,34 +201,62 @@ export function FullDatabaseDrawer({
               </div>
               <div className="flex flex-col gap-space-md">
                 <span className="font-mono-sm text-mono-sm uppercase tracking-wider text-secondary font-bold">Cross-references &amp; index numbers</span>
-                <span className="font-mono-sm text-mono-sm text-secondary">
-                  INDEX REVISION #{(part as { groupRevision?: number }).groupRevision ?? (part as { indexRevision?: number }).indexRevision ?? 1}
-                </span>
+                {(() => {
+                  const rev = (part as { groupRevision?: number }).groupRevision ?? (part as { indexRevision?: number }).indexRevision;
+                  return rev != null ? (
+                    <span className="font-mono-sm text-mono-sm text-secondary">INDEX REVISION #{rev}</span>
+                  ) : null;
+                })()}
                 <div className="p-space-md rounded-xl bg-surface-container-low border border-outline-variant/40">
-                  <p className="font-mono-sm text-mono-sm text-secondary">{(part as { groupCode?: string }).groupCode || `GRP-${String(part.groupId || "").slice(0, 8).toUpperCase()}`}</p>
-                  <p className="font-body-sm text-on-surface mt-1">Grouped with interchange members by index rules.</p>
-                  <button type="button" className="mt-2 font-mono-sm text-primary font-bold">View group →</button>
+                  <p className="font-mono-sm text-mono-sm text-secondary">{(part as { groupCode?: string }).groupCode || (part.groupId ? `Group ${part.groupId.slice(0, 8)}` : "No group")}</p>
+                  <button
+                    type="button"
+                    className="mt-2 font-mono-sm text-primary font-bold disabled:opacity-40"
+                    disabled={!part.groupId}
+                    onClick={() => {
+                      const code = (part as { groupCode?: string }).groupCode;
+                      goDominionPage("parts-catalog");
+                      writeCatalogSearch({ tab: "Full database", q: code || part.number || "" }, "push");
+                    }}
+                  >
+                    View group →
+                  </button>
                 </div>
                 <ReferenceBlock
                   title="Replaces these factory numbers"
                   count={oeRefs.data?.rows.length ?? 0}
                   rows={oeRefs.data?.rows ?? []}
                   addLabel="+ Add factory number"
-                  onAdd={onEdit}
+                  segment="oe-references"
+                  partId={partId}
+                  token={authToken}
+                  owner={owner}
+                  client={client}
+                  valueKeys={["oe_number", "number"]}
                 />
                 <ReferenceBlock
                   title="ACTIVE CLASSIFIERS · Industry index numbers"
                   count={indexNums.data?.rows.length ?? 0}
                   rows={indexNums.data?.rows ?? []}
                   addLabel="+ Add index number"
-                  onAdd={onEdit}
+                  segment="index-numbers"
+                  partId={partId}
+                  token={authToken}
+                  owner={owner}
+                  client={client}
+                  valueKeys={["value", "number", "code"]}
                 />
                 <ReferenceBlock
                   title="STANDARDS & CERTIFICATIONS"
                   count={approvals.data?.rows.length ?? 0}
                   rows={approvals.data?.rows ?? []}
                   addLabel="+ Add approval"
-                  onAdd={onEdit}
+                  segment="approvals"
+                  partId={partId}
+                  token={authToken}
+                  owner={owner}
+                  client={client}
+                  valueKeys={["value", "code"]}
                   footnote="Information only — never used by matching rules."
                 />
               </div>
@@ -235,12 +275,20 @@ export function FullDatabaseDrawer({
                 <div className="flex flex-col">
                   <span className="font-body-sm font-bold text-on-surface">{owner ? `Owner mode active: ${initials}` : "Staff view"}</span>
                   <span className="font-mono-sm text-mono-sm text-secondary">
-                    HASH {(part as { provenanceHash?: string }).provenanceHash || "pending"} · Staff view restriction: &quot;Only the owner can change parts.&quot;
+                    HASH {(part as { provenanceHash?: string }).provenanceHash || "Not computed yet"} · Staff view restriction: &quot;Only the owner can change parts.&quot;
                   </span>
                 </div>
               </div>
               {excluding ? (
                 <div className="space-y-2">
+                  {part.fits.length > 1 ? (
+                    <select className="w-full rounded-lg bg-surface-container-low px-3 py-2 text-sm" value={excludeVariantId} onChange={(e) => setExcludeVariantId(e.target.value)}>
+                      <option value="">Pick car listing…</option>
+                      {part.fits.map((fit) => (
+                        <option key={fit.variantId} value={fit.variantId}>{[fit.make, fit.model, fit.years].filter(Boolean).join(" ")}</option>
+                      ))}
+                    </select>
+                  ) : null}
                   <input className="w-full rounded-lg bg-surface-container-low px-3 py-2 text-sm" placeholder="Reason" value={reason} onChange={(event) => setReason(event.target.value)} />
                   <input className="w-full rounded-lg bg-surface-container-low px-3 py-2 text-sm" placeholder="Source link" value={source} onChange={(event) => setSource(event.target.value)} />
                 </div>
@@ -249,7 +297,7 @@ export function FullDatabaseDrawer({
           ) : null}
         </div>
         <div className="p-space-lg border-t border-outline-variant/40 flex items-center justify-between gap-space-sm">
-          <button type="button" className="px-3.5 h-9 rounded-xl bg-surface border border-outline-variant/50 text-secondary disabled:opacity-40" disabled={!owner || busy} title={ownerTitle} onClick={() => { void excludeFirst(); }}>
+          <button type="button" className="px-3.5 h-9 rounded-xl bg-surface border border-outline-variant/50 text-secondary disabled:opacity-40" disabled={!owner || busy} title={ownerTitle} onClick={() => { if (!excluding) { setExcludeVariantId(part?.fits[0]?.variantId ?? ""); setExcluding(true); return; } void excludeFirst(); }}>
             Exclude from car
           </button>
           <div className="flex items-center gap-2">
@@ -264,21 +312,70 @@ export function FullDatabaseDrawer({
   );
 }
 
+function referenceLabel(row: Record<string, unknown>, keys: string[]): string {
+  for (const key of keys) {
+    const val = row[key];
+    if (val != null && String(val).trim()) return String(val);
+  }
+  return "";
+}
+
 function ReferenceBlock({
   title,
   count,
   rows,
   addLabel,
-  onAdd,
+  segment,
+  partId,
+  token,
+  owner,
+  client,
+  valueKeys,
   footnote,
 }: {
   title: string;
   count: number;
   rows: Array<Record<string, unknown>>;
   addLabel: string;
-  onAdd: () => void;
+  segment: "oe-references" | "index-numbers" | "approvals";
+  partId: string;
+  token: string;
+  owner: boolean;
+  client: ReturnType<typeof useQueryClient>;
+  valueKeys: string[];
   footnote?: string;
 }) {
+  async function addRow() {
+    if (!owner || !token) return;
+    const value = window.prompt("Enter value:")?.trim();
+    if (!value) return;
+    const body = segment === "oe-references"
+      ? { oe_number: value, oe_brand: "OEM" }
+      : segment === "index-numbers"
+        ? { value, number_type: "wva" }
+        : { value, standard_code: value };
+    try {
+      await createPartReferenceRow(token, partId, segment, body);
+      toast.success("Row added");
+      const qk = segment === "oe-references" ? "part-oe-refs" : segment === "index-numbers" ? "part-index-nums" : "part-approvals";
+      await client.invalidateQueries({ queryKey: [qk, partId] });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not add row");
+    }
+  }
+
+  async function removeRow(refId: string) {
+    if (!owner || !token || !window.confirm("Remove this reference row?")) return;
+    try {
+      await deletePartReferenceRow(token, partId, segment, refId);
+      toast.success("Removed");
+      const qk = segment === "oe-references" ? "part-oe-refs" : segment === "index-numbers" ? "part-index-nums" : "part-approvals";
+      await client.invalidateQueries({ queryKey: [qk, partId] });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not remove");
+    }
+  }
+
   return (
     <div className="rounded-xl border border-outline-variant/40 p-space-md">
       <div className="flex justify-between font-mono-sm text-mono-sm font-bold text-secondary mb-2">
@@ -287,18 +384,22 @@ function ReferenceBlock({
       </div>
       {rows.length ? (
         <ul className="space-y-1 text-sm mb-2">
-          {rows.slice(0, 8).map((row) => (
-            <li key={String(row.id || row.number || row.code)} className="flex justify-between gap-2">
-              <span className="font-mono">{String(row.number || row.oem_number || row.code || "—")}</span>
-              <button type="button" className="text-secondary" aria-label="Row menu">⋯</button>
-            </li>
-          ))}
+          {rows.slice(0, 8).map((row) => {
+            const label = referenceLabel(row, valueKeys);
+            const refId = String(row.id || "");
+            return (
+              <li key={refId || label} className="flex justify-between gap-2">
+                <span className="font-mono">{label}</span>
+                <button type="button" className="text-secondary disabled:opacity-40" disabled={!owner || !refId} aria-label="Remove row" onClick={() => { void removeRow(refId); }}>⋯</button>
+              </li>
+            );
+          })}
         </ul>
       ) : (
         <p className="text-body-sm text-secondary mb-2">No rows on file yet.</p>
       )}
       {footnote ? <p className="text-body-sm text-secondary italic mb-2">{footnote}</p> : null}
-      <button type="button" className="text-primary font-mono-sm font-bold" onClick={onAdd}>{addLabel}</button>
+      <button type="button" className="text-primary font-mono-sm font-bold disabled:opacity-40" disabled={!owner} onClick={() => { void addRow(); }}>{addLabel}</button>
     </div>
   );
 }

@@ -833,6 +833,7 @@ export type Fp5ResultRow = {
   statusChip: "confirmed" | "checking";
   accentColor: string;
   matchStatus?: string | null;
+  checkingNote?: string | null;
 };
 
 export type Fp5TierSection = {
@@ -866,6 +867,7 @@ export type Fp5ViewModel = {
   partBrand: string;
   partNumberAlt: string;
   matchCount: number;
+  requestCount?: number;
   filterAllCount: number;
   filterStockCount: number;
   filterOemCount: number;
@@ -987,6 +989,7 @@ function rowFromItem(
   const why = formatMatchWhyLine(reasonCode, reasonParams);
   const tip = matchWhyTooltip(reasonCode, reasonParams, trimScopeLabel);
   const checking = matchStatus === "needs_checking";
+  const checkingNote = String(item.checking_note ?? item.checkingNote ?? "").trim() || null;
   return {
     id,
     tier,
@@ -1014,6 +1017,7 @@ function rowFromItem(
     statusChip: checking ? "checking" : "confirmed",
     accentColor: TIER_ACCENT[tier] ?? TIER_ACCENT[1],
     matchStatus: matchStatus || null,
+    checkingNote,
   };
 }
 
@@ -1190,6 +1194,7 @@ export function buildFp5ViewModel(input: {
     partBrand: best?.brandLabel || "—",
     partNumberAlt: orDash((bestItem?.part as { altNumber?: string } | undefined)?.altNumber),
     matchCount: filterAllCount,
+    requestCount: Number((input.result as { requestCount?: number })?.requestCount ?? input.result?.coverage?.otherParts ?? filterAllCount),
     filterAllCount,
     filterStockCount: 0,
     filterOemCount,

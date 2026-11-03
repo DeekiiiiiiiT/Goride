@@ -2,11 +2,10 @@
 import type { ReactNode } from "react";
 import { CATALOG_SECTION_TABS, type CatalogSectionTab } from "../partsCatalogUrl";
 
-const SCHEMA = "SCHEMA V2.4";
-
 export function FindPartsChrome({
   fitmentCount,
   matchTypesLabel,
+  schemaLabel = "SCHEMA",
   activeTab,
   advancedActive,
   breadcrumbSuffix = [],
@@ -22,6 +21,7 @@ export function FindPartsChrome({
 }: {
   fitmentCount: number | null;
   matchTypesLabel: string;
+  schemaLabel?: string;
   activeTab: CatalogSectionTab | null;
   advancedActive: boolean;
   breadcrumbSuffix?: Array<"ADVANCED TUNE" | "PROBLEMS">;
@@ -72,7 +72,7 @@ export function FindPartsChrome({
               <span className="w-1.5 h-1.5 rounded-full bg-primary-container ring-2 ring-primary/20" />
               <span>INDEX: {indexed} FITMENTS</span>
             </span>
-            <span className="px-2 py-0.5 rounded-full bg-surface-container border border-outline-variant/40 text-secondary font-mono-sm text-[10px] uppercase font-semibold">{SCHEMA}</span>
+            <span className="px-2 py-0.5 rounded-full bg-surface-container border border-outline-variant/40 text-secondary font-mono-sm text-[10px] uppercase font-semibold">{schemaLabel}</span>
           </div>
         </div>
 

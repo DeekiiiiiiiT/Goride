@@ -17,6 +17,7 @@ import {
   AM_FLEET_FORBIDDEN,
   AM_VARIANT_ID,
   installDominionAutoMatchMocks,
+  type AutoMatchMockProfile,
 } from "./partsAutoMatchMocks";
 import {
   STITCH_VISUAL_COMPONENT_ID,
@@ -40,7 +41,7 @@ function token() {
   })}.sig`;
 }
 
-async function installOwnerSession(page: import("@playwright/test").Page) {
+async function installOwnerSession(page: import("@playwright/test").Page, dark = false) {
   const access = token();
   const user = {
     id: "11111111-1111-4111-8111-111111111111",
@@ -58,10 +59,14 @@ async function installOwnerSession(page: import("@playwright/test").Page) {
     expires_at: Math.floor(Date.now() / 1000) + 3600,
     user,
   };
-  await page.addInitScript((stored) => {
+  await page.addInitScript(({ stored, useDark }) => {
     localStorage.setItem("sb-example-auth-token", JSON.stringify(stored));
     localStorage.setItem("sb-csfllzzastacofsvcdsc-auth-token", JSON.stringify(stored));
-  }, session);
+    if (useDark) {
+      document.documentElement.classList.add("dark");
+      localStorage.setItem("roam-admin-theme", "dark");
+    }
+  }, { stored: session, useDark: dark });
   await page.route("**/auth/v1/**", async (route) => {
     await route.fulfill({ json: session });
   });
@@ -99,7 +104,7 @@ function stitchPhrases(htmlFile: string, dir: string, minLen = 10): string[] {
       out.add(t);
     }
   }
-  return [...out].slice(0, 10);
+  return [...out];
 }
 
 async function assertNoForbidden(page: import("@playwright/test").Page, samples: string[]) {
@@ -109,8 +114,9 @@ async function assertNoForbidden(page: import("@playwright/test").Page, samples:
 }
 
 async function assertStitchPhrases(page: import("@playwright/test").Page, htmlFile: string, dir: string) {
+  const root = page.locator("main, .find-parts-flow, .find-parts-screen-root, [data-testid='admin-root']").first();
   for (const phrase of stitchPhrases(htmlFile, dir)) {
-    await expect(page.locator("main, .find-parts-flow, .find-parts-screen-root, [data-testid='admin-root']").first()).toContainText(phrase, { timeout: 8_000, ignoreCase: true });
+    await expect(root).toContainText(phrase, { timeout: 8_000, ignoreCase: true });
   }
 }
 
@@ -122,11 +128,22 @@ function isFleetProject(projectName: string) {
   return projectName === "fleet";
 }
 
+function dominionDescribe(profile: AutoMatchMockProfile, title: string, fn: () => void) {
+  test.describe(title, () => {
+    test.beforeEach(async ({ page }, testInfo) => {
+      test.skip(!isDominionProject(testInfo.project.name), "Dominion admin project only");
+      await installOwnerSession(page);
+      await installDominionAutoMatchMocks(page, { profile });
+    });
+    fn();
+  });
+}
+
 test.describe("Dominion parts auto-match Stitch fidelity", () => {
   test.beforeEach(async ({ page }, testInfo) => {
     test.skip(!isDominionProject(testInfo.project.name), "Dominion admin project only");
     await installOwnerSession(page);
-    await installDominionAutoMatchMocks(page);
+    await installDominionAutoMatchMocks(page, { profile: "default" });
   });
 
   test("AM-S6 data quality health card", async ({ page }) => {
@@ -135,14 +152,12 @@ test.describe("Dominion parts auto-match Stitch fidelity", () => {
     await expect(page.getByRole("heading", { name: "Auto-match health" })).toBeVisible();
     await expect(page.getByText("Live matches")).toBeVisible();
     await expect(page.getByText("12")).toBeVisible();
-    await expect(page.getByText(/Interval · nightly/i)).toBeVisible();
+    await expect(page.getByText(/Interval · 0 3 \* \* \*/)).toBeVisible();
     await assertNoForbidden(page, AM_DOMINION_FORBIDDEN);
+    await page.screenshot({ path: join(dominionShotsDir, "AM-S6-app.png"), fullPage: true });
     await page.getByRole("button", { name: "Run catalog audit" }).click();
     await page.getByText("Open conflicts").click();
-    await page.screenshot({ path: join(dominionShotsDir, "AM-S6-app.png"), fullPage: true });
-    for (const phrase of stitchPhrases("AM-S6-data-quality-health.html", dominionStitchDir)) {
-      await expect(page.locator("main").first()).toContainText(phrase, { timeout: 8_000, ignoreCase: true });
-    }
+    await assertStitchPhrases(page, "AM-S6-data-quality-health.html", dominionStitchDir);
   });
 
   test("AM-S5 pending catalog auto-match conflicts", async ({ page }) => {
@@ -150,6 +165,7 @@ test.describe("Dominion parts auto-match Stitch fidelity", () => {
     await expect(page.getByText("Auto-match conflicts", { exact: false })).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText("Review before turning on auto-matching.")).toBeVisible();
     await expect(page.getByText("Same number, two parts")).toBeVisible();
+    await expect(page.getByText("Toyota · Roomy · M900A · Pre-Facelift")).toBeVisible();
     await assertNoForbidden(page, AM_DOMINION_FORBIDDEN);
     await page.getByRole("button", { name: "Open" }).click();
     await page.getByRole("button", { name: "Kept" }).click();
@@ -169,6 +185,7 @@ test.describe("Dominion parts auto-match Stitch fidelity", () => {
     await page.getByRole("button", { name: /Factory part numbers/i }).click();
     await expect(page.getByText("D0051M-01-J")).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText("OE matching engine")).toBeVisible();
+    await expect(page.getByText("Brake pad set")).toBeVisible();
     await assertNoForbidden(page, AM_DOMINION_FORBIDDEN);
     await page.getByPlaceholder("part type or number").fill("D0051");
     await page.getByRole("button", { name: "brakes" }).click();
@@ -214,6 +231,64 @@ test.describe("Dominion parts auto-match Stitch fidelity", () => {
   });
 });
 
+dominionDescribe("empty", "Dominion auto-match empty states", () => {
+  test("AM-S5 conflicts list can be empty", async ({ page }) => {
+    await page.goto("/?page=pending-motor-vehicles&tab=conflicts");
+    await expect(page.getByText("Auto-match conflicts", { exact: false })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText("Open 0")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Review" })).toHaveCount(0);
+  });
+
+  test("AM-S6 health shows zero live matches", async ({ page }) => {
+    await page.goto("/?page=catalog-quality");
+    await expect(page.getByRole("heading", { name: "Data Quality" })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText("Live matches").locator("..").getByText("0")).toBeVisible();
+  });
+});
+
+dominionDescribe("error", "Dominion auto-match error surfaces", () => {
+  test("AM-S6 still renders shell when health API fails", async ({ page }) => {
+    await page.goto("/?page=catalog-quality");
+    await expect(page.getByRole("heading", { name: "Data Quality" })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText("Live matches")).toBeVisible();
+    await expect(page.getByText("Find parts auto-match · OFF")).toBeVisible();
+  });
+});
+
+dominionDescribe("flagOff", "Dominion auto-match flag off", () => {
+  test("AM-S1 shows matching engine off", async ({ page }) => {
+    await page.goto("/?page=motor-vehicles");
+    await expect(page.getByText("Vehicle Catalog", { exact: false })).toBeVisible({ timeout: 30_000 });
+    await page.getByTitle("View specs").first().click();
+    await page.getByRole("button", { name: /Factory part numbers/i }).click();
+    await expect(page.getByText("Off", { exact: true })).toBeVisible({ timeout: 15_000 });
+  });
+});
+
+dominionDescribe("allChecking", "Dominion find parts all-checking", () => {
+  test("AM-S4 rows show needs checking", async ({ page }) => {
+    await page.goto(`/?page=parts-catalog&car=${AM_VARIANT_ID}&part=${AM_COMPONENT_ID}&pos=front`);
+    await expect(page.getByText("Made for your car", { exact: false })).toBeVisible({ timeout: 35_000 });
+    await expect(page.getByText(/needs checking|Needs checking/i).first()).toBeVisible();
+  });
+});
+
+test.describe("Dominion auto-match dark mode", () => {
+  test.beforeEach(async ({ page }, testInfo) => {
+    test.skip(!isDominionProject(testInfo.project.name), "Dominion admin project only");
+    await installOwnerSession(page, true);
+    await installDominionAutoMatchMocks(page, { profile: "default" });
+  });
+
+  test("AM-S6 catalog quality in dark theme", async ({ page }) => {
+    await page.emulateMedia({ colorScheme: "dark" });
+    await page.goto("/?page=catalog-quality");
+    await expect(page.getByRole("heading", { name: "Data Quality" })).toBeVisible({ timeout: 30_000 });
+    await expect(page.locator("html.dark")).toBeAttached();
+    await assertNoForbidden(page, AM_DOMINION_FORBIDDEN);
+  });
+});
+
 test.describe("Fleet AM-S4F why it fits rows", () => {
   test.beforeEach(async ({ page }, testInfo) => {
     test.skip(!isFleetProject(testInfo.project.name), "Fleet project only");
@@ -233,8 +308,8 @@ test.describe("Fleet AM-S4F why it fits rows", () => {
     await page.getByText("Structured Match Categories", { exact: false }).waitFor({ timeout: 25_000 });
     await expect(page.getByText("Confirmed").or(page.getByText("Roam is checking")).first()).toBeVisible();
     await assertNoForbidden(page, AM_FLEET_FORBIDDEN);
-    await page.getByText("View details ›").first().click();
     await page.screenshot({ path: join(fleetShotsDir, "AM-S4F-app.png"), fullPage: true });
+    await page.getByText("View details ›").first().click();
     for (const phrase of stitchPhrases("find-parts-why-it-fits.html", fleetStitchDir, 12)) {
       await expect(page.locator(".find-parts-screen-root, main").first()).toContainText(phrase, { timeout: 8_000, ignoreCase: true });
     }

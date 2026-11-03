@@ -5,11 +5,7 @@ import { Fp12Screen } from "./screens/Fp12Screen";
 import { Fp11Screen } from "./screens/Fp11Screen";
 import { buildFp5ViewModel, buildFp11ViewModel } from "./findPartsViewModels";
 import { usePartsSavedSearches, usePartsVehicleContext } from "./findPartsQueries";
-import {
-  downloadCurrentFitmentReport,
-  saveCurrentPartsSearch,
-  type TrimScopeTab,
-} from "./findPartsActions";
+import type { TrimScopeTab } from "./findPartsActions";
 import {
   findPartsConnectionLatencyMs,
   fleetCoreErrorDetails,
@@ -187,27 +183,15 @@ export function ResultsView({
 
   const actions = {
     onAskRoam: onAsk,
-    onAskForTier,
-    onDownloadReport: () => { void downloadCurrentFitmentReport(); },
-    onSaveQuery: () => {
-      void saveCurrentPartsSearch(result?.car?.label || partName || "Saved search");
-    },
-    onUseInService: () => {
-      if (best && canLog) onUseInService(best);
-    },
     onOpenRow: (id: string) => {
       const sections = result?.sections || [];
       const item = sections.flatMap((s) => s.items || []).find((row) => row.part?.id === id);
       if (item) setOpen(item);
     },
-    onOpenBest: () => {
-      if (best) setOpen(best);
-    },
-    onTrimScope: setTrimScope,
-    onFilterTab: setFilterTab,
+    onOpenBest: phone ? () => { if (best) setOpen(best); } : undefined,
+    onEditPartCategory: phone ? onEditPartCategory : undefined,
     onBackToPartSelection,
     onChangeCar,
-    onEditPartCategory,
   };
 
   const Screen = phone ? Fp12Screen : Fp5Screen;

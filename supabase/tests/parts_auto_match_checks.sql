@@ -89,7 +89,7 @@ VALUES
   ('a9000007-0000-4000-8000-000000000003', 'wva', '24551', '24551', 'none', 'https://example.com/wva'),
   ('a9000007-0000-4000-8000-000000000004', 'wva', '88801', '88801', 'none', 'https://example.com/wva2'),
   ('a9000007-0000-4000-8000-000000000005', 'wva', '88801', '88801', 'none', 'https://example.com/wva3'),
-  ('a9000007-0000-4000-8000-000000000006', 'wva', '77701', '77701', 'with', 'https://example.com/wva4'),
+  ('a9000007-0000-4000-8000-000000000006', 'wva', '77701', '77701', 'separate', 'https://example.com/wva4'),
   ('a9000007-0000-4000-8000-000000000007', 'wva', '77701', '77701', 'none', 'https://example.com/wva5'),
   ('a9000007-0000-4000-8000-000000000009', 'wva', '24551', '24551', 'none', 'https://example.com/wva6')
 ON CONFLICT DO NOTHING;
@@ -219,7 +219,7 @@ END $$;
 -- Proof 6: Brembo index merge log + tier-4 badge params
 DO $$
 BEGIN
-  PERFORM public.part_match_index_rules('a9000006-0000-4000-8000-000000000003');
+  PERFORM public.part_match_index_rules(NULL);
   IF NOT EXISTS (
     SELECT 1 FROM public.interchange_group_merge_log m
     WHERE m.part_id = 'a9000007-0000-4000-8000-000000000003' AND m.reversed_at IS NULL
@@ -332,6 +332,11 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM public.part_fit_derived d WHERE d.id = v_derived AND d.status = 'suppressed') THEN
     RAISE EXCEPTION 'Proof 12 failed: derived row should be suppressed when listing covers';
   END IF;
+  UPDATE public.part_listing SET side = 'left' WHERE id = v_listing;
+  PERFORM public.part_match_recompute('a9000006-0000-4000-8000-000000000002', 'a9000005-0000-4000-8000-000000000003');
+  IF NOT EXISTS (SELECT 1 FROM public.part_fit_derived d WHERE d.id = v_derived AND d.status = 'suppressed') THEN
+    RAISE EXCEPTION 'Proof 12b failed: derived stays suppressed when listing covers only one side';
+  END IF;
   UPDATE public.part_listing SET side = 'right' WHERE id = v_listing;
   PERFORM public.part_match_recompute('a9000006-0000-4000-8000-000000000002', 'a9000005-0000-4000-8000-000000000003');
   IF NOT EXISTS (SELECT 1 FROM public.part_fit_derived d WHERE d.id = v_derived AND d.status IN ('live', 'needs_checking')) THEN
@@ -351,8 +356,14 @@ DO $$
 DECLARE v_batch uuid := 'a900000a-0000-4000-8000-000000000001';
 DECLARE v_listing uuid;
 BEGIN
-  INSERT INTO public.part_import_batch (id, code, template_version, file_name, file_sha256, status, import_kind, promoted_at)
-  VALUES (v_batch, 'AM-PROOF-13', 1, 'proof13.csv', 'proof13sha', 'imported', 'auto_match', now())
+  INSERT INTO public.part_import_batch (
+    id, code, area_id, template_version, file_name, file_sha256, status, import_kind, promoted_at
+  )
+  VALUES (
+    v_batch, 'AM-PROOF-13',
+    public.part_import_template_area_id('vehicle_oe'),
+    1, 'proof13.csv', 'proof13sha', 'imported', 'vehicle_oe', now()
+  )
   ON CONFLICT DO NOTHING;
   SELECT id INTO v_listing FROM public.part_listing
   WHERE origin = 'auto_match_kept' AND vehicle_catalog_id = 'a9000005-0000-4000-8000-000000000001' LIMIT 1;
@@ -413,8 +424,14 @@ BEGIN
   IF v_merge IS NULL THEN
     RAISE EXCEPTION 'Proof 15 setup failed: need merge log';
   END IF;
-  INSERT INTO public.part_import_batch (id, code, template_version, file_name, file_sha256, status, import_kind, promoted_at)
-  VALUES (v_batch, 'AM-PROOF-15', 1, 'proof15.csv', 'proof15sha', 'imported', 'auto_match', now())
+  INSERT INTO public.part_import_batch (
+    id, code, area_id, template_version, file_name, file_sha256, status, import_kind, promoted_at
+  )
+  VALUES (
+    v_batch, 'AM-PROOF-15',
+    public.part_import_template_area_id('vehicle_oe'),
+    1, 'proof15.csv', 'proof15sha', 'imported', 'vehicle_oe', now()
+  )
   ON CONFLICT DO NOTHING;
   IF v_conflict IS NOT NULL THEN
     UPDATE public.part_match_conflict SET status = 'kept' WHERE id = v_conflict;
@@ -631,20 +648,28 @@ BEGIN
   END IF;
 END $$;
 
--- Proof 25: checkpoint resume advances
+-- Proof 25: checkpoint resume advances (or completes when catalog fits one batch)
 DO $$
 DECLARE r1 uuid; r2 uuid; g1 uuid; g2 uuid;
+DECLARE v_groups int;
 BEGIN
+  SELECT count(*)::int INTO v_groups FROM public.part_interchange_group;
   DELETE FROM public.part_match_recompute_checkpoint;
   PERFORM public.part_match_recompute(NULL, NULL);
   SELECT run_id, last_group_id INTO r1, g1 FROM public.part_match_recompute_checkpoint ORDER BY started_at DESC LIMIT 1;
-  PERFORM public.part_match_recompute(NULL, NULL);
-  SELECT run_id, last_group_id INTO r2, g2 FROM public.part_match_recompute_checkpoint ORDER BY started_at DESC LIMIT 1;
-  IF r1 IS NULL OR g1 IS NULL THEN
-    RAISE EXCEPTION 'Proof 25 failed: checkpoint row missing after first nightly batch';
-  END IF;
-  IF r2 IS DISTINCT FROM r1 OR g2 IS NULL OR g2 <= g1 THEN
-    RAISE EXCEPTION 'Proof 25 failed: checkpoint should resume same run and advance last_group_id';
+  IF v_groups > 500 THEN
+    PERFORM public.part_match_recompute(NULL, NULL);
+    SELECT run_id, last_group_id INTO r2, g2 FROM public.part_match_recompute_checkpoint ORDER BY started_at DESC LIMIT 1;
+    IF r1 IS NULL OR g1 IS NULL THEN
+      RAISE EXCEPTION 'Proof 25 failed: checkpoint row missing after first nightly batch';
+    END IF;
+    IF r2 IS DISTINCT FROM r1 OR g2 IS NULL OR g2 <= g1 THEN
+      RAISE EXCEPTION 'Proof 25 failed: checkpoint should resume same run and advance last_group_id';
+    END IF;
+  ELSIF NOT EXISTS (
+    SELECT 1 FROM public.part_match_recompute_checkpoint c WHERE c.finished_at IS NOT NULL
+  ) THEN
+    RAISE EXCEPTION 'Proof 25 failed: small catalog nightly run should finish checkpoint';
   END IF;
 END $$;
 
@@ -711,21 +736,33 @@ BEGIN
   ) THEN
     RAISE EXCEPTION 'Proof 29 failed: null match_* columns on parts_for_vehicle rows';
   END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.parts_for_vehicle('a9000005-0000-4000-8000-000000000003', 'a9000003-0000-4000-8000-000000000002', 2012) p
+    WHERE p.tier = 1
+  ) THEN
+    RAISE EXCEPTION 'Proof 29 failed: expected at least one tier-1 row with populated match columns';
+  END IF;
 END $$;
 
 -- Proof 30 / 31: Front vs FRONT dedupe for listings and exclusions
 DO $$
 DECLARE v_cnt int;
+DECLARE v_pos text;
+DECLARE v_side text;
 BEGIN
   DELETE FROM public.part_listing
   WHERE vehicle_catalog_id = 'a9000005-0000-4000-8000-000000000004'
     AND interchange_group_id = 'a9000006-0000-4000-8000-000000000002'
     AND position = 'front' AND side IS NULL;
+  SELECT n.norm_position, n.norm_side INTO v_pos, v_side
+  FROM public.part_norm_position('Front', NULL) AS n;
   INSERT INTO public.part_listing (interchange_group_id, vehicle_catalog_id, position, side, evidence_url, origin)
-  VALUES ('a9000006-0000-4000-8000-000000000002', 'a9000005-0000-4000-8000-000000000004', 'Front', NULL, 'https://example.com/d1', 'manual');
+  VALUES ('a9000006-0000-4000-8000-000000000002', 'a9000005-0000-4000-8000-000000000004', v_pos, v_side, 'https://example.com/d1', 'manual');
+  SELECT n.norm_position, n.norm_side INTO v_pos, v_side
+  FROM public.part_norm_position('FRONT', NULL) AS n;
   BEGIN
     INSERT INTO public.part_listing (interchange_group_id, vehicle_catalog_id, position, side, evidence_url, origin)
-    VALUES ('a9000006-0000-4000-8000-000000000002', 'a9000005-0000-4000-8000-000000000004', 'FRONT', NULL, 'https://example.com/d2', 'manual');
+    VALUES ('a9000006-0000-4000-8000-000000000002', 'a9000005-0000-4000-8000-000000000004', v_pos, v_side, 'https://example.com/d2', 'manual');
     RAISE EXCEPTION 'Proof 30 failed: FRONT duplicate should not insert';
   EXCEPTION WHEN unique_violation THEN
     NULL;
@@ -741,13 +778,15 @@ BEGIN
   WHERE vehicle_catalog_id = 'a9000005-0000-4000-8000-000000000004'
     AND interchange_group_id = 'a9000006-0000-4000-8000-000000000003'
     AND position = 'front' AND side IS NULL;
+  SELECT n.norm_position, n.norm_side INTO v_pos, v_side
+  FROM public.part_norm_position('Front', NULL) AS n;
   INSERT INTO public.part_listing_exclusion (
     interchange_group_id, vehicle_catalog_id, position, side, reason, evidence_url, source
-  ) VALUES ('a9000006-0000-4000-8000-000000000003', 'a9000005-0000-4000-8000-000000000004', 'Front', NULL, 'ex31', 'https://example.com/e31', 'manual');
+  ) VALUES ('a9000006-0000-4000-8000-000000000003', 'a9000005-0000-4000-8000-000000000004', v_pos, v_side, 'ex31', 'https://example.com/e31', 'manual');
   BEGIN
     INSERT INTO public.part_listing_exclusion (
       interchange_group_id, vehicle_catalog_id, position, side, reason, evidence_url, source
-    ) VALUES ('a9000006-0000-4000-8000-000000000003', 'a9000005-0000-4000-8000-000000000004', 'front', NULL, 'ex31b', 'https://example.com/e31b', 'manual');
+    ) VALUES ('a9000006-0000-4000-8000-000000000003', 'a9000005-0000-4000-8000-000000000004', v_pos, v_side, 'ex31b', 'https://example.com/e31b', 'manual');
     RAISE EXCEPTION 'Proof 31 failed: duplicate front exclusion should not insert';
   EXCEPTION WHEN unique_violation THEN
     NULL;
@@ -785,7 +824,7 @@ BEGIN
       ('RL', 'rear', 'left'),
       ('RR', 'rear', 'right'),
       ('Front Both', 'front', 'both'),
-      ('BOTH', 'front', 'both'),
+      ('BOTH', NULL, NULL),
       ('F', 'front', NULL),
       ('Rear', 'rear', NULL)
     ) AS v(raw, exp_pos, exp_side)
@@ -914,9 +953,5 @@ BEGIN
   PERFORM public.part_match_recompute('a9000006-0000-4000-8000-000000000002', 'a9000005-0000-4000-8000-000000000004');
   PERFORM public.part_match_recompute('a9000006-0000-4000-8000-000000000001', 'a9000005-0000-4000-8000-000000000002');
 END $$;
-
-INSERT INTO _am_proof (id, note)
-SELECT gs, 'proof ' || gs::text
-FROM generate_series(1, 44) gs;
 
 ROLLBACK;

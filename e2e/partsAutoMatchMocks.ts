@@ -1,4 +1,9 @@
 import type { Page, Route } from "@playwright/test";
+import type {
+  AutoMatchConflictsResponse,
+  PartMatchHealth,
+  PartMatchSchedule,
+} from "../apps/admin/src/services/partsAutoMatchApi";
 
 export const AM_VEHICLE_ID = "a1111111-1111-4111-8111-111111111111";
 export const AM_VARIANT_ID = "b2222222-2222-4222-8222-222222222222";
@@ -6,6 +11,9 @@ export const AM_COMPONENT_ID = "c3333333-3333-4333-8333-333333333333";
 export const AM_PART_ID = "d4444444-4444-4444-8444-444444444444";
 export const AM_CONFLICT_ID = "e5555555-5555-4555-8555-555555555555";
 export const AM_PLATFORM_ID = "f6666666-6666-4666-8666-666666666666";
+export const AM_DERIVED_ID = "11111111-1111-4111-8111-111111111115";
+export const AM_OE_ROW_ID = "11111111-1111-4111-8111-111111111113";
+export const AM_GROUP_ID = "g1111111-1111-4111-8111-111111111111";
 
 /** Stitch sample values that must not appear when mocks supply real-shaped data. */
 export const AM_DOMINION_FORBIDDEN = [
@@ -22,36 +30,63 @@ export const AM_FLEET_FORBIDDEN = [
   "Result Row with \"Why it fits\" Match Intelligence",
 ];
 
-export function partMatchHealthFixture(vehicleId?: string | null) {
+export type AutoMatchMockProfile = "default" | "empty" | "error" | "flagOff" | "allChecking";
+
+export type AutoMatchMockOptions = {
+  profile?: AutoMatchMockProfile;
+};
+
+let activeProfile: AutoMatchMockProfile = "default";
+
+export function partMatchHealthFixture(vehicleId?: string | null): PartMatchHealth {
+  const flagOff = activeProfile === "flagOff";
   return {
     engineVersion: 2,
     normVersion: 1,
-    enabled: false,
-    derived: { live: 12, needsChecking: 2, suppressed: 1 },
-    openConflicts: vehicleId ? { oe_ambiguous: 1 } : { oe_ambiguous: 1, system_link: 0 },
-    lastRun: {
-      run_id: "11111111-1111-4111-8111-111111111112",
-      kind: "nightly",
-      started_at: "2026-11-02T03:00:00.000Z",
-      finished_at: new Date(Date.now() - 3600_000).toISOString(),
-      error: null,
-      duration_ms: 72000,
-      rows_scanned: 428,
-    },
-    errorCount24h: 0,
-    unresolvedPositionReports: 2,
+    enabled: !flagOff,
+    derived: activeProfile === "empty"
+      ? { live: 0, needsChecking: 0, suppressed: 0 }
+      : { live: 12, needsChecking: activeProfile === "allChecking" ? 12 : 2, suppressed: 1 },
+    tierBreakdown: activeProfile === "empty" ? {} : { "1": 8, "2": 3, "3": 1 },
+    openConflicts: vehicleId
+      ? { oe_ambiguous: activeProfile === "empty" ? 0 : 1 }
+      : { oe_ambiguous: activeProfile === "empty" ? 0 : 1, system_link: 0 },
+    lastRun: activeProfile === "empty"
+      ? null
+      : {
+          run_id: "11111111-1111-4111-8111-111111111112",
+          kind: "nightly",
+          started_at: "2026-11-02T03:00:00.000Z",
+          finished_at: new Date(Date.now() - 3600_000).toISOString(),
+          error: activeProfile === "error" ? "nightly worker timed out" : null,
+          duration_ms: 72000,
+          rows_scanned: 428,
+        },
+    errorCount24h: activeProfile === "error" ? 3 : 0,
+    unresolvedPositionReports: activeProfile === "empty" ? 0 : 2,
   };
 }
 
-export function partMatchScheduleFixture() {
+export function partMatchScheduleFixture(): PartMatchSchedule {
   return {
     nextRun: new Date(Date.now() + 6 * 3600_000).toISOString(),
     cron: "0 3 * * *",
     jobname: "part-match-nightly",
+    intervalLabel: "Daily at 03:00 UTC",
   };
 }
 
-export function autoMatchConflictsFixture() {
+export function autoMatchConflictsFixture(): AutoMatchConflictsResponse {
+  if (activeProfile === "empty") {
+    return {
+      rows: [],
+      filteredCount: 0,
+      totalsByType: {},
+      totalsByStatus: { open: 0, kept: 0, removed: 0, superseded: 0 },
+      totalCount: 0,
+    };
+  }
+  const foundAt = "2026-11-02T12:00:00.000Z";
   return {
     rows: [
       {
@@ -60,13 +95,14 @@ export function autoMatchConflictsFixture() {
         conflict_type: "oe_ambiguous",
         status: "open",
         vehicle_catalog_id: AM_VEHICLE_ID,
-        vehicle_label: "Toyota Roomy M900A",
+        vehicle_label: "Toyota · Roomy · M900A · Pre-Facelift",
         part_name: "Front brake pad set",
-        interchange_group_id: "g1111111-1111-4111-8111-111111111111",
+        interchange_group_id: AM_GROUP_ID,
         part_id: AM_PART_ID,
         matched_key: "D0051M-01-J",
-        detail: { group_ids: ["g1111111-1111-4111-8111-111111111111"] },
-        computed_at: "2026-11-02T12:00:00.000Z",
+        detail: { group_ids: [AM_GROUP_ID], summary: "Two parts share D0051M-01-J" },
+        computed_at: foundAt,
+        found_at: foundAt,
       },
     ],
     filteredCount: 1,
@@ -86,6 +122,9 @@ export function autoMatchConflictsFixture() {
 }
 
 export function vehicleCatalogListFixture() {
+  if (activeProfile === "empty") {
+    return { items: [], total: 0 };
+  }
   return {
     items: [
       {
@@ -111,35 +150,116 @@ export function vehicleCatalogListFixture() {
 }
 
 export function vehicleOeNumbersFixture() {
+  if (activeProfile === "empty") {
+    return { rows: [], lastRun: null, platformCode: null };
+  }
   return {
     rows: [
       {
-        id: "11111111-1111-4111-8111-111111111113",
+        id: AM_OE_ROW_ID,
+        maintenance_component_id: AM_COMPONENT_ID,
         oe_brand: "Toyota",
         oe_number: "D0051M-01-J",
-        part_type_name: "Brake pad set",
         position: "front",
         side: "both",
         year_from: 2016,
         year_to: 2020,
+        part_type_name: "Brake pad set",
+        op_code: "BRK-PAD",
         match_count: 3,
+        matching: false,
+        supersession_note: null,
       },
     ],
-    lastRun: partMatchHealthFixture(AM_VEHICLE_ID).lastRun,
+    lastRun: partMatchHealthFixture(AM_VEHICLE_ID).lastRun ?? null,
+    platformCode: "DAI-M900",
+  };
+}
+
+export function vehicleDerivedFitsFixture() {
+  if (activeProfile === "empty") {
+    return { rows: [] };
+  }
+  return {
+    rows: [
+      {
+        id: AM_DERIVED_ID,
+        vehicle_catalog_id: AM_VEHICLE_ID,
+        interchange_group_id: AM_GROUP_ID,
+        vehicle_oe_number_id: AM_OE_ROW_ID,
+        status: activeProfile === "allChecking" ? "needs_checking" : "live",
+        matched_keys: ["D0051M-01-J"],
+        computed_at: "2026-11-02T11:00:00.000Z",
+        part_name: "Front brake pad set",
+        matched_key: "D0051M-01-J",
+        match_status: activeProfile === "allChecking" ? "needs_checking" : "live",
+        conflict_id: null,
+      },
+    ],
+  };
+}
+
+export function vehicleOeRevisionsFixture() {
+  if (activeProfile === "empty") {
+    return { rows: [] };
+  }
+  return {
+    rows: [
+      {
+        id: `${AM_OE_ROW_ID}:oe_number`,
+        vehicle_oe_number_id: AM_OE_ROW_ID,
+        created_at: "2026-11-01T09:00:00.000Z",
+        field_name: "oe_number",
+        old_value: "D0051M-01",
+        new_value: "D0051M-01-J",
+      },
+    ],
   };
 }
 
 export function vehiclePlatformsFixture() {
+  const platform = {
+    id: AM_PLATFORM_ID,
+    code: "DAI-M900",
+    label: "Daihatsu M900 shared platform",
+    maker: "Daihatsu",
+    car_count: 3,
+    link_count: 2,
+    body_class: "mini_mpv",
+    market: "JDM",
+  };
+  if (activeProfile === "empty") {
+    return { platforms: [], items: [], source: "vehicle_platform" };
+  }
   return {
-    items: [
+    platforms: [platform],
+    items: [platform],
+    source: "vehicle_platform",
+  };
+}
+
+export function adminPlatformDetailFixture() {
+  const list = vehiclePlatformsFixture();
+  const platform = list.platforms[0];
+  if (!platform) {
+    return { platform: null, links: [], vehicles: [], source: "vehicle_platform" };
+  }
+  return {
+    platform,
+    links: [
       {
-        id: AM_PLATFORM_ID,
-        code: "DAI-M900",
-        label: "Daihatsu M900 shared platform",
-        maker: "Daihatsu",
-        carCount: 3,
+        id: "11111111-1111-4111-8111-111111111116",
+        platform_a_id: AM_PLATFORM_ID,
+        platform_b_id: "77777777-7777-4777-8777-777777777777",
+        maintenance_component_id: AM_COMPONENT_ID,
+        scope: "component",
+        position: "front",
+        side: "both",
+        evidence_url: "https://example.com/platform-link",
       },
     ],
+    vehicles: vehicleCatalogListFixture().items,
+    source: "vehicle_platform",
   };
 }
 
@@ -154,6 +274,7 @@ export function findPartsResultFixture() {
     production_end_year: 2020,
     drivetrain: "2WD",
   };
+  const itemStatus = activeProfile === "allChecking" ? "needs_checking" : "live";
   return {
     mode: "tiered" as const,
     car: { make: "Toyota", model: "Roomy", year: 2018, label: "Toyota Roomy 2018" },
@@ -161,51 +282,56 @@ export function findPartsResultFixture() {
     pickedVariantId: AM_VARIANT_ID,
     variants: [picked],
     picked,
-    sections: [
-      {
-        tier: 1,
-        label: "Made for your car",
-        items: [
+    sections: activeProfile === "empty"
+      ? []
+      : [
           {
-            partId: AM_PART_ID,
-            brand: "Toyota",
-            number: "D0051M-01-J",
-            name: "Front brake pad set",
-            reason: "Same factory number on file for this car.",
-            status: "live",
-            fit_source: "derived",
-            via: "engine",
-            reason_code: "oe_number_match",
-            position: "front",
-            side: "both",
-            wva: "12345",
+            tier: 1,
+            label: "Made for your car",
+            items: [
+              {
+                partId: AM_PART_ID,
+                derivedId: AM_DERIVED_ID,
+                brand: "Toyota",
+                number: "D0051M-01-J",
+                name: "Front brake pad set",
+                reason: "Same factory number on file for this car.",
+                status: itemStatus,
+                fit_source: "derived",
+                via: "engine",
+                reason_code: "oe_number_match",
+                position: "front",
+                side: "both",
+                wva: "12345",
+              },
+            ],
           },
         ],
-      },
-    ],
-    plainSections: [
-      {
-        tier: 1,
-        plainLabel: "Made for your car",
-        plainReason: "Toyota Roomy shares the M900A platform.",
-        items: [
+    plainSections: activeProfile === "empty"
+      ? []
+      : [
           {
-            partId: AM_PART_ID,
-            brand: "Toyota",
-            number: "D0051M-01-J",
-            name: "Front brake pad set",
-            reason: "Same factory number on file for this car.",
-            status: "live",
-            fit_source: "derived",
-            via: "engine",
-            reason_code: "oe_number_match",
-            position: "front",
-            side: "both",
+            tier: 1,
+            plainLabel: "Made for your car",
+            plainReason: "Toyota Roomy shares the M900A platform.",
+            items: [
+              {
+                partId: AM_PART_ID,
+                brand: "Toyota",
+                number: "D0051M-01-J",
+                name: "Front brake pad set",
+                reason: "Same factory number on file for this car.",
+                status: itemStatus,
+                fit_source: "derived",
+                via: "engine",
+                reason_code: "oe_number_match",
+                position: "front",
+                side: "both",
+              },
+            ],
           },
         ],
-      },
-    ],
-    emptyTiers: [2, 3, 4],
+    emptyTiers: activeProfile === "empty" ? [1, 2, 3, 4] : [2, 3, 4],
     bestPick: null,
     coverage: { essentials: 4, essentialsTotal: 6, specs: 2, specsTotal: 4, otherParts: 8 },
   };
@@ -214,7 +340,7 @@ export function findPartsResultFixture() {
 export function masterPartFixture() {
   return {
     partId: AM_PART_ID,
-    groupId: "g1111111-1111-4111-8111-111111111111",
+    groupId: AM_GROUP_ID,
     groupCode: "GRP-M900-BRK",
     groupRevision: 2,
     name: "Front brake pad set",
@@ -233,6 +359,7 @@ export function masterPartFixture() {
     fitCount: 35,
     indexRevision: 2,
     provenanceHash: "a1b2c3d4",
+    schemaVersion: "2",
     fits: [
       {
         variantId: AM_VARIANT_ID,
@@ -249,12 +376,20 @@ export function masterPartFixture() {
   };
 }
 
+function engineDisabledResponse() {
+  return { error: "Parts auto-match is disabled." };
+}
+
 async function fulfillCatalogAdmin(route: Route) {
   const url = route.request().url();
   const method = route.request().method();
+  if (activeProfile === "error" && method === "GET" && url.includes("/admin/catalog/find-parts") && !url.includes("export")) {
+    await route.fulfill({ status: 500, json: { error: "find-parts unavailable" } });
+    return;
+  }
   if (url.includes("/admin/catalog/find-parts/coverage")) {
     await route.fulfill({
-      json: { variantId: AM_VARIANT_ID, areas: [{ id: "brakes", count: 4 }] },
+      json: { variantId: AM_VARIANT_ID, areas: [{ id: "brakes", count: activeProfile === "empty" ? 0 : 4 }] },
     });
     return;
   }
@@ -274,7 +409,7 @@ async function fulfillCatalogAdmin(route: Route) {
         fitmentsOnFile: 890,
         vehiclesWithParts: 80,
         waiting: 2,
-        matchTypesOff: false,
+        matchTypesOff: activeProfile === "flagOff",
       },
     });
     return;
@@ -282,18 +417,20 @@ async function fulfillCatalogAdmin(route: Route) {
   if (url.includes("/admin/catalog/parts/search") || url.includes("/admin/catalog/master-search")) {
     await route.fulfill({
       json: {
-        items: [
-          {
-            partId: AM_PART_ID,
-            name: "Front brake pad set",
-            manufacturer: "Toyota",
-            oemPartNumber: "D0051M-01-J",
-            tier: 1,
-            status: "verified",
-          },
-        ],
-        total: 1,
-        counts: { all: 1, oem: 1, sister: 0, engine: 0, aftermarket: 0, universal: 0 },
+        items: activeProfile === "empty"
+          ? []
+          : [
+              {
+                partId: AM_PART_ID,
+                name: "Front brake pad set",
+                manufacturer: "Toyota",
+                oemPartNumber: "D0051M-01-J",
+                tier: 1,
+                status: "verified",
+              },
+            ],
+        total: activeProfile === "empty" ? 0 : 1,
+        counts: { all: activeProfile === "empty" ? 0 : 1, oem: 1, sister: 0, engine: 0, aftermarket: 0, universal: 0 },
       },
     });
     return;
@@ -339,6 +476,14 @@ async function fulfillCatalogAdmin(route: Route) {
 async function fulfillFleetCoreAdmin(route: Route) {
   const url = route.request().url();
   const method = route.request().method();
+
+  if (activeProfile === "error") {
+    if (url.includes("/admin/auto-match/health") || url.includes("/admin/auto-match/schedule")) {
+      await route.fulfill({ status: 500, json: { error: "health probe failed" } });
+      return;
+    }
+  }
+
   if (url.includes("/admin/auto-match/health")) {
     await route.fulfill({ json: partMatchHealthFixture(new URL(url).searchParams.get("vehicleId")) });
     return;
@@ -348,8 +493,13 @@ async function fulfillFleetCoreAdmin(route: Route) {
     return;
   }
   if (url.includes("/admin/auto-match/conflicts/heatmap")) {
+    const empty = activeProfile === "empty";
     await route.fulfill({
-      json: { byType: { oe_ambiguous: 2 }, byVehicle: { [AM_VEHICLE_ID]: 1 }, openCount: 2 },
+      json: {
+        byType: empty ? {} : { oe_ambiguous: 2 },
+        byVehicle: empty ? {} : { [AM_VEHICLE_ID]: 1 },
+        openCount: empty ? 0 : 2,
+      },
     });
     return;
   }
@@ -358,41 +508,78 @@ async function fulfillFleetCoreAdmin(route: Route) {
     return;
   }
   if (url.includes("/admin/auto-match/conflicts/") && url.includes("/resolve") && method === "POST") {
+    if (activeProfile === "flagOff") {
+      await route.fulfill({ status: 403, json: engineDisabledResponse() });
+      return;
+    }
     await route.fulfill({ json: { ok: true } });
     return;
   }
   if (url.includes("/admin/auto-match/runs")) {
-    await route.fulfill({ json: { rows: [partMatchHealthFixture().lastRun] } });
+    const last = partMatchHealthFixture().lastRun;
+    await route.fulfill({ json: { rows: last ? [last] : [] } });
     return;
   }
   if (url.includes("/admin/auto-match/catalog/completeness")) {
-    await route.fulfill({ json: { vehicleCount: 120, vehiclesWithOeNumbers: 80, platformLinkCount: 12 } });
+    await route.fulfill({
+      json: activeProfile === "empty"
+        ? { vehicleCount: 0, vehiclesWithOeNumbers: 0, platformLinkCount: 0, rows: [] }
+        : { vehicleCount: 120, vehiclesWithOeNumbers: 80, platformLinkCount: 12, rows: [] },
+    });
     return;
   }
   if (url.includes("/admin/auto-match/position-reports/export")) {
-    await route.fulfill({ body: "id,reason\n1,test", contentType: "text/csv" });
+    await route.fulfill({ body: "id,reason\n1,position_unmapped", contentType: "text/csv" });
     return;
   }
   if (url.includes("/admin/auto-match/position-reports")) {
     await route.fulfill({
       json: {
-        rows: [
-          { id: "11111111-1111-4111-8111-111111111114", original_position: "FL", original_side: null, reason: "parser", confidence: 0.82 },
-        ],
+        rows: activeProfile === "empty"
+          ? []
+          : [
+              {
+                id: "11111111-1111-4111-8111-111111111114",
+                original_position: "FL",
+                original_side: null,
+                reason: "position_unmapped",
+                resolved_at: null,
+              },
+            ],
       },
     });
     return;
   }
   if (url.includes("/admin/auto-match/run-audit") && method === "POST") {
+    if (activeProfile === "flagOff") {
+      await route.fulfill({ status: 403, json: engineDisabledResponse() });
+      return;
+    }
     await route.fulfill({ json: { ok: true } });
     return;
   }
   if (url.includes("/admin/auto-match/keep-batch") && method === "POST") {
+    if (activeProfile === "flagOff") {
+      await route.fulfill({ status: 403, json: engineDisabledResponse() });
+      return;
+    }
     await route.fulfill({ json: { ok: true } });
     return;
   }
   if (url.includes("/admin/platform-feature-flags/parts_auto_match_enabled") && method === "PATCH") {
     await route.fulfill({ json: { ok: true, enabled: true } });
+    return;
+  }
+  if (url.includes("/derived-fits") && method === "GET") {
+    if (activeProfile === "flagOff") {
+      await route.fulfill({ status: 403, json: engineDisabledResponse() });
+      return;
+    }
+    await route.fulfill({ json: vehicleDerivedFitsFixture() });
+    return;
+  }
+  if (url.includes("/revisions") && method === "GET" && url.includes("/vehicles/")) {
+    await route.fulfill({ json: vehicleOeRevisionsFixture() });
     return;
   }
   if (url.includes("/admin/vehicles/") && url.includes("/oe-numbers")) {
@@ -403,23 +590,29 @@ async function fulfillFleetCoreAdmin(route: Route) {
     await route.fulfill({ json: vehicleCatalogListFixture() });
     return;
   }
+  if (url.match(/\/admin\/auto-match\/platforms\/[^/]+(\?|$)/) && method === "GET") {
+    await route.fulfill({ json: adminPlatformDetailFixture() });
+    return;
+  }
   if (url.includes("/admin/vehicle-platforms") || url.includes("/admin/auto-match/platforms")) {
     await route.fulfill({ json: vehiclePlatformsFixture() });
     return;
   }
-  if (url.includes("/admin/auto-match/platform") && method === "GET") {
+  if (url.includes("/admin/parts/") && (url.includes("/oe-references") || url.includes("/index-numbers") || url.includes("/approvals"))) {
     await route.fulfill({
       json: {
-        platform: vehiclePlatformsFixture().items[0],
-        vehicles: vehicleCatalogListFixture().items,
-        links: [],
-        linkCount: 2,
+        rows: activeProfile === "empty"
+          ? []
+          : [
+              {
+                id: "11111111-1111-4111-8111-111111111117",
+                oe_number: "04465-02220",
+                value: "04465-02220",
+                brand: "Toyota",
+              },
+            ],
       },
     });
-    return;
-  }
-  if (url.includes("/admin/parts/") && (url.includes("/oe-references") || url.includes("/index-numbers") || url.includes("/approvals"))) {
-    await route.fulfill({ json: { rows: [] } });
     return;
   }
   if (url.includes("/admin/catalog/find-parts/export") && method === "GET") {
@@ -427,6 +620,10 @@ async function fulfillFleetCoreAdmin(route: Route) {
     return;
   }
   if (url.includes("/admin/catalog/find-parts/rematch") && method === "POST") {
+    if (activeProfile === "flagOff") {
+      await route.fulfill({ status: 403, json: engineDisabledResponse() });
+      return;
+    }
     await route.fulfill({ json: { ok: true } });
     return;
   }
@@ -441,7 +638,8 @@ async function fulfillFleetCoreAdmin(route: Route) {
   await route.continue();
 }
 
-export async function installDominionAutoMatchMocks(page: Page) {
+export async function installDominionAutoMatchMocks(page: Page, options: AutoMatchMockOptions = {}) {
+  activeProfile = options.profile ?? "default";
   await page.route("**/functions/v1/fleet-core/**", fulfillFleetCoreAdmin);
   await page.route("**/__sb/functions/v1/fleet-core/**", fulfillFleetCoreAdmin);
   await page.route("**/fleet-core/**", fulfillFleetCoreAdmin);

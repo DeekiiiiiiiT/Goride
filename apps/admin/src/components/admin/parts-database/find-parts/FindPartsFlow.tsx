@@ -534,6 +534,7 @@ export function FindPartsFlow({
           candidates={candidates}
           owner={owner}
           componentId={componentId}
+          vehicleVariantId={chosenId}
           onClose={() => setDetail(null)}
           onEdit={requestAdd}
           onConfirmed={() => { void search.refetch(); }}

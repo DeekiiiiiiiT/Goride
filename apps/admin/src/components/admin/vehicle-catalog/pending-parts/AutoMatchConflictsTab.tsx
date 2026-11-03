@@ -37,11 +37,31 @@ function minutesUntil(iso: string | undefined): string {
 }
 
 function displayCar(row: MatchConflictRow): string {
-  return String(row.vehicle_label || row.car_label || row.vehicle_catalog_id || "—");
+  return String(row.vehicle_label || row.car_label || "");
 }
 
 function displayPart(row: MatchConflictRow): string {
-  return String(row.part_name || row.group_code || row.interchange_group_id || row.part_id || "—");
+  return String(row.part_name || row.group_code || "");
+}
+
+function formatConflictDetail(row: MatchConflictRow): string {
+  const raw = row.detail;
+  if (raw == null) return String(row.code || row.matched_key || "");
+  if (typeof raw === "string") return raw;
+  if (typeof raw === "object") {
+    const parts = Object.entries(raw as Record<string, unknown>)
+      .filter(([, v]) => v != null && v !== "")
+      .map(([k, v]) => `${k}: ${typeof v === "object" ? JSON.stringify(v) : String(v)}`);
+    return parts.join(" · ") || String(row.code || "");
+  }
+  return String(row.code || "");
+}
+
+function formatFoundAt(row: MatchConflictRow): string {
+  const iso = String(row.found_at || (row as { computed_at?: string }).computed_at || (row as { created_at?: string }).created_at || "");
+  if (!iso) return "";
+  const d = new Date(iso);
+  return Number.isFinite(d.getTime()) ? d.toLocaleString() : iso;
 }
 
 export function AutoMatchConflictsTab() {
@@ -54,6 +74,8 @@ export function AutoMatchConflictsTab() {
   const [search, setSearch] = useState("");
   const [drawerId, setDrawerId] = useState<string | null>(null);
   const [note, setNote] = useState("");
+  const [batchNote, setBatchNote] = useState("");
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
 
   const schedule = useQuery({ queryKey: ["part-match-schedule"], queryFn: () => fetchPartMatchSchedule(token), enabled: Boolean(token) });
@@ -90,18 +112,24 @@ export function AutoMatchConflictsTab() {
 
   async function batchResolveRules() {
     if (!owner) return;
-    const openRows = rows.filter((r) => String(r.status) === "open").slice(0, 5);
-    if (!openRows.length) {
-      toast.message("No open rows on this page to batch.");
+    const targets = rows.filter((r) => selectedIds.includes(String(r.id)) && String(r.status) === "open");
+    if (!targets.length) {
+      toast.message("Select open conflicts first.");
+      return;
+    }
+    if (!batchNote.trim()) {
+      toast.message("Add a batch note for the audit trail.");
       return;
     }
     setBusy(true);
     try {
       await resolveAutoMatchConflictsBatch(
         token,
-        openRows.map((r) => ({ id: String(r.id), action: "keep" as const, note: "Batch resolve rules" })),
+        targets.map((r) => ({ id: String(r.id), action: "keep" as const, note: batchNote.trim() })),
       );
       toast.success("Batch resolved");
+      setSelectedIds([]);
+      setBatchNote("");
       await client.invalidateQueries({ queryKey: ["auto-match-conflicts"] });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Batch failed");
@@ -130,8 +158,9 @@ export function AutoMatchConflictsTab() {
         </div>
       </div>
       <div className="flex flex-wrap items-center justify-end gap-2">
-        <button type="button" className="rounded-[0.25rem] border border-outline-variant px-3 py-1.5 text-sm disabled:opacity-40" disabled={!owner || busy} onClick={() => { void batchResolveRules(); }}>
-          Batch Resolve Rules
+        <input className="min-w-[200px] rounded-[0.25rem] border border-outline-variant px-3 py-1.5 text-sm" placeholder="Batch note (required)" value={batchNote} onChange={(e) => setBatchNote(e.target.value)} />
+        <button type="button" className="rounded-[0.25rem] border border-outline-variant px-3 py-1.5 text-sm disabled:opacity-40" disabled={!owner || busy || !selectedIds.length} onClick={() => { void batchResolveRules(); }}>
+          Batch Resolve ({selectedIds.length})
         </button>
       </div>
       <div className="flex flex-wrap gap-2">
@@ -166,6 +195,7 @@ export function AutoMatchConflictsTab() {
           <table className="min-w-full text-left text-xs">
             <thead className="bg-surface-container-low uppercase tracking-wider text-on-surface-variant">
               <tr>
+                <th className="px-3 py-2 w-8"><span className="sr-only">Select</span></th>
                 <th className="px-3 py-2">Type</th>
                 <th className="px-3 py-2">Detail</th>
                 <th className="px-3 py-2">Found</th>
@@ -180,9 +210,18 @@ export function AutoMatchConflictsTab() {
                 const st = String(row.status || "");
                 return (
                   <tr key={String(row.id)} className="border-t border-outline-variant/40">
-                    <td className="px-3 py-2 font-mono">{String(row.conflict_type || "—")}</td>
-                    <td className="px-3 py-2">{String(row.code || row.detail || "—").slice(0, 40)}</td>
-                    <td className="px-3 py-2 font-mono">{String(row.matched_key || "—")}</td>
+                    <td className="px-3 py-2">
+                      {st === "open" ? (
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.includes(String(row.id))}
+                          onChange={() => setSelectedIds((prev) => (prev.includes(String(row.id)) ? prev.filter((id) => id !== String(row.id)) : [...prev, String(row.id)]))}
+                        />
+                      ) : null}
+                    </td>
+                    <td className="px-3 py-2 font-mono">{String(row.conflict_type || "")}</td>
+                    <td className="px-3 py-2">{formatConflictDetail(row).slice(0, 80)}</td>
+                    <td className="px-3 py-2 font-mono">{formatFoundAt(row)}</td>
                     <td className="px-3 py-2">{displayCar(row)}</td>
                     <td className="px-3 py-2">{displayPart(row)}</td>
                     <td className="px-3 py-2">{st}</td>
@@ -190,12 +229,17 @@ export function AutoMatchConflictsTab() {
                       {st === "open" ? (
                         <div className="flex flex-wrap gap-2">
                           <button type="button" className="text-primary font-semibold" onClick={() => { setDrawerId(String(row.id)); setNote(""); }}>Review</button>
-                          <button type="button" className="text-secondary" disabled={busy} onClick={() => {
-                            void resolveAutoMatchConflict(token, String(row.id), "keep", "Inline keep").then(() => client.invalidateQueries({ queryKey: ["auto-match-conflicts"] }));
+                          <button type="button" className="text-secondary disabled:opacity-40" disabled={!owner || busy} onClick={() => {
+                            const inlineNote = window.prompt("Note for audit trail (required):")?.trim();
+                            if (!inlineNote) return;
+                            void resolveAutoMatchConflict(token, String(row.id), "keep", inlineNote).then(() => client.invalidateQueries({ queryKey: ["auto-match-conflicts"] })).catch((e) => toast.error(e instanceof Error ? e.message : "Failed"));
                           }}>Keep</button>
-                          <button type="button" className="text-red-700" disabled={busy} onClick={() => {
-                            void resolveAutoMatchConflict(token, String(row.id), "remove", "Inline remove").then(() => client.invalidateQueries({ queryKey: ["auto-match-conflicts"] }));
+                          <button type="button" className="text-red-700 disabled:opacity-40" disabled={!owner || busy} onClick={() => {
+                            const inlineNote = window.prompt("Note for audit trail (required):")?.trim();
+                            if (!inlineNote) return;
+                            void resolveAutoMatchConflict(token, String(row.id), "remove", inlineNote).then(() => client.invalidateQueries({ queryKey: ["auto-match-conflicts"] })).catch((e) => toast.error(e instanceof Error ? e.message : "Failed"));
                           }}>Remove</button>
+                          <a className="text-primary" href={`/?page=global-settings-general&conflict=${encodeURIComponent(String(row.id))}`}>Audit</a>
                         </div>
                       ) : st === "superseded" ? "—" : "Resolved"}
                     </td>

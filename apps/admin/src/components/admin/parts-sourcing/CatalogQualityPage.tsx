@@ -32,13 +32,15 @@ export function CatalogQualityPage() {
   const load = useCallback(async () => {
     if (!token) return;
     const t0 = performance.now();
-    const [h, s, comp, pending, history] = await Promise.all([
+    const [h, s, comp, pending, history, runLog] = await Promise.all([
       fetchPartMatchHealth(token),
       fetchPartMatchSchedule(token),
       fetchCatalogCompleteness(token).catch(() => ({})),
       fetchPositionReports(token, true).catch(() => ({ rows: [] })),
       fetchPositionReports(token, false).catch(() => ({ rows: [] })),
+      fetchPartMatchRuns(token, 10).catch(() => ({ rows: [] })),
     ]);
+    setRuns(runLog.rows ?? []);
     setCompleteness(comp);
     setPositionPending(pending.rows ?? []);
     setPositionHistory((history.rows ?? []).filter((r) => r.resolved_at));
@@ -57,7 +59,8 @@ export function CatalogQualityPage() {
   const openConflicts = Object.values(health?.openConflicts ?? {}).reduce((a, b) => a + Number(b), 0);
   const unresolved = health?.unresolvedPositionReports ?? positionPending.length;
   const schedule = scheduleMeta?.nextRun ?? null;
-  const scheduleLabel = scheduleMeta?.cron ? scheduleMeta.cron : "nightly";
+  const scheduleLabel = (scheduleMeta as { intervalLabel?: string })?.intervalLabel
+    || (scheduleMeta?.cron ? scheduleMeta.cron : "nightly");
   const tierHint = health?.tierBreakdown
     ? `T${Object.keys(health.tierBreakdown).sort()[0] ?? "3"}–T${Object.keys(health.tierBreakdown).sort().slice(-1)[0] ?? "4"}`
     : "T1–T5";
@@ -130,7 +133,7 @@ export function CatalogQualityPage() {
           </span>
         </div>
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <HealthTile label="Live matches" value={String(health?.derived?.live ?? 0)} hint={lastRun?.error ? "" : "Sync"} />
+          <HealthTile label="Live matches" value={String(health?.derived?.live ?? 0)} hint="" />
           <HealthTile label="Needs checking" value={String(health?.derived?.needsChecking ?? 0)} hint={tierHint} />
           <HealthTile label="Hidden by listings" value={String(health?.derived?.suppressed ?? 0)} hint="" />
           <HealthTile
@@ -208,9 +211,17 @@ export function CatalogQualityPage() {
 
       <section className="rounded-[0.5rem] border border-outline-variant bg-surface-container-lowest p-space-lg">
         <h2 className="font-headline-md text-headline-md">Recent validation exceptions</h2>
-        <p className="mt-2 text-body-sm text-secondary">
-          {runs.length ? `${runs.length} recent engine runs on file.` : "Run catalog audit to populate validation exceptions."}
-        </p>
+        {runs.filter((r) => r.error).length ? (
+          <ul className="mt-2 space-y-2 text-sm">
+            {runs.filter((r) => r.error).slice(0, 8).map((row) => (
+              <li key={String(row.run_id || row.id)} className="rounded border border-red-200 bg-red-50 px-3 py-2">
+                {String(row.kind || "run")} · {row.finished_at ? new Date(String(row.finished_at)).toLocaleString() : "In progress"} · {String(row.error)}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-2 text-body-sm text-secondary">No validation exceptions in the last engine runs.</p>
+        )}
       </section>
 
       {runsOpen ? (
@@ -236,7 +247,14 @@ export function CatalogQualityPage() {
             <h3 className="font-headline-md">Catalog completeness</h3>
             <button type="button" onClick={() => setCompletenessOpen(false)}>✕</button>
           </div>
-          <pre className="mt-4 text-xs overflow-auto">{JSON.stringify(completeness, null, 2)}</pre>
+          <ul className="mt-4 space-y-2 text-sm">
+            {completeness ? Object.entries(completeness).map(([key, val]) => (
+              <li key={key} className="flex justify-between gap-2 border-b border-outline-variant/30 pb-1">
+                <span className="text-secondary">{key.replace(/([A-Z])/g, " $1")}</span>
+                <span className="font-mono font-semibold">{String(val)}</span>
+              </li>
+            )) : <li>No completeness data yet.</li>}
+          </ul>
         </aside>
       ) : null}
     </div>
@@ -258,6 +276,9 @@ function PositionTable({
   onReload: () => void;
   history?: boolean;
 }) {
+  const [draftPos, setDraftPos] = useState<Record<string, string>>({});
+  const [draftSide, setDraftSide] = useState<Record<string, string>>({});
+
   return (
     <div className="mt-4">
       <h3 className="font-semibold text-sm">{title} ({rows.length})</h3>
@@ -266,29 +287,49 @@ function PositionTable({
           <thead className="bg-surface-container-low uppercase text-on-surface-variant">
             <tr>
               <th className="px-2 py-1">Original</th>
-              <th className="px-2 py-1">Reason</th>
-              <th className="px-2 py-1">Confidence</th>
+              <th className="px-2 py-1">Suggested fix</th>
               {!history ? <th className="px-2 py-1">Actions</th> : null}
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
-              <tr key={String(row.id)} className="border-t border-outline-variant/30">
-                <td className="px-2 py-1 font-mono">{String(row.original_position || "—")} / {String(row.original_side || "—")}</td>
-                <td className="px-2 py-1">{String(row.reason || "parser")}</td>
-                <td className="px-2 py-1">{String(row.confidence ?? "—")}</td>
-                {!history ? (
-                  <td className="px-2 py-1 flex gap-1">
-                    <button type="button" className="text-primary disabled:opacity-40" disabled={!owner} onClick={() => {
-                      void remapPositionReport(token, String(row.id), { position: "front", side: "both" }).then(onReload);
-                    }}>Remap</button>
-                    <button type="button" className="text-secondary disabled:opacity-40" disabled={!owner} onClick={() => {
-                      void markPositionReportFixed(token, String(row.id)).then(onReload);
-                    }}>Mark fixed</button>
-                  </td>
-                ) : null}
-              </tr>
-            ))}
+            {rows.map((row) => {
+              const id = String(row.id);
+              const pos = draftPos[id] ?? "front";
+              const side = draftSide[id] ?? "both";
+              return (
+                <tr key={id} className="border-t border-outline-variant/30">
+                  <td className="px-2 py-1 font-mono">{String(row.original_position || "")} / {String(row.original_side || "")}</td>
+                  {!history ? (
+                    <td className="px-2 py-1">
+                      <div className="flex gap-1">
+                        <select className="rounded border px-1 py-0.5" value={pos} onChange={(e) => setDraftPos((p) => ({ ...p, [id]: e.target.value }))}>
+                          <option value="front">Front</option>
+                          <option value="rear">Rear</option>
+                        </select>
+                        <select className="rounded border px-1 py-0.5" value={side} onChange={(e) => setDraftSide((p) => ({ ...p, [id]: e.target.value }))}>
+                          <option value="both">Both</option>
+                          <option value="left">Left</option>
+                          <option value="right">Right</option>
+                        </select>
+                      </div>
+                    </td>
+                  ) : (
+                    <td className="px-2 py-1">{String(row.resolved_position || row.new_position || "")} / {String(row.resolved_side || row.new_side || "")}</td>
+                  )}
+                  {!history ? (
+                    <td className="px-2 py-1 flex gap-1">
+                      <button type="button" className="text-primary disabled:opacity-40" disabled={!owner} onClick={() => {
+                        if (!window.confirm("Confirm remap for this row?")) return;
+                        void remapPositionReport(token, id, { position: pos, side }).then(onReload).catch((e) => toast.error(e instanceof Error ? e.message : "Remap failed"));
+                      }}>Remap</button>
+                      <button type="button" className="text-secondary disabled:opacity-40" disabled={!owner} onClick={() => {
+                        void markPositionReportFixed(token, id).then(onReload);
+                      }}>Mark fixed</button>
+                    </td>
+                  ) : null}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       )}

@@ -1,4 +1,4 @@
-﻿-- Parts auto-matching (audit Rev 7) — single migration
+-- Parts auto-matching (audit Rev 7) — single migration
 -- AM-18 runbook — engine rule change:
 --   1. Bump public.part_match_engine_version() return value in a new migration.
 --   2. Run SELECT public.part_match_recompute(NULL, NULL); (archives changed/removed rows first).
@@ -116,7 +116,10 @@ BEGIN
   ELSIF v_pos IN ('R', 'RIGHT') THEN
     v_out_pos := NULL;
     v_out_side := coalesce(v_out_side, 'right');
-  ELSIF v_pos IN ('FRONT BOTH', 'BOTH') OR (v_pos LIKE '%FRONT%' AND v_pos LIKE '%BOTH%') THEN
+  ELSIF v_pos = 'BOTH' THEN
+    v_out_pos := NULL;
+    v_out_side := NULL;
+  ELSIF v_pos IN ('FRONT BOTH') OR (v_pos LIKE '%FRONT%' AND v_pos LIKE '%BOTH%') THEN
     v_out_pos := 'front';
     v_out_side := coalesce(v_out_side, 'both');
   ELSE
@@ -166,6 +169,12 @@ AS $$
     );
 $$;
 
+ALTER TABLE public.part_listing_exclusion
+  ADD COLUMN IF NOT EXISTS position text,
+  ADD COLUMN IF NOT EXISTS side text,
+  ADD COLUMN IF NOT EXISTS year_from integer,
+  ADD COLUMN IF NOT EXISTS year_to integer;
+
 CREATE OR REPLACE FUNCTION public.part_listing_exclusion_blocks(
   p_group uuid,
   p_car uuid,
@@ -198,12 +207,6 @@ GRANT EXECUTE ON FUNCTION public.part_norm_position(text) TO service_role;
 GRANT EXECUTE ON FUNCTION public.part_side_covers(text, text, text, text) TO service_role;
 GRANT EXECUTE ON FUNCTION public.part_listing_exclusion_blocks(uuid, uuid, text, text, integer) TO service_role;
 
-ALTER TABLE public.part_listing_exclusion
-  ADD COLUMN IF NOT EXISTS position text,
-  ADD COLUMN IF NOT EXISTS side text,
-  ADD COLUMN IF NOT EXISTS year_from integer,
-  ADD COLUMN IF NOT EXISTS year_to integer;
-
 DO $$
 DECLARE
   v_count bigint;
@@ -218,11 +221,14 @@ END $$;
 CREATE TABLE public.part_norm_position_backfill_report (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   table_name text NOT NULL CHECK (table_name IN ('part_listing', 'part_listing_exclusion', 'part_import_row')),
-  row_id uuid NOT NULL,
+  row_id uuid,
+  import_batch_id uuid,
+  import_line_no integer,
   original_position text,
   original_side text,
   reason text NOT NULL CHECK (reason IN ('unmapped', 'duplicate_after_normalization')),
   survivor_id uuid,
+  import_survivor_line_no integer,
   resolved_at timestamptz,
   resolved_by uuid REFERENCES auth.users (id),
   resolution_source text CHECK (resolution_source IS NULL OR resolution_source IN ('manual', 'listing_edit')),
@@ -388,7 +394,8 @@ WHERE ex.id = t.id;
 
 CREATE TEMP TABLE _am14_norm_import ON COMMIT DROP AS
 SELECT
-  r.id,
+  r.batch_id,
+  r.line_no,
   r.raw,
   r.normalized,
   n.norm_position,
@@ -400,11 +407,12 @@ CROSS JOIN LATERAL public.part_norm_position(
 ) AS n;
 
 INSERT INTO public.part_norm_position_backfill_report (
-  table_name, row_id, original_position, original_side, reason
+  table_name, import_batch_id, import_line_no, original_position, original_side, reason
 )
 SELECT
   'part_import_row',
-  t.id,
+  t.batch_id,
+  t.line_no,
   t.raw->>'position',
   coalesce(t.raw->>'side', t.normalized->>'side'),
   'unmapped'
@@ -413,6 +421,40 @@ WHERE btrim(coalesce(t.raw->>'position', '')) <> ''
   AND t.norm_position IS NULL
   AND t.norm_side IS NULL;
 
+CREATE TEMP TABLE _am14_dup_import ON COMMIT DROP AS
+SELECT t.batch_id, t.line_no AS drop_line_no, s.line_no AS survivor_line_no
+FROM _am14_norm_import t
+JOIN LATERAL (
+  SELECT x.line_no
+  FROM _am14_norm_import x
+  WHERE x.batch_id = t.batch_id
+    AND x.norm_position IS NOT DISTINCT FROM t.norm_position
+    AND x.norm_side IS NOT DISTINCT FROM t.norm_side
+    AND btrim(coalesce(x.raw->>'position', '')) <> ''
+  ORDER BY x.line_no
+  LIMIT 1
+) s ON true
+WHERE t.line_no <> s.line_no
+  AND btrim(coalesce(t.raw->>'position', '')) <> '';
+
+INSERT INTO public.part_norm_position_backfill_report (
+  table_name, import_batch_id, import_line_no, original_position, original_side, reason, import_survivor_line_no
+)
+SELECT
+  'part_import_row',
+  d.batch_id,
+  d.drop_line_no,
+  t.raw->>'position',
+  coalesce(t.raw->>'side', t.normalized->>'side'),
+  'duplicate_after_normalization',
+  d.survivor_line_no
+FROM _am14_dup_import d
+JOIN _am14_norm_import t ON t.batch_id = d.batch_id AND t.line_no = d.drop_line_no;
+
+DELETE FROM public.part_import_row r
+USING _am14_dup_import d
+WHERE r.batch_id = d.batch_id AND r.line_no = d.drop_line_no;
+
 UPDATE public.part_import_row r
 SET normalized = coalesce(r.normalized, '{}'::jsonb)
   || jsonb_build_object(
@@ -420,7 +462,8 @@ SET normalized = coalesce(r.normalized, '{}'::jsonb)
     'side', t.norm_side
   )
 FROM _am14_norm_import t
-WHERE r.id = t.id
+WHERE r.batch_id = t.batch_id
+  AND r.line_no = t.line_no
   AND (
     t.norm_position IS DISTINCT FROM r.normalized->>'position'
     OR t.norm_side IS DISTINCT FROM r.normalized->>'side'
@@ -1235,7 +1278,7 @@ LANGUAGE sql
 STABLE
 SET search_path = ''
 AS $$
-  WITH RECURSIVE walk AS (
+  WITH RECURSIVE walk_fwd AS (
     SELECT
       von.oe_number_norm AS norm,
       upper(von.oe_brand) AS brand,
@@ -1246,16 +1289,31 @@ AS $$
     WHERE von.id = p_von_id
     UNION ALL
     SELECT s.to_norm, upper(s.oe_brand), w.chain || s.to_norm, w.depth + 1, true
-    FROM walk w
+    FROM walk_fwd w
     JOIN public.oe_number_supersession s
       ON s.from_norm = w.norm AND upper(s.oe_brand) = w.brand
     WHERE w.depth < 5 AND NOT s.to_norm = ANY (w.chain)
+  ),
+  walk_bwd AS (
+    SELECT
+      von.oe_number_norm AS norm,
+      upper(von.oe_brand) AS brand,
+      ARRAY[von.oe_number_norm]::text[] AS chain,
+      0 AS depth,
+      false AS superseded
+    FROM public.vehicle_oe_number von
+    WHERE von.id = p_von_id
     UNION ALL
     SELECT s.from_norm, upper(s.oe_brand), w.chain || s.from_norm, w.depth + 1, true
-    FROM walk w
+    FROM walk_bwd w
     JOIN public.oe_number_supersession s
       ON s.to_norm = w.norm AND upper(s.oe_brand) = w.brand AND s.fully_interchangeable
     WHERE w.depth < 5 AND NOT s.from_norm = ANY (w.chain)
+  ),
+  walk AS (
+    SELECT * FROM walk_fwd
+    UNION ALL
+    SELECT * FROM walk_bwd
   )
   SELECT DISTINCT walk.norm, walk.brand, walk.chain, walk.superseded OR walk.depth > 0
   FROM walk;
@@ -1978,18 +2036,26 @@ BEGIN
     vehicle_id uuid NOT NULL,
     PRIMARY KEY (group_id, vehicle_id)
   ) ON COMMIT DROP;
-  INSERT INTO _pm_batch_scope (group_id, vehicle_id)
-  SELECT DISTINCT gn.interchange_group_id, x.vehicle_catalog_id
-  FROM (
-    SELECT n.vehicle_catalog_id FROM new_rows n
-    UNION
-    SELECT o.vehicle_catalog_id FROM old_rows o
-  ) x
-  JOIN public.vehicle_oe_number von ON von.vehicle_catalog_id = x.vehicle_catalog_id
-  JOIN public.part_match_oe_chain(von.id) ch ON true
-  JOIN public.part_match_group_numbers(NULL) gn ON gn.norm = ch.norm AND gn.brand = ch.brand
-  WHERE x.vehicle_catalog_id IS NOT NULL
-  ON CONFLICT DO NOTHING;
+  IF TG_OP IN ('INSERT', 'UPDATE') THEN
+    INSERT INTO _pm_batch_scope (group_id, vehicle_id)
+    SELECT DISTINCT gn.interchange_group_id, x.vehicle_catalog_id
+    FROM (SELECT n.vehicle_catalog_id FROM new_rows n) x
+    JOIN public.vehicle_oe_number von ON von.vehicle_catalog_id = x.vehicle_catalog_id
+    JOIN public.part_match_oe_chain(von.id) ch ON true
+    JOIN public.part_match_group_numbers(NULL) gn ON gn.norm = ch.norm AND gn.brand = ch.brand
+    WHERE x.vehicle_catalog_id IS NOT NULL
+    ON CONFLICT DO NOTHING;
+  END IF;
+  IF TG_OP IN ('DELETE', 'UPDATE') THEN
+    INSERT INTO _pm_batch_scope (group_id, vehicle_id)
+    SELECT DISTINCT gn.interchange_group_id, x.vehicle_catalog_id
+    FROM (SELECT o.vehicle_catalog_id FROM old_rows o) x
+    JOIN public.vehicle_oe_number von ON von.vehicle_catalog_id = x.vehicle_catalog_id
+    JOIN public.part_match_oe_chain(von.id) ch ON true
+    JOIN public.part_match_group_numbers(NULL) gn ON gn.norm = ch.norm AND gn.brand = ch.brand
+    WHERE x.vehicle_catalog_id IS NOT NULL
+    ON CONFLICT DO NOTHING;
+  END IF;
   PERFORM public.part_match_recompute_buffered();
   RETURN NULL;
 END; $$;
@@ -2002,17 +2068,28 @@ BEGIN
     vehicle_id uuid NOT NULL,
     PRIMARY KEY (group_id, vehicle_id)
   ) ON COMMIT DROP;
-  INSERT INTO _pm_batch_scope (group_id, vehicle_id)
-  SELECT DISTINCT gn.interchange_group_id, von.vehicle_catalog_id
-  FROM (
-    SELECT upper(n.oe_brand) AS brand, n.from_norm AS norm FROM new_rows n
-    UNION SELECT upper(n.oe_brand), n.to_norm FROM new_rows n
-    UNION SELECT upper(o.oe_brand), o.from_norm FROM old_rows o
-    UNION SELECT upper(o.oe_brand), o.to_norm FROM old_rows o
-  ) ch
-  JOIN public.part_match_group_numbers(NULL) gn ON gn.norm = ch.norm AND gn.brand = ch.brand
-  JOIN public.vehicle_oe_number von ON von.oe_number_norm = ch.norm AND upper(von.oe_brand) = ch.brand
-  ON CONFLICT DO NOTHING;
+  IF TG_OP IN ('INSERT', 'UPDATE') THEN
+    INSERT INTO _pm_batch_scope (group_id, vehicle_id)
+    SELECT DISTINCT gn.interchange_group_id, von.vehicle_catalog_id
+    FROM (
+      SELECT upper(n.oe_brand) AS brand, n.from_norm AS norm FROM new_rows n
+      UNION SELECT upper(n.oe_brand), n.to_norm FROM new_rows n
+    ) ch
+    JOIN public.part_match_group_numbers(NULL) gn ON gn.norm = ch.norm AND gn.brand = ch.brand
+    JOIN public.vehicle_oe_number von ON von.oe_number_norm = ch.norm AND upper(von.oe_brand) = ch.brand
+    ON CONFLICT DO NOTHING;
+  END IF;
+  IF TG_OP IN ('DELETE', 'UPDATE') THEN
+    INSERT INTO _pm_batch_scope (group_id, vehicle_id)
+    SELECT DISTINCT gn.interchange_group_id, von.vehicle_catalog_id
+    FROM (
+      SELECT upper(o.oe_brand) AS brand, o.from_norm AS norm FROM old_rows o
+      UNION SELECT upper(o.oe_brand), o.to_norm FROM old_rows o
+    ) ch
+    JOIN public.part_match_group_numbers(NULL) gn ON gn.norm = ch.norm AND gn.brand = ch.brand
+    JOIN public.vehicle_oe_number von ON von.oe_number_norm = ch.norm AND upper(von.oe_brand) = ch.brand
+    ON CONFLICT DO NOTHING;
+  END IF;
   PERFORM public.part_match_recompute_buffered();
   RETURN NULL;
 END; $$;
@@ -2025,28 +2102,50 @@ BEGIN
     vehicle_id uuid NOT NULL,
     PRIMARY KEY (group_id, vehicle_id)
   ) ON COMMIT DROP;
-  INSERT INTO _pm_batch_scope (group_id, vehicle_id)
-  SELECT DISTINCT g.gid, sp.vehicle_id
-  FROM (
-    SELECT pm.interchange_group_id AS gid
+  IF TG_OP IN ('INSERT', 'UPDATE') THEN
+    INSERT INTO _pm_batch_scope (group_id, vehicle_id)
+    SELECT DISTINCT g.gid, sp.vehicle_id
     FROM (
-      SELECT n.part_id FROM new_rows n UNION SELECT o.part_id FROM old_rows o
-    ) x
-    JOIN public.part_master pm ON pm.id = x.part_id
-    WHERE pm.interchange_group_id IS NOT NULL
-  ) g
-  CROSS JOIN LATERAL (
-    SELECT DISTINCT von.vehicle_catalog_id AS vehicle_id
-    FROM public.vehicle_oe_number von
-    JOIN public.part_match_oe_chain(von.id) ch ON true
-    JOIN public.part_match_group_numbers(g.gid) gn
-      ON gn.interchange_group_id = g.gid AND gn.norm = ch.norm AND gn.brand = ch.brand
-    UNION
-    SELECT d.vehicle_catalog_id
-    FROM public.part_fit_derived d
-    WHERE d.interchange_group_id = g.gid
-  ) sp
-  ON CONFLICT DO NOTHING;
+      SELECT pm.interchange_group_id AS gid
+      FROM (SELECT n.part_id FROM new_rows n) x
+      JOIN public.part_master pm ON pm.id = x.part_id
+      WHERE pm.interchange_group_id IS NOT NULL
+    ) g
+    CROSS JOIN LATERAL (
+      SELECT DISTINCT von.vehicle_catalog_id AS vehicle_id
+      FROM public.vehicle_oe_number von
+      JOIN public.part_match_oe_chain(von.id) ch ON true
+      JOIN public.part_match_group_numbers(g.gid) gn
+        ON gn.interchange_group_id = g.gid AND gn.norm = ch.norm AND gn.brand = ch.brand
+      UNION
+      SELECT d.vehicle_catalog_id
+      FROM public.part_fit_derived d
+      WHERE d.interchange_group_id = g.gid
+    ) sp
+    ON CONFLICT DO NOTHING;
+  END IF;
+  IF TG_OP IN ('DELETE', 'UPDATE') THEN
+    INSERT INTO _pm_batch_scope (group_id, vehicle_id)
+    SELECT DISTINCT g.gid, sp.vehicle_id
+    FROM (
+      SELECT pm.interchange_group_id AS gid
+      FROM (SELECT o.part_id FROM old_rows o) x
+      JOIN public.part_master pm ON pm.id = x.part_id
+      WHERE pm.interchange_group_id IS NOT NULL
+    ) g
+    CROSS JOIN LATERAL (
+      SELECT DISTINCT von.vehicle_catalog_id AS vehicle_id
+      FROM public.vehicle_oe_number von
+      JOIN public.part_match_oe_chain(von.id) ch ON true
+      JOIN public.part_match_group_numbers(g.gid) gn
+        ON gn.interchange_group_id = g.gid AND gn.norm = ch.norm AND gn.brand = ch.brand
+      UNION
+      SELECT d.vehicle_catalog_id
+      FROM public.part_fit_derived d
+      WHERE d.interchange_group_id = g.gid
+    ) sp
+    ON CONFLICT DO NOTHING;
+  END IF;
   PERFORM public.part_match_recompute_buffered();
   RETURN NULL;
 END; $$;
@@ -2059,28 +2158,84 @@ BEGIN
     vehicle_id uuid NOT NULL,
     PRIMARY KEY (group_id, vehicle_id)
   ) ON COMMIT DROP;
-  INSERT INTO _pm_batch_scope (group_id, vehicle_id)
-  SELECT DISTINCT g.gid, sp.vehicle_id
-  FROM (
-    SELECT x.gid
+  IF TG_OP = 'INSERT' THEN
+    INSERT INTO _pm_batch_scope (group_id, vehicle_id)
+    SELECT DISTINCT g.gid, sp.vehicle_id
+    FROM (SELECT n.interchange_group_id AS gid FROM new_rows n WHERE n.interchange_group_id IS NOT NULL) g
+    CROSS JOIN LATERAL (
+      SELECT DISTINCT von.vehicle_catalog_id AS vehicle_id
+      FROM public.vehicle_oe_number von
+      JOIN public.part_match_oe_chain(von.id) ch ON true
+      JOIN public.part_match_group_numbers(g.gid) gn
+        ON gn.interchange_group_id = g.gid AND gn.norm = ch.norm AND gn.brand = ch.brand
+      UNION
+      SELECT d.vehicle_catalog_id
+      FROM public.part_fit_derived d
+      WHERE d.interchange_group_id = g.gid
+    ) sp
+    ON CONFLICT DO NOTHING;
+  ELSIF TG_OP = 'UPDATE' THEN
+    INSERT INTO _pm_batch_scope (group_id, vehicle_id)
+    SELECT DISTINCT g.gid, sp.vehicle_id
     FROM (
-      SELECT n.interchange_group_id AS gid FROM new_rows n
-      UNION SELECT o.interchange_group_id FROM old_rows o
-    ) x
-    WHERE x.gid IS NOT NULL
-  ) g
-  CROSS JOIN LATERAL (
-    SELECT DISTINCT von.vehicle_catalog_id AS vehicle_id
-    FROM public.vehicle_oe_number von
-    JOIN public.part_match_oe_chain(von.id) ch ON true
-    JOIN public.part_match_group_numbers(g.gid) gn
-      ON gn.interchange_group_id = g.gid AND gn.norm = ch.norm AND gn.brand = ch.brand
-    UNION
-    SELECT d.vehicle_catalog_id
-    FROM public.part_fit_derived d
-    WHERE d.interchange_group_id = g.gid
-  ) sp
-  ON CONFLICT DO NOTHING;
+      SELECT o.interchange_group_id AS gid
+      FROM old_rows o
+      JOIN new_rows n ON n.id = o.id
+      WHERE o.interchange_group_id IS DISTINCT FROM n.interchange_group_id
+         OR o.oem_part_number IS DISTINCT FROM n.oem_part_number
+    ) g
+    CROSS JOIN LATERAL (
+      SELECT DISTINCT von.vehicle_catalog_id AS vehicle_id
+      FROM public.vehicle_oe_number von
+      JOIN public.part_match_oe_chain(von.id) ch ON true
+      JOIN public.part_match_group_numbers(g.gid) gn
+        ON gn.interchange_group_id = g.gid AND gn.norm = ch.norm AND gn.brand = ch.brand
+      UNION
+      SELECT d.vehicle_catalog_id
+      FROM public.part_fit_derived d
+      WHERE d.interchange_group_id = g.gid
+    ) sp
+    WHERE g.gid IS NOT NULL
+    ON CONFLICT DO NOTHING;
+    INSERT INTO _pm_batch_scope (group_id, vehicle_id)
+    SELECT DISTINCT g.gid, sp.vehicle_id
+    FROM (
+      SELECT n.interchange_group_id AS gid
+      FROM new_rows n
+      JOIN old_rows o ON o.id = n.id
+      WHERE o.interchange_group_id IS DISTINCT FROM n.interchange_group_id
+         OR o.oem_part_number IS DISTINCT FROM n.oem_part_number
+    ) g
+    CROSS JOIN LATERAL (
+      SELECT DISTINCT von.vehicle_catalog_id AS vehicle_id
+      FROM public.vehicle_oe_number von
+      JOIN public.part_match_oe_chain(von.id) ch ON true
+      JOIN public.part_match_group_numbers(g.gid) gn
+        ON gn.interchange_group_id = g.gid AND gn.norm = ch.norm AND gn.brand = ch.brand
+      UNION
+      SELECT d.vehicle_catalog_id
+      FROM public.part_fit_derived d
+      WHERE d.interchange_group_id = g.gid
+    ) sp
+    WHERE g.gid IS NOT NULL
+    ON CONFLICT DO NOTHING;
+  ELSIF TG_OP = 'DELETE' THEN
+    INSERT INTO _pm_batch_scope (group_id, vehicle_id)
+    SELECT DISTINCT g.gid, sp.vehicle_id
+    FROM (SELECT o.interchange_group_id AS gid FROM old_rows o WHERE o.interchange_group_id IS NOT NULL) g
+    CROSS JOIN LATERAL (
+      SELECT DISTINCT von.vehicle_catalog_id AS vehicle_id
+      FROM public.vehicle_oe_number von
+      JOIN public.part_match_oe_chain(von.id) ch ON true
+      JOIN public.part_match_group_numbers(g.gid) gn
+        ON gn.interchange_group_id = g.gid AND gn.norm = ch.norm AND gn.brand = ch.brand
+      UNION
+      SELECT d.vehicle_catalog_id
+      FROM public.part_fit_derived d
+      WHERE d.interchange_group_id = g.gid
+    ) sp
+    ON CONFLICT DO NOTHING;
+  END IF;
   PERFORM public.part_match_recompute_buffered();
   RETURN NULL;
 END; $$;
@@ -2093,18 +2248,30 @@ BEGIN
     vehicle_id uuid NOT NULL,
     PRIMARY KEY (group_id, vehicle_id)
   ) ON COMMIT DROP;
-  INSERT INTO _pm_batch_scope (group_id, vehicle_id)
-  SELECT DISTINCT pm.interchange_group_id, d.vehicle_catalog_id
-  FROM (
-    SELECT n.old_part_id AS part_id FROM new_rows n
-    UNION SELECT n.new_part_id FROM new_rows n
-    UNION SELECT o.old_part_id FROM old_rows o
-    UNION SELECT o.new_part_id FROM old_rows o
-  ) x
-  JOIN public.part_master pm ON pm.id = x.part_id
-  JOIN public.part_fit_derived d ON d.interchange_group_id = pm.interchange_group_id
-  WHERE pm.interchange_group_id IS NOT NULL
-  ON CONFLICT DO NOTHING;
+  IF TG_OP IN ('INSERT', 'UPDATE') THEN
+    INSERT INTO _pm_batch_scope (group_id, vehicle_id)
+    SELECT DISTINCT pm.interchange_group_id, d.vehicle_catalog_id
+    FROM (
+      SELECT n.old_part_id AS part_id FROM new_rows n
+      UNION SELECT n.new_part_id FROM new_rows n
+    ) x
+    JOIN public.part_master pm ON pm.id = x.part_id
+    JOIN public.part_fit_derived d ON d.interchange_group_id = pm.interchange_group_id
+    WHERE pm.interchange_group_id IS NOT NULL
+    ON CONFLICT DO NOTHING;
+  END IF;
+  IF TG_OP IN ('DELETE', 'UPDATE') THEN
+    INSERT INTO _pm_batch_scope (group_id, vehicle_id)
+    SELECT DISTINCT pm.interchange_group_id, d.vehicle_catalog_id
+    FROM (
+      SELECT o.old_part_id AS part_id FROM old_rows o
+      UNION SELECT o.new_part_id FROM old_rows o
+    ) x
+    JOIN public.part_master pm ON pm.id = x.part_id
+    JOIN public.part_fit_derived d ON d.interchange_group_id = pm.interchange_group_id
+    WHERE pm.interchange_group_id IS NOT NULL
+    ON CONFLICT DO NOTHING;
+  END IF;
   PERFORM public.part_match_recompute_buffered();
   RETURN NULL;
 END; $$;
@@ -2117,15 +2284,24 @@ BEGIN
     vehicle_id uuid NOT NULL,
     PRIMARY KEY (group_id, vehicle_id)
   ) ON COMMIT DROP;
-  INSERT INTO _pm_batch_scope (group_id, vehicle_id)
-  SELECT DISTINCT s.gid, s.vid
-  FROM (
-    SELECT n.interchange_group_id AS gid, n.vehicle_catalog_id AS vid FROM new_rows n
-    UNION
-    SELECT o.interchange_group_id, o.vehicle_catalog_id FROM old_rows o
-  ) s
-  WHERE s.gid IS NOT NULL AND s.vid IS NOT NULL
-  ON CONFLICT DO NOTHING;
+  IF TG_OP IN ('INSERT', 'UPDATE') THEN
+    INSERT INTO _pm_batch_scope (group_id, vehicle_id)
+    SELECT DISTINCT s.gid, s.vid
+    FROM (
+      SELECT n.interchange_group_id AS gid, n.vehicle_catalog_id AS vid FROM new_rows n
+    ) s
+    WHERE s.gid IS NOT NULL AND s.vid IS NOT NULL
+    ON CONFLICT DO NOTHING;
+  END IF;
+  IF TG_OP IN ('DELETE', 'UPDATE') THEN
+    INSERT INTO _pm_batch_scope (group_id, vehicle_id)
+    SELECT DISTINCT s.gid, s.vid
+    FROM (
+      SELECT o.interchange_group_id AS gid, o.vehicle_catalog_id AS vid FROM old_rows o
+    ) s
+    WHERE s.gid IS NOT NULL AND s.vid IS NOT NULL
+    ON CONFLICT DO NOTHING;
+  END IF;
   PERFORM public.part_match_recompute_buffered();
   RETURN NULL;
 END; $$;
@@ -2168,15 +2344,24 @@ BEGIN
     vehicle_id uuid NOT NULL,
     PRIMARY KEY (group_id, vehicle_id)
   ) ON COMMIT DROP;
-  INSERT INTO _pm_batch_scope (group_id, vehicle_id)
-  SELECT DISTINCT pm.interchange_group_id, d.vehicle_catalog_id
-  FROM (
-    SELECT n.part_id FROM new_rows n UNION SELECT o.part_id FROM old_rows o
-  ) x
-  JOIN public.part_master pm ON pm.id = x.part_id
-  JOIN public.part_fit_derived d ON d.interchange_group_id = pm.interchange_group_id
-  WHERE pm.interchange_group_id IS NOT NULL
-  ON CONFLICT DO NOTHING;
+  IF TG_OP IN ('INSERT', 'UPDATE') THEN
+    INSERT INTO _pm_batch_scope (group_id, vehicle_id)
+    SELECT DISTINCT pm.interchange_group_id, d.vehicle_catalog_id
+    FROM (SELECT n.part_id FROM new_rows n) x
+    JOIN public.part_master pm ON pm.id = x.part_id
+    JOIN public.part_fit_derived d ON d.interchange_group_id = pm.interchange_group_id
+    WHERE pm.interchange_group_id IS NOT NULL
+    ON CONFLICT DO NOTHING;
+  END IF;
+  IF TG_OP IN ('DELETE', 'UPDATE') THEN
+    INSERT INTO _pm_batch_scope (group_id, vehicle_id)
+    SELECT DISTINCT pm.interchange_group_id, d.vehicle_catalog_id
+    FROM (SELECT o.part_id FROM old_rows o) x
+    JOIN public.part_master pm ON pm.id = x.part_id
+    JOIN public.part_fit_derived d ON d.interchange_group_id = pm.interchange_group_id
+    WHERE pm.interchange_group_id IS NOT NULL
+    ON CONFLICT DO NOTHING;
+  END IF;
   PERFORM public.part_match_recompute_buffered();
   RETURN NULL;
 END; $$;
@@ -2184,7 +2369,7 @@ END; $$;
 CREATE OR REPLACE FUNCTION public.trg_part_master_oem_norm_version()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 BEGIN
-  IF NEW.oem_part_number_norm IS DISTINCT FROM OLD.oem_part_number_norm THEN
+  IF NEW.oem_part_number IS DISTINCT FROM OLD.oem_part_number THEN
     NEW.oem_part_number_norm_version := public.part_import_norm_version();
   END IF;
   RETURN NEW;
@@ -2223,19 +2408,6 @@ BEGIN
   RETURN coalesce(NEW, OLD);
 END; $$;
 
-CREATE OR REPLACE FUNCTION public.part_match_trg_group_from_part_row()
-RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
-BEGIN
-  IF OLD.interchange_group_id IS NOT NULL
-     AND OLD.interchange_group_id IS DISTINCT FROM NEW.interchange_group_id THEN
-    PERFORM public.part_match_recompute(OLD.interchange_group_id, NULL);
-  END IF;
-  IF NEW.interchange_group_id IS NOT NULL THEN
-    PERFORM public.part_match_recompute(NEW.interchange_group_id, NULL);
-  END IF;
-  RETURN NEW;
-END; $$;
-
 CREATE OR REPLACE FUNCTION public.trg_interchange_group_revision_bump()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE v_group uuid;
@@ -2249,48 +2421,126 @@ BEGIN
 END; $$;
 
 DROP TRIGGER IF EXISTS part_match_vehicle_oe ON public.vehicle_oe_number;
-CREATE TRIGGER part_match_vehicle_oe AFTER INSERT OR UPDATE OR DELETE ON public.vehicle_oe_number
+DROP TRIGGER IF EXISTS part_match_vehicle_oe_ins ON public.vehicle_oe_number;
+DROP TRIGGER IF EXISTS part_match_vehicle_oe_upd ON public.vehicle_oe_number;
+DROP TRIGGER IF EXISTS part_match_vehicle_oe_del ON public.vehicle_oe_number;
+CREATE TRIGGER part_match_vehicle_oe_ins AFTER INSERT ON public.vehicle_oe_number
+  REFERENCING NEW TABLE AS new_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION public.part_match_trg_vehicle_oe();
+CREATE TRIGGER part_match_vehicle_oe_upd AFTER UPDATE ON public.vehicle_oe_number
   REFERENCING NEW TABLE AS new_rows OLD TABLE AS old_rows
   FOR EACH STATEMENT EXECUTE FUNCTION public.part_match_trg_vehicle_oe();
+CREATE TRIGGER part_match_vehicle_oe_del AFTER DELETE ON public.vehicle_oe_number
+  REFERENCING OLD TABLE AS old_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION public.part_match_trg_vehicle_oe();
+
 DROP TRIGGER IF EXISTS part_match_part_oe_reference ON public.part_oe_reference;
-CREATE TRIGGER part_match_part_oe_reference AFTER INSERT OR UPDATE OR DELETE ON public.part_oe_reference
+DROP TRIGGER IF EXISTS part_match_part_oe_reference_ins ON public.part_oe_reference;
+DROP TRIGGER IF EXISTS part_match_part_oe_reference_upd ON public.part_oe_reference;
+DROP TRIGGER IF EXISTS part_match_part_oe_reference_del ON public.part_oe_reference;
+CREATE TRIGGER part_match_part_oe_reference_ins AFTER INSERT ON public.part_oe_reference
+  REFERENCING NEW TABLE AS new_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION public.part_match_trg_part_reference();
+CREATE TRIGGER part_match_part_oe_reference_upd AFTER UPDATE ON public.part_oe_reference
   REFERENCING NEW TABLE AS new_rows OLD TABLE AS old_rows
   FOR EACH STATEMENT EXECUTE FUNCTION public.part_match_trg_part_reference();
+CREATE TRIGGER part_match_part_oe_reference_del AFTER DELETE ON public.part_oe_reference
+  REFERENCING OLD TABLE AS old_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION public.part_match_trg_part_reference();
+
 DROP TRIGGER IF EXISTS part_match_oe_supersession ON public.oe_number_supersession;
-CREATE TRIGGER part_match_oe_supersession AFTER INSERT OR UPDATE OR DELETE ON public.oe_number_supersession
+DROP TRIGGER IF EXISTS part_match_oe_supersession_ins ON public.oe_number_supersession;
+DROP TRIGGER IF EXISTS part_match_oe_supersession_upd ON public.oe_number_supersession;
+DROP TRIGGER IF EXISTS part_match_oe_supersession_del ON public.oe_number_supersession;
+CREATE TRIGGER part_match_oe_supersession_ins AFTER INSERT ON public.oe_number_supersession
+  REFERENCING NEW TABLE AS new_rows
   FOR EACH STATEMENT EXECUTE FUNCTION public.part_match_trg_oe_supersession();
-CREATE TRIGGER part_match_part_supersession AFTER INSERT OR UPDATE OR DELETE ON public.part_supersession
+CREATE TRIGGER part_match_oe_supersession_upd AFTER UPDATE ON public.oe_number_supersession
+  REFERENCING NEW TABLE AS new_rows OLD TABLE AS old_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION public.part_match_trg_oe_supersession();
+CREATE TRIGGER part_match_oe_supersession_del AFTER DELETE ON public.oe_number_supersession
+  REFERENCING OLD TABLE AS old_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION public.part_match_trg_oe_supersession();
+
+DROP TRIGGER IF EXISTS part_match_part_supersession ON public.part_supersession;
+DROP TRIGGER IF EXISTS part_match_part_supersession_ins ON public.part_supersession;
+DROP TRIGGER IF EXISTS part_match_part_supersession_upd ON public.part_supersession;
+DROP TRIGGER IF EXISTS part_match_part_supersession_del ON public.part_supersession;
+CREATE TRIGGER part_match_part_supersession_ins AFTER INSERT ON public.part_supersession
+  REFERENCING NEW TABLE AS new_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION public.part_match_trg_part_supersession();
+CREATE TRIGGER part_match_part_supersession_upd AFTER UPDATE ON public.part_supersession
   REFERENCING NEW TABLE AS new_rows OLD TABLE AS old_rows
   FOR EACH STATEMENT EXECUTE FUNCTION public.part_match_trg_part_supersession();
+CREATE TRIGGER part_match_part_supersession_del AFTER DELETE ON public.part_supersession
+  REFERENCING OLD TABLE AS old_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION public.part_match_trg_part_supersession();
+
 DROP TRIGGER IF EXISTS part_match_part_master ON public.part_master;
-CREATE TRIGGER part_match_part_master_insdel
-  AFTER INSERT OR DELETE ON public.part_master
+DROP TRIGGER IF EXISTS part_match_part_master_insdel ON public.part_master;
+DROP TRIGGER IF EXISTS part_match_part_master_upd ON public.part_master;
+DROP TRIGGER IF EXISTS part_match_part_master_ins ON public.part_master;
+DROP TRIGGER IF EXISTS part_match_part_master_del ON public.part_master;
+CREATE TRIGGER part_match_part_master_ins AFTER INSERT ON public.part_master
+  REFERENCING NEW TABLE AS new_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION public.part_match_trg_group_from_part();
+CREATE TRIGGER part_match_part_master_upd AFTER UPDATE ON public.part_master
   REFERENCING NEW TABLE AS new_rows OLD TABLE AS old_rows
   FOR EACH STATEMENT EXECUTE FUNCTION public.part_match_trg_group_from_part();
-CREATE TRIGGER part_match_part_master_upd
-  AFTER UPDATE OF oem_part_number_norm, interchange_group_id ON public.part_master
-  FOR EACH ROW EXECUTE FUNCTION public.part_match_trg_group_from_part_row();
+CREATE TRIGGER part_match_part_master_del AFTER DELETE ON public.part_master
+  REFERENCING OLD TABLE AS old_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION public.part_match_trg_group_from_part();
+
 DROP TRIGGER IF EXISTS part_match_part_listing ON public.part_listing;
-CREATE TRIGGER part_match_part_listing AFTER INSERT OR UPDATE OR DELETE ON public.part_listing
+DROP TRIGGER IF EXISTS part_match_part_listing_ins ON public.part_listing;
+DROP TRIGGER IF EXISTS part_match_part_listing_upd ON public.part_listing;
+DROP TRIGGER IF EXISTS part_match_part_listing_del ON public.part_listing;
+CREATE TRIGGER part_match_part_listing_ins AFTER INSERT ON public.part_listing
+  REFERENCING NEW TABLE AS new_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION public.part_match_trg_listing_scope();
+CREATE TRIGGER part_match_part_listing_upd AFTER UPDATE ON public.part_listing
   REFERENCING NEW TABLE AS new_rows OLD TABLE AS old_rows
   FOR EACH STATEMENT EXECUTE FUNCTION public.part_match_trg_listing_scope();
+CREATE TRIGGER part_match_part_listing_del AFTER DELETE ON public.part_listing
+  REFERENCING OLD TABLE AS old_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION public.part_match_trg_listing_scope();
+
 DROP TRIGGER IF EXISTS part_match_part_listing_exclusion ON public.part_listing_exclusion;
-CREATE TRIGGER part_match_part_listing_exclusion AFTER INSERT OR UPDATE OR DELETE ON public.part_listing_exclusion
+DROP TRIGGER IF EXISTS part_match_part_listing_exclusion_ins ON public.part_listing_exclusion;
+DROP TRIGGER IF EXISTS part_match_part_listing_exclusion_upd ON public.part_listing_exclusion;
+DROP TRIGGER IF EXISTS part_match_part_listing_exclusion_del ON public.part_listing_exclusion;
+CREATE TRIGGER part_match_part_listing_exclusion_ins AFTER INSERT ON public.part_listing_exclusion
+  REFERENCING NEW TABLE AS new_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION public.part_match_trg_listing_scope();
+CREATE TRIGGER part_match_part_listing_exclusion_upd AFTER UPDATE ON public.part_listing_exclusion
   REFERENCING NEW TABLE AS new_rows OLD TABLE AS old_rows
   FOR EACH STATEMENT EXECUTE FUNCTION public.part_match_trg_listing_scope();
+CREATE TRIGGER part_match_part_listing_exclusion_del AFTER DELETE ON public.part_listing_exclusion
+  REFERENCING OLD TABLE AS old_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION public.part_match_trg_listing_scope();
+
 DROP TRIGGER IF EXISTS part_match_vehicle_catalog_years ON public.vehicle_catalog;
-CREATE TRIGGER part_match_vehicle_catalog_years
-  AFTER UPDATE OF production_start_year, production_end_year ON public.vehicle_catalog
+DROP TRIGGER IF EXISTS part_match_vehicle_catalog_years_upd ON public.vehicle_catalog;
+CREATE TRIGGER part_match_vehicle_catalog_years_upd AFTER UPDATE ON public.vehicle_catalog
   REFERENCING NEW TABLE AS new_rows OLD TABLE AS old_rows
   FOR EACH STATEMENT EXECUTE FUNCTION public.part_match_trg_catalog_years();
+
 DROP TRIGGER IF EXISTS part_match_part_index_number ON public.part_index_number;
-CREATE TRIGGER part_match_part_index_number
-  AFTER INSERT OR UPDATE OR DELETE ON public.part_index_number
+DROP TRIGGER IF EXISTS part_match_part_index_number_ins ON public.part_index_number;
+DROP TRIGGER IF EXISTS part_match_part_index_number_upd ON public.part_index_number;
+DROP TRIGGER IF EXISTS part_match_part_index_number_del ON public.part_index_number;
+CREATE TRIGGER part_match_part_index_number_ins AFTER INSERT ON public.part_index_number
+  REFERENCING NEW TABLE AS new_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION public.part_match_trg_index_number();
+CREATE TRIGGER part_match_part_index_number_upd AFTER UPDATE ON public.part_index_number
   REFERENCING NEW TABLE AS new_rows OLD TABLE AS old_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION public.part_match_trg_index_number();
+CREATE TRIGGER part_match_part_index_number_del AFTER DELETE ON public.part_index_number
+  REFERENCING OLD TABLE AS old_rows
   FOR EACH STATEMENT EXECUTE FUNCTION public.part_match_trg_index_number();
 DROP TRIGGER IF EXISTS part_master_oem_norm_version ON public.part_master;
 CREATE TRIGGER part_master_oem_norm_version
-  BEFORE UPDATE OF oem_part_number_norm ON public.part_master
+  BEFORE UPDATE OF oem_part_number ON public.part_master
   FOR EACH ROW EXECUTE FUNCTION public.trg_part_master_oem_norm_version();
 DROP TRIGGER IF EXISTS vehicle_oe_number_revision_trg ON public.vehicle_oe_number;
 CREATE TRIGGER vehicle_oe_number_revision_trg
@@ -3541,7 +3791,80 @@ BEGIN
 END;
 $$;
 
+CREATE OR REPLACE FUNCTION public.part_match_derived_keep_batch(
+  p_derived_ids uuid[],
+  p_actor uuid,
+  p_note text
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_id uuid;
+  v_found integer;
+BEGIN
+  IF p_derived_ids IS NULL OR array_length(p_derived_ids, 1) IS NULL THEN
+    RAISE EXCEPTION 'Pick at least one fit.';
+  END IF;
+  SELECT count(*) INTO v_found
+  FROM public.part_fit_derived d
+  WHERE d.id = ANY (p_derived_ids);
+  IF v_found <> array_length(p_derived_ids, 1) THEN
+    RAISE EXCEPTION 'Unknown derived fit';
+  END IF;
+  FOREACH v_id IN ARRAY p_derived_ids LOOP
+    PERFORM public.part_match_derived_keep(v_id, p_actor, p_note);
+  END LOOP;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.part_match_conflict_resolve_batch(
+  p_items jsonb,
+  p_actor uuid
+)
+RETURNS integer
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_item jsonb;
+  v_id uuid;
+  v_action text;
+  v_note text;
+  v_count integer := 0;
+BEGIN
+  IF p_items IS NULL OR jsonb_array_length(p_items) = 0 THEN
+    RAISE EXCEPTION 'Pick at least one conflict.';
+  END IF;
+  FOR v_item IN SELECT value FROM jsonb_array_elements(p_items) LOOP
+    v_id := (v_item->>'id')::uuid;
+    IF v_id IS NULL THEN
+      RAISE EXCEPTION 'Invalid conflict id in batch.';
+    END IF;
+    v_action := lower(trim(coalesce(v_item->>'action', '')));
+    IF v_action NOT IN ('keep', 'remove') THEN
+      RAISE EXCEPTION 'Choose keep or remove.';
+    END IF;
+    v_note := trim(coalesce(v_item->>'note', ''));
+    IF v_action = 'keep' THEN
+      PERFORM public.part_match_conflict_keep(v_id, p_actor, v_note);
+    ELSE
+      PERFORM public.part_match_conflict_remove(v_id, p_actor, v_note);
+    END IF;
+    v_count := v_count + 1;
+  END LOOP;
+  RETURN v_count;
+END;
+$$;
+
 REVOKE ALL ON FUNCTION public.part_match_derived_keep(uuid, uuid, text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.part_match_derived_keep_batch(uuid[], uuid, text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.part_match_conflict_resolve_batch(jsonb, uuid) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.admin_vehicle_oe_numbers(uuid) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.part_match_derived_keep(uuid, uuid, text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.part_match_derived_keep_batch(uuid[], uuid, text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.part_match_conflict_resolve_batch(jsonb, uuid) TO service_role;
 GRANT EXECUTE ON FUNCTION public.admin_vehicle_oe_numbers(uuid) TO service_role;

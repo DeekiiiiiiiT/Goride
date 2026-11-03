@@ -18,7 +18,29 @@ import { defineConfig, devices } from '@playwright/test';
  *   E2E_FLEET_EMAIL / E2E_FLEET_PASSWORD — fleet wizard E2E
  *   E2E_FUEL_WEEK / E2E_FUEL_ALLOW_FINALIZE=1 — optional deep-link / destructive finalize
  *   E2E_FUEL_WEEK_2 / E2E_FUEL_SOAK_MODE / E2E_FUEL_FLIP_ENFORCE — shadow soak smoke
+ *   ADMIN_BASE_URL / FLEET_BASE_URL — when set, skip the matching vite preview webServer (CI sets these after build).
  */
+const adminBaseUrl = process.env.ADMIN_BASE_URL?.trim();
+const fleetBaseUrl = process.env.FLEET_BASE_URL?.trim();
+const previewWebServers = [
+  ...(!adminBaseUrl
+    ? [{
+        command: 'pnpm --filter @roam/admin exec vite preview --host 127.0.0.1 --port 4173',
+        url: 'http://127.0.0.1:4173',
+        reuseExistingServer: !process.env.CI,
+        timeout: 120_000,
+      }]
+    : []),
+  ...(!fleetBaseUrl
+    ? [{
+        command: 'pnpm --filter @roam/fleet exec vite preview --host 127.0.0.1 --port 3000',
+        url: 'http://127.0.0.1:3000',
+        reuseExistingServer: !process.env.CI,
+        timeout: 120_000,
+      }]
+    : []),
+];
+
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: false,
@@ -33,6 +55,7 @@ export default defineConfig({
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
   },
+  webServer: previewWebServers.length ? previewWebServers : undefined,
   projects: [
     {
       name: 'dominion-admin',
@@ -40,32 +63,16 @@ export default defineConfig({
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1456, height: 900 },
-        baseURL: process.env.ADMIN_BASE_URL?.trim() || 'http://127.0.0.1:4173',
+        baseURL: adminBaseUrl || 'http://127.0.0.1:4173',
       },
-      webServer: process.env.ADMIN_BASE_URL
-        ? undefined
-        : {
-            command: 'pnpm --filter @roam/admin exec vite preview --host 127.0.0.1 --port 4173',
-            url: 'http://127.0.0.1:4173',
-            reuseExistingServer: !process.env.CI,
-            timeout: 120_000,
-          },
     },
     {
       name: 'fleet',
       testMatch: /fleet-rush-integration\.spec\.ts|fuel-recon-wizard\.spec\.ts|fuel-recon-shadow-soak\.spec\.ts|driver-settlements-desk\.spec\.ts|driver-detail-smoke\.spec\.ts|fleet-find-parts-visual\.spec\.ts|inventory-button-sweep\.spec\.ts|parts-import-stitch\.spec\.ts|parts-auto-match-stitch\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
-        baseURL: process.env.FLEET_BASE_URL?.trim() || 'http://127.0.0.1:3000',
+        baseURL: fleetBaseUrl || 'http://127.0.0.1:3000',
       },
-      webServer: process.env.FLEET_BASE_URL
-        ? undefined
-        : {
-            command: 'pnpm --filter @roam/fleet exec vite preview --host 127.0.0.1 --port 3000',
-            url: 'http://127.0.0.1:3000',
-            reuseExistingServer: !process.env.CI,
-            timeout: 120_000,
-          },
     },
     {
       name: 'driver-car-kit',

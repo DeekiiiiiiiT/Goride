@@ -39,7 +39,7 @@ import { PendingCatalogShell, type PendingCatalogTabId } from "./pending-parts/P
 import { PendingVehiclesCatalogTab } from "./pending-parts/PendingVehiclesCatalogTab";
 import { AutoMatchConflictsTab } from "./pending-parts/AutoMatchConflictsTab";
 import { ResearchSettingsPage } from "./pending-parts/ResearchSettingsPage";
-import { fetchAutoMatchConflicts } from "../../../services/partsAutoMatchApi";
+import { fetchAutoMatchConflicts, fetchPartMatchHealth } from "../../../services/partsAutoMatchApi";
 import { PendingVehicleReviewDrawer } from "./pending-parts/PendingVehicleReviewDrawer";
 import "./pending-parts/pendingParts.css";
 
@@ -94,6 +94,7 @@ export function PendingVehicleCatalogManager() {
   const [catalogTab, setCatalogTab] = useState<PendingCatalogTabId>(() => readCatalogTabFromUrl());
   const [partsQueueCount, setPartsQueueCount] = useState(0);
   const [conflictsCount, setConflictsCount] = useState(0);
+  const [enginePulse, setEnginePulse] = useState("");
   const [partsSyncSec, setPartsSyncSec] = useState(4);
   const [vehiclesSyncedAt, setVehiclesSyncedAt] = useState<number | null>(null);
   const [vehiclesSyncSec, setVehiclesSyncSec] = useState(4);
@@ -138,8 +139,11 @@ export function PendingVehicleCatalogManager() {
   useEffect(() => {
     if (!token) return;
     void fetchAutoMatchConflicts(token, { status: "open" })
-      .then((res) => setConflictsCount(Number(res.totalCount ?? res.totalsByStatus?.open ?? res.rows?.length ?? 0)))
+      .then((res) => setConflictsCount(Number(res.totalsByStatus?.open ?? res.filteredCount ?? res.rows?.length ?? 0)))
       .catch(() => setConflictsCount(0));
+    void fetchPartMatchHealth(token)
+      .then((h) => setEnginePulse(h.errorCount24h ? "DEGRADED" : "NOMINAL"))
+      .catch(() => setEnginePulse(""));
   }, [token, catalogTab]);
 
   useEffect(() => {
@@ -270,6 +274,7 @@ export function PendingVehicleCatalogManager() {
         partsCount={partsQueueCount}
         conflictsCount={conflictsCount}
         syncSeconds={activeSyncSec}
+        enginePulseLabel={enginePulse}
         onRefreshVehicles={() => void load()}
         vehiclesRefreshing={loading}
       >

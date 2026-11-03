@@ -17,6 +17,7 @@ import {
 } from "../partsDatabaseApi";
 import { PartsError, PartsLoading } from "../PartsDatabaseStates";
 import { readCatalogFilters, writeCatalogSearch, type CatalogMatch } from "../partsCatalogUrl";
+import { fetchPartMatchHealth } from "../../../../services/partsAutoMatchApi";
 import { FullDatabaseDrawer } from "./FullDatabaseDrawer";
 import { FullDatabaseFilterPanel } from "./FullDatabaseFilterPanel";
 import { FullDatabaseGroupedTable } from "./FullDatabaseGroupedTable";
@@ -57,6 +58,18 @@ export function FullDatabaseTab({
   const [viewUniversal, setViewUniversal] = useState<UniversalCatalogRow | null>(null);
   const [latencyMs, setLatencyMs] = useState<number | null>(null);
   const overview = useQuery({ queryKey: ["parts-overview"], queryFn: fetchPartsOverview, retry: false });
+  const [authToken, setAuthToken] = useState("");
+  useEffect(() => {
+    void supabase.auth.getSession().then((s) => setAuthToken(s.data.session?.access_token ?? ""));
+  }, []);
+  const matchHealth = useQuery({
+    queryKey: ["part-match-health-catalog"],
+    queryFn: () => fetchPartMatchHealth(authToken),
+    enabled: Boolean(authToken),
+  });
+  const schemaLabel = matchHealth.data?.engineVersion != null
+    ? `SCHEMA v${matchHealth.data.engineVersion}.${matchHealth.data.normVersion ?? 0}`
+    : "SCHEMA";
 
   useEffect(() => {
     const timer = window.setTimeout(() => setQ(draft.trim()), 300);
@@ -272,7 +285,7 @@ export function FullDatabaseTab({
               <span className="rounded-full bg-surface-container-high px-2 py-0.5 font-semibold text-on-surface">
                 INDEX: {(search.data?.total ?? 0).toLocaleString()} FITMENTS
               </span>
-              <span className="rounded-full bg-secondary-container px-2 py-0.5 font-semibold text-on-secondary-fixed">SCHEMA V2.4</span>
+              <span className="rounded-full bg-secondary-container px-2 py-0.5 font-semibold text-on-secondary-fixed">{schemaLabel}</span>
             </div>
             <span className="text-on-surface-variant flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />

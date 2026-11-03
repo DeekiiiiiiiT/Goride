@@ -1,34 +1,66 @@
 name: Parts auto-match Stitch e2e
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'apps/admin/src/components/admin/vehicle-catalog/**'
-      - 'apps/admin/src/components/admin/parts-sourcing/CatalogQualityPage.tsx'
-      - 'apps/admin/src/components/admin/platforms/**'
-      - 'apps/admin/src/components/admin/parts-database/find-parts/**'
-      - 'apps/admin/src/components/admin/parts-database/full-database/**'
-      - 'apps/fleet/src/components/vehicles/find-parts/**'
-      - 'e2e/parts-auto-match-stitch.spec.ts'
-      - 'e2e/partsAutoMatchMocks.ts'
-      - 'playwright.config.ts'
   pull_request:
     branches: [main]
-    paths:
-      - 'apps/admin/src/components/admin/vehicle-catalog/**'
-      - 'apps/admin/src/components/admin/parts-sourcing/CatalogQualityPage.tsx'
-      - 'apps/admin/src/components/admin/platforms/**'
-      - 'apps/admin/src/components/admin/parts-database/find-parts/**'
-      - 'apps/admin/src/components/admin/parts-database/full-database/**'
-      - 'apps/fleet/src/components/vehicles/find-parts/**'
-      - 'e2e/parts-auto-match-stitch.spec.ts'
-      - 'e2e/partsAutoMatchMocks.ts'
-      - 'playwright.config.ts'
+  push:
+    branches: [main]
   workflow_dispatch:
 
+env:
+  # Optional: point at an external preview instead of playwright webServer (see playwright.config.ts).
+  ADMIN_BASE_URL: http://127.0.0.1:4173
+  FLEET_BASE_URL: http://127.0.0.1:3000
+
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      auto_match: ${{ steps.filter.outputs.auto_match }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: filter
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "auto_match=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "${{ github.event_name }}" = "push" ]; then
+            BASE="${{ github.event.before }}"
+          else
+            BASE="${{ github.event.pull_request.base.sha }}"
+          fi
+          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+            echo "auto_match=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          mapfile -t CHANGED < <(git diff --name-only "$BASE" "${{ github.sha }}")
+          auto_match=false
+          for f in "${CHANGED[@]}"; do
+            case "$f" in
+              apps/admin/src/components/admin/vehicle-catalog/*|\
+              apps/admin/src/components/admin/parts-sourcing/CatalogQualityPage.tsx|\
+              apps/admin/src/components/admin/platforms/*|\
+              apps/admin/src/components/admin/parts-database/find-parts/*|\
+              apps/admin/src/components/admin/parts-database/full-database/*|\
+              apps/fleet/src/components/vehicles/find-parts/*|\
+              e2e/parts-auto-match-stitch.spec.ts|\
+              e2e/partsAutoMatchMocks.ts|\
+              playwright.config.ts|\
+              .github/workflows/parts-auto-match-e2e.yml)
+                auto_match=true
+                break
+                ;;
+            esac
+          done
+          echo "auto_match=$auto_match" >> "$GITHUB_OUTPUT"
+
   dominion-auto-match-stitch:
+    needs: changes
+    if: needs.changes.outputs.auto_match == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -45,6 +77,8 @@ jobs:
         run: pnpm exec playwright test e2e/parts-auto-match-stitch.spec.ts --project=dominion-admin
 
   fleet-auto-match-s4f:
+    needs: changes
+    if: needs.changes.outputs.auto_match == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -59,3 +93,26 @@ jobs:
         run: pnpm --filter @roam/fleet run build
       - name: Fleet AM-S4F Stitch spec
         run: pnpm exec playwright test e2e/parts-auto-match-stitch.spec.ts --project=fleet -g "AM-S4F"
+
+  parts-auto-match-stitch-e2e:
+    name: Parts auto-match Stitch e2e
+    needs: [changes, dominion-auto-match-stitch, fleet-auto-match-s4f]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report required gate
+        shell: bash
+        run: |
+          if [ "${{ needs.changes.outputs.auto_match }}" != "true" ]; then
+            echo "Auto-match paths unchanged — required check passes (skipped)."
+            exit 0
+          fi
+          if [ "${{ needs.dominion-auto-match-stitch.result }}" != "success" ]; then
+            echo "Dominion auto-match stitch failed or was cancelled."
+            exit 1
+          fi
+          if [ "${{ needs.fleet-auto-match-s4f.result }}" != "success" ]; then
+            echo "Fleet AM-S4F stitch failed or was cancelled."
+            exit 1
+          fi
+          echo "All parts auto-match stitch checks passed."

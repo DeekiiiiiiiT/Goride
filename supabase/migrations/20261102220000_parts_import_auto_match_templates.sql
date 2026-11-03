@@ -7,8 +7,46 @@ ALTER TABLE public.part_import_template
 ALTER TABLE public.part_import_batch
   ADD COLUMN IF NOT EXISTS import_kind text NOT NULL DEFAULT 'area';
 
-ALTER TABLE public.part_import_template DROP CONSTRAINT IF EXISTS part_import_template_area_id_fkey;
-ALTER TABLE public.part_import_batch DROP CONSTRAINT IF EXISTS part_import_batch_area_id_fkey;
+INSERT INTO public.maintenance_service_categories (id, code, name, kind, op_code, icon_key, sort_order, is_part)
+VALUES
+  (
+    'd1000001-0000-4000-8000-000000000001',
+    'imp-vehicle-oe',
+    'Vehicle OE numbers',
+    'system',
+    'IMP-VOE',
+    'upload',
+    9001,
+    false
+  ),
+  (
+    'd1000001-0000-4000-8000-000000000002',
+    'imp-part-cross',
+    'Part cross-references',
+    'system',
+    'IMP-XREF',
+    'hub',
+    9002,
+    false
+  ),
+  (
+    'd1000001-0000-4000-8000-000000000003',
+    'imp-platform-link',
+    'Shared platform links',
+    'system',
+    'IMP-PLINK',
+    'share',
+    9003,
+    false
+  )
+ON CONFLICT (id) DO UPDATE SET
+  code = EXCLUDED.code,
+  name = EXCLUDED.name,
+  kind = EXCLUDED.kind,
+  op_code = EXCLUDED.op_code,
+  icon_key = EXCLUDED.icon_key,
+  sort_order = EXCLUDED.sort_order,
+  is_part = EXCLUDED.is_part;
 
 CREATE UNIQUE INDEX IF NOT EXISTS part_import_template_kind_version_uidx
   ON public.part_import_template (import_kind, version)
@@ -34,15 +72,15 @@ ALTER TABLE public.part_import_change ADD CONSTRAINT part_import_change_table_na
 CREATE OR REPLACE FUNCTION public.part_import_template_area_id(p_import_kind text)
 RETURNS uuid
 LANGUAGE sql
-IMMUTABLE
+STABLE
 SET search_path = ''
 AS $$
-  SELECT CASE p_import_kind
-    WHEN 'vehicle_oe' THEN 'd1000000-0000-4000-8000-000000000001'::uuid
-    WHEN 'part_cross_ref' THEN 'd1000000-0000-4000-8000-000000000002'::uuid
-    WHEN 'platform_link' THEN 'd1000000-0000-4000-8000-000000000003'::uuid
-    ELSE NULL::uuid
-  END;
+  SELECT t.area_id
+  FROM public.part_import_template t
+  WHERE t.import_kind = p_import_kind
+    AND t.active IS TRUE
+  ORDER BY t.version DESC
+  LIMIT 1;
 $$;
 
 CREATE OR REPLACE FUNCTION public.part_import_hub_area_id()
@@ -64,7 +102,7 @@ INSERT INTO public.part_import_template (
 )
 VALUES
   (
-    public.part_import_template_area_id('vehicle_oe'),
+    'd1000001-0000-4000-8000-000000000001'::uuid,
     'vehicle_oe',
     1,
     jsonb_build_array(
@@ -97,7 +135,7 @@ VALUES
     true
   ),
   (
-    public.part_import_template_area_id('part_cross_ref'),
+    'd1000001-0000-4000-8000-000000000002'::uuid,
     'part_cross_ref',
     1,
     jsonb_build_array(
@@ -133,7 +171,7 @@ VALUES
     true
   ),
   (
-    public.part_import_template_area_id('platform_link'),
+    'd1000001-0000-4000-8000-000000000003'::uuid,
     'platform_link',
     1,
     jsonb_build_array(
@@ -897,6 +935,10 @@ BEGIN
 
   UPDATE public.part_import_batch SET status = 'promoting' WHERE id = p_batch_id;
 
+  CREATE TEMP TABLE IF NOT EXISTS _pm_import_batch_id (batch_id uuid) ON COMMIT DROP;
+  TRUNCATE _pm_import_batch_id;
+  INSERT INTO _pm_import_batch_id (batch_id) VALUES (p_batch_id);
+
   FOR r IN
     SELECT * FROM public.part_import_row
     WHERE batch_id = p_batch_id
@@ -1043,6 +1085,24 @@ BEGIN
         (SELECT interchange_group_id FROM public.part_master WHERE id = v_part),
         NULL
       );
+      INSERT INTO public.part_import_change (batch_id, line_no, table_name, row_id, op, after)
+      SELECT
+        p_batch_id,
+        r.line_no,
+        'interchange_group_merge_log',
+        m.id,
+        'insert',
+        public.part_import_row_snapshot('interchange_group_merge_log', m.id)
+      FROM public.interchange_group_merge_log m
+      WHERE m.reversed_at IS NULL
+        AND m.part_id = v_part
+        AND NOT EXISTS (
+          SELECT 1
+          FROM public.part_import_change c
+          WHERE c.batch_id = p_batch_id
+            AND c.table_name = 'interchange_group_merge_log'
+            AND c.row_id = m.id
+        );
     ELSIF v_batch.import_kind = 'platform_link' THEN
       SELECT id INTO v_row_id
       FROM public.platform_component_link l
@@ -1101,6 +1161,24 @@ BEGIN
   INTO v_matches_live, v_matches_checking
   FROM public.part_fit_derived
   WHERE import_batch_id = p_batch_id;
+
+  UPDATE public.part_fit_derived d
+  SET import_batch_id = p_batch_id
+  WHERE d.import_batch_id IS NULL
+    AND EXISTS (
+      SELECT 1
+      FROM public.part_import_change c
+      WHERE c.batch_id = p_batch_id
+        AND c.table_name = 'vehicle_oe_number'
+        AND (
+          (c.op = 'insert' AND (c.after->>'vehicle_catalog_id')::uuid = d.vehicle_catalog_id)
+          OR (c.op = 'update' AND (c.before->>'vehicle_catalog_id')::uuid = d.vehicle_catalog_id)
+        )
+    );
+
+  IF EXISTS (SELECT 1 FROM _pm_import_batch_id LIMIT 1) THEN
+    TRUNCATE _pm_import_batch_id;
+  END IF;
 
   UPDATE public.part_import_batch
   SET status = 'imported',
@@ -1191,6 +1269,23 @@ BEGIN
     AND pm.interchange_group_id IS NOT NULL
   ON CONFLICT DO NOTHING;
 
+  INSERT INTO part_import_undo_groups (group_id)
+  SELECT DISTINCT pm.interchange_group_id
+  FROM public.part_import_change c
+  JOIN public.part_master pm ON pm.id = c.row_id
+  WHERE c.batch_id = p_batch_id
+    AND c.table_name = 'part_master'
+    AND pm.interchange_group_id IS NOT NULL
+  ON CONFLICT DO NOTHING;
+
+  INSERT INTO part_import_undo_groups (group_id)
+  SELECT DISTINCT coalesce(c.after->>'interchange_group_id', c.before->>'interchange_group_id')::uuid
+  FROM public.part_import_change c
+  WHERE c.batch_id = p_batch_id
+    AND c.table_name = 'part_listing'
+    AND coalesce(c.after->>'interchange_group_id', c.before->>'interchange_group_id') IS NOT NULL
+  ON CONFLICT DO NOTHING;
+
   FOR c IN
     SELECT * FROM public.part_import_change
     WHERE batch_id = p_batch_id
@@ -1253,7 +1348,8 @@ BEGIN
           year_to = (c.before->>'year_to')::int,
           evidence_url = c.before->>'evidence_url',
           oe_brand = c.before->>'oe_brand',
-          oe_number = c.before->>'oe_number'
+          oe_number = c.before->>'oe_number',
+          oe_number_norm = c.before->>'oe_number_norm'
         WHERE id = c.row_id;
       ELSIF c.table_name IN ('part_oe_reference', 'part_index_number', 'part_approval', 'platform_component_link') THEN
         EXECUTE format(
@@ -1311,6 +1407,14 @@ BEGIN
   TRUNCATE _pm_import_batch_id;
   INSERT INTO _pm_import_batch_id (batch_id) VALUES (p_batch_id);
   PERFORM public.part_match_recompute(p_group_id, p_vehicle_id);
+  UPDATE public.part_fit_derived d
+  SET import_batch_id = p_batch_id
+  WHERE d.import_batch_id IS NULL
+    AND (
+      (p_vehicle_id IS NOT NULL AND d.vehicle_catalog_id = p_vehicle_id)
+      OR (p_group_id IS NOT NULL AND d.interchange_group_id = p_group_id)
+    );
+  TRUNCATE _pm_import_batch_id;
 END;
 $$;
 
@@ -1553,6 +1657,10 @@ BEGIN
     WHERE public.part_fit_derived.engine_version IS DISTINCT FROM EXCLUDED.engine_version
        OR public.part_fit_derived.reason_code IS DISTINCT FROM EXCLUDED.reason_code
        OR public.part_fit_derived.matched_keys IS DISTINCT FROM EXCLUDED.matched_keys
+       OR (
+         EXISTS (SELECT 1 FROM _pm_import_batch_id ib LIMIT 1)
+         AND public.part_fit_derived.import_batch_id IS DISTINCT FROM EXCLUDED.import_batch_id
+       )
     RETURNING (xmax = 0) AS inserted
   )
   SELECT

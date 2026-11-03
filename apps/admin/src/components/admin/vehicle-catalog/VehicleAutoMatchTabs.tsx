@@ -16,18 +16,24 @@ import {
   resolveAutoMatchConflict,
   updateVehicleOeNumber,
 } from "../../../services/partsAutoMatchApi";
+import { fetchPartsBrowse } from "../parts-database/partsDatabaseApi";
+import { goDominionPage, writeCatalogSearch } from "../parts-database/partsCatalogUrl";
 import { formatCatalogProductionWindow, type VehicleCatalogRecord } from "../../../types/vehicleCatalog";
 
 type TabId = "spec" | "factory" | "derived" | "audit";
 
 const AREA_CHIPS = [
   { id: "all", label: "All" },
-  { id: "brakes", label: "Brakes", match: (name: string) => /brake|pad|disc|rotor/i.test(name) },
-  { id: "engine", label: "Engine", match: (name: string) => /engine|belt|spark|gasket/i.test(name) },
-  { id: "filters", label: "Filters", match: (name: string) => /filter|oil/i.test(name) },
-  { id: "suspension", label: "Suspension", match: (name: string) => /susp|shock|strut/i.test(name) },
-  { id: "fluids", label: "Fluids", match: (name: string) => /fluid|coolant/i.test(name) },
+  { id: "brakes", label: "Brakes", match: (row: Record<string, unknown>) => /^(BRK|PAD|DSC|ROT)/i.test(String(row.op_code || "")) || /brake|pad|disc|rotor/i.test(String(row.part_type_name || "")) },
+  { id: "engine", label: "Engine", match: (row: Record<string, unknown>) => /^(ENG|BLT|SPK|GSK)/i.test(String(row.op_code || "")) || /engine|belt|spark|gasket/i.test(String(row.part_type_name || "")) },
+  { id: "filters", label: "Filters", match: (row: Record<string, unknown>) => /^(FLT|OIL)/i.test(String(row.op_code || "")) || /filter|oil/i.test(String(row.part_type_name || "")) },
+  { id: "suspension", label: "Suspension", match: (row: Record<string, unknown>) => /^(SUS|SHK|STR)/i.test(String(row.op_code || "")) || /susp|shock|strut/i.test(String(row.part_type_name || "")) },
+  { id: "fluids", label: "Fluids", match: (row: Record<string, unknown>) => /^(FLU|CLT)/i.test(String(row.op_code || "")) || /fluid|coolant/i.test(String(row.part_type_name || "")) },
 ] as const;
+
+function pluralNumbers(count: number): string {
+  return `${count} number${count === 1 ? "" : "s"} on file`;
+}
 
 function sysId(r: VehicleCatalogRecord): string {
   const make3 = (r.make || "XXX").slice(0, 3).toUpperCase();
@@ -46,9 +52,12 @@ function timeAgo(iso: string | undefined): string {
 }
 
 function catalogStatusChip(r: VehicleCatalogRecord): { label: string; className: string } {
-  const source = String((r as { source?: string }).source || "");
-  if (source === "pending_approve") {
-    return { label: "Pending", className: "border-amber-200 bg-amber-50 text-amber-900" };
+  const lifecycle = String((r as { catalog_status?: string }).catalog_status || (r as { lifecycle?: string }).lifecycle || "").toLowerCase();
+  if (lifecycle.includes("pending") || lifecycle === "draft") {
+    return { label: "Pending approval", className: "border-amber-200 bg-amber-50 text-amber-900" };
+  }
+  if (lifecycle.includes("archived") || lifecycle === "inactive") {
+    return { label: "Archived", className: "border-slate-200 bg-slate-100 text-slate-700" };
   }
   return { label: "Active catalog", className: "border-emerald-200 bg-emerald-50 text-emerald-800" };
 }
@@ -89,6 +98,9 @@ export function VehicleAutoMatchTabs({
   const [draftEvidence, setDraftEvidence] = useState("");
   const [draftPosition, setDraftPosition] = useState("front");
   const [draftSide, setDraftSide] = useState("both");
+  const [draftComponentId, setDraftComponentId] = useState("");
+  const [draftYearFrom, setDraftYearFrom] = useState("");
+  const [draftYearTo, setDraftYearTo] = useState("");
   const [normPreview, setNormPreview] = useState<string>("");
   const [busy, setBusy] = useState(false);
 
@@ -122,11 +134,28 @@ export function VehicleAutoMatchTabs({
   const platformCode = (r as VehicleCatalogRecord & { platform_code?: string | null }).platform_code
     || (oe.data?.platformCode as string | undefined);
   const rows = oe.data?.rows ?? [];
+  const browse = useQuery({
+    queryKey: ["parts-browse-vehicle-oe"],
+    queryFn: fetchPartsBrowse,
+    enabled: Boolean(token) && panelOpen,
+  });
+  const componentOptions = useMemo(() => {
+    const fromRows = rows.map((row) => ({
+      id: String(row.maintenance_component_id || ""),
+      label: String(row.part_type_name || row.op_code || "Component"),
+    })).filter((row) => row.id);
+    const fromBrowse = (browse.data?.systems ?? []).flatMap((sys) =>
+      (sys.components ?? []).map((c) => ({ id: c.id, label: c.plainName })),
+    );
+    const map = new Map<string, { id: string; label: string }>();
+    for (const opt of [...fromRows, ...fromBrowse]) map.set(opt.id, opt);
+    return [...map.values()].sort((a, b) => a.label.localeCompare(b.label));
+  }, [rows, browse.data]);
   const areaCounts = useMemo(() => {
     const counts: Record<string, number> = { all: rows.length };
     for (const chip of AREA_CHIPS) {
       if (chip.id === "all") continue;
-      counts[chip.id] = rows.filter((row) => chip.match(String(row.part_type_name || ""))).length;
+      counts[chip.id] = rows.filter((row) => chip.match(row)).length;
     }
     return counts;
   }, [rows]);
@@ -137,7 +166,7 @@ export function VehicleAutoMatchTabs({
       const name = String(row.part_type_name || "");
       if (area !== "all") {
         const chip = AREA_CHIPS.find((c) => c.id === area);
-        if (chip && chip.id !== "all" && !chip.match(name)) return false;
+        if (chip && chip.id !== "all" && !chip.match(row)) return false;
       }
       if (!q) return true;
       return [row.oe_number, row.part_type_name, row.oe_brand].some((v) => String(v || "").toLowerCase().includes(q));
@@ -177,6 +206,9 @@ export function VehicleAutoMatchTabs({
     setDraftEvidence("");
     setDraftPosition("front");
     setDraftSide("both");
+    setDraftComponentId(String(rows[0]?.maintenance_component_id || componentOptions[0]?.id || ""));
+    setDraftYearFrom(r.production_start_year ? String(r.production_start_year) : "");
+    setDraftYearTo(r.production_end_year ? String(r.production_end_year) : "");
     setNormPreview("");
     setPanelOpen(true);
   }
@@ -188,14 +220,47 @@ export function VehicleAutoMatchTabs({
     setDraftEvidence(String(row.evidence_url || ""));
     setDraftPosition(String(row.position || "front"));
     setDraftSide(String(row.side || "both"));
+    setDraftComponentId(String(row.maintenance_component_id || ""));
+    setDraftYearFrom(row.year_from != null ? String(row.year_from) : "");
+    setDraftYearTo(row.year_to != null ? String(row.year_to) : "");
     setPanelOpen(true);
     void refreshNormPreview(String(row.oe_number || ""), String(row.oe_brand || ""));
   }
+
+  function openFindPartsMatches() {
+    goDominionPage("parts-catalog");
+    writeCatalogSearch({ tab: "Find parts", variant: r.id, car: r.id }, "push");
+  }
+
+  function openImportCsv() {
+    goDominionPage("parts-catalog");
+    writeCatalogSearch({ tab: "Import" }, "push");
+  }
+
+  const duplicateOeWarning = useMemo(() => {
+    if (!draftNumber.trim() || !draftComponentId) return "";
+    const norm = normPreview || draftNumber.trim();
+    const hit = rows.find((row) =>
+      String(row.maintenance_component_id) === draftComponentId
+      && String(row.oe_number_norm || row.oe_number || "").toLowerCase() === norm.toLowerCase()
+      && String(row.id) !== String(editId || ""),
+    );
+    if (!hit) return "";
+    return `This factory number is already on file for ${String(hit.part_type_name || "this part type")}.`;
+  }, [draftNumber, draftComponentId, normPreview, rows, editId]);
 
   async function saveOeNumber() {
     if (!owner || !token) return;
     if (!draftBrand.trim() || !draftNumber.trim() || !draftEvidence.trim()) {
       toast.message("Brand, number, and source link are required.");
+      return;
+    }
+    if (!draftComponentId) {
+      toast.message("Pick a part type first.");
+      return;
+    }
+    if (duplicateOeWarning && !editId) {
+      toast.error(duplicateOeWarning);
       return;
     }
     setBusy(true);
@@ -206,7 +271,9 @@ export function VehicleAutoMatchTabs({
         evidence_url: draftEvidence.trim(),
         position: draftPosition,
         side: draftSide,
-        maintenance_component_id: String(rows[0]?.maintenance_component_id || editId || "c3333333-3333-4333-8333-333333333333"),
+        maintenance_component_id: draftComponentId,
+        year_from: draftYearFrom.trim() ? Number(draftYearFrom) : null,
+        year_to: draftYearTo.trim() ? Number(draftYearTo) : null,
       };
       if (editId) {
         await updateVehicleOeNumber(token, r.id, editId, body);
@@ -226,6 +293,7 @@ export function VehicleAutoMatchTabs({
 
   async function removeOeNumber(id: string) {
     if (!owner || !token) return;
+    if (!window.confirm("Remove this factory number from the car record?")) return;
     setBusy(true);
     try {
       await deleteVehicleOeNumber(token, r.id, id);
@@ -360,16 +428,7 @@ export function VehicleAutoMatchTabs({
                 <button type="button" className="rounded-[0.25rem] bg-blue-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-40" disabled={!owner} onClick={openAddPanel}>
                   + Add number
                 </button>
-                <button
-                  type="button"
-                  className="rounded-[0.25rem] border border-slate-300 px-3 py-2 text-sm font-semibold"
-                  onClick={() => {
-                    const url = new URL(window.location.href);
-                    url.searchParams.set("page", "parts-import");
-                    window.history.pushState({}, "", `${url.pathname}?${url.searchParams.toString()}`);
-                    window.dispatchEvent(new PopStateEvent("popstate"));
-                  }}
-                >
+                <button type="button" className="rounded-[0.25rem] border border-slate-300 px-3 py-2 text-sm font-semibold" onClick={openImportCsv}>
                   Open Import CSV
                 </button>
               </div>
@@ -387,18 +446,18 @@ export function VehicleAutoMatchTabs({
                 <div className="col-span-1 text-right">Actions</div>
               </div>
               {grouped.map(([partType, groupRows]) => {
-                const opCode = String(groupRows[0]?.op_code || groupRows[0]?.maintenance_component_id || "").slice(0, 12);
+                const opCode = String(groupRows[0]?.op_code || "");
                 return (
                   <div key={partType}>
                     <div className="flex items-center justify-between bg-slate-100 px-3 py-2 text-sm font-semibold">
-                      <span>{partType} · {groupRows.length} number on file</span>
-                      <span className="font-mono text-xs text-slate-500">CATEGORY: {opCode || "—"}</span>
+                      <span>{partType} · {pluralNumbers(groupRows.length)}</span>
+                      <span className="font-mono text-xs text-slate-500">CATEGORY: {opCode || partType}</span>
                     </div>
                     {groupRows.map((row) => {
                       const norm = normalizePartPositionSide(String(row.position || ""), String(row.side || ""));
                       const posOnly = formatPartPositionSideLabel(norm.position, null);
-                      const sideOnly = norm.side ? formatPartPositionSideLabel(null, norm.side) : "—";
-                      const num = String(row.oe_number || "—");
+                      const sideOnly = norm.side ? formatPartPositionSideLabel(null, norm.side) : "Both sides";
+                      const num = String(row.oe_number || "");
                       const matchCount = Number(row.match_count ?? 0);
                       const matching = Boolean(row.matching);
                       const superseded = String(row.supersession_note || row.changed_line || "");
@@ -406,7 +465,7 @@ export function VehicleAutoMatchTabs({
                         <div key={String(row.id)} className="grid grid-cols-12 items-center border-t border-slate-100 px-3 py-2 text-xs">
                           <div className="col-span-2"><span className="rounded bg-slate-100 px-1.5 py-0.5">{posOnly}</span></div>
                           <div className="col-span-1">{sideOnly}</div>
-                          <div className="col-span-1">{String(row.oe_brand || "—")}</div>
+                          <div className="col-span-1">{String(row.oe_brand || "")}</div>
                           <div className="col-span-3 font-mono">
                             {num}
                             {superseded ? <div className="text-[10px] text-slate-500 mt-0.5">↳ {superseded}</div> : null}
@@ -420,10 +479,16 @@ export function VehicleAutoMatchTabs({
                               <a className="text-blue-600 inline-flex items-center gap-0.5" href={String(row.evidence_url)} target="_blank" rel="noreferrer">
                                 Source <ExternalLink className="h-3 w-3" />
                               </a>
-                            ) : "—"}
+                            ) : null}
                           </div>
                           <div className="col-span-1 text-blue-600">
-                            {matching ? "Matching…" : `${matchCount} parts →`}
+                            {matching ? (
+                              <span>Matching…</span>
+                            ) : (
+                              <button type="button" className="font-semibold hover:underline" onClick={openFindPartsMatches}>
+                                {matchCount} parts →
+                              </button>
+                            )}
                           </div>
                           <div className="col-span-1 flex justify-end gap-1">
                             <button type="button" className="text-slate-500 disabled:opacity-40" disabled={!owner} onClick={() => openEditPanel(row)}><Pencil className="h-4 w-4" /></button>
@@ -453,6 +518,14 @@ export function VehicleAutoMatchTabs({
                   }}
                 />
                 <input className="rounded border px-2 py-1.5 text-sm sm:col-span-2" placeholder="Source link (required)" value={draftEvidence} onChange={(e) => setDraftEvidence(e.target.value)} />
+                <select className="rounded border px-2 py-1.5 text-sm sm:col-span-2" value={draftComponentId} onChange={(e) => setDraftComponentId(e.target.value)}>
+                  <option value="">Part type…</option>
+                  {componentOptions.map((opt) => (
+                    <option key={opt.id} value={opt.id}>{opt.label}</option>
+                  ))}
+                </select>
+                <input className="rounded border px-2 py-1.5 text-sm" placeholder="Year from" value={draftYearFrom} onChange={(e) => setDraftYearFrom(e.target.value)} />
+                <input className="rounded border px-2 py-1.5 text-sm" placeholder="Year to" value={draftYearTo} onChange={(e) => setDraftYearTo(e.target.value)} />
                 <select className="rounded border px-2 py-1.5 text-sm" value={draftPosition} onChange={(e) => setDraftPosition(e.target.value)}>
                   <option value="front">Front</option>
                   <option value="rear">Rear</option>
@@ -464,6 +537,7 @@ export function VehicleAutoMatchTabs({
                 </select>
               </div>
               {normPreview ? <p className="mt-2 font-mono text-xs text-slate-600">Normalize preview: {normPreview}</p> : null}
+              {duplicateOeWarning ? <p className="mt-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1">{duplicateOeWarning}</p> : null}
               <div className="mt-3 flex gap-2">
                 <button type="button" className="rounded border px-3 py-1.5 text-sm" onClick={() => setPanelOpen(false)}>Cancel</button>
                 <button type="button" className="rounded bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-40" disabled={!owner || busy} onClick={() => { void saveOeNumber(); }}>
@@ -486,24 +560,28 @@ export function VehicleAutoMatchTabs({
             <div className="overflow-x-auto rounded border border-slate-200">
               <table className="min-w-full text-left text-xs">
                 <thead className="bg-slate-50 uppercase text-slate-500">
-                  <tr><th className="px-3 py-2">Part</th><th className="px-3 py-2">Number</th><th className="px-3 py-2">Status</th><th className="px-3 py-2">Actions</th></tr>
+                  <tr><th className="px-3 py-2">Part</th><th className="px-3 py-2">Matched key</th><th className="px-3 py-2">Match status</th><th className="px-3 py-2">Actions</th></tr>
                 </thead>
                 <tbody>
                   {(derived.data?.rows ?? []).map((row) => (
                     <tr key={String(row.id)} className="border-t border-slate-100">
-                      <td className="px-3 py-2">{String(row.part_name || row.part_id || "—")}</td>
-                      <td className="px-3 py-2 font-mono">{String(row.matched_key || "—")}</td>
-                      <td className="px-3 py-2">{String(row.match_status || "—")}</td>
+                      <td className="px-3 py-2">{String(row.part_name || "")}</td>
+                      <td className="px-3 py-2 font-mono">{String(row.matched_key || "")}</td>
+                      <td className="px-3 py-2">{String(row.match_status || row.status || "")}</td>
                       <td className="px-3 py-2">
                         <button type="button" className="text-primary font-semibold disabled:opacity-40" disabled={!owner} onClick={() => {
-                          void keepDerivedBatch(token, [String(row.id)], "Kept from vehicle record").then(() => {
+                          const note = window.prompt("Note for audit trail (required):")?.trim();
+                          if (!note) return;
+                          void keepDerivedBatch(token, [String(row.id)], note).then(() => {
                             toast.success("Kept");
                             void derived.refetch();
                           }).catch((e) => toast.error(e instanceof Error ? e.message : "Failed"));
                         }}>Keep</button>
                         {" · "}
-                        <button type="button" className="text-secondary disabled:opacity-40" disabled={!owner} onClick={() => {
-                          void resolveAutoMatchConflict(token, String(row.conflict_id || ""), "remove", "Removed from vehicle derived tab").then(() => {
+                        <button type="button" className="text-secondary disabled:opacity-40" disabled={!owner || !row.conflict_id} onClick={() => {
+                          const note = window.prompt("Note for audit trail (required):")?.trim();
+                          if (!note || !row.conflict_id) return;
+                          void resolveAutoMatchConflict(token, String(row.conflict_id), "remove", note).then(() => {
                             toast.success("Removed");
                             void derived.refetch();
                           }).catch((e) => toast.error(e instanceof Error ? e.message : "Failed"));

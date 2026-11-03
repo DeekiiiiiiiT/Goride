@@ -5,6 +5,7 @@ import "./partsDatabase.css";
 
 const MODULES = [
   { id: "motor-vehicles", label: "Vehicle catalog", detail: "Makes, models, and the record you open with the eye button.", icon: "dataset" },
+  { id: "platforms", label: "Platforms", detail: "Sister cars and shared component links for auto-matching.", icon: "hub" },
   { id: "parts-catalog", label: "Parts database", detail: "Search any car and see its parts in five match types.", icon: "category" },
   { id: "pending-motor-vehicles", label: "Pending catalog", detail: "Rows waiting for a person to approve.", icon: "hourglass_top" },
   { id: "maintenance-templates", label: "Maintenance templates", detail: "Service schedules used by the apps.", icon: "build_circle" },
@@ -46,7 +47,7 @@ export function VehiclesHomePage({ onNavigate }: { onNavigate: (page: string) =>
         <div className="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
           <div className="px-6 py-4 flex items-center justify-between">
             <span className="text-xs font-label uppercase tracking-wider font-bold text-on-surface-variant">Modules</span>
-            <span className="text-xs font-mono text-outline">6 items</span>
+            <span className="text-xs font-mono text-outline">7 items</span>
           </div>
           {MODULES.map((item) => (
             <button

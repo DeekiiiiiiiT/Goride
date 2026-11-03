@@ -10,6 +10,8 @@ import { FindPartsChrome } from "./find-parts/FindPartsChrome";
 import { FullDatabaseTab } from "./full-database/FullDatabaseTab";
 import { ImportAdvancedTab } from "./ImportAdvancedTab";
 import { ImportByAreaFlow } from "./import/ImportByAreaFlow";
+import { fetchPartMatchHealth } from "../../../services/partsAutoMatchApi";
+import { supabase } from "../../../utils/supabase/client";
 import { exportMasterCsv, fetchPartsOverview } from "./partsDatabaseApi";
 import {
   goDominionPage,
@@ -31,6 +33,18 @@ export function PartsDatabasePage() {
   const [editGroup, setEditGroup] = useState<string | null>(null);
   const [problemsOpen, setProblemsOpen] = useState(false);
   const overview = useQuery({ queryKey: ["parts-overview"], queryFn: fetchPartsOverview, retry: false });
+  const [authToken, setAuthToken] = useState("");
+  useEffect(() => {
+    void supabase.auth.getSession().then((s) => setAuthToken(s.data.session?.access_token ?? ""));
+  }, []);
+  const matchHealth = useQuery({
+    queryKey: ["part-match-health-parts-db"],
+    queryFn: () => fetchPartMatchHealth(authToken),
+    enabled: Boolean(authToken),
+  });
+  const schemaLabel = matchHealth.data?.engineVersion != null
+    ? `SCHEMA v${matchHealth.data.engineVersion}.${matchHealth.data.normVersion ?? 0}`
+    : "SCHEMA";
 
   useEffect(() => {
     function sync() {
@@ -94,6 +108,7 @@ export function PartsDatabasePage() {
     <div className="parts-database-stitch flex flex-col w-full">
       <FindPartsChrome
         fitmentCount={overview.data?.fitmentsOnFile ?? null}
+        schemaLabel={schemaLabel}
         matchTypesLabel={matchTypesLabel}
         activeTab={sectionTab}
         advancedActive={tab === "Advanced"}

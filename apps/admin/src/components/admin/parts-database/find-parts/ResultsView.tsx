@@ -142,7 +142,9 @@ export function ResultsView({
   const live = Number(health?.derived?.live ?? 0);
   const checking = Number(health?.derived?.needsChecking ?? 0);
   const openConflicts = Object.values(health?.openConflicts ?? {}).reduce((a, b) => a + Number(b), 0);
-  const pendingInspect = checking + openConflicts;
+  const pendingInspect = vehicleId ? checking + openConflicts : checking;
+  const toleranceMm = (result as { universalToleranceMm?: number; universal_part?: { tolerance_mm?: number } }).universalToleranceMm
+    ?? (result as { universal_part?: { tolerance_mm?: number } }).universal_part?.tolerance_mm;
   const passRate = live + checking > 0 ? Math.round((live / (live + checking)) * 100) : 100;
   const ownerTitle = owner ? undefined : "Only the owner can run this.";
   const auditLabel = health?.lastRun?.error ? "DEGRADED" : "ACTIVE";
@@ -244,7 +246,13 @@ export function ResultsView({
           <span className="font-semibold">Auto-matching engine active</span>
           <span className="ml-3">Pass rate {passRate}%</span>
           <span className="ml-3 font-mono-sm">Engine hash v{health?.engineVersion ?? "—"} · {String(health?.lastRun?.run_id ?? "").slice(0, 8)}</span>
-          <span className="ml-3">{pendingInspect} Pending inspect</span>
+          {vehicleId ? (
+            <a className="ml-3 text-primary font-semibold" href={`/?page=pending-motor-vehicles&tab=conflicts&vehicle=${encodeURIComponent(vehicleId)}`}>
+              {pendingInspect} Pending inspect ↗
+            </a>
+          ) : (
+            <span className="ml-3">{pendingInspect} Pending inspect</span>
+          )}
         </div>
       ) : null}
 
@@ -307,6 +315,10 @@ export function ResultsView({
                         {meta.wva ? <span className="font-mono-sm text-xs">WVA {meta.wva}</span> : null}
                       </div>
                       <p className="font-body-sm text-secondary">{item.reason}</p>
+                      <div className="rounded border border-outline-variant/40 bg-surface-container-low px-2 py-1.5 text-xs grid sm:grid-cols-2 gap-1">
+                        <span><strong>Your car:</strong> {title}</span>
+                        <span><strong>This part:</strong> {[item.brand, item.number, item.name].filter(Boolean).join(" · ")}</span>
+                      </div>
                       <div className="flex flex-wrap gap-2 text-xs items-center">
                         {item.status === "needs_checking" ? (
                           <a
@@ -336,7 +348,7 @@ export function ResultsView({
 
       <div className="flex flex-wrap gap-4 font-mono-sm text-mono-sm text-secondary border-t border-outline-variant/40 pt-4">
         <span>DATABASE NODES · {groupCount} groups</span>
-        <span>AUTOMATCH TOLERANCE · ±{health?.normVersion ?? "—"} norm</span>
+        <span>AUTOMATCH TOLERANCE · {toleranceMm != null ? `±${toleranceMm} mm` : "Universal tolerance not on file"}</span>
         <span>ENGINE AUDIT · {auditLabel}</span>
       </div>
       {fitsEvery ? <p className="text-sm text-secondary">{fitsEvery}</p> : null}

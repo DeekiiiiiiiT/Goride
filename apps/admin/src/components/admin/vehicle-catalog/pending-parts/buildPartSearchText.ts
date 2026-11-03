@@ -3,6 +3,7 @@ import type {
   PendingPartsQueueGroup,
   VehicleCatalogBrief,
 } from "../../../../services/pendingPartsCatalogService";
+import { formatPartPositionSideLabel } from "@roam/types/partPositionNorm";
 
 function vehicleYearRange(v: VehicleCatalogBrief | undefined): string {
   if (!v) return "";
@@ -47,15 +48,12 @@ export function formatPendingRequestPosition(
     const segments = fit.split(",").map((s) => s.trim()).filter(Boolean);
     for (const seg of segments) {
       const [axle, segSide] = seg.split(":");
-      const axleLabel = axle === "rear" ? "Rear" : axle === "front" ? "Front" : axle ? axle.charAt(0).toUpperCase() + axle.slice(1) : "";
-      const sideLabel = segSide === "left" ? "Left" : segSide === "right" ? "Right" : segSide === "both" ? "Both" : "";
-      if (axleLabel && sideLabel) parts.push(`${axleLabel} · ${sideLabel}`);
-      else if (axleLabel) parts.push(axleLabel);
+      const label = formatPartPositionSideLabel(axle, segSide);
+      if (label !== "Any position") parts.push(label);
     }
   }
   if (!parts.length && side) {
-    const sideLabel = side === "left" ? "Left" : side === "right" ? "Right" : side === "both" ? "Both" : side.charAt(0).toUpperCase() + side.slice(1);
-    parts.push(sideLabel);
+    parts.push(formatPartPositionSideLabel(null, side));
   }
   if (!parts.length) return null;
   return `Position: ${parts.join("; ")}`;

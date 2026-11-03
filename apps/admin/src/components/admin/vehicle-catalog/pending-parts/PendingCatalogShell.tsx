@@ -22,6 +22,7 @@ export function PendingCatalogShell({
   partsCount,
   conflictsCount,
   syncSeconds,
+  enginePulseLabel,
   onRefreshVehicles,
   vehiclesRefreshing,
   children,
@@ -32,6 +33,7 @@ export function PendingCatalogShell({
   partsCount: number;
   conflictsCount: number;
   syncSeconds: number;
+  enginePulseLabel?: string;
   onRefreshVehicles?: () => void;
   vehiclesRefreshing?: boolean;
   children: ReactNode;
@@ -63,6 +65,11 @@ export function PendingCatalogShell({
             {catalogTab === "vehicles" ? (
               <span className="inline-flex items-center rounded-full bg-surface-container px-2 py-0.5 font-mono-sm text-mono-sm text-on-surface-variant">
                 QUEUE ACTIVE
+              </span>
+            ) : null}
+            {catalogTab === "conflicts" && enginePulseLabel ? (
+              <span className="inline-flex items-center rounded-full bg-surface-container px-2 py-0.5 font-mono-sm text-mono-sm text-on-surface-variant">
+                ENGINE PULSE · {enginePulseLabel}
               </span>
             ) : null}
           </div>

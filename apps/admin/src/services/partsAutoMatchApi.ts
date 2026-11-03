@@ -57,6 +57,7 @@ export type MatchConflictRow = Record<string, unknown> & {
   group_code?: string;
   matched_key?: string;
   detail?: Record<string, unknown>;
+  found_at?: string | null;
 };
 
 export type AutoMatchConflictsResponse = {
@@ -321,7 +322,105 @@ export async function fetchPartReferenceTable(
   });
   if (!res.ok) throw new Error(await parseErr(res));
   const data = (await res.json()) as { rows?: unknown[] };
-  return { rows: Array.isArray(data.rows) ? data.rows : (Array.isArray(data) ? data as Array<Record<string, unknown>> : []) };
+  return {
+    rows: Array.isArray(data.rows)
+      ? (data.rows as Array<Record<string, unknown>>)
+      : (Array.isArray(data) ? (data as Array<Record<string, unknown>>) : []),
+  };
+}
+
+export async function createPlatformComponentLink(
+  token: string,
+  platformId: string,
+  body: Record<string, unknown>,
+): Promise<{ row: Record<string, unknown> }> {
+  const res = await fetch(`${AUTO}/platforms/${encodeURIComponent(platformId)}/links`, {
+    method: "POST",
+    headers: await headers(token),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(await parseErr(res));
+  return (await res.json()) as { row: Record<string, unknown> };
+}
+
+export async function updatePlatformComponentLink(
+  token: string,
+  platformId: string,
+  linkId: string,
+  body: Record<string, unknown>,
+): Promise<{ row: Record<string, unknown> }> {
+  const res = await fetch(
+    `${AUTO}/platforms/${encodeURIComponent(platformId)}/links/${encodeURIComponent(linkId)}`,
+    { method: "PATCH", headers: await headers(token), body: JSON.stringify(body) },
+  );
+  if (!res.ok) throw new Error(await parseErr(res));
+  return (await res.json()) as { row: Record<string, unknown> };
+}
+
+export async function deletePlatformComponentLink(
+  token: string,
+  platformId: string,
+  linkId: string,
+): Promise<void> {
+  const res = await fetch(
+    `${AUTO}/platforms/${encodeURIComponent(platformId)}/links/${encodeURIComponent(linkId)}`,
+    { method: "DELETE", headers: await headers(token) },
+  );
+  if (!res.ok) throw new Error(await parseErr(res));
+}
+
+export async function exportPlatformMatrix(
+  token: string,
+  platformId: string,
+): Promise<Record<string, unknown>> {
+  const res = await fetch(`${AUTO}/platforms/${encodeURIComponent(platformId)}/export`, {
+    headers: await headers(token),
+  });
+  if (!res.ok) throw new Error(await parseErr(res));
+  return (await res.json()) as Record<string, unknown>;
+}
+
+export async function createPartReferenceRow(
+  token: string,
+  partId: string,
+  segment: "oe-references" | "index-numbers" | "approvals",
+  body: Record<string, unknown>,
+): Promise<{ row: Record<string, unknown> }> {
+  const res = await fetch(`${ADMIN}/parts/${encodeURIComponent(partId)}/${segment}`, {
+    method: "POST",
+    headers: await headers(token),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(await parseErr(res));
+  return (await res.json()) as { row: Record<string, unknown> };
+}
+
+export async function updatePartReferenceRow(
+  token: string,
+  partId: string,
+  segment: "oe-references" | "index-numbers" | "approvals",
+  refId: string,
+  body: Record<string, unknown>,
+): Promise<{ row: Record<string, unknown> }> {
+  const res = await fetch(
+    `${ADMIN}/parts/${encodeURIComponent(partId)}/${segment}/${encodeURIComponent(refId)}`,
+    { method: "PATCH", headers: await headers(token), body: JSON.stringify(body) },
+  );
+  if (!res.ok) throw new Error(await parseErr(res));
+  return (await res.json()) as { row: Record<string, unknown> };
+}
+
+export async function deletePartReferenceRow(
+  token: string,
+  partId: string,
+  segment: "oe-references" | "index-numbers" | "approvals",
+  refId: string,
+): Promise<void> {
+  const res = await fetch(
+    `${ADMIN}/parts/${encodeURIComponent(partId)}/${segment}/${encodeURIComponent(refId)}`,
+    { method: "DELETE", headers: await headers(token) },
+  );
+  if (!res.ok) throw new Error(await parseErr(res));
 }
 
 export async function patchPartsAutoMatchEnabled(token: string, enabled: boolean): Promise<void> {

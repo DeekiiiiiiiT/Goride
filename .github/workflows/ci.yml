@@ -287,7 +287,7 @@ jobs:
           SUPABASE_URL: http://127.0.0.1:54321
           SUPABASE_SERVICE_ROLE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU
         run: >
-          deno test --allow-read --allow-env --no-check
+          deno test --allow-read --allow-env --allow-net=127.0.0.1:54321 --no-check
           supabase/functions/_fleet-server/inventory_phase0_security.test.ts
           supabase/functions/_fleet-server/inventory_controller_auth.test.ts
           supabase/functions/_fleet-server/inventory_ledger_invariants.test.ts
@@ -299,19 +299,40 @@ jobs:
           supabase/functions/_fleet-server/inventory_integration.test.ts
           supabase/functions/_fleet-server/inventory_asset_events.test.ts
 
-      - name: Fleet inventory button sweep (optional E2E)
+      - name: Fleet inventory button sweep (E2E)
         env:
           INVENTORY_BUTTON_SWEEP: "1"
+          INVENTORY_SEED_ASSERT: "1"
           E2E_FLEET_EMAIL: ${{ secrets.E2E_FLEET_EMAIL }}
           E2E_FLEET_PASSWORD: ${{ secrets.E2E_FLEET_PASSWORD }}
           FLEET_BASE_URL: ${{ vars.FLEET_E2E_BASE_URL }}
         run: |
-          if [ -z "$E2E_FLEET_EMAIL" ] || [ -z "$FLEET_BASE_URL" ]; then
-            echo "Skipping inventory button sweep (set secrets E2E_FLEET_* and vars.FLEET_E2E_BASE_URL)"
-            exit 0
+          if [ -z "$E2E_FLEET_EMAIL" ] || [ -z "$E2E_FLEET_PASSWORD" ] || [ -z "$FLEET_BASE_URL" ]; then
+            echo "ERROR: Set secrets E2E_FLEET_EMAIL, E2E_FLEET_PASSWORD and var FLEET_E2E_BASE_URL for inventory sweep"
+            exit 1
           fi
           npx playwright install --with-deps chromium
           npx playwright test --project=fleet e2e/inventory-button-sweep.spec.ts
+
+      - name: Driver car-kit button sweep (E2E)
+        env:
+          INVENTORY_BUTTON_SWEEP: "1"
+          INVENTORY_SEED_ASSERT: "1"
+          E2E_DRIVER_EMAIL: ${{ secrets.E2E_DRIVER_EMAIL }}
+          E2E_DRIVER_PASSWORD: ${{ secrets.E2E_DRIVER_PASSWORD }}
+          DRIVER_BASE_URL: ${{ vars.DRIVER_E2E_BASE_URL }}
+        run: |
+          if [ -z "$E2E_DRIVER_EMAIL" ] || [ -z "$E2E_DRIVER_PASSWORD" ] || [ -z "$DRIVER_BASE_URL" ]; then
+            echo "ERROR: Set secrets E2E_DRIVER_* and var DRIVER_E2E_BASE_URL for car-kit sweep"
+            exit 1
+          fi
+          npx playwright install --with-deps chromium
+          npx playwright test --project=driver-car-kit e2e/car-kit-button-sweep.spec.ts
+
+      - name: Deno test parts auto-match routes
+        run: >
+          deno test --allow-read --allow-env
+          supabase/functions/_fleet-server/parts_auto_match_routes.test.ts
 
       - name: Deno test ledger read API parity
         run: >
@@ -483,6 +504,21 @@ jobs:
 
       - name: Typecheck admin money spine
         run: pnpm --filter @roam/admin typecheck:money
+
+      - name: Check driver car-kit TypeScript
+        run: node scripts/typecheck-driver-car-kit.mjs
+
+      - name: Build fleet app (inventory gate)
+        env:
+          VITE_SUPABASE_URL: https://ci-placeholder.supabase.co
+          VITE_SUPABASE_ANON_KEY: ci-placeholder-anon-key
+        run: pnpm --filter @roam/fleet build
+
+      - name: Build driver app (car-kit gate)
+        env:
+          VITE_SUPABASE_URL: https://ci-placeholder.supabase.co
+          VITE_SUPABASE_ANON_KEY: ci-placeholder-anon-key
+        run: pnpm --filter @roam/driver build
 
       - name: Build
         run: pnpm build
