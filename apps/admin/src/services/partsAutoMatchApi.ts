@@ -20,6 +20,8 @@ async function parseErr(res: Response): Promise<string> {
 export type PartMatchHealth = {
   engineVersion?: number;
   normVersion?: number;
+  normMode?: string;
+  engineHash?: string;
   enabled?: boolean;
   derived?: { live?: number; needsChecking?: number; suppressed?: number };
   tierBreakdown?: Record<string, number>;
@@ -34,6 +36,13 @@ export type PartMatchHealth = {
     rows_scanned?: number;
   } | null;
   errorCount24h?: number;
+  lastError24h?: {
+    run_id?: string;
+    kind?: string;
+    started_at?: string;
+    finished_at?: string;
+    error?: string | null;
+  } | null;
   unresolvedPositionReports?: number;
 };
 
@@ -55,9 +64,12 @@ export type MatchConflictRow = Record<string, unknown> & {
   part_name?: string;
   interchange_group_id?: string;
   group_code?: string;
+  manual_listing_group_code?: string | null;
+  part_listing_id?: string | null;
   matched_key?: string;
   detail?: Record<string, unknown>;
   found_at?: string | null;
+  resolution_note?: string | null;
 };
 
 export type AutoMatchConflictsResponse = {
@@ -85,12 +97,13 @@ export async function fetchPartMatchSchedule(token: string): Promise<PartMatchSc
 
 export async function fetchAutoMatchConflicts(
   token: string,
-  query: { type?: string; status?: string; q?: string },
+  query: { type?: string; status?: string; q?: string; vehicleId?: string },
 ): Promise<AutoMatchConflictsResponse> {
   const params = new URLSearchParams();
   if (query.type) params.set("type", query.type);
   if (query.status) params.set("status", query.status);
   if (query.q) params.set("q", query.q);
+  if (query.vehicleId) params.set("vehicleId", query.vehicleId);
   const res = await fetch(`${AUTO}/conflicts?${params.toString()}`, { headers: await headers(token) });
   if (!res.ok) throw new Error(await parseErr(res));
   return (await res.json()) as AutoMatchConflictsResponse;
@@ -109,7 +122,7 @@ export async function fetchConflictHeatmap(token: string): Promise<{
 export async function resolveAutoMatchConflict(
   token: string,
   id: string,
-  action: "keep" | "remove",
+  action: "keep" | "remove" | "merge",
   note: string,
 ): Promise<void> {
   const res = await fetch(`${AUTO}/conflicts/${encodeURIComponent(id)}/resolve`, {
@@ -184,6 +197,24 @@ export async function fetchCatalogCompleteness(token: string): Promise<Record<st
   return (await res.json()) as Record<string, unknown>;
 }
 
+export async function fetchCatalogValidationExceptions(
+  token: string,
+  limit = 50,
+): Promise<{ rows: Array<Record<string, unknown>> }> {
+  const res = await fetch(`${AUTO}/catalog/validation-exceptions?limit=${limit}`, { headers: await headers(token) });
+  if (!res.ok) throw new Error(await parseErr(res));
+  return (await res.json()) as { rows: Array<Record<string, unknown>> };
+}
+
+export async function removeDerivedBatch(token: string, derivedIds: string[], note: string): Promise<void> {
+  const res = await fetch(`${AUTO}/derived/remove-batch`, {
+    method: "POST",
+    headers: await headers(token),
+    body: JSON.stringify({ derivedIds, note }),
+  });
+  if (!res.ok) throw new Error(await parseErr(res));
+}
+
 export async function fetchPositionReports(token: string, pendingOnly = true): Promise<{ rows: Array<Record<string, unknown>> }> {
   const q = pendingOnly ? "" : "?pending=0";
   const res = await fetch(`${AUTO}/position-reports${q}`, { headers: await headers(token) });
@@ -200,12 +231,25 @@ export async function exportPositionIssueReport(token: string): Promise<Blob> {
 export async function remapPositionReport(
   token: string,
   id: string,
-  body: { position: string; side?: string | null },
+  body: { position: string | null; side?: string | null },
 ): Promise<void> {
   const res = await fetch(`${AUTO}/position-reports/${encodeURIComponent(id)}/remap`, {
     method: "POST",
     headers: await headers(token),
     body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(await parseErr(res));
+}
+
+export async function confirmPositionReportMerge(
+  token: string,
+  id: string,
+  survivorId: string,
+): Promise<void> {
+  const res = await fetch(`${AUTO}/position-reports/${encodeURIComponent(id)}/confirm-merge`, {
+    method: "POST",
+    headers: await headers(token),
+    body: JSON.stringify({ survivor_id: survivorId }),
   });
   if (!res.ok) throw new Error(await parseErr(res));
 }
@@ -223,17 +267,24 @@ export async function fetchVehicleOeNumbers(token: string, vehicleId: string): P
   rows: Array<Record<string, unknown>>;
   lastRun: Record<string, unknown> | null;
   platformCode?: string | null;
+  areaChips?: Array<{ id: string; label: string; count: number }>;
 }> {
   const res = await fetch(
     `${ADMIN}/vehicles/${encodeURIComponent(vehicleId)}/oe-numbers`,
     { headers: await headers(token) },
   );
   if (!res.ok) throw new Error(await parseErr(res));
-  const data = (await res.json()) as { rows?: unknown; lastRun?: unknown; platformCode?: string };
+  const data = (await res.json()) as {
+    rows?: unknown;
+    lastRun?: unknown;
+    platformCode?: string;
+    areaChips?: Array<{ id: string; label: string; count: number }>;
+  };
   return {
     rows: Array.isArray(data.rows) ? (data.rows as Array<Record<string, unknown>>) : [],
     lastRun: (data.lastRun as Record<string, unknown>) ?? null,
     platformCode: data.platformCode ?? null,
+    areaChips: Array.isArray(data.areaChips) ? data.areaChips : undefined,
   };
 }
 

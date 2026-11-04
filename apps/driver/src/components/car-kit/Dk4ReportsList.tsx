@@ -1,4 +1,5 @@
 import type { DriverReportRow } from '../../services/driverInventoryApi';
+import { humanizeIssue } from './carKitDisplay';
 
 function formatWhen(iso?: string | null) {
   if (!iso) return '—';
@@ -53,6 +54,8 @@ export function Dk4ReportsList({
       ) : null}
       {reports.map((r) => {
         const resolved = r.status === 'fixed';
+        const title = r.displayName ?? r.itemLabel ?? 'Kit item';
+        const issueLine = humanizeIssue(r.issue);
         return (
           <div
             key={r.id ?? r.reportNo}
@@ -61,10 +64,10 @@ export function Dk4ReportsList({
             <div className="flex items-start justify-between gap-space-xs">
               <div className="flex flex-col min-w-0">
                 <span className="font-headline-sm text-headline-sm text-on-surface font-bold truncate">
-                  {r.note ?? r.issue ?? 'Kit report'}
+                  {title}
                 </span>
                 <span className="font-body-sm text-[12px] text-outline mt-0.5">
-                  {formatWhen(r.createdAt)} · {r.reportNo ?? 'Report'}
+                  {issueLine} · {formatWhen(r.createdAt)} · {r.reportNo ?? 'Report'}
                 </span>
               </div>
               <span

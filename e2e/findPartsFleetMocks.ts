@@ -15,10 +15,10 @@ import {
   STITCH_VISUAL_VEHICLE_ID,
   stitchVisualActivity,
   stitchVisualBrowse,
-  stitchVisualFindSections,
   stitchVisualFitHints,
   stitchVisualVehicleContext,
 } from "./findPartsStitchVisualFixtures";
+import { stitchAutoMatchFindResult } from "./findPartsStitchAutoMatchFixtures";
 
 export { FIND_PARTS_FORBIDDEN_SAMPLES } from "../apps/fleet/src/components/vehicles/find-parts/findParts.noSample.banned";
 
@@ -136,7 +136,7 @@ export function fleetCoreStitchVisualFixtures() {
     make: "Toyota",
     model: "Roomy",
   } as FleetCar]);
-  const find = stitchVisualFindSections();
+  const find = stitchAutoMatchFindResult();
   return {
     ...base,
     myVehicles: {

@@ -6,6 +6,7 @@ import type { Context } from "npm:hono@4.3.11";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { requireProductAdmin, type ProductAdminUser } from "./product_admin_guard.ts";
 import {
+  DAILY_TEMP_IO_LIMIT_BYTES,
   LARGER_FLEET_HOLD_NOTE,
   WEEK_CALCULATOR_COST_NOTE,
   largerFleetHold,
@@ -39,6 +40,10 @@ type SwitchBody = {
   holdLargerFleets: boolean;
   holdNote: string;
   costNote: string;
+  dailyTempBytes: number;
+  dailyTempOk: boolean;
+  dailyTempLimitBytes: number;
+  topSpillSource: string | null;
   warning?: string | null;
 };
 
@@ -89,6 +94,40 @@ async function scaleToZero(): Promise<void> {
   if (body.name && body.done !== true) await waitForOperation(token, body.name);
 }
 
+function topSpillSourceFromSnapshot(topStatements: unknown): string | null {
+  if (!Array.isArray(topStatements) || topStatements.length === 0) return null;
+  const first = topStatements[0] as { query?: string };
+  const query = String(first?.query ?? "");
+  const match = /-- source:\s*(\S+)/.exec(query);
+  return match?.[1] ?? null;
+}
+
+async function readDailyTempIo(supabase: SupabaseClient): Promise<{
+  dailyTempBytes: number;
+  dailyTempOk: boolean;
+  topSpillSource: string | null;
+}> {
+  let dailyTempBytes = 0;
+  const { data: tempData, error: tempErr } = await supabase.rpc("io_daily_temp_bytes");
+  if (!tempErr && tempData != null) dailyTempBytes = Number(tempData) || 0;
+
+  let topSpillSource: string | null = null;
+  const { data: snap } = await supabase
+    .schema("private")
+    .from("io_snapshots")
+    .select("top_statements")
+    .order("captured_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (snap?.top_statements) topSpillSource = topSpillSourceFromSnapshot(snap.top_statements);
+
+  return {
+    dailyTempBytes,
+    dailyTempOk: dailyTempBytes < DAILY_TEMP_IO_LIMIT_BYTES,
+    topSpillSource,
+  };
+}
+
 async function readNights(supabase: SupabaseClient): Promise<WeekCalculatorNight[]> {
   const { data, error } = await supabase
     .schema("recon")
@@ -107,6 +146,7 @@ async function readNights(supabase: SupabaseClient): Promise<WeekCalculatorNight
 
 async function buildStatus(supabase: SupabaseClient, auth: ProductAdminUser): Promise<SwitchBody> {
   const emptyNights: WeekCalculatorNight[] = [];
+  const diskIo = await readDailyTempIo(supabase);
   const base = {
     canFlip: FLIP_ROLES.has(auth.role),
     closeRunning: false,
@@ -115,6 +155,10 @@ async function buildStatus(supabase: SupabaseClient, auth: ProductAdminUser): Pr
     holdLargerFleets: true,
     holdNote: LARGER_FLEET_HOLD_NOTE,
     costNote: WEEK_CALCULATOR_COST_NOTE,
+    dailyTempBytes: diskIo.dailyTempBytes,
+    dailyTempOk: diskIo.dailyTempOk,
+    dailyTempLimitBytes: DAILY_TEMP_IO_LIMIT_BYTES,
+    topSpillSource: diskIo.topSpillSource,
   };
   const { data, error } = await supabase.rpc("recon_worker_status");
   if (error || !data) {
@@ -172,6 +216,19 @@ export function registerReconWorkerSwitchRoutes(app: RouteApp, supabase: Supabas
       if (auth instanceof Response) return auth;
       if (!FLIP_ROLES.has(auth.role)) {
         return c.json({ error: "Only the fleet owner can stop or resume this." }, 403);
+      }
+      if (on) {
+        const diskIo = await readDailyTempIo(supabase);
+        if (!diskIo.dailyTempOk) {
+          const mb = Math.round(diskIo.dailyTempBytes / (1024 * 1024));
+          return c.json(
+            {
+              error:
+                `Daily disk use is ${mb} MB. Resume only after it is under 200 MB (audit done-test 3).`,
+            },
+            409,
+          );
+        }
       }
       const stopping = !on;
       const { error } = await supabase.schema("recon").from("worker_control").update({

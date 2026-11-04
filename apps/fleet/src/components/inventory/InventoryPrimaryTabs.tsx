@@ -13,11 +13,43 @@ const TABS: { id: InventoryTabId; label: string }[] = [
   { id: 'alerts', label: 'Alerts' },
 ];
 
-type Variant = 'pill' | 'segment';
+type Variant = 'pill' | 'segment' | 'ledger';
 
 export function InventoryPrimaryTabs({ variant = 'pill' }: { variant?: Variant }) {
   const shell = useInventoryShell();
   const live = useInventoryLive(shell);
+
+  if (variant === 'ledger') {
+    return (
+      <div className="flex items-center gap-space-xs overflow-x-auto py-1 w-full max-w-full">
+        {TABS.map((t) => {
+          const active = shell.tab === t.id;
+          return (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => shell.setTab(t.id)}
+              className={
+                active
+                  ? 'px-space-md py-space-sm rounded font-body-sm text-body-sm bg-primary text-on-primary font-semibold shadow-sm flex items-center gap-space-xs whitespace-nowrap'
+                  : 'px-space-md py-space-sm rounded font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-all whitespace-nowrap flex items-center gap-space-xs'
+              }
+            >
+              {active && t.id === 'movements' ? (
+                <span className="material-symbols-outlined text-[15px]">swap_horiz</span>
+              ) : null}
+              {t.label}
+              {t.id === 'alerts' && live.openAlertCount > 0 ? (
+                <span className="bg-error-container text-on-error-container font-label-code text-[11px] px-1.5 py-0.2 rounded-full font-bold">
+                  {live.openAlertCount}
+                </span>
+              ) : null}
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
 
   if (variant === 'segment') {
     return (

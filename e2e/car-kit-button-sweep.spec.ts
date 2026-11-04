@@ -1,34 +1,32 @@
 import { test, expect } from '@playwright/test';
+import {
+  assertNoStitchSamples,
+  assertSeedMarkers,
+  sweepVisibleButtons,
+} from './helpers/inventory-button-sweep';
 
 /**
- * Rev 31-04 — Driver car-kit button sweep.
- * Run: INVENTORY_BUTTON_SWEEP=1 DRIVER_BASE_URL=... playwright test car-kit-button-sweep.spec.ts --project=driver-car-kit
+ * Rev 32 — Driver car-kit button sweep (Dk1 home + in-app navigation).
  */
-const DRIVER_BASE = process.env.DRIVER_BASE_URL?.trim() || 'http://localhost:5174';
+const DRIVER_BASE = process.env.DRIVER_BASE_URL?.trim() || process.env.DRIVER_E2E_BASE_URL?.trim() || 'http://localhost:5174';
 const sweepEnabled =
   process.env.INVENTORY_BUTTON_SWEEP === '1' || process.env.CI === 'true';
 
-test.describe('Driver car-kit button sweep (R31-04)', () => {
+test.describe('Driver car-kit button sweep (R32)', () => {
   test.skip(!sweepEnabled, 'Set INVENTORY_BUTTON_SWEEP=1 to run sweep');
 
-  test('car-kit home buttons respond', async ({ page }) => {
+  test('car-kit surfaces respond and show no Stitch samples', async ({ page }) => {
     await page.goto(`${DRIVER_BASE}/`);
     const root = page.locator('.driver-car-kit-stitch, .inventory-stitch-root').first();
-    test.skip(!(await root.isVisible().catch(() => false)), 'Open driver app on car-kit with test vehicle');
+    await expect(root).toBeVisible({ timeout: 90_000 });
 
-    const failures: { label: string }[] = [];
-    const buttons = root.locator('button:visible');
-    const n = await buttons.count();
-    for (let i = 0; i < n; i++) {
-      const btn = buttons.nth(i);
-      if (await btn.isDisabled().catch(() => true)) continue;
-      const label = (await btn.innerText().catch(() => '')).trim() || `btn-${i}`;
-      const htmlBefore = await root.innerHTML().catch(() => '');
-      await btn.click().catch(() => {});
-      await page.waitForTimeout(300);
-      const htmlAfter = await root.innerHTML().catch(() => '');
-      if (htmlBefore === htmlAfter) failures.push({ label });
-    }
+    const stitch = await assertNoStitchSamples(root);
+    expect(stitch, stitch ?? '').toBeNull();
+
+    const seed = await assertSeedMarkers(root);
+    expect(seed, seed ?? '').toBeNull();
+
+    const failures = await sweepVisibleButtons(page, 'dk1', root);
     expect(failures, JSON.stringify(failures)).toHaveLength(0);
   });
 });

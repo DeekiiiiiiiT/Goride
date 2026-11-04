@@ -9,7 +9,7 @@ export function WhyItMatchesDrawer({
   onClose: () => void;
 }) {
   const params = (part.matchReasonParams ?? {}) as Record<string, unknown>;
-  const why = part.reason || formatMatchWhyLine(part.matchReasonCode ?? null, params);
+  const why = part.reason || formatMatchWhyLine(part.matchReasonCode ?? null, params, part.fitSource ?? null);
   return (
     <aside className="fixed inset-y-0 right-0 z-[60] w-full max-w-md border-l border-outline-variant bg-surface-container-lowest p-space-lg shadow-2xl flex flex-col">
       <div className="flex items-start justify-between gap-2">

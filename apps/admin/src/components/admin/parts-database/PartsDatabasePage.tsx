@@ -9,7 +9,7 @@ import { FindPartsTab } from "./FindPartsTab";
 import { FindPartsChrome } from "./find-parts/FindPartsChrome";
 import { FullDatabaseTab } from "./full-database/FullDatabaseTab";
 import { ImportAdvancedTab } from "./ImportAdvancedTab";
-import { ImportByAreaFlow } from "./import/ImportByAreaFlow";
+import { AddPartsTab } from "./add-parts/AddPartsTab";
 import { fetchPartMatchHealth } from "../../../services/partsAutoMatchApi";
 import { supabase } from "../../../utils/supabase/client";
 import { exportMasterCsv, fetchPartsOverview } from "./partsDatabaseApi";
@@ -116,7 +116,7 @@ export function PartsDatabasePage() {
         onTab={selectTab}
         onAdvanced={() => selectTab("Advanced")}
         onAddPart={() => { setEditGroup(null); setDialogMode(variantId ? "job" : "any"); setDialogOpen(true); }}
-        onImport={() => selectTab("Import")}
+        onImport={() => selectTab("Add parts")}
         onExport={() => { void exportCsv(); }}
         owner={owner}
         onNavigateDominion={() => goDominionPage("dashboard")}
@@ -135,7 +135,7 @@ export function PartsDatabasePage() {
             onEditPart={(groupId) => { setEditGroup(groupId); setDialogMode("any"); setDialogOpen(true); }}
           />
         ) : null}
-        {tab === "Import" ? <ImportByAreaFlow /> : null}
+        {tab === "Add parts" ? <AddPartsTab owner={owner} /> : null}
         {tab === "Advanced" ? (
           <ImportAdvancedTab
             advanced

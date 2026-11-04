@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react';
 import { inventoryApi } from '../../inventoryApi';
 import { strField } from '../../inventoryData';
 import { formatJmd } from '../../inventoryFormat';
+import { buildAlertRow } from '../../inventoryViewRows';
+import type { AlertRow, AlertResolvedRow } from '../../inventoryTypes';
 import { useAuth } from '../../../auth/AuthContext';
 import { useInScreenBase } from './useInShared';
 
@@ -25,6 +27,8 @@ export function useIn13AlertsForm() {
   const [search, setSearch] = useState('');
 
   const alerts = shell.alerts;
+  const selectedAlertId = shell.selectedAlertId;
+  const setSelectedAlertId = shell.setSelectedAlertId;
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -55,6 +59,23 @@ export function useIn13AlertsForm() {
       return hay.includes(q);
     });
   }, [alerts, tab, search]);
+
+  const alertRows: AlertRow[] = useMemo(
+    () => filtered.map((a) => buildAlertRow(a)),
+    [filtered],
+  );
+
+  const selectedAlert = useMemo(() => {
+    if (!selectedAlertId) return null;
+    return alerts.find((a) => strField(a, 'id', '') === selectedAlertId) ?? null;
+  }, [alerts, selectedAlertId]);
+
+  const selectedAlertRow = useMemo(
+    () => (selectedAlert ? buildAlertRow(selectedAlert) : null),
+    [selectedAlert],
+  );
+
+  const selectAlert = (id: string | null) => setSelectedAlertId(id);
 
   const tabCounts = useMemo(
     () => ({
@@ -145,6 +166,28 @@ export function useIn13AlertsForm() {
 
   const newRequisition = () => shell.openGap('requisition', { itemId: null });
 
+  const markDoneSelectedDisabledReason = selectedAlertId ? '' : 'Select an alert first';
+
+  const resolvedAlertRows: AlertResolvedRow[] = useMemo(
+    () =>
+      shell.alerts
+        .filter((a) => {
+          const st = alertStatus(a);
+          return st === 'done' || st === 'closed';
+        })
+        .slice(0, 6)
+        .map((a) => {
+          const row = buildAlertRow(a);
+          return {
+            id: row.id,
+            title: row.title,
+            resolverLabel: strField(a, 'resolved_by_name', row.assigneeLabel || '—'),
+            whenLabel: strField(a, 'resolved_at', strField(a, 'updated_at', '—')),
+          };
+        }),
+    [shell.alerts],
+  );
+
   return {
     ...base,
     shell,
@@ -154,6 +197,11 @@ export function useIn13AlertsForm() {
     search,
     setSearch,
     filtered,
+    alertRows,
+    selectedAlertId,
+    selectAlert,
+    selectedAlert,
+    selectedAlertRow,
     tabCounts,
     markAllViewed,
     markDone,
@@ -164,6 +212,8 @@ export function useIn13AlertsForm() {
     reviewApproval,
     addSerial,
     newRequisition,
+    markDoneSelectedDisabledReason,
+    resolvedAlertRows,
     formatJmd,
     strField,
   };

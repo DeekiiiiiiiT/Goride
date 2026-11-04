@@ -82,6 +82,14 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
     syncCatalog('driver');
   }, []);
 
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    const capture = new URLSearchParams(window.location.search).get('capture');
+    if (capture === 'weekly-kit') {
+      setCheckInOpen(true);
+    }
+  }, []);
+
   // After OEM camera kill, reopen check-in / expenses so consumeRestoredPhoto can run.
   useEffect(() => {
     if (loading || cameraResumeRoutedRef.current || !user) return;

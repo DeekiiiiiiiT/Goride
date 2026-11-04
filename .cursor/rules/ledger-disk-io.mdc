@@ -5,12 +5,12 @@ alwaysApply: true
 
 # Ledger Disk IO
 
-Source: `docs/unified-ledger-disk-io-audit.md`. Project `csfllzzastacofsvcdsc` stays on Nano until the 4 Nov decision.
+Source: `docs/unified-ledger-disk-io-audit.md`. Project `csfllzzastacofsvcdsc` (Nano) until R13 final (7-day daily temp average after R14).
 
 ## Do not
 
-- Resume the week calculator before **29 Oct 04:07 UTC**, and only if `select pg_size_pretty(private.io_daily_temp_bytes());` is under 200 MB. Fleet admin → Week calculator. If the number fails, wait another full day.
-- Change compute size before **4 Nov**. Stay on Nano only if the 7-day average is under 200 MB/day and Disk IO is out of the red. Otherwise move one size up.
+- Resume the week calculator until `select pg_size_pretty(private.io_daily_temp_bytes());` is under 200 MB. Fleet admin → Week calculator (server returns 409 if over limit). If the number fails, wait another full day.
+- Change compute size until R14 done-test 3 has passed and the **7-day average of daily temp growth** (via `io_daily_temp_bytes`, not raw snapshot `temp_bytes`) is under 200 MB/day. Otherwise move one size up.
 - Turn `log_temp_files` back on, or restart the database, to “check” this.
 - Write role memory as `8MB` or `8mb`. Use unitless kB: `alter role authenticated set work_mem = 8192;`
 - Drop or skip `pgss-daily-reset` (`8 4 * * *`) or `ledger-io-snapshots-hourly`.

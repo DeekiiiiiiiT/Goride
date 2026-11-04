@@ -44,6 +44,8 @@ export type ImportPromoteResult = {
   partsUpdated?: number;
   fitsCreated?: number;
   fitsUpdated?: number;
+  matchesCreated?: number;
+  matchesNeedChecking?: number;
   refreshWarning?: string | null;
   rowsImported?: number;
   ledgerHash?: string;
@@ -74,6 +76,16 @@ export type ImportAreaSummary = {
   lastImportAt: string | null;
   templateVersion: number;
   sortOrder?: number;
+  /** When set, this row uses a global auto-match template (not a parts area). */
+  importKind?: string;
+};
+
+export type ImportSpecialTemplate = {
+  importKind: string;
+  areaId: string;
+  templateVersion: number;
+  name: string;
+  iconKey: string;
 };
 
 export async function fetchImportAreas() {
@@ -83,6 +95,13 @@ export async function fetchImportAreas() {
   return body as { areas: ImportAreaSummary[] };
 }
 
+export async function fetchImportSpecialTemplates() {
+  const res = await fetch(`${base}/special-templates`, { headers: await authHeaders() });
+  const body = await readApiErrorBody(res);
+  if (!res.ok) throw apiError(apiErrorPayload(body), "Could not load import templates", res.status);
+  return body as { templates: ImportSpecialTemplate[] };
+}
+
 export type ImportTemplateColumnDef = {
   name: string;
   required?: boolean;
@@ -90,20 +109,21 @@ export type ImportTemplateColumnDef = {
   required_for?: string[];
 };
 
-export async function fetchImportTemplateSchema(areaId: string) {
-  const res = await fetch(`${base}/areas/${areaId}/template-schema`, { headers: await authHeaders() });
+export async function fetchImportTemplateSchema(areaId: string, importKind = "area") {
+  const q = importKind !== "area" ? `?import_kind=${encodeURIComponent(importKind)}` : "";
+  const res = await fetch(`${base}/areas/${areaId}/template-schema${q}`, { headers: await authHeaders() });
   const body = await readApiErrorBody(res);
   if (!res.ok) throw apiError(apiErrorPayload(body), "Could not load template", res.status);
   return body as { columns: ImportTemplateColumnDef[] };
 }
 
-export async function createImportBatch(areaId: string, fileName: string) {
+export async function createImportBatch(areaId: string, fileName: string, importKind = "area") {
   const headers = new Headers(await authHeaders());
   headers.set("Content-Type", "application/json");
   const res = await fetch(`${base}/batches`, {
     method: "POST",
     headers,
-    body: JSON.stringify({ area_id: areaId, file_name: fileName }),
+    body: JSON.stringify({ area_id: areaId, file_name: fileName, import_kind: importKind }),
   });
   const body = await readApiErrorBody(res);
   if (!res.ok) throw apiError(apiErrorPayload(body), "Could not start import", res.status);
@@ -318,8 +338,9 @@ export async function requestImportAccess() {
   return body as { ok?: boolean };
 }
 
-export function templateCsvUrl(areaId: string) {
-  return `${base}/template/${areaId}.csv`;
+export function templateCsvUrl(areaId: string, importKind = "area") {
+  const q = importKind !== "area" ? `?import_kind=${encodeURIComponent(importKind)}` : "";
+  return `${base}/template/${areaId}.csv${q}`;
 }
 
 export function vehiclesCsvUrl() {

@@ -1,13 +1,20 @@
 /** Ported from Stitch — do not simplify layout (audit §0.4). */
 import { useIn2StockForm } from './hooks/useIn2StockForm';
 import { In2StockTable } from '../In2StockTable';
+import { InventoryPrimaryTabs } from '../InventoryPrimaryTabs';
 import { useInventoryLive } from '../inventoryLive';
 import { useInventoryShell } from '../InventoryShellContext';
+import { useAuth } from '../../auth/AuthContext';
 
 export function In2Stock() {
   const form = useIn2StockForm();
   const shell = useInventoryShell();
   const live = useInventoryLive(shell);
+  const { user } = useAuth();
+  const operatorLabel =
+    user?.user_metadata?.full_name?.trim() ||
+    user?.email?.split('@')[0] ||
+    'Operator';
   const count = form.filteredCount;
   const rows = form.pagedRows;
 
@@ -24,7 +31,7 @@ export function In2Stock() {
       <span className="text-on-primary-container/40">/</span>
       <div className="flex items-center gap-space-xs">
       <span className="font-label-code text-caption bg-surface-container-highest/20 px-1.5 py-0.5 rounded text-surface-dim">DE</span>
-      <span className="font-body-sm text-body-sm text-surface-dim font-medium">Deeki T</span>
+      <span className="font-body-sm text-body-sm text-surface-dim font-medium">{operatorLabel}</span>
       <span className="font-label-code text-[10px] text-surface-variant bg-surface-tint/30 px-1 rounded">platform_owner</span>
       </div>
       </div>
@@ -50,24 +57,18 @@ export function In2Stock() {
       <h1 className="font-headline-lg text-headline-lg text-on-surface font-bold tracking-tight">Inventory & Asset Management</h1>
       </div>
 
-      <div className="bg-surface-container-high p-1 rounded-lg flex items-center gap-1 shadow-sm">
-      <button type="button" className="bg-surface-container-lowest text-primary shadow-sm px-space-md py-1.5 rounded font-body-sm text-body-sm font-semibold transition-all" onClick={() => shell.setTab('stock')}>
-                Stock
-              </button>
-      <button type="button" onClick={() => shell.setTab('movements')} className="text-on-surface-variant hover:text-on-surface px-space-md py-1.5 rounded font-body-sm text-body-sm font-medium transition-colors">
-                Movements & Audits
-              </button>
-      <button type="button" onClick={() => shell.setTab('purchasing')} className="text-on-surface-variant hover:text-on-surface px-space-md py-1.5 rounded font-body-sm text-body-sm font-medium transition-colors">
-                Purchase Orders
-              </button>
-      <button type="button" className="text-on-surface-variant hover:text-on-surface px-space-md py-1.5 rounded font-body-sm text-body-sm font-medium transition-colors" onClick={() => form.openSuppliers()}>
-                Suppliers
-              </button>
-      <button type="button" onClick={() => shell.setTab('vehicle-kits')} className="text-on-surface-variant hover:text-on-surface px-space-md py-1.5 rounded font-body-sm text-body-sm font-medium transition-colors">
-                Fleet Kit Sets
-              </button>
+      <div className="flex items-center gap-space-sm shrink-0">
+      <button
+        type="button"
+        className="h-9 px-space-md rounded-lg bg-surface-container-lowest text-on-surface hover:bg-surface-container font-body-sm text-body-sm font-medium shadow-sm transition-colors"
+        onClick={() => form.openSuppliers()}
+      >
+        Suppliers
+      </button>
       </div>
       </div>
+
+      <InventoryPrimaryTabs variant="pill" />
 
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-space-md">
       <div className="flex items-center gap-space-sm">
@@ -226,7 +227,7 @@ export function In2Stock() {
       <div>
       <div className="font-caption text-caption uppercase text-secondary font-semibold">Inventory Ledger Drift</div>
       <div className="font-headline-sm text-headline-sm font-bold text-on-surface mt-0.5">0.00% Zero-Loss</div>
-      <div className="font-body-sm text-body-sm text-on-surface-variant mt-0.5">Reconciled 2 hrs ago by Deeki T</div>
+      <div className="font-body-sm text-body-sm text-on-surface-variant mt-0.5">Reconciled from live stock · {live.hubShort}</div>
       </div>
       <div className="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center text-primary">
       <span className="material-symbols-outlined text-[20px]">verified</span>

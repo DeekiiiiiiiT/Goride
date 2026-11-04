@@ -1546,3 +1546,175 @@
   .fleet-find-parts-stitch .find-parts-sheet { position: fixed; inset: 0; max-width: none; border-radius: 0; }
 }
 @media (max-width: 420px) { .fleet-find-parts-stitch .find-parts-columns { display: flex; flex-direction: column; } }
+
+/* AM-S4F find-parts auto-match results (Fp5Screen) */
+.fleet-find-parts-stitch.find-parts-am-results .fp5-am-wrap,
+.fleet-find-parts-stitch .find-parts-am-results .fp5-am-wrap {
+  overflow-wrap: break-word;
+  word-break: normal;
+  hyphens: auto;
+}
+.fleet-find-parts-stitch.find-parts-am-results .fp5-am-dot-confirmed,
+.fleet-find-parts-stitch .find-parts-am-results .fp5-am-dot-confirmed {
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: 9999px;
+  background-color: #059669;
+}
+.fleet-find-parts-stitch.find-parts-am-results .fp5-am-dot-checking,
+.fleet-find-parts-stitch .find-parts-am-results .fp5-am-dot-checking {
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: 9999px;
+  border: 1px solid #d97706;
+  background-color: #fef3c7;
+}
+.fleet-find-parts-stitch.find-parts-am-results .fp5-am-trail-chip-active,
+.fleet-find-parts-stitch .find-parts-am-results .fp5-am-trail-chip-active {
+  background-color: #191c1e;
+  color: #f7f9fb;
+}
+.fleet-find-parts-stitch.find-parts-am-results .fp5-am-has-tooltip .fp5-am-tooltip-bubble,
+.fleet-find-parts-stitch .find-parts-am-results .fp5-am-has-tooltip .fp5-am-tooltip-bubble {
+  visibility: hidden;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+.fleet-find-parts-stitch.find-parts-am-results .fp5-am-has-tooltip:hover .fp5-am-tooltip-bubble,
+.fleet-find-parts-stitch.find-parts-am-results .fp5-am-has-tooltip:focus-within .fp5-am-tooltip-bubble,
+.fleet-find-parts-stitch .find-parts-am-results .fp5-am-has-tooltip:hover .fp5-am-tooltip-bubble,
+.fleet-find-parts-stitch .find-parts-am-results .fp5-am-has-tooltip:focus-within .fp5-am-tooltip-bubble {
+  visibility: visible;
+  opacity: 1;
+  transform: translateY(0);
+}
+.fleet-find-parts-stitch.find-parts-am-results .fp5-am-tooltip,
+.fleet-find-parts-stitch .find-parts-am-results .fp5-am-tooltip {
+  position: absolute;
+  left: 0;
+  top: 100%;
+  margin-top: 0.375rem;
+  z-index: 30;
+  max-width: min(100vw - 2rem, 22rem);
+  border-radius: 0.5rem;
+  border: 1px solid #3d3d3d;
+  background-color: #191c1e;
+  color: #f7f9fb;
+  padding: 0.5rem 0.75rem;
+  font-size: 11px;
+  line-height: 1.35;
+  box-shadow: 0 10px 24px rgb(0 0 0 / 0.25);
+}
+.fleet-find-parts-stitch.find-parts-am-results .fp5-am-tooltip-right,
+.fleet-find-parts-stitch .find-parts-am-results .fp5-am-tooltip-right {
+  left: auto;
+  right: 0;
+}
+.fleet-find-parts-stitch.find-parts-am-results .fp5-am-status-confirmed,
+.fleet-find-parts-stitch .find-parts-am-results .fp5-am-status-confirmed {
+  border-color: #6ee7b7;
+  background-color: #ecfdf5;
+  color: #047857;
+}
+.fleet-find-parts-stitch.find-parts-am-results .fp5-am-status-checking,
+.fleet-find-parts-stitch .find-parts-am-results .fp5-am-status-checking {
+  border-color: #d97706;
+  background-color: #fffbeb;
+  color: #92400e;
+}
+.fleet-find-parts-stitch.find-parts-am-results .fp5-am-tier-head-checking,
+.fleet-find-parts-stitch .find-parts-am-results .fp5-am-tier-head-checking {
+  background-color: rgb(255 251 235 / 0.75);
+}
+.fleet-find-parts-stitch.find-parts-am-results .fp5-am-tier-count-checking,
+.fleet-find-parts-stitch .find-parts-am-results .fp5-am-tier-count-checking {
+  border-color: #fcd34d;
+  background-color: #fff;
+  color: #92400e;
+}
+.fleet-find-parts-stitch.find-parts-am-results .fp5-am-part-number span,
+.fleet-find-parts-stitch .find-parts-am-results .fp5-am-part-number span {
+  white-space: nowrap;
+}
+.dark .fleet-find-parts-stitch.find-parts-am-results,
+.dark .fleet-find-parts-stitch .find-parts-am-results {
+  color: #fafafa;
+}
+.dark .fleet-find-parts-stitch.find-parts-am-results .fp5-am-car-card,
+.dark .fleet-find-parts-stitch.find-parts-am-results .fp5-am-subsystem-card,
+.dark .fleet-find-parts-stitch.find-parts-am-results .fp5-am-tier,
+.dark .fleet-find-parts-stitch .find-parts-am-results .fp5-am-car-card,
+.dark .fleet-find-parts-stitch .find-parts-am-results .fp5-am-subsystem-card,
+.dark .fleet-find-parts-stitch .find-parts-am-results .fp5-am-tier {
+  background-color: #2e2e2e;
+  border-color: #444444;
+}
+.dark .fleet-find-parts-stitch.find-parts-am-results .fp5-am-tier-head,
+.dark .fleet-find-parts-stitch .find-parts-am-results .fp5-am-tier-head {
+  background-color: #333333;
+  border-color: #444444;
+}
+.dark .fleet-find-parts-stitch.find-parts-am-results .fp5-am-trail-chip-active,
+.dark .fleet-find-parts-stitch .find-parts-am-results .fp5-am-trail-chip-active {
+  background-color: #fafafa;
+  color: #252525;
+}
+.dark .fleet-find-parts-stitch.find-parts-am-results .fp5-am-status-confirmed,
+.dark .fleet-find-parts-stitch .find-parts-am-results .fp5-am-status-confirmed {
+  background-color: rgb(6 78 59 / 0.35);
+  border-color: #34d399;
+  color: #a7f3d0;
+}
+.dark .fleet-find-parts-stitch.find-parts-am-results .fp5-am-status-checking,
+.dark .fleet-find-parts-stitch .find-parts-am-results .fp5-am-status-checking {
+  background-color: rgb(120 53 15 / 0.25);
+  border-color: #fbbf24;
+  color: #fde68a;
+}
+.dark .fleet-find-parts-stitch.find-parts-am-results .fp5-am-tier-head-checking,
+.dark .fleet-find-parts-stitch .find-parts-am-results .fp5-am-tier-head-checking {
+  background-color: rgb(120 53 15 / 0.2);
+}
+.dark .fleet-find-parts-stitch.find-parts-am-results .fp5-am-tier-count-checking,
+.dark .fleet-find-parts-stitch .find-parts-am-results .fp5-am-tier-count-checking {
+  background-color: #2e2e2e;
+  border-color: #fbbf24;
+  color: #fde68a;
+}
+.dark .fleet-find-parts-stitch.find-parts-am-results .text-primary,
+.dark .fleet-find-parts-stitch .find-parts-am-results .text-primary {
+  color: #8eb4ff;
+}
+
+.fleet-find-parts-stitch.find-parts-am-results,
+.fleet-find-parts-stitch .find-parts-am-results.find-parts-screen-root {
+  min-height: 900px;
+}
+.dark .fleet-find-parts-stitch.find-parts-am-results,
+.dark .fleet-find-parts-stitch .find-parts-am-results.find-parts-screen-root {
+  background-color: #252525;
+}
+.dark .fleet-find-parts-stitch.find-parts-am-results .fp5-am-service-chip,
+.dark .fleet-find-parts-stitch .find-parts-am-results .fp5-am-service-chip {
+  background-color: rgb(6 78 59 / 0.35);
+  border-color: #34d399;
+  color: #a7f3d0;
+}
+
+body[data-fleet-find-parts-results] [data-maintenance-tab="work-orders"],
+body[data-fleet-find-parts-results] [data-maintenance-tab="requests"],
+body[data-fleet-find-parts-results] [data-maintenance-tab="inspections"],
+body[data-fleet-find-parts-results] [data-maintenance-tab="schedule"] {
+  display: none;
+}
+
+/* AM-26: the Fleet Maintenance hub header sits outside .fleet-find-parts-stitch, so give it the same dark palette. */
+.dark .fleet-am-s4f-hub-head { background: #252525; color: #fafafa; border-color: #444444; }
+.dark .fleet-am-s4f-hub-head .text-on-surface { color: #fafafa; }
+.dark .fleet-am-s4f-hub-head .text-on-surface-variant { color: #b0b0b0; }
+.dark .fleet-am-s4f-hub-head .bg-surface-container { background-color: #2e2e2e; }
+.dark .fleet-am-s4f-hub-head [role="tab"] { color: #b0b0b0; }
+.dark .fleet-am-s4f-hub-head [role="tab"][data-state="active"] { background-color: #444444; color: #fafafa; }
+/* Row separators between rows in a tier use the dark border, not the light surface token. */
+.dark .fleet-find-parts-stitch .divide-surface-container-high > :not([hidden]) ~ :not([hidden]) { border-color: #444444; }

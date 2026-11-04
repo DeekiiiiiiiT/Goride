@@ -7,6 +7,9 @@ import { parseCatalogMonthFromUnknown } from "../../../packages/types/src/catalo
 import {
   VEHICLE_CATALOG_BULK_MAX_ROWS,
   VEHICLE_CATALOG_WRITABLE_KEYS,
+  catalogImportNonBlankPatch,
+  vehicleCatalogIdentityKey,
+  type CatalogImportOnExisting,
 } from "../../../packages/types/src/vehicleCatalogCsvImport.ts";
 import {
   catalogRowForApi,
@@ -122,6 +125,26 @@ function pickVehicleCatalogRow(raw: Record<string, unknown>, partial: boolean): 
   return out;
 }
 
+async function enrichVehicleCatalogLinks(
+  supabase: SupabaseClient,
+  row: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const make = String(row.make ?? "").trim();
+  const engineCode = String(row.engine_code ?? "").trim();
+  const chassis = String(row.chassis_code ?? "").trim();
+  if (!engineCode && !chassis) return row;
+  const { data, error } = await supabase.rpc("resolve_vehicle_catalog_links", {
+    p_make: make,
+    p_engine_code: engineCode,
+    p_chassis_code: chassis,
+  });
+  if (error || data == null || typeof data !== "object") return row;
+  const links = data as { engine_family_id?: string | null; platform_id?: string | null };
+  if (!row.engine_family_id && links.engine_family_id) row.engine_family_id = links.engine_family_id;
+  if (!row.platform_id && links.platform_id) row.platform_id = links.platform_id;
+  return row;
+}
+
 /** Bulk-delete every row in motor vehicle catalog (maintenance templates CASCADE). */
 const VEHICLE_CATALOG_PURGE_CONFIRM = "DELETE ALL";
 /** Must match client `VEHICLE_CATALOG_UNDO_BATCH_CONFIRM_PHRASE` — required when force-undoing a batch. */
@@ -161,6 +184,27 @@ route.post("/make-server-37f42386/admin/vehicle-catalog/purge", requireAuth(), a
   }
 });
 
+/** Existing car with the same make, model, series, trim, chassis code, engine code and start year, or null. */
+async function findCatalogByIdentity(
+  supabase: SupabaseClient,
+  payload: Record<string, unknown>,
+): Promise<string | null> {
+  const make = String(payload.make ?? "").trim();
+  const start = Number(payload.production_start_year);
+  if (!make || !Number.isFinite(start)) return null;
+  const likeExact = (v: string) => v.replace(/[\\%_]/g, (m) => "\\" + m);
+  const { data, error } = await supabase
+    .from("vehicle_catalog")
+    .select("id, make, model, trim_series, catalog_trim, chassis_code, engine_code, production_start_year")
+    .ilike("make", likeExact(make))
+    .eq("production_start_year", start)
+    .limit(500);
+  if (error) throw error;
+  const key = vehicleCatalogIdentityKey(payload);
+  const hit = (data ?? []).find((r) => vehicleCatalogIdentityKey(r as Record<string, unknown>) === key);
+  return hit ? String((hit as { id: string }).id) : null;
+}
+
 route.post("/make-server-37f42386/admin/vehicle-catalog/bulk", requireAuth(), async (c: any) => {
   const denied = assertVehicleCatalogAccess(c);
   if (denied) return denied;
@@ -170,7 +214,11 @@ route.post("/make-server-37f42386/admin/vehicle-catalog/bulk", requireAuth(), as
     const body = (await c.req.json()) as {
       import_batch_id?: string;
       rows?: Array<{ rowIndex?: number; id?: string; payload?: Record<string, unknown> }>;
+      /** Rows without an ID that match an existing car (make, model, series, trim, chassis, engine, start year). Default skip. */
+      on_existing?: CatalogImportOnExisting;
     };
+    const onExisting: CatalogImportOnExisting = body.on_existing === "update" ? "update" : "skip";
+    const seenKeys = new Map<string, string>();
     const importBatchId = String(body.import_batch_id ?? "").trim();
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(importBatchId)) {
       return c.json({ error: "import_batch_id must be a UUID" }, 400);
@@ -186,19 +234,40 @@ route.post("/make-server-37f42386/admin/vehicle-catalog/bulk", requireAuth(), as
       rowIndex: number;
       ok: boolean;
       id?: string;
-      action?: "created" | "updated";
+      action?: "created" | "updated" | "skipped";
+      reason?: "already_in_database" | "duplicate_in_request";
       error?: string;
       item?: Record<string, unknown>;
     }> = [];
 
     for (const entry of rows) {
       const rowIndex = Number(entry.rowIndex ?? 0);
-      const payload = (entry.payload && typeof entry.payload === "object" ? entry.payload : {}) as Record<
+      const rawPayload = (entry.payload && typeof entry.payload === "object" ? entry.payload : {}) as Record<
         string,
         unknown
       >;
-      const existingId = typeof entry.id === "string" ? entry.id.trim() : "";
+      let existingId = typeof entry.id === "string" ? entry.id.trim() : "";
+      // Updates (by ID or by identity match) only write the cells the file actually fills.
+      let payload = existingId ? catalogImportNonBlankPatch(rawPayload) : rawPayload;
       try {
+        if (!existingId) {
+          const key = vehicleCatalogIdentityKey(rawPayload);
+          const dupInRequest = seenKeys.get(key);
+          if (dupInRequest !== undefined) {
+            results.push({ rowIndex, ok: true, action: "skipped", reason: "duplicate_in_request", id: dupInRequest || undefined });
+            continue;
+          }
+          const match = await findCatalogByIdentity(supabase, rawPayload);
+          seenKeys.set(key, match ?? "");
+          if (match) {
+            if (onExisting === "skip") {
+              results.push({ rowIndex, ok: true, action: "skipped", reason: "already_in_database", id: match });
+              continue;
+            }
+            existingId = match;
+            payload = catalogImportNonBlankPatch(rawPayload);
+          }
+        }
         if (existingId) {
           const make = payload.make !== undefined ? String(payload.make ?? "").trim() : undefined;
           const model = payload.model !== undefined ? String(payload.model ?? "").trim() : undefined;
@@ -217,6 +286,7 @@ route.post("/make-server-37f42386/admin/vehicle-catalog/bulk", requireAuth(), as
             isCreate: false,
           });
           row.updated_at = new Date().toISOString();
+          await enrichVehicleCatalogLinks(supabase, row);
           let upd: any = await supabase
             .from("vehicle_catalog")
             .update(row)
@@ -242,6 +312,7 @@ route.post("/make-server-37f42386/admin/vehicle-catalog/bulk", requireAuth(), as
           if (upd.error) throw upd.error;
           if (!upd.data) throw new Error("Not found");
           invalidateCatalogExistenceCache(existingId);
+          await supabase.rpc("apply_vehicle_catalog_links", { p_vehicle_id: existingId });
           results.push({
             rowIndex,
             ok: true,
@@ -287,6 +358,7 @@ route.post("/make-server-37f42386/admin/vehicle-catalog/bulk", requireAuth(), as
             isCreate: true,
           });
           row.updated_at = new Date().toISOString();
+          await enrichVehicleCatalogLinks(supabase, row);
           let ins: any = await supabase
             .from("vehicle_catalog")
             .insert(row)
@@ -310,6 +382,7 @@ route.post("/make-server-37f42386/admin/vehicle-catalog/bulk", requireAuth(), as
           if (ins.error) throw ins.error;
           const id = String((ins.data as { id: string }).id);
           invalidateCatalogExistenceCache(id);
+          await supabase.rpc("apply_vehicle_catalog_links", { p_vehicle_id: id });
           results.push({
             rowIndex,
             ok: true,
@@ -332,6 +405,7 @@ route.post("/make-server-37f42386/admin/vehicle-catalog/bulk", requireAuth(), as
       results,
       created: results.filter((r) => r.ok && r.action === "created").length,
       updated: results.filter((r) => r.ok && r.action === "updated").length,
+      skipped: results.filter((r) => r.ok && r.action === "skipped").length,
       failed: results.filter((r) => !r.ok).length,
     });
   } catch (e: any) {
@@ -465,6 +539,7 @@ route.post("/make-server-37f42386/admin/vehicle-catalog", requireAuth(), async (
       isCreate: true,
     });
     row.updated_at = new Date().toISOString();
+    await enrichVehicleCatalogLinks(supabase, row);
     /**
      * Prefer PostgREST insert first so **new columns** (fuel economy, etc.) are applied whenever the
      * DB + schema cache include them. An older `edge_insert_vehicle_catalog_row` RPC on the project may
@@ -521,7 +596,10 @@ route.post("/make-server-37f42386/admin/vehicle-catalog", requireAuth(), async (
     if (ins.error) throw ins.error;
     const item = catalogRowForApi((ins.data ?? {}) as Record<string, unknown>);
     const newId = String((ins.data as { id?: string })?.id ?? "");
-    if (newId) invalidateCatalogExistenceCache(newId);
+    if (newId) {
+      invalidateCatalogExistenceCache(newId);
+      await supabase.rpc("apply_vehicle_catalog_links", { p_vehicle_id: newId });
+    }
     return c.json({ item });
   } catch (e: any) {
     console.error("[vehicle-catalog] create:", e);
@@ -655,6 +733,7 @@ route.patch("/make-server-37f42386/admin/vehicle-catalog/:id", requireAuth(), as
     if (upd.error) throw upd.error;
     if (!upd.data) return c.json({ error: "Not found" }, 404);
     invalidateCatalogExistenceCache(id);
+    await supabase.rpc("apply_vehicle_catalog_links", { p_vehicle_id: id });
     return c.json({ item: catalogRowForApi(upd.data as Record<string, unknown>) });
   } catch (e: any) {
     console.error("[vehicle-catalog] patch:", e);

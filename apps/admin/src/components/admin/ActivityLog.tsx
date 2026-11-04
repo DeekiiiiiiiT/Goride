@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { API_ENDPOINTS } from '../../services/apiConfig';
+import { filterAuditLogEntries } from './activityLogFilter';
 
 interface AuditEntry {
   actorId: string;
@@ -70,7 +71,13 @@ function isToday(iso: string): boolean {
   );
 }
 
-export function ActivityLog() {
+export function ActivityLog({
+  conflictId = null,
+  topicFilter = null,
+}: {
+  conflictId?: string | null;
+  topicFilter?: string | null;
+}) {
   const { session } = useAuth();
   const accessToken = session?.access_token;
 
@@ -114,15 +121,19 @@ export function ActivityLog() {
     return Array.from(set).sort();
   }, [entries]);
 
-  const filtered = useMemo(() => {
-    let list = [...entries];
-    if (actionFilter !== 'all') list = list.filter((e) => e.action === actionFilter);
-    if (whoFilter !== 'all') list = list.filter((e) => e.actorName === whoFilter);
-    if (dateFilter === 'today') list = list.filter((e) => isToday(e.timestamp));
-    else if (dateFilter === '7d') list = list.filter((e) => isWithinDays(e.timestamp, 7));
-    else if (dateFilter === '30d') list = list.filter((e) => isWithinDays(e.timestamp, 30));
-    return list;
-  }, [entries, actionFilter, whoFilter, dateFilter]);
+  const filtered = useMemo(
+    () =>
+      filterAuditLogEntries(entries, {
+        conflictId,
+        topicFilter,
+        actionFilter,
+        whoFilter,
+        dateFilter,
+        isToday,
+        isWithinDays,
+      }),
+    [entries, actionFilter, whoFilter, dateFilter, conflictId, topicFilter],
+  );
 
   const applyFilters = () => {
     setWhoFilter(draftWho);
@@ -281,11 +292,11 @@ export function ActivityLog() {
                 key={`${entry.timestamp}-${idx}`}
                 className="grid grid-cols-12 px-6 py-3 text-xs text-slate-700 hover:bg-slate-50"
               >
-                <div className="col-span-3 font-mono text-slate-500" title={formatAbsolute(entry.timestamp)}>
-                  {formatAbsolute(entry.timestamp)}
+                <div className="col-span-3 font-mono text-slate-500" title={entry.timestamp ? formatAbsolute(entry.timestamp) : undefined}>
+                  {entry.timestamp ? formatAbsolute(entry.timestamp) : '—'}
                 </div>
                 <div className="col-span-3 font-medium text-slate-900">{entry.actorName || '—'}</div>
-                <div className="col-span-3">{ACTION_LABEL[entry.action] || entry.action}</div>
+                <div className="col-span-3">{(entry.action && ACTION_LABEL[entry.action]) || entry.action || '—'}</div>
                 <div className="col-span-3 truncate text-slate-500">
                   {entry.targetEmail || entry.details || '—'}
                 </div>

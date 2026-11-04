@@ -1,5 +1,5 @@
 // Stitch: dominion-redesign/parts_import_pick_area
-import type { ImportAreaSummary } from "./partsImportApi";
+import type { ImportAreaSummary, ImportSpecialTemplate } from "./partsImportApi";
 import { materialIconForArea } from "./importAreaIcons";
 import { MaterialIcon } from "./MaterialIcon";
 
@@ -31,12 +31,31 @@ function areaStatusChip(area: ImportAreaSummary) {
   );
 }
 
+function specialAsArea(t: ImportSpecialTemplate): ImportAreaSummary {
+  return {
+    id: t.areaId,
+    name: t.name,
+    opCode: "AM-IMP",
+    iconKey: t.iconKey,
+    partsOnFile: 0,
+    fitsOnFile: 0,
+    partTypes: [],
+    needsChecking: 0,
+    lastImportAt: null,
+    templateVersion: t.templateVersion,
+    sortOrder: 9000,
+    importKind: t.importKind,
+  };
+}
+
 export function ImportAreaPicker({
   areas,
+  specialTemplates = [],
   onPick,
   onOpenLedger,
 }: {
   areas: ImportAreaSummary[];
+  specialTemplates?: ImportSpecialTemplate[];
   onPick: (area: ImportAreaSummary) => void;
   onOpenLedger: () => void;
 }) {
@@ -105,6 +124,39 @@ export function ImportAreaPicker({
           );
         })}
       </div>
+
+      {specialTemplates.length ? (
+        <div className="space-y-3">
+          <div>
+            <h3 className="font-headline-md text-headline-md font-semibold text-on-surface">Auto-match data</h3>
+            <p className="font-body-sm text-body-sm text-on-surface-variant mt-1">
+              Factory numbers, cross-references, and shared platform links use the same import ledger and undo window.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-space-md">
+            {specialTemplates.map((t) => {
+              const card = specialAsArea(t);
+              return (
+                <button
+                  key={t.importKind}
+                  type="button"
+                  className="group flex flex-col gap-2 text-left p-space-lg rounded-xl border border-outline-variant bg-surface-container-lowest hover:border-primary hover:shadow-md transition-all"
+                  onClick={() => onPick(card)}
+                >
+                  <div className="flex items-center gap-2">
+                    <MaterialIcon name={t.iconKey} className="text-[22px] text-primary" />
+                    <span className="font-headline-sm text-headline-sm font-semibold text-on-surface group-hover:text-primary">
+                      {t.name}
+                    </span>
+                  </div>
+                  <span className="font-mono-sm text-mono-sm text-outline">Template · {t.importKind}</span>
+                  <span className="font-label-md text-label-md font-semibold text-primary">Start →</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
 
       <div className="flex gap-space-md p-space-lg rounded-xl bg-surface-container-low border border-outline-variant/40">
         <MaterialIcon name="info" className="text-[22px] text-primary shrink-0 mt-0.5" />

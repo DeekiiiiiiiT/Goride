@@ -1,4 +1,5 @@
 import { formatPartsVersionTag, readPartsVehicleSpecs } from "@roam/types/partsVehicleContext";
+import { formatPartPositionSideLabel } from "@roam/types/partPositionNorm";
 import type { ComponentFitHints } from "./findPartsFitHints";
 import type { Fp4AxleRow, Fp4OptionRow, Fp4SideOption, Fp4ViewModel } from "./findPartsViewModels";
 import { formatKm, orDash, orNoneYet } from "./findPartsFormat";
@@ -55,15 +56,33 @@ function fp4OnFileLabel(count: number): string {
   return count === 1 ? "1 on file" : `${count} on file`;
 }
 
+function fp4PositionForAxle(axle: string): "front" | "rear" | null {
+  if (axle === "rear") return "rear";
+  if (axle === "front") return "front";
+  return null;
+}
+
+function fp4SideChoiceLabel(axle: string, sideId: string): string {
+  if (sideId === "both") return "Both sides";
+  const position = fp4PositionForAxle(axle);
+  if (!position) return sideId === "left" ? "Left" : "Right";
+  return formatPartPositionSideLabel(position, sideId);
+}
+
 function diagramBadgeLabel(selectedAxle: string, selectedSide: string, frontSide?: string, rearSide?: string): string {
-  const sideLabel = (side: string) => (side === "both" ? "BOTH SIDES" : side.toUpperCase());
+  const sideLabel = (side: string, axle: "front" | "rear") => {
+    if (side === "both") return "BOTH SIDES";
+    const formatted = formatPartPositionSideLabel(axle, side);
+    return formatted.toUpperCase();
+  };
   if (selectedAxle === "both") {
     const f = frontSide || selectedSide;
     const r = rearSide || selectedSide;
-    return `FRONT · ${sideLabel(f)} / REAR · ${sideLabel(r)}`;
+    return `FRONT · ${sideLabel(f, "front")} / REAR · ${sideLabel(r, "rear")}`;
   }
-  const axle = selectedAxle === "rear" ? "REAR" : "FRONT";
-  return `${axle} AXLE · ${sideLabel(selectedSide)}`;
+  const axle = selectedAxle === "rear" ? "rear" : "front";
+  const axleLabel = axle === "rear" ? "REAR" : "FRONT";
+  return `${axleLabel} AXLE · ${sideLabel(selectedSide, axle)}`;
 }
 
 /** FP4 page title: sentence case for the part name (audit F3). */
@@ -124,9 +143,9 @@ export function buildFp4ViewModel(input: {
     },
   ];
   const sideOptions: Fp4SideOption[] = [
-    { id: "left", label: "Left", selected: selectedSide === "left" },
-    { id: "right", label: "Right", selected: selectedSide === "right" },
-    { id: "both", label: "Both sides", selected: selectedSide === "both" },
+    { id: "left", label: fp4SideChoiceLabel(selectedAxle, "left"), selected: selectedSide === "left" },
+    { id: "right", label: fp4SideChoiceLabel(selectedAxle, "right"), selected: selectedSide === "right" },
+    { id: "both", label: fp4SideChoiceLabel(selectedAxle, "both"), selected: selectedSide === "both" },
   ];
   const labourDefault = Number(ctx.labour_minutes ?? ctx.labourMinutes);
   const options: Fp4OptionRow[] = (["front", "rear", "both"] as const).map((id) => ({
@@ -181,7 +200,15 @@ export function buildFp4ViewModel(input: {
     axleSetAdvisory: showSideStep
       ? null
       : "These come as an axle set (left and right together).",
-    frontSideOptions: sideOptions.map((o) => ({ ...o, selected: frontSide === o.id })),
-    rearSideOptions: sideOptions.map((o) => ({ ...o, selected: rearSide === o.id })),
+    frontSideOptions: (["left", "right", "both"] as const).map((id) => ({
+      id,
+      label: fp4SideChoiceLabel("front", id),
+      selected: frontSide === id,
+    })),
+    rearSideOptions: (["left", "right", "both"] as const).map((id) => ({
+      id,
+      label: fp4SideChoiceLabel("rear", id),
+      selected: rearSide === id,
+    })),
   };
 }

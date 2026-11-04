@@ -1,0 +1,288 @@
+ROAM DOMINION — PARTS DATABASE · "ADD A PART" SELF-SERVE FLOW (EVERY PART TYPE) — FULL DESIGN PROMPT (GOOGLE STITCH)
+
+
+
+
+Roam Dominion - Parts database, "Add a part" (Desktop Admin, for the owner and catalog editors — non-mechanics and mechanics alike):
+
+Design high-fidelity desktop screens for a guided, self-serve way to add ANY part to the Parts database in the Roam Dominion admin console — brake pads, oil filters, spark plugs, shocks, bulbs, wiper blades, batteries, fluids, tires and every other part type. Today, adding one part means three separate CSV uploads that must go in a set order, with database words a non-mechanic can't follow. The new flow matches the real-world task: "I found a part on a catalogue page". The editor answers four short questions — what is the part, how does it fit (which cars, which engine, or which size), does it replace a factory number, and where did you see it — reviews one plain sentence and saves. The app does the ordering and the matching behind the scenes. The old CSV import stays as "Bulk upload (advanced)". Dominion is the master reference database: it never shows fleet names or plates. Parts are information only: no prices, suppliers, stock or quantities anywhere.
+
+The feel: modern, calm, uncluttered — one question per screen, generous white space, one primary action. Plain words first, with the trade term shown small and muted beside it (e.g. "Factory number · OE", "Fits by engine · Engine code"), so a beginner can follow and a mechanic still sees the precise term. Never dumbed down, never jargon-first.
+
+BRAND IDENTITY:
+- Match the existing Dominion console and the current Parts database screens exactly:
+  - dark navy left sidebar with "Dominion · Roam Admin Console"; groups MASTER DATA (Overview, Vehicles active, Places and Maps, Fuel, Tolls, Tax and Vendors), ENGINES (Fuel Brain, Toll Brain, Matching Brain), DISTRIBUTION (Apps, Data API, Change requests), PLATFORM (Staff and roles, Activity log, Platform Ops, Global settings), BACK OFFICE (GCT registrations, Ledger, Remittance)
+  - top bar: search "Search entities, engines, routes…" with a ⌘K chip, moon icon, user "DT · Deeki T · Owner"
+  - breadcrumb in mono caps "DOMINION / MASTER DATA / VEHICLES / PARTS DATABASE"
+  - page title "Parts database"; tabs "Find parts", "Full database", "Add parts" (new name for the Import tab, selected, underlined); primary "+ Add a part" button top right opens this flow
+- LIGHT MODE (default):
+  - Primary: #0153dc; primary container: #dbe1ff
+  - Success: #006e31; warning: #8a5a00; error: #a83836
+  - Outline: #797a84; hairline dividers #e6e7ee
+  - Background: #faf8fe; cards white with 16px radius, no heavy shadows (1px hairline border only)
+  - Text: #30323b; muted text: #5d5f68
+- DARK MODE:
+  - Background: #0b1220; cards #111a2e; hairlines #1e293b
+  - Text: #e2e8f0
+  - Primary: #5b8def
+  - Success: #4ade80; warning: #fbbf24; error: #f87171
+  - Outline: #94a3b8
+- Trust chips (used everywhere a part, fit or number is shown):
+  - "Verified": soft green fill, shield-check icon — source is the car maker's catalogue or the part maker's own catalogue
+  - "Needs checking": soft amber outline, clock icon — any other source, or a part maker's list of "equal" parts from other brands
+- "How it fits" chips: "Specific cars" (car icon), "By engine" (engine icon "settings_suggest"), "By size or spec" (ruler icon "straighten")
+- Typography: Inter. Part numbers, factory numbers, chassis codes, engine codes, sizes, years and counts use a mono font with tabular numerals. Trade terms shown as small muted mono labels next to the plain word.
+- Icons: Material Symbols Outlined, 20px, one per part type (see Part Type Coverage).
+- No prices, costs, suppliers, stock or quantities. No fleet names or plates. No gradients, glassmorphism or 3D. No confidence percentages. No more than one primary button per screen.
+- Sample data (real, from the live database):
+  - Brake pad (specific cars): MK Kashiyama "D0051MH" · Front brake pads · replaces Toyota/Daihatsu "04465-B1190" · source "s-mk.com · MK Kashiyama OE search" · fits Toyota Roomy M900A 2020– 1KR-VET, Toyota Roomy M910A 2016–2020, Toyota Tank M910A, Daihatsu Thor M900S and M910S, Subaru Justy M900F and M910F
+  - Oil filter (by engine): Toyota "04152-40060" · Oil filter · engine "1KR-FE" → 22 car versions (Roomy, Tank, Thor, Justy, Passo, Boon, Belta KSP92, Vitz KSP90 and KSP130, Yaris KSP130, Peugeot 108 A9…); also MANN-FILTER "HU 6006 z" replaces 04152-40060
+  - Wiper blade (by size or spec): "Driver wiper 525 mm" · connector "U-hook" → every car whose spec says driver wiper 525 mm (Roomy M900A)
+  - Engine oil (by size or spec): Toyota "0W-20" engine oil → every car whose spec says engine oil grade 0W-20
+  - Headlight bulb (by size or spec): "H4" low/high beam
+  - Battery (by size or spec): JIS size "46B24L"
+  - Tire (by size or spec, per axle): "165/65R14 79S"
+  - Shock absorber (specific cars, position): KYB "334507" · Front left and Front right
+  - Already in the database (duplicate frame): "SB Nagamochi BP25562 · Front brake pads · fits 16 cars"
+  - Needs-checking example: "Akebono AN-754WK", source "SB catalogue — listed as equal to SB BP25562"
+
+PART TYPE COVERAGE (the flow must handle every one of these; Stitch uses this to design the picker, the default "How it fits" and the position choices):
+| Area | Part type | Default "How it fits" | Position choices |
+|---|---|---|---|
+| Brakes | Brake pads | Specific cars | Front · Rear (axle set) |
+| Brakes | Brake shoes / drums | Specific cars | Rear (usually) · Front (axle set) |
+| Brakes | Brake rotor | Specific cars | Front · Rear (axle set) |
+| Brakes | Brake fluid | By size or spec (DOT 3, DOT 4, DOT 5.1) | none |
+| Engine | Oil filter | By engine | none |
+| Engine | Spark plugs | By engine | none (set of N) |
+| Engine | Ignition coil | By engine | none (per cylinder) |
+| Engine | Oxygen sensor | By engine | Before catalyst · After catalyst |
+| Engine | Thermostat | By engine | none |
+| Engine | Water pump | By engine | none |
+| Filters | Air filter | Specific cars | none |
+| Filters | Fuel filter | Specific cars | none |
+| HVAC | Cabin filter | Specific cars | none |
+| Fluids | Engine oil | By size or spec (grade, e.g. 0W-20) | none |
+| Fluids | Coolant | By size or spec (type, e.g. Toyota Super Long Life) | none |
+| Fluids | Washer fluid | By size or spec | none |
+| Transmission | Transmission fluid | By size or spec (e.g. CVT Fluid FE) | none |
+| Belts & hoses | Drive belt | By engine | none |
+| Battery & electrical | Battery | By size or spec (JIS size, e.g. 46B24L) | none |
+| Battery & electrical | Alternator | By engine | none |
+| Battery & electrical | Starter motor | By engine | none |
+| Lighting & visibility | Headlight bulb | By size or spec (H4, H11…) | Low beam · High beam |
+| Lighting & visibility | Brake and tail bulb | By size or spec (e.g. W21/5W) | none |
+| Lighting & visibility | Indicator bulb | By size or spec (e.g. WY21W) | Front · Rear · Side |
+| Lighting & visibility | Fog light bulb | By size or spec (e.g. H16) | none |
+| Lighting & visibility | Wiper blades | By size or spec (length mm + connector) | Driver · Passenger · Rear |
+| Suspension & steering | Shock absorber | Specific cars | Front left · Front right · Rear left · Rear right |
+| Suspension & steering | Suspension parts (links, bushes, arms) | Specific cars | Front · Rear · Left · Right |
+| Tires & wheels | Tires | By size or spec (size + load/speed) | Front · Rear (or all four) |
+- The default can always be changed with the "How it fits" switch; e.g. an air filter that the catalogue lists by engine can be switched to "By engine".
+- A search box at the top of the picker finds any type by plain name or trade term ("pads", "O2", "lambda", "serpentine", "JIS").
+- Last tile in the picker: "Can't find the part type? Ask to add it" (opens a small request form).
+
+DESIGN PRINCIPLES:
+- Desktop-first (1440px wide); content column max 880px centred, so screens feel light
+- One real-world task: "I found a part on a catalogue page". The user never chooses a template or an upload order.
+- Four steps with a slim stepper: "1 The part · 2 How it fits · 3 Replaces (optional) · 4 Review". Done steps get a tick; the current step is filled primary.
+- One question per screen. Each screen opens with one plain sentence and a tiny real example (e.g. "Like: oil filter 04152-40060 fits every 1KR-FE engine").
+- Plain word first, trade term second, small and muted: "Factory number · OE", "Fits by engine · Engine code", "Size or spec · e.g. H4, 0W-20".
+- The part type decides the defaults (how it fits, position choices, the spec fields, the hint). The user only changes what's different.
+- The source page is asked in Step 1 and decides the trust chip, shown before saving with a one-line reason.
+- The app shows what will happen automatically ("22 car versions have engine 1KR-FE", "3 more cars carry factory number 04465-B1190") so the user understands the matching without learning it.
+- Help is one click away: "What do these words mean?" opens a side panel with the four ideas and one example each.
+- Nothing is saved until "Save part"; every save can be undone from "Recently added".
+
+SCREEN 1: ADD PARTS HOME
+- Dominion frame and Parts database header, "Add parts" tab selected
+- Heading "Add parts"; sub line "Found a part on a catalogue page? Add it in about 2 minutes."
+- One large card, centred, minimal: icon "travel_explore", title "I found a part", body "Tell us the part, how it fits, and where you saw it.", primary button "Start →"
+- Under it, two quiet text links in one row: "What do these words mean?" · "Bulk upload (advanced) →"
+- Below, a clean list "Recently added" (no heavy table borders, hairline separators): part type icon, brand + mono number, how-it-fits chip, short reach ("7 cars", "Engine 1KR-FE · 22 cars", "Spec 525 mm · 1 car"), trust chip, mono date, "Undo" text button
+  - sample rows: MK Kashiyama D0051MH · Specific cars · 7 cars · Verified; Toyota 04152-40060 · By engine · 1KR-FE · 22 cars · Verified; Driver wiper 525 mm · By size or spec · 1 car · Verified; Akebono AN-754WK · Specific cars · 4 cars · Needs checking
+
+SCREEN 2: STEP 1 — THE PART (PART TYPE PICKER)
+- Stepper step 1 current; back link "← Add parts"
+- Heading "What kind of part is it?"; sub line "Pick the closest match. You can search."
+- Search field "Search part types — pads, oil filter, H4, wiper…"
+- Areas as quiet section labels with a hairline under each; under each, small tiles (icon + plain name, trade term muted underneath where useful):
+  - Brakes: Brake pads, Brake shoes / drums, Brake rotor · disc, Brake fluid · DOT
+  - Engine: Oil filter, Spark plugs, Ignition coil, Oxygen sensor · O2 / lambda, Thermostat, Water pump
+  - Filters: Air filter, Fuel filter · HVAC: Cabin filter
+  - Fluids: Engine oil, Coolant, Washer fluid · Transmission: Transmission fluid · ATF / CVT
+  - Belts & hoses: Drive belt · serpentine
+  - Battery & electrical: Battery · JIS size, Alternator, Starter motor
+  - Lighting & visibility: Headlight bulb, Brake and tail bulb, Indicator bulb, Fog light bulb, Wiper blades
+  - Suspension & steering: Shock absorber, Suspension parts
+  - Tires & wheels: Tires
+  - last tile, dashed outline: "Can't find it? Ask to add a part type"
+- Selected tile "Brake pads" has a primary border and tick; under the grid a single hint line for the chosen type: "Disc brakes use pads; drum brakes use shoes."
+- Sticky footer: "Cancel" outlined, primary "Next →"
+
+SCREEN 3: STEP 1 (CONTINUED) — PART DETAILS AND SOURCE
+- Same step; summary pill at top "Brake pads"
+- Heading "Which part exactly?"; sub line "Copy these from the page. Like: brand MK Kashiyama, part number D0051MH."
+- Compact two-column form, generous spacing:
+  - "Brand" with suggestions; helper "Who makes it"
+  - "Part number" mono input; helper "As printed. Spaces and dashes don't matter."
+  - "Made by the car maker?" segmented: "Yes — genuine (e.g. Toyota)" / "No — another brand" (selected)
+- Divider, then "Where did you see it?":
+  - "Source page link" URL input
+  - three slim radio rows (not big cards): "Car maker's parts catalogue" · "Part maker's own catalogue" (selected) · "Something else — shop, forum, 'equal parts' list"
+  - result line under them: green "Verified" chip + "From the part maker's own catalogue."
+- For spec-based types (bulbs, wipers, batteries, fluids, tires) the brand and part number fields show the helper "Optional — leave empty to add the size or spec itself (e.g. H4)", and a "Size or spec" field appears instead as the main field
+- Sticky footer: "← Back", "Cancel", primary "Next: how it fits →"
+
+SCREEN 4: STEP 2A — HOW IT FITS: SPECIFIC CARS (brake pads example)
+- Stepper step 2 current; summary pill "MK Kashiyama D0051MH · Brake pads · Verified"
+- Heading "How does it fit?"; a three-option segmented switch at the top: "Specific cars" (selected, default for this type) · "By engine" · "By size or spec"; one muted line under it: "Pads are made for specific car versions."
+- Sub line "Tick each car the page lists. Match the chassis code (like M900A) and years."
+- Left (60%): search "Make, model or chassis code…", filter chips (Make, Model, Chassis, Years, Engine); list of car versions with checkboxes — bold make + model, mono "M900A · 2020– · 1KR-VET · Custom G-T"; sister cars grouped under a quiet header "Same body: Roomy · Tank · Thor · Justy"; link "Car not in the list? Request it"
+- Right (40%), "Your selection": mono "7 cars", removable car chips; "Where on the car?" chips Front (selected) / Rear with helper "Pads come as an axle set (left and right together)"; optional "Only some years?" From/To
+- Sticky footer: "← Back", "Cancel", primary "Next →"
+
+SCREEN 5: STEP 2B — HOW IT FITS: BY ENGINE (oil filter example)
+- Summary pill "Toyota 04152-40060 · Oil filter · Verified"
+- Switch shows "By engine" selected (default for oil filters); muted line "Oil filters are made for an engine, so every car with that engine gets it."
+- Sub line "Which engine does the page list? Like: 1KR-FE."
+- Engine search field with chip results: "1KR-FE · 1.0 L · 3-cyl petrol" (selected), "1KR-VET · 1.0 L turbo", "1NZ-FE · 1.5 L"
+- Live preview card, light primary-container: "22 car versions have engine 1KR-FE" with a collapsible mono list (Toyota Roomy M900A 2016–2020, Toyota Tank M910A, Daihatsu Thor M900S, Subaru Justy M900F, Toyota Passo M700A, Toyota Vitz KSP130, Peugeot 108 A9…); a small "Exclude a car" link per row for exceptions
+- Optional "Only some years?" From/To
+- Sticky footer as before
+
+SCREEN 6: STEP 2C — HOW IT FITS: BY SIZE OR SPEC (wiper blade example, plus small frames for other spec types)
+- Summary pill "Driver wiper 525 mm · Wiper blades · Verified"
+- Switch shows "By size or spec" selected; muted line "Wiper blades fit by length and connector, not by car."
+- Fields chosen by the part type:
+  - Wiper blades: "Length" mono input with unit "mm" (525), "Connector" select (U-hook, Bayonet, Pin, Side-pin), position chips Driver (selected) / Passenger / Rear
+- Live preview card: "1 car version has a 525 mm driver wiper: Toyota Roomy M900A 2016–2020"; muted line "Cars get this automatically when their spec says 525 mm."
+- Three small companion frames showing the same screen for other spec types (only the fields change):
+  - Headlight bulb: "Bulb type" select (H4 selected), chips Low beam / High beam
+  - Battery: "Battery size · JIS" mono input "46B24L", helper "Printed on the battery label"
+  - Engine oil: "Grade" mono input "0W-20", optional "Spec · e.g. API SP"
+  - Tires: "Size" mono input "165/65R14", "Load / speed" "79S", chips Front / Rear / All four
+- Sticky footer as before
+
+SCREEN 7: STEP 3 — REPLACES (OPTIONAL)
+- Stepper step 3 current
+- Heading "Does it replace a factory number?"; sub line "Optional. A factory number is the car maker's number for the original part. Like: D0051MH replaces Toyota 04465-B1190." Trade term muted: "Factory number · OE"
+- Repeatable rows: "Car maker" select + mono "Factory number" + remove icon; "+ Add another"
+- Preview card: "3 more cars carry Toyota 04465-B1190 and will show this part too" with a collapsible list; muted line "These show as Needs checking until confirmed."
+- Text link "Skip →" beside the primary button
+- Hidden for spec-based fits (sizes don't have factory numbers); the stepper shows step 3 as "Not needed" in muted text
+
+SCREEN 8: STEP 4 — REVIEW AND SAVE
+- Heading "Check it reads right"
+- One calm card with the plain sentence in large type, built from the answers:
+  - specific cars: "MK Kashiyama D0051MH is a front brake pad set. It fits 7 cars and replaces Toyota and Daihatsu factory number 04465-B1190."
+  - companion line variants shown as two smaller frames: "Toyota 04152-40060 is an oil filter for engine 1KR-FE (22 car versions)." and "A 525 mm U-hook wiper blade fits the driver side of any car whose spec says 525 mm (1 car today)."
+- Under the sentence: trust chip + source link
+- Three quiet sections with "Edit" links: The part · How it fits · Replaces
+- Muted line: "After saving, Roam Fleet users will see it in Find parts for these cars."
+- Sticky footer: "← Back", "Cancel", primary "Save part"
+
+SCREEN 9: SAVED
+- Big soft-green check, "Part added"; sub line "MK Kashiyama D0051MH now shows for 8 cars (7 you ticked + 1 through 04465-B1190)."
+- Three outlined buttons: "See it in Find parts", "Add another part", "Back to Add parts"
+- Muted undo line: "Added by mistake? Undo — removes this part and its fits. Nothing else is touched."
+
+SCREEN 10: "PARTS IN PLAIN WORDS" GUIDE (RIGHT DRAWER, 480px)
+- Four short cards with an icon and one example each:
+  - Car version — "A specific version of a model." Roomy · M900A · 2016–2020 · 1KR-FE
+  - Factory number · OE — "The car maker's number for the original part." Toyota 04465-B1190
+  - Aftermarket part — "Another brand's version of the same part." MK Kashiyama D0051MH
+  - Replaces · cross-reference — "The link that lets one part show on many cars." D0051MH → 04465-B1190 → Roomy, Tank, Thor, Justy
+- "Three ways a part fits": Specific cars (pads, shocks, filters) · By engine (oil filter, plugs, belts) · By size or spec (bulbs, wipers, batteries, fluids, tires) — one line each
+- "Which sources count as Verified?": car maker's catalogue, part maker's own catalogue (green); anything else (amber)
+- Quick tips list: "Drum brakes use shoes, disc brakes use pads" · "Bulb and battery sizes are printed on the part" · "Wiper sizes are usually different for driver and passenger"
+
+SCREEN 11: STATES
+- Six small frames:
+  - Part already exists: amber box "SB Nagamochi BP25562 is already in the database (Front brake pads, 16 cars)." buttons "Add more cars to it" / "It's a different part"
+  - Car not in the list: "No car matches 'Swift ZC32S'" + "Request this car" mini form (Make, Model, Chassis code, Years)
+  - Engine not found: "No engine '1KR-DE' yet" + "Request this engine"
+  - Missing source link: red-bordered input "Add the page where you saw this part, so others can check it."
+  - Needs-checking review: Akebono AN-754WK sentence with the amber chip and "Source is SB's list of equal parts, not Akebono's own catalogue."
+  - Can't find the part type: request form "Part type name", "Area", "Example part number (optional)"; helper "The owner reviews new part types."
+
+SCREEN 12: POSITION AND SPEC FRAMES FOR THE REMAINING PART TYPES
+- A sheet of small frames, each showing only the "Where on the car?" or "Size or spec" block of Step 2 for one part type, in the same style as Screens 4–6:
+  - Brake rotor (specific cars): chips Front / Rear, helper "Rotors are changed as an axle pair."
+  - Shock absorber (specific cars): a tiny top-down car outline with four tappable corners — Front left, Front right, Rear left, Rear right — with "Front left" and "Front right" selected; helper "Pick every corner the page lists. Left and right are often different part numbers."
+  - Suspension parts (specific cars): chips Front / Rear and Left / Right, plus "Which part?" select (Stabiliser link, Control arm, Bush, Ball joint, Tie rod end)
+  - Oxygen sensor (by engine): chips "Before catalyst · upstream" / "After catalyst · downstream"
+  - Indicator bulb (by size or spec): "Bulb type" mono "WY21W", chips Front / Rear / Side
+  - Brake and tail bulb (by size or spec): "Bulb type" mono "W21/5W"
+  - Fog light bulb (by size or spec): "Bulb type" mono "H16"
+  - Brake fluid (by size or spec): "Grade" select DOT 3 / DOT 4 (selected) / DOT 5.1
+  - Coolant (by size or spec): "Coolant type" text "Toyota Super Long Life Coolant", optional "Colour" chip Pink
+  - Washer fluid (by size or spec): "Type" select Ready-mixed / Concentrate
+  - Transmission fluid (by size or spec): "Fluid" text "CVT Fluid FE", chips CVT / Automatic / Manual
+  - Spark plugs (by engine): "How many per engine?" mono "3", helper "Sold per plug; most cars need one per cylinder."
+  - Drive belt (by engine): "Belt size" mono "4PK875", optional
+- Each frame shows the live preview line under it (e.g. "3 car versions have engine 1KR-FE with O2 before catalyst") so the pattern is consistent
+
+SCREEN 13: PART TYPES (OWNER SETTINGS)
+- Reached from a quiet "Part types" link on the Add parts home (owner only) and from the "Ask to add a part type" requests
+- Heading "Part types"; sub line "What can be added, how each type fits, and where it goes on the car."
+- Left: list grouped by area (quiet section labels), one row per type: icon, plain name, muted trade term, "How it fits" chip, position summary ("Front · Rear", "4 corners", "None"), count "23 parts"; a "+ New part type" button at the top
+- Amber banner at the top when requests are waiting: "2 requests to add a part type" with "Review →"
+- Right: detail panel for the selected type "Shock absorber":
+  - "Name" (plain) and "Trade term" (muted, e.g. "Damper")
+  - "Area" select (Suspension & steering)
+  - "How it usually fits" segmented: Specific cars (selected) / By engine / By size or spec
+  - "Where on the car?" choice of position set: None · Front / Rear · Four corners (selected) · Driver / Passenger / Rear · Low / High beam · Before / After catalyst · Front / Rear / Side
+  - "Size or spec fields" (only for By size or spec): list of fields with name, unit and example (e.g. Length · mm · 525; Connector · list · U-hook)
+  - "Hint shown to editors" text field: "Left and right are often different part numbers."
+  - Footer: "Cancel" and primary "Save part type"; muted line "Changing this affects new parts only. Existing parts keep their positions."
+- Frame: requests list — rows "Engine oil · Fluids · asked by Deeki T · 04 Nov 2026" with buttons "Create part type" (opens the detail panel pre-filled) and "Decline" (asks for a one-line reason)
+- Frame: new part type pre-filled from a request, e.g. "Fog light bulb · Lighting & visibility · By size or spec · Bulb type field"
+
+ADDITIONAL UI COMPONENTS:
+- Slim 4-step stepper (The part · How it fits · Replaces · Review) with a "Not needed" state
+- Four-corner car outline selector for corner positions
+- Part type settings list and detail panel; request review rows
+- Summary pill (brand + number · part type · trust chip)
+- Part type picker: grouped tiles with icon, plain name and muted trade term; search; "ask to add" tile
+- "How it fits" segmented switch (Specific cars · By engine · By size or spec) with a one-line reason
+- Car version row with sister-car grouping; selection panel with chips
+- Engine search with result chips and live car-count preview
+- Spec field sets per type (length + connector; bulb type; JIS size; oil grade; tire size + load/speed)
+- Position chip sets per type (axle, corners, driver/passenger/rear, low/high beam, before/after catalyst)
+- Live "what happens automatically" preview card
+- Trust chips with a one-line reason
+- Plain-sentence review card with Edit links
+- Recently added list with Undo
+- Plain-words guide drawer
+- Sticky footer (Back · Cancel · one primary)
+
+INTERACTIONS:
+- "+ Add a part" and "Start →" open Step 1; picking a part type sets the default "How it fits", the position chips, the spec fields and the hint
+- The "How it fits" switch can be changed; switching keeps what's still relevant and clears the rest
+- Typing an existing brand + number shows "Part already exists" at once; "Add more cars to it" jumps to Step 2 with the part loaded
+- Choosing the source type updates the trust chip and reason immediately
+- Ticking cars, choosing an engine or typing a size updates the live preview count as you go
+- Step 3 is skipped automatically for "By size or spec"
+- "Edit" on Review returns to that step with everything kept
+- "Cancel" asks "Leave without saving? Nothing has been added yet." with "Keep editing" / "Leave"; leaving clears everything
+- "Save part" shows a short progress bar on the button, then Saved
+- "Undo" asks "Remove this part and its fits?" with "Cancel" / destructive "Remove"
+- Hover: rows highlight in the primary container colour; focus rings 2px primary; every input has a visible label
+
+Spec screens / Area
+| Screen | Area |
+|---|---|
+| AP1 | Add parts — home (Start, plain-words link, bulk upload link, recently added) |
+| AP2 | Step 1 — part type picker (all 11 areas, 29 types, search, ask to add) |
+| AP3 | Step 1 — part details and source (trust chip), with the spec-based variant |
+| AP4 | Step 2A — how it fits: specific cars (brake pads) |
+| AP5 | Step 2B — how it fits: by engine (oil filter) |
+| AP6 | Step 2C — how it fits: by size or spec (wiper blade + bulb, battery, oil, tire frames) |
+| AP7 | Step 3 — replaces a factory number (optional) with preview |
+| AP8 | Step 4 — review in plain words and save (three sentence variants) |
+| AP9 | Saved — counts, next actions, undo |
+| AP10 | "Parts in plain words" guide drawer |
+| AP11 | States — part exists, car not listed, engine not found, missing source, needs checking, ask for a part type |
+| AP12 | Position and spec frames for the remaining types — rotor, shock (4 corners), suspension, O2, indicator, tail, fog, brake fluid, coolant, washer, transmission fluid, spark plugs, drive belt |
+| AP13 | Part types (owner settings) — list, detail panel, requests, new type from a request |

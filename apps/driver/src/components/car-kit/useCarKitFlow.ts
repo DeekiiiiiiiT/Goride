@@ -73,7 +73,7 @@ export function useCarKitFlow(vehicleId?: string | null) {
   }, [vehicleId, refreshKey]);
 
   useEffect(() => {
-    if (screen !== 'dk4') return;
+    if (screen !== 'dk4' && screen !== 'dk1') return;
     let cancelled = false;
     setReportsLoading(true);
     (async () => {
@@ -95,8 +95,8 @@ export function useCarKitFlow(vehicleId?: string | null) {
   const dk6View = loadStateToDk6View(sendError ? 'send_failed' : loadState);
   const showDk6 = dk6View !== null && screen !== 'dk2' && screen !== 'dk3';
 
-  const openReportSheet = (itemLabel?: string) => {
-    setReportItemLabel(itemLabel);
+  const openReportSheet = (itemLabel?: string | null) => {
+    setReportItemLabel(itemLabel ?? undefined);
     setScreen('dk2');
   };
 

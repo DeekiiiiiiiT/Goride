@@ -33,6 +33,9 @@ import { downloadBlob, jsonToCsv } from "../../../utils/csv-helper";
 import {
   parseVehicleCatalogCsvWithPapa,
   VEHICLE_CATALOG_BULK_MAX_ROWS,
+  classifyCatalogImportRows,
+  catalogImportNonBlankPatch,
+  type CatalogImportOnExisting,
   type ParsedCatalogImportRow,
 } from "../../../utils/vehicleCatalogCsvImport";
 import { catalogCreateDriftFieldNames } from "../../../utils/vehicleCatalogWriteDrift";
@@ -294,6 +297,12 @@ export function VehicleCatalogManager() {
   const [importStep, setImportStep] = useState<VehicleCatalogImportStep>("preview");
   const [importProgress, setImportProgress] = useState<{ current: number; total: number } | null>(null);
   const [importOutcome, setImportOutcome] = useState<VehicleCatalogImportOutcome | null>(null);
+  /** Rows matching a car already in the catalog: skip (default) or fill blanks-safe from the file. */
+  const [importOnExisting, setImportOnExisting] = useState<CatalogImportOnExisting>("skip");
+  const importClasses = useMemo(
+    () => (importPreview ? classifyCatalogImportRows(importPreview, items) : null),
+    [importPreview, items],
+  );
   const [importBatchId, setImportBatchId] = useState<string | null>(null);
   const [undoingBatch, setUndoingBatch] = useState(false);
   const [forceUndoOpen, setForceUndoOpen] = useState(false);
@@ -316,6 +325,7 @@ export function VehicleCatalogManager() {
         const text = String(reader.result ?? "");
         const parsed = parseVehicleCatalogCsvWithPapa(text);
         setImportPreview(parsed.rows);
+        setImportOnExisting("skip");
         setImportUnknownHeaders(parsed.unknownHeaders);
         setImportStep("preview");
         setImportProgress(null);
@@ -354,9 +364,34 @@ export function VehicleCatalogManager() {
       );
       return;
     }
-    const ready = importPreview.filter((r): r is ParsedCatalogImportRow & { payload: NonNullable<ParsedCatalogImportRow["payload"]> } =>
-      Boolean(r.payload),
-    );
+    // Second copies of the same car inside this file are never sent; cars already in the catalog are
+    // skipped (default) or sent as a blanks-safe update of that car. The server applies the same rules.
+    const ready = importPreview.filter((r): r is ParsedCatalogImportRow & { payload: NonNullable<ParsedCatalogImportRow["payload"]> } => {
+      if (!r.payload) return false;
+      const k = importClasses?.get(r.rowIndex)?.kind;
+      if (k === "duplicate_in_file") return false;
+      if (k === "existing" && importOnExisting === "skip") return false;
+      return true;
+    });
+    const skippedExisting = importPreview.filter(
+      (r) => importClasses?.get(r.rowIndex)?.kind === "existing" && importOnExisting === "skip",
+    ).length;
+    const inFileDuplicates = importPreview.filter(
+      (r) => importClasses?.get(r.rowIndex)?.kind === "duplicate_in_file",
+    ).length;
+    if (ready.length === 0 && skippedExisting + inFileDuplicates > 0) {
+      setImportOutcome({
+        imported: 0,
+        updated: 0,
+        skipped: skippedExisting,
+        inFileDuplicates,
+        failed: 0,
+        errors: [],
+        schemaWarnings: [],
+      });
+      setImportStep("result");
+      return;
+    }
     if (ready.length === 0) {
       toast.error("No valid rows to import — fix the parse issues listed in the dialog, then try again.");
       return;
@@ -374,6 +409,7 @@ export function VehicleCatalogManager() {
     setImportOutcome(null);
     let imported = 0;
     let updated = 0;
+    let skipped = skippedExisting;
     const apiErrors: string[] = [];
     const driftFieldSet = new Set<string>();
     let driftRowCount = 0;
@@ -386,11 +422,20 @@ export function VehicleCatalogManager() {
         const res = await bulkUpsertVehicleCatalog(
           token,
           batchId,
-          slice.map((r) => ({
-            rowIndex: r.rowIndex,
-            id: r.catalogId,
-            payload: r.payload,
-          })),
+          slice.map((r) => {
+            const cls = importClasses?.get(r.rowIndex);
+            const matchId = cls?.kind === "existing" ? cls.existingId : undefined;
+            const id = r.catalogId ?? matchId;
+            return {
+              rowIndex: r.rowIndex,
+              id,
+              // Updates never blank out stored values.
+              payload: (id
+                ? catalogImportNonBlankPatch(r.payload as Record<string, unknown>)
+                : r.payload) as typeof r.payload,
+            };
+          }),
+          importOnExisting,
         );
         for (const result of res.results) {
           if (!result.ok) {
@@ -398,6 +443,10 @@ export function VehicleCatalogManager() {
             continue;
           }
           completed.add(result.rowIndex);
+          if (result.action === "skipped") {
+            skipped++;
+            continue;
+          }
           if (result.action === "created") imported++;
           else updated++;
           if (result.item) {
@@ -448,6 +497,8 @@ export function VehicleCatalogManager() {
     setImportOutcome({
       imported,
       updated,
+      skipped,
+      inFileDuplicates,
       failed: apiErrors.length,
       errors: apiErrors,
       schemaWarnings,
@@ -677,6 +728,9 @@ export function VehicleCatalogManager() {
         }}
         onClose={handleCloseImportDialog}
         onRunImport={handleRunCatalogImport}
+        importClasses={importClasses}
+        importOnExisting={importOnExisting}
+        onImportOnExistingChange={setImportOnExisting}
         onUndoBatch={() => void handleUndoImportBatch(false)}
       />
 

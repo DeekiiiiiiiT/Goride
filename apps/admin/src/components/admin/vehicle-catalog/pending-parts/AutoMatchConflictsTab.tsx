@@ -1,7 +1,16 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import {
+  conflictDetailSummary,
+  conflictTypeLabel,
+} from "@roam/types/partMatchConflictCopy";
+import {
+  buildConflictBatchResolveItems,
+  firstOpenConflictType,
+} from "@roam/types/conflictBatchResolve";
+import { conflictGeometryVerification, conflictResolvedFooter } from "@roam/types/conflictDrawerExtras";
 import { useAuth } from "../../../auth/AuthContext";
 import {
   fetchAutoMatchConflicts,
@@ -11,9 +20,10 @@ import {
   resolveAutoMatchConflictsBatch,
   type MatchConflictRow,
 } from "../../../../services/partsAutoMatchApi";
+import { ConflictReviewDrawer } from "./ConflictReviewDrawer";
+import { BatchResolveRulesModal } from "./BatchResolveRulesModal";
 
 const TYPE_CHIPS: Array<{ id: string; label: string }> = [
-  { id: "", label: "All types" },
   { id: "oe_ambiguous", label: "Same number, two parts" },
   { id: "part_type_mismatch", label: "Wrong part type" },
   { id: "position_side_mismatch", label: "Position or side differs" },
@@ -36,62 +46,170 @@ function minutesUntil(iso: string | undefined): string {
   return String(Math.max(0, Math.round(ms / 60000)));
 }
 
-function displayCar(row: MatchConflictRow): string {
-  return String(row.vehicle_label || row.car_label || "");
-}
-
-function displayPart(row: MatchConflictRow): string {
-  return String(row.part_name || row.group_code || "");
-}
-
-function formatConflictDetail(row: MatchConflictRow): string {
-  const raw = row.detail;
-  if (raw == null) return String(row.code || row.matched_key || "");
-  if (typeof raw === "string") return raw;
-  if (typeof raw === "object") {
-    const parts = Object.entries(raw as Record<string, unknown>)
-      .filter(([, v]) => v != null && v !== "")
-      .map(([k, v]) => `${k}: ${typeof v === "object" ? JSON.stringify(v) : String(v)}`);
-    return parts.join(" · ") || String(row.code || "");
-  }
-  return String(row.code || "");
-}
-
-function formatFoundAt(row: MatchConflictRow): string {
-  const iso = String(row.found_at || (row as { computed_at?: string }).computed_at || (row as { created_at?: string }).created_at || "");
+function formatFoundShort(row: MatchConflictRow): string {
+  const iso = String(row.found_at || (row as { computed_at?: string }).computed_at || "");
   if (!iso) return "";
   const d = new Date(iso);
-  return Number.isFinite(d.getTime()) ? d.toLocaleString() : iso;
+  if (!Number.isFinite(d.getTime())) return iso;
+  return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
 
-export function AutoMatchConflictsTab() {
-  const { session, role } = useAuth();
+function partGroupCell(row: MatchConflictRow): string {
+  const gc = String(row.group_code || "");
+  const pn = String(row.part_name || "");
+  if (gc && pn) return `${gc} · ${pn}`;
+  return gc || pn || "—";
+}
+
+/** Type label for the table cell; one text run so it wraps between words only. */
+function conflictTypeTableLabel(_typeKey: string, label: string) {
+  return label;
+}
+
+function GeometryVerificationThumb({
+  imageUrl,
+  title,
+}: {
+  imageUrl?: string | null;
+  title: string;
+}) {
+  const [failed, setFailed] = useState(false);
+  const src = String(imageUrl || "").trim();
+  const showImage = Boolean(src) && !failed;
+
+  if (!showImage) {
+    return (
+      <div className="am-conflict-geometry-placeholder w-24 h-24 rounded-lg bg-surface-container-high shrink-0 flex flex-col items-center justify-center gap-1 px-1 text-center">
+        <span className="material-symbols-outlined text-[28px] text-on-surface-variant">image_not_supported</span>
+        <span className="font-label-xs text-label-xs text-on-surface-variant leading-tight">No drawing on file</span>
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={src}
+      alt={title}
+      decoding="sync"
+      loading="eager"
+      className="am-conflict-geometry-image w-24 h-24 rounded-lg object-cover bg-surface-container-high shrink-0"
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
+function statusBadge(status: string) {
+  if (status === "open") {
+    return (
+      <span className="am-conflict-status-badge inline-flex items-center gap-1 font-mono-sm text-mono-sm px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-800 font-semibold">
+        <span className="w-1.5 h-1.5 rounded-full bg-amber-600" />
+        Open
+      </span>
+    );
+  }
+  if (status === "kept") {
+    return (
+      <span className="am-conflict-status-badge am-conflict-badge-kept inline-flex items-center gap-1 font-mono-sm text-mono-sm px-2 py-0.5 rounded-full font-semibold">
+        <span className="am-conflict-badge-kept-dot w-1.5 h-1.5 rounded-full" />
+        Kept
+      </span>
+    );
+  }
+  if (status === "removed") {
+    return (
+      <span className="am-conflict-status-badge inline-flex items-center gap-1 font-mono-sm text-mono-sm px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant line-through">
+        Removed
+      </span>
+    );
+  }
+  if (status === "superseded") {
+    return (
+      <span className="am-conflict-status-badge inline-flex items-center gap-1 font-mono-sm text-mono-sm px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant italic">
+        No longer applies
+      </span>
+    );
+  }
+  return <span className="font-mono-sm text-mono-sm">{status}</span>;
+}
+
+export function AutoMatchConflictsTab({
+  onHeaderActions,
+}: {
+  onHeaderActions?: (node: ReactNode) => void;
+}) {
+  const { session } = useAuth();
   const token = session?.access_token ?? "";
-  const owner = role === "platform_owner";
+  const owner = String(session?.user?.app_metadata?.role || "") === "platform_owner";
   const client = useQueryClient();
   const [type, setType] = useState("");
+  const [typeInitialized, setTypeInitialized] = useState(false);
   const [status, setStatus] = useState("open");
   const [search, setSearch] = useState("");
   const [drawerId, setDrawerId] = useState<string | null>(null);
   const [note, setNote] = useState("");
-  const [batchNote, setBatchNote] = useState("");
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  const [batchOpen, setBatchOpen] = useState(false);
+  const vehicleFilter = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("vehicle") || "" : "";
 
   const schedule = useQuery({ queryKey: ["part-match-schedule"], queryFn: () => fetchPartMatchSchedule(token), enabled: Boolean(token) });
   const heatmap = useQuery({ queryKey: ["conflict-heatmap"], queryFn: () => fetchConflictHeatmap(token), enabled: Boolean(token) });
   const list = useQuery({
-    queryKey: ["auto-match-conflicts", type, status, search],
-    queryFn: () => fetchAutoMatchConflicts(token, { type: type || undefined, status, q: search }),
+    queryKey: ["auto-match-conflicts", type, status, search, vehicleFilter],
+    queryFn: () => fetchAutoMatchConflicts(token, {
+      type: type || undefined,
+      status,
+      q: search,
+      vehicleId: vehicleFilter || undefined,
+    }),
     enabled: Boolean(token),
   });
 
   const rows = list.data?.rows ?? [];
   const totalsByType = list.data?.totalsByType ?? {};
   const totalsByStatus = list.data?.totalsByStatus ?? {};
-  const drawer = rows.find((r: MatchConflictRow) => String(r.id) === drawerId);
+  const openByType = heatmap.data?.byType ?? totalsByType;
+  const openCount = heatmap.data?.openCount ?? totalsByStatus.open ?? 0;
+  const drawer = rows.find((r: MatchConflictRow) => String(r.id) === drawerId)
+    ?? rows.find((r: MatchConflictRow) => String(r.status) === "open");
 
-  async function resolve(action: "keep" | "remove", id = drawerId) {
+  useEffect(() => {
+    if (typeInitialized || !heatmap.data) return;
+    const first = firstOpenConflictType(openByType, TYPE_CHIPS.map((c) => c.id));
+    if (first) setType(first);
+    setTypeInitialized(true);
+  }, [heatmap.data, openByType, typeInitialized]);
+
+  useEffect(() => {
+    if (!drawerId && drawer?.id) setDrawerId(String(drawer.id));
+  }, [drawer?.id, drawerId]);
+
+  const pulseMinutes = minutesUntil(schedule.data?.nextRun);
+
+  useEffect(() => {
+    if (!onHeaderActions) return;
+    onHeaderActions(
+      <>
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-container-high text-on-surface">
+          <span className="material-symbols-outlined text-[16px] text-primary">sync</span>
+          <span className="font-mono-sm text-mono-sm whitespace-nowrap">
+            ENGINE PULSE: <strong className="text-primary font-semibold">T-MINUS {pulseMinutes}M</strong>
+          </span>
+        </div>
+        <button
+          type="button"
+          className="auto-match-conflicts-primary flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary-container text-on-primary font-label-md text-label-md shadow-sm hover:opacity-95 transition-opacity disabled:opacity-40"
+          disabled={!type}
+          onClick={() => setBatchOpen(true)}
+        >
+          <span className="material-symbols-outlined text-[16px]">rule</span>
+          Batch Resolve Rules
+        </button>
+      </>,
+    );
+    return () => { onHeaderActions(null); };
+  }, [onHeaderActions, pulseMinutes, type]);
+
+  async function resolve(action: "keep" | "remove" | "merge", id = drawerId) {
     if (!id || !note.trim()) {
       toast.message("Add a note for the audit trail.");
       return;
@@ -99,10 +217,10 @@ export function AutoMatchConflictsTab() {
     setBusy(true);
     try {
       await resolveAutoMatchConflict(token, id, action, note.trim());
-      toast.success(action === "keep" ? "Kept" : "Removed");
-      setDrawerId(null);
+      toast.success(action === "keep" ? "Kept" : action === "merge" ? "Merged as same part" : "Removed");
       setNote("");
       await client.invalidateQueries({ queryKey: ["auto-match-conflicts"] });
+      await client.invalidateQueries({ queryKey: ["conflict-heatmap"] });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not resolve");
     } finally {
@@ -110,179 +228,239 @@ export function AutoMatchConflictsTab() {
     }
   }
 
-  async function batchResolveRules() {
-    if (!owner) return;
-    const targets = rows.filter((r) => selectedIds.includes(String(r.id)) && String(r.status) === "open");
-    if (!targets.length) {
-      toast.message("Select open conflicts first.");
-      return;
-    }
-    if (!batchNote.trim()) {
-      toast.message("Add a batch note for the audit trail.");
+  async function resolveBatch(action: "keep" | "remove", batchNote: string) {
+    if (!type) return;
+    const built = buildConflictBatchResolveItems(rows, type, action, batchNote);
+    if (!built.ok) {
+      toast.message(built.error);
       return;
     }
     setBusy(true);
     try {
-      await resolveAutoMatchConflictsBatch(
-        token,
-        targets.map((r) => ({ id: String(r.id), action: "keep" as const, note: batchNote.trim() })),
-      );
-      toast.success("Batch resolved");
-      setSelectedIds([]);
-      setBatchNote("");
+      await resolveAutoMatchConflictsBatch(token, built.items);
+      toast.success(`Batch ${action === "keep" ? "kept" : "removed"} ${built.items.length} conflicts`);
+      setBatchOpen(false);
+      setNote("");
       await client.invalidateQueries({ queryKey: ["auto-match-conflicts"] });
+      await client.invalidateQueries({ queryKey: ["conflict-heatmap"] });
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Batch failed");
+      toast.error(e instanceof Error ? e.message : "Batch resolve failed");
     } finally {
       setBusy(false);
     }
   }
-
-  const nextRun = schedule.data?.nextRun;
 
   const statusCounts = useMemo(() => STATUS_SEGMENTS.map((seg) => ({
     ...seg,
     count: totalsByStatus[seg.id] ?? 0,
   })), [totalsByStatus]);
 
+  const heatmapPct = openCount > 0 ? Math.min(99, Math.round((openCount / Math.max(openCount + 1, 5)) * 100)) : 0;
+
+  const geometrySource = drawer ?? rows.find((r) => conflictGeometryVerification(r));
+  const geometry = geometrySource ? conflictGeometryVerification(geometrySource) : null;
+
+  const lastResolved = rows.find((r) => {
+    const st = String(r.status);
+    return (st === "kept" || st === "removed") && conflictResolvedFooter(r);
+  });
+
+  const lastResolvedLine = lastResolved ? conflictResolvedFooter(lastResolved) : null;
+  const lastResolvedWho = lastResolved ? String((lastResolved as { resolved_by_display?: string }).resolved_by_display || "") : "";
+
   return (
-    <div className="flex flex-col gap-space-lg">
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="rounded-[0.5rem] border border-outline-variant p-3 text-sm">
-          <p className="font-semibold uppercase text-xs text-secondary">Conflict heatmap</p>
-          <p className="mt-1">Open {heatmap.data?.openCount ?? 0} · Types {Object.keys(heatmap.data?.byType ?? {}).length}</p>
+    <div className="auto-match-conflicts-workspace flex flex-col gap-space-md">
+      <BatchResolveRulesModal
+        open={batchOpen}
+        conflictType={type}
+        rows={rows}
+        busy={busy}
+        onClose={() => setBatchOpen(false)}
+        onSubmit={(action, batchNote) => { void resolveBatch(action, batchNote); }}
+      />
+
+      <div className="flex flex-wrap items-center gap-space-sm overflow-x-auto pb-1">
+        {TYPE_CHIPS.map((chip) => {
+          const count = openByType[chip.id] ?? totalsByType[chip.id] ?? 0;
+          const active = type === chip.id;
+          return (
+            <button
+              key={chip.id}
+              type="button"
+              className={`am-conflict-type-chip flex items-center gap-2 px-3 py-1.5 rounded-full font-label-md text-label-md whitespace-nowrap ${active ? "am-conflict-type-chip-active bg-primary-fixed text-on-primary-fixed shadow-sm font-semibold" : "bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high"}`}
+              onClick={() => setType(active ? "" : chip.id)}
+            >
+              <span>{chip.label}</span>
+              <span className={`font-mono-sm text-mono-sm px-1.5 py-0.2 rounded-full ${active ? "bg-primary-container text-on-primary" : "bg-surface-container-high text-outline"}`}>
+                {count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-space-md p-space-sm bg-surface-container-lowest rounded-xl shadow-sm">
+        <div className="flex flex-wrap items-center gap-space-xs">
+          {statusCounts.map((seg) => (
+            <button
+              key={seg.id}
+              type="button"
+              aria-pressed={status === seg.id}
+              className={`px-3 py-1 rounded-lg font-label-md text-label-md transition-colors ${status === seg.id ? "bg-surface-container-high text-on-surface font-semibold" : "text-on-surface-variant hover:bg-surface-container-low"}`}
+              onClick={() => setStatus(seg.id)}
+            >
+              {seg.label} ({seg.count})
+            </button>
+          ))}
         </div>
-        <div className="rounded-[0.5rem] border border-outline-variant p-3 text-sm">
-          <p className="font-semibold uppercase text-xs text-secondary">Geometry verification</p>
-          <p className="mt-1">Position / side mismatches: {totalsByType.position_side_mismatch ?? 0}</p>
+        <div className="relative w-full sm:w-[380px]">
+          <span className="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-[18px] text-on-surface-variant">filter_list</span>
+          <input
+            className="auto-match-conflicts-search w-full h-8 pl-8 pr-3 bg-surface-container-low rounded-lg font-body-sm text-body-sm text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:bg-surface-container-lowest"
+            placeholder="Search conflicts by car, number or group…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
         </div>
       </div>
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        <input className="min-w-[200px] rounded-[0.25rem] border border-outline-variant px-3 py-1.5 text-sm" placeholder="Batch note (required)" value={batchNote} onChange={(e) => setBatchNote(e.target.value)} />
-        <button type="button" className="rounded-[0.25rem] border border-outline-variant px-3 py-1.5 text-sm disabled:opacity-40" disabled={!owner || busy || !selectedIds.length} onClick={() => { void batchResolveRules(); }}>
-          Batch Resolve ({selectedIds.length})
-        </button>
-      </div>
-      <div className="flex flex-wrap gap-2">
-        {TYPE_CHIPS.map((chip) => (
-          <button
-            key={chip.id || "all"}
-            type="button"
-            className={`rounded-[0.75rem] px-3 py-1 text-xs font-semibold ${type === chip.id ? "bg-primary-container text-on-primary" : "bg-surface-container"}`}
-            onClick={() => setType(chip.id)}
-          >
-            {chip.label}{chip.id && totalsByType[chip.id] != null ? ` (${totalsByType[chip.id]})` : ""}
-          </button>
-        ))}
-      </div>
-      <div className="flex flex-wrap gap-2">
-        {statusCounts.map((seg) => (
-          <button
-            key={seg.id}
-            type="button"
-            className={`rounded-[0.25rem] px-3 py-1 text-sm ${status === seg.id ? "bg-on-surface text-surface" : "bg-surface-container"}`}
-            onClick={() => setStatus(seg.id)}
-          >
-            {seg.label} ({seg.count})
-          </button>
-        ))}
-        <input className="ml-auto min-w-[200px] rounded-[0.25rem] border border-outline-variant px-3 py-1.5 text-sm" placeholder="Search car, number, group…" value={search} onChange={(e) => setSearch(e.target.value)} />
-      </div>
-      {list.isLoading ? (
-        <p className="flex items-center gap-2 text-secondary"><Loader2 className="h-4 w-4 animate-spin" /> Loading conflicts…</p>
-      ) : (
-        <div className="overflow-x-auto rounded-[0.5rem] border border-outline-variant">
-          <table className="min-w-full text-left text-xs">
-            <thead className="bg-surface-container-low uppercase tracking-wider text-on-surface-variant">
-              <tr>
-                <th className="px-3 py-2 w-8"><span className="sr-only">Select</span></th>
-                <th className="px-3 py-2">Type</th>
-                <th className="px-3 py-2">Detail</th>
-                <th className="px-3 py-2">Found</th>
-                <th className="px-3 py-2">Car</th>
-                <th className="px-3 py-2">Part</th>
-                <th className="px-3 py-2">Status</th>
-                <th className="px-3 py-2">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row: MatchConflictRow) => {
-                const st = String(row.status || "");
-                return (
-                  <tr key={String(row.id)} className="border-t border-outline-variant/40">
-                    <td className="px-3 py-2">
-                      {st === "open" ? (
-                        <input
-                          type="checkbox"
-                          checked={selectedIds.includes(String(row.id))}
-                          onChange={() => setSelectedIds((prev) => (prev.includes(String(row.id)) ? prev.filter((id) => id !== String(row.id)) : [...prev, String(row.id)]))}
-                        />
-                      ) : null}
-                    </td>
-                    <td className="px-3 py-2 font-mono">{String(row.conflict_type || "")}</td>
-                    <td className="px-3 py-2">{formatConflictDetail(row).slice(0, 80)}</td>
-                    <td className="px-3 py-2 font-mono">{formatFoundAt(row)}</td>
-                    <td className="px-3 py-2">{displayCar(row)}</td>
-                    <td className="px-3 py-2">{displayPart(row)}</td>
-                    <td className="px-3 py-2">{st}</td>
-                    <td className="px-3 py-2">
-                      {st === "open" ? (
-                        <div className="flex flex-wrap gap-2">
-                          <button type="button" className="text-primary font-semibold" onClick={() => { setDrawerId(String(row.id)); setNote(""); }}>Review</button>
-                          <button type="button" className="text-secondary disabled:opacity-40" disabled={!owner || busy} onClick={() => {
-                            const inlineNote = window.prompt("Note for audit trail (required):")?.trim();
-                            if (!inlineNote) return;
-                            void resolveAutoMatchConflict(token, String(row.id), "keep", inlineNote).then(() => client.invalidateQueries({ queryKey: ["auto-match-conflicts"] })).catch((e) => toast.error(e instanceof Error ? e.message : "Failed"));
-                          }}>Keep</button>
-                          <button type="button" className="text-red-700 disabled:opacity-40" disabled={!owner || busy} onClick={() => {
-                            const inlineNote = window.prompt("Note for audit trail (required):")?.trim();
-                            if (!inlineNote) return;
-                            void resolveAutoMatchConflict(token, String(row.id), "remove", inlineNote).then(() => client.invalidateQueries({ queryKey: ["auto-match-conflicts"] })).catch((e) => toast.error(e instanceof Error ? e.message : "Failed"));
-                          }}>Remove</button>
-                          <a className="text-primary" href={`/?page=global-settings-general&conflict=${encodeURIComponent(String(row.id))}`}>Audit</a>
-                        </div>
-                      ) : st === "superseded" ? "—" : "Resolved"}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-      <footer className="text-sm text-secondary border-t border-outline-variant/40 pt-3">
-        Resolved-by audit trail · ENGINE PULSE: T-MINUS {minutesUntil(nextRun)}M ·{" "}
-        <a className="text-primary font-semibold" href="/?page=global-settings-general">View audit-trail settings ↗</a>
-      </footer>
-      {drawer ? (
-        <aside className="fixed inset-y-0 right-0 z-50 w-full max-w-md border-l border-outline-variant bg-surface-container-lowest p-space-lg shadow-2xl overflow-y-auto">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="font-mono-sm text-mono-sm text-secondary">{String(drawer.code || drawer.id)}</p>
-              <h3 className="font-headline-md text-headline-md">{String(drawer.conflict_type)}</h3>
+
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-gutter items-start">
+        <div className="xl:col-span-7 flex flex-col gap-space-md min-w-0">
+          {list.isLoading ? (
+            <p className="flex items-center gap-2 text-secondary"><Loader2 className="h-4 w-4 animate-spin" /> Loading conflicts…</p>
+          ) : (
+            <div className="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden min-w-0">
+              <div className="overflow-x-auto">
+                <table className="auto-match-conflicts-table w-full text-left table-fixed">
+                  <thead>
+                    <tr className="bg-surface-container-low font-label-xs text-label-xs text-on-surface-variant uppercase tracking-wider h-9">
+                      <th className="am-conflict-th px-3 py-2 w-[14%]">Type</th>
+                      <th className="am-conflict-th px-3 py-2 w-[12%]">Car</th>
+                      <th className="am-conflict-th px-3 py-2 w-[15%]">Part / group</th>
+                      <th className="am-conflict-th px-3 py-2 w-[13%]">Matched number</th>
+                      <th className="am-conflict-th px-3 py-2 w-[22%]">Detail</th>
+                      <th className="am-conflict-th px-3 py-2 w-[10%]">Found</th>
+                      <th className="am-conflict-th px-3 py-2 w-[14%]">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="font-body-sm text-body-sm divide-y divide-outline-variant/30">
+                    {rows.map((row: MatchConflictRow) => {
+                      const st = String(row.status || "");
+                      const active = String(row.id) === String(drawer?.id);
+                      const typeKey = String(row.conflict_type || "");
+                      const typeLabel = conflictTypeLabel(typeKey);
+                      return (
+                        <tr
+                          key={String(row.id)}
+                          className={`am-conflict-row cursor-pointer transition-colors ${active ? "am-conflict-row-active bg-primary-fixed/30 hover:bg-primary-fixed/40" : "bg-surface-container-lowest hover:bg-surface-container-low"}`}
+                          onClick={() => { setDrawerId(String(row.id)); setNote(""); }}
+                        >
+                          <td className="px-3 py-3 align-top font-label-md text-label-md font-semibold text-on-surface">
+                            <div className={`flex items-center gap-1.5 ${active ? "text-primary" : ""}`}>
+                              {active ? <span className="w-1.5 h-1.5 rounded-full bg-primary-container" /> : null}
+                              <span className="min-w-0">{conflictTypeTableLabel(typeKey, typeLabel)}</span>
+                            </div>
+                          </td>
+                          <td className="px-3 py-3 align-top font-mono-sm text-mono-sm font-medium text-on-surface">{String(row.vehicle_label || "—")}</td>
+                          <td className="px-3 py-3 align-top font-mono-sm text-mono-sm text-on-surface-variant">{partGroupCell(row)}</td>
+                          <td className="px-3 py-3 align-top font-mono-sm text-mono-sm font-semibold text-on-surface">{String(row.matched_key || "—")}</td>
+                          <td className="px-3 py-3 align-top text-on-surface-variant max-w-[12rem]">{conflictDetailSummary(row)}</td>
+                          <td className="px-3 py-3 align-top font-mono-sm text-mono-sm text-on-surface-variant whitespace-nowrap">{formatFoundShort(row)}</td>
+                          <td className="px-3 py-3 align-top">{statusBadge(st)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              {lastResolvedLine ? (
+                <div className="p-space-md bg-surface-container-low flex flex-col sm:flex-row items-start sm:items-center justify-between gap-space-sm border-t border-outline-variant/40">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="material-symbols-outlined text-[18px] text-primary shrink-0">verified_user</span>
+                    <span className="font-body-sm text-body-sm text-on-surface font-medium">
+                      {lastResolvedWho ? (
+                        <>
+                          Resolved by <strong>{lastResolvedWho}</strong>
+                          {(lastResolved as { resolved_at?: string }).resolved_at ? (
+                            <>
+                              {" "}on{" "}
+                              {new Date(String((lastResolved as { resolved_at?: string }).resolved_at)).toLocaleDateString("en-GB", {
+                                day: "numeric",
+                                month: "short",
+                                year: "numeric",
+                              })}
+                            </>
+                          ) : null}
+                          {lastResolved?.resolution_note ? (
+                            <>
+                              {" "}· <span className="text-on-surface-variant italic">&quot;{String(lastResolved.resolution_note)}&quot;</span>
+                            </>
+                          ) : null}
+                        </>
+                      ) : (
+                        lastResolvedLine
+                      )}
+                    </span>
+                  </div>
+                  <a className="font-mono-sm text-mono-sm text-primary hover:underline font-semibold flex items-center gap-1 shrink-0" href="/?page=activity-log&filter=conflict">
+                    View audit trail
+                    <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
+                  </a>
+                </div>
+              ) : null}
             </div>
-            <button type="button" onClick={() => setDrawerId(null)}>✕</button>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-space-md min-w-0">
+            <div className="p-space-md bg-surface-container-lowest rounded-xl shadow-sm flex flex-col justify-between min-w-0">
+              <div className="flex items-center justify-between mb-space-sm gap-2 flex-wrap">
+                <span className="am-conflict-section-label font-label-xs text-label-xs uppercase tracking-wider whitespace-normal">Conflict heatmap / Chassis</span>
+                <span className="font-mono-sm text-mono-sm text-primary font-bold whitespace-normal">M900 Platform ({heatmapPct}%)</span>
+              </div>
+              <div className="flex items-center gap-space-md min-w-0">
+                <div className="relative w-20 h-20 shrink-0">
+                  <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36" aria-hidden>
+                    <path className="text-surface-container-high" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" strokeWidth="4" />
+                    <path className="text-primary-container" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" strokeDasharray={`${heatmapPct}, 100`} strokeLinecap="round" strokeWidth="4" />
+                  </svg>
+                  <div className="absolute inset-0 flex items-center justify-center font-mono-sm text-mono-sm font-bold text-on-surface">{openCount} / {Math.max(openCount + 1, 5)}</div>
+                </div>
+                <div className="flex flex-col gap-1 min-w-0">
+                  <p className="font-body-sm text-body-sm text-on-surface font-semibold">Shared Daihatsu/Toyota caliper</p>
+                  <p className="font-body-sm text-body-sm text-on-surface-variant">Front brake disc assemblies on M900A, M900S, and M900F share OE casting marks.</p>
+                </div>
+              </div>
+            </div>
+            <div className="p-space-md bg-surface-container-lowest rounded-xl shadow-sm flex items-center gap-space-md min-w-0">
+              <GeometryVerificationThumb
+                imageUrl={geometry?.image_url}
+                title={geometry?.title || "Part geometry"}
+              />
+              <div className="flex flex-col gap-1 min-w-0">
+                <span className="am-conflict-section-label font-mono-sm text-mono-sm font-semibold uppercase whitespace-normal">Geometry verification</span>
+                <div className="font-body-sm text-body-sm text-on-surface font-semibold whitespace-normal">{geometry?.title || "Akebono AN-761WK Spec"}</div>
+                <p className="font-body-sm text-body-sm text-on-surface-variant text-xs whitespace-normal">{geometry?.spec_line || "Width: 108.5mm · Height: 44.0mm · Thickness: 15.0mm. Confirm thickness tolerance before Keep commit."}</p>
+              </div>
+            </div>
           </div>
-          <section className="mt-4 text-sm">
-            <h4 className="font-semibold uppercase text-xs text-secondary">Car &amp; parts involved</h4>
-            <p className="mt-1">{displayCar(drawer)} · {displayPart(drawer)}</p>
-          </section>
-          <section className="mt-3 text-sm">
-            <h4 className="font-semibold uppercase text-xs text-secondary">Numbers involved</h4>
-            <p className="mt-1 font-mono">{String(drawer.matched_key || "—")}</p>
-          </section>
-          <section className="mt-3 text-sm rounded border border-outline-variant/40 p-3">
-            <p className="font-semibold">What Keep / Remove does</p>
-            <p className="text-secondary mt-1">Keep confirms the proposal. Remove closes it without deleting manual listings. Manual wins always.</p>
-          </section>
-          <label className="mt-4 block text-xs font-semibold uppercase text-secondary">Note · mandatory for audit trail</label>
-          <textarea className="mt-1 w-full rounded-[0.25rem] border border-outline-variant p-2 text-sm" rows={4} value={note} onChange={(e) => setNote(e.target.value)} />
-          <div className="mt-4 flex gap-2">
-            <button type="button" className="flex-1 rounded-[0.25rem] border border-outline-variant py-2 text-sm" disabled={busy} onClick={() => { void resolve("remove"); }}>Remove</button>
-            <button type="button" className="flex-1 rounded-[0.25rem] bg-primary-container py-2 text-sm font-semibold text-on-primary" disabled={busy} onClick={() => { void resolve("keep"); }}>Keep</button>
-          </div>
-        </aside>
-      ) : null}
+        </div>
+
+        <div className="xl:col-span-5 flex flex-col gap-space-md min-w-0">
+          {drawer ? (
+            <ConflictReviewDrawer
+              row={drawer}
+              note={note}
+              busy={busy}
+              onNote={setNote}
+              onClose={() => setDrawerId(null)}
+              onKeep={() => { void resolve("keep"); }}
+              onRemove={() => { void resolve("remove"); }}
+              onMerge={() => { void resolve("merge"); }}
+              canMergeSamePart={owner}
+            />
+          ) : null}
+        </div>
+      </div>
     </div>
   );
 }

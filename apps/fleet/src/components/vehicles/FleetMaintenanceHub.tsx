@@ -448,41 +448,59 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
         <div
           className={
             findPartsActive
-              ? "flex flex-wrap items-center justify-between gap-3 w-full bg-surface-container-lowest rounded-xl shadow-sm px-4 py-3"
+              ? "fleet-am-s4f-hub-head flex flex-col gap-4 w-full pb-2 border-b border-outline-variant/30"
               : ""
           }
         >
           {findPartsActive ? (
-            <div className="flex items-center gap-2">
-              <Wrench className="w-6 h-6 text-amber-600" />
-              <span className="font-semibold text-slate-900 dark:text-white">Fleet Maintenance</span>
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+              <div>
+                <nav className="flex items-center gap-1.5 text-caption text-on-surface-variant mb-1" aria-label="Breadcrumb">
+                  <span>Fleet</span>
+                  <span>/</span>
+                  <span>Maintenance</span>
+                  <span>/</span>
+                  <span className="font-medium text-on-surface">Parts Match Intelligence</span>
+                </nav>
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600 dark:bg-amber-950/40 dark:border-amber-800">
+                    <Wrench className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h1 className="text-2xl font-bold tracking-tight text-on-surface">Fleet Maintenance</h1>
+                    <p className="text-xs text-on-surface-variant mt-0.5 max-w-2xl">
+                      Parts catalog encyclopedia — factory part matches, sister vehicle interchange, and verification audit trails.
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
           ) : null}
-          <TabsList className={`h-10 bg-surface-container p-1 ${findPartsActive ? "shrink-0" : ""}`}>
-            <TabsTrigger value="by-vehicle" className="gap-1.5 px-4">
+          <TabsList className={`h-10 bg-surface-container p-1 ${findPartsActive ? "shrink-0 self-end" : ""}`}>
+            <TabsTrigger value="by-vehicle" className="gap-1.5 px-4" data-maintenance-tab="by-vehicle">
               <Car className="w-4 h-4" />
-              Overview
+              {findPartsActive ? "By vehicle" : "Overview"}
               {overviewAttentionCount > 0 ? (
                 <span className="bg-surface-container-high text-on-surface-variant font-mono text-[10px] px-1.5 py-0.5 rounded-full ml-0.5">
                   {overviewAttentionCount}
                 </span>
               ) : null}
             </TabsTrigger>
-            <TabsTrigger value="service-ledger" className="gap-1.5 px-4">
+            <TabsTrigger value="service-ledger" className="gap-1.5 px-4" data-maintenance-tab="service-ledger">
               <History className="w-4 h-4" />
-              Service history
+              {findPartsActive ? "Service ledger" : "Service history"}
             </TabsTrigger>
             {canViewParts ? (
-              <TabsTrigger value="find-parts" className="gap-1.5 px-4">
+              <TabsTrigger value="find-parts" className="gap-1.5 px-4" data-maintenance-tab="find-parts">
                 <Package className="w-4 h-4" />
                 Find parts
               </TabsTrigger>
             ) : null}
-            <TabsTrigger value="work-orders" className="gap-1.5 px-3">
+            <TabsTrigger value="work-orders" className="gap-1.5 px-3" data-maintenance-tab="work-orders">
               <Kanban className="w-4 h-4" />
               Work orders
             </TabsTrigger>
-            <TabsTrigger value="requests" className="gap-1.5 px-3">
+            <TabsTrigger value="requests" className="gap-1.5 px-3" data-maintenance-tab="requests">
               <ClipboardList className="w-4 h-4" />
               Requests
               {driverRequests.length > 0 ? (
@@ -491,11 +509,11 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
                 </span>
               ) : null}
             </TabsTrigger>
-            <TabsTrigger value="inspections" className="gap-1.5 px-3">
+            <TabsTrigger value="inspections" className="gap-1.5 px-3" data-maintenance-tab="inspections">
               <ShieldCheck className="w-4 h-4" />
               Inspections
             </TabsTrigger>
-            <TabsTrigger value="schedule" className="gap-1.5 px-3">
+            <TabsTrigger value="schedule" className="gap-1.5 px-3" data-maintenance-tab="schedule">
               <CalendarRange className="w-4 h-4" />
               Schedule
             </TabsTrigger>

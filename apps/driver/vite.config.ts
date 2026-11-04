@@ -48,6 +48,7 @@ export default defineConfig(({ mode }) => {
     },
     resolve: {
       extensions: ['.js', '.jsx', '.ts', '.tsx', '.json'],
+      dedupe: ['@tanstack/react-query'],
       alias: {
         '@': path.resolve(__dirname, './src'),
         '@fleet': path.resolve(__dirname, '../fleet/src'),

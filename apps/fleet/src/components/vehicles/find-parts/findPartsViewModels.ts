@@ -1,7 +1,14 @@
 import { formatKm, formatPercent, formatPriceJmd, orDash, orNoneYet, wearLifeBarPercent } from "./findPartsFormat";
 import type { PartsMyVehicleRow, PartsVehicleOptions } from "./findPartsTypes";
 import { PART_MATCH_TIERS } from "../../../../../../packages/types/src/partsResolution.ts";
-import { formatMatchWhyLine, fleetTypeTag, matchWhyTooltip, TIER_ACCENT, fleetSectionCountLabel } from "@roam/types/partMatchReason";
+import {
+  fleetCarShortName,
+  fleetTypeTag,
+  formatFleetWhyLine,
+  matchWhyTooltip,
+  TIER_ACCENT,
+  fleetSectionCountLabel,
+} from "@roam/types/partMatchReason";
 import { formatPartPositionSideLabel, partSideCovers } from "@roam/types/partPositionNorm";
 import { formatPartsVersionTag, readPartsVehicleSpecs } from "@roam/types/partsVehicleContext";
 
@@ -796,13 +803,59 @@ export type Fp4ViewModel = {
   rearSideOptions?: Fp4SideOption[];
 };
 
-const STITCH_TIER_DESCRIPTIONS: Record<number, string> = {
-  1: "The exact factory component designed and installed by the vehicle manufacturer.",
-  2: "Direct replacement parts listed for sister vehicles under another badge.",
-  3: "Engine-family parts shared with other models that use the same powertrain.",
-  4: "Direct replacement parts made by certified OEM tier-1 parts manufacturers.",
-  5: "Consumables, fluids, and hardware that match factory chemical and dimensional tolerances.",
+export type Fp5ChoiceTrailChip = { label: string; active?: boolean };
+
+const FLEET_AM_TIER_SUBTITLES: Record<number, (ctx: { plate: string }) => string> = {
+  1: ({ plate }) => `Exact factory assembly numbers for ${plate}`,
+  2: () => "Identical chassis built under partner brands",
+  3: () => "Powertrain & shared architecture interchange",
+  4: () => "Certified aftermarket replacements and equivalent friction standards",
+  5: () => "Identical physical dimensions and mounting clip geometry",
 };
+
+function formatBrakeConfigurationLine(specs: Record<string, unknown>): string {
+  const front = String(specs.brake_front_type || "").trim();
+  const rear = String(specs.brake_rear_type || "").trim();
+  if (!front && !rear) return "";
+  const frontLine = front
+    ? (front.toLowerCase().includes("disc") ? "Front disc brakes" : `Front ${front.toLowerCase()} brakes`)
+    : "";
+  const rearLine = rear
+    ? (rear.toLowerCase().includes("drum") ? "rear drum brakes" : `rear ${rear.toLowerCase()} brakes`)
+    : "";
+  return [frontLine, rearLine].filter(Boolean).join(", ");
+}
+
+function shortChassisCode(raw: string): string {
+  const t = raw.trim();
+  if (!t) return "";
+  return t.split("-")[0] || t;
+}
+
+export function buildFp5ChoiceTrail(input: {
+  vehicleLabel: string;
+  plate: string;
+  areaLabel?: string;
+  partName?: string;
+  position?: string;
+}): Fp5ChoiceTrailChip[] {
+  const chips: Fp5ChoiceTrailChip[] = [];
+  const vehicle = input.vehicleLabel.trim();
+  const plate = input.plate.trim();
+  if (vehicle || plate) {
+    chips.push({ label: plate ? `${vehicle.replace(/\s+\d{4}$/, "").trim() || vehicle} (${plate})` : vehicle });
+  }
+  if (input.areaLabel?.trim()) chips.push({ label: input.areaLabel.trim() });
+  if (input.partName?.trim()) chips.push({ label: input.partName.trim() });
+  const pos = String(input.position || "").trim().toLowerCase();
+  if (pos) {
+    chips.push({
+      label: pos === "rear" ? "Rear" : pos === "front" ? "Front" : pos.charAt(0).toUpperCase() + pos.slice(1),
+      active: true,
+    });
+  }
+  return chips;
+}
 
 export { buildFp4ViewModel } from "./findPartsBuildFp4";
 
@@ -834,6 +887,8 @@ export type Fp5ResultRow = {
   accentColor: string;
   matchStatus?: string | null;
   checkingNote?: string | null;
+  categoryBadge: string;
+  partNumberCopy: string;
 };
 
 export type Fp5TierSection = {
@@ -882,6 +937,12 @@ export type Fp5ViewModel = {
   emptyTierNotes: string[];
   archiveEyebrow: string;
   resultsHeadline: string;
+  choiceTrail: Fp5ChoiceTrailChip[];
+  serviceLineChip: string;
+  brakeConfigurationLine: string;
+  vehicleSpecLine: string;
+  subsystemSubtitle: string;
+  identifiedPartTitle: string;
   trimSeriesLabel: string;
   engineLayoutLabel: string;
   drivetrainLabel: string;
@@ -964,6 +1025,7 @@ function rowFromItem(
   item: Record<string, unknown>,
   bestId?: string,
   trimScopeLabel?: string,
+  fleetWhyCtx?: { carLabel?: string; indexEquivalentByPartId?: Map<string, string> },
 ): Fp5ResultRow {
   const part = (item.part || {}) as { id?: string; name?: string; brand?: string; oem_part_number?: string; manufacturer?: string };
   const id = String(part.id || "");
@@ -984,10 +1046,29 @@ function rowFromItem(
   const reasonCode = String(item.matchReasonCode ?? item.match_reason_code ?? "");
   const reasonParams = (item.matchReasonParams ?? item.match_reason_params) as Record<string, unknown> | null;
   const matchStatus = String(item.matchStatus ?? item.match_status ?? "");
+  const fitSource = String(item.fitSource ?? item.fit_source ?? "");
   const via = String(item.via ?? "");
   const partKind = String((part as { part_kind?: string }).part_kind ?? "");
-  const why = formatMatchWhyLine(reasonCode, reasonParams);
+  const linkComponentName = String(
+    item.linkComponentName ?? item.link_component_name ?? "",
+  ).trim() || null;
+  const partNumberCopy = orDash(part.oem_part_number);
+  const positionLabelForWhy = formatResultPositionLabel(item);
+  const sisterModelName = String(item.sisterNames ?? item.sister_names ?? "").trim() || null;
+  const carShort = fleetCarShortName(fleetWhyCtx?.carLabel);
+  const indexEquivalentLabel = fleetWhyCtx?.indexEquivalentByPartId?.get(id) || null;
+  const why = formatFleetWhyLine(reasonCode, reasonParams, fitSource || undefined, {
+    carShortName: carShort,
+    partBrand: orNoneYet(part.brand || part.manufacturer),
+    partNumber: partNumberCopy !== "—" ? partNumberCopy : undefined,
+    positionLabel: positionLabelForWhy,
+    linkComponentName,
+    sisterModelName,
+    indexEquivalentLabel,
+  });
   const tip = matchWhyTooltip(reasonCode, reasonParams, trimScopeLabel);
+  const typeTag = fleetTypeTag(via, partKind);
+  const categoryBadge = typeTag;
   const checking = matchStatus === "needs_checking";
   const checkingNote = String(item.checking_note ?? item.checkingNote ?? "").trim() || null;
   return {
@@ -1013,7 +1094,9 @@ function rowFromItem(
     whyLine: why,
     whyTooltipCar: tip.carLine,
     whyTooltipPart: tip.partLine,
-    typeTag: fleetTypeTag(via, partKind),
+    typeTag: categoryBadge,
+    categoryBadge,
+    partNumberCopy,
     statusChip: checking ? "checking" : "confirmed",
     accentColor: TIER_ACCENT[tier] ?? TIER_ACCENT[1],
     matchStatus: matchStatus || null,
@@ -1059,6 +1142,10 @@ export function buildFp5ViewModel(input: {
   partName?: string;
   vehicleContext?: Record<string, unknown> | null;
   variantCount?: number;
+  choiceTrail?: Fp5ChoiceTrailChip[];
+  activityRequestTotal?: number;
+  areaLabel?: string;
+  position?: string;
 }): Fp5ViewModel {
   const ctx = input.vehicleContext || {};
   const car = input.result?.car || {};
@@ -1068,10 +1155,25 @@ export function buildFp5ViewModel(input: {
   const trimScopeLabel = trimScope === "all"
     ? "Fits all listed versions"
     : `Only ${trimFromCtx !== "None yet" ? trimFromCtx : "this version"}`;
+  const carLabelForWhy = orNoneYet(car.label || String(ctx.label || ""));
+  const indexEquivalentByPartId = new Map<string, string>();
+  for (const section of input.result?.sections || []) {
+    for (const item of section.items || []) {
+      const partRec = (item.part || {}) as { id?: string; brand?: string; manufacturer?: string; oem_part_number?: string };
+      const pid = String(partRec.id || "");
+      const code = String(item.matchReasonCode ?? item.match_reason_code ?? "");
+      if (pid && code === "oe_number") {
+        const brand = orNoneYet(partRec.brand || partRec.manufacturer);
+        const num = orDash(partRec.oem_part_number);
+        if (brand !== "None yet" && num !== "—") indexEquivalentByPartId.set(pid, `${brand} ${num}`);
+      }
+    }
+  }
+  const fleetWhyCtx = { carLabel: carLabelForWhy, indexEquivalentByPartId };
   const allRows: Fp5ResultRow[] = [];
   for (const section of input.result?.sections || []) {
     for (const item of section.items || []) {
-      allRows.push(rowFromItem(section, item, input.bestId, trimScopeLabel));
+      allRows.push(rowFromItem(section, item, input.bestId, trimScopeLabel, fleetWhyCtx));
     }
   }
   const filterAllCount = allRows.length;
@@ -1121,10 +1223,11 @@ export function buildFp5ViewModel(input: {
   for (const tierRow of PART_MATCH_TIERS) {
     const sectionRows = tierMap.get(tierRow.tier) || [];
     const allChecking = sectionRows.length > 0 && sectionRows.every((r) => r.statusChip === "checking");
+    const plateForSub = orDash(input.plate || car.plate || String(ctx.plate || ""));
     tierSections.push({
       tier: tierRow.tier,
       heading: tierRow.plainLabel,
-      description: STITCH_TIER_DESCRIPTIONS[tierRow.tier] || tierRow.plainReason,
+      description: FLEET_AM_TIER_SUBTITLES[tierRow.tier]?.({ plate: plateForSub }) || tierRow.plainReason,
       tag: tierRow.tag,
       count: sectionRows.length,
       rows: sectionRows,
@@ -1155,9 +1258,40 @@ export function buildFp5ViewModel(input: {
   const matchRevisionLine = chassisCodeLabel !== "None yet"
     ? `MATCH REVISION: ${new Date().toISOString().slice(0, 10)} · CHASSIS: ${chassisCodeLabel}`
     : "None yet";
+  const plateOut = orDash(input.plate || car.plate || String(ctx.plate || ""));
+  const vehicleLabelOut = orNoneYet(car.label || String(ctx.label || ""));
+  const specsForBrake = readPartsVehicleSpecs(ctx);
+  const brakeConfigurationLine = formatBrakeConfigurationLine(specsForBrake);
+  const chassisShort = shortChassisCode(String(specsForBrake.chassis_code || chassisRaw || ""));
+  const engineCode = String(specsForBrake.engine_code || "").trim();
+  const vehicleSpecLine = [
+    trimSeriesLabel !== "None yet" ? trimSeriesLabel : "",
+    engineCode || (engineLayoutLabel !== "None yet" ? engineLayoutLabel.split("(")[0].trim() : ""),
+    drivetrainLabel !== "None yet" ? drivetrainLabel : "",
+    chassisShort ? `Chassis ${chassisShort}` : "",
+    brakeConfigurationLine,
+  ].filter(Boolean).join(" · ");
+  const choiceTrail = input.choiceTrail?.length
+    ? input.choiceTrail
+    : buildFp5ChoiceTrail({
+        vehicleLabel: vehicleLabelOut,
+        plate: plateOut,
+        areaLabel: input.areaLabel,
+        partName: searchPartName !== "None yet" ? searchPartName : undefined,
+        position: input.position,
+      });
+  const requestFromResult = (input.result as { requestCount?: number } | null | undefined)?.requestCount;
+  const requestCount = typeof requestFromResult === "number" && Number.isFinite(requestFromResult)
+    ? requestFromResult
+    : (typeof input.activityRequestTotal === "number" ? input.activityRequestTotal : 0);
+  const identifiedPartTitle = searchPartName !== "None yet"
+    ? (searchPartName.toLowerCase().includes("pad") && input.position === "front"
+      ? "Front brake pad set"
+      : searchPartName)
+    : "Part";
   return {
-    plate: orDash(input.plate || car.plate || String(ctx.plate || "")),
-    vehicleLabel: orNoneYet(car.label || String(ctx.label || "")),
+    plate: plateOut,
+    vehicleLabel: vehicleLabelOut,
     chassisLabel: chassis !== "None yet" ? chassis : "—",
     hubLabel: hubFromCtx,
     trimBadge: trimFromCtx,
@@ -1185,6 +1319,8 @@ export function buildFp5ViewModel(input: {
       whyTooltipCar: "—",
       whyTooltipPart: "—",
       typeTag: "OEM",
+      categoryBadge: "OEM Direct",
+      partNumberCopy: "—",
       statusChip: "confirmed",
       accentColor: TIER_ACCENT[1],
     }],
@@ -1194,7 +1330,7 @@ export function buildFp5ViewModel(input: {
     partBrand: best?.brandLabel || "—",
     partNumberAlt: orDash((bestItem?.part as { altNumber?: string } | undefined)?.altNumber),
     matchCount: filterAllCount,
-    requestCount: Number((input.result as { requestCount?: number })?.requestCount ?? input.result?.coverage?.otherParts ?? filterAllCount),
+    requestCount,
     filterAllCount,
     filterStockCount: 0,
     filterOemCount,
@@ -1218,6 +1354,13 @@ export function buildFp5ViewModel(input: {
     vinLabel: orDash(String(ctx.vin || ctx.vin_number || "").trim()),
     checkedCataloguesLabel: formatCheckedCataloguesLabel(bestItem),
     fitsVersionBadge: "Fits this version",
+    choiceTrail,
+    serviceLineChip: orNoneYet(String(ctx.service_line_label || ctx.serviceLineLabel || "")),
+    brakeConfigurationLine,
+    vehicleSpecLine,
+    subsystemSubtitle:
+      "Showing confirmed OEM specs, sister platform cross-references, and compatible aftermarket substitutes.",
+    identifiedPartTitle,
   };
 }
 
@@ -1272,6 +1415,7 @@ export type Fp6ViewModel = {
   specRows: Array<{ label: string; value: string }>;
   engineFilterLine: string;
   partPhotoUrl: string;
+  fitReasonLine: string;
 };
 
 function fp6ParseCrossRefRows(sisterNames: string | null | undefined, brandFallback: string, altNumber?: string): Fp6CrossRefRow[] {
@@ -1305,6 +1449,7 @@ export function buildFp6ViewModel(input: {
     specs?: Array<{ key?: string; value?: string }>;
     sisterNames?: string | null;
     fitsVariantIds?: string[];
+    reason?: string;
   } | null;
   ctx?: Record<string, unknown> | null;
   variantLabels?: string[];
@@ -1380,6 +1525,8 @@ export function buildFp6ViewModel(input: {
     specRows: specs.length ? specs : [{ label: "None yet", value: "—" }],
     engineFilterLine: String(ctx.engineFilterLine || "").trim() || "None yet",
     partPhotoUrl: catalogPhotoUrl(String((part as { photo_url?: string }).photo_url || (input.item as { photo_url?: string })?.photo_url || "")),
+    fitReasonLine: String(input.item?.reason || "").trim()
+      || `Direct match for ${orDash(String(ctx.plate || ""))} · ${orNoneYet(String(ctx.trim || ctx.vin || ctx.chassis || "this configuration"))}.`,
   };
 }
 

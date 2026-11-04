@@ -1,4 +1,5 @@
 /** Ported from Stitch — do not simplify layout (audit §0.4). */
+import { useMemo, useState } from 'react';
 import type { DriverReportRow } from '../../../services/driverInventoryApi';
 import { Dk4ReportsList } from '../Dk4ReportsList';
 
@@ -18,7 +19,25 @@ export function Dk4MyReports({
   reportsLoading?: boolean;
   onOpenReport?: (report: DriverReportRow) => void;
 }) {
+  const [reportFilter, setReportFilter] = useState<'all' | 'open' | 'resolved'>('all');
   const { total, open, resolved } = reportCounts(reports);
+
+  const visibleReports = useMemo(() => {
+    if (reportFilter === 'open') {
+      return reports.filter((r) => r.status !== 'fixed');
+    }
+    if (reportFilter === 'resolved') {
+      return reports.filter((r) => r.status === 'fixed');
+    }
+    return reports;
+  }, [reports, reportFilter]);
+
+  const tabClass = (key: typeof reportFilter) => {
+    const active = reportFilter === key;
+    return active
+      ? 'filter-tab py-2.5 px-space-xs rounded-lg font-label-button text-[14px] text-center transition-all bg-surface-container-lowest text-on-surface shadow-sm font-semibold'
+      : 'filter-tab py-2.5 px-space-xs rounded-lg font-label-button text-[14px] text-center text-on-surface-variant transition-all hover:text-on-surface font-semibold';
+  };
 
   return (
     <div className="driver-car-kit-stitch inventory-stitch-root">
@@ -45,8 +64,8 @@ export function Dk4MyReports({
               <button
                 type="button"
                 onClick={() => setReportFilter('all')}
-                aria-selected="true"
-                className="filter-tab py-2.5 px-space-xs rounded-lg font-label-button text-[14px] text-center transition-all bg-surface-container-lowest text-on-surface shadow-sm font-semibold"
+                aria-selected={reportFilter === 'all'}
+                className={tabClass('all')}
                 role="tab"
               >
                 All{' '}
@@ -55,8 +74,8 @@ export function Dk4MyReports({
               <button
                 type="button"
                 onClick={() => setReportFilter('open')}
-                aria-selected="false"
-                className="filter-tab py-2.5 px-space-xs rounded-lg font-label-button text-[14px] text-center text-on-surface-variant transition-all hover:text-on-surface font-semibold"
+                aria-selected={reportFilter === 'open'}
+                className={tabClass('open')}
                 role="tab"
               >
                 Open <span className="text-[12px] opacity-75 font-normal ml-0.5">({open})</span>
@@ -64,8 +83,8 @@ export function Dk4MyReports({
               <button
                 type="button"
                 onClick={() => setReportFilter('resolved')}
-                aria-selected="false"
-                className="filter-tab py-2.5 px-space-xs rounded-lg font-label-button text-[14px] text-center text-on-surface-variant transition-all hover:text-on-surface font-semibold"
+                aria-selected={reportFilter === 'resolved'}
+                className={tabClass('resolved')}
                 role="tab"
               >
                 Resolved{' '}
@@ -74,7 +93,7 @@ export function Dk4MyReports({
             </div>
           </div>
 
-          <Dk4ReportsList reports={reports} loading={reportsLoading} hideSummary onOpenReport={onOpenReport} />
+          <Dk4ReportsList reports={visibleReports} loading={reportsLoading} hideSummary onOpenReport={onOpenReport} />
         </div>
       </div>
     </div>

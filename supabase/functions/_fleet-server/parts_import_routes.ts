@@ -11,6 +11,7 @@ function specialTemplateLabel(kind: string) {
   if (kind === "vehicle_oe") return "Vehicle OE numbers";
   if (kind === "part_cross_ref") return "Part cross-references";
   if (kind === "platform_link") return "Shared components";
+  if (kind === "car_specs") return "Car specs";
   return kind;
 }
 
@@ -18,6 +19,7 @@ function specialTemplateIcon(kind: string) {
   if (kind === "vehicle_oe") return "pin";
   if (kind === "part_cross_ref") return "hub";
   if (kind === "platform_link") return "share";
+  if (kind === "car_specs") return "straighten";
   return "upload_file";
 }
 
@@ -25,6 +27,7 @@ function specialTemplateSort(kind: string) {
   if (kind === "vehicle_oe") return 1;
   if (kind === "part_cross_ref") return 2;
   if (kind === "platform_link") return 3;
+  if (kind === "car_specs") return 4;
   return 99;
 }
 
@@ -72,7 +75,7 @@ async function runImportCheck(supabase: SupabaseClient, batchId: string, who: { 
   }
   const hash = await sha256Hex(bytes);
   const text = new TextDecoder().decode(bytes);
-  const parsed = parsePartsImportCsv(text);
+  const parsed = parsePartsImportCsv(text, String(batch.import_kind ?? "area"));
   if (parsed.headerErrors.length) {
     const msg = parsed.headerErrors.map((e) => e.message).join("; ");
     await supabase.from("part_import_batch").update({ status: "failed", failure_message: msg }).eq("id", batchId);
@@ -243,6 +246,12 @@ export function registerPartsImportRoutes(route: RouteApp, supabase: SupabaseCli
 
   route.get("/make-server-37f42386/admin/parts-import/vehicles.csv", ...guard, async (c: Context) => {
     try {
+      const { data: specKeyRows, error: specKeyErr } = await supabase
+        .from("spec_key")
+        .select("key")
+        .order("key");
+      if (specKeyErr) throw specKeyErr;
+      const specKeys = (specKeyRows ?? []).map((row) => row.key).join(",");
       const { data, error } = await supabase
         .from("vehicle_catalog")
         .select("id, make, model, chassis_code, engine_code, production_start_year, production_end_year, version_name")
@@ -250,7 +259,7 @@ export function registerPartsImportRoutes(route: RouteApp, supabase: SupabaseCli
         .order("model")
         .limit(5000);
       if (error) throw error;
-      const header = "id,make,model,chassis,engine,year_from,year_to,version_name";
+      const header = "id,make,model,chassis,engine,year_from,year_to,version_name,spec_keys_reference";
       const rows = (data ?? []).map((v) =>
         [
           v.id,
@@ -261,10 +270,11 @@ export function registerPartsImportRoutes(route: RouteApp, supabase: SupabaseCli
           v.production_start_year ?? "",
           v.production_end_year ?? "",
           v.version_name ?? "",
+          "",
         ].join(",")
       );
       c.header("Content-Type", "text/csv; charset=utf-8");
-      return c.body([header, ...rows].join("\n"));
+      return c.body([`# Valid spec_key values for car_specs import: ${specKeys}`, header, ...rows].join("\n"));
     } catch (e) {
       return fail(c, e);
     }

@@ -217,5 +217,80 @@ Deno.test("Roomy both axles returns six brake rows", async () => {
   const ids = JSON.stringify(body.sections);
   assertEquals(ids.includes("04465-F0"), true);
   assertEquals(ids.includes("04495-R0"), true);
-  assertEquals((body.sections || []).flatMap((s) => s.items || []).length, 6);
+  const sectionItems = ((body.sections || []) as Array<{ items?: unknown[] }>).flatMap((s) => s.items || []);
+  assertEquals(sectionItems.length, 6);
+});
+
+function catalogClientWithTolerance(
+  variants: Array<Record<string, unknown>>,
+  toleranceMm: number | null,
+) {
+  return {
+    from(table: string) {
+      if (table === "vehicle_catalog") return chain(variants);
+      if (table === "universal_part") {
+        const row = toleranceMm != null ? { tolerance_mm: toleranceMm } : null;
+        return {
+          select: () => ({
+            eq: () => ({
+              not: () => ({
+                order: () => ({
+                  limit: () => ({
+                    maybeSingle: () => Promise.resolve({ data: row, error: null }),
+                  }),
+                }),
+              }),
+            }),
+          }),
+        };
+      }
+      return chain([]);
+    },
+  };
+}
+
+Deno.test("findParts returns tolerance_mm and interchange group count", async () => {
+  const componentId = "11111111-1111-4111-8111-111111111101";
+  const client = catalogClientWithTolerance([car("m900")], 0.05);
+  const body = await findParts(client as never, {
+    variantId: "m900",
+    componentId,
+    orgId: null,
+  }, async () => ({
+    mode: "tiered" as const,
+    items: [
+      {
+        part: {
+          id: "p1",
+          name: "Front brake pad set",
+          manufacturer: "Toyota",
+          oem_part_number: "04465-B1190",
+          catalog_decision: "confirmed",
+          interchange_group_id: "g1",
+        },
+        tier: 1,
+        groupId: "g1",
+        position: "front",
+        side: "both",
+      },
+      {
+        part: {
+          id: "p2",
+          name: "Front brake pad kit",
+          manufacturer: "Toyota",
+          oem_part_number: "04465-B1191",
+          catalog_decision: "confirmed",
+          interchange_group_id: "g2",
+        },
+        tier: 1,
+        groupId: "g2",
+        position: "front",
+        side: "both",
+      },
+    ],
+    universal: [],
+  }));
+  assertEquals(body.universalToleranceMm, 0.05);
+  assertEquals(body.universal_part?.tolerance_mm, 0.05);
+  assertEquals(body.databaseNodeGroups, 2);
 });

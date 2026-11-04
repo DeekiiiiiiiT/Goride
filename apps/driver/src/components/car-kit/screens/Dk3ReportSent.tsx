@@ -157,7 +157,7 @@ export function Dk3ReportSent({
       <span className="material-symbols-outlined text-[26px]">tire_repair</span>
       </div>
       <div className="flex flex-col min-w-0 flex-1">
-      <h3 className="text-base font-bold text-slate-900 truncate">Tyre pump</h3>
+      <h3 className="text-base font-bold text-slate-900 truncate">{itemTitle}</h3>
       <div className="flex items-center gap-1.5 mt-0.5">
       <span className="inline-block w-2 h-2 rounded-full bg-red-500"></span>
       <span className="text-xs font-semibold text-red-600">Missing</span>

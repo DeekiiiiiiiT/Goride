@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import type { Fp5Actions } from "./Fp5Screen";
+import type { Fp12Actions } from "./Fp5Screen";
 import type { Fp12ViewModel } from "../findPartsViewModels";
 
 const STITCH_OEM_TIER_PREFIX = "Made for your car (OEM)";
@@ -24,7 +24,7 @@ function groupRowsByTier(rows: Fp12ViewModel["rows"]) {
   return [...map.entries()];
 }
 
-export function Fp12Screen({ actions, data, partName }: { actions: Fp5Actions; data: Fp12ViewModel; partName?: string }) {
+export function Fp12Screen({ actions, data, partName }: { actions: Fp12Actions; data: Fp12ViewModel; partName?: string }) {
   const titlePart = partName || data.componentTitle || "Part";
   const tiers = useMemo(() => groupRowsByTier(data.rows), [data.rows]);
   const best = data.rows.find((row) => row.isBest) || data.rows[0];

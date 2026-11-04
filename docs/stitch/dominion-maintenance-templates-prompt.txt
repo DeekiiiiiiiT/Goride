@@ -1,0 +1,217 @@
+ROAM DOMINION — MAINTENANCE TEMPLATES (SERVICE SCHEDULES) FULL DESIGN PROMPT (GOOGLE STITCH)
+
+
+
+
+Roam Dominion - Maintenance templates (Desktop Admin, for the owner and catalog staff):
+
+Design high-fidelity desktop screens for the Maintenance templates section of the Roam Dominion admin console. Dominion is the master reference database. Here the owner decides how often each part of a car needs service: oil every 5,000 km or 3 months, brake fluid every 40,000 km or 24 months, and so on. The Roam Fleet app reads these rules to build every customer car's due list and alerts. Today the section has 5 service packages (Inspection, Basic, Intermediate, Major, Long-Term) and the bug is that a part takes the interval of the shortest package it sits in, so brake fluid inside "Basic Service" was treated as a 5,000 km job. The new design separates two ideas clearly: a PART SCHEDULE (one part, how often, for which cars, and where that number came from) and a SERVICE PACKAGE (which parts are done together at one garage visit — it never sets how often). A part schedule can be for everyone (all cars), for one engine, for one platform (chassis code, e.g. M900A), for a whole platform family (e.g. the M900 family: Toyota Roomy, Daihatsu Thor, Subaru Justy), or for one exact car. The most specific one wins. Every schedule says where its number came from — the car maker's manual, the part maker, or "Roam policy" (the owner's own rule) — and every change is kept in history. Before any change that would move due dates on real customer cars, the screen says how many Roam Fleet cars will change and asks to confirm. Dominion never shows customer names, fleet names or plates: only counts.
+
+The feel: calm, exact, uncluttered — a well-kept service manual, not a spreadsheet. One question per screen, one primary action, plain words first with the trade term small and muted beside it (e.g. "Every 5,000 km or 3 months · whichever first", "Platform · chassis code").
+
+BRAND IDENTITY:
+- Match the existing Dominion console exactly:
+  - dark navy left sidebar with "Dominion · Roam Admin Console"; groups MASTER DATA (Overview, Vehicles active, Places and Maps, Fuel, Tolls, Tax and Vendors), ENGINES (Fuel Brain, Toll Brain, Matching Brain), DISTRIBUTION (Apps, Data API, Change requests), PLATFORM (Staff and roles, Activity log, Platform Ops, Global settings), BACK OFFICE (GCT registrations, Ledger, Remittance); bottom status "KGN-DC-01 · JMD READY"
+  - top bar: search "Search entities, engines, routes…" with a ⌘K chip, moon icon, user "DT · Deeki T · Owner", sign-out icon
+  - breadcrumb in mono caps "DOMINION › MASTER DATA › VEHICLES › MAINTENANCE TEMPLATES"
+  - page title "Maintenance templates", subtitle "How often each part is serviced, for which cars, and why."
+- LIGHT MODE (default):
+  - Primary: #0153dc; primary container: #dbe1ff
+  - Success: #006e31; warning: #8a5a00; error: #a83836
+  - Outline: #797a84; hairline dividers #e6e7ee
+  - Background: #faf8fe; cards white, 16px radius, 1px hairline border, no heavy shadows
+  - Text: #30323b; muted text: #5d5f68
+- DARK MODE:
+  - Background: #0b1220; cards #111a2e; hairlines #1e293b
+  - Text: #e2e8f0; muted #94a3b8
+  - Primary: #5b8def
+  - Success: #4ade80; warning: #fbbf24; error: #f87171
+  - Outline: #94a3b8
+- Source chips (every schedule shows one, always a word plus an icon, never colour alone):
+  - "Car maker" — soft green fill, icon "verified" — from the car maker's manual or catalogue
+  - "Part maker" — soft green outline, icon "inventory_2" — from the part maker's own catalogue
+  - "Roam policy" — soft blue fill (primary container), icon "policy" — the owner's own rule, no outside source
+- Status chips:
+  - "Active" — green dot
+  - "Needs checking" — amber outline, clock icon
+  - "Draft" — grey outline, pencil icon
+  - "Retired" — grey fill, archive icon, text struck through only in lists
+- Confidence label (small muted text next to the source chip): "Confirmed", "Likely", "Uncertain"
+- "Who it covers" chips (scope), most specific first, each with an icon:
+  - "One car" (icon "directions_car")
+  - "Platform" (icon "view_in_ar") with the chassis code in mono, e.g. M900A
+  - "Platform family" (icon "account_tree"), e.g. M900 family
+  - "Engine" (icon "settings_suggest") with the engine code in mono, e.g. 1KR-FE
+  - "Everyone" (icon "public")
+- Typography: Inter. Distances, months, years, chassis codes, engine codes and counts use a mono font with tabular numerals. Distances are always km, written "5,000 km".
+- Icons: Material Symbols Outlined, 20px. One icon per part type (oil drop for oil, filter for filters, tire for tyres, brake for brakes, wiper for wipers, bolt for spark plugs, thermometer for coolant, fluid for transmission).
+- No customer names, fleet names or plates anywhere; Roam Fleet cars appear only as counts ("2 Roam Fleet cars"). No prices, suppliers or stock. No percentages for confidence. No gradients, glass or 3D. Never more than one primary button per screen.
+- Sample data (real, from the live database):
+  - The 5 service packages: Inspection (every 5,000 km or 3 months) · Basic Service (5,000 km / 3 months) · Intermediate Service (10,000 km / 6 months) · Major Service (40,000 km / 24 months) · Long-Term Service (100,000 km / 60 months)
+  - The 16 part schedules for "Everyone", all "Roam policy" and "Uncertain" at launch:
+    Engine oil 5,000 km / 3 mo · Lights check 5,000 km / 3 mo · Air filter 10,000 km / 6 mo · Cabin A/C filter 10,000 km / 6 mo · Fluids (washer/coolant top-up) 10,000 km / 6 mo · Rotate tyres 10,000 km / 6 mo · Tyre pressure check 10,000 km / 6 mo · Brakes check 10,000 km / 6 mo · Wipers 10,000 km / 6 mo · Brake fluid 40,000 km / 24 mo · Tyre change 40,000 km / 36 mo · Drive belt 40,000 km / 24 mo · Suspension check 40,000 km / 24 mo · Transmission service 40,000 km / 24 mo · Spark plugs 100,000 km / 60 mo · Coolant flush 100,000 km / 60 mo
+  - Example cars: Toyota Roomy M900A 2016– (engine 1KR-FE, platform M900A, family M900), Honda Fit GP5 2013– (engine LEB), Daihatsu Thor M900S, Subaru Justy M900F
+  - Example of a more specific schedule (illustration only, label it "Example"): "Engine oil · Platform M900A · every 10,000 km or 6 months · severe duty 5,000 km or 6 months · Car maker · Toyota owner's manual"
+  - Roam Fleet counts: "2 Roam Fleet cars" use these schedules today
+
+SCREEN 1: MAINTENANCE TEMPLATES — PART SCHEDULES TAB (HOME)
+- Header: breadcrumb, title, subtitle; right side one primary button "+ Add schedule" and a secondary "Preview a car" (eye icon)
+- Small banner (info, dismissible) the first time: "Part schedules decide how often. Service packages only group parts for one garage visit." with link "How this works"
+- Tabs under the title: "Part schedules" (selected, underlined), "Service packages", "Part types", "Review list" with a small amber count badge (e.g. 1), "History"
+- Four summary cards in a row:
+  - "Part schedules" 16 — "16 for everyone · 0 specific"
+  - "Where numbers come from" — three mini bars with counts: Car maker 0 · Part maker 0 · Roam policy 16
+  - "Roam Fleet cars using them" 2 — "updated today"
+  - "Needs your attention" 1 — "1 to review" (links to Review list)
+- Filter row: search "Search a part…", chips "All sources / Car maker / Part maker / Roam policy", chips "All status / Active / Needs checking / Draft / Retired", "Who it covers" dropdown
+- Main table, one row per part type (16 rows, grouped by area: Engine, Filters, Brakes, Tyres, Fluids, Electrical & lights, Suspension & steering, Transmission):
+  - part icon + plain name + small muted trade term (e.g. "Brake fluid · DOT fluid flush")
+  - "Everyone" schedule: "Every 40,000 km or 24 months" in mono, with "whichever first" muted
+  - "More specific" count: e.g. "0" or "2 schedules" with tiny scope chips (Engine 1KR-FE, Platform M900A)
+  - Source chip + confidence label
+  - Status chip
+  - "In packages": small grey pills, e.g. "Basic · Major"
+  - row chevron opens Screen 3 for that part
+- Empty "More specific" cells show a subtle "+ Add for a car, platform or engine" link on hover
+- Footer note muted: "Distances are kilometres. Due is whichever comes first: distance or time."
+
+SCREEN 2: MAINTENANCE TEMPLATES — SERVICE PACKAGES TAB
+- Same header and tabs, "Service packages" selected; primary button "+ New package"
+- Explanation line: "A package is one garage visit. It lists parts; each part keeps its own schedule."
+- Five package cards in a vertical list (Inspection, Basic Service, Intermediate Service, Major Service, Long-Term Service):
+  - name, visit rhythm in mono ("Every 5,000 km or 3 months"), status chip
+  - row of part pills, each pill shows the part name and its OWN schedule underneath in small mono, e.g. Basic Service → "Engine oil 5,000 km", "Brake fluid 40,000 km", "Coolant flush 100,000 km", "Rotate tyres 10,000 km", "Tyre pressure 10,000 km", "Fluids 10,000 km"
+  - pills that are required show a small "Required" tag
+  - a muted helper line under Basic Service: "Brake fluid and coolant flush are checked at this visit but only replaced when their own schedule says so."
+  - card actions: "Edit parts" (opens Screen 6), overflow menu: "Rename", "Retire"
+
+SCREEN 3: PART SCHEDULE DETAIL (ONE PART, ALL ITS SCHEDULES)
+- Opens from a row on Screen 1; full page with back link "‹ Part schedules"
+- Title: part icon + "Brake fluid", trade term muted "DOT fluid flush"; right side primary "+ Add schedule for this part"
+- "Who gets what" ladder (vertical, most specific at top), five steps with connector line:
+  1. One car — "No schedule yet" + link "Add"
+  2. Platform — list or "No schedule yet"
+  3. Platform family — list or "No schedule yet"
+  4. Engine — list or "No schedule yet"
+  5. Everyone — card: "Every 40,000 km or 24 months · Roam policy · Uncertain · Active", buttons "Edit", overflow "Retire"
+  - side caption: "A car uses the highest step that has an active schedule for it."
+- Second frame of the same screen (variant): Engine oil with two schedules: "Platform M900A — every 10,000 km or 6 months, severe duty 5,000 km or 6 months · Car maker · Confirmed" (label "Example") and "Everyone — 5,000 km / 3 months · Roam policy"; a muted note on the Everyone card: "Overridden for M900A cars"
+- Right column card "Used by": "2 Roam Fleet cars", "in packages: Basic · Major", "Last changed 4 Nov 2026 by Deeki T" with link "History"
+
+SCREEN 4: ADD / EDIT SCHEDULE (RIGHT DRAWER, 560px)
+- Title "Add schedule" (or "Edit schedule · Brake fluid")
+- Section 1 "Which part" — part picker with icons (locked when opened from a part)
+- Section 2 "Which cars" — segmented control: "Everyone" · "Engine" · "Platform family" · "Platform" · "One car"
+  - Engine: searchable engine code field (mono), helper "1KR-FE · 22 car versions"
+  - Platform / family: chassis code search with the matching cars listed under it (e.g. M900 family → Toyota Roomy M900A, Toyota Tank M900A, Daihatsu Thor M900S, Subaru Justy M900F)
+  - One car: car search "Make, model, chassis…" with result rows (Toyota Roomy · M900A · 2016– · 1KR-FE)
+  - Optional "Only these years" from–to fields (mono), helper "Leave empty for all years"
+  - Vehicle types chips: "Car" (selected), "Motorcycle", "Truck"; helper "None selected means all types"
+- Section 3 "How often" — two fields side by side: "Every [ 40,000 ] km" and "or every [ 24 ] months", with "whichever comes first" muted; optional "up to [ 45,000 ] km" (grace) collapsed under "More"
+  - toggle row "Different schedule for hard use (taxi, delivery, heavy traffic)" → reveals the same two fields labelled "Severe duty"
+- Section 4 "Where did this number come from" — three radio cards: "Car maker's manual or catalogue", "Part maker's catalogue", "Roam policy (my own rule)"; for the first two a required "Link to the page" field; confidence select "Confirmed / Likely / Uncertain"
+- Live summary card at the bottom (plain sentence): "Brake fluid for everyone: every 40,000 km or 24 months, whichever comes first. Source: Roam policy."
+- Footer: secondary "Save as draft", primary "Make active", tertiary text "Cancel"
+- If the schedule already exists for the same cars: amber inline box "There's already an active schedule for these cars (every 40,000 km). Saving opens a review so you can pick one." — the primary stays enabled
+
+SCREEN 5: BEFORE SAVING — WHAT CHANGES (CONFIRM DIALOG)
+- Opens on "Make active", "Retire" or "Reactivate" whenever real cars would move
+- Title "This changes due dates on 2 Roam Fleet cars"
+- Small table (counts only, no plates): "Brake fluid · due date moves" 1 car · "Brake fluid · first due date added" 1 car · "Cars that keep their own custom schedule" 0
+- Before → after example line in mono: "was: no due date  →  now: due at 40,000 km or Aug 2028"
+- Note: "Their old reminders for this part are replaced by new ones tonight."
+- Buttons: "Cancel", primary "Save and update cars"
+- Variant for a draft (preview only): title "If you make this active: 2 Roam Fleet cars change", single button "Close"
+- Variant for a support user: primary reads "Send to owner for approval"
+
+SCREEN 6: EDIT SERVICE PACKAGE (DRAWER)
+- Title "Edit package · Basic Service"; visit rhythm fields "Every [5,000] km or [3] months"
+- Parts list with checkbox, part name, its own schedule read-only in mono, and a "Required at this visit" switch
+- Add part search at the top
+- Clear note: "Packages don't change how often a part is due. To change that, edit the part's schedule." with link
+- Footer: "Cancel", primary "Save package"
+
+SCREEN 7: PART TYPES TAB
+- Same tabs, "Part types" selected; table of the 49 part types: icon, plain name, trade term, area, "Has a schedule" (Yes/No), "On Roam Fleet cars" count, status
+- Row overflow: "Edit", "Retire" (never "Delete")
+- Retire confirm dialog: "Retire Spark plugs? It stays on the 2 Roam Fleet cars that already have it, marked retired, and won't be added to new cars or new schedules." with a collapsible "What uses it" list (counts per area: schedules 1, packages 1, inspections 0, parts in the catalogue 0); buttons "Cancel", primary "Retire"
+- A "Delete" option appears only for a part type with nothing using it, with the copy "Nothing uses this part type. Delete it permanently?"
+
+SCREEN 8: REVIEW LIST TAB
+- Tabs inside: "Two schedules for the same cars" (count 1), "Waiting for owner approval" (count 0)
+- Conflict card: part "Engine oil", cars "Platform M900A", left column "Schedule A · every 10,000 km or 6 months · Car maker · added 1 Nov", right column "Schedule B · every 7,500 km or 6 months · Roam policy · added 4 Nov"; line "Affects 0 Roam Fleet cars"; two buttons "Keep A" and "Keep B" (the other one is retired), link "Open both"
+- Approval card (support's request): who asked, what change (before → after), reason, source link, counts of cars that would change; buttons "Reject" (asks for a reason) and primary "Approve"
+
+SCREEN 9: PREVIEW A CAR — "WHAT WILL THIS CAR GET?"
+- Opens from "Preview a car"; car search at top; toggle "Hard use (severe duty)"
+- Selected car header: "Toyota Roomy · M900A · 2016– · 1KR-FE · platform family M900"
+- Table: part, interval used (mono), "Comes from" scope chip (Everyone / Engine 1KR-FE / Platform M900A…), source chip, status; rows where a more specific schedule wins show a muted line "instead of everyone's 5,000 km"
+- Parts marked "not on this car" appear greyed at the bottom with the reason, e.g. "Timing belt — not on this car · chain-driven engine"
+- No primary button (read-only); secondary "Copy as text"
+
+SCREEN 10: HISTORY TAB
+- Timeline list, newest first: avatar, name, time, plain sentence ("Deeki T changed Brake fluid for everyone from 5,000 km / 3 mo to 40,000 km / 24 mo"), small "2 cars updated" tag, expand to see before/after fields in mono
+- Filters: part, person, date range, type of change (added, edited, retired, package changed, part type retired)
+
+SCREEN 11: HEALTH CARD (ON VEHICLES → DATA QUALITY)
+- One card titled "Service schedules" with rows, each a number and a link:
+  - "Cars in use with no specific schedule" 2
+  - "Schedules by source" Car maker 0 · Part maker 0 · Roam policy 16
+  - "Roam Fleet parts with no due date" 0
+  - "Waiting for a first odometer reading" 1
+  - "Schedules waiting for review" 1
+  - "More specific schedules overriding everyone's" 0
+  - "Retired part types still on cars" 0
+- "Last checked 06:00 today" muted
+
+SCREEN 12: STATES
+- Empty part schedules (fresh install): illustration-free card "No part schedules yet" + "+ Add schedule"
+- Saving with progress on the button
+- Saved toast "Saved · 2 Roam Fleet cars updated"
+- Error inline "Couldn't save. Nothing was changed." with "Try again"
+- Analyst view (look-only): all buttons hidden, banner "You can look but not change schedules"
+- Missing source link for "Car maker": field error "Add the link to the page you used"
+- Retired schedule row in Screen 3 with "Reactivate" link
+
+SCREEN 13: PHONE (390px) — READ-ONLY PART SCHEDULE
+- Stacked: part name, "Who gets what" ladder as collapsible list, source chip, used-by count; editing hidden with note "Edit on a larger screen"
+
+ADDITIONAL UI COMPONENTS:
+- Source chip, status chip, confidence label, scope chip (5 kinds)
+- "Every X km or Y months · whichever first" interval display in mono
+- Ladder component (5 steps, connector line, active step highlighted)
+- Before → after change line in mono
+- Count-only impact table (never plates)
+- Package card with part pills that carry their own schedule
+- Conflict comparison card (A vs B)
+- Plain-sentence summary card
+- Sticky drawer footer (Cancel · secondary · one primary)
+
+INTERACTIONS:
+- "+ Add schedule" opens Screen 4 empty; a row on Screen 1 opens Screen 3; "Add" on a ladder step opens Screen 4 with that "Which cars" choice preset
+- Changing "Which cars" shows how many catalogue cars it covers under the field as you type
+- "Make active", "Retire" and "Reactivate" open Screen 5 first when any Roam Fleet car would change; when none would, they save straight away with a toast
+- "Save as draft" never changes any car; drafts show the "If you make this active" preview
+- Saving a schedule for cars that already have an active one saves it as "Needs checking" and adds it to the Review list with a toast "Saved for review — pick one in Review list"
+- "Keep A" / "Keep B" asks "Retire the other schedule? Cars using it move to the one you keep." then shows Screen 5 if cars change
+- Package editor changes never open Screen 5 (they don't move due dates)
+- Support users see "Send to owner for approval" instead of saving live changes; the owner sees it in Review list
+- Hover: rows highlight in the primary container colour; focus rings 2px primary; every field has a visible label
+- Esc closes drawers; unsaved drawer asks "Leave without saving?" with "Keep editing" / "Leave"
+
+Spec screens / Area
+| Screen | Area |
+|---|---|
+| 1 | Part schedules tab (home): summary cards, filters, 16 parts table |
+| 2 | Service packages tab: 5 visit cards with parts carrying their own schedule |
+| 3 | One part: "who gets what" ladder, used-by card (two frames: Brake fluid, Engine oil example) |
+| 4 | Add / edit schedule drawer: which part, which cars, how often, severe duty, source |
+| 5 | Before saving: cars that change (live, draft preview, support variants) |
+| 6 | Edit service package drawer |
+| 7 | Part types tab with Retire (and dependents) |
+| 8 | Review list: two schedules for the same cars, owner approvals |
+| 9 | Preview a car: what it will get and why |
+| 10 | History timeline |
+| 11 | Service schedules health card on Data quality |
+| 12 | States |
+| 13 | Phone 390px, read-only part schedule |

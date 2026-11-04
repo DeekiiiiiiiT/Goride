@@ -15,6 +15,9 @@ on:
       - 'supabase/tests/price_engine_checks.sql'
       - 'supabase/tests/parts_import_checks.sql'
       - 'supabase/tests/parts_auto_match_checks.sql'
+      - 'supabase/tests/add_a_part_self_serve_checks.sql'
+      - 'supabase/tests/add_a_part_car_specs_smoke.sql'
+      - 'supabase/tests/add_a_part_done_checks.sql'
       - '.github/workflows/parts-sql-checks.yml'
   push:
     branches: [main]
@@ -27,6 +30,9 @@ on:
       - 'supabase/tests/price_engine_checks.sql'
       - 'supabase/tests/parts_import_checks.sql'
       - 'supabase/tests/parts_auto_match_checks.sql'
+      - 'supabase/tests/add_a_part_self_serve_checks.sql'
+      - 'supabase/tests/add_a_part_car_specs_smoke.sql'
+      - 'supabase/tests/add_a_part_done_checks.sql'
       - '.github/workflows/parts-sql-checks.yml'
   workflow_dispatch:
 
@@ -86,3 +92,9 @@ jobs:
           docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/parts_import_checks.sql
           docker cp supabase/tests/parts_auto_match_checks.sql "$db_container":/tmp/parts_auto_match_checks.sql
           docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/parts_auto_match_checks.sql
+          docker cp supabase/tests/add_a_part_self_serve_checks.sql "$db_container":/tmp/add_a_part_self_serve_checks.sql
+          docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/add_a_part_self_serve_checks.sql
+          docker cp supabase/tests/add_a_part_car_specs_smoke.sql "$db_container":/tmp/add_a_part_car_specs_smoke.sql
+          docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/add_a_part_car_specs_smoke.sql
+          docker cp supabase/tests/add_a_part_done_checks.sql "$db_container":/tmp/add_a_part_done_checks.sql
+          docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/add_a_part_done_checks.sql

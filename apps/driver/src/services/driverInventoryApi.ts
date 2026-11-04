@@ -25,6 +25,16 @@ export type DriverCarKitItem = {
   name: string;
   locationHint?: string;
   status?: 'present' | 'missing' | 'linked' | 'reported';
+  reportedAt?: string | null;
+  statusHint?: string | null;
+  reportId?: string | null;
+};
+
+export type DriverCarKitExtra = {
+  id?: string;
+  name: string;
+  description?: string | null;
+  badge?: string | null;
 };
 
 export type DriverCarKitPayload = {
@@ -33,11 +43,18 @@ export type DriverCarKitPayload = {
   vehicleId?: string | null;
   vehicleLabel?: string | null;
   vehicleMakeModel?: string | null;
+  vehicleColor?: string | null;
+  vehicleFleetClass?: string | null;
+  vinLast4?: string | null;
   odometerKm?: number | null;
   fuelLevelPct?: number | null;
   items?: DriverCarKitItem[];
+  extras?: DriverCarKitExtra[];
   openReportCount?: number;
   lastCheckInAt?: string | null;
+  lastSyncedAt?: string | null;
+  kitVersionLabel?: string | null;
+  fleetSupportPhone?: string | null;
   state?: 'ready' | 'no_vehicle' | 'no_kit';
 };
 
@@ -68,6 +85,7 @@ export type DriverReportPayload = {
   issueType?: string;
   notes?: string;
   photoUrls?: string[];
+  vehicleId?: string | null;
 };
 
 export type DriverKitCheckPayload = {

@@ -1,6 +1,7 @@
 /** Ported from Stitch — do not simplify layout (audit §0.4). */
-import { useState } from 'react';
 import { strField } from '../inventoryData';
+import { GapLoadState, GapSubmitError } from '../gap/GapLoadState';
+import { GapModalShell } from '../gap/GapModalShell';
 import { useIn4ReceiveForm } from './hooks/useIn4ReceiveForm';
 import type { ReceiveLine } from './hooks/useIn4ReceiveForm';
 
@@ -16,7 +17,6 @@ function lineItemSerialTracked(
 export function In4ReceiveDialog() {
   const form = useIn4ReceiveForm();
   const { shell, live } = form;
-  const [toastDismissed, setToastDismissed] = useState(false);
 
   const onItemSelect = (line: ReceiveLine, itemId: string) => {
     const item = form.items.find((i) => String(i.id ?? '') === itemId);
@@ -28,93 +28,12 @@ export function In4ReceiveDialog() {
     });
   };
   return (
-    <div className="fleet-inventory-stitch inventory-stitch-root">
-      <div className="inventory-stitch-main"><div className="flex flex-col w-full relative">
+    <GapModalShell onClose={() => shell.closeModal()} ariaLabel="Receive stock">
+      <GapSubmitError message={form.submit.error} />
+      <GapLoadState loading={form.load.loading} error={form.load.error} onRetry={form.load.reload}>
+      <div className="fleet-inventory-stitch -mx-space-md -mt-space-md flex flex-col md:-mx-space-lg md:-mt-space-lg">
 
-      <div className="w-full px-margin-desktop py-space-xl flex flex-col gap-space-xl opacity-40 pointer-events-none select-none filter blur-[1px]">
-
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-space-md">
-      <div>
-      <span className="font-caption text-caption text-secondary uppercase tracking-wider font-semibold">Kingston Operations Central</span>
-      <h1 className="font-headline-xl text-headline-xl text-on-surface tracking-tight mt-0.5">Inventory & Asset Management</h1>
-      <p className="font-body-md text-body-md text-on-surface-variant mt-1">What you have, where it is, and what every car is missing.</p>
-      </div>
-      <div className="flex items-center gap-space-md">
-      <div className="flex items-center gap-space-xs bg-surface-container px-space-md py-2 rounded-lg">
-      <span className="material-symbols-outlined text-[18px] text-secondary">warehouse</span>
-      <span className="font-label-code text-label-code text-on-surface font-semibold">Main store — Kingston</span>
-      </div>
-      <button type="button" className="bg-primary text-on-primary px-space-lg py-2 rounded-lg font-headline-sm text-body-md flex items-center gap-space-xs shadow-sm" onClick={() => form.focusFirstLineItem()}>
-      <span className="material-symbols-outlined text-[18px]">move_to_inbox</span>
-      <span>Receive Stock</span>
-      </button>
-      </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-gutter-desktop">
-      <div className="bg-surface-container-lowest p-space-lg rounded-xl shadow-sm">
-      <span className="font-caption text-caption text-secondary uppercase font-semibold">Tracked SKU Count</span>
-      <div className="font-label-price text-headline-lg text-on-surface mt-1">1,482</div>
-      <div className="font-caption text-caption text-secondary mt-1">Across 4 Jamaican hubs</div>
-      </div>
-      <div className="bg-surface-container-lowest p-space-lg rounded-xl shadow-sm">
-      <span className="font-caption text-caption text-secondary uppercase font-semibold">Valuation (Landed J$)</span>
-      <div className="font-label-price text-headline-lg text-on-surface mt-1">{form.grandTotalLabel}</div>
-      <div className="font-caption text-caption text-secondary mt-1">+4.2% from prior ledger period</div>
-      </div>
-      <div className="bg-surface-container-lowest p-space-lg rounded-xl shadow-sm">
-      <span className="font-caption text-caption text-secondary uppercase font-semibold">Serialized Equipment</span>
-      <div className="font-label-price text-headline-lg text-on-surface mt-1">426 Units</div>
-      <div className="font-caption text-caption text-secondary mt-1">Dashcams, GPS nodes, speed governors</div>
-      </div>
-      <div className="bg-surface-container-lowest p-space-lg rounded-xl shadow-sm">
-      <span className="font-caption text-caption text-secondary uppercase font-semibold">Discrepancy Rate</span>
-      <div className="font-label-price text-headline-lg text-on-surface mt-1">0.02%</div>
-      <div className="font-caption text-caption text-secondary mt-1">Target threshold: {'<'}{' 0.15%'}</div>
-      </div>
-      </div>
-
-      <div className="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
-      <div className="p-space-lg bg-surface-container-low flex justify-between items-center">
-      <span className="font-headline-sm text-headline-sm text-on-surface">{live.hubName}</span>
-      <span className="font-label-code text-caption text-secondary">SYNCED 08:46 PM EST</span>
-      </div>
-      <div className="divide-y divide-surface-container">
-      <div className="grid grid-cols-6 p-space-md font-caption text-caption uppercase text-secondary">
-      <span>Item / SKU</span>
-      <span>Category</span>
-      <span>Bin Location</span>
-      <span>Current Count</span>
-      <span>Landed Value</span>
-      <span>Status</span>
-      </div>
-      <div className="grid grid-cols-6 p-space-md font-body-sm text-body-sm items-center">
-      <div className="font-body-md text-body-md font-medium text-on-surface">Phone Holder Mount <span className="block font-label-code text-caption text-secondary">ACC-PHM-01</span></div>
-      <span>Accessories</span>
-      <span className="font-label-code text-label-code">BIN-04-A</span>
-      <span className="font-label-price text-body-md font-semibold">1 unit</span>
-      <span className="font-label-price text-body-md">{form.grandTotalLabel}</span>
-      <span className="text-secondary font-body-sm">Active Stock</span>
-      </div>
-      <div className="grid grid-cols-6 p-space-md font-body-sm text-body-sm items-center">
-      <div className="font-body-md text-body-md font-medium text-on-surface">Dash camera <span className="block font-label-code text-caption text-secondary">ELC-DCM-01</span></div>
-      <span>Telematics</span>
-      <span className="font-label-code text-label-code">SEC-BIN-02</span>
-      <span className="font-label-price text-body-md font-semibold">12 units</span>
-      <span className="font-label-price text-body-md">{form.grandTotalLabel}</span>
-      <span className="text-secondary font-body-sm">Active Stock</span>
-      </div>
-      </div>
-      </div>
-      </div>
-
-      <div className="fixed inset-0 z-40 bg-black/45 backdrop-blur-[2px] transition-opacity duration-200"></div>
-
-      <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-space-md sm:p-space-lg">
-
-      <div className="bg-surface-container-lowest w-full max-w-[760px] rounded-xl shadow-2xl flex flex-col overflow-hidden my-auto transform transition-all duration-150">
-
-      <div className="px-space-xl pt-space-xl pb-space-lg bg-surface-container-lowest flex items-start justify-between">
+      <div className="px-space-xl pt-space-lg pb-space-lg flex items-start justify-between border-b border-surface-container">
       <div className="flex flex-col gap-0.5">
       <div className="flex items-center gap-space-sm">
       <div className="w-7 h-7 rounded-lg bg-primary-container text-on-primary flex items-center justify-center">
@@ -357,7 +276,7 @@ export function In4ReceiveDialog() {
       <li className="flex items-start gap-2">
       <span className="material-symbols-outlined text-[16px] text-on-surface mt-0.5">arrow_forward</span>
       <span>
-                      New asset <code className="font-label-code text-caption font-bold bg-surface-container-lowest px-1.5 py-0.5 rounded">{form.lines.find((l) => l.serial.trim())?.serial || '—'}</code> added to {live.hubShort}
+                      New asset <code className="font-label-code text-caption font-bold bg-surface-container-lowest px-1.5 py-0.5 rounded">{form.lines.find((l) => l.serial.trim())?.serial || '—'}</code> added to {form.locationLabel}
                     </span>
       </li>
       <li className="flex items-start gap-2">
@@ -370,7 +289,7 @@ export function In4ReceiveDialog() {
       </div>
       </div>
 
-      <div className="px-space-xl py-space-md bg-surface-container-low flex flex-col sm:flex-row items-center justify-between gap-space-md">
+      <div className="px-space-xl py-space-md bg-surface-container-low flex flex-col sm:flex-row items-center justify-between gap-space-md border-t border-surface-container">
 
       <div className="flex items-center gap-space-xs text-secondary">
       <span className="material-symbols-outlined text-[16px]">verified</span>
@@ -388,25 +307,7 @@ export function In4ReceiveDialog() {
       </div>
       </div>
       </div>
-      </div>
-
-      {!toastDismissed ? (
-      <aside aria-label="System notification" className="fixed bottom-6 right-8 z-50 max-w-md bg-inverse-surface text-inverse-on-surface rounded-xl shadow-2xl p-space-md flex items-center justify-between gap-space-md transform transition-all duration-300">
-      <div className="flex items-center gap-space-sm">
-      <div className="w-6 h-6 rounded-full bg-surface-tint/40 flex items-center justify-center shrink-0">
-      <span className="material-symbols-outlined text-inverse-on-surface text-[16px]">check</span>
-      </div>
-      <div className="flex flex-col">
-      <span className="font-body-sm text-body-sm font-medium">Received {form.lineCountLabel} lines into {form.locationLabel}</span>
-      <span className="font-label-code text-caption text-surface-dim">Audit ledger entry verified</span>
-      </div>
-      </div>
-      <button type="button" aria-label="Dismiss toast" className="text-surface-dim hover:text-inverse-on-surface p-1 rounded transition-colors" onClick={() => setToastDismissed(true)}>
-      <span className="material-symbols-outlined text-[16px]">close</span>
-      </button>
-      </aside>
-      ) : null}
-      </div></div>
-    </div>
+      </GapLoadState>
+    </GapModalShell>
   );
 }

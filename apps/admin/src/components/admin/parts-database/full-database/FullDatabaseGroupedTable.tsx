@@ -56,7 +56,7 @@ function IconButton({ icon, label, disabled, title, danger, onClick }: {
   onClick: () => void;
 }) {
   return (
-    <button className={`p-1 rounded hover:bg-surface-container-lowest disabled:opacity-40 ${danger ? "hover:text-error" : "hover:text-primary"}`} type="button" title={title ?? label} disabled={disabled} onClick={onClick}>
+    <button className={`p-1 rounded hover:bg-surface-container-lowest disabled:opacity-40 ${danger ? "hover:text-error" : "hover:text-primary"}`} type="button" aria-label={label} title={title ?? label} disabled={disabled} onClick={onClick}>
       <span className="material-symbols-outlined text-[17px]">{icon}</span>
     </button>
   );
@@ -218,7 +218,7 @@ function PartTable({ rows, dot, owner, ownerTitle, onView, onEdit, onDelete }: {
         </thead>
         <tbody className="divide-y divide-outline-variant/30 font-body-sm text-body-sm text-on-surface">
           {rows.length === 0 ? <tr><td className="px-space-md py-4 text-secondary" colSpan={7}>None on file for this filter.</td></tr> : rows.map((row) => (
-            <tr key={row.partId} className="h-11 hover:bg-surface-container-low">
+            <tr key={row.partId} className="h-11 hover:bg-surface-container-low cursor-pointer" onClick={() => onView(row.partId)}>
               <td className="px-space-md font-semibold">
                 <span className="inline-flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: dot }} />{row.name || "Part"}</span>
               </td>
@@ -227,7 +227,7 @@ function PartTable({ rows, dot, owner, ownerTitle, onView, onEdit, onDelete }: {
               <td className="px-space-md text-secondary">{row.assembly || "—"}</td>
               <td className="px-space-md font-mono-sm text-on-surface-variant">{row.fittedCars || "—"}{row.versionCount ? ` · ${row.versionCount} versions` : ""}</td>
               <td className="px-space-md"><StatusChip status={row.status} /></td>
-              <td className="px-space-md text-right">
+              <td className="px-space-md text-right" onClick={(e) => e.stopPropagation()}>
                 <div className="flex items-center justify-end gap-1 text-secondary">
                   <IconButton icon="visibility" label="View details" onClick={() => onView(row.partId)} />
                   <IconButton icon="edit" label="Edit" disabled={!owner} title={ownerTitle} onClick={() => onEdit(row)} />

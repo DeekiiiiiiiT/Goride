@@ -7,10 +7,10 @@ export function In14CustodyDialog() {
   const form = useIn14CustodyForm();
   const shell = useInventoryShell();
   const live = useInventoryLive(shell);
-  const asset = live.selectedAsset ?? live.assets[0] ?? null;
+  const asset = form.selectedAsset;
   const serial = asset
     ? strField(asset, 'serial_number', strField(asset, 'serial_no', '—'))
-    : firstAssetSerial(live.assets);
+    : '—';
   return (
     <div className="fleet-inventory-stitch inventory-stitch-root">
       <div className="inventory-stitch-main"><div className="flex flex-col w-full relative">
@@ -54,8 +54,8 @@ export function In14CustodyDialog() {
       <span className="material-symbols-outlined text-[18px]">videocam</span>
       </div>
       <div>
-      <div className="font-body-md text-body-md font-semibold text-on-surface">Dual-Lens Telematics Dashcam</div>
-      <div className="font-label-code text-caption text-secondary">ELC-DCM-01</div>
+      <div className="font-body-md text-body-md font-semibold text-on-surface">{form.itemName}</div>
+      <div className="font-label-code text-caption text-secondary">{form.itemSku}</div>
       </div>
       </div>
       <div className="col-span-2 font-label-code text-label-code text-on-surface">{serial}</div>
@@ -165,10 +165,10 @@ export function In14CustodyDialog() {
       </div>
       <div className="flex flex-col">
       <div className="font-body-md text-body-md font-semibold text-on-surface">
-                        Dash camera — Dual-Lens 1080p Telematics
+                        {form.itemName}
                       </div>
       <div className="flex items-center gap-space-xs font-label-code text-caption text-secondary">
-      <span>ELC-DCM-01</span>
+      <span>{form.itemSku}</span>
       <span>·</span>
       <span className="text-on-surface font-semibold">S/N: {serial}</span>
       </div>

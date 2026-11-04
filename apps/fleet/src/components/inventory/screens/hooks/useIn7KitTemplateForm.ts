@@ -3,9 +3,11 @@ import { inventoryApi } from '../../inventoryApi';
 import { asPagedItems, numField, strField } from '../../inventoryData';
 import { downloadBlob } from '../../inventoryDownload';
 import { formatJmd } from '../../inventoryFormat';
+import { buildKitTemplateLineRow } from '../../inventoryViewRows';
 import { useGapLoad } from '../../gap/useGapLoad';
 import { useInScreenBase, type Row } from './useInShared';
 import type { InventoryTabId } from '../../InventoryTabs';
+import type { KitTemplateLineRow, KitTemplateVersionRow } from '../../inventoryTypes';
 
 export type KitTemplateLine = {
   key: string;
@@ -16,6 +18,15 @@ export type KitTemplateLine = {
   blocksRoadClearance: boolean;
 };
 
+export type KitTemplateEditorLineRow = KitTemplateLineRow & {
+  key: string;
+  required: boolean;
+};
+
+/**
+ * Stitch → data (In7 Kit template)
+ * line name → KitTemplateEditorLineRow.name | sku → KitTemplateEditorLineRow.sku | qty → KitTemplateEditorLineRow.qtyLabel
+ */
 export function useIn7KitTemplateForm(templateId?: string | null) {
   const base = useInScreenBase();
   const { shell, submit } = base;
@@ -30,31 +41,18 @@ export function useIn7KitTemplateForm(templateId?: string | null) {
   const templates = load.data?.templates ?? [];
   const catalogItems = load.data?.items ?? [];
 
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string>(
-    templateId ?? strField(templates[0] ?? {}, 'id', ''),
-  );
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>(templateId ?? '');
   const [lines, setLines] = useState<KitTemplateLine[]>([]);
 
   useEffect(() => {
-    if (!templates.length) return;
-    const id = templateId ?? strField(templates[0], 'id', '');
-    setSelectedTemplateId(id);
-  }, [templateId, templates]);
+    if (templateId) setSelectedTemplateId(templateId);
+  }, [templateId]);
 
   useEffect(() => {
     const tpl = templates.find((t) => strField(t, 'id', '') === selectedTemplateId);
     const rawLines = (tpl?.lines as Row[] | undefined) ?? (tpl?.template_lines as Row[] | undefined) ?? [];
-    if (!rawLines.length && catalogItems.length) {
-      setLines([
-        {
-          key: crypto.randomUUID(),
-          itemId: strField(catalogItems[0], 'id', ''),
-          name: strField(catalogItems[0], 'name', '—'),
-          qty: '1',
-          required: true,
-          blocksRoadClearance: false,
-        },
-      ]);
+    if (!selectedTemplateId || !rawLines.length) {
+      setLines([]);
       return;
     }
     setLines(
@@ -67,7 +65,7 @@ export function useIn7KitTemplateForm(templateId?: string | null) {
         blocksRoadClearance: String(row.blocks_road_clearance ?? '') === 'true',
       })),
     );
-  }, [selectedTemplateId, templates, catalogItems]);
+  }, [selectedTemplateId, templates]);
 
   const selectTemplate = (id: string) => setSelectedTemplateId(id);
 
@@ -99,7 +97,7 @@ export function useIn7KitTemplateForm(templateId?: string | null) {
   const deleteLine = (lineKey: string) => setLines((prev) => prev.filter((l) => l.key !== lineKey));
 
   const addLine = () => {
-    const item = catalogItems[0];
+    const item = catalogItems.find((i) => strField(i, 'id', ''));
     if (!item) return;
     setLines((prev) => [
       ...prev,
@@ -149,6 +147,58 @@ export function useIn7KitTemplateForm(templateId?: string | null) {
 
   const goTab = (tab: InventoryTabId) => shell.setTab(tab);
 
+  const lineEditorRows: KitTemplateEditorLineRow[] = useMemo(
+    () =>
+      lines.map((line, index) => {
+        const cat = catalogItems.find((i) => strField(i, 'id', '') === line.itemId);
+        const baseRow = buildKitTemplateLineRow(
+          {
+            id: line.key,
+            name: line.name,
+            sku: strField(cat ?? {}, 'sku', '—'),
+            qty: line.qty,
+            category: strField(cat ?? {}, 'category', '—'),
+          },
+          index,
+        );
+        return { ...baseRow, key: line.key, required: line.required };
+      }),
+    [lines, catalogItems],
+  );
+
+  const canPublish = Boolean(selectedTemplateId) && lines.length > 0;
+  const publishDisabledReason = !selectedTemplateId
+    ? 'Select a kit template'
+    : lines.length === 0
+      ? 'Add at least one equipment line'
+      : '';
+  const addLineDisabledReason = catalogItems.length ? '' : 'Load catalog items before adding lines';
+
+  const editorAuthorLabel = strField(selectedTemplate ?? {}, 'author_name', '—');
+
+  const versionHistoryRows: KitTemplateVersionRow[] = useMemo(() => {
+    const raw = (selectedTemplate?.version_history as Record<string, unknown>[] | undefined) ?? [];
+    if (raw.length) {
+      return raw.map((v) => ({
+        version: strField(v, 'version', '—'),
+        dateLabel: strField(v, 'published_at', strField(v, 'date', '—')),
+        changeSummary: strField(v, 'summary', strField(v, 'change', '—')),
+        authorLabel: strField(v, 'author_name', '—'),
+        syncLabel: strField(v, 'sync_label', strField(v, 'status', '—')),
+      }));
+    }
+    if (!selectedTemplate) return [];
+    return [
+      {
+        version: versionLabel,
+        dateLabel: strField(selectedTemplate, 'updated_at', '—'),
+        changeSummary: strField(selectedTemplate, 'change_summary', 'Current template'),
+        authorLabel: strField(selectedTemplate, 'author_name', '—'),
+        syncLabel: strField(selectedTemplate, 'sync_status', '—'),
+      },
+    ];
+  }, [selectedTemplate, versionLabel]);
+
   return {
     ...base,
     shell,
@@ -160,6 +210,7 @@ export function useIn7KitTemplateForm(templateId?: string | null) {
     selectTemplate,
     selectTemplateByService,
     lines,
+    lineEditorRows,
     newTemplate,
     compare,
     exportSpec,
@@ -171,6 +222,11 @@ export function useIn7KitTemplateForm(templateId?: string | null) {
     applyVehicleCount,
     totalLandedVal,
     linesCount: lines.length,
+    canPublish,
+    publishDisabledReason,
+    addLineDisabledReason,
+    editorAuthorLabel,
+    versionHistoryRows,
     goTab,
     strField,
   };

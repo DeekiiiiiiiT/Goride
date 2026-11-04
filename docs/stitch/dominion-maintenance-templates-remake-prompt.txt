@@ -1,0 +1,102 @@
+ROAM DOMINION — MAINTENANCE TEMPLATES: 2 SCREENS TO REDRAW (GOOGLE STITCH)
+
+
+
+
+Roam Dominion - Maintenance templates, redraw (Desktop Admin, for the owner and catalog staff):
+
+Redraw two screens of the Maintenance templates section of the Roam Dominion admin console. The other 11 screens of this section are already designed (Part schedules home, Service packages tab, one part's "who gets what" ladder, Add/edit schedule drawer, Before-saving dialog, Review list, Preview a car, History, Service schedules health card, States, Phone) — these two must look like the same product and sit beside them. In this section a PART SCHEDULE decides how often a part is due (e.g. brake fluid every 40,000 km or 24 months); a SERVICE PACKAGE is one garage visit that only lists which parts are done together and never sets how often. A PART TYPE is the list of all 49 kinds of part (Engine oil, Brake fluid, Air filter…). Part types are never deleted while anything uses them — they are retired. Dominion never shows customer names, fleet names or plates, only counts. Draw each screen at FULL HEIGHT so every element is visible in the image; nothing may be cut off, blurred or hidden behind another layer except where a frame below says so.
+
+BRAND IDENTITY:
+- Match the existing Dominion console exactly:
+  - dark navy left sidebar with "Dominion · Roam Admin Console"; groups MASTER DATA (Overview, Vehicles — highlighted, Places and Maps, Fuel, Tolls, Tax and Vendors), ENGINES (Fuel Brain, Toll Brain, Matching Brain), DISTRIBUTION (Apps, Data API, Change requests), PLATFORM (Staff and roles, Activity log, Platform Ops, Global settings), BACK OFFICE (GCT registrations, Ledger, Remittance); bottom status "KGN-DC-01 · JMD READY". There is NO separate "Maintenance templates" item in the sidebar — it lives inside Vehicles.
+  - top bar: search "Search entities, engines, routes…" with a ⌘K chip, moon icon, user "DT · Deeki T · Owner", sign-out icon. Nothing else in the top bar (no node, server, version or sync chips).
+  - breadcrumb in mono caps "DOMINION › MASTER DATA › VEHICLES › MAINTENANCE TEMPLATES"
+  - page title "Maintenance templates", subtitle "How often each part is serviced, for which cars, and why."
+  - tabs under the title, in this order: "Part schedules" (16), "Service packages" (5), "Part types" (49), "Review list" (1, amber badge), "History"
+- LIGHT MODE (default):
+  - Primary: #0153dc; primary container: #dbe1ff
+  - Success: #006e31; warning: #8a5a00; error: #a83836
+  - Outline: #797a84; hairline dividers #e6e7ee
+  - Background: #faf8fe; cards white, 16px radius, 1px hairline border, no heavy shadows
+  - Text: #30323b; muted text: #5d5f68
+- DARK MODE:
+  - Background: #0b1220; cards #111a2e; hairlines #1e293b
+  - Text: #e2e8f0; muted #94a3b8
+  - Primary: #5b8def
+  - Success: #4ade80; warning: #fbbf24; error: #f87171
+  - Outline: #94a3b8
+- Status chips (word + icon, never colour alone): "Active" green dot · "Retired" grey fill with archive icon · "Needs checking" amber outline with clock icon
+- "Required" tag: small solid primary label. "Check only" tag: small grey outline label (shown on a part whose own schedule is longer than the visit)
+- Typography: Inter. Distances, months, counts and part codes in a mono font with tabular numerals. Distances always km, written "40,000 km".
+- Icons: Material Symbols Outlined, 20px, one per part type (oil drop, filter, tire, brake, wiper, bolt for spark plugs, thermometer for coolant, fluid for transmission).
+
+DESIGN PRINCIPLES:
+- Calm and exact, a well-kept service manual, not a spreadsheet
+- Plain words first, the trade term small and muted beside it
+- One primary button per screen or drawer
+- No percentages, no made-up IDs (no "PKG-001", "TAX-ID", "TYPE-BRK-04"), no server, node, ledger, sync or version labels, no prices, suppliers or stock, no customer names or plates
+- Use only the real data listed under each screen
+
+SCREEN 1: EDIT SERVICE PACKAGE — DRAWER (FULL HEIGHT)
+- Behind: the Service packages tab, dimmed but readable; the drawer is a right-side panel 560px wide that runs the FULL height of the window from top bar to bottom, with all its content visible
+- Drawer header: title "Edit package · Basic Service", close X
+- Section "Visit rhythm": two fields side by side "Every [ 5,000 ] km" and "or every [ 3 ] months", muted "whichever comes first"; helper "How often this garage visit is booked."
+- Info box (primary container fill, info icon): "Packages don't change how often a part is due. To change that, edit the part's schedule." with link "Open part schedules"
+- Section "Parts done at this visit": search field at the top "Add a part…" with a "+" icon
+- Parts list — exactly these 6 rows, each row: checkbox (ticked), part icon, plain part name + muted trade term, the part's OWN schedule read-only in mono on the right, then a "Required at this visit" switch:
+  1. Engine oil · Oil and filter change — "Every 5,000 km or 3 months" — Required ON
+  2. Tyre pressure check · Pressure and tread — "Every 10,000 km or 6 months" — Required ON
+  3. Rotate tyres · Axle rotation — "Every 10,000 km or 6 months" — Required ON
+  4. Fluids top-up · Washer and coolant level — "Every 10,000 km or 6 months" — Required ON
+  5. Brake fluid · DOT fluid flush — "Every 40,000 km or 24 months" + grey "Check only" tag — Required ON
+  6. Coolant flush · Radiator coolant renewal — "Every 100,000 km or 60 months" + grey "Check only" tag — Required ON
+- Under rows 5 and 6 one muted line: "Checked at this visit. Replaced only when its own schedule says so."
+- Each row has a small trash icon on hover to remove it from the package
+- Sticky footer (always visible at the bottom of the drawer): text button "Cancel", primary "Save package"; muted note on the left "Saving a package doesn't move any car's due dates."
+
+SCREEN 2: PART TYPES TAB — TABLE (NO DIALOG)
+- Full page, no dialog or overlay anywhere; "Part types" tab selected and underlined
+- Right of the tabs: primary button "+ Add part type"
+- Filter row: search "Search 49 part types…", dropdowns "Area: All", "Has a schedule: All", "Status: All"
+- Small summary line in mono: "49 part types · 16 with a schedule · 0 retired"
+- Table columns: Part type (icon + plain name + muted trade term) · Area · Has a schedule (Yes green / No grey) · On Roam Fleet cars (count, mono) · Status chip · overflow menu (⋮)
+- Show these rows, grouped by area with a small area header row:
+  - Engine: Engine oil · Oil and filter change · Yes · 2 · Active / Spark plugs · Ignition plug set · Yes · 2 · Active / Drive belt · Serpentine belt · Yes · 2 · Active / Timing belt · Cam drive belt · No · 0 · Active
+  - Filters: Air filter · Engine intake element · Yes · 2 · Active / Cabin A/C filter · Pollen filter · Yes · 2 · Active / Fuel filter · In-line fuel filter · No · 0 · Active
+  - Brakes: Brakes check · Pads and rotors · Yes · 2 · Active / Brake fluid · DOT fluid flush · Yes · 2 · Active / Brake pads · Friction pads · No · 0 · Active
+  - Tyres: Tyre change · Replacement tyres · Yes · 2 · Active / Rotate tyres · Axle rotation · Yes · 2 · Active
+  - Lights: Fog light bulb · Fog lamp · No · 0 · Retired (row greyed, name not struck through, status chip "Retired")
+- The overflow menu is drawn OPEN on the "Spark plugs" row showing: "Edit", "Retire" (no "Delete")
+- The overflow menu on a row with nothing using it would show "Delete" in red — show this as a small second open menu on the "Fuel filter" row: "Edit", "Retire", "Delete"
+- Pagination at the bottom: "Showing 12 of 49" with "Previous" / "Next"
+
+SCREEN 2B: PART TYPES TAB — RETIRE DIALOG (SECOND FRAME)
+- Same page as Screen 2, dimmed behind a centred dialog (this is the only frame with a dialog)
+- Dialog title "Retire Spark plugs?", close X; under the title muted "spark_plugs · Engine"
+- Body: "It stays on the 2 Roam Fleet cars that already have it, marked retired, and won't be added to new cars or new schedules."
+- Expandable box "What uses it" (open), four small cells with counts in mono: "Schedules — 1 active (every 100,000 km or 60 months)", "Service packages — 1 (Long-Term Service)", "Inspections — 0", "Parts in the catalogue — 0"
+- Info line: "You can reactivate it later. No service history is erased."
+- Footer: "Cancel", primary "Retire part type"
+
+ADDITIONAL UI COMPONENTS:
+- Full-height right drawer with sticky footer
+- Part row with read-only own-schedule text, "Required at this visit" switch, "Check only" tag
+- Grouped table with area header rows
+- Overflow menu (Edit / Retire / Delete in red only when nothing uses it)
+- Count cells for "What uses it"
+
+INTERACTIONS:
+- Unticking a part removes it from the package on save; the trash icon does the same at once
+- Typing in "Add a part…" lists matching part types with their own schedule; choosing one adds a row
+- "Cancel" with unsaved changes asks "Leave without saving?" — "Keep editing" / "Leave"
+- "Retire" opens Screen 2B; "Retire part type" shows a toast "Spark plugs retired"
+- "Delete" (only offered when nothing uses the part type) asks "Nothing uses this part type. Delete it permanently?" — "Cancel" / red "Delete"
+- Hover: rows highlight in the primary container colour; focus rings 2px primary
+
+Spec screens / Area
+| Screen | Area |
+|---|---|
+| 1 | Edit service package drawer, full height, Basic Service with its 6 parts |
+| 2 | Part types tab, table only, no dialog, two overflow menus open |
+| 2B | Part types tab with the Retire dialog |

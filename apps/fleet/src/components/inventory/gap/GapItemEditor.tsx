@@ -1,81 +1,18 @@
 /** Ported from Stitch gap screen — panel only (audit R16-01). */
-import { formatJmd } from '../inventoryFormat';
-import { downloadInventoryExportCsv } from '../inventoryDownload';
 import { GapLoadState, GapSubmitError } from './GapLoadState';
-import { GapModalShell } from './GapModalShell';
+import { GapDrawerShell } from './GapDrawerShell';
 import { useGapItemEditorForm } from './useGapItemEditorForm';
 
 export function GapItemEditor(p: { itemId?: string | null; onClose?: () => void }) {
   const form = useGapItemEditorForm(p.itemId, p.onClose);
   const closeDrawer = () => p.onClose?.();
   return (
-    <GapModalShell onClose={p.onClose} ariaLabel="ItemEditor">
+    <GapDrawerShell onClose={p.onClose} ariaLabel="Item editor">
       <GapSubmitError message={form.submit.error} />
       <GapLoadState loading={form.load.loading} error={form.load.error} onRetry={form.load.reload}>
-      <div className="fleet-inventory-stitch inventory-stitch-root">
-        <div className="inventory-stitch-main"><div className="flex flex-col w-full relative">
+      <div className="fleet-inventory-stitch flex h-full min-h-0 flex-col">
 
-        <div className="w-full opacity-35 pointer-events-none select-none filter blur-[0.6px] transition-all duration-300">
-
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-space-md mb-space-lg">
-        <div className="flex items-center gap-space-md">
-        <div className="flex items-center gap-space-xs px-space-md py-1.5 bg-surface-container rounded-lg">
-        <span className="material-symbols-outlined text-[18px] text-on-surface-variant">filter_list</span>
-        <span className="font-body-sm text-body-sm text-on-surface font-semibold">Filter Depot: Kingston Central</span>
-        </div>
-        <div className="px-space-md py-1.5 bg-surface-container-low rounded-lg font-caption text-caption text-on-surface-variant">
-                  Showing 124 asset records
-                </div>
-        </div>
-        <div className="flex items-center gap-space-sm">
-        <button type="button" className="px-space-md py-2 bg-surface-container-high rounded-lg text-body-sm font-body-sm text-on-surface flex items-center gap-space-xs" onClick={() => void form.exportCsv()}>
-        <span className="material-symbols-outlined text-[18px]">download</span> Export CSV
-                </button>
-        <button type="button" className="px-space-lg py-2 bg-primary text-on-primary rounded-lg text-body-sm font-body-sm flex items-center gap-space-xs shadow-sm" onClick={() => form.openNewItem()}>
-        <span className="material-symbols-outlined text-[18px]">add</span> + Add Stock Item
-                </button>
-        </div>
-        </div>
-
-        <div className="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
-        <div className="grid grid-cols-12 px-space-lg py-space-md bg-surface-container-low font-caption text-caption uppercase tracking-wider text-on-surface-variant font-semibold">
-        <span className="col-span-3">Item / Description</span>
-        <span className="col-span-2">SKU / Code</span>
-        <span className="col-span-2">Category</span>
-        <span className="col-span-2">Available Count</span>
-        <span className="col-span-2">Valuation (JMD)</span>
-        <span className="col-span-1 text-right">Status</span>
-        </div>
-        <div className="divide-y divide-surface-container">
-        {form.catalog.length === 0 ? (
-        <div className="px-space-lg py-space-md font-body-sm text-body-sm text-on-surface-variant">No catalog items loaded.</div>
-        ) : (
-        form.catalog.map((row) => (
-        <div key={String(row.id)} className="grid grid-cols-12 px-space-lg py-space-md items-center">
-        <div className="col-span-3 flex items-center gap-space-sm">
-        <div className="w-8 h-8 rounded bg-surface-container flex items-center justify-center text-on-surface font-label-code text-label-code">{String(row.name ?? '?').slice(0, 2).toUpperCase()}</div>
-        <div>
-        <p className="font-body-md text-body-md font-semibold text-on-surface">{String(row.name ?? '—')}</p>
-        <p className="font-caption text-caption text-on-surface-variant">{String(row.sku ?? '—')}</p>
-        </div>
-        </div>
-        <span className="col-span-2 font-label-code text-label-code text-on-surface">{String(row.sku ?? '—')}</span>
-        <span className="col-span-2 font-body-sm text-body-sm text-on-surface-variant">{String(row.category_name ?? row.category ?? '—')}</span>
-        <span className="col-span-2 font-label-code text-label-code text-on-surface font-semibold">{String(row.qty_on_hand ?? '—')} each</span>
-        <span className="col-span-2 font-label-price text-label-price text-on-surface">{formatJmd(Number(row.default_cost_jmd ?? row.unit_cost_jmd ?? 0))}</span>
-        <span className="col-span-1 text-right"><span className="px-2 py-0.5 rounded text-caption font-caption bg-surface-container-high text-on-surface">{String(row.status ?? 'Active')}</span></span>
-        </div>
-        ))
-        )}
-        </div>
-        </div>
-        </div>
-
-        <div className="fixed inset-0 bg-primary-container/30 backdrop-blur-[1px] z-40 transition-opacity" id="drawer-backdrop"></div>
-
-        <aside className="fixed top-0 right-0 bottom-0 w-full sm:w-[580px] bg-surface-container-lowest z-50 flex flex-col shadow-[0_8px_30px_rgba(0,0,0,0.12)]" id="inventory-drawer">
-
-        <header className="p-space-lg bg-surface-container-lowest flex flex-col gap-space-md">
+        <header className="p-space-lg bg-surface-container-lowest flex flex-col gap-space-md shrink-0 border-b border-surface-container">
         <div className="flex items-start justify-between">
         <div className="flex flex-col">
         <div className="flex items-center gap-space-sm">
@@ -115,7 +52,7 @@ export function GapItemEditor(p: { itemId?: string | null; onClose?: () => void 
         </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto px-space-lg py-space-lg flex flex-col gap-space-xl">
+        <div className="flex-1 overflow-y-auto px-space-lg py-space-lg flex flex-col gap-space-xl min-h-0">
 
         <section className="flex flex-col gap-space-md">
         <div className="flex items-center justify-between pb-space-xs">
@@ -441,7 +378,7 @@ export function GapItemEditor(p: { itemId?: string | null; onClose?: () => void 
         </section>
         </div>
 
-        <footer className="p-space-lg bg-surface-container-lowest flex flex-col gap-space-sm">
+        <footer className="p-space-lg bg-surface-container-lowest flex flex-col gap-space-sm shrink-0 border-t border-surface-container">
         <div className="flex items-center justify-between">
 
         <button type="button" disabled={form.isNew || form.submit.saving} onClick={() => form.archiveSteps.openConfirm()} className="text-error hover:underline font-body-sm text-body-sm font-semibold flex items-center gap-1 transition-colors disabled:opacity-60" id="archive-toggle-btn">
@@ -480,12 +417,8 @@ export function GapItemEditor(p: { itemId?: string | null; onClose?: () => void 
         </div>
         </div>
         </footer>
-        </aside>
-
-
-        </div></div><aside className="fixed left-0 top-28 bottom-0 w-64 bg-surface-container-lowest shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-40 flex flex-col justify-between py-space-lg"><div className="flex flex-col gap-space-xs px-space-md"><div className="px-space-md py-space-xs text-caption font-caption uppercase tracking-wider text-on-surface-variant font-semibold">Inventory & Asset Scope</div><nav className="flex flex-col gap-1" data-active-classes="bg-surface-container text-on-surface font-semibold"><a className="flex items-center gap-space-md px-space-md py-space-sm rounded-lg text-body-sm font-body-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="inventory-catalog" href="#"><span className="material-symbols-outlined text-[20px]">category</span>Inventory Stock</a><a className="flex items-center gap-space-md px-space-md py-space-sm rounded-lg text-body-sm font-body-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="parts-fitment-crossref" href="#"><span className="material-symbols-outlined text-[20px]">manufacturing</span>Fitment & Compatibility</a><a className="flex items-center gap-space-md px-space-md py-space-sm rounded-lg text-body-sm font-body-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="work-orders-repairs" href="#"><span className="material-symbols-outlined text-[20px]">build</span>Work Orders</a><a className="flex items-center gap-space-md px-space-md py-space-sm rounded-lg text-body-sm font-body-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="asset-depreciation-tracker" href="#"><span className="material-symbols-outlined text-[20px]">account_balance_wallet</span>Asset Valuation</a><a className="flex items-center gap-space-md px-space-md py-space-sm rounded-lg text-body-sm font-body-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="procurement-suppliers" href="#"><span className="material-symbols-outlined text-[20px]">storefront</span>Suppliers & POs</a><a className="flex items-center gap-space-md px-space-md py-space-sm rounded-lg text-body-sm font-body-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="telemetry-diagnostics" href="#"><span className="material-symbols-outlined text-[20px]">sensors</span>Diagnostic Logs</a></nav></div><div className="px-space-lg pt-space-md"><div className="p-space-md rounded-lg bg-surface-container-low shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div className="flex items-center justify-between text-caption font-caption text-on-surface-variant mb-1"><span>Active Depot Stock</span><span className="font-label-code text-label-code text-on-surface font-semibold">84.6%</span></div><div className="w-full h-1.5 rounded-full bg-surface-container-high overflow-hidden"><div className="h-full bg-primary rounded-full w-[84.6%]"></div></div><div className="mt-space-xs text-caption font-caption text-on-surface-variant">Warehouse A & Yard Kingston</div></div></div></aside>
       </div>
       </GapLoadState>
-    </GapModalShell>
+    </GapDrawerShell>
   );
 }

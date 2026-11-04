@@ -85,6 +85,20 @@ export type FoundPartRow = {
   fitsVariantIds: string[];
   alsoKnownAs?: string[];
   evidenceUrl?: string | null;
+  matchReasonCode?: string | null;
+  matchReasonParams?: Record<string, unknown> | null;
+  matchStatus?: string | null;
+  fitSource?: string | null;
+  via?: string | null;
+  partBadgeCode?: string | null;
+  wva?: string | null;
+  position?: string | null;
+  side?: string | null;
+  derivedId?: string;
+  groupId?: string;
+  wvaPeerLabel?: string;
+  partKind?: string | null;
+  linkComponentName?: string | null;
 };
 
 export type PlainSection = {
@@ -108,6 +122,11 @@ export type FindPartsResult = {
   emptyTiers?: number[];
   bestPick?: FoundPartRow | null;
   coverage?: { essentials: number; essentialsTotal: number; specs: number; specsTotal: number; otherParts: number } | null;
+  databaseNodeGroups?: number;
+  universalToleranceMm?: number | null;
+  universal_part?: { tolerance_mm?: number | null } | null;
+  platformLabel?: string;
+  axleLabel?: string;
 };
 
 export function fetchFindParts(query: {
@@ -291,6 +310,8 @@ export type MasterPartRow = {
   versionCount: number;
   status: "verified" | "needs_checking";
   updatedAt: string | null;
+  wva?: string | null;
+  fitCount?: number;
 };
 
 export type SisterFamilyRow = {
@@ -347,11 +368,24 @@ export type MasterPartDetail = {
   name: string;
   number: string;
   brand: string;
+  partType?: string;
+  wva?: string | null;
+  fitCount?: number;
+  groupCode?: string | null;
+  groupRevision?: number | null;
+  indexRevision?: number | null;
+  indexGroupCode?: string | null;
+  indexGroupHeadline?: string | null;
+  indexBadge?: string | null;
+  wvaPeerLabels?: string[];
+  groupMembers?: Array<{ partId?: string; number?: string; brand?: string; name?: string }>;
+  provenanceHash?: string | null;
+  hash?: string | null;
   tier: number;
   status: "verified" | "needs_checking";
   evidenceUrl: string | null;
   note: string;
-  fits: MasterFit[];
+  fits: Array<MasterFit & { via?: string; side?: string }>;
 };
 
 export function fetchMasterSearch(query: {

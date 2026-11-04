@@ -21,7 +21,8 @@ export default defineConfig({
   plugins: [roamSupabaseDevProxy(), react(), tailwindcss()],
   resolve: {
     extensions: ['.js', '.jsx', '.ts', '.tsx', '.json'],
-    dedupe: ['react', 'react-dom'],
+    // react-query is a peer of shared packages (e.g. platform-ops-ui); resolve the admin copy.
+    dedupe: ['react', 'react-dom', '@tanstack/react-query'],
     alias: [
       { find: 'react', replacement: reactRoot },
       { find: 'react-dom', replacement: reactDomRoot },
@@ -76,7 +77,13 @@ export default defineConfig({
       VITE_SUPABASE_URL: 'https://ci-placeholder.supabase.co',
       VITE_SUPABASE_ANON_KEY: 'ci-placeholder-anon-key',
     },
-    include: ['src/**/*.test.ts', 'src/**/*.test.tsx', '../../packages/platform-ops-ui/src/places/categories/**/*.test.ts', '../../packages/platform-ops-ui/src/places/register/**/*.test.ts'],
+    include: [
+      'src/**/*.test.ts',
+      'src/**/*.test.tsx',
+      '../../packages/platform-ops-ui/src/places/categories/**/*.test.ts',
+      '../../packages/platform-ops-ui/src/places/register/**/*.test.ts',
+      '../../packages/types/src/partMatchReason.test.ts',
+    ],
     exclude: [
       /** Deno edge-function tests (Deno.test + https: imports) run via `deno test`, not Vitest. */
       '**/supabase/functions/**',

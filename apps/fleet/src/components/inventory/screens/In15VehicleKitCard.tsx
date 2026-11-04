@@ -43,7 +43,7 @@ export function In15VehicleKitCard({ vehicleId }: { vehicleId?: string | null })
       </div>
       <div className="flex items-center gap-space-xs px-space-sm py-1 rounded-full bg-surface-container-high text-on-surface font-label-code text-caption">
       <span className="material-symbols-outlined text-sm text-secondary">speed</span>
-      <span>64,820 km</span>
+      <span>{form.odometerLabel}</span>
       </div>
       <button type="button" className="flex items-center gap-space-xs px-space-sm py-1 rounded bg-primary text-on-primary font-body-sm text-body-sm hover:opacity-90 transition-opacity" onClick={() => form.focusVehicleKits()}>
       <span className="material-symbols-outlined text-base">tune</span>
@@ -112,71 +112,38 @@ export function In15VehicleKitCard({ vehicleId }: { vehicleId?: string | null })
       <div className="flex items-center justify-between px-space-xs">
       <div className="flex items-center gap-space-xs">
       <span className="material-symbols-outlined text-error text-base">warning</span>
-      <span className="font-caption text-caption uppercase tracking-wider text-error font-bold">Missing (3 items)</span>
+      <span className="font-caption text-caption uppercase tracking-wider text-error font-bold">Missing ({form.missingKitRows.length} items)</span>
       </div>
       <span className="font-caption text-caption text-secondary">Road Clearance Blocked</span>
       </div>
       <div className="flex flex-col gap-space-sm">
-
-      <div className="bg-error-container/40 p-space-sm rounded-lg flex flex-col gap-space-xs">
+      {form.missingKitRows.length === 0 ? (
+      <p className="font-body-sm text-secondary px-space-xs">No missing kit items for this vehicle.</p>
+      ) : (
+      form.missingKitRows.map((row) => (
+      <div key={row.itemId || row.sku} className="bg-error-container/40 p-space-sm rounded-lg flex flex-col gap-space-xs">
       <div className="flex items-start justify-between gap-space-sm">
       <div className="flex flex-col min-w-0">
       <div className="flex items-center gap-space-xs">
-      <span className="font-body-md text-body-md font-semibold text-on-surface truncate">Tyre pump</span>
-      <span className="font-label-code text-caption text-secondary">TLS-PMP-01</span>
+      <span className="font-body-md text-body-md font-semibold text-on-surface truncate">{row.name}</span>
+      <span className="font-label-code text-caption text-secondary">{row.sku}</span>
       </div>
-      <span className="font-caption text-caption text-error font-medium">Needs 1 unit</span>
+      <span className="font-caption text-caption text-error font-medium">{row.statusLabel}</span>
       </div>
-      <button type="button" className="px-space-sm py-1 rounded bg-surface-container-lowest hover:bg-surface-container text-on-surface font-body-sm text-body-sm font-medium shadow-sm transition-colors flex items-center gap-space-xs" onClick={() => issueBySku('TLS-PMP-01')}>
+      <button type="button" className="px-space-sm py-1 rounded bg-surface-container-lowest hover:bg-surface-container text-on-surface font-body-sm text-body-sm font-medium shadow-sm transition-colors flex items-center gap-space-xs" onClick={() => issueBySku(row.sku)}>
       <span className="material-symbols-outlined text-sm">add_box</span>
       <span>Issue</span>
       </button>
       </div>
+      {row.stockHint ? (
       <div className="flex items-center gap-space-xs text-secondary font-label-code text-caption pt-space-xs">
       <span className="material-symbols-outlined text-xs">warehouse</span>
-      <span>Storeroom stock: 14 available in Main store</span>
+      <span>{row.stockHint}</span>
       </div>
+      ) : null}
       </div>
-
-      <div className="bg-error-container/40 p-space-sm rounded-lg flex flex-col gap-space-xs">
-      <div className="flex items-start justify-between gap-space-sm">
-      <div className="flex flex-col min-w-0">
-      <div className="flex items-center gap-space-xs">
-      <span className="font-body-md text-body-md font-semibold text-on-surface truncate">First-aid kit</span>
-      <span className="font-label-code text-caption text-secondary">SAF-FAK-01</span>
-      </div>
-      <span className="font-caption text-caption text-error font-medium">Needs 1 unit (Sealed)</span>
-      </div>
-      <button type="button" className="px-space-sm py-1 rounded bg-surface-container-lowest hover:bg-surface-container text-on-surface font-body-sm text-body-sm font-medium shadow-sm transition-colors flex items-center gap-space-xs" onClick={() => issueBySku('SAF-FAK-01')}>
-      <span className="material-symbols-outlined text-sm">add_box</span>
-      <span>Issue</span>
-      </button>
-      </div>
-      <div className="flex items-center gap-space-xs text-secondary font-label-code text-caption pt-space-xs">
-      <span className="material-symbols-outlined text-xs">warehouse</span>
-      <span>Storeroom stock: 6 available in Main store</span>
-      </div>
-      </div>
-
-      <div className="bg-error-container/40 p-space-sm rounded-lg flex flex-col gap-space-xs">
-      <div className="flex items-start justify-between gap-space-sm">
-      <div className="flex flex-col min-w-0">
-      <div className="flex items-center gap-space-xs">
-      <span className="font-body-md text-body-md font-semibold text-on-surface truncate">Warning triangle</span>
-      <span className="font-label-code text-caption text-secondary">SAF-TRG-01</span>
-      </div>
-      <span className="font-caption text-caption text-error font-medium">Needs 1 unit (Reflective)</span>
-      </div>
-      <button type="button" className="px-space-sm py-1 rounded bg-surface-container-lowest hover:bg-surface-container text-on-surface font-body-sm text-body-sm font-medium shadow-sm transition-colors flex items-center gap-space-xs" onClick={() => issueBySku('SAF-TRG-01')}>
-      <span className="material-symbols-outlined text-sm">add_box</span>
-      <span>Issue</span>
-      </button>
-      </div>
-      <div className="flex items-center gap-space-xs text-secondary font-label-code text-caption pt-space-xs">
-      <span className="material-symbols-outlined text-xs">warehouse</span>
-      <span>Storeroom stock: 22 available in Main store</span>
-      </div>
-      </div>
+      ))
+      )}
       </div>
       </div>
 
@@ -184,90 +151,32 @@ export function In15VehicleKitCard({ vehicleId }: { vehicleId?: string | null })
       <div className="flex items-center justify-between px-space-xs">
       <div className="flex items-center gap-space-xs">
       <span className="material-symbols-outlined text-surface-tint text-base">verified</span>
-      <span className="font-caption text-caption uppercase tracking-wider text-on-surface font-bold">On this car (7 items verified)</span>
+      <span className="font-caption text-caption uppercase tracking-wider text-on-surface font-bold">On this car ({form.onCarKitRows.length} items verified)</span>
       </div>
       <span className="font-caption text-caption text-secondary">Inspected Yesterday</span>
       </div>
       <div className="flex flex-col gap-space-xs bg-surface-container-low p-space-xs rounded-lg">
-
-      <div className="p-space-sm bg-surface-container-lowest rounded flex items-center justify-between gap-space-sm">
+      {form.onCarKitRows.length === 0 ? (
+      <p className="font-body-sm text-secondary p-space-sm">No verified kit items on this vehicle yet.</p>
+      ) : (
+      form.onCarKitRows.map((row) => (
+      <div key={row.itemId || row.sku} className="p-space-sm bg-surface-container-lowest rounded flex items-center justify-between gap-space-sm">
       <div className="flex flex-col min-w-0">
       <div className="flex items-center gap-space-xs">
-      <span className="font-body-sm text-body-sm font-semibold text-on-surface">Spare tyre · 195/65 R15</span>
-      <span className="font-label-code text-caption text-secondary">TYR-SPR-01</span>
+      <span className="font-body-sm text-body-sm font-semibold text-on-surface">{row.name}</span>
+      <span className="font-label-code text-caption text-secondary">{row.sku}</span>
       </div>
-      <span className="font-caption text-caption text-secondary">Location: Boot wheel well</span>
-      </div>
-      <span className="px-2 py-0.5 rounded-full bg-secondary-container text-on-secondary-container font-caption text-caption font-medium">Good</span>
-      </div>
-
-      <div className="p-space-sm bg-surface-container-lowest rounded flex items-center justify-between gap-space-sm">
-      <div className="flex flex-col min-w-0">
-      <div className="flex items-center gap-space-xs">
-      <span className="font-body-sm text-body-sm font-semibold text-on-surface">Car jack · 2.5T Scissor</span>
-      <span className="font-label-code text-caption text-secondary">TLS-JCK-01</span>
-      </div>
-      <span className="font-caption text-caption text-secondary">Location: Boot tool bay</span>
-      </div>
-      <span className="px-2 py-0.5 rounded-full bg-secondary-container text-on-secondary-container font-caption text-caption font-medium">Good</span>
-      </div>
-
-      <div className="p-space-sm bg-surface-container-lowest rounded flex items-center justify-between gap-space-sm">
-      <div className="flex flex-col min-w-0">
-      <div className="flex items-center gap-space-xs">
-      <span className="font-body-sm text-body-sm font-semibold text-on-surface">Lug wrench · 21mm</span>
-      <span className="font-label-code text-caption text-secondary">TLS-WRN-01</span>
-      </div>
-      <span className="font-caption text-caption text-secondary">Location: Boot tool bay</span>
-      </div>
-      <span className="px-2 py-0.5 rounded-full bg-secondary-container text-on-secondary-container font-caption text-caption font-medium">Good</span>
-      </div>
-
-      <div className="p-space-sm bg-surface-container-lowest rounded flex items-center justify-between gap-space-sm">
-      <div className="flex flex-col min-w-0">
-      <div className="flex items-center gap-space-xs">
-      <span className="font-body-sm text-body-sm font-semibold text-on-surface">Phone Holder Mount</span>
-      <span className="font-label-code text-caption text-secondary">ACC-PHM-01</span>
-      </div>
-      <span className="font-caption text-caption text-secondary">Location: Dashboard</span>
-      </div>
-      <span className="px-2 py-0.5 rounded-full bg-secondary-container text-on-secondary-container font-caption text-caption font-medium">Good</span>
-      </div>
-
-      <div className="p-space-sm bg-surface-container-lowest rounded flex items-center justify-between gap-space-sm">
-      <div className="flex flex-col min-w-0">
-      <div className="flex items-center gap-space-xs">
-      <span className="font-body-sm text-body-sm font-semibold text-on-surface">Dash camera · Dual-Lens</span>
-      <span className="font-label-code text-caption text-secondary">ELC-DCM-01</span>
-      </div>
+      <span className="font-caption text-caption text-secondary">Location: {row.locationLabel}</span>
+      {row.serialLabel ? (
       <div className="flex items-center gap-space-xs font-caption text-caption text-secondary">
-      <span className="font-label-code">S/N: {serial}</span>
-      <span>· Windscreen</span>
+      <span className="font-label-code">S/N: {row.serialLabel || serial}</span>
       </div>
+      ) : null}
       </div>
-      <span className="px-2 py-0.5 rounded-full bg-tertiary-fixed text-on-tertiary-fixed font-caption text-caption font-medium">Flickering (Reported)</span>
+      <span className="px-2 py-0.5 rounded-full bg-secondary-container text-on-secondary-container font-caption text-caption font-medium">{row.statusLabel}</span>
       </div>
-
-      <div className="p-space-sm bg-surface-container-lowest rounded flex items-center justify-between gap-space-sm">
-      <div className="flex flex-col min-w-0">
-      <div className="flex items-center gap-space-xs">
-      <span className="font-body-sm text-body-sm font-semibold text-on-surface">Toll tag · RFID #JM-TOLL-9921</span>
-      </div>
-      <span className="font-caption text-caption text-secondary">Location: Windscreen center</span>
-      </div>
-      <span className="px-2 py-0.5 rounded-full bg-surface-container-high text-on-surface font-caption text-caption font-medium">Active</span>
-      </div>
-
-      <div className="p-space-sm bg-surface-container-lowest rounded flex items-center justify-between gap-space-sm">
-      <div className="flex flex-col min-w-0">
-      <div className="flex items-center gap-space-xs">
-      <span className="font-body-sm text-body-sm font-semibold text-on-surface">Fuel card · PetroJam Fleet</span>
-      <span className="font-label-code text-caption text-secondary">#4410</span>
-      </div>
-      <span className="font-caption text-caption text-secondary">Location: Glove compartment</span>
-      </div>
-      <span className="px-2 py-0.5 rounded-full bg-surface-container-high text-on-surface font-caption text-caption font-medium">Active</span>
-      </div>
+      ))
+      )}
       </div>
 
       <div className="px-space-xs font-body-sm text-caption text-secondary flex items-center gap-space-xs">

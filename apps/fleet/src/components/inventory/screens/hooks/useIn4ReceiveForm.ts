@@ -59,6 +59,11 @@ export function useIn4ReceiveForm() {
   }, [locations, locationId]);
 
   useEffect(() => {
+    const fromShell = shell.selectedPoId?.trim();
+    if (fromShell) setPoId(fromShell);
+  }, [shell.selectedPoId]);
+
+  useEffect(() => {
     if (lines.length || !items.length) return;
     const first = items[0];
     setLines([

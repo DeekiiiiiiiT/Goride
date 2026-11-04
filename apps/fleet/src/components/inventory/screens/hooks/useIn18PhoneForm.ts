@@ -1,12 +1,18 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { inventoryApi } from '../../inventoryApi';
 import { strField } from '../../inventoryData';
 import { newInventoryIdempotencyKey } from '../../inventoryIdempotency';
+import { buildPhoneComplianceRow } from '../../inventoryViewRows';
+import type { PhoneComplianceRow } from '../../inventoryTypes';
 import { useInScreenBase } from './useInShared';
 
 export type PhoneSort = 'bin' | 'name' | 'qty';
 export type PhoneView = 'stock' | 'scanner';
 
+/**
+ * Stitch → data (In18 Phone)
+ * row sku → PhoneComplianceRow.sku | name → PhoneComplianceRow.label | bin → PhoneComplianceRow.detail
+ */
 export function useIn18PhoneForm() {
   const base = useInScreenBase();
   const { shell, submit, live } = base;
@@ -15,17 +21,38 @@ export function useIn18PhoneForm() {
   const [torchOn, setTorchOn] = useState(false);
   const [manualCode, setManualCode] = useState('');
 
-  const rows = [...shell.stockRows].sort((a, b) => {
-    if (sort === 'qty') {
-      return numField(b, 'on_hand', 0) - numField(a, 'on_hand', 0);
-    }
-    if (sort === 'bin') {
-      return strField(a, 'bin_code', strField(a, 'bin', '')).localeCompare(
-        strField(b, 'bin_code', strField(b, 'bin', '')),
-      );
-    }
-    return strField(a, 'name', '').localeCompare(strField(b, 'name', ''));
-  });
+  const rows = useMemo(() => {
+    const list = [...shell.stockRows];
+    list.sort((a, b) => {
+      if (sort === 'qty') {
+        return numField(b, 'on_hand', 0) - numField(a, 'on_hand', 0);
+      }
+      if (sort === 'bin') {
+        return strField(a, 'bin_code', strField(a, 'bin', '')).localeCompare(
+          strField(b, 'bin_code', strField(b, 'bin', '')),
+        );
+      }
+      return strField(a, 'name', '').localeCompare(strField(b, 'name', ''));
+    });
+    return list;
+  }, [shell.stockRows, sort]);
+
+  const phoneRows: PhoneComplianceRow[] = useMemo(
+    () =>
+      rows.map((r, index) =>
+        buildPhoneComplianceRow(
+          {
+            id: strField(r, 'item_id', `phone-${index}`),
+            label: strField(r, 'name', 'Item'),
+            sku: strField(r, 'sku', '—'),
+            status: `${numField(r, 'on_hand', 0)} on hand`,
+            detail: strField(r, 'location_name', strField(r, 'bin_code', strField(r, 'bin', ''))),
+          },
+          index,
+        ),
+      ),
+    [rows],
+  );
 
   const scanBarcode = () => {
     setView('scanner');
@@ -48,6 +75,41 @@ export function useIn18PhoneForm() {
       setView('stock');
     }
   };
+
+  const enterCodeDisabledReason = manualCode.trim() ? '' : 'Enter a SKU or short code';
+
+  const scanMatchRow = useMemo(() => {
+    const q = manualCode.trim().toLowerCase();
+    if (q) {
+      const row = rows.find(
+        (r) =>
+          strField(r, 'sku', '').toLowerCase() === q ||
+          strField(r, 'short_code', '').toLowerCase() === q,
+      );
+      if (row) {
+        const idx = rows.indexOf(row);
+        return buildPhoneComplianceRow(
+          {
+            id: strField(row, 'item_id', `phone-${idx}`),
+            label: strField(row, 'name', 'Item'),
+            sku: strField(row, 'sku', '—'),
+            status: `${numField(row, 'on_hand', 0)} on hand`,
+            detail: strField(row, 'location_name', strField(row, 'bin_code', strField(row, 'bin', ''))),
+          },
+          idx,
+        );
+      }
+    }
+    if (shell.selectedItemId) {
+      const idx = rows.findIndex((r) => strField(r, 'item_id', '') === shell.selectedItemId);
+      if (idx >= 0) return phoneRows[idx] ?? null;
+    }
+    return phoneRows[0] ?? null;
+  }, [manualCode, rows, phoneRows, shell.selectedItemId]);
+
+  const scanMatchTitle = scanMatchRow
+    ? `${scanMatchRow.label}${scanMatchRow.sku && scanMatchRow.sku !== '—' ? ` ${scanMatchRow.sku}` : ''}`
+    : '—';
 
   const issueToCar = () => shell.openModal('issue');
   const issueWholeKit = () => shell.openModal('issue');
@@ -82,6 +144,7 @@ export function useIn18PhoneForm() {
     submit,
     live,
     rows,
+    phoneRows,
     sort,
     setSort,
     view,
@@ -92,6 +155,9 @@ export function useIn18PhoneForm() {
     setManualCode,
     scanBarcode,
     enterCode,
+    enterCodeDisabledReason,
+    scanMatchRow,
+    scanMatchTitle,
     issueToCar,
     issueWholeKit,
     receive,

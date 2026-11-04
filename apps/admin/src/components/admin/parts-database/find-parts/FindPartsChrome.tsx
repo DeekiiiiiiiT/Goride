@@ -54,9 +54,19 @@ export function FindPartsChrome({
             <span className="text-outline/60">/</span>
             <button type="button" className={crumb} onClick={onNavigateVehicles}>VEHICLES</button>
             <span className="text-outline/60">/</span>
-            <span className={breadcrumbSuffix.length ? "text-on-surface-variant font-medium" : findParts ? "text-primary font-semibold tracking-wide" : "text-primary font-semibold tracking-wide"}>
-              {findParts ? "FIND PARTS" : "PARTS DATABASE"}
-            </span>
+            {findParts ? (
+              <>
+                <span className="text-on-surface-variant font-medium">PARTS DATABASE</span>
+                <span className="text-outline/60">/</span>
+                <span className={breadcrumbSuffix.length ? "text-on-surface-variant font-medium" : "text-primary font-semibold tracking-wide"}>
+                  FIND PARTS
+                </span>
+              </>
+            ) : (
+              <span className={breadcrumbSuffix.length ? "text-on-surface-variant font-medium" : "text-primary font-semibold tracking-wide"}>
+                PARTS DATABASE
+              </span>
+            )}
             {breadcrumbSuffix.map((label, index) => {
               const last = index === breadcrumbSuffix.length - 1;
               return (
@@ -85,7 +95,7 @@ export function FindPartsChrome({
             <p className="font-body-md text-body-md text-secondary mt-1">{subtitle}</p>
           </div>
           <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
-            {database ? null : (
+            {database || findParts ? null : (
               <span className="font-mono-sm text-mono-sm uppercase text-secondary bg-surface-container-high px-2.5 py-1 rounded-lg">{matchTypesLabel}</span>
             )}
             {database ? (
@@ -140,8 +150,8 @@ export function FindPartsChrome({
                   onClick={() => onTab(name)}
                 >
                   <span>{name}</span>
-                  {name === "Import" ? (
-                    <span className="px-1.5 py-0.2 rounded-full bg-surface-container text-secondary text-[10px] font-mono-sm font-bold">CSV</span>
+                  {name === "Add parts" ? (
+                    <span className="px-1.5 py-0.2 rounded-full bg-surface-container text-secondary text-[10px] font-mono-sm font-bold">2 min</span>
                   ) : null}
                   {on ? <span className="absolute bottom-0 left-0 right-0 h-[2.5px] bg-primary-container" /> : null}
                 </button>

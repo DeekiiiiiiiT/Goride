@@ -110,6 +110,13 @@ export function WeekCalculatorPage({ accessToken }: { accessToken: string }) {
   const waiting = status?.queueWaiting ?? 0;
   const nights = Array.isArray(status?.nights) ? status.nights : null;
   const holdKnown = typeof status?.holdLargerFleets === 'boolean';
+  const dailyTempBytes = status?.dailyTempBytes;
+  const dailyTempOk = status?.dailyTempOk;
+  const dailyTempLimitBytes = status?.dailyTempLimitBytes ?? 200 * 1024 * 1024;
+  const dailyTempMb =
+    typeof dailyTempBytes === 'number' ? Math.round(dailyTempBytes / (1024 * 1024)) : null;
+  const limitMb = Math.round(dailyTempLimitBytes / (1024 * 1024));
+  const resumeBlockedByDisk = stopped && dailyTempOk === false;
 
   return (
     <div className="space-y-6 max-w-2xl">
@@ -119,6 +126,27 @@ export function WeekCalculatorPage({ accessToken }: { accessToken: string }) {
           Starts when a week changes, finishes the work, then stops.
         </p>
       </div>
+      {typeof dailyTempOk === 'boolean' && dailyTempMb != null ? (
+        <div
+          className={`rounded-xl border p-4 text-sm ${
+            dailyTempOk
+              ? 'border-emerald-800/80 bg-emerald-950/40 text-emerald-200'
+              : 'border-amber-700/80 bg-amber-950/40 text-amber-100'
+          }`}
+        >
+          <p className="font-medium">
+            Daily disk check: {dailyTempMb} MB / {limitMb} MB limit
+          </p>
+          <p className="mt-1 opacity-90">
+            {dailyTempOk
+              ? 'Under the limit. You may resume the week calculator when you are ready.'
+              : 'Over the limit. Resume stays blocked until tomorrow’s reading is under 200 MB.'}
+          </p>
+          {status?.topSpillSource ? (
+            <p className="mt-1 opacity-80">Top spill source: {status.topSpillSource}</p>
+          ) : null}
+        </div>
+      ) : null}
       <div className="rounded-xl border border-slate-800 bg-slate-900 p-6 space-y-4">
         {loading ? (
           <Loader2 className="h-6 w-6 animate-spin text-slate-500" />
@@ -163,7 +191,7 @@ export function WeekCalculatorPage({ accessToken }: { accessToken: string }) {
             {stopped ? (
               <Button
                 type="button"
-                disabled={!canUse}
+                disabled={!canUse || resumeBlockedByDisk}
                 onClick={() => void resume()}
                 className="bg-amber-600 hover:bg-amber-500"
               >

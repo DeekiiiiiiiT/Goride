@@ -380,6 +380,10 @@ export async function findParts(
       otherParts: (listingRows || []).length,
     };
   }
+  const databaseNodeGroups = new Set(
+    merged.map((item) => item.groupId).filter((id): id is string => Boolean(id)),
+  ).size;
+  const universalToleranceMm = await loadUniversalToleranceMm(supabase, componentId);
   const carRow = picked ?? variants[0] ?? null;
   const body = {
     mode,
@@ -400,9 +404,30 @@ export async function findParts(
     bestPick: best ? merged.find((item) => item.partId === best.id) ?? null : null,
     ready: loaded[0]?.parts.ready ?? false,
     coverage,
+    databaseNodeGroups,
+    universalToleranceMm,
+    universal_part: universalToleranceMm != null ? { tolerance_mm: universalToleranceMm } : null,
   };
   if (!input.orgId) assertNoCustomerIdentity(body);
   return body;
+}
+
+async function loadUniversalToleranceMm(
+  supabase: SupabaseClient,
+  componentId: string | null,
+): Promise<number | null> {
+  if (!componentId) return null;
+  const { data, error } = await supabase
+    .from("universal_part")
+    .select("tolerance_mm")
+    .eq("maintenance_component_id", componentId)
+    .not("tolerance_mm", "is", null)
+    .order("tolerance_mm", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  const raw = (data as { tolerance_mm?: number | null } | null)?.tolerance_mm;
+  return raw != null && Number.isFinite(Number(raw)) ? Number(raw) : null;
 }
 
 async function attachSides(supabase: SupabaseClient, items: FoundPart[], variantIds: string[]): Promise<FoundPart[]> {

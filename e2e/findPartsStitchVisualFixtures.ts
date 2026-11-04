@@ -139,6 +139,7 @@ export function stitchVisualVehicleContext() {
     hub_label: "Kingston East Hub",
     trim: "Pre-Facelift · 1KR-FE · 2WD",
     orgShortCode: "KIN-FLEET",
+    service_line_label: "Rideshare Fleet",
     specs: {
       trim_series: "Pre-Facelift",
       engine_code: "1KR-FE",

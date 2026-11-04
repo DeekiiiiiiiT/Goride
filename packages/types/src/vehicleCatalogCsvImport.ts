@@ -518,3 +518,92 @@ export function parseVehicleCatalogRowsFromRecords(
 
   return { rows, unknownHeaders };
 }
+
+// ---------------------------------------------------------------------------
+// Duplicate handling for CSV import (shared by the admin preview and the edge bulk route).
+// A car is "the same car" when make, model, series, trim, chassis code, engine code and production start
+// year match (trimmed, case-insensitive). Spec differences (tyre size, torque unit…) do not make a new car;
+// a different trim on the same chassis and engine (BMW 320i vs 330i, both G20 / B48) does.
+// ---------------------------------------------------------------------------
+
+export type CatalogIdentityFields = {
+  make?: unknown;
+  model?: unknown;
+  trim_series?: unknown;
+  catalog_trim?: unknown;
+  chassis_code?: unknown;
+  engine_code?: unknown;
+  production_start_year?: unknown;
+};
+
+function identityPart(v: unknown): string {
+  return String(v ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+/** Stable key for "is this the same car?". */
+export function vehicleCatalogIdentityKey(p: CatalogIdentityFields): string {
+  return [
+    identityPart(p.make),
+    identityPart(p.model),
+    identityPart(p.trim_series),
+    identityPart(p.catalog_trim),
+    identityPart(p.chassis_code),
+    identityPart(p.engine_code),
+    identityPart(p.production_start_year),
+  ].join("|");
+}
+
+/** What happens to existing cars matched by identity: leave them alone (default) or fill them from the file. */
+export type CatalogImportOnExisting = "skip" | "update";
+
+export type CatalogImportRowClass =
+  | { kind: "new" }
+  | { kind: "has_id" }
+  | { kind: "existing"; existingId: string }
+  | { kind: "duplicate_in_file"; duplicateOfRow: number }
+  | { kind: "invalid" };
+
+/** Classify parsed rows against the file itself and the cars already loaded. */
+export function classifyCatalogImportRows(
+  rows: ParsedCatalogImportRow[],
+  existing: Array<CatalogIdentityFields & { id: string }>,
+): Map<number, CatalogImportRowClass> {
+  const existingByKey = new Map<string, string>();
+  for (const e of existing) {
+    const k = vehicleCatalogIdentityKey(e);
+    if (!existingByKey.has(k)) existingByKey.set(k, e.id);
+  }
+  const firstInFile = new Map<string, number>();
+  const out = new Map<number, CatalogImportRowClass>();
+  for (const r of rows) {
+    if (!r.payload) {
+      out.set(r.rowIndex, { kind: "invalid" });
+      continue;
+    }
+    const key = vehicleCatalogIdentityKey(r.payload as CatalogIdentityFields);
+    const seen = firstInFile.get(key);
+    if (seen !== undefined) {
+      out.set(r.rowIndex, { kind: "duplicate_in_file", duplicateOfRow: seen });
+      continue;
+    }
+    firstInFile.set(key, r.rowIndex);
+    if (r.catalogId) {
+      out.set(r.rowIndex, { kind: "has_id" });
+      continue;
+    }
+    const existingId = existingByKey.get(key);
+    out.set(r.rowIndex, existingId ? { kind: "existing", existingId } : { kind: "new" });
+  }
+  return out;
+}
+
+/** Update patch from an import row: blank cells (null / "" / undefined) never overwrite stored values. */
+export function catalogImportNonBlankPatch(payload: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(payload)) {
+    if (v === null || v === undefined) continue;
+    if (typeof v === "string" && v.trim() === "") continue;
+    out[k] = v;
+  }
+  return out;
+}

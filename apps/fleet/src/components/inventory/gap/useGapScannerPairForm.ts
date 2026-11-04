@@ -25,6 +25,7 @@ export function useGapScannerPairForm(onClose?: () => void) {
   const [selectedDeviceId, setSelectedDeviceId] = useState('');
   const [pairingCode, setPairingCode] = useState('');
   const [deviceLabel, setDeviceLabel] = useState('');
+  const [binLocationId, setBinLocationId] = useState('');
 
   const pendingDevice = useMemo(() => {
     if (selectedDeviceId) {
@@ -59,6 +60,7 @@ export function useGapScannerPairForm(onClose?: () => void) {
         pairing_code: pairingCode.trim(),
         label: deviceLabel.trim() || null,
         device_id: selectedDeviceId || undefined,
+        bin_location_id: binLocationId.trim() || undefined,
       });
       await load.reload();
       await shell.refresh();
@@ -105,6 +107,8 @@ export function useGapScannerPairForm(onClose?: () => void) {
     setDeviceLabel,
     pairingDisplay: formatPairingDisplay(pairingCode),
     locations: load.data?.locations ?? [],
+    binLocationId,
+    setBinLocationId,
     canPair,
     pair,
     regenerateScanner,

@@ -1,19 +1,21 @@
 import { useMemo, type ReactNode } from "react";
 import { formatAxleTag } from "@roam/types/partPositionNorm";
 import type { Fp5ResultRow, Fp5ViewModel } from "../findPartsViewModels";
-import { FindPartsStickyHeader } from "../FindPartsStickyHeader";
-import { FpNowOnFileNotice } from "./FpNowOnFileNotice";
-import { FP5_BACK_TO_AREA_LABEL, formatCatalogResolvedNoticeLine } from "../findPartsViewModels";
 
 export type Fp5Actions = {
   onAskRoam: () => void;
   onOpenRow: (id: string) => void;
   onBackToPartSelection: () => void;
   onChangeCar: () => void;
-  /** Used by Fp12 mobile layout only */
+  onYourRequests?: () => void;
+  children?: ReactNode;
+};
+
+export type Fp12Actions = Fp5Actions & {
   onOpenBest?: () => void;
   onEditPartCategory?: () => void;
-  children?: ReactNode;
+  /** Phone hero "Use in service log" for the best part; undefined hides the button. */
+  onUseInService?: () => void;
 };
 
 export function Fp5Screen({
@@ -21,100 +23,125 @@ export function Fp5Screen({
   data,
   partName,
   positionTrail,
-  catalogNotice,
-  catalogResolvedAt,
 }: {
   actions: Fp5Actions;
   data: Fp5ViewModel;
   partName?: string;
   positionTrail?: string;
-  catalogNotice?: string;
-  catalogResolvedAt?: unknown;
 }) {
-  const titlePart = partName || data.componentTitle || "Part";
-  const sections = useMemo(() => (data.tierSections.length ? data.tierSections : []), [data.tierSections]);
+  const titlePart = data.identifiedPartTitle || partName || data.componentTitle || "Part";
+  const sections = useMemo(
+    () => data.tierSections.filter((section) => section.rows.length > 0),
+    [data.tierSections],
+  );
+  const requestTotal = data.requestCount ?? 0;
 
   return (
-    <div className="find-parts-screen-root">
-      <div className="fp-screen-root">
-        <div className="flex flex-col w-full gap-space-xl py-space-xl">
-          <FindPartsStickyHeader
-            step={5}
-            onBack={actions.onBackToPartSelection}
-            vehicleLabel={data.vehicleLabel}
-            plate={data.plate}
-            versionTag={data.trimBadge || data.trimLabel}
-            partTrailLabel={titlePart}
-            resultsTrailLabel={positionTrail || titlePart}
-          />
-          <FpNowOnFileNotice
-            message={catalogNotice || ""}
-            batchCount={catalogNotice ? data.matchCount : undefined}
-            resolvedLine={
-              catalogNotice ? formatCatalogResolvedNoticeLine(catalogResolvedAt) || undefined : undefined
-            }
-          />
+    <div className="find-parts-screen-root find-parts-am-results">
+      <div className="fp-screen-root fp5-am-root">
+        <div className="flex flex-col w-full gap-space-lg py-space-xl">
+          <div className="fp5-am-legend flex flex-wrap items-center justify-end gap-space-md font-body-sm text-on-surface-variant">
+            <span className="fp5-am-legend-item inline-flex items-center gap-1.5">
+              <span className="fp5-am-dot fp5-am-dot-confirmed" aria-hidden />
+              <span>Confirmed</span>
+            </span>
+            <span className="fp5-am-legend-item inline-flex items-center gap-1.5">
+              <span className="fp5-am-dot fp5-am-dot-checking" aria-hidden />
+              <span>Roam is checking</span>
+            </span>
+          </div>
 
-          <section className="rounded-[0.5rem] border border-surface-container-high bg-surface-container-lowest p-space-lg">
-            <div className="flex flex-wrap items-start justify-between gap-space-md">
-              <div>
-                <p className="font-headline-md text-headline-md font-bold">{titlePart}</p>
-                <p className="font-body-sm text-on-surface-variant mt-1">
-                  {data.vehicleLabel} · {data.plate} · {data.chassisCodeLabel}
-                </p>
-                <p className="font-caption text-caption text-on-surface-variant mt-2">
-                  Choice trail: {data.plate} › {titlePart} › {positionTrail || "—"}
-                </p>
-              </div>
-              <button type="button" className="text-primary font-body-sm font-semibold" onClick={actions.onChangeCar}>
-                Change car
-              </button>
-            </div>
-          </section>
-
-          <h2 className="font-headline-md font-bold px-1">Structured Match Categories</h2>
-
-          <section className="rounded-[0.5rem] bg-surface-container-low p-space-md">
-            <p className="font-caption text-caption uppercase tracking-wider text-on-surface-variant">Identified subsystem</p>
-            <p className="font-headline-sm font-bold mt-1">Your requests {data.requestCount ?? data.matchCount}</p>
-            <p className="text-body-sm text-on-surface-variant mt-1">
-              Roam found these from shared parts and is still confirming them where noted. Every row shows why it fits in plain English.
-            </p>
-            <button type="button" className="mt-2 text-primary font-body-sm font-medium" onClick={actions.onAskRoam}>
-              Need a part not listed? Ask Roam to add it →
-            </button>
-          </section>
-
-          <div className="flex flex-col gap-space-lg">
-            {sections.map((section) => (
-              <div
-                key={section.tier}
-                className={`rounded-[0.5rem] shadow-sm overflow-hidden border-l-4 ${section.allChecking ? "bg-amber-500/10 border-amber-500" : "bg-surface-container-lowest"}`}
-                style={{ borderLeftColor: section.allChecking ? undefined : section.accentColor }}
-              >
-                <div className="p-space-md flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <span className="font-headline-sm font-bold">{section.heading}</span>
-                    <span className="ml-2 font-caption text-caption">{section.countLabel}</span>
+          <div className="fp5-am-summary-grid grid grid-cols-1 lg:grid-cols-12 gap-space-lg">
+            <section className="fp5-am-car-card lg:col-span-7 rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-space-lg shadow-sm">
+              <div className="flex flex-wrap items-start justify-between gap-space-md">
+                <div className="flex items-start gap-space-md min-w-0">
+                  <div className="fp5-am-car-icon shrink-0 flex items-center justify-center rounded-lg border border-outline-variant/40 bg-surface-container-low w-12 h-12 text-on-surface">
+                    <span className="material-symbols-outlined text-[26px]">directions_car</span>
                   </div>
-                  <span className="font-body-sm text-on-surface-variant">{section.description}</span>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h2 className="font-headline-sm text-headline-sm font-bold text-on-surface">{data.vehicleLabel}</h2>
+                      <span className="font-label-code text-caption font-semibold px-2 py-0.5 rounded border border-outline-variant/50 bg-surface-container-low text-on-surface">
+                        {data.plate}
+                      </span>
+                      {data.serviceLineChip && data.serviceLineChip !== "None yet" ? (
+                        <span className="fp5-am-service-chip font-caption text-caption font-medium px-2 py-0.5 rounded-full border border-secondary/30 bg-secondary-container/40 text-on-secondary-container">
+                          {data.serviceLineChip}
+                        </span>
+                      ) : null}
+                    </div>
+                    {data.vehicleSpecLine ? (
+                      <p className="font-body-sm text-body-sm text-on-surface-variant mt-1 fp5-am-wrap">{data.vehicleSpecLine}</p>
+                    ) : null}
+                  </div>
                 </div>
-                {section.allChecking ? (
-                  <p className="px-space-md pb-2 text-sm text-amber-800 dark:text-amber-200">
-                    {section.count} unconfirmed candidates in this tier.
-                  </p>
-                ) : null}
-                {section.rows.map((row) => (
-                  <Row key={row.id} row={row} onOpen={() => actions.onOpenRow(row.id)} />
-                ))}
+                <button
+                  type="button"
+                  className="fp5-am-change-car shrink-0 font-body-sm text-body-sm font-medium px-2.5 py-1.5 rounded-lg border border-outline-variant/40 text-on-surface-variant hover:bg-surface-container-low"
+                  onClick={actions.onChangeCar}
+                >
+                  Change car
+                </button>
               </div>
+              {data.choiceTrail.length ? (
+                <div className="fp5-am-choice-trail mt-space-md pt-space-md border-t border-surface-container-high flex flex-wrap items-center gap-2 font-body-sm text-body-sm">
+                  <span className="text-on-surface-variant font-medium">Choice trail:</span>
+                  {data.choiceTrail.map((chip, index) => (
+                    <span key={`${chip.label}-${index}`} className="inline-flex items-center gap-2">
+                      {index > 0 ? <span className="text-outline-variant">›</span> : null}
+                      <span
+                        className={
+                          chip.active
+                            ? "fp5-am-trail-chip fp5-am-trail-chip-active font-medium px-2 py-0.5 rounded"
+                            : "fp5-am-trail-chip font-medium px-2 py-0.5 rounded bg-surface-container-low text-on-surface-variant"
+                        }
+                      >
+                        {chip.label}
+                      </span>
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+            </section>
+
+            <section className="fp5-am-subsystem-card lg:col-span-5 rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-space-lg shadow-sm flex flex-col justify-between gap-space-md">
+              <div>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-caption text-caption uppercase tracking-wider text-on-surface-variant font-semibold">
+                    Identified subsystem
+                  </span>
+                  <button
+                    type="button"
+                    className="fp5-am-requests-link inline-flex items-center gap-1.5 font-body-sm text-body-sm font-medium text-on-surface-variant hover:text-on-surface"
+                    onClick={actions.onYourRequests}
+                  >
+                    <span>Your requests</span>
+                    <span className="font-label-code text-[10px] font-bold w-4 h-4 rounded-full bg-surface-container-high flex items-center justify-center text-on-surface">
+                      {requestTotal}
+                    </span>
+                  </button>
+                </div>
+                <h3 className="font-headline-sm text-headline-sm font-bold text-on-surface mt-1">{titlePart}</h3>
+                <p className="font-body-sm text-body-sm text-on-surface-variant mt-1 fp5-am-wrap">{data.subsystemSubtitle}</p>
+              </div>
+              <div className="pt-space-md border-t border-surface-container-high flex flex-wrap items-center justify-between gap-2 font-body-sm text-body-sm">
+                <span className="text-on-surface-variant">Need a part not listed?</span>
+                <button type="button" className="fp5-am-ask-link font-semibold text-on-surface inline-flex items-center gap-1 hover:underline" onClick={actions.onAskRoam}>
+                  <span>Ask Roam to add it</span>
+                  <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
+                </button>
+              </div>
+            </section>
+          </div>
+
+          <div className="fp5-am-tiers flex flex-col gap-space-lg">
+            {sections.map((section) => (
+              <TierSection key={section.tier} section={section} onOpenRow={actions.onOpenRow} plate={data.plate} />
             ))}
           </div>
 
-          <footer className="text-center font-caption text-caption text-on-surface-variant pt-space-lg border-t border-surface-container-high">
-            Roam Fleet Match Intelligence Engine · {data.hubLabel}
-            <br />
-            Non-commercial parts encyclopedia · Zero pricing or procurement bias
+          <footer className="fp5-am-engine-footer pt-space-lg mt-space-md border-t border-outline-variant/30 font-body-sm text-body-sm text-on-surface-variant text-center fp5-am-wrap">
+            Roam Fleet Match Intelligence Engine · Kingston Hub #01 · Non-commercial parts encyclopedia · Zero pricing or procurement bias
           </footer>
         </div>
       </div>
@@ -122,55 +149,150 @@ export function Fp5Screen({
   );
 }
 
-function Row({ row, onOpen }: { row: Fp5ResultRow; onOpen: () => void }) {
+function TierSection({
+  section,
+  onOpenRow,
+  plate,
+}: {
+  section: Fp5ViewModel["tierSections"][number];
+  onOpenRow: (id: string) => void;
+  plate: string;
+}) {
+  const accent = section.accentColor || "#2563eb";
+  const subtitle = section.description?.includes(plate)
+    ? section.description
+    : section.description;
+  return (
+    <section
+      className={`fp5-am-tier rounded-xl border border-outline-variant/30 bg-surface-container-lowest shadow-sm overflow-hidden border-l-4 ${section.allChecking ? "fp5-am-tier-all-checking" : ""}`}
+      style={{ borderLeftColor: accent }}
+    >
+      <div
+        className={
+          section.allChecking
+            ? "fp5-am-tier-head fp5-am-tier-head-checking px-space-lg py-space-md border-b border-amber-500/30"
+            : "fp5-am-tier-head px-space-lg py-space-md border-b border-surface-container-high bg-surface-container-low/60"
+        }
+      >
+        <div className="flex flex-wrap items-start justify-between gap-space-md">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="fp5-am-tier-dot w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: accent }} />
+              <h4 className="font-headline-sm text-headline-sm font-bold text-on-surface">{section.heading}</h4>
+              {subtitle ? (
+                <span className="font-body-sm text-body-sm text-on-surface-variant fp5-am-wrap">
+                  <span className="text-on-surface-variant/70">• </span>
+                  {subtitle}
+                </span>
+              ) : null}
+            </div>
+            {section.allChecking ? (
+              <p className="font-body-sm text-body-sm text-on-surface-variant mt-2 inline-flex items-center gap-1.5 fp5-am-wrap">
+                <span className="material-symbols-outlined text-[16px] text-amber-700 dark:text-amber-300">info</span>
+                <span>Roam found these from shared parts and is still confirming them.</span>
+              </p>
+            ) : null}
+          </div>
+          {section.countLabel ? (
+            <span
+              className={
+                section.allChecking
+                  ? "fp5-am-tier-count fp5-am-tier-count-checking font-label-code text-caption font-semibold px-2 py-0.5 rounded border shrink-0"
+                  : "fp5-am-tier-count font-label-code text-caption font-medium text-on-surface-variant shrink-0"
+              }
+            >
+              {section.countLabel}
+            </span>
+          ) : null}
+        </div>
+      </div>
+      <div className="divide-y divide-surface-container-high">
+        {section.rows.map((row) => (
+          <ResultRow key={row.id} row={row} onOpen={() => onOpenRow(row.id)} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ResultRow({ row, onOpen }: { row: Fp5ResultRow; onOpen: () => void }) {
   const axle = formatAxleTag(row.positionLabel || null);
+  const copyNumber = () => {
+    if (row.partNumberCopy && row.partNumberCopy !== "—") {
+      void navigator.clipboard.writeText(row.partNumberCopy);
+    }
+  };
   return (
     <div
       role="button"
       tabIndex={0}
-      className="w-full text-left border-t border-surface-container-high px-space-lg py-space-md hover:bg-surface-container-low/40 cursor-pointer"
+      className="fp5-am-row p-space-lg hover:bg-surface-container-low/50 cursor-pointer text-left w-full"
       onClick={onOpen}
-      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onOpen(); }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") onOpen();
+      }}
     >
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="font-body-md font-bold">{row.partName}</span>
-        <span className="font-mono-sm text-primary">{row.brandLabel}</span>
-        <button
-          type="button"
-          className="font-mono-sm px-2 py-0.5 rounded bg-surface-container text-primary"
-          onClick={(e) => {
-            e.stopPropagation();
-            if (row.partNumber && row.partNumber !== "—") void navigator.clipboard.writeText(row.partNumber);
-          }}
-        >
-          {row.partNumber}
-        </button>
-        <span className="px-2 py-0.5 rounded bg-surface-container text-caption font-semibold">{row.typeTag}</span>
-        <span className="px-2 py-0.5 rounded bg-surface-container text-caption">{axle}</span>
-        <span
-          className={`px-2 py-0.5 rounded text-caption font-semibold ${
-            row.statusChip === "checking" ? "bg-amber-500/15 text-amber-900 dark:text-amber-100" : "bg-emerald-500/15 text-emerald-900 dark:text-emerald-100"
-          }`}
-          title={row.statusChip === "checking" ? "Roam is confirming this match. You can still use the number." : undefined}
-        >
-          {row.statusChip === "checking" ? "Roam is checking" : "Confirmed"}
-        </span>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-space-md">
+        <div className="min-w-0 flex-1 space-y-2">
+          <div className="flex flex-wrap items-center gap-2 fp5-am-row-tags">
+            <span className="font-body-md font-semibold text-on-surface">{row.partName}</span>
+            <button
+              type="button"
+              className="fp5-am-part-number group inline-flex items-center gap-1.5 font-label-code text-caption font-medium px-2 py-0.5 rounded border border-outline-variant/50 bg-surface-container-low text-on-surface hover:bg-surface-container"
+              title="Click to copy part number"
+              onClick={(e) => {
+                e.stopPropagation();
+                copyNumber();
+              }}
+            >
+              <span className="fp5-am-wrap">{row.brandLabel} {row.partNumber}</span>
+              <span className="material-symbols-outlined text-[14px] text-on-surface-variant group-hover:text-on-surface">content_copy</span>
+            </button>
+            <span className="fp5-am-type-tag font-caption text-[10px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded border border-outline-variant/40 bg-surface-container-low text-on-surface-variant">
+              {row.typeTag}
+            </span>
+            {axle ? (
+              <span className="font-caption text-[10px] px-2 py-0.5 rounded-full bg-surface-container-low text-on-surface-variant font-medium">
+                {axle}
+              </span>
+            ) : null}
+          </div>
+          <div className="relative inline-block max-w-full fp5-am-has-tooltip">
+            <div className="flex items-center gap-1.5 font-body-sm text-body-sm text-on-surface-variant py-0.5 min-w-0">
+              <span className="material-symbols-outlined text-[16px] shrink-0 text-outline">link</span>
+              <span className="fp5-am-why-line fp5-am-wrap">{row.whyLine}</span>
+            </div>
+            <div className="fp5-am-tooltip fp5-am-tooltip-bubble" role="tooltip">
+              <div className="font-label-code text-caption space-y-0.5">
+                <div><span className="text-on-surface-variant">Your car:</span> {row.whyTooltipCar}</div>
+                <div><span className="text-on-surface-variant">This part:</span> {row.whyTooltipPart}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-space-md shrink-0 self-end md:self-center">
+          {row.statusChip === "checking" ? (
+            <div className="relative fp5-am-has-tooltip">
+              <span className="fp5-am-status fp5-am-status-checking inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-caption font-medium">
+                <span className="material-symbols-outlined text-[16px]">visibility</span>
+                <span>Roam is checking</span>
+              </span>
+              <div className="fp5-am-tooltip fp5-am-tooltip-bubble fp5-am-tooltip-right" role="tooltip">
+                <span>Roam is confirming this match. You can still use the number.</span>
+              </div>
+            </div>
+          ) : (
+            <span className="fp5-am-status fp5-am-status-confirmed inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-caption font-medium">
+              <span className="fp5-am-dot fp5-am-dot-confirmed w-1.5 h-1.5" aria-hidden />
+              <span>Confirmed</span>
+            </span>
+          )}
+          <span className="fp5-am-view-details font-body-sm text-body-sm font-medium text-on-surface-variant inline-flex items-center gap-1">
+            <span>View details</span>
+            <span className="material-symbols-outlined text-[16px]">chevron_right</span>
+          </span>
+        </div>
       </div>
-      <div className="mt-2 grid sm:grid-cols-2 gap-2 text-xs rounded border border-surface-container-high bg-surface-container-low px-2 py-1.5">
-        <span><strong>Your car:</strong> {row.whyTooltipCar}</span>
-        <span><strong>This part:</strong> {row.whyTooltipPart}</span>
-      </div>
-      <p className="mt-2 font-body-sm text-on-surface-variant flex items-center gap-1 has-tooltip relative group">
-        <span className="material-symbols-outlined text-[16px]">link</span>
-        <span title={`${row.whyTooltipCar} · ${row.whyTooltipPart}`}>{row.whyLine}</span>
-        {row.checkingNote ? <span className="text-amber-800 dark:text-amber-200"> · {row.checkingNote}</span> : null}
-        <span className="pointer-events-none absolute left-0 top-full z-10 mt-1 hidden max-w-sm rounded-lg bg-slate-950 px-3 py-2 text-xs text-white shadow-lg group-hover:block">
-          {row.whyTooltipCar}
-          <br />
-          {row.whyTooltipPart}
-        </span>
-      </p>
-      <span className="mt-2 inline-block text-primary font-body-sm font-semibold">View details ›</span>
     </div>
   );
 }

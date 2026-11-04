@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_dashboard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{"colors":{"on-primary-container":"#ced8ff","inverse-surface":"#2e3039","surface":"#faf8ff","on-primary":"#ffffff","surface-container":"#ededf9","outline-variant":"#c3c6d7","surface-container-low":"#f3f3ff","tertiary-container":"#575e77","surface-tint":"#0053db","on-primary-fixed":"#00174b","on-surface":"#191b24","on-error-container":"#93000a","surface-container-high":"#e7e7f3","on-secondary":"#ffffff","primary":"#003ea9","on-tertiary":"#ffffff","on-secondary-fixed-variant":"#3f465c","outline":"#737686","error":"#ba1a1a","tertiary":"#40465e","background":"#faf8ff","on-error":"#ffffff","secondary":"#565e74","secondary-container":"#dae2fd","secondary-fixed":"#dae2fd","surface-container-highest":"#e1e1ed","on-tertiary-fixed-variant":"#3f465c","on-background":"#191b24","primary-fixed":"#dbe1ff","on-secondary-container":"#5c647a","inverse-on-surface":"#f0f0fc","primary-container":"#0153dc","on-primary-fixed-variant":"#003ea8","surface-dim":"#d9d9e5","on-tertiary-fixed":"#141b30","surface-bright":"#faf8ff","error-container":"#ffdad6","on-secondary-fixed":"#131b2e","tertiary-fixed":"#dbe1ff","tertiary-fixed-dim":"#bfc5e2","surface-container-lowest":"#ffffff","surface-variant":"#e1e1ed","on-surface-variant":"#434655","on-tertiary-container":"#d2d8f6","secondary-fixed-dim":"#bec6e0","primary-fixed-dim":"#b4c5ff","inverse-primary":"#b4c5ff"},"borderRadius":{"DEFAULT":"0.125rem","lg":"0.25rem","xl":"0.5rem","full":"0.75rem"},"spacing":{"space-xs":"0.25rem","space-lg":"1rem","margin-panel":"1rem","space-md":"0.75rem","margin":"1.5rem","space-sm":"0.5rem","gutter-dense":"0.5rem","space-xl":"1.5rem","gutter":"1rem"},"fontFamily":{"label-md":["Inter"],"mono-md":["JetBrains Mono"],"headline-xl":["Inter"],"headline-md":["Inter"],"headline-lg":["Inter"],"body-sm":["Inter"],"mono-sm":["JetBrains Mono"],"mono-lg":["JetBrains Mono"],"label-xs":["Inter"],"body-md":["Inter"]},"fontSize":{"label-md":["12px",{"lineHeight":"16px","letterSpacing":"0.01em","fontWeight":"500"}],"mono-md":["12px",{"lineHeight":"16px","letterSpacing":"0","fontWeight":"500"}],"headline-xl":["24px",{"lineHeight":"32px","letterSpacing":"-0.02em","fontWeight":"600"}],"headline-md":["16px",{"lineHeight":"24px","letterSpacing":"-0.01em","fontWeight":"600"}],"headline-lg":["20px",{"lineHeight":"28px","letterSpacing":"-0.015em","fontWeight":"600"}],"body-sm":["13px",{"lineHeight":"18px","letterSpacing":"0","fontWeight":"400"}],"mono-sm":["11px",{"lineHeight":"14px","letterSpacing":"0.02em","fontWeight":"400"}],"mono-lg":["14px",{"lineHeight":"20px","letterSpacing":"-0.01em","fontWeight":"500"}],"label-xs":["11px",{"lineHeight":"14px","letterSpacing":"0.04em","fontWeight":"600"}],"body-md":["14px",{"lineHeight":"20px","letterSpacing":"0","fontWeight":"400"}]}}}}</script></head><body class="bg-background font-body-md text-on-surface antialiased selection:bg-primary-fixed selection:text-on-primary-fixed"><aside class="fixed left-0 top-0 h-full w-[260px] bg-[#0f172a] z-50 flex flex-col border-r border-[#1e293b]"><div class="h-14 flex items-center justify-between px-space-lg border-b border-[#1e293b]"><div class="flex flex-col"><div class="flex items-center gap-space-xs"><span class="material-symbols-outlined text-[#38bdf8] text-[18px]">hub</span><span class="font-label-xs text-xs font-bold tracking-wider uppercase text-white">ROAM DOMINION</span></div><span class="font-mono-sm text-[10px] text-[#94a3b8] uppercase tracking-normal">Enterprise OS v4.8</span></div><span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono-sm font-semibold bg-[#1e293b] text-[#38bdf8] border border-[#334155]">PROD</span></div><div class="flex-1 overflow-y-auto px-space-sm py-space-md space-y-space-md"><div class="space-y-space-xs"><div class="px-space-sm py-1 font-label-xs text-[10px] uppercase font-bold tracking-wider text-[#64748b]">Master Data</div><nav class="space-y-0.5" data-active-classes="bg-primary-container text-on-primary font-semibold"><a class="flex items-center gap-space-sm px-space-sm h-9 rounded text-[#94a3b8] hover:bg-[#1e293b] hover:text-white transition-colors" data-path="overview" href="#"><span class="material-symbols-outlined text-[18px]">dashboard</span><span class="font-body-sm text-[13px]">Overview</span></a><a aria-current="page" class="flex items-center gap-space-sm px-space-sm h-9 rounded transition-colors bg-primary-container text-on-primary font-semibold" data-path="vehicles-active" href="#"><span class="material-symbols-outlined text-[18px]">directions_car</span><span class="font-body-sm text-[13px]">Vehicles active</span></a><a class="flex items-center gap-space-sm px-space-sm h-9 rounded text-[#94a3b8] hover:bg-[#1e293b] hover:text-white transition-colors" data-path="places-and-maps" href="#"><span class="material-symbols-outlined text-[18px]">pin_drop</span><span class="font-body-sm text-[13px]">Places and Maps</span></a><a class="flex items-center gap-space-sm px-space-sm h-9 rounded text-[#94a3b8] hover:bg-[#1e293b] hover:text-white transition-colors" data-path="fuel" href="#"><span class="material-symbols-outlined text-[18px]">local_gas_station</span><span class="font-body-sm text-[13px]">Fuel</span></a><a class="flex items-center gap-space-sm px-space-sm h-9 rounded text-[#94a3b8] hover:bg-[#1e293b] hover:text-white transition-colors" data-path="tolls" href="#"><span class="material-symbols-outlined text-[18px]">toll</span><span class="font-body-sm text-[13px]">Tolls</span></a><a class="flex items-center gap-space-sm px-space-sm h-9 rounded text-[#94a3b8] hover:bg-[#1e293b] hover:text-white transition-colors" data-path="tax-and-vendors" href="#"><span class="material-symbols-outlined text-[18px]">receipt_long</span><span class="font-body-sm text-[13px]">Tax and Vendors</span></a></nav></div><div class="space-y-space-xs"><div class="px-space-sm py-1 font-label-xs text-[10px] uppercase font-bold tracking-wider text-[#64748b]">Engines</div><nav class="space-y-0.5" data-active-classes="bg-primary-container text-on-primary font-semibold"><a class="flex items-center gap-space-sm px-space-sm h-9 rounded text-[#94a3b8] hover:bg-[#1e293b] hover:text-white transition-colors" data-path="fuel-brain" href="#"><span class="material-symbols-outlined text-[18px]">memory</span><span class="font-body-sm text-[13px]">Fuel Brain</span></a><a class="flex items-center gap-space-sm px-space-sm h-9 rounded text-[#94a3b8] hover:bg-[#1e293b] hover:text-white transition-colors" data-path="toll-brain" href="#"><span class="material-symbols-outlined text-[18px]">calculate</span><span class="font-body-sm text-[13px]">Toll Brain</span></a><a class="flex items-center gap-space-sm px-space-sm h-9 rounded text-[#94a3b8] hover:bg-[#1e293b] hover:text-white transition-colors" data-path="matching-brain" href="#"><span class="material-symbols-outlined text-[18px]">psychology</span><span class="font-body-sm text-[13px]">Matching Brain</span></a></nav></div><div class="space-y-space-xs"><div class="px-space-sm py-1 font-label-xs text-[10px] uppercase font-bold tracking-wider text-[#64748b]">Distribution</div><nav class="space-y-0.5" data-active-classes="bg-primary-container text-on-primary font-semibold"><a class="flex items-center gap-space-sm px-space-sm h-9 rounded text-[#94a3b8] hover:bg-[#1e293b] hover:text-white transition-colors" data-path="apps" href="#"><span class="material-symbols-outlined text-[18px]">apps</span><span class="font-body-sm text-[13px]">Apps</span></a><a class="flex items-center gap-space-sm px-space-sm h-9 rounded text-[#94a3b8] hover:bg-[#1e293b] hover:text-white transition-colors" data-path="data-api" href="#"><span class="material-symbols-outlined text-[18px]">api</span><span class="font-body-sm text-[13px]">Data API</span></a><a class="flex items-center gap-space-sm px-space-sm h-9 rounded text-[#94a3b8] hover:bg-[#1e293b] hover:text-white transition-colors" data-path="change-requests" href="#"><span class="material-symbols-outlined text-[18px]">published_with_changes</span><span class="font-body-sm text-[13px]">Change requests</span></a></nav></div><div class="space-y-space-xs"><div class="px-space-sm py-1 font-label-xs text-[10px] uppercase font-bold tracking-wider text-[#64748b]">Platform</div><nav class="space-y-0.5" data-active-classes="bg-primary-container text-on-primary font-semibold"><a class="flex items-center gap-space-sm px-space-sm h-9 rounded text-[#94a3b8] hover:bg-[#1e293b] hover:text-white transition-colors" data-path="staff-and-roles" href="#"><span class="material-symbols-outlined text-[18px]">badge</span><span class="font-body-sm text-[13px]">Staff and roles</span></a><a class="flex items-center gap-space-sm px-space-sm h-9 rounded text-[#94a3b8] hover:bg-[#1e293b] hover:text-white transition-colors" data-path="activity-log" href="#"><span class="material-symbols-outlined text-[18px]">receipt_long</span><span class="font-body-sm text-[13px]">Activity log</span></a><a class="flex items-center gap-space-sm px-space-sm h-9 rounded text-[#94a3b8] hover:bg-[#1e293b] hover:text-white transition-colors" data-path="platform-ops" href="#"><span class="material-symbols-outlined text-[18px]">terminal</span><span class="font-body-sm text-[13px]">Platform Ops</span></a><a class="flex items-center gap-space-sm px-space-sm h-9 rounded text-[#94a3b8] hover:bg-[#1e293b] hover:text-white transition-colors" data-path="global-settings" href="#"><span class="material-symbols-outlined text-[18px]">settings</span><span class="font-body-sm text-[13px]">Global settings</span></a></nav></div><div class="space-y-space-xs"><div class="px-space-sm py-1 font-label-xs text-[10px] uppercase font-bold tracking-wider text-[#64748b]">Back Office</div><nav class="space-y-0.5" data-active-classes="bg-primary-container text-on-primary font-semibold"><a class="flex items-center gap-space-sm px-space-sm h-9 rounded text-[#94a3b8] hover:bg-[#1e293b] hover:text-white transition-colors" data-path="gct-registrations" href="#"><span class="material-symbols-outlined text-[18px]">verified</span><span class="font-body-sm text-[13px]">GCT registrations</span></a><a class="flex items-center gap-space-sm px-space-sm h-9 rounded text-[#94a3b8] hover:bg-[#1e293b] hover:text-white transition-colors" data-path="ledger" href="#"><span class="material-symbols-outlined text-[18px]">account_balance_wallet</span><span class="font-body-sm text-[13px]">Ledger</span></a><a class="flex items-center gap-space-sm px-space-sm h-9 rounded text-[#94a3b8] hover:bg-[#1e293b] hover:text-white transition-colors" data-path="remittance" href="#"><span class="material-symbols-outlined text-[18px]">payments</span><span class="font-body-sm text-[13px]">Remittance</span></a></nav></div></div><div class="p-space-sm border-t border-[#1e293b] bg-[#0b1120]"><div class="flex items-center justify-between px-space-sm py-1"><div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span><span class="font-mono-sm text-[11px] text-[#94a3b8]">CLUSTER: AP-SOUTH</span></div><span class="font-mono-sm text-[10px] text-[#64748b]">24ms</span></div></div></aside><div class="pl-[260px]"><header class="fixed top-0 left-[260px] right-0 h-14 bg-surface-container-lowest border-b border-outline-variant/40 z-40 px-space-lg flex items-center justify-between"><div class="flex items-center gap-space-lg"><div class="relative flex items-center"><span class="material-symbols-outlined absolute left-2.5 text-on-surface-variant text-[18px]">search</span><input class="w-[380px] h-9 pl-9 pr-14 bg-surface-container-low border border-outline-variant/60 rounded text-on-surface font-body-sm text-[13px] placeholder:text-outline focus:outline-none focus:border-primary-container focus:bg-surface transition-all" placeholder="Search entities, engines, routes…" type="text"/><span class="absolute right-2.5 px-1.5 py-0.5 text-[10px] font-mono-sm font-semibold text-outline bg-surface-container-highest border border-outline-variant/50 rounded">⌘K</span></div><div class="flex items-center gap-2 px-2.5 py-1 bg-surface-container-low border border-outline-variant/50 rounded"><span class="w-1.5 h-1.5 rounded-full bg-[#006e31]"></span><span class="font-mono-sm text-[11px] font-semibold text-on-surface">NODE: OK</span></div></div><div class="flex items-center gap-space-md"><button class="w-8 h-8 flex items-center justify-center rounded text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" title="Toggle Dark Mode" type="button"><span class="material-symbols-outlined text-[20px]">dark_mode</span></button><div class="h-4 w-[1px] bg-outline-variant/60"></div><div class="flex items-center gap-space-sm pl-1"><div class="text-right"><div class="font-label-md text-xs font-semibold text-on-surface leading-tight">DT · Deeki T</div><div class="font-mono-sm text-[10px] text-on-surface-variant">Superadmin / Owner</div></div><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="w-full pt-14 bg-surface min-h-screen"><div class="flex flex-col w-full">
+<!-- Operational Breadcrumbs Bar -->
+<div class="w-full bg-surface-container-lowest px-margin py-space-sm flex items-center justify-between border-b border-outline-variant/30">
+<div class="flex items-center gap-space-xs font-mono-sm text-[11px] text-on-surface-variant tracking-wider uppercase">
+<span>DOMINION</span>
+<span class="text-outline">/</span>
+<span>MASTER DATA</span>
+<span class="text-outline">/</span>
+<span>VEHICLES</span>
+<span class="text-outline">/</span>
+<span>PARTS DATABASE</span>
+<span class="text-outline">/</span>
+<span class="text-primary font-semibold">ADD PARTS</span>
+</div>
+<div class="flex items-center gap-space-sm font-mono-sm text-[11px]">
+<span class="px-2 py-0.5 rounded bg-surface-container text-on-surface-variant font-medium">INDEX: 35 FITMENTS</span>
+<span class="px-2 py-0.5 rounded bg-surface-container-high text-primary font-semibold">SCHEMA V2.4</span>
+</div>
+</div>
+<!-- Operational Canvas Viewport -->
+<div class="w-full px-margin pt-space-xl pb-28 flex flex-col items-center">
+<!-- Header Block & Views Switcher -->
+<div class="w-full max-w-4xl flex flex-col gap-space-lg mb-space-xl">
+<div class="flex items-start justify-between">
+<div class="flex flex-col">
+<div class="flex items-center gap-space-sm">
+<h1 class="font-headline-xl text-headline-xl text-on-surface">Parts database</h1>
+<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-primary-fixed text-primary font-mono-sm text-[11px] font-semibold">
+<span class="w-1.5 h-1.5 rounded-full bg-primary-container"></span>
+              LIVE CLUSTER v4.8
+            </span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1">Found a part on a catalogue page? Add it in about 2 minutes.</p>
+</div>
+<!-- Metric micro-strip -->
+<div class="flex items-center gap-space-md p-2 px-3 rounded-lg bg-surface-container-low shadow-sm">
+<div class="flex flex-col">
+<span class="font-mono-sm text-[10px] text-outline uppercase tracking-wider">Classification Engine</span>
+<span class="font-mono-md text-mono-md text-on-surface font-semibold">ISO/DIS 21448</span>
+</div>
+<div class="w-[1px] h-6 bg-outline-variant/40"></div>
+<div class="flex flex-col">
+<span class="font-mono-sm text-[10px] text-outline uppercase tracking-wider">Sync State</span>
+<span class="font-mono-md text-mono-md text-[#006e31] font-semibold">Normalized</span>
+</div>
+</div>
+</div>
+<!-- Navigation Tabs -->
+<div class="flex items-center gap-space-lg border-b border-outline-variant/40">
+<button class="pb-2.5 font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-colors" type="button">Find parts</button>
+<button class="pb-2.5 font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-colors" type="button">Full database</button>
+<button class="pb-2.5 font-label-md text-label-md text-primary font-semibold border-b-2 border-primary -mb-[1px] flex items-center gap-1.5" type="button">
+<span>Add parts</span>
+<span class="w-1.5 h-1.5 rounded-full bg-primary"></span>
+</button>
+</div>
+</div>
+<!-- Wizard Stepper & Work Area -->
+<div class="w-full max-w-4xl flex flex-col gap-space-xl">
+<!-- Back Action and Stepper Track -->
+<div class="flex flex-col gap-space-md">
+<a class="inline-flex items-center gap-1.5 font-label-md text-label-md text-on-surface-variant hover:text-primary transition-colors w-fit" href="#">
+<span class="material-symbols-outlined text-[16px]">arrow_back</span>
+<span>Back to Parts catalog</span>
+</a>
+<!-- Stepper Progress Bar -->
+<div class="w-full bg-surface-container-lowest rounded-xl p-space-md shadow-sm grid grid-cols-4 gap-space-sm relative">
+<!-- Step 1 (Current) -->
+<div class="flex items-center gap-space-sm pl-2">
+<div class="w-7 h-7 rounded-full bg-primary-container text-on-primary flex items-center justify-center font-mono-md text-mono-md font-semibold shadow-sm">1</div>
+<div class="flex flex-col min-w-0">
+<span class="font-label-md text-label-md text-on-surface font-bold truncate">The part</span>
+<span class="font-mono-sm text-[10px] text-primary">Classify type</span>
+</div>
+</div>
+<!-- Step 2 -->
+<div class="flex items-center gap-space-sm pl-2 opacity-50">
+<div class="w-7 h-7 rounded-full bg-surface-container-high text-on-surface-variant flex items-center justify-center font-mono-md text-mono-md">2</div>
+<div class="flex flex-col min-w-0">
+<span class="font-label-md text-label-md text-on-surface font-medium truncate">How it fits</span>
+<span class="font-mono-sm text-[10px] text-outline">Axle &amp; position</span>
+</div>
+</div>
+<!-- Step 3 -->
+<div class="flex items-center gap-space-sm pl-2 opacity-50">
+<div class="w-7 h-7 rounded-full bg-surface-container-high text-on-surface-variant flex items-center justify-center font-mono-md text-mono-md">3</div>
+<div class="flex flex-col min-w-0">
+<span class="font-label-md text-label-md text-on-surface font-medium truncate">Replaces</span>
+<span class="font-mono-sm text-[10px] text-outline">Cross reference</span>
+</div>
+</div>
+<!-- Step 4 -->
+<div class="flex items-center gap-space-sm pl-2 opacity-50">
+<div class="w-7 h-7 rounded-full bg-surface-container-high text-on-surface-variant flex items-center justify-center font-mono-md text-mono-md">4</div>
+<div class="flex flex-col min-w-0">
+<span class="font-label-md text-label-md text-on-surface font-medium truncate">Review</span>
+<span class="font-mono-sm text-[10px] text-outline">Publish SKU</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Main Step Panel -->
+<div class="flex flex-col bg-surface-container-lowest rounded-xl p-space-xl shadow-sm">
+<!-- Header -->
+<div class="flex flex-col mb-space-lg">
+<div class="flex items-center justify-between">
+<h2 class="font-headline-xl text-headline-xl text-on-surface">What kind of part is it?</h2>
+<span class="font-mono-sm text-[11px] text-outline uppercase tracking-wider">Step 1 of 4</span>
+</div>
+<p class="font-body-md text-body-md text-on-surface-variant mt-0.5">Pick the closest technical match. Use search to filter standard nomenclature or trade abbreviations.</p>
+</div>
+<!-- Search Input Bar -->
+<div class="relative w-full mb-space-xl">
+<span class="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-on-surface-variant text-[20px]">search</span>
+<input class="w-full h-11 pl-11 pr-24 rounded-lg bg-surface-container-low text-on-surface font-body-md text-body-md placeholder:text-outline focus:outline-none focus:bg-surface-container-lowest focus:ring-2 focus:ring-primary-container/20 transition-all shadow-inner" id="partTypeSearch" placeholder="Search part types — pads, oil filter, H4, wiper, serpentine…" type="text"/>
+<div class="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
+<kbd class="px-1.5 py-0.5 font-mono-sm text-[10px] font-semibold text-outline bg-surface-container-highest rounded">⌘K</kbd>
+<button class="text-outline hover:text-on-surface p-1 rounded transition-colors" title="Clear search" type="button">
+<span class="material-symbols-outlined text-[16px]">close</span>
+</button>
+</div>
+</div>
+<!-- Catalog Hierarchy Grouping -->
+<div class="flex flex-col gap-space-xl" id="categoryGroups">
+<!-- 1. Brakes -->
+<div class="flex flex-col gap-space-sm group-section" data-category="brakes">
+<div class="flex items-center gap-space-sm pb-1 border-b border-outline-variant/30">
+<span class="material-symbols-outlined text-[16px] text-primary">trip_origin</span>
+<span class="font-label-xs text-label-xs uppercase font-bold tracking-wider text-on-surface">1. Brakes</span>
+<span class="font-mono-sm text-[10px] text-outline ml-auto">4 items</span>
+</div>
+<div class="grid grid-cols-4 gap-space-sm pt-1">
+<!-- SELECTED TILE: Brake pads -->
+<div class="part-tile relative p-3 rounded-lg bg-primary-fixed/30 ring-2 ring-primary-container flex flex-col justify-between h-[96px] cursor-pointer hover:bg-primary-fixed/40 transition-all shadow-sm" role="button" tabindex="0">
+<div class="flex items-start justify-between">
+<span class="material-symbols-outlined text-[20px] text-primary-container">disc_full</span>
+<div class="w-4 h-4 rounded-full bg-primary-container text-on-primary flex items-center justify-center">
+<span class="material-symbols-outlined text-[12px] font-bold">check</span>
+</div>
+</div>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md font-bold text-on-surface">Brake pads</span>
+<span class="font-mono-sm text-[10px] text-primary truncate">Disc pad set</span>
+</div>
+</div>
+<!-- Brake shoes / drums -->
+<div class="part-tile relative p-3 rounded-lg bg-surface-container-low hover:bg-surface-container flex flex-col justify-between h-[96px] cursor-pointer transition-all" role="button" tabindex="0">
+<div class="flex items-start justify-between">
+<span class="material-symbols-outlined text-[20px] text-on-surface-variant">radio_button_checked</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md font-medium text-on-surface">Brake shoes / drums</span>
+<span class="font-mono-sm text-[10px] text-outline truncate">Drum shoes</span>
+</div>
+</div>
+<!-- Brake rotor -->
+<div class="part-tile relative p-3 rounded-lg bg-surface-container-low hover:bg-surface-container flex flex-col justify-between h-[96px] cursor-pointer transition-all" role="button" tabindex="0">
+<div class="flex items-start justify-between">
+<span class="material-symbols-outlined text-[20px] text-on-surface-variant">adjust</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md font-medium text-on-surface">Brake rotor</span>
+<span class="font-mono-sm text-[10px] text-outline truncate">Disc</span>
+</div>
+</div>
+<!-- Brake fluid -->
+<div class="part-tile relative p-3 rounded-lg bg-surface-container-low hover:bg-surface-container flex flex-col justify-between h-[96px] cursor-pointer transition-all" role="button" tabindex="0">
+<div class="flex items-start justify-between">
+<span class="material-symbols-outlined text-[20px] text-on-surface-variant">opacity</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md font-medium text-on-surface">Brake fluid</span>
+<span class="font-mono-sm text-[10px] text-outline truncate">DOT 3 / 4 / 5.1</span>
+</div>
+</div>
+</div>
+</div>
+<!-- 2. Engine -->
+<div class="flex flex-col gap-space-sm group-section" data-category="engine">
+<div class="flex items-center gap-space-sm pb-1 border-b border-outline-variant/30">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">engineering</span>
+<span class="font-label-xs text-label-xs uppercase font-bold tracking-wider text-on-surface">2. Engine</span>
+<span class="font-mono-sm text-[10px] text-outline ml-auto">6 items</span>
+</div>
+<div class="grid grid-cols-4 gap-space-sm pt-1">
+<!-- Oil filter -->
+<div class="part-tile relative p-3 rounded-lg bg-surface-container-low hover:bg-surface-container flex flex-col justify-between h-[96px] cursor-pointer transition-all" role="button" tabindex="0">
+<div class="flex items-start justify-between">
+<span class="material-symbols-outlined text-[20px] text-on-surface-variant">filter_alt</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md font-medium text-on-surface">Oil filter</span>
+<span class="font-mono-sm text-[10px] text-outline truncate">Cartridge / spin-on</span>
+</div>
+</div>
+<!-- Spark plugs -->
+<div class="part-tile relative p-3 rounded-lg bg-surface-container-low hover:bg-surface-container flex flex-col justify-between h-[96px] cursor-pointer transition-all" role="button" tabindex="0">
+<div class="flex items-start justify-between">
+<span class="material-symbols-outlined text-[20px] text-on-surface-variant">bolt</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md font-medium text-on-surface">Spark plugs</span>
+<span class="font-mono-sm text-[10px] text-outline truncate">Plug set</span>
+</div>
+</div>
+<!-- Ignition coil -->
+<div class="part-tile relative p-3 rounded-lg bg-surface-container-low hover:bg-surface-container flex flex-col justify-between h-[96px] cursor-pointer transition-all" role="button" tabindex="0">
+<div class="flex items-start justify-between">
+<span class="material-symbols-outlined text-[20px] text-on-surface-variant">electric_meter</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md font-medium text-on-surface">Ignition coil</span>
+<span class="font-mono-sm text-[10px] text-outline truncate">Coil pack</span>
+</div>
+</div>
+<!-- Oxygen sensor -->
+<div class="part-tile relative p-3 rounded-lg bg-surface-container-low hover:bg-surface-container flex flex-col justify-between h-[96px] cursor-pointer transition-all" role="button" tabindex="0">
+<div class="flex items-start justify-between">
+<span class="material-symbols-outlined text-[20px] text-on-surface-variant">sensors</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md font-medium text-on-surface">Oxygen sensor</span>
+<span class="font-mono-sm text-[10px] text-outline truncate">O2 / lambda</span>
+</div>
+</div>
+<!-- Thermostat -->
+<div class="part-tile relative p-3 rounded-lg bg-surface-container-low hover:bg-surface-container flex flex-col justify-between h-[96px] cursor-pointer transition-all" role="button" tabindex="0">
+<div class="flex items-start justify-between">
+<span class="material-symbols-outlined text-[20px] text-on-surface-variant">device_thermostat</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md font-medium text-on-surface">Thermostat</span>
+<span class="font-mono-sm text-[10px] text-outline truncate">Housing / valve</span>
+</div>
+</div>
+<!-- Water pump -->
+<div class="part-tile relative p-3 rounded-lg bg-surface-container-low hover:bg-surface-container flex flex-col justify-between h-[96px] cursor-pointer transition-all" role="button" tabindex="0">
+<div class="flex items-start justify-between">
+<span class="material-symbols-outlined text-[20px] text-on-surface-variant">water</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md font-medium text-on-surface">Water pump</span>
+<span class="font-mono-sm text-[10px] text-outline truncate">Coolant impeller</span>
+</div>
+</div>
+</div>
+</div>
+<!-- 3. Filters & HVAC -->
+<div class="flex flex-col gap-space-sm group-section" data-category="filters">
+<div class="flex items-center gap-space-sm pb-1 border-b border-outline-variant/30">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">air</span>
+<span class="font-label-xs text-label-xs uppercase font-bold tracking-wider text-on-surface">3. Filters &amp; HVAC</span>
+<span class="font-mono-sm text-[10px] text-outline ml-auto">3 items</span>
+</div>
+<div class="grid grid-cols-4 gap-space-sm pt-1">
+<!-- Air filter -->
+<div class="part-tile relative p-3 rounded-lg bg-surface-container-low hover:bg-surface-container flex flex-col justify-between h-[96px] cursor-pointer transition-all" role="button" tabindex="0">
+<div class="flex items-start justify-between">
+<span class="material-symbols-outlined text-[20px] text-on-surface-variant">filter</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md font-medium text-on-surface">Air filter</span>
+<span class="font-mono-sm text-[10px] text-outline truncate">Engine intake</span>
+</div>
+</div>
+<!-- Fuel filter -->
+<div class="part-tile relative p-3 rounded-lg bg-surface-container-low hover:bg-surface-container flex flex-col justify-between h-[96px] cursor-pointer transition-all" role="button" tabindex="0">
+<div class="flex items-start justify-between">
+<span class="material-symbols-outlined text-[20px] text-on-surface-variant">local_gas_station</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md font-medium text-on-surface">Fuel filter</span>
+<span class="font-mono-sm text-[10px] text-outline truncate">In-line canister</span>
+</div>
+</div>
+<!-- Cabin filter -->
+<div class="part-tile relative p-3 rounded-lg bg-surface-container-low hover:bg-surface-container flex flex-col justify-between h-[96px] cursor-pointer transition-all" role="button" tabindex="0">
+<div class="flex items-start justify-between">
+<span class="material-symbols-outlined text-[20px] text-on-surface-variant">airline_seat_recline_normal</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md font-medium text-on-surface">Cabin filter</span>
+<span class="font-mono-sm text-[10px] text-outline truncate">HVAC / pollen</span>
+</div>
+</div>
+</div>
+</div>
+<!-- 4. Fluids & Transmission -->
+<div class="flex flex-col gap-space-sm group-section" data-category="fluids">
+<div class="flex items-center gap-space-sm pb-1 border-b border-outline-variant/30">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">oil_barrel</span>
+<span class="font-label-xs text-label-xs uppercase font-bold tracking-wider text-on-surface">4. Fluids &amp; Transmission</span>
+<span class="font-mono-sm text-[10px] text-outline ml-auto">4 items</span>
+</div>
+<div class="grid grid-cols-4 gap-space-sm pt-1">
+<!-- Engine oil -->
+<div class="part-tile relative p-3 rounded-lg bg-surface-container-low hover:bg-surface-container flex flex-col justify-between h-[96px] cursor-pointer transition-all" role="button" tabindex="0">
+<div class="flex items-start justify-between">
+<span class="material-symbols-outlined text-[20px] text-on-surface-variant">water_drop</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md font-medium text-on-surface">Engine oil</span>
+<span class="font-mono-sm text-[10px] text-outline truncate">0W-20, 5W-30</span>
+</div>
+</div>
+<!-- Coolant -->
+<div class="part-tile relative p-3 rounded-lg bg-surface-container-low hover:bg-surface-container flex flex-col justify-between h-[96px] cursor-pointer transition-all" role="button" tabindex="0">
+<div class="flex items-start justify-between">
+<span class="material-symbols-outlined text-[20px] text-on-surface-variant">ac_unit</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md font-medium text-on-surface">Coolant</span>
+<span class="font-mono-sm text-[10px] text-outline truncate">Antifreeze</span>
+</div>
+</div>
+<!-- Washer fluid -->
+<div class="part-tile relative p-3 rounded-lg bg-surface-container-low hover:bg-surface-container flex flex-col justify-between h-[96px] cursor-pointer transition-all" role="button" tabindex="0">
+<div class="flex items-start justify-between">
+<span class="material-symbols-outlined text-[20px] text-on-surface-variant">wash</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md font-medium text-on-surface">Washer fluid</span>
+<span class="font-mono-sm text-[10px] text-outline truncate">De-icer concentrate</span>
+</div>
+</div>
+<!-- Transmission fluid -->
+<div class="part-tile relative p-3 rounded-lg bg-surface-container-low hover:bg-surface-container flex flex-col justify-between h-[96px] cursor-pointer transition-all" role="button" tabindex="0">
+<div class="flex items-start justify-between">
+<span class="material-symbols-outlined text-[20px] text-on-surface-variant">settings_suggest</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md font-medium text-on-surface">Transmission fluid</span>
+<span class="font-mono-sm text-[10px] text-outline truncate">ATF / CVT FE</span>
+</div>
+</div>
+</div>
+</div>
+<!-- 5. Belts & Hoses -->
+<div class="flex flex-col gap-space-sm group-section" data-category="belts">
+<div class="flex items-center gap-space-sm pb-1 border-b border-outline-variant/30">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">alt_route</span>
+<span class="font-label-xs text-label-xs uppercase font-bold tracking-wider text-on-surface">5. Belts &amp; Hoses</span>
+<span class="font-mono-sm text-[10px] text-outline ml-auto">1 item</span>
+</div>
+<div class="grid grid-cols-4 gap-space-sm pt-1">
+<!-- Drive belt -->
+<div class="part-tile relative p-3 rounded-lg bg-surface-container-low hover:bg-surface-container flex flex-col justify-between h-[96px] cursor-pointer transition-all" role="button" tabindex="0">
+<div class="flex items-start justify-between">
+<span class="material-symbols-outlined text-[20px] text-on-surface-variant">sync</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md font-medium text-on-surface">Drive belt</span>
+<span class="font-mono-sm text-[10px] text-outline truncate">Serpentine / V-ribbed</span>
+</div>
+</div>
+</div>
+</div>
+<!-- 6. Battery & Electrical -->
+<div class="flex flex-col gap-space-sm group-section" data-category="electrical">
+<div class="flex items-center gap-space-sm pb-1 border-b border-outline-variant/30">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">power</span>
+<span class="font-label-xs text-label-xs uppercase font-bold tracking-wider text-on-surface">6. Battery &amp; Electrical</span>
+<span class="font-mono-sm text-[10px] text-outline ml-auto">3 items</span>
+</div>
+<div class="grid grid-cols-4 gap-space-sm pt-1">
+<!-- Battery -->
+<div class="part-tile relative p-3 rounded-lg bg-surface-container-low hover:bg-surface-container flex flex-col justify-between h-[96px] cursor-pointer transition-all" role="button" tabindex="0">
+<div class="flex items-start justify-between">
+<span class="material-symbols-outlined text-[20px] text-on-surface-variant">battery_charging_full</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md font-medium text-on-surface">Battery</span>
+<span class="font-mono-sm text-[10px] text-outline truncate">JIS / DIN size</span>
+</div>
+</div>
+<!-- Alternator -->
+<div class="part-tile relative p-3 rounded-lg bg-surface-container-low hover:bg-surface-container flex flex-col justify-between h-[96px] cursor-pointer transition-all" role="button" tabindex="0">
+<div class="flex items-start justify-between">
+<span class="material-symbols-outlined text-[20px] text-on-surface-variant">published_with_changes</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md font-medium text-on-surface">Alternator</span>
+<span class="font-mono-sm text-[10px] text-outline truncate">12V / 14V generator</span>
+</div>
+</div>
+<!-- Starter motor -->
+<div class="part-tile relative p-3 rounded-lg bg-surface-container-low hover:bg-surface-container flex flex-col justify-between h-[96px] cursor-pointer transition-all" role="button" tabindex="0">
+<div class="flex items-start justify-between">
+<span class="material-symbols-outlined text-[20px] text-on-surface-variant">power_settings_new</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md font-medium text-on-surface">Starter motor</span>
+<span class="font-mono-sm text-[10px] text-outline truncate">Gear reduction</span>
+</div>
+</div>
+</div>
+</div>
+<!-- 7. Lighting & Visibility -->
+<div class="flex flex-col gap-space-sm group-section" data-category="lighting">
+<div class="flex items-center gap-space-sm pb-1 border-b border-outline-variant/30">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">light_mode</span>
+<span class="font-label-xs text-label-xs uppercase font-bold tracking-wider text-on-surface">7. Lighting &amp; Visibility</span>
+<span class="font-mono-sm text-[10px] text-outline ml-auto">5 items</span>
+</div>
+<div class="grid grid-cols-4 gap-space-sm pt-1">
+<!-- Headlight bulb -->
+<div class="part-tile relative p-3 rounded-lg bg-surface-container-low hover:bg-surface-container flex flex-col justify-between h-[96px] cursor-pointer transition-all" role="button" tabindex="0">
+<div class="flex items-start justify-between">
+<span class="material-symbols-outlined text-[20px] text-on-surface-variant">highlight</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md font-medium text-on-surface">Headlight bulb</span>
+<span class="font-mono-sm text-[10px] text-outline truncate">H4, H11, LED</span>
+</div>
+</div>
+<!-- Brake & tail bulb -->
+<div class="part-tile relative p-3 rounded-lg bg-surface-container-low hover:bg-surface-container flex flex-col justify-between h-[96px] cursor-pointer transition-all" role="button" tabindex="0">
+<div class="flex items-start justify-between">
+<span class="material-symbols-outlined text-[20px] text-on-surface-variant">lens</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md font-medium text-on-surface">Brake &amp; tail bulb</span>
+<span class="font-mono-sm text-[10px] text-outline truncate">W21/5W</span>
+</div>
+</div>
+<!-- Indicator bulb -->
+<div class="part-tile relative p-3 rounded-lg bg-surface-container-low hover:bg-surface-container flex flex-col justify-between h-[96px] cursor-pointer transition-all" role="button" tabindex="0">
+<div class="flex items-start justify-between">
+<span class="material-symbols-outlined text-[20px] text-on-surface-variant">turn_right</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md font-medium text-on-surface">Indicator bulb</span>
+<span class="font-mono-sm text-[10px] text-outline truncate">WY21W</span>
+</div>
+</div>
+<!-- Fog light bulb -->
+<div class="part-tile relative p-3 rounded-lg bg-surface-container-low hover:bg-surface-container flex flex-col justify-between h-[96px] cursor-pointer transition-all" role="button" tabindex="0">
+<div class="flex items-start justify-between">
+<span class="material-symbols-outlined text-[20px] text-on-surface-variant">foggy</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md font-medium text-on-surface">Fog light bulb</span>
+<span class="font-mono-sm text-[10px] text-outline truncate">H16</span>
+</div>
+</div>
+<!-- Wiper blades -->
+<div class="part-tile relative p-3 rounded-lg bg-surface-container-low hover:bg-surface-container flex flex-col justify-between h-[96px] cursor-pointer transition-all" role="button" tabindex="0">
+<div class="flex items-start justify-between">
+<span class="material-symbols-outlined text-[20px] text-on-surface-variant">glass</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md font-medium text-on-surface">Wiper blades</span>
+<span class="font-mono-sm text-[10px] text-outline truncate">Length mm + U-hook</span>
+</div>
+</div>
+</div>
+</div>
+<!-- 8. Suspension & Steering -->
+<div class="flex flex-col gap-space-sm group-section" data-category="suspension">
+<div class="flex items-center gap-space-sm pb-1 border-b border-outline-variant/30">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">conversion_path</span>
+<span class="font-label-xs text-label-xs uppercase font-bold tracking-wider text-on-surface">8. Suspension &amp; Steering</span>
+<span class="font-mono-sm text-[10px] text-outline ml-auto">2 items</span>
+</div>
+<div class="grid grid-cols-4 gap-space-sm pt-1">
+<!-- Shock absorber -->
+<div class="part-tile relative p-3 rounded-lg bg-surface-container-low hover:bg-surface-container flex flex-col justify-between h-[96px] cursor-pointer transition-all" role="button" tabindex="0">
+<div class="flex items-start justify-between">
+<span class="material-symbols-outlined text-[20px] text-on-surface-variant">compress</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md font-medium text-on-surface">Shock absorber</span>
+<span class="font-mono-sm text-[10px] text-outline truncate">Damper / strut</span>
+</div>
+</div>
+<!-- Suspension parts -->
+<div class="part-tile relative p-3 rounded-lg bg-surface-container-low hover:bg-surface-container flex flex-col justify-between h-[96px] cursor-pointer transition-all" role="button" tabindex="0">
+<div class="flex items-start justify-between">
+<span class="material-symbols-outlined text-[20px] text-on-surface-variant">timeline</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md font-medium text-on-surface">Suspension parts</span>
+<span class="font-mono-sm text-[10px] text-outline truncate">Arms, links, bushes</span>
+</div>
+</div>
+</div>
+</div>
+<!-- 9. Tires & Wheels -->
+<div class="flex flex-col gap-space-sm group-section" data-category="tires">
+<div class="flex items-center gap-space-sm pb-1 border-b border-outline-variant/30">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">album</span>
+<span class="font-label-xs text-label-xs uppercase font-bold tracking-wider text-on-surface">9. Tires &amp; Wheels</span>
+<span class="font-mono-sm text-[10px] text-outline ml-auto">1 item</span>
+</div>
+<div class="grid grid-cols-4 gap-space-sm pt-1">
+<!-- Tires -->
+<div class="part-tile relative p-3 rounded-lg bg-surface-container-low hover:bg-surface-container flex flex-col justify-between h-[96px] cursor-pointer transition-all" role="button" tabindex="0">
+<div class="flex items-start justify-between">
+<span class="material-symbols-outlined text-[20px] text-on-surface-variant">circle</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md font-medium text-on-surface">Tires</span>
+<span class="font-mono-sm text-[10px] text-outline truncate">Size + load/speed</span>
+</div>
+</div>
+</div>
+</div>
+<!-- 10. Custom Unlisted Slot -->
+<div class="flex flex-col gap-space-sm pt-2">
+<div class="part-tile w-full p-4 rounded-xl border border-dashed border-outline-variant/80 hover:border-primary-container bg-surface-container-low/40 hover:bg-surface-container-low flex items-center justify-between cursor-pointer transition-all" role="button" tabindex="0">
+<div class="flex items-center gap-space-md">
+<div class="w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center text-on-surface-variant">
+<span class="material-symbols-outlined text-[20px]">add</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md font-semibold text-on-surface">Can't find it? Ask to add a part type</span>
+<span class="font-body-sm text-[12px] text-on-surface-variant">Submit schema addition request to master taxonomy database</span>
+</div>
+</div>
+<span class="px-2.5 py-1 rounded bg-surface-container-highest text-on-surface-variant font-mono-sm text-[11px] font-medium">REQUEST REQ-819</span>
+</div>
+</div>
+</div>
+<!-- Dynamic Context Alert Box for Selected Item -->
+<div class="mt-space-xl p-space-md rounded-xl bg-primary-fixed/40 flex items-start gap-space-md">
+<span class="material-symbols-outlined text-primary-container text-[20px] mt-0.5">info</span>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md font-bold text-on-primary-fixed">Selected classification: Disc pad set</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">
+              Disc brakes use pads; drum brakes use shoes. Default fitment: Specific cars (front or rear axle). In Step 2, you will be prompted to assign pad positioning and axle geometry.
+            </p>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Persistent / Sticky Execution Bar -->
+<footer class="fixed bottom-0 left-[260px] right-0 h-16 bg-surface-container-lowest/95 backdrop-blur-md px-margin flex items-center justify-between border-t border-outline-variant/40 z-30">
+<div class="flex items-center gap-space-md">
+<button class="px-5 py-2 rounded-lg font-label-md text-label-md text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-colors" type="button">
+        Cancel
+      </button>
+<div class="w-[1px] h-4 bg-outline-variant/50"></div>
+<span class="font-mono-sm text-[11px] text-outline">AUTOSAVE: DRAFT #819-01</span>
+</div>
+<div class="flex items-center gap-space-md">
+<span class="font-mono-sm text-[11px] text-on-surface-variant">Step 1 of 4 completed</span>
+<button class="h-10 px-6 rounded-lg bg-primary-container hover:bg-primary text-on-primary font-label-md text-label-md font-semibold shadow-sm flex items-center gap-2 transition-all" type="button">
+<span>Next: How it fits</span>
+<span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+</button>
+</div>
+</footer>
+</div>
+<script>
+  (function() {
+    const searchInput = document.getElementById('partTypeSearch');
+    const sections = document.querySelectorAll('.group-section');
+    const tiles = document.querySelectorAll('.part-tile');
+
+    if (searchInput) {
+      searchInput.addEventListener('input', function(e) {
+        const query = e.target.value.toLowerCase().trim();
+
+        sections.forEach(function(section) {
+          let visibleInSec = 0;
+          const sectionTiles = section.querySelectorAll('.part-tile');
+
+          sectionTiles.forEach(function(tile) {
+            const text = tile.textContent.toLowerCase();
+            if (text.includes(query)) {
+              tile.style.display = 'flex';
+              visibleInSec++;
+            } else {
+              tile.style.display = 'none';
+            }
+          });
+
+          if (visibleInSec === 0 && query !== '') {
+            section.style.display = 'none';
+          } else {
+            section.style.display = 'flex';
+          }
+        });
+      });
+    }
+
+    // Toggle selection micro-interaction
+    tiles.forEach(function(tile) {
+      tile.addEventListener('click', function() {
+        if (tile.textContent.includes("Can't find it")) return;
+        tiles.forEach(function(t) {
+          t.classList.remove('bg-primary-fixed/30', 'ring-2', 'ring-primary-container');
+          t.classList.add('bg-surface-container-low');
+          const check = t.querySelector('.material-symbols-outlined.font-bold');
+          if (check && check.parentElement) {
+            check.parentElement.remove();
+          }
+        });
+
+        tile.classList.remove('bg-surface-container-low');
+        tile.classList.add('bg-primary-fixed/30', 'ring-2', 'ring-primary-container');
+        
+        const topRow = tile.querySelector('.flex.items-start.justify-between');
+        if (topRow && !topRow.querySelector('.material-symbols-outlined.font-bold')) {
+          const checkPill = document.createElement('div');
+          checkPill.className = 'w-4 h-4 rounded-full bg-primary-container text-on-primary flex items-center justify-center';
+          checkPill.innerHTML = '<span class="material-symbols-outlined text-[12px] font-bold">check</span>';
+          topRow.appendChild(checkPill);
+        }
+      });
+    });
+  })();
+</script></main></div></body></html>

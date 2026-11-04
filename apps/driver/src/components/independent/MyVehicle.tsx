@@ -58,6 +58,17 @@ export function MyVehicle({ onOpenCarKit }: { onOpenCarKit?: () => void }) {
             ? Number((vehicle.metrics as any).odometer).toLocaleString()
             : null;
 
+  const carKitButton =
+    onOpenCarKit && carKitEnabled ? (
+      <button
+        type="button"
+        onClick={onOpenCarKit}
+        className="mt-4 w-full rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white dark:bg-white dark:text-slate-900"
+      >
+        My car kit
+      </button>
+    ) : null;
+
   return (
     <div className="space-y-6">
       <h1 className="text-xl font-bold text-slate-900 dark:text-white">My Vehicle</h1>
@@ -75,6 +86,7 @@ export function MyVehicle({ onOpenCarKit }: { onOpenCarKit?: () => void }) {
           <p className="mx-auto max-w-xs text-sm text-slate-600 dark:text-slate-400">
             When a vehicle is assigned to your account, it will show up here.
           </p>
+          {carKitButton}
         </div>
       ) : (
         <div className={cn(cardClass, 'p-5')}>
@@ -104,15 +116,7 @@ export function MyVehicle({ onOpenCarKit }: { onOpenCarKit?: () => void }) {
               </p>
             </div>
           </div>
-          {onOpenCarKit && carKitEnabled ? (
-            <button
-              type="button"
-              onClick={onOpenCarKit}
-              className="mt-4 w-full rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white dark:bg-white dark:text-slate-900"
-            >
-              My car kit
-            </button>
-          ) : null}
+          {carKitButton}
         </div>
       )}
     </div>

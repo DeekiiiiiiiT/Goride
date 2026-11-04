@@ -137,9 +137,9 @@ export function AddPartDialog({
 
   return (
     <div className="fixed inset-0 z-50 bg-inverse-surface/40 flex items-center justify-center p-4">
-      <div className="bg-surface-container-lowest rounded-xl shadow-sm w-full max-w-xl p-6 space-y-4 max-h-[90vh] overflow-auto">
+      <div role="dialog" aria-modal="true" aria-labelledby="add-part-dialog-title" className="bg-surface-container-lowest rounded-xl shadow-sm w-full max-w-xl p-6 space-y-4 max-h-[90vh] overflow-auto">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">{groupId ? "Edit a part" : "Add a part"}</h2>
+          <h2 id="add-part-dialog-title" className="text-lg font-semibold">{groupId ? "Edit a part" : "Add a part"}</h2>
           <button type="button" onClick={onClose}>Close</button>
         </div>
         <div className="flex gap-3 text-xs">

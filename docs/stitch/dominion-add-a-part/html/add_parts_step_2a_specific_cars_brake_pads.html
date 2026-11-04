@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_dashboard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{"colors":{"on-primary-container":"#ced8ff","inverse-surface":"#2e3039","surface":"#faf8ff","on-primary":"#ffffff","surface-container":"#ededf9","outline-variant":"#c3c6d7","surface-container-low":"#f3f3ff","tertiary-container":"#575e77","surface-tint":"#0053db","on-primary-fixed":"#00174b","on-surface":"#191b24","on-error-container":"#93000a","surface-container-high":"#e7e7f3","on-secondary":"#ffffff","primary":"#003ea9","on-tertiary":"#ffffff","on-secondary-fixed-variant":"#3f465c","outline":"#737686","error":"#ba1a1a","tertiary":"#40465e","background":"#faf8ff","on-error":"#ffffff","secondary":"#565e74","secondary-container":"#dae2fd","secondary-fixed":"#dae2fd","surface-container-highest":"#e1e1ed","on-tertiary-fixed-variant":"#3f465c","on-background":"#191b24","primary-fixed":"#dbe1ff","on-secondary-container":"#5c647a","inverse-on-surface":"#f0f0fc","primary-container":"#0153dc","on-primary-fixed-variant":"#003ea8","surface-dim":"#d9d9e5","on-tertiary-fixed":"#141b30","surface-bright":"#faf8ff","error-container":"#ffdad6","on-secondary-fixed":"#131b2e","tertiary-fixed":"#dbe1ff","tertiary-fixed-dim":"#bfc5e2","surface-container-lowest":"#ffffff","surface-variant":"#e1e1ed","on-surface-variant":"#434655","on-tertiary-container":"#d2d8f6","secondary-fixed-dim":"#bec6e0","primary-fixed-dim":"#b4c5ff","inverse-primary":"#b4c5ff"},"borderRadius":{"DEFAULT":"0.125rem","lg":"0.25rem","xl":"0.5rem","full":"0.75rem"},"spacing":{"space-xs":"0.25rem","space-lg":"1rem","margin-panel":"1rem","space-md":"0.75rem","margin":"1.5rem","space-sm":"0.5rem","gutter-dense":"0.5rem","space-xl":"1.5rem","gutter":"1rem"},"fontFamily":{"label-md":["Inter"],"mono-md":["JetBrains Mono"],"headline-xl":["Inter"],"headline-md":["Inter"],"headline-lg":["Inter"],"body-sm":["Inter"],"mono-sm":["JetBrains Mono"],"mono-lg":["JetBrains Mono"],"label-xs":["Inter"],"body-md":["Inter"]},"fontSize":{"label-md":["12px",{"lineHeight":"16px","letterSpacing":"0.01em","fontWeight":"500"}],"mono-md":["12px",{"lineHeight":"16px","letterSpacing":"0","fontWeight":"500"}],"headline-xl":["24px",{"lineHeight":"32px","letterSpacing":"-0.02em","fontWeight":"600"}],"headline-md":["16px",{"lineHeight":"24px","letterSpacing":"-0.01em","fontWeight":"600"}],"headline-lg":["20px",{"lineHeight":"28px","letterSpacing":"-0.015em","fontWeight":"600"}],"body-sm":["13px",{"lineHeight":"18px","letterSpacing":"0","fontWeight":"400"}],"mono-sm":["11px",{"lineHeight":"14px","letterSpacing":"0.02em","fontWeight":"400"}],"mono-lg":["14px",{"lineHeight":"20px","letterSpacing":"-0.01em","fontWeight":"500"}],"label-xs":["11px",{"lineHeight":"14px","letterSpacing":"0.04em","fontWeight":"600"}],"body-md":["14px",{"lineHeight":"20px","letterSpacing":"0","fontWeight":"400"}]}}}}</script></head><body class="bg-background font-body-md text-on-surface antialiased selection:bg-primary-fixed selection:text-on-primary-fixed"><aside class="fixed left-0 top-0 h-full w-[260px] bg-[#0f172a] z-50 flex flex-col border-r border-[#1e293b]"><div class="h-14 flex items-center justify-between px-space-lg border-b border-[#1e293b]"><div class="flex flex-col"><div class="flex items-center gap-space-xs"><span class="material-symbols-outlined text-[#38bdf8] text-[18px]">hub</span><span class="font-label-xs text-xs font-bold tracking-wider uppercase text-white">ROAM DOMINION</span></div><span class="font-mono-sm text-[10px] text-[#94a3b8] uppercase tracking-normal">Enterprise OS v4.8</span></div><span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono-sm font-semibold bg-[#1e293b] text-[#38bdf8] border border-[#334155]">PROD</span></div><div class="flex-1 overflow-y-auto px-space-sm py-space-md space-y-space-md"><div class="space-y-space-xs"><div class="px-space-sm py-1 font-label-xs text-[10px] uppercase font-bold tracking-wider text-[#64748b]">Master Data</div><nav class="space-y-0.5" data-active-classes="bg-primary-container text-on-primary font-semibold"><a class="flex items-center gap-space-sm px-space-sm h-9 rounded text-[#94a3b8] hover:bg-[#1e293b] hover:text-white transition-colors" data-path="overview" href="#"><span class="material-symbols-outlined text-[18px]">dashboard</span><span class="font-body-sm text-[13px]">Overview</span></a><a class="flex items-center gap-space-sm px-space-sm h-9 rounded text-[#94a3b8] hover:bg-[#1e293b] hover:text-white transition-colors" data-path="vehicles-active" href="#"><span class="material-symbols-outlined text-[18px]">directions_car</span><span class="font-body-sm text-[13px]">Vehicles active</span></a><a class="flex items-center gap-space-sm px-space-sm h-9 rounded text-[#94a3b8] hover:bg-[#1e293b] hover:text-white transition-colors" data-path="places-and-maps" href="#"><span class="material-symbols-outlined text-[18px]">pin_drop</span><span class="font-body-sm text-[13px]">Places and Maps</span></a><a class="flex items-center gap-space-sm px-space-sm h-9 rounded text-[#94a3b8] hover:bg-[#1e293b] hover:text-white transition-colors" data-path="fuel" href="#"><span class="material-symbols-outlined text-[18px]">local_gas_station</span><span class="font-body-sm text-[13px]">Fuel</span></a><a class="flex items-center gap-space-sm px-space-sm h-9 rounded text-[#94a3b8] hover:bg-[#1e293b] hover:text-white transition-colors" data-path="tolls" href="#"><span class="material-symbols-outlined text-[18px]">toll</span><span class="font-body-sm text-[13px]">Tolls</span></a><a class="flex items-center gap-space-sm px-space-sm h-9 rounded text-[#94a3b8] hover:bg-[#1e293b] hover:text-white transition-colors" data-path="tax-and-vendors" href="#"><span class="material-symbols-outlined text-[18px]">receipt_long</span><span class="font-body-sm text-[13px]">Tax and Vendors</span></a></nav></div><div class="space-y-space-xs"><div class="px-space-sm py-1 font-label-xs text-[10px] uppercase font-bold tracking-wider text-[#64748b]">Engines</div><nav class="space-y-0.5" data-active-classes="bg-primary-container text-on-primary font-semibold"><a class="flex items-center gap-space-sm px-space-sm h-9 rounded text-[#94a3b8] hover:bg-[#1e293b] hover:text-white transition-colors" data-path="fuel-brain" href="#"><span class="material-symbols-outlined text-[18px]">memory</span><span class="font-body-sm text-[13px]">Fuel Brain</span></a><a class="flex items-center gap-space-sm px-space-sm h-9 rounded text-[#94a3b8] hover:bg-[#1e293b] hover:text-white transition-colors" data-path="toll-brain" href="#"><span class="material-symbols-outlined text-[18px]">calculate</span><span class="font-body-sm text-[13px]">Toll Brain</span></a><a class="flex items-center gap-space-sm px-space-sm h-9 rounded text-[#94a3b8] hover:bg-[#1e293b] hover:text-white transition-colors" data-path="matching-brain" href="#"><span class="material-symbols-outlined text-[18px]">psychology</span><span class="font-body-sm text-[13px]">Matching Brain</span></a></nav></div><div class="space-y-space-xs"><div class="px-space-sm py-1 font-label-xs text-[10px] uppercase font-bold tracking-wider text-[#64748b]">Distribution</div><nav class="space-y-0.5" data-active-classes="bg-primary-container text-on-primary font-semibold"><a class="flex items-center gap-space-sm px-space-sm h-9 rounded text-[#94a3b8] hover:bg-[#1e293b] hover:text-white transition-colors" data-path="apps" href="#"><span class="material-symbols-outlined text-[18px]">apps</span><span class="font-body-sm text-[13px]">Apps</span></a><a class="flex items-center gap-space-sm px-space-sm h-9 rounded text-[#94a3b8] hover:bg-[#1e293b] hover:text-white transition-colors" data-path="data-api" href="#"><span class="material-symbols-outlined text-[18px]">api</span><span class="font-body-sm text-[13px]">Data API</span></a><a class="flex items-center gap-space-sm px-space-sm h-9 rounded text-[#94a3b8] hover:bg-[#1e293b] hover:text-white transition-colors" data-path="change-requests" href="#"><span class="material-symbols-outlined text-[18px]">published_with_changes</span><span class="font-body-sm text-[13px]">Change requests</span></a></nav></div><div class="space-y-space-xs"><div class="px-space-sm py-1 font-label-xs text-[10px] uppercase font-bold tracking-wider text-[#64748b]">Platform</div><nav class="space-y-0.5" data-active-classes="bg-primary-container text-on-primary font-semibold"><a class="flex items-center gap-space-sm px-space-sm h-9 rounded text-[#94a3b8] hover:bg-[#1e293b] hover:text-white transition-colors" data-path="staff-and-roles" href="#"><span class="material-symbols-outlined text-[18px]">badge</span><span class="font-body-sm text-[13px]">Staff and roles</span></a><a class="flex items-center gap-space-sm px-space-sm h-9 rounded text-[#94a3b8] hover:bg-[#1e293b] hover:text-white transition-colors" data-path="activity-log" href="#"><span class="material-symbols-outlined text-[18px]">receipt_long</span><span class="font-body-sm text-[13px]">Activity log</span></a><a class="flex items-center gap-space-sm px-space-sm h-9 rounded text-[#94a3b8] hover:bg-[#1e293b] hover:text-white transition-colors" data-path="platform-ops" href="#"><span class="material-symbols-outlined text-[18px]">terminal</span><span class="font-body-sm text-[13px]">Platform Ops</span></a><a class="flex items-center gap-space-sm px-space-sm h-9 rounded text-[#94a3b8] hover:bg-[#1e293b] hover:text-white transition-colors" data-path="global-settings" href="#"><span class="material-symbols-outlined text-[18px]">settings</span><span class="font-body-sm text-[13px]">Global settings</span></a></nav></div><div class="space-y-space-xs"><div class="px-space-sm py-1 font-label-xs text-[10px] uppercase font-bold tracking-wider text-[#64748b]">Back Office</div><nav class="space-y-0.5" data-active-classes="bg-primary-container text-on-primary font-semibold"><a class="flex items-center gap-space-sm px-space-sm h-9 rounded text-[#94a3b8] hover:bg-[#1e293b] hover:text-white transition-colors" data-path="gct-registrations" href="#"><span class="material-symbols-outlined text-[18px]">verified</span><span class="font-body-sm text-[13px]">GCT registrations</span></a><a class="flex items-center gap-space-sm px-space-sm h-9 rounded text-[#94a3b8] hover:bg-[#1e293b] hover:text-white transition-colors" data-path="ledger" href="#"><span class="material-symbols-outlined text-[18px]">account_balance_wallet</span><span class="font-body-sm text-[13px]">Ledger</span></a><a class="flex items-center gap-space-sm px-space-sm h-9 rounded text-[#94a3b8] hover:bg-[#1e293b] hover:text-white transition-colors" data-path="remittance" href="#"><span class="material-symbols-outlined text-[18px]">payments</span><span class="font-body-sm text-[13px]">Remittance</span></a></nav></div></div><div class="p-space-sm border-t border-[#1e293b] bg-[#0b1120]"><div class="flex items-center justify-between px-space-sm py-1"><div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span><span class="font-mono-sm text-[11px] text-[#94a3b8]">CLUSTER: AP-SOUTH</span></div><span class="font-mono-sm text-[10px] text-[#64748b]">24ms</span></div></div></aside><div class="pl-[260px]"><header class="fixed top-0 left-[260px] right-0 h-14 bg-surface-container-lowest border-b border-outline-variant/40 z-40 px-space-lg flex items-center justify-between"><div class="flex items-center gap-space-lg"><div class="relative flex items-center"><span class="material-symbols-outlined absolute left-2.5 text-on-surface-variant text-[18px]">search</span><input class="w-[380px] h-9 pl-9 pr-14 bg-surface-container-low border border-outline-variant/60 rounded text-on-surface font-body-sm text-[13px] placeholder:text-outline focus:outline-none focus:border-primary-container focus:bg-surface transition-all" placeholder="Search entities, engines, routes…" type="text"/><span class="absolute right-2.5 px-1.5 py-0.5 text-[10px] font-mono-sm font-semibold text-outline bg-surface-container-highest border border-outline-variant/50 rounded">⌘K</span></div><div class="flex items-center gap-2 px-2.5 py-1 bg-surface-container-low border border-outline-variant/50 rounded"><span class="w-1.5 h-1.5 rounded-full bg-[#006e31]"></span><span class="font-mono-sm text-[11px] font-semibold text-on-surface">NODE: OK</span></div></div><div class="flex items-center gap-space-md"><button class="w-8 h-8 flex items-center justify-center rounded text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" title="Toggle Dark Mode" type="button"><span class="material-symbols-outlined text-[20px]">dark_mode</span></button><div class="h-4 w-[1px] bg-outline-variant/60"></div><div class="flex items-center gap-space-sm pl-1"><div class="text-right"><div class="font-label-md text-xs font-semibold text-on-surface leading-tight">DT · Deeki T</div><div class="font-mono-sm text-[10px] text-on-surface-variant">Superadmin / Owner</div></div><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="w-full pt-14 bg-surface min-h-screen"><div class="flex flex-col w-full">
+<div class="p-margin max-w-[1520px] w-full mx-auto space-y-space-lg">
+<!-- Breadcrumb & Top Summary -->
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-space-md">
+<div class="flex items-center gap-2 font-mono-sm text-secondary">
+<span class="font-semibold text-on-surface">DOMINION</span>
+<span>/</span>
+<span>MASTER DATA</span>
+<span>/</span>
+<span>VEHICLES</span>
+<span>/</span>
+<span>PARTS DATABASE</span>
+<span>/</span>
+<span class="text-primary font-semibold">ADD PARTS · STEP 2</span>
+</div>
+<div class="inline-flex items-center gap-space-sm px-3 py-1.5 bg-surface-container-lowest shadow-sm rounded-xl">
+<span class="material-symbols-outlined text-[16px] text-tertiary">category</span>
+<span class="font-mono-md text-on-surface font-semibold">MK Kashiyama D0051MH</span>
+<span class="text-outline-variant font-mono-sm">·</span>
+<span class="font-body-sm text-secondary">Brake pads</span>
+<span class="text-outline-variant font-mono-sm">·</span>
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-surface-container text-[#006e31] font-label-xs">
+<span class="material-symbols-outlined text-[14px]" style="font-variation-settings: 'FILL' 1;">verified</span>
+          Verified
+        </span>
+</div>
+</div>
+<!-- Stepper (4 Steps) -->
+<div class="bg-surface-container-lowest p-space-md shadow-sm rounded-xl">
+<div class="grid grid-cols-1 sm:grid-cols-4 gap-space-md">
+<!-- Step 1 -->
+<div class="flex items-center gap-space-sm text-on-surface">
+<div class="w-6 h-6 rounded-full bg-[#006e31] text-on-primary flex items-center justify-center font-mono-sm">
+<span class="material-symbols-outlined text-[14px] font-bold">check</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-label-xs text-secondary uppercase">Step 1</span>
+<span class="font-body-sm font-semibold truncate">The part</span>
+</div>
+</div>
+<!-- Step 2 (Active) -->
+<div class="flex items-center gap-space-sm text-primary">
+<div class="w-6 h-6 rounded-full bg-primary-container text-on-primary flex items-center justify-center font-mono-sm font-bold">
+            2
+          </div>
+<div class="flex flex-col min-w-0">
+<span class="font-label-xs text-primary font-bold uppercase">Current step</span>
+<span class="font-body-sm font-bold truncate text-primary">How it fits</span>
+</div>
+</div>
+<!-- Step 3 -->
+<div class="flex items-center gap-space-sm text-secondary">
+<div class="w-6 h-6 rounded-full bg-surface-container text-secondary flex items-center justify-center font-mono-sm">
+            3
+          </div>
+<div class="flex flex-col min-w-0">
+<span class="font-label-xs text-secondary uppercase">Step 3</span>
+<span class="font-body-sm font-medium truncate">Replaces <span class="font-label-xs text-outline">(optional)</span></span>
+</div>
+</div>
+<!-- Step 4 -->
+<div class="flex items-center gap-space-sm text-secondary">
+<div class="w-6 h-6 rounded-full bg-surface-container text-secondary flex items-center justify-center font-mono-sm">
+            4
+          </div>
+<div class="flex flex-col min-w-0">
+<span class="font-label-xs text-secondary uppercase">Step 4</span>
+<span class="font-body-sm font-medium truncate">Review</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Header Section & Segmented Mode Switch -->
+<div class="space-y-space-sm pt-space-xs">
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-space-md">
+<div>
+<h1 class="font-headline-xl text-on-surface font-semibold tracking-tight">How does it fit?</h1>
+<p class="font-body-sm text-secondary mt-0.5">Tick each car the page lists. Match the chassis code (like M900A) and years.</p>
+</div>
+<!-- Mode Segmented Switch -->
+<div class="inline-flex p-1 bg-surface-container rounded-xl shadow-inner gap-1">
+<button class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-surface-container-lowest text-primary shadow-sm font-label-md font-semibold transition-all" type="button">
+<span class="material-symbols-outlined text-[16px] text-primary" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+            Specific cars
+          </button>
+<button class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-secondary hover:text-on-surface font-label-md transition-all" type="button">
+<span class="material-symbols-outlined text-[16px]">memory</span>
+            By engine
+          </button>
+<button class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-secondary hover:text-on-surface font-label-md transition-all" type="button">
+<span class="material-symbols-outlined text-[16px]">straighten</span>
+            By size or spec
+          </button>
+</div>
+</div>
+<p class="font-label-xs text-outline italic">Pads are made for specific car versions.</p>
+</div>
+<!-- Main Workspace: 60% Left / 40% Right -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-gutter items-start">
+<!-- Left Column (60%): Vehicle Catalog Picker -->
+<section class="lg:col-span-7 space-y-space-md">
+<!-- Visual Technical Blueprint Banner -->
+<div class="relative bg-surface-container-low p-space-md rounded-xl overflow-hidden shadow-sm">
+<div class="flex items-center justify-between relative z-10">
+<div class="space-y-1">
+<span class="font-label-xs uppercase font-bold text-primary tracking-wider">Axle Application Matrix</span>
+<div class="font-headline-md text-on-surface">Toyota / Daihatsu Common Chassis</div>
+<p class="font-body-sm text-secondary">Front Disc Brake Caliper Assembly [Pad Code D0051MH]</p>
+</div>
+<!-- Technical Axle Schematic SVG -->
+<div class="w-32 h-16 text-primary flex items-center justify-center opacity-90">
+<svg class="w-full h-full fill-none stroke-current" stroke-width="1.5" viewbox="0 0 160 80">
+<circle class="text-outline-variant" cx="40" cy="40" r="28" stroke-dasharray="2 3"></circle>
+<circle class="text-outline-variant" cx="120" cy="40" r="28" stroke-dasharray="2 3"></circle>
+<line class="text-outline" x1="40" x2="120" y1="40" y2="40"></line>
+<rect class="fill-primary-fixed text-primary" height="32" rx="4" width="28" x="26" y="24"></rect>
+<rect class="fill-primary-fixed text-primary" height="32" rx="4" width="28" x="106" y="24"></rect>
+<circle class="fill-primary text-primary" cx="40" cy="40" r="6"></circle>
+<circle class="fill-primary text-primary" cx="120" cy="40" r="6"></circle>
+<text class="stroke-none fill-primary font-mono-sm text-[9px] font-bold" text-anchor="middle" x="80" y="32">FRONT AXLE</text>
+</svg>
+</div>
+</div>
+</div>
+<!-- Search Bar and Instant Filters -->
+<div class="bg-surface-container-lowest p-space-md rounded-xl shadow-sm space-y-space-sm">
+<div class="relative flex items-center">
+<span class="material-symbols-outlined absolute left-3 text-secondary text-[20px]">search</span>
+<input class="w-full h-10 pl-10 pr-20 bg-surface-container-low rounded-lg text-on-surface font-body-sm placeholder:text-outline focus:outline-none focus:bg-surface-container-lowest transition-all" id="carSearchInput" placeholder="Make, model or chassis code…" type="text" value="M900"/>
+<div class="absolute right-3 flex items-center gap-1">
+<span class="px-1.5 py-0.5 font-mono-sm text-outline bg-surface-container-highest rounded">⌘K</span>
+</div>
+</div>
+<!-- Filter Badges -->
+<div class="flex flex-wrap items-center gap-1.5 pt-1">
+<button class="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-surface-container text-on-surface font-mono-sm hover:bg-surface-container-high transition-colors" type="button">
+<span class="text-secondary font-body-sm">Make:</span> All
+              <span class="material-symbols-outlined text-[14px] text-outline">arrow_drop_down</span>
+</button>
+<button class="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-surface-container text-on-surface font-mono-sm hover:bg-surface-container-high transition-colors" type="button">
+<span class="text-secondary font-body-sm">Model:</span> All
+              <span class="material-symbols-outlined text-[14px] text-outline">arrow_drop_down</span>
+</button>
+<button class="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-primary-fixed text-primary font-mono-sm font-semibold" type="button">
+<span class="text-primary font-body-sm">Chassis:</span> M900*
+              <span class="material-symbols-outlined text-[14px]">close</span>
+</button>
+<button class="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-surface-container text-on-surface font-mono-sm hover:bg-surface-container-high transition-colors" type="button">
+<span class="text-secondary font-body-sm">Years:</span> 2016–
+              <span class="material-symbols-outlined text-[14px] text-outline">arrow_drop_down</span>
+</button>
+<button class="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-surface-container text-on-surface font-mono-sm hover:bg-surface-container-high transition-colors" type="button">
+<span class="text-secondary font-body-sm">Engine:</span> All
+              <span class="material-symbols-outlined text-[14px] text-outline">arrow_drop_down</span>
+</button>
+<button class="font-label-xs text-primary ml-auto hover:underline" type="button">Reset filters</button>
+</div>
+</div>
+<!-- Vehicle Selection Group (Sister Car Grouped Section) -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
+<!-- Group Header -->
+<div class="bg-surface-container-low px-space-md py-3 flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[18px]">directions_car</span>
+<span class="font-headline-md text-on-surface">Same body: Roomy · Tank · Thor · Justy</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="px-2 py-0.5 rounded bg-secondary-fixed text-on-secondary-fixed font-mono-sm font-semibold">DAI-M900</span>
+<span class="font-label-xs text-secondary">7 / 8 selected</span>
+</div>
+</div>
+<!-- Table Header Labels -->
+<div class="grid grid-cols-12 px-space-md py-2 bg-surface text-secondary font-label-xs uppercase tracking-wider">
+<div class="col-span-1 flex items-center">
+<input checked="" class="w-4 h-4 rounded text-primary accent-primary cursor-pointer" title="Select all sister cars" type="checkbox"/>
+</div>
+<div class="col-span-4">Vehicle Model</div>
+<div class="col-span-2">Chassis</div>
+<div class="col-span-2">Production</div>
+<div class="col-span-3">Engine &amp; Trim</div>
+</div>
+<!-- Rows Container -->
+<div class="space-y-0.5 p-1 bg-surface-container-low" id="carCheckboxList">
+<!-- Row 1 -->
+<label class="grid grid-cols-12 items-center px-space-md py-2.5 bg-surface-container-lowest hover:bg-surface-container-low cursor-pointer transition-colors rounded">
+<div class="col-span-1">
+<input checked="" class="car-toggle w-4 h-4 accent-primary" data-id="c1" data-label="Toyota Roomy M900A (2020–)" type="checkbox"/>
+</div>
+<div class="col-span-4 font-body-sm font-semibold text-on-surface">Toyota Roomy</div>
+<div class="col-span-2 font-mono-sm text-primary font-semibold">M900A</div>
+<div class="col-span-2 font-mono-sm text-secondary">2020–</div>
+<div class="col-span-3 font-mono-sm text-on-surface-variant truncate">1KR-VET · Custom G-T</div>
+</label>
+<!-- Row 2 -->
+<label class="grid grid-cols-12 items-center px-space-md py-2.5 bg-surface-container-lowest hover:bg-surface-container-low cursor-pointer transition-colors rounded">
+<div class="col-span-1">
+<input checked="" class="car-toggle w-4 h-4 accent-primary" data-id="c2" data-label="Toyota Roomy M900A (2016–20)" type="checkbox"/>
+</div>
+<div class="col-span-4 font-body-sm font-semibold text-on-surface">Toyota Roomy</div>
+<div class="col-span-2 font-mono-sm text-primary font-semibold">M900A</div>
+<div class="col-span-2 font-mono-sm text-secondary">2016–2020</div>
+<div class="col-span-3 font-mono-sm text-on-surface-variant truncate">1KR-FE · X / G</div>
+</label>
+<!-- Row 3 -->
+<label class="grid grid-cols-12 items-center px-space-md py-2.5 bg-surface-container-lowest hover:bg-surface-container-low cursor-pointer transition-colors rounded">
+<div class="col-span-1">
+<input checked="" class="car-toggle w-4 h-4 accent-primary" data-id="c3" data-label="Toyota Roomy M910A" type="checkbox"/>
+</div>
+<div class="col-span-4 font-body-sm font-semibold text-on-surface">Toyota Roomy</div>
+<div class="col-span-2 font-mono-sm text-primary font-semibold">M910A 4WD</div>
+<div class="col-span-2 font-mono-sm text-secondary">2016–2020</div>
+<div class="col-span-3 font-mono-sm text-on-surface-variant truncate">1KR-FE</div>
+</label>
+<!-- Row 4 -->
+<label class="grid grid-cols-12 items-center px-space-md py-2.5 bg-surface-container-lowest hover:bg-surface-container-low cursor-pointer transition-colors rounded">
+<div class="col-span-1">
+<input checked="" class="car-toggle w-4 h-4 accent-primary" data-id="c4" data-label="Toyota Tank M900A" type="checkbox"/>
+</div>
+<div class="col-span-4 font-body-sm font-semibold text-on-surface">Toyota Tank</div>
+<div class="col-span-2 font-mono-sm text-primary font-semibold">M900A</div>
+<div class="col-span-2 font-mono-sm text-secondary">2016–2020</div>
+<div class="col-span-3 font-mono-sm text-on-surface-variant truncate">1KR-FE · Custom G</div>
+</label>
+<!-- Row 5 -->
+<label class="grid grid-cols-12 items-center px-space-md py-2.5 bg-surface-container-lowest hover:bg-surface-container-low cursor-pointer transition-colors rounded">
+<div class="col-span-1">
+<input checked="" class="car-toggle w-4 h-4 accent-primary" data-id="c5" data-label="Toyota Tank M910A" type="checkbox"/>
+</div>
+<div class="col-span-4 font-body-sm font-semibold text-on-surface">Toyota Tank</div>
+<div class="col-span-2 font-mono-sm text-primary font-semibold">M910A 4WD</div>
+<div class="col-span-2 font-mono-sm text-secondary">2016–2020</div>
+<div class="col-span-3 font-mono-sm text-on-surface-variant truncate">1KR-FE</div>
+</label>
+<!-- Row 6 -->
+<label class="grid grid-cols-12 items-center px-space-md py-2.5 bg-surface-container-lowest hover:bg-surface-container-low cursor-pointer transition-colors rounded">
+<div class="col-span-1">
+<input checked="" class="car-toggle w-4 h-4 accent-primary" data-id="c6" data-label="Daihatsu Thor M900S" type="checkbox"/>
+</div>
+<div class="col-span-4 font-body-sm font-semibold text-on-surface">Daihatsu Thor</div>
+<div class="col-span-2 font-mono-sm text-primary font-semibold">M900S</div>
+<div class="col-span-2 font-mono-sm text-secondary">2016–</div>
+<div class="col-span-3 font-mono-sm text-on-surface-variant truncate">1KR-FE · G SA III</div>
+</label>
+<!-- Row 7 -->
+<label class="grid grid-cols-12 items-center px-space-md py-2.5 bg-surface-container-lowest hover:bg-surface-container-low cursor-pointer transition-colors rounded">
+<div class="col-span-1">
+<input checked="" class="car-toggle w-4 h-4 accent-primary" data-id="c7" data-label="Subaru Justy M900F" type="checkbox"/>
+</div>
+<div class="col-span-4 font-body-sm font-semibold text-on-surface">Subaru Justy</div>
+<div class="col-span-2 font-mono-sm text-primary font-semibold">M900F</div>
+<div class="col-span-2 font-mono-sm text-secondary">2016–</div>
+<div class="col-span-3 font-mono-sm text-on-surface-variant truncate">1KR-FE · G Smart Assist</div>
+</label>
+<!-- Row 8 (Unchecked) -->
+<label class="grid grid-cols-12 items-center px-space-md py-2.5 bg-surface-container-lowest hover:bg-surface-container-low cursor-pointer transition-colors rounded opacity-75">
+<div class="col-span-1">
+<input class="car-toggle w-4 h-4 accent-primary" data-id="c8" data-label="Daihatsu Boon M700S" type="checkbox"/>
+</div>
+<div class="col-span-4 font-body-sm text-secondary">Daihatsu Boon</div>
+<div class="col-span-2 font-mono-sm text-secondary">M700S</div>
+<div class="col-span-2 font-mono-sm text-secondary">2016–</div>
+<div class="col-span-3 font-mono-sm text-outline truncate">1KR-FE · Standard</div>
+</label>
+</div>
+<div class="p-space-md bg-surface-container-lowest flex items-center justify-between">
+<span class="font-mono-sm text-outline">MATCH HEURISTIC: TIER 1 (PLATFORM MIRROR)</span>
+<a class="inline-flex items-center gap-1 font-body-sm font-semibold text-primary hover:underline" href="#">
+              Car not in the list? Request it
+              <span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+</a>
+</div>
+</div>
+</section>
+<!-- Right Column (40%): Active Selection & Axle Specs -->
+<section class="lg:col-span-5 space-y-space-md">
+<!-- Selection Summary Card -->
+<div class="bg-surface-container-lowest p-space-lg rounded-xl shadow-sm space-y-space-lg">
+<div class="flex items-center justify-between">
+<div>
+<h2 class="font-headline-md text-on-surface">Your selection</h2>
+<span class="font-body-sm text-secondary">Assigned fitment target list</span>
+</div>
+<span class="px-2.5 py-1 rounded bg-primary-fixed text-primary font-mono-md font-semibold" id="selectedCountBadge">
+              7 cars selected
+            </span>
+</div>
+<!-- Dynamic Car Chips List -->
+<div class="flex flex-wrap gap-1.5" id="selectedChipsContainer">
+<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-container text-on-surface font-body-sm shadow-xs" data-ref="c1">
+<span>Toyota Roomy M900A (2020–)</span>
+<button class="remove-chip text-outline hover:text-error flex items-center" data-id="c1" type="button">
+<span class="material-symbols-outlined text-[16px]">close</span>
+</button>
+</div>
+<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-container text-on-surface font-body-sm shadow-xs" data-ref="c2">
+<span>Toyota Roomy M900A (2016–20)</span>
+<button class="remove-chip text-outline hover:text-error flex items-center" data-id="c2" type="button">
+<span class="material-symbols-outlined text-[16px]">close</span>
+</button>
+</div>
+<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-container text-on-surface font-body-sm shadow-xs" data-ref="c3">
+<span>Toyota Roomy M910A</span>
+<button class="remove-chip text-outline hover:text-error flex items-center" data-id="c3" type="button">
+<span class="material-symbols-outlined text-[16px]">close</span>
+</button>
+</div>
+<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-container text-on-surface font-body-sm shadow-xs" data-ref="c4">
+<span>Toyota Tank M900A</span>
+<button class="remove-chip text-outline hover:text-error flex items-center" data-id="c4" type="button">
+<span class="material-symbols-outlined text-[16px]">close</span>
+</button>
+</div>
+<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-container text-on-surface font-body-sm shadow-xs" data-ref="c5">
+<span>Toyota Tank M910A</span>
+<button class="remove-chip text-outline hover:text-error flex items-center" data-id="c5" type="button">
+<span class="material-symbols-outlined text-[16px]">close</span>
+</button>
+</div>
+<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-container text-on-surface font-body-sm shadow-xs" data-ref="c6">
+<span>Daihatsu Thor M900S</span>
+<button class="remove-chip text-outline hover:text-error flex items-center" data-id="c6" type="button">
+<span class="material-symbols-outlined text-[16px]">close</span>
+</button>
+</div>
+<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-container text-on-surface font-body-sm shadow-xs" data-ref="c7">
+<span>Subaru Justy M900F</span>
+<button class="remove-chip text-outline hover:text-error flex items-center" data-id="c7" type="button">
+<span class="material-symbols-outlined text-[16px]">close</span>
+</button>
+</div>
+</div>
+<!-- Section: Where on the car? -->
+<div class="pt-space-sm space-y-space-sm">
+<label class="font-headline-md text-on-surface block">Where on the car?</label>
+<div class="grid grid-cols-2 gap-space-sm">
+<button class="h-10 rounded-lg bg-primary-container text-on-primary font-body-sm font-semibold flex items-center justify-center gap-2 shadow-sm" type="button">
+<span class="material-symbols-outlined text-[18px]">adjust</span>
+                Front Axle
+              </button>
+<button class="h-10 rounded-lg bg-surface-container-low text-secondary hover:text-on-surface font-body-sm font-medium flex items-center justify-center gap-2" type="button">
+<span class="material-symbols-outlined text-[18px]">radio_button_unchecked</span>
+                Rear Axle
+              </button>
+</div>
+<div class="flex items-start gap-2 p-2.5 bg-surface-container-low rounded-lg">
+<span class="material-symbols-outlined text-primary text-[18px] mt-0.5">info</span>
+<p class="font-body-sm text-secondary">Pads come as an axle set (left and right together). Matching clips and shims are bundled.</p>
+</div>
+</div>
+<!-- Section: Only some years? (Optional) -->
+<div class="pt-space-sm space-y-space-sm">
+<div class="flex items-center justify-between">
+<label class="font-headline-md text-on-surface">Only some years?</label>
+<span class="font-label-xs text-outline uppercase font-semibold">Optional constraint</span>
+</div>
+<div class="grid grid-cols-2 gap-space-md">
+<div class="space-y-1">
+<span class="font-label-xs text-secondary">From (year)</span>
+<input class="w-full h-9 px-3 bg-surface-container-low rounded text-on-surface font-mono-md focus:bg-surface-container-lowest focus:outline-none" type="number" value="2016"/>
+</div>
+<div class="space-y-1">
+<span class="font-label-xs text-secondary">To (year)</span>
+<input class="w-full h-9 px-3 bg-surface-container-low rounded text-on-surface font-mono-md placeholder:text-outline focus:bg-surface-container-lowest focus:outline-none" placeholder="Present / current" type="text"/>
+</div>
+</div>
+<p class="font-label-xs text-outline">Leave blank to inherit complete vehicle model lifespan.</p>
+</div>
+</div>
+<!-- Packaging & Spec Metadata Badge -->
+<div class="p-space-md bg-surface-container-lowest rounded-xl shadow-sm flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-lg bg-surface-container flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[22px]">inventory_2</span>
+</div>
+<div>
+<div class="font-body-sm font-semibold text-on-surface">4-Pad Set (Axle kit)</div>
+<div class="font-mono-sm text-secondary">WVA: 24345 · FMSI: D1522</div>
+</div>
+</div>
+<span class="font-mono-sm text-primary font-semibold">OEM SPEC</span>
+</div>
+</section>
+</div>
+<!-- Sticky Bottom Navigation Footer -->
+<div class="sticky bottom-0 z-30 -mx-margin px-margin py-3 bg-surface-container-lowest/95 backdrop-blur shadow-md flex items-center justify-between">
+<div class="flex items-center gap-space-md">
+<button class="inline-flex items-center gap-1.5 px-4 h-9 rounded bg-surface-container text-on-surface hover:bg-surface-container-high transition-colors font-body-sm font-medium" type="button">
+<span class="material-symbols-outlined text-[16px]">arrow_back</span>
+          Back to part details
+        </button>
+<button class="h-9 px-3 text-secondary hover:text-error transition-colors font-body-sm font-medium" type="button">
+          Cancel
+        </button>
+</div>
+<div class="flex items-center gap-space-lg">
+<div class="hidden sm:flex flex-col text-right">
+<span class="font-mono-sm text-secondary">PROGRESS</span>
+<span class="font-mono-md font-bold text-on-surface">Step 2 of 4</span>
+</div>
+<button class="inline-flex items-center gap-2 px-6 h-10 rounded bg-primary-container text-on-primary hover:bg-primary transition-all font-body-sm font-semibold shadow-sm" type="button">
+<span>Next: replaces (optional)</span>
+<span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<script>
+  // Simple interactive bindings for the dynamic chip/checkbox synchronizer
+  document.addEventListener('DOMContentLoaded', () => {
+    const checkboxes = document.querySelectorAll('.car-toggle');
+    const chipsContainer = document.getElementById('selectedChipsContainer');
+    const countBadge = document.getElementById('selectedCountBadge');
+
+    function syncCount() {
+      const active = document.querySelectorAll('.car-toggle:checked');
+      if (countBadge) {
+        countBadge.textContent = `${active.length} cars selected`;
+      }
+    }
+
+    checkboxes.forEach(cb => {
+      cb.addEventListener('change', () => {
+        const id = cb.dataset.id;
+        const label = cb.dataset.label;
+        const existingChip = chipsContainer.querySelector(`[data-ref="${id}"]`);
+
+        if (cb.checked && !existingChip) {
+          const div = document.createElement('div');
+          div.setAttribute('data-ref', id);
+          div.className = 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-container text-on-surface font-body-sm shadow-xs';
+          div.innerHTML = `
+            <span>${label}</span>
+            <button type="button" class="remove-chip text-outline hover:text-error flex items-center" data-id="${id}">
+              <span class="material-symbols-outlined text-[16px]">close</span>
+            </button>
+          `;
+          chipsContainer.appendChild(div);
+          attachChipHandler(div.querySelector('.remove-chip'));
+        } else if (!cb.checked && existingChip) {
+          existingChip.remove();
+        }
+        syncCount();
+      });
+    });
+
+    function attachChipHandler(btn) {
+      if (!btn) return;
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.id;
+        const matchingCb = document.querySelector(`.car-toggle[data-id="${id}"]`);
+        if (matchingCb) {
+          matchingCb.checked = false;
+        }
+        const chip = btn.closest('[data-ref]');
+        if (chip) chip.remove();
+        syncCount();
+      });
+    }
+
+    document.querySelectorAll('.remove-chip').forEach(attachChipHandler);
+  });
+</script></main></div></body></html>

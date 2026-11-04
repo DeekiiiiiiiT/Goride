@@ -3,8 +3,8 @@ import { PartDetailDrawer, type PartItem } from "./PartDetailDrawer";
 import { Fp5Screen } from "./screens/Fp5Screen";
 import { Fp12Screen } from "./screens/Fp12Screen";
 import { Fp11Screen } from "./screens/Fp11Screen";
-import { buildFp5ViewModel, buildFp11ViewModel } from "./findPartsViewModels";
-import { usePartsSavedSearches, usePartsVehicleContext } from "./findPartsQueries";
+import { buildFp5ChoiceTrail, buildFp5ViewModel, buildFp11ViewModel } from "./findPartsViewModels";
+import { usePartsActivity, usePartsSavedSearches, usePartsVehicleContext } from "./findPartsQueries";
 import type { TrimScopeTab } from "./findPartsActions";
 import {
   findPartsConnectionLatencyMs,
@@ -61,6 +61,9 @@ export function ResultsView({
   onBackToPartSelection,
   onChangeCar,
   onEditPartCategory,
+  onYourRequests,
+  position,
+  areaLabel,
   canLog,
 }: {
   loading: boolean;
@@ -79,6 +82,9 @@ export function ResultsView({
   onBackToPartSelection: () => void;
   onChangeCar: () => void;
   onEditPartCategory: () => void;
+  onYourRequests?: () => void;
+  position?: string;
+  areaLabel?: string;
   canLog: boolean;
 }) {
   const [open, setOpen] = useState<PartItem | null>(null);
@@ -88,7 +94,11 @@ export function ResultsView({
   const [searchAttempts, setSearchAttempts] = useState(0);
   const phone = typeof window !== "undefined" && window.matchMedia("(max-width: 768px)").matches;
   const vehicleContext = usePartsVehicleContext(vehicleId, componentId, Boolean(vehicleId));
+  const activityQuery = usePartsActivity();
   usePartsSavedSearches();
+  const activityRequestTotal = Number(
+    (activityQuery.data as { requests?: { total?: number } } | undefined)?.requests?.total ?? 0,
+  );
 
   const vehicleLabel = String(result?.car?.label || plate || "Vehicle");
   const fp11Actions = {
@@ -179,27 +189,53 @@ export function ResultsView({
     partName,
     vehicleContext: ctxData,
     variantCount,
+    activityRequestTotal,
+    areaLabel,
+    position,
+    choiceTrail: buildFp5ChoiceTrail({
+      vehicleLabel,
+      plate: plate || result?.car?.plate || "",
+      areaLabel,
+      partName: componentId === "cmp-brake-pad" ? "Brake pads" : partName,
+      position,
+    }),
   });
 
-  const actions = {
+  const fp5Actions = {
     onAskRoam: onAsk,
     onOpenRow: (id: string) => {
       const sections = result?.sections || [];
       const item = sections.flatMap((s) => s.items || []).find((row) => row.part?.id === id);
       if (item) setOpen(item);
     },
-    onOpenBest: phone ? () => { if (best) setOpen(best); } : undefined,
-    onEditPartCategory: phone ? onEditPartCategory : undefined,
     onBackToPartSelection,
     onChangeCar,
+    onYourRequests,
   };
 
-  const Screen = phone ? Fp12Screen : Fp5Screen;
+  const fp12Actions = {
+    ...fp5Actions,
+    onOpenBest: phone ? () => { if (best) setOpen(best); } : undefined,
+    onEditPartCategory: phone ? onEditPartCategory : undefined,
+    onUseInService: phone && canLog && best ? () => onUseInService(best) : undefined,
+  };
+
+  const positionTrail = position
+    ? position === "rear"
+      ? "Rear"
+      : position === "front"
+        ? "Front"
+        : position
+    : undefined;
 
   return (
     <div>
       {unsure ? <p>Fits the versions you left open</p> : null}
-      <Screen data={data} actions={actions} partName={partName} />
+      {phone ? (
+        <Fp12Screen data={data} actions={fp12Actions} partName={partName} />
+      ) : (
+        <Fp5Screen data={data} actions={fp5Actions} partName={partName} positionTrail={positionTrail} />
+      )}
       {open ? (
         <PartDetailDrawer
           item={open}

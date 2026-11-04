@@ -27,7 +27,9 @@ export type CatalogBulkRowResult = {
   rowIndex: number;
   ok: boolean;
   id?: string;
-  action?: "created" | "updated";
+  action?: "created" | "updated" | "skipped";
+  /** Set when action is "skipped". */
+  reason?: "already_in_database" | "duplicate_in_request";
   error?: string;
   item?: VehicleCatalogRecord;
 };
@@ -199,6 +201,7 @@ export async function bulkUpsertVehicleCatalog(
   accessToken: string,
   importBatchId: string,
   rows: CatalogBulkRowInput[],
+  onExisting: "skip" | "update" = "skip",
 ): Promise<{
   import_batch_id: string;
   results: CatalogBulkRowResult[];
@@ -209,7 +212,7 @@ export async function bulkUpsertVehicleCatalog(
   const res = await fetchWithRetry(`${writeUrl()}/bulk`, {
     method: "POST",
     headers: edgeHeaders(accessToken, "application/json"),
-    body: JSON.stringify({ import_batch_id: importBatchId, rows }),
+    body: JSON.stringify({ import_batch_id: importBatchId, rows, on_existing: onExisting }),
   });
   if (!res.ok) throw new Error(await parseError(res));
   return (await res.json()) as {

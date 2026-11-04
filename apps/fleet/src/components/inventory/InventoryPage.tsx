@@ -39,11 +39,7 @@ function InventoryModals() {
           <In3ItemDrawer />
         </InventoryModalFrame>
       ) : null}
-      {shell.modal === 'receive' ? (
-        <InventoryModalFrame>
-          <In4ReceiveDialog />
-        </InventoryModalFrame>
-      ) : null}
+      {shell.modal === 'receive' ? <In4ReceiveDialog /> : null}
       {shell.modal === 'issue' ? (
         <InventoryModalFrame>
           <In5IssueDialog />

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { CarKitDk6View } from '../carKitNavigation';
 import type { DriverCarKitPayload } from '../../../services/driverInventoryApi';
-import { carKitVehicleLabel } from '../carKitDisplay';
+import { carKitPlateOnly, formatSyncedAt } from '../carKitDisplay';
 
 const VIEW_IDS: Record<CarKitDk6View, string> = {
   loading: 'view-loading',
@@ -29,7 +29,14 @@ export function Dk6States({
   sendErrorRef?: string | null;
   onResend?: () => void;
 }) {
-  const vehiclePlate = carKitVehicleLabel(kit);
+  const vehiclePlate = carKitPlateOnly(kit);
+  const vehicleTitle = kit?.vehicleMakeModel?.trim() || 'Your vehicle';
+  const vehicleSubtitle = [kit?.vehicleFleetClass, kit?.vehicleColor].filter(Boolean).join(' · ') || null;
+  const vinLabel = kit?.vinLast4 ? `VIN: **${kit.vinLast4}` : null;
+  const fuelLabel =
+    kit?.fuelLevelPct != null ? `${Math.round(Number(kit.fuelLevelPct))}% full` : '—';
+  const syncLabel = formatSyncedAt(kit?.lastSyncedAt);
+  const versionLabel = kit?.kitVersionLabel?.trim() || null;
   const draftItem = failedDraft?.itemLabel ?? 'Kit item';
   const draftIssue = failedDraft?.issueLabel ?? 'Reported issue';
   const draftNote = failedDraft?.note?.trim() || 'No note saved with this report.';
@@ -38,8 +45,7 @@ export function Dk6States({
     kit?.odometerKm != null ? `${Number(kit.odometerKm).toLocaleString('en-JM')} km` : '—';
   const [inspectorPreview, setInspectorPreview] = useState<CarKitDk6View | null>(null);
   useEffect(() => {
-    const state = inspectorPreview ?? activeState;
-    if (!state) return;
+    const state = inspectorPreview ?? activeState ?? 'loading';
     const activeId = VIEW_IDS[state];
     Object.values(VIEW_IDS).forEach((id) => {
       const node = document.getElementById(id);
@@ -161,7 +167,7 @@ export function Dk6States({
       </div>
       <div className="bg-surface-container-lowest rounded-2xl p-space-xl shadow-sm flex flex-col items-center text-center mt-2">
       <div className="w-32 h-32 rounded-full bg-surface-container flex items-center justify-center mb-space-md relative overflow-hidden">
-      <svg className="w-20 h-20 text-outline stroke-current fill-none stroke-[1.5]" stroke-dasharray="3 3" viewbox="0 0 24 24">
+      <svg className="w-20 h-20 text-outline stroke-current fill-none stroke-[1.5]" strokeDasharray="3 3" viewBox="0 0 24 24">
       <path d="M5 17a2 2 0 1 0 4 0 2 2 0 1 0-4 0M15 17a2 2 0 1 0 4 0 2 2 0 1 0-4 0"></path>
       <path d="M5 17H3v-6l2-5h9l4 5h3v6h-2M9 17h6"></path>
       <path d="M14 6l3 5H9V6h5z"></path>
@@ -198,8 +204,10 @@ export function Dk6States({
       <span className="font-label-plate text-[16px] text-on-surface">{vehiclePlate}</span>
       </div>
       <div className="flex flex-col min-w-0">
-      <span className="font-headline-sm text-[16px] text-on-surface truncate">Honda Fit 2018</span>
-      <span className="font-body-sm text-[12px] text-on-surface-variant">Compact Fleet · White</span>
+      <span className="font-headline-sm text-[16px] text-on-surface truncate">{vehicleTitle}</span>
+      {vehicleSubtitle ? (
+      <span className="font-body-sm text-[12px] text-on-surface-variant">{vehicleSubtitle}</span>
+      ) : null}
       </div>
       </div>
       <span className="font-label-status text-[11px] px-2.5 py-1 rounded-full bg-surface-container-high text-on-surface-variant uppercase tracking-wider">Assigned</span>
@@ -225,12 +233,14 @@ export function Dk6States({
       <div className="bg-surface-container-lowest rounded-xl p-space-md shadow-sm">
       <div className="flex items-center justify-between mb-space-xs">
       <span className="font-headline-sm text-[15px] text-on-surface">Car Quick Specs</span>
-      <span className="font-label-code text-[12px] text-on-surface-variant">VIN: **4092</span>
+      {vinLabel ? (
+      <span className="font-label-code text-[12px] text-on-surface-variant">{vinLabel}</span>
+      ) : null}
       </div>
       <div className="grid grid-cols-2 gap-2 mt-2">
       <div className="p-2.5 rounded-lg bg-surface-container-low">
       <span className="font-body-sm text-[12px] text-on-surface-variant block">Fuel Level</span>
-      <span className="font-label-button text-[14px] text-on-surface">85% full</span>
+      <span className="font-label-button text-[14px] text-on-surface">{fuelLabel}</span>
       </div>
       <div className="p-2.5 rounded-lg bg-surface-container-low">
       <span className="font-body-sm text-[12px] text-on-surface-variant block">Odometer</span>
@@ -261,7 +271,7 @@ export function Dk6States({
       <div className="px-2 py-0.5 rounded-md bg-surface-container-highest">
       <span className="font-label-plate text-[14px] text-on-surface">{vehiclePlate}</span>
       </div>
-      <span className="font-headline-sm text-[15px] text-on-surface">Toyota Probox</span>
+      <span className="font-headline-sm text-[15px] text-on-surface">{vehicleTitle}</span>
       </div>
       <span className="font-label-status text-[11px] text-outline">Offline cached</span>
       </div>
@@ -280,10 +290,18 @@ export function Dk6States({
                 Retry connection
               </button>
       </div>
+      {syncLabel || versionLabel ? (
       <div className="p-space-md rounded-xl bg-surface-container-low flex items-center justify-between">
-      <span className="font-body-sm text-on-surface-variant">Last synced: Today at 07:15 AM</span>
-      <span className="font-label-code text-[11px] text-primary">v2.4-JA</span>
+      {syncLabel ? (
+      <span className="font-body-sm text-on-surface-variant">Last synced: {syncLabel}</span>
+      ) : (
+      <span className="font-body-sm text-on-surface-variant">Sync time unavailable</span>
+      )}
+      {versionLabel ? (
+      <span className="font-label-code text-[11px] text-primary">{versionLabel}</span>
+      ) : null}
       </div>
+      ) : null}
       </div>
 
       <div className="state-view hidden flex flex-col gap-space-md" id="view-sendfailed">

@@ -135,3 +135,34 @@ describe("FP13/14 stitch formatters (R29)", () => {
     expect(line.toLowerCase()).toContain("resolved from oem parts catalogue lookup");
   });
 });
+
+describe("buildFp5ViewModel auto-match tiers", () => {
+  it("maps all five stitch fixture tiers to sections", async () => {
+    const { buildFp5ViewModel } = await import("./findPartsViewModels");
+    const vm = buildFp5ViewModel({
+      result: {
+        car: { label: "2019 Toyota Roomy", plate: "5179KZ" },
+        sections: [1, 2, 3, 4, 5].map((tier) => ({
+          tier,
+          items: [{
+            tier,
+            via: tier === 2 ? "sister" : tier === 3 ? "platform_link" : tier === 5 ? "universal" : "direct",
+            fit_source: tier === 5 ? "universal" : "derived",
+            match_reason_code: "oe_number",
+            match_reason_params: { oe_number: "04465-B1191" },
+            part: {
+              id: `part-tier-${tier}`,
+              name: "Front brake pad set",
+              brand: "Toyota",
+              oem_part_number: "04465-B1191",
+              part_kind: tier === 4 ? "aftermarket" : tier === 5 ? "universal" : "oem",
+            },
+          }],
+        })),
+      },
+      vehicleContext: { service_line_label: "Rideshare Fleet" },
+    });
+    const filled = vm.tierSections.filter((s) => s.rows.length > 0);
+    expect(filled.map((s) => s.tier)).toEqual([1, 2, 3, 4, 5]);
+  });
+});

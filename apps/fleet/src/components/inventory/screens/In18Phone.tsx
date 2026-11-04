@@ -79,7 +79,7 @@ export function In18Phone() {
       <div className="flex items-center justify-between">
       <div className="flex items-center gap-space-xs">
       <span className="font-headline-sm text-headline-sm text-on-surface">Stock Registry</span>
-      <span className="px-space-xs py-0.5 rounded bg-surface-container-high font-label-code text-caption text-on-surface-variant font-medium">3 of 1,482</span>
+      <span className="px-space-xs py-0.5 rounded bg-surface-container-high font-label-code text-caption text-on-surface-variant font-medium">{form.phoneRows.length} of {form.rows.length}</span>
       </div>
       <button type="button" className="font-caption text-caption font-semibold text-on-surface-variant hover:text-on-surface flex items-center gap-0.5" onClick={cycleSort}>
       <span>Sort by {sortLabel}</span>
@@ -87,92 +87,42 @@ export function In18Phone() {
       </button>
       </div>
 
-      <div className="bg-surface-container-lowest p-space-md rounded-xl shadow-sm flex flex-col space-y-space-sm relative overflow-hidden group">
+      {form.phoneRows.length === 0 ? (
+      <div className="bg-surface-container-lowest p-space-md rounded-xl shadow-sm text-center text-on-surface-variant font-body-sm">
+      No stock rows loaded for this depot.
+      </div>
+      ) : (
+      form.phoneRows.map((row, index) => {
+        const raw = form.rows[index];
+        const itemId = strField(raw ?? {}, 'item_id', row.id);
+        return (
+      <div key={row.id} className="bg-surface-container-lowest p-space-md rounded-xl shadow-sm flex flex-col space-y-space-sm relative overflow-hidden group">
       <div className="flex items-start justify-between">
       <div className="flex items-start gap-space-sm min-w-0">
       <div className="w-12 h-12 rounded-lg bg-surface-container flex items-center justify-center shrink-0 text-on-surface-variant">
-      <span className="material-symbols-outlined text-[24px]">smartphone</span>
+      <span className="material-symbols-outlined text-[24px]">inventory_2</span>
       </div>
       <div className="min-w-0 flex flex-col">
-      <span className="font-headline-sm text-body-md font-semibold text-on-surface truncate">Phone Holder Mount</span>
+      <span className="font-headline-sm text-body-md font-semibold text-on-surface truncate">{row.label}</span>
       <div className="flex items-center gap-space-xs font-label-code text-caption text-on-surface-variant mt-0.5">
-      <span>ACC-PHM-01</span>
+      <span>{row.sku}</span>
       <span>•</span>
-      <span className="truncate">Main store (Bin A-12)</span>
+      <span className="truncate">{row.detail || row.statusLabel}</span>
       </div>
       </div>
       </div>
-      <InventoryOverflowMenu icon="more_vert" items={form.rowOverflowItems(strField(form.rows[0] ?? {}, 'item_id', ''))} className="shrink-0" />
+      <InventoryOverflowMenu icon="more_vert" items={form.rowOverflowItems(itemId)} className="shrink-0" />
       </div>
       <div className="flex items-center justify-between pt-space-xs">
       <div className="flex items-baseline gap-space-xs">
       <span className="font-caption text-caption text-on-surface-variant uppercase tracking-wider font-semibold">Available</span>
-      <span className="font-label-price text-[18px] font-bold text-on-surface">On hand: 6</span>
-      </div>
-      <span className="px-space-sm py-1 rounded-full bg-surface-container-low text-on-surface font-caption text-caption font-semibold flex items-center gap-1">
-      <span className="w-1.5 h-1.5 rounded-full bg-primary"></span>
-                In stock
-              </span>
-      </div>
-      </div>
-
-      <div className="bg-surface-container-lowest p-space-md rounded-xl shadow-sm flex flex-col space-y-space-sm relative overflow-hidden group">
-      <div className="flex items-start justify-between">
-      <div className="flex items-start gap-space-sm min-w-0">
-      <div className="w-12 h-12 rounded-lg bg-secondary-container/40 flex items-center justify-center shrink-0 text-on-secondary-container">
-      <span className="material-symbols-outlined text-[24px]">videocam</span>
-      </div>
-      <div className="min-w-0 flex flex-col">
-      <span className="font-headline-sm text-body-md font-semibold text-on-surface truncate">Dash camera Dual-Lens</span>
-      <div className="flex items-center gap-space-xs font-label-code text-caption text-on-surface-variant mt-0.5">
-      <span>ELC-DCM-01</span>
-      <span>•</span>
-      <span className="truncate">Main store</span>
+      <span className="font-label-price text-[18px] font-bold text-on-surface">{row.statusLabel}</span>
       </div>
       </div>
       </div>
-      <InventoryOverflowMenu icon="more_vert" items={form.rowOverflowItems(strField(form.rows[1] ?? {}, 'item_id', ''))} className="shrink-0" />
-      </div>
-      <div className="flex items-center justify-between pt-space-xs">
-      <div className="flex items-baseline gap-space-xs">
-      <span className="font-caption text-caption text-on-surface-variant uppercase tracking-wider font-semibold">Available</span>
-      <span className="font-label-price text-[18px] font-bold text-on-surface">On hand: 1</span>
-      </div>
-      <span className="px-space-sm py-1 rounded-full bg-secondary-fixed text-on-secondary-fixed font-caption text-caption font-semibold flex items-center gap-1">
-      <span className="material-symbols-outlined text-[12px]">qr_code</span>
-                1 Serialized
-              </span>
-      </div>
-      </div>
-
-      <div className="bg-surface-container-lowest p-space-md rounded-xl shadow-sm flex flex-col space-y-space-sm relative overflow-hidden group">
-      <div className="flex items-start justify-between">
-      <div className="flex items-start gap-space-sm min-w-0">
-      <div className="w-12 h-12 rounded-lg bg-error-container/40 flex items-center justify-center shrink-0 text-error">
-      <span className="material-symbols-outlined text-[24px]">tire_repair</span>
-      </div>
-      <div className="min-w-0 flex flex-col">
-      <span className="font-headline-sm text-body-md font-semibold text-on-surface truncate">Spare tyre 195/65 R15</span>
-      <div className="flex items-center gap-space-xs font-label-code text-caption text-on-surface-variant mt-0.5">
-      <span>TYR-SPR-01</span>
-      <span>•</span>
-      <span className="truncate">Main store</span>
-      </div>
-      </div>
-      </div>
-      <InventoryOverflowMenu icon="more_vert" items={form.rowOverflowItems(strField(form.rows[2] ?? {}, 'item_id', ''))} className="shrink-0" />
-      </div>
-      <div className="flex items-center justify-between pt-space-xs">
-      <div className="flex items-baseline gap-space-xs">
-      <span className="font-caption text-caption text-error uppercase tracking-wider font-semibold">Depleted</span>
-      <span className="font-label-price text-[18px] font-bold text-error">On hand: 0</span>
-      </div>
-      <span className="px-space-sm py-1 rounded-full bg-error-container text-on-error-container font-caption text-caption font-semibold flex items-center gap-1">
-      <span className="w-1.5 h-1.5 rounded-full bg-error"></span>
-                Out of stock (Short)
-              </span>
-      </div>
-      </div>
+        );
+      })
+      )}
       </div>
 
       <div className="flex flex-col space-y-space-sm pt-space-xs">
@@ -306,7 +256,7 @@ export function In18Phone() {
       </div>
       <div className="min-w-0">
       <span className="px-space-xs py-0.5 rounded bg-surface-container text-on-surface font-label-code text-caption font-bold">MATCH FOUND</span>
-      <h4 className="font-headline-sm text-body-md font-bold text-on-surface truncate mt-1">Dash camera ELC-DCM-01</h4>
+      <h4 className="font-headline-sm text-body-md font-bold text-on-surface truncate mt-1">{form.scanMatchTitle}</h4>
       <p className="font-label-code text-caption text-on-surface-variant truncate">Serial: {assetSerial}</p>
       </div>
       </div>

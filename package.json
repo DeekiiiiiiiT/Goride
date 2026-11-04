@@ -10,6 +10,7 @@
     "build:stitch-parts-css": "pnpm build:find-parts-css && pnpm build:pending-parts-css",
     "test:e2e:fleet:find-parts-capture": "node node_modules/@playwright/test/cli.js test -c playwright.fleet-find-parts.config.ts",
     "test:e2e:dominion:pending-parts-capture": "node node_modules/@playwright/test/cli.js test -c playwright.dominion.config.ts e2e/dominion-pending-parts-visual.spec.ts",
+    "test:e2e:dominion:add-a-part": "node node_modules/@playwright/test/cli.js test e2e/add-a-part-stitch.spec.ts e2e/add-a-part-done.spec.ts --project=dominion-admin",
     "test:e2e:fleet:fuel-soak": "node node_modules/@playwright/test/cli.js test --project=fleet e2e/fuel-recon-shadow-soak.spec.ts",
     "test:e2e:fleet": "node node_modules/@playwright/test/cli.js test --project=fleet",
     "test:e2e:rush": "playwright test",

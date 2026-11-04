@@ -48,6 +48,7 @@ export function ImportCheckStep({
   onExportRaw,
   onAuditTrail,
   onCheckAgain,
+  onCancel,
   onDownloadFailed,
   onPatchRow,
   onToggleAccepted,
@@ -75,6 +76,8 @@ export function ImportCheckStep({
   onExportRaw?: () => void;
   onAuditTrail?: () => void;
   onCheckAgain?: () => void;
+  /** Leave this check without importing and go back to the area picker. */
+  onCancel?: () => void;
   onDownloadFailed?: () => void;
   onPatchRow?: (lineNo: number) => void;
   onToggleAccepted?: (lineNo: number, accepted: boolean) => void;
@@ -292,7 +295,7 @@ export function ImportCheckStep({
           <MaterialIcon name="shield" className="text-[16px] text-primary" />
           Errors are left out. You can import the ready rows now and fix the rest later.
         </p>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button type="button" className="text-sm text-secondary inline-flex items-center gap-1" onClick={onDownloadFailed}>
             <MaterialIcon name="download" className="text-[16px]" />
             Download failed rows ({counts.error})
@@ -301,6 +304,16 @@ export function ImportCheckStep({
             <MaterialIcon name="sync" className="text-[16px]" />
             Check again
           </button>
+          {onCancel ? (
+            <button
+              type="button"
+              disabled={promoting}
+              className="h-10 px-5 rounded-xl border border-outline-variant text-on-surface font-semibold disabled:opacity-50"
+              onClick={onCancel}
+            >
+              Cancel
+            </button>
+          ) : null}
           <button
             type="button"
             disabled={promoting || importableCount === 0}

@@ -66,6 +66,8 @@ export type InventoryShellState = {
   setSelectedVendorId: (id: string | null) => void;
   selectedPoId: string | null;
   setSelectedPoId: (id: string | null) => void;
+  selectedAlertId: string | null;
+  setSelectedAlertId: (id: string | null) => void;
   selectedCountSessionId: string | null;
   setSelectedCountSessionId: (id: string | null) => void;
   setErrorBanner: (message: string | null) => void;
@@ -155,6 +157,7 @@ export function InventoryShellProvider({
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
   const [selectedVendorId, setSelectedVendorId] = useState<string | null>(null);
   const [selectedPoId, setSelectedPoId] = useState<string | null>(null);
+  const [selectedAlertId, setSelectedAlertId] = useState<string | null>(null);
   const [selectedCountSessionId, setSelectedCountSessionId] = useState<string | null>(null);
   const [overview, setOverview] = useState<Record<string, unknown> | null>(null);
   const [stockRows, setStockRows] = useState<Record<string, unknown>[]>([]);
@@ -292,6 +295,8 @@ export function InventoryShellProvider({
       setSelectedVendorId,
       selectedPoId,
       setSelectedPoId,
+      selectedAlertId,
+      setSelectedAlertId,
       selectedCountSessionId,
       setSelectedCountSessionId,
       setErrorBanner,
@@ -325,6 +330,7 @@ export function InventoryShellProvider({
       selectedReportId,
       selectedVendorId,
       selectedPoId,
+      selectedAlertId,
       selectedCountSessionId,
       readOnly,
       errorBanner,

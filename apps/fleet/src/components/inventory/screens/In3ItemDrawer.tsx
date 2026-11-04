@@ -126,72 +126,36 @@ export function In3ItemDrawer() {
       </tr>
       </thead>
       <tbody className="font-body-sm text-body-sm">
-
-      <tr className="bg-primary/5 transition-colors cursor-pointer">
+      {form.stockBrowseRows.length === 0 ? (
+      <tr>
+      <td colSpan={8} className="py-space-lg text-center text-on-surface-variant">No stock rows match this search.</td>
+      </tr>
+      ) : (
+      form.stockBrowseRows.map((row, index) => (
+      <tr key={row.id || row.sku} className={index === 0 ? 'bg-primary/5 transition-colors cursor-pointer' : 'hover:bg-surface-container-low/40 transition-colors'}>
       <td className="py-space-md px-space-md font-label-code text-label-code font-bold text-on-surface flex items-center gap-space-xs">
-      <span className="w-1.5 h-6 rounded-full bg-primary inline-block mr-1"></span>
-                      ACC-PHM-01
-                    </td>
+      {index === 0 ? <span className="w-1.5 h-6 rounded-full bg-primary inline-block mr-1"></span> : null}
+      {row.sku}
+      </td>
       <td className="py-space-md px-space-md">
       <div className="flex flex-col">
-      <span className="font-bold text-on-surface">Phone Holder Mount</span>
-      <span className="font-caption text-caption text-on-surface-variant">Heavy-duty magnetic dashboard clamp</span>
+      <span className="font-bold text-on-surface">{row.name}</span>
+      <span className="font-caption text-caption text-on-surface-variant">{row.locationLabel}</span>
       </div>
       </td>
-      <td className="py-space-md px-space-md text-on-surface-variant">Vehicle Cabin Access</td>
-      <td className="py-space-md px-space-md font-label-code text-label-code font-bold text-on-surface">1 in store</td>
-      <td className="py-space-md px-space-md font-label-code text-label-code text-on-surface-variant">1 on fleet</td>
-      <td className="py-space-md px-space-md font-label-price text-label-price text-on-surface">{form.valueLabels.stockValue}</td>
+      <td className="py-space-md px-space-md text-on-surface-variant">{row.locationLabel}</td>
+      <td className="py-space-md px-space-md font-label-code text-label-code font-bold text-on-surface">{row.qtyLabel}</td>
+      <td className="py-space-md px-space-md font-label-code text-label-code text-on-surface-variant">—</td>
+      <td className="py-space-md px-space-md font-label-price text-label-price text-on-surface">{row.valueLabel}</td>
       <td className="py-space-md px-space-md">
-      <span className="px-space-sm py-0.5 rounded-full bg-tertiary-container/10 text-on-tertiary-container font-caption text-caption font-bold">● Low stock</span>
+      <span className="px-space-sm py-0.5 rounded-full bg-surface-container text-on-surface font-caption text-caption font-medium">—</span>
       </td>
       <td className="py-space-md px-space-md text-right">
-      <span className="material-symbols-outlined text-[18px] text-on-surface font-semibold">chevron_right</span>
+      <span className="material-symbols-outlined text-[18px] text-on-surface-variant">chevron_right</span>
       </td>
       </tr>
-
-      <tr className="hover:bg-surface-container-low/40 transition-colors">
-      <td className="py-space-md px-space-md font-label-code text-label-code text-on-surface-variant">FLT-CAM-4K</td>
-      <td className="py-space-md px-space-md font-medium text-on-surface">Dual Dashcam Kingston Pro 4K</td>
-      <td className="py-space-md px-space-md text-on-surface-variant">Telematics Hardware</td>
-      <td className="py-space-md px-space-md font-label-code text-label-code">14 in store</td>
-      <td className="py-space-md px-space-md font-label-code text-label-code">72 on fleet</td>
-      <td className="py-space-md px-space-md font-label-price text-label-price">{form.valueLabels.stockValue}</td>
-      <td className="py-space-md px-space-md">
-      <span className="px-space-sm py-0.5 rounded-full bg-surface-container text-on-surface font-caption text-caption font-medium">Optimal</span>
-      </td>
-      <td className="py-space-md px-space-md text-right">
-      <span className="material-symbols-outlined text-[18px] text-on-surface-variant">more_vert</span>
-      </td>
-      </tr>
-      <tr className="hover:bg-surface-container-low/40 transition-colors">
-      <td className="py-space-md px-space-md font-label-code text-label-code text-on-surface-variant">TYR-175-65R14</td>
-      <td className="py-space-md px-space-md font-medium text-on-surface">Bridgestone Ecopia EP150 175/65R14</td>
-      <td className="py-space-md px-space-md text-on-surface-variant">Tyres & Wheels</td>
-      <td className="py-space-md px-space-md font-label-code text-label-code">8 in store</td>
-      <td className="py-space-md px-space-md font-label-code text-label-code">344 on fleet</td>
-      <td className="py-space-md px-space-md font-label-price text-label-price">{form.valueLabels.stockValue}</td>
-      <td className="py-space-md px-space-md">
-      <span className="px-space-sm py-0.5 rounded-full bg-surface-container text-on-surface font-caption text-caption font-medium">Optimal</span>
-      </td>
-      <td className="py-space-md px-space-md text-right">
-      <span className="material-symbols-outlined text-[18px] text-on-surface-variant">more_vert</span>
-      </td>
-      </tr>
-      <tr className="hover:bg-surface-container-low/40 transition-colors">
-      <td className="py-space-md px-space-md font-label-code text-label-code text-on-surface-variant">BAT-NS60L</td>
-      <td className="py-space-md px-space-md font-medium text-on-surface">Exide Maintenance-Free 45Ah NS60L</td>
-      <td className="py-space-md px-space-md text-on-surface-variant">Electrical</td>
-      <td className="py-space-md px-space-md font-label-code text-label-code">2 in store</td>
-      <td className="py-space-md px-space-md font-label-code text-label-code">86 on fleet</td>
-      <td className="py-space-md px-space-md font-label-price text-label-price">{form.valueLabels.stockValue}</td>
-      <td className="py-space-md px-space-md">
-      <span className="px-space-sm py-0.5 rounded-full bg-tertiary-container/10 text-on-tertiary-container font-caption text-caption font-bold">● Low stock</span>
-      </td>
-      <td className="py-space-md px-space-md text-right">
-      <span className="material-symbols-outlined text-[18px] text-on-surface-variant">more_vert</span>
-      </td>
-      </tr>
+      ))
+      )}
       </tbody>
       </table>
       </div>
@@ -218,7 +182,7 @@ export function In3ItemDrawer() {
       <div className="flex items-start justify-between gap-space-md">
       <div className="flex flex-col">
       <div className="flex items-center gap-space-sm">
-      <h2 className="font-headline-lg text-headline-lg font-bold text-on-surface tracking-tight" data-stitch-data-stitch-id="drawerTitle">Phone Holder Mount</h2>
+      <h2 className="font-headline-lg text-headline-lg font-bold text-on-surface tracking-tight" data-stitch-data-stitch-id="drawerTitle">{form.drawerRow?.name ?? 'Select an item'}</h2>
       <button type="button" className="p-1 rounded hover:bg-surface-container text-on-surface-variant hover:text-on-surface transition-colors" title="Edit item metadata — name, category, SKU, photo, reorder rule; quantities are immutable" onClick={() => form.openEditItem()}>
       <span className="material-symbols-outlined text-[18px]">edit</span>
       </button>
@@ -231,7 +195,7 @@ export function In3ItemDrawer() {
       </div>
 
       <div className="flex flex-wrap items-center gap-space-xs pt-1">
-      <span className="font-label-code text-label-code font-bold bg-surface-container px-space-sm py-0.5 rounded text-on-surface">ACC-PHM-01</span>
+      <span className="font-label-code text-label-code font-bold bg-surface-container px-space-sm py-0.5 rounded text-on-surface">{form.drawerRow?.sku ?? '—'}</span>
       <span className="font-caption text-caption bg-surface-container-low px-space-sm py-0.5 rounded text-on-surface-variant font-medium">Counted by quantity</span>
       <span className="font-caption text-caption bg-tertiary-container/10 px-space-sm py-0.5 rounded-full text-on-tertiary-container font-bold flex items-center gap-1">
       <span className="w-1.5 h-1.5 rounded-full bg-on-tertiary-container"></span>
@@ -440,96 +404,29 @@ export function In3ItemDrawer() {
       <span className="font-caption text-caption text-on-surface-variant">Last 5 verified ledger movements</span>
       </div>
       <div className="flex flex-col gap-space-xs">
-
-      <div className="p-space-sm bg-surface-container-low hover:bg-surface-container transition-colors rounded-lg flex items-center justify-between gap-space-sm">
+      {form.movementRows.length === 0 ? (
+      <p className="font-body-sm text-on-surface-variant px-space-sm py-2">No movements for this item yet.</p>
+      ) : (
+      form.movementRows.map((mov) => (
+      <div key={mov.id} className="p-space-sm bg-surface-container-low hover:bg-surface-container transition-colors rounded-lg flex items-center justify-between gap-space-sm">
       <div className="flex items-center gap-space-sm min-w-0">
-      <span className="font-label-code text-[11px] font-bold px-1.5 py-0.5 rounded bg-surface-container text-on-surface shrink-0">RECEIVE</span>
+      <span className="font-label-code text-[11px] font-bold px-1.5 py-0.5 rounded bg-surface-container text-on-surface shrink-0">{mov.typeLabel}</span>
       <div className="flex flex-col min-w-0">
       <div className="flex items-center gap-space-xs">
-      <span className="font-body-sm text-body-sm font-bold text-on-surface truncate">Main store</span>
+      <span className="font-body-sm text-body-sm font-bold text-on-surface truncate">{mov.locationLabel}</span>
       <span className="text-outline-variant font-caption">·</span>
-      <span className="font-caption text-caption text-on-surface-variant truncate">Deeki T</span>
+      <span className="font-caption text-caption text-on-surface-variant truncate">{mov.actor}</span>
       </div>
-      <span className="font-caption text-caption text-on-surface-variant truncate">Opening balance initial depot intake</span>
+      <span className="font-caption text-caption text-on-surface-variant truncate">{mov.note || mov.label}</span>
       </div>
       </div>
       <div className="flex flex-col items-end shrink-0">
-      <span className="font-label-code text-body-sm font-bold text-on-surface">+1</span>
-      <span className="font-caption text-[10px] text-on-surface-variant">11 Jan 2026</span>
+      <span className="font-label-code text-body-sm font-bold text-on-surface">{mov.qtyLabel || '—'}</span>
+      <span className="font-caption text-[10px] text-on-surface-variant">{mov.when}</span>
       </div>
       </div>
-
-      <div className="p-space-sm bg-surface-container-low hover:bg-surface-container transition-colors rounded-lg flex items-center justify-between gap-space-sm">
-      <div className="flex items-center gap-space-sm min-w-0">
-      <span className="font-label-code text-[11px] font-bold px-1.5 py-0.5 rounded bg-surface-container text-on-surface shrink-0">ISSUE</span>
-      <div className="flex flex-col min-w-0">
-      <div className="flex items-center gap-space-xs">
-      <span className="font-body-sm text-body-sm font-bold text-on-surface truncate">To {live.primaryPlate}</span>
-      <span className="text-outline-variant font-caption">·</span>
-      <span className="font-caption text-caption text-on-surface-variant truncate">—</span>
-      </div>
-      <span className="font-caption text-caption text-on-surface-variant truncate">Equipped to Rideshare kit</span>
-      </div>
-      </div>
-      <div className="flex flex-col items-end shrink-0">
-      <span className="font-label-code text-body-sm font-bold text-error">-1</span>
-      <span className="font-caption text-[10px] text-on-surface-variant">15 Dec 2025</span>
-      </div>
-      </div>
-
-      <div className="p-space-sm bg-surface-container-low hover:bg-surface-container transition-colors rounded-lg flex items-center justify-between gap-space-sm">
-      <div className="flex items-center gap-space-sm min-w-0">
-      <span className="font-label-code text-[11px] font-bold px-1.5 py-0.5 rounded bg-surface-container text-on-surface shrink-0">RECEIVE</span>
-      <div className="flex flex-col min-w-0">
-      <div className="flex items-center gap-space-xs">
-      <span className="font-body-sm text-body-sm font-bold text-on-surface truncate">Main store</span>
-      <span className="text-outline-variant font-caption">·</span>
-      <span className="font-caption text-caption text-on-surface-variant truncate">Deeki T</span>
-      </div>
-      <span className="font-caption text-caption text-on-surface-variant truncate">PO #{poNumber} ({vendorName})</span>
-      </div>
-      </div>
-      <div className="flex flex-col items-end shrink-0">
-      <span className="font-label-code text-body-sm font-bold text-on-surface">+2</span>
-      <span className="font-caption text-[10px] text-on-surface-variant">14 Dec 2025</span>
-      </div>
-      </div>
-
-      <div className="p-space-sm bg-surface-container-low hover:bg-surface-container transition-colors rounded-lg flex items-center justify-between gap-space-sm">
-      <div className="flex items-center gap-space-sm min-w-0">
-      <span className="font-label-code text-[11px] font-bold px-1.5 py-0.5 rounded bg-surface-container text-on-surface shrink-0">COUNT</span>
-      <div className="flex flex-col min-w-0">
-      <div className="flex items-center gap-space-xs">
-      <span className="font-body-sm text-body-sm font-bold text-on-surface truncate">Main store</span>
-      <span className="text-outline-variant font-caption">·</span>
-      <span className="font-caption text-caption text-on-surface-variant truncate">Auditor #04</span>
-      </div>
-      <span className="font-caption text-caption text-on-surface-variant truncate">Cycle count verified zero deviation</span>
-      </div>
-      </div>
-      <div className="flex flex-col items-end shrink-0">
-      <span className="font-label-code text-body-sm font-bold text-secondary">0</span>
-      <span className="font-caption text-[10px] text-on-surface-variant">02 Nov 2025</span>
-      </div>
-      </div>
-
-      <div className="p-space-sm bg-surface-container-low hover:bg-surface-container transition-colors rounded-lg flex items-center justify-between gap-space-sm">
-      <div className="flex items-center gap-space-sm min-w-0">
-      <span className="font-label-code text-[11px] font-bold px-1.5 py-0.5 rounded bg-surface-container text-on-surface shrink-0">TRANSFER</span>
-      <div className="flex flex-col min-w-0">
-      <div className="flex items-center gap-space-xs">
-      <span className="font-body-sm text-body-sm font-bold text-on-surface truncate">Depot Montego Bay</span>
-      <span className="text-outline-variant font-caption">·</span>
-      <span className="font-caption text-caption text-on-surface-variant truncate">Fleet Transit</span>
-      </div>
-      <span className="font-caption text-caption text-on-surface-variant truncate">Inter-hub inventory rebalance</span>
-      </div>
-      </div>
-      <div className="flex flex-col items-end shrink-0">
-      <span className="font-label-code text-body-sm font-bold text-on-surface">→ Main</span>
-      <span className="font-caption text-[10px] text-on-surface-variant">18 Oct 2025</span>
-      </div>
-      </div>
+      ))
+      )}
       </div>
       <button type="button" className="w-full py-space-sm text-center font-caption text-caption font-bold text-on-surface hover:bg-surface-container-low rounded transition-colors flex items-center justify-center gap-1" onClick={() => form.openMovementsTab()}>
       <span>View all {form.movementCount} movements in Movements log</span>

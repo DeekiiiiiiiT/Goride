@@ -8,10 +8,10 @@ export function In11Purchasing() {
   const form = useIn11PurchasingForm();
   const shell = useInventoryShell();
   const live = useInventoryLive(shell);
-  const vendorName = firstVendorName(live.vendors);
-  const featuredPo = live.purchaseOrders[0];
-  const featuredPoId = featuredPo ? strField(featuredPo, 'id', '') : '';
-  const poNumber = featuredPo ? strField(featuredPo, 'number', firstOpenPoNumber(live.purchaseOrders)) : firstOpenPoNumber(live.purchaseOrders);
+  const summary = form.selectedPoSummary;
+  const poId = form.selectedPoId ?? '';
+  const poNumber = summary?.ref ?? '—';
+  const vendorName = summary?.vendorName ?? '—';
   const firstVendorId = live.vendors[0] ? strField(live.vendors[0], 'id', '') || null : null;
   const openVendorEditor = () => shell.openGap('vendor-editor', { vendorId: firstVendorId });
   const openRequisition = () => shell.openGap('requisition');
@@ -280,9 +280,9 @@ export function In11Purchasing() {
                       </span>
       </div>
       <div className="font-caption text-caption text-on-surface-variant flex items-center gap-space-md mt-1">
-      <span>Created: <strong className="text-on-surface font-medium">1 Nov 2026</strong></span>
+      <span>Created: <strong className="text-on-surface font-medium">{form.poDetailMeta?.createdLabel ?? '—'}</strong></span>
       <span>•</span>
-      <span>Initiated by: <strong className="text-on-surface font-medium font-label-code">Deeki T (Platform Owner)</strong></span>
+      <span>Initiated by: <strong className="text-on-surface font-medium font-label-code">{form.poDetailMeta?.initiatedByLabel ?? '—'}</strong></span>
       <span>•</span>
       <span>Warehouse Target: <strong className="text-on-surface font-medium">{live.hubName}</strong></span>
       </div>
@@ -290,18 +290,24 @@ export function In11Purchasing() {
       </div>
 
       <div className="flex items-center flex-wrap gap-space-sm">
-      <button type="button" className="h-9 px-space-md bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm rounded transition-all" onClick={() => featuredPoId && form.poAction(featuredPoId, 'cancel')}>
+      <button type="button" className="h-9 px-space-md bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm rounded transition-all" onClick={() => poId && form.poAction(poId, 'cancel')}>
                     Cancel order
                   </button>
-      <button type="button" className="h-9 px-space-md bg-surface-container-highest hover:bg-surface-dim text-on-surface font-body-sm text-body-sm rounded font-medium transition-all flex items-center gap-1" onClick={() => featuredPoId && form.poAction(featuredPoId, 'submit')}>
+      <button type="button" className="h-9 px-space-md bg-surface-container-highest hover:bg-surface-dim text-on-surface font-body-sm text-body-sm rounded font-medium transition-all flex items-center gap-1" onClick={() => poId && form.poAction(poId, 'submit')}>
       <span className="material-symbols-outlined text-[16px]">verified</span>
                     Send for approval
                   </button>
-      <button type="button" className="h-9 px-space-lg bg-primary text-on-primary font-body-sm text-body-sm rounded font-semibold shadow-sm hover:bg-primary-container transition-all flex items-center gap-space-xs" onClick={() => featuredPoId && form.poAction(featuredPoId, 'order')}>
+      <button type="button" className="h-9 px-space-lg bg-primary text-on-primary font-body-sm text-body-sm rounded font-semibold shadow-sm hover:bg-primary-container transition-all flex items-center gap-space-xs" onClick={() => poId && form.poAction(poId, 'order')}>
       <span className="material-symbols-outlined text-[16px]">local_shipping</span>
                     Mark ordered
                   </button>
-      <button type="button" className="h-9 px-space-md bg-surface-container text-surface-dim font-body-sm text-body-sm rounded cursor-not-allowed opacity-60 flex items-center gap-1" disabled title="Disabled until order status is marked as Ordered">
+      <button
+        type="button"
+        className="h-9 px-space-md bg-surface-container text-on-surface font-body-sm text-body-sm rounded flex items-center gap-1 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+        disabled={!form.canReceive}
+        title={form.canReceive ? 'Receive against this PO' : form.receiveDisabledReason}
+        onClick={() => poId && form.openReceive(poId)}
+      >
       <span className="material-symbols-outlined text-[16px]">move_to_inbox</span>
                     Receive items
                   </button>
@@ -337,99 +343,46 @@ export function In11Purchasing() {
       </tr>
       </thead>
       <tbody className="divide-y divide-surface-container bg-surface-container-lowest font-body-sm text-body-sm">
-
-      <tr className="hover:bg-surface-container-low transition-colors">
+      {form.poLineRows.length === 0 ? (
+      <tr>
+      <td colSpan={6} className="py-space-xl px-space-lg text-center text-on-surface-variant font-body-sm">
+      No line items on this purchase order yet.
+      </td>
+      </tr>
+      ) : (
+      form.poLineRows.map((line) => (
+      <tr key={line.id} className="hover:bg-surface-container-low transition-colors">
       <td className="py-space-md px-space-lg">
       <div className="flex items-center gap-space-md">
       <div className="w-9 h-9 rounded bg-surface-container flex items-center justify-center">
-      <span className="material-symbols-outlined text-primary text-[18px]">stay_current_portrait</span>
+      <span className="material-symbols-outlined text-primary text-[18px]">{line.icon}</span>
       </div>
       <div className="flex flex-col">
-      <span className="font-semibold text-on-surface">Phone Holder Mount</span>
-      <span className="font-label-code text-caption text-on-surface-variant">ACC-PHM-01</span>
+      <span className="font-semibold text-on-surface">{line.name}</span>
+      <span className="font-label-code text-caption text-on-surface-variant">{line.sku}</span>
       </div>
       </div>
       </td>
       <td className="py-space-md px-space-md text-center font-label-code font-bold text-on-surface">
-                        5 ea
+                        {line.orderedLabel}
                       </td>
       <td className="py-space-md px-space-md text-center">
-      <span className="font-label-code text-caption px-2 py-0.5 rounded bg-surface-container text-on-surface-variant">0 ea</span>
+      <span className="font-label-code text-caption px-2 py-0.5 rounded bg-surface-container text-on-surface-variant">{line.receivedLabel}</span>
       </td>
       <td className="py-space-md px-space-md text-right font-label-price text-label-price text-on-surface">
-                        {form.totals}
+                        {line.unitCost}
                       </td>
       <td className="py-space-md px-space-lg text-right font-label-price text-label-price font-bold text-on-surface">
-                        {form.totals}
+                        {line.lineTotal}
                       </td>
       <td className="py-space-md px-space-md text-center">
-      <button type="button" className="p-1 rounded hover:bg-surface-container text-on-surface-variant hover:text-error transition-colors" title="Delete Line" onClick={() => featuredPoId && form.removePoLine(featuredPoId, 'line-stub')}>
+      <button type="button" className="p-1 rounded hover:bg-surface-container text-on-surface-variant hover:text-error transition-colors" title="Delete Line" onClick={() => poId && form.removePoLine(poId, line.id)}>
       <span className="material-symbols-outlined text-[16px]">delete</span>
       </button>
       </td>
       </tr>
-
-      <tr className="hover:bg-surface-container-low transition-colors">
-      <td className="py-space-md px-space-lg">
-      <div className="flex items-center gap-space-md">
-      <div className="w-9 h-9 rounded bg-surface-container flex items-center justify-center">
-      <span className="material-symbols-outlined text-primary text-[18px]">tire_repair</span>
-      </div>
-      <div className="flex flex-col">
-      <span className="font-semibold text-on-surface">Tyre pump</span>
-      <span className="font-label-code text-caption text-on-surface-variant">TLS-PMP-01</span>
-      </div>
-      </div>
-      </td>
-      <td className="py-space-md px-space-md text-center font-label-code font-bold text-on-surface">
-                        2 ea
-                      </td>
-      <td className="py-space-md px-space-md text-center">
-      <span className="font-label-code text-caption px-2 py-0.5 rounded bg-surface-container text-on-surface-variant">0 ea</span>
-      </td>
-      <td className="py-space-md px-space-md text-right font-label-price text-label-price text-on-surface">
-                        {form.totals}
-                      </td>
-      <td className="py-space-md px-space-lg text-right font-label-price text-label-price font-bold text-on-surface">
-                        {form.totals}
-                      </td>
-      <td className="py-space-md px-space-md text-center">
-      <button type="button" className="p-1 rounded hover:bg-surface-container text-on-surface-variant hover:text-error transition-colors" title="Delete Line" onClick={() => featuredPoId && form.removePoLine(featuredPoId, 'line-stub')}>
-      <span className="material-symbols-outlined text-[16px]">delete</span>
-      </button>
-      </td>
-      </tr>
-
-      <tr className="hover:bg-surface-container-low transition-colors">
-      <td className="py-space-md px-space-lg">
-      <div className="flex items-center gap-space-md">
-      <div className="w-9 h-9 rounded bg-surface-container flex items-center justify-center">
-      <span className="material-symbols-outlined text-primary text-[18px]">warning</span>
-      </div>
-      <div className="flex flex-col">
-      <span className="font-semibold text-on-surface">Warning triangle</span>
-      <span className="font-label-code text-caption text-on-surface-variant">SAF-TRG-01</span>
-      </div>
-      </div>
-      </td>
-      <td className="py-space-md px-space-md text-center font-label-code font-bold text-on-surface">
-                        1 ea
-                      </td>
-      <td className="py-space-md px-space-md text-center">
-      <span className="font-label-code text-caption px-2 py-0.5 rounded bg-surface-container text-on-surface-variant">0 ea</span>
-      </td>
-      <td className="py-space-md px-space-md text-right font-label-price text-label-price text-on-surface">
-                        {form.totals}
-                      </td>
-      <td className="py-space-md px-space-lg text-right font-label-price text-label-price font-bold text-on-surface">
-                        {form.totals}
-                      </td>
-      <td className="py-space-md px-space-md text-center">
-      <button type="button" className="p-1 rounded hover:bg-surface-container text-on-surface-variant hover:text-error transition-colors" title="Delete Line" onClick={() => featuredPoId && form.removePoLine(featuredPoId, 'line-stub')}>
-      <span className="material-symbols-outlined text-[16px]">delete</span>
-      </button>
-      </td>
-      </tr>
+      ))
+      )}
       </tbody>
       </table>
       </div>
@@ -494,7 +447,7 @@ export function In11Purchasing() {
       <div className="bg-primary text-on-primary p-space-md rounded-lg flex items-center justify-between mt-space-xs">
       <div className="flex flex-col">
       <span className="font-caption text-caption text-on-primary-container uppercase font-bold">Authorized Sign-off</span>
-      <span className="font-body-sm text-body-sm">Deeki T · Platform Owner</span>
+      <span className="font-body-sm text-body-sm">{form.signoffLabel}</span>
       </div>
       <button type="button" className="px-space-md py-1 bg-surface-container-lowest text-primary rounded font-body-sm text-body-sm font-bold hover:bg-surface-container transition-all" onClick={() => featuredPoId && form.poAction(featuredPoId, 'authorize')}>
                     Authorize {form.totals}
@@ -555,7 +508,7 @@ export function In11Purchasing() {
       </div>
       <div>
       <span className="font-semibold text-on-surface block">Phone Holder Mount</span>
-      <span className="font-label-code text-caption text-on-surface-variant">ACC-PHM-01</span>
+      <span className="font-label-code text-caption text-on-surface-variant">{form.suggestedSku}</span>
       </div>
       </div>
       </td>

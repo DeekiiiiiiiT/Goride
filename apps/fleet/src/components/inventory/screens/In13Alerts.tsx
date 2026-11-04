@@ -12,8 +12,7 @@ export function In13Alerts() {
   const openApprovalDrawer = () => {
     const pending =
       shell.alerts.find((a) => strField(a, 'status', '') === 'pending') ??
-      shell.alerts.find((a) => strField(a, 'kind', '').includes('approval')) ??
-      shell.alerts[0];
+      shell.alerts.find((a) => strField(a, 'kind', '').includes('approval'));
     const approvalId = pending
       ? strField(pending, 'approval_id', strField(pending, 'id', '')) || null
       : null;
@@ -23,10 +22,9 @@ export function In13Alerts() {
   const vendorName = firstVendorName(live.vendors);
   const secondary = live.secondaryVehicle;
   const lowStockLabel = live.lowStockLabel;
-  const alertRow = (i: number) => shell.alerts[i] ?? {};
-  const alertMenu = (i: number) => {
-    const a = alertRow(i);
-    const id = strField(a, 'id', '');
+  const alertRecord = (id: string) => form.filtered.find((a) => strField(a, 'id', '') === id) ?? {};
+  const alertMenu = (id: string) => {
+    const a = alertRecord(id);
     return [
       { label: 'Mark done', onClick: () => id && form.markDone(id) },
       { label: 'Open record', onClick: () => form.openRelated(a) },
@@ -62,19 +60,7 @@ export function In13Alerts() {
       </div>
       </div>
 
-      <div className="flex items-center gap-1 overflow-x-auto pt-2">
-      <a className="px-space-md py-2 rounded-lg text-on-surface-variant hover:text-on-surface font-body-sm text-body-sm transition-colors whitespace-nowrap" href="#">Overview</a>
-      <a className="px-space-md py-2 rounded-lg text-on-surface-variant hover:text-on-surface font-body-sm text-body-sm transition-colors whitespace-nowrap" href="#">Stock</a>
-      <a className="px-space-md py-2 rounded-lg text-on-surface-variant hover:text-on-surface font-body-sm text-body-sm transition-colors whitespace-nowrap" href="#">Vehicle kits</a>
-      <a className="px-space-md py-2 rounded-lg text-on-surface-variant hover:text-on-surface font-body-sm text-body-sm transition-colors whitespace-nowrap" href="#">Assets</a>
-      <a className="px-space-md py-2 rounded-lg text-on-surface-variant hover:text-on-surface font-body-sm text-body-sm transition-colors whitespace-nowrap" href="#">Movements</a>
-      <a className="px-space-md py-2 rounded-lg text-on-surface-variant hover:text-on-surface font-body-sm text-body-sm transition-colors whitespace-nowrap" href="#">Purchasing</a>
-      <a className="px-space-md py-2 rounded-lg text-on-surface-variant hover:text-on-surface font-body-sm text-body-sm transition-colors whitespace-nowrap" href="#">Counts</a>
-      <a className="flex items-center gap-space-xs bg-primary text-on-primary px-space-md py-1.5 rounded-lg font-body-sm text-body-sm font-semibold shadow-sm whitespace-nowrap" href="#">
-      <span>Alerts</span>
-      <span className="bg-error text-on-error font-label-code text-[11px] px-1.5 py-0.2 rounded-full font-bold">5</span>
-      </a>
-      </div>
+      <InventoryPrimaryTabs variant="pill" />
       </div>
       </div>
 
@@ -92,7 +78,7 @@ export function In13Alerts() {
       <div className="flex flex-wrap items-center gap-space-sm">
       <div className="relative min-w-[240px]">
       <span className="material-symbols-outlined absolute left-space-md top-1/2 -translate-y-1/2 text-on-surface-variant text-[18px]">search</span>
-      <input className="w-full bg-surface-container-low pl-9 pr-space-md py-2 rounded-lg font-body-sm text-body-sm text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:bg-surface-container-lowest transition-colors" placeholder="Search alerts..." type="text" value={form.searchQuery} onChange={(e) => form.setSearchQuery(e.target.value)}/>
+      <input className="w-full bg-surface-container-low pl-9 pr-space-md py-2 rounded-lg font-body-sm text-body-sm text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:bg-surface-container-lowest transition-colors" placeholder="Search alerts..." type="text" value={form.search} onChange={(e) => form.setSearch(e.target.value)}/>
       </div>
       <button type="button" onClick={() => shell.openModal('snooze-settings')} className="flex items-center gap-space-xs bg-surface-container-low hover:bg-surface-container text-on-surface px-space-md py-2 rounded-lg font-body-sm text-body-sm font-semibold transition-colors">
       <span className="material-symbols-outlined text-[18px] text-on-surface-variant">schedule</span>
@@ -176,228 +162,82 @@ export function In13Alerts() {
       </div>
       </div>
 
-      <div className="flex flex-col gap-space-md">
-
-      <div className="bg-surface-container-lowest p-space-lg rounded-xl shadow-sm hover:shadow-md transition-shadow relative overflow-hidden flex flex-col lg:flex-row lg:items-center justify-between gap-space-lg">
-
-      <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-error"></div>
+      <div className="flex flex-col lg:flex-row gap-space-lg">
+      <div className="flex flex-col gap-space-md flex-1 min-w-0">
+      {form.alertRows.length === 0 ? (
+      <div className="bg-surface-container-lowest p-space-xl rounded-xl shadow-sm text-center text-on-surface-variant font-body-md">
+      No alerts in this view. Try another tab or clear your search.
+      </div>
+      ) : (
+      form.alertRows.map((row) => {
+        const raw = alertRecord(row.id);
+        const selected = form.selectedAlertId === row.id;
+        return (
+      <button
+        key={row.id}
+        type="button"
+        className={`bg-surface-container-lowest p-space-lg rounded-xl shadow-sm hover:shadow-md transition-shadow relative overflow-hidden flex flex-col lg:flex-row lg:items-center justify-between gap-space-lg text-left w-full ${selected ? 'ring-2 ring-primary' : ''}`}
+        onClick={() => form.selectAlert(row.id)}
+      >
+      <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-primary"></div>
       <div className="flex items-start gap-space-lg pl-space-xs min-w-0">
-      <div className="w-10 h-10 rounded-full bg-error-container text-on-error-container flex items-center justify-center shrink-0 mt-0.5">
-      <span className="material-symbols-outlined text-[22px]">warning</span>
+      <div className="w-10 h-10 rounded-full bg-surface-container text-on-surface flex items-center justify-center shrink-0 mt-0.5">
+      <span className="material-symbols-outlined text-[22px]">notifications</span>
       </div>
       <div className="flex flex-col gap-1 min-w-0">
       <div className="flex items-center flex-wrap gap-space-sm">
-      <span className="font-headline-sm text-headline-sm text-on-surface font-bold tracking-tight">{live.secondaryPlate} is missing its whole kit</span>
-      <span className="bg-error-container text-on-error-container font-label-code text-[11px] font-bold px-2 py-0.5 rounded">ROAD CLEARANCE BLOCKED</span>
-      <span className="bg-surface-container text-on-surface-variant font-label-plate text-caption px-2 py-0.5 rounded tracking-widest font-bold">{live.secondaryPlate}</span>
+      <span className="font-headline-sm text-headline-sm text-on-surface font-bold tracking-tight">{row.title}</span>
+      {row.sku ? (
+      <span className="bg-surface-container text-on-surface-variant font-label-code text-caption px-2 py-0.5 rounded font-medium">SKU: {row.sku}</span>
+      ) : null}
+      {row.vehiclePlate ? (
+      <span className="bg-surface-container text-on-surface-variant font-label-plate text-caption px-2 py-0.5 rounded tracking-widest font-bold">{row.vehiclePlate}</span>
+      ) : null}
       </div>
-      <p className="font-body-md text-body-md text-on-surface-variant">{live.secondaryPlate} · {secondary ? `${secondary.missingLines + secondary.shortLines} kit gaps` : 'Kit compliance gap'}. Vehicle cannot be road-cleared for dispatch.</p>
-      <div className="flex items-center flex-wrap gap-x-space-lg gap-y-1 font-caption text-caption text-secondary mt-1">
-      <span className="flex items-center gap-1">
-      <span className="material-symbols-outlined text-[14px]">schedule</span>
-      <span className="font-label-code text-caption">2 days ago</span>
-      </span>
-      <span>•</span>
-      <span>Target: {live.secondaryPlate}</span>
-      <span>•</span>
-      <span>Depot Bay: Kingston Gate 1</span>
+      <p className="font-body-md text-body-md text-on-surface-variant">{row.message || row.kind}</p>
+      {row.assigneeLabel ? (
+      <span className="font-caption text-caption text-secondary mt-1">Assigned: {row.assigneeLabel}</span>
+      ) : null}
       </div>
       </div>
+      <div className="flex items-center gap-space-xs shrink-0" onClick={(e) => e.stopPropagation()}>
+      <InventoryOverflowMenu icon="more_vert" title="More options" items={alertMenu(row.id)} className="shrink-0" />
       </div>
-      <div className="flex items-center justify-between lg:justify-end gap-space-md shrink-0 pt-space-sm lg:pt-0">
-
-      <div className="flex items-center gap-space-xs bg-surface-container-low px-space-md py-1.5 rounded-full">
-      <div className="w-6 h-6 rounded-full bg-primary-container text-on-primary flex items-center justify-center font-label-code text-[10px] font-bold">DT</div>
-      <span className="font-body-sm text-body-sm text-on-surface font-medium">Deeki T (Platform Owner)</span>
-      </div>
-
-      <div className="flex items-center gap-space-xs">
-      <button type="button" onClick={openApprovalDrawer} className="flex items-center gap-space-xs bg-primary hover:bg-primary/90 text-on-primary px-space-lg py-2 rounded-lg font-body-sm text-body-sm font-semibold shadow-sm transition-transform active:scale-95 flex items-center gap-1">
-      <span className="material-symbols-outlined text-[16px]">build_circle</span>
-      <span>Issue kit</span>
       </button>
-      <InventoryOverflowMenu icon="more_vert" title="More options" items={alertMenu(0)} className="shrink-0" />
+        );
+      })
+      )}
       </div>
-      </div>
-      </div>
-
-      <div className="bg-surface-container-lowest p-space-lg rounded-xl shadow-sm hover:shadow-md transition-shadow relative overflow-hidden flex flex-col lg:flex-row lg:items-center justify-between gap-space-lg">
-
-      <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-tertiary-container"></div>
-      <div className="flex items-start gap-space-lg pl-space-xs min-w-0">
-      <div className="w-10 h-10 rounded-full bg-tertiary-fixed text-on-tertiary-fixed flex items-center justify-center shrink-0 mt-0.5">
-      <span className="material-symbols-outlined text-[22px]">inventory_2</span>
-      </div>
-      <div className="flex flex-col gap-1 min-w-0">
-      <div className="flex items-center flex-wrap gap-space-sm">
-      <span className="font-headline-sm text-headline-sm text-on-surface font-bold tracking-tight">{lowStockLabel !== '—' ? `${lowStockLabel} is low` : 'Low stock alert'}</span>
-      <span className="bg-tertiary-fixed text-on-tertiary-fixed-variant font-label-code text-[11px] font-bold px-2 py-0.5 rounded">REORDER LEVEL MET</span>
-      <span className="bg-surface-container text-on-surface-variant font-label-code text-caption px-2 py-0.5 rounded font-medium">SKU: ACC-PHM-01</span>
-      </div>
-      <p className="font-body-md text-body-md text-on-surface-variant">{live.hubName} has low stock on {lowStockLabel}. Preferred supplier: {vendorName}.</p>
-      <div className="flex items-center flex-wrap gap-x-space-lg gap-y-1 font-caption text-caption text-secondary mt-1">
-      <span className="flex items-center gap-1">
-      <span className="material-symbols-outlined text-[14px]">schedule</span>
-      <span className="font-label-code text-caption">1 hour ago</span>
-      </span>
-      <span>•</span>
-      <span>Preferred Supplier: {vendorName}</span>
-      <span>•</span>
-      <span>Unit Cost: {form.live.totalStockValue}</span>
-      </div>
-      </div>
-      </div>
-      <div className="flex items-center justify-between lg:justify-end gap-space-md shrink-0 pt-space-sm lg:pt-0">
-
-      <div className="flex items-center gap-space-xs bg-surface-container-low px-space-md py-1.5 rounded-full">
-      <div className="w-6 h-6 rounded-full bg-primary-container text-on-primary flex items-center justify-center font-label-code text-[10px] font-bold">DT</div>
-      <span className="font-body-sm text-body-sm text-on-surface font-medium">Deeki T</span>
-      </div>
-
-      <div className="flex items-center gap-space-xs">
-      <button type="button" className="bg-surface-container hover:bg-surface-container-high text-on-surface px-space-lg py-2 rounded-lg font-body-sm text-body-sm font-semibold transition-colors flex items-center gap-1" onClick={() => form.reorder(alertRow(1))}>
-      <span className="material-symbols-outlined text-[16px]">shopping_cart</span>
-      <span>Reorder</span>
+      <div className="bg-surface-container-lowest p-space-lg rounded-xl shadow-sm lg:w-[320px] shrink-0">
+      <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold mb-space-md">Alert detail</h3>
+      {form.selectedAlertRow ? (
+      <div className="flex flex-col gap-space-sm font-body-sm text-body-sm">
+      <div className="font-semibold text-on-surface">{form.selectedAlertRow.title}</div>
+      <div className="text-on-surface-variant">{form.selectedAlertRow.message}</div>
+      <div className="font-label-code text-caption text-secondary">Status: {form.selectedAlertRow.status}</div>
+      {form.selectedAlertRow.sku ? (
+      <div className="font-label-code text-caption">SKU: {form.selectedAlertRow.sku}</div>
+      ) : null}
+      <button
+        type="button"
+        className="mt-space-md h-9 px-space-md rounded-lg bg-primary text-on-primary font-semibold disabled:opacity-60"
+        disabled={!form.selectedAlertId}
+        title={form.markDoneSelectedDisabledReason || 'Mark selected alert done'}
+        onClick={() => form.selectedAlertId && form.markDone(form.selectedAlertId)}
+      >
+        Mark done
       </button>
-      <InventoryOverflowMenu icon="more_vert" title="More options" items={alertMenu(1)} className="shrink-0" />
-      </div>
-      </div>
-      </div>
-
-      <div className="bg-surface-container-lowest p-space-lg rounded-xl shadow-sm hover:shadow-md transition-shadow relative overflow-hidden flex flex-col lg:flex-row lg:items-center justify-between gap-space-lg">
-
-      <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-tertiary-container"></div>
-      <div className="flex items-start gap-space-lg pl-space-xs min-w-0">
-      <div className="w-10 h-10 rounded-full bg-tertiary-fixed text-on-tertiary-fixed flex items-center justify-center shrink-0 mt-0.5">
-      <span className="material-symbols-outlined text-[22px]">videocam_off</span>
-      </div>
-      <div className="flex flex-col gap-1 min-w-0">
-      <div className="flex items-center flex-wrap gap-space-sm">
-      <span className="font-headline-sm text-headline-sm text-on-surface font-bold tracking-tight">Dash camera on {live.primaryPlate} has no serial number</span>
-      <span className="bg-tertiary-fixed text-on-tertiary-fixed-variant font-label-code text-[11px] font-bold px-2 py-0.5 rounded">UNREGISTERED SERIAL</span>
-      <span className="bg-surface-container text-on-surface-variant font-label-plate text-caption px-2 py-0.5 rounded tracking-widest font-bold">{live.primaryPlate}</span>
-      </div>
-      <p className="font-body-md text-body-md text-on-surface-variant">{live.primaryPlate} has an installed unit without a registered serial in the asset ledger. Annual audit compliance at risk.</p>
-      <div className="flex items-center flex-wrap gap-x-space-lg gap-y-1 font-caption text-caption text-secondary mt-1">
-      <span className="flex items-center gap-1">
-      <span className="material-symbols-outlined text-[14px]">schedule</span>
-      <span className="font-label-code text-caption">6 Jan 2026</span>
-      </span>
-      <span>•</span>
-      <span>Model: Thinkware T700 Front/Rear Dual</span>
-      <span>•</span>
-      <span>Installed Hub: Kingston Electrical Bay</span>
-      </div>
-      </div>
-      </div>
-      <div className="flex items-center justify-between lg:justify-end gap-space-md shrink-0 pt-space-sm lg:pt-0">
-
-      <div className="flex items-center gap-space-xs bg-surface-container-low px-space-md py-1.5 rounded-full">
-      <div className="w-6 h-6 rounded-full bg-primary-container text-on-primary flex items-center justify-center font-label-code text-[10px] font-bold">DT</div>
-      <span className="font-body-sm text-body-sm text-on-surface font-medium">Deeki T</span>
-      </div>
-
-      <div className="flex items-center gap-space-xs">
-      <button type="button" className="bg-surface-container hover:bg-surface-container-high text-on-surface px-space-lg py-2 rounded-lg font-body-sm text-body-sm font-semibold transition-colors flex items-center gap-1" onClick={() => form.addSerial(alertRow(2))}>
-      <span className="material-symbols-outlined text-[16px]">qr_code_scanner</span>
-      <span>Add serial</span>
+      <button
+        type="button"
+        className="h-9 px-space-md rounded-lg bg-surface-container text-on-surface font-semibold"
+        onClick={() => form.selectedAlert && form.openRelated(form.selectedAlert)}
+      >
+        Open related record
       </button>
-      <InventoryOverflowMenu icon="more_vert" title="More options" items={alertMenu(2)} className="shrink-0" />
       </div>
-      </div>
-      </div>
-
-      <div className="bg-surface-container-lowest p-space-lg rounded-xl shadow-sm hover:shadow-md transition-shadow relative overflow-hidden flex flex-col lg:flex-row lg:items-center justify-between gap-space-lg">
-
-      <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-tertiary-container"></div>
-      <div className="flex items-start gap-space-lg pl-space-xs min-w-0">
-      <div className="w-10 h-10 rounded-full bg-tertiary-fixed text-on-tertiary-fixed flex items-center justify-center shrink-0 mt-0.5">
-      <span className="material-symbols-outlined text-[22px]">assignment_late</span>
-      </div>
-
-      <div className="relative shrink-0 hidden sm:block">
-      <img className="w-16 h-16 object-cover rounded-lg bg-surface-container" data-alt="High contrast photograph of an open vehicle hatchback trunk carpet showing empty elastic emergency mounting straps where a reflective warning triangle should be clipped, fleet yard workshop lighting in Kingston." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCg0jstt6r5dCQxKF46sLyn8UQzwpvrpKO1op51-nkxsq4O3T9XFwO4xmYbro9rvlypmDEIsaIB313h8Lll75Z84q2z2pyj2ZlC1rSsHzoEUpbGYPwgOBBgFNf0HU90bho4xxRi6Jf3VftYB2hmuOKuYn2Jn-dT6Zm1Dtv35i6iCzUrD2aytnuv2-ZJXgU_Mbshrq6b0pYFkgTIN7oUVWnzREZMJKDZKIVGwJZMYEs"/>
-      <div className="absolute inset-0 bg-primary/20 rounded-lg flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity cursor-pointer">
-      <span className="material-symbols-outlined text-on-primary text-[20px]">zoom_in</span>
-      </div>
-      </div>
-      <div className="flex flex-col gap-1 min-w-0">
-      <div className="flex items-center flex-wrap gap-space-sm">
-      <span className="font-headline-sm text-headline-sm text-on-surface font-bold tracking-tight">Driver report: Warning triangle missing — {live.primaryPlate}</span>
-      <span className="bg-secondary-container text-on-secondary-container font-label-code text-[11px] font-bold px-2 py-0.5 rounded">DRIVER APP DISPATCH</span>
-      <span className="bg-surface-container text-on-surface-variant font-label-plate text-caption px-2 py-0.5 rounded tracking-widest font-bold">{live.primaryPlate}</span>
-      </div>
-      <p className="font-body-md text-body-md text-on-surface-variant">Submitted via Roam Driver App by Driver of {live.primaryPlate}. Note: “Boot strap was empty upon vehicle pre-shift handover at Kingston Gate 2.”</p>
-      <div className="flex items-center flex-wrap gap-x-space-lg gap-y-1 font-caption text-caption text-secondary mt-1">
-      <span className="flex items-center gap-1">
-      <span className="material-symbols-outlined text-[14px]">schedule</span>
-      <span className="font-label-code text-caption">3 hours ago</span>
-      </span>
-      <span>•</span>
-      <span className="font-label-code text-caption">Incident #REP-904</span>
-      <span>•</span>
-      <span>Reported by: Omar Sterling (Shift A)</span>
-      </div>
-      </div>
-      </div>
-      <div className="flex items-center justify-between lg:justify-end gap-space-md shrink-0 pt-space-sm lg:pt-0">
-
-      <div className="flex items-center gap-space-xs bg-surface-container-low px-space-md py-1.5 rounded-full">
-      <div className="w-6 h-6 rounded-full bg-secondary text-on-secondary flex items-center justify-center font-label-code text-[10px] font-bold">DC</div>
-      <span className="font-body-sm text-body-sm text-on-surface font-medium">—</span>
-      </div>
-
-      <div className="flex items-center gap-space-xs">
-      <button type="button" className="bg-surface-container hover:bg-surface-container-high text-on-surface px-space-lg py-2 rounded-lg font-body-sm text-body-sm font-semibold transition-colors flex items-center gap-1" onClick={() => form.reviewApproval(alertRow(3))}>
-      <span className="material-symbols-outlined text-[16px]">rule</span>
-      <span>Review</span>
-      </button>
-      <InventoryOverflowMenu icon="more_vert" title="More options" items={alertMenu(3)} className="shrink-0" />
-      </div>
-      </div>
-      </div>
-
-      <div className="bg-surface-container-lowest p-space-lg rounded-xl shadow-sm hover:shadow-md transition-shadow relative overflow-hidden flex flex-col lg:flex-row lg:items-center justify-between gap-space-lg">
-
-      <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-error"></div>
-      <div className="flex items-start gap-space-lg pl-space-xs min-w-0">
-      <div className="w-10 h-10 rounded-full bg-error-container text-on-error-container flex items-center justify-center shrink-0 mt-0.5">
-      <span className="material-symbols-outlined text-[22px]">gpp_maybe</span>
-      </div>
-      <div className="flex flex-col gap-1 min-w-0">
-      <div className="flex items-center flex-wrap gap-space-sm">
-      <span className="font-headline-sm text-headline-sm text-on-surface font-bold tracking-tight">Nightly check found a stock number that doesn't add up — Main store, Car jack</span>
-      <span className="bg-error-container text-on-error-container font-label-code text-[11px] font-bold px-2 py-0.5 rounded">LEDGER VARIANCE</span>
-      <span className="bg-surface-container text-on-surface-variant font-label-code text-caption px-2 py-0.5 rounded font-medium">SKU: TOOL-HYD-02</span>
-      </div>
-      <p className="font-body-md text-body-md text-on-surface-variant">Automated ledger reconciliation identified discrepancy between recorded movements and physical ledger snapshot: expected 2, balance shows 1.</p>
-      <div className="flex items-center flex-wrap gap-x-space-lg gap-y-1 font-caption text-caption text-secondary mt-1">
-      <span className="flex items-center gap-1">
-      <span className="material-symbols-outlined text-[14px]">schedule</span>
-      <span className="font-label-code text-caption">Ran 06:30 today</span>
-      </span>
-      <span>•</span>
-      <span>Depot: Main store — Kingston</span>
-      <span>•</span>
-      <span className="text-error font-medium">Variance: -1 Unit (Value: {form.live.totalStockValue})</span>
-      </div>
-      </div>
-      </div>
-      <div className="flex items-center justify-between lg:justify-end gap-space-md shrink-0 pt-space-sm lg:pt-0">
-
-      <button type="button" className="flex items-center gap-space-xs bg-surface-container-low hover:bg-surface-container px-space-md py-1.5 rounded-full text-on-surface-variant hover:text-on-surface transition-colors" onClick={() => { const id = strField(alertRow(4), 'id', ''); if (id) form.assignToMe(id); }}>
-      <span className="material-symbols-outlined text-[16px]">person_add</span>
-      <span className="font-body-sm text-body-sm font-medium">Unassigned</span>
-      </button>
-
-      <div className="flex items-center gap-space-xs">
-      <button type="button" onClick={openApprovalDrawer} className="flex items-center gap-space-xs bg-primary hover:bg-primary/90 text-on-primary px-space-lg py-2 rounded-lg font-body-sm text-body-sm font-semibold shadow-sm transition-transform active:scale-95 flex items-center gap-1">
-      <span className="material-symbols-outlined text-[16px]">sync_alt</span>
-      <span>Open</span>
-      </button>
-      <InventoryOverflowMenu icon="more_vert" title="More options" items={alertMenu(4)} className="shrink-0" />
-      </div>
-      </div>
+      ) : (
+      <p className="font-body-sm text-body-sm text-on-surface-variant">Select an alert to see details and actions.</p>
+      )}
       </div>
       </div>
 
@@ -411,26 +251,22 @@ export function In13Alerts() {
       <a className="font-caption text-caption text-primary font-semibold hover:underline" href="#">View 18 resolved alerts</a>
       </div>
       <div className="space-y-space-sm">
-      <div className="p-space-sm bg-surface-container-low rounded-lg flex items-center justify-between text-body-sm font-body-sm">
+      {form.resolvedAlertRows.length === 0 ? (
+      <p className="font-body-sm text-on-surface-variant p-space-sm">No recently resolved alerts.</p>
+      ) : (
+      form.resolvedAlertRows.map((row) => (
+      <div key={row.id} className="p-space-sm bg-surface-container-low rounded-lg flex items-center justify-between text-body-sm font-body-sm">
       <div className="flex items-center gap-space-md min-w-0">
       <span className="material-symbols-outlined text-secondary text-[18px]">check_circle</span>
-      <span className="truncate"><strong className="font-semibold text-on-surface">Jump starter kit replenished</strong> — Kingston Bay 4</span>
+      <span className="truncate"><strong className="font-semibold text-on-surface">{row.title}</strong></span>
       </div>
       <div className="flex items-center gap-space-md shrink-0">
-      <span className="font-label-code text-caption text-on-surface-variant">Resolved by Deeki T</span>
-      <span className="font-label-code text-caption text-secondary">Yesterday 18:20</span>
+      <span className="font-label-code text-caption text-on-surface-variant">Resolved by {row.resolverLabel}</span>
+      <span className="font-label-code text-caption text-secondary">{row.whenLabel}</span>
       </div>
       </div>
-      <div className="p-space-sm bg-surface-container-low rounded-lg flex items-center justify-between text-body-sm font-body-sm">
-      <div className="flex items-center gap-space-md min-w-0">
-      <span className="material-symbols-outlined text-secondary text-[18px]">check_circle</span>
-      <span className="truncate"><strong className="font-semibold text-on-surface">Spare tire barcode audit verified</strong> — 8820HJ</span>
-      </div>
-      <div className="flex items-center gap-space-md shrink-0">
-      <span className="font-label-code text-caption text-on-surface-variant">Resolved by —</span>
-      <span className="font-label-code text-caption text-secondary">Yesterday 14:15</span>
-      </div>
-      </div>
+      ))
+      )}
       </div>
       </div>
 

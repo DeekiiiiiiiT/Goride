@@ -7,21 +7,24 @@ import { carKitVehicleLabel } from '../carKitDisplay';
 
 export function Dk2ReportSheet({
   kit,
+  itemLabel,
   onClose,
   onSend,
   sending,
   sendError,
 }: {
   kit?: DriverCarKitPayload | null;
+  itemLabel?: string | null;
   onClose?: () => void;
   onSend?: (payload: { issueType: string; notes: string; hasPhoto: boolean }) => void;
   sending?: boolean;
   sendError?: string | null;
 }) {
   const vehicleLabel = carKitVehicleLabel(kit);
+  const problemItem = itemLabel?.trim() || 'Kit item';
   const [reportNotes, setReportNotes] = useState('');
   const [issueType, setIssueType] = useState<(typeof ISSUE_OPTIONS)[number]>('Not working');
-  const [hasPhoto, setHasPhoto] = useState(true);
+  const [hasPhoto, setHasPhoto] = useState(false);
   return (
     <div className="driver-car-kit-stitch inventory-stitch-root">
       <div className="inventory-stitch-main"><div className="flex flex-col w-full relative">
@@ -54,7 +57,7 @@ export function Dk2ReportSheet({
       <div className="bg-white border border-rose-300 p-space-md rounded-xl flex items-center justify-between shadow-sm">
       <div className="flex items-center gap-space-sm">
       <span className="material-symbols-outlined text-emerald-600">videocam</span>
-      <span className="font-body-md text-body-md text-slate-800 font-medium">Dash Camera</span>
+      <span className="font-body-md text-body-md text-slate-800 font-medium">Kit item</span>
       </div>
       <span className="material-symbols-outlined text-rose-600">error</span>
       </div>
@@ -71,7 +74,7 @@ export function Dk2ReportSheet({
 
       <div className="px-gutter pt-2 pb-3 flex items-start justify-between flex-shrink-0 border-b border-slate-100">
       <div className="flex flex-col min-w-0 pr-space-xs">
-      <h2 className="font-headline-md text-[20px] font-bold text-slate-900 tracking-tight leading-tight truncate">Report a problem · Dash camera</h2>
+      <h2 className="font-headline-md text-[20px] font-bold text-slate-900 tracking-tight leading-tight truncate">Report a problem · {problemItem}</h2>
       <div className="flex items-center gap-2 mt-1.5">
       <span className="inline-flex items-center gap-1 font-label-code text-[12px] font-bold text-slate-700 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-md uppercase tracking-wider">
       <span className="material-symbols-outlined text-[14px] text-slate-500">directions_car</span>
@@ -92,17 +95,17 @@ export function Dk2ReportSheet({
       </label>
       <div aria-label="Issue type" className="grid grid-cols-3 gap-2" role="radiogroup">
 
-      <button type="button" aria-checked="false" className="issue-chip h-12 min-h-[48px] px-2 rounded-xl border border-slate-200 bg-slate-50 text-slate-700 font-semibold text-sm flex items-center justify-center gap-1.5 transition-all hover:bg-slate-100 active:scale-[0.98]" data-option="Damaged" role="radio" type="button" onClick={() => setIssueType('Damaged')}>
+      <button type="button" aria-checked={issueType === 'Damaged'} className="issue-chip h-12 min-h-[48px] px-2 rounded-xl border border-slate-200 bg-slate-50 text-slate-700 font-semibold text-sm flex items-center justify-center gap-1.5 transition-all hover:bg-slate-100 active:scale-[0.98]" data-option="Damaged" role="radio" onClick={() => setIssueType('Damaged')}>
       <span className="material-symbols-outlined text-[18px] text-slate-500">broken_image</span>
       <span className="truncate">Damaged</span>
       </button>
 
-      <button type="button" aria-checked="false" className="issue-chip h-12 min-h-[48px] px-2 rounded-xl border border-slate-200 bg-slate-50 text-slate-700 font-semibold text-sm flex items-center justify-center gap-1.5 transition-all hover:bg-slate-100 active:scale-[0.98]" data-option="Missing" role="radio" type="button" onClick={() => setIssueType('Missing')}>
+      <button type="button" aria-checked={issueType === 'Missing'} className="issue-chip h-12 min-h-[48px] px-2 rounded-xl border border-slate-200 bg-slate-50 text-slate-700 font-semibold text-sm flex items-center justify-center gap-1.5 transition-all hover:bg-slate-100 active:scale-[0.98]" data-option="Missing" role="radio" onClick={() => setIssueType('Missing')}>
       <span className="material-symbols-outlined text-[18px] text-slate-500">inventory_2</span>
       <span className="truncate">Missing</span>
       </button>
 
-      <button type="button" aria-checked="true" className="issue-chip h-12 min-h-[48px] px-2 rounded-xl border-2 border-emerald-600 bg-emerald-50 text-emerald-800 font-bold text-sm flex items-center justify-center gap-1.5 transition-all shadow-sm ring-1 ring-emerald-600/20 active:scale-[0.98]" data-option="Not working" role="radio" type="button" onClick={() => setIssueType('Not working')}>
+      <button type="button" aria-checked={issueType === 'Not working'} className="issue-chip h-12 min-h-[48px] px-2 rounded-xl border-2 border-emerald-600 bg-emerald-50 text-emerald-800 font-bold text-sm flex items-center justify-center gap-1.5 transition-all shadow-sm ring-1 ring-emerald-600/20 active:scale-[0.98]" data-option="Not working" role="radio" onClick={() => setIssueType('Not working')}>
       <span className="material-symbols-outlined text-[18px] text-emerald-600 font-bold">check</span>
       <span className="truncate">Not working</span>
       </button>
@@ -111,35 +114,23 @@ export function Dk2ReportSheet({
 
       <div className="flex flex-col gap-1.5">
       <label className="font-body-sm text-sm font-bold text-slate-900">
-                Photo proof
+                Photo proof <span className="font-normal text-slate-500">(optional)</span>
               </label>
-      <div className="relative w-full rounded-2xl border-2 border-dashed border-emerald-400/80 bg-slate-50/70 p-3 sm:p-4">
+      <div className="relative w-full rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50/70 p-3 sm:p-4">
+      {hasPhoto ? (
       <div className="flex items-center gap-3.5">
-
-      <div className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-xl overflow-hidden border border-slate-200 shadow-sm flex-shrink-0 bg-slate-900">
-      <img alt="Car dashcam with damaged cable and cracked screen" className="w-full h-full object-cover" data-alt="High contrast outdoor photo of a car dashboard camera with a shattered lens glass and detached power socket, shot in bright direct tropical sunlight." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBl0fMCbF-zIjYjFl9YXxXXmr3QkvqHQAIa2o7xtbrRIJqCHyhMjaKu6xN2lQxMcIYGwFiwnOiVVq2QRxpMrN1XcWSWO9vIf6FRMbWXMYD_T9M1mmhOI5GSiW6Swb_AhYBU2aHA15pkSQfsqngoASvPiPXlwK46dEUdH2sFnF5A-1dVgsrsHG05gB5avRlADmIE8_E_leOeadc-oB1a5PRFRIZ-rTVGmzfhebNm130"/>
-
-      <div className="absolute bottom-1 left-1 bg-slate-900/85 text-white p-1 rounded-md flex items-center justify-center">
-      <span className="material-symbols-outlined text-[13px]">photo_camera</span>
+      <div className="relative w-20 h-20 rounded-xl border border-slate-200 bg-slate-200 flex items-center justify-center text-slate-500 text-xs shrink-0">Photo</div>
+      <div className="flex flex-col gap-2">
+      <span className="text-sm font-semibold text-emerald-800">Photo ready to send</span>
+      <button type="button" className="text-xs font-semibold text-slate-600 underline w-fit" onClick={() => setHasPhoto(false)}>Remove</button>
       </div>
-
-      <button type="button" aria-label="Remove attached photo" className="absolute top-1 right-1 w-6 h-6 rounded-full bg-slate-900/80 hover:bg-rose-600 text-white flex items-center justify-center transition-colors shadow-sm" type="button" onClick={() => setHasPhoto(false)}>
-      <span className="material-symbols-outlined text-[14px]">close</span>
+      </div>
+      ) : (
+      <button type="button" className="w-full flex flex-col items-center gap-2 py-4 text-slate-600" onClick={() => setHasPhoto(true)}>
+      <span className="material-symbols-outlined text-[32px] text-slate-400">add_a_photo</span>
+      <span className="text-sm font-semibold">Attach photo</span>
       </button>
-      </div>
-
-      <div className="flex flex-col justify-center min-w-0">
-      <div className="inline-flex items-center gap-1.5 text-emerald-700 font-bold text-sm">
-      <span className="material-symbols-outlined text-[18px]" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
-      <span>dashcam_proof.jpg</span>
-      </div>
-      <p className="text-xs text-slate-500 mt-0.5">Attached just now · 1.4 MB</p>
-      <button type="button" className="mt-2 inline-flex items-center gap-1 text-emerald-700 hover:text-emerald-800 text-xs font-semibold hover:underline w-fit" onClick={() => setHasPhoto(true)}>
-      <span className="material-symbols-outlined text-[15px]">autorenew</span>
-                    Replace photo
-                  </button>
-      </div>
-      </div>
+      )}
       </div>
 
       <p className="text-xs text-slate-500 font-medium flex items-center gap-1 pl-0.5">

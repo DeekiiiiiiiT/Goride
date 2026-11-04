@@ -69,6 +69,21 @@ function normalizePortalPage(page: string): string {
   return LEGACY_PAGE_REDIRECTS[page] ?? page;
 }
 
+/** Re-read `window.location.search` when the portal page or history changes (activity-log deep links). */
+function usePortalQueryParams(syncKey: string) {
+  const [search, setSearch] = useState(() => (typeof window !== 'undefined' ? window.location.search : ''));
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const sync = () => setSearch(window.location.search);
+    window.addEventListener('popstate', sync);
+    return () => window.removeEventListener('popstate', sync);
+  }, []);
+  useEffect(() => {
+    if (typeof window !== 'undefined') setSearch(window.location.search);
+  }, [syncKey]);
+  return useMemo(() => new URLSearchParams(search), [search]);
+}
+
 /**
  * AdminPortal — Dominion platform shell that routes purely via internal page IDs.
  */
@@ -104,6 +119,7 @@ export function AdminPortal() {
       'fuel-prices': ['refinery', 'week', 'range', 'year'],
       'fuel-stations': ['q', 'status', 'pcode', 'brand', 'pin', 'source', 'issue', 'sort', 'dir', 'p', 'tab', 'sub'],
       'pending-motor-vehicles': ['tab'],
+      'activity-log': ['filter', 'conflict'],
     };
     const url = new URL(window.location.href);
     const keep = new Set(allowed[page] || []);
@@ -127,6 +143,7 @@ export function AdminPortal() {
   }, [writePageUrl]);
 
   const currentPage = currentPageRaw;
+  const portalQuery = usePortalQueryParams(currentPage);
 
   const accessToken = session?.access_token;
 
@@ -241,7 +258,12 @@ export function AdminPortal() {
           <PriceEnginePage />
         </div>
       )}
-      {currentPage === 'activity-log' && <ActivityLog />}
+      {currentPage === 'activity-log' && (
+        <ActivityLog
+          conflictId={portalQuery.get('conflict')}
+          topicFilter={portalQuery.get('filter')}
+        />
+      )}
       {currentPage === 'fuel-stations' && (
         <StationDatabasePage
           canWrite={role === 'platform_owner'}
@@ -291,11 +313,7 @@ export function AdminPortal() {
           <PartsSourcingManager mode="supply" />
         </div>
       )}
-      {currentPage === 'catalog-quality' && (
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px] dark:bg-card">
-          <CatalogQualityPage />
-        </div>
-      )}
+      {currentPage === 'catalog-quality' && <CatalogQualityPage />}
       {currentPage.startsWith('world-') && accessToken && (
         <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px] dark:bg-card">
           <WorldMapsPage

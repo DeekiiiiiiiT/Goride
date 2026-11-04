@@ -1,20 +1,18 @@
 /** Ported from Stitch — do not simplify layout (audit §0.4). */
 import { useIn8AssetsForm } from './hooks/useIn8AssetsForm';
 import { InventoryOverflowMenu } from '../InventoryOverflowMenu';
+import { InventoryPrimaryTabs } from '../InventoryPrimaryTabs';
 import { InventoryPagination } from '../InventoryPagination';
 import { useState } from 'react';
 import { useInventoryLive } from '../inventoryLive';
 import { useInventoryShell } from '../InventoryShellContext';
-import { firstAssetSerial, formatPlate, strField } from '../inventoryData';
 import { InventoryQrPrintDialog } from '../InventoryQrPrintDialog';
 export function In8Assets() {
   const form = useIn8AssetsForm();
   const [qrOpen, setQrOpen] = useState(false);
   const shell = useInventoryShell();
   const live = useInventoryLive(shell);
-  const featuredAsset = live.assets[0];
-  const featuredSerial = firstAssetSerial(live.assets);
-  const qrAssetId = form.paged[0] ? form.strField(form.paged[0], 'id', '') : null;
+  const qrAssetId = form.selectedAssetId;
   return (
     <div className="fleet-inventory-stitch inventory-stitch-root">
       <InventoryQrPrintDialog assetId={qrAssetId} open={qrOpen} onClose={() => setQrOpen(false)} />
@@ -75,22 +73,7 @@ export function In8Assets() {
       </div>
 
       <div className="bg-surface-container-low p-1 rounded-lg w-full overflow-x-auto">
-      <div className="flex items-center gap-1 min-w-max">
-      <a className="px-space-md py-1.5 rounded font-body-sm text-body-sm text-secondary hover:text-on-surface hover:bg-surface-container transition-colors" href="#">Overview</a>
-      <a className="px-space-md py-1.5 rounded font-body-sm text-body-sm text-secondary hover:text-on-surface hover:bg-surface-container transition-colors" href="#">Stock</a>
-      <a className="px-space-md py-1.5 rounded font-body-sm text-body-sm text-secondary hover:text-on-surface hover:bg-surface-container transition-colors" href="#">Vehicle kits</a>
-      <a className="px-space-md py-1.5 rounded font-body-sm text-body-sm bg-primary text-on-primary font-semibold shadow-sm flex items-center gap-space-xs" href="#">
-      <span className="material-symbols-outlined text-sm">qr_code_scanner</span>
-      <span>Assets</span>
-      </a>
-      <a className="px-space-md py-1.5 rounded font-body-sm text-body-sm text-secondary hover:text-on-surface hover:bg-surface-container transition-colors" href="#">Movements</a>
-      <a className="px-space-md py-1.5 rounded font-body-sm text-body-sm text-secondary hover:text-on-surface hover:bg-surface-container transition-colors" href="#">Purchasing</a>
-      <a className="px-space-md py-1.5 rounded font-body-sm text-body-sm text-secondary hover:text-on-surface hover:bg-surface-container transition-colors" href="#">Counts</a>
-      <a className="px-space-md py-1.5 rounded font-body-sm text-body-sm text-secondary hover:text-on-surface hover:bg-surface-container transition-colors flex items-center gap-space-xs" href="#">
-      <span>Alerts</span>
-      <span className="px-1.5 py-0.2 rounded-full bg-error text-on-error font-label-code text-caption font-bold">5</span>
-      </a>
-      </div>
+      <InventoryPrimaryTabs variant="segment" />
       </div>
 
       <div className="flex flex-col gap-space-md">
@@ -161,138 +144,97 @@ export function In8Assets() {
       </tr>
       </thead>
       <tbody className="divide-y divide-surface-container font-body-sm text-body-sm">
-
-      <tr className="hover:bg-surface-container-low/50 transition-colors">
+      {form.pagedAssetRows.length === 0 ? (
+      <tr>
+      <td colSpan={9} className="py-space-xl px-space-md text-center text-on-surface-variant font-body-sm">
+      No assets match your filters.
+      </td>
+      </tr>
+      ) : (
+      form.pagedAssetRows.map((row, index) => {
+        const assetId = row.id;
+        const selected = form.selectedAssetId === assetId;
+        const st = row.status.toLowerCase();
+        return (
+      <tr
+        key={assetId || String(index)}
+        className={`hover:bg-surface-container-low/50 transition-colors cursor-pointer ${selected ? 'bg-primary/5' : ''}`}
+        onClick={() => form.selectAsset(assetId)}
+      >
       <td className="py-space-md px-space-md align-middle">
+      {row.serial && row.serial !== '—' ? (
+      <span className="font-label-code text-label-code font-semibold text-on-surface flex items-center gap-1">
+      <span className="material-symbols-outlined text-sm text-surface-tint">qr_code_2</span>
+      <span>{row.serial}</span>
+      </span>
+      ) : (
       <div className="flex items-center gap-space-xs">
       <span className="px-2 py-0.5 rounded bg-tertiary-fixed text-on-tertiary-fixed font-label-code text-caption font-semibold flex items-center gap-1">
       <span className="w-1.5 h-1.5 rounded-full bg-on-tertiary-container animate-pulse"></span>
       <span>No serial yet</span>
       </span>
-      <button type="button" className="text-on-surface font-body-sm text-caption underline font-semibold hover:text-secondary underline-offset-2" onClick={() => form.registerAsset()}>
+      <button type="button" className="text-on-surface font-body-sm text-caption underline font-semibold hover:text-secondary underline-offset-2" onClick={(e) => { e.stopPropagation(); form.registerAsset(); }}>
                         Add serial
                       </button>
       </div>
+      )}
       </td>
       <td className="py-space-md px-space-md align-middle">
       <div className="flex flex-col">
-      <span className="font-body-md text-body-md font-semibold text-on-surface">Dash camera</span>
-      <span className="font-label-code text-caption text-on-surface-variant font-medium">ELC-DCM-01 · Dual-Lens 1080p</span>
+      <span className="font-body-md text-body-md font-semibold text-on-surface">{row.name}</span>
+      <span className="font-label-code text-caption text-on-surface-variant font-medium">{row.category}</span>
       </div>
       </td>
       <td className="py-space-md px-space-md align-middle">
       <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-surface-container text-on-surface font-caption text-caption font-medium">
       <span className="w-2 h-2 rounded-full bg-surface-tint"></span>
-      <span>Installed</span>
+      <span>{row.statusLabel}</span>
       </span>
       </td>
       <td className="py-space-md px-space-md align-middle">
       <div className="flex items-center gap-space-xs">
-      <span className="material-symbols-outlined text-secondary text-base">directions_car</span>
-      <span className="font-body-sm text-body-sm text-on-surface">{formatPlate(strField(featuredAsset ?? {}, 'vehicle_plate', live.primaryPlate))}</span>
-      <span className="px-1.5 py-0.5 rounded bg-surface-container-high font-label-plate text-caption text-on-surface font-bold">{live.primaryPlate}</span>
+      <span className="material-symbols-outlined text-secondary text-base">{st === 'installed' ? 'directions_car' : 'warehouse'}</span>
+      <span className="font-body-sm text-body-sm text-on-surface">{row.plate || '—'}</span>
       </div>
       </td>
-      <td className="py-space-md px-space-md align-middle font-label-code text-body-sm text-on-surface">
-                    06 Jan 2026
-                  </td>
-      <td className="py-space-md px-space-md align-middle font-label-code text-body-sm text-outline-variant">
-                    —
-                  </td>
-      <td className="py-space-md px-space-md align-middle font-label-code text-body-sm text-outline-variant">
-                    —
-                  </td>
+      <td className="py-space-md px-space-md align-middle font-label-code text-body-sm text-outline-variant">—</td>
+      <td className="py-space-md px-space-md align-middle font-label-code text-body-sm text-outline-variant">—</td>
+      <td className="py-space-md px-space-md align-middle font-label-code text-body-sm text-outline-variant">—</td>
       <td className="py-space-md px-space-md align-middle">
       <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-surface-container-high text-on-surface-variant font-caption text-caption font-medium">
       <span className="w-1.5 h-1.5 rounded-full bg-outline"></span>
-      <span>Not connected</span>
+      <span>—</span>
       </span>
       </td>
-      <td className="py-space-md px-space-md align-middle text-right">
-      <div className="relative inline-block text-left">
-      <InventoryOverflowMenu items={form.rowMenuItems(form.paged[0] ? form.strField(form.paged[0], 'id', '') : '')} />
-      <div className="hidden absolute right-0 mt-1 w-44 rounded-lg bg-surface-container-lowest shadow-xl z-20 py-1 text-left" data-stitch-data-stitch-id="menu-row-1">
-      <a className="flex items-center gap-2 px-3 py-1.5 font-body-sm text-body-sm text-on-surface hover:bg-surface-container-low" href="#">
-      <span className="material-symbols-outlined text-sm">visibility</span> View details
-                        </a>
-      <a className="flex items-center gap-2 px-3 py-1.5 font-body-sm text-body-sm text-on-surface hover:bg-surface-container-low" href="#">
-      <span className="material-symbols-outlined text-sm">tag</span> Add serial
-                        </a>
-      <a className="flex items-center gap-2 px-3 py-1.5 font-body-sm text-body-sm text-on-surface hover:bg-surface-container-low" href="#">
-      <span className="material-symbols-outlined text-sm">swap_horiz</span> Move asset
-                        </a>
-      <a className="flex items-center gap-2 px-3 py-1.5 font-body-sm text-body-sm text-error hover:bg-error-container/30" href="#">
-      <span className="material-symbols-outlined text-sm">warning</span> Report issue
-                        </a>
+      <td className="py-space-md px-space-md align-middle text-right" onClick={(e) => e.stopPropagation()}>
+      <InventoryOverflowMenu items={form.rowMenuItems(assetId)} />
+      </td>
+      </tr>
+        );
+      })
+      )}
+      {form.selectedAssetRow ? (
+      <tr className="bg-surface-container-low">
+      <td colSpan={9} className="py-space-md px-space-md">
+      <div className="flex flex-wrap items-center justify-between gap-space-md">
+      <div>
+      <span className="font-caption text-caption uppercase text-secondary font-semibold">Selected asset</span>
+      <div className="font-body-md text-body-md font-semibold text-on-surface">{form.selectedAssetRow.name} · {form.selectedAssetRow.serial}</div>
+      <div className="font-label-code text-caption text-on-surface-variant">{form.selectedAssetRow.plate} · {form.selectedAssetRow.bookValue}</div>
       </div>
+      <button
+        type="button"
+        className="h-9 px-space-md rounded-lg bg-primary text-on-primary font-body-sm font-semibold disabled:opacity-60"
+        disabled={!form.selectedAssetId}
+        title={form.openSelectedAssetPageDisabledReason || 'Open asset page'}
+        onClick={() => form.selectedAssetId && form.openAsset(form.selectedAssetId)}
+      >
+        View asset page
+      </button>
       </div>
       </td>
       </tr>
-
-      <tr className="hover:bg-surface-container-low/50 transition-colors">
-      <td className="py-space-md px-space-md align-middle">
-      <a className="font-label-code text-label-code font-semibold text-on-surface hover:underline flex items-center gap-1 group" href="#">
-      <span className="material-symbols-outlined text-sm text-surface-tint group-hover:text-on-surface">qr_code_2</span>
-      <span>{featuredSerial}</span>
-      </a>
-      </td>
-      <td className="py-space-md px-space-md align-middle">
-      <div className="flex flex-col">
-      <span className="font-body-md text-body-md font-semibold text-on-surface">Dash camera</span>
-      <span className="font-label-code text-caption text-on-surface-variant font-medium">ELC-DCM-01 · Telematics Edition</span>
-      </div>
-      </td>
-      <td className="py-space-md px-space-md align-middle">
-      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-secondary-container text-on-secondary-container font-caption text-caption font-medium">
-      <span className="w-2 h-2 rounded-full bg-secondary"></span>
-      <span>In store</span>
-      </span>
-      </td>
-      <td className="py-space-md px-space-md align-middle">
-      <div className="flex items-center gap-space-xs">
-      <span className="material-symbols-outlined text-secondary text-base">warehouse</span>
-      <span className="font-body-sm text-body-sm text-on-surface">Main store — Kingston</span>
-      <span className="font-label-code text-caption text-secondary bg-surface-container px-1 rounded">JM-KIN-ST01</span>
-      </div>
-      </td>
-      <td className="py-space-md px-space-md align-middle font-label-code text-body-sm text-outline-variant">
-                    —
-                  </td>
-      <td className="py-space-md px-space-md align-middle font-label-code text-body-sm text-on-surface">
-      <div className="flex flex-col">
-      <span>06 Jan 2027</span>
-      <span className="font-caption text-caption text-surface-tint">in 66 days</span>
-      </div>
-      </td>
-      <td className="py-space-md px-space-md align-middle font-label-code text-body-sm text-on-surface">
-                    15 Dec 2026
-                  </td>
-      <td className="py-space-md px-space-md align-middle">
-      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-surface-container text-secondary font-caption text-caption font-medium">
-      <span className="w-1.5 h-1.5 rounded-full bg-surface-tint"></span>
-      <span>Standby</span>
-      </span>
-      </td>
-      <td className="py-space-md px-space-md align-middle text-right">
-      <div className="relative inline-block text-left">
-      <InventoryOverflowMenu items={form.rowMenuItems(form.paged[1] ? form.strField(form.paged[1], 'id', '') : form.paged[0] ? form.strField(form.paged[0], 'id', '') : '')} />
-      <div className="hidden absolute right-0 mt-1 w-44 rounded-lg bg-surface-container-lowest shadow-xl z-20 py-1 text-left" data-stitch-data-stitch-id="menu-row-2">
-      <a className="flex items-center gap-2 px-3 py-1.5 font-body-sm text-body-sm text-on-surface hover:bg-surface-container-low" href="#">
-      <span className="material-symbols-outlined text-sm">visibility</span> View details
-                        </a>
-      <a className="flex items-center gap-2 px-3 py-1.5 font-body-sm text-body-sm text-on-surface hover:bg-surface-container-low" href="#">
-      <span className="material-symbols-outlined text-sm">swap_horiz</span> Issue to Car
-                        </a>
-      <a className="flex items-center gap-2 px-3 py-1.5 font-body-sm text-body-sm text-on-surface hover:bg-surface-container-low" href="#">
-      <span className="material-symbols-outlined text-sm">assignment_turned_in</span> Log Inspection
-                        </a>
-      <a className="flex items-center gap-2 px-3 py-1.5 font-body-sm text-body-sm text-error hover:bg-error-container/30" href="#">
-      <span className="material-symbols-outlined text-sm">build</span> Maintenance Flag
-                        </a>
-      </div>
-      </div>
-      </td>
-      </tr>
+      ) : null}
       </tbody>
       </table>
       </div>

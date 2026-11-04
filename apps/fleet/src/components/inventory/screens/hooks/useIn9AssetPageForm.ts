@@ -3,11 +3,16 @@ import { toast } from 'sonner';
 import { inventoryApi } from '../../inventoryApi';
 import { strField } from '../../inventoryData';
 import { formatJmd } from '../../inventoryFormat';
+import { buildAssetRow } from '../../inventoryViewRows';
 import { useGapLoad } from '../../gap/useGapLoad';
 import { useInScreenBase } from './useInShared';
 
 export type AssetLogFilter = 'all' | 'incident' | 'custody';
 
+/**
+ * Stitch → data (In9 Asset page)
+ * header name → AssetRow.name | serial field → AssetRow.serial | book value → valueLabel
+ */
 export function useIn9AssetPageForm() {
   const base = useInScreenBase();
   const { shell, submit, finishSuccess } = base;
@@ -28,13 +33,21 @@ export function useIn9AssetPageForm() {
   const resolvedAsset =
     shell.assets.find((a) => strField(a, 'id', '') === assetId) ?? null;
 
+  const assetRow = useMemo(
+    () => (resolvedAsset ? buildAssetRow(resolvedAsset, formatJmd) : null),
+    [resolvedAsset],
+  );
+
   const [serial, setSerial] = useState('');
   const [docName, setDocName] = useState('');
   const [logFilter, setLogFilter] = useState<AssetLogFilter>('all');
   const [incidentNote, setIncidentNote] = useState('');
 
   useEffect(() => {
-    if (!resolvedAsset) return;
+    if (!resolvedAsset) {
+      setSerial('');
+      return;
+    }
     setSerial(strField(resolvedAsset, 'serial_number', strField(resolvedAsset, 'serial_no', '')));
   }, [resolvedAsset]);
 
@@ -52,6 +65,32 @@ export function useIn9AssetPageForm() {
       return t.includes('custody') || t.includes('transfer') || t.includes('move');
     });
   }, [allEvents, logFilter]);
+
+  const eventRows = useMemo(
+    () =>
+      filteredEvents.map((e) => ({
+        id: strField(e, 'id', strField(e, 'reference', '')),
+        label: strField(e, 'title', strField(e, 'body', strField(e, 'type', 'Event'))),
+        actor: strField(e, 'actor_name', strField(e, 'created_by', '—')),
+        when: strField(e, 'created_at', strField(e, 'occurred_at', '—')),
+        type: strField(e, 'type', strField(e, 'event_type', '')),
+        body: strField(e, 'body', strField(e, 'note', strField(e, 'description', ''))),
+        poRefLabel: strField(e, 'po_number', strField(e, 'po_ref', '')),
+        skuLabel: strField(e, 'sku', strField(e, 'item_sku', '')),
+      })),
+    [filteredEvents],
+  );
+
+  const linkedPoRef = strField(
+    resolvedAsset ?? {},
+    'po_number',
+    strField(resolvedAsset ?? {}, 'linked_po_ref', '—'),
+  );
+  const assetSkuLabel = assetRow?.serial ?? assetRow?.category ?? '—';
+
+  const hasAsset = Boolean(resolvedAsset && assetId);
+  const saveSerialDisabledReason =
+    !hasAsset ? 'No asset selected' : !serial.trim() ? 'Enter a serial number' : '';
 
   const logCounts = useMemo(
     () => ({
@@ -171,6 +210,11 @@ export function useIn9AssetPageForm() {
     shell,
     assetId,
     asset: resolvedAsset,
+    assetRow,
+    hasAsset,
+    eventRows,
+    linkedPoRef,
+    assetSkuLabel,
     events: filteredEvents,
     allEvents,
     documents: load.data?.documents ?? [],
@@ -190,6 +234,7 @@ export function useIn9AssetPageForm() {
     markFaulty,
     retire,
     saveSerial,
+    saveSerialDisabledReason,
     uploadDocument,
     addIncidentNote,
     copySerial,

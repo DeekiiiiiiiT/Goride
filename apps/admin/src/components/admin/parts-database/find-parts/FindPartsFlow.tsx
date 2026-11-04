@@ -17,6 +17,7 @@ import { ResultsView } from "./ResultsView";
 import { StepBar } from "./StepBar";
 import { VariantStep } from "./VariantStep";
 import { fetchPartMatchHealth, runFindPartsRematch } from "../../../../services/partsAutoMatchApi";
+import { formatPartPositionSideLabel } from "@roam/types/partPositionNorm";
 import { toast } from "sonner";
 import {
   fetchFindParts,
@@ -27,6 +28,18 @@ import {
   type FindPartsResult,
   type FoundPartRow,
 } from "./findPartsApi";
+
+function findPartsPositionSideLabel(position: string, side: string): string {
+  const p = String(position ?? "").trim();
+  const s = String(side ?? "").trim();
+  if (!p && !s) return "";
+  if (!p && s) {
+    if (s === "both") return "Both sides";
+    return s === "left" ? "Left" : s === "right" ? "Right" : "";
+  }
+  const raw = formatPartPositionSideLabel(p, s || null);
+  return raw === "Any position" ? "" : raw;
+}
 
 const RECENT_KEY = "dominion-find-parts-recent";
 
@@ -129,6 +142,12 @@ export function FindPartsFlow({
     const timer = window.setTimeout(() => setTermQuery(partQuery.trim()), 250);
     return () => window.clearTimeout(timer);
   }, [partQuery]);
+
+  useEffect(() => {
+    if (variantId && componentId && step === "car") {
+      setStep("results");
+    }
+  }, [variantId, componentId, step]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -319,7 +338,7 @@ export function FindPartsFlow({
     }).filter((item): item is { id: string; plainName: string; positionAware: boolean } => Boolean(item)),
   }));
   const carLabel = [year, make, model].filter(Boolean).join(" ");
-  const sideLabel = side === "left" ? "Left" : side === "right" ? "Right" : position === "front" ? "Front" : position === "rear" ? "Back" : position === "both" ? "Both" : "";
+  const sideLabel = findPartsPositionSideLabel(position, side);
   const active = step === "car" ? 1 : step === "version" ? 2 : step === "part" ? 3 : step === "position" ? 4 : 5;
   const result = search.data;
   const drawerCrossRefs = useMemo(() => {
@@ -339,22 +358,39 @@ export function FindPartsFlow({
   ];
 
   const engines = [...new Set(variants.map((row) => row.engine_code).filter((code): code is string => Boolean(code)))];
+  const resultPicked = result?.picked ?? null;
+  const pickedVariant = variants.find((row) => row.id === (chosenId || variantId)) ?? resultPicked;
+  const yearRange = pickedVariant?.production_start_year && pickedVariant?.production_end_year
+    ? `${pickedVariant.production_start_year}–${pickedVariant.production_end_year}`
+    : yearSpan || year;
+  const carQueryLabel = [
+    pickedVariant?.make || make,
+    pickedVariant?.model || model,
+    yearRange,
+  ].filter(Boolean).join(" ");
+  const platformMeta = result?.platformLabel ?? "DAI-M900 (SHARED 3X)";
+  const axleMeta = result?.axleLabel
+    ?? (pickedVariant?.drivetrain && pickedVariant.drivetrain !== "2WD"
+      ? String(pickedVariant.drivetrain).toUpperCase()
+      : "DISC / VENTILATED");
+
   return (
     <div className="find-parts-flow">
+      {step !== "results" ? (
       <StepBar
-        kind={step === "version" ? "pills" : step === "part" ? "route" : step === "position" ? "axle" : step === "results" || step === "missing" || step === "all" ? "progress" : "boxes"}
+        kind={step === "version" ? "pills" : step === "part" ? "route" : step === "position" ? "axle" : step === "missing" || step === "all" ? "progress" : "boxes"}
         partLabel={partName}
         active={active}
         carLabel={carLabel}
         versionAnswer={step !== "car" && step !== "version" ? versionLabel : ""}
-        sideAnswer={step === "results" || step === "missing" || step === "all" ? sideLabel : ""}
-        resultsOnFile={step === "results" && result && emptyResult ? 0 : step === "results" && result ? sectionCount(result) : undefined}
+        sideAnswer={step === "missing" || step === "all" ? sideLabel : ""}
         onOpen={(next) => {
           const name = next === 1 ? "car" : next === 2 ? "version" : next === 3 ? "part" : next === 4 ? "position" : "results";
           setStep(name);
         }}
       />
-      {step === "results" || step === "missing" ? (
+      ) : null}
+      {step !== "results" && (step === "missing") ? (
         <ChoiceTrail chips={trail} gapDetected={Boolean(result && emptyResult)} onOpen={(next) => setStep(next)} />
       ) : null}
       {step === "car" && options.isLoading ? <PartsLoading /> : null}
@@ -477,8 +513,12 @@ export function FindPartsFlow({
           result={result}
           owner={owner}
           vehicleId={chosenId}
-          onAdd={requestAdd}
-          onBack={() => setStep(positionAware ? "position" : "part")}
+          partName={partName || "Brake pads"}
+          positionLabel={sideLabel || undefined}
+          carQueryLabel={carQueryLabel}
+          chassisChip={pickedVariant?.chassis_code ? String(pickedVariant.chassis_code) : resultPicked?.chassis_code ? String(resultPicked.chassis_code) : undefined}
+          platformLabel={platformMeta}
+          axleLabel={axleMeta}
           onOpen={setDetail}
           onOpenDatabase={() => { if (chosenId) onOpenVehicle?.(chosenId); }}
           engineEnabled={Boolean(matchHealth.data?.enabled)}
@@ -512,7 +552,7 @@ export function FindPartsFlow({
       ) : null}
       {(step === "missing" || (step === "results" && result && emptyResult)) && result ? (
         <MissingPart
-          headline={`We don't have ${sideLabel ? `${sideLabel.toLowerCase()} ` : position ? `${position === "rear" ? "rear" : "front"} ` : ""}${partName.toLowerCase()} for the ${carLabel}${versionLabel && variantId !== "any" ? ` ${versionLabel}` : ""} yet.`}
+          headline={`We don't have ${sideLabel ? `${sideLabel.toLowerCase()} ` : ""}${partName.toLowerCase()} for the ${carLabel}${versionLabel && variantId !== "any" ? ` ${versionLabel}` : ""} yet.`}
           partName={partName}
           carLabel={carLabel}
           versionLabel={variantId !== "any" ? versionLabel : ""}

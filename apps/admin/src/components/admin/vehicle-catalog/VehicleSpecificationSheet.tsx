@@ -12,6 +12,8 @@ import {
 } from "lucide-react";
 import { type VehicleCatalogRecord } from "../../../types/vehicleCatalog";
 import { VehicleAutoMatchTabs } from "./VehicleAutoMatchTabs";
+import { VehicleCarSpecsSection } from "./VehicleCarSpecsSection";
+import "../parts-database/partsDatabase.css";
 
 function dash(value: unknown): string {
   if (value == null || value === "") return "—";
@@ -188,11 +190,12 @@ export function VehicleSpecificationSheet({
           <SpecField label="Max Towing Capacity" value={monoNum(r.max_towing_kg, " kg")} mono />
         </dl>
       </SpecCard>
+      <VehicleCarSpecsSection variantId={r.id} />
     </div>
   );
 
   return (
-    <div ref={rootRef}>
+    <div ref={rootRef} className="parts-database-stitch">
       <VehicleAutoMatchTabs
         record={r}
         onClose={onClose}

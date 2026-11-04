@@ -1,0 +1,131 @@
+ROAM FLEET — MAINTENANCE: WHERE EACH DUE DATE COMES FROM (GOOGLE STITCH)
+
+
+
+
+Roam Fleet - Maintenance, schedule sources and alerts (Desktop Web App, for fleet owners, fleet managers and their staff):
+
+Design the high-fidelity screens that change in Roam Fleet's Maintenance area now that every service schedule comes from Roam's master database (Roam Dominion). The existing Maintenance screens (Overview tab, Due items drawer for one car, Log service steps, Log odometer, Service history) are already designed; these screens sit beside them and must look like the same product. What's new for the fleet manager: every due line now says where its schedule came from ("Car maker", "Part maker" or "Roam policy"); a line can be marked "Needs checking" when Roam hasn't confirmed it yet; when Roam corrects a schedule, the line shows "Updated by Roam" with the date; a car with no odometer reading yet shows "Waiting for odometer" instead of an invented due distance; a fleet can set its own tighter interval for one part on one car ("Custom schedule", with a reason); and a car can be marked "Hard use" (taxi, delivery, heavy traffic) to use shorter severe-duty schedules. Alerts change too: one alert per part per car that stays open until the work is logged, instead of a new alert every day. The tone is calm, plain and exact: a service desk logbook.
+
+BRAND IDENTITY:
+- Match the existing Roam Fleet web app:
+  - white top nav row with the black "Roam Fleet" app tile, then: Dashboard, Fleet Operations, Driver Operations, Money, Vehicle Operations (active, underlined), Delivery Operations, Analytics, Reports, Business Finance; bell icon with a red count badge; round avatar
+  - dark navy sub-bar (#020817) with "Switch vehicle or search hub..." on the left and "03:00:28 PM EST · America/Jamaica · JM (JMD) · DE · Deeki T · platform_owner" on the right
+  - page wash Slate 50, centred content (max ~1400px), shadcn-style components
+- LIGHT MODE (default):
+  - Primary: Near-black (#030213) — primary buttons, active tab, selected outlines
+  - Background: White (#FFFFFF); page wash: Slate 50 (#f8fafc)
+  - Surface cards: White, 1px border rgba(0,0,0,0.1)
+  - Text primary: #0a0a0a; muted text: #717182
+  - Success / done: Emerald (#059669)
+  - Warning / due soon / needs checking: Amber (#d97706)
+  - Error / overdue: Red (#d4183d)
+  - Neutral / waiting / retired: Slate 500 (#64748b)
+  - Info / updated by Roam / custom: Indigo 600 (#4f46e5)
+  - Muted fill for tabs and chips: Slate 100 (#f1f5f9)
+- DARK MODE:
+  - Background: #252525; surface #2e2e2e; border #444444
+  - Text primary: #fafafa; muted #b4b4b4
+  - Primary: #fafafa (buttons light with dark text)
+  - Success #34d399; warning #f59e0b; error #f87171; neutral #94a3b8; info #818cf8
+- Chips (rounded, small, always a word plus icon, never colour alone):
+  - Source: "Car maker" (verified icon, emerald outline) · "Part maker" (inventory icon, emerald outline) · "Roam policy" (policy icon, slate outline)
+  - "Needs checking" (clock icon, amber outline)
+  - "Updated by Roam · 4 Nov" (sync icon, indigo outline)
+  - "Custom" (tune icon, indigo fill)
+  - "Waiting for odometer" (speed icon, slate fill)
+  - "Hard use" (local_shipping icon, slate outline) on the car header
+  - Due status: "Overdue" red · "Due soon" amber · "OK" emerald
+- Typography: Inter; plates, odometer readings, distances, dates and counts in mono with tabular numerals. Distances are km.
+- Sample data (real):
+  - Cars: 5179KZ (odometer about 195,400 km) and 1505LM (no reading yet)
+  - 5179KZ due lines: Tyre change LF / RF overdue by 32,432 km · Cabin A/C filter overdue by 63,480 km · Engine oil overdue · Brake fluid due at 161,952 km or Oct 2028 (newly added, "Updated by Roam · 4 Nov") · Coolant flush due at 221,952 km or Oct 2031
+  - Every line at launch shows "Roam policy"
+  - Schedules: Engine oil every 5,000 km or 3 months · Brake fluid every 40,000 km or 24 months · Tyre change every 40,000 km or 36 months
+
+SCREEN 1: DUE ITEMS FOR ONE CAR (RIGHT DRAWER) — UPDATED
+- Header: plate "5179KZ" in mono, car name "Toyota Roomy · M900A", current odometer "195,432 km · read 2 Nov", chip "Hard use" (or a small link "Mark as hard use")
+- Grouped list: Overdue, Due soon, OK
+- Each line:
+  - part icon + plain name (+ position chip LF / RF / LR / RR for tyres)
+  - due line in mono: "Due at 161,952 km or 14 Oct 2028 · whichever first"
+  - status chip
+  - small second row: source chip + "Every 40,000 km or 24 months" muted; optional "Updated by Roam · 4 Nov" chip; optional "Needs checking" chip; optional "Custom" chip
+  - overflow menu per line: "Log this service", "Set custom schedule", "Why this schedule?"
+- Footer buttons: secondary "Log odometer", primary "Log service"
+
+SCREEN 2: "WHY THIS SCHEDULE?" (POPOVER FROM A DUE LINE)
+- Title "Brake fluid · 5179KZ"
+- Plain sentence: "Roam's schedule for everyone: every 40,000 km or 24 months, whichever comes first."
+- Rows: "Comes from" Everyone · "Source" Roam policy · "Last changed by Roam" 4 Nov 2026 · "Counting from" last done 121,952 km on 14 Oct 2026 (or "first odometer reading" / "when the car was added")
+- If custom: "Your fleet's custom schedule: every 30,000 km or 18 months · reason: heavy airport runs · set by Deeki T, 4 Nov"
+- Link "Set custom schedule"
+
+SCREEN 3: SET CUSTOM SCHEDULE (SMALL DIALOG)
+- Title "Custom schedule · Brake fluid · 5179KZ"
+- Shows Roam's schedule read-only on top
+- Fields "Every [ ] km" and "or every [ ] months"; required "Reason" text field
+- Note: "Roam's future changes won't change this part on this car until you remove the custom schedule."
+- Buttons: "Cancel", primary "Save custom schedule"; when one exists, a text button "Go back to Roam's schedule"
+
+SCREEN 4: CAR WAITING FOR AN ODOMETER READING (DRAWER STATE)
+- Car 1505LM: banner slate "We need a first odometer reading to work out distance-based due dates. Date-based dates are shown below."
+- Primary button in the banner "Log odometer"
+- Each line shows only a date due ("Due by 27 Feb 2027") with chip "Waiting for odometer"
+- After a reading is logged: toast "Due dates worked out from [reading] km" (example value only)
+
+SCREEN 5: MAINTENANCE ALERTS (BELL MENU) — ONE ALERT PER PART
+- Bell dropdown, title "Maintenance", tabs "Open" (count 9) and "Closed"
+- One row per car + part (+ position): plate in mono, part name, "Overdue by 32,432 km" or "Due in 9 days", age "open since 1 Nov"
+- No repeated rows for the same part on different days
+- Closed tab rows show the reason: "Done · logged 5 Nov", "Replaced · Roam updated the schedule", "Part no longer scheduled"
+- Footer link "Open Maintenance"
+
+SCREEN 6: OVERVIEW TAB — UPDATED CAR ROWS
+- Existing Overview table of cars; each row now shows: plate, car, odometer (or "Waiting for odometer" chip), counts "3 overdue · 1 due soon", and a small indigo chip "Roam updated 2 schedules · 4 Nov" when it applies (click opens Screen 1)
+- Top info strip (dismissible, once): "Service schedules now come from Roam. Each line shows where its schedule came from."
+
+SCREEN 7: MARK AS HARD USE (SMALL DIALOG)
+- Title "Hard use · 5179KZ"
+- Explanation: "Taxi, delivery and heavy-traffic cars wear faster. Car makers give shorter 'severe duty' schedules for them."
+- Switch "This car is in hard use" (on by default for rideshare and delivery cars, with that reason shown)
+- Preview list: "Engine oil 5,000 km → 5,000 km (no severe schedule yet)", "Air filter 10,000 km → 10,000 km"
+- Buttons "Cancel", primary "Save"
+
+SCREEN 8: STATES
+- A due line marked "Needs checking" with tooltip "Roam hasn't confirmed this schedule yet"
+- A retired part line: greyed, "No longer scheduled by Roam", overflow "Remove from this car"
+- Toast "2 schedules updated by Roam" on opening a car after a change
+- Error "Couldn't save the custom schedule. Nothing was changed."
+- Look-only user: overflow menu shows only "Why this schedule?"
+
+SCREEN 9: PHONE (390px) — DUE ITEMS FOR ONE CAR
+- Stacked cards per due line with status chip, due line in mono, source chip; bottom sticky "Log service" button
+
+ADDITIONAL UI COMPONENTS:
+- Source chip, Needs checking chip, Updated by Roam chip, Custom chip, Waiting for odometer chip, Hard use chip
+- Due line: "Due at X km or DATE · whichever first"
+- "Why this schedule?" popover
+- One-alert-per-part bell row with open / closed reason
+
+INTERACTIONS:
+- Clicking a due line's source chip opens Screen 2
+- "Set custom schedule" opens Screen 3; saving shows the line with "Custom" and recalculates its due at once
+- "Go back to Roam's schedule" asks "Use Roam's schedule again for this part on this car?" with "Cancel" / "Use Roam's"
+- Logging a service closes that part's open alert ("Done") and the line moves to OK
+- Logging the first odometer reading on a waiting car fills in the distance due dates
+- A reading lower than the last one is saved but flagged "Looks wrong — lower than the last reading" and is not used for due dates
+- Hover rows highlight in Slate 100; focus rings 2px primary; every field has a visible label
+
+Spec screens / Area
+| Screen | Area |
+|---|---|
+| 1 | Due items drawer for one car, with source, updated, needs-checking and custom chips |
+| 2 | "Why this schedule?" popover |
+| 3 | Set custom schedule dialog |
+| 4 | Car waiting for an odometer reading |
+| 5 | Maintenance alerts bell: one alert per part, open and closed |
+| 6 | Overview tab car rows with "Roam updated" chip |
+| 7 | Mark as hard use dialog |
+| 8 | States |
+| 9 | Phone 390px due items |

@@ -12,50 +12,8 @@ export function In5IssueDialog() {
     return status === 'missing' || status === 'short';
   });
   return (
-    <div className="fleet-inventory-stitch inventory-stitch-root">
-      <div className="inventory-stitch-main"><div className="flex flex-col w-full relative">
-
-      <div className="w-full px-margin-desktop py-space-xl opacity-20 pointer-events-none select-none filter blur-[1.5px]">
-
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-space-lg mb-space-xl">
-      <div className="bg-surface-container-lowest p-space-lg rounded-xl shadow-sm">
-      <div className="font-caption text-caption text-secondary uppercase tracking-wider mb-1">Kit Fulfillment Rate</div>
-      <div className="font-label-price text-headline-lg text-on-surface">64.2%</div>
-      <div className="font-body-sm text-body-sm text-on-surface-variant mt-1">28 of 44 active cabs complete</div>
-      </div>
-      <div className="bg-surface-container-lowest p-space-lg rounded-xl shadow-sm">
-      <div className="font-caption text-caption text-secondary uppercase tracking-wider mb-1">Storeroom Reserve</div>
-      <div className="font-label-price text-headline-lg text-on-surface">{form.storeReserveLabel}</div>
-      <div className="font-body-sm text-body-sm text-on-surface-variant mt-1">Main Store — {live.hubName}</div>
-      </div>
-      <div className="bg-surface-container-lowest p-space-lg rounded-xl shadow-sm">
-      <div className="font-caption text-caption text-secondary uppercase tracking-wider mb-1">Pending Cabs in Bay</div>
-      <div className="font-label-price text-headline-lg text-on-surface">6 units</div>
-      <div className="font-body-sm text-body-sm text-on-surface-variant mt-1">Requires outfitting prior to dispatch</div>
-      </div>
-      <div className="bg-surface-container-lowest p-space-lg rounded-xl shadow-sm">
-      <div className="font-caption text-caption text-secondary uppercase tracking-wider mb-1">SKU Stockouts</div>
-      <div className="font-label-price text-headline-lg text-error">7 line items</div>
-      <div className="font-body-sm text-body-sm text-on-surface-variant mt-1">{live.lowStockLabel}</div>
-      </div>
-      </div>
-
-      <div className="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
-      <div className="p-space-lg bg-surface-container-low flex justify-between items-center">
-      <span className="font-headline-sm text-headline-sm text-on-surface">Active Fleet Units & Kit Integrity</span>
-      <span className="font-label-code text-caption text-secondary">Updated 08:20:30 AM EST</span>
-      </div>
-      <div className="p-space-xl">
-      <div className="h-64 bg-surface-container rounded-lg flex items-center justify-center text-on-surface-variant font-label-code">
-                Fleet Kit Allocation Grid Loaded — Main Kingston Storeroom Ledger
-              </div>
-      </div>
-      </div>
-      </div>
-
-      <div className="fixed inset-0 z-40 bg-primary/45 backdrop-blur-sm transition-opacity flex items-center justify-center p-space-md overflow-y-auto">
-
-      <div className="relative w-full max-w-[848px] bg-surface-container-lowest rounded-xl shadow-xl my-auto overflow-hidden animate-in fade-in duration-150" data-stitch-data-stitch-id="issue-dialog">
+    <div className="fleet-inventory-stitch inventory-stitch-root w-full">
+      <div className="relative w-full max-w-[848px] bg-surface-container-lowest rounded-xl shadow-xl mx-auto overflow-hidden" data-stitch-data-stitch-id="issue-dialog">
 
       <div className="p-space-xl bg-surface-container-lowest">
       <div className="flex items-start justify-between gap-space-md">
@@ -276,9 +234,6 @@ export function In5IssueDialog() {
       </div>
       </div>
       </div>
-      </div>
-
-      </div></div>
     </div>
   );
 }

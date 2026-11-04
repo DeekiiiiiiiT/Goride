@@ -221,6 +221,15 @@ export function FindPartsTab({
   });
 
   const stepNumber = step === "car" || step === "link" ? 1 : step === "version" ? 2 : step === "part" || step === "request" ? 3 : step === "position" || position ? 4 : 3;
+
+  useEffect(() => {
+    if (step === "results") {
+      document.body.setAttribute("data-fleet-find-parts-results", "1");
+    } else {
+      document.body.removeAttribute("data-fleet-find-parts-results");
+    }
+    return () => document.body.removeAttribute("data-fleet-find-parts-results");
+  }, [step]);
   const car = cars.find((row) => row.vehicleId === vehicleId);
   const trail = useMemo(() => {
     const chips = [];
@@ -254,7 +263,11 @@ export function FindPartsTab({
   }
 
   return (
-    <div className="fleet-find-parts-stitch find-parts-nested-markup" data-step={stepNumber} data-trail={trail.map((chip) => chip.label).join(" › ")}>
+    <div
+      className={`fleet-find-parts-stitch find-parts-nested-markup${step === "results" ? " find-parts-am-results" : ""}`}
+      data-step={stepNumber}
+      data-trail={trail.map((chip) => chip.label).join(" › ")}
+    >
       {error ? (
         <Fp11Screen
           data={buildFp11ViewModel({
@@ -371,10 +384,15 @@ export function FindPartsTab({
               onPick={(pos, pickSide = "both", fit) => {
                 setPosition(pos);
                 setSide(pickSide);
-                const nextFit = fit || formatPartsFitParam([{
-                  axle: pos === "rear" ? "rear" : pos === "both" ? "front" : "front",
-                  side: (pickSide || "both") as "both",
-                }]);
+                const sideChoice = (pickSide || "both") as "left" | "right" | "both";
+                const pairs =
+                  pos === "both"
+                    ? [
+                      { axle: "front" as const, side: sideChoice },
+                      { axle: "rear" as const, side: sideChoice },
+                    ]
+                    : [{ axle: pos === "rear" ? ("rear" as const) : ("front" as const), side: sideChoice }];
+                const nextFit = fit || formatPartsFitParam(pairs);
                 setFitParam(nextFit);
                 writeUrl({ vehicle: vehicleId, part: componentId, pos, side: pickSide, fit: nextFit });
                 setStep("results");
@@ -391,7 +409,12 @@ export function FindPartsTab({
               partName={partName}
               onRetry={() => search.refetch()}
               componentId={componentId}
-              fitParam={fitParam}
+              position={position}
+              areaLabel={componentId === "cmp-brake-pad" ? "Braking system" : undefined}
+              onYourRequests={() => {
+                setView("activity");
+                writeUrl({ vehicle: vehicleId, view: "activity" });
+              }}
               onAsk={() => {
                 setRequestMatchType(null);
                 setStep("request");

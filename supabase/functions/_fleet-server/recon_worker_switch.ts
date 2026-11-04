@@ -9,6 +9,9 @@ export const WEEK_CALCULATOR_COST_NOTE =
 export const LARGER_FLEET_HOLD_NOTE =
   "Do not close a larger fleet until seven nights in a row are clean, and those nights include a real upload or payment.";
 
+/** Operational gate for R12 resume (audit done-test 3). Finance-recon alerts at 500 MB. */
+export const DAILY_TEMP_IO_LIMIT_BYTES = 200 * 1024 * 1024;
+
 export type WeekCalculatorState =
   | "disconnected"
   | "stopped"

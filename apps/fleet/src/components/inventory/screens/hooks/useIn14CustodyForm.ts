@@ -1,13 +1,18 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { inventoryApi } from '../../inventoryApi';
 import { strField } from '../../inventoryData';
 import { formatJmd } from '../../inventoryFormat';
 import { newInventoryIdempotencyKey } from '../../inventoryIdempotency';
+import { buildItemDrawerRow } from '../../inventoryViewRows';
 import { useGapLoad } from '../../gap/useGapLoad';
 import { useInScreenBase, type Row } from './useInShared';
 
 export type CustodyMode = 'transfer' | 'return' | 'writeoff';
 
+/**
+ * Stitch → data (In14 Custody)
+ * item name → ItemDrawerRow.name | sku → ItemDrawerRow.sku | value → valueLabel | qty field → qty state
+ */
 export function useIn14CustodyForm() {
   const base = useInScreenBase();
   const { shell, live, submit, finishSuccess, close } = base;
@@ -29,12 +34,11 @@ export function useIn14CustodyForm() {
   const stockRows = shell.stockRows;
 
   useEffect(() => {
-    if (itemId) return;
+    if (itemId || !shell.selectedItemId) return;
     const row =
-      shell.selectedItemId != null
-        ? stockRows.find((r) => strField(r, 'item_id', '') === shell.selectedItemId) ??
-          shell.items.find((i) => strField(i, 'id', '') === shell.selectedItemId)
-        : stockRows[0];
+      stockRows.find((r) => strField(r, 'item_id', '') === shell.selectedItemId) ??
+      shell.items.find((i) => strField(i, 'id', '') === shell.selectedItemId) ??
+      null;
     if (row) {
       setItemId(strField(row, 'item_id', strField(row, 'id', '')));
       setFromLocationId(strField(row, 'location_id', ''));
@@ -52,7 +56,16 @@ export function useIn14CustodyForm() {
     shell.items.find((i) => strField(i, 'id', '') === itemId) ??
     null;
 
-  const itemName = selectedRow ? strField(selectedRow, 'name', '—') : '—';
+  const itemDrawerRow = useMemo(() => buildItemDrawerRow(selectedRow, formatJmd), [selectedRow]);
+
+  const selectedAsset =
+    live.selectedAsset ??
+    (shell.selectedAssetId
+      ? shell.assets.find((a) => strField(a, 'id', '') === shell.selectedAssetId) ?? null
+      : null);
+
+  const itemName = itemDrawerRow?.name ?? '—';
+  const itemSku = itemDrawerRow?.sku ?? '—';
   const valueLabel = formatJmd(
     selectedRow ? Number(strField(selectedRow, 'stock_value', '0')) : null,
   );
@@ -65,6 +78,20 @@ export function useIn14CustodyForm() {
       : mode === 'return'
         ? Boolean(vehicleId && toLocationId)
         : Boolean(fromLocationId && reason.trim()));
+
+  const submitDisabledReason = !canSubmit
+    ? !itemId
+      ? 'Select a stock item to transfer'
+      : Number(qty) <= 0
+        ? 'Quantity must be greater than zero'
+        : mode === 'transfer' && (!fromLocationId || !toLocationId)
+          ? 'Choose from and to locations'
+          : mode === 'return' && (!vehicleId || !toLocationId)
+            ? 'Choose vehicle and return location'
+            : mode === 'writeoff' && (!fromLocationId || !reason.trim())
+              ? 'Location and reason are required'
+              : 'Complete required fields'
+    : '';
 
   const submitCustody = () =>
     submit.run(async () => {
@@ -131,10 +158,14 @@ export function useIn14CustodyForm() {
     setMemo,
     locations,
     stockRows,
+    itemDrawerRow,
     itemName,
+    itemSku,
+    selectedAsset,
     valueLabel,
     formatJmd,
     canSubmit,
+    submitDisabledReason,
     submitCustody,
     strField,
   };

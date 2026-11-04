@@ -3,10 +3,22 @@ import { GapLoadState, GapSubmitError } from './GapLoadState';
 import { GapModalShell } from './GapModalShell';
 import { useGapCountSessionForm } from './useGapCountSessionForm';
 import { useInventoryShell } from '../InventoryShellContext';
+import { useAuth } from '../../auth/AuthContext';
 
 export function GapCountSession(p: { onClose?: () => void }) {
   const shell = useInventoryShell();
   const form = useGapCountSessionForm(p.onClose);
+  const { user } = useAuth();
+  const operatorLabel =
+    user?.user_metadata?.full_name?.trim() ||
+    user?.email?.split('@')[0] ||
+    'Operator';
+  const operatorInitials = operatorLabel
+    .split(/\s+/)
+    .map((p) => p[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
   const hubLabel = shell.overview?.hub_code ? String(shell.overview.hub_code) : '—';
   const sessionCode = form.activeSession ? String(form.activeSession.code ?? '—') : '—';
   const sessionStatus = form.activeSession ? String(form.activeSession.status ?? 'open').toUpperCase() : '—';
@@ -70,7 +82,7 @@ export function GapCountSession(p: { onClose?: () => void }) {
         <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-secondary">
         <span className="material-symbols-outlined text-[20px]">barcode_scanner</span>
         </div>
-        <input className="w-full pl-11 pr-24 py-2.5 bg-surface-container-low rounded-lg text-body-md text-on-surface placeholder:text-secondary focus:bg-surface-container-lowest focus:outline-none transition-all font-label-code" placeholder="Scan handheld terminal or type SKU / Bin (e.g. TYR-SPR-01)..." type="text" value={form.scanQuery} onChange={(e) => form.setScanQuery(e.target.value)}/>
+        <input className="w-full pl-11 pr-24 py-2.5 bg-surface-container-low rounded-lg text-body-md text-on-surface placeholder:text-secondary focus:bg-surface-container-lowest focus:outline-none transition-all font-label-code" placeholder="Scan handheld terminal or type SKU / bin code…" type="text" value={form.scanQuery} onChange={(e) => form.setScanQuery(e.target.value)}/>
         <div className="absolute inset-y-0 right-0 pr-2.5 flex items-center gap-1.5">
         <kbd className="px-2 py-0.5 text-[11px] font-label-code bg-surface-container rounded text-secondary font-semibold">ENTER</kbd>
         <span className="material-symbols-outlined text-[18px] text-secondary cursor-pointer hover:text-on-surface" title="Open camera scanner">photo_camera</span>
@@ -325,8 +337,8 @@ export function GapCountSession(p: { onClose?: () => void }) {
         <div className="flex flex-col gap-1.5">
         <div className="flex items-center justify-between p-2 bg-surface-container-low rounded-lg text-body-sm">
         <div className="flex items-center gap-2">
-        <div className="w-6 h-6 rounded-full bg-primary-container text-on-primary text-[11px] font-label-code flex items-center justify-center font-bold">DT</div>
-        <span className="text-on-surface font-medium">Deeki T</span>
+        <div className="w-6 h-6 rounded-full bg-primary-container text-on-primary text-[11px] font-label-code flex items-center justify-center font-bold">{operatorInitials}</div>
+        <span className="text-on-surface font-medium">{operatorLabel}</span>
         </div>
         <span className="text-caption text-secondary">Platform Owner</span>
         </div>

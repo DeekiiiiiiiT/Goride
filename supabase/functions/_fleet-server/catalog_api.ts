@@ -129,6 +129,7 @@ type TierRow = {
   derived_id?: string | null;
   wva?: string | null;
   checking_note?: string | null;
+  interchange_group_id?: string | null;
 };
 
 async function decisionsFor(supabase: SupabaseClient, partIds: string[]): Promise<Map<string, string>> {

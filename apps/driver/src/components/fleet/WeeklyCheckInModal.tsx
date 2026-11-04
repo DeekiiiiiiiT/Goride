@@ -18,6 +18,7 @@ import {
 } from '../../utils/nativePhotoCapture';
 import { toast } from 'sonner';
 import { Dk5KitStep } from '../car-kit/screens/Dk5KitStep';
+import { Dk2ReportSheet } from '../car-kit/screens/Dk2ReportSheet';
 import { useCarKitFlow } from '../car-kit/useCarKitFlow';
 import { driverInventoryApi } from '../../services/driverInventoryApi';
 import '../car-kit/car-kit.css';
@@ -73,7 +74,10 @@ export function WeeklyCheckInModal({
         if (isOpen) {
             scanAbortRef.current?.abort();
             scanGenerationRef.current += 1;
-            setStep('CAPTURE');
+            const captureKit =
+                import.meta.env.DEV &&
+                new URLSearchParams(window.location.search).get('capture') === 'weekly-kit';
+            setStep(captureKit ? 'KIT_CHECK' : 'CAPTURE');
             setOdometer('');
             setPhoto(null);
             setPhotoPreview(null);
@@ -85,6 +89,12 @@ export function WeeklyCheckInModal({
             setPendingSubmit(null);
         }
     }, [isOpen]);
+
+    useEffect(() => {
+        if (step !== 'KIT_CHECK' || carKitFlow.screen !== 'dk3') return;
+        carKitFlow.setScreen('dk1');
+        toast.success('Report sent to fleet');
+    }, [step, carKitFlow.screen, carKitFlow.setScreen]);
 
     useEffect(() => {
         return () => {
@@ -414,7 +424,22 @@ export function WeeklyCheckInModal({
                                 busy={kitBusy || isLoading}
                                 onConfirmAll={() => void completeKitAndSubmit(true)}
                                 onReportIssue={() => void completeKitAndSubmit(false)}
+                                onReportSelected={(labels) => {
+                                    carKitFlow.openReportSheet(labels[0] ?? null);
+                                }}
                             />
+                            {carKitFlow.screen === 'dk2' ? (
+                                <div className="fixed inset-0 z-[120] flex flex-col justify-end bg-inverse-surface/65 backdrop-blur-[2px]">
+                                    <Dk2ReportSheet
+                                        kit={carKitFlow.kit}
+                                        itemLabel={carKitFlow.reportItemLabel}
+                                        onClose={carKitFlow.closeReportSheet}
+                                        sending={carKitFlow.sending}
+                                        sendError={carKitFlow.sendErrorRef}
+                                        onSend={(payload) => void carKitFlow.submitReport(payload)}
+                                    />
+                                </div>
+                            ) : null}
                         </div>
                     )}
 

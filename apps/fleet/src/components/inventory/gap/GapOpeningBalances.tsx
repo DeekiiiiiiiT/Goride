@@ -2,9 +2,15 @@
 import { GapLoadState, GapSubmitError } from './GapLoadState';
 import { GapModalShell } from './GapModalShell';
 import { useGapOpeningBalancesForm } from './useGapOpeningBalancesForm';
+import { useAuth } from '../../auth/AuthContext';
 
 export function GapOpeningBalances(p: { onClose?: () => void }) {
   const form = useGapOpeningBalancesForm(p.onClose);
+  const { user } = useAuth();
+  const operatorLabel =
+    user?.user_metadata?.full_name?.trim() ||
+    user?.email?.split('@')[0] ||
+    'Operator';
   return (
     <GapModalShell onClose={p.onClose} ariaLabel="OpeningBalances">
       <GapSubmitError message={form.submit.error} />
@@ -238,7 +244,7 @@ export function GapOpeningBalances(p: { onClose?: () => void }) {
         <div className="flex items-center justify-between p-space-sm bg-surface-container-low rounded">
         <span className="font-caption text-caption text-on-surface-variant">Session operator</span>
         <div className="flex items-center gap-space-xs">
-        <span className="font-label-code text-[11px] text-on-surface font-semibold">Deeki T (Platform Owner)</span>
+        <span className="font-label-code text-[11px] text-on-surface font-semibold">{operatorLabel}</span>
         <span className="w-2 h-2 rounded-full bg-surface-tint"></span>
         </div>
         </div>

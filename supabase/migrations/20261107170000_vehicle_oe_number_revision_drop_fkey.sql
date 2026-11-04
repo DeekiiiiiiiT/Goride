@@ -1,0 +1,1 @@
+ALTER TABLE public.vehicle_oe_number_revision DROP CONSTRAINT IF EXISTS vehicle_oe_number_revision_vehicle_oe_number_id_fkey;

@@ -2,7 +2,7 @@ import React, { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Copy, ExternalLink, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { formatPartPositionSideLabel, normalizePartPositionSide } from "@roam/types/partPositionNorm";
+import { normalizePartPositionSide } from "@roam/types/partPositionNorm";
 import { useAuth } from "../../auth/AuthContext";
 import {
   createVehicleOeNumber,
@@ -13,6 +13,7 @@ import {
   fetchVehicleOeRevisions,
   keepDerivedBatch,
   normalizeOeNumberPreview,
+  removeDerivedBatch,
   resolveAutoMatchConflict,
   updateVehicleOeNumber,
 } from "../../../services/partsAutoMatchApi";
@@ -22,14 +23,53 @@ import { formatCatalogProductionWindow, type VehicleCatalogRecord } from "../../
 
 type TabId = "spec" | "factory" | "derived" | "audit";
 
-const AREA_CHIPS = [
-  { id: "all", label: "All" },
-  { id: "brakes", label: "Brakes", match: (row: Record<string, unknown>) => /^(BRK|PAD|DSC|ROT)/i.test(String(row.op_code || "")) || /brake|pad|disc|rotor/i.test(String(row.part_type_name || "")) },
-  { id: "engine", label: "Engine", match: (row: Record<string, unknown>) => /^(ENG|BLT|SPK|GSK)/i.test(String(row.op_code || "")) || /engine|belt|spark|gasket/i.test(String(row.part_type_name || "")) },
-  { id: "filters", label: "Filters", match: (row: Record<string, unknown>) => /^(FLT|OIL)/i.test(String(row.op_code || "")) || /filter|oil/i.test(String(row.part_type_name || "")) },
-  { id: "suspension", label: "Suspension", match: (row: Record<string, unknown>) => /^(SUS|SHK|STR)/i.test(String(row.op_code || "")) || /susp|shock|strut/i.test(String(row.part_type_name || "")) },
-  { id: "fluids", label: "Fluids", match: (row: Record<string, unknown>) => /^(FLU|CLT)/i.test(String(row.op_code || "")) || /fluid|coolant/i.test(String(row.part_type_name || "")) },
-] as const;
+function oeScopeKey(position: unknown, side: unknown): string {
+  const norm = (v: unknown) => {
+    if (v == null || v === "") return "any";
+    const s = String(v).trim().toLowerCase();
+    return s === "any" ? "any" : s;
+  };
+  return `${norm(position)}|${norm(side)}`;
+}
+
+function hostLabel(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return "Source on file";
+  }
+}
+
+function formatOeSideChip(side: unknown): string {
+  const s = side == null || side === "" ? "both" : String(side).trim().toLowerCase();
+  if (s === "left") return "L";
+  if (s === "right") return "R";
+  if (s === "both") return "Both";
+  return "Both";
+}
+
+function formatPositionChip(position: unknown): string {
+  if (position == null || position === "") return "—";
+  const p = String(position).trim().toLowerCase();
+  if (p === "front") return "Front";
+  if (p === "rear") return "Rear";
+  if (p === "any") return "Any";
+  return p.charAt(0).toUpperCase() + p.slice(1);
+}
+
+function runDisplayNumber(runId: string | undefined): string {
+  if (!runId) return "";
+  const digits = runId.replace(/\D/g, "");
+  if (digits.length >= 4) return digits.slice(-4);
+  return runId.slice(0, 4).toUpperCase();
+}
+
+function catalogStatusChip(record: VehicleCatalogRecord): { label: string; className: string } {
+  if (record.source === "pending_approve") {
+    return { label: "Pending catalog", className: "border-amber-600/30 bg-amber-500/10 text-amber-900 dark:text-amber-200" };
+  }
+  return { label: "Active catalog", className: "border-emerald-600/30 bg-emerald-600/10 text-emerald-800 dark:text-emerald-200" };
+}
 
 function pluralNumbers(count: number): string {
   return `${count} number${count === 1 ? "" : "s"} on file`;
@@ -49,17 +89,6 @@ function timeAgo(iso: string | undefined): string {
   const min = Math.round(ms / 60000);
   if (min < 60) return `${min}m ago`;
   return `${Math.round(min / 60)}h ago`;
-}
-
-function catalogStatusChip(r: VehicleCatalogRecord): { label: string; className: string } {
-  const lifecycle = String((r as { catalog_status?: string }).catalog_status || (r as { lifecycle?: string }).lifecycle || "").toLowerCase();
-  if (lifecycle.includes("pending") || lifecycle === "draft") {
-    return { label: "Pending approval", className: "border-amber-200 bg-amber-50 text-amber-900" };
-  }
-  if (lifecycle.includes("archived") || lifecycle === "inactive") {
-    return { label: "Archived", className: "border-slate-200 bg-slate-100 text-slate-700" };
-  }
-  return { label: "Active catalog", className: "border-emerald-200 bg-emerald-50 text-emerald-800" };
 }
 
 function groupRows(rows: Array<Record<string, unknown>>) {
@@ -127,9 +156,11 @@ export function VehicleAutoMatchTabs({
     enabled: Boolean(token) && tab === "audit",
   });
 
-  const titleModel = [r.model, r.catalog_trim].filter(Boolean).join(" ") || r.model;
   const yearLabel = formatCatalogProductionWindow(r);
-  const title = `${r.make} ${titleModel} ${yearLabel}${r.trim_series ? ` · ${r.trim_series}` : ""}${r.full_model_code ? ` · ${r.full_model_code}` : ""}`;
+  const designation = `${r.make} ${r.model} ${yearLabel}`.replace(/\s+/g, " ").trim();
+  const trimTail = [r.catalog_trim, r.trim_series].filter(Boolean).join(" · ");
+  const displayTitle = trimTail ? `${designation} · ${trimTail}` : designation;
+  const chassisLabel = r.full_model_code || r.chassis_code || "—";
 
   const platformCode = (r as VehicleCatalogRecord & { platform_code?: string | null }).platform_code
     || (oe.data?.platformCode as string | undefined);
@@ -151,22 +182,16 @@ export function VehicleAutoMatchTabs({
     for (const opt of [...fromRows, ...fromBrowse]) map.set(opt.id, opt);
     return [...map.values()].sort((a, b) => a.label.localeCompare(b.label));
   }, [rows, browse.data]);
-  const areaCounts = useMemo(() => {
-    const counts: Record<string, number> = { all: rows.length };
-    for (const chip of AREA_CHIPS) {
-      if (chip.id === "all") continue;
-      counts[chip.id] = rows.filter((row) => chip.match(row)).length;
-    }
-    return counts;
-  }, [rows]);
+  const areaChipList = useMemo(() => {
+    return (oe.data as { areaChips?: Array<{ id: string; label: string; count: number }> } | undefined)?.areaChips ?? [];
+  }, [oe.data]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return rows.filter((row) => {
-      const name = String(row.part_type_name || "");
       if (area !== "all") {
-        const chip = AREA_CHIPS.find((c) => c.id === area);
-        if (chip && chip.id !== "all" && !chip.match(row)) return false;
+        const ids = Array.isArray(row.catalog_area_ids) ? row.catalog_area_ids as string[] : [];
+        if (!ids.includes(area)) return false;
       }
       if (!q) return true;
       return [row.oe_number, row.part_type_name, row.oe_brand].some((v) => String(v || "").toLowerCase().includes(q));
@@ -178,8 +203,11 @@ export function VehicleAutoMatchTabs({
   const derivedCount = Number(health.data?.derived?.live ?? 0) + Number(health.data?.derived?.needsChecking ?? 0);
   const statusChip = catalogStatusChip(r);
   const lastRun = oe.data?.lastRun || health.data?.lastRun;
-  const engineLive = health.data?.enabled ? "Live" : "Off";
   const lastErr = health.data?.lastRun?.error;
+  const engineVersion = health.data?.engineVersion ?? 4;
+  const crossRefLabel = `MATCH-V${engineVersion} ${lastErr ? "ERROR" : "OK"}`;
+  const pollLabel = health.data?.enabled ? "POLL_INTERVAL: 60s" : "OFF";
+  const runLabel = runDisplayNumber(String(lastRun?.run_id || ""));
 
   async function refreshNormPreview(number: string, brand: string) {
     if (!token || !number.trim()) {
@@ -190,8 +218,8 @@ export function VehicleAutoMatchTabs({
       const out = await normalizeOeNumberPreview(token, {
         brand,
         oe_number: number,
-        position: draftPosition,
-        side: draftSide,
+        position: draftPosition === "any" ? undefined : draftPosition,
+        side: draftSide === "any" ? undefined : draftSide,
       });
       setNormPreview(String(out.oe_number_norm || ""));
     } catch {
@@ -218,8 +246,8 @@ export function VehicleAutoMatchTabs({
     setDraftBrand(String(row.oe_brand || r.make || ""));
     setDraftNumber(String(row.oe_number || ""));
     setDraftEvidence(String(row.evidence_url || ""));
-    setDraftPosition(String(row.position || "front"));
-    setDraftSide(String(row.side || "both"));
+    setDraftPosition(row.position == null || row.position === "" ? "any" : String(row.position));
+    setDraftSide(row.side == null || row.side === "" ? "any" : String(row.side));
     setDraftComponentId(String(row.maintenance_component_id || ""));
     setDraftYearFrom(row.year_from != null ? String(row.year_from) : "");
     setDraftYearTo(row.year_to != null ? String(row.year_to) : "");
@@ -243,11 +271,15 @@ export function VehicleAutoMatchTabs({
     const hit = rows.find((row) =>
       String(row.maintenance_component_id) === draftComponentId
       && String(row.oe_number_norm || row.oe_number || "").toLowerCase() === norm.toLowerCase()
+      && oeScopeKey(row.position, row.side) === oeScopeKey(
+        draftPosition === "any" ? null : draftPosition,
+        draftSide === "any" ? null : draftSide,
+      )
       && String(row.id) !== String(editId || ""),
     );
     if (!hit) return "";
-    return `This factory number is already on file for ${String(hit.part_type_name || "this part type")}.`;
-  }, [draftNumber, draftComponentId, normPreview, rows, editId]);
+    return `This number is already on this car for ${String(hit.part_type_name || "this part type")} · ${formatPositionChip(draftPosition === "any" ? null : draftPosition)}. Saving will create a revision entry.`;
+  }, [draftNumber, draftComponentId, draftPosition, draftSide, normPreview, rows, editId]);
 
   async function saveOeNumber() {
     if (!owner || !token) return;
@@ -269,8 +301,8 @@ export function VehicleAutoMatchTabs({
         oe_brand: draftBrand.trim(),
         oe_number: draftNumber.trim(),
         evidence_url: draftEvidence.trim(),
-        position: draftPosition,
-        side: draftSide,
+        position: draftPosition === "any" ? null : draftPosition,
+        side: draftSide === "any" ? null : draftSide,
         maintenance_component_id: draftComponentId,
         year_from: draftYearFrom.trim() ? Number(draftYearFrom) : null,
         year_to: draftYearTo.trim() ? Number(draftYearTo) : null,
@@ -307,61 +339,65 @@ export function VehicleAutoMatchTabs({
   }
 
   return (
-    <section className="mt-6 overflow-hidden rounded-[0.75rem] border border-slate-200 bg-white shadow-sm">
-      <div className="border-b border-slate-200 bg-slate-50/90 px-6 py-4">
-        <nav className="mb-3 flex flex-wrap items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-slate-500">
-          <span>DOMINION</span><span>/</span><span>MASTER DATA</span><span>/</span><span>VEHICLES</span><span>/</span>
-          <span className="text-slate-800">{r.make} {r.model} ({r.chassis_code || "—"})</span>
-        </nav>
-        <div className="flex flex-wrap items-start justify-between gap-4">
+    <section className="vehicle-factory-record mt-6 overflow-hidden rounded-xl border border-outline-variant/40 bg-surface-container-lowest shadow-sm">
+      <div className="border-b border-outline-variant/40 bg-surface-container-lowest px-space-xl py-space-lg">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <nav className="flex flex-wrap items-center gap-1 font-mono-sm text-mono-sm uppercase tracking-wider text-secondary">
+            <span>DOMINION</span><span>/</span><span>MASTER DATA</span><span>/</span><span>VEHICLES</span><span>/</span>
+            <span className="text-on-surface font-semibold">{r.make} {r.model} ({r.chassis_code || "—"})</span>
+          </nav>
+          <div className="flex items-center gap-2">
+            <span className="rounded font-mono-sm text-mono-sm bg-surface-container px-2 py-0.5 text-on-surface-variant">SYS_ID: {sysId(r)}</span>
+            <button type="button" className="w-8 h-8 rounded-lg bg-surface-container hover:bg-surface-variant flex items-center justify-center text-on-surface-variant" onClick={onClose} aria-label="Close">
+              <span className="material-symbols-outlined text-[18px]">close</span>
+            </button>
+          </div>
+        </div>
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-space-md">
           <div>
-            <p className="font-mono text-[10px] text-slate-500">SYS_ID {sysId(r)}</p>
-            <h2 className="font-headline text-lg font-bold text-slate-900">{title}</h2>
+            <div className="flex flex-wrap items-baseline gap-space-sm">
+              <h2 className="font-headline-xl text-headline-xl font-bold text-on-surface tracking-tight">{displayTitle}</h2>
+              <span className="font-mono-md text-mono-md text-secondary">{chassisLabel}</span>
+            </div>
             <div className="mt-2 flex flex-wrap gap-2">
-              <span className="rounded-[0.25rem] border border-slate-200 bg-white px-2 py-0.5 text-[11px]">
+              <span className="rounded font-mono-sm text-mono-sm bg-surface-container px-2 py-0.5 text-on-surface-variant">
                 {r.engine_code || "—"} · {r.engine_displacement_cc ? `${Math.round(Number(r.engine_displacement_cc))} cc` : "—"}
               </span>
-              <span className="rounded-[0.25rem] border border-slate-200 bg-white px-2 py-0.5 text-[11px]">Chassis {r.chassis_code || "—"}</span>
+              <span className="rounded font-mono-sm text-mono-sm bg-surface-container px-2 py-0.5 text-on-surface-variant">Chassis: {r.chassis_code || "—"}</span>
               {platformId ? (
                 <button
                   type="button"
-                  className="rounded-[0.25rem] border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-800"
+                  className="rounded font-mono-sm text-mono-sm bg-surface-container-high px-2 py-0.5 text-on-surface font-medium hover:bg-surface-variant"
                   onClick={() => onOpenPlatform?.(String(platformId))}
                 >
-                  Platform {platformCode ? platformCode : "→"}
+                  Platform: {platformCode || "→"}
                 </button>
               ) : null}
               {(r as { market?: string }).market ? (
-                <span className="rounded-[0.25rem] border border-slate-200 px-2 py-0.5 text-[11px]">{(r as { market?: string }).market}</span>
+                <span className="vehicle-market-chip rounded font-mono-sm text-mono-sm bg-secondary-container px-2 py-0.5 text-on-secondary-fixed font-semibold">{(r as { market?: string }).market}</span>
               ) : null}
-              <span className={`rounded-[0.25rem] border px-2 py-0.5 text-[11px] ${statusChip.className}`}>{statusChip.label}</span>
-            </div>
-          </div>
-          <button type="button" className="rounded-[0.25rem] p-1 text-slate-400 hover:bg-slate-200/60" onClick={onClose} aria-label="Close">
-            ✕
-          </button>
-        </div>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <div className="rounded-[0.5rem] border border-slate-200 bg-white p-3 text-xs">
-            <div className="font-semibold uppercase tracking-wider text-slate-500">OE matching engine</div>
-            <div className="mt-1 flex flex-wrap gap-2">
-              <span className={`rounded-[0.25rem] px-2 py-0.5 font-mono ${health.data?.enabled ? "bg-emerald-100 text-emerald-800" : "bg-slate-100"}`}>
-                {engineLive}
-              </span>
-              <span className="text-slate-600">Last run {timeAgo(String(lastRun?.finished_at || lastRun?.started_at || ""))}</span>
-            </div>
-          </div>
-          <div className="rounded-[0.5rem] border border-slate-200 bg-white p-3 text-xs">
-            <div className="font-semibold uppercase tracking-wider text-slate-500">Cross ref index</div>
-            <div className="mt-1 flex flex-wrap items-center gap-2">
-              <span className="font-mono">v{health.data?.engineVersion ?? "—"}</span>
-              <span className={`rounded-[0.25rem] px-2 py-0.5 ${lastErr ? "bg-red-100 text-red-800" : "bg-emerald-100 text-emerald-800"}`}>
-                {lastErr ? "ERROR" : "OK"}
+              <span className={`inline-flex items-center gap-1.5 rounded font-mono-sm text-mono-sm border px-2 py-0.5 font-semibold ${statusChip.className}`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${r.source === "pending_approve" ? "bg-amber-600" : "bg-emerald-600"}`} />
+                Status: {statusChip.label}
               </span>
             </div>
           </div>
+          <div className="flex items-center gap-space-md bg-surface-container-low px-space-md py-space-sm rounded-lg">
+            <div className="flex flex-col">
+              <span className="font-mono-sm text-mono-sm text-secondary uppercase">OE Matching Engine</span>
+              <span className="font-mono-md text-on-surface font-semibold flex items-center gap-1">
+                {health.data?.enabled ? <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse" /> : null}
+                {pollLabel}
+              </span>
+            </div>
+            <div className="w-px h-7 bg-outline-variant/40" />
+            <div className="flex flex-col">
+              <span className="font-mono-sm text-mono-sm text-secondary uppercase">Cross Ref Index</span>
+              <span className="font-mono-md text-primary-container font-semibold">{crossRefLabel}</span>
+            </div>
+          </div>
         </div>
-        <div className="mt-4 flex flex-wrap gap-4 border-t border-slate-200 pt-3">
+        <div className="mt-4 flex flex-wrap gap-space-lg border-t border-outline-variant/40 pt-3">
           {([
             ["spec", "Specification", null],
             ["factory", "Factory part numbers", factoryCount],
@@ -371,10 +407,14 @@ export function VehicleAutoMatchTabs({
             <button
               key={id}
               type="button"
-              className={`border-b-2 pb-2 text-sm font-semibold ${tab === id ? "border-blue-600 text-blue-700" : "border-transparent text-slate-500"}`}
+              className={`pb-2.5 text-body-md font-semibold flex items-center gap-2 relative ${tab === id ? "text-primary" : "text-secondary hover:text-on-surface"}`}
               onClick={() => setTab(id)}
             >
-              {label}{count != null ? ` (${count})` : ""}
+              {label}
+              {count != null ? (
+                <span className={`px-1.5 py-0.5 rounded-full font-mono-sm text-mono-sm ${tab === id ? "bg-primary-container text-on-primary" : "bg-surface-container text-on-surface-variant"}`}>{count}</span>
+              ) : null}
+              {tab === id ? <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary-container rounded-t-full" /> : null}
             </button>
           ))}
         </div>
@@ -383,171 +423,258 @@ export function VehicleAutoMatchTabs({
       {tab === "spec" ? <div className="p-6">{specCards}</div> : null}
 
       {tab === "factory" ? (
-        <div className="p-6">
-          <div className="mb-4 rounded-[0.5rem] border border-blue-100 bg-blue-50/50 px-4 py-3 text-sm text-slate-700">
-            Numbers this car came with from the factory. Dominion uses them to match parts automatically across supplier datasets and tier interchange matrices.
-            <div className="mt-2 font-mono text-xs text-slate-600">
+        <div className="p-space-xl bg-background flex flex-col gap-space-lg">
+          <div className="bg-surface-container-low px-space-lg py-space-sm rounded-lg flex flex-wrap items-center justify-between gap-space-md">
+            <div className="flex items-center gap-space-sm text-on-surface-variant">
+              <span className="material-symbols-outlined text-primary text-[20px]">info</span>
+              <p className="font-body-sm text-body-sm">
+                Numbers this car came with from the factory. Dominion uses them to match parts automatically across supplier datasets and tier interchange matrices.
+              </p>
+            </div>
+            <div className="font-mono-sm text-mono-sm text-secondary whitespace-nowrap">
               LAST SYNC: {timeAgo(String(lastRun?.finished_at || lastRun?.started_at || "")).toUpperCase()}
-              {lastRun?.run_id ? ` · RUN #${String(lastRun.run_id).slice(0, 8)}` : ""}
+              {runLabel ? ` · RUN #${runLabel}` : ""}
             </div>
           </div>
-          <div className="mb-4 flex flex-wrap gap-2">
-            <input
-              className="min-w-[200px] flex-1 rounded-[0.25rem] border border-slate-200 px-3 py-2 text-sm"
-              placeholder="Search part type or number…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-            {AREA_CHIPS.map((chip) => (
-              <button
-                key={chip.id}
-                type="button"
-                className={`rounded-[0.75rem] px-3 py-1 text-xs font-semibold ${area === chip.id ? "bg-blue-600 text-white" : "bg-slate-100"}`}
-                onClick={() => setArea(chip.id)}
-              >
-                {chip.label} {chip.id === "all" ? areaCounts.all : areaCounts[chip.id] ?? 0}
-              </button>
-            ))}
-            <button
-              type="button"
-              className="inline-flex items-center gap-1 rounded-[0.25rem] bg-blue-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-40"
-              disabled={!owner}
-              onClick={openAddPanel}
-            >
-              <Plus className="h-4 w-4" /> Add number
-            </button>
-          </div>
 
-          {oe.isLoading ? (
-            <p className="flex items-center gap-2 text-sm text-slate-500"><Loader2 className="h-4 w-4 animate-spin" /> Loading factory numbers…</p>
-          ) : filtered.length === 0 ? (
-            <div className="rounded-[0.5rem] border border-dashed border-slate-300 p-8 text-center">
-              <p className="font-semibold text-slate-800">No factory numbers yet</p>
-              <p className="mt-2 text-sm text-slate-500">Import Vehicle OE numbers from the parts import templates.</p>
-              <div className="mt-4 flex flex-wrap justify-center gap-2">
-                <button type="button" className="rounded-[0.25rem] bg-blue-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-40" disabled={!owner} onClick={openAddPanel}>
-                  + Add number
-                </button>
-                <button type="button" className="rounded-[0.25rem] border border-slate-300 px-3 py-2 text-sm font-semibold" onClick={openImportCsv}>
-                  Open Import CSV
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="overflow-hidden rounded-[0.5rem] border border-slate-200">
-              <div className="grid grid-cols-12 bg-slate-50 px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-                <div className="col-span-2">Position</div>
-                <div className="col-span-1">Side</div>
-                <div className="col-span-1">Brand</div>
-                <div className="col-span-3">Factory number</div>
-                <div className="col-span-1">Years</div>
-                <div className="col-span-2">Source</div>
-                <div className="col-span-1">Matches</div>
-                <div className="col-span-1 text-right">Actions</div>
-              </div>
-              {grouped.map(([partType, groupRows]) => {
-                const opCode = String(groupRows[0]?.op_code || "");
-                return (
-                  <div key={partType}>
-                    <div className="flex items-center justify-between bg-slate-100 px-3 py-2 text-sm font-semibold">
-                      <span>{partType} · {pluralNumbers(groupRows.length)}</span>
-                      <span className="font-mono text-xs text-slate-500">CATEGORY: {opCode || partType}</span>
-                    </div>
-                    {groupRows.map((row) => {
-                      const norm = normalizePartPositionSide(String(row.position || ""), String(row.side || ""));
-                      const posOnly = formatPartPositionSideLabel(norm.position, null);
-                      const sideOnly = norm.side ? formatPartPositionSideLabel(null, norm.side) : "Both sides";
-                      const num = String(row.oe_number || "");
-                      const matchCount = Number(row.match_count ?? 0);
-                      const matching = Boolean(row.matching);
-                      const superseded = String(row.supersession_note || row.changed_line || "");
-                      return (
-                        <div key={String(row.id)} className="grid grid-cols-12 items-center border-t border-slate-100 px-3 py-2 text-xs">
-                          <div className="col-span-2"><span className="rounded bg-slate-100 px-1.5 py-0.5">{posOnly}</span></div>
-                          <div className="col-span-1">{sideOnly}</div>
-                          <div className="col-span-1">{String(row.oe_brand || "")}</div>
-                          <div className="col-span-3 font-mono">
-                            {num}
-                            {superseded ? <div className="text-[10px] text-slate-500 mt-0.5">↳ {superseded}</div> : null}
-                            <button type="button" className="ml-1 text-blue-600" onClick={() => { void navigator.clipboard.writeText(num); toast.success("Copied"); }}>
-                              <Copy className="inline h-3 w-3" />
-                            </button>
-                          </div>
-                          <div className="col-span-1">{row.year_from || row.year_to ? `${row.year_from || "…"}–${row.year_to || "…"}` : "All years"}</div>
-                          <div className="col-span-2">
-                            {row.evidence_url ? (
-                              <a className="text-blue-600 inline-flex items-center gap-0.5" href={String(row.evidence_url)} target="_blank" rel="noreferrer">
-                                Source <ExternalLink className="h-3 w-3" />
-                              </a>
-                            ) : null}
-                          </div>
-                          <div className="col-span-1 text-blue-600">
-                            {matching ? (
-                              <span>Matching…</span>
-                            ) : (
-                              <button type="button" className="font-semibold hover:underline" onClick={openFindPartsMatches}>
-                                {matchCount} parts →
-                              </button>
-                            )}
-                          </div>
-                          <div className="col-span-1 flex justify-end gap-1">
-                            <button type="button" className="text-slate-500 disabled:opacity-40" disabled={!owner} onClick={() => openEditPanel(row)}><Pencil className="h-4 w-4" /></button>
-                            <button type="button" className="text-red-500 disabled:opacity-40" disabled={!owner || busy} onClick={() => { void removeOeNumber(String(row.id)); }}><Trash2 className="h-4 w-4" /></button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {panelOpen ? (
-            <div className="mt-4 rounded-[0.5rem] border border-slate-200 bg-slate-50 p-4">
-              <h3 className="font-semibold text-sm">{editId ? "Edit factory number" : "Add factory number"}</h3>
-              <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                <input className="rounded border px-2 py-1.5 text-sm" placeholder="Brand" value={draftBrand} onChange={(e) => setDraftBrand(e.target.value)} />
-                <input
-                  className="rounded border px-2 py-1.5 text-sm font-mono"
-                  placeholder="Factory number"
-                  value={draftNumber}
-                  onChange={(e) => {
-                    setDraftNumber(e.target.value);
-                    void refreshNormPreview(e.target.value, draftBrand);
-                  }}
-                />
-                <input className="rounded border px-2 py-1.5 text-sm sm:col-span-2" placeholder="Source link (required)" value={draftEvidence} onChange={(e) => setDraftEvidence(e.target.value)} />
-                <select className="rounded border px-2 py-1.5 text-sm sm:col-span-2" value={draftComponentId} onChange={(e) => setDraftComponentId(e.target.value)}>
-                  <option value="">Part type…</option>
-                  {componentOptions.map((opt) => (
-                    <option key={opt.id} value={opt.id}>{opt.label}</option>
+          <div className="grid grid-cols-1 xl:grid-cols-12 gap-space-lg items-start">
+            <div className="xl:col-span-8 flex flex-col gap-space-md">
+              <div className="bg-surface-container-lowest p-space-md rounded-lg shadow-sm flex flex-col md:flex-row items-stretch md:items-center justify-between gap-space-md">
+                <div className="flex flex-wrap items-center gap-space-sm flex-1">
+                  <input
+                    className="min-w-[200px] flex-1 h-9 rounded-lg bg-surface px-3 text-body-sm text-on-surface placeholder:text-outline focus:outline-none focus:bg-surface-container-lowest shadow-sm"
+                    placeholder="Search part type or number…"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                  />
+                  {areaChipList.map((chip) => (
+                    <button
+                      key={chip.id}
+                      type="button"
+                      className={`h-8 px-2.5 rounded font-mono-sm text-mono-sm flex items-center gap-1 ${area === chip.id ? "bg-primary-container text-on-primary font-semibold" : "bg-surface-container hover:bg-surface-container-high text-on-surface"}`}
+                      onClick={() => setArea(chip.id)}
+                    >
+                      {chip.label} <span className={area === chip.id ? "opacity-80" : "text-secondary"}>{chip.count}</span>
+                    </button>
                   ))}
-                </select>
-                <input className="rounded border px-2 py-1.5 text-sm" placeholder="Year from" value={draftYearFrom} onChange={(e) => setDraftYearFrom(e.target.value)} />
-                <input className="rounded border px-2 py-1.5 text-sm" placeholder="Year to" value={draftYearTo} onChange={(e) => setDraftYearTo(e.target.value)} />
-                <select className="rounded border px-2 py-1.5 text-sm" value={draftPosition} onChange={(e) => setDraftPosition(e.target.value)}>
-                  <option value="front">Front</option>
-                  <option value="rear">Rear</option>
-                </select>
-                <select className="rounded border px-2 py-1.5 text-sm" value={draftSide} onChange={(e) => setDraftSide(e.target.value)}>
-                  <option value="both">Both sides</option>
-                  <option value="left">Left</option>
-                  <option value="right">Right</option>
-                </select>
-              </div>
-              {normPreview ? <p className="mt-2 font-mono text-xs text-slate-600">Normalize preview: {normPreview}</p> : null}
-              {duplicateOeWarning ? <p className="mt-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1">{duplicateOeWarning}</p> : null}
-              <div className="mt-3 flex gap-2">
-                <button type="button" className="rounded border px-3 py-1.5 text-sm" onClick={() => setPanelOpen(false)}>Cancel</button>
-                <button type="button" className="rounded bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-40" disabled={!owner || busy} onClick={() => { void saveOeNumber(); }}>
-                  Save
+                </div>
+                <button
+                  type="button"
+                  className={`h-9 px-3.5 rounded-lg bg-primary-container hover:bg-primary text-on-primary font-label-md inline-flex items-center gap-1.5 disabled:opacity-40 shrink-0 shadow-sm transition-colors ${panelOpen ? "ring-2 ring-primary/30" : ""}`}
+                  disabled={!owner}
+                  onClick={openAddPanel}
+                >
+                  <Plus className="h-4 w-4" /> Add number
                 </button>
               </div>
-            </div>
-          ) : null}
 
-          <p className="mt-4 text-[11px] text-slate-500">Factory numbers drive tier-1 auto-matching. Edit only with a source link on file.</p>
+              {oe.isLoading ? (
+                <p className="flex items-center gap-2 text-sm text-secondary"><Loader2 className="h-4 w-4 animate-spin" /> Loading factory numbers…</p>
+              ) : filtered.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-outline-variant p-8 text-center bg-surface-container-lowest">
+                  <p className="font-headline-md font-semibold text-on-surface">No factory numbers yet</p>
+                  <p className="mt-2 text-body-sm text-secondary">Add a factory number or import from CSV.</p>
+                  <div className="mt-4 flex flex-wrap justify-center gap-2">
+                    <button type="button" className="rounded-lg bg-primary-container px-3 py-2 text-sm font-semibold text-on-primary disabled:opacity-40" disabled={!owner} onClick={openAddPanel}>
+                      + Add number
+                    </button>
+                    <button type="button" className="rounded-lg border border-outline-variant px-3 py-2 text-sm font-semibold text-on-surface" onClick={openImportCsv}>
+                      Open Import CSV
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="overflow-hidden rounded-lg border border-outline-variant/40 bg-surface-container-lowest shadow-sm">
+                  <div className="factory-oe-grid bg-surface-container-low px-space-md py-2.5 font-label-xs uppercase tracking-wide text-secondary">
+                    <div className="min-w-0">Position</div>
+                    <div className="min-w-0">Side</div>
+                    <div className="min-w-0">Brand</div>
+                    <div className="min-w-0">Factory number</div>
+                    <div className="min-w-0 font-mono-sm">Years</div>
+                    <div className="min-w-0">Source</div>
+                    <div className="min-w-0 text-center">Matches</div>
+                    <div className="min-w-0 text-right">Actions</div>
+                  </div>
+                  {grouped.map(([partType, typeRows]) => {
+                    const opCode = String(typeRows[0]?.op_code || "");
+                    return (
+                      <div key={partType}>
+                        <div className="flex items-center justify-between bg-surface-container px-space-md py-2">
+                          <span className="font-headline-md text-on-surface">{partType} · {pluralNumbers(typeRows.length)}</span>
+                          <span className="font-mono-sm text-mono-sm text-on-surface-variant">CATEGORY: {opCode || partType}</span>
+                        </div>
+                        {typeRows.map((row) => {
+                          const norm = normalizePartPositionSide(String(row.position || ""), String(row.side || ""));
+                          const num = String(row.oe_number || "");
+                          const matchCount = Number(row.match_count ?? 0);
+                          const matching = Boolean(row.matching);
+                          const superseded = String(row.supersession_note || "");
+                          return (
+                            <div key={String(row.id)} className="factory-oe-grid items-center border-t border-outline-variant/20 px-space-md py-3 text-body-sm hover:bg-surface-container-low transition-colors">
+                              <div className="min-w-0">
+                                <span className="px-1.5 py-0.5 rounded font-mono-sm bg-surface-container text-on-surface">{formatPositionChip(norm.position)}</span>
+                              </div>
+                              <div className="min-w-0">
+                                <span className="px-1.5 py-0.5 rounded font-mono-sm bg-surface-container text-secondary">{formatOeSideChip(norm.side)}</span>
+                              </div>
+                              <div className="min-w-0 text-on-surface">{String(row.oe_brand || "")}</div>
+                              <div className="min-w-0 font-mono-lg text-on-surface">
+                                <div className="flex items-center gap-1">
+                                  <span className="font-semibold tracking-wide">{num}</span>
+                                  <button type="button" className="text-outline hover:text-on-surface" onClick={() => { void navigator.clipboard.writeText(num); toast.success("Copied"); }}>
+                                    <Copy className="inline h-3.5 w-3.5" />
+                                  </button>
+                                </div>
+                                {superseded ? (
+                                  <div className="font-mono-sm text-secondary pt-0.5 flex flex-wrap gap-1">
+                                    <span>↳ Changed to</span>
+                                    <span className="font-semibold text-primary">{superseded.replace(/.*?(?:to|with)\s+/i, "").split(/[·.]/)[0]?.trim() || superseded}</span>
+                                    {/interchange/i.test(superseded) ? <span>· fully interchangeable</span> : null}
+                                  </div>
+                                ) : null}
+                              </div>
+                              <div className="min-w-0 font-mono-sm text-on-surface">{row.year_from || row.year_to ? `${row.year_from || "…"}–${row.year_to || "…"}` : "All years"}</div>
+                              <div className="min-w-0">
+                                {row.evidence_url ? (
+                                  <a className="text-primary font-mono-sm inline-flex items-center gap-0.5 hover:underline truncate max-w-full" href={String(row.evidence_url)} target="_blank" rel="noreferrer">
+                                    {hostLabel(String(row.evidence_url))} <ExternalLink className="h-3 w-3 shrink-0" />
+                                  </a>
+                                ) : null}
+                              </div>
+                              <div className="min-w-0 flex justify-center pr-2">
+                                {matching ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary-container text-on-secondary-container font-mono-sm whitespace-nowrap">
+                                    <span className="w-2.5 h-2.5 shrink-0 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                                    Matching…
+                                  </span>
+                                ) : (
+                                  <button type="button" className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary-container/10 hover:bg-primary-container/20 text-primary-container font-mono-sm font-semibold whitespace-nowrap" onClick={openFindPartsMatches}>
+                                    {matchCount} parts →
+                                  </button>
+                                )}
+                              </div>
+                              <div className="min-w-0 flex justify-end gap-1 text-secondary">
+                                <button type="button" className="w-7 h-7 rounded hover:bg-surface-container disabled:opacity-40" disabled={!owner} onClick={() => openEditPanel(row)}><Pencil className="h-4 w-4" /></button>
+                                <button type="button" className="w-7 h-7 rounded hover:bg-surface-container text-error disabled:opacity-40" disabled={!owner || busy} onClick={() => { void removeOeNumber(String(row.id)); }}><Trash2 className="h-4 w-4" /></button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              <div className="bg-surface-container-low p-space-md rounded-lg flex items-center gap-space-sm text-secondary">
+                <span className="material-symbols-outlined text-primary text-[20px]">verified_user</span>
+                <span className="font-body-sm text-body-sm">
+                  Numbers added here are matched within a minute. Removed numbers remove their automatic matches; your own listings are never touched.
+                </span>
+              </div>
+            </div>
+
+            {panelOpen ? (
+              <div className="xl:col-span-4 bg-surface-container-lowest border border-outline-variant/40 rounded-xl shadow-lg p-space-lg flex flex-col gap-space-md">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <div className="flex items-center gap-1 font-mono-sm text-secondary font-semibold uppercase">
+                      <span className="w-1.5 h-1.5 rounded-full bg-primary-container" />
+                      Active workflow panel
+                    </div>
+                    <h3 className="font-headline-lg text-on-surface pt-0.5">{editId ? "Edit factory number" : "Add factory part number"}</h3>
+                    <span className="font-mono-sm text-secondary">Target: {r.make} {r.model} ({r.chassis_code || "—"})</span>
+                  </div>
+                  <button type="button" className="w-7 h-7 rounded-lg bg-surface-container hover:bg-surface-container-high text-secondary flex items-center justify-center" onClick={() => setPanelOpen(false)}>
+                    <span className="material-symbols-outlined text-[16px]">close</span>
+                  </button>
+                </div>
+                <label className="flex flex-col gap-1 font-label-xs uppercase text-secondary">
+                  Part type
+                  <select className="h-9 rounded-lg bg-surface px-3 text-body-md text-on-surface" value={draftComponentId} onChange={(e) => setDraftComponentId(e.target.value)}>
+                    <option value="">Pick part type…</option>
+                    {componentOptions.map((opt) => (
+                      <option key={opt.id} value={opt.id}>{opt.label}</option>
+                    ))}
+                  </select>
+                </label>
+                <div className="grid grid-cols-2 gap-space-sm">
+                  <label className="flex flex-col gap-1 font-label-xs uppercase text-secondary">
+                    Position
+                    <div className="grid grid-cols-3 p-0.5 bg-surface-container rounded-lg font-mono-sm">
+                      {(["front", "rear", "any"] as const).map((p) => (
+                        <button key={p} type="button" className={`py-1 rounded ${draftPosition === p ? "bg-surface-container-lowest text-primary font-semibold shadow-sm" : "text-secondary"}`} onClick={() => setDraftPosition(p)}>
+                          {p === "any" ? "Any" : p.charAt(0).toUpperCase() + p.slice(1)}
+                        </button>
+                      ))}
+                    </div>
+                  </label>
+                  <label className="flex flex-col gap-1 font-label-xs uppercase text-secondary">
+                    Side
+                    <div className="grid grid-cols-4 p-0.5 bg-surface-container rounded-lg font-mono-sm">
+                      {([["left", "L"], ["right", "R"], ["both", "Both"], ["any", "Any"]] as const).map(([val, label]) => (
+                        <button key={val} type="button" className={`py-1 rounded ${draftSide === val ? "bg-surface-container-lowest text-primary font-semibold shadow-sm" : "text-secondary"}`} onClick={() => setDraftSide(val)}>
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </label>
+                </div>
+                <label className="flex flex-col gap-1 font-label-xs uppercase text-secondary">
+                  Maker / brand
+                  <input className="h-9 rounded-lg bg-surface-container-low px-3 text-body-md text-on-surface" value={draftBrand} onChange={(e) => setDraftBrand(e.target.value)} />
+                </label>
+                <label className="flex flex-col gap-1">
+                  <div className="flex items-center justify-between font-label-xs uppercase text-secondary">
+                    <span>Factory part number</span>
+                    {normPreview ? (
+                      <span className="font-mono-sm text-mono-sm normal-case rounded px-2 py-0.5 bg-primary-container/10 text-primary font-semibold">
+                        CLEANED MATCH ON
+                      </span>
+                    ) : null}
+                  </div>
+                  <input
+                    className="h-9 rounded-lg bg-surface px-3 font-mono-md text-on-surface"
+                    value={draftNumber}
+                    onChange={(e) => {
+                      setDraftNumber(e.target.value);
+                      void refreshNormPreview(e.target.value, draftBrand);
+                    }}
+                  />
+                  {normPreview ? (
+                    <div className="flex justify-between font-mono-sm text-secondary px-1 pt-0.5">
+                      <span>Canonical format: <strong className="text-on-surface">{normPreview}</strong></span>
+                      <span className="text-primary font-medium">{draftNumber.trim().length} chars valid</span>
+                    </div>
+                  ) : null}
+                  {duplicateOeWarning ? (
+                    <div className="mt-1 p-2 bg-error/10 rounded-lg flex items-start gap-1.5 text-error font-body-sm">
+                      <span className="material-symbols-outlined text-[16px] shrink-0">error</span>
+                      <span>{duplicateOeWarning}</span>
+                    </div>
+                  ) : null}
+                </label>
+                <label className="flex flex-col gap-1 font-label-xs uppercase text-secondary">
+                  Years active (from / to)
+                  <div className="grid grid-cols-2 gap-space-sm">
+                    <input className="h-9 rounded-lg bg-surface px-3 font-mono-md text-on-surface text-center" placeholder="From (YYYY)" value={draftYearFrom} onChange={(e) => setDraftYearFrom(e.target.value)} />
+                    <input className="h-9 rounded-lg bg-surface px-3 font-mono-md text-on-surface text-center" placeholder="To (YYYY)" value={draftYearTo} onChange={(e) => setDraftYearTo(e.target.value)} />
+                  </div>
+                  <span className="font-body-sm text-secondary normal-case">Leave blank to apply to all production years.</span>
+                </label>
+                <label className="flex flex-col gap-1 font-label-xs uppercase text-secondary">
+                  Catalogue URL (required)
+                  <input className="h-9 rounded-lg bg-surface px-3 text-body-md" placeholder="https://…" value={draftEvidence} onChange={(e) => setDraftEvidence(e.target.value)} />
+                </label>
+                <div className="flex gap-2 pt-1">
+                  <button type="button" className="flex-1 h-9 rounded-lg border border-outline-variant text-on-surface" onClick={() => setPanelOpen(false)}>Cancel</button>
+                  <button type="button" className="flex-1 h-9 rounded-lg bg-primary-container text-on-primary font-semibold disabled:opacity-40" disabled={!owner || busy} onClick={() => { void saveOeNumber(); }}>
+                    Save number
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </div>
         </div>
       ) : null}
 
@@ -578,10 +705,13 @@ export function VehicleAutoMatchTabs({
                           }).catch((e) => toast.error(e instanceof Error ? e.message : "Failed"));
                         }}>Keep</button>
                         {" · "}
-                        <button type="button" className="text-secondary disabled:opacity-40" disabled={!owner || !row.conflict_id} onClick={() => {
+                        <button type="button" className="text-secondary disabled:opacity-40" disabled={!owner} onClick={() => {
                           const note = window.prompt("Note for audit trail (required):")?.trim();
-                          if (!note || !row.conflict_id) return;
-                          void resolveAutoMatchConflict(token, String(row.conflict_id), "remove", note).then(() => {
+                          if (!note) return;
+                          const run = row.conflict_id
+                            ? resolveAutoMatchConflict(token, String(row.conflict_id), "remove", note)
+                            : removeDerivedBatch(token, [String(row.id)], note);
+                          void run.then(() => {
                             toast.success("Removed");
                             void derived.refetch();
                           }).catch((e) => toast.error(e instanceof Error ? e.message : "Failed"));

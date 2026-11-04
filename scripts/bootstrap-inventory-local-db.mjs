@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 /** Seed test org for CI inventory Deno tests after full `supabase db reset` replay. */
 import { spawnSync } from 'node:child_process';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const dbUrl = process.env.DATABASE_URL || 'postgresql://postgres:postgres@127.0.0.1:54322/postgres';
 const testOrg = process.env.INVENTORY_TEST_ORG_ID || 'test-org-inv';
@@ -24,5 +26,15 @@ const seedRun = spawnSync('psql', [dbUrl, '-v', 'ON_ERROR_STOP=1', '-c', seed], 
   shell: process.platform === 'win32',
 });
 if (seedRun.status !== 0) process.exit(seedRun.status ?? 1);
+
+const seedFile = join(dirname(fileURLToPath(import.meta.url)), '..', 'e2e', 'fixtures', 'inventory-seed.sql');
+const seedSql = spawnSync(
+  'psql',
+  [dbUrl, '-v', 'ON_ERROR_STOP=1', '-v', `seed_org=${testOrg}`, '-f', seedFile],
+  { stdio: 'inherit', shell: process.platform === 'win32' },
+);
+if (seedSql.status !== 0) {
+  console.warn('inventory-seed.sql skipped or failed (tables may be empty until migration catch-up)');
+}
 
 console.log(`Inventory local bootstrap complete (org ${testOrg})`);

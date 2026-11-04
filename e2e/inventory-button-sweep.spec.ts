@@ -2,6 +2,8 @@ import { test, expect } from '@playwright/test';
 import { hasFleetE2ECreds, signInFleet } from './helpers/fleet-auth';
 import {
   assertFieldIsolation,
+  assertNoStitchSamples,
+  assertSeedMarkers,
   INVENTORY_TABS,
   openFleetInventory,
   sweepVisibleButtons,
@@ -30,6 +32,10 @@ test.describe('Fleet inventory button sweep (R31-04)', () => {
       await page.waitForTimeout(800);
       const root = page.locator('.inventory-stitch-root').first();
       await expect(root).toBeVisible({ timeout: 60_000 });
+      const stitch = await assertNoStitchSamples(root);
+      if (stitch) allFailures.push({ screen: `tab:${tab}`, label: 'stitch-deny', reason: stitch });
+      const seed = await assertSeedMarkers(root);
+      if (seed) allFailures.push({ screen: `tab:${tab}`, label: 'seed', reason: seed });
       allFailures.push(...(await sweepVisibleButtons(page, `tab:${tab}`, root)));
     }
 

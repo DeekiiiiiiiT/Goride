@@ -19,6 +19,7 @@ import { PartsError, PartsLoading } from "../PartsDatabaseStates";
 import { readCatalogFilters, writeCatalogSearch, type CatalogMatch } from "../partsCatalogUrl";
 import { fetchPartMatchHealth } from "../../../../services/partsAutoMatchApi";
 import { FullDatabaseDrawer } from "./FullDatabaseDrawer";
+import { MasterRepositoryIndex } from "./MasterRepositoryIndex";
 import { FullDatabaseFilterPanel } from "./FullDatabaseFilterPanel";
 import { FullDatabaseGroupedTable } from "./FullDatabaseGroupedTable";
 import { FullDatabaseSummaryBar } from "./FullDatabaseSummaryBar";
@@ -234,11 +235,19 @@ export function FullDatabaseTab({
         needs_checking: 0,
       };
   const title = make || model ? [make, model, year].filter(Boolean).join(" ") : "Whole database";
+  const indexRows = useMemo(
+    () => [...parts.oem, ...parts.engine, ...parts.aftermarket],
+    [parts],
+  );
+  const repositoryTitle = assembly
+    ? `Master Repository Index: ${assembly}`
+    : "Master Repository Index";
   const changedAt = overview.data?.lastCatalogChangeAt;
   const changedLabel = changedAt
     ? new Date(changedAt).toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).toUpperCase()
     : "—";
   const indexLabel = `INDEX ${changedLabel} · ${latencyMs == null ? "—" : `${latencyMs}MS`} LATENCY`;
+  const indexFitments = search.data?.total ?? overview.data?.fitmentsOnFile ?? (counts.all > 0 ? counts.all : null);
 
   return (
     <div className="full-database">
@@ -283,7 +292,7 @@ export function FullDatabaseTab({
           <div className="flex flex-wrap items-center justify-between gap-2 font-mono-sm text-mono-sm">
             <div className="flex flex-wrap items-center gap-2">
               <span className="rounded-full bg-surface-container-high px-2 py-0.5 font-semibold text-on-surface">
-                INDEX: {(search.data?.total ?? 0).toLocaleString()} FITMENTS
+                INDEX: {indexFitments != null ? indexFitments.toLocaleString() : "—"} FITMENTS
               </span>
               <span className="rounded-full bg-secondary-container px-2 py-0.5 font-semibold text-on-secondary-fixed">{schemaLabel}</span>
             </div>
@@ -304,7 +313,30 @@ export function FullDatabaseTab({
               </div>
             </div>
           ) : null}
-          {search.data && !search.isLoading ? (
+          {openId ? (
+            <div className="relative w-full flex gap-space-lg items-start">
+              <MasterRepositoryIndex
+                rows={indexRows}
+                activePartId={openId}
+                title={repositoryTitle}
+                totalLoaded={search.data?.total ?? indexRows.length}
+              />
+              <FullDatabaseDrawer
+                partId={openId}
+                inline
+                onClose={() => setOpenId("")}
+                onAddCar={() => {
+                  const row = indexRows.find((item) => item.partId === openId);
+                  onEditPart(row?.groupId ?? null);
+                }}
+                onEdit={() => {
+                  const row = indexRows.find((item) => item.partId === openId);
+                  onEditPart(row?.groupId ?? null);
+                }}
+              />
+            </div>
+          ) : null}
+          {!openId && search.data && !search.isLoading ? (
             <FullDatabaseGroupedTable
               match={match}
               parts={parts}
@@ -330,7 +362,7 @@ export function FullDatabaseTab({
               onAddEngine={onAddPart}
             />
           ) : null}
-          {search.data && !search.isLoading ? (
+          {!openId && search.data && !search.isLoading ? (
             <div className="w-full p-space-md rounded-xl bg-surface-container-lowest border border-outline-variant/40 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between shadow-sm">
               <div className="flex items-start gap-2 text-secondary font-body-sm text-body-sm">
                 <span className="material-symbols-outlined text-primary text-[20px]">verified_user</span>
@@ -372,20 +404,6 @@ export function FullDatabaseTab({
             {viewUniversal.source ? <a className="text-primary font-body-sm hover:underline" href={viewUniversal.source} target="_blank" rel="noreferrer">{viewUniversal.source}</a> : <p className="font-body-sm text-secondary">No source link yet.</p>}
           </div>
         </div>
-      ) : null}
-      {openId ? (
-        <FullDatabaseDrawer
-          partId={openId}
-          onClose={() => setOpenId("")}
-          onAddCar={() => {
-            const row = [...parts.oem, ...parts.engine, ...parts.aftermarket].find((item) => item.partId === openId);
-            onEditPart(row?.groupId ?? null);
-          }}
-          onEdit={() => {
-            const row = [...parts.oem, ...parts.engine, ...parts.aftermarket].find((item) => item.partId === openId);
-            onEditPart(row?.groupId ?? null);
-          }}
-        />
       ) : null}
     </div>
   );

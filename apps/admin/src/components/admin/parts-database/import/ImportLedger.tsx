@@ -37,12 +37,26 @@ function rowsBreakdown(row: Record<string, unknown>) {
 
 function changesCell(row: Record<string, unknown>) {
   const base = `${Number(row.parts_created ?? 0)} parts · ${Number(row.fits_created ?? 0)} fits`;
+  const matchesCreated = Number(row.matches_created ?? 0);
+  const matchesNeedChecking = Number(row.matches_need_checking ?? 0);
+  const matchLine =
+    matchesCreated > 0 || matchesNeedChecking > 0
+      ? `${matchesCreated} matches created · ${matchesNeedChecking} need checking`
+      : null;
   const reasons = row.undo_blocked_reasons as unknown[] | undefined;
   if (Array.isArray(reasons) && reasons.length > 0) {
     return (
       <span>
-        {base}{" "}
+        {base}
+        {matchLine ? <> · {matchLine}</> : null}{" "}
         <span className="text-[#b45309]">{reasons.length} fits changed later</span>
+      </span>
+    );
+  }
+  if (matchLine) {
+    return (
+      <span>
+        {base} · {matchLine}
       </span>
     );
   }

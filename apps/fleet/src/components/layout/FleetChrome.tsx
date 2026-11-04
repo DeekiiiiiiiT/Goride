@@ -65,6 +65,9 @@ function useFleetHealthStatus() {
 
 export function FleetFooter() {
   const [latency, setLatency] = useState<number | null>(() => getLastFleetCoreLatencyMs());
+  const [hideForFindPartsResults, setHideForFindPartsResults] = useState(
+    () => typeof document !== "undefined" && document.body.hasAttribute("data-fleet-find-parts-results"),
+  );
   const status = useFleetHealthStatus();
   useEffect(() => {
     const sync = () => setLatency(getLastFleetCoreLatencyMs());
@@ -72,6 +75,14 @@ export function FleetFooter() {
     window.addEventListener("fleet-core-latency", sync);
     return () => window.removeEventListener("fleet-core-latency", sync);
   }, []);
+  useEffect(() => {
+    const sync = () => setHideForFindPartsResults(document.body.hasAttribute("data-fleet-find-parts-results"));
+    sync();
+    const observer = new MutationObserver(sync);
+    observer.observe(document.body, { attributes: true, attributeFilter: ["data-fleet-find-parts-results"] });
+    return () => observer.disconnect();
+  }, []);
+  if (hideForFindPartsResults) return null;
   return (
     <footer className="hidden shrink-0 items-center justify-between border-t border-slate-200 bg-white px-4 py-1 text-[11px] tracking-wide text-slate-500 md:flex dark:border-slate-800 dark:bg-slate-950">
       <span>LATENCY: {latency ?? 0}ms</span>

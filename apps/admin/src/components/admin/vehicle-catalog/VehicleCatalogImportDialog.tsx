@@ -1,6 +1,10 @@
 import React from "react";
 import { CheckCircle2, Loader2, XCircle } from "lucide-react";
-import type { ParsedCatalogImportRow } from "../../../utils/vehicleCatalogCsvImport";
+import type {
+  CatalogImportOnExisting,
+  CatalogImportRowClass,
+  ParsedCatalogImportRow,
+} from "../../../utils/vehicleCatalogCsvImport";
 import { Button } from "../../ui/button";
 import {
   Dialog,
@@ -18,6 +22,10 @@ export type VehicleCatalogImportStep = "preview" | "importing" | "result";
 export type VehicleCatalogImportOutcome = {
   imported: number;
   updated: number;
+  /** Rows matching a car already in the catalog that were left untouched. */
+  skipped?: number;
+  /** Second copies of the same car inside the file (never sent). */
+  inFileDuplicates?: number;
   failed: number;
   errors: string[];
   /** Present when API accepted rows but omitted columns the CSV had (remote DB / Edge out of date). */
@@ -39,6 +47,10 @@ export type VehicleCatalogImportDialogProps = {
   onClose: () => void;
   onRunImport: () => void;
   onUndoBatch?: () => void;
+  /** Per-row duplicate check against the file and the loaded catalog. */
+  importClasses?: Map<number, CatalogImportRowClass> | null;
+  importOnExisting?: CatalogImportOnExisting;
+  onImportOnExistingChange?: (v: CatalogImportOnExisting) => void;
 };
 
 export function VehicleCatalogImportDialog({
@@ -54,9 +66,18 @@ export function VehicleCatalogImportDialog({
   onClose,
   onRunImport,
   onUndoBatch,
+  importClasses,
+  importOnExisting = "skip",
+  onImportOnExistingChange,
 }: VehicleCatalogImportDialogProps) {
   const hasUnknown = unknownHeaders.length > 0;
-  const readyCount = importPreview?.filter((r) => r.payload).length ?? 0;
+  const classCount = (kind: CatalogImportRowClass["kind"]) =>
+    importClasses ? [...importClasses.values()].filter((c) => c.kind === kind).length : 0;
+  const newCount = classCount("new");
+  const existingCount = classCount("existing");
+  const inFileDupCount = classCount("duplicate_in_file");
+  const withIdCount = classCount("has_id");
+  const readyCount = importPreview?.filter((r) => r.payload && importClasses?.get(r.rowIndex)?.kind !== "duplicate_in_file").length ?? 0;
 
   return (
     <Dialog
@@ -150,6 +171,45 @@ export function VehicleCatalogImportDialog({
               )}
               .
             </p>
+            {importClasses && (
+              <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3 text-sm text-slate-800 space-y-2">
+                <p className="font-semibold text-slate-900">Duplicate check</p>
+                <ul className="space-y-1">
+                  <li>
+                    <span className="font-semibold tabular-nums">{newCount}</span> new car(s) — will be added
+                  </li>
+                  <li>
+                    <span className="font-semibold tabular-nums">{existingCount}</span> already in the database
+                    {" — "}
+                    {importOnExisting === "update" ? "will be updated (blank cells keep the current value)" : "will be skipped"}
+                  </li>
+                  {inFileDupCount > 0 && (
+                    <li>
+                      <span className="font-semibold tabular-nums">{inFileDupCount}</span> duplicate(s) inside this file — only the first copy is used
+                    </li>
+                  )}
+                  {withIdCount > 0 && (
+                    <li>
+                      <span className="font-semibold tabular-nums">{withIdCount}</span> with a database ID — will update that car (blank cells keep the current value)
+                    </li>
+                  )}
+                </ul>
+                <p className="text-xs text-slate-500">
+                  Same car = same make, model, series, trim, chassis code, engine code and start year.
+                </p>
+                {existingCount > 0 && onImportOnExistingChange && (
+                  <label className="flex items-start gap-2 text-sm text-slate-800">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5"
+                      checked={importOnExisting === "update"}
+                      onChange={(e) => onImportOnExistingChange(e.target.checked ? "update" : "skip")}
+                    />
+                    <span>Update cars that already exist with this file's values</span>
+                  </label>
+                )}
+              </div>
+            )}
             {importPreview.some((r) => r.parseError) && (
               <div className="space-y-1">
                 <p className="text-xs font-medium text-slate-600">Parse issues</p>
@@ -218,8 +278,27 @@ export function VehicleCatalogImportDialog({
                       </>
                     )}
                     .
+                    {(importOutcome.skipped ?? 0) > 0 && (
+                      <> {importOutcome.skipped} already in the database — left unchanged.</>
+                    )}
+                    {(importOutcome.inFileDuplicates ?? 0) > 0 && (
+                      <> {importOutcome.inFileDuplicates} duplicate row(s) in the file ignored.</>
+                    )}
                   </p>
                 </div>
+              </div>
+            )}
+
+            {importOutcome.failed === 0 && importOutcome.imported === 0 && importOutcome.updated === 0 && (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-800">
+                <p className="font-semibold text-slate-900">Nothing new to add</p>
+                <p className="mt-1">
+                  {importOutcome.skipped ?? 0} car(s) were already in the database and left unchanged
+                  {(importOutcome.inFileDuplicates ?? 0) > 0
+                    ? `; ${importOutcome.inFileDuplicates} duplicate row(s) in the file were ignored`
+                    : ""}
+                  .
+                </p>
               </div>
             )}
 

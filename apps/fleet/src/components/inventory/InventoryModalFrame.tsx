@@ -5,14 +5,23 @@ import { useInventoryShell } from './InventoryShellContext';
 export function InventoryModalFrame({ children }: { children: ReactNode }) {
   const shell = useInventoryShell();
   return (
-    <div className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-primary/25 backdrop-blur-[2px] p-space-md">
-      <div className="relative w-full max-w-[960px] my-space-lg">{children}</div>
-      <button
-        type="button"
-        aria-label="Dismiss dialog"
-        className="fixed inset-0 -z-10 cursor-default"
-        onClick={() => shell.closeModal()}
-      />
+    <div
+      className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-primary/25 backdrop-blur-[2px] p-space-md"
+      role="presentation"
+      onClick={() => shell.closeModal()}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') shell.closeModal();
+      }}
+    >
+      <div
+        className="relative w-full max-w-[960px] my-space-lg"
+        role="dialog"
+        aria-modal="true"
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.stopPropagation()}
+      >
+        {children}
+      </div>
     </div>
   );
 }

@@ -9,7 +9,8 @@ import { Dk3ReportSent } from './screens/Dk3ReportSent';
 import { Dk4MyReports } from './screens/Dk4MyReports';
 import { Dk6States } from './screens/Dk6States';
 import { DkUpdateReportedItemSheet } from './screens/DkUpdateReportedItemSheet';
-import type { DriverReportRow } from '../../services/driverInventoryApi';
+import { Dk7PreShiftDvir } from './screens/Dk7PreShiftDvir';
+import type { DriverCarKitItem, DriverReportRow } from '../../services/driverInventoryApi';
 
 /** Driver car kit — DK1–DK6 navigation (R5-08). */
 export function CarKitPage({
@@ -99,12 +100,23 @@ export function CarKitPage({
         return (
           <Dk1MyCarKit
             kit={flow.kit}
-            onReportItem={(name) => flow.openReportSheet(name)}
+            onReportItem={(name) => flow.openReportSheet(name ?? undefined)}
             onPreShiftInspection={vehicleId ? () => setShowDvir(true) : undefined}
-            onUpdateStatus={() => {
-              const first = flow.reports[0];
-              if (first) setActiveReport(first);
-              else flow.openReportSheet('Kit item');
+            onUpdateStatus={(item: DriverCarKitItem) => {
+              if (item.reportId) {
+                setActiveReport({
+                  id: item.reportId,
+                  itemLabel: item.name,
+                  displayName: item.name,
+                  status: 'seen',
+                });
+                return;
+              }
+              const match = flow.reports.find(
+                (r) => r.itemLabel === item.name || r.displayName === item.name,
+              );
+              if (match) setActiveReport(match);
+              else flow.openReportSheet(item.name);
             }}
           />
         );
@@ -113,7 +125,7 @@ export function CarKitPage({
 
   return (
     <div className="relative">
-      <div className="sticky top-0 z-40 flex items-center justify-between gap-2 border-b border-surface-container-high bg-surface/95 px-margin py-2 backdrop-blur-md">
+      <div className="driver-car-kit-stitch sticky top-0 z-40 flex items-center justify-between gap-2 border-b border-surface-container-high bg-surface/95 px-margin py-2 backdrop-blur-md">
         <button
           type="button"
           className="font-body-sm text-body-sm font-semibold text-on-surface-variant hover:text-on-surface"
@@ -140,6 +152,7 @@ export function CarKitPage({
           <CarKitNavHost onAction={handleNav}>
             <Dk2ReportSheet
               kit={flow.kit}
+              itemLabel={flow.reportItemLabel}
               onClose={flow.closeReportSheet}
               sending={flow.sending}
               sendError={flow.sendErrorRef}
@@ -152,6 +165,7 @@ export function CarKitPage({
       {activeReport ? (
         <DkUpdateReportedItemSheet
           report={activeReport}
+          fleetSupportPhone={flow.kit?.fleetSupportPhone}
           offline={!navigator.onLine}
           onClose={() => setActiveReport(null)}
           onSent={() => {

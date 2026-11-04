@@ -30,4 +30,6 @@ jobs:
       - name: Build admin
         run: pnpm --filter @roam/admin run build
       - name: Parts import Stitch spec
+        env:
+          ADMIN_BASE_URL: http://127.0.0.1:4173
         run: pnpm exec playwright test e2e/parts-import-stitch.spec.ts --project=dominion-admin

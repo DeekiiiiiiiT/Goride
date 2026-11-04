@@ -1,7 +1,7 @@
-import { useInventoryShell } from '../InventoryShellContext';
-import { useInventoryLive } from '../inventoryLive';
-import { formatJmd } from '../inventoryFormat';
-import { useGapSubmit } from '../gap/useGapSubmit';
+import { useInventoryShell } from '../../InventoryShellContext';
+import { useInventoryLive } from '../../inventoryLive';
+import { formatJmd } from '../../inventoryFormat';
+import { useGapSubmit } from '../../gap/useGapSubmit';
 
 export function useInScreenBase(onClose?: () => void) {
   const shell = useInventoryShell();

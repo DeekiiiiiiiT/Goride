@@ -3,8 +3,13 @@ import { inventoryApi } from '../../inventoryApi';
 import { numField, strField } from '../../inventoryData';
 import { formatJmd } from '../../inventoryFormat';
 import { downloadInventoryExportCsv } from '../../inventoryDownload';
+import { buildItemDrawerRow } from '../../inventoryViewRows';
 import { useInScreenBase } from './useInShared';
 
+/**
+ * Stitch → data (In3 Item drawer)
+ * drawer title → ItemDrawerRow.name | sku chip → ItemDrawerRow.sku | on hand → valueLabels.onHand
+ */
 export function useIn3ItemDrawerForm() {
   const base = useInScreenBase();
   const { shell, live, submit, close } = base;
@@ -18,6 +23,8 @@ export function useIn3ItemDrawerForm() {
         shell.items.find((i) => strField(i, 'id', '') === shell.selectedItemId) ??
         null
       : null);
+
+  const drawerRow = useMemo(() => buildItemDrawerRow(item, formatJmd), [item]);
 
   const itemId = item ? strField(item, 'item_id', strField(item, 'id', '')) : '';
   const onHand = item ? numField(item, 'on_hand', 0) : 0;
@@ -72,6 +79,41 @@ export function useIn3ItemDrawerForm() {
       await shell.refresh();
     });
 
+  const stockBrowseRows = useMemo(() => {
+    const q = drawerSearch.trim().toLowerCase();
+    let rows = shell.stockRows;
+    if (q) {
+      rows = rows.filter((r) => {
+        const name = strField(r, 'name', '').toLowerCase();
+        const sku = strField(r, 'sku', '').toLowerCase();
+        return name.includes(q) || sku.includes(q);
+      });
+    }
+    return rows
+      .slice(0, 25)
+      .map((r) => buildItemDrawerRow(r, formatJmd))
+      .filter((r): r is NonNullable<typeof r> => r != null);
+  }, [shell.stockRows, drawerSearch]);
+
+  const movementRows = useMemo(
+    () =>
+      itemMovements.map((m) => ({
+        id: strField(m, 'id', strField(m, 'reference', '')),
+        label: strField(m, 'reference', strField(m, 'type', 'Movement')),
+        actor: strField(m, 'actor_name', strField(m, 'created_by', '—')),
+        when: strField(m, 'created_at', strField(m, 'occurred_at', '—')),
+        typeLabel: strField(m, 'type', strField(m, 'movement_type', 'MOVE')).toUpperCase(),
+        locationLabel: strField(m, 'location_name', strField(m, 'location', '—')),
+        qtyLabel: strField(m, 'qty_delta', strField(m, 'qty', '')),
+        note: strField(m, 'note', strField(m, 'memo', '')),
+      })),
+    [itemMovements],
+  );
+
+  const hasSelectedItem = Boolean(itemId);
+  const issueDisabledReason = hasSelectedItem ? '' : 'Select an item from stock first';
+  const receiveDisabledReason = hasSelectedItem ? '' : 'Select an item from stock first';
+
   return {
     ...base,
     shell,
@@ -84,6 +126,12 @@ export function useIn3ItemDrawerForm() {
     setDrawerSearch,
     item,
     itemId,
+    drawerRow,
+    stockBrowseRows,
+    movementRows,
+    hasSelectedItem,
+    issueDisabledReason,
+    receiveDisabledReason,
     valueLabels,
     itemMovements,
     formatJmd,

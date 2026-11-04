@@ -3,22 +3,24 @@ import { useIn9AssetPageForm } from './hooks/useIn9AssetPageForm';
 import { useState } from 'react';
 import { useInventoryLive } from '../inventoryLive';
 import { useInventoryShell } from '../InventoryShellContext';
-import { firstAssetSerial, formatPlate, strField } from '../inventoryData';
 import { InventoryQrPrintDialog } from '../InventoryQrPrintDialog';
 export function In9AssetPage() {
   const form = useIn9AssetPageForm();
   const shell = useInventoryShell();
   const live = useInventoryLive(shell);
   const [qrOpen, setQrOpen] = useState(false);
-  const asset = live.selectedAsset ?? live.assets[0] ?? null;
-  const serial = asset
-    ? strField(asset, 'serial_number', strField(asset, 'serial_no', '—'))
-    : firstAssetSerial(live.assets);
-  const assetName = asset ? strField(asset, 'name', 'Asset') : 'No asset selected';
-  const vehiclePlate = asset
-    ? formatPlate(strField(asset, 'vehicle_plate', strField(asset, 'license_plate', live.primaryPlate)))
-    : live.primaryPlate;
-  const assetId = asset ? strField(asset, 'id', '') : '';
+  const asset = form.asset;
+  const serial = form.assetRow?.serial ?? '—';
+  const assetName = form.assetRow?.name ?? 'No asset selected';
+  const vehiclePlate = form.assetRow?.plate || live.primaryPlate;
+  const assetId = form.assetId;
+  if (!form.hasAsset) {
+    return (
+      <div className="fleet-inventory-stitch inventory-stitch-root p-space-xl text-center text-on-surface-variant font-body-md">
+        Select an asset from the Assets tab to view its lifecycle page.
+      </div>
+    );
+  }
   return (
     <div className="fleet-inventory-stitch inventory-stitch-root">
       <InventoryQrPrintDialog
@@ -112,7 +114,7 @@ export function In9AssetPage() {
       </div>
       <div>
       <div className="font-label-code text-headline-sm text-on-surface font-bold">6 Jan 2026</div>
-      <div className="font-caption text-caption text-on-surface-variant mt-0.5">PO #JAM-7721</div>
+      <div className="font-caption text-caption text-on-surface-variant mt-0.5">PO #{form.linkedPoRef}</div>
       </div>
       </div>
 
@@ -202,128 +204,42 @@ export function In9AssetPage() {
 
       <div className="relative pl-6 sm:pl-8 space-y-space-lg before:content-[''] before:absolute before:left-3 sm:before:left-4 before:top-3 before:bottom-3 before:w-0.5 before:bg-surface-container-high pt-space-sm">
 
-      <div className="relative group">
-
+      {form.eventRows.length === 0 ? (
+      <p className="font-body-sm text-body-sm text-on-surface-variant pl-2">No lifecycle events recorded for this asset yet.</p>
+      ) : (
+      form.eventRows.map((ev) => (
+      <div key={ev.id} className="relative group">
       <div className="absolute -left-6 sm:-left-8 top-0.5 w-6 sm:w-8 h-6 sm:h-8 rounded-full bg-primary-container text-on-primary flex items-center justify-center ring-4 ring-surface-container-lowest">
-      <span className="material-symbols-outlined text-[15px]">tag</span>
+      <span className="material-symbols-outlined text-[15px]">history</span>
       </div>
       <div className="bg-surface-container-low rounded-xl p-space-md shadow-sm transition-all hover:bg-surface-container">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-      <div className="flex items-center gap-2">
-      <span className="font-label-code text-body-md text-on-surface font-bold">1 Nov 2026</span>
+      <div className="flex items-center gap-2 flex-wrap">
+      <span className="font-label-code text-body-md text-on-surface font-bold">{ev.when}</span>
       <span className="text-surface-tint">•</span>
-      <span className="font-headline-sm text-body-md text-on-surface font-semibold">Serial number added</span>
+      <span className="font-headline-sm text-body-md text-on-surface font-semibold">{ev.label}</span>
       </div>
-      <div className="font-label-code text-caption text-on-surface-variant">03:42 PM EST</div>
+      {ev.poRefLabel ? (
+      <div className="font-label-code text-caption text-on-surface-variant">PO #{ev.poRefLabel}</div>
+      ) : null}
       </div>
-      <div className="mt-1 font-body-sm text-body-sm text-on-surface-variant flex items-center gap-1.5">
+      <div className="mt-1 font-body-sm text-body-sm text-on-surface-variant flex items-center gap-1.5 flex-wrap">
       <span className="material-symbols-outlined text-sm">badge</span>
-      <span>Actor: <strong className="text-on-surface">Deeki T (Platform Owner)</strong></span>
+      <span>Actor: <strong className="text-on-surface">{ev.actor}</strong></span>
+      {ev.skuLabel ? (
+      <>
       <span className="text-surface-tint">/</span>
-      <span className="font-label-code text-caption">Depot Kingston Gate 2</span>
+      <span className="font-label-code text-caption">{ev.skuLabel}</span>
+      </>
+      ) : null}
       </div>
-      <p className="mt-space-sm font-body-sm text-body-sm text-on-surface leading-relaxed bg-surface-container-lowest/80 p-space-sm rounded-lg">
-                      Manual serial entry verified against hardware barcode <code className="font-label-code text-caption px-1.5 py-0.5 rounded bg-surface-container font-bold text-on-surface">{serial}</code> at Kingston Main Store staging bay during quarterly asset reconciliation.
-                    </p>
-      </div>
-      </div>
-
-      <div className="relative group">
-
-      <div className="absolute -left-6 sm:-left-8 top-0.5 w-6 sm:w-8 h-6 sm:h-8 rounded-full bg-tertiary-container text-on-tertiary-container flex items-center justify-center ring-4 ring-surface-container-lowest">
-      <span className="material-symbols-outlined text-[16px]">warning</span>
-      </div>
-      <div className="bg-surface-container-low rounded-xl p-space-md shadow-sm transition-all hover:bg-surface-container">
-      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
-      <div>
-      <div className="flex flex-wrap items-center gap-2">
-      <span className="font-label-code text-body-md text-on-surface font-bold">12 Mar 2026</span>
-      <span className="text-surface-tint">•</span>
-      <span className="font-headline-sm text-body-md text-on-surface font-bold">Driver report: "Screen flickers"</span>
-      </div>
-      <div className="mt-1 font-body-sm text-body-sm text-on-surface-variant flex items-center gap-1.5">
-      <span className="material-symbols-outlined text-sm">directions_car</span>
-      <span>Actor: <strong className="text-on-surface">Driver of {live.primaryPlate}</strong> (via Roam Driver App)</span>
+      {ev.body ? (
+      <p className="mt-space-sm font-body-sm text-body-sm text-on-surface leading-relaxed bg-surface-container-lowest/80 p-space-sm rounded-lg">{ev.body}</p>
+      ) : null}
       </div>
       </div>
-      <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-secondary-container text-on-secondary-container font-caption text-caption font-semibold">
-      <span className="w-1.5 h-1.5 rounded-full bg-surface-tint animate-pulse"></span>
-      <span>Inspection pending</span>
-      </div>
-      </div>
-
-      <div className="mt-space-md grid grid-cols-1 sm:grid-cols-12 gap-space-md items-center bg-surface-container-lowest p-space-md rounded-xl">
-      <div className="sm:col-span-4 overflow-hidden rounded-lg relative aspect-video bg-surface-container-high group/img">
-      <img className="w-full h-full object-cover rounded-lg group-hover/img:scale-105 transition-transform duration-300" data-alt="Close-up photograph taken from driver seat of a dual lens dash camera mounted on car windshield with amber illuminated screen showing mild electrical static flutter inside a modern compact vehicle cabin in daylight." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCeugX8NmYdwWO7vF3pzK32-mW7vSza3mY3p9YxQb44kPQ2lYZdwMP7tbhs_koFRGT0IS7bGPoWzQIdgB3zyn7FsmzhPQemVAQ35pAaznX4hNAi8dgbm8J8FH11EsNcUmkjCgzmqQ713tlMmGUmhtum_Sdk4CQUIBML37X3-KrBNZwFv8TrFgAPsj1KjLWKjmiUx2AD5xP_zCdwfJyVHllnumGqrQmOw6XOQ4E_sP8"/>
-      <div className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded bg-primary-container/80 text-on-primary font-label-code text-caption">
-                          IMG_0812.HEIC
-                        </div>
-      </div>
-      <div className="sm:col-span-8 space-y-1">
-      <div className="font-caption text-caption uppercase tracking-wider text-on-surface-variant font-semibold flex items-center gap-1">
-      <span className="material-symbols-outlined text-sm">chat_bubble</span>
-      <span>Reported Commentary</span>
-      </div>
-      <blockquote className="font-body-sm text-body-sm text-on-surface italic">
-                          "Display flickers and restarts when going over potholes along Marcus Garvey Drive. Cable connection to 12V auxiliary port seems tight, possibly an internal wiring wiggle."
-                        </blockquote>
-      <div className="pt-1 flex items-center gap-space-md font-label-code text-caption text-on-surface-variant">
-      <span>GPS: 17.9712° N, 76.7928° W</span>
-      <span>•</span>
-      <span>OBD: No battery fault</span>
-      </div>
-      </div>
-      </div>
-      </div>
-      </div>
-
-      <div className="relative group">
-
-      <div className="absolute -left-6 sm:-left-8 top-0.5 w-6 sm:w-8 h-6 sm:h-8 rounded-full bg-surface-tint text-on-primary flex items-center justify-center ring-4 ring-surface-container-lowest">
-      <span className="material-symbols-outlined text-[15px]">construction</span>
-      </div>
-      <div className="bg-surface-container-low rounded-xl p-space-md shadow-sm transition-all hover:bg-surface-container">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-      <div className="flex items-center gap-2">
-      <span className="font-label-code text-body-md text-on-surface font-bold">6 Jan 2026</span>
-      <span className="text-surface-tint">•</span>
-      <span className="font-headline-sm text-body-md text-on-surface font-semibold">Installed on {live.primaryPlate}</span>
-      </div>
-      <div className="font-label-code text-caption text-on-surface-variant">11:15 AM EST</div>
-      </div>
-      <div className="mt-1 font-body-sm text-body-sm text-on-surface-variant flex items-center gap-1.5">
-      <span className="material-symbols-outlined text-sm">person</span>
-      <span>Actor: <strong className="text-on-surface">Deeki T</strong> (Certified Installer)</span>
-      </div>
-      <p className="mt-space-sm font-body-sm text-body-sm text-on-surface bg-surface-container-lowest/80 p-space-sm rounded-lg">
-                      Provisioned as part of standard Rideshare car kit upgrade on <strong>{vehiclePlate}</strong>. Hardwired bracket fitted behind rearview mirror with 64GB high-endurance SD module initialized.
-                    </p>
-      </div>
-      </div>
-
-      <div className="relative group">
-
-      <div className="absolute -left-6 sm:-left-8 top-0.5 w-6 sm:w-8 h-6 sm:h-8 rounded-full bg-surface-container-highest text-on-surface flex items-center justify-center ring-4 ring-surface-container-lowest">
-      <span className="material-symbols-outlined text-[15px]">inventory_2</span>
-      </div>
-      <div className="bg-surface-container-low rounded-xl p-space-md shadow-sm transition-all hover:bg-surface-container">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-      <div className="flex items-center gap-2">
-      <span className="font-label-code text-body-md text-on-surface font-bold">6 Jan 2026</span>
-      <span className="text-surface-tint">•</span>
-      <span className="font-headline-sm text-body-md text-on-surface font-semibold">Received into Main store</span>
-      </div>
-      <div className="font-label-code text-caption text-on-surface-variant">08:00 AM EST</div>
-      </div>
-      <div className="mt-1 font-body-sm text-body-sm text-on-surface-variant flex items-center gap-1.5">
-      <span className="material-symbols-outlined text-sm">inventory</span>
-      <span>Actor: <strong className="text-on-surface">Deeki T</strong></span>
-      </div>
-      <p className="mt-space-sm font-body-sm text-body-sm text-on-surface bg-surface-container-lowest/80 p-space-sm rounded-lg">
-                      Received from Amazon (via shipping agent). Landed cost booked at <strong className="font-label-price text-on-surface font-semibold">{form.valueLabel}</strong> under Ledger Entry <span className="font-label-code font-bold">#RCV-8821</span>. Packaging intact, all secondary harnesses accounted for.
-                    </p>
-      </div>
-      </div>
+      ))
+      )}
       </div>
       </div>
 
@@ -350,49 +266,39 @@ export function In9AssetPage() {
       <span className="material-symbols-outlined text-primary text-xl">folder_open</span>
       <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold">Attached Documents</h3>
       </div>
-      <span className="font-label-code text-caption text-on-surface-variant bg-surface-container px-2 py-0.5 rounded">2 FILES</span>
+      <span className="font-label-code text-caption text-on-surface-variant bg-surface-container px-2 py-0.5 rounded">{form.documents.length} FILES</span>
       </div>
       <div className="space-y-space-xs">
-
-      <div className="flex items-center justify-between p-space-sm bg-surface-container-low hover:bg-surface-container rounded-lg transition-colors group">
+      {form.documents.length === 0 ? (
+      <div className="font-body-sm text-body-sm text-on-surface-variant py-space-sm">No documents uploaded yet.</div>
+      ) : (
+      form.documents.slice(0, 4).map((doc) => {
+        const docId = form.strField(doc, 'id', form.strField(doc, 'name', 'doc'));
+        const docTitle = form.strField(doc, 'name', form.strField(doc, 'title', 'Document'));
+        const docMeta = form.strField(doc, 'size_label', form.strField(doc, 'mime_type', ''));
+        return (
+      <div key={docId} className="flex items-center justify-between p-space-sm bg-surface-container-low hover:bg-surface-container rounded-lg transition-colors group">
       <div className="flex items-center gap-space-sm min-w-0">
       <div className="w-9 h-9 rounded bg-surface-container-high text-primary flex items-center justify-center shrink-0">
       <span className="material-symbols-outlined text-[20px]">picture_as_pdf</span>
       </div>
       <div className="min-w-0">
-      <div className="font-body-md text-body-md text-on-surface font-bold truncate group-hover:text-primary">Invoice.pdf</div>
-      <div className="font-label-code text-caption text-on-surface-variant truncate">{form.valueLabel} • 240 KB</div>
+      <div className="font-body-md text-body-md text-on-surface font-bold truncate group-hover:text-primary">{docTitle}</div>
+      <div className="font-label-code text-caption text-on-surface-variant truncate">{docMeta || form.valueLabel}</div>
       </div>
       </div>
       <div className="flex items-center gap-1 shrink-0">
-      <button type="button" className="w-8 h-8 rounded hover:bg-surface-container-highest text-on-surface-variant hover:text-on-surface flex items-center justify-center transition-colors" title="View Document" onClick={() => form.openDocument(form.documents[-1] ?? {})}>
+      <button type="button" className="w-8 h-8 rounded hover:bg-surface-container-highest text-on-surface-variant hover:text-on-surface flex items-center justify-center transition-colors" title="View Document" onClick={() => form.openDocument(doc)}>
       <span className="material-symbols-outlined text-[18px]">visibility</span>
       </button>
-      <button type="button" className="w-8 h-8 rounded hover:bg-surface-container-highest text-on-surface-variant hover:text-on-surface flex items-center justify-center transition-colors" title="Download" onClick={() => form.downloadDocument(form.documents[-1] ?? {})}>
+      <button type="button" className="w-8 h-8 rounded hover:bg-surface-container-highest text-on-surface-variant hover:text-on-surface flex items-center justify-center transition-colors" title="Download" onClick={() => form.downloadDocument(doc)}>
       <span className="material-symbols-outlined text-[18px]">download</span>
       </button>
       </div>
       </div>
-
-      <div className="flex items-center justify-between p-space-sm bg-surface-container-low hover:bg-surface-container rounded-lg transition-colors group">
-      <div className="flex items-center gap-space-sm min-w-0">
-      <div className="w-9 h-9 rounded bg-surface-container-high text-primary flex items-center justify-center shrink-0">
-      <span className="material-symbols-outlined text-[20px]">image</span>
-      </div>
-      <div className="min-w-0">
-      <div className="font-body-md text-body-md text-on-surface font-bold truncate group-hover:text-primary">Warranty.jpg</div>
-      <div className="font-label-code text-caption text-on-surface-variant truncate">Manufacturer 1-Yr • 1.2 MB</div>
-      </div>
-      </div>
-      <div className="flex items-center gap-1 shrink-0">
-      <button type="button" className="w-8 h-8 rounded hover:bg-surface-container-highest text-on-surface-variant hover:text-on-surface flex items-center justify-center transition-colors" title="View Document" onClick={() => form.openDocument(form.documents[0] ?? {})}>
-      <span className="material-symbols-outlined text-[18px]">visibility</span>
-      </button>
-      <button type="button" className="w-8 h-8 rounded hover:bg-surface-container-highest text-on-surface-variant hover:text-on-surface flex items-center justify-center transition-colors" title="Download" onClick={() => form.downloadDocument(form.documents[0] ?? {})}>
-      <span className="material-symbols-outlined text-[18px]">download</span>
-      </button>
-      </div>
-      </div>
+        );
+      })
+      )}
       </div>
 
       <button type="button" className="w-full py-2 px-space-md rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm font-semibold transition-colors flex items-center justify-center gap-2" onClick={() => form.uploadDocument()}>
@@ -412,7 +318,7 @@ export function In9AssetPage() {
       <div className="space-y-space-sm font-body-sm text-body-sm">
       <div className="flex justify-between py-1.5 px-2 rounded bg-surface-container-low">
       <span className="text-on-surface-variant">Model SKU</span>
-      <span className="font-label-code font-bold text-on-surface">ELC-DCM-01</span>
+      <span className="font-label-code font-bold text-on-surface">{form.assetSkuLabel}</span>
       </div>
       <div className="flex justify-between py-1.5 px-2 rounded bg-surface-container-low">
       <span className="text-on-surface-variant">Sensor Architecture</span>

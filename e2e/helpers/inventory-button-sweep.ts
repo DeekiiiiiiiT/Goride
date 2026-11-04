@@ -3,7 +3,49 @@ import type { Locator, Page } from '@playwright/test';
 const INVENTORY_API = /\/make-server-[^/]+\/inventory\//;
 const DRIVER_API = /\/make-server-[^/]+\/inventory\/driver\//;
 
+export const STITCH_DENY_SAMPLES = [
+  'ACC-PHM-01',
+  'ELC-DCM-01',
+  'Deeki T',
+  '98.4%',
+  '64,820 km',
+  'PO #JAM-7721',
+];
+
+export const INVENTORY_SEED_MARKERS = ['SEED Wiper 400mm', 'SEED-PO-1'];
+
 export type SweepFailure = { screen: string; label: string; reason: string };
+
+function trackInventoryResponses(page: Page) {
+  const bad: { url: string; status: number }[] = [];
+  const onResponse = (res: { url: () => string; status: () => number }) => {
+    const u = res.url();
+    if (!INVENTORY_API.test(u) && !DRIVER_API.test(u)) return;
+    const status = res.status();
+    if (status >= 400) bad.push({ url: u, status });
+  };
+  page.on('response', onResponse);
+  return () => {
+    page.off('response', onResponse);
+    return bad;
+  };
+}
+
+export async function assertNoStitchSamples(root: Locator): Promise<string | null> {
+  const text = await root.innerText().catch(() => '');
+  for (const needle of STITCH_DENY_SAMPLES) {
+    if (text.includes(needle)) return `Stitch sample "${needle}" visible on screen`;
+  }
+  return null;
+}
+
+export async function assertSeedMarkers(root: Locator): Promise<string | null> {
+  if (process.env.INVENTORY_SEED_ASSERT !== '1') return null;
+  const text = await root.innerText().catch(() => '');
+  const missing = INVENTORY_SEED_MARKERS.filter((m) => !text.includes(m));
+  if (missing.length) return `missing seed markers: ${missing.join(', ')}`;
+  return null;
+}
 
 /** Click each visible control; pass if network, modal/tab, or DOM changed. */
 export async function sweepVisibleButtons(
@@ -12,6 +54,7 @@ export async function sweepVisibleButtons(
   root: Locator,
 ): Promise<SweepFailure[]> {
   const failures: SweepFailure[] = [];
+  const stopTracking = trackInventoryResponses(page);
   const controls = root.locator('button:visible, [role="tab"]:visible');
   const count = await controls.count();
 
@@ -68,6 +111,15 @@ export async function sweepVisibleButtons(
         await page.waitForTimeout(200);
       }
     }
+  }
+
+  const badResponses = stopTracking();
+  for (const r of badResponses) {
+    failures.push({
+      screen,
+      label: 'inventory-api',
+      reason: `HTTP ${r.status} ${r.url.slice(0, 120)}`,
+    });
   }
 
   return failures;

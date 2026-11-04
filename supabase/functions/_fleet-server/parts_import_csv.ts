@@ -13,7 +13,16 @@ function normHeader(h: string): string {
   return h.trim().toLowerCase().replace(/\s+/g, "_");
 }
 
-export function parsePartsImportCsv(text: string): ParsedImportFile {
+/** Required header keys per import kind (mirrors part_import_template columns where required = true). */
+const REQUIRED_BY_KIND: Record<string, string[]> = {
+  area: ["vehicle", "part_type", "brand", "part_number", "match_type", "year_from", "year_to", "source_url"],
+  vehicle_oe: ["vehicle", "part_type", "oe_brand", "oe_number", "source_url"],
+  part_cross_ref: ["brand", "part_number", "source_url"],
+  platform_link: ["platform_a", "platform_b", "part_type", "scope", "source_url"],
+  car_specs: ["vehicle", "spec_key", "spec_value", "source_url"],
+};
+
+export function parsePartsImportCsv(text: string, importKind = "area"): ParsedImportFile {
   let body = text.replace(/^\uFEFF/, "");
   const headerErrors: ParsedImportFile["headerErrors"] = [];
   const delimiter = body.includes(";") && !body.includes(",") ? ";" : ",";
@@ -28,7 +37,7 @@ export function parsePartsImportCsv(text: string): ParsedImportFile {
       headerErrors.push({ code: "SCHEMA_INVALID", message: `Column "${h}" is not allowed` });
     }
   }
-  const required = ["vehicle", "part_type", "brand", "part_number", "match_type", "year_from", "year_to", "source_url"];
+  const required = REQUIRED_BY_KIND[importKind] ?? REQUIRED_BY_KIND.area;
   const aliases: Record<string, string> = {
     manufacturer: "brand",
     job: "part_type",

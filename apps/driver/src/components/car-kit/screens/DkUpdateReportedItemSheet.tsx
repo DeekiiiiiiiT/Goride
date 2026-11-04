@@ -1,5 +1,6 @@
 /** Driver update reported item — Stitch DK7 (docs/stitch/roam-driver-app/car-kit/update_reported_item_sheet). */
 import type { DriverReportRow } from '../../../services/driverInventoryApi';
+import { fleetPhoneTel } from '../carKitDisplay';
 import { useDriverReportUpdate, type ReportUpdateKind } from '../useDriverReportUpdate';
 
 const KIND_OPTIONS: {
@@ -37,16 +38,20 @@ function formatReportedDate(createdAt?: string) {
 
 export function DkUpdateReportedItemSheet({
   report,
+  fleetSupportPhone,
   offline,
   onClose,
   onSent,
 }: {
   report: DriverReportRow;
+  fleetSupportPhone?: string | null;
   offline?: boolean;
   onClose?: () => void;
   onSent?: () => void;
 }) {
   const flow = useDriverReportUpdate(report, onSent);
+  const supportPhone = fleetSupportPhone?.trim() || null;
+  const supportTel = fleetPhoneTel(supportPhone);
   const fixed = report.status === 'fixed' || flow.sent;
   const itemLabel = report.itemLabel ?? report.displayName ?? 'Kit item';
   const issueLabel = report.issue ?? 'Missing';
@@ -160,16 +165,20 @@ export function DkUpdateReportedItemSheet({
                       </div>
                     </div>
                     <div className="flex items-center justify-between gap-space-sm pt-space-xs">
+                      {supportPhone ? (
                       <span className="font-label-code text-label-code font-bold text-on-secondary">
-                        876-555-0100
+                        {supportPhone}
                       </span>
+                      ) : null}
+                      {supportTel ? (
                       <a
                         className="flex min-h-[44px] items-center justify-center gap-1.5 rounded-lg bg-surface-container-lowest px-space-md font-label-button text-sm font-bold text-secondary shadow-sm"
-                        href="tel:8765550100"
+                        href={supportTel}
                       >
                         <span className="material-symbols-outlined text-[18px]">call</span>
                         Call fleet now
                       </a>
+                      ) : null}
                     </div>
                   </div>
                 ) : null}

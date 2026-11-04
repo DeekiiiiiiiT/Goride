@@ -1,24 +1,24 @@
 # Unified Ledger Disk IO — Audit
 
-**Rev 18 · 2026-10-28 12:45 UTC · Project `csfllzzastacofsvcdsc` (Nano) · Fixed — two dated checks left**
+**Rev 21 · 2026-11-04 16:00 UTC · Project `csfllzzastacofsvcdsc` (Nano) · FIX LIVE — two dated checks left**
 
 ## Status
 
-Fixed and committed (`81a3ae5d`). Verified live at 12:44 UTC: **0 bytes** of temp written since 04:07 UTC (8.5 hours), `temp_files` flat at 423,223, `pg_stat_statements` at 237 entries, `pgss-daily-reset` scheduled, no restart. The `io_daily_temp_bytes()` reading still includes the old drain until its 24 h window rolls past 04:07 today.
+R14 (dashboard spilling ~20 MB per load) is fixed and verified live. `postgres` now runs with `work_mem = 32768`. The dashboard's function-list query, run through the same `postgres` login with no override, writes **0 bytes** to disk (was 20 MB). The week-calculator resume gate (409 above 200 MB) is in the deployed fleet-core (15:48 UTC).
 
 ## Left
 
 | ID | Action | When |
 |---|---|---|
-| R12 | Turn the week calculator back on (Fleet admin → Week calculator). | **29 Oct after 04:07 UTC**, if `select pg_size_pretty(private.io_daily_temp_bytes());` is under 200 MB. |
-| R13 | Stay on Nano. Move one size up only if the check fails. | **4 Nov**: 7-day average under 200 MB/day and Disk IO chart out of the red. |
+| R14-3 | `select pg_size_pretty(private.io_daily_temp_bytes());` is under 200 MB. The first reading with no pre-fix spill in its window is after the **16:07 UTC snapshot on 5 Nov**. | 5 Nov after 16:07 UTC |
+| R12 | Fleet admin → Week calculator → Resume (the API refuses until R14-3 passes). | After R14-3 |
+| R13 | Stay on Nano if the 7-day average of daily temp stays under 200 MB. | 11 Nov after 16:07 UTC |
 
-If the drain ever returns: `select count(*) from extensions.pg_stat_statements;` should stay in the hundreds, and `pgss-daily-reset` must still be in `cron.job`.
+**If it returns:** the newest `private.io_snapshots.top_statements` row names the query, and its `-- source:` tag names the caller. Check that role's `work_mem`.
 
 ## Rules
 
-1. API roles take unitless values only (`8MB` → `8mb` breaks every request).
-2. Every role setting, cron job and seed row lives in an active migration; check API logs within 60 s.
-3. The database adds up; the app asks for answers. No edge function sums raw ledger rows.
-4. Every ledger read passes org + date range to SQL. No `select *`, no OFFSET, no exact count unless it is on screen.
-5. Every growing log or stats store has a purge or reset job.
+1. Role settings are unitless (`8MB` breaks the API) and live in a migration whose file version matches prod; check the API within 60 s.
+2. Every role that runs queries has `work_mem` set, including `postgres` (32768).
+3. Ledger totals are computed in SQL; reads pass org + date range, with no `select *` and no OFFSET.
+4. Every growing log or stats store has a purge or reset job.

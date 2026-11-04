@@ -17,6 +17,7 @@ import {
 import { FEATURE_FLAGS, setFeatureFlag } from "./feature_flags.ts";
 import { findParts } from "./parts_finder.ts";
 import { readFindPartsCoverage, readPartTerm, readPartsBrowse, readSymptoms } from "./parts_catalog_read.ts";
+import { enrichCatalogMasterPart, enrichCatalogMasterSearch } from "./catalog_master_enrich.ts";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -270,7 +271,8 @@ export function registerCatalogRoutes(route: RouteApp, supabase: SupabaseClient)
         p_year: year,
       });
       if (error) throw error;
-      const payload = (data ?? { rows: [], total: 0, chips: {}, facets: {} }) as Record<string, unknown>;
+      let payload = (data ?? { rows: [], total: 0, chips: {}, facets: {} }) as Record<string, unknown>;
+      payload = await enrichCatalogMasterSearch(supabase, payload);
       const { data: areaFacets } = await supabase.rpc("admin_catalog_area_facets");
       if (areaFacets && payload.facets && typeof payload.facets === "object") {
         (payload.facets as Record<string, unknown>).areaCounts = areaFacets;
@@ -350,9 +352,10 @@ export function registerCatalogRoutes(route: RouteApp, supabase: SupabaseClient)
       if (!UUID_RE.test(partId)) return c.json({ error: "Choose a part" }, 400);
       const { data, error } = await supabase.rpc("admin_catalog_master_part", { p_part_id: partId });
       if (error) throw error;
-      const body = (data && typeof data === "object" ? data : {}) as { error?: string };
+      const body = (data && typeof data === "object" ? data : {}) as Record<string, unknown> & { error?: string };
       if (body.error) return c.json({ error: body.error }, 404);
-      return staffJson(c, data ?? {});
+      const enriched = await enrichCatalogMasterPart(supabase, body);
+      return staffJson(c, enriched);
     } catch (error) {
       return fail(c, error);
     }
@@ -891,6 +894,354 @@ export function registerCatalogRoutes(route: RouteApp, supabase: SupabaseClient)
       const { error } = await supabase.from("universal_part").delete().eq("id", body.id);
       if (error) throw error;
       return staffJson(c, { ok: true });
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
+  route.get("/make-server-37f42386/admin/catalog/engine-families", requireAuth(), async (c: Context) => {
+    const denied = assertPlatformStaffResponse(c);
+    if (denied) return denied;
+    try {
+      const q = (c.req.query("q") ?? "").trim();
+      const { data, error } = await supabase.rpc("list_self_serve_engine_families", { p_q: q, p_limit: 30 });
+      if (error) {
+        let query = supabase.from("engine_family").select("id, code, notes").order("code").limit(30);
+        if (q) query = query.ilike("code", `%${q}%`);
+        const fallback = await query;
+        if (fallback.error) throw fallback.error;
+        return staffJson(c, { items: fallback.data ?? [] });
+      }
+      return staffJson(c, { items: data ?? [] });
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
+  route.get("/make-server-37f42386/admin/catalog/engine-families/:id", requireAuth(), async (c: Context) => {
+    const denied = assertPlatformStaffResponse(c);
+    if (denied) return denied;
+    try {
+      const id = c.req.param("id");
+      if (!UUID_RE.test(id)) return c.json({ error: "Invalid engine" }, 400);
+      const { data, error } = await supabase.rpc("self_serve_engine_family_detail", { p_engine_family_id: id });
+      if (error) return c.json({ error: error.message }, 400);
+      if (!data) return c.json({ error: "Engine not found" }, 404);
+      return staffJson(c, data);
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
+  route.get("/make-server-37f42386/admin/catalog/part-types", requireAuth(), async (c: Context) => {
+    const denied = assertPlatformStaffResponse(c);
+    if (denied) return denied;
+    try {
+      const owner = hasPlatformOwnerAccess(c.get("rbacUser") as RbacUser | undefined);
+      const { data, error } = await supabase.rpc("list_self_serve_part_types", {
+        p_include_draft: owner,
+      });
+      if (error) return c.json({ error: error.message }, 400);
+      return staffJson(c, { types: data ?? [] });
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
+  route.get("/make-server-37f42386/admin/catalog/parts/lookup", requireAuth(), async (c: Context) => {
+    const denied = assertPlatformStaffResponse(c);
+    if (denied) return denied;
+    try {
+      const brand = (c.req.query("brand") ?? "").trim();
+      const number = (c.req.query("number") ?? "").trim();
+      if (!brand || !number) return c.json({ error: "Brand and number are required" }, 400);
+      const { data, error } = await supabase.rpc("self_serve_part_lookup", { p_brand: brand, p_number: number });
+      if (error) return c.json({ error: error.message }, 400);
+      return staffJson(c, data ?? { found: false });
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
+  route.get("/make-server-37f42386/admin/catalog/parts/add/preview", requireAuth(), async (c: Context) => {
+    const denied = assertPlatformStaffResponse(c);
+    if (denied) return denied;
+    try {
+      const vehicleIds = (c.req.query("vehicleIds") ?? "").split(",").filter((id) => UUID_RE.test(id));
+      let excludedVehicleIds: string[] = [];
+      const excludedRaw = c.req.query("excludedVehicleIds");
+      if (excludedRaw) {
+        try {
+          const parsed = JSON.parse(excludedRaw) as unknown;
+          if (Array.isArray(parsed)) {
+            excludedVehicleIds = parsed.filter((id): id is string => typeof id === "string" && UUID_RE.test(id));
+          }
+        } catch {
+          excludedVehicleIds = excludedRaw.split(",").filter((id) => UUID_RE.test(id));
+        }
+      }
+      const factoryRaw = c.req.query("factoryNumbers");
+      let factoryNumbers: unknown[] = [];
+      if (factoryRaw) {
+        try { factoryNumbers = JSON.parse(factoryRaw) as unknown[]; } catch { factoryNumbers = []; }
+      }
+      let listings: unknown[] = [];
+      const listingsRaw = c.req.query("listings");
+      if (listingsRaw) {
+        try { listings = JSON.parse(listingsRaw) as unknown[]; } catch { listings = []; }
+      }
+      const p_input = {
+        fitMode: c.req.query("fitMode"),
+        engineFamilyId: c.req.query("engineFamilyId"),
+        engineCode: c.req.query("engineCode"),
+        specKey: c.req.query("specKey"),
+        specValue: c.req.query("specValue"),
+        brand: c.req.query("brand"),
+        partNumber: c.req.query("partNumber"),
+        partTypeName: c.req.query("partTypeName"),
+        tradeTerm: c.req.query("tradeTerm"),
+        sourceType: c.req.query("sourceType"),
+        position: c.req.query("position"),
+        positionScheme: c.req.query("positionScheme"),
+        vehicleIds,
+        listings,
+        excludedVehicleIds,
+        factoryNumbers,
+      };
+      const { data, error } = await supabase.rpc("self_serve_part_add_preview", { p_input });
+      if (error) return c.json({ error: error.message }, 400);
+      return staffJson(c, data ?? {});
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
+  route.post("/make-server-37f42386/admin/catalog/parts/add", requireAuth(), async (c: Context) => {
+    const denied = assertPlatformStaffResponse(c);
+    if (denied) return denied;
+    try {
+      const body = await c.req.json() as Record<string, unknown>;
+      const actor = c.get("rbacUser") as { userId?: string; id?: string } | undefined;
+      const actorId = String(actor?.userId ?? actor?.id ?? "");
+      if (UUID_RE.test(actorId)) body.actorId = actorId;
+      const { data, error } = await supabase.rpc("save_self_serve_part", { p_input: body });
+      if (error) return c.json({ error: error.message }, 400);
+      const payload = (data ?? {}) as Record<string, unknown>;
+      const chassisInput = body.listings ? { listings: body.listings } : { vehicleIds: body.vehicleIds ?? [] };
+      const { data: chassisList, error: chassisErr } = await supabase.rpc("self_serve_save_chassis_list", { p_input: chassisInput });
+      if (!chassisErr && chassisList) payload.chassisList = chassisList;
+      return staffJson(c, payload);
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
+  route.get("/make-server-37f42386/admin/catalog/parts/recent", requireAuth(), async (c: Context) => {
+    const denied = assertPlatformStaffResponse(c);
+    if (denied) return denied;
+    try {
+      const limit = Math.min(50, Math.max(1, Number(c.req.query("limit") ?? 20) || 20));
+      const { data, error } = await supabase.rpc("self_serve_part_recent", { p_limit: limit });
+      if (error) return c.json({ error: error.message }, 400);
+      return staffJson(c, { items: data ?? [] });
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
+  route.post("/make-server-37f42386/admin/catalog/parts/undo", requireAuth(), async (c: Context) => {
+    const denied = assertPlatformStaffResponse(c);
+    if (denied) return denied;
+    try {
+      const body = await c.req.json() as { batchId?: string };
+      const batchId = String(body.batchId ?? "").trim();
+      if (!UUID_RE.test(batchId)) return c.json({ error: "Choose a save to undo" }, 400);
+      const actor = c.get("rbacUser") as { userId?: string; id?: string } | undefined;
+      const actorId = String(actor?.userId ?? actor?.id ?? "");
+      const { data, error } = await supabase.rpc("part_import_undo", { p_batch_id: batchId, p_actor: actorId || null });
+      if (error) return c.json({ error: error.message }, 400);
+      return staffJson(c, data ?? { ok: true });
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
+  route.post("/make-server-37f42386/admin/catalog/part-type-requests", requireAuth(), async (c: Context) => {
+    const denied = assertPlatformStaffResponse(c);
+    if (denied) return denied;
+    try {
+      const body = await c.req.json() as Record<string, unknown>;
+      const name = String(body.name ?? "").trim();
+      const reason = String(body.reason ?? "").trim();
+      if (!name || !reason) return c.json({ error: "Name and reason are required" }, 400);
+      const actor = c.get("rbacUser") as { userId?: string; id?: string } | undefined;
+      const actorId = String(actor?.userId ?? actor?.id ?? "");
+      const { data, error } = await supabase.from("part_type_request").insert({
+        name,
+        area: body.area ? String(body.area) : null,
+        example_number: body.exampleNumber ? String(body.exampleNumber) : null,
+        reason,
+        requester_id: UUID_RE.test(actorId) ? actorId : null,
+        status: "pending",
+      }).select("*").single();
+      if (error) throw error;
+      return staffJson(c, { request: data });
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
+  route.get("/make-server-37f42386/admin/catalog/part-type-requests", requireAuth(), async (c: Context) => {
+    const denied = assertPlatformStaffResponse(c);
+    if (denied) return denied;
+    try {
+      const status = (c.req.query("status") ?? "pending").trim();
+      const mine = (c.req.query("mine") ?? "").trim() === "1";
+      const actor = c.get("rbacUser") as { userId?: string; id?: string } | undefined;
+      const actorId = String(actor?.userId ?? actor?.id ?? "");
+      const owner = hasPlatformOwnerAccess(actor as RbacUser | undefined);
+      if (mine) {
+        if (!UUID_RE.test(actorId)) return staffJson(c, { items: [] });
+        const { data, error } = await supabase.from("part_type_request").select("*")
+          .eq("requester_id", actorId)
+          .eq("status", status)
+          .order("created_at", { ascending: false })
+          .limit(50);
+        if (error) throw error;
+        return staffJson(c, { items: data ?? [] });
+      }
+      if (!owner) return c.json({ error: "Owner only" }, 403);
+      const { data, error } = await supabase.from("part_type_request").select("*").eq("status", status).order("created_at", { ascending: false }).limit(100);
+      if (error) throw error;
+      return staffJson(c, { items: data ?? [] });
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
+  route.post("/make-server-37f42386/admin/catalog/part-type-requests/:id/decide", requireAuth(), async (c: Context) => {
+    const denied = assertPlatformStaffResponse(c);
+    if (denied) return denied;
+    if (!hasPlatformOwnerAccess(c.get("rbacUser") as RbacUser | undefined)) {
+      return c.json({ error: "Owner only" }, 403);
+    }
+    try {
+      const id = c.req.param("id");
+      if (!UUID_RE.test(id)) return c.json({ error: "Invalid request" }, 400);
+      const body = await c.req.json() as Record<string, unknown>;
+      const action = String(body.action ?? "").trim();
+      const actor = c.get("rbacUser") as { userId?: string; id?: string } | undefined;
+      const actorId = String(actor?.userId ?? actor?.id ?? "");
+      const { data, error } = await supabase.rpc("decide_part_type_request", {
+        p_request_id: id,
+        p_action: action,
+        p_actor: UUID_RE.test(actorId) ? actorId : null,
+        p_decline_reason: body.declineReason ? String(body.declineReason) : null,
+        p_new_type: body.newType ?? null,
+      });
+      if (error) return c.json({ error: error.message }, 400);
+      return staffJson(c, data ?? {});
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
+  route.post("/make-server-37f42386/admin/catalog/part-types", requireAuth(), async (c: Context) => {
+    const denied = assertPlatformStaffResponse(c);
+    if (denied) return denied;
+    if (!hasPlatformOwnerAccess(c.get("rbacUser") as RbacUser | undefined)) {
+      return c.json({ error: "Owner only" }, 403);
+    }
+    try {
+      const body = await c.req.json() as Record<string, unknown>;
+      const { data, error } = await supabase.rpc("upsert_self_serve_part_type", { p_input: body });
+      if (error) return c.json({ error: error.message }, 400);
+      return staffJson(c, data ?? {});
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
+  route.patch("/make-server-37f42386/admin/catalog/part-types/:id", requireAuth(), async (c: Context) => {
+    const denied = assertPlatformStaffResponse(c);
+    if (denied) return denied;
+    if (!hasPlatformOwnerAccess(c.get("rbacUser") as RbacUser | undefined)) {
+      return c.json({ error: "Owner only" }, 403);
+    }
+    try {
+      const id = c.req.param("id");
+      if (!UUID_RE.test(id)) return c.json({ error: "Invalid part type" }, 400);
+      const body = await c.req.json() as Record<string, unknown>;
+      body.id = id;
+      const { data, error } = await supabase.rpc("upsert_self_serve_part_type", { p_input: body });
+      if (error) return c.json({ error: error.message }, 400);
+      return staffJson(c, data ?? {});
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
+  route.get("/make-server-37f42386/admin/catalog/part-types/:id/top-brands", requireAuth(), async (c: Context) => {
+    const denied = assertPlatformStaffResponse(c);
+    if (denied) return denied;
+    try {
+      const id = c.req.param("id");
+      if (!UUID_RE.test(id)) return c.json({ error: "Invalid part type" }, 400);
+      const limit = Math.min(10, Math.max(1, Number(c.req.query("limit") ?? 4) || 4));
+      const { data, error } = await supabase.rpc("self_serve_top_brands", { p_part_type_id: id, p_limit: limit });
+      if (error) return c.json({ error: error.message }, 400);
+      return staffJson(c, { brands: data ?? [] });
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
+  route.get("/make-server-37f42386/admin/catalog/add-part/vehicles", requireAuth(), async (c: Context) => {
+    const denied = assertPlatformStaffResponse(c);
+    if (denied) return denied;
+    try {
+      const q = (c.req.query("q") ?? "").trim();
+      const make = (c.req.query("make") ?? "").trim();
+      const model = (c.req.query("model") ?? "").trim();
+      const chassis = (c.req.query("chassis") ?? "").trim();
+      const engine = (c.req.query("engine") ?? "").trim();
+      const year = Number(c.req.query("year") ?? 0);
+      const yearFrom = Number(c.req.query("yearFrom") ?? 0);
+      const yearTo = Number(c.req.query("yearTo") ?? 0);
+      let query = supabase
+        .from("vehicle_catalog")
+        .select("id, make, model, chassis_code, engine_code, production_start_year, production_end_year, version_name, platform_id, drivetrain")
+        .order("make")
+        .order("model")
+        .limit(80);
+      if (make) query = query.ilike("make", make);
+      if (model) query = query.ilike("model", model);
+      if (chassis) query = query.ilike("chassis_code", `%${chassis}%`);
+      if (engine) query = query.ilike("engine_code", `%${engine}%`);
+      if (q) {
+        query = query.or(`make.ilike.%${q}%,model.ilike.%${q}%,chassis_code.ilike.%${q}%,engine_code.ilike.%${q}%`);
+      }
+      const { data, error } = await query;
+      if (error) throw error;
+      let items = data ?? [];
+      const filterYear = (v: { production_start_year?: number | null; production_end_year?: number | null }, y: number) => {
+        const start = Number(v.production_start_year ?? 0);
+        const end = Number(v.production_end_year ?? 9999);
+        return y >= start && y <= end;
+      };
+      if (Number.isFinite(year) && year > 0) {
+        items = items.filter((v) => filterYear(v, year));
+      }
+      if (Number.isFinite(yearFrom) && yearFrom > 0) {
+        items = items.filter((v) => filterYear(v, yearFrom));
+      }
+      if (Number.isFinite(yearTo) && yearTo > 0) {
+        items = items.filter((v) => {
+          const start = Number(v.production_start_year ?? 0);
+          return yearTo >= start;
+        });
+      }
+      return staffJson(c, { items });
     } catch (error) {
       return fail(c, error);
     }

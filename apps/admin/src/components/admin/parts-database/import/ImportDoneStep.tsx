@@ -44,6 +44,8 @@ export function ImportDoneStep({
   const partsCreated = promoteResult?.partsCreated ?? Number(batch?.parts_created ?? 0);
   const fitsCreated = promoteResult?.fitsCreated ?? Number(batch?.fits_created ?? 0);
   const partsUpdated = promoteResult?.partsUpdated ?? Number(batch?.parts_updated ?? 0);
+  const matchesCreated = promoteResult?.matchesCreated;
+  const matchesNeedChecking = promoteResult?.matchesNeedChecking;
   const rowsError = Number(batch?.rows_error ?? 0);
   const rowsDuplicate = Number(batch?.rows_duplicate ?? 0);
   const importedRows = Number(batch?.rows_valid ?? 0) + Number(batch?.rows_labelled ?? 0);
@@ -101,6 +103,17 @@ export function ImportDoneStep({
               <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-primary-fixed/30 text-primary">+{fitsCreated} FITMENTS</span>
             </span>
           </li>
+          {matchesCreated != null ? (
+            <li className="flex flex-wrap items-center justify-between gap-2">
+              <span className="flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#0ea5e9]" />
+                Auto-match rows touched
+              </span>
+              <span className="font-mono text-sm">
+                {matchesCreated} matches created · {matchesNeedChecking ?? 0} need checking
+              </span>
+            </li>
+          ) : null}
           <li className="flex flex-wrap items-center justify-between gap-2">
             <span className="flex items-center gap-2">
               <span className="w-1.5 h-1.5 rounded-full bg-outline" />

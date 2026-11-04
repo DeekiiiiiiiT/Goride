@@ -10,11 +10,18 @@ import {
   strField,
 } from '../inventoryData';
 import { InventoryPagination } from '../InventoryPagination';
+import { InventoryPrimaryTabs } from '../InventoryPrimaryTabs';
+import { useAuth } from '../../auth/AuthContext';
 
 export function In10Movements() {
   const form = useIn10MovementsForm();
   const shell = useInventoryShell();
   const live = useInventoryLive(shell);
+  const { user } = useAuth();
+  const operatorLabel =
+    user?.user_metadata?.full_name?.trim() ||
+    user?.email?.split('@')[0] ||
+    'Operator';
   const vendorName = firstVendorName(live.vendors);
   const poNumber = firstOpenPoNumber(live.purchaseOrders);
   const movementCount = form.total || live.movementsTotal || live.movements.length;
@@ -27,6 +34,7 @@ export function In10Movements() {
   const selectedRef = selectedMovement
     ? strField(selectedMovement, 'ref_no', form.selectedMovementId ?? '—')
     : '—';
+  const reversalSku = selectedMovement ? strField(selectedMovement, 'sku', '—') : '—';
 
   const closeReversal = () => {
     form.setSelectedMovementId(null);
@@ -50,7 +58,7 @@ export function In10Movements() {
       </div>
       </div>
       <div className="flex items-center gap-space-sm font-label-code text-caption text-on-surface-variant">
-      <span>08:47 PM EST · America/Jamaica · JM (JMD) · DE · Deeki T · <strong className="text-on-surface font-semibold">platform_owner</strong></span>
+      <span>08:47 PM EST · America/Jamaica · JM (JMD) · {operatorLabel}</span>
       </div>
       </div>
 
@@ -90,23 +98,7 @@ export function In10Movements() {
       </div>
       </div>
 
-      <div className="flex items-center gap-space-xs overflow-x-auto py-1">
-      <a className="px-space-md py-space-sm rounded font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-all" href="#">Overview</a>
-      <a className="px-space-md py-space-sm rounded font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-all" href="#">Stock</a>
-      <a className="px-space-md py-space-sm rounded font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-all" href="#">Vehicle kits</a>
-      <a className="px-space-md py-space-sm rounded font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-all" href="#">Assets</a>
-
-      <a className="px-space-md py-space-sm rounded font-body-sm text-body-sm bg-primary text-on-primary font-semibold shadow-sm flex items-center gap-space-xs" href="#">
-      <span className="material-symbols-outlined text-[15px]">swap_horiz</span>
-              Movements
-            </a>
-      <a className="px-space-md py-space-sm rounded font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-all" href="#">Purchasing</a>
-      <a className="px-space-md py-space-sm rounded font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-all" href="#">Counts</a>
-      <a className="px-space-md py-space-sm rounded font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-all flex items-center gap-space-xs" href="#">
-      <span>Alerts</span>
-      <span className="bg-error-container text-on-error-container font-label-code text-[11px] px-1.5 py-0.2 rounded-full font-bold">5</span>
-      </a>
-      </div>
+      <InventoryPrimaryTabs variant="ledger" />
 
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-space-md bg-surface-container-lowest p-space-lg rounded-xl shadow-sm">
       <div className="flex items-start gap-space-md max-w-4xl">
@@ -285,7 +277,7 @@ export function In10Movements() {
       <div className="font-caption text-caption uppercase text-on-surface-variant font-semibold tracking-wider mb-1">State Modification Preview</div>
       <div className="font-label-code text-caption text-on-surface flex items-center justify-between">
       <span>Main store — Kingston</span>
-      <span className="font-bold text-on-surface">ACC-PHM-01</span>
+      <span className="font-bold text-on-surface">{reversalSku}</span>
       </div>
       <div className="flex items-center gap-2 mt-1 font-label-price text-label-price">
       <span className="text-on-surface">6 in stock</span>

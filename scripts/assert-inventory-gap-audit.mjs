@@ -29,6 +29,9 @@ const in2StockTableFile = join(
 );
 const fleetDir = join(root, 'apps', 'fleet');
 const driverCarKitDir = join(root, 'apps', 'driver', 'src', 'components', 'car-kit');
+const myVehicleFile = join(root, 'apps', 'driver', 'src', 'components', 'independent', 'MyVehicle.tsx');
+const carKitPageFile = join(driverCarKitDir, 'CarKitPage.tsx');
+const driverViteConfig = join(root, 'apps', 'driver', 'vite.config.ts');
 
 const forbiddenDemoStrings = [
   'Demo button states',
@@ -53,6 +56,72 @@ const forbiddenSamples = [
   'PHM-PRO-V2',
   'DEV-70M',
 ];
+
+/** Rev 32 Phase 4 — Stitch export literals must not ship in live-bound UI. */
+const stitchDenyList = [
+  'ACC-PHM-01',
+  'ELC-DCM-01',
+  'TYR-SPR-01',
+  'TLS-JCK-01',
+  'Deeki T',
+  'Kingston Gate',
+  '98.4%',
+  '64,820 km',
+  '•••• 2118',
+  'PO #JAM-7721',
+];
+
+/** Rev 33 — driver car-kit Stitch literals (scoped to apps/driver/.../car-kit only). */
+const driverCarKitDenyList = [
+  'dashcam_proof.jpg',
+  'Toyota Probox',
+  'Honda Fit 2018',
+  '876-555-0100',
+  'Prior Open Reports (3)',
+  'Prior open reports (3)',
+  'v2.4-JA',
+  '**4092',
+  'Today at 07:15 AM',
+  '1.4 MB',
+  'Compact Fleet · White',
+  'Report a problem · Dash camera',
+];
+
+function scanR33DriverCarKitDeny(file, text, label) {
+  if (!/apps[/\\]driver[/\\]src[/\\]components[/\\]car-kit[/\\]/i.test(file)) return;
+  if (!/\.tsx$/i.test(file)) return;
+  const stripped = stripBlockComments(text);
+  for (const needle of driverCarKitDenyList) {
+    if (stripped.includes(needle)) {
+      fail(label, file, `Driver car-kit deny-list sample "${needle}" (R33-06)`);
+    }
+  }
+}
+
+function scanR32Rev32Rules(file, text, label) {
+  if (!/\.tsx$/i.test(file)) return;
+  const stripped = stripBlockComments(text);
+  for (const needle of stitchDenyList) {
+    if (stripped.includes(needle)) {
+      fail(label, file, `Stitch deny-list sample "${needle}" (R32-03)`);
+    }
+  }
+  if (stripped.includes("'line-stub'") || stripped.includes('"line-stub"')) {
+    fail(label, file, 'line-stub placeholder (R32-04)');
+  }
+  if (/\bonClick=\{[^}]*\[[0-9]+\]/.test(stripped)) {
+    fail(label, file, 'onClick uses [0] index (R32-04)');
+  }
+  if (/\bdisabled=""|\bdisabled=\{""\}/.test(stripped)) {
+    fail(label, file, 'bare disabled="" (R32-05)');
+  }
+  if (/<button\b[^>]*\bdisabled(?!=\{)/i.test(stripped.replace(/\bdisabled=\{/g, ''))) {
+    const badDisabled = /<button\b[^>]*\sdisabled\s/i;
+    if (badDisabled.test(stripped)) {
+      fail(label, file, 'disabled without expression (R32-05)');
+    }
+  }
+}
 
 function walkFiles(dir) {
   const out = [];
@@ -192,6 +261,8 @@ function scanDir(dir, label) {
     scanR22UiRules(file, text, label);
     scanR24Rules(file, text, label);
     scanR26EmptyHandlers(file, text, label);
+    scanR32Rev32Rules(file, text, label);
+    scanR33DriverCarKitDeny(file, text, label);
   }
 }
 
@@ -204,6 +275,7 @@ function scanFile(file, label) {
   scanR22UiRules(file, text, label);
   scanR24Rules(file, text, label);
   scanR26EmptyHandlers(file, text, label);
+  scanR32Rev32Rules(file, text, label);
 }
 
 scanDir(gapDir, 'gap');
@@ -282,6 +354,32 @@ for (const file of walkFiles(fleetDir)) {
     fail('fleet', file, 'GapActionDock');
   }
 }
+
+/** Rev 36 — driver car-kit audit closure gates (R35-01…03). */
+function scanR35DriverCarKitAudit() {
+  const viteText = readFileSync(driverViteConfig, 'utf8');
+  if (!/dedupe:\s*\[[^\]]*['"]@tanstack\/react-query['"]/.test(viteText)) {
+    fail('driver-vite', driverViteConfig, 'missing resolve.dedupe for @tanstack/react-query (R35-01)');
+  }
+
+  const myVehicleText = readFileSync(myVehicleFile, 'utf8');
+  if (!/No vehicle on file[\s\S]*?\{carKitButton\}/.test(myVehicleText)) {
+    fail('my-vehicle', myVehicleFile, 'empty state must render carKitButton (R35-02)');
+  }
+  if (!myVehicleText.includes('const carKitButton')) {
+    fail('my-vehicle', myVehicleFile, 'expected shared carKitButton entry CTA (R35-02)');
+  }
+
+  const carKitPageText = readFileSync(carKitPageFile, 'utf8');
+  if (
+    !/className="driver-car-kit-stitch sticky top-0/.test(carKitPageText) &&
+    !/className="[^"]*driver-car-kit-stitch[^"]*sticky top-0/.test(carKitPageText)
+  ) {
+    fail('car-kit-page', carKitPageFile, 'sticky top bar must include driver-car-kit-stitch (R35-03)');
+  }
+}
+
+scanR35DriverCarKitAudit();
 
 if (failed) process.exit(1);
 console.log('OK — inventory audit checks passed.');

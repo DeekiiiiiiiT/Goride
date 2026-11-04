@@ -48,6 +48,25 @@ describe("buildFp4ViewModel", () => {
     expect(fp4PageTitle("None yet")).toBe("Which part?");
   });
 
+  it("diagram badge uses axle position for left/right labels", () => {
+    const vm = buildFp4ViewModel({
+      componentName: "Brake pads",
+      selectedAxle: "front",
+      selectedSide: "left",
+    });
+    expect(vm.diagramBadge).toBe("FRONT AXLE · FRONT LEFT");
+  });
+
+  it("side step labels include axle position for left and right", () => {
+    const vm = buildFp4ViewModel({
+      componentName: "Brake pads",
+      selectedAxle: "front",
+      selectedSide: "left",
+    });
+    expect(vm.sideOptions.find((o) => o.id === "left")?.label).toBe("Front left");
+    expect(vm.sideOptions.find((o) => o.id === "right")?.label).toBe("Front right");
+  });
+
   it("diagram badge lists front and rear when both axles are selected", () => {
     const vm = buildFp4ViewModel({
       componentName: "Brake pads",

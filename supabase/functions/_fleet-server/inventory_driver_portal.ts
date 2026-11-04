@@ -35,6 +35,34 @@ function mapItemStatus(lineStatus: string): "present" | "missing" | "linked" | "
   return "missing";
 }
 
+async function loadFleetSupportPhone(org: string): Promise<string | null> {
+  const { data } = await db()
+    .from("fleet_inv_settings")
+    .select("fleet_support_phone")
+    .eq("organization_id", org)
+    .maybeSingle();
+  const phone = data?.fleet_support_phone ? String(data.fleet_support_phone).trim() : "";
+  return phone || null;
+}
+
+function formatKitVersion(version: number | null | undefined, revisionHash: string | null | undefined): string | null {
+  if (version != null && Number.isFinite(Number(version))) {
+    return `v${version}`;
+  }
+  if (revisionHash?.trim()) return revisionHash.trim();
+  return null;
+}
+
+async function loadOpenReportsByVehicle(org: string, vehicleId: string) {
+  const { data } = await db()
+    .from("fleet_inv_driver_report")
+    .select("id, item_id, kit_line_id, created_at, fleet_reply, issue, note")
+    .eq("organization_id", org)
+    .eq("vehicle_id", vehicleId)
+    .in("status", ["sent", "seen"]);
+  return data ?? [];
+}
+
 async function nextReportNo(org: string): Promise<string> {
   const { data } = await db()
     .from("fleet_inv_driver_report")
@@ -61,6 +89,8 @@ export async function buildDriverCarKitPayload(
   });
 
   const resolvedId = assignment.vehicleId;
+  const fleetSupportPhone = await loadFleetSupportPhone(org);
+
   if (!resolvedId) {
     return {
       stub: false,
@@ -70,21 +100,44 @@ export async function buildDriverCarKitPayload(
       items: [] as Array<Record<string, unknown>>,
       openReportCount: 0,
       lastCheckInAt: null,
+      fleetSupportPhone,
       state: "no_vehicle" as const,
     };
   }
 
   const { data: vehicle } = await db()
     .from("fleet_vehicles")
-    .select("id, license_plate, make, model, year, odometer, fuel_level")
+    .select("id, license_plate, make, model, year, odometer, fuel_level, color, vin")
     .eq("organization_id", org)
     .eq("id", resolvedId)
     .maybeSingle();
 
   const plate = vehicle?.license_plate ? String(vehicle.license_plate) : resolvedId;
-  const vehicleLabel = vehicle?.make
+  const vehicleMakeModel = vehicle?.make
     ? `${vehicle.make} ${vehicle.model ?? ""}`.trim() + (vehicle.year ? ` ${vehicle.year}` : "")
-    : plate;
+    : null;
+  const vinRaw = vehicle?.vin ? String(vehicle.vin).replace(/\s/g, "") : "";
+  const vinLast4 = vinRaw.length >= 4 ? vinRaw.slice(-4) : null;
+  const vehicleColor = vehicle?.color ? String(vehicle.color) : null;
+
+  const { data: vkMeta } = await db()
+    .from("fleet_inv_vehicle_kit")
+    .select("last_inspected_at, updated_at, version_id")
+    .eq("organization_id", org)
+    .eq("vehicle_id", resolvedId)
+    .maybeSingle();
+
+  let kitVersionLabel: string | null = null;
+  let lastSyncedAt: string | null = vkMeta?.updated_at ?? null;
+  if (vkMeta?.version_id) {
+    const { data: ver } = await db()
+      .from("fleet_inv_kit_template_version")
+      .select("version, revision_hash")
+      .eq("organization_id", org)
+      .eq("id", vkMeta.version_id)
+      .maybeSingle();
+    kitVersionLabel = formatKitVersion(ver?.version as number | undefined, ver?.revision_hash as string | undefined);
+  }
 
   const { data: compliance, error: compErr } = await db()
     .from("fleet_inv_v_kit_compliance")
@@ -100,12 +153,17 @@ export async function buildDriverCarKitPayload(
       organizationId: org,
       vehicleId: resolvedId,
       vehicleLabel: plate,
-      vehicleMakeModel: vehicleLabel,
+      vehicleMakeModel: vehicleMakeModel ?? plate,
+      vehicleColor,
+      vinLast4,
       odometerKm: vehicle?.odometer ?? null,
       fuelLevelPct: vehicle?.fuel_level ?? null,
       items: [],
       openReportCount: 0,
-      lastCheckInAt: null,
+      lastCheckInAt: vkMeta?.last_inspected_at ?? null,
+      lastSyncedAt,
+      kitVersionLabel,
+      fleetSupportPhone,
       state: "no_kit" as const,
     };
   }
@@ -123,44 +181,67 @@ export async function buildDriverCarKitPayload(
     }
   }
 
+  const openReports = await loadOpenReportsByVehicle(org, resolvedId);
+  const reportByLine = new Map<string, (typeof openReports)[0]>();
+  const reportByItem = new Map<string, (typeof openReports)[0]>();
+  for (const rep of openReports) {
+    if (rep.kit_line_id) reportByLine.set(String(rep.kit_line_id), rep);
+    if (rep.item_id) reportByItem.set(String(rep.item_id), rep);
+  }
+
   const items = compliance.map((row) => {
     const lineType = String(row.line_type ?? "item");
+    const lineId = String(row.kit_line_id);
+    const itemId = row.item_id ? String(row.item_id) : null;
     const name = row.item_id
       ? names.get(String(row.item_id)) ?? "Kit item"
       : LINKED_LABELS[lineType] ?? "Linked item";
+    let status = mapItemStatus(String(row.line_status));
+    let reportedAt: string | null = null;
+    let statusHint: string | null = null;
+    let reportId: string | null = null;
+    const openRep = reportByLine.get(lineId) ?? (itemId ? reportByItem.get(itemId) : undefined);
+    if (openRep && status !== "linked") {
+      status = "reported";
+      reportedAt = openRep.created_at ? String(openRep.created_at) : null;
+      statusHint = openRep.fleet_reply ? String(openRep.fleet_reply) : null;
+      reportId = openRep.id ? String(openRep.id) : null;
+    }
     return {
-      id: String(row.kit_line_id),
+      id: lineId,
       name,
-      status: mapItemStatus(String(row.line_status)),
-      locationHint: lineType === "linked_fuel_card" ? "PetroJam fleet card" : undefined,
+      status,
+      reportedAt,
+      statusHint,
+      reportId,
+      locationHint:
+        lineType === "linked_fuel_card"
+          ? "PetroJam fleet card"
+          : lineType === "linked_toll_tag"
+            ? "Managed by fleet"
+            : undefined,
     };
   });
 
-  const { count: openReportCount } = await db()
-    .from("fleet_inv_driver_report")
-    .select("*", { count: "exact", head: true })
-    .eq("organization_id", org)
-    .eq("vehicle_id", resolvedId)
-    .in("status", ["sent", "seen"]);
-
-  const { data: vk } = await db()
-    .from("fleet_inv_vehicle_kit")
-    .select("last_inspected_at")
-    .eq("organization_id", org)
-    .eq("vehicle_id", resolvedId)
-    .maybeSingle();
+  const openReportCount = openReports.length;
 
   return {
     stub: false,
     organizationId: org,
     vehicleId: resolvedId,
     vehicleLabel: plate,
-    vehicleMakeModel: vehicleLabel,
+    vehicleMakeModel: vehicleMakeModel ?? plate,
+    vehicleColor,
+    vinLast4,
     odometerKm: vehicle?.odometer ?? null,
     fuelLevelPct: vehicle?.fuel_level ?? null,
     items,
-    openReportCount: openReportCount ?? 0,
-    lastCheckInAt: vk?.last_inspected_at ?? null,
+    extras: [],
+    openReportCount,
+    lastCheckInAt: vkMeta?.last_inspected_at ?? null,
+    lastSyncedAt,
+    kitVersionLabel,
+    fleetSupportPhone,
     state: "ready" as const,
   };
 }
@@ -196,18 +277,37 @@ export async function handleDriverReportsGet(
 
   if (error) return c.json({ error: error.message }, 500);
 
-  const items = (data ?? []).map((r) => ({
-    id: r.id,
-    reportNo: r.report_no,
-    issue: r.issue,
-    note: r.note,
-    status: r.status,
-    fleetReply: r.fleet_reply,
-    seenAt: r.seen_at,
-    fixedAt: r.fixed_at,
-    createdAt: r.created_at,
-    photoPaths: r.photo_paths,
-  }));
+  const itemIds = [...new Set((data ?? []).map((r) => r.item_id).filter(Boolean))] as string[];
+  const itemNames = new Map<string, string>();
+  if (itemIds.length) {
+    const { data: itemRows } = await db()
+      .from("fleet_inv_item")
+      .select("id, name")
+      .eq("organization_id", org)
+      .in("id", itemIds);
+    for (const row of itemRows ?? []) {
+      itemNames.set(String(row.id), String(row.name));
+    }
+  }
+
+  const items = (data ?? []).map((r) => {
+    const fromItem = r.item_id ? itemNames.get(String(r.item_id)) : undefined;
+    const itemLabel = fromItem ?? (r.note && String(r.note).trim() ? String(r.note).trim() : "Kit item");
+    return {
+      id: r.id,
+      reportNo: r.report_no,
+      issue: r.issue,
+      note: r.note,
+      status: r.status,
+      fleetReply: r.fleet_reply,
+      seenAt: r.seen_at,
+      fixedAt: r.fixed_at,
+      createdAt: r.created_at,
+      photoPaths: r.photo_paths,
+      itemLabel,
+      displayName: itemLabel,
+    };
+  });
 
   const nextCursor = items.length === limit ? String(offset + limit) : null;
   return c.json({ items, nextCursor, limit, offset, stub: false, organizationId: org });
@@ -238,14 +338,48 @@ export async function handleDriverReportPost(c: InvCtx, org: string, idem: strin
   const itemLabel = itemNames[0] ?? "Kit item";
   const reportNo = await nextReportNo(org);
 
+  let resolvedItemId: string | null = null;
+  let resolvedKitLineId: string | null = null;
+  if (itemLabel && itemLabel !== "Kit item") {
+    const { data: compliance } = await db()
+      .from("fleet_inv_v_kit_compliance")
+      .select("kit_line_id, item_id")
+      .eq("organization_id", org)
+      .eq("vehicle_id", assignment.vehicleId);
+    const compItemIds = [...new Set((compliance ?? []).map((r) => r.item_id).filter(Boolean))] as string[];
+    const nameById = new Map<string, string>();
+    if (compItemIds.length) {
+      const { data: itemRows } = await db()
+        .from("fleet_inv_item")
+        .select("id, name")
+        .eq("organization_id", org)
+        .in("id", compItemIds);
+      for (const row of itemRows ?? []) {
+        nameById.set(String(row.id), String(row.name));
+      }
+    }
+    for (const row of compliance ?? []) {
+      if (!row.item_id) continue;
+      const nm = nameById.get(String(row.item_id));
+      if (nm && nm.toLowerCase() === itemLabel.toLowerCase()) {
+        resolvedItemId = String(row.item_id);
+        resolvedKitLineId = String(row.kit_line_id);
+        break;
+      }
+    }
+  }
+
+  const noteText = body.notes != null ? String(body.notes).trim() : "";
   const { data: inserted, error } = await db()
     .from("fleet_inv_driver_report")
     .insert({
       organization_id: org,
       report_no: reportNo,
       vehicle_id: assignment.vehicleId,
+      kit_line_id: resolvedKitLineId,
+      item_id: resolvedItemId,
       issue: mapIssue(body.issueType ?? body.issue ?? itemLabel),
-      note: String(body.notes ?? body.note ?? itemLabel),
+      note: noteText || itemLabel,
       photo_paths: Array.isArray(body.photoUrls) ? body.photoUrls.map(String) : [],
       client_key: idem,
       status: "sent",

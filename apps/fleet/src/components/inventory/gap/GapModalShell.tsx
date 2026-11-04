@@ -10,7 +10,7 @@ export function GapModalShell({
   ariaLabel?: string;
 }) {
   return (
-    <div className="fixed inset-0 z-[60] flex items-end md:items-center justify-center bg-black/40 p-0 md:p-4">
+    <div className="fixed inset-0 z-[100] flex items-end md:items-center justify-center bg-black/40 p-0 md:p-4">
       <div
         role="dialog"
         aria-label={ariaLabel ?? 'Inventory'}

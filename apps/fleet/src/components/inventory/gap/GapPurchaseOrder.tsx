@@ -347,7 +347,7 @@ export function GapPurchaseOrder(p: { poId?: string | null; onClose?: () => void
                             {form.poTotalLabel}
                           </td>
         <td className="py-space-md px-space-md text-center">
-        <button type="button" className="text-on-surface-variant hover:text-error transition-colors p-1 rounded hover:bg-surface-container" onClick={() => { const row = form.extraCosts[0]; if (row) form.removeExtraCost(row.key); }}>
+        <button type="button" className="text-on-surface-variant hover:text-error transition-colors p-1 rounded hover:bg-surface-container" onClick={() => { const row = form.extraCosts.find((c) => c.kind === 'duty'); if (row) form.removeExtraCost(row.key); }}>
         <span className="material-symbols-outlined text-[18px]">close</span>
         </button>
         </td>

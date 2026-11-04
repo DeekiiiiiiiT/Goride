@@ -26,7 +26,7 @@ export function In7KitTemplateEditor() {
       <div className="flex items-center gap-space-md">
       <div className="flex items-center gap-space-xs bg-surface-container px-space-md py-1.5 rounded-lg">
       <span className="material-symbols-outlined text-[16px] text-secondary">verified_user</span>
-      <span className="font-label-code text-body-sm font-semibold text-on-surface">Deeki T</span>
+      <span className="font-label-code text-body-sm font-semibold text-on-surface">{form.editorAuthorLabel}</span>
       <span className="font-caption text-caption text-secondary uppercase tracking-tight">(platform_owner)</span>
       </div>
       <button type="button" className="bg-primary text-on-primary font-body-sm px-space-md py-1.5 rounded-lg flex items-center gap-space-xs shadow-sm hover:opacity-90 transition-opacity" onClick={() => form.newTemplate()}>
@@ -173,331 +173,47 @@ export function In7KitTemplateEditor() {
       </tr>
       </thead>
       <tbody className="divide-y divide-surface-container">
-
-      <tr className="hover:bg-surface-container-low/50 transition-colors">
+      {form.lineEditorRows.length === 0 ? (
+      <tr><td colSpan={6} className="py-space-xl text-center text-on-surface-variant font-body-sm">No equipment lines on this template yet.</td></tr>
+      ) : (
+      form.lineEditorRows.map((line) => (
+      <tr key={line.key} className="hover:bg-surface-container-low/50 transition-colors">
       <td className="py-3 px-3 text-center cursor-grab text-secondary hover:text-on-surface">
       <span className="material-symbols-outlined text-[18px]">drag_indicator</span>
       </td>
       <td className="py-3 px-4">
       <div className="flex items-center gap-space-sm">
       <div className="w-7 h-7 rounded bg-surface-container flex items-center justify-center text-on-surface">
-      <span className="material-symbols-outlined text-[15px]">tire_repair</span>
+      <span className="material-symbols-outlined text-[15px]">inventory_2</span>
       </div>
       <div>
-      <div className="font-body-sm font-semibold text-on-surface">Spare tyre</div>
-      <div className="font-label-code text-caption text-secondary">TYR-SPR-01</div>
+      <div className="font-body-sm font-semibold text-on-surface">{line.name}</div>
+      <div className="font-label-code text-caption text-secondary">{line.sku}</div>
       </div>
       </div>
       </td>
       <td className="py-3 px-3 text-center">
-      <span className="font-label-code text-body-sm font-semibold text-on-surface">1 ea</span>
+      <span className="font-label-code text-body-sm font-semibold text-on-surface">{line.qtyLabel}</span>
       </td>
       <td className="py-3 px-4">
-      <span className="inline-flex items-center px-2 py-0.5 rounded text-caption font-bold bg-primary text-on-primary">
-                              Required
+      <span className={`inline-flex items-center px-2 py-0.5 rounded text-caption font-bold ${line.required ? 'bg-primary text-on-primary' : 'bg-surface-container text-secondary font-medium'}`}>
+                              {line.required ? 'Required' : 'Optional'}
                             </span>
       </td>
       <td className="py-3 px-4">
       <div className="flex items-center gap-1.5 text-on-surface">
       <span className="material-symbols-outlined text-[15px] text-secondary">pin_drop</span>
-      <span className="font-body-sm">Boot wheel well</span>
+      <span className="font-body-sm">{line.category}</span>
       </div>
       </td>
       <td className="py-3 px-3 text-center">
-      <button type="button" className="text-secondary hover:text-error transition-colors p-1 rounded" onClick={() => form.lines[0] && form.deleteLine(form.lines[0].key)}>
+      <button type="button" className="text-secondary hover:text-error transition-colors p-1 rounded" onClick={() => form.deleteLine(line.key)}>
       <span className="material-symbols-outlined text-[18px]">delete</span>
       </button>
       </td>
       </tr>
-
-      <tr className="hover:bg-surface-container-low/50 transition-colors">
-      <td className="py-3 px-3 text-center cursor-grab text-secondary hover:text-on-surface">
-      <span className="material-symbols-outlined text-[18px]">drag_indicator</span>
-      </td>
-      <td className="py-3 px-4">
-      <div className="flex items-center gap-space-sm">
-      <div className="w-7 h-7 rounded bg-surface-container flex items-center justify-center text-on-surface">
-      <span className="material-symbols-outlined text-[15px]">build</span>
-      </div>
-      <div>
-      <div className="font-body-sm font-semibold text-on-surface">Car jack</div>
-      <div className="font-label-code text-caption text-secondary">TLS-JCK-01</div>
-      </div>
-      </div>
-      </td>
-      <td className="py-3 px-3 text-center">
-      <span className="font-label-code text-body-sm font-semibold text-on-surface">1 ea</span>
-      </td>
-      <td className="py-3 px-4">
-      <span className="inline-flex items-center px-2 py-0.5 rounded text-caption font-bold bg-primary text-on-primary">
-                              Required
-                            </span>
-      </td>
-      <td className="py-3 px-4">
-      <div className="flex items-center gap-1.5 text-on-surface">
-      <span className="material-symbols-outlined text-[15px] text-secondary">pin_drop</span>
-      <span className="font-body-sm">Boot tool compartment</span>
-      </div>
-      </td>
-      <td className="py-3 px-3 text-center">
-      <button type="button" className="text-secondary hover:text-error transition-colors p-1 rounded" onClick={() => form.lines[1] && form.deleteLine(form.lines[1].key)}>
-      <span className="material-symbols-outlined text-[18px]">delete</span>
-      </button>
-      </td>
-      </tr>
-
-      <tr className="hover:bg-surface-container-low/50 transition-colors">
-      <td className="py-3 px-3 text-center cursor-grab text-secondary hover:text-on-surface">
-      <span className="material-symbols-outlined text-[18px]">drag_indicator</span>
-      </td>
-      <td className="py-3 px-4">
-      <div className="flex items-center gap-space-sm">
-      <div className="w-7 h-7 rounded bg-surface-container flex items-center justify-center text-on-surface">
-      <span className="material-symbols-outlined text-[15px]">home_repair_service</span>
-      </div>
-      <div>
-      <div className="font-body-sm font-semibold text-on-surface">Lug wrench</div>
-      <div className="font-label-code text-caption text-secondary">TLS-WRN-01</div>
-      </div>
-      </div>
-      </td>
-      <td className="py-3 px-3 text-center">
-      <span className="font-label-code text-body-sm font-semibold text-on-surface">1 ea</span>
-      </td>
-      <td className="py-3 px-4">
-      <span className="inline-flex items-center px-2 py-0.5 rounded text-caption font-bold bg-primary text-on-primary">
-                              Required
-                            </span>
-      </td>
-      <td className="py-3 px-4">
-      <div className="flex items-center gap-1.5 text-on-surface">
-      <span className="material-symbols-outlined text-[15px] text-secondary">pin_drop</span>
-      <span className="font-body-sm">Boot tool compartment</span>
-      </div>
-      </td>
-      <td className="py-3 px-3 text-center">
-      <button type="button" className="text-secondary hover:text-error transition-colors p-1 rounded" onClick={() => form.lines[2] && form.deleteLine(form.lines[2].key)}>
-      <span className="material-symbols-outlined text-[18px]">delete</span>
-      </button>
-      </td>
-      </tr>
-
-      <tr className="hover:bg-surface-container-low/50 transition-colors">
-      <td className="py-3 px-3 text-center cursor-grab text-secondary hover:text-on-surface">
-      <span className="material-symbols-outlined text-[18px]">drag_indicator</span>
-      </td>
-      <td className="py-3 px-4">
-      <div className="flex items-center gap-space-sm">
-      <div className="w-7 h-7 rounded bg-surface-container flex items-center justify-center text-on-surface">
-      <span className="material-symbols-outlined text-[15px]">mode_fan</span>
-      </div>
-      <div>
-      <div className="font-body-sm font-semibold text-on-surface">Tyre pump</div>
-      <div className="font-label-code text-caption text-secondary">TLS-PMP-01</div>
-      </div>
-      </div>
-      </td>
-      <td className="py-3 px-3 text-center">
-      <span className="font-label-code text-body-sm font-semibold text-on-surface">1 ea</span>
-      </td>
-      <td className="py-3 px-4">
-      <span className="inline-flex items-center px-2 py-0.5 rounded text-caption font-bold bg-primary text-on-primary">
-                              Required
-                            </span>
-      </td>
-      <td className="py-3 px-4">
-      <div className="flex items-center gap-1.5 text-on-surface">
-      <span className="material-symbols-outlined text-[15px] text-secondary">pin_drop</span>
-      <span className="font-body-sm">Boot side netting</span>
-      </div>
-      </td>
-      <td className="py-3 px-3 text-center">
-      <button type="button" className="text-secondary hover:text-error transition-colors p-1 rounded" onClick={() => form.lines[3] && form.deleteLine(form.lines[3].key)}>
-      <span className="material-symbols-outlined text-[18px]">delete</span>
-      </button>
-      </td>
-      </tr>
-
-      <tr className="hover:bg-surface-container-low/50 transition-colors">
-      <td className="py-3 px-3 text-center cursor-grab text-secondary hover:text-on-surface">
-      <span className="material-symbols-outlined text-[18px]">drag_indicator</span>
-      </td>
-      <td className="py-3 px-4">
-      <div className="flex items-center gap-space-sm">
-      <div className="w-7 h-7 rounded bg-surface-container flex items-center justify-center text-on-surface">
-      <span className="material-symbols-outlined text-[15px]">smartphone</span>
-      </div>
-      <div>
-      <div className="font-body-sm font-semibold text-on-surface">Phone Holder Mount</div>
-      <div className="font-label-code text-caption text-secondary">ACC-PHM-01</div>
-      </div>
-      </div>
-      </td>
-      <td className="py-3 px-3 text-center">
-      <span className="font-label-code text-body-sm font-semibold text-on-surface">1 ea</span>
-      </td>
-      <td className="py-3 px-4">
-      <span className="inline-flex items-center px-2 py-0.5 rounded text-caption font-bold bg-primary text-on-primary">
-                              Required
-                            </span>
-      </td>
-      <td className="py-3 px-4">
-      <div className="flex items-center gap-1.5 text-on-surface">
-      <span className="material-symbols-outlined text-[15px] text-secondary">pin_drop</span>
-      <span className="font-body-sm">Dashboard</span>
-      </div>
-      </td>
-      <td className="py-3 px-3 text-center">
-      <button type="button" className="text-secondary hover:text-error transition-colors p-1 rounded" onClick={() => form.lines[4] && form.deleteLine(form.lines[4].key)}>
-      <span className="material-symbols-outlined text-[18px]">delete</span>
-      </button>
-      </td>
-      </tr>
-
-      <tr className="hover:bg-surface-container-low/50 transition-colors">
-      <td className="py-3 px-3 text-center cursor-grab text-secondary hover:text-on-surface">
-      <span className="material-symbols-outlined text-[18px]">drag_indicator</span>
-      </td>
-      <td className="py-3 px-4">
-      <div className="flex items-center gap-space-sm">
-      <div className="w-7 h-7 rounded bg-surface-container flex items-center justify-center text-on-surface">
-      <span className="material-symbols-outlined text-[15px]">medical_services</span>
-      </div>
-      <div>
-      <div className="font-body-sm font-semibold text-on-surface">First-aid kit</div>
-      <div className="font-label-code text-caption text-secondary">SAF-FAK-01</div>
-      </div>
-      </div>
-      </td>
-      <td className="py-3 px-3 text-center">
-      <span className="font-label-code text-body-sm font-semibold text-on-surface">1 ea</span>
-      </td>
-      <td className="py-3 px-4">
-      <span className="inline-flex items-center px-2 py-0.5 rounded text-caption font-bold bg-primary text-on-primary">
-                              Required
-                            </span>
-      </td>
-      <td className="py-3 px-4">
-      <div className="flex items-center gap-1.5 text-on-surface">
-      <span className="material-symbols-outlined text-[15px] text-secondary">pin_drop</span>
-      <span className="font-body-sm">Glove compartment</span>
-      </div>
-      </td>
-      <td className="py-3 px-3 text-center">
-      <button type="button" className="text-secondary hover:text-error transition-colors p-1 rounded" onClick={() => form.lines[5] && form.deleteLine(form.lines[5].key)}>
-      <span className="material-symbols-outlined text-[18px]">delete</span>
-      </button>
-      </td>
-      </tr>
-
-      <tr className="hover:bg-surface-container-low/50 transition-colors">
-      <td className="py-3 px-3 text-center cursor-grab text-secondary hover:text-on-surface">
-      <span className="material-symbols-outlined text-[18px]">drag_indicator</span>
-      </td>
-      <td className="py-3 px-4">
-      <div className="flex items-center gap-space-sm">
-      <div className="w-7 h-7 rounded bg-surface-container flex items-center justify-center text-on-surface">
-      <span className="material-symbols-outlined text-[15px]">warning</span>
-      </div>
-      <div>
-      <div className="font-body-sm font-semibold text-on-surface">Warning triangle</div>
-      <div className="font-label-code text-caption text-secondary">SAF-TRG-01</div>
-      </div>
-      </div>
-      </td>
-      <td className="py-3 px-3 text-center">
-      <span className="font-label-code text-body-sm font-semibold text-on-surface">1 ea</span>
-      </td>
-      <td className="py-3 px-4">
-      <span className="inline-flex items-center px-2 py-0.5 rounded text-caption font-bold bg-primary text-on-primary">
-                              Required
-                            </span>
-      </td>
-      <td className="py-3 px-4">
-      <div className="flex items-center gap-1.5 text-on-surface">
-      <span className="material-symbols-outlined text-[15px] text-secondary">pin_drop</span>
-      <span className="font-body-sm">Boot hatch strap</span>
-      </div>
-      </td>
-      <td className="py-3 px-3 text-center">
-      <button type="button" className="text-secondary hover:text-error transition-colors p-1 rounded" onClick={() => form.lines[6] && form.deleteLine(form.lines[6].key)}>
-      <span className="material-symbols-outlined text-[18px]">delete</span>
-      </button>
-      </td>
-      </tr>
-
-      <tr className="hover:bg-surface-container-low/50 transition-colors">
-      <td className="py-3 px-3 text-center cursor-grab text-secondary hover:text-on-surface">
-      <span className="material-symbols-outlined text-[18px]">drag_indicator</span>
-      </td>
-      <td className="py-3 px-4">
-      <div className="flex items-center gap-space-sm">
-      <div className="w-7 h-7 rounded bg-surface-container flex items-center justify-center text-on-surface">
-      <span className="material-symbols-outlined text-[15px]">videocam</span>
-      </div>
-      <div>
-      <div className="font-body-sm font-semibold text-on-surface">Dash camera</div>
-      <div className="font-label-code text-caption text-secondary">ELC-DCM-01</div>
-      </div>
-      </div>
-      </td>
-      <td className="py-3 px-3 text-center">
-      <span className="font-label-code text-body-sm font-semibold text-on-surface">1 ea</span>
-      </td>
-      <td className="py-3 px-4">
-      <span className="inline-flex items-center px-2 py-0.5 rounded text-caption font-bold bg-primary text-on-primary">
-                              Required
-                            </span>
-      </td>
-      <td className="py-3 px-4">
-      <div className="flex items-center gap-1.5 text-on-surface">
-      <span className="material-symbols-outlined text-[15px] text-secondary">pin_drop</span>
-      <span className="font-body-sm">Windscreen rearview mount</span>
-      </div>
-      </td>
-      <td className="py-3 px-3 text-center">
-      <button type="button" className="text-secondary hover:text-error transition-colors p-1 rounded" onClick={() => form.lines[7] && form.deleteLine(form.lines[7].key)}>
-      <span className="material-symbols-outlined text-[18px]">delete</span>
-      </button>
-      </td>
-      </tr>
-
-      <tr className="hover:bg-surface-container-low/50 transition-colors">
-      <td className="py-3 px-3 text-center cursor-grab text-secondary hover:text-on-surface">
-      <span className="material-symbols-outlined text-[18px]">drag_indicator</span>
-      </td>
-      <td className="py-3 px-4">
-      <div className="flex items-center gap-space-sm">
-      <div className="w-7 h-7 rounded bg-surface-container flex items-center justify-center text-on-surface">
-      <span className="material-symbols-outlined text-[15px]">fire_extinguisher</span>
-      </div>
-      <div>
-      <div className="font-body-sm font-semibold text-on-surface">Fire extinguisher</div>
-      <div className="font-label-code text-caption text-secondary">SAF-EXT-01</div>
-      </div>
-      </div>
-      </td>
-      <td className="py-3 px-3 text-center">
-      <span className="font-label-code text-body-sm font-semibold text-on-surface">1 ea</span>
-      </td>
-      <td className="py-3 px-4">
-      <span className="inline-flex items-center px-2 py-0.5 rounded text-caption font-medium bg-surface-container text-secondary">
-                              Optional
-                            </span>
-      </td>
-      <td className="py-3 px-4">
-      <div className="flex items-center gap-1.5 text-on-surface">
-      <span className="material-symbols-outlined text-[15px] text-secondary">pin_drop</span>
-      <span className="font-body-sm">Under passenger seat</span>
-      </div>
-      </td>
-      <td className="py-3 px-3 text-center">
-      <button type="button" className="text-secondary hover:text-error transition-colors p-1 rounded" onClick={() => form.lines[8] && form.deleteLine(form.lines[8].key)}>
-      <span className="material-symbols-outlined text-[18px]">delete</span>
-      </button>
-      </td>
-      </tr>
-      </tbody>
+      ))
+      )}</tbody>
       </table>
       </div>
 
@@ -568,7 +284,7 @@ export function In7KitTemplateEditor() {
       <button type="button" className="bg-surface-container text-on-surface hover:bg-surface-container-high font-body-sm font-semibold px-space-lg py-2 rounded-lg transition-colors" onClick={() => form.saveDraft()}>
                       Save as draft
                     </button>
-      <button type="button" className="bg-primary text-on-primary font-body-sm font-semibold px-space-xl py-2 rounded-lg shadow-sm hover:opacity-90 transition-opacity flex items-center gap-space-xs"  onClick={() => form.publish()}>
+      <button type="button" className="bg-primary text-on-primary font-body-sm font-semibold px-space-xl py-2 rounded-lg shadow-sm hover:opacity-90 transition-opacity flex items-center gap-space-xs disabled:opacity-60" disabled={!form.canPublish} title={form.publishDisabledReason || 'Save as new version'} onClick={() => form.publish()}>
       <span className="material-symbols-outlined text-[16px]">save</span>
       <span>Save as new version</span>
       </button>
@@ -591,44 +307,24 @@ export function In7KitTemplateEditor() {
 
       <div className="absolute left-2.5 top-2 bottom-2 w-0.5 bg-surface-container"></div>
 
-      <div className="relative flex items-start gap-space-sm">
-      <div className="absolute -left-6 top-1 w-3.5 h-3.5 rounded-full bg-primary ring-4 ring-surface-container-lowest"></div>
+      {form.versionHistoryRows.length === 0 ? (
+      <p className="font-body-sm text-body-sm text-on-surface-variant">No revision history for this template yet.</p>
+      ) : (
+      form.versionHistoryRows.map((ver, index) => (
+      <div key={`${ver.version}-${index}`} className="relative flex items-start gap-space-sm">
+      <div className={`absolute -left-6 top-1 w-3.5 h-3.5 rounded-full ${index === 0 ? 'bg-primary' : index === 1 ? 'bg-secondary' : 'bg-surface-dim'} ring-4 ring-surface-container-lowest`}></div>
       <div className="flex flex-col">
       <div className="flex items-center gap-space-xs">
-      <span className="font-label-code text-body-sm font-bold text-on-surface">v3</span>
-      <span className="font-caption text-caption text-secondary">· 1 Nov 2026</span>
+      <span className="font-label-code text-body-sm font-bold text-on-surface">v{ver.version}</span>
+      <span className="font-caption text-caption text-secondary">· {ver.dateLabel}</span>
       </div>
-      <div className="font-body-sm font-medium text-on-surface">added Warning triangle</div>
-      <div className="font-caption text-caption text-secondary">Author: Deeki T (Authorizer)</div>
-      <span className="font-label-code text-[11px] text-on-primary-fixed bg-surface-container px-2 py-0.5 rounded self-start mt-1">Pending Sync</span>
-      </div>
-      </div>
-
-      <div className="relative flex items-start gap-space-sm">
-      <div className="absolute -left-6 top-1 w-3.5 h-3.5 rounded-full bg-secondary ring-4 ring-surface-container-lowest"></div>
-      <div className="flex flex-col">
-      <div className="flex items-center gap-space-xs">
-      <span className="font-label-code text-body-sm font-bold text-on-surface">v2</span>
-      <span className="font-caption text-caption text-secondary">· 14 Aug 2025</span>
-      </div>
-      <div className="font-body-sm text-on-surface">added Dash camera</div>
-      <div className="font-caption text-caption text-secondary">Author: —</div>
-      <span className="font-label-code text-[11px] text-secondary bg-surface-container-low px-2 py-0.5 rounded self-start mt-1">Production (Live)</span>
+      <div className="font-body-sm font-medium text-on-surface">{ver.changeSummary}</div>
+      <div className="font-caption text-caption text-secondary">Author: {ver.authorLabel}</div>
+      <span className="font-label-code text-[11px] text-on-primary-fixed bg-surface-container px-2 py-0.5 rounded self-start mt-1">{ver.syncLabel}</span>
       </div>
       </div>
-
-      <div className="relative flex items-start gap-space-sm">
-      <div className="absolute -left-6 top-1 w-3.5 h-3.5 rounded-full bg-surface-dim ring-4 ring-surface-container-lowest"></div>
-      <div className="flex flex-col">
-      <div className="flex items-center gap-space-xs">
-      <span className="font-label-code text-body-sm font-bold text-on-surface">v1</span>
-      <span className="font-caption text-caption text-secondary">· 10 Jan 2025</span>
-      </div>
-      <div className="font-body-sm text-on-surface">Initial release</div>
-      <div className="font-caption text-caption text-secondary">Author: Deeki T</div>
-      <span className="font-label-code text-[11px] text-secondary bg-surface-container-low px-2 py-0.5 rounded self-start mt-1">Archived Spec</span>
-      </div>
-      </div>
+      ))
+      )}
       </div>
       </div>
 
@@ -728,7 +424,7 @@ export function In7KitTemplateEditor() {
       <button type="button" className="bg-surface-container text-on-surface hover:bg-surface-container-high font-body-sm font-semibold px-space-lg py-2 rounded-lg transition-colors"  onClick={() => form.close()}>
                 Not now
               </button>
-      <button type="button" className="bg-primary text-on-primary font-body-sm font-semibold px-space-xl py-2 rounded-lg shadow-sm hover:opacity-90 transition-opacity flex items-center gap-space-xs"  onClick={() => form.publish()}>
+      <button type="button" className="bg-primary text-on-primary font-body-sm font-semibold px-space-xl py-2 rounded-lg shadow-sm hover:opacity-90 transition-opacity flex items-center gap-space-xs disabled:opacity-60" disabled={!form.canPublish} title={form.publishDisabledReason || 'Save as new version'} onClick={() => form.publish()}>
       <span className="material-symbols-outlined text-[16px]">check_circle</span>
       <span>Move {form.applyVehicleCount} cars</span>
       </button>

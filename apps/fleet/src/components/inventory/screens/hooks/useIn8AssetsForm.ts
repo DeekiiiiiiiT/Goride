@@ -1,10 +1,17 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { inventoryApi } from '../../inventoryApi';
 import { downloadInventoryExportCsv } from '../../inventoryDownload';
+import { formatJmd } from '../../inventoryFormat';
 import { numField, strField } from '../../inventoryData';
+import type { AssetRow } from '../../inventoryTypes';
 import type { OverflowMenuItem } from '../../InventoryOverflowMenu';
+import { buildAssetRow } from '../../inventoryViewRows';
 import { useInScreenBase } from './useInShared';
 
+/**
+ * Stitch → data (In8 Assets)
+ * serial cell → AssetRow.serial | item name → AssetRow.name | status pill → AssetRow.statusLabel | plate → AssetRow.plate
+ */
 export function useIn8AssetsForm() {
   const base = useInScreenBase();
   const { shell, submit } = base;
@@ -14,6 +21,8 @@ export function useIn8AssetsForm() {
   const pageSize = 20;
 
   const assets = shell.assets;
+  const selectedAssetId = shell.selectedAssetId;
+  const setSelectedAssetId = shell.setSelectedAssetId;
 
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = {
@@ -62,6 +71,28 @@ export function useIn8AssetsForm() {
   const safePage = Math.min(page, pageCount - 1);
   const paged = filtered.slice(safePage * pageSize, safePage * pageSize + pageSize);
 
+  const pagedAssetRows: AssetRow[] = useMemo(
+    () => paged.map((a) => buildAssetRow(a, formatJmd)),
+    [paged],
+  );
+
+  useEffect(() => {
+    if (selectedAssetId && filtered.some((a) => strField(a, 'id', '') === selectedAssetId)) return;
+    setSelectedAssetId(null);
+  }, [filtered, selectedAssetId, setSelectedAssetId]);
+
+  const selectedAsset = useMemo(() => {
+    if (!selectedAssetId) return null;
+    return assets.find((a) => strField(a, 'id', '') === selectedAssetId) ?? null;
+  }, [assets, selectedAssetId]);
+
+  const selectedAssetRow = useMemo(
+    () => (selectedAsset ? buildAssetRow(selectedAsset, formatJmd) : null),
+    [selectedAsset],
+  );
+
+  const selectAsset = (assetId: string) => setSelectedAssetId(assetId);
+
   const openAsset = (assetId: string) => {
     shell.setSelectedAssetId(assetId);
     shell.openModal('asset-page');
@@ -96,6 +127,8 @@ export function useIn8AssetsForm() {
     { label: 'Retire', onClick: () => void assetAction(assetId, 'retire') },
   ];
 
+  const openSelectedAssetPageDisabledReason = selectedAssetId ? '' : 'Select an asset row to open details';
+
   return {
     ...base,
     shell,
@@ -107,6 +140,12 @@ export function useIn8AssetsForm() {
     setPage,
     pageCount,
     paged,
+    pagedAssetRows,
+    selectedAssetId,
+    setSelectedAssetId,
+    selectAsset,
+    selectedAsset,
+    selectedAssetRow,
     statusCounts,
     openAsset,
     registerAsset,
@@ -115,6 +154,7 @@ export function useIn8AssetsForm() {
     totalBookValue,
     rowMenuItems,
     filteredCount: filtered.length,
+    openSelectedAssetPageDisabledReason,
     strField,
   };
 }

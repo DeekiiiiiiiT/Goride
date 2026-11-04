@@ -198,7 +198,7 @@ test.describe("Fleet find parts stitch live PNGs", () => {
   test("FP5 results at 1440px", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(`/maintenance?tab=find-parts&vehicle=${STITCH_VISUAL_VEHICLE_ID}&part=${STITCH_VISUAL_COMPONENT_ID}&pos=front`);
-    await page.getByText("Structured Match Categories", { exact: false }).waitFor({ timeout: 20_000 });
+    await page.locator(".find-parts-am-results").waitFor({ timeout: 20_000 });
     await prepareFindPartsCapture(page);
     await page.screenshot({
       path: "docs/stitch/roam-fleet-app/screenshots/FP5-live.png",

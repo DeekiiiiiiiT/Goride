@@ -445,6 +445,10 @@ export type WeekCalculatorStatus = {
   holdLargerFleets: boolean;
   holdNote: string;
   costNote: string;
+  dailyTempBytes?: number;
+  dailyTempOk?: boolean;
+  dailyTempLimitBytes?: number;
+  topSpillSource?: string | null;
   warning?: string | null;
 };
 

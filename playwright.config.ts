@@ -59,7 +59,7 @@ export default defineConfig({
   projects: [
     {
       name: 'dominion-admin',
-      testMatch: /parts-import-stitch\.spec\.ts|parts-auto-match-stitch\.spec\.ts/,
+      testMatch: /parts-import-stitch\.spec\.ts|parts-auto-match-stitch\.spec\.ts|add-a-part-stitch\.spec\.ts|add-a-part-done\.spec\.ts|capture-am-screens\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1456, height: 900 },

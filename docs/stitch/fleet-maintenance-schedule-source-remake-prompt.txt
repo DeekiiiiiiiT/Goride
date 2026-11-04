@@ -1,0 +1,98 @@
+ROAM FLEET — MAINTENANCE: 2 SCREENS TO REDRAW (GOOGLE STITCH)
+
+
+
+
+Roam Fleet - Maintenance, redraw (Desktop Web App, for fleet owners, fleet managers and their staff):
+
+Redraw two screens of Roam Fleet's Maintenance area. The other screens are already designed (Due items drawer for one car with source chips, "Why this schedule?" popover, Set custom schedule dialog, Maintenance alerts bell, Overview rows, States, Phone) — these two must look like the same product. Service schedules come from Roam's master database; each due line says where its schedule came from ("Car maker", "Part maker" or "Roam policy"). Roam Fleet has NO telematics: people type in the odometer. A car with no odometer reading yet shows date-only due dates and "Waiting for odometer" instead of an invented distance. A car can be marked "Hard use" (taxi, delivery, heavy traffic) to use shorter "severe duty" schedules where Roam has them. Draw each screen so the WHOLE screen is visible: nothing cut off at the top or bottom, nothing covered by a toast or another layer.
+
+BRAND IDENTITY:
+- Match the existing Roam Fleet web app exactly:
+  - white top nav row with the black "Roam Fleet" app tile, then: Dashboard, Fleet Operations, Driver Operations, Money, Vehicle Operations (active, underlined), Delivery Operations, Analytics, Reports, Business Finance; bell icon with a red count badge; round black avatar "DT"
+  - dark navy sub-bar (#020817) with "Switch vehicle or search hub..." on the left and "03:00:28 PM EST · America/Jamaica · JM (JMD) · DE · Deeki T · platform_owner" on the right
+  - under it, the page header: orange wrench tile, "Fleet Maintenance", tabs "Overview" (selected), "Service history", "Find parts"
+  - page wash Slate 50, centred content (max ~1400px), shadcn-style components
+  - no footer text, no version numbers, no hub names, no VINs
+- LIGHT MODE (default):
+  - Primary: Near-black (#030213) — primary buttons, active tab, selected outlines
+  - Background: White (#FFFFFF); page wash: Slate 50 (#f8fafc)
+  - Surface cards: White, 1px border rgba(0,0,0,0.1)
+  - Text primary: #0a0a0a; muted text: #717182
+  - Success / OK: Emerald (#059669)
+  - Warning / due soon / needs checking: Amber (#d97706)
+  - Error / overdue: Red (#d4183d)
+  - Neutral / waiting: Slate 500 (#64748b)
+  - Info / updated by Roam / custom: Indigo 600 (#4f46e5)
+  - Muted fill for tabs and chips: Slate 100 (#f1f5f9)
+- DARK MODE:
+  - Background: #252525; surface #2e2e2e; border #444444
+  - Text primary: #fafafa; muted #b4b4b4
+  - Primary: #fafafa (buttons light with dark text)
+  - Success #34d399; warning #f59e0b; error #f87171; neutral #94a3b8; info #818cf8
+- Chips (rounded, small, word + icon, never colour alone): "Roam policy" (policy icon, slate outline) · "Waiting for odometer" (speed icon, slate fill) · "Hard use" (local_shipping icon, slate outline) · "No severe schedule yet" (muted grey text chip) · "Shorter for hard use" (indigo outline)
+- Typography: Inter; plates, odometer readings, distances, dates and counts in mono with tabular numerals. Distances in km.
+
+DESIGN PRINCIPLES:
+- Calm, plain and exact: a service desk logbook
+- One primary button per screen or dialog
+- No telematics, OBD, sensors, gateways, "telemetry", health index or percentages anywhere
+- No KPI cards behind the drawer or dialog — the background is the plain Overview table, dimmed
+- Use only the real data listed under each screen
+
+SCREEN 1: CAR WAITING FOR AN ODOMETER READING — DUE ITEMS DRAWER (1505LM)
+- Behind: the Overview tab's car table, dimmed (rows: 5179KZ Toyota Roomy, 1505LM Honda Fit); no KPI cards
+- Right-side drawer 560px wide, FULL height of the window, all content visible, no toast on top
+- Drawer header: plate "1505LM" in a mono box, title "Due items · Honda Fit", muted "GP5 · added 27 Aug 2026"; close X
+- Odometer line: speed icon + "No odometer reading yet" + chip "Waiting for odometer"
+- Slate banner (full width inside the drawer): info icon, bold "We need a first odometer reading", text "Distance-based due dates are worked out from it. Until then, due dates are by date only." Primary button inside the banner "Log odometer"
+- Group header "DUE BY DATE (4 ITEMS)"
+- Four due lines, each: part icon, part name, "Due by <date>" in mono, chip "Waiting for odometer", second row with "Roam policy" chip and the schedule muted, overflow ⋮:
+  1. Engine oil — "Due by 27 Nov 2026" — "Every 5,000 km or 3 months"
+  2. Air filter — "Due by 27 Feb 2027" — "Every 10,000 km or 6 months"
+  3. Tyre change (LF · RF · LR · RR) — "Due by 27 Aug 2029" — "Every 40,000 km or 36 months"
+  4. Brake fluid — "Due by 27 Aug 2028" — "Every 40,000 km or 24 months"
+- Drawer footer (sticky): secondary "Log odometer", primary "Log service"
+
+SCREEN 1B: AFTER THE FIRST READING (SMALL SEPARATE FRAME)
+- A small frame showing only the toast on its own (not over the drawer): dark toast, check icon, "Odometer logged · [reading] km", second line "Distance due dates worked out from it", close X
+- Next to it, one updated due line from the same drawer: "Engine oil — Due at [reading + 5,000] km or 27 Nov 2026 · whichever first", chip "Due soon" amber, "Roam policy" chip (the "Waiting for odometer" chip is gone)
+
+SCREEN 2: MARK AS HARD USE — DIALOG (5179KZ), WHOLE DIALOG VISIBLE
+- Behind: the Overview tab's car table, dimmed; no KPI cards
+- Centred dialog 600px wide with comfortable margin above and below so the title and footer are fully visible
+- Title "Hard use · 5179KZ" (plate in a mono box), muted subtitle "Toyota Roomy · M900A"; close X
+- Explanation box (Slate 100 fill, car icon): "Taxi, delivery and heavy-traffic cars wear faster. Car makers give shorter 'severe duty' schedules for them."
+- Switch row: bold "This car is in hard use", muted "On by default for rideshare and delivery cars — this car is in Rideshare." Switch ON
+- Section "What changes for this car" — muted "Roam doesn't have hard-use schedules for these parts yet, so nothing changes today." — list of 4 rows, each: part name, current schedule in mono, arrow, schedule with hard use in mono, chip:
+  1. Engine oil — "5,000 km or 3 months → 5,000 km or 3 months" — "No severe schedule yet"
+  2. Air filter — "10,000 km or 6 months → 10,000 km or 6 months" — "No severe schedule yet"
+  3. Rotate tyres — "10,000 km or 6 months → 10,000 km or 6 months" — "No severe schedule yet"
+  4. Brake fluid — "40,000 km or 24 months → 40,000 km or 24 months" — "No severe schedule yet"
+- Info line: "When Roam adds a hard-use schedule for a part, this car switches to it automatically."
+- Footer: "Cancel", primary "Save"
+
+SCREEN 2B: HARD USE WITH A SEVERE SCHEDULE (SECOND FRAME, SAME DIALOG)
+- Same dialog, but row 1 reads "Engine oil — 10,000 km or 6 months → 5,000 km or 6 months" with indigo chip "Shorter for hard use" and source "Car maker", and the muted line at the top of the list reads "1 part gets a shorter schedule with hard use." Label this frame "Example"
+
+ADDITIONAL UI COMPONENTS:
+- Full-height right drawer with sticky footer
+- Slate info banner with an inline primary button
+- Date-only due line with "Waiting for odometer" chip
+- Before → after schedule row with chip
+- Toast (shown on its own frame only)
+
+INTERACTIONS:
+- "Log odometer" opens the existing Log odometer dialog; after saving, the drawer refreshes to distance + date due lines and the toast shows
+- A reading lower than an earlier one is saved but flagged "Looks wrong — lower than the last reading" and not used for due dates
+- Turning the hard-use switch updates the "What changes" list at once; "Save" recalculates that car's due dates
+- "Cancel" with changes asks "Leave without saving?" — "Keep editing" / "Leave"
+- Focus rings 2px primary; every field has a visible label
+
+Spec screens / Area
+| Screen | Area |
+|---|---|
+| 1 | Due items drawer for 1505LM waiting for an odometer reading, full height |
+| 1B | Toast and one updated due line after the first reading |
+| 2 | Mark as hard use dialog for 5179KZ, whole dialog visible, no severe schedules yet |
+| 2B | Same dialog, example with a shorter hard-use schedule |

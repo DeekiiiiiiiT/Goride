@@ -39,7 +39,7 @@ import { PendingCatalogShell, type PendingCatalogTabId } from "./pending-parts/P
 import { PendingVehiclesCatalogTab } from "./pending-parts/PendingVehiclesCatalogTab";
 import { AutoMatchConflictsTab } from "./pending-parts/AutoMatchConflictsTab";
 import { ResearchSettingsPage } from "./pending-parts/ResearchSettingsPage";
-import { fetchAutoMatchConflicts, fetchPartMatchHealth } from "../../../services/partsAutoMatchApi";
+import { fetchAutoMatchConflicts } from "../../../services/partsAutoMatchApi";
 import { PendingVehicleReviewDrawer } from "./pending-parts/PendingVehicleReviewDrawer";
 import "./pending-parts/pendingParts.css";
 
@@ -92,9 +92,9 @@ export function PendingVehicleCatalogManager() {
   const [requestInfoMessage, setRequestInfoMessage] = useState("");
   const [actionBusy, setActionBusy] = useState(false);
   const [catalogTab, setCatalogTab] = useState<PendingCatalogTabId>(() => readCatalogTabFromUrl());
+  const [conflictsHeaderActions, setConflictsHeaderActions] = useState<React.ReactNode>(null);
   const [partsQueueCount, setPartsQueueCount] = useState(0);
   const [conflictsCount, setConflictsCount] = useState(0);
-  const [enginePulse, setEnginePulse] = useState("");
   const [partsSyncSec, setPartsSyncSec] = useState(4);
   const [vehiclesSyncedAt, setVehiclesSyncedAt] = useState<number | null>(null);
   const [vehiclesSyncSec, setVehiclesSyncSec] = useState(4);
@@ -141,9 +141,6 @@ export function PendingVehicleCatalogManager() {
     void fetchAutoMatchConflicts(token, { status: "open" })
       .then((res) => setConflictsCount(Number(res.totalsByStatus?.open ?? res.filteredCount ?? res.rows?.length ?? 0)))
       .catch(() => setConflictsCount(0));
-    void fetchPartMatchHealth(token)
-      .then((h) => setEnginePulse(h.errorCount24h ? "DEGRADED" : "NOMINAL"))
-      .catch(() => setEnginePulse(""));
   }, [token, catalogTab]);
 
   useEffect(() => {
@@ -265,7 +262,7 @@ export function PendingVehicleCatalogManager() {
   const activeSyncSec = catalogTab === "parts" ? partsSyncSec : vehiclesSyncSec;
 
   return (
-    <div className="pending-parts-stitch min-h-[600px] flex-1">
+    <div className={`pending-parts-stitch min-h-[600px] flex-1${catalogTab === "conflicts" ? " auto-match-conflicts" : ""}`}>
       <PendingPartsQueueCount onCount={setPartsQueueCount} />
       <PendingCatalogShell
         catalogTab={catalogTab}
@@ -274,14 +271,14 @@ export function PendingVehicleCatalogManager() {
         partsCount={partsQueueCount}
         conflictsCount={conflictsCount}
         syncSeconds={activeSyncSec}
-        enginePulseLabel={enginePulse}
+        conflictsHeaderActions={conflictsHeaderActions}
         onRefreshVehicles={() => void load()}
         vehiclesRefreshing={loading}
       >
         {catalogTab === "parts" ? (
           <PendingPartsCatalogTab onSyncSeconds={setPartsSyncSec} />
         ) : catalogTab === "conflicts" ? (
-          <AutoMatchConflictsTab />
+          <AutoMatchConflictsTab onHeaderActions={setConflictsHeaderActions} />
         ) : catalogTab === "settings" ? (
           <ResearchSettingsPage />
         ) : (

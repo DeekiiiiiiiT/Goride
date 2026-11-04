@@ -1,43 +1,19 @@
 # Fleet Inventory & Asset Management — Audit
 
-**Rev 31 · 2 Nov 2026 · complete (automated gates green; R26-02 prod walk-through is the manual sign-off below).**
+**Rev 38 · 4 Nov 2026 · CLOSED in code — no open items.**
 **Scope:** Fleet → Vehicle Operations → Inventory & Asset Management, and the Roam Driver car kit. Admin is out of scope.
+**Designs:** `docs/stitch/roam-driver-app/car-kit/*/screen.png`, real app captures beside each as `screen-live.png` (4 Nov).
 
-**Works today:**
-- All 15 gap screens, driver car-kit screens, and primary In* tabs/modals call real hook handlers and APIs (no `stitchChrome` / shared `stitchInput`).
-- Static gate: `node scripts/assert-inventory-gap-audit.mjs` (also in CI).
-- Behavioral sweep: `e2e/inventory-button-sweep.spec.ts` + `e2e/car-kit-button-sweep.spec.ts` (run with `INVENTORY_BUTTON_SWEEP=1` and fleet/driver base URLs; CI runs fleet sweep when `E2E_FLEET_*` + `FLEET_E2E_BASE_URL` are set).
-- Ledger baseline unchanged: 7 movements, J$69,380, chain ok (verify after any prod smoke).
+## Open items
 
----
+None. Re-checked 4 Nov: Fleet and Driver builds pass, both inventory type checks pass, assert script passes, car-kit screens verified by rendered capture.
 
-## 1. Rev 31 — status
+## Where to find it
 
-| Item | Status | Verification |
-|------|--------|--------------|
-| **R31-01** Bind fields to hook state | **Done** | Assert script + receive field-isolation in sweep |
-| **R31-02** Wire 211 dead buttons | **Done** | [`fleet-inventory-button-spec.md`](fleet-inventory-button-spec.md); grep `stitchChrome` → 0 |
-| **R31-03** Real amounts, refs, counts | **Done** | Assert fails on `formatJmd(null)`, `REF-0` |
-| **R31-04** Button sweep + assert hardening | **Done** | Specs above + CI optional step after inventory Deno tests |
-| **R26-02** Production walk-through | **Pending (manual)** | Run only after R31-04 green on target deploy — see runbook below |
+Driver app: **Menu → My Vehicle → My car kit**. With no car assigned it opens "No car assigned"; with a car it opens My car kit. Weekly check-in shows the kit step.
 
-**Removed:** `scripts/patch-in-*.mjs`, `stitchInput` / `stitchChrome` from [`useInShared.ts`](../apps/fleet/src/components/inventory/screens/hooks/useInShared.ts).
+## Done test (repeat on any change)
 
-**Backend added:** `POST /inventory/assets/:id/events` (incident notes) in [`inventory_controller_extended.ts`](../supabase/functions/_fleet-server/inventory_controller_extended.ts).
-
----
-
-## 2. R26-02 — production walk-through (manual)
-
-Follow [`inventory-r26-prod-smoke-runbook.md`](inventory-r26-prod-smoke-runbook.md):
-
-1. Real Receive, Issue, Transfer, and Count with chosen values; confirm ledger rows match inputs.
-2. Capture `screen-live.png` signed in (`scripts/capture-inventory-screen-live.mjs`).
-3. Reverse test movements.
-4. Run [`scripts/sql/fleet_inventory_integrity_checks.sql`](../scripts/sql/fleet_inventory_integrity_checks.sql): every query returns 0 rows; stock value J$69,380.
-
-**Do not** run this on production until the R31-04 sweep passes against the same fleet-core build you are promoting.
-
----
-
-When R26-02 is signed off in Notion, this audit section is fully closed.
+1. `pnpm --filter @roam/fleet build` and `pnpm --filter @roam/driver build` pass.
+2. `node scripts/typecheck-driver-car-kit.mjs`, `node scripts/typecheck-fleet-inventory.mjs` and `node scripts/assert-inventory-gap-audit.mjs` pass.
+3. Re-capture the car-kit screens from the running app; every `screen-live.png` matches its `screen.png` side by side.

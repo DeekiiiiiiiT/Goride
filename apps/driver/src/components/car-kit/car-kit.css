@@ -1,7 +1,36 @@
 .driver-car-kit-stitch {
+  --ck-surface: #faf8ff;
+  --ck-surface-dim: #d2d9f4;
+  --ck-surface-container-lowest: #ffffff;
+  --ck-surface-container-low: #f2f3ff;
+  --ck-surface-container: #eaedff;
+  --ck-surface-container-high: #e2e7ff;
+  --ck-surface-container-highest: #dae2fd;
+  --ck-on-surface: #131b2e;
+  --ck-on-surface-variant: #3d4a42;
+  --ck-inverse-surface: #283044;
+  --ck-inverse-on-surface: #eef0ff;
+  --ck-outline: #6d7a72;
+  --ck-outline-variant: #bccac0;
+  --ck-primary: #006948;
+  --ck-on-primary: #ffffff;
+  --ck-primary-container: #00855d;
+  --ck-on-primary-container: #f5fff7;
+  --ck-inverse-primary: #68dba9;
+  --ck-secondary: #bb0112;
+  --ck-on-secondary: #ffffff;
+  --ck-secondary-container: #e02928;
+  --ck-on-secondary-container: #fffbff;
+  --ck-tertiary: #8d4b00;
+  --ck-on-tertiary: #ffffff;
+  --ck-error: #ba1a1a;
+  --ck-on-error: #ffffff;
+  --ck-error-container: #ffdad6;
+  --ck-on-error-container: #93000a;
+  --ck-primary-fixed: #85f8c4;
   font-family: Inter, sans-serif;
-  color: #191c1e;
-  background: #f7f9fb;
+  color: var(--ck-on-surface);
+  background: var(--ck-surface);
 }
 .driver-car-kit-stitch .material-symbols-outlined {
   font-family: "Material Symbols Outlined";
@@ -48,7 +77,7 @@
 }
 .driver-car-kit-stitch .font-label-plate,
 .driver-car-kit-stitch .font-label-code {
-  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-family: "Space Mono", ui-monospace, monospace;
 }
 .driver-car-kit-stitch .gap-space-xs { gap: 0.25rem; }
 .driver-car-kit-stitch .gap-space-sm { gap: 0.5rem; }
@@ -58,3 +87,37 @@
 .driver-car-kit-stitch .px-margin-desktop { padding-left: 2rem; padding-right: 2rem; }
 .driver-car-kit-stitch .p-space-md { padding: 0.75rem; }
 .driver-car-kit-stitch .p-space-lg { padding: 1rem; }
+
+/* High-Sun palette — override driver global theme inside car kit only */
+.driver-car-kit-stitch .bg-surface { background-color: var(--ck-surface); }
+.driver-car-kit-stitch .bg-surface-container { background-color: var(--ck-surface-container); }
+.driver-car-kit-stitch .bg-surface-container-low { background-color: var(--ck-surface-container-low); }
+.driver-car-kit-stitch .bg-surface-container-high { background-color: var(--ck-surface-container-high); }
+.driver-car-kit-stitch .bg-surface-container-highest { background-color: var(--ck-surface-container-highest); }
+.driver-car-kit-stitch .bg-surface-container-lowest { background-color: var(--ck-surface-container-lowest); }
+.driver-car-kit-stitch .bg-primary { background-color: var(--ck-primary); }
+.driver-car-kit-stitch .bg-primary-container { background-color: var(--ck-primary-container); }
+.driver-car-kit-stitch .bg-secondary { background-color: var(--ck-secondary); }
+.driver-car-kit-stitch .bg-secondary-container { background-color: var(--ck-secondary-container); }
+.driver-car-kit-stitch .bg-error-container { background-color: var(--ck-error-container); }
+.driver-car-kit-stitch .bg-inverse-surface { background-color: var(--ck-inverse-surface); }
+.driver-car-kit-stitch .bg-tertiary { background-color: var(--ck-tertiary); }
+.driver-car-kit-stitch .text-on-surface { color: var(--ck-on-surface); }
+.driver-car-kit-stitch .text-on-surface-variant { color: var(--ck-on-surface-variant); }
+.driver-car-kit-stitch .text-on-primary { color: var(--ck-on-primary); }
+.driver-car-kit-stitch .text-on-primary-container { color: var(--ck-on-primary-container); }
+.driver-car-kit-stitch .text-on-secondary { color: var(--ck-on-secondary); }
+.driver-car-kit-stitch .text-on-secondary-container { color: var(--ck-on-secondary-container); }
+.driver-car-kit-stitch .text-on-error-container { color: var(--ck-on-error-container); }
+.driver-car-kit-stitch .text-inverse-on-surface { color: var(--ck-inverse-on-surface); }
+.driver-car-kit-stitch .text-primary { color: var(--ck-primary); }
+.driver-car-kit-stitch .text-secondary { color: var(--ck-secondary); }
+.driver-car-kit-stitch .text-tertiary { color: var(--ck-tertiary); }
+.driver-car-kit-stitch .text-error { color: var(--ck-error); }
+.driver-car-kit-stitch .text-outline { color: var(--ck-outline); }
+.driver-car-kit-stitch .text-primary-fixed { color: var(--ck-primary-fixed); }
+.driver-car-kit-stitch .border-outline-variant { border-color: var(--ck-outline-variant); }
+.driver-car-kit-stitch .hover\:bg-primary:hover { background-color: var(--ck-primary); }
+.driver-car-kit-stitch .hover\:text-primary:hover { color: var(--ck-primary); }
+.driver-car-kit-stitch .hover\:text-error:hover { color: var(--ck-error); }
+.driver-car-kit-stitch .active\:bg-primary-container:active { background-color: var(--ck-primary-container); }

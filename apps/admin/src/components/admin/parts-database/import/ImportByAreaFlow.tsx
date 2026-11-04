@@ -18,6 +18,7 @@ import {
   uploadImportBatchSource,
   failedCsvUrl,
   fetchImportAreas,
+  fetchImportSpecialTemplates,
   fetchImportBatch,
   fetchImportBatchChanges,
   fetchImportLedger,
@@ -112,6 +113,35 @@ export function ImportByAreaFlow() {
   const [fileBytes, setFileBytes] = useState<number | undefined>();
   const [uploadFailMeta, setUploadFailMeta] = useState<{ hexPrefix?: string; detectedType?: string } | null>(null);
   const [templateColumns, setTemplateColumns] = useState<ImportTemplateColumnDef[]>(DEFAULT_IMPORT_TEMPLATE_COLUMNS);
+
+  /** Back to the area picker with nothing carried over (no file, batch, check rows or result). */
+  const resetToAreas = () => {
+    setStep(1);
+    setArea(null);
+    setBatchId(null);
+    setBatchMeta({});
+    setBatchCode("");
+    setFileName("");
+    setParsedRowCount(undefined);
+    setChecking(false);
+    setCheckProgress(null);
+    setFileFailed(false);
+    setFileErrorDetail(null);
+    setHeaderBlocked(false);
+    setHeaderError(null);
+    setCheckRows([]);
+    setCheckTotal(0);
+    setCheckPage({ offset: 0, limit: 25, status: "", issue: "", q: "" });
+    setPriorImport(null);
+    setPromoteResult(null);
+    setRefreshWarning(null);
+    setShaPrefix("");
+    setBatchSummary(null);
+    setFileBytes(undefined);
+    setUploadFailMeta(null);
+    setParsedCsvHeaders(null);
+    pendingFile.current = null;
+  };
   const [parsedCsvHeaders, setParsedCsvHeaders] = useState<{ mapped: string[]; raw: string[] } | null>(null);
   const columnRows = useMemo(() => {
     if (parsedCsvHeaders?.mapped.length) {
@@ -121,6 +151,11 @@ export function ImportByAreaFlow() {
   }, [templateColumns, parsedCsvHeaders]);
 
   const areasQuery = useQuery({ queryKey: ["parts-import-areas"], queryFn: fetchImportAreas, enabled: canImport });
+  const specialTemplatesQuery = useQuery({
+    queryKey: ["parts-import-special-templates"],
+    queryFn: fetchImportSpecialTemplates,
+    enabled: canImport,
+  });
   const ledgerQuery = useQuery({
     queryKey: ["parts-import-ledger"],
     queryFn: () => fetchImportLedger(),
@@ -246,9 +281,9 @@ export function ImportByAreaFlow() {
       });
   }
 
-  async function loadTemplateSchema(areaId: string) {
+  async function loadTemplateSchema(areaId: string, importKind = "area") {
     try {
-      const { columns } = await fetchImportTemplateSchema(areaId);
+      const { columns } = await fetchImportTemplateSchema(areaId, importKind);
       const cols = columns?.length ? columns : DEFAULT_IMPORT_TEMPLATE_COLUMNS;
       setTemplateColumns(cols);
       return cols;
@@ -298,7 +333,7 @@ export function ImportByAreaFlow() {
     setHeaderError(null);
     setFileFailed(false);
     try {
-      const { batch } = await createImportBatch(area.id, file.name);
+      const { batch } = await createImportBatch(area.id, file.name, area.importKind ?? "area");
       const id = String(batch.id);
       setBatchId(id);
       setBatchCode(String(batch.code ?? ""));
@@ -458,15 +493,13 @@ export function ImportByAreaFlow() {
       {view === "areas" && step === 1 ? (
         <ImportAreaPicker
           areas={areasQuery.data?.areas ?? []}
+          specialTemplates={specialTemplatesQuery.data?.templates ?? []}
           onPick={(picked) => {
+            // Every template starts clean — a file chosen for another template is never carried over.
+            resetToAreas();
             setArea(picked);
             setStep(2);
-            setPromoteResult(null);
-            void loadTemplateSchema(picked.id).then((cols) => {
-              if (pendingFile.current?.size) {
-                void pendingFile.current.text().then((text) => applyFileHeaderAnalysis(text, cols));
-              }
-            });
+            void loadTemplateSchema(picked.id, picked.importKind ?? "area");
           }}
           onOpenLedger={() => setView("ledger")}
         />
@@ -516,8 +549,13 @@ export function ImportByAreaFlow() {
             fileName={fileName}
             rowCount={parsedRowCount}
             fileBytes={fileBytes}
-            onBackToAreas={() => { setStep(1); setArea(null); }}
-            onDownloadTemplate={() => { void download(templateCsvUrl(area.id), `${area.name}-template.csv`); }}
+            onBackToAreas={resetToAreas}
+            onDownloadTemplate={() => {
+              void download(
+                templateCsvUrl(area.id, area.importKind ?? "area"),
+                `${area.name}-template.csv`,
+              );
+            }}
             onDownloadVehicles={() => { void download(vehiclesCsvUrl(), "vehicles.csv"); }}
             onFile={assignFile}
             onClearFile={() => assignFile(new File([], ""))}
@@ -565,6 +603,7 @@ export function ImportByAreaFlow() {
           onExportRaw={() => { void download(sourceCsvUrl(batchId), fileName || "source.csv"); }}
           onAuditTrail={() => goDominionPage("activity-log")}
           onCheckAgain={() => { void onCheckAgain(); }}
+          onCancel={resetToAreas}
           onDownloadFailed={() => { void download(failedCsvUrl(batchId), `${fileName || "import"}-failed.csv`); }}
           onToggleAccepted={(line, accepted) => {
             void patchImportRow(batchId, line, { accepted })
@@ -620,7 +659,7 @@ export function ImportByAreaFlow() {
               setParsedCsvHeaders(null);
               setPromoteResult(null);
             }}
-            onBackToAreas={() => { setStep(1); setArea(null); setBatchId(null); setPromoteResult(null); }}
+            onBackToAreas={resetToAreas}
             onUndoIngestion={() => { void runUndoPreflightForDone(); }}
           />
           <ImportBatchRecordsTable
