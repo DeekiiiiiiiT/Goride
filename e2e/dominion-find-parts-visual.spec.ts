@@ -107,7 +107,7 @@ test("find parts car step renders with the sample car", async ({ page }) => {
 
   await page.goto("/?page=parts-catalog");
   await expect(page.getByText("Which car is it?")).toBeVisible({ timeout: 60_000 });
-  await expect(page.getByText("Match types on")).toBeVisible();
+  // FindPartsChrome hides the match-types chip on the Find parts and Full database tabs.
   await expect(page.getByText("INDEX: 35 FITMENTS")).toBeVisible();
 });
 
@@ -151,7 +151,7 @@ test("parts database keeps the tab in the address bar", async ({ page }) => {
     });
   });
   await page.goto("/?page=parts-catalog&tab=import");
-  await expect(page.getByRole("navigation", { name: "Database sections" }).getByRole("button", { name: "Import" })).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("navigation", { name: "Database sections" }).getByRole("button", { name: /Add parts/ })).toHaveAttribute("aria-current", "page");
   await expect(page.getByText("Match types off")).toBeVisible();
   await page.getByRole("button", { name: "Advanced tune" }).click();
   await expect(page).toHaveURL(/tab=advanced/);

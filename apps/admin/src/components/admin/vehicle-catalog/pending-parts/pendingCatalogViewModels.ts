@@ -24,7 +24,9 @@ export function buildS10eStripViewModel(strip: CatalogResearchStrip): S10eStripV
       : "Research is on"
     : "Research is off";
   const pauseReasonLabel = strip.paused && strip.pausedReason ? strip.pausedReason : "";
-  const todayJobsLabel = `Today ${strip.todayResearchCount ?? 0} / ${strip.dailyJobLimit} jobs`;
+  const todayJobsLabel = strip.dailyJobLimit != null
+    ? `Today ${strip.todayResearchCount ?? 0} / ${strip.dailyJobLimit} jobs`
+    : `Today ${strip.todayResearchCount ?? 0} jobs`;
   const dispatcherLabel = !strip.enabled
     ? "Turn on"
     : strip.paused

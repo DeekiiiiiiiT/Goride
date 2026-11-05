@@ -169,7 +169,7 @@ test.describe("Dominion pending parts stitch live PNGs", () => {
   test("S10b parts queue at 1440px", async ({ page }) => {
     await page.goto("/?page=pending-motor-vehicles");
     await page.getByRole("button", { name: /Parts\s+\d/i }).click();
-    await expect(page.getByText("Awaiting review")).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByText("Awaiting gate")).toBeVisible({ timeout: 20_000 });
     await page.locator(".pending-parts-stitch").screenshot({
       path: "docs/stitch/dominion-redesign/screenshots/S10b-live.png",
     });
@@ -179,7 +179,7 @@ test.describe("Dominion pending parts stitch live PNGs", () => {
     await page.goto("/?page=pending-motor-vehicles");
     await page.getByRole("button", { name: /Parts\s+\d/i }).click();
     await page.getByRole("button", { name: "Open" }).first().click();
-    await expect(page.getByText("Fleet Request Log", { exact: false })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole("heading", { name: "What they asked" })).toBeVisible({ timeout: 15_000 });
     await page.locator(".pending-parts-stitch").screenshot({
       path: "docs/stitch/dominion-redesign/screenshots/S10c-live.png",
     });
