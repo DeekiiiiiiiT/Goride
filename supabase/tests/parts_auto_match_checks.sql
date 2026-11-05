@@ -3086,8 +3086,7 @@ BEGIN
     RAISE EXCEPTION 'Proof 84 failed: missing merge log for moved part';
   END IF;
 
-  UPDATE public.interchange_group_merge_log SET reversed_at = now() WHERE id = v_merge;
-  UPDATE public.part_master SET interchange_group_id = v_grp_b WHERE id = v_part_b;
+  PERFORM public.part_match_unmerge_same_part(v_conflict, NULL);
 
   SELECT count(*)::int INTO v_cnt FROM public.part_master pm
   WHERE pm.id = v_part_a AND pm.interchange_group_id = v_grp_a;
@@ -3098,6 +3097,11 @@ BEGIN
   WHERE pm.id = v_part_b AND pm.interchange_group_id = v_grp_b;
   IF v_cnt <> 1 THEN
     RAISE EXCEPTION 'Proof 84 unmerge failed: part B group';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM public.part_match_conflict c WHERE c.id = v_conflict AND c.status <> 'open'
+  ) THEN
+    RAISE EXCEPTION 'Proof 84 unmerge failed: conflict should reopen';
   END IF;
 END $$;
 

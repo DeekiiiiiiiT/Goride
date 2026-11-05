@@ -1,4 +1,4 @@
-﻿-- parts_for_vehicle: on tier tie, prefer live match_status over needs_checking before rule_source
+-- parts_for_vehicle: on tier tie, prefer live match_status over needs_checking before rule_source
 
 
 

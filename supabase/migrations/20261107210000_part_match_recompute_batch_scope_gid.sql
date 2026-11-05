@@ -1,4 +1,4 @@
-﻿-- part_match_recompute: nightly batch scope uses u.gid from unnest(v_batch)
+-- part_match_recompute: nightly batch scope uses u.gid from unnest(v_batch)
 -- Depends on 20261107200000_part_match_sync_conflicts_manual_note.sql
 
 CREATE OR REPLACE FUNCTION public.part_match_recompute(

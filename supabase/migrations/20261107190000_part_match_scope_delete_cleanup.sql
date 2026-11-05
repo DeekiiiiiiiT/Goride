@@ -1,4 +1,4 @@
-﻿-- Use DELETE (not TRUNCATE) on temp scope tables so nested calls in one transaction stay safe
+-- Use DELETE (not TRUNCATE) on temp scope tables so nested calls in one transaction stay safe
 -- Depends on 20261107180000_part_match_scope_truncate_cleanup.sql
 
 CREATE OR REPLACE FUNCTION public.part_match_recompute_pairs(

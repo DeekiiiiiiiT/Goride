@@ -776,6 +776,25 @@ export function registerPartsAutoMatchRoutes(
     }
   });
 
+  route.post(`${BASE}/conflicts/:id/unmerge-same-part`, ...guard, async (c: Context) => {
+    const denied = ownerOnly(c);
+    if (denied) return denied;
+    const engineDenied = await requireAutoMatchEngine(c, supabase);
+    if (engineDenied) return engineDenied;
+    try {
+      const id = assertUuid(c.req.param("id"));
+      if (!id) return c.json({ error: "Invalid conflict id" }, 400);
+      const { error } = await supabase.rpc("part_match_unmerge_same_part", {
+        p_conflict_id: id,
+        p_actor: actorId(c),
+      });
+      if (error) throw error;
+      return c.json({ ok: true });
+    } catch (e) {
+      return fail(c, e, rpcClientErrorStatus(e));
+    }
+  });
+
   route.post(`${BASE}/conflicts/resolve-batch`, ...guard, async (c: Context) => {
     const denied = staffOnly(c);
     if (denied) return denied;

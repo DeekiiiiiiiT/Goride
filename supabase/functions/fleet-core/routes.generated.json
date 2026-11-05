@@ -1,7 +1,7 @@
 {
   "slug": "fleet-core",
-  "generatedAt": "2026-11-04T13:53:22.384Z",
-  "routeCount": 898,
+  "generatedAt": "2026-11-04T23:33:50.866Z",
+  "routeCount": 900,
   "routes": [
     "ALL /make-server-37f42386/webhooks/wipay-fleet-modules",
     "DELETE ${ADMIN_CAT}/:id",
@@ -239,6 +239,7 @@
     "GET /make-server-37f42386/admin/catalog/body-families",
     "GET /make-server-37f42386/admin/catalog/compare",
     "GET /make-server-37f42386/admin/catalog/engine-families",
+    "GET /make-server-37f42386/admin/catalog/engine-families/:id",
     "GET /make-server-37f42386/admin/catalog/find-parts",
     "GET /make-server-37f42386/admin/catalog/find-parts/coverage",
     "GET /make-server-37f42386/admin/catalog/matrix",
@@ -488,6 +489,7 @@
     "POST ${BASE}/bulk-reconcile",
     "POST ${BASE}/claims-toll-sync/repair",
     "POST ${BASE}/conflicts/:id/resolve",
+    "POST ${BASE}/conflicts/:id/unmerge-same-part",
     "POST ${BASE}/conflicts/resolve-batch",
     "POST ${BASE}/derived/remove-batch",
     "POST ${BASE}/external-orgs/:id/convert",

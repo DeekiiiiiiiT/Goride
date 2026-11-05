@@ -1,4 +1,4 @@
-﻿-- part_match_sync_conflicts: manual/import listing supersede note includes group code
+-- part_match_sync_conflicts: manual/import listing supersede note includes group code
 -- Depends on 20261107190000_part_match_scope_delete_cleanup.sql
 
 CREATE OR REPLACE FUNCTION public.part_match_sync_conflicts(

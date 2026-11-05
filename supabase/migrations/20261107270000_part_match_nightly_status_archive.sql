@@ -1,4 +1,4 @@
-﻿-- Nightly all-batches loop, status after conflicts, scoped archive, derived cars in locks
+-- Nightly all-batches loop, status after conflicts, scoped archive, derived cars in locks
 -- Depends on 20261107260000_part_match_index_merge_keep.sql
 CREATE OR REPLACE FUNCTION public.part_match_archive_derived_changes(
   p_new_engine_version integer

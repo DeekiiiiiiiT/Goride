@@ -1,4 +1,4 @@
-﻿-- parts_for_vehicle: sister derived tier 2, derived row guards, engine tier-3 years, ORDER BY, badge dedupe
+-- parts_for_vehicle: sister derived tier 2, derived row guards, engine tier-3 years, ORDER BY, badge dedupe
 -- Depends on 20261107240000_parts_for_vehicle_universal.sql
 
 

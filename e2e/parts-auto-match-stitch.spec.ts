@@ -191,7 +191,11 @@ async function assertStitchPhrases(
 }
 
 const STITCH_PHRASE_SKIPS: Record<string, string[]> = {
-  "AM-S1-vehicle-factory-part-numbers.html": ["Add factory part number", "No factory numbers yet"],
+  "AM-S1-vehicle-factory-part-numbers.html": [
+    "Add factory part number",
+    "No factory numbers yet",
+    "Part Type",
+  ],
   "AM-S5-auto-match-conflicts.html": [
     "Auto-Match Conflicts",
     "Group BRK-0031 already has a listing you entered for this car, so it stays. Both parts will show.",
@@ -214,6 +218,7 @@ const AM_APP_ONLY_LABELS: Record<string, string[]> = {
     "Pending inspect",
   ],
   "AM-S3-platform-shared-components.html": ["Export Matrix CSV"],
+  "AM-S5-auto-match-conflicts.html": ["Same part — merge", "Undo merge"],
   "find-parts-why-it-fits.html": [
     "Roam is checking",
     "Confirmed",
@@ -449,6 +454,8 @@ test.describe("Dominion parts auto-match Stitch fidelity", () => {
     await expect(page.getByText("DAI-M900").first()).toBeVisible();
     await assertNoForbidden(page, AM_DOMINION_FORBIDDEN, page.locator(".platform-shared-record").first());
     await page.getByPlaceholder("Search platform code or maker").fill("DAI");
+    await page.getByRole("button", { name: /Add shared component/i }).first().click();
+    await expect(page.getByText("Component Scope", { exact: false })).toBeVisible({ timeout: 10_000 });
     await page.screenshot({ path: join(dominionShotsDir, "AM-S3-app.png"), fullPage: true });
     await assertStitchLabelParity(
       page,

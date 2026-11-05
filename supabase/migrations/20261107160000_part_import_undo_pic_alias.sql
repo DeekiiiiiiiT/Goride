@@ -1,4 +1,4 @@
-﻿-- part_import_undo: rename part_import_change alias to pic in undo scope INSERTs (avoid shadowing loop variable c)
+-- part_import_undo: rename part_import_change alias to pic in undo scope INSERTs (avoid shadowing loop variable c)
 -- Depends on 20261107150000_part_match_derived_keep_pfd_alias.sql
 
 CREATE OR REPLACE FUNCTION public.part_import_undo(p_batch_id uuid, p_actor uuid)

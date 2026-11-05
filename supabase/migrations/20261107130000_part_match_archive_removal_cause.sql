@@ -1,4 +1,4 @@
-﻿-- Archive removal_cause: exclusion vs keys_no_longer_match; changed rows leave removal_cause null
+-- Archive removal_cause: exclusion vs keys_no_longer_match; changed rows leave removal_cause null
 -- Depends on 20261107120000_parts_for_vehicle_live_tiebreak.sql
 
 CREATE OR REPLACE FUNCTION public.part_match_archive_derived_changes(

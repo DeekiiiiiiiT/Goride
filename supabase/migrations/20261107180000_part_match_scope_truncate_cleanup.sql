@@ -1,4 +1,4 @@
-﻿-- Clear _pm_scope / _pm_batch_scope between calls in one transaction
+-- Clear _pm_scope / _pm_batch_scope between calls in one transaction
 -- Depends on 20261107170000_vehicle_oe_number_revision_drop_fkey.sql
 
 CREATE OR REPLACE FUNCTION public.part_match_recompute_pairs(

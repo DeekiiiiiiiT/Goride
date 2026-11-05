@@ -24,6 +24,7 @@ export function ConflictReviewDrawer({
   onKeep,
   onRemove,
   onMerge,
+  onUnmerge,
   canMergeSamePart,
 }: {
   row: MatchConflictRow;
@@ -34,12 +35,15 @@ export function ConflictReviewDrawer({
   onKeep: () => void;
   onRemove: () => void;
   onMerge?: () => void;
+  onUnmerge?: () => void;
   canMergeSamePart?: boolean;
 }) {
   const manual = conflictManualWinsBanner(row);
   const open = String(row.status || "") === "open";
+  const kept = String(row.status || "") === "kept";
   const typeLabel = conflictTypeLabel(String(row.conflict_type || ""));
   const isOeAmbiguous = String(row.conflict_type || "") === "oe_ambiguous";
+  const canUnmergeSamePart = Boolean(canMergeSamePart && kept && isOeAmbiguous && onUnmerge);
   const groups = conflictInvolvedGroups(row);
   const numbers = conflictNumbersInvolved(row);
   const vehicleSpec = conflictVehicleSpecLine(row);
@@ -201,7 +205,17 @@ export function ConflictReviewDrawer({
           {resolvedLine ? (
             <p className="font-body-sm text-body-sm text-on-surface-variant">{resolvedLine}</p>
           ) : null}
-          <div className="flex items-center justify-end">
+          <div className="flex items-center justify-end gap-space-sm flex-wrap">
+            {canUnmergeSamePart ? (
+              <button
+                type="button"
+                className="px-4 py-2 rounded-lg bg-secondary-container hover:opacity-95 text-on-secondary-container font-label-md text-label-md font-semibold transition-opacity disabled:opacity-40"
+                disabled={busy}
+                onClick={onUnmerge}
+              >
+                Undo merge
+              </button>
+            ) : null}
             <button type="button" className="px-5 py-2 rounded-lg bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-label-md text-label-md font-semibold transition-colors" onClick={onClose}>
               Close
             </button>

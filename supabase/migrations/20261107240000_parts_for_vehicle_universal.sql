@@ -1,4 +1,4 @@
-﻿-- parts_for_vehicle: tier tiebreak + universal tier 5 rows
+-- parts_for_vehicle: tier tiebreak + universal tier 5 rows
 -- Depends on 20261107230000_part_match_conflict_open_key_oe.sql
 
 

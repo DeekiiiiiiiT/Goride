@@ -43,7 +43,7 @@ export function VehicleCarSpecsSection({ variantId }: { variantId: string }) {
     onError: (e) => toast.error(e instanceof Error ? e.message : "Could not save spec"),
   });
 
-  const selected = keys.data?.items.find((k) => k.key === specKey);
+  const selected = keys.data?.items?.find((k) => k.key === specKey);
 
   return (
     <div className="rounded-[0.5rem] border border-slate-200 bg-white p-4 lg:col-span-2 xl:col-span-4">

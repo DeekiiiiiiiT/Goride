@@ -1,4 +1,4 @@
-﻿-- Add-a-part behavioural done tests (audit § Done test). Rolls back; run after add-a-part migrations.
+-- Add-a-part behavioural done tests (audit § Done test). Rolls back; run after add-a-part migrations.
 BEGIN;
 
 INSERT INTO auth.users (id, email)

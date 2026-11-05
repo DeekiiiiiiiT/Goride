@@ -133,6 +133,14 @@ export async function resolveAutoMatchConflict(
   if (!res.ok) throw new Error(await parseErr(res));
 }
 
+export async function unmergeSamePartConflict(token: string, id: string): Promise<void> {
+  const res = await fetch(`${AUTO}/conflicts/${encodeURIComponent(id)}/unmerge-same-part`, {
+    method: "POST",
+    headers: await headers(token),
+  });
+  if (!res.ok) throw new Error(await parseErr(res));
+}
+
 export async function resolveAutoMatchConflictsBatch(
   token: string,
   items: Array<{ id: string; action: "keep" | "remove"; note: string }>,

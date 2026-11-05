@@ -18,6 +18,7 @@ import {
   fetchPartMatchSchedule,
   resolveAutoMatchConflict,
   resolveAutoMatchConflictsBatch,
+  unmergeSamePartConflict,
   type MatchConflictRow,
 } from "../../../../services/partsAutoMatchApi";
 import { ConflictReviewDrawer } from "./ConflictReviewDrawer";
@@ -223,6 +224,22 @@ export function AutoMatchConflictsTab({
       await client.invalidateQueries({ queryKey: ["conflict-heatmap"] });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not resolve");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function unmergeSamePart(id = drawerId) {
+    if (!id) return;
+    setBusy(true);
+    try {
+      await unmergeSamePartConflict(token, id);
+      toast.success("Merge undone");
+      setNote("");
+      await client.invalidateQueries({ queryKey: ["auto-match-conflicts"] });
+      await client.invalidateQueries({ queryKey: ["conflict-heatmap"] });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not undo merge");
     } finally {
       setBusy(false);
     }
@@ -456,6 +473,7 @@ export function AutoMatchConflictsTab({
               onKeep={() => { void resolve("keep"); }}
               onRemove={() => { void resolve("remove"); }}
               onMerge={() => { void resolve("merge"); }}
+              onUnmerge={() => { void unmergeSamePart(); }}
               canMergeSamePart={owner}
             />
           ) : null}

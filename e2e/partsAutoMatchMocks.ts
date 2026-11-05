@@ -963,6 +963,10 @@ async function fulfillCatalogAdmin(route: Route) {
     });
     return;
   }
+  if (url.includes("/admin/catalog/spec-keys")) {
+    await route.fulfill({ json: { items: [] } });
+    return;
+  }
   if (method === "GET" && url.includes("/admin/catalog/")) {
     await route.fulfill({ json: {} });
     return;
@@ -1032,6 +1036,14 @@ async function fulfillFleetCoreAdmin(route: Route) {
       return;
     }
     await route.fulfill({ json: { ok: true, resolved: 1 } });
+    return;
+  }
+  if (url.includes("/admin/auto-match/conflicts/") && url.includes("/unmerge-same-part") && method === "POST") {
+    if (activeProfile === "flagOff") {
+      await route.fulfill({ status: 403, json: engineDisabledResponse() });
+      return;
+    }
+    await route.fulfill({ json: { ok: true } });
     return;
   }
   if (url.includes("/admin/auto-match/conflicts/") && url.includes("/resolve") && method === "POST") {
