@@ -1,0 +1,113 @@
+.pending-parts-stitch.auto-match-conflicts .am-conflict-badge-kept {
+  background-color: rgba(16, 185, 129, 0.12);
+  color: #065f46;
+}
+.pending-parts-stitch.auto-match-conflicts .am-conflict-badge-kept-dot {
+  background-color: #059669;
+}
+.dark .pending-parts-stitch.auto-match-conflicts .am-conflict-badge-kept {
+  background-color: rgba(52, 211, 153, 0.15);
+  color: #6ee7b7;
+}
+.dark .pending-parts-stitch.auto-match-conflicts .am-conflict-badge-kept-dot {
+  background-color: #34d399;
+}
+.pending-parts-stitch .bg-black\/40 { background-color: rgba(0, 0, 0, 0.4); }
+.pending-parts-stitch.auto-match-conflicts .am-conflict-section-label { color: #565e74; }
+.pending-parts-stitch.auto-match-conflicts .am-conflict-th {
+  white-space: normal;
+  word-break: normal;
+  overflow-wrap: normal;
+  hyphens: none;
+}
+.pending-parts-stitch.auto-match-conflicts .auto-match-conflicts-table td {
+  white-space: normal;
+  word-break: normal;
+  overflow-wrap: anywhere;
+}
+.pending-parts-stitch.auto-match-conflicts .am-conflict-status-badge { white-space: nowrap; }
+.pending-parts-stitch.auto-match-conflicts .am-conflict-type-keep { white-space: nowrap; }
+.pending-parts-stitch.auto-match-conflicts .am-conflict-type-chip-active {
+  background-color: #dbe1ff;
+  color: #00174b;
+}
+.pending-parts-stitch.auto-match-conflicts .am-conflict-type-chip-active .font-mono-sm {
+  background-color: #0153dc;
+  color: #ffffff;
+}
+.pending-parts-stitch.auto-match-conflicts .am-conflict-remove-impact-heading { color: #565e74; }
+.pending-parts-stitch.auto-match-conflicts .auto-match-conflicts-drawer .text-on-surface-variant.material-symbols-outlined { color: #565e74; }
+.pending-parts-stitch.auto-match-conflicts .auto-match-conflicts-primary:not(:disabled) {
+  background-color: #0153dc !important;
+  color: #ffffff !important;
+}
+.pending-parts-stitch.auto-match-conflicts .auto-match-conflicts-note,
+.pending-parts-stitch.auto-match-conflicts .auto-match-conflicts-search {
+  border: 1px solid #c3c6d7;
+}
+.dark .pending-parts-stitch.auto-match-conflicts {
+  --color-surface: #0b1220;
+  color: #e2e8f0;
+  background: #0b1220;
+}
+.dark main:has(.pending-parts-stitch.auto-match-conflicts) {
+  background-color: #0b1220;
+  color: #e2e8f0;
+}
+.dark .pending-parts-stitch.auto-match-conflicts .bg-surface { background-color: #0b1220; }
+.dark .pending-parts-stitch.auto-match-conflicts .bg-surface-container-lowest { background-color: #111827; }
+.dark .pending-parts-stitch.auto-match-conflicts .bg-surface-container-low,
+.dark .pending-parts-stitch.auto-match-conflicts .bg-surface-container-low\/30,
+.dark .pending-parts-stitch.auto-match-conflicts .bg-surface-container-low\/40 { background-color: #172033; }
+.dark .pending-parts-stitch.auto-match-conflicts .bg-surface-container { background-color: #1e293b; }
+.dark .pending-parts-stitch.auto-match-conflicts .bg-surface-container-high { background-color: #243044; }
+.dark .pending-parts-stitch.auto-match-conflicts .bg-surface-container-highest { background-color: #2a3650; }
+.dark .pending-parts-stitch.auto-match-conflicts .bg-primary-fixed,
+.dark .pending-parts-stitch.auto-match-conflicts .bg-primary-fixed\/30,
+.dark .pending-parts-stitch.auto-match-conflicts .bg-primary-fixed\/40 { background-color: #1e3a5f; }
+.dark .pending-parts-stitch.auto-match-conflicts .text-on-surface { color: #e2e8f0; }
+.dark .pending-parts-stitch.auto-match-conflicts .text-on-surface-variant { color: #cbd5e1; }
+.dark .pending-parts-stitch.auto-match-conflicts .text-outline { color: #94a3b8; }
+.dark .pending-parts-stitch.auto-match-conflicts .text-primary { color: #8eb4ff; }
+.dark .pending-parts-stitch.auto-match-conflicts .am-conflict-section-label { color: #94a3b8; }
+.dark .pending-parts-stitch.auto-match-conflicts .am-conflict-code-chip {
+  background-color: #1e3a5f;
+  color: #8eb4ff;
+}
+.dark .pending-parts-stitch.auto-match-conflicts .am-conflict-type-chip .text-outline { color: #cbd5e1; }
+.dark .pending-parts-stitch.auto-match-conflicts .am-conflict-type-chip-active {
+  background-color: #3b6fd4;
+  color: #ffffff;
+}
+.dark .pending-parts-stitch.auto-match-conflicts .am-conflict-type-chip-active .font-mono-sm {
+  background-color: #0153dc;
+  color: #ffffff;
+}
+.dark .pending-parts-stitch.auto-match-conflicts .am-conflict-remove-impact-heading,
+.dark .pending-parts-stitch.auto-match-conflicts .auto-match-conflicts-drawer .text-on-surface-variant.material-symbols-outlined {
+  color: #94a3b8 !important;
+}
+.dark .pending-parts-stitch.auto-match-conflicts .am-pending-tab-count-active {
+  background-color: #5b8def !important;
+  color: #ffffff !important;
+}
+.dark .pending-parts-stitch.auto-match-conflicts .text-on-primary {
+  color: #ffffff;
+}
+.dark .pending-parts-stitch.auto-match-conflicts .am-conflict-row-active {
+  background-color: rgba(30, 58, 95, 0.65) !important;
+}
+.dark .pending-parts-stitch.auto-match-conflicts .am-conflict-row-active .font-mono-sm,
+.dark .pending-parts-stitch.auto-match-conflicts .am-conflict-row-active .font-label-md { color: #e2e8f0; }
+.dark .pending-parts-stitch.auto-match-conflicts .auto-match-conflicts-primary:not(:disabled) {
+  background-color: #5b8def !important;
+  color: #ffffff !important;
+}
+.dark .pending-parts-stitch.auto-match-conflicts .auto-match-conflicts-note,
+.dark .pending-parts-stitch.auto-match-conflicts .auto-match-conflicts-search {
+  background-color: #172033;
+  color: #e2e8f0;
+  border-color: #475569;
+}
+.dark .pending-parts-stitch.auto-match-conflicts .auto-match-conflicts-search::placeholder { color: #94a3b8; }
+.dark .pending-parts-stitch.auto-match-conflicts .text-amber-800 { color: #fde68a; }

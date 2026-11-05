@@ -1,4 +1,4 @@
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { generateScopedStitchCss, mergeThemeExtend, parseTailwindConfigFromHtml } from './stitch-tailwind-theme.mjs';
 
@@ -50,5 +50,7 @@ const manualTail = `.fleet-find-parts-stitch .find-parts-stepbar, .fleet-find-pa
 
 const generated = generateScopedStitchCss('fleet-find-parts-stitch', theme);
 const out = join(repo, 'apps', 'fleet', 'src', 'components', 'vehicles', 'find-parts', 'findParts.css');
-writeFileSync(out, `${manualHead}\n${manualFp4}${generated.join('\n')}\n${manualTail}`);
+// Hand-written styles (e.g. AM-S4F results) live in scripts/stitch-css/findParts.manual.css so regeneration keeps them.
+const manualExtra = readFileSync(join(repo, 'scripts', 'stitch-css', 'findParts.manual.css'), 'utf8').replace(/\r\n/g, '\n');
+writeFileSync(out, `${manualHead}\n${manualFp4}${generated.join('\n')}\n${manualTail}\n${manualExtra}`);
 console.log(`wrote ${generated.length + 2} sections → ${out}`);

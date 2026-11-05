@@ -150,3 +150,8 @@ DROP TRIGGER IF EXISTS mm_mtt_revision_bump ON public.maintenance_task_templates
 CREATE TRIGGER mm_mtt_revision_bump
   BEFORE UPDATE ON public.maintenance_task_templates
   FOR EACH ROW EXECUTE FUNCTION public.trg_mtt_revision_bump();
+
+-- R4-01 guard: trigger functions need no EXECUTE for anon/authenticated (triggers fire regardless).
+REVOKE EXECUTE ON FUNCTION public.trg_mpc_reject_part_rule_template() FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.trg_mtt_block_package_to_part_rule() FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.trg_mtt_revision_bump() FROM PUBLIC, anon, authenticated;

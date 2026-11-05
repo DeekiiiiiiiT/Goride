@@ -143,7 +143,8 @@ export function Fp5Screen({
           <footer className="fp5-am-engine-footer pt-space-lg mt-space-md border-t border-outline-variant/30 font-body-sm text-body-sm text-on-surface-variant fp5-am-wrap flex flex-col md:flex-row items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-emerald-500" aria-hidden />
-              <span>Roam Fleet Match Intelligence Engine • Kingston Hub #01</span>
+              {/* Stitch shows a sample hub name here; findParts.noSample bans sample data. */}
+              <span>Roam Fleet Match Intelligence Engine</span>
             </div>
             <div>
               <span>Non-commercial parts encyclopedia • Zero pricing or procurement bias</span>

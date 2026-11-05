@@ -83,6 +83,8 @@ for (const row of readme.split('\n').filter((l) => /^\| (S\d|PI\d)/.test(l))) {
   if (report || (checked && bad)) {
     console.log(`${bad ? 'FAIL' : 'ok  '} ${num} ${pct}% labels${oldKit ? ', old ui kit' : ''} — ${react}`);
     if (report && dropped.length) console.log(`drop ${num}: ${dropped.join(' | ')}`);
+    const missing = [...labels].filter((l) => !lower.includes(l)).sort();
+    if (report && missing.length) console.log(`miss ${num}: ${missing.join(' | ')}`);
   }
   if (checked && bad) failed = true;
 }

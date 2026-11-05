@@ -47,4 +47,4 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Places register
-        run: npx playwright test -c playwright.dominion.config.ts
+        run: node node_modules/@playwright/test/cli.js test -c playwright.dominion.config.ts

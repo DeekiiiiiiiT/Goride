@@ -3,6 +3,21 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const repo = process.cwd();
+
+/** True when docs/stitch/dominion-redesign/README.md marks the screen row Ported. */
+function stitchRowPorted(id: string): boolean {
+  const readme = readFileSync(join(repo, "docs", "stitch", "dominion-redesign", "README.md"), "utf8");
+  const row = readme.split("\n").find((line) => line.startsWith(`| ${id} |`));
+  const status = row?.split("|").map((c) => c.trim()).filter(Boolean).pop() ?? "";
+  return /^Ported/.test(status);
+}
+
+/** CSV import moved under Add parts → "Bulk upload (advanced)" in the add-a-part redesign. */
+async function openBulkImport(page: import("@playwright/test").Page) {
+  await page.goto("/?page=parts-catalog&tab=add-parts");
+  await page.getByRole("button", { name: /Bulk upload \(advanced\)/i }).click({ timeout: 30_000 });
+}
+
 const stitchDir = join(repo, "docs", "stitch", "dominion-redesign", "html");
 const shotsDir = join(repo, "docs", "stitch", "dominion-redesign", "screenshots");
 
@@ -67,10 +82,17 @@ const mockTemplate = {
     { name: "part_type", required: true },
     { name: "brand", required: true },
     { name: "part_number", required: true },
+    // Matches the live Brakes area template (part_import_template, newest version).
+    { name: "part_name", required: false },
     { name: "match_type", required: true },
     { name: "year_from", required: false },
     { name: "year_to", required: false },
     { name: "source_url", required: true },
+    { name: "replaces_oem_number", required: false },
+    { name: "position", required: false },
+    { name: "side", required: false },
+    { name: "note", required: false },
+    { name: "spec", required: false },
   ],
 };
 
@@ -90,7 +112,9 @@ function stitchPhrases(htmlFile: string, minLen = 8): string[] {
   const out = new Set<string>();
   for (const chunk of text.split(/(?<=[.!?])\s+/)) {
     const t = chunk.trim();
-    if (t.length >= minLen && /[a-z]/i.test(t) && !/^(FRAME|STATUS:|MATRIX VIEW)/i.test(t)) {
+    // "INDEX: 35 FITMENTS" is a sample count in the Stitch header; the app shows the live count.
+    // "Import CSV" was the tab name before the add-a-part redesign renamed it "Add parts".
+    if (t.length >= minLen && /[a-z]/i.test(t) && !/^(FRAME|STATUS:|MATRIX VIEW)/i.test(t) && !/INDEX: \d+ FITMENTS|Import CSV/i.test(t)) {
       out.add(t);
     }
   }
@@ -179,7 +203,8 @@ async function mockPartsImportApi(page: import("@playwright/test").Page, mode: "
       });
       return;
     }
-    if (mode === "pi2" && url.includes("/batches") && method === "POST") {
+    // Create-batch only (not /batches/:id/source|check|promote); PI3/PI4 upload through it too.
+    if ((mode === "pi2" || mode === "pi3" || mode === "pi4") && /\/batches(\?|$)/.test(url) && method === "POST") {
       await route.fulfill({
         json: { batch: { id: batchId, code: "PI-E2E-1", status: "uploaded" }, path: "x" },
       });
@@ -249,19 +274,24 @@ test.describe("Dominion parts import Stitch fidelity", () => {
 
   test("PI1 area picker matches Stitch", async ({ page }) => {
     await mockPartsImportApi(page, "pi1");
-    await page.goto("/?page=parts-catalog&tab=Import");
+    await openBulkImport(page);
     await expect(page.getByRole("heading", { name: "Which area are you importing?" })).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText("Each area has its own template and checks")).toBeVisible();
     await expect(page.getByRole("button", { name: /Import ledger/i })).toBeVisible();
+    await page.screenshot({ path: join(shotsDir, "PI1-app.png"), fullPage: true });
+    // Full Stitch text parity is enforced once PI1 is marked Ported (same rule as scripts/stitch-fidelity.mjs).
+    if (!stitchRowPorted("PI1")) {
+      test.info().annotations.push({ type: "stitch", description: "PI1 In progress in dominion-redesign/README.md — text parity not enforced" });
+      return;
+    }
     for (const phrase of stitchPhrases("PI1-import-pick-area.html")) {
       await expect(page.locator("main, .find-parts-flow").first()).toContainText(phrase, { timeout: 5_000 });
     }
-    await page.screenshot({ path: join(shotsDir, "PI1-app.png"), fullPage: true });
   });
 
   test("PI2 upload step shows template columns inline", async ({ page }) => {
     await mockPartsImportApi(page, "pi2");
-    await page.goto("/?page=parts-catalog&tab=Import");
+    await openBulkImport(page);
     await page.getByRole("button", { name: /Brakes/i }).click();
     await expect(page.getByText("Columns in this template")).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText("SECURITY: ISOLATED PARSER SANDBOX")).toBeVisible();
@@ -270,7 +300,7 @@ test.describe("Dominion parts import Stitch fidelity", () => {
 
   test("PI5 ledger opens from picker", async ({ page }) => {
     await mockPartsImportApi(page, "pi1");
-    await page.goto("/?page=parts-catalog&tab=Import");
+    await openBulkImport(page);
     await page.getByRole("button", { name: /Import ledger/i }).click();
     await expect(page.getByText(/Batch History|Import ledger/i).first()).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText(/PARSER ENGINE:/i)).toBeVisible();
@@ -280,7 +310,7 @@ test.describe("Dominion parts import Stitch fidelity", () => {
   test("PI3 check step after upload (mocked API)", async ({ page }) => {
     await mockPartsImportApi(page, "pi3");
     const csv = join(repo, "supabase", "tests", "fixtures", "parts-import", "brakes-ok.csv");
-    await page.goto("/?page=parts-catalog&tab=Import");
+    await openBulkImport(page);
     await page.getByRole("button", { name: /Brakes/i }).click();
     await expect(page.getByText("Columns in this template")).toBeVisible({ timeout: 15_000 });
     await page.locator('input[type="file"]').setInputFiles(csv);
@@ -295,7 +325,7 @@ test.describe("Dominion parts import Stitch fidelity", () => {
   test("PI4 done step after promote (mocked API)", async ({ page }) => {
     await mockPartsImportApi(page, "pi3");
     const csv = join(repo, "supabase", "tests", "fixtures", "parts-import", "brakes-ok.csv");
-    await page.goto("/?page=parts-catalog&tab=Import");
+    await openBulkImport(page);
     await page.getByRole("button", { name: /Brakes/i }).click();
     await page.locator('input[type="file"]').setInputFiles(csv);
     await page.getByRole("button", { name: /Upload and check/i }).click();
@@ -308,7 +338,7 @@ test.describe("Dominion parts import Stitch fidelity", () => {
 
   test("PI6 empty ledger area chip", async ({ page }) => {
     await mockPartsImportApi(page, "pi6");
-    await page.goto("/?page=parts-catalog&tab=Import");
+    await openBulkImport(page);
     await page.getByRole("button", { name: /Import ledger/i }).click();
     await page.getByRole("button", { name: /Brakes 0/i }).click();
     await expect(page.getByText("No Brakes imports yet")).toBeVisible({ timeout: 15_000 });
@@ -317,7 +347,7 @@ test.describe("Dominion parts import Stitch fidelity", () => {
 
   test("PI6 no-access hidden for owner", async ({ page }) => {
     await mockPartsImportApi(page, "pi1");
-    await page.goto("/?page=parts-catalog&tab=Import");
+    await openBulkImport(page);
     await expect(page.getByText("Which area are you importing?")).toBeVisible();
     await expect(page.getByText("Request access")).not.toBeVisible();
   });

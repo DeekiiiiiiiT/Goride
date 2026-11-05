@@ -448,6 +448,9 @@ test.describe("Dominion parts auto-match Stitch fidelity", () => {
     await page.getByRole("button", { name: /Brakes/i }).click();
     await page.screenshot({ path: join(dominionShotsDir, "AM-S1-app.png"), fullPage: true });
     await assertNoForbidden(page, AM_DOMINION_FORBIDDEN, page.locator(".vehicle-auto-match-tabs, .parts-database-stitch").first());
+    // Stitch shows the add-number form open; open it so its field labels are on the page.
+    await page.getByRole("button", { name: /Add number/i }).first().click();
+    await expect(page.getByText("Parts Catalogue Reference URL")).toBeVisible({ timeout: 10_000 });
     await assertStitchLabelParity(
       page,
       "AM-S1-vehicle-factory-part-numbers.html",
@@ -822,7 +825,7 @@ test.describe("Fleet AM-S4F why it fits rows", () => {
     }
     await resultsRoot.screenshot({ path: join(fleetShotsDir, "AM-S4F-app.png") });
     await expect(page.getByRole("heading", { name: "Fleet Maintenance" })).toBeVisible();
-    await expect(resultsRoot).toContainText("Roam Fleet Match Intelligence Engine • Kingston Hub #01");
+    await expect(resultsRoot).toContainText("Roam Fleet Match Intelligence Engine");
     await expect(resultsRoot).toContainText("Non-commercial parts encyclopedia • Zero pricing or procurement bias");
     await assertStitchLabelParity(
       page,

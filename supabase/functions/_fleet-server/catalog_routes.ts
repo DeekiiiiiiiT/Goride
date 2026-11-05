@@ -18,6 +18,8 @@ import { FEATURE_FLAGS, setFeatureFlag } from "./feature_flags.ts";
 import { findParts } from "./parts_finder.ts";
 import { readFindPartsCoverage, readPartTerm, readPartsBrowse, readSymptoms } from "./parts_catalog_read.ts";
 import { enrichCatalogMasterPart, enrichCatalogMasterSearch } from "./catalog_master_enrich.ts";
+/** No signed-in user means not an owner (hasPlatformOwnerAccess needs a user). */
+const isOwnerUser = (u: RbacUser | undefined): boolean => !!u && hasPlatformOwnerAccess(u);
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -937,7 +939,7 @@ export function registerCatalogRoutes(route: RouteApp, supabase: SupabaseClient)
     const denied = assertPlatformStaffResponse(c);
     if (denied) return denied;
     try {
-      const owner = hasPlatformOwnerAccess(c.get("rbacUser") as RbacUser | undefined);
+      const owner = isOwnerUser(c.get("rbacUser") as RbacUser | undefined);
       const { data, error } = await supabase.rpc("list_self_serve_part_types", {
         p_include_draft: owner,
       });
@@ -1099,7 +1101,7 @@ export function registerCatalogRoutes(route: RouteApp, supabase: SupabaseClient)
       const mine = (c.req.query("mine") ?? "").trim() === "1";
       const actor = c.get("rbacUser") as { userId?: string; id?: string } | undefined;
       const actorId = String(actor?.userId ?? actor?.id ?? "");
-      const owner = hasPlatformOwnerAccess(actor as RbacUser | undefined);
+      const owner = isOwnerUser(actor as RbacUser | undefined);
       if (mine) {
         if (!UUID_RE.test(actorId)) return staffJson(c, { items: [] });
         const { data, error } = await supabase.from("part_type_request").select("*")
@@ -1122,7 +1124,7 @@ export function registerCatalogRoutes(route: RouteApp, supabase: SupabaseClient)
   route.post("/make-server-37f42386/admin/catalog/part-type-requests/:id/decide", requireAuth(), async (c: Context) => {
     const denied = assertPlatformStaffResponse(c);
     if (denied) return denied;
-    if (!hasPlatformOwnerAccess(c.get("rbacUser") as RbacUser | undefined)) {
+    if (!isOwnerUser(c.get("rbacUser") as RbacUser | undefined)) {
       return c.json({ error: "Owner only" }, 403);
     }
     try {
@@ -1149,7 +1151,7 @@ export function registerCatalogRoutes(route: RouteApp, supabase: SupabaseClient)
   route.post("/make-server-37f42386/admin/catalog/part-types", requireAuth(), async (c: Context) => {
     const denied = assertPlatformStaffResponse(c);
     if (denied) return denied;
-    if (!hasPlatformOwnerAccess(c.get("rbacUser") as RbacUser | undefined)) {
+    if (!isOwnerUser(c.get("rbacUser") as RbacUser | undefined)) {
       return c.json({ error: "Owner only" }, 403);
     }
     try {
@@ -1165,7 +1167,7 @@ export function registerCatalogRoutes(route: RouteApp, supabase: SupabaseClient)
   route.patch("/make-server-37f42386/admin/catalog/part-types/:id", requireAuth(), async (c: Context) => {
     const denied = assertPlatformStaffResponse(c);
     if (denied) return denied;
-    if (!hasPlatformOwnerAccess(c.get("rbacUser") as RbacUser | undefined)) {
+    if (!isOwnerUser(c.get("rbacUser") as RbacUser | undefined)) {
       return c.json({ error: "Owner only" }, 403);
     }
     try {

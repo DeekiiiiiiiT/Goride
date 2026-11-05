@@ -96,6 +96,10 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install chromium --with-deps
       - name: Build admin
+        # Without Supabase config the app shows its setup screen. "example" matches the sb-example-auth-token session the specs seed; mocks catch the API host.
+        env:
+          VITE_SUPABASE_URL: https://example.supabase.co
+          VITE_SUPABASE_ANON_KEY: ci-placeholder-anon-key
         run: pnpm --filter @roam/admin run build
       - name: Dominion auto-match Stitch spec
         env:
@@ -124,6 +128,10 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install chromium --with-deps
       - name: Build fleet
+        # Without Supabase config the app shows its setup screen. "example" matches the sb-example-auth-token session the specs seed; mocks catch the API host.
+        env:
+          VITE_SUPABASE_URL: https://example.supabase.co
+          VITE_SUPABASE_ANON_KEY: ci-placeholder-anon-key
         run: pnpm --filter @roam/fleet run build
       - name: Fleet AM-S4F Stitch spec
         env:

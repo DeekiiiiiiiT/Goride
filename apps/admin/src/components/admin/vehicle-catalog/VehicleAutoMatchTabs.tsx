@@ -663,7 +663,7 @@ export function VehicleAutoMatchTabs({
                   <span className="font-body-sm text-secondary normal-case">Leave blank to apply to all production years.</span>
                 </label>
                 <label className="flex flex-col gap-1 font-label-xs uppercase text-secondary">
-                  Catalogue URL (required)
+                  Parts Catalogue Reference URL
                   <input className="h-9 rounded-lg bg-surface px-3 text-body-md" placeholder="https://…" value={draftEvidence} onChange={(e) => setDraftEvidence(e.target.value)} />
                 </label>
                 <div className="flex gap-2 pt-1">
