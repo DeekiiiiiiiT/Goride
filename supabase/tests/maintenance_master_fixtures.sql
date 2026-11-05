@@ -26,9 +26,9 @@ BEGIN
   INSERT INTO public.engine_family (id, code) VALUES (v_eng, 'FX-ENG')
   ON CONFLICT DO NOTHING;
 
-  INSERT INTO public.vehicle_platform (id, code, maker, label, parent_id) VALUES
-    (v_fam, 'FX-M900', 'FxToyota', 'Fx M900 family', NULL),
-    (v_plat, 'FX-M900A', 'FxToyota', 'Fx M900A', v_fam)
+  INSERT INTO public.vehicle_platform (id, code, maker, label, parent_id, family_evidence_url) VALUES
+    (v_fam, 'FX-M900', 'FxToyota', 'Fx M900 family', NULL, NULL),
+    (v_plat, 'FX-M900A', 'FxToyota', 'Fx M900A', v_fam, 'https://example.com/fx-m900a-family')
   ON CONFLICT DO NOTHING;
 
   INSERT INTO public.maintenance_service_categories (
@@ -52,13 +52,15 @@ BEGIN
 
   INSERT INTO public.maintenance_task_templates (
     id, task_name, task_code, template_scope, component_id, interval_miles, interval_months,
-    status, source_type, confidence, applicable_vehicle_classes
+    status, source_type, confidence, applicable_vehicle_classes,
+    vehicle_catalog_id, platform_id, engine_family_id
   ) VALUES
-    ('e2000010-0000-4000-8000-000000000001'::uuid, 'Fx car rule', 'fx-car', 'variant', v_part, 1000, 1, 'active', 'roam_policy', 'uncertain', ARRAY['car']::text[]),
-    ('e2000010-0000-4000-8000-000000000002'::uuid, 'Fx plat rule', 'fx-plat', 'platform', v_part, 2000, 2, 'active', 'roam_policy', 'uncertain', ARRAY['car']::text[]),
-    ('e2000010-0000-4000-8000-000000000003'::uuid, 'Fx fam rule', 'fx-fam', 'platform', v_part, 2500, 2, 'active', 'roam_policy', 'uncertain', ARRAY['car']::text[]),
-    ('e2000010-0000-4000-8000-000000000004'::uuid, 'Fx eng rule', 'fx-eng', 'engine_family', v_part, 3000, 3, 'active', 'roam_policy', 'uncertain', ARRAY['car']::text[]),
-    ('e2000010-0000-4000-8000-000000000005'::uuid, 'Fx global rule', 'fx-glob', 'global', v_part, 4000, 4, 'active', 'roam_policy', 'uncertain', ARRAY['car']::text[])
+    -- maintenance_task_templates_scope_check needs each scope's target set at insert time.
+    ('e2000010-0000-4000-8000-000000000001'::uuid, 'Fx car rule', 'fx-car', 'variant', v_part, 1000, 1, 'active', 'roam_policy', 'uncertain', ARRAY['car']::text[], v_car, NULL, NULL),
+    ('e2000010-0000-4000-8000-000000000002'::uuid, 'Fx plat rule', 'fx-plat', 'platform', v_part, 2000, 2, 'active', 'roam_policy', 'uncertain', ARRAY['car']::text[], NULL, v_plat, NULL),
+    ('e2000010-0000-4000-8000-000000000003'::uuid, 'Fx fam rule', 'fx-fam', 'platform', v_part, 2500, 2, 'active', 'roam_policy', 'uncertain', ARRAY['car']::text[], NULL, v_fam, NULL),
+    ('e2000010-0000-4000-8000-000000000004'::uuid, 'Fx eng rule', 'fx-eng', 'engine_family', v_part, 3000, 3, 'active', 'roam_policy', 'uncertain', ARRAY['car']::text[], NULL, NULL, v_eng),
+    ('e2000010-0000-4000-8000-000000000005'::uuid, 'Fx global rule', 'fx-glob', 'global', v_part, 4000, 4, 'active', 'roam_policy', 'uncertain', ARRAY['car']::text[], NULL, NULL, NULL)
   ON CONFLICT (id) DO NOTHING;
 
   UPDATE public.maintenance_task_templates SET vehicle_catalog_id = v_car WHERE id = 'e2000010-0000-4000-8000-000000000001'::uuid;
@@ -376,6 +378,8 @@ BEGIN
     'e2000003-0000-4000-8000-000000000055'::uuid, 5000, 3, 'active', 'roam_policy', 'uncertain'
   ) ON CONFLICT (id) DO UPDATE SET interval_miles = 5000, interval_months = 3;
   DELETE FROM fleet.odometer_readings WHERE vehicle_id = v_vehicle;
+  -- Create the Fx Oil schedule row first; the baseline UPDATE below needs it to exist.
+  v_res := public.recompute_component_schedules_for_car(v_org, v_vehicle);
   UPDATE public.vehicle_component_schedule SET baseline_date = date '2026-01-01', baseline_odometer = 0
   WHERE organization_id = v_org AND vehicle_id = v_vehicle
     AND category_id = 'e2000003-0000-4000-8000-000000000055'::uuid;
@@ -407,8 +411,9 @@ BEGIN
   END IF;
 
   -- Done test 6: retire rule -> next rank on recompute
+  -- Retire the car (rank 1) and platform rules; family/engine are draft since TT15, so global wins.
   UPDATE public.maintenance_task_templates SET status = 'retired'
-  WHERE id = 'e2000010-0000-4000-8000-000000000002'::uuid;
+  WHERE id IN ('e2000010-0000-4000-8000-000000000001'::uuid, 'e2000010-0000-4000-8000-000000000002'::uuid);
   UPDATE public.maintenance_task_templates SET status = 'active'
   WHERE id = 'e2000010-0000-4000-8000-000000000005'::uuid;
   v_res := public.recompute_component_schedules_for_car(v_org, v_vehicle);

@@ -28,6 +28,7 @@ AS $$
     vc.engine_family_id,
     lower(trim(coalesce(vc.vehicle_class, 'car'))),
     coalesce(
+      nullif(fv.year, 0),
       nullif((to_jsonb(fv.*)->>'model_year')::integer, 0),
       vc.production_start_year
     ),

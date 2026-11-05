@@ -334,8 +334,9 @@ BEGIN
   SELECT p.tier INTO v_tier
   FROM public.parts_for_vehicle('eeeeeeee-eeee-4eee-8eee-eeeeeeeeee13', NULL, 2012) p
   WHERE p.oem_part_number = 'EE-OIL-1';
-  IF v_tier IS DISTINCT FROM 3 THEN
-    RAISE EXCEPTION 'Vitz KSP130 (2012) should be engine compatible (3), got %', v_tier;
+  -- Auto-match rule: engine (tier 3) matches only inside the listing's years (2016-2022).
+  IF v_tier IS NOT NULL THEN
+    RAISE EXCEPTION 'Vitz KSP130 (2012) is outside the 2016-2022 listing years, expected no match, got %', v_tier;
   END IF;
   SELECT p.tier INTO v_tier
   FROM public.parts_for_vehicle('eeeeeeee-eeee-4eee-8eee-eeeeeeeeee14', NULL, 2019) p

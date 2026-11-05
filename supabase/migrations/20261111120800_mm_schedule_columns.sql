@@ -114,7 +114,7 @@ BEGIN
     RETURN;
   END IF;
 
-  SELECT public.mm_pick_part_rule(
+  SELECT * INTO v_rule FROM public.mm_pick_part_rule(
     p_component_id,
     v_ctx.catalog_id,
     v_ctx.platform_id,
@@ -123,11 +123,10 @@ BEGIN
     v_ctx.vehicle_class,
     v_ctx.vehicle_year,
     ARRAY['active']::text[]
-  )
-  INTO v_rule;
+  );
 
   IF v_rule.id IS NULL THEN
-    SELECT public.mm_pick_part_rule(
+    SELECT * INTO v_rule FROM public.mm_pick_part_rule(
       p_component_id,
       v_ctx.catalog_id,
       v_ctx.platform_id,
@@ -136,8 +135,7 @@ BEGIN
       v_ctx.vehicle_class,
       v_ctx.vehicle_year,
       ARRAY['needs_checking']::text[]
-    )
-    INTO v_rule;
+    );
   END IF;
 
   IF v_rule.id IS NULL THEN

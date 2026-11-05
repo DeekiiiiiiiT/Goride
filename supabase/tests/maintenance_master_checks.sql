@@ -44,7 +44,8 @@ BEGIN
   SELECT count(*) INTO v_cnt
   FROM public.vehicle_component_schedule vcs
   JOIN public.maintenance_task_templates t ON t.id = vcs.rule_id
-  WHERE vcs.rule_revision_no IS NOT NULL
+  WHERE vcs.schedule_status NOT IN ('manual_override', 'no_rule', 'retired')  -- same exclusions as check_2
+    AND vcs.rule_revision_no IS NOT NULL
     AND vcs.rule_revision_no < t.revision_no;
   RAISE NOTICE 'check_3_rule_revision_behind: %', v_cnt;
   IF v_cnt > 0 THEN
@@ -71,12 +72,9 @@ DO $$
 DECLARE v_cnt bigint;
 BEGIN
   SELECT count(*) INTO v_cnt
+  -- Audit §196/§265: a package is a rule with component_id NULL (due_kind is unchanged and stays
+  -- 'service_package' on every row), so the only bad shape is a part rule with package links.
   FROM (
-    SELECT t.id
-    FROM public.maintenance_task_templates t
-    WHERE t.due_kind = 'service_package'
-      AND t.component_id IS NOT NULL
-    UNION ALL
     SELECT t.id
     FROM public.maintenance_task_templates t
     WHERE t.component_id IS NOT NULL

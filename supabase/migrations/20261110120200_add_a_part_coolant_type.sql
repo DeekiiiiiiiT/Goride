@@ -37,6 +37,11 @@ ON CONFLICT (id) DO UPDATE SET
   editor_hint = EXCLUDED.editor_hint,
   part_type_status = 'active';
 
+-- Fresh-database fix: the coolant_type spec key exists in prod but no migration created it.
+INSERT INTO public.spec_key (key, label, value_type, unit, component_id)
+VALUES ('coolant_type', 'Coolant', 'text', NULL, 'a1000001-0000-4000-8000-000000000102'::uuid)
+ON CONFLICT (key) DO NOTHING;
+
 UPDATE public.spec_key
 SET component_id = 'a1000001-0000-4000-8000-000000000102'::uuid
 WHERE key = 'coolant_type';

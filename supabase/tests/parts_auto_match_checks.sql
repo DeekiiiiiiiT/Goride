@@ -3011,12 +3011,12 @@ END $$;
 -- Proof 84 (AM-01): same-part merge combines oe_ambiguous groups; unmerge restores both.
 DO $$
 DECLARE
-  v_car uuid := 'a9000005-0000-4000-8000-0000000000f0';
-  v_grp_a uuid := 'a9000006-0000-4000-8000-0000000000f0';
-  v_grp_b uuid := 'a9000006-0000-4000-8000-0000000000f1';
-  v_part_a uuid := 'a9000007-0000-4000-8000-0000000000f0';
-  v_part_b uuid := 'a9000007-0000-4000-8000-0000000000f1';
-  v_von uuid := 'a9000008-0000-4000-8000-0000000000f0';
+  v_car uuid := 'a9000005-0000-4000-8000-000000000840';
+  v_grp_a uuid := 'a9000006-0000-4000-8000-000000000840';
+  v_grp_b uuid := 'a9000006-0000-4000-8000-000000000841';
+  v_part_a uuid := 'a9000007-0000-4000-8000-000000000840';
+  v_part_b uuid := 'a9000007-0000-4000-8000-000000000841';
+  v_von uuid := 'a9000008-0000-4000-8000-000000000840';
   v_conflict uuid;
   v_merge uuid;
   v_cnt int;
@@ -3042,10 +3042,13 @@ BEGIN
   ON CONFLICT (id) DO UPDATE SET interchange_group_id = EXCLUDED.interchange_group_id;
   INSERT INTO public.part_oe_reference (
     id, part_id, reference_type, oe_brand, oe_number, oe_number_norm, evidence_url
-  ) VALUES (
-    'a900000a-0000-4000-8000-0000000000f0', v_part_b, 'cross_ref',
-    'Toyota', 'PR84-SAME', 'PR84SAME', 'https://example.com/pr84-b-xref'
-  ) ON CONFLICT DO NOTHING;
+  ) VALUES
+    -- Both brands cross-reference the same Toyota number, so the car's OE number matches two groups.
+    ('a900000a-0000-4000-8000-000000000841', v_part_a, 'cross_ref',
+      'Toyota', 'PR84-SAME', 'PR84SAME', 'https://example.com/pr84-a-xref'),
+    ('a900000a-0000-4000-8000-000000000840', v_part_b, 'cross_ref',
+      'Toyota', 'PR84-SAME', 'PR84SAME', 'https://example.com/pr84-b-xref')
+  ON CONFLICT DO NOTHING;
   INSERT INTO public.vehicle_oe_number (
     id, vehicle_catalog_id, maintenance_component_id, position, side,
     oe_brand, oe_number, oe_number_norm, evidence_url

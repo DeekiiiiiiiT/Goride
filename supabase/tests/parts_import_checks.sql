@@ -107,8 +107,9 @@ BEGIN
     FROM public.part_import_row r
     WHERE r.batch_id = v_batch1 AND r.line_no IN (1, 2, 3)
   LOOP
-    IF v_row.status IS DISTINCT FROM 'valid' THEN
-      RAISE EXCEPTION 'batch1 line % expected valid, got % issues %', v_row.line_no, v_row.status, v_row.issues;
+    -- Labels (new brand, untrusted source, unusual number) never block: 'labelled' rows still promote.
+    IF v_row.status NOT IN ('valid', 'labelled') THEN
+      RAISE EXCEPTION 'batch1 line % expected valid or labelled, got % issues %', v_row.line_no, v_row.status, v_row.issues;
     END IF;
     IF coalesce(v_row.normalized->>'side', '') <> 'left' THEN
       RAISE EXCEPTION 'batch1 line % expected normalized side left, got %', v_row.line_no, v_row.normalized->>'side';
@@ -168,8 +169,8 @@ BEGIN
     SELECT line_no, status FROM public.part_import_row
     WHERE batch_id = v_batch_side AND line_no IN (1, 2)
   LOOP
-    IF v_row.status IS DISTINCT FROM 'valid' THEN
-      RAISE EXCEPTION 'PI-18: line % should stay valid beside Up row, got %', v_row.line_no, v_row.status;
+    IF v_row.status NOT IN ('valid', 'labelled') THEN
+      RAISE EXCEPTION 'PI-18: line % should stay valid or labelled beside Up row, got %', v_row.line_no, v_row.status;
     END IF;
   END LOOP;
 

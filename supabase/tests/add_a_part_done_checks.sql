@@ -272,9 +272,9 @@ BEGIN
     'sourceType', 'car_maker_catalogue',
     'evidenceUrl', 'https://example.com/oil-exist',
     'fitMode', 'specific',
+    -- Oil filters have no position (scheme 'none'); AS-04 rejects one.
     'listings', jsonb_build_array(jsonb_build_object(
-      'vehicleId', 'a0900005-0000-4000-8000-000000000004',
-      'position', 'Front'
+      'vehicleId', 'a0900005-0000-4000-8000-000000000004'
     ))
   ));
   v_part := (v_save->>'partId')::uuid;

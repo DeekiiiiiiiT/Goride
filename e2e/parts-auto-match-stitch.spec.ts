@@ -184,10 +184,15 @@ async function assertStitchPhrases(
 ) {
   const root = page.locator(scopeSelector).first();
   const skips = new Set((STITCH_PHRASE_SKIPS[htmlFile] ?? []).map((s) => s.toLowerCase()));
-  for (const phrase of stitchPhrases(htmlFile, dir)) {
-    if (skips.has(phrase.toLowerCase())) continue;
-    await expect(root).toContainText(decodeHtmlEntities(phrase), { timeout: 8_000, ignoreCase: true });
-  }
+  await expect(root).toBeVisible({ timeout: 8_000 });
+  // textContent, like toContainText: includes tooltip/screen-reader copy that innerText hides.
+  const text = ((await root.textContent()) ?? "").toLowerCase().replace(/\s+/g, " ");
+  const missing = stitchPhrases(htmlFile, dir)
+    .filter((phrase) => !skips.has(phrase.toLowerCase()))
+    .map((phrase) => decodeHtmlEntities(phrase))
+    .filter((phrase) => !text.includes(phrase.toLowerCase().replace(/\s+/g, " ")));
+  // Report every missing Stitch phrase at once, not one per run.
+  expect(missing, `${htmlFile}: Stitch phrases missing from the app`).toEqual([]);
 }
 
 const STITCH_PHRASE_SKIPS: Record<string, string[]> = {
@@ -206,6 +211,14 @@ const STITCH_PHRASE_SKIPS: Record<string, string[]> = {
     "Merges both brand groups",
   ],
   "AM-S3-platform-shared-components.html": ["Other Platform"],
+  "find-parts-why-it-fits.html": [
+    // Page heading lives in FleetMaintenanceHub above the results root; AM-S4F asserts it on the page.
+    "Fleet Maintenance",
+    // Sample car in the design; Fleet Stitch screens disagree on order (13 vs 4). The app shows the real car.
+    "Toyota Roomy 2019",
+    // Extractor joins the last card's "View details" with the footer; AM-S4F asserts both footer lines.
+    "View details Roam Fleet Match Intelligence Engine • Kingston Hub #01 Non-commercial parts encyclopedia • Zero pricing or procurement bias",
+  ],
 };
 
 const AM_APP_ONLY_LABELS: Record<string, string[]> = {
@@ -808,6 +821,9 @@ test.describe("Fleet AM-S4F why it fits rows", () => {
       await expect(resultsRoot).toContainText(phrase, { ignoreCase: true });
     }
     await resultsRoot.screenshot({ path: join(fleetShotsDir, "AM-S4F-app.png") });
+    await expect(page.getByRole("heading", { name: "Fleet Maintenance" })).toBeVisible();
+    await expect(resultsRoot).toContainText("Roam Fleet Match Intelligence Engine • Kingston Hub #01");
+    await expect(resultsRoot).toContainText("Non-commercial parts encyclopedia • Zero pricing or procurement bias");
     await assertStitchLabelParity(
       page,
       "find-parts-why-it-fits.html",

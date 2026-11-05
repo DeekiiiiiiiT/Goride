@@ -49,7 +49,7 @@ export const BridgedMaintenancePage = bridge(() =>
 );
 
 export const BridgedEquipmentPage = bridge(() =>
-  import('@fleet/components/fleet/FleetPage').then((m) => ({ default: m.FleetPage })),
+  import('@fleet/components/inventory/InventoryPageGate').then((m) => ({ default: m.InventoryPageGate })),
 );
 
 export {

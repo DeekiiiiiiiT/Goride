@@ -238,11 +238,19 @@ DECLARE
   v_no_rule int := 0;
   v_skipped int := 0;
 BEGIN
+  -- Parts with a live rule, plus parts this car already has a row for (so a row whose
+  -- rules were all retired is revisited and becomes no_rule).
   FOR v_part IN
-    SELECT DISTINCT t.component_id
+    SELECT t.component_id
     FROM public.maintenance_task_templates t
     WHERE t.component_id IS NOT NULL
       AND t.status NOT IN ('draft', 'retired')
+    UNION
+    SELECT vcs.category_id
+    FROM public.vehicle_component_schedule vcs
+    WHERE vcs.organization_id = p_org
+      AND vcs.vehicle_id = p_vehicle_id
+      AND vcs.category_id IS NOT NULL
   LOOP
     FOR v_pos IN
       SELECT pos.p
