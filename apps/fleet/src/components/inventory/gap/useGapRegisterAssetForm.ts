@@ -6,7 +6,6 @@ import { downloadInventoryExportCsv } from '../inventoryDownload';
 import { useInventoryShell } from '../InventoryShellContext';
 import { useGapLoad } from './useGapLoad';
 import { useGapSubmit } from './useGapSubmit';
-import { useGapSectionOpen } from './useGapSectionOpen';
 
 function parseMoney(raw: string): number | null {
   const n = Number(String(raw).replace(/[^0-9.-]/g, ''));
@@ -38,14 +37,9 @@ export function useGapRegisterAssetForm(onClose?: () => void) {
   const [itemId, setItemId] = useState('');
   const [assetTag, setAssetTag] = useState('');
   const [serialNumber, setSerialNumber] = useState('');
-  const [imei, setImei] = useState('');
   const [locationId, setLocationId] = useState('');
   const [purchaseCost, setPurchaseCost] = useState('');
-  const [warrantyEndsOn, setWarrantyEndsOn] = useState('');
   const [nextInspectionDue, setNextInspectionDue] = useState('');
-  const [provider, setProvider] = useState('');
-  const [externalDeviceId, setExternalDeviceId] = useState('');
-  const [insurerName, setInsurerName] = useState('');
 
   const selectedItem = serialItems.find((it) => String(it.id) === itemId) ?? null;
   const selectedLocation =
@@ -68,14 +62,9 @@ export function useGapRegisterAssetForm(onClose?: () => void) {
         item_id: itemId,
         asset_tag: assetTag.trim() || undefined,
         serial_number: serialNumber.trim(),
-        imei: imei.trim() || null,
         location_id: locationId.trim() || null,
         purchase_cost: parseMoney(purchaseCost),
-        warranty_ends_on: warrantyEndsOn.trim() || null,
         next_inspection_due: nextInspectionDue.trim() || null,
-        provider: provider.trim() || null,
-        external_device_id: externalDeviceId.trim() || null,
-        insurer_name: insurerName.trim() || null,
       });
       await shell.refresh();
       onClose?.();
@@ -86,8 +75,6 @@ export function useGapRegisterAssetForm(onClose?: () => void) {
   const scrollToRegisterForm = () => {
     document.getElementById('register-asset-form-root')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
-
-  const sections = useGapSectionOpen({ connectedDevice: false, insurance: false });
 
   return {
     load,
@@ -101,22 +88,12 @@ export function useGapRegisterAssetForm(onClose?: () => void) {
     setAssetTag,
     serialNumber,
     setSerialNumber,
-    imei,
-    setImei,
     locationId,
     setLocationId,
     purchaseCost,
     setPurchaseCost,
-    warrantyEndsOn,
-    setWarrantyEndsOn,
     nextInspectionDue,
     setNextInspectionDue,
-    provider,
-    setProvider,
-    externalDeviceId,
-    setExternalDeviceId,
-    insurerName,
-    setInsurerName,
     canRegister,
     register,
     selectedItem,
@@ -129,7 +106,6 @@ export function useGapRegisterAssetForm(onClose?: () => void) {
     formatJmd,
     exportLedger,
     scrollToRegisterForm,
-    sections,
     cancel: () => onClose?.(),
   };
 }

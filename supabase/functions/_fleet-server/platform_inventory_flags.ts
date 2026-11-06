@@ -1,5 +1,6 @@
 /**
  * Load fleet inventory phase flags from public.platform_feature_flags (R3-16).
+ * Rev 52: phase 4–8 HTTP gates removed from fleet-server; flags may still exist for UI rollout.
  */
 import { getServiceClient } from "./service_client.ts";
 

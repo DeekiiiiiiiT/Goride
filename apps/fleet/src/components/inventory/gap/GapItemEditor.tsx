@@ -224,48 +224,6 @@ export function GapItemEditor(p: { itemId?: string | null; onClose?: () => void 
         <div className="flex items-center justify-between pb-space-xs">
         <div className="flex items-center gap-space-xs">
         <span className="font-caption text-caption uppercase tracking-wider text-on-surface-variant font-bold">04</span>
-        <h3 className="font-body-md text-body-md font-semibold text-on-surface">Reordering per Location</h3>
-        </div>
-        <span className="font-caption text-caption text-on-surface-variant">Par levels & triggers</span>
-        </div>
-        <div className="rounded-xl overflow-hidden bg-surface-container-low shadow-sm">
-
-        <div className="grid grid-cols-12 px-space-md py-2.5 bg-surface-container font-caption text-caption text-on-surface-variant font-semibold uppercase tracking-wider">
-        <span className="col-span-6">Location</span>
-        <span className="col-span-2 text-center">Reorder at</span>
-        <span className="col-span-2 text-center">Order qty</span>
-        <span className="col-span-2 text-right">Safety stock</span>
-        </div>
-
-        <div className="divide-y divide-surface-container-high/60 bg-surface-container-lowest">
-        {form.reorderRules.map((rule) => (
-        <div key={rule.location_id} className="grid grid-cols-12 px-space-md py-space-sm items-center">
-        <div className="col-span-6 flex items-center gap-space-xs">
-        <span className="material-symbols-outlined text-[16px] text-on-surface-variant">warehouse</span>
-        <span className="font-body-sm text-body-sm font-semibold text-on-surface">{rule.location_name}</span>
-        </div>
-        <div className="col-span-2 flex justify-center">
-        <input className="w-10 h-7 text-center rounded bg-surface-container-low font-label-code text-label-code text-on-surface font-semibold focus:outline-none focus:bg-surface-container-lowest focus:ring-1 focus:ring-primary" type="text" value={rule.reorder_at} onChange={(e) => form.setReorderField(rule.location_id, 'reorder_at', e.target.value)} />
-        </div>
-        <div className="col-span-2 flex justify-center">
-        <input className="w-10 h-7 text-center rounded bg-surface-container-low font-label-code text-label-code text-on-surface font-semibold focus:outline-none focus:bg-surface-container-lowest focus:ring-1 focus:ring-primary" type="text" value={rule.order_qty} onChange={(e) => form.setReorderField(rule.location_id, 'order_qty', e.target.value)} />
-        </div>
-        <div className="col-span-2 flex justify-end">
-        <input className="w-10 h-7 text-center rounded bg-surface-container-low font-label-code text-label-code text-on-surface font-semibold focus:outline-none focus:bg-surface-container-lowest focus:ring-1 focus:ring-primary" type="text" value={rule.safety_stock} onChange={(e) => form.setReorderField(rule.location_id, 'safety_stock', e.target.value)} />
-        </div>
-        </div>
-        ))}
-        </div>
-        </div>
-        <button className="self-start px-space-md py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm font-semibold flex items-center gap-1 transition-colors" type="button" onClick={() => form.addReorderRule()}>
-        <span className="material-symbols-outlined text-[16px]">add</span> Add location rule
-                </button>
-        </section>
-
-        <section className="flex flex-col gap-space-md pt-space-xs">
-        <div className="flex items-center justify-between pb-space-xs">
-        <div className="flex items-center gap-space-xs">
-        <span className="font-caption text-caption uppercase tracking-wider text-on-surface-variant font-bold">05</span>
         <h3 className="font-body-md text-body-md font-semibold text-on-surface">Warranty & Inspection</h3>
         </div>
         <span className="font-caption text-caption text-on-surface-variant">Maintenance schedules</span>

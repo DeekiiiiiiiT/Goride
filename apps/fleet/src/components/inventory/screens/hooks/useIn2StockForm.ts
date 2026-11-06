@@ -51,7 +51,7 @@ export function useIn2StockForm() {
     setPage(0);
   };
 
-  const openSuppliers = () => shell.openGap('vendor-editor', { vendorId: null });
+  const openInventorySettings = () => shell.openModal('inventory-settings');
   const openItem = (itemId: string) => {
     shell.setSelectedItemId(itemId);
     shell.openModal('item-drawer');
@@ -97,7 +97,7 @@ export function useIn2StockForm() {
     pageStart,
     pageEnd,
     resetFilters,
-    openSuppliers,
+    openInventorySettings,
     openItem,
     refreshStock,
     locationOptions,

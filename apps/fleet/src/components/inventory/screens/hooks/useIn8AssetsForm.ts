@@ -102,12 +102,14 @@ export function useIn8AssetsForm() {
 
   const exportAssets = () => void downloadInventoryExportCsv();
 
-  const assetAction = (assetId: string, action: 'move' | 'repair' | 'faulty' | 'retire') =>
+  const openAssetModal = (assetId: string, modal: 'asset-move' | 'asset-condition' | 'asset-repair') => {
+    shell.setSelectedAssetId(assetId);
+    shell.openModal(modal);
+  };
+
+  const retireAsset = (assetId: string) =>
     submit.run(async () => {
-      if (action === 'move') await inventoryApi.assetMove(assetId, { note: 'Moved from assets list' });
-      else if (action === 'repair') await inventoryApi.assetRepair(assetId, {});
-      else if (action === 'faulty') await inventoryApi.assetFaulty(assetId, {});
-      else await inventoryApi.assetRetire(assetId, {});
+      await inventoryApi.assetRetire(assetId, {});
       await shell.refresh();
     });
 
@@ -121,10 +123,10 @@ export function useIn8AssetsForm() {
 
   const rowMenuItems = (assetId: string): OverflowMenuItem[] => [
     { label: 'Open', onClick: () => openAsset(assetId) },
-    { label: 'Move', onClick: () => void assetAction(assetId, 'move') },
-    { label: 'Send to repair', onClick: () => void assetAction(assetId, 'repair') },
-    { label: 'Mark faulty', onClick: () => void assetAction(assetId, 'faulty') },
-    { label: 'Retire', onClick: () => void assetAction(assetId, 'retire') },
+    { label: 'Move', onClick: () => openAssetModal(assetId, 'asset-move') },
+    { label: 'Send to repair', onClick: () => openAssetModal(assetId, 'asset-repair') },
+    { label: 'Mark faulty', onClick: () => openAssetModal(assetId, 'asset-condition') },
+    { label: 'Retire', onClick: () => void retireAsset(assetId) },
   ];
 
   const openSelectedAssetPageDisabledReason = selectedAssetId ? '' : 'Select an asset row to open details';
@@ -150,7 +152,8 @@ export function useIn8AssetsForm() {
     openAsset,
     registerAsset,
     exportAssets,
-    assetAction,
+    openAssetModal,
+    retireAsset,
     totalBookValue,
     rowMenuItems,
     filteredCount: filtered.length,

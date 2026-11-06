@@ -58,13 +58,9 @@ export function useIn3ItemDrawerForm() {
     shell.setTab('movements');
   };
 
-  const goToInventoryTab = (
-    tab: 'stock' | 'movements' | 'pos' | 'suppliers' | 'kits',
-  ) => {
+  const goToInventoryTab = (tab: 'stock' | 'movements' | 'kits') => {
     close();
-    if (tab === 'pos') shell.setTab('purchasing');
-    else if (tab === 'suppliers') shell.openGap('vendor-editor', { vendorId: null });
-    else if (tab === 'kits') shell.setTab('vehicle-kits');
+    if (tab === 'kits') shell.setTab('vehicle-kits');
     else shell.setTab(tab);
   };
 

@@ -28,7 +28,7 @@ export function GapInventorySettings(p: { onClose?: () => void }) {
         </div>
         <div>
         <h1 className="font-headline-lg text-headline-lg text-on-surface tracking-tight font-semibold">Inventory & Asset Management — Settings</h1>
-        <p className="font-body-sm text-body-sm text-on-surface-variant">System policies, approval governance, fiscal definitions, and hardware telemetry parameters for Jamaica hubs.</p>
+        <p className="font-body-sm text-body-sm text-on-surface-variant">Depot policies, categories, and write-off defaults for Jamaica hubs.</p>
         </div>
         </div>
         </div>
@@ -60,14 +60,6 @@ export function GapInventorySettings(p: { onClose?: () => void }) {
         <span className="material-symbols-outlined text-[16px] text-surface-dim opacity-75">chevron_right</span>
         </button>
 
-        <button className="w-full flex items-center justify-between px-space-md py-2.5 rounded-lg text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-all text-left font-body-sm text-body-sm group" type="button" onClick={() => form.setSettingsSection('approvals')}>
-        <div className="flex items-center gap-space-sm min-w-0">
-        <span className="material-symbols-outlined text-[18px]">verified_user</span>
-        <span className="truncate">Approvals & Governance</span>
-        </div>
-        <span className="font-label-code text-caption px-1.5 py-0.5 rounded bg-surface-container text-on-surface-variant font-medium">{form.governanceLimitCount} limits</span>
-        </button>
-
         <button
           type="button"
           className="w-full flex items-center justify-between px-space-md py-2.5 rounded-lg text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-all text-left font-body-sm text-body-sm group"
@@ -87,14 +79,6 @@ export function GapInventorySettings(p: { onClose?: () => void }) {
         </div>
         <span className="font-label-code text-caption text-secondary">{form.categoryCount} root</span>
         </button>
-
-        <a className="w-full flex items-center justify-between px-space-md py-2.5 rounded-lg text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-all text-left font-body-sm text-body-sm group" href="#">
-        <div className="flex items-center gap-space-sm min-w-0">
-        <span className="material-symbols-outlined text-[18px]">barcode_scanner</span>
-        <span className="truncate">Hardware Scanners</span>
-        </div>
-        <span className="font-label-code text-caption px-1.5 py-0.5 rounded bg-surface-container-high text-primary font-semibold">Screen 8 ↗</span>
-        </a>
 
         <a className="w-full flex items-center justify-between px-space-md py-2.5 rounded-lg text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-all text-left font-body-sm text-body-sm group" href="#">
         <div className="flex items-center gap-space-sm min-w-0">
@@ -210,80 +194,10 @@ export function GapInventorySettings(p: { onClose?: () => void }) {
         </section>
 
         <section className="bg-surface-container-lowest rounded-xl p-space-xl shadow-sm flex flex-col gap-space-lg">
-        <div className="flex items-start justify-between">
-        <div className="flex flex-col gap-0.5">
-        <div className="flex items-center gap-space-sm">
-        <span className="font-caption text-caption text-secondary uppercase font-bold tracking-wider">Module 02</span>
-        <span className="w-1.5 h-1.5 rounded-full bg-secondary"></span>
-        <span className="font-caption text-caption text-on-surface-variant">Financial Safeguards</span>
-        </div>
-        <h2 className="font-headline-sm text-headline-sm text-on-surface font-semibold tracking-tight">Approvals & Governance Limits</h2>
-        </div>
-        <span className="font-label-code text-caption px-2 py-1 rounded bg-secondary-container text-on-secondary-fixed font-medium">CURRENCY: JMD</span>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-space-lg pt-space-xs">
-
-        <div className="flex flex-col gap-space-xs">
-        <label className="font-body-sm text-body-sm font-semibold text-on-surface flex items-center justify-between" htmlFor="approval-threshold">
-        <span>Dual-approval threshold</span>
-        <span className="font-caption text-caption text-secondary">Second person over limit</span>
-        </label>
-        <div className="relative flex items-center">
-        <span className="absolute left-3 font-label-code text-caption font-bold text-on-surface-variant">J$</span>
-        <input className="w-full pl-9 pr-space-md py-2 rounded-lg bg-surface font-label-price text-label-price text-on-surface outline-none focus:bg-surface-container-lowest focus:ring-1 focus:ring-primary transition-all tabular-nums" id="approval-threshold" type="text" value={form.approvalThreshold} onChange={(e) => form.setApprovalThreshold(e.target.value)}/>
-        </div>
-        <p className="font-body-sm text-body-sm text-on-surface-variant">
-                        Part purchase requisitions exceeding this amount require dispatch manager counter-signature.
-                      </p>
-        </div>
-
-        <div className="flex flex-col gap-space-xs">
-        <label className="font-body-sm text-body-sm font-semibold text-on-surface flex items-center justify-between" htmlFor="monthly-cap">
-        <span>Monthly discretionary inventory cap</span>
-        <span className="font-caption text-caption text-secondary">Depot aggregate</span>
-        </label>
-        <div className="relative flex items-center">
-        <span className="absolute left-3 font-label-code text-caption font-bold text-on-surface-variant">J$</span>
-        <input className="w-full pl-9 pr-space-md py-2 rounded-lg bg-surface font-label-price text-label-price text-on-surface outline-none focus:bg-surface-container-lowest focus:ring-1 focus:ring-primary transition-all tabular-nums" id="monthly-cap" type="text" value={form.monthlyCap} onChange={(e) => form.setMonthlyCap(e.target.value)}/>
-        </div>
-        <p className="font-body-sm text-body-sm text-on-surface-variant">
-                        Exceeding this requires CFO review and regional procurement board authorization.
-                      </p>
-        </div>
-
-        <div className="md:col-span-2 p-space-md rounded-lg bg-surface-container-low flex flex-col sm:flex-row sm:items-center justify-between gap-space-md">
-        <div className="flex items-start gap-space-md">
-        <div className="w-8 h-8 rounded bg-surface-container-highest flex items-center justify-center text-primary shrink-0 mt-0.5 sm:mt-0">
-        <span className="material-symbols-outlined text-[18px]">gavel</span>
-        </div>
-        <div>
-        <h4 className="font-body-md text-body-md font-semibold text-on-surface">Write-off Threshold Rule</h4>
-        <p className="font-body-sm text-body-sm text-on-surface-variant">Write-offs exceeding <span className="font-label-price text-body-sm font-bold text-on-surface">{formatJmd(Number(String(form.approvalThreshold).replace(/,/g, '')) || null)}</span> require secondary manager sign-off prior to stock ledger removal.</p>
-        </div>
-        </div>
-        <div className="flex items-center gap-space-sm shrink-0">
-        <span className="font-label-code text-caption text-on-surface bg-surface-container px-2 py-1 rounded">Write-off threshold</span>
-        </div>
-        </div>
-        </div>
-
-        <div className="flex items-center justify-between pt-space-md mt-space-xs bg-surface-container-low p-space-md rounded-lg">
-        <div className="flex items-center gap-space-xs text-on-surface-variant font-label-code text-caption">
-        <span className="material-symbols-outlined text-[16px] text-primary">check_circle</span>
-        <span id="approvals-save-status">Saved 08:15 AM</span>
-        </div>
-        <button type="button" disabled={!form.canSaveApprovals || form.submit.saving} className="px-space-lg py-2 rounded-lg bg-primary hover:bg-inverse-surface active:scale-[0.98] transition-all text-on-primary font-body-sm text-body-sm font-medium shadow-sm flex items-center gap-space-xs" onClick={() => void form.saveApprovals()}>
-        <span className="material-symbols-outlined text-[16px]">{form.submit.saving ? 'progress_activity' : 'save'}</span>
-        <span>{form.submit.saving ? 'Saving…' : 'Save Approvals'}</span>
-        </button>
-        </div>
-        </section>
-
-        <section className="bg-surface-container-lowest rounded-xl p-space-xl shadow-sm flex flex-col gap-space-lg">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-space-sm">
         <div className="flex flex-col gap-0.5">
         <div className="flex items-center gap-space-sm">
-        <span className="font-caption text-caption text-secondary uppercase font-bold tracking-wider">Module 03</span>
+        <span className="font-caption text-caption text-secondary uppercase font-bold tracking-wider">Module 02</span>
         <span className="w-1.5 h-1.5 rounded-full bg-secondary"></span>
         <span className="font-caption text-caption text-on-surface-variant">Taxonomy Tree</span>
         </div>
@@ -360,27 +274,6 @@ export function GapInventorySettings(p: { onClose?: () => void }) {
         </div>
         </div>
 
-        <div className="bg-surface-container-lowest rounded-xl p-space-xl shadow-sm flex flex-col justify-between gap-space-md">
-        <div className="flex flex-col gap-space-xs">
-        <div className="flex items-center justify-between">
-        <div className="w-8 h-8 rounded bg-surface-container flex items-center justify-center text-primary">
-        <span className="material-symbols-outlined text-[18px]">qr_code_scanner</span>
-        </div>
-        <span className="font-label-code text-caption text-secondary">SCREEN 8</span>
-        </div>
-        <h3 className="font-headline-sm text-headline-sm text-on-surface font-semibold tracking-tight mt-space-xs">Mobile Scanners</h3>
-        <p className="font-body-sm text-body-sm text-on-surface-variant">
-                        Pair phones and laser scanners for depot receiving and bin scans.
-                      </p>
-        </div>
-        <div className="pt-space-xs">
-        <a className="inline-flex items-center gap-space-xs font-body-sm text-body-sm font-semibold text-primary hover:underline" href="#">
-        <span>Pair scanner</span>
-        <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
-        </a>
-        </div>
-        </div>
-
         <div className="md:col-span-2 bg-surface-container-lowest rounded-xl p-space-xl shadow-sm flex flex-col gap-space-md">
         <div className="flex items-center justify-between">
         <div className="flex flex-col gap-0.5">
@@ -407,7 +300,7 @@ export function GapInventorySettings(p: { onClose?: () => void }) {
         <span className="material-symbols-outlined text-[16px] text-primary">verified</span>
         <span>Mandatory regulatory phrase lock enabled</span>
         </div>
-        <button type="button" disabled={!form.canSaveScrapNote || form.submit.saving} onClick={() => void form.saveApprovals()} className="px-space-md py-1.5 rounded-lg bg-primary hover:bg-inverse-surface transition-colors text-on-primary font-body-sm text-body-sm font-medium shadow-sm flex items-center gap-space-xs disabled:opacity-60">
+        <button type="button" disabled={!form.canSaveScrapNote || form.submit.saving} onClick={() => void form.saveScrapNote()} className="px-space-md py-1.5 rounded-lg bg-primary hover:bg-inverse-surface transition-colors text-on-primary font-body-sm text-body-sm font-medium shadow-sm flex items-center gap-space-xs disabled:opacity-60">
         <span>{form.submit.saving ? 'Saving…' : 'Save Template'}</span>
         </button>
         </div>

@@ -114,10 +114,6 @@ export function In5IssueDialog() {
                     </p>
       </div>
       </div>
-      <button type="button" className="font-caption text-caption font-bold text-on-tertiary-fixed-variant hover:text-on-tertiary-fixed bg-surface-container-lowest px-space-md py-1.5 rounded-lg whitespace-nowrap shadow-sm hover:shadow transition-all flex items-center gap-1 shrink-0 disabled:opacity-50" disabled={form.shortCount <= 0} onClick={() => form.openDraftOrder()}>
-      <span>Create draft order for {form.shortCount} short item{form.shortCount === 1 ? '' : 's'}</span>
-      <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
-      </button>
       </div>
 
       <div className="bg-surface-container-lowest rounded-xl overflow-hidden shadow-sm">

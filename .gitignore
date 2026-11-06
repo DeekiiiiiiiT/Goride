@@ -89,6 +89,15 @@ apps/dash-merchant/ios/App/App.xcworkspace/xcuserdata/
 # Local / debug logs (never commit)
 *.log
 
+# Agent scratch / local typecheck (never commit)
+.cursor/*.txt
+.cursor/*.json
+.cursor/*.b64
+.cursor/*.sql
+**/.vite/
+apps/admin/typecheck-out.txt
+inventory-playwright-run1.txt
+
 # Fleet edge prebundle outputs (scripts/build-edge-bundle.mjs)
 supabase/functions/make-server-37f42386/index.ts
 supabase/functions/fleet-fuel/index.ts

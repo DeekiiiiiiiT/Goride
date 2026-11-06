@@ -164,36 +164,17 @@ export function useGapLocationsBinsForm(onClose?: () => void) {
 
   const saveBin = () =>
     submit.run(async () => {
-      if (!canSaveBin) throw new Error('Choose a location and enter a bin code');
-      await inventoryApi.createBin({
-        location_id: binLocationId,
-        code: binCode.trim(),
-        zone: binZone.trim() || null,
-      });
-      setBinCode('');
-      setBinZone('');
-      await load.reload();
-      await shell.refresh();
+      throw new Error('Warehouse bins are not used in this inventory version.');
     });
 
   const patchBin = () =>
     submit.run(async () => {
-      if (!canPatchBin) throw new Error('Select a bin to update');
-      await inventoryApi.patchBin(selectedBinId, {
-        code: binCode.trim(),
-        zone: binZone.trim() || null,
-        location_id: binLocationId,
-      });
-      await load.reload();
-      await shell.refresh();
+      throw new Error('Warehouse bins are not used in this inventory version.');
     });
 
   const archiveBin = () =>
     submit.run(async () => {
-      if (!selectedBinId) throw new Error('Select a bin');
-      await inventoryApi.patchBin(selectedBinId, { archive: true });
-      await load.reload();
-      await shell.refresh();
+      throw new Error('Warehouse bins are not used in this inventory version.');
     });
 
   const locationPlate = (row: LocRow) => String(row.plate ?? row.code ?? '—');

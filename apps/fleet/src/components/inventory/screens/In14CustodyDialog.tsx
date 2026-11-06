@@ -265,20 +265,6 @@ export function In14CustodyDialog() {
       </div>
       </div>
 
-      <div className="p-space-md rounded-lg bg-tertiary-fixed/20 flex items-start gap-space-md" data-stitch-data-stitch-id="high-value-alert">
-      <div className="w-7 h-7 rounded-full bg-tertiary-fixed flex items-center justify-center shrink-0">
-      <span className="material-symbols-outlined text-[18px] text-on-tertiary-fixed font-bold">gavel</span>
-      </div>
-      <div className="flex flex-col">
-      <div className="flex items-center gap-space-sm">
-      <span className="font-body-sm text-body-sm font-semibold text-on-tertiary-fixed">High-Value Dual-Signature Review Triggered</span>
-      <span className="font-label-code text-caption uppercase px-1.5 py-0.2 rounded bg-tertiary-fixed-dim/40 text-on-tertiary-fixed font-bold">Rule SEC-402</span>
-      </div>
-      <p className="font-body-sm text-body-sm text-on-surface-variant pt-0.5 leading-snug">
-                    This write-off exceeds Jamaica Depot Statutory limit of <strong className="font-label-price text-on-surface">{form.valueLabel}</strong>. It will be routed to the <strong>Admin Dual-Approval Queue</strong> and queued in Alerts until confirmed by the Hub Director.
-                  </p>
-      </div>
-      </div>
       </div>
 
       <div className="px-space-lg py-space-md bg-surface-container-low flex items-center justify-between">
@@ -289,7 +275,7 @@ export function In14CustodyDialog() {
       <span className="font-caption text-caption text-secondary">Logged as John Doe (JD-Kingston)</span>
       <button type="button" className="h-9 px-space-lg bg-primary text-on-primary rounded font-body-sm text-body-sm font-semibold flex items-center gap-space-xs hover:bg-surface-tint active:scale-95 transition-all shadow-sm disabled:opacity-60" data-stitch-data-stitch-id="primary-action-btn" disabled={!form.canSubmit || form.submit.saving} onClick={() => void form.submitCustody()}>
       <span className="material-symbols-outlined text-[18px]">{form.submit.saving ? 'progress_activity' : 'verified_user'}</span>
-      <span data-stitch-data-stitch-id="primary-action-label">{form.submit.saving ? 'Submitting…' : 'Submit for Dual-Approval'}</span>
+      <span data-stitch-data-stitch-id="primary-action-label">{form.submit.saving ? 'Submitting…' : form.mode === 'writeoff' ? 'Confirm write-off' : 'Submit custody change'}</span>
       </button>
       </div>
       </div>

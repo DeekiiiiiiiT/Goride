@@ -1,15 +1,13 @@
 /**
- * Extended inventory HTTP routes (audit R3-06 phases 2–8).
+ * Extended inventory HTTP routes (Rev 52 cutdown — core stock, kits, assets, alerts).
  */
 import type { Hono } from "npm:hono@4.3.11";
 import type { Context } from "npm:hono@4.3.11";
 import { requirePermission, PLATFORM_RESOLVED_ROLES, type RbacUser } from "./rbac_middleware.ts";
 import { getOrgId } from "./org_scope.ts";
-import { getServiceClient } from "./service_client.ts";
 import { invDb, invRpcName } from "./inventory_db.ts";
 import { safeErrorResponse } from "./safe_error.ts";
 import { registerInventoryR16Routes, assertAlertSnoozeAllowed } from "./inventory_controller_r16.ts";
-import { registerInventoryPhaseMiddleware } from "./inventory_phase_gate.ts";
 
 type InvEnv = { Variables: { rbacUser?: RbacUser } };
 type InvCtx = Context<InvEnv>;
@@ -51,6 +49,9 @@ async function rpcJson(
       )
     ) {
       return c.json({ error: msg }, 409);
+    }
+    if (/required|invalid asset status|destination must be/i.test(msg)) {
+      return c.json({ error: msg }, 400);
     }
     return c.json({ error: msg }, 500);
   }
@@ -139,10 +140,112 @@ function actorId(c: InvCtx): string | null {
   return (c.get("rbacUser") as RbacUser | undefined)?.userId ?? null;
 }
 
-function actorUuid(c: InvCtx): string | null {
-  const id = actorId(c);
-  if (id && /^[0-9a-f-]{36}$/i.test(id)) return id;
-  return null;
+function parseAssetMoney(v: unknown): number | null {
+  if (v == null || v === "") return null;
+  const n = Number(String(v).replace(/[^0-9.-]/g, ""));
+  return Number.isFinite(n) ? n : null;
+}
+
+async function buildDerivedAssetAlerts(org: string): Promise<Record<string, unknown>[]> {
+  const cutoff = new Date();
+  cutoff.setUTCDate(cutoff.getUTCDate() + 30);
+  const cutoffStr = cutoff.toISOString().slice(0, 10);
+  const today = new Date().toISOString().slice(0, 10);
+
+  const { data: assets, error } = await fleetDb().from("fleet_inv_asset").select("*")
+    .eq("organization_id", org);
+  if (error || !assets?.length) return [];
+
+  const itemIds = [...new Set(assets.map((a) => a.item_id).filter(Boolean))] as string[];
+  const itemsMap = new Map<string, { name: string; sku: string }>();
+  if (itemIds.length) {
+    const { data: items } = await fleetDb().from("fleet_inv_item").select("id, name, sku")
+      .eq("organization_id", org).in("id", itemIds);
+    for (const it of items ?? []) {
+      itemsMap.set(String(it.id), { name: String(it.name), sku: String(it.sku) });
+    }
+  }
+
+  const locIds = [...new Set(assets.map((a) => a.location_id).filter(Boolean))] as string[];
+  const plateByLoc = new Map<string, string>();
+  if (locIds.length) {
+    const { data: locs } = await fleetDb().from("fleet_inv_location").select("id, vehicle_id")
+      .eq("organization_id", org).in("id", locIds);
+    const vehIds = [...new Set((locs ?? []).map((l) => l.vehicle_id).filter(Boolean))] as string[];
+    const plateByVeh = new Map<string, string>();
+    if (vehIds.length) {
+      const { data: vehs } = await fleetDb().from("fleet_vehicles").select("id, license_plate")
+        .in("id", vehIds);
+      for (const v of vehs ?? []) {
+        plateByVeh.set(String(v.id), String(v.license_plate ?? ""));
+      }
+    }
+    for (const loc of locs ?? []) {
+      if (loc.vehicle_id) {
+        plateByLoc.set(String(loc.id), plateByVeh.get(String(loc.vehicle_id)) ?? "");
+      }
+    }
+  }
+
+  const derived: Record<string, unknown>[] = [];
+  for (const a of assets) {
+    const id = String(a.id);
+    const status = String(a.status ?? "");
+    const item = itemsMap.get(String(a.item_id));
+    const label = String(a.serial_number ?? a.asset_tag ?? id.slice(0, 8));
+    const sku = item?.sku ?? "";
+    const plate = a.location_id ? plateByLoc.get(String(a.location_id)) ?? "" : "";
+
+    if (status === "faulty" || status === "lost" || status === "in_repair") {
+      const typeByStatus = {
+        faulty: "asset_faulty",
+        lost: "asset_lost",
+        in_repair: "asset_in_repair",
+      } as const;
+      const alertType = typeByStatus[status as keyof typeof typeByStatus];
+      derived.push({
+        id: `derived:${alertType}:${id}`,
+        organization_id: org,
+        type: alertType,
+        severity: status === "lost" ? "critical" : "high",
+        title: `${label} — ${status.replace(/_/g, " ")}`,
+        body: item?.name ? `${item.name} (${status.replace(/_/g, " ")})` : status,
+        message: item?.name ? `${item.name} (${status.replace(/_/g, " ")})` : status,
+        status: "open",
+        entity_type: "asset",
+        entity_id: id,
+        asset_id: id,
+        item_sku: sku,
+        sku,
+        vehicle_plate: plate,
+        created_at: a.updated_at ?? a.created_at,
+      });
+    }
+
+    const dueRaw = a.next_inspection_due;
+    const due = dueRaw ? String(dueRaw).slice(0, 10) : null;
+    if (due && due <= cutoffStr) {
+      const past = due < today;
+      derived.push({
+        id: `derived:asset_inspection_due:${id}`,
+        organization_id: org,
+        type: "asset_inspection_due",
+        severity: past ? "critical" : "medium",
+        title: `${label} — check ${past ? "overdue" : "due within 30 days"}`,
+        body: `Next check date: ${due}`,
+        message: `Next check date: ${due}`,
+        status: "open",
+        entity_type: "asset",
+        entity_id: id,
+        asset_id: id,
+        item_sku: sku,
+        sku,
+        vehicle_plate: plate,
+        created_at: a.updated_at ?? a.created_at,
+      });
+    }
+  }
+  return derived;
 }
 
 async function loadAsset(
@@ -164,7 +267,7 @@ async function insertAssetEvent(
   title: string,
   extra?: Record<string, unknown>,
 ) {
-  return fleetDb().from("fleet_inv_asset_event").insert({
+  const row: Record<string, unknown> = {
     organization_id: org,
     asset_id: assetId,
     type,
@@ -173,7 +276,18 @@ async function insertAssetEvent(
     vehicle_id: extra?.vehicle_id ?? null,
     actor: extra?.actor ?? null,
     place: extra?.place ?? null,
-  }).select("*").single();
+  };
+  if (Array.isArray(extra?.photo_paths)) {
+    row.photo_paths = extra.photo_paths;
+  }
+  return fleetDb().from("fleet_inv_asset_event").insert(row).select("*").single();
+}
+
+function photoPathsFromBody(body: Record<string, unknown>): string[] | undefined {
+  const raw = body.photo_paths ?? body.photoPaths;
+  if (!Array.isArray(raw)) return undefined;
+  const paths = raw.map(String).filter(Boolean);
+  return paths.length ? paths : [];
 }
 
 function minimalKitSpecPdf(title: string, lines: string[]): Uint8Array {
@@ -203,23 +317,7 @@ startxref
   return new TextEncoder().encode(pdf);
 }
 
-async function updatePo(
-  c: InvCtx,
-  org: string,
-  poId: string,
-  patch: Record<string, unknown>,
-): Promise<Response | Record<string, unknown>> {
-  const { data, error } = await fleetDb().from("fleet_inv_purchase_order").update({
-    ...patch,
-    updated_at: new Date().toISOString(),
-  }).eq("organization_id", org).eq("id", poId).select("*").maybeSingle();
-  if (error) return c.json({ error: error.message }, 500);
-  if (!data) return c.json({ error: "Not found" }, 404);
-  return { po: data };
-}
-
 export function registerInventoryExtendedRoutes(app: Hono<InvEnv>) {
-  registerInventoryPhaseMiddleware(app, PREFIX);
 
   app.post(`${PREFIX}/return`, requirePermission("inventory.move"), async (c) => {
     try {
@@ -534,21 +632,12 @@ export function registerInventoryExtendedRoutes(app: Hono<InvEnv>) {
       asset_tag: assetTag,
       item_id: itemId,
       serial_number: serial != null ? String(serial).trim() || null : null,
-      imei: body.imei != null ? String(body.imei).trim() || null : null,
       status: body.status ?? "in_store",
       location_id: body.location_id ?? body.locationId ?? null,
-      bin_id: body.bin_id ?? body.binId ?? null,
       purchase_cost: parseMoney(body.purchase_cost ?? body.purchaseCost ?? body.cost),
-      warranty_ends_on: parseDate(body.warranty_ends_on ?? body.warrantyEndsOn ?? body.warranty),
       next_inspection_due: parseDate(
         body.next_inspection_due ?? body.nextInspectionDue ?? body.inspection_due,
       ),
-      provider: body.provider != null ? String(body.provider).trim() || null : null,
-      external_device_id:
-        body.external_device_id ?? body.externalDeviceId ?? body.device_id ?? null,
-      insurer_name: body.insurer_name ?? body.insurerName ?? null,
-      insurance_policy_ref:
-        body.insurance_policy_ref ?? body.insurancePolicyRef ?? null,
     };
     const { data, error } = await fleetDb().from("fleet_inv_asset").insert(row).select("*").single();
     if (error) return c.json({ error: error.message }, 500);
@@ -584,7 +673,11 @@ export function registerInventoryExtendedRoutes(app: Hono<InvEnv>) {
       const note = String(body.body ?? body.note ?? body.text ?? "").trim();
       if (!note) return c.json({ error: "body text required" }, 400);
       const title = String(body.title ?? (type === "incident" ? "Incident note" : "Asset event")).trim();
-      const { data, error } = await insertAssetEvent(org, assetId, type, title, { body: note });
+      const photo_paths = photoPathsFromBody(body as Record<string, unknown>);
+      const { data, error } = await insertAssetEvent(org, assetId, type, title, {
+        body: note,
+        ...(photo_paths !== undefined ? { photo_paths } : {}),
+      });
       if (error) return c.json({ error: error.message }, 500);
       return c.json({ event: data }, 201);
     } catch (e) {
@@ -643,26 +736,71 @@ export function registerInventoryExtendedRoutes(app: Hono<InvEnv>) {
       const assetId = c.req.param("id");
       const loaded = await loadAsset(c, org, assetId);
       if ("response" in loaded) return loaded.response;
-      const body = await c.req.json();
-      const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
-      if (body.location_id !== undefined) patch.location_id = body.location_id;
-      if (body.bin_id !== undefined) patch.bin_id = body.bin_id;
-      if (body.vehicle_id) {
-        patch.status = "installed";
-        patch.installed_at = new Date().toISOString();
+      const body = await c.req.json() as Record<string, unknown>;
+      const toVehicleId = body.to_vehicle_id ?? body.vehicle_id ?? null;
+      if (toVehicleId) {
+        const headerIdem = c.req.header("Idempotency-Key") || c.req.header("idempotency-key");
+        const idem = String(body.idempotency_key ?? headerIdem ?? crypto.randomUUID()).trim();
+        const rpcResult = await rpcJson(c, "inv_asset_move_vehicle", {
+          p_org_id: org,
+          p_asset_id: assetId,
+          p_to_vehicle_id: toVehicleId,
+          p_from_vehicle_id: body.from_vehicle_id ?? null,
+          p_note: body.note ?? null,
+          p_driver_id: body.driver_id ?? null,
+          p_idempotency_key: idem,
+        });
+        if (rpcResult instanceof Response) return rpcResult;
+        return c.json(rpcResult);
       }
-      const { data, error } = await fleetDb().from("fleet_inv_asset").update(patch)
-        .eq("organization_id", org).eq("id", assetId).select("*").single();
-      if (error) return c.json({ error: error.message }, 500);
-      await insertAssetEvent(org, assetId, "move", "Asset moved", {
-        body: body.note ?? null,
-        vehicle_id: body.vehicle_id ?? null,
-        actor: actorId(c),
-        place: body.place ?? null,
-      });
-      return c.json({ asset: data });
+      const toLocationId = body.location_id ?? body.to_location_id ?? body.locationId ?? null;
+      if (toLocationId) {
+        const headerIdem = c.req.header("Idempotency-Key") || c.req.header("idempotency-key");
+        const idem = String(body.idempotency_key ?? headerIdem ?? crypto.randomUUID()).trim();
+        const rpcResult = await rpcJson(c, "inv_asset_move_to_store", {
+          p_org_id: org,
+          p_asset_id: assetId,
+          p_to_location_id: toLocationId,
+          p_note: body.note ?? null,
+          p_idempotency_key: idem,
+        });
+        if (rpcResult instanceof Response) return rpcResult;
+        return c.json(rpcResult);
+      }
+      return c.json({ error: "to_vehicle_id or location_id required" }, 400);
     } catch (e) {
       return safeErrorResponse(c, e, "inventory.assets.move");
+    }
+  });
+
+  app.post(`${PREFIX}/assets/:id/condition`, requirePermission("inventory.move"), async (c) => {
+    try {
+      const org = orgOrForbid(c);
+      if (org instanceof Response) return org;
+      const assetId = c.req.param("id");
+      const body = await c.req.json() as Record<string, unknown>;
+      const note = String(body.note ?? "").trim();
+      if (!note) return c.json({ error: "note required" }, 400);
+      const status = String(body.status ?? "").trim();
+      if (!status) return c.json({ error: "status required" }, 400);
+      const loaded = await loadAsset(c, org, assetId);
+      if ("response" in loaded) return loaded.response;
+      const photo_paths = photoPathsFromBody(body);
+      const rpcResult = await rpcJson(c, "inv_asset_set_condition", {
+        p_org_id: org,
+        p_asset_id: assetId,
+        p_status: status,
+        p_note: note,
+        p_actor: actorId(c),
+        p_photo_paths: photo_paths ?? [],
+      });
+      if (rpcResult instanceof Response) return rpcResult;
+      const { data, error } = await fleetDb().from("fleet_inv_asset").select("*")
+        .eq("organization_id", org).eq("id", assetId).single();
+      if (error) return c.json({ error: error.message }, 500);
+      return c.json({ asset: data });
+    } catch (e) {
+      return safeErrorResponse(c, e, "inventory.assets.condition");
     }
   });
 
@@ -673,19 +811,64 @@ export function registerInventoryExtendedRoutes(app: Hono<InvEnv>) {
       const assetId = c.req.param("id");
       const loaded = await loadAsset(c, org, assetId);
       if ("response" in loaded) return loaded.response;
-      const body = await c.req.json();
-      const { data, error } = await fleetDb().from("fleet_inv_asset").update({
-        status: "in_repair",
-        updated_at: new Date().toISOString(),
-      }).eq("organization_id", org).eq("id", assetId).select("*").single();
-      if (error) return c.json({ error: error.message }, 500);
-      await insertAssetEvent(org, assetId, "repair", "Sent for repair", {
-        body: body.note ?? null,
-        actor: actorId(c),
+      const body = await c.req.json() as Record<string, unknown>;
+      const description = String(body.description ?? body.note ?? "").trim();
+      if (!description) return c.json({ error: "description required" }, 400);
+      const nextStatus = body.set_status != null && String(body.set_status).trim()
+        ? String(body.set_status).trim()
+        : "in_repair";
+      const costJmd = parseAssetMoney(body.cost_jmd ?? body.costJmd);
+      const photo_paths = photoPathsFromBody(body);
+      const rpcResult = await rpcJson(c, "inv_asset_log_repair", {
+        p_org_id: org,
+        p_asset_id: assetId,
+        p_description: description,
+        p_set_status: nextStatus,
+        p_cost_jmd: costJmd,
+        p_actor: actorId(c),
+        p_photo_paths: photo_paths ?? [],
       });
-      return c.json({ asset: data });
+      if (rpcResult instanceof Response) return rpcResult;
+      const { data, error } = await fleetDb().from("fleet_inv_asset").select("*")
+        .eq("organization_id", org).eq("id", assetId).single();
+      if (error) return c.json({ error: error.message }, 500);
+      return c.json({ asset: data, ...rpcResult });
     } catch (e) {
       return safeErrorResponse(c, e, "inventory.assets.repair");
+    }
+  });
+
+  app.post(`${PREFIX}/assets/:id/next-inspection`, requirePermission("inventory.move"), async (c) => {
+    try {
+      const org = orgOrForbid(c);
+      if (org instanceof Response) return org;
+      const assetId = c.req.param("id");
+      const loaded = await loadAsset(c, org, assetId);
+      if ("response" in loaded) return loaded.response;
+      const body = await c.req.json() as Record<string, unknown>;
+      const note = String(body.note ?? "").trim();
+      if (!note) return c.json({ error: "note required" }, 400);
+      const rawDue = body.next_inspection_due ?? body.nextInspectionDue ?? body.inspection_due;
+      let due: string | null = null;
+      if (rawDue != null && String(rawDue).trim() !== "") {
+        const d = new Date(String(rawDue));
+        if (Number.isNaN(d.getTime())) return c.json({ error: "invalid next_inspection_due" }, 400);
+        due = d.toISOString().slice(0, 10);
+      }
+      const rpcResult = await rpcJson(c, "inv_asset_set_next_inspection", {
+        p_org_id: org,
+        p_asset_id: assetId,
+        p_next_inspection_due: due,
+        p_note: note,
+        p_actor: actorId(c),
+      });
+      if (rpcResult instanceof Response) return rpcResult;
+      const { data, error } = await fleetDb().from("fleet_inv_asset").select("*")
+        .eq("organization_id", org).eq("id", assetId).single();
+      if (error) return c.json({ error: error.message }, 500);
+      return c.json({ asset: data, ...rpcResult });
+    } catch (e) {
+      return safeErrorResponse(c, e, "inventory.assets.next_inspection");
     }
   });
 
@@ -757,244 +940,20 @@ export function registerInventoryExtendedRoutes(app: Hono<InvEnv>) {
     }
   });
 
-  app.post(`${PREFIX}/assets/:id/qr-label`, requirePermission("inventory.view"), async (c) => {
-    try {
-      const org = orgOrForbid(c);
-      if (org instanceof Response) return org;
-      const assetId = c.req.param("id");
-      const loaded = await loadAsset(c, org, assetId);
-      if ("response" in loaded) return loaded.response;
-      const asset = loaded.asset;
-      const payload = `roam:asset:${org}:${assetId}`;
-      return c.json({
-        stub: false,
-        assetId,
-        assetTag: asset.asset_tag,
-        serialNumber: asset.serial_number ?? null,
-        qrPayload: payload,
-        labelText: `${asset.asset_tag}${asset.serial_number ? ` · ${asset.serial_number}` : ""}`,
-      });
-    } catch (e) {
-      return safeErrorResponse(c, e, "inventory.assets.qr-label");
-    }
-  });
-
-  app.get(`${PREFIX}/purchase-orders`, requirePermission("inventory.purchasing"), async (c) => {
-    const org = orgOrForbid(c);
-    if (org instanceof Response) return org;
-    const { data, error } = await fleetDb().from("fleet_inv_purchase_order").select("*").eq("organization_id", org);
-    if (error) return c.json({ error: error.message }, 500);
-    return c.json({ items: data ?? [] });
-  });
-
-  app.post(`${PREFIX}/purchase-orders/:id/submit`, requirePermission("inventory.purchasing"), async (c) => {
-    try {
-      const org = orgOrForbid(c);
-      if (org instanceof Response) return org;
-      const poId = c.req.param("id");
-      const result = await updatePo(c, org, poId, {
-        status: "awaiting_approval",
-        initiated_by: actorUuid(c),
-      });
-      if (result instanceof Response) return result;
-      return c.json(result);
-    } catch (e) {
-      return safeErrorResponse(c, e, "inventory.po.submit");
-    }
-  });
-
-  app.post(`${PREFIX}/purchase-orders/:id/authorize`, requirePermission("inventory.approve"), async (c) => {
-    try {
-      const org = orgOrForbid(c);
-      if (org instanceof Response) return org;
-      const poId = c.req.param("id");
-      const result = await updatePo(c, org, poId, {
-        approved_by: actorId(c),
-        approved_at: new Date().toISOString(),
-      });
-      if (result instanceof Response) return result;
-      return c.json(result);
-    } catch (e) {
-      return safeErrorResponse(c, e, "inventory.po.authorize");
-    }
-  });
-
-  app.post(`${PREFIX}/purchase-orders/:id/order`, requirePermission("inventory.purchasing"), async (c) => {
-    try {
-      const org = orgOrForbid(c);
-      if (org instanceof Response) return org;
-      const poId = c.req.param("id");
-      const result = await updatePo(c, org, poId, {
-        status: "ordered",
-        ordered_at: new Date().toISOString(),
-      });
-      if (result instanceof Response) return result;
-      return c.json(result);
-    } catch (e) {
-      return safeErrorResponse(c, e, "inventory.po.order");
-    }
-  });
-
-  app.post(`${PREFIX}/purchase-orders/:id/receive`, requirePermission("inventory.purchasing"), async (c) => {
-    try {
-      const org = orgOrForbid(c);
-      if (org instanceof Response) return org;
-      const poId = c.req.param("id");
-      const idem = requireIdempotencyKey(c);
-      if (idem instanceof Response) return idem;
-      const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
-      if (Array.isArray(body.lines) && body.lines.length) {
-        const rpcResult = await rpcJson(c, "inv_receive", {
-          p_org_id: org,
-          p_receipt: { po_id: poId, ...(body.receipt as Record<string, unknown> ?? {}) },
-          p_lines: body.lines,
-          p_costs: body.costs ?? [],
-          p_idempotency_key: idem,
-        });
-        if (rpcResult instanceof Response) return rpcResult;
-        const status = body.partial ? "part_received" : "received";
-        const poResult = await updatePo(c, org, poId, { status });
-        if (poResult instanceof Response) return poResult;
-        return c.json({ ...rpcResult, po: (poResult as { po: unknown }).po });
-      }
-      const status = body.partial ? "part_received" : "received";
-      const result = await updatePo(c, org, poId, { status });
-      if (result instanceof Response) return result;
-      return c.json(result);
-    } catch (e) {
-      return safeErrorResponse(c, e, "inventory.po.receive");
-    }
-  });
-
-  app.post(`${PREFIX}/purchase-orders/:id/cancel`, requirePermission("inventory.purchasing"), async (c) => {
-    try {
-      const org = orgOrForbid(c);
-      if (org instanceof Response) return org;
-      const poId = c.req.param("id");
-      const result = await updatePo(c, org, poId, { status: "cancelled" });
-      if (result instanceof Response) return result;
-      return c.json(result);
-    } catch (e) {
-      return safeErrorResponse(c, e, "inventory.po.cancel");
-    }
-  });
-
-  app.get(`${PREFIX}/vendors`, requirePermission("inventory.purchasing"), async (c) => {
-    const org = orgOrForbid(c);
-    if (org instanceof Response) return org;
-    const { data, error } = await fleetDb().from("fleet_inv_vendor").select("*").eq("organization_id", org);
-    if (error) return c.json({ error: error.message }, 500);
-    return c.json({ items: data ?? [] });
-  });
-
-  app.get(`${PREFIX}/reorder/suggestions`, requirePermission("inventory.view"), async (c) => {
-    const org = orgOrForbid(c);
-    if (org instanceof Response) return org;
-    const { data, error } = await fleetDb().from("fleet_inv_v_stock").select("*")
-      .eq("organization_id", org).in("stock_status", ["low", "out"]);
-    if (error) return c.json({ error: error.message }, 500);
-    return c.json({ items: data ?? [] });
-  });
-
-  app.post(`${PREFIX}/reorder/recompute`, requirePermission("inventory.purchasing"), async (c) => {
-    const org = orgOrForbid(c);
-    if (org instanceof Response) return org;
-    const result = await rpcJson(c, "inv_recompute_reorder", { p_org_id: org });
-    if (result instanceof Response) return result;
-    return c.json(result);
-  });
-
-  app.get(`${PREFIX}/counts/sessions`, requirePermission("inventory.view"), async (c) => {
-    const org = orgOrForbid(c);
-    if (org instanceof Response) return org;
-    const { data, error } = await fleetDb().from("fleet_inv_count_session").select("*").eq("organization_id", org);
-    if (error) return c.json({ error: error.message }, 500);
-    return c.json({ items: data ?? [] });
-  });
-
-  app.post(`${PREFIX}/counts/:id/submit`, requirePermission("inventory.adjust"), async (c) => {
-    const org = orgOrForbid(c);
-    if (org instanceof Response) return org;
-    const sessionId = c.req.param("id");
-    const { error } = await fleetDb().from("fleet_inv_count_session").update({ status: "submitted" })
-      .eq("organization_id", org).eq("id", sessionId);
-    if (error) return c.json({ error: error.message }, 500);
-    return c.json({ sessionId, status: "submitted" });
-  });
-
-  app.post(`${PREFIX}/counts/:id/recount`, requirePermission("inventory.adjust"), async (c) => {
-    try {
-      const org = orgOrForbid(c);
-      if (org instanceof Response) return org;
-      const sessionId = c.req.param("id");
-      const { error: lineErr } = await fleetDb().from("fleet_inv_count_line").update({ line_status: "recount" })
-        .eq("organization_id", org).eq("session_id", sessionId);
-      if (lineErr) return c.json({ error: lineErr.message }, 500);
-      const { error } = await fleetDb().from("fleet_inv_count_session").update({
-        status: "open",
-        submitted_at: null,
-        submitted_by: null,
-      }).eq("organization_id", org).eq("id", sessionId);
-      if (error) return c.json({ error: error.message }, 500);
-      return c.json({ sessionId, status: "open", recount: true });
-    } catch (e) {
-      return safeErrorResponse(c, e, "inventory.counts.recount");
-    }
-  });
-
-  app.post(`${PREFIX}/counts/:id/reject`, requirePermission("inventory.approve"), async (c) => {
-    try {
-      const org = orgOrForbid(c);
-      if (org instanceof Response) return org;
-      const sessionId = c.req.param("id");
-      const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
-      const { error } = await fleetDb().from("fleet_inv_count_session").update({
-        status: "open",
-        submitted_at: null,
-        approved_by: null,
-      }).eq("organization_id", org).eq("id", sessionId);
-      if (error) return c.json({ error: error.message }, 500);
-      await fleetDb().from("fleet_inv_approval").update({
-        status: "rejected",
-        decided_at: new Date().toISOString(),
-        approved_by: actorId(c),
-      }).eq("organization_id", org).eq("subject_type", "count").eq("subject_id", sessionId)
-        .eq("status", "pending");
-      return c.json({ sessionId, status: "open", rejected: true, reason: body.reason ?? null });
-    } catch (e) {
-      return safeErrorResponse(c, e, "inventory.counts.reject");
-    }
-  });
-
-  app.post(`${PREFIX}/counts/:id/approve`, requirePermission("inventory.approve"), async (c) => {
-    try {
-      const org = orgOrForbid(c);
-      if (org instanceof Response) return org;
-      const sessionId = c.req.param("id");
-      const { error } = await fleetDb().from("fleet_inv_count_session").update({
-        status: "reconciled",
-        approved_by: actorId(c),
-      }).eq("organization_id", org).eq("id", sessionId);
-      if (error) return c.json({ error: error.message }, 500);
-      await fleetDb().from("fleet_inv_approval").update({
-        status: "approved",
-        decided_at: new Date().toISOString(),
-        approved_by: actorId(c),
-      }).eq("organization_id", org).eq("subject_type", "count").eq("subject_id", sessionId)
-        .eq("status", "pending");
-      return c.json({ sessionId, status: "reconciled" });
-    } catch (e) {
-      return safeErrorResponse(c, e, "inventory.counts.approve");
-    }
-  });
-
   app.get(`${PREFIX}/alerts`, requirePermission("inventory.view"), async (c) => {
     const org = orgOrForbid(c);
     if (org instanceof Response) return org;
     const { data, error } = await fleetDb().from("fleet_inv_alert").select("*").eq("organization_id", org)
       .order("created_at", { ascending: false }).limit(100);
     if (error) return c.json({ error: error.message }, 500);
-    return c.json({ items: data ?? [] });
+    const derived = await buildDerivedAssetAlerts(org);
+    const merged = [...(data ?? []), ...derived];
+    merged.sort((a, b) => {
+      const ta = new Date(String(a.created_at ?? 0)).getTime();
+      const tb = new Date(String(b.created_at ?? 0)).getTime();
+      return tb - ta;
+    });
+    return c.json({ items: merged });
   });
 
   app.post(`${PREFIX}/alerts/:id/assign`, requirePermission("inventory.approve"), async (c) => {
@@ -1059,159 +1018,12 @@ export function registerInventoryExtendedRoutes(app: Hono<InvEnv>) {
     }
   });
 
-  app.get(`${PREFIX}/scanners`, requirePermission("inventory.view"), async (c) => {
-    try {
-      const org = orgOrForbid(c);
-      if (org instanceof Response) return org;
-      const { data, error } = await fleetDb().from("fleet_inv_scan_device").select("*")
-        .eq("organization_id", org)
-        .order("updated_at", { ascending: false });
-      if (error) return c.json({ error: error.message }, 500);
-      return c.json({ items: data ?? [] });
-    } catch (e) {
-      return safeErrorResponse(c, e, "inventory.scanners.list");
-    }
-  });
-
-  app.post(`${PREFIX}/scanners/pair`, requirePermission("inventory.move"), async (c) => {
-    const org = orgOrForbid(c);
-    if (org instanceof Response) return org;
-    const body = await c.req.json();
-    const result = await rpcJson(c, "inv_pair_scanner", {
-      p_org_id: org,
-      p_pairing_code: body.pairing_code,
-      p_device_label: body.label ?? null,
-    });
-    if (result instanceof Response) return result;
-    return c.json(result);
-  });
-
-  app.get(`${PREFIX}/requisitions`, requirePermission("inventory.view"), async (c) => {
-    const org = orgOrForbid(c);
-    if (org instanceof Response) return org;
-    const { data, error } = await fleetDb().from("fleet_inv_requisition").select("*").eq("organization_id", org);
-    if (error) return c.json({ error: error.message }, 500);
-    return c.json({ items: data ?? [] });
-  });
-
-  app.post(`${PREFIX}/requisitions`, requirePermission("inventory.move"), async (c) => {
-    const org = orgOrForbid(c);
-    if (org instanceof Response) return org;
-    const body = await c.req.json() as Record<string, unknown>;
-    const refNo = String(body.ref_no ?? `REQ-${crypto.randomUUID().slice(0, 8).toUpperCase()}`);
-    const { data, error } = await fleetDb().from("fleet_inv_requisition").insert({
-      organization_id: org,
-      ref_no: refNo,
-      requested_by: actorId(c),
-      for_vehicle_id: body.for_vehicle_id ?? null,
-      for_user_id: body.for_user_id ?? null,
-      needed_by: body.needed_by ?? null,
-      note: body.note ?? null,
-      status: "open",
-    }).select("*").single();
-    if (error) return c.json({ error: error.message }, 500);
-    const lines = Array.isArray(body.lines) ? body.lines as Record<string, unknown>[] : [];
-    if (lines.length) {
-      const { error: lineErr } = await fleetDb().from("fleet_inv_requisition_line").insert(
-        lines.map((line) => ({
-          organization_id: org,
-          requisition_id: data.id,
-          item_id: line.item_id,
-          qty: line.qty ?? line.qty_ordered ?? 1,
-        })),
-      );
-      if (lineErr) return c.json({ error: lineErr.message }, 500);
-    }
-    return c.json({ requisition: data });
-  });
-
   app.get(`${PREFIX}/analytics/kit-reserve`, requirePermission("inventory.view"), async (c) => {
     const org = orgOrForbid(c);
     if (org instanceof Response) return org;
     const { data, error } = await fleetDb().from("fleet_inv_v_kit_reserve").select("*").eq("organization_id", org);
     if (error) return c.json({ error: error.message }, 500);
     return c.json({ items: data ?? [] });
-  });
-
-  app.get(`${PREFIX}/analytics/where-used`, requirePermission("inventory.view"), async (c) => {
-    const org = orgOrForbid(c);
-    if (org instanceof Response) return org;
-    const itemId = c.req.query("item_id");
-    let q = fleetDb().from("fleet_inv_v_where_used").select("*").eq("organization_id", org);
-    if (itemId) q = q.eq("item_id", itemId);
-    const { data, error } = await q;
-    if (error) return c.json({ error: error.message }, 500);
-    return c.json({ items: data ?? [] });
-  });
-
-  app.get(`${PREFIX}/analytics/reorder-suggestions`, requirePermission("inventory.view"), async (c) => {
-    const org = orgOrForbid(c);
-    if (org instanceof Response) return org;
-    const { data, error } = await fleetDb().from("fleet_inv_v_reorder_suggestions").select("*").eq("organization_id", org);
-    if (error) return c.json({ error: error.message }, 500);
-    return c.json({ items: data ?? [] });
-  });
-
-  app.get(`${PREFIX}/analytics/vendor-stats`, requirePermission("inventory.view"), async (c) => {
-    const org = orgOrForbid(c);
-    if (org instanceof Response) return org;
-    const { data, error } = await fleetDb().from("fleet_inv_v_vendor_stats").select("*").eq("organization_id", org);
-    if (error) return c.json({ error: error.message }, 500);
-    return c.json({ items: data ?? [] });
-  });
-
-  app.get(`${PREFIX}/analytics/count-accuracy`, requirePermission("inventory.view"), async (c) => {
-    const org = orgOrForbid(c);
-    if (org instanceof Response) return org;
-    const { data, error } = await fleetDb().from("fleet_inv_v_count_accuracy").select("*").eq("organization_id", org);
-    if (error) return c.json({ error: error.message }, 500);
-    return c.json({ items: data ?? [] });
-  });
-
-  app.get(`${PREFIX}/analytics/procurement-mtd`, requirePermission("inventory.view"), async (c) => {
-    const org = orgOrForbid(c);
-    if (org instanceof Response) return org;
-    const { data, error } = await fleetDb().from("fleet_inv_v_procurement_mtd").select("*").eq("organization_id", org).maybeSingle();
-    if (error) return c.json({ error: error.message }, 500);
-    return c.json({ summary: data ?? null });
-  });
-
-  app.get(`${PREFIX}/analytics/report-sla`, requirePermission("inventory.view"), async (c) => {
-    const org = orgOrForbid(c);
-    if (org instanceof Response) return org;
-    const { data, error } = await fleetDb().from("fleet_inv_v_report_sla").select("*").eq("organization_id", org);
-    if (error) return c.json({ error: error.message }, 500);
-    return c.json({ items: data ?? [] });
-  });
-
-  app.get(`${PREFIX}/analytics/asset-kpis`, requirePermission("inventory.view"), async (c) => {
-    const org = orgOrForbid(c);
-    if (org instanceof Response) return org;
-    const { data, error } = await fleetDb().from("fleet_inv_v_asset_kpis").select("*").eq("organization_id", org).maybeSingle();
-    if (error) return c.json({ error: error.message }, 500);
-    return c.json({ kpis: data ?? null });
-  });
-
-  app.post(`${PREFIX}/finance/post`, requirePermission("inventory.purchasing"), async (c) => {
-    const org = orgOrForbid(c);
-    if (org instanceof Response) return org;
-    const sb = getServiceClient();
-    const { data: flag } = await sb
-      .from("platform_feature_flags")
-      .select("enabled")
-      .eq("name", "fleet_inventory_finance_posting")
-      .maybeSingle();
-    if (!flag?.enabled) {
-      return c.json({ error: "Finance posting not enabled" }, 403);
-    }
-    return c.json(
-      {
-        error: "Inventory finance posting is not wired to Business Finance yet",
-        code: "not_implemented",
-        organizationId: org,
-      },
-      501,
-    );
   });
 
   registerInventoryR16Routes(app);

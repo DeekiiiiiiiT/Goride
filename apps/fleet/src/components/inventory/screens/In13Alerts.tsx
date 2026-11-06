@@ -4,22 +4,11 @@ import { useInventoryLive } from '../inventoryLive';
 import { useInventoryShell } from '../InventoryShellContext';
 import { InventoryPrimaryTabs } from '../InventoryPrimaryTabs';
 import { InventoryOverflowMenu } from '../InventoryOverflowMenu';
-import { firstVendorName, strField } from '../inventoryData';
+import { strField } from '../inventoryData';
 export function In13Alerts() {
   const form = useIn13AlertsForm();
   const shell = useInventoryShell();
   const live = useInventoryLive(shell);
-  const openApprovalDrawer = () => {
-    const pending =
-      shell.alerts.find((a) => strField(a, 'status', '') === 'pending') ??
-      shell.alerts.find((a) => strField(a, 'kind', '').includes('approval'));
-    const approvalId = pending
-      ? strField(pending, 'approval_id', strField(pending, 'id', '')) || null
-      : null;
-    shell.setSelectedApprovalId(approvalId);
-    shell.openModal('approval-drawer');
-  };
-  const vendorName = firstVendorName(live.vendors);
   const secondary = live.secondaryVehicle;
   const lowStockLabel = live.lowStockLabel;
   const alertRecord = (id: string) => form.filtered.find((a) => strField(a, 'id', '') === id) ?? {};
@@ -53,9 +42,9 @@ export function In13Alerts() {
       <span className="material-symbols-outlined text-[18px]">verified</span>
       <span className="font-label-code text-caption font-semibold">Ledger Sync: Operational</span>
       </div>
-      <button type="button" className="flex items-center gap-space-xs bg-primary text-on-primary px-space-lg py-2 rounded-lg font-body-sm text-body-sm font-semibold hover:bg-primary/90 transition-colors shadow-sm" onClick={() => form.newRequisition()}>
-      <span className="material-symbols-outlined text-[16px]">add</span>
-      <span>New Requisition</span>
+      <button type="button" className="flex items-center gap-space-xs bg-primary text-on-primary px-space-lg py-2 rounded-lg font-body-sm text-body-sm font-semibold hover:bg-primary/90 transition-colors shadow-sm" onClick={() => shell.openModal('receive')}>
+      <span className="material-symbols-outlined text-[16px]">move_to_inbox</span>
+      <span>Receive stock</span>
       </button>
       </div>
       </div>
@@ -96,7 +85,7 @@ export function In13Alerts() {
       <div>
       <span className="font-caption text-caption text-on-surface-variant uppercase tracking-wider font-semibold">Active Deficits</span>
       <div className="font-headline-lg text-headline-lg font-bold text-on-surface mt-1">{form.live.totalStockValue}</div>
-      <span className="font-caption text-caption text-error font-medium">Kit & telemetry assets missing</span>
+      <span className="font-caption text-caption text-error font-medium">Kit items missing</span>
       </div>
       <div className="w-10 h-10 rounded-lg bg-error-container text-on-error-container flex items-center justify-center">
       <span className="material-symbols-outlined text-[20px]">warning</span>
@@ -267,21 +256,6 @@ export function In13Alerts() {
       </div>
       ))
       )}
-      </div>
-      </div>
-
-      <div className="bg-surface-container-lowest p-space-lg rounded-xl shadow-sm flex flex-col justify-between">
-      <div>
-      <div className="flex items-center justify-between mb-2">
-      <span className="font-caption text-caption text-on-surface-variant uppercase tracking-wider font-semibold">Storeroom Sensor Status</span>
-      <span className="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
-      </div>
-      <div className="font-headline-sm text-headline-sm text-on-surface font-bold">Kingston Depot Cage A</div>
-      <p className="font-body-sm text-body-sm text-on-surface-variant mt-1">RFID gate scanner and smart tag antennas operating at nominal signal integrity.</p>
-      </div>
-      <div className="pt-space-md mt-space-md bg-surface-container-low p-space-md rounded-lg flex items-center justify-between">
-      <span className="font-label-code text-caption text-on-surface font-semibold">Gate RFID Check: PASS</span>
-      <span className="font-label-code text-caption text-secondary">99.4% read accuracy</span>
       </div>
       </div>
       </div>

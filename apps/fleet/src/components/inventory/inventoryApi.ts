@@ -1,25 +1,11 @@
 import { API_ENDPOINTS } from '@roam/api-client';
 import { fetchWithRetry } from '../../services/api';
 import { getHeaders } from '../../utils/authHeaders';
-import { INVENTORY_PHASE_OFF_MESSAGE } from './inventoryPhaseUi';
 
 const BASE = `${API_ENDPOINTS.fleetCore}/inventory`;
 
-export class InventoryPhaseOffError extends Error {
-  constructor(message: string = INVENTORY_PHASE_OFF_MESSAGE) {
-    super(message);
-    this.name = 'InventoryPhaseOffError';
-  }
-}
-
 function throwInventoryHttpError(response: Response, body: Record<string, unknown>) {
   const msg = String(body.error ?? body.message ?? `Inventory API ${response.status}`);
-  if (
-    response.status === 403 &&
-    (msg.includes(INVENTORY_PHASE_OFF_MESSAGE) || msg.toLowerCase().includes("isn't switched on"))
-  ) {
-    throw new InventoryPhaseOffError(msg);
-  }
   throw new Error(msg);
 }
 
@@ -176,7 +162,6 @@ export const inventoryApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ user_id: userId }),
     }),
-  reorderRecompute: () => invFetch('/reorder/recompute', { method: 'POST' }),
   assets: () => invFetch('/assets'),
   assetEvents: (id: string) => invFetch(`/assets/${encodeURIComponent(id)}/events`),
   assetAddEvent: (id: string, body: unknown) =>
@@ -192,14 +177,28 @@ export const inventoryApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     }),
-  assetMove: (id: string, body: unknown) =>
+  assetMove: (id: string, body: unknown, idempotencyKey?: string) =>
     invFetch(`/assets/${encodeURIComponent(id)}/move`, {
+      method: 'POST',
+      headers: idempotencyKey
+        ? idempotencyHeaders(idempotencyKey)
+        : { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+  assetCondition: (id: string, body: unknown) =>
+    invFetch(`/assets/${encodeURIComponent(id)}/condition`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     }),
   assetRepair: (id: string, body: unknown = {}) =>
     invFetch(`/assets/${encodeURIComponent(id)}/repair`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+  assetNextInspection: (id: string, body: unknown) =>
+    invFetch(`/assets/${encodeURIComponent(id)}/next-inspection`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -222,50 +221,6 @@ export const inventoryApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ serial_number: serialNumber }),
     }),
-  assetQrLabel: (id: string) =>
-    invFetch(`/assets/${encodeURIComponent(id)}/qr-label`, { method: 'POST' }),
-  purchaseOrders: () => invFetch('/purchase-orders'),
-  poSubmit: (id: string) =>
-    invFetch(`/purchase-orders/${encodeURIComponent(id)}/submit`, { method: 'POST' }),
-  poAuthorize: (id: string) =>
-    invFetch(`/purchase-orders/${encodeURIComponent(id)}/authorize`, { method: 'POST' }),
-  poOrder: (id: string) =>
-    invFetch(`/purchase-orders/${encodeURIComponent(id)}/order`, { method: 'POST' }),
-  poReceive: (id: string, body: unknown, idempotencyKey: string) =>
-    invFetch(`/purchase-orders/${encodeURIComponent(id)}/receive`, {
-      method: 'POST',
-      headers: idempotencyHeaders(idempotencyKey),
-      body: JSON.stringify(body),
-    }),
-  poCancel: (id: string) =>
-    invFetch(`/purchase-orders/${encodeURIComponent(id)}/cancel`, { method: 'POST' }),
-  countSessions: () => invFetch('/counts/sessions'),
-  countSubmit: (id: string) =>
-    invFetch(`/counts/${encodeURIComponent(id)}/submit`, { method: 'POST' }),
-  countRecount: (id: string) =>
-    invFetch(`/counts/${encodeURIComponent(id)}/recount`, { method: 'POST' }),
-  countReject: (id: string, body: unknown = {}) =>
-    invFetch(`/counts/${encodeURIComponent(id)}/reject`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    }),
-  countApprove: (id: string) =>
-    invFetch(`/counts/${encodeURIComponent(id)}/approve`, { method: 'POST' }),
-  scanners: () => invFetch('/scanners'),
-  scannerPair: (body: unknown) =>
-    invFetch('/scanners/pair', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    }),
-  financePost: (body: unknown = {}) =>
-    invFetch('/finance/post', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    }),
-  vendors: () => invFetch('/vendors'),
   carKit: () => invFetch('/driver/car-kit'),
   ledgerVerify: () =>
     invFetch('/ledger/verify', {
@@ -279,6 +234,13 @@ export const inventoryApi = {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
+    }),
+  alertRules: () => invFetch('/alert-rules'),
+  updateAlertRules: (rules: unknown) =>
+    invFetch('/alert-rules', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rules }),
     }),
   categories: () => invFetch('/categories'),
   createCategory: (body: unknown) =>
@@ -305,84 +267,6 @@ export const inventoryApi = {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
-    }),
-  createBin: (body: unknown) =>
-    invFetch('/bins', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    }),
-  patchBin: (id: string, body: unknown) =>
-    invFetch(`/bins/${encodeURIComponent(id)}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    }),
-  createVendor: (body: unknown) =>
-    invFetch('/vendors', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    }),
-  patchVendor: (id: string, body: unknown) =>
-    invFetch(`/vendors/${encodeURIComponent(id)}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    }),
-  vendorStats: () => invFetch('/analytics/vendor-stats'),
-  createPurchaseOrder: (body: unknown) =>
-    invFetch('/purchase-orders', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    }),
-  patchPurchaseOrder: (id: string, body: unknown) =>
-    invFetch(`/purchase-orders/${encodeURIComponent(id)}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    }),
-  startCountSession: (body: unknown) =>
-    invFetch('/counts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    }),
-  saveCountLines: (id: string, lines: unknown[]) =>
-    invFetch(`/counts/${encodeURIComponent(id)}/lines`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ lines }),
-    }),
-  approvals: (status = 'pending') => invFetch(`/approvals?status=${encodeURIComponent(status)}`),
-  approveApproval: (id: string) =>
-    invFetch(`/approvals/${encodeURIComponent(id)}/approve`, { method: 'POST' }),
-  rejectApproval: (id: string) =>
-    invFetch(`/approvals/${encodeURIComponent(id)}/reject`, { method: 'POST' }),
-  requisitions: () => invFetch('/requisitions'),
-  createRequisition: (body: unknown) =>
-    invFetch('/requisitions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    }),
-  approveRequisition: (id: string) =>
-    invFetch(`/requisitions/${encodeURIComponent(id)}/approve`, { method: 'POST' }),
-  rejectRequisition: (id: string) =>
-    invFetch(`/requisitions/${encodeURIComponent(id)}/reject`, { method: 'POST' }),
-  issueRequisition: (id: string) =>
-    invFetch(`/requisitions/${encodeURIComponent(id)}/issue`, { method: 'POST' }),
-  regenerateScanner: (id: string) =>
-    invFetch(`/scanners/${encodeURIComponent(id)}/regenerate`, { method: 'POST' }),
-  unpairScanner: (id: string) =>
-    invFetch(`/scanners/${encodeURIComponent(id)}`, { method: 'DELETE' }),
-  alertRules: () => invFetch('/alert-rules'),
-  updateAlertRules: (rules: unknown[]) =>
-    invFetch('/alert-rules', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ rules }),
     }),
   importItems: (file: unknown) =>
     invFetch('/items/import', {

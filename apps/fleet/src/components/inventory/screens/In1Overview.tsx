@@ -3,7 +3,7 @@ import { useIn1OverviewForm } from './hooks/useIn1OverviewForm';
 import { InventoryOverflowMenu } from '../InventoryOverflowMenu';
 import { InventoryPrimaryTabs } from '../InventoryPrimaryTabs';
 import { useInventoryLive } from '../inventoryLive';
-import { firstVendorName, strField } from '../inventoryData';
+import { strField } from '../inventoryData';
 import { useInventoryShell } from '../InventoryShellContext';
 
 export function In1Overview() {
@@ -70,13 +70,13 @@ export function In1Overview() {
 
       <InventoryPrimaryTabs variant="pill" />
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-space-md">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-space-md">
 
       <div className="p-space-lg rounded-xl bg-surface-container-lowest shadow-sm flex flex-col justify-between gap-space-md">
       <span className="font-body-sm text-body-sm text-on-surface-variant font-medium">Stock value</span>
       <div className="flex flex-col gap-1">
       <span className="font-label-price text-headline-sm text-on-surface tracking-tight">{live.totalStockValue}</span>
-      <span className="font-label-code text-caption text-secondary">{live.inStoreValue} in store · {live.onCarsValue} on cars</span>
+      <span className="font-label-code text-caption text-on-surface-variant">{live.inStoreValue} in store · {live.onCarsValue} on cars</span>
       </div>
       </div>
 
@@ -97,18 +97,14 @@ export function In1Overview() {
       </div>
 
       <div className="p-space-lg rounded-xl bg-surface-container-lowest shadow-sm flex flex-col justify-between gap-space-md">
-      <span className="font-body-sm text-body-sm text-on-surface-variant font-medium">Devices needing attention</span>
+      <span className="font-body-sm text-body-sm text-on-surface-variant font-medium">Equipment needing attention</span>
       <div className="flex flex-col gap-1">
-      <span className="font-label-code text-headline-sm text-on-surface tracking-tight font-bold">{live.devicesNeedingAttention}</span>
-      <span className="font-body-sm text-body-sm text-tertiary font-medium">{live.devicesNeedingAttention ? 'Devices need attention' : 'All devices OK'}</span>
-      </div>
-      </div>
-
-      <div className="p-space-lg rounded-xl bg-surface-container-lowest shadow-sm flex flex-col justify-between gap-space-md">
-      <span className="font-body-sm text-body-sm text-on-surface-variant font-medium">Open purchase orders</span>
-      <div className="flex flex-col gap-1">
-      <span className="font-label-code text-headline-sm text-on-surface tracking-tight font-bold">{live.openPoCount}</span>
-      <span className="font-label-code text-caption text-secondary">{live.openPoCount ? 'Open purchase orders' : 'Nothing on order'}</span>
+      <span className="font-label-code text-headline-sm text-on-surface tracking-tight font-bold">
+                  {live.assetsFaulty + live.assetsLost + live.assetsInRepair}
+                </span>
+      <span className="font-body-sm text-body-sm text-on-surface-variant font-medium">
+                  {live.assetsFaulty} faulty · {live.assetsLost} lost · {live.assetsInRepair} in repair
+                </span>
       </div>
       </div>
       </div>
@@ -163,56 +159,85 @@ export function In1Overview() {
                 <span className="font-body-sm text-body-sm text-on-surface font-medium truncate">
                   {live.lowStockLabel} is low or out
                 </span>
-                <span className="font-label-code text-caption text-secondary">
+                <span className="font-label-code text-caption text-on-surface-variant">
                   {live.lowStockCount} item{live.lowStockCount === 1 ? '' : 's'} need attention
                 </span>
               </div>
             </div>
-            {shell.phaseFlags.phase6Purchasing ? (
-            <button type="button" onClick={() => shell.setTab('purchasing')} className="shrink-0 h-8 px-space-md rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface transition-colors font-body-sm text-body-sm font-medium">
-              Reorder
-            </button>
-            ) : null}
           </div>
         </>
       ) : null}
 
-      {shell.phaseFlags.phase4Assets
-        ? live.assets.filter((a) => !strField(a, 'serial_number', '')).slice(0, 1).map((asset) => (
-        <div key={strField(asset, 'id', 'asset')}>
+      {live.assetsFaulty > 0 ? (
+        <>
           <div className="h-px w-full bg-surface-container-low"></div>
           <div className="p-space-lg flex flex-col sm:flex-row sm:items-center justify-between gap-space-md bg-surface-container-lowest hover:bg-surface-container-low transition-colors">
             <div className="flex items-center gap-space-md min-w-0">
               <div className="shrink-0 w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center text-on-surface">
-                <span className="material-symbols-outlined text-[20px]">videocam</span>
+                <span className="material-symbols-outlined text-[20px]">report_problem</span>
               </div>
               <div className="flex flex-col min-w-0">
                 <span className="font-body-sm text-body-sm text-on-surface font-medium truncate">
-                  {strField(asset, 'name', 'Asset')} has no serial number
+                  {live.assetsFaulty} tracked asset{live.assetsFaulty === 1 ? '' : 's'} marked faulty
                 </span>
-                <span className="font-body-sm text-caption text-secondary">
-                  Tag {strField(asset, 'asset_tag', '—')}
-                </span>
+                <span className="font-label-code text-caption text-error font-medium">Review on Assets tab</span>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                shell.setSelectedAssetId(strField(asset, 'id', '') || null);
-                shell.openModal('asset-page');
-              }}
-              className="shrink-0 h-8 px-space-md rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface transition-colors font-body-sm text-body-sm font-medium"
-            >
-              Add serial
+            <button type="button" onClick={() => shell.setTab('assets')} className="shrink-0 h-8 px-space-md rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface transition-colors font-body-sm text-body-sm font-medium">
+              View assets
             </button>
           </div>
-        </div>
-      ))
-        : null}
+        </>
+      ) : null}
+
+      {live.assetsLost > 0 ? (
+        <>
+          <div className="h-px w-full bg-surface-container-low"></div>
+          <div className="p-space-lg flex flex-col sm:flex-row sm:items-center justify-between gap-space-md bg-surface-container-lowest hover:bg-surface-container-low transition-colors">
+            <div className="flex items-center gap-space-md min-w-0">
+              <div className="shrink-0 w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center text-on-surface">
+                <span className="material-symbols-outlined text-[20px]">location_off</span>
+              </div>
+              <div className="flex flex-col min-w-0">
+                <span className="font-body-sm text-body-sm text-on-surface font-medium truncate">
+                  {live.assetsLost} asset{live.assetsLost === 1 ? '' : 's'} reported lost
+                </span>
+                <span className="font-label-code text-caption text-on-surface-variant">Confirm custody on Assets</span>
+              </div>
+            </div>
+            <button type="button" onClick={() => shell.setTab('assets')} className="shrink-0 h-8 px-space-md rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface transition-colors font-body-sm text-body-sm font-medium">
+              View assets
+            </button>
+          </div>
+        </>
+      ) : null}
+
+      {live.assetsInRepair > 0 ? (
+        <>
+          <div className="h-px w-full bg-surface-container-low"></div>
+          <div className="p-space-lg flex flex-col sm:flex-row sm:items-center justify-between gap-space-md bg-surface-container-lowest hover:bg-surface-container-low transition-colors">
+            <div className="flex items-center gap-space-md min-w-0">
+              <div className="shrink-0 w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center text-on-surface">
+                <span className="material-symbols-outlined text-[20px]">build</span>
+              </div>
+              <div className="flex flex-col min-w-0">
+                <span className="font-body-sm text-body-sm text-on-surface font-medium truncate">
+                  {live.assetsInRepair} asset{live.assetsInRepair === 1 ? '' : 's'} in repair
+                </span>
+                <span className="font-label-code text-caption text-on-surface-variant">Track return to fleet</span>
+              </div>
+            </div>
+            <button type="button" onClick={() => shell.setTab('assets')} className="shrink-0 h-8 px-space-md rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface transition-colors font-body-sm text-body-sm font-medium">
+              View assets
+            </button>
+          </div>
+        </>
+      ) : null}
 
       {live.openAlertCount === 0 &&
       live.kitVehicles.every((v) => v.missingLines + v.shortLines === 0) &&
-      live.lowStockCount === 0 ? (
+      live.lowStockCount === 0 &&
+      live.assetsFaulty + live.assetsLost + live.assetsInRepair === 0 ? (
         <div className="p-space-lg font-body-sm text-body-sm text-on-surface-variant">Nothing needs action right now.</div>
       ) : null}
       </div>
@@ -260,37 +285,6 @@ export function In1Overview() {
       </button>
       </div>
 
-      <div className="p-space-lg rounded-xl bg-surface-container-lowest shadow-sm flex flex-col gap-space-lg">
-      <div className="flex items-center justify-between">
-      <h3 className="font-headline-sm text-headline-sm text-on-surface font-semibold tracking-tight">Suggested to buy</h3>
-      <span className="w-2 h-2 rounded-full bg-primary"></span>
-      </div>
-
-      {shell.phaseFlags.phase6Purchasing ? (
-      <>
-      <div className="p-space-md rounded-lg bg-surface-container-low flex flex-col gap-space-xs">
-      <div className="flex items-center justify-between">
-      <span className="font-body-sm text-body-sm font-semibold text-on-surface">Phone Holder Mount</span>
-      <span className="font-label-code text-caption font-bold bg-surface-container px-2 py-0.5 rounded text-on-surface">Buy 5</span>
-      </div>
-      <div className="flex flex-col gap-0.5 text-caption font-body-sm text-secondary">
-      <div className="flex items-center gap-space-xs">
-      <span className="material-symbols-outlined text-[14px]">storefront</span>
-      <span>{firstVendorName(live.vendors)}</span>
-      </div>
-      <div className="flex items-center gap-space-xs">
-      <span className="material-symbols-outlined text-[14px]">schedule</span>
-      <span>7 days lead time</span>
-      </div>
-      </div>
-      </div>
-      <button type="button" onClick={() => shell.setTab('purchasing')} className="w-full h-9 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface transition-colors font-body-sm text-body-sm font-medium flex items-center justify-center gap-space-xs">
-      <span className="material-symbols-outlined text-[16px]">add_shopping_cart</span>
-      <span>Create draft order</span>
-      </button>
-      </>
-      ) : null}
-      </div>
       </div>
       </div>
       </div>

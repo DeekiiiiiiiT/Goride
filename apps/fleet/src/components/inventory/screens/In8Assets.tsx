@@ -3,19 +3,14 @@ import { useIn8AssetsForm } from './hooks/useIn8AssetsForm';
 import { InventoryOverflowMenu } from '../InventoryOverflowMenu';
 import { InventoryPrimaryTabs } from '../InventoryPrimaryTabs';
 import { InventoryPagination } from '../InventoryPagination';
-import { useState } from 'react';
 import { useInventoryLive } from '../inventoryLive';
 import { useInventoryShell } from '../InventoryShellContext';
-import { InventoryQrPrintDialog } from '../InventoryQrPrintDialog';
 export function In8Assets() {
   const form = useIn8AssetsForm();
-  const [qrOpen, setQrOpen] = useState(false);
   const shell = useInventoryShell();
   const live = useInventoryLive(shell);
-  const qrAssetId = form.selectedAssetId;
   return (
     <div className="fleet-inventory-stitch inventory-stitch-root">
-      <InventoryQrPrintDialog assetId={qrAssetId} open={qrOpen} onClose={() => setQrOpen(false)} />
       <div className="inventory-stitch-main"><div className="max-w-[1400px] mx-auto px-margin md:px-margin-desktop py-space-lg"><div className="flex flex-col w-full gap-space-lg">
 
       <div className="relative overflow-hidden rounded-lg bg-surface-container-high p-space-md shadow-sm transition-all duration-300" data-stitch-data-stitch-id="telemetry-banner">
@@ -55,10 +50,7 @@ export function In8Assets() {
       <span className="material-symbols-outlined text-lg">settings</span>
       </button>
       <InventoryOverflowMenu
-        items={[
-          { label: 'Export assets', onClick: () => form.exportAssets() },
-          { label: 'Print QR labels', onClick: () => setQrOpen(true) },
-        ]}
+        items={[{ label: 'Export assets', onClick: () => form.exportAssets() }]}
         title="More Operations"
       />
       <button type="button" className="h-9 px-space-md rounded bg-surface-container-lowest text-on-surface hover:bg-surface-container-high font-body-sm text-body-sm font-semibold transition-colors shadow-sm flex items-center gap-space-xs" onClick={() => shell.openModal('receive')}>
@@ -139,14 +131,13 @@ export function In8Assets() {
       <th className="py-3 px-space-md font-semibold">Installed</th>
       <th className="py-3 px-space-md font-semibold">Warranty ends</th>
       <th className="py-3 px-space-md font-semibold">Next inspection</th>
-      <th className="py-3 px-space-md font-semibold">Device health</th>
       <th className="py-3 px-space-md font-semibold text-right">Actions</th>
       </tr>
       </thead>
       <tbody className="divide-y divide-surface-container font-body-sm text-body-sm">
       {form.pagedAssetRows.length === 0 ? (
       <tr>
-      <td colSpan={9} className="py-space-xl px-space-md text-center text-on-surface-variant font-body-sm">
+      <td colSpan={8} className="py-space-xl px-space-md text-center text-on-surface-variant font-body-sm">
       No assets match your filters.
       </td>
       </tr>
@@ -200,12 +191,6 @@ export function In8Assets() {
       <td className="py-space-md px-space-md align-middle font-label-code text-body-sm text-outline-variant">—</td>
       <td className="py-space-md px-space-md align-middle font-label-code text-body-sm text-outline-variant">—</td>
       <td className="py-space-md px-space-md align-middle font-label-code text-body-sm text-outline-variant">—</td>
-      <td className="py-space-md px-space-md align-middle">
-      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-surface-container-high text-on-surface-variant font-caption text-caption font-medium">
-      <span className="w-1.5 h-1.5 rounded-full bg-outline"></span>
-      <span>{shell.phaseFlags.phase8Telematics ? '—' : 'Not connected'}</span>
-      </span>
-      </td>
       <td className="py-space-md px-space-md align-middle text-right" onClick={(e) => e.stopPropagation()}>
       <InventoryOverflowMenu items={form.rowMenuItems(assetId)} />
       </td>
@@ -215,7 +200,7 @@ export function In8Assets() {
       )}
       {form.selectedAssetRow ? (
       <tr className="bg-surface-container-low">
-      <td colSpan={9} className="py-space-md px-space-md">
+      <td colSpan={8} className="py-space-md px-space-md">
       <div className="flex flex-wrap items-center justify-between gap-space-md">
       <div>
       <span className="font-caption text-caption uppercase text-secondary font-semibold">Selected asset</span>

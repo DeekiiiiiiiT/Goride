@@ -293,9 +293,9 @@ export function In16FirstTimeSetup() {
       </div>
       </div>
       <div className="flex flex-col items-stretch sm:items-end gap-space-sm w-full md:w-auto flex-shrink-0">
-      <button type="button" className="bg-primary hover:bg-surface-container-highest hover:text-on-surface text-on-primary font-body-md text-body-md font-semibold px-space-xl py-2.5 rounded-lg shadow-sm transition-all duration-200 active:scale-95 flex items-center justify-center gap-space-xs" onClick={() => form.startCount()}>
+      <button type="button" className="bg-primary hover:bg-surface-container-highest hover:text-on-surface text-on-primary font-body-md text-body-md font-semibold px-space-xl py-2.5 rounded-lg shadow-sm transition-all duration-200 active:scale-95 flex items-center justify-center gap-space-xs" onClick={() => shell.openGap('opening-balances')}>
       <span className="material-symbols-outlined text-[18px]">fact_check</span>
-      <span>+ Start a count</span>
+      <span>Enter opening balances</span>
       </button>
       <button type="button" onClick={() => shell.openGap('opening-balances')} className="text-secondary hover:text-on-surface font-body-sm text-body-sm transition-colors text-center sm:text-right px-1">
                   I'll count later (enter opening balances manually)

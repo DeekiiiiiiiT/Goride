@@ -8,8 +8,8 @@ export function useIn16SetupForm() {
   const [locationName, setLocationName] = useState('');
 
   const itemCount = shell.items.length;
-  const step = itemCount > 0 ? (shell.countSessions.length > 0 ? 3 : 2) : 1;
-  const progressPct = Math.round((step / 3) * 100);
+  const step = itemCount > 0 ? 2 : 1;
+  const progressPct = Math.round((step / 2) * 100);
 
   const addLocation = () =>
     submit.run(async () => {
@@ -20,7 +20,6 @@ export function useIn16SetupForm() {
     });
 
   const loadStarter = () => shell.openGap('import-items', { itemId: null });
-  const startCount = () => shell.openGap('count-session', { countSessionId: null });
   const finishSetup = () => shell.closeModal();
 
   return {
@@ -34,7 +33,6 @@ export function useIn16SetupForm() {
     progressPct,
     addLocation,
     loadStarter,
-    startCount,
     finishSetup,
   };
 }

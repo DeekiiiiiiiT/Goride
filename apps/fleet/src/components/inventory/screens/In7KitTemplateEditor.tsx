@@ -3,14 +3,10 @@ import { useIn7KitTemplateForm } from './hooks/useIn7KitTemplateForm';
 import { useInventoryLive } from '../inventoryLive';
 import { useInventoryShell } from '../InventoryShellContext';
 import { GapSubmitError } from '../gap/GapLoadState';
-import { visibleInventoryTabs } from '../inventoryPhaseUi';
-import type { InventoryTabId } from '../InventoryTabs';
 export function In7KitTemplateEditor() {
   const form = useIn7KitTemplateForm();
   const shell = useInventoryShell();
   const live = useInventoryLive(shell);
-  const visibleTabs = new Set(visibleInventoryTabs(shell.phaseFlags));
-  const showTab = (id: InventoryTabId) => visibleTabs.has(id);
   return (
     <div className="fleet-inventory-stitch inventory-stitch-root">
       <GapSubmitError message={form.submit.error} />
@@ -49,16 +45,8 @@ export function In7KitTemplateEditor() {
       <span className="material-symbols-outlined text-[16px]">inventory_2</span>
       <span>Vehicle kits</span>
       </button>
-      {showTab('assets') ? (
       <button type="button" className="px-space-md py-1.5 rounded-lg font-body-sm text-secondary hover:text-on-surface hover:bg-surface-container transition-colors" onClick={() => form.goTab('assets')}>Assets</button>
-      ) : null}
       <button type="button" className="px-space-md py-1.5 rounded-lg font-body-sm text-secondary hover:text-on-surface hover:bg-surface-container transition-colors" onClick={() => form.goTab('movements')}>Movements</button>
-      {showTab('purchasing') ? (
-      <button type="button" className="px-space-md py-1.5 rounded-lg font-body-sm text-secondary hover:text-on-surface hover:bg-surface-container transition-colors" onClick={() => form.goTab('purchasing')}>Purchasing</button>
-      ) : null}
-      {showTab('counts') ? (
-      <button type="button" className="px-space-md py-1.5 rounded-lg font-body-sm text-secondary hover:text-on-surface hover:bg-surface-container transition-colors" onClick={() => form.goTab('counts')}>Counts</button>
-      ) : null}
       <button type="button" className="px-space-md py-1.5 rounded-lg font-body-sm text-secondary hover:text-on-surface hover:bg-surface-container transition-colors flex items-center gap-space-xs" onClick={() => form.goTab('alerts')}>
       <span>Alerts</span>
       <span className="bg-error text-on-error font-label-code text-[10px] font-bold px-1.5 py-0.2 rounded-full">5</span>

@@ -2,13 +2,11 @@
 import { useIn3ItemDrawerForm } from './hooks/useIn3ItemDrawerForm';
 import { useInventoryLive } from '../inventoryLive';
 import { useInventoryShell } from '../InventoryShellContext';
-import { firstOpenPoNumber, firstVendorName, strField } from '../inventoryData';
+import { strField } from '../inventoryData';
 export function In3ItemDrawer() {
   const form = useIn3ItemDrawerForm();
   const shell = useInventoryShell();
   const live = useInventoryLive(shell);
-  const vendorName = firstVendorName(live.vendors);
-  const poNumber = firstOpenPoNumber(live.purchaseOrders);
   const item = live.selectedItem;
   const primarySub = live.primaryVehicle
     ? `${live.primaryPlate} · ${strField(item ?? {}, 'name', 'Kit item')}`
@@ -62,12 +60,6 @@ export function In3ItemDrawer() {
       </button>
       <button type="button" className="px-space-md py-1.5 rounded text-on-surface-variant hover:text-on-surface font-body-sm text-body-sm font-medium transition-colors" onClick={() => form.goToInventoryTab('movements')}>
               Movements & Audits
-            </button>
-      <button type="button" className="px-space-md py-1.5 rounded text-on-surface-variant hover:text-on-surface font-body-sm text-body-sm font-medium transition-colors" onClick={() => form.goToInventoryTab('pos')}>
-              Purchase Orders
-            </button>
-      <button type="button" className="px-space-md py-1.5 rounded text-on-surface-variant hover:text-on-surface font-body-sm text-body-sm font-medium transition-colors" onClick={() => form.goToInventoryTab('suppliers')}>
-              Suppliers
             </button>
       <button type="button" className="px-space-md py-1.5 rounded text-on-surface-variant hover:text-on-surface font-body-sm text-body-sm font-medium transition-colors" onClick={() => form.goToInventoryTab('kits')}>
               Fleet Kit Sets
@@ -359,37 +351,6 @@ export function In3ItemDrawer() {
       <span>Issue to {live.secondaryPlate}</span>
       <span className="material-symbols-outlined text-[13px]">arrow_forward</span>
       </button>
-      </div>
-      </div>
-      </div>
-      </div>
-
-      <div className="flex flex-col gap-space-sm">
-      <div className="flex items-center justify-between">
-      <div className="flex items-center gap-space-xs">
-      <span className="material-symbols-outlined text-[18px] text-primary">tune</span>
-      <h3 className="font-headline-sm text-body-lg font-bold text-on-surface">Reorder rule</h3>
-      </div>
-      <button type="button" className="font-caption text-caption font-bold text-on-surface hover:underline" onClick={() => form.openEditRule()}>Edit rule</button>
-      </div>
-      <div className="bg-surface-container-low p-space-md rounded-lg flex flex-col gap-space-md">
-      <div className="flex items-start gap-space-sm">
-      <div className="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center shrink-0">
-      <span className="material-symbols-outlined text-[18px] text-on-surface">restart_alt</span>
-      </div>
-      <div className="flex flex-col">
-      <span className="font-body-sm text-body-sm font-bold text-on-surface">Reorder at 3 units · Buy 5 units</span>
-      <span className="font-caption text-caption text-on-surface-variant">Preferred supplier: {vendorName}</span>
-      </div>
-      </div>
-
-      <div className="p-space-sm rounded bg-tertiary-container/10 flex items-start gap-space-sm">
-      <span className="material-symbols-outlined text-on-tertiary-container text-[18px] shrink-0 mt-0.5">notification_important</span>
-      <div className="flex flex-col">
-      <span className="font-body-sm text-body-sm font-bold text-on-tertiary-container">Restock Trigger Active</span>
-      <p className="font-caption text-caption text-on-surface">
-                      1 unit on hand in Main Store is below minimum reorder threshold (3). Recommended restock: <span className="font-bold">5 units</span> via automated draft PO.
-                    </p>
       </div>
       </div>
       </div>

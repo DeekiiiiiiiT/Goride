@@ -2,15 +2,12 @@
 import { useIn18PhoneForm } from './hooks/useIn18PhoneForm';
 import { useInventoryLive } from '../inventoryLive';
 import { useInventoryShell } from '../InventoryShellContext';
-import { visibleInventoryTabs } from '../inventoryPhaseUi';
-import type { InventoryTabId } from '../InventoryTabs';
 import { InventoryOverflowMenu } from '../InventoryOverflowMenu';
 import { firstAssetSerial, strField } from '../inventoryData';
 export function In18Phone() {
   const form = useIn18PhoneForm();
   const shell = useInventoryShell();
   const live = useInventoryLive(shell);
-  const showTab = (id: InventoryTabId) => visibleInventoryTabs(shell.phaseFlags).includes(id);
   const primary = live.primaryVehicle;
   const secondary = live.secondaryVehicle;
   const assetSerial = firstAssetSerial(live.assets);
@@ -30,13 +27,8 @@ export function In18Phone() {
       <span className="w-1.5 h-1.5 rounded-full bg-secondary-fixed"></span>
       </button>
       <button type="button" onClick={() => shell.setTab('vehicle-kits')} className="px-space-md py-1.5 rounded-full font-caption text-caption text-on-surface-variant bg-surface-container hover:bg-surface-container-high transition-colors">Vehicle Kits</button>
-      {showTab('assets') ? (
       <button type="button" onClick={() => shell.setTab('assets')} className="px-space-md py-1.5 rounded-full font-caption text-caption text-on-surface-variant bg-surface-container hover:bg-surface-container-high transition-colors">Assets</button>
-      ) : null}
       <button type="button" onClick={() => shell.setTab('movements')} className="px-space-md py-1.5 rounded-full font-caption text-caption text-on-surface-variant bg-surface-container hover:bg-surface-container-high transition-colors">Movements</button>
-      {showTab('counts') ? (
-      <button type="button" onClick={() => shell.setTab('counts')} className="px-space-md py-1.5 rounded-full font-caption text-caption text-on-surface-variant bg-surface-container hover:bg-surface-container-high transition-colors">Counts</button>
-      ) : null}
       <button type="button" onClick={() => shell.setTab('alerts')} className="px-space-md py-1.5 rounded-full font-caption text-caption text-error bg-error-container/60 hover:bg-error-container transition-colors flex items-center gap-1 font-semibold">
       <span>Alerts</span>
       {live.openAlertCount > 0 ? (
@@ -163,8 +155,8 @@ export function In18Phone() {
       <span className="material-symbols-outlined text-[14px]">error</span>
                 {primary ? `${primary.missingLines + primary.shortLines} items missing` : 'No kit data'}
               </span>
-      <button type="button" className="px-space-sm py-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-caption text-caption font-semibold transition-colors" onClick={() => form.fulfill()}>
-                Fulfill
+      <button type="button" className="px-space-sm py-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-caption text-caption font-semibold transition-colors" onClick={() => form.issueToCar()}>
+                Issue kit
               </button>
       </div>
       </div>

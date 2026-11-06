@@ -15,7 +15,9 @@ import { In7KitTemplateEditor } from './screens/In7KitTemplateEditor';
 import { InventoryModalFrame } from './InventoryModalFrame';
 import { useInventoryShell } from './InventoryShellContext';
 import { InventoryGapModals } from './InventoryGapModals';
-import { isTabVisible } from './inventoryPhaseUi';
+import { InAssetMoveDialog } from './screens/InAssetMoveDialog';
+import { InAssetConditionDialog } from './screens/InAssetConditionDialog';
+import { InAssetRepairDialog } from './screens/InAssetRepairDialog';
 
 function tabFromSearch(): InventoryTabId {
   const raw = new URLSearchParams(window.location.search).get('tab');
@@ -25,10 +27,9 @@ function tabFromSearch(): InventoryTabId {
     'vehicle-kits',
     'assets',
     'movements',
-    'purchasing',
-    'counts',
     'alerts',
   ];
+  if (raw === 'purchasing' || raw === 'counts') return 'overview';
   return allowed.includes(raw as InventoryTabId) ? (raw as InventoryTabId) : 'overview';
 }
 
@@ -62,6 +63,21 @@ function InventoryModals() {
           <In9AssetPage />
         </InventoryModalFrame>
       ) : null}
+      {shell.modal === 'asset-move' ? (
+        <InventoryModalFrame>
+          <InAssetMoveDialog />
+        </InventoryModalFrame>
+      ) : null}
+      {shell.modal === 'asset-condition' ? (
+        <InventoryModalFrame>
+          <InAssetConditionDialog />
+        </InventoryModalFrame>
+      ) : null}
+      {shell.modal === 'asset-repair' ? (
+        <InventoryModalFrame>
+          <InAssetRepairDialog />
+        </InventoryModalFrame>
+      ) : null}
       {shell.modal === 'kit-editor' ? (
         <InventoryModalFrame>
           <In7KitTemplateEditor />
@@ -75,23 +91,14 @@ function InventoryModals() {
 function InventoryPageBody() {
   const shell = useInventoryShell();
 
-  useEffect(() => {
-    if (!isTabVisible(shell.tab, shell.phaseFlags)) {
-      shell.setTab('overview');
-    }
-  }, [shell.tab, shell.phaseFlags, shell.setTab]);
-
   return (
     <div className="fleet-inventory-stitch w-full min-h-0">
       <In17OperationalBanners
         showError={Boolean(shell.errorBanner)}
         showDiscrepancy={Boolean(shell.discrepancyBanner)}
         showReadOnly={shell.readOnly}
-        showPhaseNotice={Boolean(shell.phaseNotice)}
         errorMessage={shell.errorBanner ?? undefined}
         discrepancyMessage={shell.discrepancyBanner ?? undefined}
-        phaseNoticeMessage={shell.phaseNotice ?? undefined}
-        onDismissPhaseNotice={() => shell.setPhaseNotice(null)}
       />
       <div className="md:hidden">
         <In18Phone />
@@ -106,6 +113,12 @@ function InventoryPageBody() {
 
 export function InventoryPage() {
   const [tab, setTab] = useState<InventoryTabId>(() => tabFromSearch());
+
+  useEffect(() => {
+    const onPop = () => setTab(tabFromSearch());
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
 
   const setTabAndUrl = (next: InventoryTabId) => {
     setTab(next);

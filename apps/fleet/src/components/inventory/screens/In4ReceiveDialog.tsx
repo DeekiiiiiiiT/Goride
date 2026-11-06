@@ -52,42 +52,7 @@ export function In4ReceiveDialog() {
 
       <div className="px-space-xl py-space-sm flex flex-col gap-space-lg max-h-[calc(88vh-140px)] overflow-y-auto">
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-space-md bg-surface-container-low p-space-md rounded-lg">
-
-      <div className="flex flex-col gap-1.5">
-      <label className="font-caption text-caption text-secondary uppercase font-semibold tracking-wide">From Source</label>
-      <div className="relative">
-      <select className="w-full bg-surface-container-lowest text-on-surface font-body-sm text-body-sm rounded-lg px-space-md py-2 appearance-none focus:outline-none focus:bg-surface-container-lowest" value={form.poId} onChange={(e) => form.setPoId(e.target.value)}>
-      <option value="">No purchase order</option>
-      {form.purchaseOrders.map((po) => {
-        const id = strField(po, 'id', '');
-        const ref = strField(po, 'number', strField(po, 'po_number', '—'));
-        return (
-      <option key={id} value={id}>Purchase order #{ref}</option>
-        );
-      })}
-      </select>
-      <span className="material-symbols-outlined text-[16px] text-secondary absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none">expand_more</span>
-      </div>
-      <div className="mt-1 flex flex-col gap-1">
-      <span className="font-caption text-[10px] text-secondary uppercase">Vendor</span>
-      <div className="relative">
-      <select className="w-full bg-surface-container-lowest text-on-surface font-body-sm text-body-sm rounded-lg px-space-md py-1.5 appearance-none focus:outline-none" value={form.vendorId} onChange={(e) => form.setVendorId(e.target.value)}>
-      {live.vendors.length === 0 ? (
-      <option value="">No vendors on file</option>
-      ) : (
-      live.vendors.map((v) => {
-        const id = strField(v, 'id', '');
-        return (
-      <option key={id || strField(v, 'name', '')} value={id}>{strField(v, 'name', 'Vendor')}</option>
-        );
-      })
-      )}
-      </select>
-      <span className="material-symbols-outlined text-[14px] text-secondary absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none">expand_more</span>
-      </div>
-      </div>
-      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-space-md bg-surface-container-low p-space-md rounded-lg">
 
       <div className="flex flex-col gap-1.5">
       <label className="font-caption text-caption text-secondary uppercase font-semibold tracking-wide">Into Location</label>
@@ -191,10 +156,6 @@ export function In4ReceiveDialog() {
       {serialTracked ? (
       <div className="flex items-center bg-surface-container-low rounded-lg px-2 py-1 gap-1">
       <input className="flex-1 bg-transparent font-label-code text-[11px] text-on-surface font-semibold tracking-wider focus:outline-none" type="text" placeholder="Serial" value={line.serial} onChange={(e) => form.updateLine(line.key, { serial: e.target.value })}/>
-      <button type="button" className="ml-auto bg-surface-container-lowest px-1.5 py-0.5 rounded shadow-sm flex items-center gap-0.5 text-on-surface text-[11px] font-caption hover:bg-surface-container transition-colors" title="Scan Barcode / Serial" onClick={() => form.openScanner()}>
-      <span className="material-symbols-outlined text-[13px]">photo_camera</span>
-      <span>Scan</span>
-      </button>
       </div>
       ) : (
       <div className="inline-flex items-center gap-1 bg-surface-container px-2 py-1 rounded text-secondary">

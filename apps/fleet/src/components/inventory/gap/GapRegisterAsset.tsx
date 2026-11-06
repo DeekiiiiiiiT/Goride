@@ -140,14 +140,6 @@ export function GapRegisterAsset(p: { onClose?: () => void }) {
         </div>
 
         <div className="flex flex-col gap-1">
-        <label className="text-caption font-caption uppercase tracking-wider text-on-surface-variant font-semibold flex items-center justify-between">
-        <span>IMEI / Cellular ID</span>
-        <span className="text-caption font-caption text-on-surface-variant">Optional</span>
-        </label>
-        <input className="w-full h-10 px-3 rounded-lg bg-surface-container-low font-label-code text-label-code text-on-surface focus:outline-none focus:bg-surface-container-lowest focus:ring-1 focus:ring-primary shadow-sm" placeholder="e.g. 864209041234567" type="text" value={form.imei} onChange={(e) => form.setImei(e.target.value)}/>
-        </div>
-
-        <div className="flex flex-col gap-1">
         <label className="text-caption font-caption uppercase tracking-wider text-on-surface-variant font-semibold">Purchase Cost</label>
         <div className="relative">
         <input className="w-full h-10 px-3 rounded-lg bg-surface-container-low font-label-price text-label-price text-on-surface focus:outline-none focus:bg-surface-container-lowest focus:ring-1 focus:ring-primary shadow-sm font-bold" type="text" value={form.purchaseCost} onChange={(e) => form.setPurchaseCost(e.target.value)}/>
@@ -203,73 +195,13 @@ export function GapRegisterAsset(p: { onClose?: () => void }) {
         </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-space-md">
-        <div className="flex flex-col gap-1">
-        <label className="text-caption font-caption uppercase tracking-wider text-on-surface-variant font-semibold">Warranty ends</label>
-        <div className="relative">
-        <input className="w-full h-10 px-3 rounded-lg bg-surface-container-low font-body-sm text-body-sm text-on-surface focus:outline-none focus:bg-surface-container-lowest focus:ring-1 focus:ring-primary shadow-sm" type="date" value={form.warrantyEndsOn} onChange={(e) => form.setWarrantyEndsOn(e.target.value)}/>
-        <span className="material-symbols-outlined absolute right-2.5 top-2.5 text-[18px] text-on-surface-variant">calendar_today</span>
-        </div>
-        <span className="text-caption font-caption text-on-surface-variant">12 months from purchase</span>
-        </div>
         <div className="flex flex-col gap-1">
         <label className="text-caption font-caption uppercase tracking-wider text-on-surface-variant font-semibold">Next inspection</label>
         <div className="relative">
         <input className="w-full h-10 px-3 rounded-lg bg-surface-container-low font-body-sm text-body-sm text-on-surface focus:outline-none focus:bg-surface-container-lowest focus:ring-1 focus:ring-primary shadow-sm" type="date" value={form.nextInspectionDue} onChange={(e) => form.setNextInspectionDue(e.target.value)}/>
         <span className="material-symbols-outlined absolute right-2.5 top-2.5 text-[18px] text-on-surface-variant">event_repeat</span>
         </div>
-        <span className="text-caption font-caption text-on-surface-variant">every 90 days</span>
-        </div>
-        </div>
-
-        <div className="rounded-xl bg-surface-container-low overflow-hidden">
-        <button className="w-full px-space-md py-2.5 flex items-center justify-between text-left hover:bg-surface-container transition-colors" type="button" onClick={() => form.sections.toggle('connectedDevice')}>
-        <div className="flex items-center gap-1.5 font-body-sm text-body-sm font-semibold text-on-surface">
-        <span className="material-symbols-outlined text-[18px] transition-transform duration-150 rotate-90 chevron-icon">chevron_right</span>
-        <span>Connected device & telemetry</span>
-        <span className="text-caption font-caption text-on-surface-variant font-normal">(Optional)</span>
-        </div>
-        <span className="px-1.5 py-0.5 rounded bg-surface-container-lowest text-caption font-caption font-label-code text-on-surface">3 fields active</span>
-        </button>
-        {form.sections.open.connectedDevice ? (
-        <div className="px-space-md pb-space-md pt-1 flex flex-col gap-2.5">
-        <div className="flex items-center justify-between text-body-sm">
-        <span className="text-caption font-caption text-on-surface-variant">Provider</span>
-        <input className="w-48 h-8 px-2.5 rounded bg-surface-container-lowest text-on-surface font-body-sm text-body-sm focus:outline-none focus:ring-1 focus:ring-primary" type="text" value={form.provider} onChange={(e) => form.setProvider(e.target.value)}/>
-        </div>
-        <div className="flex items-center justify-between text-body-sm">
-        <span className="text-caption font-caption text-on-surface-variant">Device ID</span>
-        <input className="w-48 h-8 px-2.5 rounded bg-surface-container-lowest font-label-code text-label-code text-on-surface focus:outline-none focus:ring-1 focus:ring-primary font-semibold" type="text" value={form.externalDeviceId} onChange={(e) => form.setExternalDeviceId(e.target.value)}/>
-        </div>
-        <div className="flex items-center justify-between text-body-sm">
-        <span className="text-caption font-caption text-on-surface-variant">Firmware</span>
-        <input className="w-48 h-8 px-2.5 rounded bg-surface-container-lowest font-label-code text-label-code text-on-surface focus:outline-none focus:ring-1 focus:ring-primary" type="text" value={form.provider} readOnly aria-label="Firmware placeholder"/>
-        </div>
-        </div>
-        ) : null}
-        </div>
-
-        <div className="rounded-xl bg-surface-container-low overflow-hidden">
-        <button className="w-full px-space-md py-2.5 flex items-center justify-between text-left hover:bg-surface-container transition-colors" type="button" onClick={() => form.sections.toggle('insurance')}>
-        <div className="flex items-center gap-1.5 font-body-sm text-body-sm font-semibold text-on-surface">
-        <span className="material-symbols-outlined text-[18px] transition-transform duration-150 rotate-90 chevron-icon">chevron_right</span>
-        <span>Insurance & coverage</span>
-        <span className="text-caption font-caption text-on-surface-variant font-normal">(Optional)</span>
-        </div>
-        <span className="px-1.5 py-0.5 rounded bg-surface-container-lowest text-caption font-caption font-label-code text-on-surface">Coverage</span>
-        </button>
-        {form.sections.open.insurance ? (
-        <div className="px-space-md pb-space-md pt-1 flex flex-col gap-2.5">
-        <div className="flex items-center justify-between text-body-sm">
-        <span className="text-caption font-caption text-on-surface-variant">Insurer</span>
-        <input className="w-48 h-8 px-2.5 rounded bg-surface-container-lowest text-on-surface font-body-sm text-body-sm focus:outline-none focus:ring-1 focus:ring-primary" type="text" value={form.insurerName} onChange={(e) => form.setInsurerName(e.target.value)}/>
-        </div>
-        <div className="flex items-center justify-between text-body-sm">
-        <span className="text-caption font-caption text-on-surface-variant">Policy No</span>
-        <input className="w-48 h-8 px-2.5 rounded bg-surface-container-lowest font-label-code text-label-code text-on-surface focus:outline-none focus:ring-1 focus:ring-primary font-semibold" type="text" value={form.assetTag} onChange={(e) => form.setAssetTag(e.target.value)} aria-label="Policy number"/>
-        </div>
-        </div>
-        ) : null}
+        <span className="text-caption font-caption text-on-surface-variant">Optional schedule</span>
         </div>
         </div>
         </div>

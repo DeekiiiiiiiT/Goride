@@ -29,28 +29,3 @@ export function useInventoryPhase2Enabled(): boolean {
 export function useInventoryPhase3Enabled(): boolean {
   return useInventoryPhaseFlag('fleet_inventory_phase3_kits');
 }
-
-export function useInventoryPhase4Enabled(): boolean {
-  return useInventoryPhaseFlag('fleet_inventory_phase4_assets');
-}
-
-export function useInventoryPhase6Enabled(): boolean {
-  return useInventoryPhaseFlag('fleet_inventory_phase6_purchasing');
-}
-
-export function useInventoryPhase7Enabled(): boolean {
-  return useInventoryPhaseFlag('fleet_inventory_phase7_counts');
-}
-
-export function useInventoryPhase8Enabled(): boolean {
-  return useInventoryPhaseFlag('fleet_inventory_phase8_telematics');
-}
-
-export function useInventoryPhaseFlags() {
-  return {
-    phase4Assets: useInventoryPhase4Enabled(),
-    phase6Purchasing: useInventoryPhase6Enabled(),
-    phase7Counts: useInventoryPhase7Enabled(),
-    phase8Telematics: useInventoryPhase8Enabled(),
-  };
-}

@@ -4,11 +4,7 @@ import { StockRowMenu } from './StockRowMenu';
 import { In6VehicleKits } from './screens/In6VehicleKits';
 import { In8Assets } from './screens/In8Assets';
 import { In10Movements } from './screens/In10Movements';
-import { In11Purchasing } from './screens/In11Purchasing';
-import { In12Counts } from './screens/In12Counts';
 import { In13Alerts } from './screens/In13Alerts';
-import { isTabVisible } from './inventoryPhaseUi';
-import { useInventoryShell } from './InventoryShellContext';
 
 export type InventoryTabId =
   | 'overview'
@@ -16,8 +12,6 @@ export type InventoryTabId =
   | 'vehicle-kits'
   | 'assets'
   | 'movements'
-  | 'purchasing'
-  | 'counts'
   | 'alerts';
 
 /** R3-09: Stitch tab bars live inside each screen — no duplicate shadcn tab list. */
@@ -27,10 +21,7 @@ export function InventoryTabs({
   tab: InventoryTabId;
   onTabChange: (next: InventoryTabId) => void;
 }) {
-  const shell = useInventoryShell();
-  const effectiveTab = isTabVisible(tab, shell.phaseFlags) ? tab : 'overview';
-
-  switch (effectiveTab) {
+  switch (tab) {
     case 'overview':
       return <In1Overview />;
     case 'stock':
@@ -46,10 +37,6 @@ export function InventoryTabs({
       return <In8Assets />;
     case 'movements':
       return <In10Movements />;
-    case 'purchasing':
-      return <In11Purchasing />;
-    case 'counts':
-      return <In12Counts />;
     case 'alerts':
       return <In13Alerts />;
     default:

@@ -49,14 +49,6 @@ WHERE NOT c.ok
     WHERE c2.organization_id = c.organization_id
   );
 
--- Approver = requester on closed approvals
-SELECT 'approver_eq_requester' AS check_id, id, organization_id
-FROM fleet.inv_approval
-WHERE status = 'approved'
-  AND approved_by IS NOT NULL
-  AND requested_by IS NOT NULL
-  AND approved_by = requested_by;
-
 -- Layer qty ≠ on-hand (real locations; bins aggregated at location)
 SELECT 'layer_qty_vs_on_hand' AS check_id, x.*
 FROM (

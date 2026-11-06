@@ -13,7 +13,6 @@ import { getOrgId } from "./org_scope.ts";
 import { invDb, invRpcName } from "./inventory_db.ts";
 import { safeErrorResponse } from "./safe_error.ts";
 import { registerInventoryExtendedRoutes } from "./inventory_controller_extended.ts";
-import { guardInventoryPhase8Diagnostics } from "./inventory_phase_gate.ts";
 import {
   handleDriverCarKitGet,
   handleDriverKitCheckPost,
@@ -615,22 +614,6 @@ app.post(`${PREFIX}/driver/kit-check`, requirePermission("inventory.report"), as
   } catch (e) {
     return safeErrorResponse(c, e, "inventory.driver.kit-check");
   }
-});
-
-app.get(`${PREFIX}/assets/:id/diagnostics`, requirePermission("inventory.view"), async (c) => {
-  const phaseDenied = await guardInventoryPhase8Diagnostics(c);
-  if (phaseDenied) return phaseDenied;
-  const org = orgOrForbid(c);
-  if (org instanceof Response) return org;
-  const assetId = c.req.param("id");
-  const { getTelematicsProvider } = await import("./inventory_telematics_provider.ts");
-  const provider = getTelematicsProvider();
-  const diagnostics = await provider.getDiagnostics(org, [assetId]);
-  return c.json({
-    assetId,
-    rows: diagnostics[assetId] ?? [],
-    connected: diagnostics[assetId]?.length > 0,
-  });
 });
 
 registerInventoryExtendedRoutes(app);

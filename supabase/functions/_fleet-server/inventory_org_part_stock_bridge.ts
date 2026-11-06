@@ -57,16 +57,11 @@ export async function upsertOrgPartStockViaEngine(
   }
 
   if (reorderPoint != null) {
-    await fleet.from("fleet_inv_reorder_policy").upsert(
-      {
-        organization_id: orgId,
-        item_id: itemId,
-        location_id: locationId,
-        reorder_point: reorderPoint,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "organization_id,item_id,location_id" },
-    );
+    const { error: minErr } = await fleet.from("fleet_inv_item").update({
+      reorder_qty: reorderPoint,
+      updated_at: new Date().toISOString(),
+    }).eq("organization_id", orgId).eq("id", itemId);
+    if (minErr) throw minErr;
   }
 
   const publicClient = getServiceClient();

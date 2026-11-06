@@ -1,7 +1,6 @@
 import type { InventoryTabId } from './InventoryTabs';
 import { useInventoryLive } from './inventoryLive';
 import { useInventoryShell } from './InventoryShellContext';
-import { visibleInventoryTabs } from './inventoryPhaseUi';
 
 const TABS: { id: InventoryTabId; label: string }[] = [
   { id: 'overview', label: 'Overview' },
@@ -9,8 +8,6 @@ const TABS: { id: InventoryTabId; label: string }[] = [
   { id: 'vehicle-kits', label: 'Vehicle kits' },
   { id: 'assets', label: 'Assets' },
   { id: 'movements', label: 'Movements' },
-  { id: 'purchasing', label: 'Purchasing' },
-  { id: 'counts', label: 'Counts' },
   { id: 'alerts', label: 'Alerts' },
 ];
 
@@ -19,13 +16,11 @@ type Variant = 'pill' | 'segment' | 'ledger';
 export function InventoryPrimaryTabs({ variant = 'pill' }: { variant?: Variant }) {
   const shell = useInventoryShell();
   const live = useInventoryLive(shell);
-  const visible = new Set(visibleInventoryTabs(shell.phaseFlags));
-  const tabs = TABS.filter((t) => visible.has(t.id));
 
   if (variant === 'ledger') {
     return (
       <div className="flex items-center gap-space-xs overflow-x-auto py-1 w-full max-w-full">
-        {tabs.map((t) => {
+        {TABS.map((t) => {
           const active = shell.tab === t.id;
           return (
             <button
@@ -57,7 +52,7 @@ export function InventoryPrimaryTabs({ variant = 'pill' }: { variant?: Variant }
   if (variant === 'segment') {
     return (
       <div className="flex items-center gap-space-xs bg-surface-container-high p-1 rounded-lg overflow-x-auto w-full max-w-full">
-        {tabs.map((t) => {
+        {TABS.map((t) => {
           const active = shell.tab === t.id;
           return (
             <button
@@ -88,7 +83,7 @@ export function InventoryPrimaryTabs({ variant = 'pill' }: { variant?: Variant }
 
   return (
     <div className="flex items-center overflow-x-auto p-1 bg-surface-container rounded-xl w-fit max-w-full">
-      {tabs.map((t) => {
+      {TABS.map((t) => {
         const active = shell.tab === t.id;
         return (
           <button

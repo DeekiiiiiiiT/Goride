@@ -61,7 +61,7 @@ export function In2Stock() {
       <button
         type="button"
         className="h-9 px-space-md rounded-lg bg-surface-container-lowest text-on-surface hover:bg-surface-container font-body-sm text-body-sm font-medium shadow-sm transition-colors"
-        onClick={() => form.openSuppliers()}
+        onClick={() => form.openInventorySettings()}
       >
         Suppliers
       </button>

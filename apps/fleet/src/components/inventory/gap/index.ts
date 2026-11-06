@@ -1,15 +1,9 @@
 export { GapOpeningBalances } from './GapOpeningBalances';
 export { GapRegisterAsset } from './GapRegisterAsset';
 export { GapItemEditor } from './GapItemEditor';
-export { GapApprovalDrawer } from './GapApprovalDrawer';
-export { GapPurchaseOrder } from './GapPurchaseOrder';
-export { GapVendorEditor } from './GapVendorEditor';
-export { GapCountSession } from './GapCountSession';
-export { GapScannerPair } from './GapScannerPair';
 export { GapInventorySettings } from './GapInventorySettings';
 export { GapImportItems } from './GapImportItems';
 export { GapSnoozeSettings } from './GapSnoozeSettings';
 export { GapKitCompare } from './GapKitCompare';
 export { GapDriverReportUpdate } from './GapDriverReportUpdate';
 export { GapLocationsBins } from './GapLocationsBins';
-export { GapRequisition } from './GapRequisition';

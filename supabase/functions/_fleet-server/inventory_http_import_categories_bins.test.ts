@@ -8,7 +8,7 @@ import {
 const runIntegration = Deno.env.get("INVENTORY_INTEGRATION_TESTS") === "1";
 
 Deno.test({
-  name: "POST items import and GET categories bins",
+  name: "POST items import and GET categories",
   ignore: !runIntegration,
   fn: async () => {
     const app = createInventoryTestApp(testInventoryUser());
@@ -21,8 +21,5 @@ Deno.test({
 
     const catRes = await app.request(`${INVENTORY_API_PREFIX}/categories`);
     assertEquals(catRes.status, 200);
-
-    const locRes = await app.request(`${INVENTORY_API_PREFIX}/locations`);
-    assertEquals(locRes.status, 200);
   },
 });

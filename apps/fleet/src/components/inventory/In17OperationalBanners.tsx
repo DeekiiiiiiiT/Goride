@@ -3,44 +3,19 @@ export function In17OperationalBanners({
   showError,
   showDiscrepancy,
   showReadOnly,
-  showPhaseNotice,
   errorMessage,
   discrepancyMessage,
-  phaseNoticeMessage,
-  onDismissPhaseNotice,
 }: {
   showError?: boolean;
   showDiscrepancy?: boolean;
   showReadOnly?: boolean;
-  showPhaseNotice?: boolean;
   errorMessage?: string;
   discrepancyMessage?: string;
-  phaseNoticeMessage?: string;
-  onDismissPhaseNotice?: () => void;
 }) {
-  if (!showError && !showDiscrepancy && !showReadOnly && !showPhaseNotice) return null;
+  if (!showError && !showDiscrepancy && !showReadOnly) return null;
 
   return (
     <div className="fleet-inventory-stitch w-full px-margin-desktop py-space-sm flex flex-col gap-space-sm max-w-[1440px] mx-auto">
-      {showPhaseNotice ? (
-        <div className="w-full bg-surface-container-high text-on-surface rounded-xl p-space-md shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-space-md">
-          <div className="flex items-start gap-space-sm">
-            <span className="material-symbols-outlined text-[20px] text-on-surface-variant">info</span>
-            <p className="font-body-sm text-body-sm font-medium">
-              {phaseNoticeMessage ?? "This part of Inventory isn't switched on yet"}
-            </p>
-          </div>
-          {onDismissPhaseNotice ? (
-            <button
-              type="button"
-              className="font-body-sm text-body-sm font-semibold text-on-surface-variant hover:text-on-surface"
-              onClick={onDismissPhaseNotice}
-            >
-              Dismiss
-            </button>
-          ) : null}
-        </div>
-      ) : null}
       {showError ? (
         <div className="w-full bg-error text-on-error rounded-xl p-space-md shadow-md flex flex-col md:flex-row md:items-center justify-between gap-space-md">
           <div className="flex items-start gap-space-sm">

@@ -510,15 +510,13 @@ jobs:
           supabase/functions/_fleet-server/inventory_driver_reports.test.ts
           supabase/functions/_fleet-server/inventory_integration.test.ts
           supabase/functions/_fleet-server/inventory_asset_events.test.ts
-          supabase/functions/_fleet-server/inventory_http_phase_gates.test.ts
           supabase/functions/_fleet-server/inventory_road_clearance_gate_sync.test.ts
           supabase/functions/_fleet-server/inventory_http_driver_fixed_unseen.test.ts
           supabase/functions/_fleet-server/inventory_http_kits.test.ts
           supabase/functions/_fleet-server/inventory_http_reads.test.ts
           supabase/functions/_fleet-server/inventory_http_alerts.test.ts
-          supabase/functions/_fleet-server/inventory_http_purchasing.test.ts
-          supabase/functions/_fleet-server/inventory_http_counts.test.ts
           supabase/functions/_fleet-server/inventory_http_import_categories_bins.test.ts
+          supabase/functions/_fleet-server/inventory_http_asset_move_condition_repair.test.ts
           supabase/functions/_fleet-server/inventory_controller_r16.test.ts
           supabase/functions/_fleet-server/inventory_double_entry.test.ts
 

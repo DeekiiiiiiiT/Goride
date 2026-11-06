@@ -1,11 +1,29 @@
 import { assertEquals } from "jsr:@std/assert@1";
-import { readMigrationGlob } from "./test_read_migration_glob.ts";
 
-const RPC = await readMigrationGlob("_fleet_inventory_engine_rpcs_");
+const S02_CUTDOWN = await Deno.readTextFile(
+  new URL(
+    "../../../supabase/migrations/20261113120000_fleet_inventory_s02_cutdown.sql",
+    import.meta.url,
+  ),
+);
 
-Deno.test("write-off / adjust reference approval threshold", () => {
-  if (!RPC.includes("approval_threshold_jmd")) {
-    throw new Error("expected approval threshold read from inv_settings");
+function extractInvWriteOff(sql: string): string {
+  const marker = "CREATE OR REPLACE FUNCTION fleet.inv_write_off(";
+  const start = sql.indexOf(marker);
+  if (start === -1) {
+    throw new Error("missing fleet.inv_write_off in 20261113120000_fleet_inventory_s02_cutdown.sql");
+  }
+  const slice = sql.slice(start);
+  const end = slice.indexOf("\n$$;");
+  if (end === -1) throw new Error("could not parse inv_write_off body");
+  return slice.slice(0, end + 4);
+}
+
+const INV_WRITE_OFF = extractInvWriteOff(S02_CUTDOWN);
+
+Deno.test("Rev 52 inv_write_off has no pending_approval gate", () => {
+  if (INV_WRITE_OFF.includes("pending_approval")) {
+    throw new Error("inv_write_off must not reference pending_approval after Rev 52 cutdown");
   }
   assertEquals(true, true);
 });

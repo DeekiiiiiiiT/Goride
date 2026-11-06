@@ -55,8 +55,7 @@ export function useIn18PhoneForm() {
   );
 
   const scanBarcode = () => {
-    setView('scanner');
-    void shell.openGap('scanner-pair', { itemId: null });
+    /* Rev 52: scanner pairing removed — manual SKU entry only */
   };
 
   const backToStock = () => setView('stock');
@@ -114,7 +113,6 @@ export function useIn18PhoneForm() {
   const issueToCar = () => shell.openModal('issue');
   const issueWholeKit = () => shell.openModal('issue');
   const receive = () => shell.openModal('receive');
-  const fulfill = (_requisitionId?: string) => shell.openGap('requisition', { itemId: null });
   const moveStock = () => shell.openModal('custody');
   const openLifecycle = () => shell.openModal('asset-page');
 
@@ -161,7 +159,6 @@ export function useIn18PhoneForm() {
     issueToCar,
     issueWholeKit,
     receive,
-    fulfill,
     moveStock,
     openLifecycle,
     rowOverflowItems,

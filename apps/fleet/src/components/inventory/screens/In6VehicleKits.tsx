@@ -585,23 +585,6 @@ export function In6VehicleKits() {
       <span className="font-label-code font-semibold text-primary">+12% vs last week</span>
       </div>
       </div>
-      <div className="bg-surface-container-lowest p-space-lg rounded-xl shadow-sm flex flex-col justify-between">
-      <div className="flex flex-col gap-space-xs">
-      <span className="font-caption text-caption text-on-surface-variant uppercase">Depot Operations</span>
-      <h4 className="font-headline-sm text-headline-sm text-on-surface">Quick Scanner</h4>
-      <p className="font-body-sm text-body-sm text-on-surface-variant">Handheld barcode sync for technician staging bay.</p>
-      </div>
-      <div className="p-space-sm bg-surface-container-low rounded flex items-center justify-between">
-      <div className="flex items-center gap-space-sm">
-      <span className="material-symbols-outlined text-secondary">barcode_scanner</span>
-      <span className="font-label-code text-body-sm text-on-surface">Laser #3 Active</span>
-      </div>
-      <span className="w-2 h-2 rounded-full bg-primary animate-ping"></span>
-      </div>
-      <button type="button" className="h-8 w-full rounded bg-primary text-on-primary font-body-sm text-body-sm hover:bg-inverse-surface transition-colors font-medium" onClick={() => shell.openModal('scanner-pair')}>
-                Pair Mobile Scanner
-              </button>
-      </div>
       </div>
       </div>
 

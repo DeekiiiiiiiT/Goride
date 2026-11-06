@@ -1,7 +1,5 @@
 import { useInventoryShell } from './InventoryShellContext';
 import {
-  GapApprovalDrawer,
-  GapCountSession,
   GapDriverReportUpdate,
   GapImportItems,
   GapInventorySettings,
@@ -9,12 +7,8 @@ import {
   GapKitCompare,
   GapLocationsBins,
   GapOpeningBalances,
-  GapPurchaseOrder,
   GapRegisterAsset,
-  GapRequisition,
-  GapScannerPair,
   GapSnoozeSettings,
-  GapVendorEditor,
 } from './gap';
 
 export function InventoryGapModals() {
@@ -31,18 +25,6 @@ export function InventoryGapModals() {
       {shell.modal === 'import-items' ? <GapImportItems onClose={close} /> : null}
       {shell.modal === 'locations-bins' ? <GapLocationsBins onClose={close} /> : null}
       {shell.modal === 'register-asset' ? <GapRegisterAsset onClose={close} /> : null}
-      {shell.modal === 'purchase-order' ? (
-        <GapPurchaseOrder poId={shell.selectedPoId} onClose={close} />
-      ) : null}
-      {shell.modal === 'vendor-editor' ? (
-        <GapVendorEditor vendorId={shell.selectedVendorId} onClose={close} />
-      ) : null}
-      {shell.modal === 'count-session' ? <GapCountSession onClose={close} /> : null}
-      {shell.modal === 'requisition' ? <GapRequisition onClose={close} /> : null}
-      {shell.modal === 'approval-drawer' ? (
-        <GapApprovalDrawer approvalId={shell.selectedApprovalId} onClose={close} />
-      ) : null}
-      {shell.modal === 'scanner-pair' ? <GapScannerPair onClose={close} /> : null}
       {shell.modal === 'snooze-settings' ? <GapSnoozeSettings onClose={close} /> : null}
       {shell.modal === 'kit-compare' ? <GapKitCompare onClose={close} /> : null}
       {shell.modal === 'driver-report-update' ? (

@@ -29,17 +29,15 @@ export type InventoryLive = {
   lowStockLabel: string;
   kitFullCount: number;
   kitVehicleCount: number;
-  devicesNeedingAttention: number;
-  openPoCount: number;
+  assetsFaulty: number;
+  assetsLost: number;
+  assetsInRepair: number;
   chainCheckOk: boolean | null;
   stockItemCount: number;
   movements: Record<string, unknown>[];
   movementsTotal: number;
   assets: Record<string, unknown>[];
   alerts: Record<string, unknown>[];
-  purchaseOrders: Record<string, unknown>[];
-  vendors: Record<string, unknown>[];
-  countSessions: Record<string, unknown>[];
   complianceRows: Record<string, unknown>[];
   selectedItem: Record<string, unknown> | null;
   selectedAsset: Record<string, unknown> | null;
@@ -68,6 +66,10 @@ function splitStoreVsCarsValue(
     else inStore += value;
   }
   return { inStore, onCars };
+}
+
+function countAssetsByStatus(assets: Record<string, unknown>[], status: string): number {
+  return assets.filter((a) => strField(a, 'status', '').toLowerCase() === status).length;
 }
 
 export function buildInventoryLive(shell: InventoryShellState): InventoryLive {
@@ -103,20 +105,13 @@ export function buildInventoryLive(shell: InventoryShellState): InventoryLive {
       : kitVehicles.length;
 
   const assets = shell.assets;
-  const devicesNeedingAttention = assets.filter((a) => {
-    const serial = strField(a, 'serial_number', strField(a, 'serial_no', ''));
-    const status = strField(a, 'status', '');
-    return !serial || status === 'faulty' || status === 'repair';
-  }).length;
+  const assetsFaulty = countAssetsByStatus(assets, 'faulty');
+  const assetsLost = countAssetsByStatus(assets, 'lost');
+  const assetsInRepair = countAssetsByStatus(assets, 'in_repair');
 
   const openAlertCount =
     numField(alertTiles, 'open_alerts', NaN) ||
     shell.alerts.filter((a) => strField(a, 'status', '') === 'open').length;
-
-  const openPoCount = shell.purchaseOrders.filter((po) => {
-    const st = strField(po, 'status', '').toLowerCase();
-    return st && !['received', 'cancelled', 'closed'].includes(st);
-  }).length;
 
   const chain = asRecord(overview.chainCheck);
   const chainCheckOk = typeof chain.ok === 'boolean' ? chain.ok : null;
@@ -153,17 +148,15 @@ export function buildInventoryLive(shell: InventoryShellState): InventoryLive {
     lowStockLabel,
     kitFullCount,
     kitVehicleCount,
-    devicesNeedingAttention,
-    openPoCount,
+    assetsFaulty,
+    assetsLost,
+    assetsInRepair,
     chainCheckOk,
     stockItemCount: stockRows.length,
     movements: shell.movements,
     movementsTotal: shell.movementsTotal,
     assets,
     alerts: shell.alerts,
-    purchaseOrders: shell.purchaseOrders,
-    vendors: shell.vendors,
-    countSessions: shell.countSessions,
     complianceRows,
     selectedItem,
     selectedAsset,
@@ -181,9 +174,6 @@ export function useInventoryLive(shell: InventoryShellState): InventoryLive {
       shell.movementsTotal,
       shell.assets,
       shell.alerts,
-      shell.purchaseOrders,
-      shell.vendors,
-      shell.countSessions,
       shell.items,
       shell.selectedItemId,
       shell.selectedAssetId,

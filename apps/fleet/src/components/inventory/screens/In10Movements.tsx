@@ -2,13 +2,7 @@
 import { useIn10MovementsForm } from './hooks/useIn10MovementsForm';
 import { useInventoryLive } from '../inventoryLive';
 import { useInventoryShell } from '../InventoryShellContext';
-import {
-  firstOpenPoNumber,
-  firstVendorName,
-  formatMovementWhen,
-  movementTypeIcon,
-  strField,
-} from '../inventoryData';
+import { formatMovementWhen, movementTypeIcon, strField } from '../inventoryData';
 import { InventoryPagination } from '../InventoryPagination';
 import { InventoryPrimaryTabs } from '../InventoryPrimaryTabs';
 import { useAuth } from '../../auth/AuthContext';
@@ -22,8 +16,6 @@ export function In10Movements() {
     user?.user_metadata?.full_name?.trim() ||
     user?.email?.split('@')[0] ||
     'Operator';
-  const vendorName = firstVendorName(live.vendors);
-  const poNumber = firstOpenPoNumber(live.purchaseOrders);
   const movementCount = form.total || live.movementsTotal || live.movements.length;
   const pageSize = 25;
   const rangeStart = form.paged.length ? form.page * pageSize + 1 : 0;
@@ -201,8 +193,8 @@ export function In10Movements() {
         const refNo = strField(m, 'ref_no', '—');
         const reason = strField(m, 'reason', strField(m, 'memo', '—'));
         const refType = strField(m, 'reference_type', '');
-        const poRef = refType.includes('purchase') ? refNo : poNumber;
-        const fromLabel = type.toLowerCase().includes('receive') ? vendorName : live.hubShort;
+        const poRef = refType.includes('purchase') ? refNo : '—';
+        const fromLabel = type.toLowerCase().includes('receive') ? live.hubShort : live.hubShort;
         const toLabel = live.hubName;
         return (
       <tr key={rowKey} className="hover:bg-surface-container-low transition-colors">

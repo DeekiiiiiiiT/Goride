@@ -20,21 +20,17 @@ export function useIn4ReceiveForm() {
   const base = useInScreenBase();
   const { shell, live, submit, finishSuccess, close } = base;
   const load = useGapLoad(async () => {
-    const [items, locations, pos] = await Promise.all([
+    const [items, locations] = await Promise.all([
       inventoryApi.items(),
       inventoryApi.locationsBins(),
-      inventoryApi.purchaseOrders(),
     ]);
     return {
       items: asPagedItems(items as { items?: unknown[] }),
       locations: (locations as { locations?: Row[] }).locations ?? [],
-      purchaseOrders: asPagedItems(pos as { items?: unknown[] }),
     };
   }, []);
 
-  const [vendorId, setVendorId] = useState('');
   const [locationId, setLocationId] = useState('');
-  const [poId, setPoId] = useState('');
   const [receivedOn, setReceivedOn] = useState(() => new Date().toISOString().slice(0, 10));
   const [freightCost, setFreightCost] = useState('0');
   const [dutyCost, setDutyCost] = useState('0');
@@ -43,13 +39,6 @@ export function useIn4ReceiveForm() {
 
   const items = load.data?.items ?? [];
   const locations = load.data?.locations ?? [];
-  const purchaseOrders = useMemo(() => {
-    const all = load.data?.purchaseOrders ?? [];
-    return all.filter((po) => {
-      const st = String(po.status ?? po.po_status ?? '').toLowerCase();
-      return st === 'ordered' || st === 'part_received' || st === 'part received' || st === 'open';
-    });
-  }, [load.data?.purchaseOrders]);
 
   useEffect(() => {
     if (locationId || !locations.length) return;
@@ -57,11 +46,6 @@ export function useIn4ReceiveForm() {
       locations.find((l) => String(l.is_primary ?? l.primary) === 'true') ?? locations[0];
     if (primary) setLocationId(String(primary.id ?? ''));
   }, [locations, locationId]);
-
-  useEffect(() => {
-    const fromShell = shell.selectedPoId?.trim();
-    if (fromShell) setPoId(fromShell);
-  }, [shell.selectedPoId]);
 
   useEffect(() => {
     if (lines.length || !items.length) return;
@@ -151,32 +135,19 @@ export function useIn4ReceiveForm() {
       }));
 
       const key = newInventoryIdempotencyKey('receive');
-      if (poId) {
-        await inventoryApi.poReceive(
-          poId,
-          {
+      await inventoryApi.receive(
+        {
+          receipt: {
             location_id: locationId,
+            vendor_id: null,
+            purchase_order_id: null,
             received_on: receivedOn,
-            lines: payloadLines,
-            costs,
           },
-          key,
-        );
-      } else {
-        await inventoryApi.receive(
-          {
-            receipt: {
-              location_id: locationId,
-              vendor_id: vendorId || null,
-              purchase_order_id: null,
-              received_on: receivedOn,
-            },
-            lines: payloadLines,
-            costs,
-          },
-          key,
-        );
-      }
+          lines: payloadLines,
+          costs,
+        },
+        key,
+      );
       await finishSuccess();
     });
 
@@ -184,20 +155,13 @@ export function useIn4ReceiveForm() {
     document.getElementById('in4-receive-first-item')?.focus();
   };
 
-  const openScanner = () => shell.openGap('scanner-pair', { itemId: null });
-
   return {
     ...base,
     load,
     items,
     locations,
-    purchaseOrders,
-    vendorId,
-    setVendorId,
     locationId,
     setLocationId,
-    poId,
-    setPoId,
     receivedOn,
     setReceivedOn,
     freightCost,
@@ -219,7 +183,6 @@ export function useIn4ReceiveForm() {
     canSubmit,
     receive,
     focusFirstLineItem,
-    openScanner,
     strField,
   };
 }

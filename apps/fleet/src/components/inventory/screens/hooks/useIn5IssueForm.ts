@@ -127,8 +127,6 @@ export function useIn5IssueForm() {
 
   const storeReserveLabel = live.inStoreValue;
 
-  const openDraftOrder = () => shell.openGap('purchase-order', { poId: null });
-
   const editCarsOrItems = () => setStep(1);
 
   return {
@@ -158,7 +156,6 @@ export function useIn5IssueForm() {
     totalUnits,
     totalLabel,
     storeReserveLabel,
-    openDraftOrder,
     editCarsOrItems,
     formatJmd,
     strField,

@@ -36,9 +36,9 @@ export function useGapInventorySettingsForm(onClose?: () => void) {
   const [monthlyCap, setMonthlyCap] = useState('');
   const [scrapNote, setScrapNote] = useState('');
   const [fiscalYear, setFiscalYear] = useState('4');
-  const [settingsSection, setSettingsSection] = useState<
-    'general' | 'approvals' | 'categories' | 'scrap'
-  >('general');
+  const [settingsSection, setSettingsSection] = useState<'general' | 'categories' | 'scrap'>(
+    'general',
+  );
   const [newCategoryName, setNewCategoryName] = useState('');
 
   useEffect(() => {
@@ -114,22 +114,16 @@ export function useGapInventorySettingsForm(onClose?: () => void) {
       onClose?.();
     });
 
-  const saveApprovals = () =>
+  const saveScrapNote = () =>
     submit.run(async () => {
-      const threshold = parseMoney(approvalThreshold);
-      const cap = parseMoney(monthlyCap);
       await inventoryApi.updateSettings({
-        approval_threshold_jmd: threshold,
-        monthly_procurement_cap_jmd: cap,
         scrap_note: scrapNote.trim() || null,
       });
       await shell.refresh();
       onClose?.();
     });
 
-  const governanceLimitCount = [approvalThreshold.trim(), monthlyCap.trim()].filter(Boolean).length;
   const canSaveGeneral = !submit.saving;
-  const canSaveApprovals = !submit.saving;
   const canSaveScrapNote = !submit.saving;
 
   return {
@@ -149,14 +143,12 @@ export function useGapInventorySettingsForm(onClose?: () => void) {
     fiscalYear,
     setFiscalYear,
     categoryCount,
-    governanceLimitCount,
     canSaveGeneral,
-    canSaveApprovals,
     canSaveScrapNote,
     toggleCategory,
     saveFiscalYear,
     saveGeneral,
-    saveApprovals,
+    saveScrapNote,
     settingsSection,
     setSettingsSection,
     newCategoryName,

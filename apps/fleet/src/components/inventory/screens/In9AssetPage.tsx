@@ -1,14 +1,11 @@
 /** Ported from Stitch — do not simplify layout (audit §0.4). */
 import { useIn9AssetPageForm } from './hooks/useIn9AssetPageForm';
-import { useState } from 'react';
 import { useInventoryLive } from '../inventoryLive';
 import { useInventoryShell } from '../InventoryShellContext';
-import { InventoryQrPrintDialog } from '../InventoryQrPrintDialog';
 export function In9AssetPage() {
   const form = useIn9AssetPageForm();
   const shell = useInventoryShell();
   const live = useInventoryLive(shell);
-  const [qrOpen, setQrOpen] = useState(false);
   const asset = form.asset;
   const serial = form.assetRow?.serial ?? '—';
   const assetName = form.assetRow?.name ?? 'No asset selected';
@@ -23,11 +20,6 @@ export function In9AssetPage() {
   }
   return (
     <div className="fleet-inventory-stitch inventory-stitch-root">
-      <InventoryQrPrintDialog
-        assetId={assetId || null}
-        open={qrOpen}
-        onClose={() => setQrOpen(false)}
-      />
       <div className="inventory-stitch-main"><div className="max-w-[1400px] mx-auto px-margin md:px-margin-desktop py-space-lg"><div className="flex flex-col w-full space-y-space-lg pb-space-xl">
 
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-space-sm pt-space-xs">
@@ -42,7 +34,7 @@ export function In9AssetPage() {
       <span className="text-surface-tint">//</span>
       <span>{live.hubName}</span>
       <span className="text-surface-tint">//</span>
-      <span className="text-on-surface font-semibold">Hardware Telemetry</span>
+      <span className="text-on-surface font-semibold">Asset detail</span>
       </div>
       </div>
 
@@ -82,15 +74,15 @@ export function In9AssetPage() {
       </div>
 
       <div className="flex flex-wrap items-center gap-space-xs sm:gap-space-sm">
-      <button type="button" className="px-space-md py-2 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface font-body-sm text-body-sm font-semibold transition-colors flex items-center gap-1.5 shadow-sm" onClick={() => form.moveAssetConfirmed()}>
+      <button type="button" className="px-space-md py-2 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface font-body-sm text-body-sm font-semibold transition-colors flex items-center gap-1.5 shadow-sm" onClick={() => form.openMoveDialog()}>
       <span className="material-symbols-outlined text-[18px]">drive_file_move</span>
       <span>Move</span>
       </button>
-      <button type="button" className="px-space-md py-2 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface font-body-sm text-body-sm font-semibold transition-colors flex items-center gap-1.5 shadow-sm" onClick={() => form.sendRepairConfirmed()}>
+      <button type="button" className="px-space-md py-2 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface font-body-sm text-body-sm font-semibold transition-colors flex items-center gap-1.5 shadow-sm" onClick={() => form.openRepairDialog()}>
       <span className="material-symbols-outlined text-[18px]">build</span>
       <span>Send to repair</span>
       </button>
-      <button type="button" className="px-space-md py-2 rounded-lg bg-surface-container-low hover:bg-error-container hover:text-on-error-container text-on-surface font-body-sm text-body-sm font-semibold transition-colors flex items-center gap-1.5 shadow-sm" onClick={() => form.markFaultyConfirmed()}>
+      <button type="button" className="px-space-md py-2 rounded-lg bg-surface-container-low hover:bg-error-container hover:text-on-error-container text-on-surface font-body-sm text-body-sm font-semibold transition-colors flex items-center gap-1.5 shadow-sm" onClick={() => form.openConditionDialog()}>
       <span className="material-symbols-outlined text-[18px]">report_problem</span>
       <span>Mark faulty</span>
       </button>
@@ -98,14 +90,10 @@ export function In9AssetPage() {
       <span className="material-symbols-outlined text-[18px]">archive</span>
       <span>Retire</span>
       </button>
-      <button type="button" className="px-space-lg py-2 rounded-lg bg-primary hover:bg-surface-container-high text-on-primary hover:text-on-surface font-body-sm text-body-sm font-semibold transition-all flex items-center gap-2 shadow-md" onClick={() => setQrOpen(true)}>
-      <span className="material-symbols-outlined text-[18px]">qr_code_2</span>
-      <span>Print QR label</span>
-      </button>
       </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-space-md">
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-space-md">
 
       <div className="bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col justify-between space-y-space-xs">
       <div className="flex items-center justify-between text-on-surface-variant font-caption text-caption uppercase tracking-wider">
@@ -126,6 +114,9 @@ export function In9AssetPage() {
       <div>
       <div className="font-label-price text-headline-sm text-on-surface font-bold">{form.valueLabel}</div>
       <div className="font-caption text-caption text-on-surface-variant mt-0.5">FIFO Landed valuation</div>
+      {form.totalRepairCostJmd > 0 ? (
+      <div className="font-caption text-caption text-on-surface-variant mt-1">Total repairs: {form.totalRepairCostLabel}</div>
+      ) : null}
       </div>
       </div>
 
@@ -160,24 +151,16 @@ export function In9AssetPage() {
       <span className="material-symbols-outlined text-sm">calendar_month</span>
       </div>
       <div>
-      <div className="font-label-code text-headline-sm text-on-surface font-bold">—</div>
-      <div className="font-caption text-caption text-on-surface-variant mt-0.5">Annual depot inspection</div>
+      <div className="font-label-code text-headline-sm text-on-surface font-bold">{form.nextInspectionDueLabel}</div>
+      <div className="font-caption text-caption text-on-surface-variant mt-0.5">Next check / expiry</div>
+      <div className="mt-space-sm flex flex-col gap-1.5">
+      <input type="date" className="w-full bg-surface-container-low rounded-lg px-2 py-1 font-body-sm text-body-sm text-on-surface" value={form.inspectionDueDate} onChange={(e) => form.setInspectionDueDate(e.target.value)} aria-label="Next check date"/>
+      <input type="text" className="w-full bg-surface-container-low rounded-lg px-2 py-1 font-body-sm text-body-sm text-on-surface placeholder:text-on-surface-variant" placeholder="Note (required to save)" value={form.inspectionNote} onChange={(e) => form.setInspectionNote(e.target.value)}/>
+      <button type="button" className="self-start px-2 py-1 rounded-lg bg-primary text-on-primary font-body-sm text-body-sm font-semibold" onClick={() => void form.saveNextInspection()}>Save check date</button>
+      </div>
       </div>
       </div>
 
-      <div className="bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col justify-between space-y-space-xs">
-      <div className="flex items-center justify-between text-on-surface-variant font-caption text-caption uppercase tracking-wider">
-      <span>Device / Telemetry</span>
-      <span className="material-symbols-outlined text-sm">sensors_off</span>
-      </div>
-      <div>
-      <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant font-label-code text-caption font-medium">
-      <span className="w-1.5 h-1.5 rounded-full bg-surface-tint"></span>
-      <span>Not connected</span>
-      </div>
-      <div className="font-caption text-caption text-on-surface-variant mt-1">Direct CAN-bus feed inactive</div>
-      </div>
-      </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-space-lg items-start">

@@ -55,7 +55,48 @@ export function useIn9AssetPageForm() {
     resolvedAsset ? Number(strField(resolvedAsset, 'book_value_jmd', '0')) : null,
   );
 
+  const nextInspectionDueRaw = resolvedAsset
+    ? strField(resolvedAsset, 'next_inspection_due', '')
+    : '';
+  const nextInspectionDueLabel = nextInspectionDueRaw
+    ? nextInspectionDueRaw.slice(0, 10)
+    : '—';
+
+  const [inspectionDueDate, setInspectionDueDate] = useState('');
+  const [inspectionNote, setInspectionNote] = useState('');
+
+  useEffect(() => {
+    setInspectionDueDate(nextInspectionDueRaw ? nextInspectionDueRaw.slice(0, 10) : '');
+  }, [nextInspectionDueRaw]);
+
   const allEvents = load.data?.events ?? [];
+
+  const totalRepairCostJmd = useMemo(() => {
+    let sum = 0;
+    for (const e of allEvents) {
+      const t = strField(e, 'type', strField(e, 'event_type', '')).toLowerCase();
+      if (t !== 'repair') continue;
+      const cost = Number(e.cost_jmd ?? 0);
+      if (Number.isFinite(cost)) sum += cost;
+    }
+    return sum;
+  }, [allEvents]);
+
+  const totalRepairCostLabel = formatJmd(totalRepairCostJmd > 0 ? totalRepairCostJmd : null);
+
+  const saveNextInspection = () =>
+    submit.run(async () => {
+      if (!assetId) throw new Error('No asset');
+      const note = inspectionNote.trim();
+      if (!note) throw new Error('Add a note explaining the check date change');
+      await inventoryApi.assetNextInspection(assetId, {
+        next_inspection_due: inspectionDueDate.trim() || null,
+        note,
+      });
+      setInspectionNote('');
+      await shell.refresh();
+      await load.reload();
+    });
 
   const filteredEvents = useMemo(() => {
     if (logFilter === 'all') return allEvents;
@@ -106,26 +147,20 @@ export function useIn9AssetPageForm() {
     [allEvents],
   );
 
-  const moveAsset = () =>
-    submit.run(async () => {
-      if (!assetId) throw new Error('No asset');
-      await inventoryApi.assetMove(assetId, { note: 'Moved from asset page' });
-      await shell.refresh();
-    });
+  const openMoveDialog = () => {
+    if (!assetId) return;
+    shell.openModal('asset-move');
+  };
 
-  const sendRepair = () =>
-    submit.run(async () => {
-      if (!assetId) throw new Error('No asset');
-      await inventoryApi.assetRepair(assetId, {});
-      await shell.refresh();
-    });
+  const openRepairDialog = () => {
+    if (!assetId) return;
+    shell.openModal('asset-repair');
+  };
 
-  const markFaulty = () =>
-    submit.run(async () => {
-      if (!assetId) throw new Error('No asset');
-      await inventoryApi.assetFaulty(assetId, {});
-      await shell.refresh();
-    });
+  const openConditionDialog = () => {
+    if (!assetId) return;
+    shell.openModal('asset-condition');
+  };
 
   const retire = () =>
     submit.run(async () => {
@@ -191,15 +226,6 @@ export function useIn9AssetPageForm() {
     if (window.confirm(message)) run();
   };
 
-  const moveAssetConfirmed = () =>
-    confirmAction('Move this asset to a new location?', () => void moveAsset());
-
-  const sendRepairConfirmed = () =>
-    confirmAction('Send this asset to repair?', () => void sendRepair());
-
-  const markFaultyConfirmed = () =>
-    confirmAction('Mark this asset as faulty?', () => void markFaulty());
-
   const retireConfirmed = () =>
     confirmAction('Retire this asset permanently?', () => void retire());
 
@@ -228,10 +254,18 @@ export function useIn9AssetPageForm() {
     setLogFilter,
     logCounts,
     valueLabel,
+    nextInspectionDueLabel,
+    inspectionDueDate,
+    setInspectionDueDate,
+    inspectionNote,
+    setInspectionNote,
+    saveNextInspection,
+    totalRepairCostJmd,
+    totalRepairCostLabel,
     formatJmd,
-    moveAsset,
-    sendRepair,
-    markFaulty,
+    openMoveDialog,
+    openRepairDialog,
+    openConditionDialog,
     retire,
     saveSerial,
     saveSerialDisabledReason,
@@ -240,9 +274,6 @@ export function useIn9AssetPageForm() {
     copySerial,
     openDocument,
     downloadDocument,
-    moveAssetConfirmed,
-    sendRepairConfirmed,
-    markFaultyConfirmed,
     retireConfirmed,
     closeAssetPage: () => shell.closeModal(),
     strField,

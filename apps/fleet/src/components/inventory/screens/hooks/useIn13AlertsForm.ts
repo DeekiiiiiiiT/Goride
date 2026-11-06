@@ -147,24 +147,11 @@ export function useIn13AlertsForm() {
     }
   };
 
-  const reorder = (alert: Record<string, unknown>) => {
-    const itemId = strField(alert, 'item_id', '') || null;
-    shell.openGap('requisition', { itemId });
-  };
-
-  const reviewApproval = (alert: Record<string, unknown>) => {
-    const approvalId =
-      strField(alert, 'approval_id', '') || strField(alert, 'id', '') || null;
-    shell.openGap('approval-drawer', { approvalId });
-  };
-
   const addSerial = (alert: Record<string, unknown>) => {
     const assetId = strField(alert, 'asset_id', '');
     if (assetId) shell.setSelectedAssetId(assetId);
     shell.openModal('asset-page');
   };
-
-  const newRequisition = () => shell.openGap('requisition', { itemId: null });
 
   const markDoneSelectedDisabledReason = selectedAlertId ? '' : 'Select an alert first';
 
@@ -208,10 +195,7 @@ export function useIn13AlertsForm() {
     markViewed,
     assignToMe,
     openRelated,
-    reorder,
-    reviewApproval,
     addSerial,
-    newRequisition,
     markDoneSelectedDisabledReason,
     resolvedAlertRows,
     formatJmd,
