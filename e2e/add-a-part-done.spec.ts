@@ -32,7 +32,6 @@ test.describe("Add parts done tests", () => {
   });
 
   test("7 abandon wizard at step 3 — draft clears on home", async ({ page }) => {
-    page.on("dialog", (d) => d.accept());
     await gotoAddParts(page);
     await page.getByRole("button", { name: /Start/i }).click();
     await pickTypeOpenDetails(page, "Brake pads");
@@ -42,6 +41,8 @@ test.describe("Add parts done tests", () => {
     await page.getByRole("button", { name: /Next: replaces \(optional\)/i }).click();
     await expect(page.getByText(/Replaces a factory number/i)).toBeVisible();
     await page.getByRole("button", { name: "Cancel" }).click();
+    // In-app confirm (no browser pop-ups): "Cancel adding this part?"
+    await page.getByRole("button", { name: "Cancel part" }).click();
     await expect(page.getByRole("heading", { name: "Add parts" })).toBeVisible();
     await page.getByRole("button", { name: /Start/i }).click();
     await expect(page.getByRole("heading", { name: /What kind of part/i })).toBeVisible();
@@ -50,7 +51,6 @@ test.describe("Add parts done tests", () => {
   });
 
   test("8 request part type appears in owner Part types", async ({ page }) => {
-    page.on("dialog", (d) => d.accept());
     await gotoAddParts(page);
     await page.getByRole("button", { name: /Start/i }).click();
     await page.getByRole("button", { name: /Can't find it\? Ask to add a part type/i }).click();
@@ -58,6 +58,7 @@ test.describe("Add parts done tests", () => {
     await page.getByPlaceholder("Why do you need it?").fill("Fleet uses these weekly");
     await page.getByRole("button", { name: "Submit request" }).click();
     await page.locator(".fixed.bottom-0").getByRole("button", { name: "Cancel" }).click();
+    await page.getByRole("button", { name: "Cancel part" }).click();
     await expect(page.getByRole("heading", { name: "Add parts" })).toBeVisible();
     await page.getByRole("button", { name: "Part types" }).click();
     await expect(page.getByText("Custom widget")).toBeVisible();
@@ -137,7 +138,7 @@ test.describe("Add parts done tests", () => {
     await page.getByRole("button", { name: /Start/i }).click();
     await pickTypeOpenDetails(page, "Brake pads");
     await fillPartDetails(page, "Dup", "EXIST-1");
-    await expect(page.getByText(/already in the database/i)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(/already exists/i)).toBeVisible({ timeout: 10_000 });
   });
 
   test("V1 part type icons are not raw icon_key words", async ({ page }) => {
