@@ -2,6 +2,7 @@
 import { Fragment, useState } from "react";
 import { ImportRowExpanded } from "./ImportRowExpanded";
 import { MaterialIcon } from "./MaterialIcon";
+import { PartsButton } from "../PartsButton";
 
 function statusChip(status: string) {
   switch (status) {
@@ -156,14 +157,9 @@ export function ImportRowTable({
                     {issues?.[0]?.message ?? issues?.[0]?.code ?? "—"}
                   </td>
                   <td className="p-2" onClick={(e) => e.stopPropagation()}>
-                    <button
-                      type="button"
-                      className="text-secondary"
-                      aria-label={`Inspect line ${lineNo}`}
-                      onClick={() => onInspectLine?.(lineNo)}
-                    >
+                    <PartsButton variant="icon" aria-label={`Inspect line ${lineNo}`} onClick={() => onInspectLine?.(lineNo)}>
                       <MaterialIcon name="manage_search" className="text-[18px]" />
-                    </button>
+                    </PartsButton>
                   </td>
                 </tr>
                 {expanded === lineNo && issues?.length ? (

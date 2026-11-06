@@ -51,10 +51,14 @@ CREATE INDEX IF NOT EXISTS idx_vcs_rule_id
   ON public.vehicle_component_schedule (rule_id)
   WHERE rule_id IS NOT NULL;
 
+DROP FUNCTION IF EXISTS public.schedule_rule_for_part(text, text, uuid);
+
 CREATE OR REPLACE FUNCTION public.schedule_rule_for_part(
   p_org text,
   p_vehicle_id text,
-  p_component_id uuid
+  p_component_id uuid,
+  p_position text DEFAULT NULL,
+  p_include_custom boolean DEFAULT true
 )
 RETURNS TABLE (
   rule_id uuid,
@@ -87,31 +91,33 @@ BEGIN
     RETURN;
   END IF;
 
-  SELECT vcs.*
-  INTO v_sched
-  FROM public.vehicle_component_schedule vcs
-  WHERE vcs.organization_id = p_org
-    AND vcs.vehicle_id = p_vehicle_id
-    AND vcs.category_id = p_component_id
-  ORDER BY vcs.position NULLS FIRST
-  LIMIT 1;
+  IF p_include_custom THEN
+    SELECT vcs.*
+    INTO v_sched
+    FROM public.vehicle_component_schedule vcs
+    WHERE vcs.organization_id = p_org
+      AND vcs.vehicle_id = p_vehicle_id
+      AND vcs.category_id = p_component_id
+      AND vcs.position IS NOT DISTINCT FROM p_position
+    LIMIT 1;
 
-  IF FOUND
-    AND v_sched.schedule_status = 'manual_override'
-    AND (
-      v_sched.custom_interval_km IS NOT NULL
-      OR v_sched.custom_interval_months IS NOT NULL
-    )
-  THEN
-    rule_id := v_sched.rule_id;
-    rank := NULL;
-    interval_km := v_sched.custom_interval_km;
-    interval_km_max := NULL;
-    interval_months := v_sched.custom_interval_months;
-    interval_basis := 'custom';
-    rule_status := 'active';
-    RETURN NEXT;
-    RETURN;
+    IF FOUND
+      AND v_sched.schedule_status = 'manual_override'
+      AND (
+        v_sched.custom_interval_km IS NOT NULL
+        OR v_sched.custom_interval_months IS NOT NULL
+      )
+    THEN
+      rule_id := v_sched.rule_id;
+      rank := NULL;
+      interval_km := v_sched.custom_interval_km;
+      interval_km_max := NULL;
+      interval_months := v_sched.custom_interval_months;
+      interval_basis := 'custom';
+      rule_status := 'active';
+      RETURN NEXT;
+      RETURN;
+    END IF;
   END IF;
 
   SELECT * INTO v_rule FROM public.mm_pick_part_rule(
@@ -181,5 +187,5 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.schedule_rule_for_part(text, text, uuid) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.schedule_rule_for_part(text, text, uuid) TO service_role;
+REVOKE ALL ON FUNCTION public.schedule_rule_for_part(text, text, uuid, text, boolean) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.schedule_rule_for_part(text, text, uuid, text, boolean) TO service_role;

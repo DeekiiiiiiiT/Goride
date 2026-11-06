@@ -21,14 +21,61 @@ export function registerMaintenanceAlertsKpiRoutes(route: RouteApp, supabase: Su
       try {
         const orgId = getOrgId(c);
         if (!orgId) return c.json({ error: "Organization required" }, 400);
-        const { data, error } = await fleetDb()
+        const status = String(c.req.query("status") ?? "").toLowerCase();
+        let q = fleetDb()
           .from("fleet_maintenance_alerts")
           .select("*")
-          .eq("organization_id", orgId)
+          .eq("organization_id", orgId);
+        if (status === "open") q = q.eq("status", "open");
+        else if (status === "closed") q = q.in("status", ["resolved", "superseded"]);
+        const { data, error } = await q
           .order("created_at", { ascending: false })
           .limit(100);
         if (error) throw error;
-        return c.json({ items: data || [] });
+        const rows = (data || []) as Array<Record<string, unknown>>;
+        const vehicleIds = [
+          ...new Set(rows.map((r) => String(r.vehicle_id ?? "").trim()).filter(Boolean)),
+        ];
+        const categoryIds = [
+          ...new Set(rows.map((r) => String(r.category_id ?? "").trim()).filter(Boolean)),
+        ];
+        const plateByVehicleId = new Map<string, string>();
+        if (vehicleIds.length) {
+          const { data: vehicles, error: vErr } = await fleetDb()
+            .from("fleet_vehicles")
+            .select("id, license_plate")
+            .eq("organization_id", orgId)
+            .in("id", vehicleIds);
+          if (vErr) throw vErr;
+          for (const v of vehicles || []) {
+            const id = String((v as { id?: string }).id ?? "");
+            const plate = String((v as { license_plate?: string }).license_plate ?? "").trim();
+            if (id && plate) plateByVehicleId.set(id, plate);
+          }
+        }
+        const categoryLabelById = new Map<string, string>();
+        if (categoryIds.length) {
+          const { data: cats, error: cErr } = await supabase
+            .from("maintenance_service_categories")
+            .select("id, name")
+            .in("id", categoryIds);
+          if (cErr) throw cErr;
+          for (const cat of cats || []) {
+            const id = String((cat as { id?: string }).id ?? "");
+            const name = String((cat as { name?: string }).name ?? "").trim();
+            if (id && name) categoryLabelById.set(id, name);
+          }
+        }
+        const items = rows.map((row) => {
+          const vehicleId = String(row.vehicle_id ?? "");
+          const categoryId = String(row.category_id ?? "");
+          return {
+            ...row,
+            license_plate: plateByVehicleId.get(vehicleId) ?? row.license_plate ?? null,
+            category_name: categoryLabelById.get(categoryId) ?? row.category_name ?? null,
+          };
+        });
+        return c.json({ items });
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
         return c.json({ error: msg }, 500);

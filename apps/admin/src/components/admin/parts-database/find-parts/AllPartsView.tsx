@@ -7,6 +7,7 @@ import type { FindPartsResult, FoundPartRow } from "../partsDatabaseApi";
 import type { BrowseArea } from "./PartStep";
 import { PartsMatchTypesOff } from "../PartsDatabaseStates";
 import { sectionsFrom } from "./ResultsView";
+import { PartsButton } from "../PartsButton";
 
 const TIER_COLORS: Record<number, string> = {
   1: "#0153dc",
@@ -304,18 +305,18 @@ export function AllPartsView({
             <span>Vehicle parts</span>
             <span className="px-1.5 py-0.5 rounded-full bg-secondary-container text-on-secondary-fixed font-mono-sm font-bold">{items.length}</span>
           </button>
-          <button type="button" className="font-body-md font-medium text-secondary hover:text-on-surface pb-2 flex items-center gap-1.5" onClick={() => onOpenStep("part")}>
+          <PartsButton variant="secondary" className="font-body-md pb-2 gap-1.5" onClick={() => onOpenStep("part")}>
             <span className="material-symbols-outlined text-[18px]">search_insights</span>
             Find &amp; cross-match
-          </button>
-          <button type="button" className="font-body-md font-medium text-secondary hover:text-on-surface pb-2 flex items-center gap-1.5" onClick={onOpenDatabase}>
+          </PartsButton>
+          <PartsButton variant="secondary" className="font-body-md pb-2 gap-1.5" onClick={onOpenDatabase}>
             <span className="material-symbols-outlined text-[18px]">rule</span>
             Validation rules
-          </button>
-          <button type="button" className="font-body-md font-medium text-secondary hover:text-on-surface pb-2 flex items-center gap-1.5" onClick={onBack}>
+          </PartsButton>
+          <PartsButton variant="secondary" className="font-body-md pb-2 gap-1.5" onClick={onBack}>
             <span className="material-symbols-outlined text-[18px]">arrow_back</span>
             Back to part picker
-          </button>
+          </PartsButton>
         </div>
       </div>
 

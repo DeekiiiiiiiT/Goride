@@ -1,5 +1,6 @@
 // Stitch: dominion-redesign/S42l + AM-S4
 import type { ReactNode } from "react";
+import { PartsButton } from "../PartsButton";
 import { CATALOG_SECTION_TABS, type CatalogSectionTab } from "../partsCatalogUrl";
 
 export function FindPartsChrome({
@@ -42,17 +43,17 @@ export function FindPartsChrome({
   const subtitle = database
     ? "Every part, car family and size-based part on file, in one searchable place. Direct catalog overview."
     : "Every part that fits a car, in five match types.";
-  const crumb = "font-mono-sm text-mono-sm text-on-surface-variant font-medium hover:text-primary transition-colors bg-transparent p-0";
+  const crumbBtn = "font-mono-sm text-mono-sm min-h-[32px] h-8 px-2";
   return (
     <div className="flex flex-col w-full">
       <div className="find-parts-header px-space-xl pt-space-md pb-space-sm bg-surface-container-lowest shadow-sm flex flex-col gap-space-sm">
         <div className="flex items-center justify-between gap-3 pb-1 border-b border-outline-variant/40">
           <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-1.5 font-mono-sm text-mono-sm text-secondary">
-            <button type="button" className={crumb} onClick={onNavigateDominion}>DOMINION</button>
+            <PartsButton variant="secondary" className={crumbBtn} onClick={onNavigateDominion}>DOMINION</PartsButton>
             <span className="text-outline/60">/</span>
             <span className="text-on-surface-variant font-medium">MASTER DATA</span>
             <span className="text-outline/60">/</span>
-            <button type="button" className={crumb} onClick={onNavigateVehicles}>VEHICLES</button>
+            <PartsButton variant="secondary" className={crumbBtn} onClick={onNavigateVehicles}>VEHICLES</PartsButton>
             <span className="text-outline/60">/</span>
             {findParts ? (
               <>
@@ -159,10 +160,10 @@ export function FindPartsChrome({
             })}
           </nav>
           {database ? (
-            <button className="ml-auto flex items-center gap-1 py-1 px-2.5 rounded-lg text-secondary hover:text-primary hover:bg-surface-container-low font-body-sm font-medium shrink-0" type="button" aria-pressed={advancedActive} onClick={onAdvanced}>
+            <PartsButton variant="secondary" className="ml-auto shrink-0 py-1 px-2.5 font-body-sm" aria-pressed={advancedActive} onClick={onAdvanced}>
               <span className="material-symbols-outlined text-[16px]">tune</span>
               <span>Advanced tune</span>
-            </button>
+            </PartsButton>
           ) : (
             <div className="ml-auto hidden lg:flex items-center gap-1.5 text-secondary font-mono-sm text-mono-sm pb-2 shrink-0">
               <span className="material-symbols-outlined text-[16px] text-primary">verified_user</span>

@@ -1,5 +1,6 @@
 // Stitch: dominion-redesign/parts_import_states
 import { MaterialIcon } from "./MaterialIcon";
+import { PartsButton } from "../PartsButton";
 
 const PIPELINE = ["PARSE", "VALIDATE", "FITMENT MATRIX", "COMMIT"] as const;
 
@@ -92,12 +93,12 @@ export function ImportStates({
           You can leave this page; the check keeps running in the background worker pool.
         </p>
         <div className="flex flex-wrap gap-2">
-          <button type="button" className="text-sm font-semibold text-secondary flex-1 text-left" onClick={onViewJobs}>
+          <PartsButton variant="secondary" className="text-sm flex-1 justify-start" onClick={onViewJobs}>
             View background jobs
-          </button>
-          <button type="button" className="text-sm text-secondary" onClick={onCancelCheck}>
+          </PartsButton>
+          <PartsButton variant="danger" className="text-sm" onClick={onCancelCheck}>
             Cancel check
-          </button>
+          </PartsButton>
         </div>
       </div>
     );
@@ -118,12 +119,12 @@ export function ImportStates({
         </div>
         <p className="text-[10px] font-mono text-outline">STRICT_MIME_MODE text/csv, text/plain</p>
         <div className="flex flex-wrap gap-2">
-          <button type="button" className="text-sm font-semibold flex-1" onClick={onChooseAnother}>
+          <PartsButton variant="secondary" className="text-sm flex-1" onClick={onChooseAnother}>
             Choose another file
-          </button>
-          <button type="button" className="text-sm text-secondary" onClick={onRetry}>
+          </PartsButton>
+          <PartsButton variant="secondary" className="text-sm" onClick={onRetry}>
             Retry
-          </button>
+          </PartsButton>
         </div>
       </div>
     );
@@ -138,13 +139,13 @@ export function ImportStates({
         <ul className="text-sm space-y-1">
           {undoBlocked.reasons.map((r, i) => (
             <li key={`${r.line}-${i}`}>
-              <button
-                type="button"
-                className="text-primary font-semibold text-left hover:underline"
+              <PartsButton
+                variant="secondary"
+                className="text-left justify-start min-h-[32px] h-auto py-1"
                 onClick={() => r.line != null && onConflictLink?.(r.line)}
               >
                 → [Line {r.line ?? "—"}: {r.reason ?? "Changed after import"}]
-              </button>
+              </PartsButton>
             </li>
           ))}
         </ul>

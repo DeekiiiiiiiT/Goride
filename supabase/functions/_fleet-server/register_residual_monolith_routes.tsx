@@ -17,6 +17,10 @@ import { GoogleGenerativeAI } from "npm:@google/generative-ai";
 import * as kv from "./kv_store.tsx";
 import { listStationRecords } from "./fleet_table_read_thru.ts";
 import { dominionCan } from "../../../packages/auth-client/src/dominionPermissions.ts";
+import {
+  assertCatalogStaffReadResponse,
+  assertCatalogWriteResponse,
+} from "./catalog_access.ts";
 import { stampDriverHomePin } from "./fuel_shift_km.ts";
 import { splitCashAwaitingSaveBlocked } from "../../../packages/fuel-core/src/fuelSplitCashLifecycle.ts";
 import * as cache from "./cache.ts";
@@ -10703,13 +10707,12 @@ export function registerResidualMonolithRoutes(app: Hono) {
     return parseCatalogMonthFromUnknown(raw, label);
   }
 
+  function assertVehicleCatalogReadAccess(c: any) {
+    return assertCatalogStaffReadResponse(c);
+  }
+
   function assertVehicleCatalogAccess(c: any) {
-    const rbacUser = c.get("rbacUser") as any;
-    const callerRole = rbacUser?.resolvedRole || rbacUser?.role;
-    if (!dominionCan(callerRole, "catalog.write")) {
-      return c.json({ error: "Forbidden", message: "You cannot change that" }, 403);
-    }
-    return null;
+    return assertCatalogWriteResponse(c);
   }
 
   function vehicleCatalogActorId(c: any): string | null {
@@ -10760,7 +10763,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
 
   // GET /admin/vehicle-catalog
   app.get("/make-server-37f42386/admin/vehicle-catalog", requireAuth(), async (c) => {
-    const denied = assertVehicleCatalogAccess(c);
+    const denied = assertVehicleCatalogReadAccess(c);
     if (denied) return denied;
     try {
       const { items, total } = await listVehicleCatalogWithFallback(supabase);
@@ -10771,48 +10774,12 @@ export function registerResidualMonolithRoutes(app: Hono) {
     }
   });
 
-  /** Bulk-delete every row in motor vehicle catalog (maintenance templates CASCADE). */
-  const VEHICLE_CATALOG_PURGE_CONFIRM = "DELETE ALL";
-  /** Must match client `VEHICLE_CATALOG_UNDO_BATCH_CONFIRM_PHRASE` — required when force-undoing a batch. */
+  /** Must match client `VEHICLE_CATALOG_UNDO_BATCH_CONFIRM_PHRASE` — required when undoing a batch. */
   const VEHICLE_CATALOG_UNDO_BATCH_CONFIRM = "UNDO BATCH";
-
-  // POST /admin/vehicle-catalog/purge — must be registered before POST /admin/vehicle-catalog (create)
-  app.post("/make-server-37f42386/admin/vehicle-catalog/purge", requireAuth(), async (c) => {
-    const denied = assertVehicleCatalogAccess(c);
-    if (denied) return denied;
-    const limited = await assertCatalogWriteRateLimit(c);
-    if (limited) return limited;
-    try {
-      const body = (await c.req.json().catch(() => ({}))) as { confirm?: string };
-      if (String(body.confirm ?? "").trim() !== VEHICLE_CATALOG_PURGE_CONFIRM) {
-        return c.json(
-          { error: `Confirmation required: send JSON { "confirm": "${VEHICLE_CATALOG_PURGE_CONFIRM}" }` },
-          400,
-        );
-      }
-      const CHUNK = 500;
-      let deleted = 0;
-      for (;;) {
-        const { data: batch, error: qErr } = await supabase.from("vehicle_catalog").select("id").limit(CHUNK);
-        if (qErr) throw qErr;
-        if (!batch?.length) break;
-        const ids = (batch as { id: string }[]).map((r) => r.id);
-        const { error: dErr } = await supabase.from("vehicle_catalog").delete().in("id", ids);
-        if (dErr) throw dErr;
-        deleted += ids.length;
-        if (batch.length < CHUNK) break;
-      }
-      invalidateCatalogExistenceCache();
-      return c.json({ deleted });
-    } catch (e: any) {
-      console.error("[vehicle-catalog] purge:", e);
-      return c.json({ error: e.message || "Failed to purge vehicle catalog" }, 500);
-    }
-  });
 
   // GET /admin/vehicle-catalog/orphans — before :id routes
   app.get("/make-server-37f42386/admin/vehicle-catalog/orphans", requireAuth(), async (c) => {
-    const denied = assertVehicleCatalogAccess(c);
+    const denied = assertVehicleCatalogReadAccess(c);
     if (denied) return denied;
     try {
       const items = await listCatalogOrphanVehicles(supabase);
@@ -11068,7 +11035,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
 
   // GET /admin/vehicle-catalog/:id/dependencies
   app.get("/make-server-37f42386/admin/vehicle-catalog/:id/dependencies", requireAuth(), async (c) => {
-    const denied = assertVehicleCatalogAccess(c);
+    const denied = assertVehicleCatalogReadAccess(c);
     if (denied) return denied;
     try {
       const id = c.req.param("id");
@@ -11381,7 +11348,7 @@ export function registerResidualMonolithRoutes(app: Hono) {
   // GET /admin/vehicle-catalog-gate/audit
   // Returns the most recent catalog gate denials/warnings for platform review.
   app.get("/make-server-37f42386/admin/vehicle-catalog-gate/audit", requireAuth(), async (c) => {
-    const denied = assertVehicleCatalogAccess(c);
+    const denied = assertVehicleCatalogReadAccess(c);
     if (denied) return denied;
     try {
       const limitRaw = parseInt(c.req.query("limit") ?? "100", 10);

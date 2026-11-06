@@ -13,6 +13,7 @@ import { getOrgId } from "./org_scope.ts";
 import { invDb, invRpcName } from "./inventory_db.ts";
 import { safeErrorResponse } from "./safe_error.ts";
 import { registerInventoryExtendedRoutes } from "./inventory_controller_extended.ts";
+import { guardInventoryPhase8Diagnostics } from "./inventory_phase_gate.ts";
 import {
   handleDriverCarKitGet,
   handleDriverKitCheckPost,
@@ -26,9 +27,6 @@ type InvEnv = {
   };
 };
 type InvCtx = Context<InvEnv>;
-
-const app = new Hono<InvEnv>();
-app.use("*", requireAuth({ strict: true }));
 
 const PREFIX = "/make-server-37f42386/inventory";
 const PAGE = 50;
@@ -103,6 +101,7 @@ async function rpcJson(
   return (data ?? {}) as Record<string, unknown>;
 }
 
+export function registerInventoryRoutes(app: Hono<InvEnv>) {
 // ---------------------------------------------------------------------------
 // Overview / stock
 // ---------------------------------------------------------------------------
@@ -550,6 +549,17 @@ app.post(`${PREFIX}/driver/reports`, requirePermission("inventory.report"), asyn
   }
 });
 
+app.post(`${PREFIX}/driver/reports/seen`, requirePermission("inventory.report"), async (c) => {
+  try {
+    const org = orgOrForbid(c);
+    if (org instanceof Response) return org;
+    const { handleDriverReportsSeenPost } = await import("./inventory_driver_portal.ts");
+    return await handleDriverReportsSeenPost(c, org);
+  } catch (e) {
+    return safeErrorResponse(c, e, "inventory.driver.reports.seen");
+  }
+});
+
 app.post(`${PREFIX}/driver/reports/:id/resolve`, requirePermission("inventory.approve"), async (c) => {
   try {
     const org = orgOrForbid(c);
@@ -561,6 +571,7 @@ app.post(`${PREFIX}/driver/reports/:id/resolve`, requirePermission("inventory.ap
     const patch: Record<string, unknown> = {
       status: "fixed",
       fixed_at: now,
+      seen_by_driver_at: null,
       fleet_reply: body.note ?? body.fleet_reply ?? null,
       driver_liability: Boolean(body.driver_liability),
     };
@@ -607,6 +618,8 @@ app.post(`${PREFIX}/driver/kit-check`, requirePermission("inventory.report"), as
 });
 
 app.get(`${PREFIX}/assets/:id/diagnostics`, requirePermission("inventory.view"), async (c) => {
+  const phaseDenied = await guardInventoryPhase8Diagnostics(c);
+  if (phaseDenied) return phaseDenied;
   const org = orgOrForbid(c);
   if (org instanceof Response) return org;
   const assetId = c.req.param("id");
@@ -621,5 +634,10 @@ app.get(`${PREFIX}/assets/:id/diagnostics`, requirePermission("inventory.view"),
 });
 
 registerInventoryExtendedRoutes(app);
+}
+
+const app = new Hono<InvEnv>();
+app.use("*", requireAuth({ strict: true }));
+registerInventoryRoutes(app);
 
 export default app;

@@ -22,6 +22,7 @@ import { defineConfig, devices } from '@playwright/test';
  */
 const adminBaseUrl = process.env.ADMIN_BASE_URL?.trim();
 const fleetBaseUrl = process.env.FLEET_BASE_URL?.trim();
+const driverBaseUrl = process.env.DRIVER_BASE_URL?.trim();
 const previewWebServers = [
   ...(!adminBaseUrl
     ? [{
@@ -35,6 +36,14 @@ const previewWebServers = [
     ? [{
         command: 'pnpm --filter @roam/fleet exec vite preview --host 127.0.0.1 --port 3000',
         url: 'http://127.0.0.1:3000',
+        reuseExistingServer: !process.env.CI,
+        timeout: 120_000,
+      }]
+    : []),
+  ...(process.env.INVENTORY_E2E === '1' && !driverBaseUrl
+    ? [{
+        command: 'pnpm --filter @roam/driver exec vite preview --host 127.0.0.1 --port 5174',
+        url: 'http://127.0.0.1:5174',
         reuseExistingServer: !process.env.CI,
         timeout: 120_000,
       }]
@@ -59,7 +68,7 @@ export default defineConfig({
   projects: [
     {
       name: 'dominion-admin',
-      testMatch: /parts-import-stitch\.spec\.ts|parts-auto-match-stitch\.spec\.ts|add-a-part-stitch\.spec\.ts|add-a-part-done\.spec\.ts|capture-am-screens\.spec\.ts/,
+      testMatch: /parts-import-stitch\.spec\.ts|parts-auto-match-stitch\.spec\.ts|add-a-part-stitch\.spec\.ts|add-a-part-done\.spec\.ts|capture-am-screens\.spec\.ts|dominion-maintenance-master\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1456, height: 900 },
@@ -68,18 +77,20 @@ export default defineConfig({
     },
     {
       name: 'fleet',
-      testMatch: /fleet-rush-integration\.spec\.ts|fuel-recon-wizard\.spec\.ts|fuel-recon-shadow-soak\.spec\.ts|driver-settlements-desk\.spec\.ts|driver-detail-smoke\.spec\.ts|fleet-find-parts-visual\.spec\.ts|inventory-button-sweep\.spec\.ts|parts-import-stitch\.spec\.ts|parts-auto-match-stitch\.spec\.ts/,
+      testMatch: /fleet-rush-integration\.spec\.ts|fuel-recon-wizard\.spec\.ts|fuel-recon-shadow-soak\.spec\.ts|driver-settlements-desk\.spec\.ts|driver-detail-smoke\.spec\.ts|fleet-find-parts-visual\.spec\.ts|parts-import-stitch\.spec\.ts|parts-auto-match-stitch\.spec\.ts|fleet-maintenance-master\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         baseURL: fleetBaseUrl || 'http://127.0.0.1:3000',
       },
     },
     {
-      name: 'driver-car-kit',
-      testMatch: /car-kit-button-sweep\.spec\.ts/,
+      name: 'inventory',
+      testMatch: /inventory-done-test-.+\.spec\.ts/,
+      fullyParallel: false,
       use: {
-        ...devices['Pixel 7'],
-        baseURL: process.env.DRIVER_BASE_URL?.trim() || 'http://localhost:5174',
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1456, height: 900 },
+        baseURL: fleetBaseUrl || 'http://127.0.0.1:3000',
       },
     },
     {

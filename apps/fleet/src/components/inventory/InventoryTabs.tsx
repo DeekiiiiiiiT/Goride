@@ -7,6 +7,8 @@ import { In10Movements } from './screens/In10Movements';
 import { In11Purchasing } from './screens/In11Purchasing';
 import { In12Counts } from './screens/In12Counts';
 import { In13Alerts } from './screens/In13Alerts';
+import { isTabVisible } from './inventoryPhaseUi';
+import { useInventoryShell } from './InventoryShellContext';
 
 export type InventoryTabId =
   | 'overview'
@@ -25,7 +27,10 @@ export function InventoryTabs({
   tab: InventoryTabId;
   onTabChange: (next: InventoryTabId) => void;
 }) {
-  switch (tab) {
+  const shell = useInventoryShell();
+  const effectiveTab = isTabVisible(tab, shell.phaseFlags) ? tab : 'overview';
+
+  switch (effectiveTab) {
     case 'overview':
       return <In1Overview />;
     case 'stock':

@@ -2,7 +2,10 @@ import { createClient } from '@supabase/supabase-js';
 import { shouldMainClientDetectSessionInUrl } from '@roam/auth-client';
 import { projectId, publicAnonKey } from './info';
 
-const supabaseUrl = `https://${projectId}.supabase.co`;
+const viteSupabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim();
+const supabaseUrl = viteSupabaseUrl
+  ? viteSupabaseUrl.replace(/\/$/, '')
+  : `https://${projectId}.supabase.co`;
 const supabaseKey = publicAnonKey;
 
 export const supabase = createClient(supabaseUrl, supabaseKey, {

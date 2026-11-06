@@ -16,6 +16,7 @@ import {
   type UniversalCatalogRow,
 } from "../partsDatabaseApi";
 import { PartsError, PartsLoading } from "../PartsDatabaseStates";
+import { PartsButton } from "../PartsButton";
 import { readCatalogFilters, writeCatalogSearch, type CatalogMatch } from "../partsCatalogUrl";
 import { fetchPartMatchHealth } from "../../../../services/partsAutoMatchApi";
 import { FullDatabaseDrawer } from "./FullDatabaseDrawer";
@@ -259,7 +260,7 @@ export function FullDatabaseTab({
       <div className="p-margin flex items-start gap-space-lg">
         <aside className={`${filtersOpen ? "fixed inset-x-0 bottom-0 z-40 max-h-[80vh] overflow-y-auto rounded-t-xl shadow-2xl" : "hidden"} lg:flex lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto lg:w-[280px] lg:shrink-0 lg:rounded-xl lg:shadow-sm w-full bg-surface-container-lowest border border-outline-variant/40 p-space-md flex-col`}>
           <div className="lg:hidden flex justify-end mb-2">
-            <button type="button" className="text-secondary" onClick={() => setFiltersOpen(false)}>Close</button>
+            <PartsButton variant="secondary" onClick={() => setFiltersOpen(false)}>Close</PartsButton>
           </div>
           <FullDatabaseFilterPanel
             draft={draft}
@@ -398,7 +399,7 @@ export function FullDatabaseTab({
                 <p className="font-mono-sm text-primary font-bold">{viewUniversal.number || "No number"}</p>
                 <h2 className="font-headline-md font-bold text-on-surface">{viewUniversal.name || "Part"}</h2>
               </div>
-              <button type="button" className="text-secondary" onClick={() => setViewUniversal(null)}>Close</button>
+              <PartsButton variant="secondary" onClick={() => setViewUniversal(null)}>Close</PartsButton>
             </div>
             <p className="font-body-sm text-secondary">{viewUniversal.brand || "No brand"} · {viewUniversal.fits || "No size on file"}</p>
             {viewUniversal.source ? <a className="text-primary font-body-sm hover:underline" href={viewUniversal.source} target="_blank" rel="noreferrer">{viewUniversal.source}</a> : <p className="font-body-sm text-secondary">No source link yet.</p>}

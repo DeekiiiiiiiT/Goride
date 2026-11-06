@@ -534,7 +534,7 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
       if (vehicleIds.length) {
         const { data: schedules, error: schedErr } = await supabase
           .from("vehicle_component_schedule")
-          .select("vehicle_id, position, next_due_miles, next_due_miles_max, next_due_date, schedule_status, category:maintenance_service_categories(name)")
+          .select("vehicle_id, position, next_due_km, next_due_km_max, next_due_date, schedule_status, category:maintenance_service_categories(name)")
           .eq("organization_id", orgId)
           .in("vehicle_id", vehicleIds);
         if (schedErr) throw schedErr;
@@ -547,8 +547,8 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
             if (String((row as { vehicle_id?: string }).vehicle_id ?? "") !== vehicleId) continue;
             const schedule = row as {
               position?: string | null;
-              next_due_miles?: number | null;
-              next_due_miles_max?: number | null;
+              next_due_km?: number | null;
+              next_due_km_max?: number | null;
               next_due_date?: string | null;
               schedule_status?: string | null;
               category?: { name?: string } | { name?: string }[] | null;
@@ -557,8 +557,8 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
             const analysis = analyzeMaintenanceScheduleRow(
               odometer,
               today,
-              schedule.next_due_miles != null ? Number(schedule.next_due_miles) : null,
-              schedule.next_due_miles_max != null ? Number(schedule.next_due_miles_max) : null,
+              schedule.next_due_km != null ? Number(schedule.next_due_km) : null,
+              schedule.next_due_km_max != null ? Number(schedule.next_due_km_max) : null,
               schedule.next_due_date ? String(schedule.next_due_date).slice(0, 10) : null,
               schedule.schedule_status,
             );

@@ -9,6 +9,7 @@ import {
   fetchSymptomSummary,
   saveSymptom,
 } from "./findPartsApi";
+import { PartsButton } from "../PartsButton";
 
 type SymptomRow = {
   id: string;
@@ -359,14 +360,15 @@ export function ProblemsEditor({ owner, onEditingChange }: { owner: boolean; onE
                           </div>
                         </td>
                         <td className="px-space-md py-3 align-top text-right">
-                          <button
+                          <PartsButton
                             type="button"
-                            className={`h-7 px-2.5 rounded-lg font-body-sm font-medium shadow-xs inline-flex items-center gap-1 ${isSelected ? "bg-primary-container text-on-primary" : "bg-surface-container text-on-surface hover:bg-surface-container-high"}`}
+                            variant="secondary"
+                            className={`font-body-sm ${isSelected ? "bg-primary-container text-on-primary border-primary-container" : ""}`}
                             onClick={() => openEdit(row)}
                           >
                             <span className="material-symbols-outlined text-[14px]">edit</span>
                             <span>{isSelected ? "Editing" : "Edit"}</span>
-                          </button>
+                          </PartsButton>
                         </td>
                       </tr>
                     );
@@ -419,10 +421,10 @@ export function ProblemsEditor({ owner, onEditingChange }: { owner: boolean; onE
                   Category: <strong className="text-on-surface">{drawerCategory}</strong>
                 </span>
               </div>
-              <button type="button" className="px-2.5 py-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant font-mono-sm font-semibold flex items-center gap-1 shrink-0" onClick={closeDrawer}>
+              <PartsButton variant="secondary" className="px-2.5 py-1 font-mono-sm font-semibold flex items-center gap-1 shrink-0" onClick={closeDrawer}>
                 <span className="material-symbols-outlined text-[16px]">close</span>
                 ESC
-              </button>
+              </PartsButton>
             </div>
 
             <div className="p-space-lg flex flex-col gap-space-lg overflow-y-auto max-h-[calc(100vh-240px)]">
@@ -470,9 +472,9 @@ export function ProblemsEditor({ owner, onEditingChange }: { owner: boolean; onE
                       <div key={link.componentId} className="p-space-sm bg-surface-container-low rounded-xl flex items-center justify-between shadow-xs group hover:bg-surface-container-high transition-colors gap-2">
                         <div className="flex items-center gap-space-sm min-w-0">
                           <div className="flex flex-col">
-                            <button type="button" className="text-outline hover:text-on-surface p-0.5 disabled:opacity-30" disabled={!owner || index === 0} onClick={() => moveComponent(index, -1)} aria-label="Move up">
+                            <PartsButton variant="icon" className="p-0.5 disabled:opacity-30" disabled={!owner || index === 0} onClick={() => moveComponent(index, -1)} aria-label="Move up">
                               <span className="material-symbols-outlined text-[18px]">drag_indicator</span>
-                            </button>
+                            </PartsButton>
                           </div>
                           <div className={`w-6 h-6 rounded-lg flex items-center justify-center font-mono-md font-bold shadow-xs shrink-0 ${primary ? "bg-primary-container text-on-primary" : "bg-secondary text-on-secondary"}`}>
                             {index + 1}
@@ -543,7 +545,7 @@ export function ProblemsEditor({ owner, onEditingChange }: { owner: boolean; onE
             </div>
 
             <div className="p-space-lg bg-surface-container-low flex items-center justify-between gap-2 flex-wrap">
-              <button type="button" className="h-9 px-space-md rounded-xl hover:bg-surface-container text-on-surface-variant font-body-sm font-semibold" onClick={closeDrawer}>Cancel</button>
+              <PartsButton variant="secondary" className="h-9 px-space-md font-body-sm font-semibold" onClick={closeDrawer}>Cancel</PartsButton>
               <div className="flex items-center gap-space-sm">
                 <button
                   type="button"

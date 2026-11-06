@@ -7,6 +7,19 @@ const PORTAL = await Deno.readTextFile(
   new URL("./inventory_driver_portal.ts", import.meta.url),
 );
 
+Deno.test("driver car-kit exposes fixedUnseenCount and reports seen route", () => {
+  if (!PORTAL.includes("fixedUnseenCount")) {
+    throw new Error("buildDriverCarKitPayload must return fixedUnseenCount");
+  }
+  if (!CTRL.includes("/driver/reports/seen")) {
+    throw new Error("missing POST /driver/reports/seen");
+  }
+  if (!CTRL.includes("seen_by_driver_at: null")) {
+    throw new Error("resolve must reset seen_by_driver_at");
+  }
+  assertEquals(true, true);
+});
+
 Deno.test("driver report POST accepts idempotency key", () => {
   const block = CTRL.slice(CTRL.indexOf("/driver/reports"), CTRL.indexOf("/driver/reports/:id"));
   if (!block.includes("requireIdempotencyKey")) {

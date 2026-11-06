@@ -2,8 +2,9 @@
 import { useQuery } from "@tanstack/react-query";
 import type { AddPartsDraft, SourceType } from "../addPartsTypes";
 import { fetchTopBrandsForPartType } from "../addPartsApi";
-import { CAR_MAKER_CATALOGUE_OPTIONS, trustLabelFromSource } from "../addPartsShared";
+import { CAR_MAKER_CATALOGUE_OPTIONS, PartTypeIcon, normalizePartNumberKey, trustLabelFromSource } from "../addPartsShared";
 import { MaterialIcon } from "../../import/MaterialIcon";
+import { PartsButton } from "../../PartsButton";
 import { PartExistsPanel } from "../states/PartExistsPanel";
 import { RequestCheckingSourcePanel } from "../states/RequestCheckingSourcePanel";
 
@@ -54,7 +55,7 @@ export function Step1Details({
       <div className="flex items-center justify-between bg-surface-container-low px-space-md py-space-sm rounded-lg gap-3 flex-wrap">
         <div className="flex items-center gap-space-sm min-w-0">
           <div className="w-8 h-8 rounded bg-primary-fixed flex items-center justify-center text-primary-container shrink-0">
-            {draft.partType.iconKey ? <MaterialIcon name={draft.partType.iconKey} className="text-[20px]" /> : null}
+            {draft.partType.iconKey ? <PartTypeIcon iconKey={draft.partType.iconKey} className="text-[20px]" /> : null}
           </div>
           <div className="flex items-center gap-2 flex-wrap min-w-0">
             <span className="font-headline-md text-body-md font-semibold text-on-surface">{draft.partType.name}</span>
@@ -65,9 +66,9 @@ export function Step1Details({
             ) : null}
           </div>
         </div>
-        <button type="button" className="font-label-md text-label-md font-semibold text-primary-container hover:underline shrink-0" onClick={onChangeType}>
+        <PartsButton variant="secondary" className="shrink-0" onClick={onChangeType}>
           Change
-        </button>
+        </PartsButton>
       </div>
 
       <div className="space-y-1">
@@ -91,11 +92,15 @@ export function Step1Details({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-space-lg">
         <div className="space-y-1.5">
           <label className="block font-label-md text-label-md font-semibold text-on-surface">Brand</label>
-          <input
-            className="w-full h-10 px-3 bg-surface-container-lowest rounded-lg font-body-md text-body-md text-on-surface shadow-sm focus:bg-surface-container-low focus:outline-none"
-            value={draft.brand}
-            onChange={(e) => setDraft({ ...draft, brand: e.target.value })}
-          />
+          <div className="relative">
+            <input
+              className="w-full h-10 px-3 pr-10 bg-surface-container-lowest rounded-lg font-body-md text-body-md text-on-surface shadow-sm focus:bg-surface-container-low focus:outline-none"
+              value={draft.brand}
+              onChange={(e) => setDraft({ ...draft, brand: e.target.value })}
+            />
+            <MaterialIcon name="unfold_more" className="absolute right-3 top-2.5 text-secondary text-[20px] pointer-events-none" />
+          </div>
+          <p className="font-body-sm text-body-sm text-outline">Who makes it</p>
           {(brands.data?.length ?? 0) > 0 ? (
             <div className="pt-1 flex items-center gap-1.5 flex-wrap">
               <span className="font-mono-sm text-[10px] text-outline uppercase">Quick picks:</span>
@@ -114,11 +119,25 @@ export function Step1Details({
         </div>
         <div className="space-y-1.5">
           <label className="block font-label-md text-label-md font-semibold text-on-surface">Part number</label>
-          <input
-            className="w-full h-10 px-3 bg-surface-container-lowest rounded-lg font-mono-md text-mono-md font-medium text-on-surface shadow-sm focus:bg-surface-container-low focus:outline-none uppercase tracking-wide"
-            value={draft.partNumber}
-            onChange={(e) => setDraft({ ...draft, partNumber: e.target.value })}
-          />
+          <div className="relative">
+            <input
+              className="w-full h-10 px-3 pr-10 bg-surface-container-lowest rounded-lg font-mono-md text-mono-md font-medium text-on-surface shadow-sm focus:bg-surface-container-low focus:outline-none uppercase tracking-wide"
+              value={draft.partNumber}
+              onChange={(e) => setDraft({ ...draft, partNumber: e.target.value })}
+            />
+            <MaterialIcon name="pin" className="absolute right-3 top-2.5 text-secondary text-[20px] pointer-events-none" />
+          </div>
+          <p className="font-body-sm text-body-sm text-outline">As printed. Spaces and dashes don&apos;t matter.</p>
+          {draft.partNumber.trim() ? (
+            <div className="pt-1 flex items-center gap-2 flex-wrap">
+              <div className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-surface-container-high rounded text-secondary font-mono-sm text-[11px]">
+                <MaterialIcon name="fingerprint" className="text-[13px] text-secondary" />
+                <span>
+                  Normalized key: <strong className="text-on-surface">{normalizePartNumberKey(draft.partNumber)}</strong>
+                </span>
+              </div>
+            </div>
+          ) : null}
         </div>
         <div className="md:col-span-2 space-y-2">
           <label className="block font-label-md text-label-md font-semibold text-on-surface">Made by the car maker?</label>
@@ -158,14 +177,27 @@ export function Step1Details({
         {draft.sourceType !== "other" ? (
           <div className="space-y-1.5">
             <label className="block font-label-md text-label-md font-semibold text-on-surface">Source page link</label>
-            <div className="relative flex items-center">
-              <MaterialIcon name="link" className="absolute left-3 text-on-surface-variant text-[18px]" />
-              <input
-                className="w-full h-10 pl-9 pr-3 bg-surface-container-lowest rounded-lg font-mono-sm text-body-sm text-on-surface shadow-sm focus:bg-surface-container-low focus:outline-none"
-                value={draft.evidenceUrl}
-                onChange={(e) => setDraft({ ...draft, evidenceUrl: e.target.value })}
-                placeholder="https://…"
-              />
+            <div className="relative flex items-center gap-2">
+              <div className="relative flex-1">
+                <MaterialIcon name="link" className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-[18px]" />
+                <input
+                  className="w-full h-10 pl-9 pr-3 bg-surface-container-lowest rounded-lg font-mono-sm text-body-sm text-on-surface shadow-sm focus:bg-surface-container-low focus:outline-none"
+                  value={draft.evidenceUrl}
+                  onChange={(e) => setDraft({ ...draft, evidenceUrl: e.target.value })}
+                  placeholder="https://…"
+                />
+              </div>
+              {draft.evidenceUrl.trim() ? (
+                <a
+                  href={draft.evidenceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="h-10 px-4 shrink-0 rounded-lg bg-primary-container text-on-primary font-label-md font-semibold inline-flex items-center gap-1"
+                >
+                  Open
+                  <MaterialIcon name="open_in_new" className="text-[16px]" />
+                </a>
+              ) : null}
             </div>
           </div>
         ) : null}
@@ -249,6 +281,15 @@ export function Step1Details({
           </div>
         )}
       </div>
+
+      {draft.partType.defaultFitMode === "spec" ? (
+        <div className="p-space-md rounded-xl bg-surface-container-low border border-outline-variant/30 flex items-start gap-space-md">
+          <MaterialIcon name="straighten" className="text-primary-container text-[20px] shrink-0" />
+          <p className="font-body-sm text-body-sm text-on-surface-variant">
+            This is a <span className="font-semibold text-on-surface">spec-based part type</span>. Step 2 asks for size or spec instead of ticking cars; the catalog matcher links it to car versions automatically.
+          </p>
+        </div>
+      ) : null}
     </div>
   );
 }

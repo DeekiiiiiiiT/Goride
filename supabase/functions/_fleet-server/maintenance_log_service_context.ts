@@ -136,7 +136,7 @@ export async function buildLogServiceContext(args: {
   const { data: compRows } = await supabase
     .from("vehicle_component_schedule")
     .select(
-      "category_id, next_due_miles, next_due_miles_max, next_due_date, schedule_status, category:maintenance_service_categories(id, name, icon_key, parent_id)",
+      "category_id, next_due_km, next_due_km_max, next_due_date, schedule_status, category:maintenance_service_categories(id, name, icon_key, parent_id)",
     )
     .eq("organization_id", orgId)
     .eq("vehicle_id", vehicleId);
@@ -164,8 +164,8 @@ export async function buildLogServiceContext(args: {
       parent_id?: string | null;
     } | null;
     if (!cat?.id) continue;
-    const nextMiles = row.next_due_miles != null ? Number(row.next_due_miles) : null;
-    const nextMax = row.next_due_miles_max != null ? Number(row.next_due_miles_max) : null;
+    const nextMiles = row.next_due_km != null ? Number(row.next_due_km) : null;
+    const nextMax = row.next_due_km_max != null ? Number(row.next_due_km_max) : null;
     const nextDate = row.next_due_date != null ? String(row.next_due_date).slice(0, 10) : null;
     const schSt = row.schedule_status != null ? String(row.schedule_status) : "active";
     const analysis = analyzeMaintenanceScheduleRow(

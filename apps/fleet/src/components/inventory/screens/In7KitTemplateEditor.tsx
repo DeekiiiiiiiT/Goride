@@ -2,12 +2,18 @@
 import { useIn7KitTemplateForm } from './hooks/useIn7KitTemplateForm';
 import { useInventoryLive } from '../inventoryLive';
 import { useInventoryShell } from '../InventoryShellContext';
+import { GapSubmitError } from '../gap/GapLoadState';
+import { visibleInventoryTabs } from '../inventoryPhaseUi';
+import type { InventoryTabId } from '../InventoryTabs';
 export function In7KitTemplateEditor() {
   const form = useIn7KitTemplateForm();
   const shell = useInventoryShell();
   const live = useInventoryLive(shell);
+  const visibleTabs = new Set(visibleInventoryTabs(shell.phaseFlags));
+  const showTab = (id: InventoryTabId) => visibleTabs.has(id);
   return (
     <div className="fleet-inventory-stitch inventory-stitch-root">
+      <GapSubmitError message={form.submit.error} />
       <div className="inventory-stitch-main"><div className="flex flex-col w-full">
 
       <div className="w-full bg-surface-container-lowest px-margin-desktop py-space-md shadow-sm">
@@ -43,10 +49,16 @@ export function In7KitTemplateEditor() {
       <span className="material-symbols-outlined text-[16px]">inventory_2</span>
       <span>Vehicle kits</span>
       </button>
+      {showTab('assets') ? (
       <button type="button" className="px-space-md py-1.5 rounded-lg font-body-sm text-secondary hover:text-on-surface hover:bg-surface-container transition-colors" onClick={() => form.goTab('assets')}>Assets</button>
+      ) : null}
       <button type="button" className="px-space-md py-1.5 rounded-lg font-body-sm text-secondary hover:text-on-surface hover:bg-surface-container transition-colors" onClick={() => form.goTab('movements')}>Movements</button>
+      {showTab('purchasing') ? (
       <button type="button" className="px-space-md py-1.5 rounded-lg font-body-sm text-secondary hover:text-on-surface hover:bg-surface-container transition-colors" onClick={() => form.goTab('purchasing')}>Purchasing</button>
+      ) : null}
+      {showTab('counts') ? (
       <button type="button" className="px-space-md py-1.5 rounded-lg font-body-sm text-secondary hover:text-on-surface hover:bg-surface-container transition-colors" onClick={() => form.goTab('counts')}>Counts</button>
+      ) : null}
       <button type="button" className="px-space-md py-1.5 rounded-lg font-body-sm text-secondary hover:text-on-surface hover:bg-surface-container transition-colors flex items-center gap-space-xs" onClick={() => form.goTab('alerts')}>
       <span>Alerts</span>
       <span className="bg-error text-on-error font-label-code text-[10px] font-bold px-1.5 py-0.2 rounded-full">5</span>
@@ -178,7 +190,7 @@ export function In7KitTemplateEditor() {
       ) : (
       form.lineEditorRows.map((line) => (
       <tr key={line.key} className="hover:bg-surface-container-low/50 transition-colors">
-      <td className="py-3 px-3 text-center cursor-grab text-secondary hover:text-on-surface">
+      <td className="py-3 px-3 text-center cursor-grab text-secondary hover:text-on-surface" onClick={() => form.moveLine(line.key, 'up')}>
       <span className="material-symbols-outlined text-[18px]">drag_indicator</span>
       </td>
       <td className="py-3 px-4">
@@ -193,17 +205,32 @@ export function In7KitTemplateEditor() {
       </div>
       </td>
       <td className="py-3 px-3 text-center">
-      <span className="font-label-code text-body-sm font-semibold text-on-surface">{line.qtyLabel}</span>
+      <input
+        className="w-12 text-center bg-surface-container-low rounded font-label-code text-body-sm font-semibold text-on-surface"
+        type="text"
+        value={line.qtyLabel}
+        onChange={(e) => form.updateLineQty(line.key, e.target.value)}
+      />
       </td>
       <td className="py-3 px-4">
-      <span className={`inline-flex items-center px-2 py-0.5 rounded text-caption font-bold ${line.required ? 'bg-primary text-on-primary' : 'bg-surface-container text-secondary font-medium'}`}>
+      <button
+        type="button"
+        className={`inline-flex items-center px-2 py-0.5 rounded text-caption font-bold ${line.required ? 'bg-primary text-on-primary' : 'bg-surface-container text-secondary font-medium'}`}
+        onClick={() => form.updateLineRequired(line.key, !line.required)}
+      >
                               {line.required ? 'Required' : 'Optional'}
-                            </span>
+                            </button>
       </td>
       <td className="py-3 px-4">
       <div className="flex items-center gap-1.5 text-on-surface">
       <span className="material-symbols-outlined text-[15px] text-secondary">pin_drop</span>
-      <span className="font-body-sm">{line.category}</span>
+      <input
+        className="font-body-sm bg-transparent border-b border-outline-variant/40 focus:border-primary outline-none min-w-[5rem]"
+        type="text"
+        value={line.installPosition}
+        placeholder="Where it goes"
+        onChange={(e) => form.updateLineInstallPosition(line.key, e.target.value)}
+      />
       </div>
       </td>
       <td className="py-3 px-3 text-center">
@@ -232,11 +259,11 @@ export function In7KitTemplateEditor() {
       <h3 className="font-headline-sm text-headline-sm font-semibold text-on-surface">Linked records</h3>
       <p className="font-body-sm text-body-sm text-on-surface-variant">Auto-bind operational credentials and digital hub peripherals upon vehicle kit allocation.</p>
       </div>
-      <span className="font-label-code text-caption bg-surface-container px-2.5 py-1 rounded text-on-surface">2 Active Integrations</span>
+      <span className="font-label-code text-caption bg-surface-container px-2.5 py-1 rounded text-on-surface">{form.linkedIntegrationCount} Active Integrations</span>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-space-md pt-space-xs">
 
-      <div className="bg-surface-container-low p-space-md rounded-lg flex items-center justify-between">
+      <button type="button" className="bg-surface-container-low p-space-md rounded-lg flex items-center justify-between text-left w-full" onClick={() => form.toggleLinkedTollTag()}>
       <div className="flex items-center gap-space-md">
       <div className="w-9 h-9 rounded-lg bg-surface-container-lowest flex items-center justify-center text-on-surface shadow-sm">
       <span className="material-symbols-outlined text-[20px]">nfc</span>
@@ -247,13 +274,13 @@ export function In7KitTemplateEditor() {
       </div>
       </div>
 
-      <div className="relative inline-flex items-center cursor-pointer">
-      <div className="w-11 h-6 bg-primary rounded-full transition-colors"></div>
-      <div className="absolute left-6 top-1 w-4 h-4 bg-surface-container-lowest rounded-full transition-transform"></div>
+      <div className="relative inline-flex items-center cursor-pointer shrink-0" aria-hidden>
+      <div className={`w-11 h-6 rounded-full transition-colors ${form.linkedTollTag ? 'bg-primary' : 'bg-surface-container-highest'}`}></div>
+      <div className={`absolute top-1 w-4 h-4 bg-surface-container-lowest rounded-full transition-transform ${form.linkedTollTag ? 'left-6' : 'left-1'}`}></div>
       </div>
-      </div>
+      </button>
 
-      <div className="bg-surface-container-low p-space-md rounded-lg flex items-center justify-between">
+      <button type="button" className="bg-surface-container-low p-space-md rounded-lg flex items-center justify-between text-left w-full" onClick={() => form.toggleLinkedFuelCard()}>
       <div className="flex items-center gap-space-md">
       <div className="w-9 h-9 rounded-lg bg-surface-container-lowest flex items-center justify-center text-on-surface shadow-sm">
       <span className="material-symbols-outlined text-[20px]">credit_card</span>
@@ -264,11 +291,11 @@ export function In7KitTemplateEditor() {
       </div>
       </div>
 
-      <div className="relative inline-flex items-center cursor-pointer">
-      <div className="w-11 h-6 bg-primary rounded-full transition-colors"></div>
-      <div className="absolute left-6 top-1 w-4 h-4 bg-surface-container-lowest rounded-full transition-transform"></div>
+      <div className="relative inline-flex items-center cursor-pointer shrink-0" aria-hidden>
+      <div className={`w-11 h-6 rounded-full transition-colors ${form.linkedFuelCard ? 'bg-primary' : 'bg-surface-container-highest'}`}></div>
+      <div className={`absolute top-1 w-4 h-4 bg-surface-container-lowest rounded-full transition-transform ${form.linkedFuelCard ? 'left-6' : 'left-1'}`}></div>
       </div>
-      </div>
+      </button>
       </div>
       </div>
 
@@ -284,7 +311,7 @@ export function In7KitTemplateEditor() {
       <button type="button" className="bg-surface-container text-on-surface hover:bg-surface-container-high font-body-sm font-semibold px-space-lg py-2 rounded-lg transition-colors" onClick={() => form.saveDraft()}>
                       Save as draft
                     </button>
-      <button type="button" className="bg-primary text-on-primary font-body-sm font-semibold px-space-xl py-2 rounded-lg shadow-sm hover:opacity-90 transition-opacity flex items-center gap-space-xs disabled:opacity-60" disabled={!form.canPublish} title={form.publishDisabledReason || 'Save as new version'} onClick={() => form.publish()}>
+      <button type="button" className="bg-primary text-on-primary font-body-sm font-semibold px-space-xl py-2 rounded-lg shadow-sm hover:opacity-90 transition-opacity flex items-center gap-space-xs disabled:opacity-60" disabled={!form.canPublish || form.submit.saving} title={form.publishDisabledReason || 'Save as new version'} onClick={() => void form.requestPublishModal()}>
       <span className="material-symbols-outlined text-[16px]">save</span>
       <span>Save as new version</span>
       </button>
@@ -396,6 +423,7 @@ export function In7KitTemplateEditor() {
       </div>
       </div>
 
+      {form.showMoveModal ? (
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-primary/40 backdrop-blur-[2px]" data-stitch-data-stitch-id="migration-modal">
       <div className="bg-surface-container-lowest max-w-md w-full rounded-xl p-space-xl shadow-2xl flex flex-col gap-space-lg transform transition-all">
       <div className="flex items-start gap-space-md">
@@ -404,7 +432,7 @@ export function In7KitTemplateEditor() {
       </div>
       <div>
       <span className="font-label-code text-[11px] uppercase tracking-wider text-secondary font-bold">Migration Confirmation</span>
-      <h3 className="font-headline-sm text-headline-sm font-bold text-on-surface mt-0.5">2 cars use this kit. Move them to version 3?</h3>
+      <h3 className="font-headline-sm text-headline-sm font-bold text-on-surface mt-0.5">{form.applyVehicleCount} cars use this kit. Move them to version {form.versionLabel}?</h3>
       </div>
       </div>
       <p className="font-body-sm text-body-sm text-on-surface-variant leading-relaxed">
@@ -420,17 +448,61 @@ export function In7KitTemplateEditor() {
       <span>Generate 2 kit upgrade tickets</span>
       </div>
       </div>
-      <div className="flex items-center justify-end gap-space-md pt-space-xs">
-      <button type="button" className="bg-surface-container text-on-surface hover:bg-surface-container-high font-body-sm font-semibold px-space-lg py-2 rounded-lg transition-colors"  onClick={() => form.close()}>
+      <div className="flex items-center justify-end gap-space-md pt-space-xs flex-wrap">
+      <button type="button" className="bg-surface-container text-on-surface hover:bg-surface-container-high font-body-sm font-semibold px-space-lg py-2 rounded-lg transition-colors" onClick={() => form.cancelMoveModal()}>
                 Not now
               </button>
-      <button type="button" className="bg-primary text-on-primary font-body-sm font-semibold px-space-xl py-2 rounded-lg shadow-sm hover:opacity-90 transition-opacity flex items-center gap-space-xs disabled:opacity-60" disabled={!form.canPublish} title={form.publishDisabledReason || 'Save as new version'} onClick={() => form.publish()}>
+      <button type="button" className="bg-surface-container text-on-surface hover:bg-surface-container-high font-body-sm font-semibold px-space-lg py-2 rounded-lg transition-colors" onClick={() => void form.confirmPublish(false)}>
+                Publish without moving
+              </button>
+      <button type="button" className="bg-primary text-on-primary font-body-sm font-semibold px-space-xl py-2 rounded-lg shadow-sm hover:opacity-90 transition-opacity flex items-center gap-space-xs disabled:opacity-60" disabled={!form.canPublish || form.submit.saving} onClick={() => void form.confirmPublish(true)}>
       <span className="material-symbols-outlined text-[16px]">check_circle</span>
       <span>Move {form.applyVehicleCount} cars</span>
       </button>
       </div>
       </div>
       </div>
+      ) : null}
+
+      {form.pickerOpen ? (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-primary/40 backdrop-blur-[2px]">
+      <div className="bg-surface-container-lowest max-w-lg w-full rounded-xl p-space-lg shadow-2xl flex flex-col gap-space-md max-h-[80vh]">
+      <h3 className="font-headline-sm text-headline-sm font-bold text-on-surface">Add equipment line</h3>
+      <div className="overflow-y-auto flex flex-col gap-space-xs">
+      {form.catalogItems.map((item) => {
+        const id = form.strField(item, 'id', '');
+        return (
+      <button key={id} type="button" className="text-left px-space-md py-2 rounded-lg hover:bg-surface-container flex flex-col" onClick={() => form.pickCatalogItem(id)}>
+      <span className="font-body-sm font-semibold text-on-surface">{form.strField(item, 'name', '—')}</span>
+      <span className="font-label-code text-caption text-secondary">{form.strField(item, 'sku', '—')}</span>
+      </button>
+        );
+      })}
+      </div>
+      <button type="button" className="self-end font-body-sm font-semibold text-secondary" onClick={() => form.closeLinePicker()}>Cancel</button>
+      </div>
+      </div>
+      ) : null}
+
+      {form.newKitOpen ? (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-primary/40 backdrop-blur-[2px]">
+      <div className="bg-surface-container-lowest max-w-md w-full rounded-xl p-space-xl shadow-2xl flex flex-col gap-space-md">
+      <h3 className="font-headline-sm font-bold text-on-surface">New kit template</h3>
+      <label className="font-caption text-caption text-secondary uppercase font-bold" htmlFor="new-kit-name">Name</label>
+      <input id="new-kit-name" className="w-full bg-surface-container-low px-space-md py-2 rounded-lg text-on-surface" value={form.newKitName} onChange={(e) => form.setNewKitName(e.target.value)} />
+      <label className="font-caption text-caption text-secondary uppercase font-bold" htmlFor="new-kit-class">Classification</label>
+      <select id="new-kit-class" className="w-full bg-surface-container-low px-space-md py-2 rounded-lg text-on-surface" value={form.newKitClassification} onChange={(e) => form.setNewKitClassification(e.target.value as 'rideshare' | 'delivery' | 'executive')}>
+      <option value="rideshare">Rideshare</option>
+      <option value="delivery">Delivery</option>
+      <option value="executive">Executive</option>
+      </select>
+      <div className="flex justify-end gap-space-md">
+      <button type="button" className="px-space-lg py-2 rounded-lg bg-surface-container" onClick={() => form.setNewKitOpen(false)}>Cancel</button>
+      <button type="button" className="px-space-lg py-2 rounded-lg bg-primary text-on-primary font-semibold" onClick={() => void form.createNewKit()}>Create</button>
+      </div>
+      </div>
+      </div>
+      ) : null}
       </div></div>
     </div>
   );

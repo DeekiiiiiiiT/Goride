@@ -4,7 +4,7 @@
 
 export const FLEET_SERVICES_ATTENTION_CAP = 10;
 
-/** Valid upper window bound: must be strictly greater than next_due_miles. */
+/** Valid upper window bound: must be strictly greater than next_due_km. */
 export function normalizeNextMilesMax(
   nextMiles: number | null,
   nextMilesMaxRaw: number | null | undefined,

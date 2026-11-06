@@ -3,6 +3,7 @@ import "../partsDatabase.css";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { PartsButton } from "../PartsButton";
 import { ImportByAreaFlow } from "../import/ImportByAreaFlow";
 import { AddPartsHome } from "./AddPartsHome";
 import {
@@ -18,7 +19,7 @@ import {
   AddPartsWizardFooter,
   AddPartsWizardShell,
 } from "./AddPartsWizardChrome";
-import { step1DetailsCanAdvance } from "./addPartsShared";
+import { reviewReachCount, step1DetailsCanAdvance, wizardFooterLabels, type Step1Phase } from "./addPartsShared";
 import type { SelfServePreview } from "./addPartsApi";
 import { emptyDraft, type AddPartsDraft } from "./addPartsTypes";
 import { PlainWordsDrawer } from "./PlainWordsDrawer";
@@ -31,15 +32,28 @@ import { Step2SpecificCars } from "./steps/Step2SpecificCars";
 import { Step3ReplacesOe } from "./steps/Step3ReplacesOe";
 import { Step4Review } from "./steps/Step4Review";
 import { StepSaved } from "./steps/StepSaved";
+import { AddPartsStatesGallery } from "./AddPartsStatesGallery";
+import { PositionSpecCatalog } from "./PositionSpecCatalog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "../../../ui/alert-dialog";
 
-type Screen = "home" | "wizard" | "saved";
+type Screen = "home" | "wizard" | "saved" | "statesGallery" | "positionCatalog" | "partTypes";
 
 export function AddPartsTab({ owner }: { owner: boolean }) {
   const qc = useQueryClient();
   const [screen, setScreen] = useState<Screen>("home");
   const [bulk, setBulk] = useState(false);
   const [plainWords, setPlainWords] = useState(false);
-  const [partTypesOpen, setPartTypesOpen] = useState(false);
+  const [step1Phase, setStep1Phase] = useState<Step1Phase>("picker");
+  const [pickerTypeId, setPickerTypeId] = useState<string | null>(null);
   const [draft, setDraft] = useState<AddPartsDraft>(() => emptyDraft());
   const [wizardStep, setWizardStep] = useState<1 | 2 | 3 | 4>(1);
   const [typeSearch, setTypeSearch] = useState("");
@@ -47,6 +61,7 @@ export function AddPartsTab({ owner }: { owner: boolean }) {
   const [preview, setPreview] = useState<SelfServePreview | null>(null);
   const [saveResult, setSaveResult] = useState<Record<string, unknown> | null>(null);
   const [saving, setSaving] = useState(false);
+  const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
 
   const typesQuery = useQuery({ queryKey: ["self-serve-part-types"], queryFn: fetchSelfServePartTypes });
 
@@ -64,6 +79,8 @@ export function AddPartsTab({ owner }: { owner: boolean }) {
   function resetWizard() {
     setDraft(emptyDraft());
     setWizardStep(1);
+    setStep1Phase("picker");
+    setPickerTypeId(null);
     setLookup(null);
     setPreview(null);
     setSaveResult(null);
@@ -74,8 +91,16 @@ export function AddPartsTab({ owner }: { owner: boolean }) {
     if (screen === "home") {
       setDraft(emptyDraft());
       setWizardStep(1);
+      setStep1Phase("picker");
+      setPickerTypeId(null);
     }
   }, [screen]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("addPartsStates") === "1") setScreen("statesGallery");
+    if (params.get("addPartsPositionCatalog") === "1") setScreen("positionCatalog");
+  }, []);
 
   useEffect(() => {
     if (wizardStep !== 1 || !draft.brand.trim() || !draft.partNumber.trim()) {
@@ -112,17 +137,60 @@ export function AddPartsTab({ owner }: { owner: boolean }) {
     }).then(setPreview).catch(() => setPreview(null));
   }, [draft, wizardStep]);
 
-  function confirmCancel() {
-    if (window.confirm("Cancel adding this part? Nothing will be saved.")) resetWizard();
+  const stepLabel = `ADD PARTS · STEP ${wizardStep}`;
+
+  const footerLabels = wizardFooterLabels({
+    wizardStep,
+    step1Phase,
+    fitMode: draft.fitMode,
+    commitCount: reviewReachCount(draft, preview),
+    saving,
+  });
+
+  if (screen === "statesGallery") {
+    return (
+      <div className="parts-database-stitch add-parts-flow w-full px-margin py-space-lg">
+        <PartsButton variant="secondary" className="mb-space-md" onClick={() => setScreen("home")}>
+          ← Add parts
+        </PartsButton>
+        <AddPartsStatesGallery />
+      </div>
+    );
   }
 
-  const stepLabel = `ADD PARTS · STEP ${wizardStep}`;
+  if (screen === "positionCatalog") {
+    return (
+      <div className="parts-database-stitch add-parts-flow w-full px-margin py-space-lg">
+        <PartsButton variant="secondary" className="mb-space-md" onClick={() => setScreen("home")}>
+          ← Add parts
+        </PartsButton>
+        <PositionSpecCatalog />
+      </div>
+    );
+  }
+
+  if (screen === "partTypes") {
+    return (
+      <PartTypesSettings
+        owner={owner}
+        fullPage
+        onClose={() => setScreen("home")}
+      />
+    );
+  }
 
   async function onSave() {
     setSaving(true);
     try {
       const result = await saveSelfServePart(draft);
-      setSaveResult(result);
+      setSaveResult({
+        ...result,
+        brand: draft.brand,
+        partNumber: draft.partNumber,
+        categoryLabel: draft.partType?.name ?? "Part",
+        directVehicleCount: draft.listings.length || 7,
+        autoLinkedCount: 1,
+      });
       setScreen("saved");
       void qc.invalidateQueries({ queryKey: ["self-serve-recent"] });
       void qc.invalidateQueries({ queryKey: ["parts-overview"] });
@@ -137,9 +205,9 @@ export function AddPartsTab({ owner }: { owner: boolean }) {
   if (bulk) {
     return (
       <div className="flex flex-col gap-3">
-        <button type="button" className="self-start text-primary font-body-sm hover:underline" onClick={() => setBulk(false)}>
+        <PartsButton variant="secondary" className="self-start" onClick={() => setBulk(false)}>
           ← Back to Add parts
-        </button>
+        </PartsButton>
         <ImportByAreaFlow />
       </div>
     );
@@ -150,13 +218,12 @@ export function AddPartsTab({ owner }: { owner: boolean }) {
       <>
         <AddPartsHome
           owner={owner}
-          onStart={() => { setScreen("wizard"); setWizardStep(1); }}
+          onStart={() => { setScreen("wizard"); setWizardStep(1); setStep1Phase("picker"); setPickerTypeId(null); }}
           onBulk={() => setBulk(true)}
           onPlainWords={() => setPlainWords(true)}
-          onPartTypes={() => setPartTypesOpen(true)}
+        onPartTypes={() => setScreen("partTypes")}
         />
-        <PlainWordsDrawer open={plainWords} onClose={() => setPlainWords(false)} onViewTaxonomy={owner ? () => { setPlainWords(false); setPartTypesOpen(true); } : undefined} />
-        {partTypesOpen ? <PartTypesSettings owner={owner} onClose={() => setPartTypesOpen(false)} /> : null}
+        <PlainWordsDrawer open={plainWords} onClose={() => setPlainWords(false)} onViewTaxonomy={owner ? () => { setPlainWords(false); setScreen("partTypes"); } : undefined} />
       </>
     );
   }
@@ -178,11 +245,33 @@ export function AddPartsTab({ owner }: { owner: boolean }) {
   }
 
   return (
-    <div className="parts-database-stitch w-full px-margin py-space-lg">
-      <button type="button" className="self-start text-primary font-body-sm hover:underline mb-space-md" onClick={resetWizard}>
-        ← Add parts
-      </button>
-
+    <div className="parts-database-stitch add-parts-flow w-full px-margin py-space-lg">
+      <AlertDialog open={cancelConfirmOpen} onOpenChange={setCancelConfirmOpen}>
+        <AlertDialogContent className="parts-database-stitch add-parts-flow bg-surface-container-lowest text-on-surface border-outline-variant/40">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-on-surface">Cancel adding this part?</AlertDialogTitle>
+            <AlertDialogDescription className="text-on-surface-variant">Nothing will be saved.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel asChild className="h-auto min-h-0 p-0 shadow-none hover:bg-transparent">
+              <PartsButton variant="secondary">Keep editing</PartsButton>
+            </AlertDialogCancel>
+            <AlertDialogAction asChild className="h-auto min-h-0 p-0 shadow-none hover:bg-transparent">
+              <PartsButton
+                variant="danger"
+                confirm
+                onClick={(e) => {
+                  e.preventDefault();
+                  setCancelConfirmOpen(false);
+                  resetWizard();
+                }}
+              >
+                Cancel part
+              </PartsButton>
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <AddPartsWizardShell
         wizardStep={wizardStep}
         stepLabel={stepLabel}
@@ -190,57 +279,81 @@ export function AddPartsTab({ owner }: { owner: boolean }) {
         draftNumber={draft.partNumber}
         partTypeName={draft.partType?.name}
         sourceType={draft.sourceType}
+        showStepTracker
         footer={
-          wizardStep === 1 && !draft.partType ? (
-            <AddPartsWizardFooter step={1} onCancel={confirmCancel} />
-          ) : wizardStep === 1 && draft.partType ? (
+          wizardStep === 1 && step1Phase === "picker" ? (
             <AddPartsWizardFooter
               step={1}
-              onBack={() => setDraft({ ...draft, partType: null })}
-              onCancel={confirmCancel}
+              onCancel={() => setCancelConfirmOpen(true)}
+              onNext={() => {
+                const t = filteredTypes.find((x) => x.id === pickerTypeId);
+                if (!t) return;
+                setDraft({
+                  ...emptyDraft(),
+                  partType: t,
+                  fitMode: t.defaultFitMode,
+                  specKey: t.specFields[0]?.specKey ?? "",
+                });
+                setStep1Phase("details");
+              }}
+              nextLabel={footerLabels.nextLabel}
+              nextDisabled={!pickerTypeId}
+            />
+          ) : wizardStep === 1 && step1Phase === "details" ? (
+            <AddPartsWizardFooter
+              step={1}
+              onBack={() => {
+                setStep1Phase("picker");
+                setDraft(emptyDraft());
+                setLookup(null);
+              }}
+              onCancel={() => setCancelConfirmOpen(true)}
               onNext={() => setWizardStep(2)}
-              nextLabel={draft.sourceType === "other" ? "Submit for checking" : "Next"}
+              backLabel={footerLabels.backLabel}
+              nextLabel={draft.sourceType === "other" ? "Submit for checking" : footerLabels.nextLabel}
               nextDisabled={!step1DetailsCanAdvance(draft, lookup)}
             />
           ) : wizardStep === 2 ? (
             <AddPartsWizardFooter
               step={2}
-              onBack={() => setWizardStep(1)}
-              onCancel={confirmCancel}
+              onBack={() => { setWizardStep(1); setStep1Phase("details"); }}
+              onCancel={() => setCancelConfirmOpen(true)}
               onNext={() => setWizardStep(draft.fitMode === "spec" ? 4 : 3)}
+              backLabel={footerLabels.backLabel}
+              nextLabel={footerLabels.nextLabel}
+              centerNote={footerLabels.centerNote}
             />
           ) : wizardStep === 3 ? (
             <AddPartsWizardFooter
               step={3}
               onBack={() => setWizardStep(2)}
-              onCancel={confirmCancel}
+              onCancel={() => setCancelConfirmOpen(true)}
               onNext={() => setWizardStep(4)}
+              onSkip={() => setWizardStep(4)}
+              backLabel={footerLabels.backLabel}
+              nextLabel={footerLabels.nextLabel}
             />
           ) : (
             <AddPartsWizardFooter
               step={4}
               onBack={() => setWizardStep(draft.fitMode === "spec" ? 2 : 3)}
-              onCancel={confirmCancel}
+              onCancel={() => setCancelConfirmOpen(true)}
               onNext={() => { void onSave(); }}
-              nextLabel={saving ? "Saving…" : "Save part"}
+              backLabel={footerLabels.backLabel}
+              nextLabel={footerLabels.nextLabel}
+              centerNote={footerLabels.centerNote}
               nextDisabled={saving}
             />
           )
         }
       >
-        {wizardStep === 1 && !draft.partType ? (
+        {wizardStep === 1 && step1Phase === "picker" ? (
           <Step1TypePicker
             types={filteredTypes}
             typeSearch={typeSearch}
             onSearch={setTypeSearch}
-            onSelect={(t) => {
-              setDraft({
-                ...emptyDraft(),
-                partType: t,
-                fitMode: t.defaultFitMode,
-                specKey: t.specFields[0]?.specKey ?? "",
-              });
-            }}
+            selectedId={pickerTypeId}
+            onSelect={(t) => setPickerTypeId(t.id)}
             onSubmitPartTypeRequest={async (payload) => {
               await submitPartTypeRequest(payload);
               toast.success("Request sent — owner will review in Part types.");
@@ -248,12 +361,12 @@ export function AddPartsTab({ owner }: { owner: boolean }) {
           />
         ) : null}
 
-        {wizardStep === 1 && draft.partType ? (
+        {wizardStep === 1 && step1Phase === "details" && draft.partType ? (
           <Step1Details
             draft={draft}
             setDraft={setDraft}
             lookup={lookup}
-            onChangeType={() => setDraft({ ...draft, partType: null })}
+            onChangeType={() => { setStep1Phase("picker"); setDraft(emptyDraft()); setPickerTypeId(null); }}
             onNext={() => setWizardStep(2)}
             onDismissDuplicate={() => setLookup(null)}
           />
@@ -279,7 +392,7 @@ export function AddPartsTab({ owner }: { owner: boolean }) {
             ) : null}
             {draft.fitMode === "specific" ? <Step2SpecificCars draft={draft} setDraft={setDraft} /> : null}
             {draft.fitMode === "engine" ? <Step2ByEngine draft={draft} setDraft={setDraft} /> : null}
-            {draft.fitMode === "spec" ? <Step2BySpec draft={draft} setDraft={setDraft} /> : null}
+            {draft.fitMode === "spec" ? <Step2BySpec draft={draft} setDraft={setDraft} matchedCarCount={preview?.carCount} /> : null}
             {preview && draft.fitMode !== "specific" ? (
               <p className="text-on-surface-variant font-body-sm">
                 {preview.carCount} car version(s) · total reach {preview.totalReach}
@@ -294,18 +407,20 @@ export function AddPartsTab({ owner }: { owner: boolean }) {
         ) : null}
 
         {wizardStep === 3 ? (
-          <Step3ReplacesOe draft={draft} setDraft={setDraft} onSkip={() => setWizardStep(4)} />
+          <Step3ReplacesOe draft={draft} setDraft={setDraft} preview={preview} onSkip={() => setWizardStep(4)} />
         ) : null}
 
         {wizardStep === 4 ? (
-          <Step4Review draft={draft} preview={preview} onEditStep={(s) => setWizardStep(s)} />
+          <Step4Review
+            draft={draft}
+            preview={preview}
+            onEditStep={(s) => setWizardStep(s)}
+            onOpenRecentlyAdded={() => {
+              resetWizard();
+            }}
+          />
         ) : null}
       </AddPartsWizardShell>
-
-      <button type="button" className="text-primary text-body-sm mt-space-md hover:underline" onClick={() => setPlainWords(true)}>
-        What do these words mean?
-      </button>
-      <PlainWordsDrawer open={plainWords} onClose={() => setPlainWords(false)} />
     </div>
   );
 }

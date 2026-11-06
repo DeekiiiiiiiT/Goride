@@ -4,6 +4,7 @@ import { ImportCheckKpis } from "./ImportCheckKpis";
 import { ImportLineInspector, type ImportRowInspectPayload } from "./ImportLineInspector";
 import { ImportRowTable } from "./ImportRowTable";
 import { MaterialIcon } from "./MaterialIcon";
+import { PartsButton } from "../PartsButton";
 import { fetchImportRowInspect, type ImportBatchSummary } from "./partsImportApi";
 
 export { ImportCheckKpis } from "./ImportCheckKpis";
@@ -165,22 +166,22 @@ export function ImportCheckStep({
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <button type="button" className="text-xs font-semibold text-secondary inline-flex items-center gap-1" onClick={onExportRaw}>
+        <PartsButton variant="secondary" className="text-xs inline-flex items-center gap-1" onClick={onExportRaw}>
           <MaterialIcon name="download" className="text-[14px]" />
           Export raw CSV
-        </button>
-        <button type="button" className="text-xs font-semibold text-secondary inline-flex items-center gap-1" onClick={onAuditTrail}>
+        </PartsButton>
+        <PartsButton variant="secondary" className="text-xs inline-flex items-center gap-1" onClick={onAuditTrail}>
           <MaterialIcon name="sync" className="text-[14px]" />
           Audit trail
-        </button>
+        </PartsButton>
       </div>
 
       {priorImport?.promoted_at ? (
         <div className="rounded-xl bg-surface-container-low px-4 py-3 text-sm flex flex-wrap items-center justify-between gap-2">
           <span>This file was imported on {new Date(String(priorImport.promoted_at)).toLocaleString()}</span>
-          <button type="button" className="font-semibold text-primary" onClick={onViewPriorImport}>
+          <PartsButton variant="secondary" onClick={onViewPriorImport}>
             View that import →
-          </button>
+          </PartsButton>
         </div>
       ) : null}
 
@@ -243,13 +244,9 @@ export function ImportCheckStep({
           </select>
         </label>
         {onSelectAllAccepted ? (
-          <button
-            type="button"
-            className="text-xs font-semibold text-primary"
-            onClick={() => onSelectAllAccepted(true)}
-          >
+          <PartsButton variant="secondary" className="text-xs" onClick={() => onSelectAllAccepted(true)}>
             Select all importable
-          </button>
+          </PartsButton>
         ) : null}
         <div className="relative flex-1 min-w-[200px]">
           <MaterialIcon name="search" className="absolute left-2 top-1/2 -translate-y-1/2 text-[16px] text-outline" />
@@ -296,14 +293,14 @@ export function ImportCheckStep({
           Errors are left out. You can import the ready rows now and fix the rest later.
         </p>
         <div className="flex flex-wrap items-center gap-2">
-          <button type="button" className="text-sm text-secondary inline-flex items-center gap-1" onClick={onDownloadFailed}>
+          <PartsButton variant="secondary" className="text-sm inline-flex items-center gap-1" onClick={onDownloadFailed}>
             <MaterialIcon name="download" className="text-[16px]" />
             Download failed rows ({counts.error})
-          </button>
-          <button type="button" className="text-sm text-secondary inline-flex items-center gap-1" onClick={onCheckAgain}>
+          </PartsButton>
+          <PartsButton variant="secondary" className="text-sm inline-flex items-center gap-1" onClick={onCheckAgain}>
             <MaterialIcon name="sync" className="text-[16px]" />
             Check again
-          </button>
+          </PartsButton>
           {onCancel ? (
             <button
               type="button"

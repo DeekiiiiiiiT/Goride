@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { deleteUniversalPart, fetchSpecKeys, fetchUniversalParts, saveUniversalPart } from "../partsDatabaseApi";
 import { PartsError, PartsLoading } from "../PartsDatabaseStates";
+import { PartsButton } from "../PartsButton";
 
 function hostLabel(url: string): string {
   try {
@@ -124,7 +125,7 @@ export function UniversalPartsSection({
                     {url ? <a className="text-primary hover:underline" href={url} target="_blank" rel="noreferrer">{hostLabel(url)}</a> : "—"}
                   </td>
                   <td className="px-space-md text-right">
-                    <button type="button" className="text-primary font-semibold disabled:opacity-40" disabled={!owner} title={ownerTitle} onClick={() => {
+                    <PartsButton variant="secondary" className="disabled:opacity-40" disabled={!owner} title={ownerTitle} onClick={() => {
                       const extra = (item.extra ?? {}) as Record<string, unknown>;
                       setEditId(String(item.id));
                       setForm({
@@ -137,9 +138,9 @@ export function UniversalPartsSection({
                         evidenceUrl: url,
                       });
                       setOpen(true);
-                    }}>Edit</button>
+                    }}>Edit</PartsButton>
                     <span className="text-outline/40 px-1">·</span>
-                    <button type="button" className="text-secondary hover:text-error disabled:opacity-40" disabled={!owner} title={ownerTitle} onClick={() => { void deleteUniversalPart(String(item.id)).then(() => query.refetch()); }}>Delete</button>
+                    <PartsButton variant="danger" className="disabled:opacity-40" disabled={!owner} title={ownerTitle} onClick={() => { void deleteUniversalPart(String(item.id)).then(() => query.refetch()); }}>Delete</PartsButton>
                   </td>
                 </tr>
               );
@@ -162,7 +163,7 @@ export function UniversalPartsSection({
           <input className="w-full bg-surface-container-low rounded-lg px-3 py-2 text-sm" placeholder="Source link" value={form.evidenceUrl} onChange={(event) => setForm({ ...form, evidenceUrl: event.target.value })} />
           {error ? <p className="text-xs text-error">{error}</p> : null}
           <div className="flex gap-3">
-            <button type="button" onClick={() => { setOpen(false); onDismiss?.(); }}>Cancel</button>
+            <PartsButton variant="danger" onClick={() => { setOpen(false); onDismiss?.(); }}>Cancel</PartsButton>
             <button type="button" className="bg-primary-container text-on-primary px-3 py-1.5 rounded-lg text-sm disabled:opacity-40" disabled={!owner} onClick={() => { void save(); }}>Save</button>
           </div>
         </div>

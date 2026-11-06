@@ -1,4 +1,5 @@
--- Fleet inventory post-apply checks (audit §3). Each SELECT must return 0 rows.
+-- Fleet inventory post-apply checks (audit §3). Each SELECT must return 0 rows when healthy.
+-- Runner: scripts/run-fleet-inventory-data-checks.mjs (psql -tA); any output line fails CI/local gate.
 
 -- Balances ≠ sum(ledger)
 SELECT 'balance_ledger_drift' AS check_id, x.*
@@ -130,4 +131,40 @@ FROM (
   WHERE cl.qty_remaining > 0
   GROUP BY cl.organization_id, cl.item_id, cl.location_id, b.on_hand
 ) x
-WHERE COALESCE(x.on_hand, 0) = 0;
+  WHERE COALESCE(x.on_hand, 0) = 0;
+
+-- Kit lines in one version share a sort position (D10)
+SELECT 'kit_line_sort_dup' AS check_id, version_id, sort_order, count(*) AS line_count
+FROM fleet.kit_template_line
+GROUP BY version_id, sort_order
+HAVING count(*) > 1;
+
+-- Duplicate serial numbers within a fleet (P10 / D-2)
+SELECT 'duplicate_serial' AS check_id, organization_id, serial_number, count(*) AS asset_count
+FROM fleet.inv_asset
+WHERE serial_number IS NOT NULL
+GROUP BY organization_id, serial_number
+HAVING count(*) > 1;
+
+-- More than one draft or production kit version per template (P10 / D-2)
+SELECT 'kit_version_state' AS check_id, template_id, status, count(*) AS version_count
+FROM fleet.kit_template_version
+WHERE status IN ('draft', 'production')
+GROUP BY template_id, status
+HAVING count(*) > 1;
+
+-- Vehicles missing kit assignment or vehicle stock location (P10 / D-2)
+SELECT 'vehicle_without_kit' AS check_id, v.organization_id, v.id AS vehicle_id
+FROM fleet.vehicles v
+LEFT JOIN fleet.vehicle_kit vk
+  ON vk.organization_id = v.organization_id AND vk.vehicle_id = v.id
+LEFT JOIN fleet.inv_location loc
+  ON loc.organization_id = v.organization_id
+ AND loc.vehicle_id = v.id
+ AND loc.kind = 'vehicle'
+WHERE v.organization_id IS NOT NULL
+  AND EXISTS (
+    SELECT 1 FROM fleet.inv_settings s
+    WHERE s.organization_id = v.organization_id
+  )
+  AND (vk.id IS NULL OR loc.id IS NULL);

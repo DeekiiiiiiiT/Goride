@@ -8,8 +8,11 @@ import {
   type ReactNode,
 } from 'react';
 import { asPagedItems, pagedTotal } from './inventoryData';
-import { inventoryApi } from './inventoryApi';
+import { inventoryApi, InventoryPhaseOffError } from './inventoryApi';
 import type { InventoryTabId } from './InventoryTabs';
+import { isModalAllowed, INVENTORY_PHASE_OFF_MESSAGE, type InventoryPhaseFlags } from './inventoryPhaseUi';
+import { useAuth } from '../auth/AuthContext';
+import { useInventoryPhaseFlags } from '../../hooks/useInventoryPhase2Flag';
 
 export type InventoryModalId =
   | 'none'
@@ -71,6 +74,9 @@ export type InventoryShellState = {
   selectedCountSessionId: string | null;
   setSelectedCountSessionId: (id: string | null) => void;
   setErrorBanner: (message: string | null) => void;
+  phaseNotice: string | null;
+  setPhaseNotice: (message: string | null) => void;
+  phaseFlags: InventoryPhaseFlags;
   readOnly: boolean;
   errorBanner: string | null;
   discrepancyBanner: string | null;
@@ -83,6 +89,7 @@ export type InventoryShellState = {
   assets: Record<string, unknown>[];
   alerts: Record<string, unknown>[];
   purchaseOrders: Record<string, unknown>[];
+  reorderSuggestions?: Record<string, unknown>[];
   vendors: Record<string, unknown>[];
   countSessions: Record<string, unknown>[];
   tabLoading: boolean;
@@ -150,6 +157,9 @@ export function InventoryShellProvider({
   setTab: (tab: InventoryTabId) => void;
   children: ReactNode;
 }) {
+  const phaseFlags = useInventoryPhaseFlags();
+  const { resolvedRole } = useAuth();
+  const readOnly = resolvedRole === 'fleet_viewer';
   const [modal, setModal] = useState<InventoryModalId>('none');
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
@@ -173,8 +183,8 @@ export function InventoryShellProvider({
   const [loading, setLoading] = useState(true);
   const [tabLoading, setTabLoading] = useState(false);
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
+  const [phaseNotice, setPhaseNotice] = useState<string | null>(null);
   const [discrepancyBanner, setDiscrepancyBanner] = useState<string | null>(null);
-  const [readOnly] = useState(false);
 
   const refreshOverview = useCallback(async () => {
     const [ov, stock, kits, assetPayload, alertPayload] = await Promise.all([
@@ -217,7 +227,11 @@ export function InventoryShellProvider({
       if (patch.stockRows) setStockRows(patch.stockRows);
       if (patch.items) setItems(patch.items);
     } catch (e) {
-      setErrorBanner(e instanceof Error ? e.message : 'Could not load inventory tab');
+      if (e instanceof InventoryPhaseOffError) {
+        setPhaseNotice(e.message);
+      } else {
+        setErrorBanner(e instanceof Error ? e.message : 'Could not load inventory tab');
+      }
     } finally {
       setTabLoading(false);
     }
@@ -230,7 +244,11 @@ export function InventoryShellProvider({
       await refreshOverview();
       await refreshTab();
     } catch (e) {
-      setErrorBanner(e instanceof Error ? e.message : 'Could not load inventory');
+      if (e instanceof InventoryPhaseOffError) {
+        setPhaseNotice(e.message);
+      } else {
+        setErrorBanner(e instanceof Error ? e.message : 'Could not load inventory');
+      }
     } finally {
       setLoading(false);
     }
@@ -255,6 +273,17 @@ export function InventoryShellProvider({
 
   const closeModal = useCallback(() => setModal('none'), []);
 
+  const openModal = useCallback(
+    (next: InventoryModalId) => {
+      if (next !== 'none' && !isModalAllowed(next, phaseFlags)) {
+        setPhaseNotice(INVENTORY_PHASE_OFF_MESSAGE);
+        return;
+      }
+      setModal(next);
+    },
+    [phaseFlags],
+  );
+
   const closeAndGoToTab = useCallback(
     (next: InventoryTabId) => {
       setModal('none');
@@ -263,23 +292,30 @@ export function InventoryShellProvider({
     [setTab],
   );
 
-  const openGap = useCallback((next: InventoryModalId, ctx?: InventoryGapContext) => {
-    if (ctx?.itemId !== undefined) setSelectedItemId(ctx.itemId);
-    if (ctx?.assetId !== undefined) setSelectedAssetId(ctx.assetId);
-    if (ctx?.approvalId !== undefined) setSelectedApprovalId(ctx.approvalId);
-    if (ctx?.reportId !== undefined) setSelectedReportId(ctx.reportId);
-    if (ctx?.vendorId !== undefined) setSelectedVendorId(ctx.vendorId);
-    if (ctx?.poId !== undefined) setSelectedPoId(ctx.poId);
-    if (ctx?.countSessionId !== undefined) setSelectedCountSessionId(ctx.countSessionId);
-    setModal(next);
-  }, []);
+  const openGap = useCallback(
+    (next: InventoryModalId, ctx?: InventoryGapContext) => {
+      if (!isModalAllowed(next, phaseFlags)) {
+        setPhaseNotice(INVENTORY_PHASE_OFF_MESSAGE);
+        return;
+      }
+      if (ctx?.itemId !== undefined) setSelectedItemId(ctx.itemId);
+      if (ctx?.assetId !== undefined) setSelectedAssetId(ctx.assetId);
+      if (ctx?.approvalId !== undefined) setSelectedApprovalId(ctx.approvalId);
+      if (ctx?.reportId !== undefined) setSelectedReportId(ctx.reportId);
+      if (ctx?.vendorId !== undefined) setSelectedVendorId(ctx.vendorId);
+      if (ctx?.poId !== undefined) setSelectedPoId(ctx.poId);
+      if (ctx?.countSessionId !== undefined) setSelectedCountSessionId(ctx.countSessionId);
+      setModal(next);
+    },
+    [phaseFlags],
+  );
 
   const value = useMemo<InventoryShellState>(
     () => ({
       tab,
       setTab,
       modal,
-      openModal: setModal,
+      openModal,
       openGap,
       closeModal,
       closeAndGoToTab,
@@ -300,6 +336,9 @@ export function InventoryShellProvider({
       selectedCountSessionId,
       setSelectedCountSessionId,
       setErrorBanner,
+      phaseNotice,
+      setPhaseNotice,
+      phaseFlags,
       readOnly,
       errorBanner,
       discrepancyBanner,
@@ -334,7 +373,11 @@ export function InventoryShellProvider({
       selectedCountSessionId,
       readOnly,
       errorBanner,
-      discrepancyBanner,
+      phaseNotice,
+      setPhaseNotice,
+      phaseFlags,
+      openModal,
+      closeModal,
       overview,
       stockRows,
       items,
@@ -352,7 +395,6 @@ export function InventoryShellProvider({
       refreshTab,
       verifyLedger,
       openGap,
-      closeModal,
       closeAndGoToTab,
     ],
   );

@@ -210,8 +210,8 @@ export function MaintenanceScheduleLedgerPage({ accessToken }: { accessToken: st
                           </td>
                           <td className="p-3 text-xs text-slate-400">
                             {[
-                              row.nextDueMiles != null
-                                ? `${Number(row.nextDueMiles).toLocaleString()} km`
+                              row.nextDueKm != null
+                                ? `${Number(row.nextDueKm).toLocaleString()} km`
                                 : null,
                               row.nextDueDate,
                             ]

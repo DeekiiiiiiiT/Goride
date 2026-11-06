@@ -13,6 +13,7 @@ import { goDominionPage, writeCatalogSearch } from "../partsCatalogUrl";
 import { excludeListing, fetchMasterPart } from "../partsDatabaseApi";
 import { fitLinkBadge, type FitVia } from "@roam/types/partMatchReason";
 import { formatPartPositionSideLabel } from "@roam/types/partPositionNorm";
+import { PartsButton } from "../PartsButton";
 
 function hostLabel(url: string): string {
   try {
@@ -207,10 +208,10 @@ export function FullDatabaseDrawer({
                       {matchedCars} MATCHED
                     </span>
                   </div>
-                  <button type="button" className="font-mono-sm text-mono-sm text-primary font-bold inline-flex items-center gap-0.5 disabled:opacity-40" disabled={!owner} title={ownerTitle} onClick={onAddCar}>
+                  <PartsButton variant="secondary" className="font-mono-sm text-mono-sm gap-0.5 disabled:opacity-40" disabled={!owner} title={ownerTitle} onClick={onAddCar}>
                     <span className="material-symbols-outlined text-[15px]">add</span>
                     Add a car
-                  </button>
+                  </PartsButton>
                 </div>
                 {part.fits.length === 0 ? <p className="font-body-sm text-secondary">No car listing yet.</p> : part.fits.map((fit) => (
                   <div key={`${fit.linkType}-${fit.variantId}`} className="p-space-sm rounded-lg bg-surface-container border border-outline-variant/30 flex items-center justify-between hover:bg-surface-container-high transition-colors">
@@ -244,16 +245,16 @@ export function FullDatabaseDrawer({
                         </span>
                       </div>
                       {indexGroupCode ? (
-                        <button
-                          type="button"
-                          className="font-mono-sm text-mono-sm text-primary font-bold hover:underline shrink-0"
+                        <PartsButton
+                          variant="secondary"
+                          className="font-mono-sm text-mono-sm shrink-0"
                           onClick={() => {
                             goDominionPage("parts-catalog");
                             writeCatalogSearch({ tab: "Full database", q: indexGroupCode || part.number || "" }, "push");
                           }}
                         >
                           View group →
-                        </button>
+                        </PartsButton>
                       ) : null}
                     </div>
                     {wvaPeers.length ? (
@@ -535,12 +536,12 @@ function ReferenceBlock({
                   ) : "—"}
                 </td>
                 <td className="py-2.5 px-space-sm text-right relative">
-                <button type="button" className="text-on-surface-variant hover:text-on-surface disabled:opacity-40" disabled={!owner || !refId} aria-label="Row menu" onClick={() => setMenuId(menuId === refId ? null : refId)}>
+                <PartsButton variant="icon" className="disabled:opacity-40" disabled={!owner || !refId} aria-label="Row menu" onClick={() => setMenuId(menuId === refId ? null : refId)}>
                   <span className="material-symbols-outlined text-[18px]">more_horiz</span>
-                </button>
+                </PartsButton>
                 {menuId === refId ? (
                   <div className="absolute right-0 z-10 mt-1 rounded border border-outline-variant/40 bg-surface-container-lowest shadow p-2">
-                    <button type="button" className="text-error text-xs" onClick={() => { void removeRow(refId); setMenuId(null); }}>Remove</button>
+                    <PartsButton variant="danger" className="text-xs min-h-[32px] h-8" onClick={() => { void removeRow(refId); setMenuId(null); }}>Remove</PartsButton>
                   </div>
                 ) : null}
                 </td>
@@ -575,12 +576,12 @@ function ReferenceBlock({
             <input className="w-full rounded border px-2 py-1" placeholder="Evidence URL" value={draftEvidence} onChange={(e) => setDraftEvidence(e.target.value)} />
           ) : null}
           <div className="flex gap-2">
-            <button type="button" className="rounded border px-2 py-1" onClick={() => setAddOpen(false)}>Cancel</button>
-            <button type="button" className="rounded bg-primary-container px-2 py-1 font-semibold text-on-primary disabled:opacity-40" disabled={!owner} onClick={() => { void addRow(); }}>Save</button>
+            <PartsButton variant="danger" onClick={() => setAddOpen(false)}>Cancel</PartsButton>
+            <PartsButton variant="primary" className="disabled:opacity-40" disabled={!owner} onClick={() => { void addRow(); }}>Save</PartsButton>
           </div>
         </div>
       ) : (
-        <button type="button" className="text-primary font-mono-sm font-bold disabled:opacity-40" disabled={!owner} onClick={() => { setDraftBrand(partBrand || ""); setAddOpen(true); }}>{addLabel}</button>
+        <PartsButton variant="secondary" className="font-mono-sm disabled:opacity-40" disabled={!owner} onClick={() => { setDraftBrand(partBrand || ""); setAddOpen(true); }}>{addLabel}</PartsButton>
       )}
     </div>
   );

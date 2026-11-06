@@ -111,6 +111,16 @@ BEGIN
 
   GET DIAGNOSTICS v_super = ROW_COUNT;
 
+  UPDATE fleet.maintenance_alerts a
+  SET component_schedule_id = vcs.id
+  FROM public.vehicle_component_schedule vcs
+  WHERE a.status = 'open'
+    AND a.component_schedule_id IS NULL
+    AND vcs.organization_id = a.organization_id
+    AND vcs.vehicle_id = a.vehicle_id
+    AND vcs.category_id = a.category_id
+    AND vcs.position IS NOT DISTINCT FROM a.position;
+
   SELECT count(DISTINCT (
     a.organization_id, a.vehicle_id, a.category_id, coalesce(a.position, '-')
   ))::int

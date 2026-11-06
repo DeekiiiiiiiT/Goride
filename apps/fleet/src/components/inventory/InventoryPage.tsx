@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useState } from 'react';
 import './inventory.css';
 import { InventoryTabs, type InventoryTabId } from './InventoryTabs';
@@ -14,6 +15,7 @@ import { In7KitTemplateEditor } from './screens/In7KitTemplateEditor';
 import { InventoryModalFrame } from './InventoryModalFrame';
 import { useInventoryShell } from './InventoryShellContext';
 import { InventoryGapModals } from './InventoryGapModals';
+import { isTabVisible } from './inventoryPhaseUi';
 
 function tabFromSearch(): InventoryTabId {
   const raw = new URLSearchParams(window.location.search).get('tab');
@@ -72,14 +74,24 @@ function InventoryModals() {
 
 function InventoryPageBody() {
   const shell = useInventoryShell();
+
+  useEffect(() => {
+    if (!isTabVisible(shell.tab, shell.phaseFlags)) {
+      shell.setTab('overview');
+    }
+  }, [shell.tab, shell.phaseFlags, shell.setTab]);
+
   return (
     <div className="fleet-inventory-stitch w-full min-h-0">
       <In17OperationalBanners
         showError={Boolean(shell.errorBanner)}
         showDiscrepancy={Boolean(shell.discrepancyBanner)}
         showReadOnly={shell.readOnly}
+        showPhaseNotice={Boolean(shell.phaseNotice)}
         errorMessage={shell.errorBanner ?? undefined}
         discrepancyMessage={shell.discrepancyBanner ?? undefined}
+        phaseNoticeMessage={shell.phaseNotice ?? undefined}
+        onDismissPhaseNotice={() => shell.setPhaseNotice(null)}
       />
       <div className="md:hidden">
         <In18Phone />

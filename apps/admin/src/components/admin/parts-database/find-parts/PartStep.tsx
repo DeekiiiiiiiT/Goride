@@ -1,6 +1,7 @@
 // Stitch: dominion-redesign/S42c (find_parts_what_part/code.html)
 // Stitch: dominion-redesign/find_parts_what_part
 import { useEffect, useState } from "react";
+import { PartsButton } from "../PartsButton";
 
 export type BrowseComponent = { id: string; plainName: string; positionAware: boolean; count: number };
 export type BrowseArea = { id: string; plainName: string; icon: string | null; components: BrowseComponent[] };
@@ -127,7 +128,7 @@ export function PartStep({
             <h2 className="font-headline-xl text-headline-xl text-on-surface font-bold tracking-tight mt-1">What part do you need?</h2>
             <p className="font-body-md text-body-md text-on-surface-variant">Search, pick from a list, or tell us the problem. You can also skip this.</p>
           </div>
-          <button type="button" className="font-label-md text-label-md text-primary shrink-0 pt-1" onClick={onSkip}>Skip</button>
+          <PartsButton variant="secondary" className="shrink-0 pt-1" onClick={onSkip}>Skip</PartsButton>
         </div>
         <div className="relative w-full max-w-3xl mt-space-sm">
           <div className="relative flex items-center bg-surface-container-lowest rounded-xl shadow-md">
@@ -183,7 +184,7 @@ export function PartStep({
               </div>
               <div className="p-space-sm bg-surface-container-lowest flex items-center justify-between border-t border-outline-variant/20">
                 <span className="font-mono-sm text-mono-sm text-outline">{partTotal.toLocaleString()} parts on file for this car</span>
-                <button type="button" className="font-label-xs text-label-xs text-primary font-semibold hover:underline">Exact part number lookup ›</button>
+                <PartsButton variant="secondary" className="font-label-xs text-label-xs min-h-[32px] h-8">Exact part number lookup ›</PartsButton>
               </div>
             </div>
           ) : null}
@@ -360,10 +361,10 @@ export function PartStep({
         </div>
       ) : null}
 
-      <button type="button" className="self-start h-12 px-4 text-secondary font-label-md text-label-md flex items-center gap-1" onClick={onBack}>
+      <PartsButton variant="secondary" className="self-start h-12 px-4 gap-1" onClick={onBack}>
         <span className="material-symbols-outlined text-[18px]">arrow_back</span>
         Back to version
-      </button>
+      </PartsButton>
     </div>
   );
 }

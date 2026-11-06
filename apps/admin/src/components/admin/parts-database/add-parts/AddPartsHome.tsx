@@ -1,9 +1,10 @@
 // Stitch AP1
 import { useQuery } from "@tanstack/react-query";
+import { PartsButton } from "../PartsButton";
 import { MaterialIcon } from "../import/MaterialIcon";
 import { fetchMyPartTypeRequests, fetchRecentSelfServeParts, undoSelfServePart } from "./addPartsApi";
 import { AddPartsScreenFrame } from "./AddPartsScreenFrame";
-import { fitModeDisplay } from "./addPartsShared";
+import { fitModeDisplay, PartTypeIcon } from "./addPartsShared";
 import { toast } from "sonner";
 
 function formatRecentWhen(iso: unknown): string {
@@ -20,15 +21,10 @@ function formatRecentWhen(iso: unknown): string {
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-function rowIconKey(row: Record<string, unknown>): string {
-  const mode = String(row.fitMode ?? "");
-  if (mode === "engine") return "filter_alt";
-  if (mode === "spec") return "straighten";
-  const name = String(row.partTypeName ?? row.tradeTerm ?? "").toLowerCase();
-  if (name.includes("pad") || name.includes("brake")) return "album";
-  if (name.includes("filter")) return "filter_alt";
-  if (name.includes("wiper")) return "straighten";
-  return "inventory_2";
+function rowIconKey(row: Record<string, unknown>): string | null {
+  const ik = row.iconKey ?? row.partTypeIconKey;
+  if (ik) return String(ik);
+  return null;
 }
 
 export function AddPartsHome({
@@ -71,21 +67,17 @@ export function AddPartsHome({
           <span>Start</span>
           <MaterialIcon name="arrow_forward" className="text-[16px] transition-transform group-hover:translate-x-1" />
         </button>
-        <div className="w-full mt-8 pt-6 flex items-center justify-center gap-3 font-label-md text-label-md text-on-surface-variant flex-wrap">
-          <button type="button" className="hover:text-primary transition-colors flex items-center gap-1 cursor-pointer" onClick={onPlainWords}>
-            <MaterialIcon name="help_outline" className="text-[16px] text-outline" />
+        <div className="w-full mt-8 pt-6 flex items-center justify-center gap-3 flex-wrap">
+          <PartsButton variant="secondary" className="flex items-center gap-1" onClick={onPlainWords}>
+            <MaterialIcon name="help_outline" className="text-[16px]" />
             <span>What do these words mean?</span>
-          </button>
-          <span className="text-outline-variant font-bold">·</span>
-          <button type="button" className="hover:text-primary transition-colors flex items-center gap-1" onClick={onBulk}>
+          </PartsButton>
+          <PartsButton variant="secondary" className="flex items-center gap-1" onClick={onBulk}>
             <span>Bulk upload (advanced)</span>
             <MaterialIcon name="arrow_right_alt" className="text-[14px]" />
-          </button>
+          </PartsButton>
           {owner ? (
-            <>
-              <span className="text-outline-variant font-bold">·</span>
-              <button type="button" className="hover:text-primary transition-colors" onClick={onPartTypes}>Part types</button>
-            </>
+            <PartsButton variant="secondary" onClick={onPartTypes}>Part types</PartsButton>
           ) : null}
         </div>
       </div>
@@ -124,11 +116,13 @@ export function AddPartsHome({
             const partLabel = String(r.partTypeName ?? r.tradeTerm ?? "Part");
             const fitSummary = String(r.fitSummary ?? r.reachLabel ?? "");
             const sourceHost = String(r.sourceHost ?? r.evidenceHost ?? "");
+            const whenIso = r.promotedAt ?? r.when;
+            const undoOk = r.undoEligible === true || r.canUndo === true;
             return (
               <div key={String(r.batchId)} className="px-5 py-3.5 flex items-center justify-between hover:bg-surface-container-low transition-colors group gap-3">
                 <div className="flex items-center gap-3.5 min-w-0">
                   <div className="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center text-outline group-hover:text-primary-container transition-colors shrink-0">
-                    <MaterialIcon name={rowIconKey(r)} className="text-[18px]" />
+                    <PartTypeIcon iconKey={rowIconKey(r)} className="text-[18px]" />
                   </div>
                   <div className="flex flex-col min-w-0">
                     <div className="flex items-center gap-2 truncate">
@@ -171,15 +165,11 @@ export function AddPartsHome({
                       <span>Needs checking</span>
                     </span>
                   )}
-                  <span className="font-mono-sm text-mono-sm text-outline hidden md:inline">{formatRecentWhen(r.promotedAt)}</span>
-                  <button
-                    type="button"
-                    className={
-                      r.undoEligible
-                        ? "font-mono-sm text-mono-sm text-primary-container hover:text-error transition-colors px-1 py-0.5 rounded"
-                        : "font-mono-sm text-mono-sm text-outline hover:text-error transition-colors px-1 py-0.5 rounded disabled:opacity-40"
-                    }
-                    disabled={!r.undoEligible}
+                  <span className="font-mono-sm text-mono-sm text-outline hidden md:inline">{formatRecentWhen(whenIso)}</span>
+                  <PartsButton
+                    variant="danger"
+                    className="font-mono-sm text-mono-sm min-h-0 h-8 px-2"
+                    disabled={!undoOk}
                     title={String(r.undoReason ?? "Undo")}
                     onClick={() => {
                       void undoSelfServePart(String(r.batchId))
@@ -188,7 +178,7 @@ export function AddPartsHome({
                     }}
                   >
                     Undo
-                  </button>
+                  </PartsButton>
                 </div>
               </div>
             );
@@ -196,6 +186,16 @@ export function AddPartsHome({
           {items.length === 0 ? (
             <p className="py-8 text-center font-body-sm text-body-sm text-on-surface-variant">Nothing added yet — start above.</p>
           ) : null}
+        </div>
+      </section>
+
+      <section className="rounded-xl bg-surface-container-low border border-outline-variant/30 p-space-lg flex flex-col sm:flex-row gap-space-md items-start sm:items-center">
+        <MaterialIcon name="info" className="text-primary text-[22px] shrink-0" />
+        <div>
+          <h3 className="font-headline-md text-headline-md text-on-surface">Information only</h3>
+          <p className="font-body-sm text-body-sm text-on-surface-variant mt-1">
+            Parts you add here are fitment and catalogue facts for Fleet — not prices, suppliers, or stock levels.
+          </p>
         </div>
       </section>
     </AddPartsScreenFrame>

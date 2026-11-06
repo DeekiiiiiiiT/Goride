@@ -124,9 +124,14 @@ export function repairCatalogAddress() {
   window.history.replaceState({ page: "parts-catalog" }, "", next);
 }
 
-export function goDominionPage(page: string) {
+export function goDominionPage(page: string, extraParams?: Record<string, string>) {
   const url = new URL(window.location.href);
   url.search = `?page=${page}`;
+  if (extraParams) {
+    for (const [k, v] of Object.entries(extraParams)) {
+      url.searchParams.set(k, v);
+    }
+  }
   window.history.pushState({ page }, "", `${url.pathname}${url.search}`);
   window.dispatchEvent(new PopStateEvent("popstate"));
 }

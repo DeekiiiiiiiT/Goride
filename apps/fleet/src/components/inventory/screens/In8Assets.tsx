@@ -203,7 +203,7 @@ export function In8Assets() {
       <td className="py-space-md px-space-md align-middle">
       <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-surface-container-high text-on-surface-variant font-caption text-caption font-medium">
       <span className="w-1.5 h-1.5 rounded-full bg-outline"></span>
-      <span>—</span>
+      <span>{shell.phaseFlags.phase8Telematics ? '—' : 'Not connected'}</span>
       </span>
       </td>
       <td className="py-space-md px-space-md align-middle text-right" onClick={(e) => e.stopPropagation()}>

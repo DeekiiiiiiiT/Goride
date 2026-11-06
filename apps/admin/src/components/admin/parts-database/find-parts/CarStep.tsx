@@ -1,4 +1,5 @@
 // Stitch: dominion-redesign/find_parts_pick_the_car
+import { PartsButton } from "../PartsButton";
 import { MatchTypeStrip } from "./MatchTypeStrip";
 
 export type RecentSearch = { make: string; model: string; year: string };
@@ -85,10 +86,10 @@ export function CarStep({
               value={quick}
               onChange={(event) => onQuick(event.target.value)}
             />
-            <button className="absolute right-2.5 px-2 py-1 rounded-lg bg-surface-container text-secondary hover:text-on-surface text-label-xs font-label-xs font-semibold uppercase transition-colors flex items-center gap-1" type="button" onClick={onClearQuick} aria-label="Clear close">
+            <PartsButton variant="secondary" className="absolute right-2.5 py-1 px-2 text-label-xs font-label-xs uppercase min-h-[32px] h-8" onClick={onClearQuick} aria-label="Clear close">
               <span>Clear</span>
               <span className="material-symbols-outlined text-[14px]">close</span>
-            </button>
+            </PartsButton>
           </div>
           <div className="flex items-center justify-between text-secondary px-1 font-body-sm text-body-sm">
             <span>Accepts combined strings, Japanese auction grades, or VIN codes</span>
@@ -142,7 +143,7 @@ export function CarStep({
         <div className="flex items-center justify-between">
           <span className="font-label-xs text-label-xs uppercase tracking-wider text-secondary font-bold">Recent searches & Active bays</span>
           {recent.length > 0 ? (
-            <button className="font-mono-sm text-mono-sm text-primary hover:underline" type="button" onClick={onClearRecent}>Clear history</button>
+            <PartsButton variant="danger" className="font-mono-sm text-mono-sm min-h-[32px] h-8" onClick={onClearRecent}>Clear history</PartsButton>
           ) : null}
         </div>
         <div className="flex flex-wrap items-center gap-space-sm">
@@ -168,7 +169,7 @@ export function CarStep({
             <span className="font-semibold text-on-surface">Staff note:</span>{" "}
             You are viewing customer-facing match logic. Customer identity profiles and pricing metrics are stripped.             Any missing fitment can be added directly via{" "}
             {owner ? (
-              <button type="button" className="text-primary font-semibold hover:underline" onClick={onContinue}>Add it now</button>
+              <PartsButton variant="secondary" className="inline min-h-[32px] h-8 px-2 font-semibold" onClick={onContinue}>Add it now</PartsButton>
             ) : (
               <span className="text-primary font-semibold">Add it now</span>
             )}.

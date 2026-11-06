@@ -63,7 +63,7 @@ export interface MaintenanceServiceCategory {
   /** When true, Fleet tracks LF/RF/LR/RR separately for outstanding work. */
   position_aware?: boolean;
   /** Fallback interval when component is not in a package. */
-  default_interval_miles?: number | null;
+  default_interval_km?: number | null;
   default_interval_months?: number | null;
   /** Optional long-form copy for admin category editor. */
   description?: string | null;
@@ -119,8 +119,8 @@ export interface VehicleComponentScheduleRow {
   position?: string | null;
   lastPerformedMiles?: number | null;
   lastPerformedDate?: string | null;
-  nextDueMiles?: number | null;
-  nextDueMilesMax?: number | null;
+  nextDueKm?: number | null;
+  nextDueKmMax?: number | null;
   nextDueDate?: string | null;
   scheduleStatus?: "active" | "fulfilled";
   category?: MaintenanceServiceCategory | null;
@@ -232,8 +232,8 @@ export interface MaintenanceTaskTemplate {
   task_name: string;
   description: string | null;
   icon_key?: string | null;
-  interval_miles: number | null;
-  interval_miles_max?: number | null;
+  interval_km: number | null;
+  interval_km_max?: number | null;
   interval_months: number | null;
   frequency_kind?: MaintenanceFrequencyKind;
   frequency_label?: string | null;
@@ -250,8 +250,8 @@ export interface VehicleMaintenanceScheduleRowApi {
   template?: MaintenanceTaskTemplate | null;
   schedule_status?: "active" | "fulfilled";
   computed_status?: string;
-  next_due_miles?: number | null;
-  next_due_miles_max?: number | null;
+  next_due_km?: number | null;
+  next_due_km_max?: number | null;
   next_due_date?: string | null;
   [key: string]: unknown;
 }

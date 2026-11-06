@@ -1,4 +1,5 @@
 import type { CatalogMatch } from "../partsCatalogUrl";
+import { PartsButton } from "../PartsButton";
 
 const MATCHES: Array<{ id: CatalogMatch; label: string; tag?: string; dot?: string }> = [
   { id: "all", label: "All" },
@@ -174,7 +175,7 @@ export function FullDatabaseFilterPanel({
         ))}
       </div>
       <div className="pt-2 border-t border-outline-variant/40">
-        <button className="w-full text-center text-body-sm text-secondary hover:text-primary py-1 font-medium" type="button" onClick={onReset}>Reset filters</button>
+        <PartsButton variant="secondary" className="w-full justify-center text-body-sm py-1" onClick={onReset}>Reset filters</PartsButton>
       </div>
     </div>
   );

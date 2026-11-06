@@ -14,10 +14,13 @@ export function AddPartsScreenFrame({
   children: ReactNode;
 }) {
   return (
-    <div className="parts-database-stitch w-full max-w-[840px] mx-auto flex flex-col gap-space-lg py-space-lg">
-      <div className="flex items-center justify-between gap-3">
-        <AddPartsBreadcrumb tail={title} ap={ap} />
-        <span className="font-mono-sm text-mono-sm text-outline hidden sm:inline">Catalog pipeline active</span>
+    <div className="parts-database-stitch add-parts-flow w-full max-w-[840px] mx-auto flex flex-col gap-space-lg py-space-lg">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <AddPartsBreadcrumb ap={ap} />
+        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-surface-container font-mono-sm text-mono-sm text-on-surface-variant">
+          <span className="w-1.5 h-1.5 rounded-full bg-primary-container" />
+          v4.8
+        </span>
       </div>
       <div className="flex flex-col gap-1">
         <h1 className="font-headline-xl text-headline-xl text-on-surface tracking-tight">{title}</h1>

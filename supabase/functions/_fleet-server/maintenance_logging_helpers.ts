@@ -80,6 +80,7 @@ export type FleetVehicleRow = {
   home_base?: string | null;
   vin?: string | null;
   vehicle_catalog_id?: string | null;
+  severe_duty?: boolean | null;
 };
 
 export async function loadFleetVehicleForOrg(
@@ -88,7 +89,7 @@ export async function loadFleetVehicleForOrg(
 ): Promise<FleetVehicleRow | null> {
   const { data, error } = await fleetDb()
     .from("fleet_vehicles")
-    .select("id, organization_id, license_plate, make, model, year, fleet_unit_id, home_base, vin, vehicle_catalog_id")
+    .select("id, organization_id, license_plate, make, model, year, fleet_unit_id, home_base, vin, vehicle_catalog_id, severe_duty")
     .eq("organization_id", orgId)
     .eq("id", vehicleId)
     .maybeSingle();
@@ -99,7 +100,7 @@ export async function loadFleetVehicleForOrg(
 export async function loadFleetVehiclesForOrg(orgId: string): Promise<FleetVehicleRow[]> {
   const { data, error } = await fleetDb()
     .from("fleet_vehicles")
-    .select("id, organization_id, license_plate, make, model, year, fleet_unit_id, home_base, vin, vehicle_catalog_id")
+    .select("id, organization_id, license_plate, make, model, year, fleet_unit_id, home_base, vin, vehicle_catalog_id, severe_duty")
     .eq("organization_id", orgId)
     .limit(500);
   if (error) throw error;

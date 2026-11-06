@@ -80,7 +80,8 @@ export async function countCatalogDependencies(
     supabase
       .from("maintenance_task_templates")
       .select("id", { count: "exact", head: true })
-      .eq("vehicle_catalog_id", id),
+      .eq("vehicle_catalog_id", id)
+      .is("component_id", null),
     supabase
       .from("part_fitment")
       .select("id", { count: "exact", head: true })
@@ -108,7 +109,8 @@ export async function countCatalogDependenciesForIds(
     supabase
       .from("maintenance_task_templates")
       .select("id", { count: "exact", head: true })
-      .in("vehicle_catalog_id", ids),
+      .in("vehicle_catalog_id", ids)
+      .is("component_id", null),
     supabase
       .from("part_fitment")
       .select("id", { count: "exact", head: true })

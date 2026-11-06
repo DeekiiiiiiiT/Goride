@@ -6,6 +6,11 @@ import { getServiceClient } from "./service_client.ts";
 const CACHE_TTL_MS = 30_000;
 let cached: { at: number; flags: Record<string, boolean> } | null = null;
 
+/** Test / ops: reload flags from DB on next read. */
+export function clearFleetInventoryFeatureFlagsCache(): void {
+  cached = null;
+}
+
 export async function loadFleetInventoryFeatureFlags(): Promise<Record<string, boolean>> {
   if (cached && Date.now() - cached.at < CACHE_TTL_MS) {
     return cached.flags;

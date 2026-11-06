@@ -49,7 +49,7 @@ type OutstandingItem = {
   status: "pending" | "overdue";
   lastPerformedDate: string | null;
   lastPerformedMiles: number | null;
-  nextDueMiles: number | null;
+  nextDueKm: number | null;
   nextDueDate: string | null;
 };
 
@@ -213,7 +213,7 @@ export function MaintenanceServiceLedgerPanel({
                       </TableCell>
                       <TableCell className="text-sm text-slate-600">
                         {[
-                          row.nextDueMiles != null ? `${Number(row.nextDueMiles).toLocaleString()} km` : null,
+                          row.nextDueKm != null ? `${Number(row.nextDueKm).toLocaleString()} km` : null,
                           row.nextDueDate,
                         ]
                           .filter(Boolean)

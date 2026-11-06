@@ -383,7 +383,7 @@ export type FleetMaintLedgerOrgDetail = {
     status: "pending" | "overdue";
     lastPerformedDate: string | null;
     lastPerformedMiles: number | null;
-    nextDueMiles: number | null;
+    nextDueKm: number | null;
     nextDueDate: string | null;
   }>;
   history: Array<{

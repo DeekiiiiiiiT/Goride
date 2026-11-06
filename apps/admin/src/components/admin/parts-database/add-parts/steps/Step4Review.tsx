@@ -1,8 +1,20 @@
-// Stitch AP8
+// Stitch AP8 — review sentence with styled brand, count, OE chip
+import { useQuery } from "@tanstack/react-query";
 import { MaterialIcon } from "../../import/MaterialIcon";
 import type { AddPartsDraft } from "../addPartsTypes";
-import type { SelfServePreview } from "../addPartsApi";
-import { trustLabelFromSource } from "../addPartsShared";
+import { fetchRecentSelfServeParts, type SelfServePreview } from "../addPartsApi";
+import {
+  ADD_PARTS_VERIFIED_CHIP,
+  ADD_PARTS_VERIFIED_CHIP_COMPACT,
+  PartTypeIcon,
+  pickLatestAdaptationExamples,
+  reviewReachCount,
+  reviewTradeTermPhrase,
+  technicalProfileLines,
+  trustLabelFromSource,
+  type RecentSelfServeRow,
+} from "../addPartsShared";
+import { PartsButton } from "../../PartsButton";
 
 function ReviewBlock({
   icon,
@@ -37,86 +49,198 @@ function ReviewBlock({
           </ul>
         </div>
       </div>
-      <button
-        type="button"
-        className="px-space-md h-9 rounded-lg bg-primary-container text-on-primary hover:opacity-90 font-label-md font-semibold transition-all shrink-0 shadow-sm"
-        onClick={onEdit}
-      >
+      <PartsButton variant="secondary" className="shrink-0" onClick={onEdit}>
         Edit
-      </button>
+      </PartsButton>
     </div>
   );
-}
-
-function positionLabelFromDraft(draft: AddPartsDraft): string | null {
-  const pos = draft.position || draft.listings[0]?.position;
-  if (!pos) return null;
-  const scheme = draft.partType?.positionScheme;
-  if (pos === "front" && (scheme === "axle" || scheme === "axle_inner_outer")) return "Front Axle";
-  if (pos === "rear" && (scheme === "axle" || scheme === "axle_inner_outer")) return "Rear Axle";
-  if (pos === "before_cat") return "Before catalytic converter";
-  if (pos === "after_cat") return "After catalytic converter";
-  return pos;
 }
 
 function fitDetailLines(draft: AddPartsDraft, preview: SelfServePreview | null): string[] {
   const structured = preview?.fitSummaryStructured;
   const lines: string[] = [];
-
-  const positionLabel = structured?.positionLabel ?? positionLabelFromDraft(draft);
+  const positionLabel = structured?.positionLabel ?? (() => {
+    const pos = draft.position || draft.listings[0]?.position;
+    if (!pos) return null;
+    const scheme = draft.partType?.positionScheme;
+    if (pos === "front" && (scheme === "axle" || scheme === "axle_inner_outer")) return "Front Axle";
+    if (pos === "rear" && (scheme === "axle" || scheme === "axle_inner_outer")) return "Rear Axle";
+    if (pos === "before_cat") return "Before catalytic converter";
+    if (pos === "after_cat") return "After catalytic converter";
+    return pos;
+  })();
   const yearsLabel = structured?.modelYearsLabel;
   const vehicleSummary = structured?.vehicleSummary;
-
   if (positionLabel) lines.push(`Position: ${positionLabel}`);
   if (yearsLabel) lines.push(`Model years: ${yearsLabel}`);
-
-  if (vehicleSummary) {
-    lines.push(vehicleSummary);
-  } else {
+  if (vehicleSummary) lines.push(vehicleSummary);
+  else {
     const summary = preview?.fitSummaryLines ?? [];
     if (summary.length) {
       for (const line of summary) lines.push(String(line));
     } else if (draft.fitMode === "specific") {
-      for (const l of draft.listings.slice(0, 8)) {
-        lines.push(l.label ?? l.vehicleId);
-      }
+      for (const l of draft.listings.slice(0, 8)) lines.push(l.label ?? l.vehicleId);
       if (draft.listings.length > 8) lines.push(`+ ${draft.listings.length - 8} more`);
     }
   }
-
   if (!lines.length) lines.push("Add cars or engine/spec fit on step 2.");
   return lines;
+}
+
+function trustLine(row: RecentSelfServeRow) {
+  const trust = String(row.trustLabel ?? "");
+  const verified = trust.toLowerCase().includes("verified");
+  const host = String(row.sourceHost ?? "");
+  const url = String(row.evidenceUrl ?? "");
+  return (
+    <div className="flex items-center gap-1.5 font-mono-sm text-[11px] text-secondary flex-wrap">
+      {verified ? (
+        <span className={ADD_PARTS_VERIFIED_CHIP_COMPACT}>Verified</span>
+      ) : (
+        <span className="text-[#b45309] font-semibold">Needs checking</span>
+      )}
+      {host ? (
+        <>
+          <span>·</span>
+          {url ? (
+            <a
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-primary hover:underline"
+            >
+              {host}
+              <MaterialIcon name="north_east" className="text-[13px]" />
+            </a>
+          ) : (
+            <span className="text-on-surface-variant">{host}</span>
+          )}
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+function AdaptationCard({
+  variantLabel,
+  dotClass,
+  row,
+  emptyMessage,
+}: {
+  variantLabel: string;
+  dotClass: string;
+  row: RecentSelfServeRow | null;
+  emptyMessage: string;
+}) {
+  const sentence = row ? String(row.plainWordsSentence ?? row.sentence ?? "") : "";
+  const hint = row ? String(row.vehicleHint ?? row.fitSummary ?? "") : "";
+  return (
+    <div className="bg-surface-container-lowest p-space-md rounded-xl shadow-sm flex flex-col justify-between gap-space-sm min-h-[140px]">
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center justify-between">
+          <span className="font-mono-sm text-[10px] text-secondary font-semibold tracking-wider uppercase">{variantLabel}</span>
+          <span className={`w-1.5 h-1.5 rounded-full ${dotClass}`} />
+        </div>
+        {sentence ? (
+          <p className="font-body-md text-on-surface font-medium leading-snug">“{sentence}”</p>
+        ) : (
+          <p className="font-body-sm text-on-surface-variant italic">{emptyMessage}</p>
+        )}
+      </div>
+      {row && sentence ? (
+        <div className="flex flex-col gap-1 pt-2 bg-surface-container-lowest">
+          {trustLine(row)}
+          {hint ? <p className="font-body-sm text-[12px] text-outline truncate">{hint}</p> : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function PlainWordsSentence({
+  draft,
+  preview,
+}: {
+  draft: AddPartsDraft;
+  preview: SelfServePreview | null;
+}) {
+  const nounFallback = reviewTradeTermPhrase(draft, preview);
+  const carCount = reviewReachCount(draft, preview) ?? 0;
+  const oe = draft.factoryNumbers[0];
+  const trust = preview?.trustLabel ?? trustLabelFromSource(draft.sourceType);
+  const verified = trust.startsWith("Verified");
+
+  return (
+    <>
+      <p className="font-headline-lg text-on-surface font-medium text-[22px] leading-[30px] tracking-tight">
+        <span className="text-primary font-semibold">
+          {draft.brand} {draft.partNumber}
+        </span>{" "}
+        is a {nounFallback}. It fits{" "}
+        <span className="font-semibold text-on-surface underline decoration-primary/40 underline-offset-4 decoration-2">
+          {carCount} car{carCount === 1 ? "" : "s"}
+        </span>
+        {oe ? (
+          <>
+            {" "}
+            and replaces {oe.brand} factory number{" "}
+            <span className="font-mono-md bg-surface-container px-1.5 py-0.5 rounded text-on-surface">{oe.number}</span>
+          </>
+        ) : null}
+        .
+      </p>
+      <div className="flex flex-wrap items-center gap-space-md pt-2">
+        {verified ? (
+          <div className={ADD_PARTS_VERIFIED_CHIP}>
+            <MaterialIcon name="verified_user" className="text-[15px]" filled />
+            Verified Direct Match
+          </div>
+        ) : null}
+        {draft.evidenceUrl ? (
+          <a
+            href={draft.evidenceUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 font-mono-sm text-[11px] text-primary hover:underline"
+          >
+            Source: {draft.evidenceUrl.replace(/^https?:\/\//, "").split("/")[0]}
+            <MaterialIcon name="north_east" className="text-[13px]" />
+          </a>
+        ) : null}
+      </div>
+    </>
+  );
 }
 
 export function Step4Review({
   draft,
   preview,
   onEditStep,
+  onOpenRecentlyAdded,
 }: {
   draft: AddPartsDraft;
   preview: SelfServePreview | null;
   onEditStep: (step: 1 | 2 | 3) => void;
+  onOpenRecentlyAdded?: () => void;
 }) {
-  const trade = draft.partType?.tradeTerm;
-  const pos = draft.position || draft.listings[0]?.position;
-  const nounFallback =
-    trade && pos && !trade.startsWith(pos)
-      ? `${pos} ${trade}`
-      : trade ?? draft.partType?.name?.toLowerCase() ?? "part";
-  const sentence =
-    preview?.sentence ??
-    `${draft.brand} ${draft.partNumber} is a ${nounFallback}.`;
-  const trust = preview?.trustLabel ?? trustLabelFromSource(draft.sourceType);
+  const recentQuery = useQuery({ queryKey: ["self-serve-recent"], queryFn: fetchRecentSelfServeParts });
+  const { engine, spec } = pickLatestAdaptationExamples((recentQuery.data?.items ?? []) as RecentSelfServeRow[]);
+  const engineTypeName = engine ? String(engine.partTypeName ?? "Engine fit") : "Engine fit";
+  const specTypeName = spec ? String(spec.partTypeName ?? "Spec fit") : "Spec fit";
+
   const madeLabel = draft.madeByCarMaker === true ? "Genuine OEM" : draft.madeByCarMaker === false ? "Aftermarket OE-Spec" : "Part identity";
   const oeLines = draft.factoryNumbers.length
     ? draft.factoryNumbers.map((f) => `${f.brand} ${f.number}`)
     : ["No factory numbers added"];
-  const fitBadgeCount = draft.fitMode === "specific" ? draft.listings.length : preview?.carCount;
+  const reach = reviewReachCount(draft, preview);
+  const fitBadgeCount = reach;
+  const profileTrust = preview?.trustLabel ?? trustLabelFromSource(draft.sourceType);
+  const profileLines = technicalProfileLines(draft);
 
   return (
     <div className="flex flex-col gap-space-lg max-w-[880px] mx-auto w-full">
       <div className="flex flex-col gap-0.5">
-        <h1 className="font-headline-xl text-on-surface tracking-tight">Check it reads right</h1>
+        <h1 className="font-headline-xl text-headline-xl text-on-surface tracking-tight">Check it reads right</h1>
         <p className="font-body-md text-on-surface-variant">
           We turned your answers into plain English. Review before saving to the master database.
         </p>
@@ -129,20 +253,8 @@ export function Step4Review({
             <MaterialIcon name="auto_awesome" className="text-[14px]" />
             <span>Plain words</span>
           </div>
-          <span className="font-mono-sm text-on-surface-variant text-[11px]">{trust}</span>
         </div>
-        <p className="font-headline-lg text-on-surface font-medium text-[22px] leading-[30px] tracking-tight">{sentence}</p>
-        {draft.evidenceUrl ? (
-          <a
-            href={draft.evidenceUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 font-mono-sm text-[11px] text-primary hover:underline w-fit"
-          >
-            <span>Source: {draft.evidenceUrl.replace(/^https?:\/\//, "").split("/")[0]}</span>
-            <MaterialIcon name="north_east" className="text-[13px]" />
-          </a>
-        ) : null}
+        <PlainWordsSentence draft={draft} preview={preview} />
       </div>
 
       <div className="grid grid-cols-1 gap-space-sm">
@@ -175,10 +287,57 @@ export function Step4Review({
         ) : null}
       </div>
 
-      <div className="bg-surface-container-low rounded-xl p-space-md border border-outline-variant/30 font-body-sm text-on-surface-variant">
-        After saving, Roam Fleet users will see it in{" "}
-        <span className="text-on-surface font-medium">Find parts for these cars</span>. Reversible within 24 hours from{" "}
-        <span className="text-on-surface font-medium">Recently added</span> without database lockdown.
+      <div className="flex flex-col gap-space-sm pt-4">
+        <div className="flex items-center justify-between px-1">
+          <span className="font-label-xs uppercase tracking-wider text-secondary font-bold">Dynamic Engine Adaptation Previews</span>
+          <span className="font-mono-sm text-[11px] text-outline">MATCHING_BRAIN · v4.8 SIMULATION</span>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-space-md">
+          <AdaptationCard
+            variantLabel={`Variant: By Engine (${engineTypeName})`}
+            dotClass="bg-amber-600"
+            row={engine}
+            emptyMessage="No saved by-engine example yet."
+          />
+          <AdaptationCard
+            variantLabel={`Variant: By Size or Spec (${specTypeName})`}
+            dotClass="bg-indigo-600"
+            row={spec}
+            emptyMessage="No saved by-spec example yet."
+          />
+        </div>
+      </div>
+
+      <div className="bg-surface-container-low p-space-md rounded-xl flex items-start gap-space-md">
+        <MaterialIcon name="lock_clock" className="text-secondary text-[20px] shrink-0 mt-0.5" />
+        <div className="flex flex-col">
+          <span className="font-label-md text-on-surface font-semibold">Catalogue Governance &amp; Immediate Visibility</span>
+          <p className="font-body-sm text-secondary">
+            After saving, Roam Fleet users will see it in{" "}
+            <span className="text-on-surface font-medium">Find parts for these cars</span>. Reversible within 24 hours from{" "}
+            {onOpenRecentlyAdded ? (
+              <PartsButton variant="secondary" className="inline-flex min-h-[32px] h-8 px-2 align-baseline" onClick={onOpenRecentlyAdded}>
+                Recently added
+              </PartsButton>
+            ) : (
+              <span className="text-primary underline">Recently added</span>
+            )}{" "}
+            log without database lockdown.
+          </p>
+        </div>
+      </div>
+
+      <div className="bg-surface-container-lowest p-space-md rounded-xl shadow-sm flex items-center justify-between gap-space-md flex-wrap">
+        <div className="flex items-center gap-space-md min-w-0">
+          <div className="w-12 h-12 rounded-lg bg-surface-container flex items-center justify-center shrink-0 text-primary">
+            <PartTypeIcon iconKey={draft.partType?.iconKey} className="text-[28px]" />
+          </div>
+          <div className="flex flex-col min-w-0">
+            <span className="font-label-md text-on-surface font-semibold">Technical Profile Match Confirmation</span>
+            <span className="font-mono-sm text-[11px] text-secondary">{profileLines.join(" · ")}</span>
+          </div>
+        </div>
+        <span className={`${ADD_PARTS_VERIFIED_CHIP} shrink-0 max-w-[220px] text-center`}>{profileTrust}</span>
       </div>
     </div>
   );

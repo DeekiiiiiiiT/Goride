@@ -101,7 +101,7 @@ export function CarKitPage({
           <Dk1MyCarKit
             kit={flow.kit}
             onReportItem={(name) => flow.openReportSheet(name ?? undefined)}
-            onPreShiftInspection={vehicleId ? () => setShowDvir(true) : undefined}
+            onOpenFixedReports={() => flow.setScreen('dk4')}
             onUpdateStatus={(item: DriverCarKitItem) => {
               if (item.reportId) {
                 setActiveReport({

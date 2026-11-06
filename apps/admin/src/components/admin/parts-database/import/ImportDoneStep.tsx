@@ -1,5 +1,6 @@
 // Stitch: dominion-redesign/parts_import_done
 import { MaterialIcon } from "./MaterialIcon";
+import { PartsButton } from "../PartsButton";
 import type { ImportPromoteResult } from "./partsImportApi";
 
 export { ImportBatchRecordsTable } from "./ImportBatchRecordsTable";
@@ -152,9 +153,9 @@ export function ImportDoneStep({
           <button type="button" className="h-10 px-5 rounded-xl border border-outline-variant font-semibold" onClick={onImportMore}>
             ⊕ Import more {areaName} parts
           </button>
-          <button type="button" className="h-10 px-5 rounded-xl text-secondary font-semibold" onClick={onBackToAreas}>
+          <PartsButton variant="secondary" className="h-10 px-5 rounded-xl" onClick={onBackToAreas}>
             Back to areas
-          </button>
+          </PartsButton>
         </div>
         <p className="text-[11px] font-mono text-outline pt-2 border-t border-outline-variant/30">
           LEDGER HASH: 0x{shaPrefix || "—"} · SIGNED: {signedBy ?? "Staff"} ({signedRole ?? "catalog editor"})
@@ -176,13 +177,13 @@ export function ImportDoneStep({
       ) : null}
 
       <div className="flex flex-wrap gap-2 text-sm">
-        <button type="button" className="font-semibold text-primary" onClick={onLedger}>
+        <PartsButton variant="secondary" onClick={onLedger}>
           View Import Ledger (Batch #{batchCode})
-        </button>
+        </PartsButton>
         {onUndoIngestion ? (
-          <button type="button" className="font-semibold text-error" onClick={onUndoIngestion}>
+          <PartsButton variant="danger" onClick={onUndoIngestion}>
             Revert / Undo Ingestion
-          </button>
+          </PartsButton>
         ) : null}
       </div>
     </div>

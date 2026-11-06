@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+
+<html class="h-full" lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_dashboard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{"colors":{"on-secondary-container":"#5c647a","error":"#ba1a1a","on-tertiary":"#ffffff","outline-variant":"#c3c6d7","on-tertiary-container":"#d2d8f6","secondary-fixed":"#dae2fd","on-error":"#ffffff","surface-container-highest":"#e1e1ed","on-tertiary-fixed":"#141b30","outline":"#737686","surface":"#faf8ff","on-surface":"#191b24","primary-container":"#0153dc","tertiary-container":"#575e77","surface-container-high":"#e7e7f3","on-secondary":"#ffffff","on-tertiary-fixed-variant":"#3f465e","on-primary-fixed-variant":"#003ea8","inverse-on-surface":"#f0f0fc","tertiary-fixed-dim":"#bfc5e2","primary-fixed":"#dbe1ff","tertiary-fixed":"#dbe1ff","surface-container-low":"#f3f3ff","surface-variant":"#e1e1ed","on-primary-fixed":"#00174b","surface-dim":"#d9d9e5","surface-tint":"#0053db","secondary":"#565e74","primary":"#003ea9","secondary-container":"#dae2fd","on-background":"#191b24","on-primary-container":"#ced8ff","surface-container":"#ededf9","inverse-primary":"#b4c5ff","secondary-fixed-dim":"#bec6e0","on-surface-variant":"#434655","surface-container-lowest":"#ffffff","surface-bright":"#faf8ff","tertiary":"#40465e","background":"#faf8ff","on-primary":"#ffffff","on-secondary-fixed-variant":"#3f465c","error-container":"#ffdad6","on-secondary-fixed":"#131b2e","on-error-container":"#93000a","primary-fixed-dim":"#b4c5ff","inverse-surface":"#2e3039"},"borderRadius":{"DEFAULT":"0.125rem","lg":"0.25rem","xl":"0.5rem","full":"0.75rem"},"spacing":{"gutter":"1rem","space-lg":"1rem","space-xs":"0.25rem","space-sm":"0.5rem","space-xl":"1.5rem","margin":"1.5rem","margin-panel":"1rem","gutter-dense":"0.5rem","space-md":"0.75rem"},"fontFamily":{"headline-xl":["Inter"],"label-md":["Inter"],"mono-sm":["JetBrains Mono"],"body-md":["Inter"],"headline-md":["Inter"],"mono-md":["JetBrains Mono"],"headline-lg":["Inter"],"mono-lg":["JetBrains Mono"],"label-xs":["Inter"],"body-sm":["Inter"]},"fontSize":{"headline-xl":["24px",{"lineHeight":"32px","letterSpacing":"-0.02em","fontWeight":"600"}],"label-md":["12px",{"lineHeight":"16px","letterSpacing":"0.01em","fontWeight":"500"}],"mono-sm":["11px",{"lineHeight":"14px","letterSpacing":"0.02em","fontWeight":"400"}],"body-md":["14px",{"lineHeight":"20px","letterSpacing":"0","fontWeight":"400"}],"headline-md":["16px",{"lineHeight":"24px","letterSpacing":"-0.01em","fontWeight":"600"}],"mono-md":["12px",{"lineHeight":"16px","letterSpacing":"0","fontWeight":"500"}],"headline-lg":["20px",{"lineHeight":"28px","letterSpacing":"-0.015em","fontWeight":"600"}],"mono-lg":["14px",{"lineHeight":"20px","letterSpacing":"-0.01em","fontWeight":"500"}],"label-xs":["11px",{"lineHeight":"14px","letterSpacing":"0.04em","fontWeight":"600"}],"body-sm":["13px",{"lineHeight":"18px","letterSpacing":"0","fontWeight":"400"}]}}}};</script></head><body class="bg-background font-body-md text-on-surface antialiased"><aside class="fixed top-0 bottom-0 left-0 w-64 bg-[#0b1120] text-slate-300 z-50 flex flex-col justify-between select-none"><div class="flex flex-col h-full overflow-hidden"><div class="h-14 px-4 flex items-center gap-2.5 shrink-0 bg-[#0b1120]"><div class="w-7 h-7 rounded bg-primary-container flex items-center justify-center shrink-0"><span class="material-symbols-outlined text-white text-[18px]">hub</span></div><div class="flex flex-col min-w-0"><span class="font-headline-md text-headline-md text-white tracking-tight truncate">Dominion</span><span class="font-label-xs text-[10px] text-slate-400 tracking-wider uppercase truncate">Roam Admin Console</span></div></div><div class="flex-1 overflow-y-auto px-3 py-3 space-y-4"><nav class="space-y-4" data-active-classes="bg-primary-container text-white font-semibold"><div class="space-y-1"><div class="px-2 py-1 font-label-xs text-label-xs text-slate-300 uppercase tracking-wider font-semibold">Master Data</div><a class="flex items-center h-8 px-2.5 rounded text-slate-400 hover:bg-slate-800 hover:text-white transition-colors gap-2.5" data-path="overview" href="#"><span class="material-symbols-outlined text-[18px]">dashboard</span><span class="font-body-sm text-body-sm">Overview</span></a><a class="flex items-center h-8 px-2.5 rounded text-slate-400 hover:bg-slate-800 hover:text-white transition-colors gap-2.5" data-path="vehicles" href="#"><span class="material-symbols-outlined text-[18px]">directions_car</span><span class="font-body-sm text-body-sm">Vehicles</span></a><a class="flex items-center h-8 px-2.5 rounded text-slate-400 hover:bg-slate-800 hover:text-white transition-colors gap-2.5" data-path="places-and-maps" href="#"><span class="material-symbols-outlined text-[18px]">map</span><span class="font-body-sm text-body-sm">Places and Maps</span></a><a class="flex items-center h-8 px-2.5 rounded text-slate-400 hover:bg-slate-800 hover:text-white transition-colors gap-2.5" data-path="fuel" href="#"><span class="material-symbols-outlined text-[18px]">local_gas_station</span><span class="font-body-sm text-body-sm">Fuel</span></a><a class="flex items-center h-8 px-2.5 rounded text-slate-400 hover:bg-slate-800 hover:text-white transition-colors gap-2.5" data-path="tolls" href="#"><span class="material-symbols-outlined text-[18px]">toll</span><span class="font-body-sm text-body-sm">Tolls</span></a><a class="flex items-center h-8 px-2.5 rounded text-slate-400 hover:bg-slate-800 hover:text-white transition-colors gap-2.5" data-path="tax-and-vendors" href="#"><span class="material-symbols-outlined text-[18px]">receipt_long</span><span class="font-body-sm text-body-sm">Tax and Vendors</span></a></div><div class="space-y-1"><div class="px-2 py-1 font-label-xs text-label-xs text-slate-300 uppercase tracking-wider font-semibold">Engines</div><a class="flex items-center h-8 px-2.5 rounded text-slate-400 hover:bg-slate-800 hover:text-white transition-colors gap-2.5" data-path="fuel-brain" href="#"><span class="material-symbols-outlined text-[18px]">neurology</span><span class="font-body-sm text-body-sm">Fuel Brain</span></a><a class="flex items-center h-8 px-2.5 rounded text-slate-400 hover:bg-slate-800 hover:text-white transition-colors gap-2.5" data-path="toll-brain" href="#"><span class="material-symbols-outlined text-[18px]">alt_route</span><span class="font-body-sm text-body-sm">Toll Brain</span></a><a class="flex items-center h-8 px-2.5 rounded text-slate-400 hover:bg-slate-800 hover:text-white transition-colors gap-2.5" data-path="matching-brain" href="#"><span class="material-symbols-outlined text-[18px]">schema</span><span class="font-body-sm text-body-sm">Matching Brain</span></a></div><div class="space-y-1"><div class="px-2 py-1 font-label-xs text-label-xs text-slate-300 uppercase tracking-wider font-semibold">Distribution</div><a class="flex items-center h-8 px-2.5 rounded text-slate-400 hover:bg-slate-800 hover:text-white transition-colors gap-2.5" data-path="apps" href="#"><span class="material-symbols-outlined text-[18px]">phone_iphone</span><span class="font-body-sm text-body-sm">Apps</span></a><a class="flex items-center h-8 px-2.5 rounded text-slate-400 hover:bg-slate-800 hover:text-white transition-colors gap-2.5" data-path="data-api" href="#"><span class="material-symbols-outlined text-[18px]">api</span><span class="font-body-sm text-body-sm">Data API</span></a><a class="flex items-center h-8 px-2.5 rounded text-slate-400 hover:bg-slate-800 hover:text-white transition-colors gap-2.5" data-path="change-requests" href="#"><span class="material-symbols-outlined text-[18px]">published_with_changes</span><span class="font-body-sm text-body-sm">Change requests</span></a></div><div class="space-y-1"><div class="px-2 py-1 font-label-xs text-label-xs text-slate-300 uppercase tracking-wider font-semibold">Platform</div><a class="flex items-center h-8 px-2.5 rounded text-slate-400 hover:bg-slate-800 hover:text-white transition-colors gap-2.5" data-path="staff-and-roles" href="#"><span class="material-symbols-outlined text-[18px]">badge</span><span class="font-body-sm text-body-sm">Staff and roles</span></a><a class="flex items-center h-8 px-2.5 rounded text-slate-400 hover:bg-slate-800 hover:text-white transition-colors gap-2.5" data-path="activity-log" href="#"><span class="material-symbols-outlined text-[18px]">history</span><span class="font-body-sm text-body-sm">Activity log</span></a><a class="flex items-center h-8 px-2.5 rounded text-slate-400 hover:bg-slate-800 hover:text-white transition-colors gap-2.5" data-path="platform-ops" href="#"><span class="material-symbols-outlined text-[18px]">settings_input_component</span><span class="font-body-sm text-body-sm">Platform Ops</span></a><a class="flex items-center h-8 px-2.5 rounded text-slate-400 hover:bg-slate-800 hover:text-white transition-colors gap-2.5" data-path="global-settings" href="#"><span class="material-symbols-outlined text-[18px]">tune</span><span class="font-body-sm text-body-sm">Global settings</span></a></div><div class="space-y-1"><div class="px-2 py-1 font-label-xs text-label-xs text-slate-300 uppercase tracking-wider font-semibold">Back Office</div><a class="flex items-center h-8 px-2.5 rounded text-slate-400 hover:bg-slate-800 hover:text-white transition-colors gap-2.5" data-path="gct-registrations" href="#"><span class="material-symbols-outlined text-[18px]">domain_verification</span><span class="font-body-sm text-body-sm">GCT registrations</span></a><a class="flex items-center h-8 px-2.5 rounded text-slate-400 hover:bg-slate-800 hover:text-white transition-colors gap-2.5" data-path="ledger" href="#"><span class="material-symbols-outlined text-[18px]">account_balance_wallet</span><span class="font-body-sm text-body-sm">Ledger</span></a><a class="flex items-center h-8 px-2.5 rounded text-slate-400 hover:bg-slate-800 hover:text-white transition-colors gap-2.5" data-path="remittance" href="#"><span class="material-symbols-outlined text-[18px]">payments</span><span class="font-body-sm text-body-sm">Remittance</span></a></div></nav></div><div class="h-11 px-4 flex items-center bg-[#070b14] shrink-0"><div class="flex items-center gap-2 font-mono-sm text-mono-sm text-slate-400"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span><span>KGN-DC-01</span><span class="text-slate-400">·</span><span class="text-slate-300">JMD READY</span></div></div></div></aside><div class="pl-64"><header class="fixed top-0 left-64 right-0 h-14 bg-surface-container-lowest shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-40 flex items-center justify-between px-6"><div class="flex items-center w-full max-w-md"><div class="relative w-full flex items-center"><span class="material-symbols-outlined absolute left-2.5 text-on-surface-variant text-[18px]">search</span><input class="w-full h-8 pl-8 pr-12 bg-surface text-on-surface font-body-sm text-body-sm rounded outline-none placeholder:text-on-surface-variant focus:bg-surface-container-lowest" placeholder="Search entities, engines, routes…" type="text"/><div class="absolute right-2 px-1.5 py-0.5 rounded bg-surface-container font-mono-sm text-[10px] text-on-surface-variant">⌘K</div></div></div><div class="flex items-center gap-3"><button class="w-8 h-8 rounded flex items-center justify-center text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors" title="Toggle theme" type="button"><span class="material-symbols-outlined text-[18px]">dark_mode</span></button><div class="flex items-center gap-2 pl-2 pr-3 py-1 rounded-full bg-surface-container-low"><div class="w-6 h-6 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[14px]">person</span></div><div class="flex items-center gap-1 font-body-sm text-body-sm font-medium text-on-surface"><span class="font-mono-md text-mono-md font-semibold">DT</span><span class="text-on-surface-variant">·</span><span>Deeki T</span><span class="text-on-surface-variant">·</span><span class="text-on-surface-variant">Owner</span></div></div><button class="w-8 h-8 rounded flex items-center justify-center text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors" title="Sign out" type="button"><span class="material-symbols-outlined text-[18px]">logout</span></button></div></header><main class="relative pt-14 bg-background min-h-screen"><div class="w-full px-margin pt-margin-panel pb-12"><div class="mb-6"><div class="font-mono-sm text-mono-sm uppercase text-on-surface-variant tracking-wider mb-1.5 flex items-center gap-1.5"><span>DOMINION</span><span>›</span><span>MASTER DATA</span><span>›</span><span>VEHICLES</span><span>›</span><span class="text-on-surface font-medium">MAINTENANCE TEMPLATES</span></div><div class="flex items-baseline justify-between"><h1 class="font-headline-xl text-headline-xl text-on-surface tracking-tight">Maintenance templates</h1></div><p class="font-body-md text-body-md text-on-surface-variant mt-1">How often each part is serviced, for which cars, and why.</p></div><div class="mb-6 bg-surface-container-low p-1 rounded-lg inline-flex items-center gap-1"><nav class="flex items-center gap-1" data-active-classes="bg-surface-container-lowest text-on-surface font-semibold shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><a class="flex items-center gap-1.5 px-3 py-1.5 rounded text-on-surface-variant hover:text-on-surface transition-colors font-body-sm text-body-sm" data-path="part-schedules" href="#"><span>Part schedules</span><span class="font-mono-sm text-[10px] px-1.5 py-0.2 rounded-full bg-surface-container text-on-surface-variant">16</span></a><a aria-current="page" class="flex items-center gap-1.5 px-3 py-1.5 rounded transition-colors bg-surface-container-lowest text-on-surface font-semibold shadow-[0_1px_8px_rgba(0,0,0,0.04)]" data-path="service-packages" href="#"><span>Service packages</span><span class="font-mono-sm text-[10px] px-1.5 py-0.2 rounded-full bg-surface-container text-on-surface-variant">5</span></a><a class="flex items-center gap-1.5 px-3 py-1.5 rounded text-on-surface-variant hover:text-on-surface transition-colors font-body-sm text-body-sm" data-path="part-types" href="#"><span>Part types</span><span class="font-mono-sm text-[10px] px-1.5 py-0.2 rounded-full bg-surface-container text-on-surface-variant">49</span></a><a class="flex items-center gap-1.5 px-3 py-1.5 rounded text-on-surface-variant hover:text-on-surface transition-colors font-body-sm text-body-sm" data-path="review-list" href="#"><span>Review list</span><span class="font-mono-sm text-[10px] px-1.5 py-0.2 rounded-full bg-amber-100 text-amber-800 font-semibold">1</span></a><a class="flex items-center gap-1.5 px-3 py-1.5 rounded text-on-surface-variant hover:text-on-surface transition-colors font-body-sm text-body-sm" data-path="history" href="#"><span>History</span></a></nav></div><div class="w-full"><div class="flex flex-col w-full relative">
+<!-- Active Tab State Sync in Parent Shell Context -->
+<div aria-hidden="true" class="sr-only">Active context: Maintenance Templates &gt; Service packages</div>
+<!-- Ambient Content Underneath the Modal Drawer -->
+<div class="w-full grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-gutter opacity-45 pointer-events-none select-none filter blur-[0.4px]">
+<!-- Service Package Card 1 (Basic Service) -->
+<div class="bg-surface-container-lowest rounded-xl p-space-xl shadow-sm flex flex-col justify-between">
+<div>
+<div class="flex items-start justify-between mb-space-md">
+<div>
+<div class="font-headline-lg text-headline-lg text-on-surface">Basic Service</div>
+<div class="font-mono-md text-mono-md text-primary mt-space-xs">Every 5,000 km · 3 months</div>
+</div>
+<span class="px-space-sm py-0.5 rounded-full bg-surface-container text-on-surface-variant font-mono-sm text-mono-sm">6 parts</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-space-lg">Standard preventative check covering lubrication, tire pressure validation, fluid top-offs, and critical system inspections.</p>
+<div class="space-y-space-xs pt-space-xs">
+<div class="flex items-center justify-between text-on-surface font-body-sm text-body-sm py-1">
+<span class="flex items-center gap-2"><span class="material-symbols-outlined text-[16px] text-on-surface-variant">opacity</span>Engine oil</span>
+<span class="font-mono-sm text-mono-sm text-on-surface-variant">5,000 km</span>
+</div>
+<div class="flex items-center justify-between text-on-surface font-body-sm text-body-sm py-1">
+<span class="flex items-center gap-2"><span class="material-symbols-outlined text-[16px] text-on-surface-variant">tire_repair</span>Tyre pressure check</span>
+<span class="font-mono-sm text-mono-sm text-on-surface-variant">10,000 km</span>
+</div>
+<div class="flex items-center justify-between text-on-surface font-body-sm text-body-sm py-1">
+<span class="flex items-center gap-2"><span class="material-symbols-outlined text-[16px] text-on-surface-variant">sync_alt</span>Rotate tyres</span>
+<span class="font-mono-sm text-mono-sm text-on-surface-variant">10,000 km</span>
+</div>
+</div>
+</div>
+<div class="pt-space-lg mt-space-lg flex items-center justify-between">
+<span class="font-mono-sm text-mono-sm text-on-surface-variant">Active across 142 vehicles</span>
+<button class="h-8 px-space-md rounded bg-surface-container text-on-surface font-body-sm text-body-sm font-medium" type="button">Edit package</button>
+</div>
+</div>
+<!-- Service Package Card 2 (Intermediate Service) -->
+<div class="bg-surface-container-lowest rounded-xl p-space-xl shadow-sm flex flex-col justify-between">
+<div>
+<div class="flex items-start justify-between mb-space-md">
+<div>
+<div class="font-headline-lg text-headline-lg text-on-surface">Intermediate Service</div>
+<div class="font-mono-md text-mono-md text-primary mt-space-xs">Every 20,000 km · 12 months</div>
+</div>
+<span class="px-space-sm py-0.5 rounded-full bg-surface-container text-on-surface-variant font-mono-sm text-mono-sm">11 parts</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-space-lg">Full powertrain inspection, air filtration renewals, front brake pad servicing, and battery impedance diagnostics.</p>
+<div class="space-y-space-xs pt-space-xs">
+<div class="flex items-center justify-between text-on-surface font-body-sm text-body-sm py-1">
+<span class="flex items-center gap-2"><span class="material-symbols-outlined text-[16px] text-on-surface-variant">air</span>Cabin filter</span>
+<span class="font-mono-sm text-mono-sm text-on-surface-variant">20,000 km</span>
+</div>
+<div class="flex items-center justify-between text-on-surface font-body-sm text-body-sm py-1">
+<span class="flex items-center gap-2"><span class="material-symbols-outlined text-[16px] text-on-surface-variant">filter_alt</span>Air intake filter</span>
+<span class="font-mono-sm text-mono-sm text-on-surface-variant">20,000 km</span>
+</div>
+<div class="flex items-center justify-between text-on-surface font-body-sm text-body-sm py-1">
+<span class="flex items-center gap-2"><span class="material-symbols-outlined text-[16px] text-on-surface-variant">disc_full</span>Front brake pads</span>
+<span class="font-mono-sm text-mono-sm text-on-surface-variant">30,000 km</span>
+</div>
+</div>
+</div>
+<div class="pt-space-lg mt-space-lg flex items-center justify-between">
+<span class="font-mono-sm text-mono-sm text-on-surface-variant">Active across 88 vehicles</span>
+<button class="h-8 px-space-md rounded bg-surface-container text-on-surface font-body-sm text-body-sm font-medium" type="button">Edit package</button>
+</div>
+</div>
+<!-- Service Package Card 3 (Major Service) -->
+<div class="bg-surface-container-lowest rounded-xl p-space-xl shadow-sm flex flex-col justify-between">
+<div>
+<div class="flex items-start justify-between mb-space-md">
+<div>
+<div class="font-headline-lg text-headline-lg text-on-surface">Major Service</div>
+<div class="font-mono-md text-mono-md text-primary mt-space-xs">Every 40,000 km · 24 months</div>
+</div>
+<span class="px-space-sm py-0.5 rounded-full bg-surface-container text-on-surface-variant font-mono-sm text-mono-sm">18 parts</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-space-lg">Comprehensive workshop overhaul replacing transmission fluids, spark plugs, hydraulic actuators, and differential oils.</p>
+<div class="space-y-space-xs pt-space-xs">
+<div class="flex items-center justify-between text-on-surface font-body-sm text-body-sm py-1">
+<span class="flex items-center gap-2"><span class="material-symbols-outlined text-[16px] text-on-surface-variant">electric_bolt</span>Spark plugs</span>
+<span class="font-mono-sm text-mono-sm text-on-surface-variant">40,000 km</span>
+</div>
+<div class="flex items-center justify-between text-on-surface font-body-sm text-body-sm py-1">
+<span class="flex items-center gap-2"><span class="material-symbols-outlined text-[16px] text-on-surface-variant">water_drop</span>Transmission fluid</span>
+<span class="font-mono-sm text-mono-sm text-on-surface-variant">40,000 km</span>
+</div>
+<div class="flex items-center justify-between text-on-surface font-body-sm text-body-sm py-1">
+<span class="flex items-center gap-2"><span class="material-symbols-outlined text-[16px] text-on-surface-variant">tune</span>Drive belt check</span>
+<span class="font-mono-sm text-mono-sm text-on-surface-variant">40,000 km</span>
+</div>
+</div>
+</div>
+<div class="pt-space-lg mt-space-lg flex items-center justify-between">
+<span class="font-mono-sm text-mono-sm text-on-surface-variant">Active across 142 vehicles</span>
+<button class="h-8 px-space-md rounded bg-surface-container text-on-surface font-body-sm text-body-sm font-medium" type="button">Edit package</button>
+</div>
+</div>
+</div>
+<!-- Scrim / Dimmed Backdrop Overlay -->
+<div class="fixed inset-0 top-14 left-64 bg-inverse-surface/40 z-50 backdrop-blur-[2px] transition-opacity duration-200" id="drawerBackdrop"></div>
+<!-- Pinned Right Drawer (560px wide, runs top to bottom below top bar) -->
+<aside aria-label="Edit Service Package Drawer" class="fixed top-14 bottom-0 right-0 w-[560px] bg-surface-container-lowest z-50 shadow-2xl flex flex-col overflow-hidden transition-transform duration-300" id="serviceDrawer">
+<!-- Drawer Header -->
+<div class="h-16 px-space-xl flex items-center justify-between bg-surface-container-lowest shrink-0 shadow-sm">
+<div class="flex items-baseline gap-2">
+<h2 class="font-headline-lg text-headline-lg text-on-surface">Edit package</h2>
+<span class="text-on-surface-variant font-body-md text-body-md">·</span>
+<span class="font-headline-lg text-headline-lg text-primary font-semibold">Basic Service</span>
+</div>
+<button class="w-8 h-8 rounded flex items-center justify-center text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors" onclick="document.getElementById('serviceDrawer').classList.add('translate-x-full'); document.getElementById('drawerBackdrop').classList.add('hidden');" title="Close drawer" type="button">
+<span class="material-symbols-outlined text-[20px]">close</span>
+</button>
+</div>
+<!-- Scrollable Drawer Body Content -->
+<div class="flex-1 overflow-y-auto px-space-xl py-space-xl space-y-space-xl">
+<!-- Section: Visit rhythm -->
+<section class="space-y-space-md">
+<div>
+<h3 class="font-headline-md text-headline-md text-on-surface">Visit rhythm</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">How often this garage visit is booked.</p>
+</div>
+<div class="grid grid-cols-2 gap-space-md items-end">
+<div class="space-y-1.5">
+<label class="block font-label-md text-label-md text-on-surface-variant" for="rhythm-km">Interval distance</label>
+<div class="relative flex items-center">
+<span class="absolute left-3 font-body-sm text-body-sm text-on-surface-variant select-none">Every</span>
+<input class="w-full h-9 pl-14 pr-11 bg-surface-container-lowest text-on-surface font-mono-md text-mono-md font-semibold rounded shadow-sm focus:bg-surface-container-lowest focus:ring-2 focus:ring-primary/20 outline-none transition-all text-left" id="rhythm-km" type="text" value="5,000"/>
+<span class="absolute right-3 font-mono-sm text-mono-sm text-on-surface-variant select-none">km</span>
+</div>
+</div>
+<div class="space-y-1.5">
+<label class="block font-label-md text-label-md text-on-surface-variant" for="rhythm-months">Interval calendar</label>
+<div class="relative flex items-center">
+<span class="absolute left-3 font-body-sm text-body-sm text-on-surface-variant select-none">or every</span>
+<input class="w-full h-9 pl-20 pr-16 bg-surface-container-lowest text-on-surface font-mono-md text-mono-md font-semibold rounded shadow-sm focus:bg-surface-container-lowest focus:ring-2 focus:ring-primary/20 outline-none transition-all text-left" id="rhythm-months" type="text" value="3"/>
+<span class="absolute right-3 font-mono-sm text-mono-sm text-on-surface-variant select-none">months</span>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-1 font-body-sm text-body-sm text-on-surface-variant italic">
+<span class="material-symbols-outlined text-[16px] not-italic">schedule</span>
+<span>whichever comes first</span>
+</div>
+</section>
+<!-- Info Box: Primary Light Container -->
+<section class="p-space-lg rounded-xl bg-primary-fixed text-on-primary-fixed shadow-sm">
+<div class="flex items-start gap-space-md">
+<span class="material-symbols-outlined text-primary-container text-[20px] shrink-0 mt-0.5">info</span>
+<div class="font-body-sm text-body-sm space-y-1">
+<p class="leading-snug text-on-primary-fixed">Packages don't change how often a part is due. To change that, edit the part's schedule.</p>
+<a class="inline-flex items-center gap-1 font-body-sm text-body-sm font-semibold text-primary-container hover:underline" href="#">
+<span>Open part schedules</span>
+<span class="material-symbols-outlined text-[14px]">arrow_forward</span>
+</a>
+</div>
+</div>
+</section>
+<!-- Section: Parts done at this visit -->
+<section class="space-y-space-md">
+<div class="flex items-baseline justify-between">
+<div>
+<h3 class="font-headline-md text-headline-md text-on-surface">Parts done at this visit</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">Work order scope assembled for this service cycle.</p>
+</div>
+<span class="font-mono-sm text-mono-sm text-on-surface-variant bg-surface-container-low px-2 py-0.5 rounded">6 assigned</span>
+</div>
+<!-- Add a part search input -->
+<div class="relative flex items-center shadow-sm">
+<span class="material-symbols-outlined absolute left-3 text-on-surface-variant text-[18px]">add</span>
+<input class="w-full h-9 pl-9 pr-9 bg-surface-container-low text-on-surface font-body-sm text-body-sm rounded outline-none placeholder:text-on-surface-variant focus:bg-surface-container-lowest transition-colors" placeholder="Add a part…" type="text"/>
+<button class="absolute right-2.5 w-5 h-5 flex items-center justify-center text-on-surface-variant hover:text-on-surface" title="Browse catalog" type="button">
+<span class="material-symbols-outlined text-[16px]">search</span>
+</button>
+</div>
+<!-- Parts Rows Group -->
+<div class="space-y-1 bg-surface-container-low p-1.5 rounded-xl">
+<!-- Row 1: Engine oil -->
+<div class="group bg-surface-container-lowest rounded-lg px-space-md py-space-sm flex items-center justify-between transition-colors hover:shadow-sm">
+<div class="flex items-center gap-3 min-w-0 pr-2">
+<input checked="" class="w-4 h-4 rounded text-primary-container focus:ring-0 accent-[#0153dc] cursor-pointer" type="checkbox"/>
+<div class="w-7 h-7 rounded bg-surface-container flex items-center justify-center shrink-0 text-on-surface-variant">
+<span class="material-symbols-outlined text-[17px]">water_drop</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-body-sm text-body-sm font-medium text-on-surface truncate">Engine oil</span>
+<span class="font-label-xs text-label-xs text-on-surface-variant truncate">Oil and filter change</span>
+</div>
+</div>
+<div class="flex items-center gap-3 shrink-0">
+<span class="font-mono-sm text-mono-sm text-on-surface-variant">Every 5,000 km or 3 months</span>
+<!-- Toggle Switch: ON -->
+<label class="relative inline-flex items-center cursor-pointer" title="Required at this visit">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-8 h-4 bg-surface-container-highest peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3.5 after:transition-all peer-checked:bg-primary-container"></div>
+</label>
+<!-- Hover Trash Icon -->
+<button class="w-6 h-6 rounded flex items-center justify-center text-on-surface-variant/40 hover:text-error hover:bg-error-container/30 transition-colors" title="Remove part" type="button">
+<span class="material-symbols-outlined text-[16px]">delete</span>
+</button>
+</div>
+</div>
+<!-- Row 2: Tyre pressure check -->
+<div class="group bg-surface-container-lowest rounded-lg px-space-md py-space-sm flex items-center justify-between transition-colors hover:shadow-sm">
+<div class="flex items-center gap-3 min-w-0 pr-2">
+<input checked="" class="w-4 h-4 rounded text-primary-container focus:ring-0 accent-[#0153dc] cursor-pointer" type="checkbox"/>
+<div class="w-7 h-7 rounded bg-surface-container flex items-center justify-center shrink-0 text-on-surface-variant">
+<span class="material-symbols-outlined text-[17px]">tire_repair</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-body-sm text-body-sm font-medium text-on-surface truncate">Tyre pressure check</span>
+<span class="font-label-xs text-label-xs text-on-surface-variant truncate">Pressure and tread</span>
+</div>
+</div>
+<div class="flex items-center gap-3 shrink-0">
+<span class="font-mono-sm text-mono-sm text-on-surface-variant">Every 10,000 km or 6 months</span>
+<!-- Toggle Switch: ON -->
+<label class="relative inline-flex items-center cursor-pointer" title="Required at this visit">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-8 h-4 bg-surface-container-highest peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3.5 after:transition-all peer-checked:bg-primary-container"></div>
+</label>
+<!-- Hover Trash Icon -->
+<button class="w-6 h-6 rounded flex items-center justify-center text-on-surface-variant/40 hover:text-error hover:bg-error-container/30 transition-colors" title="Remove part" type="button">
+<span class="material-symbols-outlined text-[16px]">delete</span>
+</button>
+</div>
+</div>
+<!-- Row 3: Rotate tyres -->
+<div class="group bg-surface-container-lowest rounded-lg px-space-md py-space-sm flex items-center justify-between transition-colors hover:shadow-sm">
+<div class="flex items-center gap-3 min-w-0 pr-2">
+<input checked="" class="w-4 h-4 rounded text-primary-container focus:ring-0 accent-[#0153dc] cursor-pointer" type="checkbox"/>
+<div class="w-7 h-7 rounded bg-surface-container flex items-center justify-center shrink-0 text-on-surface-variant">
+<span class="material-symbols-outlined text-[17px]">sync_alt</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-body-sm text-body-sm font-medium text-on-surface truncate">Rotate tyres</span>
+<span class="font-label-xs text-label-xs text-on-surface-variant truncate">Axle rotation</span>
+</div>
+</div>
+<div class="flex items-center gap-3 shrink-0">
+<span class="font-mono-sm text-mono-sm text-on-surface-variant">Every 10,000 km or 6 months</span>
+<!-- Toggle Switch: ON -->
+<label class="relative inline-flex items-center cursor-pointer" title="Required at this visit">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-8 h-4 bg-surface-container-highest peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3.5 after:transition-all peer-checked:bg-primary-container"></div>
+</label>
+<!-- Hover Trash Icon -->
+<button class="w-6 h-6 rounded flex items-center justify-center text-on-surface-variant/40 hover:text-error hover:bg-error-container/30 transition-colors" title="Remove part" type="button">
+<span class="material-symbols-outlined text-[16px]">delete</span>
+</button>
+</div>
+</div>
+<!-- Row 4: Fluids top-up -->
+<div class="group bg-surface-container-lowest rounded-lg px-space-md py-space-sm flex items-center justify-between transition-colors hover:shadow-sm">
+<div class="flex items-center gap-3 min-w-0 pr-2">
+<input checked="" class="w-4 h-4 rounded text-primary-container focus:ring-0 accent-[#0153dc] cursor-pointer" type="checkbox"/>
+<div class="w-7 h-7 rounded bg-surface-container flex items-center justify-center shrink-0 text-on-surface-variant">
+<span class="material-symbols-outlined text-[17px]">opacity</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-body-sm text-body-sm font-medium text-on-surface truncate">Fluids top-up</span>
+<span class="font-label-xs text-label-xs text-on-surface-variant truncate">Washer and coolant level</span>
+</div>
+</div>
+<div class="flex items-center gap-3 shrink-0">
+<span class="font-mono-sm text-mono-sm text-on-surface-variant">Every 10,000 km or 6 months</span>
+<!-- Toggle Switch: ON -->
+<label class="relative inline-flex items-center cursor-pointer" title="Required at this visit">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-8 h-4 bg-surface-container-highest peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3.5 after:transition-all peer-checked:bg-primary-container"></div>
+</label>
+<!-- Hover Trash Icon -->
+<button class="w-6 h-6 rounded flex items-center justify-center text-on-surface-variant/40 hover:text-error hover:bg-error-container/30 transition-colors" title="Remove part" type="button">
+<span class="material-symbols-outlined text-[16px]">delete</span>
+</button>
+</div>
+</div>
+<!-- Row 5: Brake fluid -->
+<div class="group bg-surface-container-lowest rounded-lg px-space-md py-space-sm flex items-center justify-between transition-colors hover:shadow-sm">
+<div class="flex items-center gap-3 min-w-0 pr-2">
+<input checked="" class="w-4 h-4 rounded text-primary-container focus:ring-0 accent-[#0153dc] cursor-pointer" type="checkbox"/>
+<div class="w-7 h-7 rounded bg-surface-container flex items-center justify-center shrink-0 text-on-surface-variant">
+<span class="material-symbols-outlined text-[17px]">album</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-body-sm text-body-sm font-medium text-on-surface truncate">Brake fluid</span>
+<span class="font-label-xs text-label-xs text-on-surface-variant truncate">DOT fluid flush</span>
+</div>
+</div>
+<div class="flex items-center gap-2.5 shrink-0">
+<span class="font-mono-sm text-mono-sm text-on-surface-variant">Every 40,000 km or 24 months</span>
+<span class="px-1.5 py-0.5 rounded font-label-xs text-[10px] uppercase font-semibold bg-surface-container text-on-surface-variant select-none">Check only</span>
+<!-- Toggle Switch: ON -->
+<label class="relative inline-flex items-center cursor-pointer ml-0.5" title="Required at this visit">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-8 h-4 bg-surface-container-highest peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3.5 after:transition-all peer-checked:bg-primary-container"></div>
+</label>
+<!-- Hover Trash Icon -->
+<button class="w-6 h-6 rounded flex items-center justify-center text-on-surface-variant/40 hover:text-error hover:bg-error-container/30 transition-colors" title="Remove part" type="button">
+<span class="material-symbols-outlined text-[16px]">delete</span>
+</button>
+</div>
+</div>
+<!-- Row 6: Coolant flush -->
+<div class="group bg-surface-container-lowest rounded-lg px-space-md py-space-sm flex items-center justify-between transition-colors hover:shadow-sm">
+<div class="flex items-center gap-3 min-w-0 pr-2">
+<input checked="" class="w-4 h-4 rounded text-primary-container focus:ring-0 accent-[#0153dc] cursor-pointer" type="checkbox"/>
+<div class="w-7 h-7 rounded bg-surface-container flex items-center justify-center shrink-0 text-on-surface-variant">
+<span class="material-symbols-outlined text-[17px]">device_thermostat</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-body-sm text-body-sm font-medium text-on-surface truncate">Coolant flush</span>
+<span class="font-label-xs text-label-xs text-on-surface-variant truncate">Radiator coolant renewal</span>
+</div>
+</div>
+<div class="flex items-center gap-2.5 shrink-0">
+<span class="font-mono-sm text-mono-sm text-on-surface-variant">Every 100,000 km or 60 months</span>
+<span class="px-1.5 py-0.5 rounded font-label-xs text-[10px] uppercase font-semibold bg-surface-container text-on-surface-variant select-none">Check only</span>
+<!-- Toggle Switch: ON -->
+<label class="relative inline-flex items-center cursor-pointer ml-0.5" title="Required at this visit">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-8 h-4 bg-surface-container-highest peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3.5 after:transition-all peer-checked:bg-primary-container"></div>
+</label>
+<!-- Hover Trash Icon -->
+<button class="w-6 h-6 rounded flex items-center justify-center text-on-surface-variant/40 hover:text-error hover:bg-error-container/30 transition-colors" title="Remove part" type="button">
+<span class="material-symbols-outlined text-[16px]">delete</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Muted Helper Note under Rows 5 and 6 -->
+<div class="flex items-center gap-1.5 px-1 font-body-sm text-body-sm text-on-surface-variant">
+<span class="material-symbols-outlined text-[15px]">verified</span>
+<span>Checked at this visit. Replaced only when its own schedule says so.</span>
+</div>
+</section>
+</div>
+<!-- Sticky Drawer Footer -->
+<div class="h-16 px-space-xl bg-surface-container-lowest shrink-0 shadow-lg flex items-center justify-between">
+<div class="font-body-sm text-body-sm text-on-surface-variant max-w-[240px] leading-tight">
+        Saving a package doesn't move any car's due dates.
+      </div>
+<div class="flex items-center gap-3">
+<button class="h-9 px-space-md rounded bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm text-body-sm font-medium transition-colors" onclick="document.getElementById('serviceDrawer').classList.add('translate-x-full'); document.getElementById('drawerBackdrop').classList.add('hidden');" type="button">
+          Cancel
+        </button>
+<button class="h-9 px-space-xl rounded bg-primary-container hover:bg-primary text-on-primary font-body-sm text-body-sm font-semibold transition-colors shadow-sm flex items-center gap-1.5" type="button">
+<span class="material-symbols-outlined text-[16px]">check</span>
+<span>Save package</span>
+</button>
+</div>
+</div>
+</aside>
+</div>
+<script>
+  (function initActiveTabHighlight() {
+    // Synchronize parent shell header tabs so 'Service packages' is visibly marked active
+    const tabLinks = document.querySelectorAll('header nav a, main nav a[data-path]');
+    tabLinks.forEach(link => {
+      if (link.getAttribute('data-path') === 'service-packages') {
+        link.className = 'flex items-center gap-1.5 px-3 py-1.5 rounded bg-surface-container-lowest text-on-surface font-semibold shadow-[0_1px_8px_rgba(0,0,0,0.04)] font-body-sm text-body-sm';
+      }
+    });
+  })();
+</script></div></div></main></div></body></html>

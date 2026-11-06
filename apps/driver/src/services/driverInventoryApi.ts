@@ -51,6 +51,7 @@ export type DriverCarKitPayload = {
   items?: DriverCarKitItem[];
   extras?: DriverCarKitExtra[];
   openReportCount?: number;
+  fixedUnseenCount?: number;
   lastCheckInAt?: string | null;
   lastSyncedAt?: string | null;
   kitVersionLabel?: string | null;
@@ -145,4 +146,9 @@ export const driverInventoryApi = {
       },
       body: JSON.stringify(body),
     }),
+
+  markReportsSeen: (vehicleId?: string | null) => {
+    const q = vehicleId ? `?vehicle_id=${encodeURIComponent(vehicleId)}` : '';
+    return invFetch(`/driver/reports/seen${q}`, { method: 'POST' });
+  },
 };

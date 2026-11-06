@@ -49,7 +49,47 @@ export type MaintenanceOverviewVehicleRow = {
   servicesAttention: Array<{ taskName: string; kind: "overdue" | "due_soon" }>;
   doNotDrive?: boolean;
   doNotDriveReason?: string | null;
+  dominionScheduleStatus?: "roam_policy" | "maker_manual" | "needs_checking" | "waiting_odometer";
 };
+
+export type DominionScheduleFilter =
+  | "all"
+  | "roam_policy"
+  | "maker_manual"
+  | "needs_checking"
+  | "waiting_odometer";
+
+const SCHEDULE_FILTER_CHIPS: { id: DominionScheduleFilter; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "roam_policy", label: "Roam policy" },
+  { id: "maker_manual", label: "Car maker" },
+  { id: "needs_checking", label: "Needs checking" },
+  { id: "waiting_odometer", label: "Waiting for odometer" },
+];
+
+function dominionScheduleChip(status?: MaintenanceOverviewVehicleRow["dominionScheduleStatus"]) {
+  const s = status ?? "roam_policy";
+  const labels: Record<string, string> = {
+    roam_policy: "Roam policy",
+    maker_manual: "Car maker",
+    needs_checking: "Needs checking",
+    waiting_odometer: "Waiting for odometer",
+  };
+  const styles: Record<string, string> = {
+    roam_policy: "border-indigo-200 bg-indigo-50 text-indigo-800",
+    maker_manual: "border-emerald-200 bg-emerald-50 text-emerald-900",
+    needs_checking: "border-amber-300 bg-amber-50 text-amber-900",
+    waiting_odometer: "border-slate-300 bg-slate-100 text-slate-700",
+  };
+  return (
+    <span
+      className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium ${styles[s] ?? styles.roam_policy}`}
+      data-testid="mm-schedule-status-chip"
+    >
+      {labels[s] ?? labels.roam_policy}
+    </span>
+  );
+}
 
 function vehicleTitle(row: MaintenanceOverviewVehicleRow): string {
   const name = [row.make, row.model, row.year ? `(${row.year})` : ""].filter(Boolean).join(" ").trim();
@@ -110,29 +150,33 @@ export function MaintenanceOverviewPanel({
   onClearDoNotDrive?: (vehicleId: string, reason: string) => Promise<void>;
 }) {
   const [filter, setFilter] = useState("");
+  const [scheduleFilter, setScheduleFilter] = useState<DominionScheduleFilter>("all");
   const [clearTarget, setClearTarget] = useState<MaintenanceOverviewVehicleRow | null>(null);
   const [clearReason, setClearReason] = useState("");
   const [clearing, setClearing] = useState(false);
 
   const filtered = useMemo(() => {
     const q = filter.trim().toLowerCase();
-    if (!q) return items;
     return items.filter((row) => {
+      if (scheduleFilter !== "all" && (row.dominionScheduleStatus ?? "roam_policy") !== scheduleFilter) {
+        return false;
+      }
+      if (!q) return true;
       const blob = [row.licensePlate, row.make, row.model, row.fleetUnitId, row.homeBase]
         .filter(Boolean)
         .join(" ")
         .toLowerCase();
       return blob.includes(q);
     });
-  }, [filter, items]);
+  }, [filter, items, scheduleFilter]);
 
   const syncLabel = orgName?.trim()
     ? `${orgName} Synchronized`
     : "Fleet register synchronized";
 
   return (
-    <div className="flex flex-col w-full max-[390px]:text-sm">
-      <div className="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden flex flex-col mb-6">
+    <div className="flex flex-col w-full max-w-full overflow-x-hidden max-[390px]:text-sm">
+      <div className="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden flex flex-col mb-6 max-w-full">
         <div className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <span className="text-lg font-semibold text-on-surface">Vehicle Service Ledger</span>
@@ -150,7 +194,23 @@ export function MaintenanceOverviewPanel({
             <span className="material-symbols-outlined absolute left-2 top-2 text-outline text-[16px]">search</span>
           </div>
         </div>
-        <div className="overflow-x-auto w-full">
+        <div className="px-4 pb-3 flex flex-wrap gap-2" data-testid="mm-overview-schedule-filters">
+          {SCHEDULE_FILTER_CHIPS.map((chip) => (
+            <button
+              key={chip.id}
+              type="button"
+              onClick={() => setScheduleFilter(chip.id)}
+              className={`rounded-full px-3 py-1 text-xs font-medium ${
+                scheduleFilter === chip.id
+                  ? "bg-primary text-on-primary"
+                  : "bg-surface-container text-on-surface-variant border border-surface-container-high"
+              }`}
+            >
+              {chip.label}
+            </button>
+          ))}
+        </div>
+        <div className="overflow-x-auto w-full max-w-full">
           <table className="w-full text-left border-collapse min-w-[720px]">
             <thead>
               <tr className="bg-surface-container-low text-stitch-secondary text-[11px] uppercase tracking-wider">
@@ -158,6 +218,9 @@ export function MaintenanceOverviewPanel({
                 <th className="py-3 px-3 font-semibold">Plate</th>
                 <th className="py-3 px-3 font-semibold">Odometer</th>
                 <th className="py-3 px-3 font-semibold">Status</th>
+                <th className="py-3 px-3 font-semibold" data-testid="mm-overview-schedule-col">
+                  Dominion schedule status
+                </th>
                 <th className="py-3 px-3 font-semibold">Next due</th>
                 <th className="py-3 px-3 font-semibold">Due items</th>
                 <th className="py-3 px-3 font-semibold">Last service</th>
@@ -167,7 +230,7 @@ export function MaintenanceOverviewPanel({
             <tbody className="text-sm">
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-on-surface-variant">
+                  <td colSpan={9} className="py-12 text-center text-on-surface-variant">
                     No vehicles match this filter.
                   </td>
                 </tr>
@@ -251,6 +314,9 @@ export function MaintenanceOverviewPanel({
                         </div>
                       </td>
                       <td className="py-4 px-3 align-top">
+                        {dominionScheduleChip(row.dominionScheduleStatus)}
+                      </td>
+                      <td className="py-4 px-3 align-top">
                         {needsOdo && !row.nextDueSummary ? (
                           <div className="flex flex-col">
                             <span className="text-sm text-stitch-secondary">
@@ -309,15 +375,24 @@ export function MaintenanceOverviewPanel({
                       </td>
                       <td className="py-4 px-4 align-top text-right">
                         <div className="flex items-center justify-end gap-1 flex-wrap max-[390px]:flex-col max-[390px]:items-stretch">
+                          <button
+                            type="button"
+                            className="bg-surface-container hover:bg-surface-variant text-on-surface font-semibold px-3 py-1 rounded shadow-sm text-sm"
+                            onClick={() => onOpenDueDrawer(row.vehicleId)}
+                          >
+                            View due items
+                          </button>
                           {needsOdo ? (
-                            <button
-                              type="button"
-                              className="bg-primary hover:bg-primary-container text-on-primary font-semibold px-3 py-1 rounded shadow-sm text-sm flex items-center justify-center gap-1"
-                              onClick={() => onLogOdometer(row.vehicleId)}
-                            >
-                              <span className="material-symbols-outlined text-[15px]">speed</span>
-                              Log odometer
-                            </button>
+                            <>
+                              <button
+                                type="button"
+                                className="bg-primary hover:bg-primary-container text-on-primary font-semibold px-3 py-1 rounded shadow-sm text-sm flex items-center justify-center gap-1"
+                                onClick={() => onLogOdometer(row.vehicleId)}
+                              >
+                                <span className="material-symbols-outlined text-[15px]">speed</span>
+                                Log odometer
+                              </button>
+                            </>
                           ) : null}
                           <button
                             type="button"

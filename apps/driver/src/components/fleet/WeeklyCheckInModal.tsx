@@ -25,6 +25,12 @@ import '../car-kit/car-kit.css';
 
 type CheckInStep = 'CAPTURE' | 'ANALYZING' | 'CONFIRM_AI' | 'MANUAL_ENTRY' | 'KIT_CHECK' | 'SUBMITTING';
 
+function isWeeklyKitCaptureMode() {
+  const inventoryE2e = import.meta.env.VITE_INVENTORY_E2E === '1';
+  if (!import.meta.env.DEV && !inventoryE2e) return false;
+  return new URLSearchParams(window.location.search).get('capture') === 'weekly-kit';
+}
+
 interface WeeklyCheckInModalProps {
     isOpen: boolean;
     onClose: () => void;
@@ -74,9 +80,7 @@ export function WeeklyCheckInModal({
         if (isOpen) {
             scanAbortRef.current?.abort();
             scanGenerationRef.current += 1;
-            const captureKit =
-                import.meta.env.DEV &&
-                new URLSearchParams(window.location.search).get('capture') === 'weekly-kit';
+            const captureKit = isWeeklyKitCaptureMode();
             setStep(captureKit ? 'KIT_CHECK' : 'CAPTURE');
             setOdometer('');
             setPhoto(null);
@@ -250,6 +254,26 @@ export function WeeklyCheckInModal({
     };
 
     const completeKitAndSubmit = async (allPresent: boolean) => {
+        if (isWeeklyKitCaptureMode() && allPresent) {
+            setKitBusy(true);
+            setErrorMsg(null);
+            try {
+                await driverInventoryApi.kitCheck(
+                    { allPresent: true, vehicleId },
+                    `kit-check-${crypto.randomUUID()}`,
+                );
+            } catch (err: any) {
+                const msg =
+                    typeof err?.message === 'string' && err.message.trim()
+                        ? err.message
+                        : 'Could not save kit check. Please try again.';
+                setErrorMsg(msg);
+                setStep('KIT_CHECK');
+            } finally {
+                setKitBusy(false);
+            }
+            return;
+        }
         if (!pendingSubmit) return;
         setKitBusy(true);
         setErrorMsg(null);

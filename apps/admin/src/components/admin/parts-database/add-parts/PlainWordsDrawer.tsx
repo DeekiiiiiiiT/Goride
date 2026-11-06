@@ -1,4 +1,5 @@
 // Stitch AP10
+import { PartsButton } from "../PartsButton";
 import { MaterialIcon } from "../import/MaterialIcon";
 
 const VOCAB = [
@@ -26,14 +27,15 @@ export function PlainWordsDrawer({ open, onClose, onViewTaxonomy }: { open: bool
             </div>
             <p className="font-body-sm text-body-sm text-on-surface-variant">A quick guide for fleet operators and catalog editors.</p>
           </div>
-          <button type="button" className="w-8 h-8 rounded bg-surface-container hover:bg-surface-container-high flex items-center justify-center" onClick={onClose} aria-label="Close">
+          <button type="button" className="parts-btn parts-btn--icon" onClick={onClose} aria-label="Close">
             <MaterialIcon name="close" className="text-[18px]" />
           </button>
         </header>
-        <div className="flex-1 overflow-y-auto px-space-xl py-space-lg flex flex-col gap-space-xl bg-surface-bright">
+        <div className="flex-1 overflow-y-auto px-space-xl py-space-lg flex flex-col gap-space-xl bg-surface-bright parts-database-stitch">
           <section className="flex flex-col gap-space-md">
-            <div className="flex items-center justify-between">
-              <span className="font-label-xs text-label-xs uppercase tracking-wider text-outline font-bold">Four key ideas</span>
+            <div className="flex items-center gap-space-sm border-b border-outline-variant/30 pb-2">
+              <span className="font-mono-sm text-mono-sm text-outline uppercase tracking-wider">Section 01</span>
+              <h3 className="font-headline-md text-headline-md text-on-surface font-semibold">Four key ideas</h3>
             </div>
             <div className="flex flex-col gap-space-sm">
               {VOCAB.map((v) => (
@@ -45,8 +47,8 @@ export function PlainWordsDrawer({ open, onClose, onViewTaxonomy }: { open: bool
                     <span className="font-label-md text-label-md text-on-surface font-semibold">{v.title}</span>
                   </div>
                   <p className="font-body-sm text-body-sm text-on-surface font-medium pl-9">{v.body}</p>
-                  <div className="ml-9 mt-1 inline-flex items-center px-2 py-1 rounded bg-surface-container-low font-mono-sm text-mono-sm text-primary">
-                    <span className="font-semibold">{v.example}</span>
+                  <div className="ml-9 mt-1 inline-flex items-center px-2 py-1 rounded bg-surface-container-low font-mono-sm text-mono-sm text-primary font-semibold">
+                    <span>{v.example}</span>
                   </div>
                 </div>
               ))}
@@ -61,13 +63,14 @@ export function PlainWordsDrawer({ open, onClose, onViewTaxonomy }: { open: bool
         </div>
         <div className="px-space-xl py-space-md border-t border-outline-variant/30 flex flex-col gap-2 bg-surface-container-lowest">
           {onViewTaxonomy ? (
-            <button type="button" className="text-left text-primary font-body-sm hover:underline" onClick={onViewTaxonomy}>
+            <PartsButton variant="secondary" className="w-full justify-start" onClick={onViewTaxonomy}>
               View full taxonomy
-            </button>
+            </PartsButton>
           ) : null}
-          <button type="button" className="h-10 rounded-lg bg-primary-container text-on-primary font-label-md font-semibold" onClick={onClose}>
-            Got it
-          </button>
+          <PartsButton variant="primary" className="w-full gap-2" onClick={onClose}>
+            <MaterialIcon name="arrow_back" className="text-[18px]" />
+            Got it, back to adding parts
+          </PartsButton>
         </div>
       </aside>
     </div>

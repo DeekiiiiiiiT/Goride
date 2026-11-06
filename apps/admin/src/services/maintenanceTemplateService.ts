@@ -6,7 +6,7 @@ import type {
 } from "../types/maintenance";
 import { publicAnonKey } from "../utils/supabase/info";
 
-const base = () => `${API_ENDPOINTS.admin}`;
+const base = () => `${API_ENDPOINTS.fleetOps}`;
 
 /** Coerce API JSON `error` field (string or object) to a displayable string. */
 function apiErrorBodyToString(raw: unknown, fallback: string): string {
@@ -217,12 +217,24 @@ export async function listPackageCategories(
 export async function setPackageCategories(
   accessToken: string,
   templateId: string,
-  categoryIds: string[],
+  categoryIdsOrItems: string[] | { categoryId: string; required?: boolean; sortOrder?: number }[],
 ): Promise<MaintenancePackageCategory[]> {
+  const body =
+    categoryIdsOrItems.length > 0 && typeof categoryIdsOrItems[0] === "object"
+      ? {
+          items: (categoryIdsOrItems as { categoryId: string; required?: boolean; sortOrder?: number }[]).map(
+            (x) => ({
+              categoryId: x.categoryId,
+              required: x.required !== false,
+              sortOrder: x.sortOrder ?? 0,
+            }),
+          ),
+        }
+      : { categoryIds: categoryIdsOrItems as string[] };
   const res = await edgeFetch(`${base()}/admin/maintenance-templates/${templateId}/categories`, {
     method: "PUT",
     headers: edgeHeaders(accessToken, "application/json"),
-    body: JSON.stringify({ categoryIds }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(String(await parseError(res)));
   const data = await res.json();

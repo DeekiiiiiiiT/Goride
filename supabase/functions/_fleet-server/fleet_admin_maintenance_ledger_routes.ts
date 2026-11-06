@@ -91,7 +91,7 @@ async function buildByOrgMaintenanceRollup(
   const { data: scheduleRows } = await supabase
     .from("vehicle_component_schedule")
     .select(
-      "organization_id, vehicle_id, next_due_miles, next_due_miles_max, next_due_date, schedule_status, last_performed_miles",
+      "organization_id, vehicle_id, next_due_km, next_due_km_max, next_due_date, schedule_status, last_performed_km",
     );
 
   for (const r of scheduleRows || []) {
@@ -106,12 +106,12 @@ async function buildByOrgMaintenanceRollup(
     }
     // Prefer date; for miles use last_performed as weak floor only when no date
     const proxyOdo =
-      r.last_performed_miles != null && Number.isFinite(Number(r.last_performed_miles))
-        ? Number(r.last_performed_miles)
+      r.last_performed_km != null && Number.isFinite(Number(r.last_performed_km))
+        ? Number(r.last_performed_km)
         : 0;
     const st = analyzeComponentRowStatus(proxyOdo, today, {
-      next_due_miles: r.next_due_miles != null ? Number(r.next_due_miles) : null,
-      next_due_miles_max: r.next_due_miles_max != null ? Number(r.next_due_miles_max) : null,
+      next_due_km: r.next_due_km != null ? Number(r.next_due_km) : null,
+      next_due_km_max: r.next_due_km_max != null ? Number(r.next_due_km_max) : null,
       next_due_date: r.next_due_date != null ? String(r.next_due_date) : null,
       schedule_status: r.schedule_status != null ? String(r.schedule_status) : null,
     });
@@ -122,7 +122,7 @@ async function buildByOrgMaintenanceRollup(
       row.outstandingCount += 1;
     } else if (st === "pending") {
       row.outstandingCount += 1;
-    } else if (r.next_due_date == null && r.next_due_miles != null) {
+    } else if (r.next_due_date == null && r.next_due_km != null) {
       // Miles due unknown without live odo — count as tracked only
     }
   }
@@ -191,7 +191,7 @@ export function registerFleetAdminMaintenanceLedgerRoutes(
         const { data: schedules, error: schErr } = await supabase
           .from("vehicle_component_schedule")
           .select(
-            "id, vehicle_id, category_id, position, last_performed_miles, last_performed_date, next_due_miles, next_due_miles_max, next_due_date, schedule_status, category:maintenance_service_categories(id, code, name)",
+            "id, vehicle_id, category_id, position, last_performed_km, last_performed_date, next_due_km, next_due_km_max, next_due_date, schedule_status, category:maintenance_service_categories(id, code, name)",
           )
           .eq("organization_id", orgId);
         if (schErr) throw schErr;
@@ -201,10 +201,10 @@ export function registerFleetAdminMaintenanceLedgerRoutes(
           const vid = String(r.vehicle_id);
           const odo =
             odoMap.get(vid) ??
-            (r.last_performed_miles != null ? Number(r.last_performed_miles) : 0);
+            (r.last_performed_km != null ? Number(r.last_performed_km) : 0);
           const st = analyzeComponentRowStatus(odo, today, {
-            next_due_miles: r.next_due_miles != null ? Number(r.next_due_miles) : null,
-            next_due_miles_max: r.next_due_miles_max != null ? Number(r.next_due_miles_max) : null,
+            next_due_km: r.next_due_km != null ? Number(r.next_due_km) : null,
+            next_due_km_max: r.next_due_km_max != null ? Number(r.next_due_km_max) : null,
             next_due_date: r.next_due_date != null ? String(r.next_due_date) : null,
             schedule_status: r.schedule_status != null ? String(r.schedule_status) : null,
           });
@@ -221,8 +221,8 @@ export function registerFleetAdminMaintenanceLedgerRoutes(
               ? String(r.last_performed_date).slice(0, 10)
               : null,
             lastPerformedMiles:
-              r.last_performed_miles != null ? Number(r.last_performed_miles) : null,
-            nextDueMiles: r.next_due_miles != null ? Number(r.next_due_miles) : null,
+              r.last_performed_km != null ? Number(r.last_performed_km) : null,
+            nextDueKm: r.next_due_km != null ? Number(r.next_due_km) : null,
             nextDueDate: r.next_due_date != null ? String(r.next_due_date).slice(0, 10) : null,
           });
         }

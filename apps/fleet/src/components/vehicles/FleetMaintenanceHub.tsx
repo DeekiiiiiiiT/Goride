@@ -89,6 +89,8 @@ type FleetHubVehicleRow = {
   doNotDrive?: boolean;
   doNotDriveReason?: string | null;
   doNotDriveSetAt?: string | null;
+  dominionScheduleStatus?: "roam_policy" | "maker_manual" | "needs_checking" | "waiting_odometer";
+  severeDuty?: boolean;
 };
 
 function vehicleLabel(row: {
@@ -119,7 +121,16 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
   const { can, canAny } = usePermissions();
   const canViewParts = can("vehicles.view");
   const canClearDoNotDrive = canAny("vehicles.edit", "maintenance.approve");
+  const canEditMaintenance = can("vehicles.edit");
   const orgName = fleetOrgDisplayName();
+
+  const [mobileCompact, setMobileCompact] = useState(false);
+  useEffect(() => {
+    const check = () => setMobileCompact(window.innerWidth <= 390);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -233,8 +244,14 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
           maxKmOverdue: row.maxKmOverdue ?? null,
           servicesAttention: row.servicesAttention ?? [],
           servicesAttentionTruncated: Boolean(row.servicesAttentionTruncated),
+          dominionScheduleStatus: row.dominionScheduleStatus ?? "roam_policy",
         })),
       );
+      setServicesDueView((prev) => {
+        if (!prev) return prev;
+        const fresh = ((res.items || []) as FleetHubVehicleRow[]).find((r) => r.vehicleId === prev.vehicleId);
+        return fresh ? { ...fresh, dominionScheduleStatus: fresh.dominionScheduleStatus ?? "roam_policy" } : prev;
+      });
       await loadRequests();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to load");
@@ -555,7 +572,7 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
           <MaintenanceScheduleTab vehicles={items} />
         </TabsContent>
 
-        <TabsContent value="by-vehicle" className="mt-0 space-y-4">
+        <TabsContent value="by-vehicle" className="mt-0 space-y-4 max-w-full overflow-x-hidden">
           {loading ? (
             <MaintenanceHubLoadingState />
           ) : error ? null : items.length === 0 ? (
@@ -608,6 +625,12 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
           setServicesDueView(null);
           void prepareLogForVehicle(id);
         }}
+        onLogOdometer={(id) => {
+          const row = items.find((r) => r.vehicleId === id);
+          if (row) setLogOdometerVehicle(row);
+        }}
+        mobileCompact={mobileCompact}
+        canEditMaintenance={canEditMaintenance}
       />
 
       <OdometerHistoryDrawer

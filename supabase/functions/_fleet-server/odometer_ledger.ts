@@ -3,6 +3,7 @@
  * Source systems (fuel / check-in / service / manual) project into fleet.odometer_readings.
  */
 import * as kv from "./kv_store.tsx";
+import { createClient } from "npm:@supabase/supabase-js@2";
 import { fleetDb, fleetTable, rowToKvValue } from "./repos/baseRepo.ts";
 import { getFleetTimezone, hasTzSuffix, naiveToUtc } from "./timezone_helper.tsx";
 
@@ -284,7 +285,10 @@ export async function projectOdometerReading(
 
   const current = await getCurrentOdometer(vehicleId);
   const threshold = input.anomalyThresholdKm ?? REGRESSION_THRESHOLD_DEFAULT;
-  const isAnomaly = current.km > 0 && reading < current.km - threshold;
+  const lowerThanPrevious = current.km > 0 && reading < current.km;
+  const isAnomaly = lowerThanPrevious ||
+    (current.km > 0 && reading < current.km - threshold);
+  const anomalyReason = lowerThanPrevious ? "lower_than_previous" : null;
 
   const payload: Record<string, unknown> = {
     id,
@@ -330,6 +334,7 @@ export async function projectOdometerReading(
         is_verified: !!input.isVerified,
         is_voided: false,
         is_anomaly: isAnomaly,
+        anomaly_reason: anomalyReason,
         void_reason: null,
         driver_id: input.driverId || null,
         legacy_kv_id: key,
@@ -343,6 +348,29 @@ export async function projectOdometerReading(
     await refreshVehicleOdometerCache(vehicleId);
   } catch (e) {
     console.warn("[odometer_ledger] cache refresh failed:", vehicleId, e);
+  }
+
+  if (input.organizationId && !isAnomaly) {
+    try {
+      const url = Deno.env.get("SUPABASE_URL");
+      const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+      if (url && key) {
+        const sb = createClient(url, key);
+        const { data: flag } = await sb
+          .from("platform_feature_flags")
+          .select("enabled")
+          .eq("name", "maintenance_master_governance")
+          .maybeSingle();
+        if (flag?.enabled === true) {
+          await sb.rpc("recompute_component_schedules_for_car", {
+            p_org: input.organizationId,
+            p_vehicle_id: vehicleId,
+          });
+        }
+      }
+    } catch (e) {
+      console.warn("[odometer_ledger] schedule recompute failed:", vehicleId, e);
+    }
   }
 
   return payload;

@@ -519,6 +519,7 @@ const FLEET_ACCOUNTANT_PERMISSIONS: Permission[] = [
 
 const FLEET_VIEWER_PERMISSIONS: Permission[] = [
   'nav.dashboard',
+  'nav.maintenance',
   'reports.view',
   'recon.view',
   'inventory.view',

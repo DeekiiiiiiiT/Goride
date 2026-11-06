@@ -5,6 +5,7 @@
  */
 export const DOMINION_ACTIONS = [
   "catalog.write",
+  "catalog.govern",
   "stations.verify",
   "stations.edit",
   "tolls.edit",
@@ -29,6 +30,7 @@ const MASTER_EDITS = new Set<DominionAction>([
 
 export function dominionCan(role: string | null | undefined, action: DominionAction): boolean {
   if (role === "platform_owner" || role === "superadmin") return true;
+  if (action === "catalog.govern") return false;
   if (role === "platform_support") return MASTER_EDITS.has(action);
   return false;
 }

@@ -15,14 +15,14 @@ export function addMonthsIso(ymd: string, months: number): string {
 
 export interface TemplateLike {
   frequency_kind?: string | null;
-  interval_miles?: number | null;
-  interval_miles_max?: number | null;
+  interval_km?: number | null;
+  interval_km_max?: number | null;
   interval_months?: number | null;
 }
 
 export interface ScheduleTargets {
-  next_due_miles: number | null;
-  next_due_miles_max: number | null;
+  next_due_km: number | null;
+  next_due_km_max: number | null;
   next_due_date: string | null;
   schedule_status: "active" | "fulfilled";
 }
@@ -34,14 +34,14 @@ function parseKind(t: TemplateLike): FrequencyKind {
 }
 
 function hasAnyInterval(t: TemplateLike): boolean {
-  const im = t.interval_miles != null && Number.isFinite(Number(t.interval_miles));
+  const im = t.interval_km != null && Number.isFinite(Number(t.interval_km));
   const imo = t.interval_months != null && Number.isFinite(Number(t.interval_months));
   return im || imo;
 }
 
 function nextOdoWindow(referenceOdo: number, t: TemplateLike): { next: number | null; nextMax: number | null } {
-  const lo = t.interval_miles != null ? Number(t.interval_miles) : null;
-  const hi = t.interval_miles_max != null ? Number(t.interval_miles_max) : null;
+  const lo = t.interval_km != null ? Number(t.interval_km) : null;
+  const hi = t.interval_km_max != null ? Number(t.interval_km_max) : null;
   const low = lo != null && Number.isFinite(lo) ? lo : null;
   const high = hi != null && Number.isFinite(hi) ? hi : null;
   if (low == null) return { next: null, nextMax: null };
@@ -63,8 +63,8 @@ export function computeInitialScheduleRow(
   if (kind === "manual_only") {
     return {
       ok: true,
-      next_due_miles: null,
-      next_due_miles_max: null,
+      next_due_km: null,
+      next_due_km_max: null,
       next_due_date: null,
       schedule_status: "active",
     };
@@ -81,8 +81,8 @@ export function computeInitialScheduleRow(
     const nextDate = intMo != null && Number.isFinite(intMo) ? addMonthsIso(baselineDate, intMo) : null;
     return {
       ok: true,
-      next_due_miles: nextMiles,
-      next_due_miles_max: nextMilesMax,
+      next_due_km: nextMiles,
+      next_due_km_max: nextMilesMax,
       next_due_date: nextDate,
       schedule_status: "active",
     };
@@ -92,8 +92,8 @@ export function computeInitialScheduleRow(
   const nextDate = intMo != null && Number.isFinite(intMo) ? addMonthsIso(baselineDate, intMo) : null;
   return {
     ok: true,
-    next_due_miles: nextMiles,
-    next_due_miles_max: nextMilesMax,
+    next_due_km: nextMiles,
+    next_due_km_max: nextMilesMax,
     next_due_date: nextDate,
     schedule_status: "active",
   };
@@ -108,8 +108,8 @@ export function advanceAfterService(
 
   if (kind === "manual_only") {
     return {
-      next_due_miles: null,
-      next_due_miles_max: null,
+      next_due_km: null,
+      next_due_km_max: null,
       next_due_date: null,
       schedule_status: "active",
     };
@@ -117,8 +117,8 @@ export function advanceAfterService(
 
   if (kind === "once_milestone") {
     return {
-      next_due_miles: null,
-      next_due_miles_max: null,
+      next_due_km: null,
+      next_due_km_max: null,
       next_due_date: null,
       schedule_status: "fulfilled",
     };
@@ -128,8 +128,8 @@ export function advanceAfterService(
   const { next: nextMiles, nextMax: nextMilesMax } = nextOdoWindow(performedOdo, template);
   const nextDate = intMo != null && Number.isFinite(intMo) ? addMonthsIso(performedDate, intMo) : null;
   return {
-    next_due_miles: nextMiles,
-    next_due_miles_max: nextMilesMax,
+    next_due_km: nextMiles,
+    next_due_km_max: nextMilesMax,
     next_due_date: nextDate,
     schedule_status: "active",
   };

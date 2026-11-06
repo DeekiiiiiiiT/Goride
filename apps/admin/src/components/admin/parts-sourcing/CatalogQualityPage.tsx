@@ -18,6 +18,8 @@ import {
   remapPositionReport,
   runCatalogAudit,
 } from "../../../services/partsAutoMatchApi";
+import { MaintenanceMasterHealthCard } from "../maintenance-master/MaintenanceMasterHealthCard";
+import { fetchMaintenanceGovernanceFlag, fetchMaintenanceHealth } from "../maintenance-master/maintenanceMasterApi";
 import {
   COMPLETENESS_DRAWER_ROWS,
   formatActiveLogsLabel,
@@ -75,27 +77,46 @@ export function CatalogQualityPage() {
   const [positionHistory, setPositionHistory] = useState<Array<Record<string, unknown>>>([]);
   const [validationExceptions, setValidationExceptions] = useState<Array<Record<string, unknown>>>([]);
   const [positionTab, setPositionTab] = useState<"pending" | "history">("pending");
+  const [mmHealth, setMmHealth] = useState<Awaited<ReturnType<typeof fetchMaintenanceHealth>> | null>(null);
+  const [mmHealthLoading, setMmHealthLoading] = useState(false);
+  const [mmGovernance, setMmGovernance] = useState(false);
 
   const load = useCallback(async () => {
     if (!token) return;
     const t0 = performance.now();
+    const mmFlag = await fetchMaintenanceGovernanceFlag(token).catch(() => false);
+    setMmGovernance(mmFlag);
+    if (mmFlag) {
+      setMmHealthLoading(true);
+      void fetchMaintenanceHealth(token)
+        .then(setMmHealth)
+        .catch(() => setMmHealth(null))
+        .finally(() => setMmHealthLoading(false));
+    } else {
+      setMmHealth(null);
+      setMmHealthLoading(false);
+    }
     const [h, s, comp, pending, history, runLog, validation] = await Promise.all([
-      fetchPartMatchHealth(token),
-      fetchPartMatchSchedule(token),
+      fetchPartMatchHealth(token).catch(() => null),
+      fetchPartMatchSchedule(token).catch(() => null),
       fetchCatalogCompleteness(token).catch(() => null),
       fetchPositionReports(token, true).catch(() => ({ rows: [] })),
       fetchPositionReports(token, false).catch(() => ({ rows: [] })),
       fetchPartMatchRuns(token, 10).catch(() => ({ rows: [] })),
       fetchCatalogValidationExceptions(token, 50).catch(() => ({ rows: [] })),
     ]);
-    setRuns(runLog.rows ?? []);
+    setRuns(((runLog as { rows?: Record<string, unknown>[] } | null)?.rows ?? []) as Record<string, unknown>[]);
     setCompleteness(comp);
-    setPositionPending(pending.rows ?? []);
-    setPositionHistory((history.rows ?? []).filter((r) => r.resolved_at));
-    setValidationExceptions(validation.rows ?? []);
+    setPositionPending(((pending as { rows?: Record<string, unknown>[] }).rows ?? []) as Record<string, unknown>[]);
+    setPositionHistory(
+      (((history as { rows?: Record<string, unknown>[] }).rows ?? []).filter((r) =>
+        (r as { resolved_at?: unknown }).resolved_at
+      )) as Record<string, unknown>[],
+    );
+    setValidationExceptions(((validation as { rows?: Record<string, unknown>[] }).rows ?? []) as Record<string, unknown>[]);
     setLatencyMs(Math.round(performance.now() - t0));
-    setHealth(h);
-    setScheduleMeta(typeof s === "object" && s ? s as { nextRun?: string; cron?: string; intervalLabel?: string } : null);
+    setHealth(h as typeof health);
+    setScheduleMeta(typeof s === "object" && s ? (s as { nextRun?: string; cron?: string; intervalLabel?: string }) : null);
   }, [token]);
 
   useEffect(() => {
@@ -218,6 +239,21 @@ export function CatalogQualityPage() {
           </button>
         </div>
       </div>
+
+      {mmGovernance ? (
+        <div className="mb-space-xl">
+          <MaintenanceMasterHealthCard
+            health={mmHealth}
+            loading={mmHealthLoading}
+            onNavigate={(page) => {
+              const url = new URL(window.location.href);
+              url.searchParams.set("page", page);
+              window.history.pushState({ page }, "", url.toString());
+              window.dispatchEvent(new PopStateEvent("popstate"));
+            }}
+          />
+        </div>
+      ) : null}
 
       <section className="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden mb-space-xl">
         <div className="p-space-lg flex flex-col md:flex-row md:items-center justify-between gap-space-sm bg-surface-container-low/60">

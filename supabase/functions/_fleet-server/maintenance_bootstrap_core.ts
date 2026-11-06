@@ -4,6 +4,8 @@
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { computeInitialScheduleRow } from "./maintenance_schedule_engine.ts";
 import { bootstrapVehicleComponentSchedules } from "./maintenance_service_ledger_core.ts";
+import { filterMaintenancePackageTemplates } from "./maintenance_package_templates.ts";
+import { isMaintenanceMasterGovernanceEnabled } from "./maintenance_master_flag.ts";
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
@@ -56,6 +58,7 @@ export type BootstrapRunResult =
   | {
     ok: true;
     emptyTemplates: false;
+    catalogId: string;
     created: number;
     globalApplied: number;
     catalogApplied: number;
@@ -92,16 +95,21 @@ export async function executeMaintenanceBootstrap(args: {
   if (!schedErr && Array.isArray(sched)) {
     const ids = (sched as Array<{ template_id?: string }>).map((row) => row.template_id).filter(Boolean) as string[];
     if (ids.length) {
-      const { data: rows, error: rowErr } = await sb.from("maintenance_task_templates").select("*").in("id", ids);
+      const { data: rows, error: rowErr } = await sb
+        .from("maintenance_task_templates")
+        .select("*")
+        .in("id", ids)
+        .is("component_id", null);
       if (rowErr) throw rowErr;
-      templates = (rows || []) as MaintenanceTemplateRow[];
+      templates = filterMaintenancePackageTemplates((rows || []) as MaintenanceTemplateRow[]);
       catalogOverridesGlobal = templates.filter((t) => String(t.template_scope) !== "global").length;
     }
   } else {
     const { data: globalTemplatesRaw, error: gErr } = await sb
       .from("maintenance_task_templates")
       .select("*")
-      .eq("template_scope", "global");
+      .eq("template_scope", "global")
+      .is("component_id", null);
     if (gErr) throw gErr;
     const globalTemplates = ((globalTemplatesRaw || []) as MaintenanceTemplateRow[]).filter((t) => {
       const classes = Array.isArray(t.applicable_vehicle_classes)
@@ -113,7 +121,8 @@ export async function executeMaintenanceBootstrap(args: {
       .from("maintenance_task_templates")
       .select("*")
       .eq("vehicle_catalog_id", args.catalogId)
-      .in("template_scope", ["variant"]);
+      .in("template_scope", ["variant"])
+      .is("component_id", null);
     if (cErr) throw cErr;
     const merged = mergeGlobalAndCatalogTemplates(globalTemplates, (catalogTemplates || []) as MaintenanceTemplateRow[]);
     templates = merged.merged;
@@ -126,6 +135,25 @@ export async function executeMaintenanceBootstrap(args: {
       ok: true,
       emptyTemplates: true,
       catalogId: args.catalogId,
+    };
+  }
+
+  if (await isMaintenanceMasterGovernanceEnabled(sb)) {
+    const { error: recomputeErr } = await sb.rpc("recompute_component_schedules_for_car", {
+      p_org: args.organizationId,
+      p_vehicle_id: args.vehicleId,
+    });
+    if (recomputeErr) {
+      return { ok: false, error: recomputeErr.message, catalogId: args.catalogId };
+    }
+    return {
+      ok: true,
+      emptyTemplates: false,
+      catalogId: args.catalogId,
+      created: 0,
+      globalApplied: templates.filter((t) => String(t.template_scope ?? "") === "global").length,
+      catalogApplied: templates.filter((t) => String(t.template_scope ?? "") === "variant").length,
+      skippedDuplicates: catalogOverridesGlobal,
     };
   }
 
@@ -161,6 +189,7 @@ export async function executeMaintenanceBootstrap(args: {
   return {
     ok: true,
     emptyTemplates: false,
+    catalogId: args.catalogId,
     created,
     globalApplied,
     catalogApplied,

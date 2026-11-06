@@ -6,7 +6,7 @@ BEGIN
   SELECT count(*) INTO v_cnt
   FROM public.vehicle_component_schedule vcs
   WHERE vcs.schedule_status = 'active'
-    AND vcs.next_due_miles IS NULL
+    AND vcs.next_due_km IS NULL
     AND vcs.next_due_date IS NULL;
   RAISE NOTICE 'check_1_active_rows_without_due: %', v_cnt;
   IF v_cnt > 0 THEN
@@ -22,7 +22,9 @@ BEGIN
   JOIN public.maintenance_task_templates t ON t.id = vcs.rule_id
   CROSS JOIN LATERAL (
     SELECT r.interval_km, r.interval_months, r.interval_basis
-    FROM public.schedule_rule_for_part(vcs.organization_id, vcs.vehicle_id, vcs.category_id) r
+    FROM public.schedule_rule_for_part(
+      vcs.organization_id, vcs.vehicle_id, vcs.category_id, vcs.position
+    ) r
     LIMIT 1
   ) sr
   WHERE vcs.schedule_status NOT IN ('manual_override', 'no_rule', 'retired')
@@ -163,5 +165,33 @@ BEGIN
   RAISE NOTICE 'check_8_active_rule_overlaps: %', v_cnt;
   IF v_cnt > 0 THEN
     RAISE EXCEPTION 'check_8 failed: % pairs', v_cnt;
+  END IF;
+END $$;
+
+DO $$
+DECLARE v_cnt bigint;
+BEGIN
+  SELECT count(*) INTO v_cnt
+  FROM fleet.maintenance_alerts a
+  WHERE a.status = 'open'
+    AND a.component_schedule_id IS NULL;
+  RAISE NOTICE 'check_9_open_alerts_missing_schedule_link: %', v_cnt;
+  IF v_cnt > 0 THEN
+    RAISE EXCEPTION 'check_9 failed: % alerts', v_cnt;
+  END IF;
+END $$;
+
+DO $$
+DECLARE v_cnt bigint;
+BEGIN
+  SELECT count(*) INTO v_cnt
+  FROM pg_proc p
+  JOIN pg_namespace n ON n.oid = p.pronamespace
+  WHERE n.nspname IN ('public', 'fleet')
+    AND p.prosrc ~* '(next_due_miles|last_performed_miles|interval_miles|default_interval_miles)'
+    AND p.prosrc ~* '(vehicle_component_schedule|maintenance_task_templates|maintenance_service_categories)';
+  RAISE NOTICE 'check_10_db_functions_stale_mile_columns: %', v_cnt;
+  IF v_cnt > 0 THEN
+    RAISE EXCEPTION 'check_10 failed: % functions', v_cnt;
   END IF;
 END $$;

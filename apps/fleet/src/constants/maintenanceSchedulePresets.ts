@@ -7,7 +7,7 @@
 export interface MaintenanceSchedulePreset {
   id: string;
   label: string;
-  interval_miles: number;
+  interval_km: number;
   /** Suggested months for Super Admin quick-fill */
   interval_months: number;
   items: string[];
@@ -18,7 +18,7 @@ export const MAINTENANCE_SCHEDULE_PRESETS: MaintenanceSchedulePreset[] = [
   {
     id: "A",
     label: "Basic Service (Every 5,000 km)",
-    interval_miles: 5000,
+    interval_km: 5000,
     interval_months: 3,
     sort_order: 0,
     items: [
@@ -33,7 +33,7 @@ export const MAINTENANCE_SCHEDULE_PRESETS: MaintenanceSchedulePreset[] = [
   {
     id: "B",
     label: "Intermediate Service (Every 10,000 km)",
-    interval_miles: 10000,
+    interval_km: 10000,
     interval_months: 6,
     sort_order: 1,
     items: [
@@ -48,7 +48,7 @@ export const MAINTENANCE_SCHEDULE_PRESETS: MaintenanceSchedulePreset[] = [
   {
     id: "C",
     label: "Major Service (Every 40,000 km)",
-    interval_miles: 40000,
+    interval_km: 40000,
     interval_months: 24,
     sort_order: 2,
     items: [
@@ -62,7 +62,7 @@ export const MAINTENANCE_SCHEDULE_PRESETS: MaintenanceSchedulePreset[] = [
   {
     id: "D",
     label: "Long-Term Service (Every 100,000 km)",
-    interval_miles: 100000,
+    interval_km: 100000,
     interval_months: 60,
     sort_order: 3,
     items: ["Replace Spark Plugs (Iridium)", "Flush Radiator Coolant"],

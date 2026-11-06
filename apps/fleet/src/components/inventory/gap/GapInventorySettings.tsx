@@ -262,7 +262,7 @@ export function GapInventorySettings(p: { onClose?: () => void }) {
         </div>
         </div>
         <div className="flex items-center gap-space-sm shrink-0">
-        <span className="font-label-code text-caption text-on-surface bg-surface-container px-2 py-1 rounded">Rule #WO-5K-SEC</span>
+        <span className="font-label-code text-caption text-on-surface bg-surface-container px-2 py-1 rounded">Write-off threshold</span>
         </div>
         </div>
         </div>

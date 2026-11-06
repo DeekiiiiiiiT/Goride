@@ -34,4 +34,14 @@ describe("filterAuditLogEntries conflict param", () => {
     });
     expect(filtered).toHaveLength(1);
   });
+
+  it("filters parts topic for catalog and self-serve actions", () => {
+    const catalogEntries = [
+      { action: "self_serve_part_saved", details: "part_master updated", timestamp: "2026-11-01T12:00:00.000Z" },
+      { action: "suspend_user", details: "Suspended account", timestamp: "2026-11-01T13:00:00.000Z" },
+    ];
+    const filtered = filterAuditLogEntries(catalogEntries, { topicFilter: "parts" });
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0]?.action).toBe("self_serve_part_saved");
+  });
 });

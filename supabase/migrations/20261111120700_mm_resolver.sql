@@ -134,7 +134,9 @@ AS $$
     t.vehicle_catalog_id,
     t.platform_id,
     t.engine_family_id
-  )
+  ),
+  t.updated_at DESC,
+  t.id
   LIMIT 1;
 $$;
 

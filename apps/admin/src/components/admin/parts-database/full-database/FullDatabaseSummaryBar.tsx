@@ -1,3 +1,5 @@
+import { PartsButton } from "../PartsButton";
+
 export function FullDatabaseSummaryBar({
   title,
   total,
@@ -20,7 +22,7 @@ export function FullDatabaseSummaryBar({
         {chips.map((chip) => (
           <span key={chip.id} className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-surface-container-low border border-outline-variant/40 font-body-sm text-body-sm text-on-surface">
             <span>{chip.label}</span>
-            <button className="hover:text-error text-outline text-[13px] leading-none" type="button" title="Remove filter" onClick={() => onRemove(chip.id)}>✕</button>
+            <PartsButton variant="icon" className="min-h-[24px] min-w-[24px] w-6 h-6 text-[13px] leading-none" title="Remove filter" onClick={() => onRemove(chip.id)}>✕</PartsButton>
           </span>
         ))}
       </div>

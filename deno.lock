@@ -9,7 +9,9 @@
     "jsr:@std/internal@^1.0.12": "1.0.14",
     "jsr:@std/internal@^1.0.14": "1.0.14",
     "jsr:@std/internal@^1.0.6": "1.0.14",
+    "jsr:@std/path@1": "1.1.6",
     "jsr:@std/path@^1.1.5": "1.1.6",
+    "jsr:@std/yaml@1.0.5": "1.0.5",
     "jsr:@supabase/supabase-js@2.49.8": "2.49.8",
     "npm:@capacitor-community/contacts@7": "7.2.0_@capacitor+core@7.6.8",
     "npm:@capacitor/android@^7.6.5": "7.6.8_@capacitor+core@7.6.8",
@@ -174,7 +176,7 @@
     "@std/fs@1.0.24": {
       "integrity": "f3061b45b81673a2bece689da041df32d174be064c89eb6397fb5718d3fb7877",
       "dependencies": [
-        "jsr:@std/path"
+        "jsr:@std/path@^1.1.5"
       ]
     },
     "@std/internal@1.0.14": {
@@ -185,6 +187,9 @@
       "dependencies": [
         "jsr:@std/internal@^1.0.14"
       ]
+    },
+    "@std/yaml@1.0.5": {
+      "integrity": "71ba3d334305ee2149391931508b2c293a8490f94a337eef3a09cade1a2a2742"
     },
     "@supabase/supabase-js@2.49.8": {
       "integrity": "fe1057c623e3297d627d8d795f8c8e7195b2973da8cec813f99e1484b6943b99",

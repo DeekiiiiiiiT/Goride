@@ -4,6 +4,7 @@ import { ProblemsEditor } from "./find-parts/ProblemsEditor";
 import { useAuth } from "../../auth/AuthContext";
 import { useState } from "react";
 import { fetchAdvancedTables } from "./partsDatabaseApi";
+import { PartsButton } from "./PartsButton";
 
 export function ImportAdvancedTab({
   advanced,
@@ -64,13 +65,14 @@ export function ImportAdvancedTab({
             <span className="truncate">{String(row.vehicle_catalog_id ?? "")}</span>
             <span className="truncate">{String(row.interchange_group_id ?? "")}</span>
             <span>{String(row.position ?? "listing")}</span>
-            <button type="button" className="text-secondary text-left" onClick={() => onOpenVehicle?.(String(row.vehicle_catalog_id ?? ""))}>Open on vehicle</button>
+            <PartsButton variant="secondary" className="text-xs text-left justify-start" onClick={() => onOpenVehicle?.(String(row.vehicle_catalog_id ?? ""))}>Open on vehicle</PartsButton>
           </div>
         ))}
         <div className="flex gap-3 text-xs pt-3">
-          <button type="button" disabled={offset === 0} onClick={() => setOffset((value) => Math.max(0, value - 50))}>Previous</button>
-          <button
-            type="button"
+          <PartsButton variant="secondary" className="text-xs h-8 min-h-[32px] disabled:opacity-40" disabled={offset === 0} onClick={() => setOffset((value) => Math.max(0, value - 50))}>Previous</PartsButton>
+          <PartsButton
+            variant="secondary"
+            className="text-xs h-8 min-h-[32px] disabled:opacity-40"
             disabled={
               !tables.data
               || offset + 50 >= Math.max(
@@ -80,7 +82,7 @@ export function ImportAdvancedTab({
               )
             }
             onClick={() => setOffset((value) => value + 50)}
-          >Next</button>
+          >Next</PartsButton>
         </div>
       </section>
     </div>

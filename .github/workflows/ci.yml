@@ -65,12 +65,6 @@ jobs:
           SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
         run: node scripts/assert-migration-versions-parity.mjs
 
-      - name: Check fleet inventory gap audit greps
-        run: node scripts/assert-inventory-gap-audit.mjs
-
-      - name: Check fleet inventory TypeScript
-        run: node scripts/typecheck-fleet-inventory.mjs
-
       - name: Check public function revoke from anon
         run: node scripts/assert-public-fn-revoke-anon.mjs
 
@@ -269,67 +263,6 @@ jobs:
           supabase/functions/_fleet-server/catalog_research_part_research.test.ts
           supabase/functions/_fleet-server/catalog_trusted_source_block.test.ts
 
-      - name: Setup Supabase CLI
-        uses: ./.github/actions/setup-supabase-cli
-
-      - name: Start Supabase and bootstrap inventory schema
-        run: |
-          supabase start -x gotrue,realtime,storage-api,imgproxy,mailpit,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
-          supabase db reset
-          node scripts/bootstrap-inventory-local-db.mjs
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
-          INVENTORY_TEST_ORG_ID: test-org-inv
-
-      - name: Deno test fleet inventory engine
-        env:
-          INVENTORY_INTEGRATION_TESTS: "1"
-          INVENTORY_TEST_ORG_ID: test-org-inv
-          SUPABASE_URL: http://127.0.0.1:54321
-          SUPABASE_SERVICE_ROLE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU
-        run: >
-          deno test --allow-read --allow-env --allow-net=127.0.0.1:54321 --no-check
-          supabase/functions/_fleet-server/inventory_phase0_security.test.ts
-          supabase/functions/_fleet-server/inventory_controller_auth.test.ts
-          supabase/functions/_fleet-server/inventory_ledger_invariants.test.ts
-          supabase/functions/_fleet-server/inventory_hash_chain.test.ts
-          supabase/functions/_fleet-server/inventory_issue_concurrency.test.ts
-          supabase/functions/_fleet-server/inventory_fifo_cost.test.ts
-          supabase/functions/_fleet-server/inventory_approvals.test.ts
-          supabase/functions/_fleet-server/inventory_driver_reports.test.ts
-          supabase/functions/_fleet-server/inventory_integration.test.ts
-          supabase/functions/_fleet-server/inventory_asset_events.test.ts
-
-      - name: Fleet inventory button sweep (E2E)
-        env:
-          INVENTORY_BUTTON_SWEEP: "1"
-          INVENTORY_SEED_ASSERT: "1"
-          E2E_FLEET_EMAIL: ${{ secrets.E2E_FLEET_EMAIL }}
-          E2E_FLEET_PASSWORD: ${{ secrets.E2E_FLEET_PASSWORD }}
-          FLEET_BASE_URL: ${{ vars.FLEET_E2E_BASE_URL }}
-        run: |
-          if [ -z "$E2E_FLEET_EMAIL" ] || [ -z "$E2E_FLEET_PASSWORD" ] || [ -z "$FLEET_BASE_URL" ]; then
-            echo "::notice title=Inventory button sweep skipped::Set secrets E2E_FLEET_EMAIL, E2E_FLEET_PASSWORD and var FLEET_E2E_BASE_URL to run it"
-            exit 0
-          fi
-          npx playwright install --with-deps chromium
-          node node_modules/@playwright/test/cli.js test --project=fleet e2e/inventory-button-sweep.spec.ts
-
-      - name: Driver car-kit button sweep (E2E)
-        env:
-          INVENTORY_BUTTON_SWEEP: "1"
-          INVENTORY_SEED_ASSERT: "1"
-          E2E_DRIVER_EMAIL: ${{ secrets.E2E_DRIVER_EMAIL }}
-          E2E_DRIVER_PASSWORD: ${{ secrets.E2E_DRIVER_PASSWORD }}
-          DRIVER_BASE_URL: ${{ vars.DRIVER_E2E_BASE_URL }}
-        run: |
-          if [ -z "$E2E_DRIVER_EMAIL" ] || [ -z "$E2E_DRIVER_PASSWORD" ] || [ -z "$DRIVER_BASE_URL" ]; then
-            echo "::notice title=Car-kit button sweep skipped::Set secrets E2E_DRIVER_EMAIL, E2E_DRIVER_PASSWORD and var DRIVER_E2E_BASE_URL to run it"
-            exit 0
-          fi
-          npx playwright install --with-deps chromium
-          node node_modules/@playwright/test/cli.js test --project=driver-car-kit e2e/car-kit-button-sweep.spec.ts
-
       - name: Deno test parts auto-match routes
         run: >
           deno test --allow-read --allow-env
@@ -506,25 +439,88 @@ jobs:
       - name: Typecheck admin money spine
         run: pnpm --filter @roam/admin typecheck:money
 
-      - name: Check driver car-kit TypeScript
-        run: node scripts/typecheck-driver-car-kit.mjs
-
       # deno.json nodeModulesDir lets the Deno steps above re-link node_modules into node_modules/.deno;
       # Vite then resolves broken copies (e.g. @radix-ui/react-slot). Restore pnpm's links before building.
       - name: Restore pnpm links after Deno steps
         run: pnpm install --frozen-lockfile
 
-      - name: Build fleet app (inventory gate)
-        env:
-          VITE_SUPABASE_URL: https://ci-placeholder.supabase.co
-          VITE_SUPABASE_ANON_KEY: ci-placeholder-anon-key
-        run: pnpm --filter @roam/fleet build
-
-      - name: Build driver app (car-kit gate)
-        env:
-          VITE_SUPABASE_URL: https://ci-placeholder.supabase.co
-          VITE_SUPABASE_ANON_KEY: ci-placeholder-anon-key
-        run: pnpm --filter @roam/driver build
-
       - name: Build
         run: pnpm build
+
+  inventory:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check fleet inventory gap audit greps
+        run: node scripts/assert-inventory-gap-audit.mjs
+
+      - name: Check fleet inventory TypeScript
+        run: node scripts/typecheck-fleet-inventory.mjs
+
+      - name: Check driver car-kit TypeScript
+        run: node scripts/typecheck-driver-car-kit.mjs
+
+      - name: Setup Supabase CLI
+        uses: ./.github/actions/setup-supabase-cli
+
+      - name: Inventory done-tests (local Supabase + Playwright)
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          INVENTORY_TEST_ORG_ID: test-org-inv
+          INVENTORY_E2E: "1"
+          INVENTORY_E2E_SUPABASE_PROJECT_REF: Goride
+          FLEET_BASE_URL: http://127.0.0.1:3000
+          DRIVER_BASE_URL: http://127.0.0.1:5174
+        run: node scripts/run-inventory-done-tests.mjs
+
+      - name: Fleet inventory data checks
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+        run: node scripts/run-fleet-inventory-data-checks.mjs
+
+      - name: Deno test fleet inventory engine
+        env:
+          INVENTORY_INTEGRATION_TESTS: "1"
+          INVENTORY_TEST_ORG_ID: test-org-inv
+          SUPABASE_URL: http://127.0.0.1:54321
+          SUPABASE_SERVICE_ROLE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU
+        run: >
+          deno test --allow-read --allow-env --allow-net=127.0.0.1:54321 --no-check
+          supabase/functions/_fleet-server/inventory_phase0_security.test.ts
+          supabase/functions/_fleet-server/inventory_controller_auth.test.ts
+          supabase/functions/_fleet-server/inventory_ledger_invariants.test.ts
+          supabase/functions/_fleet-server/inventory_hash_chain.test.ts
+          supabase/functions/_fleet-server/inventory_issue_concurrency.test.ts
+          supabase/functions/_fleet-server/inventory_fifo_cost.test.ts
+          supabase/functions/_fleet-server/inventory_approvals.test.ts
+          supabase/functions/_fleet-server/inventory_driver_reports.test.ts
+          supabase/functions/_fleet-server/inventory_integration.test.ts
+          supabase/functions/_fleet-server/inventory_asset_events.test.ts
+          supabase/functions/_fleet-server/inventory_http_phase_gates.test.ts
+          supabase/functions/_fleet-server/inventory_road_clearance_gate_sync.test.ts
+          supabase/functions/_fleet-server/inventory_http_driver_fixed_unseen.test.ts
+          supabase/functions/_fleet-server/inventory_http_kits.test.ts
+          supabase/functions/_fleet-server/inventory_http_reads.test.ts
+          supabase/functions/_fleet-server/inventory_http_alerts.test.ts
+          supabase/functions/_fleet-server/inventory_http_purchasing.test.ts
+          supabase/functions/_fleet-server/inventory_http_counts.test.ts
+          supabase/functions/_fleet-server/inventory_http_import_categories_bins.test.ts
+          supabase/functions/_fleet-server/inventory_controller_r16.test.ts
+          supabase/functions/_fleet-server/inventory_double_entry.test.ts
+
+      - name: Restore pnpm links after Deno steps
+        run: pnpm install --frozen-lockfile

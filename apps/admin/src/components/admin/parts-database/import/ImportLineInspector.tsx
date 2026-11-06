@@ -1,5 +1,6 @@
 // Stitch: dominion-redesign/parts_import_check_results — Line N Inspection panel
 import { MaterialIcon } from "./MaterialIcon";
+import { PartsButton } from "../PartsButton";
 
 export type ImportRowInspectPayload = {
   lineNo?: number;
@@ -32,10 +33,10 @@ export function ImportLineInspector({
     <aside className="fixed top-0 right-0 z-40 h-full w-full max-w-md border-l border-outline-variant/40 bg-surface-container-lowest shadow-2xl flex flex-col">
       <div className="flex items-center justify-between gap-2 p-4 border-b border-outline-variant/30">
         <h3 className="text-sm font-semibold">Line {lineNo} Inspection</h3>
-        <button type="button" className="text-secondary font-semibold text-xs inline-flex items-center gap-1" onClick={onDismiss}>
+        <PartsButton variant="secondary" className="text-xs inline-flex items-center gap-1" onClick={onDismiss}>
           <MaterialIcon name="close" className="text-[18px]" />
           Dismiss Inspector
-        </button>
+        </PartsButton>
       </div>
       <div className="flex-1 overflow-y-auto p-4 space-y-4 text-xs">
         {loading ? (

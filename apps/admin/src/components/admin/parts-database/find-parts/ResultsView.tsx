@@ -16,6 +16,7 @@ import { useAuth } from "../../../auth/AuthContext";
 import { MaterialIcon } from "../import/MaterialIcon";
 import { PartsMatchTypesOff } from "../PartsDatabaseStates";
 import { WhyItMatchesDrawer } from "./WhyItMatchesDrawer";
+import { PartsButton } from "../PartsButton";
 
 function readItemFields(item: FoundPartRow & Record<string, unknown>) {
   return {
@@ -305,16 +306,16 @@ export function ResultsView({
           <MaterialIcon name="file_download" className="text-[16px]" />
           Export Matrix
         </button>
-        <button
-          type="button"
-          className="find-parts-primary-btn flex h-8 items-center gap-1.5 rounded-lg px-3 font-label-md text-label-md font-semibold shadow-sm transition-colors disabled:opacity-40"
+        <PartsButton
+          variant="primary"
+          className="shadow-sm disabled:opacity-40"
           disabled={!owner}
           title={ownerTitle}
           onClick={onRematch}
         >
           <MaterialIcon name="sync_alt" className="text-[16px]" />
           Run Engine Re-match
-        </button>
+        </PartsButton>
       </div>
 
       <div className="rounded-xl bg-surface-container-lowest p-space-md shadow-sm">
@@ -524,13 +525,14 @@ export function ResultsView({
                             </span>
                           ) : null}
                           {item.status === "needs_checking" ? (
-                            <a
-                              className="find-parts-pending-link flex shrink-0 items-center gap-0.5 font-mono-sm text-mono-sm font-semibold"
-                              href="/?page=pending-motor-vehicles&tab=conflicts"
+                            <PartsButton
+                              variant="secondary"
+                              className="find-parts-pending-link shrink-0 gap-0.5 font-mono-sm text-mono-sm min-h-[32px] h-8"
+                              onClick={() => { window.location.href = "/?page=pending-motor-vehicles&tab=conflicts"; }}
                             >
                               Review in Pending catalog
                               <MaterialIcon name="north_east" className="text-[13px]" />
-                            </a>
+                            </PartsButton>
                           ) : null}
                         </div>
                       </div>
@@ -610,15 +612,15 @@ export function ResultsView({
             >
               {batchMode ? "Exit batch mode" : "Batch validation mode"}
             </button>
-            <button
-              type="button"
-              className="find-parts-primary-btn h-8 rounded-lg px-3 font-label-md text-label-md font-semibold transition-colors disabled:opacity-40"
+            <PartsButton
+              variant="primary"
+              className="disabled:opacity-40"
               disabled={!owner || !batchIds.length || !batchNote.trim()}
               title={ownerTitle}
               onClick={() => { void commitBatch(); }}
             >
               Commit active fitments
-            </button>
+            </PartsButton>
           </div>
         </div>
       </div>

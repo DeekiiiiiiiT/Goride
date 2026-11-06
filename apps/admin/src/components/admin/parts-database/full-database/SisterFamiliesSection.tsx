@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { fetchBodyFamilies, saveBodyFamily } from "../partsDatabaseApi";
 import { PartsError, PartsLoading } from "../PartsDatabaseStates";
+import { PartsButton } from "../PartsButton";
 
 type Car = {
   id?: string;
@@ -160,9 +161,9 @@ export function SisterFamiliesSection({
                 </div>
                 <div className="pt-space-sm border-t border-outline-variant/30 flex flex-wrap items-center gap-2 font-body-sm text-body-sm">
                   <span className="font-mono-sm text-mono-sm text-[#0e7490] font-bold">{familyMembers.length} bodies in this family</span>
-                  <button type="button" className="text-primary font-semibold disabled:opacity-40" disabled={!owner} title={ownerTitle} onClick={() => openFamily(String(family.id), String(family.label ?? ""))}>+ Add car</button>
-                  <button type="button" className="text-secondary hover:text-error disabled:opacity-40" disabled={!owner} title={ownerTitle} onClick={() => openFamily(String(family.id), String(family.label ?? ""))}>Remove</button>
-                  <button type="button" className="text-on-surface font-medium disabled:opacity-40" disabled={!owner} title={ownerTitle} onClick={() => openFamily(String(family.id), String(family.label ?? ""))}>Edit family</button>
+                  <PartsButton variant="secondary" className="disabled:opacity-40" disabled={!owner} title={ownerTitle} onClick={() => openFamily(String(family.id), String(family.label ?? ""))}>+ Add car</PartsButton>
+                  <PartsButton variant="danger" className="disabled:opacity-40" disabled={!owner} title={ownerTitle} onClick={() => openFamily(String(family.id), String(family.label ?? ""))}>Remove</PartsButton>
+                  <PartsButton variant="secondary" className="disabled:opacity-40" disabled={!owner} title={ownerTitle} onClick={() => openFamily(String(family.id), String(family.label ?? ""))}>Edit family</PartsButton>
                 </div>
               </div>
             );
@@ -213,13 +214,13 @@ export function SisterFamiliesSection({
           <input className="w-full bg-surface-container-lowest rounded-lg px-3 py-2 text-sm" placeholder="Required source link" value={evidenceUrl} onChange={(event) => setEvidenceUrl(event.target.value)} />
           <input className="w-full bg-surface-container-lowest rounded-lg px-3 py-2 text-sm" placeholder="Reason for this change" value={reason} onChange={(event) => setReason(event.target.value)} />
           <div className="flex flex-wrap gap-3 text-sm">
-            <button type="button" disabled={!owner} title={ownerTitle} onClick={() => { void apply("add", true); }}>Preview add</button>
-            <button type="button" disabled={!owner} title={ownerTitle} onClick={() => { void apply("remove", true); }}>Preview remove</button>
+            <PartsButton variant="secondary" disabled={!owner} title={ownerTitle} onClick={() => { void apply("add", true); }}>Preview add</PartsButton>
+            <PartsButton variant="secondary" disabled={!owner} title={ownerTitle} onClick={() => { void apply("remove", true); }}>Preview remove</PartsButton>
             <button type="button" className="bg-primary-container text-on-primary px-3 py-1.5 rounded-lg disabled:opacity-40" disabled={!owner} title={ownerTitle} onClick={() => { void apply(pendingAction || "add", false, false); }}>Apply changes</button>
             {leaveFamily ? (
-              <button type="button" className="text-primary" onClick={() => { void apply(pendingAction || "add", false, true); }}>Move from {leaveFamily}</button>
+              <PartsButton variant="secondary" onClick={() => { void apply(pendingAction || "add", false, true); }}>Move from {leaveFamily}</PartsButton>
             ) : null}
-            <button type="button" onClick={() => { setEditor(false); onDismiss?.(); }}>Close</button>
+            <PartsButton variant="secondary" onClick={() => { setEditor(false); onDismiss?.(); }}>Close</PartsButton>
           </div>
           {preview ? <p className="text-xs">{preview}</p> : null}
           {message ? <p className="text-xs">{message}</p> : null}

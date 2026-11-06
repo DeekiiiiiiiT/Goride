@@ -92,6 +92,24 @@ export function useCarKitFlow(vehicleId?: string | null) {
     };
   }, [screen, refreshKey]);
 
+  useEffect(() => {
+    if (screen !== 'dk4') return;
+    let cancelled = false;
+    (async () => {
+      try {
+        await driverInventoryApi.markReportsSeen(vehicleId ?? kit?.vehicleId ?? null);
+        if (cancelled) return;
+        const data = await driverInventoryApi.carKit(vehicleId ?? null);
+        setKit(data);
+      } catch (err) {
+        console.error('mark reports seen failed', err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [screen, vehicleId, refreshKey]);
+
   const dk6View = loadStateToDk6View(sendError ? 'send_failed' : loadState);
   const showDk6 = dk6View !== null && screen !== 'dk2' && screen !== 'dk3';
 

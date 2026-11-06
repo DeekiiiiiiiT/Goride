@@ -99,6 +99,7 @@ export async function buildDriverCarKitPayload(
       vehicleLabel: null,
       items: [] as Array<Record<string, unknown>>,
       openReportCount: 0,
+      fixedUnseenCount: 0,
       lastCheckInAt: null,
       fleetSupportPhone,
       state: "no_vehicle" as const,
@@ -119,6 +120,15 @@ export async function buildDriverCarKitPayload(
   const vinRaw = vehicle?.vin ? String(vehicle.vin).replace(/\s/g, "") : "";
   const vinLast4 = vinRaw.length >= 4 ? vinRaw.slice(-4) : null;
   const vehicleColor = vehicle?.color ? String(vehicle.color) : null;
+
+  const { count: fixedUnseenCountRaw } = await db()
+    .from("fleet_inv_driver_report")
+    .select("id", { count: "exact", head: true })
+    .eq("organization_id", org)
+    .eq("vehicle_id", resolvedId)
+    .eq("status", "fixed")
+    .is("seen_by_driver_at", null);
+  const fixedUnseenCount = fixedUnseenCountRaw ?? 0;
 
   const { data: vkMeta } = await db()
     .from("fleet_inv_vehicle_kit")
@@ -160,6 +170,7 @@ export async function buildDriverCarKitPayload(
       fuelLevelPct: vehicle?.fuel_level ?? null,
       items: [],
       openReportCount: 0,
+      fixedUnseenCount,
       lastCheckInAt: vkMeta?.last_inspected_at ?? null,
       lastSyncedAt,
       kitVersionLabel,
@@ -238,6 +249,7 @@ export async function buildDriverCarKitPayload(
     items,
     extras: [],
     openReportCount,
+    fixedUnseenCount,
     lastCheckInAt: vkMeta?.last_inspected_at ?? null,
     lastSyncedAt,
     kitVersionLabel,
@@ -250,6 +262,28 @@ export async function handleDriverCarKitGet(c: InvCtx, org: string) {
   const hint = c.req.query("vehicle_id") ?? null;
   const payload = await buildDriverCarKitPayload(org, hint, hint, driverId(c));
   return c.json(payload);
+}
+
+export async function handleDriverReportsSeenPost(c: InvCtx, org: string) {
+  const hint = c.req.query("vehicle_id") ?? null;
+  const assignment = await resolveDriverVehicleAssignment(driverId(c), {
+    organizationId: org,
+    hintVehicleId: hint,
+  });
+  if (!assignment.vehicleId) {
+    return c.json({ error: "No vehicle assigned" }, 409);
+  }
+  const now = new Date().toISOString();
+  const { data, error } = await db()
+    .from("fleet_inv_driver_report")
+    .update({ seen_by_driver_at: now })
+    .eq("organization_id", org)
+    .eq("vehicle_id", assignment.vehicleId)
+    .eq("status", "fixed")
+    .is("seen_by_driver_at", null)
+    .select("id");
+  if (error) return c.json({ error: error.message }, 500);
+  return c.json({ stub: false, markedSeen: (data ?? []).length, organizationId: org });
 }
 
 export async function handleDriverReportsGet(

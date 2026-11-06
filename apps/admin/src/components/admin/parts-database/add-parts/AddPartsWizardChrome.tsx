@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
+import { PartsButton } from "../PartsButton";
 import { MaterialIcon } from "../import/MaterialIcon";
 import type { FitMode } from "./addPartsTypes";
-import { trustLabelFromSource } from "./addPartsShared";
+import { trustLabelFromSource, WIZARD_FOOTER_HEIGHT_PX } from "./addPartsShared";
 
 export function AddPartsDominionBreadcrumb({ stepLabel }: { stepLabel: string }) {
   return (
@@ -50,7 +51,7 @@ export function AddPartsPartSummaryChip({
       <span
         className={
           verified
-            ? "inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-surface-container text-[#006e31] font-label-xs"
+            ? "inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-600/10 text-emerald-800 dark:bg-emerald-400/15 dark:text-emerald-200 font-label-xs"
             : "inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant font-label-xs"
         }
       >
@@ -156,39 +157,50 @@ export function AddPartsWizardFooter({
   onBack,
   onCancel,
   onNext,
+  onSkip,
+  backLabel = "Back",
   nextLabel = "Next",
+  centerNote,
   nextDisabled,
 }: {
   step: 1 | 2 | 3 | 4;
   onBack?: () => void;
   onCancel: () => void;
   onNext?: () => void;
+  onSkip?: () => void;
+  backLabel?: string;
   nextLabel?: string;
+  centerNote?: string;
   nextDisabled?: boolean;
 }) {
   return (
-    <div className="sticky bottom-0 z-20 -mx-margin px-margin py-space-md bg-surface/95 backdrop-blur border-t border-outline-variant/40 mt-space-lg">
-      <div className="max-w-[1520px] mx-auto flex flex-wrap items-center justify-between gap-3">
-        <div className="flex gap-2">
+    <div
+      className="fixed bottom-0 left-0 right-0 lg:left-64 z-30 border-t border-outline-variant/40 bg-surface/95 backdrop-blur"
+      style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
+    >
+      <div className="max-w-[1520px] mx-auto px-margin py-space-md flex flex-wrap items-center justify-between gap-3">
+        <div className="flex gap-2 items-center flex-wrap">
           {onBack ? (
-            <button type="button" className="h-10 px-4 rounded-lg border border-outline-variant/50 font-label-md hover:bg-surface-container-low" onClick={onBack}>
-              Back
-            </button>
+            <PartsButton variant="secondary" onClick={onBack}>
+              {backLabel}
+            </PartsButton>
           ) : null}
-          <button type="button" className="h-10 px-4 rounded-lg text-on-surface-variant font-label-md hover:underline" onClick={onCancel}>
+          <PartsButton variant="danger" onClick={onCancel}>
             Cancel
-          </button>
+          </PartsButton>
+          {onSkip ? (
+            <PartsButton variant="secondary" onClick={onSkip}>
+              Skip →
+            </PartsButton>
+          ) : null}
         </div>
-        <span className="font-mono-sm text-on-surface-variant">Step {step} of 4 · Not saved yet</span>
+        <span className="font-mono-sm text-on-surface-variant text-center flex-1 min-w-[120px]">
+          {centerNote ?? `Step ${step} of 4 · Not saved yet`}
+        </span>
         {onNext ? (
-          <button
-            type="button"
-            className="h-10 px-6 rounded-lg bg-primary-container text-on-primary font-label-md font-semibold disabled:opacity-50 shadow-sm"
-            disabled={nextDisabled}
-            onClick={onNext}
-          >
+          <PartsButton variant="primary" className="px-6 shadow-sm" disabled={nextDisabled} onClick={onNext}>
             {nextLabel}
-          </button>
+          </PartsButton>
         ) : (
           <span className="w-[88px]" />
         )}
@@ -204,6 +216,7 @@ export function AddPartsWizardShell({
   draftNumber,
   partTypeName,
   sourceType,
+  showStepTracker,
   children,
   footer,
 }: {
@@ -213,11 +226,15 @@ export function AddPartsWizardShell({
   draftNumber: string;
   partTypeName?: string;
   sourceType: string;
+  showStepTracker?: boolean;
   children: ReactNode;
   footer: ReactNode;
 }) {
   return (
-    <div className="w-full max-w-[1520px] mx-auto flex flex-col gap-space-lg pb-24">
+    <div
+      className="w-full max-w-[1520px] mx-auto flex flex-col gap-space-lg"
+      style={{ paddingBottom: WIZARD_FOOTER_HEIGHT_PX + 24 }}
+    >
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-space-md">
         <AddPartsDominionBreadcrumb stepLabel={stepLabel} />
         {draftBrand || draftNumber ? (
@@ -229,7 +246,7 @@ export function AddPartsWizardShell({
           />
         ) : null}
       </div>
-      {wizardStep >= 1 && draftBrand ? <AddPartsStepTracker wizardStep={wizardStep} /> : null}
+      {showStepTracker ? <AddPartsStepTracker wizardStep={wizardStep} /> : null}
       {children}
       {footer}
     </div>

@@ -27,11 +27,19 @@ export function In1Overview() {
               </p>
       <div className="flex items-center gap-space-xs mt-space-xs">
       <span className="relative flex h-2 w-2">
+      {live.chainCheckOk === false ? (
+      <span className="relative inline-flex rounded-full h-2 w-2 bg-error"></span>
+      ) : (
+      <>
       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-on-surface opacity-75"></span>
       <span className="relative inline-flex rounded-full h-2 w-2 bg-on-surface"></span>
+      </>
+      )}
       </span>
-      <span className="font-label-code text-caption text-secondary">
-                  Nightly check ran 06:30 today · all stock numbers add up
+      <span className={`font-label-code text-caption ${live.chainCheckOk === false ? 'text-error font-semibold' : 'text-secondary'}`}>
+                  {live.chainCheckOk === false
+                    ? 'Nightly check found stock numbers that do not add up — cannot snooze'
+                    : 'Nightly check ran 06:30 today · all stock numbers add up'}
                 </span>
       </div>
       </div>
@@ -45,6 +53,8 @@ export function In1Overview() {
         className="h-9 px-space-md flex items-center justify-center rounded-lg bg-surface-container-lowest shadow-sm"
         title="More Options"
       />
+      {!shell.readOnly ? (
+      <>
       <button type="button" onClick={() => shell.openModal('receive')} className="h-9 px-space-lg flex items-center gap-space-xs rounded-lg bg-surface-container-lowest text-on-surface hover:bg-surface-container transition-colors shadow-sm font-body-sm text-body-sm font-medium">
       <span className="material-symbols-outlined text-[16px]">move_to_inbox</span>
       <span>Receive</span>
@@ -53,6 +63,8 @@ export function In1Overview() {
       <span className="material-symbols-outlined text-[16px]">grid_view</span>
       <span>Issue</span>
       </button>
+      </>
+      ) : null}
       </div>
       </div>
 
@@ -156,14 +168,17 @@ export function In1Overview() {
                 </span>
               </div>
             </div>
+            {shell.phaseFlags.phase6Purchasing ? (
             <button type="button" onClick={() => shell.setTab('purchasing')} className="shrink-0 h-8 px-space-md rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface transition-colors font-body-sm text-body-sm font-medium">
               Reorder
             </button>
+            ) : null}
           </div>
         </>
       ) : null}
 
-      {live.assets.filter((a) => !strField(a, 'serial_number', '')).slice(0, 1).map((asset) => (
+      {shell.phaseFlags.phase4Assets
+        ? live.assets.filter((a) => !strField(a, 'serial_number', '')).slice(0, 1).map((asset) => (
         <div key={strField(asset, 'id', 'asset')}>
           <div className="h-px w-full bg-surface-container-low"></div>
           <div className="p-space-lg flex flex-col sm:flex-row sm:items-center justify-between gap-space-md bg-surface-container-lowest hover:bg-surface-container-low transition-colors">
@@ -192,7 +207,8 @@ export function In1Overview() {
             </button>
           </div>
         </div>
-      ))}
+      ))
+        : null}
 
       {live.openAlertCount === 0 &&
       live.kitVehicles.every((v) => v.missingLines + v.shortLines === 0) &&
@@ -250,6 +266,8 @@ export function In1Overview() {
       <span className="w-2 h-2 rounded-full bg-primary"></span>
       </div>
 
+      {shell.phaseFlags.phase6Purchasing ? (
+      <>
       <div className="p-space-md rounded-lg bg-surface-container-low flex flex-col gap-space-xs">
       <div className="flex items-center justify-between">
       <span className="font-body-sm text-body-sm font-semibold text-on-surface">Phone Holder Mount</span>
@@ -270,6 +288,8 @@ export function In1Overview() {
       <span className="material-symbols-outlined text-[16px]">add_shopping_cart</span>
       <span>Create draft order</span>
       </button>
+      </>
+      ) : null}
       </div>
       </div>
       </div>

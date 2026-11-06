@@ -251,7 +251,7 @@ export function In15VehicleKitCard({ vehicleId }: { vehicleId?: string | null })
                   </div>
       <div className="flex flex-col min-w-0">
       <span className="font-body-lg text-body-lg font-bold text-on-surface">—</span>
-      <span className="font-caption text-caption text-secondary font-label-code">DRV-KGN-0482 · Kingston East</span>
+      <span className="font-caption text-caption text-secondary font-label-code">{form.assignedDriverLabel}</span>
       <div className="flex items-center gap-space-xs mt-1">
       <span className="material-symbols-outlined text-xs text-secondary">star</span>
       <span className="font-caption text-caption font-semibold text-on-surface">4.92 Rating</span>

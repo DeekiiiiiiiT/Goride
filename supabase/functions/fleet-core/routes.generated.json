@@ -736,7 +736,6 @@
     "POST /make-server-37f42386/admin/vehicle-catalog-pending-requests/:id/reject",
     "POST /make-server-37f42386/admin/vehicle-catalog-pending-requests/:id/request-info",
     "POST /make-server-37f42386/admin/vehicle-catalog/bulk",
-    "POST /make-server-37f42386/admin/vehicle-catalog/purge",
     "POST /make-server-37f42386/admin/vehicle-catalog/undo-batch",
     "POST /make-server-37f42386/ai/map-csv",
     "POST /make-server-37f42386/ai/parse-toll-csv",

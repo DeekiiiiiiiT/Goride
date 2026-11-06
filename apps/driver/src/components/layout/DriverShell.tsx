@@ -83,7 +83,8 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
   }, []);
 
   useEffect(() => {
-    if (!import.meta.env.DEV) return;
+    const inventoryE2e = import.meta.env.VITE_INVENTORY_E2E === '1';
+    if (!import.meta.env.DEV && !inventoryE2e) return;
     const capture = new URLSearchParams(window.location.search).get('capture');
     if (capture === 'weekly-kit') {
       setCheckInOpen(true);

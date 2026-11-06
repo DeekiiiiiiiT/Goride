@@ -1,7 +1,7 @@
 /** Vehicle catalog writes live on platform-catalog. Reads stay on fleet-core. */
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { requireAuth } from "./rbac_middleware.ts";
-import { dominionCan } from "../../../packages/auth-client/src/dominionPermissions.ts";
+import { assertCatalogWriteResponse } from "./catalog_access.ts";
 import { checkRateLimit, getClientIp } from "./rate_limiter.ts";
 import { parseCatalogMonthFromUnknown } from "../../../packages/types/src/catalogMonthParse.ts";
 import {
@@ -15,12 +15,7 @@ import {
   catalogRowForApi,
   insertRowForLegacyDb,
   isLegacyVehicleCatalogYearNotNullError,
-  isPostgrestVehicleCatalogSchemaCacheError,
-  mergeCatalogTrimIntoTrimSeriesInPlace,
-  parseMissingColumnFromVehicleCatalogDbError,
   patchRowForLegacyDb,
-  shouldStripVehicleCatalogInsertPayloadOnRetry,
-  stripVehicleCatalogOptionalMigrationColumns,
   VEHICLE_CATALOG_SUPABASE_SELECT,
 } from "./vehicle_catalog_schema_fallback.ts";
 import {
@@ -71,12 +66,7 @@ function parseOptionalProductionMonth(
 }
 
 function assertVehicleCatalogAccess(c: any) {
-  const rbacUser = c.get("rbacUser") as any;
-  const callerRole = rbacUser?.resolvedRole || rbacUser?.role;
-  if (!dominionCan(callerRole, "catalog.write")) {
-    return c.json({ error: "Forbidden", message: "You cannot change that" }, 403);
-  }
-  return null;
+  return assertCatalogWriteResponse(c);
 }
 
 function vehicleCatalogActorId(c: any): string | null {
@@ -145,46 +135,10 @@ async function enrichVehicleCatalogLinks(
   return row;
 }
 
-/** Bulk-delete every row in motor vehicle catalog (maintenance templates CASCADE). */
-const VEHICLE_CATALOG_PURGE_CONFIRM = "DELETE ALL";
-/** Must match client `VEHICLE_CATALOG_UNDO_BATCH_CONFIRM_PHRASE` — required when force-undoing a batch. */
+/** Must match client `VEHICLE_CATALOG_UNDO_BATCH_CONFIRM_PHRASE` — legacy, force undo removed (V-04). */
 const VEHICLE_CATALOG_UNDO_BATCH_CONFIRM = "UNDO BATCH";
 
-// POST /admin/vehicle-catalog/purge — must be registered before POST /admin/vehicle-catalog (create)
-route.post("/make-server-37f42386/admin/vehicle-catalog/purge", requireAuth(), async (c: any) => {
-  const denied = assertVehicleCatalogAccess(c);
-  if (denied) return denied;
-  const limited = await assertCatalogWriteRateLimit(c);
-  if (limited) return limited;
-  try {
-    const body = (await c.req.json().catch(() => ({}))) as { confirm?: string };
-    if (String(body.confirm ?? "").trim() !== VEHICLE_CATALOG_PURGE_CONFIRM) {
-      return c.json(
-        { error: `Confirmation required: send JSON { "confirm": "${VEHICLE_CATALOG_PURGE_CONFIRM}" }` },
-        400,
-      );
-    }
-    const CHUNK = 500;
-    let deleted = 0;
-    for (;;) {
-      const { data: batch, error: qErr } = await supabase.from("vehicle_catalog").select("id").limit(CHUNK);
-      if (qErr) throw qErr;
-      if (!batch?.length) break;
-      const ids = (batch as { id: string }[]).map((r) => r.id);
-      const { error: dErr } = await supabase.from("vehicle_catalog").delete().in("id", ids);
-      if (dErr) throw dErr;
-      deleted += ids.length;
-      if (batch.length < CHUNK) break;
-    }
-    invalidateCatalogExistenceCache();
-    return c.json({ deleted });
-  } catch (e: any) {
-    console.error("[vehicle-catalog] purge:", e);
-    return c.json({ error: e.message || "Failed to purge vehicle catalog" }, 500);
-  }
-});
-
-/** Existing car with the same make, model, series, trim, chassis code, engine code and start year, or null. */
+// POST /admin/vehicle-catalog
 async function findCatalogByIdentity(
   supabase: SupabaseClient,
   payload: Record<string, unknown>,
@@ -293,22 +247,6 @@ route.post("/make-server-37f42386/admin/vehicle-catalog/bulk", requireAuth(), as
             .eq("id", existingId)
             .select(VEHICLE_CATALOG_SUPABASE_SELECT)
             .single();
-          if (upd.error && shouldStripVehicleCatalogInsertPayloadOnRetry(upd.error)) {
-            const trimmed = stripVehicleCatalogOptionalMigrationColumns(row);
-            trimmed.updated_at = row.updated_at;
-            stampCatalogProvenance(trimmed, {
-              userId: actorId,
-              source: "csv_import",
-              importBatchId,
-              isCreate: false,
-            });
-            upd = await supabase
-              .from("vehicle_catalog")
-              .update(trimmed)
-              .eq("id", existingId)
-              .select(VEHICLE_CATALOG_SUPABASE_SELECT)
-              .single();
-          }
           if (upd.error) throw upd.error;
           if (!upd.data) throw new Error("Not found");
           invalidateCatalogExistenceCache(existingId);
@@ -364,20 +302,10 @@ route.post("/make-server-37f42386/admin/vehicle-catalog/bulk", requireAuth(), as
             .insert(row)
             .select(VEHICLE_CATALOG_SUPABASE_SELECT)
             .single();
-          if (ins.error && shouldStripVehicleCatalogInsertPayloadOnRetry(ins.error)) {
-            const trimmed = stripVehicleCatalogOptionalMigrationColumns(row);
-            trimmed.updated_at = row.updated_at;
-            stampCatalogProvenance(trimmed, {
-              userId: actorId,
-              source: "csv_import",
-              importBatchId,
-              isCreate: true,
-            });
-            ins = await supabase
-              .from("vehicle_catalog")
-              .insert(trimmed)
-              .select(VEHICLE_CATALOG_SUPABASE_SELECT)
-              .single();
+          if (ins.error && isLegacyVehicleCatalogYearNotNullError(ins.error)) {
+            const legacyRow = insertRowForLegacyDb(row);
+            legacyRow.updated_at = row.updated_at;
+            ins = await supabase.from("vehicle_catalog").insert(legacyRow).select("*").single();
           }
           if (ins.error) throw ins.error;
           const id = String((ins.data as { id: string }).id);
@@ -421,48 +349,60 @@ route.post("/make-server-37f42386/admin/vehicle-catalog/undo-batch", requireAuth
   const limited = await assertCatalogWriteRateLimit(c);
   if (limited) return limited;
   try {
-    const body = (await c.req.json().catch(() => ({}))) as {
-      import_batch_id?: string;
-      force?: boolean;
-      confirm?: string;
-    };
+    const body = (await c.req.json().catch(() => ({}))) as { import_batch_id?: string };
     const importBatchId = String(body.import_batch_id ?? "").trim();
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(importBatchId)) {
       return c.json({ error: "import_batch_id must be a UUID" }, 400);
     }
-    if (body.force === true) {
-      if (String(body.confirm ?? "").trim() !== VEHICLE_CATALOG_UNDO_BATCH_CONFIRM) {
-        return c.json(
-          { error: `Confirmation required: send JSON { "confirm": "${VEHICLE_CATALOG_UNDO_BATCH_CONFIRM}" }` },
-          400,
-        );
-      }
-    }
     const { data: batchRows, error: qErr } = await supabase
       .from("vehicle_catalog")
-      .select("id")
+      .select("id, import_batch_id, updated_at, created_at")
       .eq("import_batch_id", importBatchId);
     if (qErr) throw qErr;
-    const ids = (batchRows || []).map((r: { id: string }) => r.id);
-    if (ids.length === 0) {
-      return c.json({ deleted: 0, import_batch_id: importBatchId, dependencies: null });
+    const rows = batchRows || [];
+    if (rows.length === 0) {
+      return c.json({ deleted: 0, retired: 0, kept_edited: 0, import_batch_id: importBatchId });
     }
-    const deps = await countCatalogDependenciesForIds(supabase, ids);
-    if (dependenciesBlockDelete(deps) && body.force !== true) {
-      return c.json(
-        {
-          error: "Batch has dependents; pass force:true to delete anyway",
-          code: "CATALOG_HAS_DEPENDENTS",
-          dependencies: deps,
-          rowCount: ids.length,
-        },
-        409,
-      );
+    let deleted = 0;
+    let retired = 0;
+    let keptEdited = 0;
+    const now = new Date().toISOString();
+    for (const row of rows as Array<{ id: string; updated_at?: string; created_at?: string }>) {
+      const id = String(row.id);
+      const { data: revs } = await supabase
+        .from("platform_revision")
+        .select("id, created_at")
+        .eq("entity_table", "vehicle_catalog")
+        .eq("entity_id", id)
+        .eq("import_batch_id", importBatchId)
+        .order("created_at", { ascending: false })
+        .limit(2);
+      const revList = revs || [];
+      if (revList.length > 1) {
+        keptEdited += 1;
+        continue;
+      }
+      const deps = await countCatalogDependencies(supabase, id);
+      if (dependenciesBlockDelete(deps)) {
+        const { error: rErr } = await supabase
+          .from("vehicle_catalog")
+          .update({ status: "retired", retired_at: now, updated_at: now })
+          .eq("id", id);
+        if (rErr) throw rErr;
+        retired += 1;
+        continue;
+      }
+      const { error: dErr } = await supabase.from("vehicle_catalog").delete().eq("id", id);
+      if (dErr) throw dErr;
+      deleted += 1;
     }
-    const { error: dErr } = await supabase.from("vehicle_catalog").delete().eq("import_batch_id", importBatchId);
-    if (dErr) throw dErr;
     invalidateCatalogExistenceCache();
-    return c.json({ deleted: ids.length, import_batch_id: importBatchId, dependencies: deps });
+    return c.json({
+      deleted,
+      retired,
+      kept_edited: keptEdited,
+      import_batch_id: importBatchId,
+    });
   } catch (e: any) {
     console.error("[vehicle-catalog] undo-batch:", e);
     return c.json({ error: e.message || "Failed to undo import batch" }, 500);
@@ -548,49 +488,10 @@ route.post("/make-server-37f42386/admin/vehicle-catalog", requireAuth(), async (
      */
     let ins: any = await supabase.from("vehicle_catalog").insert(row).select(VEHICLE_CATALOG_SUPABASE_SELECT).single();
 
-    /** Legacy DB: `year NOT NULL` only — map production_start_year → year. */
     if (ins.error && isLegacyVehicleCatalogYearNotNullError(ins.error)) {
-      const legacyRow = insertRowForLegacyDb(stripVehicleCatalogOptionalMigrationColumns(row));
+      const legacyRow = insertRowForLegacyDb(row);
       legacyRow.updated_at = row.updated_at;
       ins = await supabase.from("vehicle_catalog").insert(legacyRow).select("*").single();
-    } else if (ins.error && isPostgrestVehicleCatalogSchemaCacheError(ins.error)) {
-      const rpc = await supabase.rpc("edge_insert_vehicle_catalog_row", { p: row });
-      if (!rpc.error && rpc.data != null) {
-        ins = { data: rpc.data as Record<string, unknown>, error: null };
-      }
-    } else if (ins.error) {
-      const rpcIns = await supabase.rpc("edge_insert_vehicle_catalog_row", { p: row });
-      if (!rpcIns.error && rpcIns.data != null) {
-        ins = { data: rpcIns.data as Record<string, unknown>, error: null };
-      }
-    }
-    if (!ins.error) {
-      /* success */
-    } else {
-      /** Drop only columns the DB reports missing — never for PGRST schema-cache-only errors. */
-      let candidate: Record<string, unknown> = { ...row };
-      for (
-        let i = 0;
-        ins.error && shouldStripVehicleCatalogInsertPayloadOnRetry(ins.error) && i < 48;
-        i++
-      ) {
-        const missing = parseMissingColumnFromVehicleCatalogDbError(ins.error);
-        if (!missing || !(missing in candidate)) break;
-        if (missing === "catalog_trim") mergeCatalogTrimIntoTrimSeriesInPlace(candidate);
-        delete candidate[missing];
-        candidate.updated_at = row.updated_at;
-        ins = await supabase.from("vehicle_catalog").insert(candidate).select(VEHICLE_CATALOG_SUPABASE_SELECT).single();
-      }
-      if (ins.error && shouldStripVehicleCatalogInsertPayloadOnRetry(ins.error)) {
-        const trimmed = stripVehicleCatalogOptionalMigrationColumns(candidate);
-        trimmed.updated_at = row.updated_at;
-        ins = await supabase.from("vehicle_catalog").insert(trimmed).select(VEHICLE_CATALOG_SUPABASE_SELECT).single();
-      }
-      if (ins.error && shouldStripVehicleCatalogInsertPayloadOnRetry(ins.error)) {
-        const legacyRow = insertRowForLegacyDb(stripVehicleCatalogOptionalMigrationColumns(candidate));
-        legacyRow.updated_at = row.updated_at;
-        ins = await supabase.from("vehicle_catalog").insert(legacyRow).select("*").single();
-      }
     }
 
     if (ins.error) throw ins.error;
@@ -711,22 +612,8 @@ route.patch("/make-server-37f42386/admin/vehicle-catalog/:id", requireAuth(), as
       return c.json({ error: "No fields to update" }, 400);
     }
     let upd: any = await supabase.from("vehicle_catalog").update(row).eq("id", id).select(VEHICLE_CATALOG_SUPABASE_SELECT).single();
-    let patchCandidate: Record<string, unknown> = { ...row };
-    for (let i = 0; upd.error && shouldStripVehicleCatalogInsertPayloadOnRetry(upd.error) && i < 48; i++) {
-      const missing = parseMissingColumnFromVehicleCatalogDbError(upd.error);
-      if (!missing || !(missing in patchCandidate)) break;
-      if (missing === "catalog_trim") mergeCatalogTrimIntoTrimSeriesInPlace(patchCandidate);
-      delete patchCandidate[missing];
-      patchCandidate.updated_at = row.updated_at;
-      upd = await supabase.from("vehicle_catalog").update(patchCandidate).eq("id", id).select(VEHICLE_CATALOG_SUPABASE_SELECT).single();
-    }
-    if (upd.error && shouldStripVehicleCatalogInsertPayloadOnRetry(upd.error)) {
-      const trimmed = stripVehicleCatalogOptionalMigrationColumns(patchCandidate);
-      trimmed.updated_at = row.updated_at;
-      upd = await supabase.from("vehicle_catalog").update(trimmed).eq("id", id).select(VEHICLE_CATALOG_SUPABASE_SELECT).single();
-    }
-    if (upd.error && shouldStripVehicleCatalogInsertPayloadOnRetry(upd.error)) {
-      const legacyRow = patchRowForLegacyDb(stripVehicleCatalogOptionalMigrationColumns(patchCandidate));
+    if (upd.error && isLegacyVehicleCatalogYearNotNullError(upd.error)) {
+      const legacyRow = patchRowForLegacyDb(row);
       legacyRow.updated_at = row.updated_at;
       upd = await supabase.from("vehicle_catalog").update(legacyRow).eq("id", id).select("*").single();
     }
@@ -749,23 +636,46 @@ route.delete("/make-server-37f42386/admin/vehicle-catalog/:id", requireAuth(), a
   if (limited) return limited;
   try {
     const id = c.req.param("id");
-    const force = c.req.query("force") === "true";
-    const dependencies = await countCatalogDependencies(supabase, id);
-    if (dependenciesBlockDelete(dependencies) && !force) {
+    const { data: existing, error: loadErr } = await supabase
+      .from("vehicle_catalog")
+      .select("id, status")
+      .eq("id", id)
+      .maybeSingle();
+    if (loadErr) throw loadErr;
+    if (!existing) return c.json({ error: "Not found" }, 404);
+    const status = String((existing as { status?: string }).status ?? "active");
+    const { data: depRows, error: depErr } = await supabase.rpc("catalog_car_dependents", { p_id: id });
+    if (depErr) throw depErr;
+    const depTotal = (depRows || []).reduce(
+      (sum: number, row: { row_count?: number }) => sum + Number(row.row_count ?? 0),
+      0,
+    );
+    const now = new Date().toISOString();
+    if (status === "draft" && depTotal === 0) {
+      const { error } = await supabase.from("vehicle_catalog").delete().eq("id", id);
+      if (error) throw error;
+      invalidateCatalogExistenceCache(id);
+      return c.json({ success: true, deleted: true });
+    }
+    if (depTotal > 0 && status !== "draft") {
       return c.json(
         {
-          error: "Catalog row has dependents; pass force=true to delete anyway",
+          error: "Catalog row has dependents; retire instead",
           code: "CATALOG_HAS_DEPENDENTS",
-          dependencies,
+          dependents: depRows,
         },
         409,
       );
     }
-    const { data, error } = await supabase.from("vehicle_catalog").delete().eq("id", id).select("id");
+    const { data, error } = await supabase
+      .from("vehicle_catalog")
+      .update({ status: "retired", retired_at: now, updated_at: now })
+      .eq("id", id)
+      .select("id, status")
+      .maybeSingle();
     if (error) throw error;
-    if (!data?.length) return c.json({ error: "Not found" }, 404);
     invalidateCatalogExistenceCache(id);
-    return c.json({ success: true, dependencies });
+    return c.json({ success: true, retired: true, item: data });
   } catch (e: any) {
     console.error("[vehicle-catalog] delete:", e);
     return c.json({ error: e.message || "Failed to delete vehicle catalog entry" }, 500);

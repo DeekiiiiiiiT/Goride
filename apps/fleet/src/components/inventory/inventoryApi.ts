@@ -1,8 +1,27 @@
 import { API_ENDPOINTS } from '@roam/api-client';
 import { fetchWithRetry } from '../../services/api';
 import { getHeaders } from '../../utils/authHeaders';
+import { INVENTORY_PHASE_OFF_MESSAGE } from './inventoryPhaseUi';
 
 const BASE = `${API_ENDPOINTS.fleetCore}/inventory`;
+
+export class InventoryPhaseOffError extends Error {
+  constructor(message: string = INVENTORY_PHASE_OFF_MESSAGE) {
+    super(message);
+    this.name = 'InventoryPhaseOffError';
+  }
+}
+
+function throwInventoryHttpError(response: Response, body: Record<string, unknown>) {
+  const msg = String(body.error ?? body.message ?? `Inventory API ${response.status}`);
+  if (
+    response.status === 403 &&
+    (msg.includes(INVENTORY_PHASE_OFF_MESSAGE) || msg.toLowerCase().includes("isn't switched on"))
+  ) {
+    throw new InventoryPhaseOffError(msg);
+  }
+  throw new Error(msg);
+}
 
 async function invFetch(path: string, init: RequestInit = {}) {
   const headers = await getHeaders();
@@ -14,8 +33,8 @@ async function invFetch(path: string, init: RequestInit = {}) {
     },
   });
   if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
-    throw new Error(body.error || body.message || `Inventory API ${response.status}`);
+    const body = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+    throwInventoryHttpError(response, body);
   }
   return response.json();
 }
@@ -30,8 +49,8 @@ async function invFetchRaw(path: string, init: RequestInit = {}) {
     },
   });
   if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
-    throw new Error(body.error || body.message || `Inventory API ${response.status}`);
+    const body = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+    throwInventoryHttpError(response, body);
   }
   return response;
 }
@@ -395,6 +414,12 @@ export const inventoryApi = {
   publishKitTemplate: (templateId: string, body: unknown) =>
     invFetch(`/kits/templates/${encodeURIComponent(templateId)}/publish`, {
       method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+  saveKitTemplateDraft: (templateId: string, body: unknown) =>
+    invFetch(`/kits/templates/${encodeURIComponent(templateId)}/draft`, {
+      method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     }),

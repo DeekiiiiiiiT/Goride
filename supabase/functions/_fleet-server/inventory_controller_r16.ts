@@ -27,6 +27,12 @@ function actorId(c: InvCtx): string | null {
   return (c.get("rbacUser") as RbacUser | undefined)?.userId ?? null;
 }
 
+function actorUuid(c: InvCtx): string | null {
+  const id = actorId(c);
+  if (id && /^[0-9a-f-]{36}$/i.test(id)) return id;
+  return null;
+}
+
 const OPEN_PO_STATUSES = ["draft", "awaiting_approval", "ordered", "part_received", "received", "staged"];
 
 async function hasStockAtLocation(org: string, locationId: string): Promise<boolean> {
@@ -280,7 +286,7 @@ export function registerInventoryR16Routes(app: Hono<InvEnv>) {
       vendor_id: body.vendor_id ?? null,
       ship_to_location_id: body.ship_to_location_id ?? null,
       status: "draft",
-      initiated_by: actorId(c),
+      initiated_by: actorUuid(c),
     }).select("*").single();
     if (error) return c.json({ error: error.message }, 500);
     const lines = Array.isArray(body.lines) ? body.lines as Record<string, unknown>[] : [];

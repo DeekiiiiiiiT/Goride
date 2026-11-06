@@ -49,6 +49,23 @@ export function filterAuditLogEntries(
         || e.details?.toLowerCase().includes("part_match"),
     );
   }
+  if (topic === "parts") {
+    list = list.filter((e) => {
+      const action = e.action?.toLowerCase() ?? "";
+      const details = e.details?.toLowerCase() ?? "";
+      return (
+        action.includes("part_")
+        || action.includes("catalog")
+        || action.includes("self_serve")
+        || action.includes("import_batch")
+        || details.includes("part_master")
+        || details.includes("part_listing")
+        || details.includes("self_serve")
+        || details.includes("catalog")
+        || details.includes("part import")
+      );
+    });
+  }
   if (opts.actionFilter && opts.actionFilter !== "all") {
     list = list.filter((e) => e.action === opts.actionFilter);
   }

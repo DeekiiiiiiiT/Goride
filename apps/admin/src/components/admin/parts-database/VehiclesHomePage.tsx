@@ -1,5 +1,8 @@
 // Stitch: dominion-redesign/c160c221588b4987b7a9d6737e69c3c2
 import { useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { useAuth } from "../../auth/AuthContext";
+import { fetchMaintenanceGovernanceFlag } from "../maintenance-master/maintenanceMasterApi";
 import { fetchPartsOverview } from "./partsDatabaseApi";
 import "./partsDatabase.css";
 
@@ -14,6 +17,14 @@ const MODULES = [
 ];
 
 export function VehiclesHomePage({ onNavigate }: { onNavigate: (page: string) => void }) {
+  const { session } = useAuth();
+  const token = session?.access_token ?? "";
+  const [mmGovernance, setMmGovernance] = useState(false);
+  useEffect(() => {
+    if (!token) return;
+    void fetchMaintenanceGovernanceFlag(token).then(setMmGovernance);
+  }, [token]);
+  const modules = MODULES.filter((m) => m.id !== "maintenance-templates" || mmGovernance);
   const query = useQuery({ queryKey: ["parts-overview"], queryFn: fetchPartsOverview, retry: false });
   const data = query.data;
   const vehicles = data ? String(data.vehicles) : "—";
@@ -47,9 +58,9 @@ export function VehiclesHomePage({ onNavigate }: { onNavigate: (page: string) =>
         <div className="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
           <div className="px-6 py-4 flex items-center justify-between">
             <span className="text-xs font-label uppercase tracking-wider font-bold text-on-surface-variant">Modules</span>
-            <span className="text-xs font-mono text-outline">7 items</span>
+            <span className="text-xs font-mono text-outline">{modules.length} items</span>
           </div>
-          {MODULES.map((item) => (
+          {modules.map((item) => (
             <button
               key={item.id}
               type="button"

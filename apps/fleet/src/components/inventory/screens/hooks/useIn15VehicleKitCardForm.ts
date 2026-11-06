@@ -127,6 +127,18 @@ export function useIn15VehicleKitCardForm(vehicleId?: string | null) {
     shell.setTab('vehicle-kits');
   };
 
+  const assignedDriverLabel = useMemo(() => {
+    const row = shell.kitComplianceRows.find(
+      (r) => strField(r, 'vehicle_id', '') === (vehicle?.vehicleId ?? ''),
+    );
+    const driver = strField(row ?? {}, 'driver_name', strField(row ?? {}, 'assigned_driver', ''));
+    const hub = strField(row ?? {}, 'hub_name', strField(row ?? {}, 'home_base', ''));
+    if (driver && hub) return `${driver} · ${hub}`;
+    if (driver) return driver;
+    if (hub) return hub;
+    return '—';
+  }, [shell.kitComplianceRows, vehicle?.vehicleId]);
+
   return {
     ...base,
     shell,
@@ -147,6 +159,7 @@ export function useIn15VehicleKitCardForm(vehicleId?: string | null) {
     issueKitDisabledReason,
     bookMaintenance,
     focusVehicleKits,
+    assignedDriverLabel,
     strField,
   };
 }

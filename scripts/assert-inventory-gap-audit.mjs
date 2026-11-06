@@ -69,6 +69,15 @@ const stitchDenyList = [
   '64,820 km',
   '•••• 2118',
   'PO #JAM-7721',
+  '876-555',
+  'write-offs over J$ 5,000',
+  'J$ 150,000',
+  'roamfleet.co/scan',
+  '482 913',
+  '98 of 100',
+  '70mai',
+  'Kingston Auto Supplies',
+  'Guardian General',
 ];
 
 /** Rev 33 — driver car-kit Stitch literals (scoped to apps/driver/.../car-kit only). */

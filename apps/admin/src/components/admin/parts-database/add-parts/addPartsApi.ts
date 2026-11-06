@@ -144,6 +144,7 @@ export type SelfServePreview = {
     modelYearsLabel?: string;
     vehicleSummary?: string;
   };
+  oePreviewCars?: Array<{ label: string; years?: string; engine?: string; position?: string }>;
 };
 
 export async function previewSelfServePart(input: {

@@ -13,13 +13,16 @@ export function Dk1MyCarKit({
   onReportItem,
   onPreShiftInspection,
   onUpdateStatus,
+  onOpenFixedReports,
 }: {
   kit?: DriverCarKitPayload | null;
   onReportItem?: (itemName: string | null) => void;
   onPreShiftInspection?: () => void;
   onUpdateStatus?: (item: DriverCarKitItem) => void;
+  onOpenFixedReports?: () => void;
 }) {
   const vehicleLabel = carKitVehicleLabel(kit);
+  const fixedUnseen = kit?.fixedUnseenCount ?? 0;
   const { present, total, missing, reported } = carKitItemCounts(kit);
   const progressOffset = carKitProgressOffset(present, total);
   const summaryTitle = carKitSummaryTitle(kit);
@@ -79,6 +82,20 @@ export function Dk1MyCarKit({
       <span className="font-body-sm text-body-sm text-on-surface-variant">{checkInLabel}</span>
       </div>
       </div>
+
+      {fixedUnseen > 0 && onOpenFixedReports ? (
+      <button
+        type="button"
+        className="w-full text-left bg-primary-fixed text-on-primary-fixed rounded-xl px-space-md py-space-sm shadow-sm flex items-center gap-space-sm hover:opacity-95 transition-opacity"
+        onClick={onOpenFixedReports}
+      >
+      <span className="material-symbols-outlined text-[20px]" style={{ fontVariationSettings: "'FILL' 1" }}>task_alt</span>
+      <span className="font-body-sm text-body-sm font-semibold">
+                {fixedUnseen} report{fixedUnseen === 1 ? '' : 's'} fixed by the fleet
+              </span>
+      <span className="material-symbols-outlined text-[18px] ml-auto">chevron_right</span>
+      </button>
+      ) : null}
 
       <div className="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden flex flex-col">
       <div className="px-space-md py-space-sm bg-surface-container-low flex items-center justify-between">

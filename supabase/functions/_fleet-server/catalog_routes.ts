@@ -5,6 +5,7 @@ import type { Context } from "npm:hono@4.3.11";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { assertPlatformStaffResponse, hasPlatformOwnerAccess, requireAuth } from "./rbac_middleware.ts";
 import type { RbacUser } from "./rbac_middleware.ts";
+import { assertCatalogWriteResponse } from "./catalog_access.ts";
 import { assertNoCustomerIdentity } from "./catalog_parts_shape.ts";
 import {
   getCatalogParts,
@@ -39,6 +40,10 @@ function optionalYear(value: unknown): number | null | false {
   const year = Number(value);
   if (!Number.isInteger(year) || year < 1900 || year > 2100) return false;
   return year;
+}
+
+function assertCatalogWrite(c: Context): Response | null {
+  return assertCatalogWriteResponse(c);
 }
 
 function staffJson(c: Context, body: unknown) {
@@ -211,7 +216,7 @@ export function registerCatalogRoutes(route: RouteApp, supabase: SupabaseClient)
   });
 
   route.post("/make-server-37f42386/admin/catalog/tiered-kill", requireAuth(), async (c: Context) => {
-    const denied = assertPlatformStaffResponse(c);
+    const denied = assertCatalogWrite(c);
     if (denied) return denied;
     try {
       const body = await c.req.json() as { killed?: boolean };
@@ -230,7 +235,7 @@ export function registerCatalogRoutes(route: RouteApp, supabase: SupabaseClient)
   });
 
   route.post("/make-server-37f42386/admin/catalog/refresh-demand", requireAuth(), async (c: Context) => {
-    const denied = assertPlatformStaffResponse(c);
+    const denied = assertCatalogWrite(c);
     if (denied) return denied;
     try {
       const { data, error } = await supabase.rpc("refresh_catalog_variant_demand");
@@ -244,7 +249,7 @@ export function registerCatalogRoutes(route: RouteApp, supabase: SupabaseClient)
   });
 
   route.post("/make-server-37f42386/admin/catalog/seed-in-use", requireAuth(), async (c: Context) => {
-    const denied = assertPlatformStaffResponse(c);
+    const denied = assertCatalogWrite(c);
     if (denied) return denied;
     return c.json({ error: "Parts are entered from a source, not seeded." }, 410);
   });
@@ -443,7 +448,7 @@ export function registerCatalogRoutes(route: RouteApp, supabase: SupabaseClient)
   });
 
   route.post("/make-server-37f42386/admin/catalog/symptoms", requireAuth(), async (c: Context) => {
-    const denied = assertPlatformStaffResponse(c);
+    const denied = assertCatalogWrite(c);
     if (denied) return denied;
     const user = c.get("rbacUser") as RbacUser | undefined;
     if (!user || !hasPlatformOwnerAccess(user)) {
@@ -508,7 +513,7 @@ export function registerCatalogRoutes(route: RouteApp, supabase: SupabaseClient)
   });
 
   route.post("/make-server-37f42386/admin/catalog/parts/alias", requireAuth(), async (c: Context) => {
-    const denied = assertPlatformStaffResponse(c);
+    const denied = assertCatalogWrite(c);
     if (denied) return denied;
     const user = c.get("rbacUser") as RbacUser | undefined;
     if (!user || !hasPlatformOwnerAccess(user)) {
@@ -580,7 +585,7 @@ export function registerCatalogRoutes(route: RouteApp, supabase: SupabaseClient)
   });
 
   route.post("/make-server-37f42386/admin/catalog/body-families", requireAuth(), async (c: Context) => {
-    const denied = assertPlatformStaffResponse(c);
+    const denied = assertCatalogWrite(c);
     if (denied) return denied;
     try {
       const body = await c.req.json();
@@ -593,7 +598,7 @@ export function registerCatalogRoutes(route: RouteApp, supabase: SupabaseClient)
   });
 
   route.post("/make-server-37f42386/admin/catalog/parts/reach-preview", requireAuth(), async (c: Context) => {
-    const denied = assertPlatformStaffResponse(c);
+    const denied = assertCatalogWrite(c);
     if (denied) return denied;
     try {
       const body = await c.req.json() as {
@@ -642,7 +647,7 @@ export function registerCatalogRoutes(route: RouteApp, supabase: SupabaseClient)
   });
 
   route.post("/make-server-37f42386/admin/catalog/parts/exclude", requireAuth(), async (c: Context) => {
-    const denied = assertPlatformStaffResponse(c);
+    const denied = assertCatalogWrite(c);
     if (denied) return denied;
     try {
       const body = await c.req.json();
@@ -667,7 +672,7 @@ export function registerCatalogRoutes(route: RouteApp, supabase: SupabaseClient)
   });
 
   route.patch("/make-server-37f42386/admin/catalog/tasks/:id", requireAuth(), async (c: Context) => {
-    const denied = assertPlatformStaffResponse(c);
+    const denied = assertCatalogWrite(c);
     if (denied) return denied;
     try {
       const id = c.req.param("id");
@@ -683,7 +688,7 @@ export function registerCatalogRoutes(route: RouteApp, supabase: SupabaseClient)
   });
 
   route.post("/make-server-37f42386/admin/catalog/reference-offer", requireAuth(), async (c: Context) => {
-    const denied = assertPlatformStaffResponse(c);
+    const denied = assertCatalogWrite(c);
     if (denied) return denied;
     try {
       const body = await c.req.json() as {
@@ -728,7 +733,7 @@ export function registerCatalogRoutes(route: RouteApp, supabase: SupabaseClient)
   });
 
   const guided = async (c: Context, name: string) => {
-    const denied = assertPlatformStaffResponse(c);
+    const denied = assertCatalogWrite(c);
     if (denied) return denied;
     try {
       const body = await c.req.json() as Record<string, unknown>;
@@ -751,7 +756,7 @@ export function registerCatalogRoutes(route: RouteApp, supabase: SupabaseClient)
   route.patch("/make-server-37f42386/admin/catalog/parts/:groupId/fit", requireAuth(), async (c: Context) => {
     const body = await c.req.json() as Record<string, unknown>;
     body.groupId = c.req.param("groupId");
-    const denied = assertPlatformStaffResponse(c);
+    const denied = assertCatalogWrite(c);
     if (denied) return denied;
     try {
       const actor = c.get("rbacUser") as { userId?: string; id?: string } | undefined;
@@ -774,7 +779,7 @@ export function registerCatalogRoutes(route: RouteApp, supabase: SupabaseClient)
   route.post("/make-server-37f42386/admin/catalog/related-supplies", requireAuth(), (c: Context) => guided(c, "save_related_supply"));
 
   route.get("/make-server-37f42386/admin/catalog/variants/:id/checklist", requireAuth(), async (c: Context) => {
-    const denied = assertPlatformStaffResponse(c);
+    const denied = assertCatalogWrite(c);
     if (denied) return denied;
     try {
       const id = c.req.param("id")?.trim() ?? "";
@@ -888,7 +893,7 @@ export function registerCatalogRoutes(route: RouteApp, supabase: SupabaseClient)
   });
 
   route.post("/make-server-37f42386/admin/catalog/universal-parts/delete", requireAuth(), async (c: Context) => {
-    const denied = assertPlatformStaffResponse(c);
+    const denied = assertCatalogWrite(c);
     if (denied) return denied;
     try {
       const body = await c.req.json() as { id?: string };
@@ -1019,7 +1024,7 @@ export function registerCatalogRoutes(route: RouteApp, supabase: SupabaseClient)
   });
 
   route.post("/make-server-37f42386/admin/catalog/parts/add", requireAuth(), async (c: Context) => {
-    const denied = assertPlatformStaffResponse(c);
+    const denied = assertCatalogWrite(c);
     if (denied) return denied;
     try {
       const body = await c.req.json() as Record<string, unknown>;
@@ -1052,7 +1057,7 @@ export function registerCatalogRoutes(route: RouteApp, supabase: SupabaseClient)
   });
 
   route.post("/make-server-37f42386/admin/catalog/parts/undo", requireAuth(), async (c: Context) => {
-    const denied = assertPlatformStaffResponse(c);
+    const denied = assertCatalogWrite(c);
     if (denied) return denied;
     try {
       const body = await c.req.json() as { batchId?: string };
@@ -1069,7 +1074,7 @@ export function registerCatalogRoutes(route: RouteApp, supabase: SupabaseClient)
   });
 
   route.post("/make-server-37f42386/admin/catalog/part-type-requests", requireAuth(), async (c: Context) => {
-    const denied = assertPlatformStaffResponse(c);
+    const denied = assertCatalogWrite(c);
     if (denied) return denied;
     try {
       const body = await c.req.json() as Record<string, unknown>;
@@ -1122,7 +1127,7 @@ export function registerCatalogRoutes(route: RouteApp, supabase: SupabaseClient)
   });
 
   route.post("/make-server-37f42386/admin/catalog/part-type-requests/:id/decide", requireAuth(), async (c: Context) => {
-    const denied = assertPlatformStaffResponse(c);
+    const denied = assertCatalogWrite(c);
     if (denied) return denied;
     if (!isOwnerUser(c.get("rbacUser") as RbacUser | undefined)) {
       return c.json({ error: "Owner only" }, 403);
@@ -1149,7 +1154,7 @@ export function registerCatalogRoutes(route: RouteApp, supabase: SupabaseClient)
   });
 
   route.post("/make-server-37f42386/admin/catalog/part-types", requireAuth(), async (c: Context) => {
-    const denied = assertPlatformStaffResponse(c);
+    const denied = assertCatalogWrite(c);
     if (denied) return denied;
     if (!isOwnerUser(c.get("rbacUser") as RbacUser | undefined)) {
       return c.json({ error: "Owner only" }, 403);
@@ -1165,7 +1170,7 @@ export function registerCatalogRoutes(route: RouteApp, supabase: SupabaseClient)
   });
 
   route.patch("/make-server-37f42386/admin/catalog/part-types/:id", requireAuth(), async (c: Context) => {
-    const denied = assertPlatformStaffResponse(c);
+    const denied = assertCatalogWrite(c);
     if (denied) return denied;
     if (!isOwnerUser(c.get("rbacUser") as RbacUser | undefined)) {
       return c.json({ error: "Owner only" }, 403);

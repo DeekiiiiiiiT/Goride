@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_dashboard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "surface-container-high": "#e7e7f3", "on-error-container": "#93000a", "on-surface": "#191b24", "secondary-fixed-dim": "#bec6e0", "on-surface-variant": "#434655", "surface-dim": "#d9d9e5", "surface": "#faf8ff", "outline-variant": "#c3c6d7", "outline": "#737686", "surface-tint": "#0053db", "secondary-fixed": "#dae2fd", "secondary-container": "#dae2fd", "on-error": "#ffffff", "surface-container": "#ededf9", "inverse-surface": "#2e3039", "on-primary-container": "#ced8ff", "on-primary-fixed": "#00174b", "error": "#ba1a1a", "on-tertiary": "#ffffff", "on-tertiary-container": "#d2d8f6", "surface-container-low": "#f3f3ff", "on-primary": "#ffffff", "primary": "#003ea9", "on-secondary-fixed": "#131b2e", "on-tertiary-fixed-variant": "#3f465e", "inverse-on-surface": "#f0f0fc", "primary-fixed-dim": "#b4c5ff", "inverse-primary": "#b4c5ff", "surface-bright": "#faf8ff", "primary-fixed": "#dbe1ff", "tertiary": "#40465e", "surface-container-lowest": "#ffffff", "on-secondary-fixed-variant": "#3f465c", "tertiary-container": "#575e77", "on-tertiary-fixed": "#141b30", "surface-variant": "#e1e1ed", "tertiary-fixed-dim": "#bfc5e2", "error-container": "#ffdad6", "tertiary-fixed": "#dbe1ff", "secondary": "#565e74", "on-secondary": "#ffffff", "on-background": "#191b24", "surface-container-highest": "#e1e1ed", "on-secondary-container": "#5c647a", "primary-container": "#0153dc", "background": "#faf8ff", "on-primary-fixed-variant": "#003ea8" }, "borderRadius": { "DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem" }, "spacing": { "margin": "1.5rem", "margin-panel": "1rem", "space-md": "0.75rem", "space-sm": "0.5rem", "space-lg": "1rem", "space-xl": "1.5rem", "gutter-dense": "0.5rem", "gutter": "1rem", "space-xs": "0.25rem" }, "fontFamily": { "body-md": ["Inter"], "mono-sm": ["JetBrains Mono"], "mono-md": ["JetBrains Mono"], "label-xs": ["Inter"], "body-sm": ["Inter"], "mono-lg": ["JetBrains Mono"], "headline-lg": ["Inter"], "headline-xl": ["Inter"], "headline-md": ["Inter"], "label-md": ["Inter"] }, "fontSize": { "body-md": ["14px", { "lineHeight": "20px", "letterSpacing": "0", "fontWeight": "400" }], "mono-sm": ["11px", { "lineHeight": "14px", "letterSpacing": "0.02em", "fontWeight": "400" }], "mono-md": ["12px", { "lineHeight": "16px", "letterSpacing": "0", "fontWeight": "500" }], "label-xs": ["11px", { "lineHeight": "14px", "letterSpacing": "0.04em", "fontWeight": "600" }], "body-sm": ["13px", { "lineHeight": "18px", "letterSpacing": "0", "fontWeight": "400" }], "mono-lg": ["14px", { "lineHeight": "20px", "letterSpacing": "-0.01em", "fontWeight": "500" }], "headline-lg": ["20px", { "lineHeight": "28px", "letterSpacing": "-0.015em", "fontWeight": "600" }], "headline-xl": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.02em", "fontWeight": "600" }], "headline-md": ["16px", { "lineHeight": "24px", "letterSpacing": "-0.01em", "fontWeight": "600" }], "label-md": ["12px", { "lineHeight": "16px", "letterSpacing": "0.01em", "fontWeight": "500" }] } } } };</script></head><body class="bg-background font-body-md text-on-surface antialiased"><aside class="fixed left-0 top-0 h-full w-[260px] bg-[#0b1220] z-50 flex flex-col justify-between border-r border-[#1e293b]"><div class="flex flex-col flex-1 min-h-0"><div class="h-14 px-4 flex items-center gap-space-sm border-b border-[#1e293b] shrink-0"><div class="w-7 h-7 rounded-lg bg-primary-container flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">dns</span></div><div class="flex flex-col overflow-hidden"><span class="font-headline-md text-[13px] text-white tracking-tight truncate">Dominion</span><span class="font-mono-sm text-[10px] text-slate-400 tracking-wider uppercase truncate">Roam Admin Console</span></div></div><div class="flex-1 overflow-y-auto px-3 py-space-sm space-y-space-md"><div class="space-y-space-xs"><div class="px-2 py-1 font-label-xs text-label-xs uppercase tracking-wider text-slate-400 font-semibold">Master Data</div><nav class="space-y-0.5" data-active-classes="bg-primary-container text-white font-semibold shadow-sm"><a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 font-body-sm text-body-sm hover:bg-slate-800 hover:text-white transition-colors" data-path="overview" href="#"><span class="material-symbols-outlined text-[18px]">dashboard</span>Overview</a><a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 font-body-sm text-body-sm hover:bg-slate-800 hover:text-white transition-colors" data-path="vehicles-active" href="#"><span class="material-symbols-outlined text-[18px]">directions_car</span>Vehicles Active</a><a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 font-body-sm text-body-sm hover:bg-slate-800 hover:text-white transition-colors" data-path="places-and-maps" href="#"><span class="material-symbols-outlined text-[18px]">map</span>Places and Maps</a><a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 font-body-sm text-body-sm hover:bg-slate-800 hover:text-white transition-colors" data-path="fuel" href="#"><span class="material-symbols-outlined text-[18px]">local_gas_station</span>Fuel</a><a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 font-body-sm text-body-sm hover:bg-slate-800 hover:text-white transition-colors" data-path="tolls" href="#"><span class="material-symbols-outlined text-[18px]">toll</span>Tolls</a><a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 font-body-sm text-body-sm hover:bg-slate-800 hover:text-white transition-colors" data-path="tax-and-vendors" href="#"><span class="material-symbols-outlined text-[18px]">receipt_long</span>Tax and Vendors</a><a aria-current="page" class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg transition-colors bg-primary-container text-white font-semibold shadow-sm" data-path="maintenance-templates" href="#"><span class="material-symbols-outlined text-[18px]">build_circle</span>Maintenance Templates</a></nav></div><div class="space-y-space-xs"><div class="px-2 py-1 font-label-xs text-label-xs uppercase tracking-wider text-slate-400 font-semibold">Engines</div><nav class="space-y-0.5" data-active-classes="bg-primary-container text-white font-semibold shadow-sm"><a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 font-body-sm text-body-sm hover:bg-slate-800 hover:text-white transition-colors" data-path="fuel-brain" href="#"><span class="material-symbols-outlined text-[18px]">neurology</span>Fuel Brain</a><a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 font-body-sm text-body-sm hover:bg-slate-800 hover:text-white transition-colors" data-path="toll-brain" href="#"><span class="material-symbols-outlined text-[18px]">psychology</span>Toll Brain</a><a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 font-body-sm text-body-sm hover:bg-slate-800 hover:text-white transition-colors" data-path="matching-brain" href="#"><span class="material-symbols-outlined text-[18px]">hub</span>Matching Brain</a></nav></div><div class="space-y-space-xs"><div class="px-2 py-1 font-label-xs text-label-xs uppercase tracking-wider text-slate-400 font-semibold">Distribution</div><nav class="space-y-0.5" data-active-classes="bg-primary-container text-white font-semibold shadow-sm"><a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 font-body-sm text-body-sm hover:bg-slate-800 hover:text-white transition-colors" data-path="apps" href="#"><span class="material-symbols-outlined text-[18px]">apps</span>Apps</a><a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 font-body-sm text-body-sm hover:bg-slate-800 hover:text-white transition-colors" data-path="data-api" href="#"><span class="material-symbols-outlined text-[18px]">api</span>Data API</a><a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 font-body-sm text-body-sm hover:bg-slate-800 hover:text-white transition-colors" data-path="change-requests" href="#"><span class="material-symbols-outlined text-[18px]">published_with_changes</span>Change Requests</a></nav></div><div class="space-y-space-xs"><div class="px-2 py-1 font-label-xs text-label-xs uppercase tracking-wider text-slate-400 font-semibold">Platform</div><nav class="space-y-0.5" data-active-classes="bg-primary-container text-white font-semibold shadow-sm"><a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 font-body-sm text-body-sm hover:bg-slate-800 hover:text-white transition-colors" data-path="staff-and-roles" href="#"><span class="material-symbols-outlined text-[18px]">badge</span>Staff and Roles</a><a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 font-body-sm text-body-sm hover:bg-slate-800 hover:text-white transition-colors" data-path="activity-log" href="#"><span class="material-symbols-outlined text-[18px]">list_alt</span>Activity Log</a><a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 font-body-sm text-body-sm hover:bg-slate-800 hover:text-white transition-colors" data-path="platform-ops" href="#"><span class="material-symbols-outlined text-[18px]">terminal</span>Platform Ops</a><a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 font-body-sm text-body-sm hover:bg-slate-800 hover:text-white transition-colors" data-path="global-settings" href="#"><span class="material-symbols-outlined text-[18px]">settings</span>Global Settings</a></nav></div><div class="space-y-space-xs"><div class="px-2 py-1 font-label-xs text-label-xs uppercase tracking-wider text-slate-400 font-semibold">Back Office</div><nav class="space-y-0.5" data-active-classes="bg-primary-container text-white font-semibold shadow-sm"><a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 font-body-sm text-body-sm hover:bg-slate-800 hover:text-white transition-colors" data-path="gct-registrations" href="#"><span class="material-symbols-outlined text-[18px]">app_registration</span>GCT Registrations</a><a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 font-body-sm text-body-sm hover:bg-slate-800 hover:text-white transition-colors" data-path="ledger" href="#"><span class="material-symbols-outlined text-[18px]">menu_book</span>Ledger</a><a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-slate-300 font-body-sm text-body-sm hover:bg-slate-800 hover:text-white transition-colors" data-path="remittance" href="#"><span class="material-symbols-outlined text-[18px]">payments</span>Remittance</a></nav></div></div></div><div class="px-3 py-3 border-t border-[#1e293b] shrink-0 bg-[#070b14]"><div class="flex items-center justify-between text-slate-400 font-mono-sm text-mono-sm"><div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span><span>KGN-DC-01</span></div><span class="px-1.5 py-0.5 rounded bg-slate-800 text-[10px] text-slate-300 font-semibold">JMD READY</span></div></div></aside><div class="pl-[260px]"><header class="fixed top-0 left-[260px] right-0 h-14 bg-surface-container-lowest border-b border-surface-container-highest z-40 px-6 flex items-center justify-between gap-4"><div class="flex items-center gap-4 min-w-0"><nav class="flex items-center gap-1.5 font-mono-sm text-[12px] text-on-surface-variant truncate"><span class="font-semibold text-on-surface">DOMINION</span><span class="text-outline-variant">/</span><span>MASTER DATA</span><span class="text-outline-variant">/</span><span>VEHICLES</span><span class="text-outline-variant">/</span><span class="text-primary font-medium truncate">MAINTENANCE TEMPLATES</span></nav></div><div class="flex items-center gap-space-lg"><div class="relative flex items-center w-[400px]"><span class="material-symbols-outlined absolute left-3 text-[18px] text-outline pointer-events-none">search</span><input class="w-full h-9 pl-9 pr-12 rounded-lg bg-surface-container-low border border-surface-container-highest font-body-sm text-body-sm text-on-surface placeholder:text-outline focus:outline-none focus:border-primary-container focus:bg-surface transition-colors" placeholder="Search entities, engines, routes…" type="text"/><kbd class="absolute right-2.5 px-1.5 py-0.5 rounded bg-surface-container border border-surface-container-high font-mono-sm text-[10px] text-on-surface-variant select-none">⌘K</kbd></div><div class="flex items-center gap-space-sm pl-2 border-l border-surface-container-high"><button class="w-8 h-8 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-colors" title="Toggle Dark Mode" type="button"><span class="material-symbols-outlined text-[19px]">dark_mode</span></button><button class="w-8 h-8 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-colors" title="Sign Out" type="button"><span class="material-symbols-outlined text-[19px]">logout</span></button><div class="flex items-center gap-2 pl-2 border-l border-surface-container-high"><div class="flex items-center gap-2 py-1 px-2 rounded-lg bg-surface-container-low border border-surface-container-highest"><div class="w-6 h-6 rounded bg-primary-container flex items-center justify-center font-mono-sm text-[11px] text-on-primary font-semibold">DT</div><span class="font-label-md text-label-md text-on-surface whitespace-nowrap">Deeki T · <span class="text-outline">Owner</span></span></div><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center shrink-0"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></div></header><main class="relative pt-14 w-full bg-surface min-h-screen px-margin py-margin"><div class="flex flex-col w-full">
+<!-- Underlying Maintenance Templates Detail (Context Layer) -->
+<div class="relative w-full opacity-40 pointer-events-none select-none filter blur-[1px] space-y-space-lg">
+<!-- Top Action Bar -->
+<div class="flex items-center justify-between bg-surface-container-lowest p-space-lg rounded-xl shadow-sm">
+<div class="flex items-center gap-space-md">
+<div class="w-10 h-10 rounded-xl bg-surface-container flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[24px]">construction</span>
+</div>
+<div>
+<div class="flex items-center gap-space-sm">
+<h1 class="font-headline-lg text-headline-lg text-on-surface">Standard Passenger B-Segment</h1>
+<span class="px-2 py-0.5 rounded-full bg-surface-container-high text-on-surface-variant font-mono-sm text-mono-sm">TMP-PAS-0042</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Scheduled interval mapping for Toyota Tank / Roomy (M900A, 1KR-FE)</p>
+</div>
+</div>
+<div class="flex items-center gap-space-md">
+<button class="h-9 px-4 rounded-xl bg-surface-container-low text-on-surface font-label-md text-label-md">Revert Draft</button>
+<button class="h-9 px-4 rounded-xl bg-primary text-on-primary font-label-md text-label-md">Save Template</button>
+</div>
+</div>
+<!-- Background Mock Data Grid -->
+<div class="grid grid-cols-12 gap-gutter">
+<div class="col-span-8 bg-surface-container-lowest rounded-xl p-space-lg shadow-sm space-y-space-md">
+<div class="flex items-center justify-between pb-space-sm">
+<span class="font-headline-md text-headline-md text-on-surface">Subsystems &amp; Service Schedulers</span>
+<span class="font-mono-sm text-mono-sm text-outline">18 ACTIVE POLICIES</span>
+</div>
+<div class="space-y-space-xs">
+<div class="flex items-center justify-between p-3 rounded-lg bg-surface-container-low">
+<span class="font-body-md text-body-md text-on-surface font-medium">Engine Oil &amp; Sump Filter (API SP 0W-20)</span>
+<span class="font-mono-sm text-mono-sm text-on-surface-variant">Every 5,000 km / 6 mo</span>
+</div>
+<div class="flex items-center justify-between p-3 rounded-lg bg-secondary-container/40">
+<span class="font-body-md text-body-md text-primary font-semibold">DOT4 Brake Fluid Replenishment &amp; Flush</span>
+<span class="font-mono-sm text-mono-sm text-primary font-medium">Every 40,000 km / 24 mo [DIRTY]</span>
+</div>
+<div class="flex items-center justify-between p-3 rounded-lg bg-surface-container-low">
+<span class="font-body-md text-body-md text-on-surface font-medium">Iridium Spark Plug Replacement</span>
+<span class="font-mono-sm text-mono-sm text-on-surface-variant">Every 100,000 km / 48 mo</span>
+</div>
+</div>
+</div>
+<div class="col-span-4 bg-surface-container-lowest rounded-xl p-space-lg shadow-sm space-y-space-sm">
+<span class="font-label-xs text-label-xs uppercase text-outline">Affected Vehicle Cohorts</span>
+<div class="p-3 rounded-lg bg-surface-container-low space-y-1">
+<div class="font-mono-sm text-mono-sm text-on-surface font-semibold">Roam Fleet (Active Ops)</div>
+<div class="font-body-sm text-body-sm text-on-surface-variant">2 VINs bound to current master template</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Primary Modal Backdrop & Dialog Container -->
+<div class="fixed inset-0 z-50 flex items-center justify-center p-6 bg-slate-950/45 backdrop-blur-[2px] transition-opacity duration-200" id="modal-container">
+<div class="relative w-full max-w-[620px] bg-surface-container-lowest rounded-xl shadow-xl overflow-hidden flex flex-col">
+<!-- Top Subtle Indicator Stripe -->
+<div class="h-1 w-full bg-primary-container"></div>
+<!-- Modal Header -->
+<div class="p-6 pb-4 flex items-start justify-between gap-4">
+<div class="flex items-start gap-3.5">
+<div class="w-10 h-10 rounded-xl bg-surface-container-high flex items-center justify-center text-primary-container shrink-0 mt-0.5">
+<span class="material-symbols-outlined text-[22px]">published_with_changes</span>
+</div>
+<div class="space-y-1">
+<h2 class="font-headline-lg text-headline-lg text-on-surface font-semibold tracking-tight">This changes due dates on 2 Roam Fleet cars</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Review the impact on scheduled fleet maintenance before applying to live vehicles.</p>
+</div>
+</div>
+<button class="w-8 h-8 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-colors" onclick="toggleModal('close')" title="Close Dialog">
+<span class="material-symbols-outlined text-[20px]">close</span>
+</button>
+</div>
+<!-- Modal Body -->
+<div class="px-6 py-2 space-y-4">
+<!-- Count-only Impact Table Card -->
+<div class="bg-surface-container-low rounded-xl p-3.5 space-y-2.5">
+<div class="space-y-1">
+<!-- Row 1 -->
+<div class="flex items-center justify-between px-3 py-2 rounded-lg bg-surface-container-lowest">
+<div class="flex items-center gap-2.5">
+<span class="material-symbols-outlined text-[18px] text-primary-container">calendar_month</span>
+<span class="font-body-sm text-body-sm text-on-surface">Brake fluid · due date moves</span>
+</div>
+<span class="px-2.5 py-0.5 rounded bg-surface-container font-mono-sm text-mono-sm text-on-surface font-semibold tabular-nums">1 car</span>
+</div>
+<!-- Row 2 -->
+<div class="flex items-center justify-between px-3 py-2 rounded-lg bg-surface-container-lowest">
+<div class="flex items-center gap-2.5">
+<span class="material-symbols-outlined text-[18px] text-emerald-600">add_circle</span>
+<span class="font-body-sm text-body-sm text-on-surface">Brake fluid · first due date added</span>
+</div>
+<span class="px-2.5 py-0.5 rounded bg-surface-container font-mono-sm text-mono-sm text-on-surface font-semibold tabular-nums">1 car</span>
+</div>
+<!-- Row 3 -->
+<div class="flex items-center justify-between px-3 py-2 rounded-lg bg-surface-container-lowest">
+<div class="flex items-center gap-2.5">
+<span class="material-symbols-outlined text-[18px] text-outline">shield</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Cars that keep their own custom schedule</span>
+</div>
+<span class="px-2.5 py-0.5 rounded bg-surface-container font-mono-sm text-mono-sm text-outline font-semibold tabular-nums">0 cars</span>
+</div>
+</div>
+<div class="flex items-center justify-between px-2 pt-1 font-mono-sm text-[11px] text-on-surface-variant">
+<span>Aggregated partition tally</span>
+<span class="font-medium text-on-surface">Total affected vehicles in Roam Fleet: <strong class="text-primary-container font-semibold">2</strong></span>
+</div>
+</div>
+<!-- Before → After High-Contrast Inspection Sample -->
+<div class="bg-surface-container rounded-xl p-4 space-y-2">
+<div class="flex items-center justify-between">
+<span class="font-mono-sm text-[10px] tracking-wider uppercase text-on-surface-variant font-semibold">Inspection Sample (Chassis M900A)</span>
+<span class="font-mono-sm text-[10px] text-outline">ANONYMIZED DISPATCH UNIT</span>
+</div>
+<div class="p-3 bg-surface-container-lowest rounded-lg font-mono-md text-mono-md flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="text-outline">was:</span>
+<span class="text-on-surface-variant line-through decoration-outline/60">no due date</span>
+</div>
+<span class="text-outline-variant font-body-sm">→</span>
+<div class="flex items-center gap-2">
+<span class="text-on-surface-variant">now:</span>
+<span class="text-primary-container font-semibold bg-secondary-container/40 px-2 py-0.5 rounded">due at 40,000 km or Aug 2028</span>
+</div>
+</div>
+</div>
+<!-- Policy Note Callout -->
+<div class="flex items-start gap-3 p-3.5 rounded-xl bg-surface-container-low text-on-surface-variant">
+<span class="material-symbols-outlined text-[20px] text-primary-container shrink-0 mt-0.5">schedule</span>
+<p class="font-body-sm text-body-sm leading-snug">
+            Their old reminders for this part are replaced by new ones tonight. Fleet dispatch and vehicle alerts will update during the <span class="font-mono-sm font-semibold text-on-surface">02:00 UTC</span> maintenance sync.
+          </p>
+</div>
+</div>
+<!-- Modal Footer Actions (Owner View) -->
+<div class="p-6 pt-4 flex items-center justify-between bg-surface-container-lowest">
+<span class="font-mono-sm text-[11px] text-outline flex items-center gap-1.5">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+          Author: Deeki T (Owner)
+        </span>
+<div class="flex items-center gap-3">
+<button class="h-9 px-4 rounded-xl text-on-surface-variant font-label-md text-label-md hover:bg-surface-container hover:text-on-surface transition-colors" onclick="toggleModal('close')">
+            Cancel
+          </button>
+<button class="h-9 px-5 rounded-xl bg-primary-container text-on-primary font-label-md text-label-md hover:bg-primary font-medium shadow-sm transition-all flex items-center gap-2" onclick="simulateSave(this)">
+<span>Save and update cars</span>
+<span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Documentation Section: Operational Modal State Variants -->
+<div class="mt-8 pt-8 space-y-6">
+<div class="flex items-center justify-between">
+<div>
+<h3 class="font-headline-md text-headline-md text-on-surface">Operational Lifecycle Variants</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Design states and approval gates across different user privileges.</p>
+</div>
+<button class="h-8 px-3.5 rounded-xl bg-surface-container-high text-primary font-label-md text-label-md hover:bg-secondary-container transition-colors flex items-center gap-1.5" onclick="toggleModal('open')">
+<span class="material-symbols-outlined text-[16px]">visibility</span>
+        Re-open Live Modal
+      </button>
+</div>
+<!-- Side-by-Side Architectural State Cards -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-gutter">
+<!-- VARIANT A: Draft Mode Preview -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm p-6 flex flex-col justify-between space-y-5">
+<div class="space-y-4">
+<div class="flex items-center justify-between">
+<span class="px-2.5 py-0.5 rounded-full bg-surface-container-high font-mono-sm text-mono-sm font-semibold text-tertiary">
+              VARIANT A · SIMULATION
+            </span>
+<span class="font-mono-sm text-mono-sm text-outline">READ-ONLY AUDIT</span>
+</div>
+<div class="flex items-start gap-3">
+<div class="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center text-on-surface-variant shrink-0">
+<span class="material-symbols-outlined text-[20px]">science</span>
+</div>
+<div>
+<h4 class="font-headline-md text-headline-md text-on-surface font-semibold">If you make this active: 2 Roam Fleet cars change</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Dry run forecast of rule updates before publishing draft.</p>
+</div>
+</div>
+<!-- Condensed Impact Table -->
+<div class="bg-surface-container-low rounded-xl p-3 space-y-2">
+<div class="flex items-center justify-between text-body-sm">
+<span class="flex items-center gap-2 text-on-surface"><span class="material-symbols-outlined text-[16px] text-primary">calendar_month</span> Brake fluid · due date moves</span>
+<span class="font-mono-sm text-mono-sm font-semibold text-on-surface">1 car</span>
+</div>
+<div class="flex items-center justify-between text-body-sm">
+<span class="flex items-center gap-2 text-on-surface"><span class="material-symbols-outlined text-[16px] text-emerald-600">add_circle</span> Brake fluid · first due date added</span>
+<span class="font-mono-sm text-mono-sm font-semibold text-on-surface">1 car</span>
+</div>
+<div class="flex items-center justify-between text-body-sm">
+<span class="flex items-center gap-2 text-outline"><span class="material-symbols-outlined text-[16px]">shield</span> Custom overrides preserved</span>
+<span class="font-mono-sm text-mono-sm font-semibold text-outline">0 cars</span>
+</div>
+</div>
+<!-- Read-only Disclaimer Banner -->
+<div class="p-3 bg-surface-container rounded-lg flex items-start gap-2.5 text-on-surface-variant">
+<span class="material-symbols-outlined text-[18px] text-outline shrink-0 mt-0.5">info</span>
+<span class="font-body-sm text-body-sm">Drafts never modify active vehicle schedules. This preview estimates the impact if published.</span>
+</div>
+</div>
+<div class="pt-2 flex justify-end">
+<button class="h-9 px-4 rounded-xl bg-surface-container text-on-surface font-label-md text-label-md hover:bg-surface-container-high transition-colors">
+            Close Preview
+          </button>
+</div>
+</div>
+<!-- VARIANT B: Support User Approval Request -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm p-6 flex flex-col justify-between space-y-5">
+<div class="space-y-4">
+<div class="flex items-center justify-between">
+<span class="px-2.5 py-0.5 rounded-full bg-secondary-container font-mono-sm text-mono-sm font-semibold text-primary">
+              VARIANT B · ROLE: SUPPORT OPERATOR
+            </span>
+<span class="font-mono-sm text-mono-sm text-outline">PENDING APPROVAL</span>
+</div>
+<div class="flex items-start gap-3">
+<div class="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center text-primary shrink-0">
+<span class="material-symbols-outlined text-[20px]">how_to_reg</span>
+</div>
+<div>
+<h4 class="font-headline-md text-headline-md text-on-surface font-semibold">Change request queues for 2 Roam Fleet cars</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Support staff cannot deploy directly to live vehicles.</p>
+</div>
+</div>
+<!-- Impact Summary Card -->
+<div class="bg-surface-container-low rounded-xl p-3 space-y-2">
+<div class="flex items-center justify-between text-body-sm">
+<span class="flex items-center gap-2 text-on-surface"><span class="material-symbols-outlined text-[16px] text-primary">calendar_month</span> Shifted interval schedules</span>
+<span class="font-mono-sm text-mono-sm font-semibold text-on-surface">1 car</span>
+</div>
+<div class="flex items-center justify-between text-body-sm">
+<span class="flex items-center gap-2 text-on-surface"><span class="material-symbols-outlined text-[16px] text-emerald-600">add_circle</span> Added maintenance requirements</span>
+<span class="font-mono-sm text-mono-sm font-semibold text-on-surface">1 car</span>
+</div>
+<div class="flex items-center justify-between text-body-sm text-on-surface-variant">
+<span class="flex items-center gap-2 text-outline"><span class="material-symbols-outlined text-[16px]">shield</span> Retained custom intervals</span>
+<span class="font-mono-sm text-mono-sm font-semibold text-outline">0 cars</span>
+</div>
+</div>
+<!-- Routing Target Notice -->
+<div class="p-3 bg-surface-container-low rounded-lg flex items-center justify-between">
+<div class="flex items-center gap-2 text-on-surface font-body-sm text-body-sm">
+<span class="material-symbols-outlined text-[18px] text-primary">forward_to_inbox</span>
+<span>Queues change for <strong class="text-on-surface">Deeki T</strong> in Review list</span>
+</div>
+<span class="font-mono-sm text-[11px] text-outline">CR-2025-081</span>
+</div>
+</div>
+<div class="pt-2 flex items-center justify-end gap-3">
+<button class="h-9 px-4 rounded-xl text-on-surface-variant font-label-md text-label-md hover:bg-surface-container transition-colors">
+            Cancel
+          </button>
+<button class="h-9 px-5 rounded-xl bg-primary text-on-primary font-label-md text-label-md hover:bg-primary/90 transition-all flex items-center gap-1.5 shadow-sm">
+<span>Send to owner for approval</span>
+<span class="material-symbols-outlined text-[16px]">send</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<script>
+    function toggleModal(action) {
+      const modal = document.getElementById('modal-container');
+      if (!modal) return;
+      if (action === 'close') {
+        modal.classList.add('opacity-0', 'pointer-events-none');
+      } else {
+        modal.classList.remove('opacity-0', 'pointer-events-none');
+      }
+    }
+
+    function simulateSave(button) {
+      button.disabled = true;
+      const originalHTML = button.innerHTML;
+      button.innerHTML = '<span class="material-symbols-outlined text-[16px] animate-spin">refresh</span> <span>Queueing 02:00 sync…</span>';
+      setTimeout(() => {
+        button.innerHTML = '<span class="material-symbols-outlined text-[16px]">done</span> <span>Applied</span>';
+        setTimeout(() => {
+          toggleModal('close');
+          button.disabled = false;
+          button.innerHTML = originalHTML;
+        }, 600);
+      }, 900);
+    }
+  </script>
+</div></main></div></body></html>

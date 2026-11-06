@@ -68,9 +68,10 @@ import { registerMaintenanceAlertsKpiRoutes } from "./maintenance/routes_alerts_
 import { registerMaintenanceInspectionRoutes } from "./maintenance/routes_inspections.ts";
 import { registerMaintenanceWorkOrderRoutes } from "./maintenance/routes_work_orders.ts";
 import { fleetDb } from "./repos/baseRepo.ts";
+import { registerMaintenanceMasterRoutes } from "./maintenance_master_routes.ts";
 import { buildLogServiceContext } from "./maintenance_log_service_context.ts";
+import { assertCatalogWriteResponse, governWriteOrProposal } from "./catalog_access.ts";
 
-// Wave 5: DRY — use shared assertPlatformStaffResponse from rbac_middleware
 const assertVehicleCatalogPlatformAccess = assertPlatformStaffResponse;
 
 function todayIso(): string {
@@ -199,10 +200,10 @@ function parseOptionalNumberField(v: unknown): number | null {
 }
 
 /** Returns error message or null if OK. */
-function assertIntervalMilesRange(miles: number | null, milesMax: number | null): string | null {
-  if (milesMax == null) return null;
-  if (miles == null) return "interval_miles is required when interval_miles_max is set";
-  if (milesMax < miles) return "interval_miles_max must be greater than or equal to interval_miles";
+function assertIntervalKmRange(km: number | null, kmMax: number | null): string | null {
+  if (kmMax == null) return null;
+  if (km == null) return "interval_km is required when interval_km_max is set";
+  if (kmMax < km) return "interval_km_max must be greater than or equal to interval_km";
   return null;
 }
 
@@ -571,6 +572,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           .select("*")
           .eq("vehicle_catalog_id", catalogId)
           .in("template_scope", ["variant", "catalog"])
+          .is("component_id", null)
           .order("sort_order", { ascending: true })
           .order("task_name", { ascending: true });
         if (error) throw error;
@@ -587,7 +589,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
     "/admin/vehicle-catalog/:catalogId/maintenance-templates",
     requireAuth(),
     async (c) => {
-      const denied = assertVehicleCatalogPlatformAccess(c);
+      const denied = assertCatalogWriteResponse(c);
       if (denied) return denied;
       const catalogId = c.req.param("catalogId")?.trim() ?? "";
       if (!isUuid(catalogId)) {
@@ -603,14 +605,14 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           : "recurring";
         const fl = body.frequency_label != null ? String(body.frequency_label).trim() : "";
         const frequency_label = fl.length ? fl.slice(0, 120) : null;
-        const interval_miles = body.interval_miles != null && body.interval_miles !== ""
-          ? Number(body.interval_miles)
+        const interval_km = body.interval_km != null && body.interval_km !== ""
+          ? Number(body.interval_km)
           : null;
-        let interval_miles_max = parseOptionalNumberField(body.interval_miles_max);
-        if (interval_miles != null && interval_miles_max != null && interval_miles_max === interval_miles) {
-          interval_miles_max = null;
+        let interval_km_max = parseOptionalNumberField(body.interval_km_max);
+        if (interval_km != null && interval_km_max != null && interval_km_max === interval_km) {
+          interval_km_max = null;
         }
-        const rangeErr = assertIntervalMilesRange(interval_miles, interval_miles_max);
+        const rangeErr = assertIntervalKmRange(interval_km, interval_km_max);
         if (rangeErr) return c.json({ error: rangeErr }, 400);
         const iconKeyRaw = body.icon_key != null ? String(body.icon_key).trim() : "wrench";
         const icon_key = (iconKeyRaw || "wrench").slice(0, 40);
@@ -625,8 +627,8 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           task_name,
           task_code: parseTaskCode(body),
           description: body.description != null ? String(body.description) : null,
-          interval_miles,
-          interval_miles_max,
+          interval_km,
+          interval_km_max,
           interval_months: body.interval_months != null && body.interval_months !== ""
             ? Number(body.interval_months)
             : null,
@@ -652,7 +654,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
     "/admin/maintenance-templates/:id",
     requireAuth(),
     async (c) => {
-      const denied = assertVehicleCatalogPlatformAccess(c);
+      const denied = assertCatalogWriteResponse(c);
       if (denied) return denied;
       const id = c.req.param("id");
       try {
@@ -661,15 +663,15 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         if (body.task_name !== undefined) patch.task_name = String(body.task_name).trim();
         if (body.task_code !== undefined) patch.task_code = parseTaskCode(body);
         if (body.description !== undefined) patch.description = body.description;
-        if (body.interval_miles !== undefined) {
-          patch.interval_miles = body.interval_miles === "" || body.interval_miles == null
+        if (body.interval_km !== undefined) {
+          patch.interval_km = body.interval_km === "" || body.interval_km == null
             ? null
-            : Number(body.interval_miles);
+            : Number(body.interval_km);
         }
-        if (body.interval_miles_max !== undefined) {
-          patch.interval_miles_max = body.interval_miles_max === "" || body.interval_miles_max == null
+        if (body.interval_km_max !== undefined) {
+          patch.interval_km_max = body.interval_km_max === "" || body.interval_km_max == null
             ? null
-            : Number(body.interval_miles_max);
+            : Number(body.interval_km_max);
         }
         if (body.interval_months !== undefined) {
           patch.interval_months = body.interval_months === "" || body.interval_months == null
@@ -698,22 +700,22 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
 
         const { data: existingRow } = await supabase
           .from("maintenance_task_templates")
-          .select("interval_miles, interval_miles_max")
+          .select("interval_km, interval_km_max")
           .eq("id", id)
           .maybeSingle();
         if (!existingRow) return c.json({ error: "Not found" }, 404);
 
-        const mergedMiles = patch.interval_miles !== undefined
-          ? (patch.interval_miles as number | null)
-          : (existingRow.interval_miles != null ? Number(existingRow.interval_miles) : null);
-        let mergedMax = patch.interval_miles_max !== undefined
-          ? (patch.interval_miles_max as number | null)
-          : (existingRow.interval_miles_max != null ? Number(existingRow.interval_miles_max) : null);
+        const mergedMiles = patch.interval_km !== undefined
+          ? (patch.interval_km as number | null)
+          : (existingRow.interval_km != null ? Number(existingRow.interval_km) : null);
+        let mergedMax = patch.interval_km_max !== undefined
+          ? (patch.interval_km_max as number | null)
+          : (existingRow.interval_km_max != null ? Number(existingRow.interval_km_max) : null);
         if (mergedMiles != null && mergedMax != null && mergedMax === mergedMiles) {
           mergedMax = null;
-          patch.interval_miles_max = null;
+          patch.interval_km_max = null;
         }
-        const patchRangeErr = assertIntervalMilesRange(mergedMiles, mergedMax);
+        const patchRangeErr = assertIntervalKmRange(mergedMiles, mergedMax);
         if (patchRangeErr) return c.json({ error: patchRangeErr }, 400);
 
         const { data, error } = await supabase
@@ -736,7 +738,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
     "/admin/maintenance-templates/:id",
     requireAuth(),
     async (c) => {
-      const denied = assertVehicleCatalogPlatformAccess(c);
+      const denied = assertCatalogWriteResponse(c);
       if (denied) return denied;
       const id = c.req.param("id");
       try {
@@ -784,6 +786,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           .select("*")
           .eq("template_scope", "global")
           .is("archived_at", null)
+          .is("component_id", null)
           .order("sort_order", { ascending: true })
           .order("task_name", { ascending: true });
         if (error) throw error;
@@ -803,7 +806,12 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
       const scope = String(c.req.query("scope") ?? "");
       const targetId = String(c.req.query("targetId") ?? "");
       if (!["platform", "engine_family", "variant"].includes(scope)) return c.json({ error: "Invalid scope" }, 400);
-      let q = supabase.from("maintenance_task_templates").select("*").eq("template_scope", scope).is("archived_at", null);
+      let q = supabase
+        .from("maintenance_task_templates")
+        .select("*")
+        .eq("template_scope", scope)
+        .is("archived_at", null)
+        .is("component_id", null);
       if (scope === "platform") q = q.eq("platform_id", targetId);
       if (scope === "engine_family") q = q.eq("engine_family_id", targetId);
       if (scope === "variant") q = q.eq("vehicle_catalog_id", targetId);
@@ -833,7 +841,9 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         vehicle_catalog_id: scope === "variant" ? body.vehicle_catalog_id : null,
         platform_id: scope === "platform" ? body.platform_id : null,
         engine_family_id: scope === "engine_family" ? body.engine_family_id : null,
-        interval_miles: body.interval_miles != null && body.interval_miles !== "" ? Number(body.interval_miles) : null,
+        interval_km: body.interval_km != null && body.interval_km !== ""
+          ? Number(body.interval_km)
+          : null,
         interval_months: body.interval_months != null && body.interval_months !== "" ? Number(body.interval_months) : null,
         icon_key: body.icon_key != null ? String(body.icon_key) : "wrench",
       };
@@ -849,7 +859,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
     "/admin/maintenance-templates/global",
     requireAuth(),
     async (c) => {
-      const denied = assertVehicleCatalogPlatformAccess(c);
+      const denied = assertCatalogWriteResponse(c);
       if (denied) return denied;
       try {
         const body = (await c.req.json()) as Record<string, unknown>;
@@ -861,14 +871,14 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           : "recurring";
         const fl = body.frequency_label != null ? String(body.frequency_label).trim() : "";
         const frequency_label = fl.length ? fl.slice(0, 120) : null;
-        const interval_miles = body.interval_miles != null && body.interval_miles !== ""
-          ? Number(body.interval_miles)
+        const interval_km = body.interval_km != null && body.interval_km !== ""
+          ? Number(body.interval_km)
           : null;
-        let interval_miles_max = parseOptionalNumberField(body.interval_miles_max);
-        if (interval_miles != null && interval_miles_max != null && interval_miles_max === interval_miles) {
-          interval_miles_max = null;
+        let interval_km_max = parseOptionalNumberField(body.interval_km_max);
+        if (interval_km != null && interval_km_max != null && interval_km_max === interval_km) {
+          interval_km_max = null;
         }
-        const rangeErrG = assertIntervalMilesRange(interval_miles, interval_miles_max);
+        const rangeErrG = assertIntervalKmRange(interval_km, interval_km_max);
         if (rangeErrG) return c.json({ error: rangeErrG }, 400);
         const iconKeyRawG = body.icon_key != null ? String(body.icon_key).trim() : "wrench";
         const icon_key = (iconKeyRawG || "wrench").slice(0, 40);
@@ -883,8 +893,8 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           task_name,
           task_code: parseTaskCode(body),
           description: body.description != null ? String(body.description) : null,
-          interval_miles,
-          interval_miles_max,
+          interval_km,
+          interval_km_max,
           interval_months: body.interval_months != null && body.interval_months !== ""
             ? Number(body.interval_months)
             : null,
@@ -936,7 +946,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
     "/admin/maintenance-categories",
     requireAuth(),
     async (c) => {
-      const denied = assertVehicleCatalogPlatformAccess(c);
+      const denied = assertCatalogWriteResponse(c);
       if (denied) return denied;
       try {
         const body = (await c.req.json()) as Record<string, unknown>;
@@ -966,12 +976,6 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           parent_id,
           op_code,
           position_aware: kind === "component" && body.position_aware === true,
-          default_interval_miles: body.default_interval_miles != null && body.default_interval_miles !== ""
-            ? Number(body.default_interval_miles)
-            : null,
-          default_interval_months: body.default_interval_months != null && body.default_interval_months !== ""
-            ? Number(body.default_interval_months)
-            : null,
           updated_at: new Date().toISOString(),
         };
         const { data, error } = await supabase
@@ -992,7 +996,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
     "/admin/maintenance-categories/:id",
     requireAuth(),
     async (c) => {
-      const denied = assertVehicleCatalogPlatformAccess(c);
+      const denied = assertCatalogWriteResponse(c);
       if (denied) return denied;
       const id = c.req.param("id");
       try {
@@ -1014,18 +1018,6 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         }
         if (body.position_aware !== undefined) {
           patch.position_aware = body.position_aware === true;
-        }
-        if (body.default_interval_miles !== undefined) {
-          patch.default_interval_miles =
-            body.default_interval_miles === null || body.default_interval_miles === ""
-              ? null
-              : Number(body.default_interval_miles);
-        }
-        if (body.default_interval_months !== undefined) {
-          patch.default_interval_months =
-            body.default_interval_months === null || body.default_interval_months === ""
-              ? null
-              : Number(body.default_interval_months);
         }
 
         const { data: existingCat } = await supabase
@@ -1077,17 +1069,72 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
     "/admin/maintenance-categories/:id",
     requireAuth(),
     async (c) => {
-      const denied = assertVehicleCatalogPlatformAccess(c);
+      const denied = assertCatalogWriteResponse(c);
       if (denied) return denied;
       const id = c.req.param("id");
       try {
+        const { data: deps, error: depErr } = await supabase.rpc("maintenance_part_type_dependents", { p_id: id });
+        if (depErr) throw depErr;
+        const total = (deps || []).reduce(
+          (sum: number, row: { row_count?: number }) => sum + Number(row.row_count ?? 0),
+          0,
+        );
+        if (total > 0) {
+          return c.json(
+            { error: "Part type has dependents; retire it instead", code: "PART_TYPE_HAS_DEPENDENTS", dependents: deps },
+            409,
+          );
+        }
         const { error } = await supabase.from("maintenance_service_categories").delete().eq("id", id);
         if (error) throw error;
-        return c.json({ success: true });
+        return c.json({ success: true, deleted: true });
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
         return c.json({ error: msg }, 500);
       }
+    },
+  );
+
+  route.post(
+    "/admin/maintenance-categories/:id/retire",
+    requireAuth(),
+    async (c) => {
+      return governWriteOrProposal(
+        c,
+        supabase,
+        {
+          entityTable: "maintenance_service_categories",
+          entityId: c.req.param("id"),
+          action: "retire",
+          payload: {},
+        },
+        async () => {
+          const id = c.req.param("id");
+          const now = new Date().toISOString();
+          const { data, error } = await supabase
+            .from("maintenance_service_categories")
+            .update({ status: "retired", retired_at: now, updated_at: now })
+            .eq("id", id)
+            .select("*")
+            .maybeSingle();
+          if (error) throw error;
+          if (!data) return c.json({ error: "Not found" }, 404);
+          await supabase
+            .from("vehicle_component_schedule")
+            .update({ schedule_status: "retired", updated_at: now })
+            .eq("category_id", id);
+          await fleetDb()
+            .from("fleet_maintenance_alerts")
+            .update({
+              status: "superseded",
+              resolution_reason: "schedule_retired",
+              resolved_at: now,
+            })
+            .eq("category_id", id)
+            .eq("status", "open");
+          return c.json({ item: data, retired: true });
+        },
+      );
     },
   );
 
@@ -1117,11 +1164,12 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
     "/admin/maintenance-templates/:id/categories",
     requireAuth(),
     async (c) => {
-      const denied = assertVehicleCatalogPlatformAccess(c);
+      const denied = assertCatalogWriteResponse(c);
       if (denied) return denied;
       const id = c.req.param("id");
       try {
         const body = (await c.req.json()) as Record<string, unknown>;
+        const rawItems = Array.isArray(body.items) ? body.items : null;
         const rawIds = Array.isArray(body.categoryIds) ? body.categoryIds : [];
         const categoryIds = rawIds.map((x) => String(x).trim()).filter((x) => isUuid(x));
         const { error: delErr } = await supabase
@@ -1129,7 +1177,28 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           .delete()
           .eq("template_id", id);
         if (delErr) throw delErr;
-        if (categoryIds.length) {
+        if (rawItems && rawItems.length) {
+          const rows = rawItems.map((item, sort_order) => {
+            const row = item as Record<string, unknown>;
+            const category_id = String(row.categoryId ?? row.category_id ?? "").trim();
+            if (!isUuid(category_id)) return null;
+            return {
+              template_id: id,
+              category_id,
+              sort_order: row.sortOrder != null ? Number(row.sortOrder) : sort_order,
+              required: row.required !== false,
+            };
+          }).filter(Boolean) as Array<{
+            template_id: string;
+            category_id: string;
+            sort_order: number;
+            required: boolean;
+          }>;
+          if (rows.length) {
+            const { error: insErr } = await supabase.from("maintenance_package_categories").insert(rows);
+            if (insErr) throw insErr;
+          }
+        } else if (categoryIds.length) {
           const rows = categoryIds.map((category_id, sort_order) => ({
             template_id: id,
             category_id,
@@ -1222,7 +1291,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
     "/admin/migrate-maintenance-from-kv",
     requireAuth(),
     async (c) => {
-      const denied = assertVehicleCatalogPlatformAccess(c);
+      const denied = assertCatalogWriteResponse(c);
       if (denied) return denied;
       try {
         const { data: rows, error } = await fromKvStore()
@@ -1331,7 +1400,11 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
 
         const templateIds = [...new Set((scheduleRows || []).map((r: { template_id?: string }) => r.template_id).filter(Boolean))] as string[];
         const { data: tplRows } = templateIds.length
-          ? await supabase.from("maintenance_task_templates").select("*").in("id", templateIds)
+          ? await supabase
+            .from("maintenance_task_templates")
+            .select("*")
+            .in("id", templateIds)
+            .is("component_id", null)
           : { data: [] as Record<string, unknown>[] };
         const catsByTpl = await loadCategoriesForTemplateIds(supabase, templateIds);
         const tplById: Record<string, Record<string, unknown>> = {};
@@ -2328,9 +2401,22 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         const { data: componentSchedules } = await supabase
           .from("vehicle_component_schedule")
           .select(
-            "vehicle_id, position, next_due_miles, next_due_miles_max, next_due_date, schedule_status, category:maintenance_service_categories(id, code, name)",
+            "vehicle_id, position, next_due_km, next_due_km_max, next_due_date, schedule_status, rule_id, category:maintenance_service_categories(id, code, name)",
           )
           .eq("organization_id", orgId);
+
+        const compRuleIds = [
+          ...new Set((componentSchedules || []).map((s) => s.rule_id).filter(Boolean)),
+        ] as string[];
+        const compRulesById = new Map<string, Record<string, unknown>>();
+        if (compRuleIds.length) {
+          const { data: compRules } = await supabase
+            .from("maintenance_task_templates")
+            .select("id, source_type, status")
+            .in("id", compRuleIds);
+          for (const r of compRules || []) compRulesById.set(String(r.id), r as Record<string, unknown>);
+        }
+        const { computeDominionScheduleStatus } = await import("./maintenance_master_fleet_enrich.ts");
 
         const byVehicle: Record<string, Record<string, unknown>[]> = {};
         for (const s of schedules || []) {
@@ -2349,7 +2435,11 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
 
         const templateIds = [...new Set((schedules || []).map((s) => s.template_id).filter(Boolean))] as string[];
         const { data: fleetTplRows } = templateIds.length
-          ? await supabase.from("maintenance_task_templates").select("id, task_name").in("id", templateIds)
+          ? await supabase
+            .from("maintenance_task_templates")
+            .select("id, task_name")
+            .in("id", templateIds)
+            .is("component_id", null)
           : { data: [] as { id: string; task_name?: string | null }[] };
         const fleetTplById: Record<string, string> = {};
         for (const t of fleetTplRows || []) {
@@ -2450,8 +2540,8 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           // even when package schedule rows are missing.
           let minComponentNext: number | null = null;
           for (const row of compRows) {
-            const nextMiles = row.next_due_miles != null ? Number(row.next_due_miles) : null;
-            const nextMilesMaxRaw = row.next_due_miles_max != null ? Number(row.next_due_miles_max) : null;
+            const nextMiles = row.next_due_km != null ? Number(row.next_due_km) : null;
+            const nextMilesMaxRaw = row.next_due_km_max != null ? Number(row.next_due_km_max) : null;
             const nextDate = row.next_due_date != null ? String(row.next_due_date).slice(0, 10) : null;
             const schSt = row.schedule_status != null ? String(row.schedule_status) : "active";
             const a = analyzeMaintenanceScheduleRow(odo, today, nextMiles, nextMilesMaxRaw, nextDate, schSt);
@@ -2513,6 +2603,12 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           const sortedAttention = sortFleetServiceAttention(attention);
           const servicesAttentionTruncated = sortedAttention.length > FLEET_SERVICES_ATTENTION_CAP;
           const servicesAttention = sortedAttention.slice(0, FLEET_SERVICES_ATTENTION_CAP);
+          const hasOdoReading = (trusted?.reading ?? (odo > 0 ? odo : 0)) > 0;
+          const dominionScheduleStatus = computeDominionScheduleStatus(
+            compRows,
+            compRulesById,
+            hasOdoReading,
+          );
           return {
             vehicleId: vid,
             licensePlate: v.license_plate ?? undefined,
@@ -2544,6 +2640,8 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
               overdue: vehicleDue.filter((r) => r.due_status === "overdue").length,
               dueSoon: vehicleDue.filter((r) => r.due_status === "due_soon").length,
             },
+            dominionScheduleStatus,
+            severeDuty: (v as { severe_duty?: boolean }).severe_duty === true,
             ...(doNotDriveByVehicle.get(vid) ?? { doNotDrive: false }),
           };
         }));
@@ -2714,8 +2812,8 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         const items = [];
         for (const row of states || []) {
           const st = analyzeComponentRowStatus(odo, today, {
-            next_due_miles: row.next_due_miles as number | null,
-            next_due_miles_max: row.next_due_miles_max as number | null,
+            next_due_km: row.next_due_km as number | null,
+            next_due_km_max: row.next_due_km_max as number | null,
             next_due_date: row.next_due_date as string | null,
             schedule_status: row.schedule_status as string | null,
           });
@@ -2731,8 +2829,8 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
               ? String(row.last_performed_date).slice(0, 10)
               : null,
             lastPerformedMiles:
-              row.last_performed_miles != null ? Number(row.last_performed_miles) : null,
-            nextDueMiles: row.next_due_miles != null ? Number(row.next_due_miles) : null,
+              row.last_performed_km != null ? Number(row.last_performed_km) : null,
+            nextDueKm: row.next_due_km != null ? Number(row.next_due_km) : null,
             nextDueDate: row.next_due_date != null ? String(row.next_due_date).slice(0, 10) : null,
           });
         }
@@ -3624,7 +3722,22 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           .eq("organization_id", orgId)
           .eq("vehicle_id", vehicleId);
         if (error) throw error;
-        return c.json({ items: data || [] });
+        const { enrichMaintenanceDueItems } = await import("./maintenance_master_fleet_enrich.ts");
+        const items = await enrichMaintenanceDueItems(
+          supabase,
+          orgId,
+          vehicleId,
+          (data || []) as Record<string, unknown>[],
+        );
+        const { data: vehRow } = await fleetDb()
+          .from("fleet_vehicles")
+          .select("severe_duty")
+          .eq("organization_id", orgId)
+          .eq("id", vehicleId)
+          .maybeSingle();
+        const severeDuty = (vehRow as { severe_duty?: boolean } | null)?.severe_duty === true;
+        const withSevere = items.map((row) => ({ ...row, severe_duty: severeDuty }));
+        return c.json({ items: withSevere });
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
         return c.json({ error: msg }, 500);
@@ -3635,6 +3748,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
   registerMaintenanceAlertsKpiRoutes(route, supabase);
   registerMaintenanceInspectionRoutes(route, supabase);
   registerMaintenanceWorkOrderRoutes(route, supabase);
+  registerMaintenanceMasterRoutes(route, supabase);
 
   /**
    * Legacy cron path — forwards to nightly SQL job.

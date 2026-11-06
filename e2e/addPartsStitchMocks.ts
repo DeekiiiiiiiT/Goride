@@ -39,7 +39,21 @@ const WIPER_TYPE = {
   status: "active",
   iconKey: "straighten",
   areaId: "b1000000-0000-4000-8000-000000000007",
-  specFields: [{ specKey: "wiper_driver_mm", label: "Driver wiper", unit: "mm", dataType: "number", required: true }],
+  specFields: [{ specKey: "wiper_driver_mm", label: "Length", unit: "mm", dataType: "number", required: true }],
+};
+
+const SHOCK_TYPE = {
+  id: "a9000003-0000-4000-8000-000000000020",
+  opCode: "SUS-SHOCK",
+  name: "Shock absorber",
+  tradeTerm: "shock",
+  editorHint: "Pick every corner the page lists.",
+  defaultFitMode: "specific",
+  positionScheme: "four_corners",
+  status: "active",
+  iconKey: "suspension",
+  areaId: "b1000000-0000-4000-8000-000000000008",
+  specFields: [],
 };
 
 const EXTRA_TYPES = [
@@ -60,6 +74,7 @@ export const MOCK_PART_TYPES = [
   BRAKE_TYPE,
   OIL_TYPE,
   WIPER_TYPE,
+  SHOCK_TYPE,
   ...EXTRA_TYPES.map((t, i) => typeRow(t, 10 + i)),
 ];
 
@@ -84,8 +99,18 @@ export type AddPartsMockState = {
 };
 
 export function createAddPartsMockState(): AddPartsMockState {
-  return { saveCalls: 0, lastSaveBody: null, partTypeRequests: [], extraTypes: [] };
+  return {
+    saveCalls: 0,
+    lastSaveBody: null,
+    partTypeRequests: [],
+    extraTypes: [],
+  };
 }
+
+const DEFAULT_PART_TYPE_REQUESTS = [
+  { id: "req-mock-1", name: "Fog light bulb", reason: "Need for fleet Roomy units", status: "pending" },
+  { id: "req-mock-2", name: "VVT Solenoid", reason: "Missing from brakes area taxonomy", status: "pending" },
+];
 
 export async function installAddPartsMocks(page: Page, state?: AddPartsMockState) {
   const st = state ?? createAddPartsMockState();
@@ -110,6 +135,10 @@ export async function installAddPartsMocks(page: Page, state?: AddPartsMockState
       st.extraTypes.push(created);
       return route.fulfill({ json: { id: created.id, ...body, specFieldCount: 0 } });
     }
+    if (url.match(/part-types\/[^/?]+/) && method === "PATCH") {
+      const body = route.request().postDataJSON() as Record<string, unknown>;
+      return route.fulfill({ json: { ok: true, ...body } });
+    }
     if (url.includes("/part-types") && !url.includes("top-brands") && !url.match(/part-types\/[^/?]+/)) {
       return route.fulfill({ json: { types: [...MOCK_PART_TYPES, ...st.extraTypes] } });
     }
@@ -119,16 +148,55 @@ export async function installAddPartsMocks(page: Page, state?: AddPartsMockState
     if (url.includes("/parts/recent")) {
       return route.fulfill({
         json: {
-          items: [{
-            batchId: "44444444-4444-4444-8444-444444444441",
-            batchCode: "AP-RECENT1",
-            brand: "Toyota",
-            partNumber: "04152-40060",
-            partTypeName: "Oil filter",
-            fitMode: "engine",
-            when: new Date().toISOString(),
-            canUndo: true,
-          }],
+          items: [
+            {
+              batchId: "44444444-4444-4444-8444-444444444441",
+              batchCode: "AP-RECENT-ENG",
+              brand: "Union",
+              partNumber: "O-104-MOCK",
+              partTypeName: "Oil filter",
+              fitMode: "engine",
+              fitSummary: "21 car versions",
+              reachLabel: "21 car versions",
+              plainWordsSentence: "Union O-104-MOCK is an oil filter. It fits 21 car version(s) with engine 1KR-FE.",
+              sourceHost: "example.com",
+              evidenceUrl: "https://example.com/oil-filter",
+              trustLabel: "Verified · part maker's catalogue",
+              vehicleHint: "Toyota Roomy, Toyota Tank",
+              promotedAt: new Date(Date.now() - 86400000).toISOString(),
+              undoEligible: true,
+              canUndo: true,
+            },
+            {
+              batchId: "44444444-4444-4444-8444-444444444443",
+              batchCode: "AP-RECENT-SPEC",
+              brand: "Example",
+              partNumber: "WB-525-MOCK",
+              partTypeName: "Wiper blades",
+              fitMode: "spec",
+              fitSummary: "3 car versions",
+              reachLabel: "3 car versions",
+              plainWordsSentence: "Example WB-525-MOCK is a wiper mm. It fits 3 car version(s) at 525.",
+              sourceHost: "example.com",
+              evidenceUrl: "https://example.com/wiper",
+              trustLabel: "Verified · part maker's catalogue",
+              promotedAt: new Date(Date.now() - 172800000).toISOString(),
+              undoEligible: true,
+              canUndo: true,
+            },
+          ],
+        },
+      });
+    }
+    if (url.includes("parts-overview")) {
+      return route.fulfill({
+        json: {
+          vehicles: 100,
+          partsOnFile: 50,
+          fitmentsOnFile: 200,
+          vehiclesWithParts: 80,
+          waiting: 3,
+          matchTypesOff: false,
         },
       });
     }
@@ -138,15 +206,16 @@ export async function installAddPartsMocks(page: Page, state?: AddPartsMockState
       return route.fulfill({ json: { ok: true, id: "req-1" } });
     }
     if (url.includes("part-type-requests")) {
-      return route.fulfill({
-        json: {
-          items: st.partTypeRequests.map((r, i) => ({
-            id: `req-${i}`,
-            name: String((r as Record<string, unknown>).name ?? "Request"),
-            status: "pending",
-          })),
-        },
-      });
+      const items = [
+        ...DEFAULT_PART_TYPE_REQUESTS,
+        ...st.partTypeRequests.map((r, i) => ({
+          id: `req-${i}`,
+          name: String((r as Record<string, unknown>).name ?? "Request"),
+          reason: String((r as Record<string, unknown>).reason ?? ""),
+          status: "pending",
+        })),
+      ];
+      return route.fulfill({ json: { items } });
     }
     if (url.includes("/add-part/vehicles")) {
       const u = new URL(url);
@@ -205,7 +274,7 @@ export async function installAddPartsMocks(page: Page, state?: AddPartsMockState
       return route.fulfill({
         json: {
           carCount: carCount || 2,
-          oeExtraCarCount: 0,
+          oeExtraCarCount: factoryRaw ? 3 : 0,
           totalReach: carCount || 2,
           sentence,
           trustLabel: "Verified · part maker's catalogue",
@@ -215,6 +284,9 @@ export async function installAddPartsMocks(page: Page, state?: AddPartsMockState
             modelYearsLabel: "2016–present",
             vehicleSummary: "Includes Toyota Roomy, Tank",
           },
+          oePreviewCars: factoryRaw
+            ? [{ label: "Toyota Passo M700A", years: "(2016–present)", engine: "1KR-FE", position: "Front" }]
+            : [],
         },
       });
     }
@@ -227,11 +299,16 @@ export async function installAddPartsMocks(page: Page, state?: AddPartsMockState
           batchCode: "AP-MOCK01",
           partId: "55555555-5555-4555-8555-555555555551",
           groupId: "66666666-6666-4666-8666-666666666661",
-          catalogDecision: st.lastSaveBody.sourceType === "other" ? "pending" : "confirmed",
-          trustLabel: st.lastSaveBody.sourceType === "other"
+          catalogDecision: st.lastSaveBody?.sourceType === "other" ? "pending" : "confirmed",
+          trustLabel: st.lastSaveBody?.sourceType === "other"
             ? "Needs checking · other source"
             : "Verified · part maker's catalogue",
-          preview: { carCount: 2, totalReach: 2 },
+          preview: { carCount: 8, totalReach: 8 },
+          brand: String(st.lastSaveBody?.brand ?? "MK Kashiyama"),
+          partNumber: String(st.lastSaveBody?.partNumber ?? "D0051MH"),
+          categoryLabel: "Front brake pads",
+          directVehicleCount: 7,
+          autoLinkedCount: 1,
           chassisList: ["Toyota Roomy M900A"],
         },
       });
@@ -258,10 +335,51 @@ export async function installAddPartsMocks(page: Page, state?: AddPartsMockState
       });
     }
     if (url.includes("engine-families")) {
-      return route.fulfill({ json: { items: [{ id: ENGINE_ID, code: "1KR-FE", variantCount: 22 }] } });
+      return route.fulfill({
+        json: {
+          items: [{
+            id: ENGINE_ID,
+            code: "1KR-FE",
+            variantCount: 22,
+            displacement: "1.0L",
+            cylinders: 3,
+          }],
+        },
+      });
     }
     if (url.includes("spec-keys")) {
       return route.fulfill({ json: { items: [{ key: "wiper_driver_mm", label: "Driver wiper", unit: "mm" }] } });
+    }
+    if (url.includes("find-parts")) {
+      return route.fulfill({
+        json: {
+          mode: "tiered",
+          car: { make: "Toyota", model: "Roomy", year: 2018 },
+          candidates: [],
+          sections: [],
+          plainSections: [],
+          emptyTiers: [1, 2, 3, 4, 5],
+        },
+      });
+    }
+    if (url.includes("vehicle-options")) {
+      return route.fulfill({ json: { makes: ["Toyota"], models: ["Roomy"], years: [2018] } });
+    }
+    if (url.includes("parts/browse")) {
+      return route.fulfill({ json: { systems: [], common: [] } });
+    }
+    if (url.includes("master-search") || url.includes("parts/master")) {
+      return route.fulfill({
+        json: {
+          parts: [],
+          sisters: [],
+          universals: [],
+          counts: { oem: 0, sister: 0, engine: 0, aftermarket: 0, universal: 0 },
+          total: 0,
+          page: 1,
+          pages: 1,
+        },
+      });
     }
     return route.fulfill({ json: {} });
   });

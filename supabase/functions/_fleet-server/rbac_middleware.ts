@@ -460,8 +460,8 @@ export function requireAuth(options?: RequireAuthOptions) {
       path.includes("/recover-platform-owner") ||
       path.includes("/signup") ||
       path.includes("/platform-status") ||
-      path.includes("/platform-feature-flags") ||
-      path.includes("/health") ||
+      (path.includes("/platform-feature-flags") && !path.includes("/admin/")) ||
+      (path.endsWith("/health") && !path.includes("/admin/") && !path.includes("/odometer/")) ||
       // Week seals are service-role calls. The kernel checks that key first;
       // a user session is not one, and the login gate must not answer first.
       path.includes("/internal/seal-") ||

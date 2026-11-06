@@ -15,7 +15,7 @@ const GlobalPlatformSettingsPage = lazyNamed(() => import('@roam/admin-core/sett
 const ApiCommandCenter = lazyNamed(() => import('./api-center/ApiCommandCenter'), 'ApiCommandCenter');
 const VehicleCatalogManager = lazyNamed(() => import('./vehicle-catalog/VehicleCatalogManager'), 'VehicleCatalogManager');
 const PendingVehicleCatalogManager = lazyNamed(() => import('./vehicle-catalog/PendingVehicleCatalogManager'), 'PendingVehicleCatalogManager');
-const MaintenanceTemplatesManager = lazyNamed(() => import('./maintenance-templates/MaintenanceTemplatesManager'), 'MaintenanceTemplatesManager');
+const MaintenanceMasterPage = lazyNamed(() => import('./maintenance-master/MaintenanceMasterPage'), 'MaintenanceMasterPage');
 const PartsSourcingManager = lazyNamed(() => import('./parts-sourcing/PartsSourcingManager'), 'PartsSourcingManager');
 const PartsDatabasePage = lazyNamed(() => import('./parts-database/PartsDatabasePage'), 'PartsDatabasePage');
 const VehiclesHomePage = lazyNamed(() => import('./parts-database/VehiclesHomePage'), 'VehiclesHomePage');
@@ -303,9 +303,9 @@ export function AdminPortal() {
       )}
       {currentPage === 'pending-motor-vehicles' && <PendingVehicleCatalogManager />}
       {currentPage === 'maintenance-templates' && (
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px] dark:bg-card">
-          <MaintenanceTemplatesManager />
-        </div>
+        <Suspense fallback={<div className="p-8 text-slate-500">Loading maintenance templates…</div>}>
+          <MaintenanceMasterPage />
+        </Suspense>
       )}
       {currentPage === 'parts-catalog' && <PartsDatabasePage />}
       {currentPage === 'suppliers-prices' && (

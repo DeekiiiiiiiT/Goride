@@ -4,6 +4,7 @@ import { ImportBatchDrawer } from "./ImportBatchDrawer";
 import { ImportUndoDialog } from "./ImportUndoDialog";
 import { ImportStates } from "./ImportStates";
 import { MaterialIcon } from "./MaterialIcon";
+import { PartsButton } from "../PartsButton";
 import type { ImportAreaSummary } from "./partsImportApi";
 
 export { ImportBatchDrawer } from "./ImportBatchDrawer";
@@ -168,10 +169,10 @@ export function ImportLedger({
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         {onBackToAreas ? (
-          <button type="button" className="text-sm font-semibold text-secondary inline-flex items-center gap-1" onClick={onBackToAreas}>
+          <PartsButton variant="secondary" className="text-sm inline-flex items-center gap-1" onClick={onBackToAreas}>
             <MaterialIcon name="chevron_left" className="text-[18px]" />
             All areas
-          </button>
+          </PartsButton>
         ) : null}
         <span className="text-sm font-semibold text-on-surface">/ Import ledger</span>
       </div>
@@ -181,12 +182,12 @@ export function ImportLedger({
       </p>
       <div className="flex flex-wrap justify-between gap-2">
         <div className="flex flex-wrap gap-2">
-          <button type="button" className="text-sm font-semibold text-secondary" onClick={onExportLedger}>
+          <PartsButton variant="secondary" className="text-sm" onClick={onExportLedger}>
             Export Full Ledger
-          </button>
-          <button type="button" className="text-sm font-semibold text-primary" onClick={onNewBatch}>
+          </PartsButton>
+          <PartsButton variant="primary" className="text-sm" onClick={onNewBatch}>
             New Batch Import
-          </button>
+          </PartsButton>
         </div>
       </div>
       <div className="flex flex-wrap gap-2 text-xs font-mono">
@@ -218,9 +219,9 @@ export function ImportLedger({
             </button>
           );
         })}
-        <button type="button" className="text-xs font-semibold text-secondary ml-auto" onClick={onSync}>
+        <PartsButton variant="secondary" className="text-xs ml-auto" onClick={onSync}>
           Sync
-        </button>
+        </PartsButton>
       </div>
 
       <div className="relative max-w-md">
@@ -245,9 +246,9 @@ export function ImportLedger({
         <div className="rounded-xl border border-outline-variant/30 overflow-hidden">
           <div className="flex flex-wrap justify-between gap-2 p-3 bg-surface-container-low text-xs font-mono">
             <span>{filtered.length} Records Displayed</span>
-            <button type="button" className="font-semibold text-secondary" onClick={onSync}>
+            <PartsButton variant="secondary" className="text-xs" onClick={onSync}>
               Sync
-            </button>
+            </PartsButton>
           </div>
           <table className="w-full text-xs">
             <thead>
@@ -274,15 +275,15 @@ export function ImportLedger({
                   <td className="p-2">{statusChip(String(row.status ?? ""))}</td>
                   <td className="p-2 space-x-2 whitespace-nowrap">
                     {row.undo_open === true ? (
-                      <button type="button" className="text-error font-semibold" onClick={() => openUndo(row)}>
+                      <PartsButton variant="danger" className="min-h-[32px] h-8 px-2" onClick={() => openUndo(row)}>
                         Undo
-                      </button>
+                      </PartsButton>
                     ) : (
                       <span className="text-outline">—</span>
                     )}
-                    <button type="button" className="text-secondary font-semibold" onClick={() => openDrawer(row)}>
+                    <PartsButton variant="secondary" className="min-h-[32px] h-8 px-2" onClick={() => openDrawer(row)}>
                       View drawer
-                    </button>
+                    </PartsButton>
                   </td>
                 </tr>
               ))}

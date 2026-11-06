@@ -8,6 +8,7 @@ import {
   computeInitialScheduleRow,
   type TemplateLike,
 } from "./maintenance_schedule_engine.ts";
+import { fleetDb } from "./repos/baseRepo.ts";
 
 export const MAINTENANCE_POSITIONS = ["LF", "RF", "LR", "RR"] as const;
 export type MaintenancePosition = (typeof MAINTENANCE_POSITIONS)[number];
@@ -34,7 +35,7 @@ export function pickTightestInterval(templates: TemplateLike[]): TemplateLike {
   let best = templates[0];
   let bestMiles = Number.POSITIVE_INFINITY;
   for (const t of templates) {
-    const m = t.interval_miles != null ? Number(t.interval_miles) : null;
+    const m = t.interval_km != null ? Number(t.interval_km) : null;
     if (m != null && Number.isFinite(m) && m > 0 && m < bestMiles) {
       bestMiles = m;
       best = t;
@@ -52,7 +53,7 @@ export function pickTightestInterval(templates: TemplateLike[]): TemplateLike {
 export function intervalFromCategoryDefaults(cat: Record<string, unknown>): TemplateLike {
   return {
     frequency_kind: "recurring",
-    interval_miles: cat.default_interval_miles != null ? Number(cat.default_interval_miles) : null,
+    interval_km: cat.default_interval_km != null ? Number(cat.default_interval_km) : null,
     interval_months: cat.default_interval_months != null ? Number(cat.default_interval_months) : null,
   };
 }
@@ -65,8 +66,9 @@ export async function loadIntervalTemplateForCategory(
   if (preferredTemplateId) {
     const { data: tpl } = await sb
       .from("maintenance_task_templates")
-      .select("id, frequency_kind, interval_miles, interval_miles_max, interval_months")
+      .select("id, frequency_kind, interval_km, interval_km_max, interval_months")
       .eq("id", preferredTemplateId)
+      .is("component_id", null)
       .maybeSingle();
     if (tpl) {
       return { template: tpl as TemplateLike, sourceTemplateId: String(tpl.id) };
@@ -76,14 +78,15 @@ export async function loadIntervalTemplateForCategory(
   const { data: memberships } = await sb
     .from("maintenance_package_categories")
     .select(
-      "template_id, template:maintenance_task_templates(id, frequency_kind, interval_miles, interval_miles_max, interval_months)",
+      "template_id, template:maintenance_task_templates(id, frequency_kind, interval_km, interval_km_max, interval_months, component_id)",
     )
     .eq("category_id", categoryId);
 
   const templates: TemplateLike[] = [];
   const ids: string[] = [];
   for (const m of memberships || []) {
-    const t = (m as { template?: TemplateLike & { id?: string } }).template;
+    const t = (m as { template?: TemplateLike & { id?: string; component_id?: unknown } }).template;
+    if (t && t.component_id != null && t.component_id !== "") continue;
     if (t) {
       templates.push(t);
       if (t.id) ids.push(String(t.id));
@@ -104,7 +107,7 @@ export async function loadIntervalTemplateForCategory(
 
   const { data: cat } = await sb
     .from("maintenance_service_categories")
-    .select("default_interval_miles, default_interval_months")
+    .select("id, position_aware")
     .eq("id", categoryId)
     .maybeSingle();
 
@@ -112,6 +115,30 @@ export async function loadIntervalTemplateForCategory(
     template: intervalFromCategoryDefaults((cat || {}) as Record<string, unknown>),
     sourceTemplateId: null,
   };
+}
+
+async function resolveOpenMaintenanceAlerts(
+  args: {
+    organizationId: string;
+    vehicleId: string;
+    categoryId: string;
+    position: string | null;
+  },
+): Promise<void> {
+  const now = new Date().toISOString();
+  let q = fleetDb()
+    .from("fleet_maintenance_alerts")
+    .update({
+      status: "resolved",
+      resolution_reason: "performed",
+      resolved_at: now,
+    })
+    .eq("organization_id", args.organizationId)
+    .eq("vehicle_id", args.vehicleId)
+    .eq("category_id", args.categoryId)
+    .eq("status", "open");
+  q = args.position == null ? q.is("position", null) : q.eq("position", args.position);
+  await q;
 }
 
 async function upsertComponentScheduleRow(
@@ -133,10 +160,10 @@ async function upsertComponentScheduleRow(
     vehicle_id: args.vehicleId,
     category_id: args.categoryId,
     position: args.position,
-    last_performed_miles: args.performedMiles,
+    last_performed_km: args.performedMiles,
     last_performed_date: args.performedDate,
-    next_due_miles: adv.next_due_miles,
-    next_due_miles_max: adv.next_due_miles_max,
+    next_due_km: adv.next_due_km,
+    next_due_km_max: adv.next_due_km_max,
     next_due_date: adv.next_due_date,
     schedule_status: adv.schedule_status,
     source_template_id: args.sourceTemplateId,
@@ -157,6 +184,12 @@ async function upsertComponentScheduleRow(
   } else {
     await sb.from("vehicle_component_schedule").insert(patch);
   }
+  await resolveOpenMaintenanceAlerts({
+    organizationId: args.organizationId,
+    vehicleId: args.vehicleId,
+    categoryId: args.categoryId,
+    position: args.position,
+  });
 }
 
 export type LedgerLineInput = {
@@ -196,7 +229,7 @@ export async function recordCompletedServiceLines(args: {
 
     const { data: cat } = await sb
       .from("maintenance_service_categories")
-      .select("id, code, name, position_aware, default_interval_miles, default_interval_months")
+      .select("id, code, name, position_aware")
       .eq("id", categoryId)
       .maybeSingle();
     if (!cat) continue;
@@ -218,7 +251,7 @@ export async function recordCompletedServiceLines(args: {
     );
     // Prefer category defaults when template has no interval
     const hasInterval =
-      (template.interval_miles != null && Number.isFinite(Number(template.interval_miles))) ||
+      (template.interval_km != null && Number.isFinite(Number(template.interval_km))) ||
       (template.interval_months != null && Number.isFinite(Number(template.interval_months)));
     const effective = hasInterval ? template : intervalFromCategoryDefaults(cat as Record<string, unknown>);
 
@@ -299,7 +332,7 @@ export async function bootstrapVehicleComponentSchedules(args: {
   const { data: memberships } = await sb
     .from("maintenance_package_categories")
     .select(
-      "category_id, template_id, required, category:maintenance_service_categories(id, position_aware, default_interval_miles, default_interval_months), template:maintenance_task_templates(id, frequency_kind, interval_miles, interval_miles_max, interval_months)",
+      "category_id, template_id, required, category:maintenance_service_categories(id, position_aware, default_interval_km, default_interval_months), template:maintenance_task_templates(id, frequency_kind, interval_km, interval_km_max, interval_months, component_id)",
     )
     .in("template_id", args.templateIds);
 
@@ -314,7 +347,8 @@ export async function bootstrapVehicleComponentSchedules(args: {
   for (const m of memberships || []) {
     const catId = String((m as { category_id: string }).category_id);
     const cat = (m as { category?: Record<string, unknown> }).category;
-    const tpl = (m as { template?: TemplateLike & { id?: string } }).template;
+    const tpl = (m as { template?: TemplateLike & { id?: string; component_id?: unknown } }).template;
+    if (tpl && tpl.component_id != null && tpl.component_id !== "") continue;
     if (!catId || !cat) continue;
     let acc = byCat.get(catId);
     if (!acc) {
@@ -338,7 +372,7 @@ export async function bootstrapVehicleComponentSchedules(args: {
       ? pickTightestInterval(acc.templates)
       : acc.defaults;
     const hasInterval =
-      (template.interval_miles != null && Number.isFinite(Number(template.interval_miles))) ||
+      (template.interval_km != null && Number.isFinite(Number(template.interval_km))) ||
       (template.interval_months != null && Number.isFinite(Number(template.interval_months)));
     const effective = hasInterval ? template : acc.defaults;
     const computed = computeInitialScheduleRow(effective, args.currentOdo, args.baselineDate);
@@ -364,10 +398,10 @@ export async function bootstrapVehicleComponentSchedules(args: {
         baseline_odometer: args.currentOdo,
         baseline_date: args.baselineDate,
         baseline_source: "bootstrap",
-        last_performed_miles: null,
+        last_performed_km: null,
         last_performed_date: null,
-        next_due_miles: computed.next_due_miles,
-        next_due_miles_max: computed.next_due_miles_max,
+        next_due_km: computed.next_due_km,
+        next_due_km_max: computed.next_due_km_max,
         next_due_date: computed.next_due_date,
         schedule_status: computed.schedule_status,
         source_template_id: acc.sourceTemplateId,
@@ -383,15 +417,15 @@ export function analyzeComponentRowStatus(
   currentOdo: number,
   today: string,
   row: {
-    next_due_miles?: number | null;
-    next_due_miles_max?: number | null;
+    next_due_km?: number | null;
+    next_due_km_max?: number | null;
     next_due_date?: string | null;
     schedule_status?: string | null;
   },
 ): "ok" | "pending" | "overdue" | "fulfilled" {
   if (String(row.schedule_status ?? "") === "fulfilled") return "fulfilled";
-  const nextMiles = row.next_due_miles != null ? Number(row.next_due_miles) : null;
-  const nextMax = row.next_due_miles_max != null ? Number(row.next_due_miles_max) : null;
+  const nextMiles = row.next_due_km != null ? Number(row.next_due_km) : null;
+  const nextMax = row.next_due_km_max != null ? Number(row.next_due_km_max) : null;
   const nextDate = row.next_due_date != null ? String(row.next_due_date).slice(0, 10) : null;
 
   let overdueMiles = false;
@@ -468,8 +502,8 @@ export async function getPackageChecklist(args: {
         const row = stateByKey.get(`${categoryId}|${pos}`);
         const st = row
           ? analyzeComponentRowStatus(args.currentOdo, args.today, {
-              next_due_miles: row.next_due_miles as number | null,
-              next_due_miles_max: row.next_due_miles_max as number | null,
+              next_due_km: row.next_due_km as number | null,
+              next_due_km_max: row.next_due_km_max as number | null,
               next_due_date: row.next_due_date as string | null,
               schedule_status: row.schedule_status as string | null,
             })
@@ -480,7 +514,7 @@ export async function getPackageChecklist(args: {
           const d = String(row.last_performed_date).slice(0, 10);
           if (!lastDate || d > lastDate) {
             lastDate = d;
-            lastMiles = row.last_performed_miles != null ? Number(row.last_performed_miles) : null;
+            lastMiles = row.last_performed_km != null ? Number(row.last_performed_km) : null;
           }
         }
       }
@@ -504,8 +538,8 @@ export async function getPackageChecklist(args: {
       const row = stateByKey.get(`${categoryId}|`);
       const st = row
         ? analyzeComponentRowStatus(args.currentOdo, args.today, {
-            next_due_miles: row.next_due_miles as number | null,
-            next_due_miles_max: row.next_due_miles_max as number | null,
+            next_due_km: row.next_due_km as number | null,
+            next_due_km_max: row.next_due_km_max as number | null,
             next_due_date: row.next_due_date as string | null,
             schedule_status: row.schedule_status as string | null,
           })
@@ -524,7 +558,7 @@ export async function getPackageChecklist(args: {
         lastPerformedDate: row?.last_performed_date
           ? String(row.last_performed_date).slice(0, 10)
           : null,
-        lastPerformedMiles: row?.last_performed_miles != null ? Number(row.last_performed_miles) : null,
+        lastPerformedMiles: row?.last_performed_km != null ? Number(row.last_performed_km) : null,
       });
     }
   }
@@ -571,6 +605,7 @@ export async function maybeAdvancePackageSchedule(args: {
     .from("maintenance_task_templates")
     .select("*")
     .eq("id", args.templateId)
+    .is("component_id", null)
     .maybeSingle();
   if (!template) return { advanced: false };
 
@@ -580,8 +615,8 @@ export async function maybeAdvancePackageSchedule(args: {
     .update({
       last_performed_miles: args.performedMiles,
       last_performed_date: args.performedDate,
-      next_due_miles: adv.next_due_miles,
-      next_due_miles_max: adv.next_due_miles_max,
+      next_due_miles: adv.next_due_km,
+      next_due_miles_max: adv.next_due_km_max,
       next_due_date: adv.next_due_date,
       schedule_status: adv.schedule_status,
       updated_at: new Date().toISOString(),

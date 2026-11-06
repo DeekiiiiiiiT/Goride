@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { PartsButton } from "../PartsButton";
 import type { MasterPartRow, SisterFamilyRow, UniversalCatalogRow } from "../partsDatabaseApi";
 
 const GROUPS = [
@@ -39,10 +40,10 @@ function GroupOwnerAction({ groupId, owner, ownerTitle, onNewFamily, onAddUniver
   onAddUniversal: () => void;
 }) {
   if (groupId === "sister") {
-    return <button type="button" className="font-body-sm text-[11px] md:text-body-sm text-primary font-semibold disabled:opacity-40" disabled={!owner} title={ownerTitle} onClick={onNewFamily}>New family</button>;
+    return <PartsButton variant="secondary" className="font-body-sm text-[11px] md:text-body-sm disabled:opacity-40" disabled={!owner} title={ownerTitle} onClick={onNewFamily}>New family</PartsButton>;
   }
   if (groupId === "universal") {
-    return <button type="button" className="font-body-sm text-[11px] md:text-body-sm text-primary font-semibold disabled:opacity-40" disabled={!owner} title={ownerTitle} onClick={onAddUniversal}>Add size-based part</button>;
+    return <PartsButton variant="secondary" className="font-body-sm text-[11px] md:text-body-sm disabled:opacity-40" disabled={!owner} title={ownerTitle} onClick={onAddUniversal}>Add size-based part</PartsButton>;
   }
   return null;
 }
@@ -56,9 +57,9 @@ function IconButton({ icon, label, disabled, title, danger, onClick }: {
   onClick: () => void;
 }) {
   return (
-    <button className={`p-1 rounded hover:bg-surface-container-lowest disabled:opacity-40 ${danger ? "hover:text-error" : "hover:text-primary"}`} type="button" aria-label={label} title={title ?? label} disabled={disabled} onClick={onClick}>
+    <PartsButton variant="icon" className="rounded disabled:opacity-40" aria-label={label} title={title ?? label} disabled={disabled} onClick={onClick}>
       <span className="material-symbols-outlined text-[17px]">{icon}</span>
-    </button>
+    </PartsButton>
   );
 }
 
@@ -140,9 +141,9 @@ export function FullDatabaseGroupedTable({
                   <span className="px-1.5 py-0.2 rounded bg-surface-container text-secondary font-mono-sm text-[10px] md:text-[11px] font-bold shrink-0">{group.tag}</span>
                   <span className="hidden md:inline text-secondary font-mono-sm text-mono-sm">· {count} {group.id === "sister" ? "families" : "records"}</span>
                 </div>
-                <button type="button" className="md:hidden text-outline hover:text-on-surface p-0.5 shrink-0" title={open ? "Collapse group" : "Expand group"} onClick={() => setClosed((current) => ({ ...current, [group.id]: open }))}>
+                <PartsButton variant="icon" className="md:hidden shrink-0" title={open ? "Collapse group" : "Expand group"} onClick={() => setClosed((current) => ({ ...current, [group.id]: open }))}>
                   <span className="material-symbols-outlined text-[17px]">{open ? "expand_less" : "expand_more"}</span>
-                </button>
+                </PartsButton>
               </div>
               <div className="md:hidden flex items-center justify-between gap-2 mt-1 pt-1 border-t border-outline-variant/40">
                 <span className="font-mono-sm text-[11px] text-secondary">{group.id === "sister" ? `${count} ${count === 1 ? "family" : "families"} on file` : `${count} ${count === 1 ? "record" : "records"} in file`}</span>
@@ -150,9 +151,9 @@ export function FullDatabaseGroupedTable({
               </div>
               <div className="hidden md:flex items-center gap-2 shrink-0">
                 <GroupOwnerAction groupId={group.id} owner={owner} ownerTitle={ownerTitle} onNewFamily={onNewFamily} onAddUniversal={onAddUniversal} />
-                <button type="button" className="text-outline hover:text-on-surface p-1" title={open ? "Collapse group" : "Expand group"} onClick={() => setClosed((current) => ({ ...current, [group.id]: open }))}>
+                <PartsButton variant="icon" title={open ? "Collapse group" : "Expand group"} onClick={() => setClosed((current) => ({ ...current, [group.id]: open }))}>
                   <span className="material-symbols-outlined text-[18px]">{open ? "expand_less" : "expand_more"}</span>
-                </button>
+                </PartsButton>
               </div>
             </div>
             {open ? (
@@ -177,16 +178,16 @@ export function FullDatabaseGroupedTable({
             <span className="text-outline">· 0 records matched for current filter</span>
           </div>
           {emptyTiers.includes("Fits the engine") ? (
-            <button type="button" className="font-body-sm text-[12px] text-primary hover:underline font-semibold disabled:opacity-40 shrink-0" disabled={!owner} title={ownerTitle} onClick={onAddEngine}>+ Add an engine fitment</button>
+            <PartsButton variant="secondary" className="font-body-sm text-[12px] disabled:opacity-40 shrink-0" disabled={!owner} title={ownerTitle} onClick={onAddEngine}>+ Add an engine fitment</PartsButton>
           ) : null}
         </div>
       ) : null}
       <div className="px-space-md py-2.5 bg-surface-container-low flex items-center justify-between gap-2">
         <span className="font-body-sm text-body-sm text-secondary">Showing <strong className="font-bold text-on-surface">{shown} of {total}</strong> records</span>
         <div className="flex items-center gap-2 font-body-sm">
-          <button className="px-3 h-8 rounded-lg bg-surface-container-lowest border border-outline-variant/60 text-secondary disabled:opacity-40" type="button" disabled={page <= 1} onClick={() => onPage(page - 1)}>Previous</button>
+          <PartsButton variant="secondary" className="px-3 h-8 min-h-[32px] disabled:opacity-40" disabled={page <= 1} onClick={() => onPage(page - 1)}>Previous</PartsButton>
           <span className="w-8 h-8 flex items-center justify-center rounded-lg bg-primary-container text-on-primary font-mono-sm font-bold">{page}</span>
-          <button className="px-3 h-8 rounded-lg bg-surface-container-lowest border border-outline-variant/60 text-secondary disabled:opacity-40" type="button" disabled={page >= pages} onClick={() => onPage(page + 1)}>Next</button>
+          <PartsButton variant="secondary" className="px-3 h-8 min-h-[32px] disabled:opacity-40" disabled={page >= pages} onClick={() => onPage(page + 1)}>Next</PartsButton>
         </div>
       </div>
     </div>
@@ -290,8 +291,8 @@ function SisterTable({ rows, owner, ownerTitle, onAddCar, onRemoveCar }: {
                 </span>
               </td>
               <td className="px-space-md text-right">
-                <button type="button" className="text-primary font-semibold text-[12px] disabled:opacity-40 mr-2" disabled={!owner} title={ownerTitle} onClick={() => onAddCar(row)}>Add a car</button>
-                <button type="button" className="text-secondary text-[12px] disabled:opacity-40" disabled={!owner} title={ownerTitle} onClick={() => onRemoveCar(row)}>Remove a car</button>
+                <PartsButton variant="secondary" className="text-[12px] mr-2 disabled:opacity-40" disabled={!owner} title={ownerTitle} onClick={() => onAddCar(row)}>Add a car</PartsButton>
+                <PartsButton variant="danger" className="text-[12px] disabled:opacity-40" disabled={!owner} title={ownerTitle} onClick={() => onRemoveCar(row)}>Remove a car</PartsButton>
               </td>
             </tr>
           ))}
@@ -306,8 +307,8 @@ function SisterTable({ rows, owner, ownerTitle, onAddCar, onRemoveCar }: {
               {(row.cars ?? []).map((car) => <span key={car} className="px-2 py-0.5 rounded-full bg-surface-container text-[11px]">{car}</span>)}
             </span>
             <div className="flex justify-end gap-2">
-              <button type="button" className="text-primary font-semibold text-[12px] disabled:opacity-40" disabled={!owner} title={ownerTitle} onClick={() => onAddCar(row)}>Add a car</button>
-              <button type="button" className="text-secondary text-[12px] disabled:opacity-40" disabled={!owner} title={ownerTitle} onClick={() => onRemoveCar(row)}>Remove a car</button>
+              <PartsButton variant="secondary" className="text-[12px] disabled:opacity-40" disabled={!owner} title={ownerTitle} onClick={() => onAddCar(row)}>Add a car</PartsButton>
+              <PartsButton variant="danger" className="text-[12px] disabled:opacity-40" disabled={!owner} title={ownerTitle} onClick={() => onRemoveCar(row)}>Remove a car</PartsButton>
             </div>
           </div>
         ))}

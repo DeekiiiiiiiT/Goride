@@ -15,7 +15,7 @@ export function GapCountSession(p: { onClose?: () => void }) {
     'Operator';
   const operatorInitials = operatorLabel
     .split(/\s+/)
-    .map((p) => p[0])
+    .map((part: string) => part[0])
     .join('')
     .slice(0, 2)
     .toUpperCase();

@@ -1,6 +1,7 @@
 // Stitch: dominion-redesign/parts_import_ledger_drawer
 import { useState } from "react";
 import { MaterialIcon } from "./MaterialIcon";
+import { PartsButton } from "../PartsButton";
 import { ImportStates } from "./ImportStates";
 
 type ChangesPayload = {
@@ -107,9 +108,9 @@ export function ImportBatchDrawer({
           <div className="space-y-1">
             <div className="flex items-center justify-between">
               <p className="text-xs font-semibold">{fits.length} fits added</p>
-              <button type="button" className="text-xs text-secondary font-semibold" onClick={() => setFitsCollapsed((v) => !v)}>
+              <PartsButton variant="icon" className="text-xs min-h-[32px] h-8 w-auto px-2" onClick={() => setFitsCollapsed((v) => !v)}>
                 {fitsCollapsed ? "Expand" : "Collapse"}
-              </button>
+              </PartsButton>
             </div>
             {!fitsCollapsed ? (
               <ul className="text-xs space-y-1 max-h-32 overflow-y-auto">
@@ -127,9 +128,9 @@ export function ImportBatchDrawer({
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-2">
               <p className="text-sm font-semibold text-error">LEFT OUT FROM CATALOG ({leftOut.length} ROWS)</p>
-              <button type="button" className="text-xs font-semibold text-secondary" onClick={onDownloadFailed}>
+              <PartsButton variant="secondary" className="text-xs" onClick={onDownloadFailed}>
                 Download failed rows ({leftOut.length})
-              </button>
+              </PartsButton>
             </div>
             <ul className="text-xs space-y-1 max-h-36 overflow-y-auto">
               {leftOut.map((row) => (

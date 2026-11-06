@@ -112,7 +112,7 @@ export function MaintenanceScheduleTab({
                     <td className="p-2">{String(r.category_name ?? r.categoryName ?? cid)}</td>
                     <td className="p-2">{status}</td>
                     <td className="p-2 font-mono text-xs">
-                      {r.next_due_miles != null ? `${r.next_due_miles} km` : String(r.next_due_date ?? "—")}
+                      {r.next_due_km != null ? `${r.next_due_km} km` : String(r.next_due_date ?? "—")}
                     </td>
                   </tr>
                 );

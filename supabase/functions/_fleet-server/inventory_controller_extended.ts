@@ -9,6 +9,7 @@ import { getServiceClient } from "./service_client.ts";
 import { invDb, invRpcName } from "./inventory_db.ts";
 import { safeErrorResponse } from "./safe_error.ts";
 import { registerInventoryR16Routes, assertAlertSnoozeAllowed } from "./inventory_controller_r16.ts";
+import { registerInventoryPhaseMiddleware } from "./inventory_phase_gate.ts";
 
 type InvEnv = { Variables: { rbacUser?: RbacUser } };
 type InvCtx = Context<InvEnv>;
@@ -44,7 +45,11 @@ async function rpcJson(
   if (error) {
     const msg = error.message || String(error);
     if (/not found|forbidden org/i.test(msg)) return c.json({ error: msg }, 404);
-    if (/reason required|must be positive|insufficient/i.test(msg)) {
+    if (
+      /reason required|must be positive|insufficient|version is not a draft|duplicate|already exists|kit template|organization_id required|archived|linked type|sort order/i.test(
+        msg,
+      )
+    ) {
       return c.json({ error: msg }, 409);
     }
     return c.json({ error: msg }, 500);
@@ -52,8 +57,92 @@ async function rpcJson(
   return (data ?? {}) as Record<string, unknown>;
 }
 
+function kitCodeFromName(name: string): string {
+  const slug = name.trim().toUpperCase().replace(/[^A-Z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  return slug || "KIT";
+}
+
+async function uniqueKitTemplateCode(org: string, baseCode: string): Promise<string> {
+  let code = baseCode;
+  let suffix = 2;
+  for (;;) {
+    const { data } = await fleetDb().from("fleet_inv_kit_template").select("id")
+      .eq("organization_id", org).ilike("code", code).limit(1);
+    if (!data?.length) return code;
+    code = `${baseCode}-${suffix}`;
+    suffix += 1;
+  }
+}
+
+async function loadKitVersionBundle(org: string, versionId: string) {
+  const { data: version, error: vErr } = await fleetDb().from("fleet_inv_kit_template_version")
+    .select("*").eq("organization_id", org).eq("id", versionId).maybeSingle();
+  if (vErr || !version) return null;
+  const { data: lines } = await fleetDb().from("fleet_inv_kit_template_line").select("*")
+    .eq("organization_id", org).eq("version_id", versionId).order("sort_order", { ascending: true });
+  const itemIds = [...new Set((lines ?? []).map((l) => l.item_id).filter(Boolean))] as string[];
+  const names = new Map<string, string>();
+  const skus = new Map<string, string>();
+  if (itemIds.length) {
+    const { data: items } = await fleetDb().from("fleet_inv_item").select("id, name, sku")
+      .eq("organization_id", org).in("id", itemIds);
+    for (const row of items ?? []) {
+      names.set(String(row.id), String(row.name));
+      skus.set(String(row.id), String(row.sku));
+    }
+  }
+  const enriched = (lines ?? []).map((line) => ({
+    ...line,
+    item_name: line.item_id ? names.get(String(line.item_id)) ?? null : null,
+    name: line.item_id ? names.get(String(line.item_id)) ?? null : null,
+    sku: line.item_id ? skus.get(String(line.item_id)) ?? null : null,
+  }));
+  return { ...version, lines: enriched };
+}
+
+async function loadKitTemplatesEnriched(org: string) {
+  const { data: templates, error } = await fleetDb().from("fleet_inv_kit_template").select("*")
+    .eq("organization_id", org);
+  if (error) throw new Error(error.message);
+  const items = [];
+  for (const tpl of templates ?? []) {
+    const templateId = String(tpl.id);
+    const { data: versions } = await fleetDb().from("fleet_inv_kit_template_version").select("id, status, version")
+      .eq("organization_id", org).eq("template_id", templateId);
+    const draftRow = versions?.find((v) => v.status === "draft");
+    const prodRow = versions?.find((v) => v.status === "production");
+    const draftVersion = draftRow
+      ? await loadKitVersionBundle(org, String(draftRow.id))
+      : null;
+    const productionVersion = prodRow
+      ? await loadKitVersionBundle(org, String(prodRow.id))
+      : null;
+    const { data: vkRows, error: vkErr } = await fleetDb().from("fleet_inv_vehicle_kit")
+      .select("vehicle_id")
+      .eq("organization_id", org)
+      .eq("template_id", templateId);
+    if (vkErr) throw new Error(vkErr.message);
+    const vehicleCount = vkRows?.length ?? 0;
+    items.push({
+      ...tpl,
+      draft_version_id: draftRow?.id ?? null,
+      vehicle_count: vehicleCount,
+      draftVersion,
+      productionVersion,
+      lines: draftVersion?.lines ?? productionVersion?.lines ?? [],
+    });
+  }
+  return items;
+}
+
 function actorId(c: InvCtx): string | null {
   return (c.get("rbacUser") as RbacUser | undefined)?.userId ?? null;
+}
+
+function actorUuid(c: InvCtx): string | null {
+  const id = actorId(c);
+  if (id && /^[0-9a-f-]{36}$/i.test(id)) return id;
+  return null;
 }
 
 async function loadAsset(
@@ -130,6 +219,8 @@ async function updatePo(
 }
 
 export function registerInventoryExtendedRoutes(app: Hono<InvEnv>) {
+  registerInventoryPhaseMiddleware(app, PREFIX);
+
   app.post(`${PREFIX}/return`, requirePermission("inventory.move"), async (c) => {
     try {
       const org = orgOrForbid(c);
@@ -225,32 +316,61 @@ export function registerInventoryExtendedRoutes(app: Hono<InvEnv>) {
   app.get(`${PREFIX}/kits/templates`, requirePermission("inventory.view"), async (c) => {
     const org = orgOrForbid(c);
     if (org instanceof Response) return org;
-    const { data, error } = await fleetDb().from("fleet_inv_kit_template").select("*").eq("organization_id", org);
-    if (error) return c.json({ error: error.message }, 500);
-    return c.json({ items: data ?? [] });
+    try {
+      const items = await loadKitTemplatesEnriched(org);
+      return c.json({ items });
+    } catch (e) {
+      return safeErrorResponse(c, e, "inventory.kits.templates.list");
+    }
   });
 
   app.post(`${PREFIX}/kits/templates`, requirePermission("inventory.kits.manage"), async (c) => {
     const org = orgOrForbid(c);
     if (org instanceof Response) return org;
-    const body = await c.req.json();
+    const body = await c.req.json() as Record<string, unknown>;
+    const name = String(body.name ?? "").trim();
+    const classification = String(body.classification ?? "").trim();
+    if (!name) return c.json({ error: "name required" }, 400);
+    if (!classification) return c.json({ error: "classification required" }, 400);
+    if (!["rideshare", "delivery", "executive"].includes(classification)) {
+      return c.json({ error: "classification must be rideshare, delivery, or executive" }, 400);
+    }
+    const baseCode = kitCodeFromName(name);
+    const code = await uniqueKitTemplateCode(org, baseCode);
     const { data, error } = await fleetDb().from("fleet_inv_kit_template").insert({
       organization_id: org,
-      name: body.name,
-      code: body.code,
+      name,
+      code,
+      classification,
     }).select("*").single();
-    if (error) return c.json({ error: error.message }, 500);
+    if (error) return c.json({ error: error.message }, 409);
     return c.json({ template: data });
+  });
+
+  app.put(`${PREFIX}/kits/templates/:id/draft`, requirePermission("inventory.kits.manage"), async (c) => {
+    const org = orgOrForbid(c);
+    if (org instanceof Response) return org;
+    const body = await c.req.json() as Record<string, unknown>;
+    const result = await rpcJson(c, "inv_save_kit_draft", {
+      p_org_id: org,
+      p_template_id: c.req.param("id"),
+      p_lines: body.lines ?? [],
+      p_change_note: body.change_note ?? body.changeNote ?? "",
+      p_author: actorId(c),
+    });
+    if (result instanceof Response) return result;
+    return c.json(result);
   });
 
   app.post(`${PREFIX}/kits/templates/:id/publish`, requirePermission("inventory.kits.manage"), async (c) => {
     const org = orgOrForbid(c);
     if (org instanceof Response) return org;
-    const body = await c.req.json();
+    const body = await c.req.json() as Record<string, unknown>;
     const result = await rpcJson(c, "inv_publish_kit_version", {
       p_org_id: org,
       p_template_id: c.req.param("id"),
-      p_version_id: body.version_id,
+      p_version_id: body.version_id ?? body.versionId,
+      p_move_vehicles: Boolean(body.move_vehicles ?? body.moveVehicles),
       p_idempotency_key: body.idempotency_key ?? null,
     });
     if (result instanceof Response) return result;
@@ -674,7 +794,7 @@ export function registerInventoryExtendedRoutes(app: Hono<InvEnv>) {
       const poId = c.req.param("id");
       const result = await updatePo(c, org, poId, {
         status: "awaiting_approval",
-        initiated_by: actorId(c),
+        initiated_by: actorUuid(c),
       });
       if (result instanceof Response) return result;
       return c.json(result);

@@ -147,8 +147,11 @@ const queryClient = new QueryClient({
   },
 });
 
-function inferClientProductLine(meta: Record<string, unknown> | undefined): 'fleet' | 'enterprise' {
-  const pl = meta?.productLine;
+function inferClientProductLine(
+  meta: Record<string, unknown> | undefined,
+  appMeta?: Record<string, unknown> | undefined,
+): 'fleet' | 'enterprise' {
+  const pl = meta?.productLine ?? appMeta?.productLine;
   if (pl === 'fleet' || pl === 'enterprise') return pl;
   if (meta?.businessType === 'rideshare' || meta?.businessType === 'delivery') return 'fleet';
   if (Array.isArray(meta?.serviceLines) && meta.serviceLines.length > 0) return 'fleet';
@@ -705,7 +708,10 @@ function AppContent() {
   const ownerProductLine =
     teamAccess?.productLine === 'fleet' || teamAccess?.productLine === 'enterprise'
       ? teamAccess.productLine
-      : inferClientProductLine(user.user_metadata as Record<string, unknown>);
+      : inferClientProductLine(
+          user.user_metadata as Record<string, unknown>,
+          user.app_metadata as Record<string, unknown>,
+        );
   if (ownerProductLine !== PRODUCT_LINE) {
     return (
       <WrongProductLineGate

@@ -15,6 +15,19 @@ export function In11Purchasing() {
   const firstVendorId = live.vendors[0] ? strField(live.vendors[0], 'id', '') || null : null;
   const openVendorEditor = () => shell.openGap('vendor-editor', { vendorId: firstVendorId });
   const openRequisition = () => shell.openGap('requisition');
+  const poVendorLabel = (po: Record<string, unknown> | undefined) =>
+    po ? strField(po, 'vendor_name', firstVendorName(live.vendors)) : '—';
+  const poVendorDetail = (po: Record<string, unknown> | undefined) =>
+    po
+      ? strField(po, 'vendor_address', strField(po, 'ship_to', strField(po, 'delivery_note', '—')))
+      : '—';
+  const poReceivedNote = (po: Record<string, unknown> | undefined) => {
+    if (!po) return '—';
+    const at = strField(po, 'received_at', strField(po, 'updated_at', ''));
+    return at ? `Dock check verified ${at}` : '—';
+  };
+  const stagedPoA = live.purchaseOrders[1];
+  const stagedPoB = live.purchaseOrders[2];
   return (
     <div className="fleet-inventory-stitch inventory-stitch-root">
       <div className="inventory-stitch-main"><div className="flex flex-col w-full">
@@ -182,8 +195,8 @@ export function In11Purchasing() {
       <span className="font-caption text-caption px-2 py-0.5 rounded bg-secondary-fixed text-on-secondary-fixed font-semibold">Staged</span>
       </div>
       <div className="flex flex-col">
-      <span className="font-body-md text-body-md font-semibold text-on-surface truncate">Kingston Auto Supplies</span>
-      <span className="font-caption text-caption text-on-surface-variant">Wharf St, Depot 4</span>
+      <span className="font-body-md text-body-md font-semibold text-on-surface truncate">{poVendorLabel(stagedPoA)}</span>
+      <span className="font-caption text-caption text-on-surface-variant">{poVendorDetail(stagedPoA)}</span>
       </div>
       <div className="bg-surface-container-low p-2 rounded flex items-center justify-between">
       <span className="font-caption text-caption text-on-surface-variant">4 lines</span>
@@ -191,7 +204,7 @@ export function In11Purchasing() {
       </div>
       <div className="text-on-surface-variant font-caption text-caption flex items-center gap-1">
       <span className="material-symbols-outlined text-[14px]">check_circle</span>
-                    Dock check verified 28 Oct
+                    {poReceivedNote(stagedPoA)}
                   </div>
       </div>
 
@@ -201,8 +214,8 @@ export function In11Purchasing() {
       <span className="font-caption text-caption px-2 py-0.5 rounded bg-secondary-fixed text-on-secondary-fixed font-semibold">Staged</span>
       </div>
       <div className="flex flex-col">
-      <span className="font-body-md text-body-md font-semibold text-on-surface truncate">Amazon Cargo Freight</span>
-      <span className="font-caption text-caption text-on-surface-variant">Air Logistics JMD</span>
+      <span className="font-body-md text-body-md font-semibold text-on-surface truncate">{poVendorLabel(stagedPoB)}</span>
+      <span className="font-caption text-caption text-on-surface-variant">{poVendorDetail(stagedPoB)}</span>
       </div>
       <div className="bg-surface-container-low p-2 rounded flex items-center justify-between">
       <span className="font-caption text-caption text-on-surface-variant">1 line</span>
@@ -319,7 +332,7 @@ export function In11Purchasing() {
       <div className="flex items-center gap-space-sm">
       <span className="material-symbols-outlined text-[20px] text-on-tertiary-container">info</span>
       <span className="font-body-sm text-body-sm">
-      <strong>Spending Threshold Policy:</strong> This order total exceeds the local dispatcher threshold of <strong>{form.totals}</strong>. Authorization token from Kingston platform administrator is required prior to invoice dispatch.
+      <strong>Spending Threshold Policy:</strong> This order total exceeds the configured approval threshold of <strong>{form.totals}</strong>. A fleet administrator must authorize before invoice dispatch.
                 </span>
       </div>
       <span className="font-label-code text-caption font-bold bg-surface-container-lowest px-2 py-1 rounded text-on-surface">Rule REG-801-JMD</span>
@@ -405,7 +418,7 @@ export function In11Purchasing() {
       <div className="bg-surface-container-lowest p-space-md rounded-lg flex flex-col gap-1 shadow-sm">
       <span className="font-caption text-caption text-on-surface-variant uppercase">Local Drayage / Courier</span>
       <div className="flex items-center justify-between">
-      <span className="font-body-sm text-body-sm font-medium text-on-surface">Kingston Express Delivery</span>
+      <span className="font-body-sm text-body-sm font-medium text-on-surface">—</span>
       <span className="font-label-price text-label-price font-bold text-on-surface">{form.totals}</span>
       </div>
       </div>
@@ -449,7 +462,7 @@ export function In11Purchasing() {
       <span className="font-caption text-caption text-on-primary-container uppercase font-bold">Authorized Sign-off</span>
       <span className="font-body-sm text-body-sm">{form.signoffLabel}</span>
       </div>
-      <button type="button" className="px-space-md py-1 bg-surface-container-lowest text-primary rounded font-body-sm text-body-sm font-bold hover:bg-surface-container transition-all" onClick={() => featuredPoId && form.poAction(featuredPoId, 'authorize')}>
+      <button type="button" className="px-space-md py-1 bg-surface-container-lowest text-primary rounded font-body-sm text-body-sm font-bold hover:bg-surface-container transition-all" onClick={() => poId && form.poAction(poId, 'authorize')}>
                     Authorize {form.totals}
                   </button>
       </div>
@@ -468,7 +481,7 @@ export function In11Purchasing() {
       <h3 className="font-headline-sm text-headline-sm text-on-surface">Suggested to Buy</h3>
       <span className="px-2 py-0.5 rounded-full font-label-code text-caption bg-tertiary-fixed text-on-tertiary-fixed font-bold">1 Rule Match</span>
       </div>
-      <p className="font-body-sm text-body-sm text-on-surface-variant">Automated trigger based on minimum stock policies in Kingston central repository.</p>
+      <p className="font-body-sm text-body-sm text-on-surface-variant">Automated trigger based on minimum stock policies in your catalog.</p>
       </div>
       </div>
       <div className="flex items-center gap-space-sm">
@@ -549,7 +562,7 @@ export function In11Purchasing() {
       <div className="flex items-center gap-space-xs">
       <span className="material-symbols-outlined text-primary text-[18px]">domain</span>
       <h3 className="font-headline-sm text-headline-sm text-on-surface tracking-tight">Active Vendor Directory</h3>
-      <span className="font-caption text-caption bg-surface-container-high px-2 py-0.5 rounded text-on-surface-variant">3 Active Partners</span>
+      <span className="font-caption text-caption bg-surface-container-high px-2 py-0.5 rounded text-on-surface-variant">{live.vendors.length} Active Partners</span>
       </div>
       <button type="button" onClick={openVendorEditor} className="font-body-sm text-body-sm text-on-surface font-semibold hover:underline flex items-center gap-1">
                 Manage all vendors
@@ -557,69 +570,36 @@ export function In11Purchasing() {
       </button>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-space-lg">
-
-      <div className="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col justify-between gap-space-md hover:shadow-md transition-all">
+      {live.vendors.length === 0 ? (
+      <p className="font-body-sm text-body-sm text-on-surface-variant md:col-span-3">No vendors yet — add your first one</p>
+      ) : (
+      live.vendors.slice(0, 3).map((vendor) => {
+        const vName = form.strField(vendor, 'name', '—');
+        const vPhone = form.strField(vendor, 'phone', form.strField(vendor, 'contact_phone', '—'));
+        const vLead = form.strField(vendor, 'lead_time_days', '—');
+        return (
+      <div key={form.strField(vendor, 'id', vName)} className="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col justify-between gap-space-md hover:shadow-md transition-all">
       <div className="flex flex-col gap-space-xs">
       <div className="flex items-center justify-between">
-      <span className="font-headline-sm text-[16px] font-bold text-on-surface">{vendorName}</span>
+      <span className="font-headline-sm text-[16px] font-bold text-on-surface">{vName}</span>
       <span className="w-2 h-2 rounded-full bg-on-surface"></span>
       </div>
-      <span className="font-label-code text-caption text-on-surface-variant">876-928-1144</span>
+      <span className="font-label-code text-caption text-on-surface-variant">{vPhone || '—'}</span>
       <p className="font-body-sm text-body-sm text-on-surface-variant mt-1">
-                    Primary supplier for in-cabin mounting devices, chargers, safety alerts, and tyre diagnostics tools.
+                    {form.strField(vendor, 'notes', form.strField(vendor, 'description', '—'))}
                   </p>
       </div>
       <div className="pt-space-md bg-surface-container-low -mx-space-lg -mb-space-lg p-space-md rounded-b-xl flex items-center justify-between font-caption text-caption text-on-surface">
       <span className="flex items-center gap-1 text-on-surface-variant">
       <span className="material-symbols-outlined text-[15px]">schedule</span>
-                    7 days average turnaround
+                    {vLead !== '—' ? `${vLead} day lead time` : 'Lead time not set'}
                   </span>
-      <span className="font-label-code font-bold">Grade A</span>
+      <span className="font-label-code font-bold">{form.strField(vendor, 'grade', '—')}</span>
       </div>
       </div>
-
-      <div className="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col justify-between gap-space-md hover:shadow-md transition-all">
-      <div className="flex flex-col gap-space-xs">
-      <div className="flex items-center justify-between">
-      <span className="font-headline-sm text-[16px] font-bold text-on-surface">Kingston Auto Supplies</span>
-      <span className="w-2 h-2 rounded-full bg-on-surface"></span>
-      </div>
-      <div className="flex items-center gap-2">
-      <span className="font-label-code text-caption text-on-surface-variant">876-967-3321</span>
-      <span className="font-caption text-[10px] px-1.5 py-0.5 rounded bg-secondary-fixed text-on-secondary-fixed font-semibold">Linked to Dominion</span>
-      </div>
-      <p className="font-body-sm text-body-sm text-on-surface-variant mt-1">
-                    Specialized powertrain parts, fluids, brake hardware, and quick-intake emergency replacements.
-                  </p>
-      </div>
-      <div className="pt-space-md bg-surface-container-low -mx-space-lg -mb-space-lg p-space-md rounded-b-xl flex items-center justify-between font-caption text-caption text-on-surface">
-      <span className="flex items-center gap-1 text-on-surface-variant">
-      <span className="material-symbols-outlined text-[15px]">schedule</span>
-                    3 days rapid logistics
-                  </span>
-      <span className="font-label-code font-bold">Grade A+</span>
-      </div>
-      </div>
-
-      <div className="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col justify-between gap-space-md hover:shadow-md transition-all">
-      <div className="flex flex-col gap-space-xs">
-      <div className="flex items-center justify-between">
-      <span className="font-headline-sm text-[16px] font-bold text-on-surface">Amazon via Shipping Agent</span>
-      <span className="w-2 h-2 rounded-full bg-surface-tint"></span>
-      </div>
-      <span className="font-label-code text-caption text-on-surface-variant">Freight Forwarding / Miami</span>
-      <p className="font-body-sm text-body-sm text-on-surface-variant mt-1">
-                    Consolidated bulk imports for specialized OBD-II telemetry trackers, diagnostic readers, and GPS dongles.
-                  </p>
-      </div>
-      <div className="pt-space-md bg-surface-container-low -mx-space-lg -mb-space-lg p-space-md rounded-b-xl flex items-center justify-between font-caption text-caption text-on-surface">
-      <span className="flex items-center gap-1 text-on-surface-variant">
-      <span className="material-symbols-outlined text-[15px]">schedule</span>
-                    14 days overseas freight
-                  </span>
-      <span className="font-label-code font-bold">Import FIFO</span>
-      </div>
-      </div>
+        );
+      })
+      )}
       </div>
       </div>
       </div>

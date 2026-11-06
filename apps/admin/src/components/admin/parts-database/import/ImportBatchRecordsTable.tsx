@@ -1,4 +1,6 @@
 // Stitch: dominion-redesign/parts_import_done
+import { PartsButton } from "../PartsButton";
+
 export function ImportBatchRecordsTable({
   rows,
   fileName,
@@ -26,14 +28,14 @@ export function ImportBatchRecordsTable({
         </div>
         <div className="flex flex-wrap gap-2">
           {batchCode && onLedger ? (
-            <button type="button" className="text-xs font-semibold text-primary" onClick={onLedger}>
+            <PartsButton variant="secondary" className="text-xs" onClick={onLedger}>
               View Import Ledger (Batch #{batchCode})
-            </button>
+            </PartsButton>
           ) : null}
           {onUndoIngestion ? (
-            <button type="button" className="text-xs font-semibold text-error" onClick={onUndoIngestion}>
+            <PartsButton variant="danger" className="text-xs" onClick={onUndoIngestion}>
               Revert / Undo Ingestion
-            </button>
+            </PartsButton>
           ) : null}
         </div>
       </div>

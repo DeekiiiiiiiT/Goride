@@ -34,6 +34,134 @@ export async function assertAddPartsTheme(page: Page, dark: boolean) {
   }
 }
 
+/** Every in-scope visible button under parts-database-stitch must have fill or border (B1–B33 gate). */
+export async function assertPartsDatabaseButtonsHaveBorderOrFill(page: Page) {
+  const bad = await page.evaluate(() => {
+    const root = document.querySelector(".parts-database-stitch");
+    if (!root) return ["missing .parts-database-stitch"];
+    const issues: string[] = [];
+    for (const btn of root.querySelectorAll("button")) {
+      if (!(btn instanceof HTMLButtonElement)) continue;
+      const style = window.getComputedStyle(btn);
+      if (style.display === "none" || style.visibility === "hidden") continue;
+      const rect = btn.getBoundingClientRect();
+      if (rect.width < 1 || rect.height < 1) continue;
+      if (btn.closest('nav[aria-label="Database sections"]')) continue;
+      if (btn.closest(".find-parts-stepbar") || btn.closest(".find-parts-trail")) continue;
+      const bg = style.backgroundColor;
+      const hasBg = Boolean(bg && bg !== "rgba(0, 0, 0, 0)" && bg !== "transparent");
+      const bw = Math.max(
+        parseFloat(style.borderTopWidth) || 0,
+        parseFloat(style.borderRightWidth) || 0,
+        parseFloat(style.borderBottomWidth) || 0,
+        parseFloat(style.borderLeftWidth) || 0,
+      );
+      const hasBorder = bw > 0 && style.borderTopStyle !== "none";
+      if (!hasBg && !hasBorder) {
+        const label = (btn.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 48)
+          || btn.getAttribute("aria-label")
+          || "button";
+        issues.push(label);
+      }
+    }
+    return issues;
+  });
+  expect(bad, `Buttons missing border or fill: ${bad.join("; ")}`).toEqual([]);
+}
+
+/** Cancel wizard overlay: readable title, secondary border, solid red confirm (R1 done-test). */
+export async function assertCancelOverlayButtonStyling(page: Page, dark: boolean) {
+  const checks = await page.evaluate((useDark) => {
+    const panel = document.querySelector('[data-slot="alert-dialog-content"]');
+    if (!panel) return { ok: false, reason: "missing dialog panel" };
+    const title = panel.querySelector('[data-slot="alert-dialog-title"]');
+    if (!title) return { ok: false, reason: "missing title" };
+    const panelStyle = window.getComputedStyle(panel);
+    const titleStyle = window.getComputedStyle(title);
+    const parseRgb = (color: string): [number, number, number] | null => {
+      const m = color.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
+      if (!m) return null;
+      return [Number(m[1]), Number(m[2]), Number(m[3])];
+    };
+    const lum = (r: number, g: number, b: number) => {
+      const ch = (c: number) => {
+        const v = c / 255;
+        return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+      };
+      return 0.2126 * ch(r) + 0.7152 * ch(g) + 0.0722 * ch(b);
+    };
+    const contrast = (fg: string, bg: string) => {
+      const f = parseRgb(fg);
+      const b = parseRgb(bg);
+      if (!f || !b) return null;
+      const l1 = lum(...f);
+      const l2 = lum(...b);
+      const lighter = Math.max(l1, l2);
+      const darker = Math.min(l1, l2);
+      return (lighter + 0.05) / (darker + 0.05);
+    };
+    const ratio = contrast(titleStyle.color, panelStyle.backgroundColor);
+    const keepBtn = Array.from(panel.querySelectorAll("button")).find((b) => /keep editing/i.test(b.textContent ?? ""));
+    const cancelBtn = panel.querySelector(".parts-btn--danger-confirm");
+    if (!keepBtn || !cancelBtn) return { ok: false, reason: "missing action buttons" };
+    const keepStyle = window.getComputedStyle(keepBtn);
+    const cancelStyle = window.getComputedStyle(cancelBtn);
+    const borderW = Math.max(
+      parseFloat(keepStyle.borderTopWidth) || 0,
+      parseFloat(keepStyle.borderRightWidth) || 0,
+      parseFloat(keepStyle.borderBottomWidth) || 0,
+      parseFloat(keepStyle.borderLeftWidth) || 0,
+    );
+    const cancelBg = parseRgb(cancelStyle.backgroundColor);
+    const isRed =
+      cancelBg != null &&
+      (useDark
+        ? cancelBg[0] >= 220 && cancelBg[1] <= 90 && cancelBg[2] <= 90
+        : cancelBg[0] >= 200 && cancelBg[1] <= 70 && cancelBg[2] <= 70);
+    return {
+      ok: true,
+      ratio,
+      hasKeepBorder: borderW > 0 && keepStyle.borderTopStyle !== "none",
+      isRed,
+    };
+  }, dark);
+  expect(checks.ok, "overlay DOM").toBe(true);
+  if (!checks.ok) return;
+  expect(checks.ratio, "title contrast on panel").toBeGreaterThanOrEqual(4.5);
+  expect(checks.hasKeepBorder, "Keep editing border").toBe(true);
+  expect(checks.isRed, "Cancel part red background").toBe(true);
+}
+
+export async function installPartsImportAreasMock(page: Page) {
+  await page.route("**/admin/parts-import/**", async (route) => {
+    const url = route.request().url();
+    if (url.includes("/areas") && !url.includes("template-schema")) {
+      await route.fulfill({
+        json: {
+          areas: [{
+            id: "b1000000-0000-4000-8000-000000000004",
+            name: "Brakes",
+            opCode: "BRK",
+            iconKey: "brakes",
+            partsOnFile: 12,
+            fitsOnFile: 35,
+            partTypes: ["Brake pads"],
+            needsChecking: 0,
+            templateVersion: 2,
+            sortOrder: 4,
+          }],
+        },
+      });
+      return;
+    }
+    if (url.includes("/meta")) {
+      await route.fulfill({ json: { engineVersion: "2.4.0", integrityRatio: 1, workspaceId: "ws-test" } });
+      return;
+    }
+    await route.fulfill({ json: {} });
+  });
+}
+
 export function ownerToken(role: "platform_owner" | "platform_support" = "platform_owner") {
   const encode = (value: object) => Buffer.from(JSON.stringify(value)).toString("base64url");
   return `${encode({ alg: "none", typ: "JWT" })}.${encode({
@@ -88,8 +216,14 @@ export async function prepareAddPartsScreen(page: Page, dark: boolean) {
   await assertAddPartsTheme(page, dark);
 }
 
-export async function gotoAddParts(page: Page) {
-  await page.goto("/?page=parts-catalog&tab=add-parts");
+export async function gotoAddParts(page: Page, querySuffix = "") {
+  const base = "/?page=parts-catalog&tab=add-parts";
+  const extra = querySuffix.startsWith("?") ? querySuffix.replace("?", "&") : querySuffix;
+  await page.goto(`${base}${extra}`);
+  if (querySuffix.includes("addPartsStates") || querySuffix.includes("addPartsPositionCatalog")) {
+    await expect(page.locator(".parts-database-stitch").first()).toBeVisible({ timeout: 20_000 });
+    return;
+  }
   await expect(page.getByRole("heading", { name: "Add parts" })).toBeVisible({ timeout: 20_000 });
 }
 

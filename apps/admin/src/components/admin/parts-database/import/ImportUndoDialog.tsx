@@ -1,6 +1,7 @@
 // Stitch: dominion-redesign/parts_import_ledger_drawer
 import { useEffect } from "react";
 import { MaterialIcon } from "./MaterialIcon";
+import { PartsButton } from "../PartsButton";
 
 export function ImportUndoDialog({
   open,
@@ -76,15 +77,10 @@ export function ImportUndoDialog({
           </p>
         ) : null}
         <div className="flex gap-2 justify-end pt-2">
-          <button type="button" className="px-4 py-2 rounded-lg bg-surface-container-high" onClick={onCancel} disabled={confirming}>
+          <PartsButton variant="secondary" onClick={onCancel} disabled={confirming}>
             Cancel
-          </button>
-          <button
-            type="button"
-            className="px-4 py-2 rounded-lg bg-error text-on-error font-semibold inline-flex items-center gap-2"
-            disabled={confirming}
-            onClick={onConfirm}
-          >
+          </PartsButton>
+          <PartsButton variant="danger" confirm disabled={confirming} onClick={onConfirm} className="inline-flex items-center gap-2">
             {confirming ? (
               <>
                 <MaterialIcon name="progress_activity" className="text-[16px] animate-spin" />
@@ -96,7 +92,7 @@ export function ImportUndoDialog({
                 Undo import
               </>
             )}
-          </button>
+          </PartsButton>
         </div>
       </div>
     </div>

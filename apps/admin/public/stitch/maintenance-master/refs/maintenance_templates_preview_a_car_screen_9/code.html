@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_dashboard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{colors:{"on-secondary-container":"#5c647a","background":"#faf8ff","secondary-container":"#dae2fd","outline":"#737686","surface-variant":"#e1e1ed","surface-container-high":"#e7e7f3","on-surface":"#191b24","primary-fixed-dim":"#b4c5ff","on-primary-fixed-variant":"#003ea8","surface":"#faf8ff","secondary":"#565e74","on-tertiary-fixed":"#141b30","primary":"#003ea9","surface-bright":"#faf8ff","on-primary":"#ffffff","surface-container-highest":"#e1e1ed","on-background":"#191b24","inverse-on-surface":"#f0f0fc","on-error":"#ffffff","on-error-container":"#93000a","on-secondary-fixed-variant":"#3f465c","tertiary":"#40465e","tertiary-fixed":"#dbe1ff","on-tertiary-container":"#d2d8f6","outline-variant":"#c3c6d7","on-secondary-fixed":"#131b2e","error-container":"#ffdad6","surface-dim":"#d9d9e5","primary-container":"#0153dc","surface-tint":"#0053db","secondary-fixed":"#dae2fd","surface-container":"#ededf9","tertiary-container":"#575e77","on-tertiary-fixed-variant":"#3f465e","secondary-fixed-dim":"#bec6e0","on-tertiary":"#ffffff","on-primary-container":"#ced8ff","primary-fixed":"#dbe1ff","on-primary-fixed":"#00174b","surface-container-low":"#f3f3ff","surface-container-lowest":"#ffffff","error":"#ba1a1a","inverse-surface":"#2e3039","on-secondary":"#ffffff","tertiary-fixed-dim":"#bfc5e2","on-surface-variant":"#434655","inverse-primary":"#b4c5ff"},borderRadius:{"DEFAULT":"0.125rem","lg":"0.25rem","xl":"0.5rem","full":"0.75rem"},spacing:{"gutter-dense":"0.5rem","space-xs":"0.25rem","space-md":"0.75rem","space-lg":"1rem","margin-panel":"1rem","gutter":"1rem","space-xl":"1.5rem","space-sm":"0.5rem","margin":"1.5rem"},fontFamily:{"label-xs":["Inter"],"headline-xl":["Inter"],"body-sm":["Inter"],"headline-lg":["Inter"],"label-md":["Inter"],"body-md":["Inter"],"mono-sm":["JetBrains Mono"],"headline-md":["Inter"],"mono-lg":["JetBrains Mono"],"mono-md":["JetBrains Mono"]},fontSize:{"label-xs":["11px",{"lineHeight":"14px","letterSpacing":"0.04em","fontWeight":"600"}],"headline-xl":["24px",{"lineHeight":"32px","letterSpacing":"-0.02em","fontWeight":"600"}],"body-sm":["13px",{"lineHeight":"18px","letterSpacing":"0","fontWeight":"400"}],"headline-lg":["20px",{"lineHeight":"28px","letterSpacing":"-0.015em","fontWeight":"600"}],"label-md":["12px",{"lineHeight":"16px","letterSpacing":"0.01em","fontWeight":"500"}],"body-md":["14px",{"lineHeight":"20px","letterSpacing":"0","fontWeight":"400"}],"mono-sm":["11px",{"lineHeight":"14px","letterSpacing":"0.02em","fontWeight":"400"}],"headline-md":["16px",{"lineHeight":"24px","letterSpacing":"-0.01em","fontWeight":"600"}],"mono-lg":["14px",{"lineHeight":"20px","letterSpacing":"-0.01em","fontWeight":"500"}],"mono-md":["12px",{"lineHeight":"16px","letterSpacing":"0","fontWeight":"500"}]}}}};</script></head><body class="bg-surface font-body-md text-on-surface antialiased"><aside class="fixed left-0 top-0 h-screen w-64 bg-[#0f172a] z-50 flex flex-col justify-between select-none shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="flex flex-col h-full"><div class="h-14 px-space-lg flex items-center justify-between border-b border-slate-800"><div class="flex items-center gap-space-sm"><div class="w-6 h-6 rounded bg-primary-container flex items-center justify-center"><span class="material-symbols-outlined text-[16px] text-on-primary">hub</span></div><span class="font-headline-md text-slate-100 font-semibold tracking-tight text-[13px] leading-tight">Dominion · Roam</span></div><span class="font-mono-sm text-[10px] text-slate-400 bg-slate-800/80 px-1.5 py-0.5 rounded">ADM</span></div><div class="flex-1 overflow-y-auto px-space-sm py-space-md"><div class="mb-space-lg"><div class="px-space-md py-1 font-mono-sm text-[10px] uppercase font-semibold tracking-wider text-slate-400">Master Data</div><nav class="mt-1 space-y-0.5" data-active-classes="bg-primary-container text-on-primary font-medium rounded-xl shadow-sm"><a class="flex items-center px-space-md py-1.5 rounded-xl font-body-sm text-slate-300 hover:bg-slate-800/70 hover:text-white transition-all" data-path="overview" href="#"><span class="material-symbols-outlined mr-space-md text-[18px] text-slate-400">dashboard</span>Overview</a><a class="flex items-center px-space-md py-1.5 rounded-xl font-body-sm text-slate-300 hover:bg-slate-800/70 hover:text-white transition-all" data-path="vehicles-active" href="#"><span class="material-symbols-outlined mr-space-md text-[18px] text-slate-400">directions_car</span>Vehicles active</a><a class="flex items-center px-space-md py-1.5 rounded-xl font-body-sm text-slate-300 hover:bg-slate-800/70 hover:text-white transition-all" data-path="places-and-maps" href="#"><span class="material-symbols-outlined mr-space-md text-[18px] text-slate-400">map</span>Places and Maps</a><a class="flex items-center px-space-md py-1.5 rounded-xl font-body-sm text-slate-300 hover:bg-slate-800/70 hover:text-white transition-all" data-path="fuel" href="#"><span class="material-symbols-outlined mr-space-md text-[18px] text-slate-400">local_gas_station</span>Fuel</a><a class="flex items-center px-space-md py-1.5 rounded-xl font-body-sm text-slate-300 hover:bg-slate-800/70 hover:text-white transition-all" data-path="tolls" href="#"><span class="material-symbols-outlined mr-space-md text-[18px] text-slate-400">toll</span>Tolls</a><a class="flex items-center px-space-md py-1.5 rounded-xl font-body-sm text-slate-300 hover:bg-slate-800/70 hover:text-white transition-all" data-path="tax-and-vendors" href="#"><span class="material-symbols-outlined mr-space-md text-[18px] text-slate-400">account_balance</span>Tax and Vendors</a><a class="flex items-center px-space-md py-1.5 rounded-xl font-body-sm text-slate-300 hover:bg-slate-800/70 hover:text-white transition-all" data-path="maintenance-templates" href="#"><span class="material-symbols-outlined mr-space-md text-[18px] text-slate-400">build_circle</span>Maintenance templates</a></nav></div><div class="mb-space-lg"><div class="px-space-md py-1 font-mono-sm text-[10px] uppercase font-semibold tracking-wider text-slate-400">Engines</div><nav class="mt-1 space-y-0.5" data-active-classes="bg-primary-container text-on-primary font-medium rounded-xl shadow-sm"><a class="flex items-center px-space-md py-1.5 rounded-xl font-body-sm text-slate-300 hover:bg-slate-800/70 hover:text-white transition-all" data-path="fuel-brain" href="#"><span class="material-symbols-outlined mr-space-md text-[18px] text-slate-400">memory</span>Fuel Brain</a><a class="flex items-center px-space-md py-1.5 rounded-xl font-body-sm text-slate-300 hover:bg-slate-800/70 hover:text-white transition-all" data-path="toll-brain" href="#"><span class="material-symbols-outlined mr-space-md text-[18px] text-slate-400">toll</span>Toll Brain</a><a class="flex items-center px-space-md py-1.5 rounded-xl font-body-sm text-slate-300 hover:bg-slate-800/70 hover:text-white transition-all" data-path="matching-brain" href="#"><span class="material-symbols-outlined mr-space-md text-[18px] text-slate-400">alt_route</span>Matching Brain</a></nav></div><div class="mb-space-lg"><div class="px-space-md py-1 font-mono-sm text-[10px] uppercase font-semibold tracking-wider text-slate-400">Distribution</div><nav class="mt-1 space-y-0.5" data-active-classes="bg-primary-container text-on-primary font-medium rounded-xl shadow-sm"><a class="flex items-center px-space-md py-1.5 rounded-xl font-body-sm text-slate-300 hover:bg-slate-800/70 hover:text-white transition-all" data-path="apps" href="#"><span class="material-symbols-outlined mr-space-md text-[18px] text-slate-400">apps</span>Apps</a><a class="flex items-center px-space-md py-1.5 rounded-xl font-body-sm text-slate-300 hover:bg-slate-800/70 hover:text-white transition-all" data-path="data-api" href="#"><span class="material-symbols-outlined mr-space-md text-[18px] text-slate-400">api</span>Data API</a><a class="flex items-center px-space-md py-1.5 rounded-xl font-body-sm text-slate-300 hover:bg-slate-800/70 hover:text-white transition-all" data-path="change-requests" href="#"><span class="material-symbols-outlined mr-space-md text-[18px] text-slate-400">pending_actions</span>Change requests</a></nav></div><div class="mb-space-lg"><div class="px-space-md py-1 font-mono-sm text-[10px] uppercase font-semibold tracking-wider text-slate-400">Platform</div><nav class="mt-1 space-y-0.5" data-active-classes="bg-primary-container text-on-primary font-medium rounded-xl shadow-sm"><a class="flex items-center px-space-md py-1.5 rounded-xl font-body-sm text-slate-300 hover:bg-slate-800/70 hover:text-white transition-all" data-path="staff-and-roles" href="#"><span class="material-symbols-outlined mr-space-md text-[18px] text-slate-400">badge</span>Staff and roles</a><a class="flex items-center px-space-md py-1.5 rounded-xl font-body-sm text-slate-300 hover:bg-slate-800/70 hover:text-white transition-all" data-path="activity-log" href="#"><span class="material-symbols-outlined mr-space-md text-[18px] text-slate-400">history</span>Activity log</a><a class="flex items-center px-space-md py-1.5 rounded-xl font-body-sm text-slate-300 hover:bg-slate-800/70 hover:text-white transition-all" data-path="platform-ops" href="#"><span class="material-symbols-outlined mr-space-md text-[18px] text-slate-400">dns</span>Platform Ops</a><a class="flex items-center px-space-md py-1.5 rounded-xl font-body-sm text-slate-300 hover:bg-slate-800/70 hover:text-white transition-all" data-path="global-settings" href="#"><span class="material-symbols-outlined mr-space-md text-[18px] text-slate-400">settings</span>Global settings</a></nav></div><div class="mb-space-lg"><div class="px-space-md py-1 font-mono-sm text-[10px] uppercase font-semibold tracking-wider text-slate-400">Back Office</div><nav class="mt-1 space-y-0.5" data-active-classes="bg-primary-container text-on-primary font-medium rounded-xl shadow-sm"><a class="flex items-center px-space-md py-1.5 rounded-xl font-body-sm text-slate-300 hover:bg-slate-800/70 hover:text-white transition-all" data-path="gct-registrations" href="#"><span class="material-symbols-outlined mr-space-md text-[18px] text-slate-400">receipt_long</span>GCT registrations</a><a class="flex items-center px-space-md py-1.5 rounded-xl font-body-sm text-slate-300 hover:bg-slate-800/70 hover:text-white transition-all" data-path="ledger" href="#"><span class="material-symbols-outlined mr-space-md text-[18px] text-slate-400">menu_book</span>Ledger</a><a class="flex items-center px-space-md py-1.5 rounded-xl font-body-sm text-slate-300 hover:bg-slate-800/70 hover:text-white transition-all" data-path="remittance" href="#"><span class="material-symbols-outlined mr-space-md text-[18px] text-slate-400">payments</span>Remittance</a></nav></div></div><div class="p-space-md border-t border-slate-800"><div class="flex items-center justify-between text-slate-400 font-mono-sm text-[11px]"><span class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>KGN-DC-01</span><span class="font-mono-sm text-[10px] text-slate-400 tracking-wider">JMD READY</span></div></div></div></aside><div class="pl-64"><header class="fixed top-0 left-64 right-0 h-14 bg-surface-container-lowest z-40 border-b border-surface-container shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="h-14 px-space-xl flex items-center justify-between gap-space-lg"><div class="flex items-center gap-space-lg flex-1"><div class="relative flex items-center max-w-[420px] w-full"><span class="material-symbols-outlined absolute left-3 text-slate-400 text-[18px]">search</span><input class="w-full h-9 pl-9 pr-14 bg-surface-container-low rounded-xl text-on-surface placeholder:text-on-surface-variant font-body-sm border border-transparent focus:outline-none focus:border-primary-container focus:bg-surface-container-lowest transition-all" placeholder="Search entities, engines, routes…" type="text"/><span class="absolute right-2 font-mono-sm text-[10px] text-slate-400 bg-surface-container px-1.5 py-0.5 rounded border border-surface-variant">⌘K</span></div><div class="flex items-center gap-2 px-2.5 py-1 rounded bg-surface-container-low border border-surface-container"><span class="w-2 h-2 rounded-full bg-emerald-600"></span><span class="font-mono-sm text-slate-600 font-medium text-[11px]">NODE: OK</span><span class="font-mono-sm text-slate-400 text-[11px]">·</span><span class="font-mono-sm text-slate-500 text-[11px]">PROD-US-EAST</span></div></div><div class="flex items-center gap-space-md"><button class="w-8 h-8 rounded-lg flex items-center justify-center text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors" title="Toggle color mode" type="button"><span class="material-symbols-outlined text-[20px]">light_mode</span></button><div class="h-4 w-px bg-surface-variant"></div><div class="flex items-center gap-space-sm pl-1"><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div><div class="flex flex-col text-left"><span class="font-mono-md text-on-surface text-[12px] font-medium leading-none">DT · Deeki T</span><span class="font-label-xs text-on-surface-variant leading-tight mt-0.5">Owner</span></div></div><button class="w-8 h-8 rounded-lg flex items-center justify-center text-on-surface-variant hover:text-error hover:bg-error-container/20 transition-colors ml-1" title="Sign out" type="button"><span class="material-symbols-outlined text-[20px]">logout</span></button></div></div></header><main class="relative pt-14 bg-surface min-h-screen"><div class="flex flex-col w-full">
+<!-- Sub-Header Workspace Canvas -->
+<div class="px-margin py-space-lg flex flex-col gap-space-lg max-w-[1520px] w-full mx-auto">
+<!-- Breadcrumb & Mode Meta -->
+<div class="flex flex-wrap items-center justify-between gap-space-sm">
+<div class="flex items-center gap-space-xs font-mono-sm text-label-xs text-secondary tracking-wider uppercase">
+<span class="hover:text-primary transition-colors cursor-pointer">DOMINION</span>
+<span>/</span>
+<span class="hover:text-primary transition-colors cursor-pointer">MASTER DATA</span>
+<span>/</span>
+<span class="hover:text-primary transition-colors cursor-pointer">VEHICLES</span>
+<span>/</span>
+<a class="hover:text-primary transition-colors text-on-surface" href="#">MAINTENANCE TEMPLATES</a>
+<span>/</span>
+<span class="text-primary font-semibold">PREVIEW A CAR</span>
+</div>
+<div class="flex items-center gap-space-md">
+<a class="inline-flex items-center gap-space-xs font-label-md text-secondary hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined text-[16px]">arrow_back</span>
+<span>Back to part schedules</span>
+</a>
+<span class="text-outline-variant">|</span>
+<div class="flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-surface-container font-mono-sm text-label-xs text-on-surface-variant">
+<span class="w-1.5 h-1.5 rounded-full bg-primary-container"></span>
+<span>ENGINE: SPECIFICITY-V4</span>
+</div>
+</div>
+</div>
+<!-- Title & Navigation Tabs Bar -->
+<div class="flex flex-col gap-space-md">
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-space-md">
+<div>
+<h1 class="font-headline-xl text-headline-xl text-on-surface tracking-tight">Maintenance Templates</h1>
+<p class="font-body-md text-body-md text-secondary mt-0.5">How often each part is serviced, for which cars, and why.</p>
+</div>
+<!-- Secondary Utility Actions (Strictly Read-Only / Export) -->
+<div class="flex items-center gap-space-sm self-start md:self-auto">
+<button class="inline-flex items-center gap-space-xs h-9 px-space-md rounded-xl bg-surface-container-lowest text-on-surface hover:bg-surface-container font-label-md text-label-md shadow-sm transition-all" id="copy-plan-btn" title="Copy breakdown as structured plain text" type="button">
+<span class="material-symbols-outlined text-[16px] text-secondary">content_copy</span>
+<span>Copy as text</span>
+</button>
+<button class="inline-flex items-center gap-space-xs h-9 px-space-md rounded-xl bg-surface-container-lowest text-on-surface hover:bg-surface-container font-label-md text-label-md shadow-sm transition-all" title="Download TSV audit schedule" type="button">
+<span class="material-symbols-outlined text-[16px] text-secondary">download</span>
+<span>Export breakdown</span>
+</button>
+</div>
+</div>
+<!-- Tab Strip -->
+<div class="flex items-center gap-space-xs bg-surface-container-low p-1 rounded-xl">
+<a class="px-space-md py-1.5 rounded-lg font-label-md text-label-md text-secondary hover:text-on-surface hover:bg-surface-container-lowest/60 transition-all" href="#">Part Schedules</a>
+<a class="px-space-md py-1.5 rounded-lg font-label-md text-label-md text-secondary hover:text-on-surface hover:bg-surface-container-lowest/60 transition-all" href="#">Service Packages</a>
+<a class="px-space-md py-1.5 rounded-lg font-label-md text-label-md text-secondary hover:text-on-surface hover:bg-surface-container-lowest/60 transition-all" href="#">Part Types</a>
+<a class="flex items-center gap-1.5 px-space-md py-1.5 rounded-lg font-label-md text-label-md text-secondary hover:text-on-surface hover:bg-surface-container-lowest/60 transition-all" href="#">
+<span>Review List</span>
+<span class="px-1.5 py-0.2 rounded-full bg-secondary-container text-on-secondary-fixed text-mono-sm font-semibold">1</span>
+</a>
+<a class="px-space-md py-1.5 rounded-lg font-label-md text-label-md text-secondary hover:text-on-surface hover:bg-surface-container-lowest/60 transition-all" href="#">History</a>
+<div class="ml-auto">
+<span class="inline-flex items-center gap-1.5 px-space-md py-1.5 rounded-lg bg-surface-container-lowest text-primary font-label-md text-label-md shadow-sm font-semibold">
+<span class="material-symbols-outlined text-[15px] text-primary">visibility</span>
+<span>Preview a car</span>
+</span>
+</div>
+</div>
+</div>
+<!-- Car Selector & Severe Duty Configuration Control -->
+<div class="bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-space-lg">
+<div class="flex-1 flex flex-col gap-1.5 min-w-0">
+<label class="font-label-xs text-label-xs uppercase tracking-wider text-secondary flex items-center gap-1.5" for="car-search">
+<span class="material-symbols-outlined text-[14px]">directions_car</span>
+<span>Target Vehicle Query</span>
+</label>
+<div class="relative flex items-center w-full">
+<span class="material-symbols-outlined absolute left-3 text-secondary text-[18px]">search</span>
+<input class="w-full h-10 pl-9 pr-24 bg-surface-container-low rounded-xl text-on-surface placeholder:text-secondary font-body-md text-body-md focus:outline-none focus:bg-surface-container-lowest focus:ring-2 focus:ring-primary-container transition-all" id="car-search" placeholder="Search car by make, model, chassis, or engine (e.g. Toyota Roomy, M900A, 1KR-FE)..." type="text" value="Toyota Roomy · M900A · 1KR-FE"/>
+<div class="absolute right-2.5 flex items-center gap-1">
+<span class="font-mono-sm text-mono-sm text-secondary bg-surface-container px-1.5 py-0.5 rounded">LADDER RESOLVED</span>
+</div>
+</div>
+<!-- Quick Picks -->
+<div class="flex items-center gap-space-xs text-mono-sm font-mono-sm flex-wrap pt-0.5">
+<span class="text-secondary">Quick picks:</span>
+<button class="text-primary hover:underline bg-secondary-container/40 px-1.5 py-0.5 rounded" type="button">Toyota Roomy (M900A)</button>
+<span class="text-outline-variant">·</span>
+<button class="text-secondary hover:text-on-surface hover:underline" type="button">Honda Fit (GK5)</button>
+<span class="text-outline-variant">·</span>
+<button class="text-secondary hover:text-on-surface hover:underline" type="button">Nissan Note e-POWER (HE12)</button>
+<span class="text-outline-variant">·</span>
+<button class="text-secondary hover:text-on-surface hover:underline" type="button">Toyota Probox (NCP160V)</button>
+</div>
+</div>
+<!-- Severe Duty Mode Toggle Card -->
+<div class="flex items-center gap-space-md p-space-sm pl-space-md bg-surface-container-low rounded-xl self-start lg:self-center shrink-0">
+<div class="flex flex-col text-left">
+<div class="flex items-center gap-1.5">
+<span class="font-label-md text-label-md font-semibold text-on-surface">Hard use (severe duty)</span>
+<span class="material-symbols-outlined text-[15px] text-secondary cursor-help" title="Reduces severe engine oil &amp; brake service cycle by 50% for high idling, mountainous terrain, or unpaved routes.">info</span>
+</div>
+<span class="font-body-sm text-[11px] text-secondary leading-tight mt-0.5">Applies taxi, delivery &amp; harsh tropical intervals where configured</span>
+</div>
+<!-- Interactive Checkbox Switch -->
+<label class="relative inline-flex items-center cursor-pointer select-none">
+<input class="sr-only peer" id="severe-duty-toggle" type="checkbox"/>
+<div class="w-11 h-6 bg-surface-variant peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-surface-container-lowest after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-container shadow-inner"></div>
+</label>
+</div>
+</div>
+<!-- Selected Car Technical Profile Card -->
+<div class="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col gap-space-md">
+<div class="flex flex-col lg:flex-row lg:items-center justify-between gap-space-md">
+<div class="flex flex-wrap items-center gap-space-sm">
+<div class="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[24px] text-primary">directions_car</span>
+</div>
+<div class="flex flex-col">
+<div class="flex items-center gap-2 flex-wrap">
+<span class="font-headline-md text-headline-md text-on-surface font-semibold tracking-tight">Toyota Roomy</span>
+<span class="text-secondary font-headline-md font-normal">· M900A · 2016– · 1KR-FE · platform family M900</span>
+<span class="px-2 py-0.5 rounded-full bg-secondary-container text-on-secondary-fixed font-mono-sm text-mono-sm font-semibold">Tier 1 Matrix Match</span>
+</div>
+<span class="font-body-sm text-body-sm text-secondary">Subcompact Tall Wagon · 5-door Hatchback · FF Layout · Super CVT-i</span>
+</div>
+</div>
+<div class="flex flex-wrap items-center gap-space-xs font-mono-sm text-mono-sm">
+<div class="px-2.5 py-1 rounded-lg bg-surface-container text-on-surface-variant flex items-center gap-1.5">
+<span class="text-secondary">Chassis:</span>
+<span class="font-semibold text-on-surface">M900A</span>
+</div>
+<div class="px-2.5 py-1 rounded-lg bg-surface-container text-on-surface-variant flex items-center gap-1.5">
+<span class="text-secondary">Engine:</span>
+<span class="font-semibold text-on-surface">1KR-FE (1.0L 3-cyl)</span>
+</div>
+<div class="px-2.5 py-1 rounded-lg bg-primary/10 text-primary flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[13px]">verified</span>
+<span>Catalogue match: 100%</span>
+</div>
+<div class="px-2.5 py-1 rounded-lg bg-surface-container text-on-surface-variant flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-primary-container"></span>
+<span>Roam Fleet deployed: 1 active unit</span>
+</div>
+</div>
+</div>
+<!-- Explanatory Specificity Ladder Banner -->
+<div class="bg-surface-container-low rounded-xl px-space-md py-space-sm flex items-start gap-space-sm">
+<span class="material-symbols-outlined text-primary text-[20px] shrink-0 mt-0.5">account_tree</span>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md font-semibold text-on-surface">Resolved Specificity Hierarchy Active</span>
+<p class="font-body-sm text-body-sm text-secondary">
+            Effective maintenance schedule calculated top-down via Specificity Ladder. More specific engine, platform, or chassis rules automatically override global baseline rules. Engine oil and transmission cycles reflect M900A technical service manuals.
+          </p>
+</div>
+</div>
+</div>
+<!-- Active Schedules Table -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden flex flex-col">
+<!-- Table Header Title Row -->
+<div class="px-space-lg py-space-md flex flex-wrap items-center justify-between gap-space-sm bg-surface-container-lowest">
+<div class="flex items-center gap-2">
+<span class="font-headline-md text-headline-md text-on-surface font-semibold">Active Service Program</span>
+<span class="font-mono-sm text-mono-sm px-2 py-0.5 rounded-full bg-surface-container text-secondary">10 components registered</span>
+</div>
+<div class="flex items-center gap-space-md text-label-xs font-label-xs text-secondary">
+<span class="flex items-center gap-1.5">
+<span class="w-2.5 h-2.5 rounded-sm bg-primary/20"></span>
+<span>Specific Override Applied</span>
+</span>
+<span class="flex items-center gap-1.5">
+<span class="w-2.5 h-2.5 rounded-sm bg-surface-container"></span>
+<span>Global Standard Baseline</span>
+</span>
+</div>
+</div>
+<!-- High-Density Data Table -->
+<div class="overflow-x-auto w-full">
+<table class="w-full text-left border-collapse select-text">
+<thead>
+<tr class="bg-surface-container-low font-label-xs text-label-xs text-secondary uppercase tracking-wider h-9">
+<th class="px-space-lg py-2 font-semibold">Part &amp; Trade Name</th>
+<th class="px-space-md py-2 font-semibold">Interval Used (Tabular)</th>
+<th class="px-space-md py-2 font-semibold">Comes From Scope</th>
+<th class="px-space-md py-2 font-semibold">Source &amp; Confidence</th>
+<th class="px-space-md py-2 font-semibold">Package Inclusions</th>
+<th class="px-space-lg py-2 font-semibold">Specificity Override Trace</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-surface-container font-body-sm text-body-sm">
+<!-- ROW 1: Engine Oil (Platform Override) -->
+<tr class="bg-surface-container-lowest hover:bg-surface-container-low/70 transition-colors">
+<td class="px-space-lg py-space-sm">
+<div class="flex items-center gap-space-sm">
+<div class="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[16px] text-primary">oil_barrel</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md text-on-surface font-semibold">Engine oil</span>
+<span class="font-mono-sm text-[11px] text-secondary">0W-20 / API SP · 2.9L with filter</span>
+</div>
+</div>
+</td>
+<td class="px-space-md py-space-sm">
+<div class="flex flex-col">
+<span class="font-mono-md text-mono-md text-on-surface font-semibold">Every 10,000 km or 6 months</span>
+<span class="font-mono-sm text-[11px] text-secondary">Whichever comes first</span>
+</div>
+</td>
+<td class="px-space-md py-space-sm">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary font-mono-sm text-mono-sm font-semibold">
+<span class="material-symbols-outlined text-[12px]">dataset</span>
+<span>Platform M900A</span>
+</span>
+</td>
+<td class="px-space-md py-space-sm">
+<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-surface-container font-label-xs text-label-xs text-on-surface">
+<span class="material-symbols-outlined text-[14px] text-primary">check_circle</span>
+<span>Car maker · Confirmed</span>
+</span>
+</td>
+<td class="px-space-md py-space-sm">
+<div class="flex items-center gap-1 flex-wrap">
+<span class="px-1.5 py-0.5 rounded bg-surface-container text-on-surface font-mono-sm text-[11px]">Basic</span>
+<span class="px-1.5 py-0.5 rounded bg-surface-container text-on-surface font-mono-sm text-[11px]">Major</span>
+</div>
+</td>
+<td class="px-space-lg py-space-sm">
+<div class="flex items-start gap-1.5 text-secondary">
+<span class="font-mono-sm text-primary">↳</span>
+<div class="flex flex-col text-[12px]">
+<span class="font-medium text-on-surface">Overrides Everyone rule (5,000 km / 3 mo)</span>
+<span class="text-secondary font-mono-sm text-[11px]">Sourced from Toyota Roomy 2020 Manual, Sec 6.2</span>
+</div>
+</div>
+</td>
+</tr>
+<!-- ROW 2: Brake Fluid -->
+<tr class="bg-surface-container-lowest hover:bg-surface-container-low/70 transition-colors">
+<td class="px-space-lg py-space-sm">
+<div class="flex items-center gap-space-sm">
+<div class="w-7 h-7 rounded-lg bg-surface-container flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[16px] text-secondary">car_crash</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md text-on-surface font-semibold">Brake fluid</span>
+<span class="font-mono-sm text-[11px] text-secondary">DOT 4 Non-petroleum base</span>
+</div>
+</div>
+</td>
+<td class="px-space-md py-space-sm">
+<div class="flex flex-col">
+<span class="font-mono-md text-mono-md text-on-surface font-medium">Every 40,000 km or 24 months</span>
+<span class="font-mono-sm text-[11px] text-secondary">Whichever comes first</span>
+</div>
+</td>
+<td class="px-space-md py-space-sm">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-surface-container text-secondary font-mono-sm text-mono-sm">
+<span>Everyone</span>
+</span>
+</td>
+<td class="px-space-md py-space-sm">
+<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-surface-container font-label-xs text-label-xs text-secondary">
+<span class="material-symbols-outlined text-[14px]">shield</span>
+<span>Roam policy · Baseline</span>
+</span>
+</td>
+<td class="px-space-md py-space-sm">
+<span class="px-1.5 py-0.5 rounded bg-surface-container text-on-surface font-mono-sm text-[11px]">Major</span>
+</td>
+<td class="px-space-lg py-space-sm text-secondary font-mono-sm text-[11px]">
+                Standard Dominion baseline schedule applied
+              </td>
+</tr>
+<!-- ROW 3: Air filter -->
+<tr class="bg-surface-container-lowest hover:bg-surface-container-low/70 transition-colors">
+<td class="px-space-lg py-space-sm">
+<div class="flex items-center gap-space-sm">
+<div class="w-7 h-7 rounded-lg bg-surface-container flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[16px] text-secondary">air</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md text-on-surface font-semibold">Air filter</span>
+<span class="font-mono-sm text-[11px] text-secondary">Engine intake cartridge element</span>
+</div>
+</div>
+</td>
+<td class="px-space-md py-space-sm">
+<div class="flex flex-col">
+<span class="font-mono-md text-mono-md text-on-surface font-medium">Every 10,000 km or 6 months</span>
+<span class="font-mono-sm text-[11px] text-secondary">Inspect / replace at 20k km</span>
+</div>
+</td>
+<td class="px-space-md py-space-sm">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-surface-container text-secondary font-mono-sm text-mono-sm">
+<span>Everyone</span>
+</span>
+</td>
+<td class="px-space-md py-space-sm">
+<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-surface-container font-label-xs text-label-xs text-secondary">
+<span class="material-symbols-outlined text-[14px]">shield</span>
+<span>Roam policy · Standard</span>
+</span>
+</td>
+<td class="px-space-md py-space-sm">
+<div class="flex items-center gap-1 flex-wrap">
+<span class="px-1.5 py-0.5 rounded bg-surface-container text-on-surface font-mono-sm text-[11px]">Basic</span>
+<span class="px-1.5 py-0.5 rounded bg-surface-container text-on-surface font-mono-sm text-[11px]">Major</span>
+</div>
+</td>
+<td class="px-space-lg py-space-sm text-secondary font-mono-sm text-[11px]">
+                Standard fleet interval for tropical environments
+              </td>
+</tr>
+<!-- ROW 4: Cabin A/C Filter -->
+<tr class="bg-surface-container-lowest hover:bg-surface-container-low/70 transition-colors">
+<td class="px-space-lg py-space-sm">
+<div class="flex items-center gap-space-sm">
+<div class="w-7 h-7 rounded-lg bg-surface-container flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[16px] text-secondary">hvac</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md text-on-surface font-semibold">Cabin A/C filter</span>
+<span class="font-mono-sm text-[11px] text-secondary">Pollen &amp; PM2.5 activated carbon</span>
+</div>
+</div>
+</td>
+<td class="px-space-md py-space-sm">
+<div class="flex flex-col">
+<span class="font-mono-md text-mono-md text-on-surface font-medium">Every 10,000 km or 6 months</span>
+<span class="font-mono-sm text-[11px] text-secondary">Replacement cycle</span>
+</div>
+</td>
+<td class="px-space-md py-space-sm">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-surface-container text-secondary font-mono-sm text-mono-sm">
+<span>Everyone</span>
+</span>
+</td>
+<td class="px-space-md py-space-sm">
+<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-surface-container font-label-xs text-label-xs text-secondary">
+<span class="material-symbols-outlined text-[14px]">shield</span>
+<span>Roam policy · Standard</span>
+</span>
+</td>
+<td class="px-space-md py-space-sm">
+<span class="px-1.5 py-0.5 rounded bg-surface-container text-on-surface font-mono-sm text-[11px]">Basic</span>
+</td>
+<td class="px-space-lg py-space-sm text-secondary font-mono-sm text-[11px]">
+                Standard Dominion baseline schedule applied
+              </td>
+</tr>
+<!-- ROW 5: Spark Plugs -->
+<tr class="bg-surface-container-lowest hover:bg-surface-container-low/70 transition-colors">
+<td class="px-space-lg py-space-sm">
+<div class="flex items-center gap-space-sm">
+<div class="w-7 h-7 rounded-lg bg-surface-container flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[16px] text-secondary">electric_bolt</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md text-on-surface font-semibold">Spark plugs</span>
+<span class="font-mono-sm text-[11px] text-secondary">Iridium tipped long-life (x3)</span>
+</div>
+</div>
+</td>
+<td class="px-space-md py-space-sm">
+<div class="flex flex-col">
+<span class="font-mono-md text-mono-md text-on-surface font-medium">Every 100,000 km or 60 months</span>
+<span class="font-mono-sm text-[11px] text-secondary">Iridium service standard</span>
+</div>
+</td>
+<td class="px-space-md py-space-sm">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-surface-container text-secondary font-mono-sm text-mono-sm">
+<span>Everyone</span>
+</span>
+</td>
+<td class="px-space-md py-space-sm">
+<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-surface-container font-label-xs text-label-xs text-secondary">
+<span class="material-symbols-outlined text-[14px]">shield</span>
+<span>Roam policy · Baseline</span>
+</span>
+</td>
+<td class="px-space-md py-space-sm">
+<span class="px-1.5 py-0.5 rounded bg-surface-container text-on-surface font-mono-sm text-[11px]">Major</span>
+</td>
+<td class="px-space-lg py-space-sm text-secondary font-mono-sm text-[11px]">
+                Baseline matched (1KR-FE factory specified NGK ILKR7D8)
+              </td>
+</tr>
+<!-- ROW 6: Rotate Tyres -->
+<tr class="bg-surface-container-lowest hover:bg-surface-container-low/70 transition-colors">
+<td class="px-space-lg py-space-sm">
+<div class="flex items-center gap-space-sm">
+<div class="w-7 h-7 rounded-lg bg-surface-container flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[16px] text-secondary">sync</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md text-on-surface font-semibold">Rotate tyres</span>
+<span class="font-mono-sm text-[11px] text-secondary">Cross-axle rotation + balance</span>
+</div>
+</div>
+</td>
+<td class="px-space-md py-space-sm">
+<div class="flex flex-col">
+<span class="font-mono-md text-mono-md text-on-surface font-medium">Every 10,000 km or 6 months</span>
+<span class="font-mono-sm text-[11px] text-secondary">Front-to-rear sequence</span>
+</div>
+</td>
+<td class="px-space-md py-space-sm">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-surface-container text-secondary font-mono-sm text-mono-sm">
+<span>Everyone</span>
+</span>
+</td>
+<td class="px-space-md py-space-sm">
+<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-surface-container font-label-xs text-label-xs text-secondary">
+<span class="material-symbols-outlined text-[14px]">shield</span>
+<span>Roam policy · Standard</span>
+</span>
+</td>
+<td class="px-space-md py-space-sm">
+<div class="flex items-center gap-1 flex-wrap">
+<span class="px-1.5 py-0.5 rounded bg-surface-container text-on-surface font-mono-sm text-[11px]">Basic</span>
+<span class="px-1.5 py-0.5 rounded bg-surface-container text-on-surface font-mono-sm text-[11px]">Major</span>
+</div>
+</td>
+<td class="px-space-lg py-space-sm text-secondary font-mono-sm text-[11px]">
+                Standard Dominion baseline schedule applied
+              </td>
+</tr>
+<!-- ROW 7: Tyre pressure check -->
+<tr class="bg-surface-container-lowest hover:bg-surface-container-low/70 transition-colors">
+<td class="px-space-lg py-space-sm">
+<div class="flex items-center gap-space-sm">
+<div class="w-7 h-7 rounded-lg bg-surface-container flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[16px] text-secondary">speed</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md text-on-surface font-semibold">Tyre pressure check</span>
+<span class="font-mono-sm text-[11px] text-secondary">Cold spec: 240 kPa Front / 220 kPa Rear</span>
+</div>
+</div>
+</td>
+<td class="px-space-md py-space-sm">
+<div class="flex flex-col">
+<span class="font-mono-md text-mono-md text-on-surface font-medium">Every 10,000 km or 6 months</span>
+<span class="font-mono-sm text-[11px] text-secondary">Routine check</span>
+</div>
+</td>
+<td class="px-space-md py-space-sm">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-surface-container text-secondary font-mono-sm text-mono-sm">
+<span>Everyone</span>
+</span>
+</td>
+<td class="px-space-md py-space-sm">
+<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-surface-container font-label-xs text-label-xs text-secondary">
+<span class="material-symbols-outlined text-[14px]">shield</span>
+<span>Roam policy · Standard</span>
+</span>
+</td>
+<td class="px-space-md py-space-sm">
+<span class="px-1.5 py-0.5 rounded bg-surface-container text-on-surface font-mono-sm text-[11px]">Basic</span>
+</td>
+<td class="px-space-lg py-space-sm text-secondary font-mono-sm text-[11px]">
+                Standard Dominion baseline schedule applied
+              </td>
+</tr>
+<!-- ROW 8: Transmission Service (CVT Platform Override) -->
+<tr class="bg-surface-container-lowest hover:bg-surface-container-low/70 transition-colors">
+<td class="px-space-lg py-space-sm">
+<div class="flex items-center gap-space-sm">
+<div class="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[16px] text-primary">settings_suggest</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md text-on-surface font-semibold">Transmission service (CVT)</span>
+<span class="font-mono-sm text-[11px] text-secondary">Daihatsu Ammix CVT Fluid FE · 5.7L Total</span>
+</div>
+</div>
+</td>
+<td class="px-space-md py-space-sm">
+<div class="flex flex-col">
+<span class="font-mono-md text-mono-md text-on-surface font-semibold">Every 40,000 km or 24 months</span>
+<span class="font-mono-sm text-[11px] text-secondary">Fluid replacement &amp; pan clean</span>
+</div>
+</td>
+<td class="px-space-md py-space-sm">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary font-mono-sm text-mono-sm font-semibold">
+<span class="material-symbols-outlined text-[12px]">dataset</span>
+<span>Platform M900A</span>
+</span>
+</td>
+<td class="px-space-md py-space-sm">
+<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-surface-container font-label-xs text-label-xs text-on-surface">
+<span class="material-symbols-outlined text-[14px] text-primary">check_circle</span>
+<span>Car maker · Confirmed</span>
+</span>
+</td>
+<td class="px-space-md py-space-sm">
+<span class="px-1.5 py-0.5 rounded bg-surface-container text-on-surface font-mono-sm text-[11px]">Major</span>
+</td>
+<td class="px-space-lg py-space-sm">
+<div class="flex items-start gap-1.5 text-secondary">
+<span class="font-mono-sm text-primary">↳</span>
+<div class="flex flex-col text-[12px]">
+<span class="font-medium text-on-surface">Overrides generic torque-converter automatic rule</span>
+<span class="text-secondary font-mono-sm text-[11px]">Strict CVT-FE requirement via Daihatsu Thor/Roomy service directive</span>
+</div>
+</div>
+</td>
+</tr>
+<!-- ROW 9: Coolant flush -->
+<tr class="bg-surface-container-lowest hover:bg-surface-container-low/70 transition-colors">
+<td class="px-space-lg py-space-sm">
+<div class="flex items-center gap-space-sm">
+<div class="w-7 h-7 rounded-lg bg-surface-container flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[16px] text-secondary">water_drop</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md text-on-surface font-semibold">Coolant flush</span>
+<span class="font-mono-sm text-[11px] text-secondary">Toyota Super Long Life Coolant (Pink)</span>
+</div>
+</div>
+</td>
+<td class="px-space-md py-space-sm">
+<div class="flex flex-col">
+<span class="font-mono-md text-mono-md text-on-surface font-medium">Every 100,000 km or 60 months</span>
+<span class="font-mono-sm text-[11px] text-secondary">Initial 160k then every 100k</span>
+</div>
+</td>
+<td class="px-space-md py-space-sm">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-surface-container text-secondary font-mono-sm text-mono-sm">
+<span>Everyone</span>
+</span>
+</td>
+<td class="px-space-md py-space-sm">
+<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-surface-container font-label-xs text-label-xs text-secondary">
+<span class="material-symbols-outlined text-[14px]">shield</span>
+<span>Roam policy · Standard</span>
+</span>
+</td>
+<td class="px-space-md py-space-sm">
+<span class="px-1.5 py-0.5 rounded bg-surface-container text-on-surface font-mono-sm text-[11px]">Major</span>
+</td>
+<td class="px-space-lg py-space-sm text-secondary font-mono-sm text-[11px]">
+                Standard Dominion baseline schedule applied
+              </td>
+</tr>
+<!-- ROW 10: Drive belt -->
+<tr class="bg-surface-container-lowest hover:bg-surface-container-low/70 transition-colors">
+<td class="px-space-lg py-space-sm">
+<div class="flex items-center gap-space-sm">
+<div class="w-7 h-7 rounded-lg bg-surface-container flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[16px] text-secondary">all_inclusive</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md text-on-surface font-semibold">Drive belt</span>
+<span class="font-mono-sm text-[11px] text-secondary">Serpentine V-ribbed accessory belt</span>
+</div>
+</div>
+</td>
+<td class="px-space-md py-space-sm">
+<div class="flex flex-col">
+<span class="font-mono-md text-mono-md text-on-surface font-medium">Every 40,000 km or 24 months</span>
+<span class="font-mono-sm text-[11px] text-secondary">Tension inspection &amp; belt rib renewal</span>
+</div>
+</td>
+<td class="px-space-md py-space-sm">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-surface-container text-secondary font-mono-sm text-mono-sm">
+<span>Everyone</span>
+</span>
+</td>
+<td class="px-space-md py-space-sm">
+<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-surface-container font-label-xs text-label-xs text-secondary">
+<span class="material-symbols-outlined text-[14px]">shield</span>
+<span>Roam policy · Standard</span>
+</span>
+</td>
+<td class="px-space-md py-space-sm">
+<span class="px-1.5 py-0.5 rounded bg-surface-container text-on-surface font-mono-sm text-[11px]">Major</span>
+</td>
+<td class="px-space-lg py-space-sm text-secondary font-mono-sm text-[11px]">
+                Standard Dominion baseline schedule applied
+              </td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Footnote summary -->
+<div class="px-space-lg py-space-sm bg-surface-container-low/50 flex flex-wrap items-center justify-between text-mono-sm font-mono-sm text-secondary">
+<span>DISPLAYING 10 EFFECTIVE INTERVAL RULES</span>
+<span>SPECIFICITY LADDER AUDIT: COMPLETE · 0 UNRESOLVED CONFLICTS</span>
+</div>
+</div>
+<!-- Excluded Components Section (Muted & Grayed Out) -->
+<div class="bg-surface-container-low rounded-xl p-space-lg flex flex-col gap-space-md">
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-space-sm">
+<div class="flex items-center gap-space-sm">
+<div class="w-8 h-8 rounded-lg bg-surface-variant flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[18px] text-secondary">block</span>
+</div>
+<div>
+<h2 class="font-headline-md text-headline-md text-on-surface font-semibold">Excluded Components</h2>
+<p class="font-body-sm text-body-sm text-secondary">Not applicable to Toyota Roomy M900A (1KR-FE FF)</p>
+</div>
+</div>
+<span class="font-mono-sm text-mono-sm text-secondary bg-surface-container px-2.5 py-1 rounded-full self-start sm:self-auto">4 engineering exemptions</span>
+</div>
+<!-- Exclusions List -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-space-sm">
+<!-- Excluded 1 -->
+<div class="bg-surface-container-lowest/80 rounded-xl p-space-md flex items-start gap-space-sm shadow-sm">
+<span class="material-symbols-outlined text-secondary text-[20px] shrink-0 mt-0.5">remove_circle_outline</span>
+<div class="flex flex-col">
+<div class="flex items-center gap-2 flex-wrap">
+<span class="font-label-md text-label-md font-semibold text-on-surface">Timing belt</span>
+<span class="px-1.5 py-0.2 rounded bg-surface-container font-mono-sm text-[10px] text-secondary font-medium">NOT ON THIS CAR</span>
+</div>
+<p class="font-body-sm text-[12px] text-secondary mt-1">
+              Chain-driven engine. 1KR-FE utilizes silent internal timing chain lubricated by engine oil; no scheduled replacement interval required under normal life expectancy.
+            </p>
+</div>
+</div>
+<!-- Excluded 2 -->
+<div class="bg-surface-container-lowest/80 rounded-xl p-space-md flex items-start gap-space-sm shadow-sm">
+<span class="material-symbols-outlined text-secondary text-[20px] shrink-0 mt-0.5">remove_circle_outline</span>
+<div class="flex flex-col">
+<div class="flex items-center gap-2 flex-wrap">
+<span class="font-label-md text-label-md font-semibold text-on-surface">Rear disc brake pads</span>
+<span class="px-1.5 py-0.2 rounded bg-surface-container font-mono-sm text-[10px] text-secondary font-medium">NOT ON THIS CAR</span>
+</div>
+<p class="font-body-sm text-[12px] text-secondary mt-1">
+              Equipped with leading-trailing rear drum brake shoes (Toyota OEM Ref: 04495-B2400). Serviced via friction lining thickness inspection rather than pad replacement.
+            </p>
+</div>
+</div>
+<!-- Excluded 3 -->
+<div class="bg-surface-container-lowest/80 rounded-xl p-space-md flex items-start gap-space-sm shadow-sm">
+<span class="material-symbols-outlined text-secondary text-[20px] shrink-0 mt-0.5">remove_circle_outline</span>
+<div class="flex flex-col">
+<div class="flex items-center gap-2 flex-wrap">
+<span class="font-label-md text-label-md font-semibold text-on-surface">Differential fluid (Rear)</span>
+<span class="px-1.5 py-0.2 rounded bg-surface-container font-mono-sm text-[10px] text-secondary font-medium">NOT ON THIS CAR</span>
+</div>
+<p class="font-body-sm text-[12px] text-secondary mt-1">
+              2WD Front-wheel drive transaxle configuration (M900A). Integrated front differential shares CVT oil sump; separate rear hypoid differential unit absent.
+            </p>
+</div>
+</div>
+<!-- Excluded 4 -->
+<div class="bg-surface-container-lowest/80 rounded-xl p-space-md flex items-start gap-space-sm shadow-sm">
+<span class="material-symbols-outlined text-secondary text-[20px] shrink-0 mt-0.5">remove_circle_outline</span>
+<div class="flex flex-col">
+<div class="flex items-center gap-2 flex-wrap">
+<span class="font-label-md text-label-md font-semibold text-on-surface">Fuel filter (in-line)</span>
+<span class="px-1.5 py-0.2 rounded bg-surface-container font-mono-sm text-[10px] text-secondary font-medium">NOT ON THIS CAR</span>
+</div>
+<p class="font-body-sm text-[12px] text-secondary mt-1">
+              Non-serviceable in-tank fuel pump strainer module. Does not feature external chassis line filter canister; serviced exclusively upon fuel pump unit malfunction.
+            </p>
+</div>
+</div>
+</div>
+</div>
+<!-- Notification Toast Element (Script Triggered) -->
+<div class="fixed bottom-6 right-6 z-50 bg-inverse-surface text-inverse-on-surface px-space-md py-space-sm rounded-xl shadow-lg flex items-center gap-space-sm font-label-md text-label-md transition-all duration-300 opacity-0 pointer-events-none translate-y-2" id="copy-toast">
+<span class="material-symbols-outlined text-primary-fixed text-[18px]">done</span>
+<span>Effective schedule copied to clipboard as text.</span>
+</div>
+</div>
+</div>
+<script>
+  (function() {
+    const copyBtn = document.getElementById('copy-plan-btn');
+    const toast = document.getElementById('copy-toast');
+    const toggleSevere = document.getElementById('severe-duty-toggle');
+
+    if (copyBtn && toast) {
+      copyBtn.addEventListener('click', function() {
+        const textPayload = 
+`VEHICLE PREVIEW: Toyota Roomy · M900A (1KR-FE)
+Calculated via Roam Dominion Specificity Ladder
+--------------------------------------------------
+1. Engine oil: Every 10,000 km / 6 mo [Platform M900A override]
+2. Brake fluid: Every 40,000 km / 24 mo [Everyone]
+3. Air filter: Every 10,000 km / 6 mo [Everyone]
+4. Cabin A/C filter: Every 10,000 km / 6 mo [Everyone]
+5. Spark plugs: Every 100,000 km / 60 mo [Everyone]
+6. Rotate tyres: Every 10,000 km / 6 mo [Everyone]
+7. Tyre pressure check: Every 10,000 km / 6 mo [Everyone]
+8. Transmission service (CVT): Every 40,000 km / 24 mo [Platform M900A]
+9. Coolant flush: Every 100,000 km / 60 mo [Everyone]
+10. Drive belt: Every 40,000 km / 24 mo [Everyone]
+--------------------------------------------------
+Excluded: Timing belt, Rear brake pads, Rear differential, In-line fuel filter.`;
+
+        navigator.clipboard.writeText(textPayload).then(function() {
+          toast.classList.remove('opacity-0', 'translate-y-2', 'pointer-events-none');
+          toast.classList.add('opacity-100', 'translate-y-0');
+          setTimeout(function() {
+            toast.classList.remove('opacity-100', 'translate-y-0');
+            toast.classList.add('opacity-0', 'translate-y-2', 'pointer-events-none');
+          }, 2400);
+        }).catch(function() {
+          console.warn('Clipboard write failed.');
+        });
+      });
+    }
+
+    if (toggleSevere) {
+      toggleSevere.addEventListener('change', function(e) {
+        const isChecked = e.target.checked;
+        const rows = document.querySelectorAll('tbody tr');
+        if (rows.length > 0) {
+          const oilInterval = rows[0].querySelector('td:nth-child(2) span');
+          if (oilInterval) {
+            oilInterval.textContent = isChecked ? 'Every 5,000 km or 3 months' : 'Every 10,000 km or 6 months';
+          }
+        }
+      });
+    }
+  })();
+</script></main></div></body></html>

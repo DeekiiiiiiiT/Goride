@@ -2631,7 +2631,7 @@ export const api = {
           status: "pending" | "overdue";
           lastPerformedDate: string | null;
           lastPerformedMiles: number | null;
-          nextDueMiles: number | null;
+          nextDueKm: number | null;
           nextDueDate: string | null;
         }>;
       };
@@ -2676,12 +2676,74 @@ export const api = {
     return { items: (json.items || []) as MaintenanceWorkOrder[] };
   },
 
-  async getMaintenanceAlerts() {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetOps}/maintenance-alerts`, {
+  async getMaintenanceAlerts(status?: "open" | "closed") {
+    const q = status ? `?status=${encodeURIComponent(status)}` : "";
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleetOps}/maintenance-alerts${q}`, {
       headers: await getHeaders(null),
     });
     if (!response.ok) throw new Error("Failed to fetch maintenance alerts");
     return response.json() as Promise<{ items: Array<Record<string, unknown>> }>;
+  },
+
+  async getMaintenanceScheduleExplain(vehicleId: string, categoryId: string, position: string | null) {
+    const params = new URLSearchParams({ category_id: categoryId });
+    if (position) params.set("position", position);
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fleetOps}/vehicles/${encodeURIComponent(vehicleId)}/maintenance/schedule-explain?${params}`,
+      { headers: await getHeaders(null) },
+    );
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error((err as { error?: string }).error || "Failed to load schedule explain");
+    }
+    return response.json() as Promise<Record<string, unknown>>;
+  },
+
+  async patchMaintenanceCustomInterval(
+    vehicleId: string,
+    body: {
+      category_id: string;
+      position?: string | null;
+      custom_interval_km?: number | null;
+      custom_interval_months?: number | null;
+      reason: string;
+    },
+  ) {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fleetOps}/vehicles/${encodeURIComponent(vehicleId)}/maintenance/custom-interval`,
+      { method: "PATCH", headers: await getHeaders(), body: JSON.stringify(body) },
+    );
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error((err as { error?: string }).error || "Custom schedule failed");
+    }
+    return response.json();
+  },
+
+  async clearMaintenanceCustomInterval(vehicleId: string, categoryId: string, position: string | null) {
+    const params = new URLSearchParams({ category_id: categoryId });
+    if (position) params.set("position", position);
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fleetOps}/vehicles/${encodeURIComponent(vehicleId)}/maintenance/custom-interval?${params}`,
+      { method: "DELETE", headers: await getHeaders() },
+    );
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error((err as { error?: string }).error || "Clear custom failed");
+    }
+    return response.json();
+  },
+
+  async patchVehicleSevereDuty(vehicleId: string, body: { severe_duty: boolean; reason?: string }) {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fleetOps}/vehicles/${encodeURIComponent(vehicleId)}/maintenance/severe-duty`,
+      { method: "PATCH", headers: await getHeaders(), body: JSON.stringify(body) },
+    );
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error((err as { error?: string }).error || "Hard use update failed");
+    }
+    return response.json();
   },
 
   async triageMaintenanceWorkOrder(

@@ -9,6 +9,7 @@ import { partsEnterpriseApi } from "../../../../services/partSourcingService";
 import type { FindPartsCandidate, FoundPartRow } from "../partsDatabaseApi";
 import { excludeListing } from "../partsDatabaseApi";
 import { savePartAlias } from "./findPartsApi";
+import { PartsButton } from "../PartsButton";
 
 function evidenceLabel(url: string): string {
   try {
@@ -154,9 +155,9 @@ export function PartDetailDrawer({
                 <div className="flex items-center gap-space-sm pt-0.5">
                   <span className="font-mono-lg text-mono-lg text-primary font-semibold tracking-tight truncate">{partNumberLine}</span>
                   {part.number ? (
-                    <button type="button" className="text-outline hover:text-primary transition-colors shrink-0" title="Copy part number" onClick={() => { void copyNumber(); }}>
+                    <PartsButton variant="icon" className="shrink-0" title="Copy part number" onClick={() => { void copyNumber(); }}>
                       <span className="material-symbols-outlined text-[16px]">content_copy</span>
-                    </button>
+                    </PartsButton>
                   ) : null}
                 </div>
               </div>

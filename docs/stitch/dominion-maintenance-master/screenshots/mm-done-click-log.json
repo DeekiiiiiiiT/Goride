@@ -1,0 +1,93 @@
+[
+  {
+    "screen": "D1",
+    "label": "Review list tab",
+    "method": "",
+    "url": "",
+    "status": 0
+  },
+  {
+    "screen": "D1",
+    "label": "Part schedules tab",
+    "method": "",
+    "url": "",
+    "status": 0
+  },
+  {
+    "screen": "D1",
+    "label": "Preview a car",
+    "method": "GET",
+    "url": "https://csfllzzastacofsvcdsc.supabase.co/functions/v1/fleet-ops/admin/maintenance/preview?car=e2000005-0000-4000-8000-000000000010",
+    "status": 200
+  },
+  {
+    "screen": "D2",
+    "label": "Service packages tab",
+    "method": "GET",
+    "url": "https://csfllzzastacofsvcdsc.supabase.co/functions/v1/fleet-ops/admin/maintenance-templates/f05a0814-300b-4b40-878a-8d228ec9adba/categories",
+    "status": 200
+  },
+  {
+    "screen": "D2",
+    "label": "Edit parts",
+    "method": "GET",
+    "url": "https://csfllzzastacofsvcdsc.supabase.co/functions/v1/fleet-ops/admin/maintenance-templates/5efcdc04-17aa-400d-8155-612ebaf9b074/categories",
+    "status": 200
+  },
+  {
+    "screen": "D3",
+    "label": "Back",
+    "method": "GET",
+    "url": "https://csfllzzastacofsvcdsc.supabase.co/functions/v1/fleet-ops/admin/maintenance-templates/global",
+    "status": 200
+  },
+  {
+    "screen": "D4",
+    "label": "Add schedule",
+    "method": "GET",
+    "url": "https://csfllzzastacofsvcdsc.supabase.co/functions/v1/fleet-ops/admin/maintenance/scope-coverage?scope=global",
+    "status": 200
+  },
+  {
+    "screen": "D5",
+    "label": "Add schedule",
+    "method": "GET",
+    "url": "https://csfllzzastacofsvcdsc.supabase.co/functions/v1/fleet-ops/admin/maintenance/scope-coverage?scope=global",
+    "status": 200
+  },
+  {
+    "screen": "D5",
+    "label": "Cancel impact",
+    "method": "GET",
+    "url": "https://csfllzzastacofsvcdsc.supabase.co/functions/v1/fleet-ops/admin/platform-feature-flags/maintenance_master_governance",
+    "status": 200
+  },
+  {
+    "screen": "D7",
+    "label": "Part types tab",
+    "method": "GET",
+    "url": "https://csfllzzastacofsvcdsc.supabase.co/functions/v1/fleet-ops/admin/platform-feature-flags/maintenance_master_governance",
+    "status": 200
+  },
+  {
+    "screen": "D8",
+    "label": "Review list",
+    "method": "GET",
+    "url": "https://csfllzzastacofsvcdsc.supabase.co/functions/v1/fleet-ops/admin/maintenance/rules",
+    "status": 200
+  },
+  {
+    "screen": "D10",
+    "label": "History tab",
+    "method": "",
+    "url": "",
+    "status": 0
+  },
+  {
+    "screen": "D10",
+    "label": "Export CSV",
+    "method": "GET",
+    "url": "https://csfllzzastacofsvcdsc.supabase.co/functions/v1/fleet-ops/admin/maintenance/history/export.csv",
+    "status": 200
+  }
+]

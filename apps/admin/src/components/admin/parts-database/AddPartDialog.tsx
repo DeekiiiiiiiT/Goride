@@ -9,6 +9,7 @@ import {
   previewPartReach,
   saveGuidedPart,
 } from "./partsDatabaseApi";
+import { PartsButton } from "./PartsButton";
 
 type BrandRow = { manufacturer: string; partNumber: string; name: string; kind: string };
 
@@ -140,7 +141,7 @@ export function AddPartDialog({
       <div role="dialog" aria-modal="true" aria-labelledby="add-part-dialog-title" className="bg-surface-container-lowest rounded-xl shadow-sm w-full max-w-xl p-6 space-y-4 max-h-[90vh] overflow-auto">
         <div className="flex items-center justify-between">
           <h2 id="add-part-dialog-title" className="text-lg font-semibold">{groupId ? "Edit a part" : "Add a part"}</h2>
-          <button type="button" onClick={onClose}>Close</button>
+          <PartsButton variant="secondary" onClick={onClose}>Close</PartsButton>
         </div>
         <div className="flex gap-3 text-xs">
           <button type="button" onClick={() => setStep(0)}>✓ Part</button>
@@ -183,11 +184,11 @@ export function AddPartDialog({
                   <option value="other">Other brand</option>
                 </select>
                 {rows.length > 1 ? (
-                  <button type="button" className="text-xs text-left col-span-2" onClick={() => setRows((current) => current.filter((_, i) => i !== index))}>Remove brand</button>
+                  <PartsButton variant="danger" className="text-xs col-span-2 justify-start" onClick={() => setRows((current) => current.filter((_, i) => i !== index))}>Remove brand</PartsButton>
                 ) : null}
               </div>
             ))}
-            <button type="button" className="text-xs text-secondary" onClick={() => setRows((current) => [...current, { manufacturer: "", partNumber: "", name: "", kind: "other" }])}>+ Add another brand for the same part</button>
+            <PartsButton variant="secondary" className="text-xs" onClick={() => setRows((current) => [...current, { manufacturer: "", partNumber: "", name: "", kind: "other" }])}>+ Add another brand for the same part</PartsButton>
             <div className="grid grid-cols-2 gap-2">
               <input className="bg-surface-container-low rounded-lg px-3 py-2 text-sm" placeholder="Year from" value={yearFrom} onChange={(event) => setYearFrom(event.target.value)} />
               <input className="bg-surface-container-low rounded-lg px-3 py-2 text-sm" placeholder="Year to" value={yearTo} onChange={(event) => setYearTo(event.target.value)} />
@@ -218,18 +219,18 @@ export function AddPartDialog({
         {step === 3 ? (
           <div className="space-y-2 text-sm">
             <p>{rows.map((row) => `${row.manufacturer} ${row.partNumber}`).join(", ")} listed for this vehicle{position ? ` (${position})` : ""}.</p>
-            <button type="button" className="inline-flex items-center gap-1 text-xs text-secondary" onClick={() => { void showReach(); }}>
+            <PartsButton variant="secondary" className="text-xs inline-flex items-center gap-1" onClick={() => { void showReach(); }}>
               Show cars
               <span className="material-symbols-outlined text-[16px]">open_in_new</span>
-            </button>
+            </PartsButton>
             {preview ? <p className="text-xs">{preview}</p> : null}
           </div>
         ) : null}
         {error ? <p className="text-xs text-red-700">{error}</p> : null}
         <div className="flex justify-between">
-          <button type="button" className="text-sm" onClick={onClose}>Cancel</button>
+          <PartsButton variant="danger" onClick={onClose}>Cancel</PartsButton>
           <div className="flex gap-2">
-            {step > 0 ? <button type="button" className="text-sm" onClick={() => setStep((value) => value - 1)}>Back</button> : null}
+            {step > 0 ? <PartsButton variant="secondary" onClick={() => setStep((value) => value - 1)}>Back</PartsButton> : null}
             <button type="button" className="inline-flex items-center gap-1 bg-secondary text-on-secondary text-sm px-3 py-2 rounded-lg" onClick={() => { if (step < 3) setStep((value) => value + 1); else void save(); }}>
               {step === 0 ? "Next: same source" : step === 1 ? "Next: source" : step === 2 ? "Next: review" : "Save"}
               {step === 1 ? <span className="material-symbols-outlined text-[16px]">arrow_forward</span> : null}

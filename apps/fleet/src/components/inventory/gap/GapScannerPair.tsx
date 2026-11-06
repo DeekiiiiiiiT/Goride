@@ -227,7 +227,7 @@ export function GapScannerPair(p: { onClose?: () => void }) {
         <div>
         <p className="font-caption text-caption text-on-surface-variant uppercase tracking-wider mb-1 font-semibold">DIRECT URL LINK</p>
         <div className="flex items-center justify-between p-2 rounded bg-surface-container-lowest px-3">
-        <span className="font-label-code text-label-code text-on-surface font-medium select-all">roamfleet.co/scan</span>
+        <span className="font-label-code text-label-code text-on-surface font-medium select-all">{form.pairingCode ? form.pairingDisplay : 'Not set'}</span>
         <button type="button" className="flex items-center gap-1 font-caption text-caption text-on-surface hover:text-primary font-semibold" onClick={() => p.onClose?.()}>
         <span className="material-symbols-outlined text-[14px]">content_copy</span>
                             COPY

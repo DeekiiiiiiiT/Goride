@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+
+<html class="h-full" lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_dashboard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{"colors":{"on-secondary-container":"#5c647a","error":"#ba1a1a","on-tertiary":"#ffffff","outline-variant":"#c3c6d7","on-tertiary-container":"#d2d8f6","secondary-fixed":"#dae2fd","on-error":"#ffffff","surface-container-highest":"#e1e1ed","on-tertiary-fixed":"#141b30","outline":"#737686","surface":"#faf8ff","on-surface":"#191b24","primary-container":"#0153dc","tertiary-container":"#575e77","surface-container-high":"#e7e7f3","on-secondary":"#ffffff","on-tertiary-fixed-variant":"#3f465e","on-primary-fixed-variant":"#003ea8","inverse-on-surface":"#f0f0fc","tertiary-fixed-dim":"#bfc5e2","primary-fixed":"#dbe1ff","tertiary-fixed":"#dbe1ff","surface-container-low":"#f3f3ff","surface-variant":"#e1e1ed","on-primary-fixed":"#00174b","surface-dim":"#d9d9e5","surface-tint":"#0053db","secondary":"#565e74","primary":"#003ea9","secondary-container":"#dae2fd","on-background":"#191b24","on-primary-container":"#ced8ff","surface-container":"#ededf9","inverse-primary":"#b4c5ff","secondary-fixed-dim":"#bec6e0","on-surface-variant":"#434655","surface-container-lowest":"#ffffff","surface-bright":"#faf8ff","tertiary":"#40465e","background":"#faf8ff","on-primary":"#ffffff","on-secondary-fixed-variant":"#3f465c","error-container":"#ffdad6","on-secondary-fixed":"#131b2e","on-error-container":"#93000a","primary-fixed-dim":"#b4c5ff","inverse-surface":"#2e3039"},"borderRadius":{"DEFAULT":"0.125rem","lg":"0.25rem","xl":"0.5rem","full":"0.75rem"},"spacing":{"gutter":"1rem","space-lg":"1rem","space-xs":"0.25rem","space-sm":"0.5rem","space-xl":"1.5rem","margin":"1.5rem","margin-panel":"1rem","gutter-dense":"0.5rem","space-md":"0.75rem"},"fontFamily":{"headline-xl":["Inter"],"label-md":["Inter"],"mono-sm":["JetBrains Mono"],"body-md":["Inter"],"headline-md":["Inter"],"mono-md":["JetBrains Mono"],"headline-lg":["Inter"],"mono-lg":["JetBrains Mono"],"label-xs":["Inter"],"body-sm":["Inter"]},"fontSize":{"headline-xl":["24px",{"lineHeight":"32px","letterSpacing":"-0.02em","fontWeight":"600"}],"label-md":["12px",{"lineHeight":"16px","letterSpacing":"0.01em","fontWeight":"500"}],"mono-sm":["11px",{"lineHeight":"14px","letterSpacing":"0.02em","fontWeight":"400"}],"body-md":["14px",{"lineHeight":"20px","letterSpacing":"0","fontWeight":"400"}],"headline-md":["16px",{"lineHeight":"24px","letterSpacing":"-0.01em","fontWeight":"600"}],"mono-md":["12px",{"lineHeight":"16px","letterSpacing":"0","fontWeight":"500"}],"headline-lg":["20px",{"lineHeight":"28px","letterSpacing":"-0.015em","fontWeight":"600"}],"mono-lg":["14px",{"lineHeight":"20px","letterSpacing":"-0.01em","fontWeight":"500"}],"label-xs":["11px",{"lineHeight":"14px","letterSpacing":"0.04em","fontWeight":"600"}],"body-sm":["13px",{"lineHeight":"18px","letterSpacing":"0","fontWeight":"400"}]}}}};</script></head><body class="bg-background font-body-md text-on-surface antialiased"><aside class="fixed top-0 bottom-0 left-0 w-64 bg-[#0b1120] text-slate-300 z-50 flex flex-col justify-between select-none"><div class="flex flex-col h-full overflow-hidden"><div class="h-14 px-4 flex items-center gap-2.5 shrink-0 bg-[#0b1120]"><div class="w-7 h-7 rounded bg-primary-container flex items-center justify-center shrink-0"><span class="material-symbols-outlined text-white text-[18px]">hub</span></div><div class="flex flex-col min-w-0"><span class="font-headline-md text-headline-md text-white tracking-tight truncate">Dominion</span><span class="font-label-xs text-[10px] text-slate-400 tracking-wider uppercase truncate">Roam Admin Console</span></div></div><div class="flex-1 overflow-y-auto px-3 py-3 space-y-4"><nav class="space-y-4" data-active-classes="bg-primary-container text-white font-semibold"><div class="space-y-1"><div class="px-2 py-1 font-label-xs text-label-xs text-slate-300 uppercase tracking-wider font-semibold">Master Data</div><a class="flex items-center h-8 px-2.5 rounded text-slate-400 hover:bg-slate-800 hover:text-white transition-colors gap-2.5" data-path="overview" href="#"><span class="material-symbols-outlined text-[18px]">dashboard</span><span class="font-body-sm text-body-sm">Overview</span></a><a class="flex items-center h-8 px-2.5 rounded text-slate-400 hover:bg-slate-800 hover:text-white transition-colors gap-2.5" data-path="vehicles" href="#"><span class="material-symbols-outlined text-[18px]">directions_car</span><span class="font-body-sm text-body-sm">Vehicles</span></a><a class="flex items-center h-8 px-2.5 rounded text-slate-400 hover:bg-slate-800 hover:text-white transition-colors gap-2.5" data-path="places-and-maps" href="#"><span class="material-symbols-outlined text-[18px]">map</span><span class="font-body-sm text-body-sm">Places and Maps</span></a><a class="flex items-center h-8 px-2.5 rounded text-slate-400 hover:bg-slate-800 hover:text-white transition-colors gap-2.5" data-path="fuel" href="#"><span class="material-symbols-outlined text-[18px]">local_gas_station</span><span class="font-body-sm text-body-sm">Fuel</span></a><a class="flex items-center h-8 px-2.5 rounded text-slate-400 hover:bg-slate-800 hover:text-white transition-colors gap-2.5" data-path="tolls" href="#"><span class="material-symbols-outlined text-[18px]">toll</span><span class="font-body-sm text-body-sm">Tolls</span></a><a class="flex items-center h-8 px-2.5 rounded text-slate-400 hover:bg-slate-800 hover:text-white transition-colors gap-2.5" data-path="tax-and-vendors" href="#"><span class="material-symbols-outlined text-[18px]">receipt_long</span><span class="font-body-sm text-body-sm">Tax and Vendors</span></a></div><div class="space-y-1"><div class="px-2 py-1 font-label-xs text-label-xs text-slate-300 uppercase tracking-wider font-semibold">Engines</div><a class="flex items-center h-8 px-2.5 rounded text-slate-400 hover:bg-slate-800 hover:text-white transition-colors gap-2.5" data-path="fuel-brain" href="#"><span class="material-symbols-outlined text-[18px]">neurology</span><span class="font-body-sm text-body-sm">Fuel Brain</span></a><a class="flex items-center h-8 px-2.5 rounded text-slate-400 hover:bg-slate-800 hover:text-white transition-colors gap-2.5" data-path="toll-brain" href="#"><span class="material-symbols-outlined text-[18px]">alt_route</span><span class="font-body-sm text-body-sm">Toll Brain</span></a><a class="flex items-center h-8 px-2.5 rounded text-slate-400 hover:bg-slate-800 hover:text-white transition-colors gap-2.5" data-path="matching-brain" href="#"><span class="material-symbols-outlined text-[18px]">schema</span><span class="font-body-sm text-body-sm">Matching Brain</span></a></div><div class="space-y-1"><div class="px-2 py-1 font-label-xs text-label-xs text-slate-300 uppercase tracking-wider font-semibold">Distribution</div><a class="flex items-center h-8 px-2.5 rounded text-slate-400 hover:bg-slate-800 hover:text-white transition-colors gap-2.5" data-path="apps" href="#"><span class="material-symbols-outlined text-[18px]">phone_iphone</span><span class="font-body-sm text-body-sm">Apps</span></a><a class="flex items-center h-8 px-2.5 rounded text-slate-400 hover:bg-slate-800 hover:text-white transition-colors gap-2.5" data-path="data-api" href="#"><span class="material-symbols-outlined text-[18px]">api</span><span class="font-body-sm text-body-sm">Data API</span></a><a class="flex items-center h-8 px-2.5 rounded text-slate-400 hover:bg-slate-800 hover:text-white transition-colors gap-2.5" data-path="change-requests" href="#"><span class="material-symbols-outlined text-[18px]">published_with_changes</span><span class="font-body-sm text-body-sm">Change requests</span></a></div><div class="space-y-1"><div class="px-2 py-1 font-label-xs text-label-xs text-slate-300 uppercase tracking-wider font-semibold">Platform</div><a class="flex items-center h-8 px-2.5 rounded text-slate-400 hover:bg-slate-800 hover:text-white transition-colors gap-2.5" data-path="staff-and-roles" href="#"><span class="material-symbols-outlined text-[18px]">badge</span><span class="font-body-sm text-body-sm">Staff and roles</span></a><a class="flex items-center h-8 px-2.5 rounded text-slate-400 hover:bg-slate-800 hover:text-white transition-colors gap-2.5" data-path="activity-log" href="#"><span class="material-symbols-outlined text-[18px]">history</span><span class="font-body-sm text-body-sm">Activity log</span></a><a class="flex items-center h-8 px-2.5 rounded text-slate-400 hover:bg-slate-800 hover:text-white transition-colors gap-2.5" data-path="platform-ops" href="#"><span class="material-symbols-outlined text-[18px]">settings_input_component</span><span class="font-body-sm text-body-sm">Platform Ops</span></a><a class="flex items-center h-8 px-2.5 rounded text-slate-400 hover:bg-slate-800 hover:text-white transition-colors gap-2.5" data-path="global-settings" href="#"><span class="material-symbols-outlined text-[18px]">tune</span><span class="font-body-sm text-body-sm">Global settings</span></a></div><div class="space-y-1"><div class="px-2 py-1 font-label-xs text-label-xs text-slate-300 uppercase tracking-wider font-semibold">Back Office</div><a class="flex items-center h-8 px-2.5 rounded text-slate-400 hover:bg-slate-800 hover:text-white transition-colors gap-2.5" data-path="gct-registrations" href="#"><span class="material-symbols-outlined text-[18px]">domain_verification</span><span class="font-body-sm text-body-sm">GCT registrations</span></a><a class="flex items-center h-8 px-2.5 rounded text-slate-400 hover:bg-slate-800 hover:text-white transition-colors gap-2.5" data-path="ledger" href="#"><span class="material-symbols-outlined text-[18px]">account_balance_wallet</span><span class="font-body-sm text-body-sm">Ledger</span></a><a class="flex items-center h-8 px-2.5 rounded text-slate-400 hover:bg-slate-800 hover:text-white transition-colors gap-2.5" data-path="remittance" href="#"><span class="material-symbols-outlined text-[18px]">payments</span><span class="font-body-sm text-body-sm">Remittance</span></a></div></nav></div><div class="h-11 px-4 flex items-center bg-[#070b14] shrink-0"><div class="flex items-center gap-2 font-mono-sm text-mono-sm text-slate-400"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span><span>KGN-DC-01</span><span class="text-slate-400">·</span><span class="text-slate-300">JMD READY</span></div></div></div></aside><div class="pl-64"><header class="fixed top-0 left-64 right-0 h-14 bg-surface-container-lowest shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-40 flex items-center justify-between px-6"><div class="flex items-center w-full max-w-md"><div class="relative w-full flex items-center"><span class="material-symbols-outlined absolute left-2.5 text-on-surface-variant text-[18px]">search</span><input class="w-full h-8 pl-8 pr-12 bg-surface text-on-surface font-body-sm text-body-sm rounded outline-none placeholder:text-on-surface-variant focus:bg-surface-container-lowest" placeholder="Search entities, engines, routes…" type="text"/><div class="absolute right-2 px-1.5 py-0.5 rounded bg-surface-container font-mono-sm text-[10px] text-on-surface-variant">⌘K</div></div></div><div class="flex items-center gap-3"><button class="w-8 h-8 rounded flex items-center justify-center text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors" title="Toggle theme" type="button"><span class="material-symbols-outlined text-[18px]">dark_mode</span></button><div class="flex items-center gap-2 pl-2 pr-3 py-1 rounded-full bg-surface-container-low"><div class="w-6 h-6 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[14px]">person</span></div><div class="flex items-center gap-1 font-body-sm text-body-sm font-medium text-on-surface"><span class="font-mono-md text-mono-md font-semibold">DT</span><span class="text-on-surface-variant">·</span><span>Deeki T</span><span class="text-on-surface-variant">·</span><span class="text-on-surface-variant">Owner</span></div></div><button class="w-8 h-8 rounded flex items-center justify-center text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors" title="Sign out" type="button"><span class="material-symbols-outlined text-[18px]">logout</span></button></div></header><main class="relative pt-14 bg-background min-h-screen"><div class="w-full px-margin pt-margin-panel pb-12"><div class="mb-6"><div class="font-mono-sm text-mono-sm uppercase text-on-surface-variant tracking-wider mb-1.5 flex items-center gap-1.5"><span>DOMINION</span><span>›</span><span>MASTER DATA</span><span>›</span><span>VEHICLES</span><span>›</span><span class="text-on-surface font-medium">MAINTENANCE TEMPLATES</span></div><div class="flex items-baseline justify-between"><h1 class="font-headline-xl text-headline-xl text-on-surface tracking-tight">Maintenance templates</h1></div><p class="font-body-md text-body-md text-on-surface-variant mt-1">How often each part is serviced, for which cars, and why.</p></div><div class="mb-6 bg-surface-container-low p-1 rounded-lg inline-flex items-center gap-1"><nav class="flex items-center gap-1" data-active-classes="bg-surface-container-lowest text-on-surface font-semibold shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><a class="flex items-center gap-1.5 px-3 py-1.5 rounded text-on-surface-variant hover:text-on-surface transition-colors font-body-sm text-body-sm" data-path="part-schedules" href="#"><span>Part schedules</span><span class="font-mono-sm text-[10px] px-1.5 py-0.2 rounded-full bg-surface-container text-on-surface-variant">16</span></a><a class="flex items-center gap-1.5 px-3 py-1.5 rounded text-on-surface-variant hover:text-on-surface transition-colors font-body-sm text-body-sm" data-path="service-packages" href="#"><span>Service packages</span><span class="font-mono-sm text-[10px] px-1.5 py-0.2 rounded-full bg-surface-container text-on-surface-variant">5</span></a><a aria-current="page" class="flex items-center gap-1.5 px-3 py-1.5 rounded transition-colors bg-surface-container-lowest text-on-surface font-semibold shadow-[0_1px_8px_rgba(0,0,0,0.04)]" data-path="part-types" href="#"><span>Part types</span><span class="font-mono-sm text-[10px] px-1.5 py-0.2 rounded-full bg-surface-container text-on-surface-variant">49</span></a><a class="flex items-center gap-1.5 px-3 py-1.5 rounded text-on-surface-variant hover:text-on-surface transition-colors font-body-sm text-body-sm" data-path="review-list" href="#"><span>Review list</span><span class="font-mono-sm text-[10px] px-1.5 py-0.2 rounded-full bg-amber-100 text-amber-800 font-semibold">1</span></a><a class="flex items-center gap-1.5 px-3 py-1.5 rounded text-on-surface-variant hover:text-on-surface transition-colors font-body-sm text-body-sm" data-path="history" href="#"><span>History</span></a></nav></div><div class="w-full"><div class="flex flex-col w-full relative">
+<!-- Underlying Screen 2: Part Types Workspace -->
+<div class="w-full flex flex-col space-y-4 filter blur-[1px] select-none pointer-events-none opacity-40">
+<!-- Top Action & Filter Row -->
+<div class="flex items-center justify-between gap-4">
+<div class="flex items-center gap-2">
+<div class="relative w-80">
+<span class="material-symbols-outlined absolute left-2.5 top-2 text-[18px] text-on-surface-variant">search</span>
+<input class="w-full h-9 pl-9 pr-3 rounded bg-surface-container-lowest text-on-surface font-body-sm text-body-sm shadow-sm outline-none" readonly="" type="text" value="Spark plugs"/>
+</div>
+<div class="flex items-center gap-1.5 px-3 py-1.5 rounded bg-surface-container-low text-on-surface font-body-sm text-body-sm">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">filter_list</span>
+<span>Category: <strong class="font-medium">Engine</strong></span>
+</div>
+<div class="flex items-center gap-1.5 px-3 py-1.5 rounded bg-surface-container-low text-on-surface font-body-sm text-body-sm">
+<span>Status: <strong class="font-medium">Active</strong></span>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<button class="h-9 px-4 rounded bg-surface-container-lowest text-on-surface font-body-sm text-body-sm shadow-sm flex items-center gap-1.5 font-medium">
+<span class="material-symbols-outlined text-[16px]">file_download</span>
+          Export registry
+        </button>
+<button class="h-9 px-4 rounded bg-primary text-on-primary font-body-sm text-body-sm shadow-sm flex items-center gap-1.5 font-medium">
+<span class="material-symbols-outlined text-[16px]">add</span>
+          New part type
+        </button>
+</div>
+</div>
+<!-- Data Summary Counter -->
+<div class="flex items-center justify-between px-1 py-0.5">
+<div class="font-mono-sm text-mono-sm text-on-surface-variant tracking-wider uppercase">
+        Showing 49 catalogued part definitions · 1 match
+      </div>
+<div class="flex items-center gap-2">
+<span class="inline-flex items-center gap-1 font-mono-sm text-mono-sm text-on-surface-variant">
+<span class="w-2 h-2 rounded-full bg-emerald-500"></span> Active (46)
+        </span>
+<span class="inline-flex items-center gap-1 font-mono-sm text-mono-sm text-on-surface-variant ml-2">
+<span class="w-2 h-2 rounded-full bg-slate-400"></span> Retired (3)
+        </span>
+</div>
+</div>
+<!-- Part Types Data Table -->
+<div class="w-full bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
+<table class="w-full text-left font-body-sm text-body-sm">
+<thead class="bg-surface-container-low text-on-surface-variant font-label-xs text-label-xs uppercase tracking-wider">
+<tr>
+<th class="h-9 px-4 font-semibold">Part Type &amp; Key</th>
+<th class="h-9 px-4 font-semibold">System Category</th>
+<th class="h-9 px-4 font-semibold">Active Schedules</th>
+<th class="h-9 px-4 font-semibold">Service Packages</th>
+<th class="h-9 px-4 font-semibold">Catalogue Parts</th>
+<th class="h-9 px-4 font-semibold">Status</th>
+<th class="h-9 px-4 text-right font-semibold">Actions</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-surface-container-low">
+<!-- Spark Plugs (Focused row) -->
+<tr class="bg-primary-fixed/20">
+<td class="h-11 px-4">
+<div class="flex flex-col">
+<span class="font-headline-md text-headline-md text-on-surface font-medium leading-tight">Spark plugs</span>
+<span class="font-mono-sm text-mono-sm text-on-surface-variant">spark_plugs</span>
+</div>
+</td>
+<td class="h-11 px-4">
+<span class="px-2 py-0.5 rounded bg-surface-container text-on-surface font-mono-sm text-mono-sm">Engine</span>
+</td>
+<td class="h-11 px-4">
+<div class="flex items-center gap-1.5">
+<span class="font-mono-md text-mono-md font-semibold text-on-surface">1</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">schedule</span>
+</div>
+</td>
+<td class="h-11 px-4">
+<div class="flex items-center gap-1.5">
+<span class="font-mono-md text-mono-md font-semibold text-on-surface">1</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">package</span>
+</div>
+</td>
+<td class="h-11 px-4 font-mono-md text-mono-md text-on-surface-variant">0</td>
+<td class="h-11 px-4">
+<span class="inline-flex items-center px-2 py-0.5 rounded-full font-mono-sm text-mono-sm font-medium bg-emerald-50 text-emerald-700">
+                Active
+              </span>
+</td>
+<td class="h-11 px-4 text-right">
+<div class="inline-flex items-center gap-1">
+<button class="px-2 py-1 rounded bg-surface-container-low text-on-surface font-body-sm text-body-sm font-medium">Edit</button>
+<button class="px-2 py-1 rounded bg-error-container text-on-error-container font-body-sm text-body-sm font-medium">Retire</button>
+</div>
+</td>
+</tr>
+<!-- Ambient Dummy Row 1 -->
+<tr>
+<td class="h-11 px-4">
+<div class="flex flex-col">
+<span class="font-headline-md text-headline-md text-on-surface font-medium leading-tight">Engine Oil Filter</span>
+<span class="font-mono-sm text-mono-sm text-on-surface-variant">oil_filter_engine</span>
+</div>
+</td>
+<td class="h-11 px-4">
+<span class="px-2 py-0.5 rounded bg-surface-container text-on-surface font-mono-sm text-mono-sm">Engine</span>
+</td>
+<td class="h-11 px-4 font-mono-md text-mono-md text-on-surface">4</td>
+<td class="h-11 px-4 font-mono-md text-mono-md text-on-surface">3</td>
+<td class="h-11 px-4 font-mono-md text-mono-md text-on-surface">12</td>
+<td class="h-11 px-4">
+<span class="inline-flex items-center px-2 py-0.5 rounded-full font-mono-sm text-mono-sm font-medium bg-emerald-50 text-emerald-700">
+                Active
+              </span>
+</td>
+<td class="h-11 px-4 text-right">
+<div class="inline-flex items-center gap-1">
+<button class="px-2 py-1 rounded bg-surface-container-low text-on-surface font-body-sm text-body-sm font-medium">Edit</button>
+</div>
+</td>
+</tr>
+<!-- Ambient Dummy Row 2 -->
+<tr>
+<td class="h-11 px-4">
+<div class="flex flex-col">
+<span class="font-headline-md text-headline-md text-on-surface font-medium leading-tight">Cabin Air Microfilter</span>
+<span class="font-mono-sm text-mono-sm text-on-surface-variant">cabin_air_filter</span>
+</div>
+</td>
+<td class="h-11 px-4">
+<span class="px-2 py-0.5 rounded bg-surface-container text-on-surface font-mono-sm text-mono-sm">Climate Control</span>
+</td>
+<td class="h-11 px-4 font-mono-md text-mono-md text-on-surface">2</td>
+<td class="h-11 px-4 font-mono-md text-mono-md text-on-surface">2</td>
+<td class="h-11 px-4 font-mono-md text-mono-md text-on-surface">6</td>
+<td class="h-11 px-4">
+<span class="inline-flex items-center px-2 py-0.5 rounded-full font-mono-sm text-mono-sm font-medium bg-emerald-50 text-emerald-700">
+                Active
+              </span>
+</td>
+<td class="h-11 px-4 text-right">
+<div class="inline-flex items-center gap-1">
+<button class="px-2 py-1 rounded bg-surface-container-low text-on-surface font-body-sm text-body-sm font-medium">Edit</button>
+</div>
+</td>
+</tr>
+<!-- Ambient Dummy Row 3 -->
+<tr>
+<td class="h-11 px-4">
+<div class="flex flex-col">
+<span class="font-headline-md text-headline-md text-on-surface font-medium leading-tight">Front Brake Rotor Set</span>
+<span class="font-mono-sm text-mono-sm text-on-surface-variant">rotor_front_pair</span>
+</div>
+</td>
+<td class="h-11 px-4">
+<span class="px-2 py-0.5 rounded bg-surface-container text-on-surface font-mono-sm text-mono-sm">Braking</span>
+</td>
+<td class="h-11 px-4 font-mono-md text-mono-md text-on-surface">3</td>
+<td class="h-11 px-4 font-mono-md text-mono-md text-on-surface">1</td>
+<td class="h-11 px-4 font-mono-md text-mono-md text-on-surface">8</td>
+<td class="h-11 px-4">
+<span class="inline-flex items-center px-2 py-0.5 rounded-full font-mono-sm text-mono-sm font-medium bg-emerald-50 text-emerald-700">
+                Active
+              </span>
+</td>
+<td class="h-11 px-4 text-right">
+<div class="inline-flex items-center gap-1">
+<button class="px-2 py-1 rounded bg-surface-container-low text-on-surface font-body-sm text-body-sm font-medium">Edit</button>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<!-- Modal Dimmed Backdrop Overlay -->
+<div class="fixed inset-0 bg-inverse-surface/40 backdrop-blur-[2px] z-50 flex items-center justify-center p-4">
+<!-- Retire Spark Plugs Modal Dialog -->
+<div class="w-full max-w-[520px] bg-surface-container-lowest rounded-xl shadow-xl overflow-hidden flex flex-col transition-all transform scale-100">
+<!-- Modal Header -->
+<div class="px-6 pt-6 pb-4 flex items-start justify-between gap-4">
+<div class="flex flex-col">
+<h2 class="font-headline-lg text-headline-lg text-on-surface font-semibold tracking-tight">Retire Spark plugs?</h2>
+<span class="font-mono-sm text-mono-sm text-on-surface-variant mt-0.5 flex items-center gap-1.5">
+<span>spark_plugs</span>
+<span>·</span>
+<span>Engine</span>
+</span>
+</div>
+<button aria-label="Close dialog" class="w-8 h-8 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-colors shrink-0" type="button">
+<span class="material-symbols-outlined text-[20px]">close</span>
+</button>
+</div>
+<!-- Modal Body -->
+<div class="px-6 py-2 flex flex-col space-y-5">
+<!-- Main explanation -->
+<p class="font-body-md text-body-md text-on-surface leading-relaxed">
+          It stays on the 2 Roam Fleet cars that already have it, marked retired, and won't be added to new cars or new schedules.
+        </p>
+<!-- Expandable Section (Shown EXPANDED / OPEN) -->
+<div class="w-full flex flex-col rounded-xl bg-surface-container-low p-4 space-y-3.5">
+<div class="flex items-center justify-between text-on-surface cursor-pointer select-none">
+<span class="font-headline-md text-headline-md font-semibold flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px] text-primary">lan</span>
+              What uses it
+            </span>
+<span class="material-symbols-outlined text-[18px] text-on-surface-variant">expand_less</span>
+</div>
+<!-- 2x2 Breakdown Grid -->
+<div class="grid grid-cols-2 gap-2.5">
+<!-- Cell 1: Schedules -->
+<div class="bg-surface-container-lowest p-3 rounded-lg flex flex-col justify-between shadow-sm min-h-[76px]">
+<span class="font-label-xs text-label-xs uppercase tracking-wider text-on-surface-variant">Schedules</span>
+<div class="flex flex-col mt-1">
+<span class="font-mono-md text-mono-md font-semibold text-on-surface">1 active</span>
+<span class="font-body-sm text-[11px] leading-tight text-on-surface-variant mt-0.5 truncate" title="every 100,000 km or 60 months">every 100,000 km or 60 months</span>
+</div>
+</div>
+<!-- Cell 2: Service packages -->
+<div class="bg-surface-container-lowest p-3 rounded-lg flex flex-col justify-between shadow-sm min-h-[76px]">
+<span class="font-label-xs text-label-xs uppercase tracking-wider text-on-surface-variant">Service packages</span>
+<div class="flex flex-col mt-1">
+<span class="font-mono-md text-mono-md font-semibold text-on-surface">1</span>
+<span class="font-body-sm text-[11px] leading-tight text-on-surface-variant mt-0.5 truncate" title="Long-Term Service">Long-Term Service</span>
+</div>
+</div>
+<!-- Cell 3: Inspections -->
+<div class="bg-surface-container-lowest p-3 rounded-lg flex flex-col justify-between shadow-sm min-h-[76px]">
+<span class="font-label-xs text-label-xs uppercase tracking-wider text-on-surface-variant">Inspections</span>
+<div class="flex flex-col mt-1">
+<span class="font-mono-md text-mono-md font-semibold text-on-surface">0</span>
+<span class="font-body-sm text-[11px] leading-tight text-on-surface-variant mt-0.5">None mapped</span>
+</div>
+</div>
+<!-- Cell 4: Parts in the catalogue -->
+<div class="bg-surface-container-lowest p-3 rounded-lg flex flex-col justify-between shadow-sm min-h-[76px]">
+<span class="font-label-xs text-label-xs uppercase tracking-wider text-on-surface-variant">Parts in the catalogue</span>
+<div class="flex flex-col mt-1">
+<span class="font-mono-md text-mono-md font-semibold text-on-surface">0</span>
+<span class="font-body-sm text-[11px] leading-tight text-on-surface-variant mt-0.5">Unassigned SKU list</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Reassurance Banner -->
+<div class="flex items-start gap-2.5 px-3.5 py-2.5 rounded-lg bg-surface-container text-on-surface">
+<span class="material-symbols-outlined text-[18px] text-primary shrink-0 mt-0.5">info</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant leading-snug">
+            You can reactivate it later. No service history is erased.
+          </p>
+</div>
+</div>
+<!-- Modal Footer -->
+<div class="px-6 pt-5 pb-6 flex items-center justify-end gap-2.5 mt-2 bg-surface-container-low/50">
+<button class="h-9 px-4 rounded-lg bg-surface-container-lowest text-on-surface font-body-sm text-body-sm font-medium shadow-sm hover:bg-surface-container transition-colors" type="button">
+          Cancel
+        </button>
+<button class="h-9 px-5 rounded-lg bg-primary-container text-on-primary font-body-sm text-body-sm font-semibold shadow-sm hover:opacity-95 transition-opacity flex items-center gap-1.5" type="button">
+<span class="material-symbols-outlined text-[16px]">archive</span>
+          Retire part type
+        </button>
+</div>
+</div>
+</div>
+</div></div></div></main></div></body></html>
