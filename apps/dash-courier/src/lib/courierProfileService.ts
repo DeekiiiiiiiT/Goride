@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { projectId, publicAnonKey } from '@roam/api-client';
+import { publicAnonKey, supabaseUrl } from '@roam/api-client';
 import { supabase } from '@/lib/supabase';
 
 export type CourierProfileStatus = 'pending' | 'active' | 'suspended' | 'deactivated';
@@ -27,7 +27,7 @@ async function getDeliveryClient() {
   } = await supabase.auth.getSession();
   if (!session?.access_token) return null;
 
-  return createClient(`https://${projectId}.supabase.co`, publicAnonKey, {
+  return createClient(supabaseUrl, publicAnonKey, {
     db: { schema: 'delivery' },
     global: {
       headers: { Authorization: `Bearer ${session.access_token}` },

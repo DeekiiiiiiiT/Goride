@@ -1,9 +1,9 @@
 import { createClient } from '@supabase/supabase-js';
-import { projectId, publicAnonKey } from '@roam/api-client';
+import { projectId, publicAnonKey, supabaseUrl } from '@roam/api-client';
 
 /** Isolated client for email recovery links (Site URL redirects). */
 export const supabaseRecovery = createClient(
-  `https://${projectId}.supabase.co`,
+  supabaseUrl,
   publicAnonKey,
   {
     auth: {

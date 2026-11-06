@@ -6,7 +6,7 @@
  */
 
 import { useState, useCallback } from 'react';
-import { projectId } from '../../../utils/supabase/info';
+import { getSupabaseFunctionsBaseUrl } from '../../../utils/supabase/info';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../ui/card';
 import { Button } from '../../ui/button';
 import { Badge } from '../../ui/badge';
@@ -34,9 +34,9 @@ export function SyncStatusCard({ policyId, canEdit, session }: SyncStatusCardPro
     setError(null);
 
     try {
-      const baseUrl = `https://${projectId}.supabase.co`;
+      const baseUrl = getSupabaseFunctionsBaseUrl();
       const res = await fetch(
-        `${baseUrl}/functions/v1/matching/admin/policies/${policyId}/sync-status`,
+        `${baseUrl}/matching/admin/policies/${policyId}/sync-status`,
         {
           headers: {
             Authorization: `Bearer ${session.access_token}`,
@@ -65,8 +65,8 @@ export function SyncStatusCard({ policyId, canEdit, session }: SyncStatusCardPro
     setError(null);
 
     try {
-      const baseUrl = `https://${projectId}.supabase.co`;
-      const res = await fetch(`${baseUrl}/functions/v1/matching/admin/sync-to-legacy`, {
+      const baseUrl = getSupabaseFunctionsBaseUrl();
+      const res = await fetch(`${baseUrl}/matching/admin/sync-to-legacy`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${session.access_token}`,

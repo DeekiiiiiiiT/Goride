@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { WeeklyCheckIn } from '../types/check-in';
-import { projectId } from '../utils/supabase/info';
+import { getSupabaseFunctionsBaseUrl } from '../utils/supabase/info';
 import { requireAuthHeaders } from '../utils/authHeaders';
 import { api } from '../services/api';
 
@@ -50,7 +50,7 @@ export function useWeeklyCheckIn(driverId: string | undefined) {
     setIsLoading(true);
     try {
       const response = await fetchWithDeadline(
-        `https://${projectId}.supabase.co/functions/v1/fleet-core/check-ins/eligibility?driverId=${encodeURIComponent(driverId)}`,
+        `${getSupabaseFunctionsBaseUrl()}/fleet-core/check-ins/eligibility?driverId=${encodeURIComponent(driverId)}`,
         {
           headers: await requireAuthHeaders(null),
         },
@@ -118,7 +118,7 @@ export function useWeeklyCheckIn(driverId: string | undefined) {
     } as any;
 
     const res = await fetchWithDeadline(
-      `https://${projectId}.supabase.co/functions/v1/fleet-core/check-ins`,
+      `${getSupabaseFunctionsBaseUrl()}/fleet-core/check-ins`,
       {
         method: 'POST',
         headers: await requireAuthHeaders(),

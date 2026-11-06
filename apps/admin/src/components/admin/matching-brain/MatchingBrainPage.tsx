@@ -5,7 +5,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Loader2, Network, Settings, Users, Zap, Cog } from 'lucide-react';
-import { projectId } from '../../../utils/supabase/info';
+import { getSupabaseFunctionsBaseUrl } from '../../../utils/supabase/info';
 import { useAuth } from '../../auth/AuthContext';
 import type { MatchingPolicy, ProductProfile, BrainStatus } from './types';
 import {
@@ -56,18 +56,18 @@ export function MatchingBrainPage({ onNavigate }: { onNavigate?: (page: string) 
     setError(null);
 
     try {
-      const baseUrl = `https://${projectId}.supabase.co`;
+      const baseUrl = getSupabaseFunctionsBaseUrl();
       const headers = {
         Authorization: `Bearer ${session.access_token}`,
         'Content-Type': 'application/json',
       };
 
-      const statusRes = await fetch(`${baseUrl}/functions/v1/matching/health`, { headers });
+      const statusRes = await fetch(`${baseUrl}/matching/health`, { headers });
       if (statusRes.ok) {
         setStatus(await statusRes.json());
       }
 
-      const policiesRes = await fetch(`${baseUrl}/functions/v1/matching/admin/policies`, {
+      const policiesRes = await fetch(`${baseUrl}/matching/admin/policies`, {
         headers,
       });
       if (policiesRes.ok) {
@@ -84,7 +84,7 @@ export function MatchingBrainPage({ onNavigate }: { onNavigate?: (page: string) 
       }
 
       const profilesRes = await fetch(
-        `${baseUrl}/functions/v1/matching/admin/product-profiles`,
+        `${baseUrl}/matching/admin/product-profiles`,
         { headers },
       );
       if (profilesRes.ok) {
@@ -110,9 +110,9 @@ export function MatchingBrainPage({ onNavigate }: { onNavigate?: (page: string) 
     setError(null);
     setSuccess(null);
 
-    const baseUrl = `https://${projectId}.supabase.co`;
+    const baseUrl = getSupabaseFunctionsBaseUrl();
     const res = await fetch(
-      `${baseUrl}/functions/v1/matching/admin/policies/${selectedPolicy.id}`,
+      `${baseUrl}/matching/admin/policies/${selectedPolicy.id}`,
       {
         method: 'PATCH',
         headers: {

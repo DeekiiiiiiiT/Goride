@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { projectId } from '../utils/supabase/info';
+import { getSupabaseFunctionsBaseUrl } from '../utils/supabase/info';
 import { requireAuthHeaders } from '../utils/authHeaders';
 import { WeeklyCheckIn } from '../types/check-in';
 
@@ -9,7 +9,7 @@ export function useAdminCheckIn() {
     const reviewCheckIn = async (checkInId: string, status: 'approved' | 'rejected', notes?: string) => {
         setIsReviewing(true);
         try {
-            const response = await fetch(`https://${projectId}.supabase.co/functions/v1/fleet-core/check-ins/review`, {
+            const response = await fetch(`${getSupabaseFunctionsBaseUrl()}/fleet-core/check-ins/review`, {
                 method: 'POST',
                 headers: await requireAuthHeaders(),
                 body: JSON.stringify({ checkInId, status, managerNotes: notes })

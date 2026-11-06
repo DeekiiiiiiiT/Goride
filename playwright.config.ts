@@ -26,25 +26,25 @@ const driverBaseUrl = process.env.DRIVER_BASE_URL?.trim();
 const previewWebServers = [
   ...(!adminBaseUrl
     ? [{
-        command: 'pnpm --filter @roam/admin exec vite preview --host 127.0.0.1 --port 4173',
-        url: 'http://127.0.0.1:4173',
-        reuseExistingServer: !process.env.CI,
+        command: 'pnpm --filter @roam/admin run dev:testcopy',
+        url: 'http://127.0.0.1:5180',
+        reuseExistingServer: false,
         timeout: 120_000,
       }]
     : []),
   ...(!fleetBaseUrl
     ? [{
-        command: 'pnpm --filter @roam/fleet exec vite preview --host 127.0.0.1 --port 3000',
-        url: 'http://127.0.0.1:3000',
-        reuseExistingServer: !process.env.CI,
+        command: 'pnpm --filter @roam/fleet run dev:testcopy',
+        url: 'http://127.0.0.1:5181',
+        reuseExistingServer: false,
         timeout: 120_000,
       }]
     : []),
   ...(process.env.INVENTORY_E2E === '1' && !driverBaseUrl
     ? [{
-        command: 'pnpm --filter @roam/driver exec vite preview --host 127.0.0.1 --port 5174',
-        url: 'http://127.0.0.1:5174',
-        reuseExistingServer: !process.env.CI,
+        command: 'pnpm --filter @roam/driver run dev:testcopy',
+        url: 'http://127.0.0.1:5182',
+        reuseExistingServer: false,
         timeout: 120_000,
       }]
     : []),
@@ -72,7 +72,7 @@ export default defineConfig({
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1456, height: 900 },
-        baseURL: adminBaseUrl || 'http://127.0.0.1:4173',
+        baseURL: adminBaseUrl || 'http://127.0.0.1:5180',
       },
     },
     {
@@ -80,7 +80,7 @@ export default defineConfig({
       testMatch: /fleet-rush-integration\.spec\.ts|fuel-recon-wizard\.spec\.ts|fuel-recon-shadow-soak\.spec\.ts|driver-settlements-desk\.spec\.ts|driver-detail-smoke\.spec\.ts|fleet-find-parts-visual\.spec\.ts|parts-import-stitch\.spec\.ts|parts-auto-match-stitch\.spec\.ts|fleet-maintenance-master\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
-        baseURL: fleetBaseUrl || 'http://127.0.0.1:3000',
+        baseURL: fleetBaseUrl || 'http://127.0.0.1:5181',
       },
     },
     {
@@ -90,7 +90,7 @@ export default defineConfig({
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1456, height: 900 },
-        baseURL: fleetBaseUrl || 'http://127.0.0.1:3000',
+        baseURL: fleetBaseUrl || 'http://127.0.0.1:5181',
       },
     },
     {

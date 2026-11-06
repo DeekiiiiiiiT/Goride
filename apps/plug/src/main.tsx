@@ -7,5 +7,12 @@ import './index.css';
 
 if (localStorage.getItem('plug-theme') === 'dark') document.documentElement.classList.add('dark');
 
-await settlePlugAuth();
+const PLUG_AUTH_STARTUP_MS = 5000;
+await Promise.race([
+  settlePlugAuth(),
+  new Promise<void>((resolve) => {
+    window.setTimeout(resolve, PLUG_AUTH_STARTUP_MS);
+  }),
+]);
+
 createRoot(document.getElementById('root')!).render(<App />);

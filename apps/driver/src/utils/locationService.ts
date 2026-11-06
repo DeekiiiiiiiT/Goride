@@ -1,5 +1,5 @@
 import { TripStop, RoutePoint } from '../types/tripSession';
-import { projectId, publicAnonKey } from './supabase/info';
+import { getSupabaseFunctionsBaseUrl, publicAnonKey } from './supabase/info';
 import { looksLikePlusCodeAddress } from './plusCode';
 
 const REVERSE_GEOCODE_TIMEOUT_MS = 8000;
@@ -102,7 +102,7 @@ export const loadGoogleMapsApi = async (): Promise<void> => {
           }
       }
 
-      const response = await fetch(`https://${projectId}.supabase.co/functions/v1/fleet-core/maps-config`, {
+      const response = await fetch(`${getSupabaseFunctionsBaseUrl()}/fleet-core/maps-config`, {
         headers: {
           Authorization: `Bearer ${publicAnonKey}`,
         },

@@ -1,7 +1,7 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertTriangle, RefreshCcw, ShieldAlert } from 'lucide-react';
 import { Button } from './button';
-import { projectId, publicAnonKey } from '@roam/api-client';
+import { getSupabaseFunctionsBaseUrl, publicAnonKey } from '@roam/api-client';
 
 interface Props {
   children: ReactNode;
@@ -30,7 +30,7 @@ export class ErrorBoundary extends Component<Props, State> {
     
     // Phase 8.2: Log error to forensic audit trail
     try {
-        const response = await fetch(`https://${projectId}.supabase.co/functions/v1/fleet-core/system/log-error`, {
+        const response = await fetch(`${getSupabaseFunctionsBaseUrl()}/fleet-core/system/log-error`, {
             method: 'POST',
             headers: { 
                 'Content-Type': 'application/json',

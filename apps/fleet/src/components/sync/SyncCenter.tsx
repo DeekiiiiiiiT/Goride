@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { projectId } from '../../utils/supabase/info';
+import { getSupabaseFunctionsBaseUrl } from '../../utils/supabase/info';
 import { requireAuthHeaders } from '../../utils/authHeaders';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../ui/card";
 import { Badge } from "../ui/badge";
@@ -13,7 +13,7 @@ export function SyncCenter() {
     const fetchAudit = async () => {
         setLoading(true);
         try {
-            const res = await fetch(`https://${projectId}.supabase.co/functions/v1/fleet-core/sync/audit-trail`, {
+            const res = await fetch(`${getSupabaseFunctionsBaseUrl()}/fleet-core/sync/audit-trail`, {
                 headers: await requireAuthHeaders(null)
             });
             const json = await res.json();

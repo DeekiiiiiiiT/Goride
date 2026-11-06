@@ -1,4 +1,4 @@
-import { projectId, publicAnonKey } from '../utils/supabase/info';
+import { getSupabaseFunctionsBaseUrl, publicAnonKey } from '../utils/supabase/info';
 import { supabase } from '../utils/supabase/client';
 import { Trip, ImportBatch, CanonicalBatchAuditSnapshot, DriverMetrics, VehicleMetrics, FinancialTransaction, LedgerEntry, LedgerFilterParams, PaginatedLedgerResponse, LedgerDriverOverview, IndriveWalletSummary, DisputeRefund } from '../types/data';
 import type { AppendCanonicalLedgerResult, CanonicalLedgerEventInput } from '../types/ledgerCanonical';
@@ -3628,7 +3628,7 @@ export const api = {
   /** Fuel Brain edge — health / policies (platform staff). */
   async getFuelBrainHealth(): Promise<any> {
     const response = await fetchWithRetry(
-      `https://${projectId}.supabase.co/functions/v1/fuel-brain/health`,
+      `${getSupabaseFunctionsBaseUrl()}/fuel-brain/health`,
       { headers: await getHeaders() },
     );
     if (!response.ok) throw new Error('Failed to load Fuel Brain health');
@@ -3637,7 +3637,7 @@ export const api = {
 
   async getFuelBrainPolicies(): Promise<{ policies: any[] }> {
     const response = await fetchWithRetry(
-      `https://${projectId}.supabase.co/functions/v1/fuel-brain/admin/policies`,
+      `${getSupabaseFunctionsBaseUrl()}/fuel-brain/admin/policies`,
       { headers: await getHeaders() },
     );
     if (!response.ok) {
@@ -3650,7 +3650,7 @@ export const api = {
 
   async putFuelBrainPolicy(policy: Record<string, unknown>): Promise<{ policy: any }> {
     const response = await fetchWithRetry(
-      `https://${projectId}.supabase.co/functions/v1/fuel-brain/admin/policies`,
+      `${getSupabaseFunctionsBaseUrl()}/fuel-brain/admin/policies`,
       {
         method: 'PUT',
         headers: await getHeaders(),
@@ -3699,7 +3699,7 @@ export const api = {
 export async function fetchFleetTimezone(): Promise<string> {
   try {
     const res = await fetch(
-      `https://${projectId}.supabase.co/functions/v1/fleet-core/fleet-timezone`,
+      `${getSupabaseFunctionsBaseUrl()}/fleet-core/fleet-timezone`,
       {
         headers: { Authorization: `Bearer ${publicAnonKey}` },
       },

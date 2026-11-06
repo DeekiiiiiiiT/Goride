@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:testcopy": "vite --mode testcopy --host 127.0.0.1 --port 5182 --strictPort",
     "build": "vite build",
     "preview": "vite preview",
     "build:mobile": "node ../../scripts/assert-vite-supabase-env.mjs && vite build",

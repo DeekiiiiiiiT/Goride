@@ -1,11 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import { projectId, publicAnonKey } from '@roam/api-client';
+import { projectId, publicAnonKey, supabaseUrl } from '@roam/api-client';
 import { shouldMainClientDetectSessionInUrl } from './detectSessionInUrl';
-
-const viteSupabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim();
-const supabaseUrl = viteSupabaseUrl
-  ? viteSupabaseUrl.replace(/\/$/, '')
-  : `https://${projectId}.supabase.co`;
 
 const roamFetch: typeof fetch = (url, options) => {
   const controller = new AbortController();

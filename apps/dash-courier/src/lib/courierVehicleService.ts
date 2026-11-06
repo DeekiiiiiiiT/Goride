@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { projectId, publicAnonKey } from '@roam/api-client';
+import { publicAnonKey, supabaseUrl } from '@roam/api-client';
 import { supabase } from '@/lib/supabase';
 import { loadSignupDraft } from '@/lib/signupDraft';
 import { upsertCourierVehicleRemote } from '@/lib/courierApi';
@@ -23,7 +23,7 @@ async function getDeliveryClient() {
   if (!session?.access_token) return null;
   return {
     session,
-    delivery: createClient(`https://${projectId}.supabase.co`, publicAnonKey, {
+    delivery: createClient(supabaseUrl, publicAnonKey, {
       db: { schema: 'delivery' },
       global: { headers: { Authorization: `Bearer ${session.access_token}` } },
     }),

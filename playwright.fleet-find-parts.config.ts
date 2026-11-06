@@ -17,7 +17,7 @@ export default defineConfig({
   webServer: {
     command: `pnpm --filter @roam/fleet dev --host 127.0.0.1 --port ${port}`,
     url: `http://127.0.0.1:${port}`,
-    reuseExistingServer: true,
+    reuseExistingServer: false,
     timeout: 180_000,
     env: {
       VITE_SUPABASE_URL: "https://example.supabase.co",

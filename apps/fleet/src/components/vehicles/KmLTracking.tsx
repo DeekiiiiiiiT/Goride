@@ -55,7 +55,7 @@ import {
   parseISO,
 } from 'date-fns';
 import type { DateRange } from 'react-day-picker';
-import { projectId } from '../../utils/supabase/info';
+import { getSupabaseFunctionsBaseUrl } from '../../utils/supabase/info';
 import { requireAuthHeaders } from '../../utils/authHeaders';
 import { unwrapFuelEntriesPayload } from '@roam/fuel-core';
 import { trailingDaysWindow, FUEL_ALERTS_TRAILING_DAYS } from '../../utils/fuelWeekPeriod';
@@ -70,7 +70,7 @@ import { DatePickerWithRange } from '../ui/date-range-picker';
 import { PeriodWeekDropdown } from '../ui/PeriodWeekDropdown';
 import { generateWeekOptionsForDateRange, ENTIRE_PERIOD_OPTION_ID } from '../../utils/periodWeekOptions';
 
-const API_BASE = `https://${projectId}.supabase.co/functions/v1/fleet-core`;
+const API_BASE = `${getSupabaseFunctionsBaseUrl()}/fleet-core`;
 
 interface KmLTrackingProps {
   vehicle: any;

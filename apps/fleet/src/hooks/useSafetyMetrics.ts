@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { projectId } from '../utils/supabase/info';
+import { getSupabaseFunctionsBaseUrl } from '../utils/supabase/info';
 import { requireAuthHeaders } from '../utils/authHeaders';
 
 export function useSafetyMetrics() {
@@ -11,7 +11,7 @@ export function useSafetyMetrics() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const baseUrl = `https://${projectId}.supabase.co/functions/v1/fleet-core`;
+      const baseUrl = `${getSupabaseFunctionsBaseUrl()}/fleet-core`;
       const headers = await requireAuthHeaders();
 
       const [effRes, fatRes] = await Promise.all([

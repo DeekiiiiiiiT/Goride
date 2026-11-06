@@ -1,4 +1,4 @@
-import { projectId } from '../utils/supabase/info';
+import { getSupabaseFunctionsBaseUrl } from '../utils/supabase/info';
 import { supabase } from '../utils/supabase/client';
 import { AuthRequiredError, getHeaders as sharedGetHeaders, requireAuthHeaders } from '../utils/authHeaders';
 export { AuthRequiredError };
@@ -8570,7 +8570,7 @@ export const api = {
 export async function fetchFleetTimezone(): Promise<string> {
   try {
     const res = await fetch(
-      `https://${projectId}.supabase.co/functions/v1/fleet-core/fleet-timezone`,
+      `${getSupabaseFunctionsBaseUrl()}/fleet-core/fleet-timezone`,
       {
         headers: await requireAuthHeaders(null),
       },

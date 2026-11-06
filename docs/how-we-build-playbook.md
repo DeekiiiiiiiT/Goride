@@ -52,12 +52,17 @@ Build **Data → Server → Screens → Tests**, in that order. Finish and check
 ## Step 6 — Prove it on a private copy first
 Before anything risky touches real data, the planner tests it on a **private copy of your database** running on your own computer (for example in Docker).
 
+**When to use it:** anything that changes data, money or who can log in. Skip it for small text or colour changes; it costs extra AI credits.
+
 **Rules for proving:**
+- **A test only counts if nothing is faked:** no pretend server answers, no hidden test-only switches in the app, and no loosening who can log in just to make a test pass.
 - **Test the way the app really works**, through the same path real users take, not a shortcut. Some bugs only appear on the real path.
 - **Use made-up test data** that can never match real records.
 - **Every bug you fix gets a new test**, so it can never quietly come back.
 
 ## Step 7 — Go live behind a switch
+The app you open in your browser shows the **real** database, so a feature proven on the private copy won't appear there until it goes live.
+
 1. Release the feature **switched off**.
 2. Load a small amount of real data, from trusted sources only.
 3. Check that the data landed correctly.

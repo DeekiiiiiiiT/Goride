@@ -16,7 +16,7 @@ import {
   toggleRowClass,
 } from '../../shared/SettingsSection';
 import { useSettingsSection } from '../../../../hooks/useSettingsSection';
-import { projectId } from '../../../../utils/supabase/info';
+import { getSupabaseFunctionsBaseUrl } from '../../../../utils/supabase/info';
 import { useAuth } from '../../../auth/AuthContext';
 import type { MatchingPolicy } from '../types';
 import { TOOLTIPS, SECTION_KEYS } from '../types';
@@ -43,7 +43,7 @@ function FleetPilotList({ canEdit }: { canEdit: boolean }) {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const baseUrl = `https://${projectId}.supabase.co/functions/v1/matching/admin/dispatch-pilots`;
+  const baseUrl = `${getSupabaseFunctionsBaseUrl()}/matching/admin/dispatch-pilots`;
 
   const load = useCallback(async () => {
     if (!session) return;

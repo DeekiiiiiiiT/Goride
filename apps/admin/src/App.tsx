@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   AuthRecoveryGate,
+  TestCopyBar,
   clearDominionAccessDenied,
   dominionAccessDeniedMessage,
   flashAdminLoginError,
@@ -86,6 +87,7 @@ export default function App() {
       signInHref="/"
     >
       <QueryClientProvider client={queryClient}>
+        <TestCopyBar />
         <AuthProvider>
           <PlatformSessionFromAuth>
             <AppContent />

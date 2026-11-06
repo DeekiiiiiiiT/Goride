@@ -1,7 +1,7 @@
-import { projectId } from "../../../utils/supabase/info";
+import { getSupabaseFunctionsBaseUrl } from '../../../utils/supabase/info';
 import { supabase } from "../../../utils/supabase/client";
 
-const BASE = `https://${projectId}.supabase.co/functions/v1/petrojam-prices`;
+const BASE = `${getSupabaseFunctionsBaseUrl()}/petrojam-prices`;
 
 export type RefineryCard = {
   id: string;
