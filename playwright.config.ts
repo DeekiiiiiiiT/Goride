@@ -24,7 +24,8 @@ const adminBaseUrl = process.env.ADMIN_BASE_URL?.trim();
 const fleetBaseUrl = process.env.FLEET_BASE_URL?.trim();
 const driverBaseUrl = process.env.DRIVER_BASE_URL?.trim();
 const previewWebServers = [
-  ...(!adminBaseUrl
+  // Inventory done-tests only build Fleet + Driver; no inventory spec opens Admin.
+  ...(!adminBaseUrl && process.env.INVENTORY_E2E !== '1'
     ? [{
         command: 'pnpm --filter @roam/admin exec vite preview --host 127.0.0.1 --port 4173',
         url: 'http://127.0.0.1:4173',
