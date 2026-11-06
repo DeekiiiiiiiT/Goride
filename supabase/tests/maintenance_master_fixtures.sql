@@ -445,8 +445,16 @@ BEGIN
     AND vcs.position IS NULL;
 
   v_res := public.recompute_component_schedules_for_car(v_org, v_vehicle);
-  IF coalesce(v_res->>'skipped_custom', '0')::int < 1 THEN
-    RAISE EXCEPTION 'Done test 7 failed: expected skipped_custom';
+  IF NOT EXISTS (
+    SELECT 1 FROM public.vehicle_component_schedule vcs
+    WHERE vcs.organization_id = v_org
+      AND vcs.vehicle_id = v_vehicle
+      AND vcs.category_id = v_part
+      AND vcs.position IS NULL
+      AND vcs.schedule_status = 'manual_override'
+      AND vcs.custom_interval_km = 9000
+  ) THEN
+    RAISE EXCEPTION 'Done test 7 failed: manual_override should be preserved';
   END IF;
 
   -- D-01: shorter Roam interval clears manual_override (custom 9,000 -> Roam 5,000)
@@ -566,6 +574,47 @@ BEGIN
     RAISE EXCEPTION 'D-03 failed: first reading baseline / due';
   END IF;
   INSERT INTO mm_truth_log VALUES ('D03_first_reading_baseline', 'ok');
+
+  -- L-01: legacy row with NULL baseline_source gets first_reading and a due (car has odometer)
+  UPDATE public.vehicle_component_schedule vcs
+  SET
+    baseline_odometer = 0,
+    baseline_date = date '2026-01-01',
+    baseline_source = NULL,
+    last_performed_km = NULL,
+    last_performed_date = NULL,
+    next_due_km = NULL,
+    next_due_date = NULL,
+    schedule_status = 'odometer_needed',
+    custom_interval_km = NULL,
+    custom_interval_months = NULL,
+    custom_reason = NULL,
+    custom_set_at = NULL
+  WHERE vcs.organization_id = v_org
+    AND vcs.vehicle_id = v_vehicle
+    AND vcs.category_id = v_tire_part
+    AND vcs.position = 'LF';
+
+  SELECT vcs.id INTO v_sched_id
+  FROM public.vehicle_component_schedule vcs
+  WHERE vcs.organization_id = v_org
+    AND vcs.vehicle_id = v_vehicle
+    AND vcs.category_id = v_tire_part
+    AND vcs.position = 'LF';
+
+  PERFORM public.mm_recompute_schedule_row(v_org, v_vehicle, v_tire_part, 'LF', v_sched_id);
+
+  IF NOT EXISTS (
+    SELECT 1 FROM public.vehicle_component_schedule vcs
+    WHERE vcs.id = v_sched_id
+      AND vcs.baseline_source = 'first_reading'
+      AND vcs.baseline_odometer = 50000
+      AND vcs.next_due_km = 90000
+      AND vcs.schedule_status = 'active'
+  ) THEN
+    RAISE EXCEPTION 'L-01 failed: NULL baseline_source / first reading baseline / due';
+  END IF;
+  INSERT INTO mm_truth_log VALUES ('L01_null_baseline_first_reading', 'ok');
 
   -- D-04: impact preview for unsaved global rule includes fx car
   v_impact := public.maintenance_rule_impact(jsonb_build_object(

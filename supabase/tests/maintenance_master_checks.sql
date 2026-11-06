@@ -195,3 +195,16 @@ BEGIN
     RAISE EXCEPTION 'check_10 failed: % functions', v_cnt;
   END IF;
 END $$;
+
+DO $$
+DECLARE v_cnt bigint;
+BEGIN
+  SELECT count(*) INTO v_cnt
+  FROM public.vehicle_component_schedule vcs
+  WHERE vcs.schedule_status = 'odometer_needed'
+    AND public.mm_fleet_has_valid_odometer(vcs.vehicle_id);
+  RAISE NOTICE 'check_11_odometer_needed_with_valid_odometer: %', v_cnt;
+  IF v_cnt > 0 THEN
+    RAISE EXCEPTION 'check_11 failed: % rows', v_cnt;
+  END IF;
+END $$;
