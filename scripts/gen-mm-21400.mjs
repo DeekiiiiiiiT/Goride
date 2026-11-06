@@ -190,7 +190,7 @@ END;
 $$;
 `;
 
-const outPath = path.join(root, "supabase/migrations/20261111121400_mm_rename_db_readers.sql");
+const outPath = path.join(root, "supabase/migrations/20261106131200_mm_rename_db_readers.sql");
 const out =
   "-- S-02 / S-03: km column readers + M-13 open alert lifecycle\n\n" +
   recompute +

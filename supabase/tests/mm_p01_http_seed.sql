@@ -181,7 +181,7 @@ BEGIN
   )
   ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
 
-  -- Global Roam rules: migration 20261111121200_mm_seed_16_part_rules.sql (16 parts). P-01 adds fx-glob only.
+  -- Global Roam rules: migration 20261106131000_mm_seed_16_part_rules.sql (16 parts). P-01 adds fx-glob only.
 
   INSERT INTO public.maintenance_task_templates (
     id, task_name, task_code, template_scope, component_id, interval_km, interval_months,

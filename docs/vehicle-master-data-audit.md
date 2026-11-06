@@ -650,23 +650,23 @@ The round-1 folders for these 4 screens were deleted at the owner's request.
 
 > **Task:** build the Phase 1 database layer of `docs/vehicle-master-data-audit.md`. Read §2, §3, §4, §5, M-01 to M-04, M-10, M-13, M-14, V-02, V-03 and V-06 first. Database only: SQL migrations, SQL functions and SQL tests. **Don't touch** edge function code (`supabase/functions/**`), front-end code or any other migration file. Build and prove everything on the local Docker copy of the database. The server and screen layers come later; the migrations that would break today's server code are marked below and stay together with that layer.
 >
-> **Migrations**: new files, versions after `20261110122000`, one concern per file, in this order:
+> **Migrations**: new files, versions after `20261106124600`, one concern per file, in this order:
 >
-> 1. `20261111120000_mm_grants_revoke.sql` (V-06): `REVOKE ALL` from `anon, authenticated` on `vehicle_catalog`, `vehicle_platform`, `engine_family`, `catalog_spec_value`, `spec_key`, `vehicle_oe_number`, `maintenance_task_templates`, `maintenance_package_categories`, `maintenance_service_categories`, `vehicle_component_schedule`, `platform_revision`.
-> 2. `20261111120100_mm_schedule_for_variant_packages_only.sql` (M-14): `CREATE OR REPLACE FUNCTION public.schedule_for_variant` identical to today's (A.2) plus `AND t.component_id IS NULL` in `candidates`.
-> 3. `20261111120200_mm_revision_trigger.sql` (V-03, M-06): new function `public.trg_master_revision()`. It is a copy of `trg_platform_revision()`, with these differences:
+> 1. `20261106125800_mm_grants_revoke.sql` (V-06): `REVOKE ALL` from `anon, authenticated` on `vehicle_catalog`, `vehicle_platform`, `engine_family`, `catalog_spec_value`, `spec_key`, `vehicle_oe_number`, `maintenance_task_templates`, `maintenance_package_categories`, `maintenance_service_categories`, `vehicle_component_schedule`, `platform_revision`.
+> 2. `20261106125900_mm_schedule_for_variant_packages_only.sql` (M-14): `CREATE OR REPLACE FUNCTION public.schedule_for_variant` identical to today's (A.2) plus `AND t.component_id IS NULL` in `candidates`.
+> 3. `20261106130000_mm_revision_trigger.sql` (V-03, M-06): new function `public.trg_master_revision()`. It is a copy of `trg_platform_revision()`, with these differences:
 >    - `actor = coalesce(auth.uid(), (to_jsonb(NEW)->>'updated_by')::uuid, (to_jsonb(NEW)->>'created_by')::uuid)`; on DELETE it reads from OLD.
 >    - It also writes `import_batch_id` from the row when present.
 >
 >    Attach it AFTER INSERT/UPDATE/DELETE FOR EACH ROW on `vehicle_catalog`, `engine_family`, `catalog_spec_value`, `maintenance_task_templates`, `maintenance_package_categories` and `maintenance_service_categories`. Add `updated_by uuid` to `maintenance_service_categories` and `maintenance_package_categories`. Leave `trg_platform_revision` unchanged.
-> 4. `20261111120300_mm_part_type_restrict.sql` (M-02):
+> 4. `20261106130100_mm_part_type_restrict.sql` (M-02):
 >    - Change the FK `vehicle_component_schedule.category_id → maintenance_service_categories` to `ON DELETE RESTRICT`.
 >    - Add `maintenance_service_categories.status text NOT NULL DEFAULT 'active' CHECK (status IN ('active','retired'))` and `retired_at timestamptz`.
 >    - Function `maintenance_part_type_dependents(p_id uuid) RETURNS TABLE(table_name text, row_count bigint)`. It is built at run time from `pg_constraint` (every FK into the table), so a new table is never missed (N2).
-> 5. `20261111120400_mm_car_status_and_dependents.sql` (V-02):
+> 5. `20261106130200_mm_car_status_and_dependents.sql` (V-02):
 >    - Add `vehicle_catalog.status text NOT NULL DEFAULT 'active' CHECK (status IN ('draft','active','needs_checking','retired'))`, plus `status_reason`, `merged_into_id uuid REFERENCES vehicle_catalog(id)`, `retired_at`. Backfill all rows to `active`.
 >    - Function `catalog_car_dependents(p_id uuid)`: every FK from `pg_constraint`, plus the 5 unlinked tables in A.10 by name.
-> 6. `20261111120500_mm_templates_schema.sql` (§3.1, M-05 columns, M-08 columns, S2, S8):
+> 6. `20261106130300_mm_templates_schema.sql` (§3.1, M-05 columns, M-08 columns, S2, S8):
 >    - Add every **new** column in the §3.1 table, with the CHECKs listed there: `status`, `confidence`, `source_type`, `evidence_url`, `verified_by/at`, `created_by/updated_by`, `year_from/year_to`, `severe_interval_*`, `revision_no int NOT NULL DEFAULT 1`.
 >    - Backfill: `status = CASE WHEN archived_at IS NULL THEN 'active' ELSE 'retired' END`; `source_type = 'roam_policy'`; `confidence = 'uncertain'`.
 >    - `applicable_vehicle_classes`: set null → `{car}`, then `SET NOT NULL`.
@@ -674,23 +674,23 @@ The round-1 folders for these 4 screens were deleted at the owner's request.
 >    - CHECK: `source_type = 'roam_policy' OR evidence_url IS NOT NULL` for `component_id IS NOT NULL`.
 >    - Trigger: a package (`component_id IS NULL`) can't be turned into a part rule while it has `maintenance_package_categories` rows. Also a trigger on `maintenance_package_categories` refusing links to a template whose `component_id IS NOT NULL` (N6).
 >    - Trigger `revision_no + 1` on a change to an interval, severe, year, scope, target or status column.
-> 7. `20261111120600_mm_overlap_guard.sql` (§2.3):
+> 7. `20261106130400_mm_overlap_guard.sql` (§2.3):
 >    - Table `maintenance_rule_conflict` (§3.4 columns). RLS on, policy false, no grants.
 >    - `BEFORE INSERT OR UPDATE` trigger on `maintenance_task_templates`, for part rules whose new status is `active` or `needs_checking`:
 >      1. `pg_advisory_xact_lock(hashtext(component_id || scope || target))`;
 >      2. find another `active` part rule with the same component + scope + target, overlapping `int4range(coalesce(year_from,0), coalesce(year_to,9999),'[]')`, and overlapping classes (empty array = all classes);
 >      3. if found, set `NEW.status = 'needs_checking'` and insert a conflict row (`rule_id_a` = the existing rule, `rule_id_b` = NEW.id).
 >    - Never raise an error.
-> 8. `20261111120700_mm_resolver.sql` (§2.2): `schedule_rule_for_part(p_org text, p_vehicle_id text, p_component_id uuid) RETURNS TABLE(rule_id uuid, rank int, interval_km int, interval_km_max int, interval_months int, interval_basis text, rule_status text)`.
+> 8. `20261106130500_mm_resolver.sql` (§2.2): `schedule_rule_for_part(p_org text, p_vehicle_id text, p_component_id uuid) RETURNS TABLE(rule_id uuid, rank int, interval_km int, interval_km_max int, interval_months int, interval_basis text, rule_status text)`.
 >    - Steps 1–3 of §2.2 exactly: active pass first, then the needs_checking pass. The year comes from the RoamFleet car or the catalog `production_start_year`. Classes: empty means all. "Not on this car" from `catalog_component_applicability` at car, platform and engine scope.
 >    - Step 3: custom interval, then severe interval (read `fleet.vehicles.severe_duty`, added in this migration as `boolean NOT NULL DEFAULT false`), then the normal interval.
 >    - `SECURITY DEFINER`, `SET search_path = ''`.
-> 9. `20261111120800_mm_schedule_columns.sql` (§3.2):
+> 9. `20261106130600_mm_schedule_columns.sql` (§3.2):
 >    - **Add** `rule_id`, `rule_revision_no`, `interval_km_used`, `interval_months_used`, `interval_basis`, `last_performed_source`, `custom_interval_km`, `custom_interval_months`, `custom_reason`, `custom_set_by`, `custom_set_at`, `computed_at`.
 >    - Widen the `schedule_status` CHECK to the §3.2 values.
 >    - CHECK: custom interval ≤ the rule's interval is enforced in the recompute function, not as a constraint.
 >    - **Don't rename `*_miles` columns here** (that's file 12).
-> 10. `20261111120900_mm_recompute.sql` (§2.0, M-04, M-09):
+> 10. `20261106130700_mm_recompute.sql` (§2.0, M-04, M-09):
 >     - `recompute_component_schedules_for_car(p_org text, p_vehicle_id text) RETURNS jsonb` (counts: created, updated, no_rule, skipped_custom). Rules:
 >       - Upsert on the two live unique indexes (A.11).
 >       - Positions follow `position_aware` (LF, RF, LR, RR or null).
@@ -700,18 +700,18 @@ The round-1 folders for these 4 screens were deleted at the owner's request.
 >       - Every changed row supersedes its open alert (file 11).
 >     - `recompute_component_schedules_for_rule(p_rule_id uuid)`: only the cars `maintenance_rule_impact` returns.
 >     - `maintenance_rule_impact(p_rule jsonb)`: the per-car rows that would change, with before → after, without writing anything.
-> 11. `20261111121000_mm_alert_lifecycle.sql` (M-13):
+> 11. `20261106130800_mm_alert_lifecycle.sql` (M-13):
 >     - Add to `fleet.maintenance_alerts` the §3.4 columns.
 >     - Function `maintenance_alerts_migrate_daily_rows()`: newest row per car + part + position → `open`, the rest → `superseded` / `migrated_daily_row`. Idempotent: it only touches rows whose status is null.
 >     - Partial unique index: one `open` row per (organization_id, vehicle_id, category_id, coalesce(position,'-')).
 >     - **Don't change the nightly job** (server layer).
-> 12. `20261111121100_mm_units_rename.sql` (M-10), **held for the server layer, don't apply until that layer is done.** Renames:
+> 12. `20261106130900_mm_units_rename.sql` (M-10), **held for the server layer, don't apply until that layer is done.** Renames:
 >     - `maintenance_task_templates`: `interval_miles` → `interval_km`, `interval_miles_max` → `interval_km_max`
 >     - `vehicle_component_schedule`: `next_due_miles` → `next_due_km`, `next_due_miles_max` → `next_due_km_max`, `last_performed_miles` → `last_performed_km`
 >     - `maintenance_service_categories.default_interval_miles` → `default_interval_km`
 >
 >     Rewrite `schedule_for_variant`, the resolver and the recompute functions to use the new names, in this same file.
-> 13. `20261111121200_mm_seed_16_part_rules.sql` (§3.1 data migration, A.3), **held: applies only after M-14's server read sites are filtered.**
+> 13. `20261106131000_mm_seed_16_part_rules.sql` (§3.1 data migration, A.3), **held: applies only after M-14's server read sites are filtered.**
 >     - Insert the 16 `global` part rules from A.3: `roam_policy`, `active`, `uncertain`.
 >     - Then drop `maintenance_service_categories.default_interval_*`.
 >

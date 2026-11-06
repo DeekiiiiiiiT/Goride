@@ -9,6 +9,3 @@ Every new file in `supabase/migrations/` is named with the **current UTC date an
 - Never pick the date by adding to the newest existing file's date.
 - Never put a date in the future. CI (`scripts/validate-migration-sql.mjs`) fails on future dates.
 
-Until 14 Nov 2026 13:00 UTC, some live files still carry future dates (up to `20261114130000`).
-A file dated today sorts before them on a fresh database. If the new file changes a function or
-table that one of those files also defines, say so in the file's first comment line.
