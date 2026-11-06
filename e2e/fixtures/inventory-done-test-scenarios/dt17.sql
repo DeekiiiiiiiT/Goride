@@ -9,6 +9,5 @@ DELETE FROM fleet.inv_balance WHERE organization_id = 'f6010000-0000-4000-8000-0
 DELETE FROM fleet.inv_cost_layer WHERE organization_id = 'f6010000-0000-4000-8000-000000000099';
 DELETE FROM fleet.inv_asset_event WHERE organization_id = 'f6010000-0000-4000-8000-000000000099';
 DELETE FROM fleet.inv_asset WHERE organization_id = 'f6010000-0000-4000-8000-000000000099';
-DELETE FROM fleet.inv_approval WHERE organization_id = 'f6010000-0000-4000-8000-000000000099';
 DELETE FROM fleet.inv_chain_check WHERE organization_id = 'f6010000-0000-4000-8000-000000000099';
 COMMIT;

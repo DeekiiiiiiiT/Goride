@@ -122,9 +122,15 @@ for (const file of files) {
   while ((m = CREATE_FN_RE.exec(text)) !== null) {
     const name = m[1];
     const prev = latest.get(name);
+    // Postgres: CREATE OR REPLACE on an existing function keeps its ACL, so an
+    // earlier REVOKE still holds — unless this file DROPs the function first.
+    const isReplace = /^CREATE\s+OR\s+REPLACE/i.test(m[0]);
+    const dropRe = new RegExp(`DROP\\s+FUNCTION\\s+(?:IF\\s+EXISTS\\s+)?public\\.${name}\\b`, "i");
+    const keepsAcl = isReplace && prev?.revokeFile && !dropRe.test(text);
     latest.set(name, {
       createFile: file.name,
-      revokeFile: prev?.revokeFile && prev.createFile > file.name ? prev.revokeFile : null,
+      revokeFile: keepsAcl ? prev.revokeFile : null,
+      inheritedRevoke: keepsAcl ? true : false,
     });
   }
 
@@ -160,6 +166,7 @@ for (const [name, info] of [...latest.entries()].sort((a, b) => a[0].localeCompa
   if (createVer < FORWARD_CUTOFF) continue;
   if (AUDITED_NAMES.has(name)) continue; // already checked
   if (PROD_RECREATE_WITHOUT_REVOKE.has(name)) continue;
+  if (info.inheritedRevoke) continue; // replaced in place; earlier REVOKE still applies
   if (!info.revokeFile || info.revokeFile < info.createFile) {
     failures.push(
       `${info.createFile}: public.${name}() created at/after ${FORWARD_CUTOFF} without REVOKE FROM anon, authenticated`,

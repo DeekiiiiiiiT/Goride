@@ -10,7 +10,7 @@ DECLARE
   v_offer uuid := 'b6010009-0000-4000-8000-000000000901'::uuid;
   v_merchant uuid := 'b6010009-0000-4000-8000-000000000903'::uuid;
 BEGIN
-  INSERT INTO delivery.merchants (id, name, slug, status, lat, lng, address, phone, vertical_type, fulfillment_type)
+  INSERT INTO delivery.merchants (id, name, slug, operational_status, lat, lng, address, phone, vertical_type, fulfillment_type, submitted_at, procurement_mode)
   VALUES (
     v_merchant,
     'ZZ Inv Test Merchant',
@@ -21,7 +21,9 @@ BEGIN
     'Spanish Town test',
     '+18765550199',
     'restaurant',
-    'delivery'
+    'cook_to_order',
+    now(),
+    'in_house'
   )
   ON CONFLICT (id) DO NOTHING;
 
@@ -33,34 +35,37 @@ BEGIN
     fleet_id = EXCLUDED.fleet_id,
     display_name = EXCLUDED.display_name;
 
-  INSERT INTO fleet.drivers (id, organization_id, user_id, assigned_vehicle_id, name, service_lines)
+  INSERT INTO fleet.drivers (id, organization_id, user_id, assigned_vehicle_id, name, service_lines, legacy_kv_id)
   VALUES (
     'inv-done-driver-fleet-row',
     v_org,
     v_driver::text,
     'test-org-inv-veh-001',
     'Inv Done Driver',
-    ARRAY['rideshare', 'rush_delivery']
+    ARRAY['rideshare', 'rush_delivery'],
+    'legacy-inv-done-driver-fleet-row'
   )
   ON CONFLICT (id) DO UPDATE SET
     organization_id = EXCLUDED.organization_id,
     user_id = EXCLUDED.user_id,
     assigned_vehicle_id = EXCLUDED.assigned_vehicle_id;
 
-  INSERT INTO delivery.courier_availability (driver_id, is_online, current_lat, current_lng, updated_at)
-  VALUES (v_driver, true, 18.014, -76.954, now())
+  INSERT INTO delivery.courier_availability (driver_id, is_online, current_lat, current_lng, updated_at, h3_cell, h3_res)
+  VALUES (v_driver, true, 18.014, -76.954, now(), '876732d73ffffff', 7)
   ON CONFLICT (driver_id) DO UPDATE SET
     is_online = true,
     current_lat = EXCLUDED.current_lat,
     current_lng = EXCLUDED.current_lng,
+    h3_cell = EXCLUDED.h3_cell,
+    h3_res = EXCLUDED.h3_res,
     updated_at = now();
 
   DELETE FROM delivery.courier_offers WHERE id = v_offer OR order_id = v_order;
   DELETE FROM delivery.orders WHERE id = v_order;
 
   INSERT INTO delivery.orders (
-    id, order_number, status, merchant_id, total, delivery_fee,
-    delivery_address, delivery_lat, delivery_lng, ready_at, items
+    id, order_number, status, merchant_id, total, delivery_fee, subtotal, platform_fee,
+    delivery_address, delivery_lat, delivery_lng, ready_at, items, channel, fulfillment_type
   ) VALUES (
     v_order,
     'ZZ-DT09-001',
@@ -68,11 +73,15 @@ BEGIN
     v_merchant,
     2500,
     500,
+    2000,
+    0,
     '12 Burke Rd, Spanish Town',
     18.015,
     -76.955,
     now(),
-    '[]'::jsonb
+    '[]'::jsonb,
+    'phone',
+    'delivery'
   );
 
   INSERT INTO delivery.courier_offers (id, order_id, courier_user_id, status, wave, expires_at)

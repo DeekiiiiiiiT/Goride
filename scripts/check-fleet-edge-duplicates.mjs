@@ -26,7 +26,9 @@ function namesFromBraceList(inner) {
       const cleaned = part.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/, '').trim();
       if (!cleaned) return '';
       const noType = cleaned.replace(/^type\s+/, '');
-      const ident = noType.split(/\s+as\s+/)[0].trim();
+      // `a as b` binds (import) or exposes (export) the name `b`, so that is the one that must be unique.
+      const parts = noType.split(/\s+as\s+/);
+      const ident = parts[parts.length - 1].trim();
       return ident;
     })
     .filter(Boolean);

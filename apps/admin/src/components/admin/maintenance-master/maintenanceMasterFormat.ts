@@ -103,8 +103,8 @@ export function historyPlainSentence(row: Record<string, unknown>): string {
   if (newStatus !== "retired" && (oldKm !== newKm || oldMo !== newMo)) {
     const from = formatInterval(oldKm, oldMo);
     const to = formatInterval(newKm, newMo);
-    if (Object.keys(oldRow).length === 0 && to !== "—") {
-      parts.push(`added: ${to}`);
+    if (Object.keys(oldRow).length === 0) {
+      // Brand-new schedule: reported as "created" below, with its interval.
     } else if (from !== to) {
       parts.push(`interval from ${from} to ${to}`);
     }
@@ -114,10 +114,11 @@ export function historyPlainSentence(row: Record<string, unknown>): string {
     cars != null && Number.isFinite(cars) && cars > 0
       ? ` · ${cars} car${cars === 1 ? "" : "s"} updated`
       : "";
-  if (parts.length) return `${actor} changed ${name}: ${parts.join("; ")}${carsBit}`;
   if (Object.keys(oldRow).length === 0 && Object.keys(newRow).length > 0) {
-    return `${actor} created ${name}${carsBit}`;
+    const created = formatInterval(newKm, newMo);
+    return `${actor} created ${name}${created !== "—" ? `, added: ${created}` : ""}${carsBit}`;
   }
+  if (parts.length) return `${actor} changed ${name}: ${parts.join("; ")}${carsBit}`;
   return `${actor} updated ${name}${carsBit}`;
 }
 

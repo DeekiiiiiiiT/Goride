@@ -25,13 +25,13 @@ SELECT 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1', 'Vdb', 'Check', 'VDB-CH', 2020
 WHERE NOT EXISTS (SELECT 1 FROM public.vehicle_catalog WHERE id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1');
 
 INSERT INTO public.maintenance_task_templates (
-  id, template_scope, task_name, task_code, interval_miles
+  id, template_scope, task_name, task_code, interval_km
 )
 SELECT 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2', 'global', 'VDB oil', 'VDB-OIL', 10000
 WHERE NOT EXISTS (SELECT 1 FROM public.maintenance_task_templates WHERE id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2');
 
 INSERT INTO public.maintenance_task_templates (
-  id, template_scope, vehicle_catalog_id, task_name, task_code, interval_miles
+  id, template_scope, vehicle_catalog_id, task_name, task_code, interval_km
 )
 SELECT
   'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3', 'variant',
@@ -43,7 +43,7 @@ DECLARE
   won_scope text;
   won_miles numeric;
 BEGIN
-  SELECT template_scope, interval_miles INTO won_scope, won_miles
+  SELECT template_scope, interval_km INTO won_scope, won_miles
   FROM public.schedule_for_variant('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1'::uuid, 2020)
   WHERE task_code = 'VDB-OIL';
   IF won_scope IS DISTINCT FROM 'variant' OR won_miles IS DISTINCT FROM 5000 THEN
@@ -56,7 +56,7 @@ SELECT 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa4', 'Vdb', 'Bike', 'VDB-BK', 2020, 'm
 WHERE NOT EXISTS (SELECT 1 FROM public.vehicle_catalog WHERE id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa4');
 
 INSERT INTO public.maintenance_task_templates (
-  id, template_scope, task_name, task_code, interval_miles, applicable_vehicle_classes
+  id, template_scope, task_name, task_code, interval_km, applicable_vehicle_classes
 )
 SELECT 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa5', 'global', 'VDB chain', 'VDB-CHAIN', 3000, ARRAY['motorcycle']::text[]
 WHERE NOT EXISTS (SELECT 1 FROM public.maintenance_task_templates WHERE id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa5');
