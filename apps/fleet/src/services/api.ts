@@ -3215,6 +3215,28 @@ export const api = {
       return response.json();
   },
 
+  async partsLookup(partId: string, variantId?: string) {
+      const q = new URLSearchParams({ partId });
+      if (variantId) q.set("variantId", variantId);
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/lookup?${q}`, { headers: await getHeaders(null) });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error || "Could not load part detail");
+      }
+      return response.json();
+  },
+
+  async partsBrakesOverview(variantId: string, year?: number | null) {
+      const q = new URLSearchParams({ variantId });
+      if (year != null && year > 0) q.set("year", String(year));
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/brakes-overview?${q}`, { headers: await getHeaders(null) });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error || "Could not load brakes");
+      }
+      return response.json();
+  },
+
   async partsComponentFitHints(variantId: string, componentId: string) {
       const q = new URLSearchParams({ variantId, componentId });
       const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/component-fit-hints?${q}`, { headers: await getHeaders(null) });

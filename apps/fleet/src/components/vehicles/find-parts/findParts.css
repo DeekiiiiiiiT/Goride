@@ -1718,3 +1718,15 @@ body[data-fleet-find-parts-results] [data-maintenance-tab="schedule"] {
 .dark .fleet-am-s4f-hub-head [role="tab"][data-state="active"] { background-color: #444444; color: #fafafa; }
 /* Row separators between rows in a tier use the dark border, not the light surface token. */
 .dark .fleet-find-parts-stitch .divide-surface-container-high > :not([hidden]) ~ :not([hidden]) { border-color: #444444; }
+
+.brakes-find-parts-flow .brakes-part-detail-sheet {
+  max-height: 100vh;
+}
+.fleet-find-parts-stitch .brakes-part-detail-overlay {
+  top: 3.5rem;
+}
+@media (min-width: 1024px) {
+  .fleet-find-parts-stitch .brakes-part-detail-overlay {
+    top: 4.5rem;
+  }
+}

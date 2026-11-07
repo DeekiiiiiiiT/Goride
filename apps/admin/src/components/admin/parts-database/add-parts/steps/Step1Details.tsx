@@ -2,7 +2,8 @@
 import { useQuery } from "@tanstack/react-query";
 import type { AddPartsDraft, SourceType } from "../addPartsTypes";
 import { fetchTopBrandsForPartType } from "../addPartsApi";
-import { CAR_MAKER_CATALOGUE_OPTIONS, PartTypeIcon, normalizePartNumberKey, trustLabelFromSource } from "../addPartsShared";
+import type { SelfServePreview } from "../addPartsApi";
+import { CAR_MAKER_CATALOGUE_OPTIONS, PartTypeIcon, normalizePartNumberKey, effectiveTrustLabel, isVerifiedTrustLabel } from "../addPartsShared";
 import { MaterialIcon } from "../../import/MaterialIcon";
 import { PartsButton } from "../../PartsButton";
 import { PartExistsPanel } from "../states/PartExistsPanel";
@@ -31,6 +32,7 @@ export function Step1Details({
   draft,
   setDraft,
   lookup,
+  preview,
   onChangeType,
   onNext,
   onDismissDuplicate,
@@ -38,6 +40,7 @@ export function Step1Details({
   draft: AddPartsDraft;
   setDraft: (d: AddPartsDraft) => void;
   lookup: Record<string, unknown> | null;
+  preview: SelfServePreview | null;
   onChangeType: () => void;
   onNext: () => void;
   onDismissDuplicate: () => void;
@@ -91,10 +94,11 @@ export function Step1Details({
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-space-lg">
         <div className="space-y-1.5">
-          <label className="block font-label-md text-label-md font-semibold text-on-surface">Brand</label>
+          <label className="block font-label-md text-label-md font-semibold text-on-surface" htmlFor="add-part-brand">Brand</label>
           <div className="relative">
             <input
               className="w-full h-10 px-3 pr-10 bg-surface-container-lowest rounded-lg font-body-md text-body-md text-on-surface shadow-sm focus:bg-surface-container-low focus:outline-none"
+              id="add-part-brand"
               value={draft.brand}
               onChange={(e) => setDraft({ ...draft, brand: e.target.value })}
             />
@@ -118,10 +122,11 @@ export function Step1Details({
           ) : null}
         </div>
         <div className="space-y-1.5">
-          <label className="block font-label-md text-label-md font-semibold text-on-surface">Part number</label>
+          <label className="block font-label-md text-label-md font-semibold text-on-surface" htmlFor="add-part-number">Part number</label>
           <div className="relative">
             <input
               className="w-full h-10 px-3 pr-10 bg-surface-container-lowest rounded-lg font-mono-md text-mono-md font-medium text-on-surface shadow-sm focus:bg-surface-container-low focus:outline-none uppercase tracking-wide"
+              id="add-part-number"
               value={draft.partNumber}
               onChange={(e) => setDraft({ ...draft, partNumber: e.target.value })}
             />
@@ -176,12 +181,13 @@ export function Step1Details({
 
         {draft.sourceType !== "other" ? (
           <div className="space-y-1.5">
-            <label className="block font-label-md text-label-md font-semibold text-on-surface">Source page link</label>
+            <label className="block font-label-md text-label-md font-semibold text-on-surface" htmlFor="add-part-source-link">Source page link</label>
             <div className="relative flex items-center gap-2">
               <div className="relative flex-1">
                 <MaterialIcon name="link" className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-[18px]" />
                 <input
                   className="w-full h-10 pl-9 pr-3 bg-surface-container-lowest rounded-lg font-mono-sm text-body-sm text-on-surface shadow-sm focus:bg-surface-container-low focus:outline-none"
+                  id="add-part-source-link"
                   value={draft.evidenceUrl}
                   onChange={(e) => setDraft({ ...draft, evidenceUrl: e.target.value })}
                   placeholder="https://…"
@@ -240,6 +246,7 @@ export function Step1Details({
             <label className="block font-label-md text-label-md font-semibold text-on-surface">Which car maker&apos;s catalogue?</label>
             <div className="relative">
               <select
+                id="catalog-car-maker-select"
                 className="w-full h-10 pl-3 pr-10 rounded-lg bg-surface-container-lowest font-body-md text-body-md text-on-surface appearance-none shadow-sm focus:outline-none focus:bg-surface-container-low"
                 value={draft.catalogCarMaker}
                 onChange={(e) => {
@@ -267,19 +274,23 @@ export function Step1Details({
             evidenceUrl={draft.evidenceUrl}
             onChange={(evidenceUrl) => setDraft({ ...draft, evidenceUrl })}
           />
-        ) : (
-          <div className="p-space-md rounded-xl bg-surface-container flex items-start gap-space-md shadow-sm">
-            <div className="w-8 h-8 rounded-full bg-surface-container-lowest flex items-center justify-center text-primary-container shrink-0 shadow-sm">
-              <MaterialIcon name="verified" className="text-[20px]" />
+        ) : (() => {
+          const trust = effectiveTrustLabel(preview?.trustLabel, draft.sourceType);
+          const verified = isVerifiedTrustLabel(preview?.trustLabel, draft.sourceType);
+          return (
+            <div className="p-space-md rounded-xl bg-surface-container flex items-start gap-space-md shadow-sm">
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 shadow-sm ${verified ? "bg-surface-container-lowest text-primary-container" : "bg-amber-900/10 text-amber-800 dark:text-amber-200"}`}>
+                <MaterialIcon name={verified ? "verified" : "help"} className="text-[20px]" />
+              </div>
+              <div className="space-y-1">
+                <span className={`inline-flex items-center px-2 py-0.5 rounded font-mono-sm text-[11px] font-semibold ${verified ? "bg-surface-container-highest text-primary-container" : "bg-amber-900/15 text-amber-950 dark:text-amber-100"}`}>
+                  {trust.split("·")[0]?.trim() ?? (verified ? "Verified" : "Needs checking")}
+                </span>
+                <p className="font-body-sm text-body-sm text-on-surface">{trust}</p>
+              </div>
             </div>
-            <div className="space-y-1">
-              <span className="inline-flex items-center px-2 py-0.5 rounded font-mono-sm text-[11px] font-semibold bg-surface-container-highest text-primary-container">
-                {trustLabelFromSource(draft.sourceType).split("·")[0]?.trim() ?? "Verified"}
-              </span>
-              <p className="font-body-sm text-body-sm text-on-surface">{trustLabelFromSource(draft.sourceType)}</p>
-            </div>
-          </div>
-        )}
+          );
+        })()}
       </div>
 
       {draft.partType.defaultFitMode === "spec" ? (

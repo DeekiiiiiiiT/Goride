@@ -30,7 +30,9 @@ function mockRoute() {
       patch(path: string, ...handlers: unknown[]) {
         registered.push({ method: "PATCH", path, handler: handlers[handlers.length - 1] as RouteRow["handler"] });
       },
-      delete() {},
+      delete(path: string, ...handlers: unknown[]) {
+        registered.push({ method: "DELETE", path, handler: handlers[handlers.length - 1] as RouteRow["handler"] });
+      },
     },
   };
 }

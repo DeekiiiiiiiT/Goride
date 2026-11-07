@@ -1,0 +1,148 @@
+ROAM FLEET — FIND PARTS · BRAKES, ONE CARD PER PART, "ALSO FITS" — DESIGN PROMPT (GOOGLE STITCH)
+
+
+
+
+Roam Fleet - Find Parts, Brakes (Desktop Web App, for fleet managers and their staff):
+
+Design high-fidelity desktop screens for the "Find parts" tab inside Fleet maintenance in the Roam Fleet app. A fleet manager picks one of their cars, opens Brakes, and sees every brake part their car has: front pads, rear shoes, rotors, drums, calipers, wheel cylinders, hoses, master cylinder, handbrake cable, ABS sensors and brake fluid. One physical part is shown as ONE card, with all the brand numbers that are the same part listed inside it. Opening a part shows every other car that same part fits — for example the Roomy's front pads also fit the Mazda 2, Suzuki Swift, Daihatsu Materia and Ford Fiesta — so the manager knows the part is common and easy to find.
+
+Find parts is an information tool, not a shop: no prices, suppliers, stock, quotes or maintenance schedules. Everything already on Find parts stays as it is (the car picker "Which car is it?", the part picker, "Your parts activity", "Ask Roam to find it"). These screens change the Brakes list, the result cards and the part detail only. The tone is calm, plain and helpful: a parts encyclopedia for your own cars, written for someone who knows nothing about cars.
+
+
+BRAND IDENTITY:
+- Match the existing Roam Fleet web app:
+  - **Top:** a white nav row with the black "Roam Fleet" app tile, then: Dashboard, Fleet Operations, Driver Operations, Money, Vehicle Operations (active, underlined), Delivery Operations, Analytics, Reports, Business Finance, a bell with a red count, avatar.
+  - **Status strip:** a thin near-black strip under it, with the search box "Switch vehicle or search hub…" on the left, and on the right the clock "01:41 PM EST", "America/Jamaica", "JM (JMD)" and the user chip "DE · Deeki T".
+  - **Page title:** breadcrumb "Fleet / Maintenance / Find parts", then "Fleet Maintenance" with an orange wrench icon, then the tab pill: By vehicle, Service ledger, Find parts (active), Work orders, Requests, Inspections, Schedule.
+- LIGHT MODE (default):
+  - Primary: near-black #030213
+  - Background: white #FFFFFF; page wash: #f8fafc
+  - Card border: rgba(0,0,0,0.1)
+  - Text: #0a0a0a; muted text: #717182
+  - Success: #059669; warning: #d97706; error: #d4183d
+  - Chip fill: #f1f5f9
+  - Orange #f97316, only for the page icon
+- DARK MODE:
+  - Background #252525, surface #2e2e2e, border #444444
+  - Text #fafafa, muted #b4b4b4, primary #fafafa
+  - Success #34d399, warning #f59e0b, error #f87171
+- Trust chips (the only two):
+  - "Confirmed": small green dot + text. The maker's own catalogue says it fits.
+  - "Needs checking": amber outline with a small eye icon. Roam has it from a cross-reference and is still confirming.
+- Position tags: "Front", "Rear", "Front left", "Front right", "Rear left", "Rear right" — small grey chips.
+- Typography: Inter. Part numbers, plates, chassis codes, counts and years use a mono font with tabular numerals.
+- Buttons always look like buttons (filled or outlined boxes), never like underlined text links. Cancel / remove buttons are red.
+- No prices, no currency, no suppliers, no stock, no quotes, no maintenance schedules, no odometers, no "last replaced", anywhere. No gradients, glassmorphism or 3D. No AI badges, no confidence percentages.
+- Jamaica sample data:
+  - **Fleet car:** "Toyota Roomy 2019 · 5179KZ" (version "Custom G · 1KR-FE · 2WD", chassis M900A, front ventilated disc 255 mm, rear drum).
+  - **Front brake pad set — one card:** reference "Daihatsu 04465-B1190"; same part as: Toyota 04465-B1190, Daihatsu 04465-B1320, NiBK PN5562, SB BP25562, Brembo P 16 013, Akebono AN-754WK. Size 125.7 × 51.7 mm, 4 pads per set.
+  - **Rear brake shoe kit — one card:** reference "Toyota 04495-B2400"; same part as: Blue Print ADT34155.
+  - **Also fits (front pad):**
+    - Toyota: Tank M900A / M910A (2016–), Roomy M910A (2016–2020) — Confirmed
+    - Daihatsu: Thor M900S / M910S (2016–) — Confirmed; Materia M400 (2007–2010) — Needs checking; Sirion M301RS (2006–2013) — Needs checking
+    - Subaru: Justy M900F / M910F (2016–) — Confirmed
+    - Suzuki: Swift ZC13S (2017–2020), Swift ZC33S (2017–2023), Swift ZCED1S (2023–) — Confirmed; Swift ZC72S (2010–2016), Swift ZC83S (2017–2023) — Needs checking
+    - Mazda: Demio DE3FS (2007–2011), Demio DE3FS (2011–2014) — Needs checking
+    - Ford: Fiesta B299 1.6 (2010–2013 only) — Needs checking
+  - **Brake types with nothing on file yet:** Brake rotor, Rear brake drum, Brake caliper, Wheel cylinder, Brake hose, Master cylinder, Handbrake cable, ABS wheel sensor, Brake fluid.
+
+
+DESIGN PRINCIPLES:
+- Desktop-first (1440px wide), same page width and cards as the current Find parts tab
+- One physical part = one card. Brand numbers that are the same part live inside the card, never as separate cards
+- Every brake part type the car has is listed, even when Roam has nothing yet — never hide a type
+- "Also fits" is grouped by maker so a long list stays easy to read
+- Show trust plainly with the two chips. Never hide a Needs checking row
+- Back / next arrows at the top of the page, never buttons at the bottom
+
+
+SCREEN 1: BRAKES — EVERY BRAKE PART FOR YOUR CAR
+- Header row: back arrow, then "Brakes for Toyota Roomy 2019 · 5179KZ" and a small muted line "Front: ventilated disc 255 mm · Rear: drum".
+- Two groups, each a white card with a small heading: "Front brakes" and "Rear brakes", plus a third "Whole system" for brake fluid, master cylinder, brake hoses and ABS sensors.
+- Each group lists its part types as rows:
+  - Icon on the left (simple line icon of the part), plain name ("Front brake pads"), and a one-line plain description in muted text ("The pads that squeeze the disc to stop the front wheels").
+  - Right side: a mono count chip ("1 part") or, when nothing is on file, a muted grey chip "Not on file yet".
+  - Whole row is a button; a right arrow at the far right.
+- Rows in this frame: Front — Front brake pads (1 part), Brake rotor (Not on file yet), Brake caliper (Not on file yet). Rear — Rear brake shoes (1 part), Rear brake drum (Not on file yet), Wheel cylinder (Not on file yet), Handbrake cable (Not on file yet). Whole system — Brake fluid (Not on file yet), Master cylinder (Not on file yet), Brake hose (Not on file yet), ABS wheel sensor (Not on file yet).
+- Right column keeps the existing "Your parts activity" card unchanged.
+
+
+SCREEN 2: FRONT BRAKE PADS — ONE CARD PER PART
+- Header row: back arrow, "Front brake pads · Toyota Roomy 2019 · 5179KZ", position chip "Front".
+- Muted line under the header: "1 part fits your car. It is sold under 7 brand numbers."
+- One large part card:
+  - **Top line:** "Front brake pad set" in bold, the "Confirmed" chip, the "Front" position chip.
+  - **Reference number:** "Daihatsu 04465-B1190" in mono, large, with a copy button (an outlined icon button, not a link).
+  - **"Same part, other brands"** — a neat two-column list of brand + number rows in mono: Toyota 04465-B1190, Daihatsu 04465-B1320, NiBK PN5562, SB BP25562, Brembo P 16 013, Akebono AN-754WK. Each row has its own small copy button and its trust chip (Confirmed or Needs checking).
+  - **Size line:** "125.7 × 51.7 mm · 4 pads per set" in muted mono.
+  - **Also fits teaser:** "Also fits 17 other cars — Mazda, Suzuki, Daihatsu, Ford, Subaru, Toyota" in muted text.
+  - **Buttons (bottom right of the card):** "View details" (filled near-black) and "Use in a service log" (outlined).
+- A second frame shows the same screen in dark mode.
+
+
+SCREEN 3: PART DETAIL — ALSO FITS
+- Opens from "View details" as a full-width panel in the Find parts tab (same panel style Fleet uses today), with a close X at the top right and a back arrow at the top left.
+- **Header:** "Front brake pad set", "Daihatsu 04465-B1190" in mono with copy button, chips "Confirmed" and "Front".
+- **Section "Fits your car":** one row — car icon, "Toyota Roomy 2019 · 5179KZ", muted "M900A · 1KR-FE · Custom G", green "Your car" chip.
+- **Section "Same part, other brands":** the brand number list from Screen 2.
+- **Section "Also fits" (the new part of this screen):**
+  - Muted note at the top: "These cars use the same front brake pads. Handy when you shop — ask for any of these cars and you get the same part."
+  - A filter row of small buttons: "All (17)", "Confirmed (10)", "Needs checking (7)".
+  - Cars grouped by maker, each maker a small heading with a mono count: "Toyota (3)", "Daihatsu (4)", "Subaru (2)", "Suzuki (5)", "Mazda (2)", "Ford (1)".
+  - Each car row: model in bold ("Swift"), chassis in mono ("ZC33S"), years in mono ("2017–2023"), engine in muted mono ("K14C"), and the trust chip on the right.
+  - The Ford row shows a muted note under it: "Only 2010–2013 cars".
+- **Section "Where this comes from":** one muted line per source, e.g. "SB catalogue — sbparts.jp" and "NiBK catalogue — jnbk-brakes.com", each with an outlined "Open source" button.
+- A second frame shows Screen 3 in dark mode.
+
+
+SCREEN 4: A BRAKE PART WE DON'T HAVE YET
+- Opens when a "Not on file yet" row from Screen 1 is clicked (sample: "Brake rotor · Front").
+- Header row: back arrow, "Brake rotor · Toyota Roomy 2019 · 5179KZ", position chip "Front".
+- One calm empty card in the middle:
+  - Simple line icon of a brake disc.
+  - Title: "Not in our database yet".
+  - Body: "Your Roomy has front disc brakes (255 mm), so it does have a brake rotor. Roam hasn't added the right one yet."
+  - Filled near-black button "Ask Roam to find it" and a muted line under it "We'll add it and tell you when it's here."
+- After the button is pressed, the card shows a green "Request sent" chip and the request appears in "Your parts activity" on the right.
+
+
+SCREEN 5: STATES
+- Frame A — loading: Screen 1 layout with grey skeleton rows in each group.
+- Frame B — could not load: a red outlined banner "Couldn't load brake parts. Nothing was changed." with an outlined "Try again" button.
+- Frame C — car with no brake details on file (sample "Toyota Rush · J210E"): a muted card "We don't know this car's brake setup yet, so we can't list its brake parts." with "Ask Roam to find it".
+- Frame D — "Also fits" with only sister cars: Screen 3's Also fits section showing just Toyota, Daihatsu and Subaru groups, and a muted line "No other cars found yet."
+
+
+SCREEN 6: NARROW WINDOW (390px)
+- Screen 2 and Screen 3 at 390px wide: cards stack, the two-column brand list becomes one column, the "Also fits" filter buttons wrap, and car rows show model + chassis on line 1 and years + chip on line 2. No sideways scrolling.
+
+
+ADDITIONAL UI COMPONENTS:
+- Brake part type row (icon, name, one-line description, count chip or "Not on file yet", arrow)
+- One-per-part card with the "Same part, other brands" list
+- "Also fits" maker group with car rows and the filter buttons
+- "Confirmed" and "Needs checking" chips; position chips
+- Copy button (outlined icon button) used on every part number
+- Empty "Not in our database yet" card
+
+
+INTERACTIONS:
+- **Brake type row:** clicking opens Screen 2 (parts on file) or Screen 4 (nothing on file).
+- **Copy:** clicking a copy button copies that number and shows a small "Copied" toast.
+- **"Also fits" filter:** All / Confirmed / Needs checking narrows the list; counts update.
+- **"Needs checking" chip:** tooltip "Roam is confirming this. You can still use the number."
+- **"Open source":** opens the maker's catalogue page in a new tab.
+- **"Ask Roam to find it":** sends the request, the card switches to "Request sent".
+- **Focus:** focus rings follow the existing Fleet style; every row and button reachable by keyboard.
+
+
+Spec screens / Area
+| Screen | Area |
+|---|---|
+| 1 | Brakes list — every brake part type for the car, grouped Front / Rear / Whole system, counts and "Not on file yet" |
+| 2 | Front brake pads results — one card per part, same part other brands inside, light + dark |
+| 3 | Part detail — Fits your car, Same part other brands, Also fits grouped by maker with filter, sources, light + dark |
+| 4 | Part type with nothing on file — "Not in our database yet" + Ask Roam to find it |
+| 5 | States — loading, error, car with no brake details, Also fits with sisters only |
+| 6 | Narrow window 390px for Screens 2 and 3 |

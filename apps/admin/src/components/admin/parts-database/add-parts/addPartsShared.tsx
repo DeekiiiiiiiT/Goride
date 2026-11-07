@@ -159,8 +159,9 @@ export function wizardFooterLabels(opts: {
   fitMode: FitMode;
   commitCount?: number | null;
   saving?: boolean;
+  specificListings?: Array<{ listingTrust?: "confirmed" | "needs_checking" }>;
 }): { backLabel?: string; nextLabel?: string; centerNote?: string; skipLabel?: string } {
-  const { wizardStep, step1Phase, fitMode, commitCount, saving } = opts;
+  const { wizardStep, step1Phase, fitMode, commitCount, saving, specificListings } = opts;
   if (wizardStep === 1 && step1Phase === "picker") {
     return { nextLabel: "Next: How it fits" };
   }
@@ -168,10 +169,21 @@ export function wizardFooterLabels(opts: {
     return { backLabel: "Back to part type", nextLabel: "Next: How it fits" };
   }
   if (wizardStep === 2) {
+    let specificNote: string | undefined;
+    if (fitMode === "specific" && specificListings?.length) {
+      const n = specificListings.length;
+      const nc = specificListings.filter((l) => l.listingTrust === "confirmed").length;
+      const nn = specificListings.filter((l) => l.listingTrust === "needs_checking").length;
+      specificNote = `${n} car${n === 1 ? "" : "s"} · ${nc} Confirmed · ${nn} Needs checking`;
+    }
     return {
       backLabel: "Back to part details",
       nextLabel: fitMode === "spec" ? "Next: Review in plain words" : "Next: replaces (optional)",
-      centerNote: fitMode === "spec" ? "Step 3 skipped · Replaces optional" : undefined,
+      centerNote: fitMode === "spec"
+        ? "Step 3 skipped · Replaces optional"
+        : fitMode === "specific"
+        ? specificNote
+        : undefined,
     };
   }
   if (wizardStep === 3) {
@@ -189,6 +201,24 @@ export function wizardFooterLabels(opts: {
 }
 
 export const WIZARD_FOOTER_HEIGHT_PX = 72;
+
+export function step2SpecificCanAdvance(draft: AddPartsDraft): boolean {
+  if (draft.fitMode !== "specific" || !draft.partType) return true;
+  if (!draft.listings.length) return false;
+  const scheme = draft.partType.positionScheme;
+  if (scheme && scheme !== "none") {
+    const pos = draft.position || draft.listings[0]?.position;
+    if (!pos) return false;
+    if (scheme === "four_corners" || scheme === "axle_left_right") {
+      const side = draft.side || draft.listings[0]?.side;
+      if (!side) return false;
+    }
+  }
+  for (const l of draft.listings) {
+    if (l.listingTrust === "needs_checking" && !String(l.reason ?? "").trim()) return false;
+  }
+  return true;
+}
 
 export function step1DetailsCanAdvance(
   draft: AddPartsDraft,
@@ -253,6 +283,14 @@ export function trustLabelFromSource(sourceType: string) {
   return "Needs checking · other source";
 }
 
+export function effectiveTrustLabel(trustLabel: string | null | undefined, sourceType: string) {
+  return (trustLabel?.trim() || trustLabelFromSource(sourceType));
+}
+
+export function isVerifiedTrustLabel(trustLabel: string | null | undefined, sourceType: string) {
+  return effectiveTrustLabel(trustLabel, sourceType).startsWith("Verified");
+}
+
 /** AP8 verified / trust chips — readable in light and dark. */
 export const ADD_PARTS_VERIFIED_CHIP =
   "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-600/10 text-emerald-800 dark:bg-emerald-400/15 dark:text-emerald-200 font-mono-sm text-[11px] font-semibold";
@@ -311,6 +349,7 @@ export const CAR_MAKER_CATALOGUE_OPTIONS = [
   "Mitsubishi",
   "Isuzu",
   "Lexus",
+  "FxTrustMaker6",
 ] as const;
 
 export function fitModeDisplay(mode: string | undefined): { label: string; icon: string } {

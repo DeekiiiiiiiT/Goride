@@ -16,14 +16,57 @@ const MFA_FACTOR_BY_EMAIL = {
   'mm-p01-analyst@local.test': '101000f2-0000-4000-8000-000000000002',
 };
 
+// `app` = which app's real login path to walk after the password check.
 const ACCOUNTS = [
-  { email: 'mm-p01-owner@local.test', password: 'MmP01Local2026!', role: 'platform_owner', mfa: true },
-  { email: 'mm-p01-analyst@local.test', password: 'MmP01Local2026!', role: 'platform_analyst', mfa: true },
-  { email: 'mm-f01-fleet@local.test', password: 'MmF01Local2026!', role: 'fleet_owner', mfa: false },
-  { email: 'mm-f01-viewer@local.test', password: 'MmF01Local2026!', role: 'fleet_viewer', mfa: false },
-  { email: 'testcopy-driver@local.test', password: 'TestCopyDriver2026!', role: 'driver', mfa: false },
-  { email: 'testcopy-customer@local.test', password: 'TestCopyPlug2026!', role: 'explorer_user', mfa: false },
+  { email: 'mm-p01-owner@local.test', password: 'MmP01Local2026!', role: 'platform_owner', mfa: true, app: 'dominion' },
+  { email: 'mm-p01-analyst@local.test', password: 'MmP01Local2026!', role: 'platform_analyst', mfa: true, app: 'dominion' },
+  { email: 'mm-f01-fleet@local.test', password: 'MmF01Local2026!', role: 'fleet_owner', mfa: false, app: 'fleet' },
+  { email: 'mm-f01-viewer@local.test', password: 'MmF01Local2026!', role: 'fleet_viewer', mfa: false, app: 'fleet' },
+  { email: 'testcopy-driver@local.test', password: 'TestCopyDriver2026!', role: 'driver', mfa: false, app: 'driver' },
+  { email: 'testcopy-customer@local.test', password: 'TestCopyPlug2026!', role: 'explorer_user', mfa: false, app: 'plug' },
 ];
+
+async function postJson(url, headers, body) {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...headers },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => null);
+  return { status: res.status, data };
+}
+
+/** Walk the same login step each app runs in the browser. Returns null when it passes, else the reason. */
+async function appLoginStep(base, anonKey, acct, token) {
+  const fn = `${base}/functions/v1`;
+  const anon = { apikey: anonKey, Authorization: `Bearer ${anonKey}` };
+  if (acct.app === 'dominion') {
+    const r = await postJson(`${fn}/fleet-core/admin-login`, anon, { email: acct.email, password: acct.password });
+    return r.status === 200 && r.data?.access_token ? null : `admin-login ${r.status} ${JSON.stringify(r.data)}`;
+  }
+  if (acct.app === 'fleet') {
+    const r = await postJson(
+      `${fn}/fleet-core/fleet-login`,
+      { ...anon, 'X-Roam-Product-Line': 'fleet' },
+      { email: acct.email, password: acct.password },
+    );
+    return r.status === 200 && r.data?.access_token ? null : `fleet-login ${r.status} ${JSON.stringify(r.data)}`;
+  }
+  if (acct.app === 'driver') {
+    const res = await fetch(`${base}/rest/v1/driver_profiles?select=onboarding_complete`, {
+      headers: { apikey: anonKey, Authorization: `Bearer ${token}` },
+    });
+    const rows = await res.json().catch(() => null);
+    return res.ok && Array.isArray(rows) && rows[0]?.onboarding_complete === true
+      ? null
+      : `driver profile ${res.status} ${JSON.stringify(rows)}`;
+  }
+  if (acct.app === 'plug') {
+    const r = await postJson(`${fn}/explorer/join`, { apikey: anonKey, Authorization: `Bearer ${token}` }, {});
+    return r.status === 200 ? null : `plug join ${r.status} ${JSON.stringify(r.data)}`;
+  }
+  return `unknown app ${acct.app}`;
+}
 
 const APP_PORTS = [
   { name: 'dominion', url: 'http://127.0.0.1:5180' },
@@ -168,12 +211,15 @@ async function main() {
         : (await signInPassword(base, anonKey, acct.email, acct.password)).access_token;
       const meta = jwtPayload(token).app_metadata || {};
       const role = meta.role || meta.roles?.[0];
-      const ok = role === acct.role;
+      const loginStepError = await appLoginStep(base, anonKey, acct, token);
+      const ok = role === acct.role && loginStepError === null;
       authResults.push({
         email: acct.email,
+        app: acct.app,
         ok,
         role: role || '(none)',
         expected: acct.role,
+        ...(loginStepError ? { appLogin: loginStepError } : { appLogin: 'ok' }),
       });
     } catch (err) {
       authResults.push({ email: acct.email, ok: false, error: String(err) });

@@ -39,9 +39,12 @@ export function FindPartsChrome({
   const indexed = fitmentCount == null ? "—" : fitmentCount.toLocaleString();
   const database = activeTab === "Full database";
   const findParts = activeTab === "Find parts";
+  const trustedSources = activeTab === "Trusted sources";
   const ownerTitle = owner ? undefined : "Only the owner can change parts.";
   const subtitle = database
     ? "Every part, car family and size-based part on file, in one searchable place. Direct catalog overview."
+    : trustedSources
+    ? "Car maker and part maker sites that count as Confirmed when you save a source link to them."
     : "Every part that fits a car, in five match types.";
   const crumbBtn = "font-mono-sm text-mono-sm min-h-[32px] h-8 px-2";
   return (
@@ -96,7 +99,7 @@ export function FindPartsChrome({
             <p className="font-body-md text-body-md text-secondary mt-1">{subtitle}</p>
           </div>
           <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
-            {database || findParts ? null : (
+            {database || findParts || trustedSources ? null : (
               <span className="font-mono-sm text-mono-sm uppercase text-secondary bg-surface-container-high px-2.5 py-1 rounded-lg">{matchTypesLabel}</span>
             )}
             {database ? (
@@ -110,7 +113,7 @@ export function FindPartsChrome({
                   <span>Export CSV</span>
                 </button>
               </>
-            ) : (
+            ) : trustedSources ? null : (
               <button
                 className={advancedActive
                   ? "flex items-center gap-1.5 px-3.5 h-9 rounded-xl bg-primary-container text-on-primary font-body-sm text-body-sm font-semibold shadow-sm"
@@ -150,7 +153,14 @@ export function FindPartsChrome({
                   aria-current={on ? "page" : undefined}
                   onClick={() => onTab(name)}
                 >
-                  <span>{name}</span>
+                  <span className="inline-flex items-center gap-1">
+                    {name === "Trusted sources" ? (
+                      <span className="material-symbols-outlined text-[18px] text-primary" aria-hidden>
+                        shield
+                      </span>
+                    ) : null}
+                    {name}
+                  </span>
                   {name === "Add parts" ? (
                     <span className="px-1.5 py-0.2 rounded-full bg-surface-container text-secondary text-[10px] font-mono-sm font-bold">2 min</span>
                   ) : null}
@@ -159,7 +169,7 @@ export function FindPartsChrome({
               );
             })}
           </nav>
-          {database ? (
+          {database || trustedSources ? (
             <PartsButton variant="secondary" className="ml-auto shrink-0 py-1 px-2.5 font-body-sm" aria-pressed={advancedActive} onClick={onAdvanced}>
               <span className="material-symbols-outlined text-[16px]">tune</span>
               <span>Advanced tune</span>

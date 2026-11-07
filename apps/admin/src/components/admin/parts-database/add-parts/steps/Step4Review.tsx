@@ -1,18 +1,16 @@
-// Stitch AP8 — review sentence with styled brand, count, OE chip
-import { useQuery } from "@tanstack/react-query";
+// Stitch AP8 — review sentence with styled brand, count, OE chip + Dominion trust summary
+import { useState } from "react";
 import { MaterialIcon } from "../../import/MaterialIcon";
 import type { AddPartsDraft } from "../addPartsTypes";
-import { fetchRecentSelfServeParts, type SelfServePreview } from "../addPartsApi";
+import type { SelfServePreview } from "../addPartsApi";
 import {
   ADD_PARTS_VERIFIED_CHIP,
-  ADD_PARTS_VERIFIED_CHIP_COMPACT,
   PartTypeIcon,
-  pickLatestAdaptationExamples,
   reviewReachCount,
   reviewTradeTermPhrase,
   technicalProfileLines,
-  trustLabelFromSource,
-  type RecentSelfServeRow,
+  effectiveTrustLabel,
+  isVerifiedTrustLabel,
 } from "../addPartsShared";
 import { PartsButton } from "../../PartsButton";
 
@@ -87,74 +85,14 @@ function fitDetailLines(draft: AddPartsDraft, preview: SelfServePreview | null):
   return lines;
 }
 
-function trustLine(row: RecentSelfServeRow) {
-  const trust = String(row.trustLabel ?? "");
-  const verified = trust.toLowerCase().includes("verified");
-  const host = String(row.sourceHost ?? "");
-  const url = String(row.evidenceUrl ?? "");
-  return (
-    <div className="flex items-center gap-1.5 font-mono-sm text-[11px] text-secondary flex-wrap">
-      {verified ? (
-        <span className={ADD_PARTS_VERIFIED_CHIP_COMPACT}>Verified</span>
-      ) : (
-        <span className="text-[#b45309] font-semibold">Needs checking</span>
-      )}
-      {host ? (
-        <>
-          <span>·</span>
-          {url ? (
-            <a
-              href={url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-primary hover:underline"
-            >
-              {host}
-              <MaterialIcon name="north_east" className="text-[13px]" />
-            </a>
-          ) : (
-            <span className="text-on-surface-variant">{host}</span>
-          )}
-        </>
-      ) : null}
-    </div>
-  );
-}
-
-function AdaptationCard({
-  variantLabel,
-  dotClass,
-  row,
-  emptyMessage,
-}: {
-  variantLabel: string;
-  dotClass: string;
-  row: RecentSelfServeRow | null;
-  emptyMessage: string;
-}) {
-  const sentence = row ? String(row.plainWordsSentence ?? row.sentence ?? "") : "";
-  const hint = row ? String(row.vehicleHint ?? row.fitSummary ?? "") : "";
-  return (
-    <div className="bg-surface-container-lowest p-space-md rounded-xl shadow-sm flex flex-col justify-between gap-space-sm min-h-[140px]">
-      <div className="flex flex-col gap-2">
-        <div className="flex items-center justify-between">
-          <span className="font-mono-sm text-[10px] text-secondary font-semibold tracking-wider uppercase">{variantLabel}</span>
-          <span className={`w-1.5 h-1.5 rounded-full ${dotClass}`} />
-        </div>
-        {sentence ? (
-          <p className="font-body-md text-on-surface font-medium leading-snug">“{sentence}”</p>
-        ) : (
-          <p className="font-body-sm text-on-surface-variant italic">{emptyMessage}</p>
-        )}
-      </div>
-      {row && sentence ? (
-        <div className="flex flex-col gap-1 pt-2 bg-surface-container-lowest">
-          {trustLine(row)}
-          {hint ? <p className="font-body-sm text-[12px] text-outline truncate">{hint}</p> : null}
-        </div>
-      ) : null}
-    </div>
-  );
+function hostFromEvidence(url: string): string {
+  if (!url.trim()) return "";
+  try {
+    const u = new URL(url.startsWith("http") ? url : `https://${url}`);
+    return u.hostname.replace(/^www\./, "");
+  } catch {
+    return url.replace(/^https?:\/\//, "").split("/")[0] || "";
+  }
 }
 
 function PlainWordsSentence({
@@ -167,8 +105,14 @@ function PlainWordsSentence({
   const nounFallback = reviewTradeTermPhrase(draft, preview);
   const carCount = reviewReachCount(draft, preview) ?? 0;
   const oe = draft.factoryNumbers[0];
-  const trust = preview?.trustLabel ?? trustLabelFromSource(draft.sourceType);
-  const verified = trust.startsWith("Verified");
+  const trust = effectiveTrustLabel(preview?.trustLabel, draft.sourceType);
+  const verified = isVerifiedTrustLabel(preview?.trustLabel, draft.sourceType);
+  const specificConfirmed = draft.fitMode === "specific"
+    ? draft.listings.filter((l) => l.listingTrust === "confirmed").length
+    : null;
+  const specificNeeds = draft.fitMode === "specific"
+    ? draft.listings.filter((l) => l.listingTrust === "needs_checking").length
+    : null;
 
   return (
     <>
@@ -189,6 +133,19 @@ function PlainWordsSentence({
         ) : null}
         .
       </p>
+      {draft.fitMode === "specific" && draft.listings.length ? (
+        <p className="font-body-md text-on-surface-variant pt-2">
+          Per-car trust:{" "}
+          <span className="font-semibold text-on-surface">{specificConfirmed}</span> confirmed
+          {specificNeeds != null && specificNeeds > 0 ? (
+            <>
+              {" "}
+              · <span className="font-semibold text-amber-800 dark:text-amber-200">{specificNeeds}</span> needs checking
+            </>
+          ) : null}
+          .
+        </p>
+      ) : null}
       <div className="flex flex-wrap items-center gap-space-md pt-2">
         {verified ? (
           <div className={ADD_PARTS_VERIFIED_CHIP}>
@@ -212,29 +169,142 @@ function PlainWordsSentence({
   );
 }
 
+function yearsFromListingLabel(label: string | undefined | null): { from?: number; to?: number } {
+  const t = String(label ?? "").trim();
+  const closed = t.match(/(\d{4})[–\-](\d{4})(?!\d)/);
+  if (closed) return { from: Number(closed[1]), to: Number(closed[2]) };
+  const open = t.match(/(\d{4})[–\-]\s*$/);
+  if (open) return { from: Number(open[1]), to: undefined };
+  return {};
+}
+
+function yearsFromFitSummaryLine(line: string): { from?: number; to?: number } {
+  const present = line.match(/(\d{4})[–\-]present/i);
+  if (present) return { from: Number(present[1]), to: undefined };
+  const closed = line.match(/(\d{4})[–\-](\d{4})(?!\d)/);
+  if (closed) return { from: Number(closed[1]), to: Number(closed[2]) };
+  return {};
+}
+
+function fitSummaryLineForListing(
+  l: { label?: string | null },
+  lines: string[] | undefined,
+): string | undefined {
+  if (!lines?.length) return undefined;
+  const parts = String(l.label ?? "").trim().split(/\s+/).filter(Boolean);
+  const make = parts[0];
+  const model = parts[1];
+  if (!make || !model) return undefined;
+  return lines.find((s) => s.includes(make) && s.includes(model));
+}
+
+function NeedsCheckingTable({ draft, preview }: { draft: AddPartsDraft; preview: SelfServePreview | null }) {
+  const rawLines = preview?.fitSummaryLines;
+  const summaryLines = Array.isArray(rawLines) ? rawLines.map((x) => String(x)) : [];
+  const modelYearsFallback = preview?.fitSummaryStructured?.modelYearsLabel;
+  const rows = draft.listings.filter((l) => l.listingTrust === "needs_checking");
+  const [open, setOpen] = useState(rows.length > 0);
+
+  if (!rows.length) return null;
+
+  function yearLabel(l: (typeof rows)[0]) {
+    const a = l.yearFrom;
+    const b = l.yearTo;
+    if (a != null && b != null) return `${a}–${b}`;
+    if (a != null) return `${a}–`;
+    const p = yearsFromListingLabel(l.label);
+    if (p.from != null && p.to != null) return `${p.from}–${p.to}`;
+    if (p.from != null) return `${p.from}–`;
+    const fitLine = fitSummaryLineForListing(l, summaryLines);
+    if (fitLine) {
+      const fy = yearsFromFitSummaryLine(fitLine);
+      if (fy.from != null && fy.to != null) return `${fy.from}–${fy.to}`;
+      if (fy.from != null) return `${fy.from}–`;
+    }
+    if (modelYearsFallback && rows.length === 1) return modelYearsFallback;
+    return "—";
+  }
+
+  return (
+    <div className="rounded-xl border border-amber-800/25 dark:border-amber-400/30 bg-amber-900/5 dark:bg-amber-400/10 overflow-hidden">
+      <button
+        type="button"
+        className="w-full flex items-center justify-between px-space-md py-3 text-left hover:bg-amber-900/5 dark:hover:bg-amber-400/5 transition-colors"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+      >
+        <span className="font-label-md font-semibold text-on-surface">
+          Needs checking ({rows.length})
+        </span>
+        <MaterialIcon name={open ? "expand_less" : "expand_more"} className="text-on-surface-variant" />
+      </button>
+      {open ? (
+        <div className="border-t border-amber-800/20 dark:border-amber-400/20 overflow-x-auto">
+          <table className="w-full text-left font-body-sm">
+            <thead>
+              <tr className="text-on-surface-variant font-mono-sm text-[11px] uppercase tracking-wide">
+                <th className="px-space-md py-2 font-medium">Car</th>
+                <th className="px-space-md py-2 font-medium">Chassis</th>
+                <th className="px-space-md py-2 font-medium">Years</th>
+                <th className="px-space-md py-2 font-medium">Why</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((l) => {
+                const parts = String(l.label ?? "").trim().split(/\s+/).filter(Boolean);
+                const make = parts[0] ?? "";
+                const model = parts[1] ?? "";
+                const chassis = parts.length >= 3 ? (parts[2] ?? "—") : "—";
+                const carLabel = [make, model].filter(Boolean).join(" ") || "—";
+                return (
+                  <tr key={l.vehicleId} className="border-t border-outline-variant/30">
+                    <td className="px-space-md py-2 text-on-surface font-medium">{carLabel}</td>
+                    <td className="px-space-md py-2 font-mono-sm text-mono-sm text-on-surface-variant">{chassis}</td>
+                    <td className="px-space-md py-2 font-mono-sm text-mono-sm tabular-nums">{yearLabel(l)}</td>
+                    <td className="px-space-md py-2 text-amber-950 dark:text-amber-100 max-w-[280px]">{String(l.reason ?? "").trim() || "—"}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function ConfirmedFromSourceRow({ draft }: { draft: AddPartsDraft }) {
+  if (draft.fitMode !== "specific") return null;
+  const host = hostFromEvidence(draft.evidenceUrl);
+  const count = draft.listings.filter((l) => l.listingTrust === "confirmed").length;
+  if (!count || !host) return null;
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 px-space-md py-3 rounded-xl bg-surface-container-low border border-outline-variant/40">
+      <span className={ADD_PARTS_VERIFIED_CHIP}>
+        <MaterialIcon name="verified_user" className="text-[15px]" filled />
+        Confirmed from {host} ({count})
+      </span>
+    </div>
+  );
+}
+
 export function Step4Review({
   draft,
   preview,
   onEditStep,
-  onOpenRecentlyAdded,
 }: {
   draft: AddPartsDraft;
   preview: SelfServePreview | null;
   onEditStep: (step: 1 | 2 | 3) => void;
-  onOpenRecentlyAdded?: () => void;
 }) {
-  const recentQuery = useQuery({ queryKey: ["self-serve-recent"], queryFn: fetchRecentSelfServeParts });
-  const { engine, spec } = pickLatestAdaptationExamples((recentQuery.data?.items ?? []) as RecentSelfServeRow[]);
-  const engineTypeName = engine ? String(engine.partTypeName ?? "Engine fit") : "Engine fit";
-  const specTypeName = spec ? String(spec.partTypeName ?? "Spec fit") : "Spec fit";
-
   const madeLabel = draft.madeByCarMaker === true ? "Genuine OEM" : draft.madeByCarMaker === false ? "Aftermarket OE-Spec" : "Part identity";
   const oeLines = draft.factoryNumbers.length
     ? draft.factoryNumbers.map((f) => `${f.brand} ${f.number}`)
     : ["No factory numbers added"];
   const reach = reviewReachCount(draft, preview);
   const fitBadgeCount = reach;
-  const profileTrust = preview?.trustLabel ?? trustLabelFromSource(draft.sourceType);
+  const profileTrust = effectiveTrustLabel(preview?.trustLabel, draft.sourceType);
   const profileLines = technicalProfileLines(draft);
 
   return (
@@ -256,6 +326,13 @@ export function Step4Review({
         </div>
         <PlainWordsSentence draft={draft} preview={preview} />
       </div>
+
+      {draft.fitMode === "specific" ? (
+        <div className="flex flex-col gap-space-sm">
+          <NeedsCheckingTable draft={draft} preview={preview} />
+          <ConfirmedFromSourceRow draft={draft} />
+        </div>
+      ) : null}
 
       <div className="grid grid-cols-1 gap-space-sm">
         <ReviewBlock
@@ -287,46 +364,6 @@ export function Step4Review({
         ) : null}
       </div>
 
-      <div className="flex flex-col gap-space-sm pt-4">
-        <div className="flex items-center justify-between px-1">
-          <span className="font-label-xs uppercase tracking-wider text-secondary font-bold">Dynamic Engine Adaptation Previews</span>
-          <span className="font-mono-sm text-[11px] text-outline">MATCHING_BRAIN · v4.8 SIMULATION</span>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-space-md">
-          <AdaptationCard
-            variantLabel={`Variant: By Engine (${engineTypeName})`}
-            dotClass="bg-amber-600"
-            row={engine}
-            emptyMessage="No saved by-engine example yet."
-          />
-          <AdaptationCard
-            variantLabel={`Variant: By Size or Spec (${specTypeName})`}
-            dotClass="bg-indigo-600"
-            row={spec}
-            emptyMessage="No saved by-spec example yet."
-          />
-        </div>
-      </div>
-
-      <div className="bg-surface-container-low p-space-md rounded-xl flex items-start gap-space-md">
-        <MaterialIcon name="lock_clock" className="text-secondary text-[20px] shrink-0 mt-0.5" />
-        <div className="flex flex-col">
-          <span className="font-label-md text-on-surface font-semibold">Catalogue Governance &amp; Immediate Visibility</span>
-          <p className="font-body-sm text-secondary">
-            After saving, Roam Fleet users will see it in{" "}
-            <span className="text-on-surface font-medium">Find parts for these cars</span>. Reversible within 24 hours from{" "}
-            {onOpenRecentlyAdded ? (
-              <PartsButton variant="secondary" className="inline-flex min-h-[32px] h-8 px-2 align-baseline" onClick={onOpenRecentlyAdded}>
-                Recently added
-              </PartsButton>
-            ) : (
-              <span className="text-primary underline">Recently added</span>
-            )}{" "}
-            log without database lockdown.
-          </p>
-        </div>
-      </div>
-
       <div className="bg-surface-container-lowest p-space-md rounded-xl shadow-sm flex items-center justify-between gap-space-md flex-wrap">
         <div className="flex items-center gap-space-md min-w-0">
           <div className="w-12 h-12 rounded-lg bg-surface-container flex items-center justify-center shrink-0 text-primary">
@@ -334,7 +371,7 @@ export function Step4Review({
           </div>
           <div className="flex flex-col min-w-0">
             <span className="font-label-md text-on-surface font-semibold">Technical Profile Match Confirmation</span>
-            <span className="font-mono-sm text-[11px] text-secondary">{profileLines.join(" · ")}</span>
+            <span className="font-mono-sm text-[11px] text-on-surface-variant">{profileLines.join(" · ")}</span>
           </div>
         </div>
         <span className={`${ADD_PARTS_VERIFIED_CHIP} shrink-0 max-w-[220px] text-center`}>{profileTrust}</span>

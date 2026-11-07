@@ -323,7 +323,7 @@ route.post("/make-server-37f42386/admin/vehicle-catalog/bulk", requireAuth(), as
         results.push({
           rowIndex,
           ok: false,
-          error: err instanceof Error ? err.message : String(err),
+          error: err instanceof Error ? err.message : (err && typeof err === "object" && "message" in err ? String((err as { message: unknown }).message) : String(err)),
         });
       }
     }

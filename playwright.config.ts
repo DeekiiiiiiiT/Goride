@@ -19,16 +19,19 @@ import { defineConfig, devices } from '@playwright/test';
  *   E2E_FUEL_WEEK / E2E_FUEL_ALLOW_FINALIZE=1 — optional deep-link / destructive finalize
  *   E2E_FUEL_WEEK_2 / E2E_FUEL_SOAK_MODE / E2E_FUEL_FLIP_ENFORCE — shadow soak smoke
  *   ADMIN_BASE_URL / FLEET_BASE_URL — when set, skip the matching vite preview webServer (CI sets these after build).
+ *   CI — when unset locally, webServer uses reuseExistingServer so an already-running dev:testcopy is reused.
  */
 const adminBaseUrl = process.env.ADMIN_BASE_URL?.trim();
 const fleetBaseUrl = process.env.FLEET_BASE_URL?.trim();
 const driverBaseUrl = process.env.DRIVER_BASE_URL?.trim();
+/** Local dev often already runs dev:testcopy on 5180/5181; CI must own the port. */
+const reuseLocalPreviewServer = !process.env.CI;
 const previewWebServers = [
   ...(!adminBaseUrl
     ? [{
         command: 'pnpm --filter @roam/admin run dev:testcopy',
         url: 'http://127.0.0.1:5180',
-        reuseExistingServer: false,
+        reuseExistingServer: reuseLocalPreviewServer,
         timeout: 120_000,
       }]
     : []),
@@ -36,7 +39,7 @@ const previewWebServers = [
     ? [{
         command: 'pnpm --filter @roam/fleet run dev:testcopy',
         url: 'http://127.0.0.1:5181',
-        reuseExistingServer: false,
+        reuseExistingServer: reuseLocalPreviewServer,
         timeout: 120_000,
       }]
     : []),
@@ -44,7 +47,7 @@ const previewWebServers = [
     ? [{
         command: 'pnpm --filter @roam/driver run dev:testcopy',
         url: 'http://127.0.0.1:5182',
-        reuseExistingServer: false,
+        reuseExistingServer: reuseLocalPreviewServer,
         timeout: 120_000,
       }]
     : []),
@@ -61,6 +64,9 @@ export default defineConfig({
   expect: { timeout: 15_000 },
   use: {
     trace: 'on-first-retry',
+    /** A missing button fails fast with a clear error instead of waiting out the 5-minute test timeout. */
+    actionTimeout: 30_000,
+    navigationTimeout: 60_000,
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
   },
@@ -68,7 +74,7 @@ export default defineConfig({
   projects: [
     {
       name: 'dominion-admin',
-      testMatch: /parts-import-stitch\.spec\.ts|parts-auto-match-stitch\.spec\.ts|add-a-part-stitch\.spec\.ts|add-a-part-done\.spec\.ts|capture-am-screens\.spec\.ts|dominion-maintenance-master\.spec\.ts/,
+      testMatch: /parts-import-stitch\.spec\.ts|parts-auto-match-stitch\.spec\.ts|add-a-part-stitch\.spec\.ts|add-a-part-done\.spec\.ts|roomy-brakes-trust\.spec\.ts|capture-am-screens\.spec\.ts|dominion-maintenance-master\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1456, height: 900 },
@@ -77,7 +83,7 @@ export default defineConfig({
     },
     {
       name: 'fleet',
-      testMatch: /fleet-rush-integration\.spec\.ts|fuel-recon-wizard\.spec\.ts|fuel-recon-shadow-soak\.spec\.ts|driver-settlements-desk\.spec\.ts|driver-detail-smoke\.spec\.ts|fleet-find-parts-visual\.spec\.ts|parts-import-stitch\.spec\.ts|parts-auto-match-stitch\.spec\.ts|fleet-maintenance-master\.spec\.ts/,
+      testMatch: /fleet-rush-integration\.spec\.ts|fuel-recon-wizard\.spec\.ts|fuel-recon-shadow-soak\.spec\.ts|driver-settlements-desk\.spec\.ts|driver-detail-smoke\.spec\.ts|fleet-find-parts-visual\.spec\.ts|parts-import-stitch\.spec\.ts|parts-auto-match-stitch\.spec\.ts|fleet-maintenance-master\.spec\.ts|roomy-brakes-fleet\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         baseURL: fleetBaseUrl || 'http://127.0.0.1:5181',

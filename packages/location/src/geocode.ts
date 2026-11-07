@@ -209,7 +209,7 @@ export async function searchAddresses(
   }
 
   const { suggestions } = await AutocompleteSuggestion.fetchAutocompleteSuggestions(
-    request as google.maps.places.AutocompleteRequest,
+    request as unknown as google.maps.places.AutocompleteRequest,
   );
 
   return suggestions.map((s) => {

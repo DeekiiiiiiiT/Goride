@@ -63,6 +63,102 @@ export async function postJson<T>(path: string, payload: unknown): Promise<T> {
   return body as T;
 }
 
+export async function patchJson<T>(path: string, payload: unknown): Promise<T> {
+  const headers = new Headers(await authHeaders());
+  headers.set("Content-Type", "application/json");
+  const response = await fetch(`${API_ENDPOINTS.admin}/admin/catalog/${path}`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify(payload),
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error((body as { error?: string }).error || "Could not save");
+  return body as T;
+}
+
+export async function deleteJson<T>(path: string, payload?: unknown): Promise<T> {
+  const headers = new Headers(await authHeaders());
+  if (payload !== undefined) headers.set("Content-Type", "application/json");
+  const response = await fetch(`${API_ENDPOINTS.admin}/admin/catalog/${path}`, {
+    method: "DELETE",
+    headers,
+    ...(payload !== undefined ? { body: JSON.stringify(payload) } : {}),
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error((body as { error?: string }).error || "Could not save");
+  return body as T;
+}
+
+export type ListingTrustSnapshot = {
+  trust?: string | null;
+  /** Server returns `reason` for listing trust patch */
+  reason?: string | null;
+  setBy?: string | null;
+};
+
+export type ListingTrustPatchResult = {
+  previous: ListingTrustSnapshot;
+  current: ListingTrustSnapshot;
+};
+
+export type ListingYearsSnapshot = {
+  yearFrom?: number | null;
+  yearTo?: number | null;
+};
+
+export type ListingYearsPatchResult = {
+  previous: ListingYearsSnapshot;
+  current: ListingYearsSnapshot;
+};
+
+export function patchListingTrust(listingId: string, body: { trust: string; reason?: string | null }) {
+  return patchJson<ListingTrustPatchResult>(`listings/${encodeURIComponent(listingId)}/trust`, body);
+}
+
+export function patchListingYears(
+  listingId: string,
+  body: { yearFrom: number | null | undefined; yearTo: number | null | undefined },
+) {
+  return patchJson<ListingYearsPatchResult>(`listings/${encodeURIComponent(listingId)}/years`, body);
+}
+
+export type TrustedSourceSiteRow = {
+  id: string;
+  domain: string;
+  addedBy: string | null;
+  addedAt: string | null;
+};
+
+export type TrustedSourceMakerGroup = {
+  maker: string;
+  sites: TrustedSourceSiteRow[];
+};
+
+export type TrustedSourcesPayload = {
+  carMakers: TrustedSourceMakerGroup[];
+  partMakers: TrustedSourceMakerGroup[];
+};
+
+export function fetchTrustedSources() {
+  return getJson<TrustedSourcesPayload>("trusted-sources");
+}
+
+export function addTrustedSource(body: { kind: "car_maker" | "part_maker"; maker: string; domain: string }) {
+  return postJson<TrustedSourceSiteRow & { kind?: string; maker?: string }>("trusted-sources", body);
+}
+
+export function removeTrustedSource(id: string) {
+  return deleteJson<TrustedSourceSiteRow>(`trusted-sources/${encodeURIComponent(id)}`);
+}
+
+export function renameTrustedSourceMaker(body: { kind: "car_maker" | "part_maker"; from: string; to: string }) {
+  return patchJson<{ updated: number }>("trusted-sources/maker", body);
+}
+
+export function deleteTrustedSourceMaker(body: { kind: "car_maker" | "part_maker"; maker: string }) {
+  return deleteJson<unknown>("trusted-sources/maker", body);
+}
+
 export function fetchPartsOverview() {
   return getJson<PartsOverview>("parts-overview");
 }
@@ -353,13 +449,35 @@ export type MasterSearchResult = {
 };
 
 export type MasterFit = {
+  listingId?: string;
   variantId: string;
   make: string;
   model: string;
   chassis: string;
   years: string;
+  yearFrom?: number | null;
+  yearTo?: number | null;
   position: string;
   linkType: "DIRECT" | "PLATFORM TWIN";
+  evidenceUrl?: string | null;
+  trust?: string | null;
+  /** API / RPC field name */
+  trustReason?: string | null;
+  trustSetBy?: string | null;
+};
+
+export type MasterFactoryOeOnCar = {
+  oeId?: string;
+  variantId?: string;
+  make?: string;
+  model?: string;
+  oeNumber?: string;
+  oeBrand?: string;
+  evidenceUrl?: string | null;
+  evidenceUrl2?: string | null;
+  trust?: string | null;
+  trustReason?: string | null;
+  trustSetBy?: string | null;
 };
 
 export type MasterPartDetail = {
@@ -386,6 +504,7 @@ export type MasterPartDetail = {
   evidenceUrl: string | null;
   note: string;
   fits: Array<MasterFit & { via?: string; side?: string }>;
+  factoryOeOnCars?: MasterFactoryOeOnCar[];
 };
 
 export function fetchMasterSearch(query: {

@@ -26,8 +26,9 @@ import {
   stepFromPartDeepLink,
 } from "./findPartsRoute";
 import "./findParts.css";
+import { BrakesFindPartsFlow } from "./BrakesFindPartsFlow";
 
-type Step = "car" | "version" | "part" | "position" | "results" | "request" | "link" | "missing";
+type Step = "car" | "version" | "part" | "position" | "results" | "request" | "link" | "missing" | "brakes";
 
 export function FindPartsTab({
   cars,
@@ -61,6 +62,7 @@ export function FindPartsTab({
   const [side, setSide] = useState(params.get("side") || "");
   const [fitParam, setFitParam] = useState(params.get("fit") || "");
   const [requestMatchType, setRequestMatchType] = useState<string | null>(null);
+  const [brakesInitialTypeId, setBrakesInitialTypeId] = useState<string | undefined>();
   const [error, setError] = useState("");
   const [attempts, setAttempts] = useState(0);
   const [linkMeta, setLinkMeta] = useState({ make: "", model: "", year: "", plate: "" });
@@ -373,6 +375,30 @@ export function FindPartsTab({
                 writeUrl(findPartsUrlAfterNewPartPick(vehicleId, id));
                 setStep("request");
               }}
+              onOpenBrakes={(initialTypeId) => {
+                setBrakesInitialTypeId(initialTypeId);
+                setStep("brakes");
+              }}
+            />
+          ) : null}
+          {step === "brakes" && vehicleId ? (
+            <BrakesFindPartsFlow
+              vehicleId={vehicleId}
+              initialTypeId={brakesInitialTypeId}
+              onBack={() => {
+                setBrakesInitialTypeId(undefined);
+                setStep("part");
+              }}
+              onAskRoam={(id, name) => {
+                setComponentId(id);
+                setPartName(name);
+                setStep("request");
+              }}
+              onUseInService={
+                onUseInService
+                  ? (componentId, partName) => onUseInService(vehicleId, componentId, partName)
+                  : undefined
+              }
             />
           ) : null}
           {step === "position" ? (

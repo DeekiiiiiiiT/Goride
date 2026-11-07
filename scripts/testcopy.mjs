@@ -99,6 +99,10 @@ async function main() {
   await waitForHttp('http://127.0.0.1:54321/rest/v1/');
 
   killFunctionsServe();
+  // Local-only secrets the edge functions refuse to start without (test values, never real ones).
+  mkdirSync(stateDir, { recursive: true });
+  const functionsEnvFile = join(stateDir, 'functions.env');
+  writeFileSync(functionsEnvFile, 'PLUG_USER_HASH_PEPPER=testcopy-local-only-pepper\n', 'utf8');
   console.error('Serving edge functions (fleet-core, fleet-ops, driver, explorer)…');
   spawnBg('functions', npx, [
     'supabase',
@@ -109,6 +113,8 @@ async function main() {
     'driver',
     'explorer',
     '--no-verify-jwt',
+    '--env-file',
+    functionsEnvFile,
   ]);
   await new Promise((r) => setTimeout(r, 8000));
   await waitForHttp('http://127.0.0.1:54321/functions/v1/fleet-core');

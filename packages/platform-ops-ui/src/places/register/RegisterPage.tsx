@@ -312,7 +312,7 @@ export function RegisterPage({
       {placeId && detailQuery.data && openRow ? (
         <NearbyProbe apiBase={apiBase} getToken={getToken} row={openRow} onHit={setDuplicate} />
       ) : null}
-      <span className="sr-only">{states.Loading ? "" : ""}</span>
+      {listQuery.isLoading ? <span className="sr-only">{states.Loading()}</span> : null}
     </div>
   );
 }

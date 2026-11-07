@@ -239,7 +239,7 @@ export async function listVehicleCatalogWithFallback(
       modernOk = false;
       break;
     }
-    const page = (modern.data || []).map((r) => catalogRowForApi(r as Record<string, unknown>));
+    const page = (modern.data || []).map((r: Record<string, unknown>) => catalogRowForApi(r));
     modernItems.push(...page);
     if (page.length < LIST_PAGE) break;
     from += LIST_PAGE;
@@ -260,7 +260,7 @@ export async function listVehicleCatalogWithFallback(
       .order("year", { ascending: false })
       .range(from, from + LIST_PAGE - 1);
     if (leg.error) throw leg.error;
-    const page = (leg.data || []).map((r) => catalogRowForApi(r as Record<string, unknown>));
+    const page = (leg.data || []).map((r: Record<string, unknown>) => catalogRowForApi(r));
     legItems.push(...page);
     if (page.length < LIST_PAGE) break;
     from += LIST_PAGE;

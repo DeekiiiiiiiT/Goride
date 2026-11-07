@@ -1,0 +1,113 @@
+ROAM DOMINION — PARTS DATABASE · CARS IT FITS WITH TRUST PER CAR — DESIGN PROMPT (GOOGLE STITCH)
+
+
+
+
+Roam Dominion - Parts database, "Cars it fits" (Desktop Admin, for the owner):
+
+Design high-fidelity desktop screens for the part drawer in Dominion's Parts database, and for the "Cars it fits" step of "Add a part". The owner loads which cars a part fits from the part maker's own catalogue (for example SB and NiBK list 92 cars for one front brake pad). Some cars are named exactly by the maker (Confirmed); others are close but not named exactly — a different chassis code or a year range that goes past the maker's list — so they go in as Needs checking. Today Dominion only records one trust level for the whole part. These screens let the owner set trust and the source page for each car, see it in the list, and change it later.
+
+Dominion is the master parts database. Everything is stored; odd values get a label, never blocked. No prices, suppliers, stock or customer records. Everything else on the part drawer and in Add a part stays as it is.
+
+
+BRAND IDENTITY:
+- Match the existing Roam Dominion admin:
+  - Left sidebar with the Dominion logo, sections; "Parts database" active.
+  - Page title "Parts database" with the tabs as today: Find parts, Full database, Add parts, Part types.
+- LIGHT MODE (default):
+  - Primary: #0153dc; primary container: #dbe1ff
+  - Background: #faf8fe; surface: #ffffff
+  - Text: #30323b; muted text: #5d5f6a
+  - Outline: #797a84
+  - Success: #006e31; warning: #8a5300; error: #a83836
+- DARK MODE:
+  - Background #0b1220, surface #111a2e
+  - Text #e2e8f0, muted #94a3b8
+  - Primary #5b8def, success #4ade80, warning #fbbf24, error #f87171, outline #94a3b8
+- Trust chips (the only two):
+  - "Confirmed": green dot + text.
+  - "Needs checking": amber outline + small eye icon.
+- Link chips (already exist, keep): "Direct", "Sister", "Kept".
+- Typography: Inter. Part numbers, chassis codes, years and counts in a mono font with tabular numerals.
+- Helper and label text is grey (muted), never blue. Buttons always look like buttons; remove / cancel buttons are red.
+- No gradients, glassmorphism, 3D, AI badges or confidence percentages.
+- Sample data:
+  - **Part:** "Front brake pad set" · reference "Daihatsu 04465-B1190" · other numbers NiBK PN5562, SB BP25562, Brembo P 16 013, Akebono AN-754WK, Toyota 04465-B1190 · Front.
+  - **Cars it fits (17):**
+    - Toyota Roomy M900A 2016– (Direct, Confirmed) · Roomy M910A 2016–2020 (Direct, Confirmed) · Tank M900A / M910A 2016– (Sister, Confirmed)
+    - Daihatsu Thor M900S / M910S 2016– (Sister, Confirmed) · Materia M400 2007–2010 (Direct, Needs checking — "maker lists M402S, 2006–2008") · Sirion M301RS 2006–2013 (Direct, Needs checking — "maker lists M300")
+    - Subaru Justy M900F / M910F 2016– (Sister, Confirmed)
+    - Suzuki Swift ZC13S 2017–2020, ZC33S 2017–2023, ZCED1S 2023– (Direct, Confirmed) · Swift ZC72S 2010–2016 (Direct, Needs checking — "maker lists ZC72S LHD") · Swift ZC83S 2017–2023 (Direct, Needs checking — "maker lists ZC43S")
+    - Mazda Demio DE3FS 2007–2014 (Direct, Needs checking — "maker lists Mazda 2 DE, Demio DE5FS")
+    - Ford Fiesta B299 1.6, 2010–2013 only (Direct, Needs checking — "maker lists 2010–2013")
+  - **Sources:** "SB catalogue — https://www.sbparts.jp/catalogue/723410", "NiBK catalogue — https://jnbk-brakes.com/catalogue/cars/brake/723409/PN5562".
+
+
+DESIGN PRINCIPLES:
+- Desktop-first (1440px wide)
+- Trust and source belong to each car, not only to the part
+- A Needs checking car always says why, in one short muted line
+- Long lists stay readable: group by maker, filter by trust
+- Changing trust is one click and can be undone
+
+
+SCREEN 1: PART DRAWER — CARS IT FITS WITH TRUST PER CAR
+- The existing part drawer (right side), header unchanged.
+- "Cars it fits" heading with the mono "17 MATCHED" count and the existing outlined "Add a car" button.
+- New filter buttons under the heading: "All (17)", "Confirmed (11)", "Needs checking (6)".
+- Cars grouped by maker with a small heading and mono count: Toyota (4), Daihatsu (4), Subaru (2), Suzuki (5), Mazda (1), Ford (1).
+- Each car row:
+  - Car icon, make + model in bold, chassis · years · position in mono underneath.
+  - Right side: the existing link chip (Direct / Sister / Kept) and the new trust chip (Confirmed / Needs checking).
+  - Needs checking rows show the reason as a muted line under the car ("maker lists M402S, 2006–2008").
+  - A small outlined "Source" button opening the source page, and a "⋯" menu button with: "Mark confirmed", "Mark needs checking", "Change years", "Remove this car" (red).
+- Sister rows (Tank, Thor, Justy) show "From the Roomy" in muted text instead of a Source button — their trust follows the car they come from.
+- A second frame shows the same drawer in dark mode.
+
+
+SCREEN 2: ADD A PART — CARS IT FITS STEP WITH TRUST PER CAR
+- The existing "Add a part" step for choosing cars (the car table with the selection panel and sticky footer), unchanged except:
+  - **Source for these cars:** above the table, a text field "Where did you find this list?" with the SB link filled in, and a muted line under it that reads the source type: "Part maker's own catalogue — cars it names go in as Confirmed".
+  - **Selected cars panel (right side):** each selected car shows a two-option toggle "Confirmed | Needs checking" and, when Needs checking is on, a short text field "Why?" (placeholder "e.g. maker lists a different chassis code").
+  - **Years:** each selected car shows its years in mono with an outlined "Change years" button (sample: Fiesta changed to 2010–2013).
+  - **Footer summary:** "17 cars · 11 Confirmed · 6 Needs checking" and the existing Next button.
+- A second frame shows the selected cars panel with the Fiesta row open on "Change years" (two small year boxes, From 2010, To 2013, with Save and red Cancel buttons).
+
+
+SCREEN 3: ADD A PART — REVIEW SENTENCE
+- The existing review step, with the plain sentence extended: "Front brake pad set Daihatsu 04465-B1190 fits 17 cars: 11 Confirmed from the SB catalogue, 6 Needs checking." and a collapsible list of the 6 Needs checking cars with their reasons.
+- Existing Save and Undo stay.
+
+
+SCREEN 4: STATES
+- Frame A — part with no cars yet: "No car listing yet." with the "Add a car" button.
+- Frame B — every car Needs checking: amber note at the top of Cars it fits "None of these cars are confirmed yet."
+- Frame C — after "Mark confirmed": a small toast "Swift ZC72S marked Confirmed" with an outlined "Undo" button.
+- Frame D — could not load: red outlined banner "Could not load this part. Nothing was changed."
+
+
+ADDITIONAL UI COMPONENTS:
+- Trust chip per car (Confirmed / Needs checking) next to the existing link chip
+- Reason line under Needs checking cars
+- Maker group heading with count; trust filter buttons
+- Per-car "⋯" menu (Mark confirmed, Mark needs checking, Change years, Remove this car)
+- Confirmed | Needs checking toggle with "Why?" field in Add a part
+- "Change years" inline editor
+
+
+INTERACTIONS:
+- **Filter buttons:** narrow the car list; counts update.
+- **Mark confirmed / needs checking:** changes the chip at once, shows a toast with Undo.
+- **Change years:** opens the inline year editor; Save updates the row's years.
+- **Remove this car:** asks in an in-app confirm panel (never a browser pop-up): "Remove Swift ZC72S from this part?" with red "Remove" and outlined "Keep".
+- **Source:** opens the source page in a new tab.
+- **Focus:** keyboard reachable rows and buttons, existing Dominion focus rings.
+
+
+Spec screens / Area
+| Screen | Area |
+|---|---|
+| 1 | Part drawer — Cars it fits grouped by maker, trust chip + reason per car, filter, per-car menu, light + dark |
+| 2 | Add a part — cars step with source field, Confirmed / Needs checking per car, Why field, Change years |
+| 3 | Add a part — review sentence with trust counts and Needs checking list |
+| 4 | States — no cars, all Needs checking, Undo toast, could not load |

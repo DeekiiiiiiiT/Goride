@@ -7,8 +7,8 @@ export function isLocationComplete(value: Partial<LocationValue> | null | undefi
     Number.isFinite(value.lat) &&
     typeof value.lng === 'number' &&
     Number.isFinite(value.lng) &&
-    value.streetAddress.trim().length >= 3 &&
-    value.city.trim().length >= 2
+    (value.streetAddress ?? '').trim().length >= 3 &&
+    (value.city ?? '').trim().length >= 2
   );
 }
 

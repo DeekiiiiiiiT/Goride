@@ -114,7 +114,10 @@ const DEFAULT_PART_TYPE_REQUESTS = [
 
 export async function installAddPartsMocks(page: Page, state?: AddPartsMockState) {
   const st = state ?? createAddPartsMockState();
-  await page.route("**/admin/catalog/**", async (route) => {
+  /** Path-based match covers __sb-prefixed fleet-core URLs; plain glob for admin catalog misses those. */
+  await page.route(
+    (url) => url.pathname.includes("/admin/catalog/"),
+    async (route) => {
     const url = route.request().url();
     const method = route.request().method();
     if (url.includes("/part-types") && method === "POST") {
@@ -271,6 +274,19 @@ export async function installAddPartsMocks(page: Page, state?: AddPartsMockState
         } catch { /* ignore */ }
       }
       const sentence = `${brand} ${partNumber} is a ${typePhrase}. It fits ${carCount || 2} cars${oePhrase}.`;
+      let listingTrustPreview: Array<{ catalogId: string; trust: string; trustReason?: string | null }> | undefined;
+      const listingsRaw = u.searchParams.get("listings");
+      if (mode === "specific" && listingsRaw) {
+        try {
+          const listings = JSON.parse(listingsRaw) as Array<{ vehicleId?: string }>;
+          listingTrustPreview = (listings ?? [])
+            .map((l) => l.vehicleId)
+            .filter(Boolean)
+            .map((id) => ({ catalogId: id as string, trust: "confirmed", trustReason: null }));
+        } catch {
+          listingTrustPreview = undefined;
+        }
+      }
       return route.fulfill({
         json: {
           carCount: carCount || 2,
@@ -278,6 +294,7 @@ export async function installAddPartsMocks(page: Page, state?: AddPartsMockState
           totalReach: carCount || 2,
           sentence,
           trustLabel: "Verified · part maker's catalogue",
+          ...(listingTrustPreview ? { listingTrustPreview } : {}),
           fitSummaryLines: MOCK_VEHICLES.slice(0, carCount || 2).map((v) => `${v.make} ${v.model} ${v.chassis_code}`),
           fitSummaryStructured: {
             positionLabel: "Front Axle",
@@ -381,7 +398,96 @@ export async function installAddPartsMocks(page: Page, state?: AddPartsMockState
         },
       });
     }
+    if (url.includes("trusted-sources/maker")) {
+      if (method === "PATCH") {
+        return route.fulfill({ json: { updated: 1 } });
+      }
+      if (method === "DELETE") {
+        return route.fulfill({ json: { ok: true } });
+      }
+      if (method === "POST") {
+        return route.fulfill({ json: { kind: "car_maker", maker: "Mock" } });
+      }
+    }
+    if (url.includes("trusted-sources") && !url.match(/trusted-sources\/[^/]+$/)) {
+      if (method === "GET") {
+        const makers = [...new Set(MOCK_VEHICLES.map((v) => v.make))].sort();
+        return route.fulfill({
+          json: {
+            carMakers: makers.map((maker) => ({
+              maker,
+              sites: [{
+                id: `trust-site-${maker}`,
+                domain: "parts.mock",
+                addedBy: "Dominion Owner",
+                addedAt: new Date().toISOString(),
+              }],
+            })),
+            partMakers: [
+              {
+                maker: "MK Kashiyama",
+                sites: [{
+                  id: "trust-site-part-1",
+                  domain: "mk.mock",
+                  addedBy: null,
+                  addedAt: new Date().toISOString(),
+                }],
+              },
+            ],
+          },
+        });
+      }
+      if (method === "POST") {
+        const body = (route.request().postDataJSON() ?? {}) as { kind?: string; maker?: string; domain?: string };
+        return route.fulfill({
+          json: {
+            id: "new-trust-site-id",
+            kind: body.kind ?? "car_maker",
+            maker: body.maker ?? "Toyota",
+            domain: body.domain ?? "new.mock",
+            added_by: null,
+            added_at: new Date().toISOString(),
+          },
+        });
+      }
+    }
+    if (url.match(/trusted-sources\/[^/]+$/) && method === "DELETE") {
+      return route.fulfill({
+        json: {
+          id: "removed",
+          kind: "car_maker",
+          maker: "Toyota",
+          domain: "parts.mock",
+        },
+      });
+    }
     return route.fulfill({ json: {} });
-  });
+    },
+  );
+
+  // Dominion shell calls (when local Supabase is down). Playwright matches LIFO — register after catalog so catalog runs first.
+  await page.route(
+    (url) => url.pathname.includes("/functions/v1/") && !url.pathname.includes("/admin/catalog/"),
+    async (route) => {
+      const url = route.request().url();
+      if (url.includes("platform-status")) {
+        return route.fulfill({ json: { ok: true } });
+      }
+      if (url.includes("settings/preferences")) {
+        return route.fulfill({ json: { darkMode: false } });
+      }
+      if (url.includes("platform-feature-flags")) {
+        return route.fulfill({ json: {} });
+      }
+      if (url.includes("auto-match/health")) {
+        return route.fulfill({ json: { engineVersion: 2, normVersion: 0 } });
+      }
+      if (url.includes("vehicle-catalog-pending-requests")) {
+        return route.fulfill({ json: { items: [], total: 0 } });
+      }
+      return route.fulfill({ json: {} });
+    },
+  );
+
   return st;
 }

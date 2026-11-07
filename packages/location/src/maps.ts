@@ -10,7 +10,7 @@ declare global {
 }
 
 export async function loadPartnerMapsApi(): Promise<void> {
-  if (typeof window !== 'undefined' && window.google?.maps?.importLibrary) {
+  if (typeof window !== 'undefined' && typeof window.google?.maps?.importLibrary === 'function') {
     return;
   }
   if (mapsLoadedPromise) return mapsLoadedPromise;
@@ -31,7 +31,7 @@ export async function loadPartnerMapsApi(): Promise<void> {
           let attempts = 0;
           const interval = setInterval(() => {
             attempts++;
-            if (window.google?.maps?.importLibrary) {
+            if (typeof window.google?.maps?.importLibrary === 'function') {
               clearInterval(interval);
               resolve();
             } else if (attempts > 100) {
@@ -51,7 +51,7 @@ export async function loadPartnerMapsApi(): Promise<void> {
           let attempts = 0;
           const interval = setInterval(() => {
             attempts++;
-            if (window.google?.maps?.importLibrary) {
+            if (typeof window.google?.maps?.importLibrary === 'function') {
               clearInterval(interval);
               resolve();
             } else if (attempts > 100) {

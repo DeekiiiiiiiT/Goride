@@ -10,6 +10,7 @@ import { FindPartsChrome } from "./find-parts/FindPartsChrome";
 import { FullDatabaseTab } from "./full-database/FullDatabaseTab";
 import { ImportAdvancedTab } from "./ImportAdvancedTab";
 import { AddPartsTab } from "./add-parts/AddPartsTab";
+import { TrustedSourcesTab } from "./trusted-sources/TrustedSourcesTab";
 import { fetchPartMatchHealth } from "../../../services/partsAutoMatchApi";
 import { supabase } from "../../../utils/supabase/client";
 import { exportMasterCsv, fetchPartsOverview } from "./partsDatabaseApi";
@@ -136,6 +137,7 @@ export function PartsDatabasePage() {
           />
         ) : null}
         {tab === "Add parts" ? <AddPartsTab owner={owner} /> : null}
+        {tab === "Trusted sources" ? <TrustedSourcesTab owner={owner} /> : null}
         {tab === "Advanced" ? (
           <ImportAdvancedTab
             advanced

@@ -4,6 +4,7 @@ import { Fp3AreaOverlay, FP3_OPENING_SIDE_LABEL } from "./screens/Fp3AreaOverlay
 import { buildFp3OverlayViewModel, buildFp3ViewModel, type Fp3OverlayRow, type Fp3SearchHit } from "./findPartsViewModels";
 import { usePartsBrowse, usePartsSymptoms, usePartsTerm, usePartsVehicleContext } from "./findPartsQueries";
 import { onFileCountForComponent, partNameForComponent, positionAwareForComponent, stepAfterPartPick } from "./findPartsRoute";
+import { isBrakeComponent, isBrakesAreaId } from "./brakesFindPartsConstants";
 
 type SpeechRecognitionCtor = new () => {
   lang: string;
@@ -40,6 +41,7 @@ export function PartStep({
   onBack,
   onPick,
   onAskRoam,
+  onOpenBrakes,
 }: {
   vehicleId: string;
   initialComponentId?: string;
@@ -47,6 +49,7 @@ export function PartStep({
   onBack: () => void;
   onPick: (componentId: string, positionAware: boolean, name: string, onFileCount: number) => void;
   onAskRoam: (componentId: string, name: string) => void;
+  onOpenBrakes?: (initialTypeId?: string) => void;
 }) {
   const ctx = usePartsVehicleContext(vehicleId);
   const variantId = String((ctx.data as { variantId?: string | null } | undefined)?.variantId || "");
@@ -148,6 +151,11 @@ export function PartStep({
 
   function commitPart(id: string, name: string, positionAware?: boolean) {
     selectPart(id, name, positionAware);
+    if (onOpenBrakes && isBrakeComponent(browseData, id, overlayAreaId, overlayArea?.name)) {
+      onOpenBrakes(id);
+      setOverlayAreaId(null);
+      return;
+    }
     const count = onFileCountForComponent(browseData as Parameters<typeof onFileCountForComponent>[0], id);
     onPick(id, Boolean(positionAware), name, count);
   }
@@ -202,6 +210,11 @@ export function PartStep({
           onPickPart: selectPart,
           onPickProblem: (id, name, positionAware) => commitPart(id, name, positionAware),
           onOpenArea: (id) => {
+            const area = data.areas.find((a) => a.id === id);
+            if (onOpenBrakes && isBrakesAreaId(id, area?.name)) {
+              onOpenBrakes(undefined);
+              return;
+            }
             setOverlayAreaId(id);
             setExpandedNotOnFileId("");
           },

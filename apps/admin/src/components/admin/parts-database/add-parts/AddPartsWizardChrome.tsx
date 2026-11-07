@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { PartsButton } from "../PartsButton";
 import { MaterialIcon } from "../import/MaterialIcon";
 import type { FitMode } from "./addPartsTypes";
-import { trustLabelFromSource, WIZARD_FOOTER_HEIGHT_PX } from "./addPartsShared";
+import { effectiveTrustLabel, isVerifiedTrustLabel, WIZARD_FOOTER_HEIGHT_PX } from "./addPartsShared";
 
 export function AddPartsDominionBreadcrumb({ stepLabel }: { stepLabel: string }) {
   return (
@@ -27,14 +27,16 @@ export function AddPartsPartSummaryChip({
   partNumber,
   partTypeName,
   sourceType,
+  trustLabel,
 }: {
   brand: string;
   partNumber: string;
   partTypeName?: string;
   sourceType: string;
+  trustLabel?: string | null;
 }) {
-  const trust = trustLabelFromSource(sourceType);
-  const verified = trust.startsWith("Verified");
+  const trust = effectiveTrustLabel(trustLabel, sourceType);
+  const verified = isVerifiedTrustLabel(trustLabel, sourceType);
   return (
     <div className="inline-flex flex-wrap items-center gap-2 bg-surface-container-lowest px-3 py-1.5 rounded-xl shadow-sm">
       <MaterialIcon name="category" className="text-[16px] text-tertiary" />
@@ -216,6 +218,7 @@ export function AddPartsWizardShell({
   draftNumber,
   partTypeName,
   sourceType,
+  trustLabel,
   showStepTracker,
   children,
   footer,
@@ -226,6 +229,7 @@ export function AddPartsWizardShell({
   draftNumber: string;
   partTypeName?: string;
   sourceType: string;
+  trustLabel?: string | null;
   showStepTracker?: boolean;
   children: ReactNode;
   footer: ReactNode;
@@ -243,6 +247,7 @@ export function AddPartsWizardShell({
             partNumber={draftNumber}
             partTypeName={partTypeName}
             sourceType={sourceType}
+            trustLabel={trustLabel}
           />
         ) : null}
       </div>
