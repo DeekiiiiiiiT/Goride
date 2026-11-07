@@ -251,6 +251,7 @@ Proof = side-by-side `screen.png` vs live screenshot (light + dark) where every 
 | **4 — Fleet Also fits + one card per part ✅ DONE in code 7 Nov (Fleet 8/8, Dominion 15/15; live pending)** | RB-10, RB-11, RB-12, RB-13 | `/parts/lookup` full fit list + Fleet 1–6 screens | Cursor | e2e on test copy; side-by-side vs Stitch per §5a |
 | 5 — Load the data | RB-06, RB-05, RB-09, RB-08 | add missing cars, link the 17 cars, brake specs on sisters, rotor/drum/fluid | Owner in Dominion (screens from Phase 3) | done-tests 1–8 |
 | 6 — Final gate | RB-14 | all done-tests run through the real API path | Cursor + Claude check | §4 all pass |
+| 7 — Find parts for normal people | RB-17 | redesign every Fleet Find parts screen: logos, make/model/year, one part number, Verified badge; new design guide | Claude (audit + Stitch prompt), owner (Stitch), Cursor (port) | done-test in the Phase 7 section |
 
 **Phase 1 decisions (6 Nov):**
 - Front-pad merge goes into the existing group `34c02865…` (NiBK + Brembo, already merged by WVA 24283), and is logged against the kept conflict `e9e86e27…` (CNF-001317, which lists all 6 pad groups) with rule `oe_same_part`, so the existing `part_match_unmerge_same_part` can undo it. The old duplicate warnings were all marked **Keep** on 4 Nov instead of merged, so the Merge button can't be used on them (it needs an open warning).
@@ -372,7 +373,45 @@ Proof = side-by-side `screen.png` vs live screenshot (light + dark) where every 
   - Rush J210E gets Ventilated Disc / Drum from Goo-net and dealer listings; size left blank because sources disagree.
   - It fills empty cells only.
 - Committed on parts-auto-match: 8f67ceb1 (all Phase 1–4 work plus fixes) and 6975e65d (RB-09). Not pushed.
-- Left: RB-05 (link pads to the other cars, in the new Dominion screens after release) and RB-08 (rotor / drum / fluid).
+- **RB-05 done (7 Nov, owner in Dominion, checked on live):** NiBK PN5562 group now has 62 car listings: the 10 from before plus 52 new. 50 are Confirmed and 12 Needs checking, all with reasons. Fiesta B299 is limited to 2010–2013 (Needs checking). No Rush and no Boon. Still one part with 7 brand numbers. Source: NiBK catalogue page (jnbk-brakes.com, trusted part maker).
+- Fixed and live during RB-05 (commit 7345e65b): "Add more cars to it" skipped the source link (now stays on step 1), and the car search matched a single word only (now every word).
+- **5-01 (open, small):** on Add a part step 2, "Change years" resets that car's trust to Confirmed. The owner caught it before saving.
+- **5-02 (fixed 7 Nov):** "Made by the car maker?" could be left blank. The source type then defaulted to "Part maker's own catalogue", so a Toyota part from Partsouq showed Needs checking (no car maker to check the link against). Now Next stays off until Genuine (OEM) or Aftermarket is picked, with "Pick one to continue." (not required when adding cars to a part already on file).
+- Left: RB-08 (rotor / drum / fluid) and the separate Full database redesign audit (the owner asked for it).
+
+## Phase 7: Find parts for normal people (RB-17), added 7 Nov at the owner's request
+
+**RB-17 · Fleet Find parts speaks parts-catalogue, not person.** The owner's verdict on the live Brakes screens: "only a mechanic or an auto parts person would know what is going on." A normal user only knows make, model and year. Today the screens show:
+- factory and brand numbers as the headline ("Daihatsu 04465-B1320");
+- chassis and engine codes on every car ("M400 · 2007–2010 · 3SZ");
+- tags like FRONT, "Reference number", "7 other brand numbers", "Same part, other brands";
+- the words "Confirmed" and "Needs checking", plus our internal reasons ("just need to confirm").
+
+**Cause:** the Fleet Stitch design guide (`docs/stitch/roomy-brakes-fleet/fleet_operational_engine/DESIGN.md`) sets the style to "Precision Utilitarianism / Technical Corporate Minimal… Swiss-style data density" for "dispatchers, maintenance engineers and procurement managers". The Fleet Stitch prompt also asked for "the two chips". Every Stitch screen built from these looks like a staff tool.
+
+**Fix (what the user sees, everywhere in Fleet Find parts):**
+1. **Cars read as people say them:** maker logo, then "Daihatsu Thor 2016–2022". The maker logo comes first; people recognise the Toyota logo before they read the word. No chassis or engine codes on screen. They exist only to tell two versions apart, and then as plain words ("2WD" / "4WD", "1.5 petrol").
+2. **Pick by logo:** "Also fits" and the car picker are grouped under big maker logos, not text headings.
+3. **One plain part card** that a person and a parts store both understand:
+   - **Part:** Front brake pads.
+   - **Part number:** one number to give the store.
+   - **Other numbers stores may use:** folded away until tapped.
+
+   No "Reference number" label, no FRONT tag, no "7 other brand numbers" count.
+4. **Trust as a badge, not words:**
+   - Confirmed fits get a **Verified** badge (check mark).
+   - Unconfirmed ones get a soft **"Check before buying"** badge with a one-line plain explanation on tap.
+   - Our internal reasons ("maker lists M301, not M300") stay in Dominion only and are never shown in Fleet.
+5. **Sweep the whole Find parts section**, not only Brakes: car picker, area tiles, part types, results, part detail, Your parts activity, empty and error states. Remove every tag, code or count that a normal user can't act on.
+6. **Modern, consumer look:**
+   - Write a new design guide for Fleet Find parts (friendly, visual, logos and part pictures, generous spacing) and stop using the "Technical Corporate Minimal" guide for these screens.
+   - The Stitch prompt follows the owner's Stitch prompt format, one file per app.
+
+**Data needed:** a logo per car maker in the Dominion master data (each app reads it from there), and a plain name per part type (already in `plain_name`).
+
+**Process:** audit list of every screen and button first → new design guide + Stitch prompt → owner makes the screens → port exactly → done-tests on the test copy, written as "a person who knows nothing about cars can find and buy the right part".
+
+**Done-test:** shown only make, model and year, the owner can pick their Roomy, open Brakes, see the front pads with one part number to give a store, and see which other cars it fits by logo, without meeting a single code or jargon word.
 
 ## 6. Order
 

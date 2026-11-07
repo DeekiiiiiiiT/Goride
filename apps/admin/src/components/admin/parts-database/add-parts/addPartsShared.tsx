@@ -232,6 +232,10 @@ export function step1DetailsCanAdvance(
     && draft.evidenceUrl.trim(),
   );
   if (!hasCore) return false;
+  // Every part is genuine (OEM) or aftermarket: the owner must answer before moving on, because the
+  // answer decides which catalogue the link is checked against. Adding cars to a part already on file
+  // keeps that part's own answer.
+  if (draft.madeByCarMaker === null && !draft.existingPartId) return false;
   if (draft.sourceType === "car_maker_catalogue" && !draft.catalogCarMaker.trim()) return false;
   return true;
 }

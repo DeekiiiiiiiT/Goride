@@ -189,6 +189,9 @@ export function Step1Details({
               No — another brand (aftermarket)
             </button>
           </div>
+          {draft.madeByCarMaker === null && !draft.existingPartId ? (
+            <p className="font-body-sm text-body-sm text-amber-800 dark:text-amber-200">Pick one to continue.</p>
+          ) : null}
         </div>
       </div>
 

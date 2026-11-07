@@ -306,6 +306,7 @@ export async function wizardThroughStep2BrakePads(page: Page) {
   await page.getByRole("button", { name: "Brake pads" }).click();
   await page.getByLabel(/^Brand$/i).fill("MK Kashiyama");
   await page.getByLabel(/^Part number$/i).fill("D0051MH");
+  await page.getByRole("button", { name: /No — another brand/ }).click();
   await page.getByLabel(/Source link/i).fill("https://example.com/src");
   await page.getByRole("button", { name: "Next" }).click();
 }

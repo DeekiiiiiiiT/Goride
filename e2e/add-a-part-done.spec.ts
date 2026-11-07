@@ -14,6 +14,8 @@ import { createAddPartsMockState, installAddPartsMocks } from "./addPartsStitchM
 async function fillPartDetails(page: import("@playwright/test").Page, brand: string, number: string) {
   await page.locator('label:has-text("Brand")').locator("..").locator("input").fill(brand);
   await page.locator('label:has-text("Part number")').locator("..").locator("input").fill(number);
+  // Genuine or aftermarket is required before Next.
+  await page.getByRole("button", { name: /No — another brand/ }).click();
   await page.locator('label:has-text("Source page link")').locator("..").locator("input").fill("https://example.com/evidence");
 }
 
