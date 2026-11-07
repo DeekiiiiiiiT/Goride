@@ -365,6 +365,15 @@ Proof = side-by-side `screen.png` vs live screenshot (light + dark) where every 
   - Minor, not blocking: the pad card lacks the "Also fits N other cars — makers" line, and it says "5 other brand numbers" where it should say 4 (the count includes the reference number itself).
 - **Phase 4 CLOSED in code.** Live `admin_catalog_master_part` is still the Phase 3a body (md5 8144ecf5…), so `20261107012459` applies cleanly. To go live: the owner applies that migration and deploys fleet-core (this also fixes live bug 4-05); the Fleet and Dominion screens reach live with the next release.
 
+**Phase 5 notes (7 Nov):**
+- RB-06 done: 890 + 6 cars imported (catalog 937 → 1,833). Only Swift ZC32S and Demio DE5FS had been missing; both are in now.
+- RB-09 prepared: migration `20261107025603_roomy_brakes_phase5_sister_brake_specs.sql`.
+  - Tank, Thor and Justy (M900/M910) get the Roomy values: Ventilated Disc / Drum / 255 mm.
+  - Rush J210E gets Ventilated Disc / Drum from Goo-net and dealer listings; size left blank because sources disagree.
+  - It fills empty cells only.
+- Committed on parts-auto-match: 8f67ceb1 (all Phase 1–4 work plus fixes) and 6975e65d (RB-09). Not pushed.
+- Left: RB-05 (link pads to the other cars, in the new Dominion screens after release) and RB-08 (rotor / drum / fluid).
+
 ## 6. Order
 
 1. Data fixes on what exists: RB-04, RB-03, RB-02, RB-01.
