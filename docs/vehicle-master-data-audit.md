@@ -23,7 +23,7 @@
 ## Closed in this round
 
 **L-01 (fixed and verified live):**
-- migration `20261112153100` is applied;
+- migration `20261106132200` is applied;
 - 5179KZ has 25 of 25 parts with dues: brake fluid at 161,952 km or 30 Oct 2027, coolant flush at 221,952 km or 30 Oct 2030;
 - 1505LM still correctly waits for its first odometer reading;
 - new check 11 = 0.

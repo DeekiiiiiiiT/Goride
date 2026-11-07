@@ -20,7 +20,7 @@ on:
       - 'supabase/tests/add_a_part_done_checks.sql'
       - 'supabase/tests/maintenance_master_checks.sql'
       - 'supabase/tests/maintenance_master_fixtures.sql'
-      - 'supabase/tests/20261111121500_mm_go_live_order_fixture.sql'
+      - 'supabase/tests/20261106131300_mm_go_live_order_fixture.sql'
       - '.github/workflows/parts-sql-checks.yml'
   push:
     branches: [main]
@@ -38,7 +38,7 @@ on:
       - 'supabase/tests/add_a_part_done_checks.sql'
       - 'supabase/tests/maintenance_master_checks.sql'
       - 'supabase/tests/maintenance_master_fixtures.sql'
-      - 'supabase/tests/20261111121500_mm_go_live_order_fixture.sql'
+      - 'supabase/tests/20261106131300_mm_go_live_order_fixture.sql'
       - '.github/workflows/parts-sql-checks.yml'
   workflow_dispatch:
 
@@ -108,5 +108,5 @@ jobs:
           docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/maintenance_master_checks.sql
           docker cp supabase/tests/maintenance_master_fixtures.sql "$db_container":/tmp/maintenance_master_fixtures.sql
           docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/maintenance_master_fixtures.sql
-          docker cp supabase/tests/20261111121500_mm_go_live_order_fixture.sql "$db_container":/tmp/20261111121500_mm_go_live_order_fixture.sql
-          docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/20261111121500_mm_go_live_order_fixture.sql
+          docker cp supabase/tests/20261106131300_mm_go_live_order_fixture.sql "$db_container":/tmp/20261106131300_mm_go_live_order_fixture.sql
+          docker exec "$db_container" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/20261106131300_mm_go_live_order_fixture.sql

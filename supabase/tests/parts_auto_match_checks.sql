@@ -2896,7 +2896,7 @@ BEGIN
   END IF;
 END $$;
 
--- Proof 81: one part edit writes exactly one platform_revision row (20261109130000)
+-- Proof 81: one part edit writes exactly one platform_revision row (20261106122100)
 DO $$
 DECLARE
   v_grp uuid := 'a9000006-0000-4000-8000-0000000000f7';

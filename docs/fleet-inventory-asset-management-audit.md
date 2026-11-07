@@ -30,7 +30,7 @@ On 5 Nov the owner cut the extras (purchasing, counts, device tracking). Per-uni
 None. **Live and checked by the planner (5 Nov):** 11 items, 7 movements and 22 ledger rows, all unchanged. The dash camera and its history are kept. The removed tables are gone, only phase 0–3 switches remain, the ledger chain check is ok, and the last migration is `20261114120000`. Still to do: the owner tries the done-tests by hand, then G2–G4.
 
 **Built (Rev 54):** S-01 to S-12 are done on the local copy.
-- **Migrations:** `20261113120000_fleet_inventory_s02_cutdown.sql` and `20261114120000_fleet_inventory_s08_s12_asset_rpcs.sql`.
+- **Migrations:** `20261106132300_fleet_inventory_s02_cutdown.sql` and `20261106132400_fleet_inventory_s08_s12_asset_rpcs.sql`.
 - **Tests (Cursor):** 50 inventory server tests pass, integrity checks are 0, and inventory typecheck errors are 0.
 - **Stock transfers (I checked):** the local `inv_transfer` is identical to live, except the movement label (`transfer` instead of `requisition`). Stock costs move exactly as before.
 - **Database (I checked):** every removed table and view is gone, and everything kept is still there.

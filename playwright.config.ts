@@ -27,7 +27,8 @@ const driverBaseUrl = process.env.DRIVER_BASE_URL?.trim();
 /** Local dev often already runs dev:testcopy on 5180/5181; CI must own the port. */
 const reuseLocalPreviewServer = !process.env.CI;
 const previewWebServers = [
-  ...(!adminBaseUrl
+  // Inventory done-tests only build Fleet + Driver; no inventory spec opens Admin.
+  ...(!adminBaseUrl && process.env.INVENTORY_E2E !== '1'
     ? [{
         command: 'pnpm --filter @roam/admin run dev:testcopy',
         url: 'http://127.0.0.1:5180',

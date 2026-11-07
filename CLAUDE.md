@@ -1,0 +1,11 @@
+# Project rules
+
+## Migration file dates
+
+Every new file in `supabase/migrations/` is named with the **current UTC date and time**:
+`YYYYMMDDHHMMSS_short_name.sql`.
+
+- Create it with `npx supabase migration new <short_name>`, or use the real current UTC time.
+- Never pick the date by adding to the newest existing file's date.
+- Never put a date in the future. CI (`scripts/validate-migration-sql.mjs`) fails on future dates.
+

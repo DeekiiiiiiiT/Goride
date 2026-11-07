@@ -340,7 +340,8 @@ BEGIN
     'evidenceUrl', 'https://example.com/wiper',
     'fitMode', 'spec',
     'specKey', 'wiper_driver_mm',
-    'specValue', '525'
+    'specValue', '525',
+    'position', 'driver'
   ));
   IF NOT EXISTS (
     SELECT 1 FROM public.parts_for_vehicle(v_roomy, v_wiper, 2019) p

@@ -55,19 +55,19 @@ jobs:
               supabase/migrations/20261105100000_parts_auto_match_rev12_hotfix.sql|\
               supabase/migrations/20261105120000_parts_auto_match_rev12_audit.sql|\
               supabase/migrations/20261106120000_parts_auto_match_rev13_closeout.sql|\
-              supabase/migrations/20261107120000_parts_for_vehicle_live_tiebreak.sql|\
-              supabase/migrations/20261107130000_part_match_archive_removal_cause.sql|\
-              supabase/migrations/20261107140000_part_match_trg_listing_scope_backfill.sql|\
-              supabase/migrations/20261107150000_part_match_derived_keep_pfd_alias.sql|\
-              supabase/migrations/20261107160000_part_import_undo_pic_alias.sql|\
-              supabase/migrations/20261107170000_vehicle_oe_number_revision_drop_fkey.sql|\
-              supabase/migrations/20261107180000_part_match_scope_truncate_cleanup.sql|\
-              supabase/migrations/20261107190000_part_match_scope_delete_cleanup.sql|\
-              supabase/migrations/20261107200000_part_match_sync_conflicts_manual_note.sql|\
-              supabase/migrations/20261107210000_part_match_recompute_batch_scope_gid.sql|\
-              supabase/migrations/20261107220000_part_match_sync_conflicts_reopen_identity.sql|\
-              supabase/migrations/20261107230000_part_match_conflict_open_key_oe.sql|\
-              supabase/migrations/20261107240000_parts_for_vehicle_universal.sql|\
+              supabase/migrations/20261106120100_parts_for_vehicle_live_tiebreak.sql|\
+              supabase/migrations/20261106120200_part_match_archive_removal_cause.sql|\
+              supabase/migrations/20261106120300_part_match_trg_listing_scope_backfill.sql|\
+              supabase/migrations/20261106120400_part_match_derived_keep_pfd_alias.sql|\
+              supabase/migrations/20261106120500_part_import_undo_pic_alias.sql|\
+              supabase/migrations/20261106120600_vehicle_oe_number_revision_drop_fkey.sql|\
+              supabase/migrations/20261106120700_part_match_scope_truncate_cleanup.sql|\
+              supabase/migrations/20261106120800_part_match_scope_delete_cleanup.sql|\
+              supabase/migrations/20261106120900_part_match_sync_conflicts_manual_note.sql|\
+              supabase/migrations/20261106121000_part_match_recompute_batch_scope_gid.sql|\
+              supabase/migrations/20261106121100_part_match_sync_conflicts_reopen_identity.sql|\
+              supabase/migrations/20261106121200_part_match_conflict_open_key_oe.sql|\
+              supabase/migrations/20261106121300_parts_for_vehicle_universal.sql|\
               supabase/tests/parts_auto_match_checks.sql|\
               e2e/parts-auto-match-stitch.spec.ts|\
               e2e/add-a-part-stitch.spec.ts|\

@@ -32,10 +32,7 @@ BEGIN
     WHERE organization_id IN (SELECT DISTINCT organization_id FROM fleet.inv_item WHERE id = ANY(v_item_ids));
     DELETE FROM fleet.inv_balance WHERE item_id = ANY(v_item_ids);
     DELETE FROM fleet.inv_cost_layer WHERE item_id = ANY(v_item_ids);
-    DELETE FROM fleet.inv_reservation WHERE item_id = ANY(v_item_ids);
     DELETE FROM fleet.inv_asset_event
-    WHERE asset_id IN (SELECT id FROM fleet.inv_asset WHERE item_id = ANY(v_item_ids));
-    DELETE FROM fleet.inv_asset_diagnostic
     WHERE asset_id IN (SELECT id FROM fleet.inv_asset WHERE item_id = ANY(v_item_ids));
     DELETE FROM fleet.inv_asset WHERE item_id = ANY(v_item_ids);
     DELETE FROM fleet.kit_template_line WHERE item_id = ANY(v_item_ids);

@@ -2,7 +2,7 @@ import { assertEquals } from "jsr:@std/assert@1";
 
 const S02_CUTDOWN = await Deno.readTextFile(
   new URL(
-    "../../../supabase/migrations/20261113120000_fleet_inventory_s02_cutdown.sql",
+    "../../../supabase/migrations/20261106132300_fleet_inventory_s02_cutdown.sql",
     import.meta.url,
   ),
 );
@@ -11,7 +11,7 @@ function extractInvWriteOff(sql: string): string {
   const marker = "CREATE OR REPLACE FUNCTION fleet.inv_write_off(";
   const start = sql.indexOf(marker);
   if (start === -1) {
-    throw new Error("missing fleet.inv_write_off in 20261113120000_fleet_inventory_s02_cutdown.sql");
+    throw new Error("missing fleet.inv_write_off in 20261106132300_fleet_inventory_s02_cutdown.sql");
   }
   const slice = sql.slice(start);
   const end = slice.indexOf("\n$$;");
