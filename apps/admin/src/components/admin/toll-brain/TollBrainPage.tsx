@@ -6,7 +6,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { Loader2, Radar, RefreshCw, Route } from 'lucide-react';
-import { projectId } from '../../../utils/supabase/info';
+import { getSupabaseFunctionsBaseUrl } from '../../../utils/supabase/info';
 import { useAuth } from '../../auth/AuthContext';
 import { EngineConsoleChrome, EnginePanelHeader } from '../engine/EngineConsoleChrome';
 
@@ -136,7 +136,7 @@ export function TollBrainPage({ onNavigate }: { onNavigate?: (page: string) => v
   const [health, setHealth] = useState<BrainHealth | null>(null);
   const [policy, setPolicy] = useState<BrainPolicy | null>(null);
 
-  const baseUrl = `https://${projectId}.supabase.co`;
+  const baseUrl = getSupabaseFunctionsBaseUrl();
 
   const headers = useCallback(() => {
     return {
@@ -154,8 +154,8 @@ export function TollBrainPage({ onNavigate }: { onNavigate?: (page: string) => v
     setError(null);
     try {
       const [hRes, pRes] = await Promise.all([
-        fetch(`${baseUrl}/functions/v1/toll-brain/health`, { headers: headers() }),
-        fetch(`${baseUrl}/functions/v1/toll-brain/admin/policies`, { headers: headers() }),
+        fetch(`${baseUrl}/toll-brain/health`, { headers: headers() }),
+        fetch(`${baseUrl}/toll-brain/admin/policies`, { headers: headers() }),
       ]);
       if (hRes.ok) setHealth(await hRes.json());
       if (pRes.ok) {
@@ -182,7 +182,7 @@ export function TollBrainPage({ onNavigate }: { onNavigate?: (page: string) => v
     if (!policy || !session) return;
     setSuccess(null);
     setError(null);
-    const res = await fetch(`${baseUrl}/functions/v1/toll-brain/admin/policies`, {
+    const res = await fetch(`${baseUrl}/toll-brain/admin/policies`, {
       method: 'PUT',
       headers: headers(),
       body: JSON.stringify(policy),

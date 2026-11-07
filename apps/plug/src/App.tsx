@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { TestCopyBar } from '@roam/auth-client/components/TestCopyBar';
 import { AuthProvider } from './auth';
 import { plugSend } from './api';
 import { readQueue, removeJob } from './offline';
@@ -84,6 +85,7 @@ function SyncOffline() {
 export default function App() {
   return (
     <AuthProvider>
+      <TestCopyBar />
       <HashRouter>
         <PlugShell>
           <SyncOffline />

@@ -57,8 +57,8 @@ export function BulkConfirmDialog({
             {action === "type" ? "Type" : "Facility"}
             <select className="mt-1 w-full rounded-lg bg-surface-container-low px-3 py-2 text-xs text-on-surface" value={extra} onChange={(event) => setExtra(event.target.value)}>
               <option value="">Choose</option>
-              {(action === "type" ? taxonomy?.placeTypes || [] : taxonomy?.facilityTypes || []).map((row) => (
-                <option key={row.slug} value={row.slug}>{"label" in row ? row.label : row.slug}</option>
+              {(action === "type" ? taxonomy?.placeTypes || [] : taxonomy?.facilityTypes || []).map((row: { slug: string; label?: string }) => (
+                <option key={row.slug} value={row.slug}>{row.label ?? row.slug}</option>
               ))}
             </select>
           </label>

@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_dashboard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{colors:{"tertiary-fixed-dim":"#bfc5e2","tertiary":"#40465e","inverse-surface":"#2e3039","on-surface-variant":"#434655","on-primary-fixed":"#00174b","on-secondary-container":"#5c647a","surface-container-highest":"#e1e1ed","surface-variant":"#e1e1ed","outline-variant":"#c3c6d7","primary":"#003ea9","secondary":"#565e74","on-background":"#191b24","on-tertiary-fixed":"#141b30","outline":"#737686","on-secondary-fixed-variant":"#3f465c","on-surface":"#191b24","surface-container-high":"#e7e7f3","surface-dim":"#d9d9e5","on-primary-container":"#ced8ff","on-error":"#ffffff","secondary-fixed-dim":"#bec6e0","background":"#faf8ff","surface-bright":"#faf8ff","surface-container-lowest":"#ffffff","on-tertiary-container":"#d2d8f6","on-primary":"#ffffff","primary-fixed-dim":"#b4c5ff","on-primary-fixed-variant":"#003ea8","on-error-container":"#93000a","error-container":"#ffdad6","on-tertiary":"#ffffff","on-tertiary-fixed-variant":"#3f465e","inverse-on-surface":"#f0f0fc","on-secondary-fixed":"#131b2e","tertiary-fixed":"#dbe1ff","surface":"#faf8ff","on-secondary":"#ffffff","primary-container":"#0153dc","surface-container":"#ededf9","surface-container-low":"#f3f3ff","primary-fixed":"#dbe1ff","error":"#ba1a1a","tertiary-container":"#575e77","secondary-fixed":"#dae2fd","secondary-container":"#dae2fd","surface-tint":"#0053db","inverse-primary":"#b4c5ff"},borderRadius:{DEFAULT:"0.125rem",lg:"0.25rem",xl:"0.5rem",full:"0.75rem"},spacing:{"space-lg":"1rem","space-xs":"0.25rem","margin-panel":"1rem",gutter:"1rem",margin:"1.5rem","space-xl":"1.5rem","space-md":"0.75rem","gutter-dense":"0.5rem","space-sm":"0.5rem"},fontFamily:{"body-md":["Inter"],"label-md":["Inter"],"headline-lg":["Inter"],"mono-sm":["JetBrains Mono"],"mono-md":["JetBrains Mono"],"mono-lg":["JetBrains Mono"],"headline-xl":["Inter"],"body-sm":["Inter"],"label-xs":["Inter"],"headline-md":["Inter"]},fontSize:{"body-md":["14px",{lineHeight:"20px",letterSpacing:"0",fontWeight:"400"}],"label-md":["12px",{lineHeight:"16px",letterSpacing:"0.01em",fontWeight:"500"}],"headline-lg":["20px",{lineHeight:"28px",letterSpacing:"-0.015em",fontWeight:"600"}],"mono-sm":["11px",{lineHeight:"14px",letterSpacing:"0.02em",fontWeight:"400"}],"mono-md":["12px",{lineHeight:"16px",letterSpacing:"0",fontWeight:"500"}],"mono-lg":["14px",{lineHeight:"20px",letterSpacing:"-0.01em",fontWeight:"500"}],"headline-xl":["24px",{lineHeight:"32px",letterSpacing:"-0.02em",fontWeight:"600"}],"body-sm":["13px",{lineHeight:"18px",letterSpacing:"0",fontWeight:"400"}],"label-xs":["11px",{lineHeight:"14px",letterSpacing:"0.04em",fontWeight:"600"}],"headline-md":["16px",{lineHeight:"24px",letterSpacing:"-0.01em",fontWeight:"600"}]}}}};</script></head><body class="bg-background font-body-md text-on-surface antialiased min-h-screen"><aside class="fixed left-0 top-0 h-screen w-64 bg-inverse-surface z-50 flex flex-col justify-between select-none"><div class="flex flex-col flex-1 overflow-y-auto"><div class="h-14 px-margin flex items-center justify-between border-b border-outline-variant/20"><div class="flex items-center gap-space-sm"><div class="w-7 h-7 bg-primary flex items-center justify-center rounded"><span class="material-symbols-outlined text-on-primary text-[18px]">precision_manufacturing</span></div><div class="flex flex-col"><span class="font-headline-md text-headline-md font-semibold text-inverse-on-surface tracking-tight leading-none">DOMINION</span><span class="font-mono-sm text-mono-sm text-outline-variant uppercase tracking-wider">Operations Core</span></div></div><span class="font-mono-sm text-mono-sm px-1.5 py-0.5 rounded bg-primary/20 text-primary-fixed border border-primary-fixed/30">v4.8</span></div><nav class="px-space-md py-space-md space-y-space-md" data-active-classes="bg-primary-container text-on-primary font-semibold"><div class="space-y-space-xs"><div class="px-space-sm py-1 font-mono-sm text-mono-sm uppercase tracking-wider text-outline-variant">MASTER DATA</div><a class="flex items-center gap-space-sm px-space-sm py-2 rounded text-outline-variant hover:bg-surface-container-highest/10 hover:text-inverse-on-surface transition-colors font-body-sm text-body-sm" data-path="overview" href="#"><span class="material-symbols-outlined text-[18px]">grid_view</span>Overview</a><a aria-current="page" class="flex items-center gap-space-sm px-space-sm py-2 rounded transition-colors bg-primary-container text-on-primary font-semibold" data-path="parts-database" href="#"><span class="material-symbols-outlined text-[18px]">directions_car</span>Vehicles</a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded text-outline-variant hover:bg-surface-container-highest/10 hover:text-inverse-on-surface transition-colors font-body-sm text-body-sm" data-path="engines" href="#"><span class="material-symbols-outlined text-[18px]">bolt</span>Engines</a></div><div class="space-y-space-xs"><div class="px-space-sm py-1 font-mono-sm text-mono-sm uppercase tracking-wider text-outline-variant">DISTRIBUTION</div><a class="flex items-center gap-space-sm px-space-sm py-2 rounded text-outline-variant hover:bg-surface-container-highest/10 hover:text-inverse-on-surface transition-colors font-body-sm text-body-sm" data-path="warehouses" href="#"><span class="material-symbols-outlined text-[18px]">warehouse</span>Warehouses</a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded text-outline-variant hover:bg-surface-container-highest/10 hover:text-inverse-on-surface transition-colors font-body-sm text-body-sm" data-path="dispatch-routes" href="#"><span class="material-symbols-outlined text-[18px]">local_shipping</span>Logistics &amp; Routes</a></div><div class="space-y-space-xs"><div class="px-space-sm py-1 font-mono-sm text-mono-sm uppercase tracking-wider text-outline-variant">PLATFORM</div><a class="flex items-center gap-space-sm px-space-sm py-2 rounded text-outline-variant hover:bg-surface-container-highest/10 hover:text-inverse-on-surface transition-colors font-body-sm text-body-sm" data-path="catalogs" href="#"><span class="material-symbols-outlined text-[18px]">menu_book</span>OEM Catalogs</a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded text-outline-variant hover:bg-surface-container-highest/10 hover:text-inverse-on-surface transition-colors font-body-sm text-body-sm" data-path="schema-settings" href="#"><span class="material-symbols-outlined text-[18px]">schema</span>Data Schema</a></div><div class="space-y-space-xs"><div class="px-space-sm py-1 font-mono-sm text-mono-sm uppercase tracking-wider text-outline-variant">BACK OFFICE</div><a class="flex items-center gap-space-sm px-space-sm py-2 rounded text-outline-variant hover:bg-surface-container-highest/10 hover:text-inverse-on-surface transition-colors font-body-sm text-body-sm" data-path="audit-trail" href="#"><span class="material-symbols-outlined text-[18px]">receipt_long</span>Audit Logs</a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded text-outline-variant hover:bg-surface-container-highest/10 hover:text-inverse-on-surface transition-colors font-body-sm text-body-sm" data-path="access-control" href="#"><span class="material-symbols-outlined text-[18px]">admin_panel_settings</span>Access Control</a></div></nav></div><div class="p-space-md border-t border-outline-variant/20 bg-inverse-surface"><div class="flex items-center justify-between px-space-sm py-2 rounded bg-surface-container-highest/10"><div class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-[#006e31] inline-block animate-pulse"></span><span class="font-mono-sm text-mono-sm text-inverse-on-surface tracking-wider font-medium">KGN-DC-01 · JMD READY</span></div><span class="material-symbols-outlined text-outline-variant text-[16px]">dns</span></div></div></aside><div class="pl-64"><header class="fixed top-0 left-64 right-0 h-14 bg-surface-container-lowest border-b border-surface-container-high z-40 flex items-center justify-between px-margin"><div class="flex items-center gap-space-md"><div class="relative w-[420px]"><span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-[18px]">search</span><input class="w-full h-9 pl-9 pr-14 bg-surface rounded border border-outline-variant/60 font-body-sm text-body-sm text-on-surface placeholder:text-outline focus:outline-none focus:border-primary" placeholder="Search entities, engines, routes…" type="text"/><div class="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-surface-container-high text-outline text-label-xs font-mono-sm border border-outline-variant/40"><span class="text-[10px]">⌘</span><span>K</span></div></div></div><div class="flex items-center gap-space-md"><button class="p-1.5 rounded text-outline hover:text-on-surface hover:bg-surface-container transition-colors" title="Toggle Theme" type="button"><span class="material-symbols-outlined text-[20px]">dark_mode</span></button><div class="h-4 w-px bg-outline-variant/50"></div><div class="flex items-center gap-space-sm px-space-sm py-1 rounded bg-surface-container-low border border-surface-container-high"><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div><div class="flex items-center gap-1 font-mono-md text-mono-md text-on-surface"><span class="font-semibold">DT</span><span class="text-outline">·</span><span>Deeki T</span><span class="text-outline">·</span><span class="text-primary font-medium">Owner</span></div></div><div class="h-4 w-px bg-outline-variant/50"></div><a class="p-1.5 rounded text-outline hover:text-error hover:bg-error-container/40 transition-colors" data-path="login" href="#" title="Sign Out"><span class="material-symbols-outlined text-[20px]">logout</span></a></div></header><main class="relative pt-14 bg-surface min-h-screen"><div class="flex flex-col w-full">
+<div class="w-full max-w-[1440px] mx-auto px-margin py-margin space-y-space-xl">
+<!-- Top System Subnavigation Tabs -->
+<div class="w-full flex items-center justify-between border-b border-surface-container-high pb-0">
+<nav aria-label="Database Sections" class="flex items-center gap-space-lg">
+<a class="pb-3 text-secondary hover:text-on-surface font-headline-md text-headline-md font-medium transition-colors flex items-center gap-1.5" href="#">
+<span class="material-symbols-outlined text-[18px]">manage_search</span>
+          Find parts
+        </a>
+<a class="pb-3 text-secondary hover:text-on-surface font-headline-md text-headline-md font-medium transition-colors flex items-center gap-1.5" href="#">
+<span class="material-symbols-outlined text-[18px]">database</span>
+          Full database
+        </a>
+<a class="pb-3 text-secondary hover:text-on-surface font-headline-md text-headline-md font-medium transition-colors flex items-center gap-1.5" href="#">
+<span class="material-symbols-outlined text-[18px]">add_circle</span>
+          Add parts
+        </a>
+<a class="pb-3 text-secondary hover:text-on-surface font-headline-md text-headline-md font-medium transition-colors flex items-center gap-1.5" href="#">
+<span class="material-symbols-outlined text-[18px]">category</span>
+          Part types
+        </a>
+<a aria-current="page" class="relative pb-3 text-primary-container font-headline-md text-headline-md font-semibold flex items-center gap-1.5" href="#">
+<span class="material-symbols-outlined text-[18px] text-primary-container">verified_user</span>
+          Trusted sources
+          <span class="absolute bottom-0 left-0 right-0 h-[2.5px] bg-primary-container rounded-t"></span>
+</a>
+</nav>
+<div class="pb-2 hidden lg:flex items-center gap-2 text-outline font-mono-sm text-mono-sm">
+<span>SCHEMA: OEM_CANONICAL_V4</span>
+<span class="text-outline-variant">/</span>
+<span class="text-on-surface font-medium">AUTHORITY_REGISTRY</span>
+</div>
+</div>
+<!-- Intro Card -->
+<div class="w-full bg-surface-container-lowest border border-[#e6e7ee] rounded-xl p-space-lg shadow-sm">
+<div class="flex flex-col md:flex-row md:items-start justify-between gap-space-lg">
+<div class="space-y-1.5 max-w-3xl">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary-container text-[20px]">verified</span>
+<h1 class="font-headline-lg text-headline-lg font-semibold text-on-surface tracking-tight">Trusted sources</h1>
+</div>
+<p class="font-body-md text-body-md text-secondary leading-relaxed">
+            Websites listed here show a car maker's own parts catalogue for a frame number. Parts and car fits saved with a link from one of these sites are marked <strong class="text-on-surface font-medium">Confirmed</strong>. Links from anywhere else are saved as <strong class="text-on-surface font-medium">Needs checking</strong>.
+          </p>
+</div>
+<!-- Trust Legend Chips -->
+<div class="flex items-center gap-space-sm shrink-0 self-start pt-1">
+<div class="flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#006e31]/10 border border-[#006e31]/25 text-[#006e31] font-mono-sm text-mono-sm font-medium">
+<span class="w-2 h-2 rounded-full bg-[#006e31] shrink-0"></span>
+<span>Confirmed</span>
+</div>
+<div class="flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#8a5300]/10 border border-[#8a5300]/25 text-[#8a5300] font-mono-sm text-mono-sm font-medium">
+<span class="material-symbols-outlined text-[14px]">visibility</span>
+<span>Needs checking</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Action Bar & Filter Row -->
+<div class="w-full flex flex-col md:flex-row md:items-center justify-between gap-space-md bg-surface-container-low p-space-md rounded-xl border border-[#e6e7ee]">
+<div class="flex flex-1 items-center gap-space-md">
+<div class="relative w-full max-w-sm">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-[18px]">search</span>
+<input class="w-full h-9 pl-9 pr-3 bg-surface-container-lowest rounded border border-[#e6e7ee] font-body-sm text-body-sm text-on-surface placeholder:text-outline focus:outline-none focus:border-primary-container transition-colors" id="maker-search-input" placeholder="Filter by maker…" type="text"/>
+</div>
+<span class="font-mono-md text-mono-md text-secondary whitespace-nowrap tabular-nums">
+<span class="font-semibold text-on-surface" id="active-maker-count">5</span> car makers · <span class="font-semibold text-on-surface">8</span> trusted domains active
+        </span>
+</div>
+<div class="flex items-center gap-space-sm shrink-0">
+<button class="h-9 px-4 rounded bg-primary-container hover:bg-[#0146ba] text-on-primary font-label-md text-label-md font-semibold transition-colors flex items-center gap-1.5 shadow-sm" onclick="document.getElementById('add-maker-modal').classList.remove('hidden')" type="button">
+<span class="material-symbols-outlined text-[18px]">add</span>
+          Add a car maker
+        </button>
+</div>
+</div>
+<!-- Two-Column Grid of Car Maker Cards -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-space-lg" id="maker-cards-grid">
+<!-- Card 1: Toyota -->
+<article class="maker-card flex flex-col justify-between bg-surface-container-lowest border border-[#e6e7ee] rounded-xl shadow-sm overflow-hidden" data-maker="Toyota">
+<div>
+<header class="p-space-lg pb-space-md border-b border-surface-container flex items-center justify-between">
+<div class="flex items-center gap-space-md">
+<h2 class="font-headline-lg text-headline-lg font-bold text-on-surface tracking-tight">Toyota</h2>
+<span class="font-mono-sm text-mono-sm px-2 py-0.5 rounded bg-surface-container text-secondary font-medium tabular-nums">3 sites</span>
+</div>
+<button class="w-8 h-8 flex items-center justify-center rounded text-outline hover:text-on-surface hover:bg-surface-container-low transition-colors" title="Maker Options" type="button">
+<span class="material-symbols-outlined text-[20px]">more_horiz</span>
+</button>
+</header>
+<div class="divide-y divide-surface-container">
+<!-- Row 1 -->
+<div class="p-space-md px-space-lg flex items-center justify-between hover:bg-surface-container-low/40 transition-colors">
+<div class="flex items-center gap-3 min-w-0">
+<span class="material-symbols-outlined text-outline text-[18px] shrink-0">public</span>
+<div class="flex flex-col min-w-0">
+<span class="font-mono-md text-mono-md font-medium text-on-surface tracking-tight">amayama.com</span>
+<span class="font-body-sm text-[12px] text-secondary tabular-nums">Added by Deeki T · 6 Nov 2026</span>
+</div>
+</div>
+<div class="flex items-center gap-2 shrink-0 ml-3">
+<a class="h-7 px-2.5 rounded border border-[#e6e7ee] hover:bg-surface-container-low text-on-surface font-label-md text-label-md flex items-center gap-1 transition-colors" href="https://amayama.com" rel="noopener noreferrer" target="_blank">
+<span>Open</span>
+<span class="material-symbols-outlined text-[14px] text-outline">open_in_new</span>
+</a>
+<button class="h-7 px-2 rounded hover:bg-error-container/40 text-[#a83836] font-label-md text-label-md flex items-center gap-0.5 transition-colors" onclick="this.closest('.flex.items-center.justify-between').remove()" title="Remove domain" type="button">
+<span class="material-symbols-outlined text-[15px]">delete</span>
+<span>Remove</span>
+</button>
+</div>
+</div>
+<!-- Row 2 -->
+<div class="p-space-md px-space-lg flex items-center justify-between hover:bg-surface-container-low/40 transition-colors">
+<div class="flex items-center gap-3 min-w-0">
+<span class="material-symbols-outlined text-outline text-[18px] shrink-0">public</span>
+<div class="flex flex-col min-w-0">
+<span class="font-mono-md text-mono-md font-medium text-on-surface tracking-tight">megazip.net</span>
+<span class="font-body-sm text-[12px] text-secondary tabular-nums">Added by Deeki T · 6 Nov 2026</span>
+</div>
+</div>
+<div class="flex items-center gap-2 shrink-0 ml-3">
+<a class="h-7 px-2.5 rounded border border-[#e6e7ee] hover:bg-surface-container-low text-on-surface font-label-md text-label-md flex items-center gap-1 transition-colors" href="https://megazip.net" rel="noopener noreferrer" target="_blank">
+<span>Open</span>
+<span class="material-symbols-outlined text-[14px] text-outline">open_in_new</span>
+</a>
+<button class="h-7 px-2 rounded hover:bg-error-container/40 text-[#a83836] font-label-md text-label-md flex items-center gap-0.5 transition-colors" onclick="this.closest('.flex.items-center.justify-between').remove()" title="Remove domain" type="button">
+<span class="material-symbols-outlined text-[15px]">delete</span>
+<span>Remove</span>
+</button>
+</div>
+</div>
+<!-- Row 3 -->
+<div class="p-space-md px-space-lg flex items-center justify-between hover:bg-surface-container-low/40 transition-colors">
+<div class="flex items-center gap-3 min-w-0">
+<span class="material-symbols-outlined text-outline text-[18px] shrink-0">public</span>
+<div class="flex flex-col min-w-0">
+<span class="font-mono-md text-mono-md font-medium text-on-surface tracking-tight">partsouq.com</span>
+<span class="font-body-sm text-[12px] text-secondary tabular-nums">Added by Deeki T · 6 Nov 2026</span>
+</div>
+</div>
+<div class="flex items-center gap-2 shrink-0 ml-3">
+<a class="h-7 px-2.5 rounded border border-[#e6e7ee] hover:bg-surface-container-low text-on-surface font-label-md text-label-md flex items-center gap-1 transition-colors" href="https://partsouq.com" rel="noopener noreferrer" target="_blank">
+<span>Open</span>
+<span class="material-symbols-outlined text-[14px] text-outline">open_in_new</span>
+</a>
+<button class="h-7 px-2 rounded hover:bg-error-container/40 text-[#a83836] font-label-md text-label-md flex items-center gap-0.5 transition-colors" onclick="this.closest('.flex.items-center.justify-between').remove()" title="Remove domain" type="button">
+<span class="material-symbols-outlined text-[15px]">delete</span>
+<span>Remove</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Footer -->
+<footer class="p-space-md px-space-lg bg-surface-container-low/50 border-t border-surface-container mt-2">
+<form class="flex items-center gap-2" onsubmit="event.preventDefault();">
+<div class="relative flex-1">
+<input aria-label="Add a website address" class="w-full h-8 px-3 bg-surface-container-lowest border border-[#e6e7ee] rounded font-mono-sm text-mono-sm text-on-surface placeholder:text-outline focus:outline-none focus:border-primary-container transition-colors" placeholder="e.g. amayama.com" type="text"/>
+</div>
+<button class="h-8 px-3 rounded border border-[#e6e7ee] bg-surface-container-lowest hover:bg-surface-container text-on-surface font-label-md text-label-md font-medium transition-colors" type="button">
+              Add
+            </button>
+</form>
+</footer>
+</article>
+<!-- Card 2: Daihatsu -->
+<article class="maker-card flex flex-col justify-between bg-surface-container-lowest border border-[#e6e7ee] rounded-xl shadow-sm overflow-hidden" data-maker="Daihatsu">
+<div>
+<header class="p-space-lg pb-space-md border-b border-surface-container flex items-center justify-between">
+<div class="flex items-center gap-space-md">
+<h2 class="font-headline-lg text-headline-lg font-bold text-on-surface tracking-tight">Daihatsu</h2>
+<span class="font-mono-sm text-mono-sm px-2 py-0.5 rounded bg-surface-container text-secondary font-medium tabular-nums">3 sites</span>
+</div>
+<button class="w-8 h-8 flex items-center justify-center rounded text-outline hover:text-on-surface hover:bg-surface-container-low transition-colors" title="Maker Options" type="button">
+<span class="material-symbols-outlined text-[20px]">more_horiz</span>
+</button>
+</header>
+<div class="divide-y divide-surface-container">
+<!-- Row 1 -->
+<div class="p-space-md px-space-lg flex items-center justify-between hover:bg-surface-container-low/40 transition-colors">
+<div class="flex items-center gap-3 min-w-0">
+<span class="material-symbols-outlined text-outline text-[18px] shrink-0">public</span>
+<div class="flex flex-col min-w-0">
+<span class="font-mono-md text-mono-md font-medium text-on-surface tracking-tight">amayama.com</span>
+<span class="font-body-sm text-[12px] text-secondary tabular-nums">Added by Deeki T · 6 Nov 2026</span>
+</div>
+</div>
+<div class="flex items-center gap-2 shrink-0 ml-3">
+<a class="h-7 px-2.5 rounded border border-[#e6e7ee] hover:bg-surface-container-low text-on-surface font-label-md text-label-md flex items-center gap-1 transition-colors" href="https://amayama.com" rel="noopener noreferrer" target="_blank">
+<span>Open</span>
+<span class="material-symbols-outlined text-[14px] text-outline">open_in_new</span>
+</a>
+<button class="h-7 px-2 rounded hover:bg-error-container/40 text-[#a83836] font-label-md text-label-md flex items-center gap-0.5 transition-colors" onclick="this.closest('.flex.items-center.justify-between').remove()" title="Remove domain" type="button">
+<span class="material-symbols-outlined text-[15px]">delete</span>
+<span>Remove</span>
+</button>
+</div>
+</div>
+<!-- Row 2 -->
+<div class="p-space-md px-space-lg flex items-center justify-between hover:bg-surface-container-low/40 transition-colors">
+<div class="flex items-center gap-3 min-w-0">
+<span class="material-symbols-outlined text-outline text-[18px] shrink-0">public</span>
+<div class="flex flex-col min-w-0">
+<span class="font-mono-md text-mono-md font-medium text-on-surface tracking-tight">megazip.net</span>
+<span class="font-body-sm text-[12px] text-secondary tabular-nums">Added by Deeki T · 6 Nov 2026</span>
+</div>
+</div>
+<div class="flex items-center gap-2 shrink-0 ml-3">
+<a class="h-7 px-2.5 rounded border border-[#e6e7ee] hover:bg-surface-container-low text-on-surface font-label-md text-label-md flex items-center gap-1 transition-colors" href="https://megazip.net" rel="noopener noreferrer" target="_blank">
+<span>Open</span>
+<span class="material-symbols-outlined text-[14px] text-outline">open_in_new</span>
+</a>
+<button class="h-7 px-2 rounded hover:bg-error-container/40 text-[#a83836] font-label-md text-label-md flex items-center gap-0.5 transition-colors" onclick="this.closest('.flex.items-center.justify-between').remove()" title="Remove domain" type="button">
+<span class="material-symbols-outlined text-[15px]">delete</span>
+<span>Remove</span>
+</button>
+</div>
+</div>
+<!-- Row 3 -->
+<div class="p-space-md px-space-lg flex items-center justify-between hover:bg-surface-container-low/40 transition-colors">
+<div class="flex items-center gap-3 min-w-0">
+<span class="material-symbols-outlined text-outline text-[18px] shrink-0">public</span>
+<div class="flex flex-col min-w-0">
+<span class="font-mono-md text-mono-md font-medium text-on-surface tracking-tight">partsouq.com</span>
+<span class="font-body-sm text-[12px] text-secondary tabular-nums">Added by Deeki T · 6 Nov 2026</span>
+</div>
+</div>
+<div class="flex items-center gap-2 shrink-0 ml-3">
+<a class="h-7 px-2.5 rounded border border-[#e6e7ee] hover:bg-surface-container-low text-on-surface font-label-md text-label-md flex items-center gap-1 transition-colors" href="https://partsouq.com" rel="noopener noreferrer" target="_blank">
+<span>Open</span>
+<span class="material-symbols-outlined text-[14px] text-outline">open_in_new</span>
+</a>
+<button class="h-7 px-2 rounded hover:bg-error-container/40 text-[#a83836] font-label-md text-label-md flex items-center gap-0.5 transition-colors" onclick="this.closest('.flex.items-center.justify-between').remove()" title="Remove domain" type="button">
+<span class="material-symbols-outlined text-[15px]">delete</span>
+<span>Remove</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Footer -->
+<footer class="p-space-md px-space-lg bg-surface-container-low/50 border-t border-surface-container mt-2">
+<form class="flex items-center gap-2" onsubmit="event.preventDefault();">
+<div class="relative flex-1">
+<input aria-label="Add a website address" class="w-full h-8 px-3 bg-surface-container-lowest border border-[#e6e7ee] rounded font-mono-sm text-mono-sm text-on-surface placeholder:text-outline focus:outline-none focus:border-primary-container transition-colors" placeholder="e.g. amayama.com" type="text"/>
+</div>
+<button class="h-8 px-3 rounded border border-[#e6e7ee] bg-surface-container-lowest hover:bg-surface-container text-on-surface font-label-md text-label-md font-medium transition-colors" type="button">
+              Add
+            </button>
+</form>
+</footer>
+</article>
+<!-- Card 3: Lexus -->
+<article class="maker-card flex flex-col justify-between bg-surface-container-lowest border border-[#e6e7ee] rounded-xl shadow-sm overflow-hidden" data-maker="Lexus">
+<div>
+<header class="p-space-lg pb-space-md border-b border-surface-container flex items-center justify-between">
+<div class="flex items-center gap-space-md">
+<h2 class="font-headline-lg text-headline-lg font-bold text-on-surface tracking-tight">Lexus</h2>
+<span class="font-mono-sm text-mono-sm px-2 py-0.5 rounded bg-surface-container text-secondary font-medium tabular-nums">2 sites</span>
+</div>
+<button class="w-8 h-8 flex items-center justify-center rounded text-outline hover:text-on-surface hover:bg-surface-container-low transition-colors" title="Maker Options" type="button">
+<span class="material-symbols-outlined text-[20px]">more_horiz</span>
+</button>
+</header>
+<div class="divide-y divide-surface-container">
+<!-- Row 1 -->
+<div class="p-space-md px-space-lg flex items-center justify-between hover:bg-surface-container-low/40 transition-colors">
+<div class="flex items-center gap-3 min-w-0">
+<span class="material-symbols-outlined text-outline text-[18px] shrink-0">public</span>
+<div class="flex flex-col min-w-0">
+<span class="font-mono-md text-mono-md font-medium text-on-surface tracking-tight">amayama.com</span>
+<span class="font-body-sm text-[12px] text-secondary tabular-nums">Added by Deeki T · 6 Nov 2026</span>
+</div>
+</div>
+<div class="flex items-center gap-2 shrink-0 ml-3">
+<a class="h-7 px-2.5 rounded border border-[#e6e7ee] hover:bg-surface-container-low text-on-surface font-label-md text-label-md flex items-center gap-1 transition-colors" href="https://amayama.com" rel="noopener noreferrer" target="_blank">
+<span>Open</span>
+<span class="material-symbols-outlined text-[14px] text-outline">open_in_new</span>
+</a>
+<button class="h-7 px-2 rounded hover:bg-error-container/40 text-[#a83836] font-label-md text-label-md flex items-center gap-0.5 transition-colors" onclick="this.closest('.flex.items-center.justify-between').remove()" title="Remove domain" type="button">
+<span class="material-symbols-outlined text-[15px]">delete</span>
+<span>Remove</span>
+</button>
+</div>
+</div>
+<!-- Row 2 -->
+<div class="p-space-md px-space-lg flex items-center justify-between hover:bg-surface-container-low/40 transition-colors">
+<div class="flex items-center gap-3 min-w-0">
+<span class="material-symbols-outlined text-outline text-[18px] shrink-0">public</span>
+<div class="flex flex-col min-w-0">
+<span class="font-mono-md text-mono-md font-medium text-on-surface tracking-tight">megazip.net</span>
+<span class="font-body-sm text-[12px] text-secondary tabular-nums">Added by Deeki T · 6 Nov 2026</span>
+</div>
+</div>
+<div class="flex items-center gap-2 shrink-0 ml-3">
+<a class="h-7 px-2.5 rounded border border-[#e6e7ee] hover:bg-surface-container-low text-on-surface font-label-md text-label-md flex items-center gap-1 transition-colors" href="https://megazip.net" rel="noopener noreferrer" target="_blank">
+<span>Open</span>
+<span class="material-symbols-outlined text-[14px] text-outline">open_in_new</span>
+</a>
+<button class="h-7 px-2 rounded hover:bg-error-container/40 text-[#a83836] font-label-md text-label-md flex items-center gap-0.5 transition-colors" onclick="this.closest('.flex.items-center.justify-between').remove()" title="Remove domain" type="button">
+<span class="material-symbols-outlined text-[15px]">delete</span>
+<span>Remove</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Footer -->
+<footer class="p-space-md px-space-lg bg-surface-container-low/50 border-t border-surface-container mt-2">
+<form class="flex items-center gap-2" onsubmit="event.preventDefault();">
+<div class="relative flex-1">
+<input aria-label="Add a website address" class="w-full h-8 px-3 bg-surface-container-lowest border border-[#e6e7ee] rounded font-mono-sm text-mono-sm text-on-surface placeholder:text-outline focus:outline-none focus:border-primary-container transition-colors" placeholder="e.g. amayama.com" type="text"/>
+</div>
+<button class="h-8 px-3 rounded border border-[#e6e7ee] bg-surface-container-lowest hover:bg-surface-container text-on-surface font-label-md text-label-md font-medium transition-colors" type="button">
+              Add
+            </button>
+</form>
+</footer>
+</article>
+<!-- Card 4: Suzuki -->
+<article class="maker-card flex flex-col justify-between bg-surface-container-lowest border border-[#e6e7ee] rounded-xl shadow-sm overflow-hidden" data-maker="Suzuki">
+<div>
+<header class="p-space-lg pb-space-md border-b border-surface-container flex items-center justify-between">
+<div class="flex items-center gap-space-md">
+<h2 class="font-headline-lg text-headline-lg font-bold text-on-surface tracking-tight">Suzuki</h2>
+<span class="font-mono-sm text-mono-sm px-2 py-0.5 rounded bg-surface-container text-secondary font-medium tabular-nums">0 sites</span>
+</div>
+<button class="w-8 h-8 flex items-center justify-center rounded text-outline hover:text-on-surface hover:bg-surface-container-low transition-colors" title="Maker Options" type="button">
+<span class="material-symbols-outlined text-[20px]">more_horiz</span>
+</button>
+</header>
+<!-- Empty State Line -->
+<div class="p-space-lg flex items-center gap-3">
+<span class="material-symbols-outlined text-[#5d5f6a]/60 text-[20px]">info</span>
+<p class="font-body-sm text-body-sm text-[#5d5f6a] leading-tight">
+              No trusted sites yet — links for this maker are saved as Needs checking.
+            </p>
+</div>
+</div>
+<!-- Footer -->
+<footer class="p-space-md px-space-lg bg-surface-container-low/50 border-t border-surface-container mt-2">
+<form class="flex items-center gap-2" onsubmit="event.preventDefault();">
+<div class="relative flex-1">
+<input aria-label="Add a website address" class="w-full h-8 px-3 bg-surface-container-lowest border border-[#e6e7ee] rounded font-mono-sm text-mono-sm text-on-surface placeholder:text-outline focus:outline-none focus:border-primary-container transition-colors" placeholder="e.g. amayama.com" type="text"/>
+</div>
+<button class="h-8 px-3 rounded border border-[#e6e7ee] bg-surface-container-lowest hover:bg-surface-container text-on-surface font-label-md text-label-md font-medium transition-colors" type="button">
+              Add
+            </button>
+</form>
+</footer>
+</article>
+<!-- Card 5: Mazda -->
+<article class="maker-card flex flex-col justify-between bg-surface-container-lowest border border-[#e6e7ee] rounded-xl shadow-sm overflow-hidden" data-maker="Mazda">
+<div>
+<header class="p-space-lg pb-space-md border-b border-surface-container flex items-center justify-between">
+<div class="flex items-center gap-space-md">
+<h2 class="font-headline-lg text-headline-lg font-bold text-on-surface tracking-tight">Mazda</h2>
+<span class="font-mono-sm text-mono-sm px-2 py-0.5 rounded bg-surface-container text-secondary font-medium tabular-nums">0 sites</span>
+</div>
+<button class="w-8 h-8 flex items-center justify-center rounded text-outline hover:text-on-surface hover:bg-surface-container-low transition-colors" title="Maker Options" type="button">
+<span class="material-symbols-outlined text-[20px]">more_horiz</span>
+</button>
+</header>
+<!-- Empty State Line -->
+<div class="p-space-lg flex items-center gap-3">
+<span class="material-symbols-outlined text-[#5d5f6a]/60 text-[20px]">info</span>
+<p class="font-body-sm text-body-sm text-[#5d5f6a] leading-tight">
+              No trusted sites yet — links for this maker are saved as Needs checking.
+            </p>
+</div>
+</div>
+<!-- Footer -->
+<footer class="p-space-md px-space-lg bg-surface-container-low/50 border-t border-surface-container mt-2">
+<form class="flex items-center gap-2" onsubmit="event.preventDefault();">
+<div class="relative flex-1">
+<input aria-label="Add a website address" class="w-full h-8 px-3 bg-surface-container-lowest border border-[#e6e7ee] rounded font-mono-sm text-mono-sm text-on-surface placeholder:text-outline focus:outline-none focus:border-primary-container transition-colors" placeholder="e.g. amayama.com" type="text"/>
+</div>
+<button class="h-8 px-3 rounded border border-[#e6e7ee] bg-surface-container-lowest hover:bg-surface-container text-on-surface font-label-md text-label-md font-medium transition-colors" type="button">
+              Add
+            </button>
+</form>
+</footer>
+</article>
+</div>
+<!-- Micro Metadata Strip -->
+<div class="flex flex-col sm:flex-row items-center justify-between gap-space-sm pt-space-lg border-t border-[#e6e7ee] text-outline font-mono-sm text-mono-sm">
+<div class="flex items-center gap-4">
+<span>AUTO_VERIFY: ON_IMPORT</span>
+<span>STATUS: 200 OK</span>
+<span>LAST_SYNCHRONIZED: 2026-11-06 14:28 UTC</span>
+</div>
+<div>
+<span>SECURITY LEVEL: RESTRICTED CATALOG ARCHITECT</span>
+</div>
+</div>
+</div>
+<!-- Add Car Maker Modal (Interactive) -->
+<div class="fixed inset-0 z-50 bg-on-surface/40 backdrop-blur-xs flex items-center justify-center hidden p-4" id="add-maker-modal">
+<div class="bg-surface-container-lowest w-full max-w-md rounded-xl border border-[#e6e7ee] shadow-xl p-space-lg space-y-space-md">
+<div class="flex items-center justify-between pb-2 border-b border-surface-container">
+<h3 class="font-headline-md text-headline-md font-bold text-on-surface">Add a car maker</h3>
+<button class="text-outline hover:text-on-surface p-1" onclick="document.getElementById('add-maker-modal').classList.add('hidden')" type="button">
+<span class="material-symbols-outlined text-[20px]">close</span>
+</button>
+</div>
+<div class="space-y-3">
+<label class="block font-label-md text-label-md text-secondary" for="new-maker-input">
+          Car Maker Name (OEM)
+        </label>
+<input class="w-full h-9 px-3 bg-surface-container-lowest border border-[#e6e7ee] rounded font-body-sm text-body-sm text-on-surface placeholder:text-outline focus:outline-none focus:border-primary-container" id="new-maker-input" placeholder="e.g. Honda, Nissan, Subaru…" type="text"/>
+<p class="font-body-sm text-[12px] text-secondary">
+          Newly added car makers start with 0 verified domains and default to the Needs checking verification rule.
+        </p>
+</div>
+<div class="flex items-center justify-end gap-2 pt-2">
+<button class="h-9 px-4 rounded border border-[#e6e7ee] bg-surface-container-lowest hover:bg-surface-container text-on-surface font-label-md text-label-md font-medium" onclick="document.getElementById('add-maker-modal').classList.add('hidden')" type="button">
+          Cancel
+        </button>
+<button class="h-9 px-4 rounded bg-primary-container hover:bg-[#0146ba] text-on-primary font-label-md text-label-md font-semibold" onclick="document.getElementById('add-maker-modal').classList.add('hidden')" type="button">
+          Save Maker
+        </button>
+</div>
+</div>
+</div>
+<!-- Inline Script for Filter behavior -->
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const searchInput = document.getElementById('maker-search-input');
+      const cards = document.querySelectorAll('.maker-card');
+      const countEl = document.getElementById('active-maker-count');
+
+      if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+          const val = e.target.value.toLowerCase().trim();
+          let visible = 0;
+          cards.forEach(card => {
+            const maker = card.getAttribute('data-maker').toLowerCase();
+            if (maker.includes(val)) {
+              card.classList.remove('hidden');
+              visible++;
+            } else {
+              card.classList.add('hidden');
+            }
+          });
+          if (countEl) countEl.textContent = visible;
+        });
+      }
+    });
+  </script>
+</div></main></div></body></html>

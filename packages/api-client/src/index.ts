@@ -1,6 +1,13 @@
 export { API_ENDPOINTS } from './config';
 export { catalogGet, catalogPages, syncCatalog, type CatalogApp } from './catalogRead';
-export { projectId, publicAnonKey, supabaseAnonFunctionHeaders } from './supabaseInfo';
+export {
+  projectId,
+  publicAnonKey,
+  supabaseUrl,
+  functionsUrl,
+  isLocalSupabaseHost,
+  supabaseAnonFunctionHeaders,
+} from './supabaseInfo';
 export {
   getSupabaseFunctionsBaseUrl,
   SUPABASE_FUNCTIONS_DEV_PREFIX,

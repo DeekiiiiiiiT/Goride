@@ -41,6 +41,8 @@ export interface StationProfile {
   // Phase 10: Enriched Metadata
   amenities: string[];
   dataSource: 'log' | 'manual' | 'import' | string;
+  /** Which app created or last touched this station row (filter uses snake_case alias). */
+  originApp?: string;
   category?: 'fuel' | 'non_fuel';
   contactInfo: {
     phone?: string;

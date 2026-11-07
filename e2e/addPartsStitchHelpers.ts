@@ -181,7 +181,7 @@ export async function installAddPartsSession(page: Page, opts?: { dark?: boolean
     aud: "authenticated",
     role: "authenticated",
     email: role === "platform_owner" ? "owner@example.com" : "staff@example.com",
-    app_metadata: { role },
+    app_metadata: { role, roles: [role] },
     user_metadata: { name: role === "platform_owner" ? "Dominion Owner" : "Dominion Staff" },
   };
   const session = {
@@ -195,6 +195,8 @@ export async function installAddPartsSession(page: Page, opts?: { dark?: boolean
   await page.addInitScript(({ stored, useDark }) => {
     localStorage.setItem("sb-example-auth-token", JSON.stringify(stored));
     localStorage.setItem("sb-csfllzzastacofsvcdsc-auth-token", JSON.stringify(stored));
+    /** Vite testcopy uses VITE_SUPABASE_URL=http://127.0.0.1:54321 → storage key prefix `127` (first hostname segment). */
+    localStorage.setItem("sb-127-auth-token", JSON.stringify(stored));
     if (useDark) {
       document.documentElement.classList.add("dark");
       document.documentElement.style.colorScheme = "dark";
@@ -206,6 +208,16 @@ export async function installAddPartsSession(page: Page, opts?: { dark?: boolean
     }
   }, { stored: session, useDark: Boolean(opts?.dark) });
   await page.route("**/auth/v1/**", async (route) => {
+    const url = route.request().url();
+    const method = route.request().method();
+    if (url.includes("/mfa/")) {
+      await route.fulfill({ json: { currentLevel: "aal2", nextLevel: "aal2" } });
+      return;
+    }
+    if (method === "GET" && /\/auth\/v1\/user(?:\?|$)/.test(url)) {
+      await route.fulfill({ json: { user } });
+      return;
+    }
     await route.fulfill({ json: session });
   });
 }

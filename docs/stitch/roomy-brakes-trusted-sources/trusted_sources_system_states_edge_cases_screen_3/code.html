@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_dashboard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{colors:{"tertiary-fixed-dim":"#bfc5e2","tertiary":"#40465e","inverse-surface":"#2e3039","on-surface-variant":"#434655","on-primary-fixed":"#00174b","on-secondary-container":"#5c647a","surface-container-highest":"#e1e1ed","surface-variant":"#e1e1ed","outline-variant":"#c3c6d7","primary":"#003ea9","secondary":"#565e74","on-background":"#191b24","on-tertiary-fixed":"#141b30","outline":"#737686","on-secondary-fixed-variant":"#3f465c","on-surface":"#191b24","surface-container-high":"#e7e7f3","surface-dim":"#d9d9e5","on-primary-container":"#ced8ff","on-error":"#ffffff","secondary-fixed-dim":"#bec6e0","background":"#faf8ff","surface-bright":"#faf8ff","surface-container-lowest":"#ffffff","on-tertiary-container":"#d2d8f6","on-primary":"#ffffff","primary-fixed-dim":"#b4c5ff","on-primary-fixed-variant":"#003ea8","on-error-container":"#93000a","error-container":"#ffdad6","on-tertiary":"#ffffff","on-tertiary-fixed-variant":"#3f465e","inverse-on-surface":"#f0f0fc","on-secondary-fixed":"#131b2e","tertiary-fixed":"#dbe1ff","surface":"#faf8ff","on-secondary":"#ffffff","primary-container":"#0153dc","surface-container":"#ededf9","surface-container-low":"#f3f3ff","primary-fixed":"#dbe1ff","error":"#ba1a1a","tertiary-container":"#575e77","secondary-fixed":"#dae2fd","secondary-container":"#dae2fd","surface-tint":"#0053db","inverse-primary":"#b4c5ff"},borderRadius:{DEFAULT:"0.125rem",lg:"0.25rem",xl:"0.5rem",full:"0.75rem"},spacing:{"space-lg":"1rem","space-xs":"0.25rem","margin-panel":"1rem",gutter:"1rem",margin:"1.5rem","space-xl":"1.5rem","space-md":"0.75rem","gutter-dense":"0.5rem","space-sm":"0.5rem"},fontFamily:{"body-md":["Inter"],"label-md":["Inter"],"headline-lg":["Inter"],"mono-sm":["JetBrains Mono"],"mono-md":["JetBrains Mono"],"mono-lg":["JetBrains Mono"],"headline-xl":["Inter"],"body-sm":["Inter"],"label-xs":["Inter"],"headline-md":["Inter"]},fontSize:{"body-md":["14px",{lineHeight:"20px",letterSpacing:"0",fontWeight:"400"}],"label-md":["12px",{lineHeight:"16px",letterSpacing:"0.01em",fontWeight:"500"}],"headline-lg":["20px",{lineHeight:"28px",letterSpacing:"-0.015em",fontWeight:"600"}],"mono-sm":["11px",{lineHeight:"14px",letterSpacing:"0.02em",fontWeight:"400"}],"mono-md":["12px",{lineHeight:"16px",letterSpacing:"0",fontWeight:"500"}],"mono-lg":["14px",{lineHeight:"20px",letterSpacing:"-0.01em",fontWeight:"500"}],"headline-xl":["24px",{lineHeight:"32px",letterSpacing:"-0.02em",fontWeight:"600"}],"body-sm":["13px",{lineHeight:"18px",letterSpacing:"0",fontWeight:"400"}],"label-xs":["11px",{lineHeight:"14px",letterSpacing:"0.04em",fontWeight:"600"}],"headline-md":["16px",{lineHeight:"24px",letterSpacing:"-0.01em",fontWeight:"600"}]}}}};</script></head><body class="bg-background font-body-md text-on-surface antialiased min-h-screen"><aside class="fixed left-0 top-0 h-screen w-64 bg-inverse-surface z-50 flex flex-col justify-between select-none"><div class="flex flex-col flex-1 overflow-y-auto"><div class="h-14 px-margin flex items-center justify-between border-b border-outline-variant/20"><div class="flex items-center gap-space-sm"><div class="w-7 h-7 bg-primary flex items-center justify-center rounded"><span class="material-symbols-outlined text-on-primary text-[18px]">precision_manufacturing</span></div><div class="flex flex-col"><span class="font-headline-md text-headline-md font-semibold text-inverse-on-surface tracking-tight leading-none">DOMINION</span><span class="font-mono-sm text-mono-sm text-outline-variant uppercase tracking-wider">Operations Core</span></div></div><span class="font-mono-sm text-mono-sm px-1.5 py-0.5 rounded bg-primary/20 text-primary-fixed border border-primary-fixed/30">v4.8</span></div><nav class="px-space-md py-space-md space-y-space-md" data-active-classes="bg-primary-container text-on-primary font-semibold"><div class="space-y-space-xs"><div class="px-space-sm py-1 font-mono-sm text-mono-sm uppercase tracking-wider text-outline-variant">MASTER DATA</div><a class="flex items-center gap-space-sm px-space-sm py-2 rounded text-outline-variant hover:bg-surface-container-highest/10 hover:text-inverse-on-surface transition-colors font-body-sm text-body-sm" data-path="overview" href="#"><span class="material-symbols-outlined text-[18px]">grid_view</span>Overview</a><a aria-current="page" class="flex items-center gap-space-sm px-space-sm py-2 rounded transition-colors bg-primary-container text-on-primary font-semibold" data-path="parts-database" href="#"><span class="material-symbols-outlined text-[18px]">directions_car</span>Vehicles</a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded text-outline-variant hover:bg-surface-container-highest/10 hover:text-inverse-on-surface transition-colors font-body-sm text-body-sm" data-path="engines" href="#"><span class="material-symbols-outlined text-[18px]">bolt</span>Engines</a></div><div class="space-y-space-xs"><div class="px-space-sm py-1 font-mono-sm text-mono-sm uppercase tracking-wider text-outline-variant">DISTRIBUTION</div><a class="flex items-center gap-space-sm px-space-sm py-2 rounded text-outline-variant hover:bg-surface-container-highest/10 hover:text-inverse-on-surface transition-colors font-body-sm text-body-sm" data-path="warehouses" href="#"><span class="material-symbols-outlined text-[18px]">warehouse</span>Warehouses</a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded text-outline-variant hover:bg-surface-container-highest/10 hover:text-inverse-on-surface transition-colors font-body-sm text-body-sm" data-path="dispatch-routes" href="#"><span class="material-symbols-outlined text-[18px]">local_shipping</span>Logistics &amp; Routes</a></div><div class="space-y-space-xs"><div class="px-space-sm py-1 font-mono-sm text-mono-sm uppercase tracking-wider text-outline-variant">PLATFORM</div><a class="flex items-center gap-space-sm px-space-sm py-2 rounded text-outline-variant hover:bg-surface-container-highest/10 hover:text-inverse-on-surface transition-colors font-body-sm text-body-sm" data-path="catalogs" href="#"><span class="material-symbols-outlined text-[18px]">menu_book</span>OEM Catalogs</a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded text-outline-variant hover:bg-surface-container-highest/10 hover:text-inverse-on-surface transition-colors font-body-sm text-body-sm" data-path="schema-settings" href="#"><span class="material-symbols-outlined text-[18px]">schema</span>Data Schema</a></div><div class="space-y-space-xs"><div class="px-space-sm py-1 font-mono-sm text-mono-sm uppercase tracking-wider text-outline-variant">BACK OFFICE</div><a class="flex items-center gap-space-sm px-space-sm py-2 rounded text-outline-variant hover:bg-surface-container-highest/10 hover:text-inverse-on-surface transition-colors font-body-sm text-body-sm" data-path="audit-trail" href="#"><span class="material-symbols-outlined text-[18px]">receipt_long</span>Audit Logs</a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded text-outline-variant hover:bg-surface-container-highest/10 hover:text-inverse-on-surface transition-colors font-body-sm text-body-sm" data-path="access-control" href="#"><span class="material-symbols-outlined text-[18px]">admin_panel_settings</span>Access Control</a></div></nav></div><div class="p-space-md border-t border-outline-variant/20 bg-inverse-surface"><div class="flex items-center justify-between px-space-sm py-2 rounded bg-surface-container-highest/10"><div class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-[#006e31] inline-block animate-pulse"></span><span class="font-mono-sm text-mono-sm text-inverse-on-surface tracking-wider font-medium">KGN-DC-01 · JMD READY</span></div><span class="material-symbols-outlined text-outline-variant text-[16px]">dns</span></div></div></aside><div class="pl-64"><header class="fixed top-0 left-64 right-0 h-14 bg-surface-container-lowest border-b border-surface-container-high z-40 flex items-center justify-between px-margin"><div class="flex items-center gap-space-md"><div class="relative w-[420px]"><span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-[18px]">search</span><input class="w-full h-9 pl-9 pr-14 bg-surface rounded border border-outline-variant/60 font-body-sm text-body-sm text-on-surface placeholder:text-outline focus:outline-none focus:border-primary" placeholder="Search entities, engines, routes…" type="text"/><div class="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-surface-container-high text-outline text-label-xs font-mono-sm border border-outline-variant/40"><span class="text-[10px]">⌘</span><span>K</span></div></div></div><div class="flex items-center gap-space-md"><button class="p-1.5 rounded text-outline hover:text-on-surface hover:bg-surface-container transition-colors" title="Toggle Theme" type="button"><span class="material-symbols-outlined text-[20px]">dark_mode</span></button><div class="h-4 w-px bg-outline-variant/50"></div><div class="flex items-center gap-space-sm px-space-sm py-1 rounded bg-surface-container-low border border-surface-container-high"><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div><div class="flex items-center gap-1 font-mono-md text-mono-md text-on-surface"><span class="font-semibold">DT</span><span class="text-outline">·</span><span>Deeki T</span><span class="text-outline">·</span><span class="text-primary font-medium">Owner</span></div></div><div class="h-4 w-px bg-outline-variant/50"></div><a class="p-1.5 rounded text-outline hover:text-error hover:bg-error-container/40 transition-colors" data-path="login" href="#" title="Sign Out"><span class="material-symbols-outlined text-[20px]">logout</span></a></div></header><main class="relative pt-14 bg-surface min-h-screen"><div class="flex flex-col w-full">
+<div class="px-margin py-margin max-w-[1440px] mx-auto w-full space-y-space-xl">
+<div class="flex flex-col gap-space-sm pb-space-md border-b border-surface-container-high">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-sm">
+<span class="font-mono-sm text-mono-sm uppercase tracking-wider text-outline">SPECIFICATION PROTOCOL // VERIFICATION ARCHITECTURE</span>
+<span class="inline-flex items-center px-1.5 py-0.5 rounded text-label-xs font-mono-sm bg-primary-fixed text-primary font-semibold">STATE CATALOG v4.8</span>
+</div>
+<div class="flex items-center gap-space-md font-mono-sm text-mono-sm text-outline">
+<span class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-primary-container inline-block"></span>4 CONTEXTUAL SCENARIOS</span>
+<span class="text-outline-variant">|</span>
+<span>REGISTRY: AUTOMOTIVE OEM CATALOGUE</span>
+</div>
+</div>
+<div class="flex flex-wrap items-baseline justify-between gap-space-md">
+<div>
+<h1 class="font-headline-xl text-headline-xl font-semibold tracking-tight text-on-surface">Trusted Sources System States &amp; Edge Validations</h1>
+<p class="font-body-sm text-body-sm text-secondary mt-1">Lifecycle feedback matrices, remote synchronization failure fallbacks, and client-side hostname sanitization guards.</p>
+</div>
+<div class="flex items-center gap-space-xs bg-surface-container-low p-1 rounded-xl">
+<button class="px-3 py-1.5 rounded-lg font-body-sm text-body-sm text-secondary hover:text-on-surface transition-colors">Catalog Rules</button>
+<button class="px-3 py-1.5 rounded-lg font-body-sm text-body-sm bg-surface-container-lowest text-primary font-medium shadow-sm">Trusted Sources</button>
+<button class="px-3 py-1.5 rounded-lg font-body-sm text-body-sm text-secondary hover:text-on-surface transition-colors">Audit Integrity</button>
+<button class="px-3 py-1.5 rounded-lg font-body-sm text-body-sm text-secondary hover:text-on-surface transition-colors">Sync Queues</button>
+</div>
+</div>
+</div>
+<div class="grid grid-cols-1 xl:grid-cols-2 gap-space-xl">
+<section class="flex flex-col bg-surface-container-lowest rounded-xl p-space-lg shadow-sm">
+<div class="flex items-center justify-between pb-space-md mb-space-md border-b border-surface-container-high">
+<div class="flex items-center gap-space-sm">
+<span class="px-2 py-0.5 rounded font-mono-sm text-mono-sm font-semibold bg-surface-container-high text-on-surface tracking-wide">FRAME A · Loading</span>
+<span class="font-body-sm text-body-sm text-outline">Asynchronous cluster sync pipeline</span>
+</div>
+<span class="material-symbols-outlined text-outline text-[18px] animate-spin">progress_activity</span>
+</div>
+<div class="flex items-center gap-space-sm p-space-sm rounded-lg bg-surface-container-low text-secondary font-body-sm text-body-sm mb-space-lg">
+<span class="material-symbols-outlined text-[18px] text-primary">sync</span>
+<span>Fetching trusted maker registries from master catalog...</span>
+<span class="font-mono-sm text-mono-sm text-outline ml-auto">POLL_INTERVAL: 450ms</span>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-space-md">
+<div class="bg-surface-container-lowest rounded-xl p-space-md space-y-space-md">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<div class="w-7 h-7 rounded bg-surface-container-high animate-pulse"></div>
+<div class="h-4 w-28 bg-surface-container-high rounded animate-pulse"></div>
+</div>
+<div class="h-5 w-12 bg-surface-container-high rounded-full animate-pulse"></div>
+</div>
+<div class="space-y-2 pt-2">
+<div class="h-8 w-full bg-surface-container-high/60 rounded animate-pulse flex items-center px-3 justify-between">
+<div class="h-3 w-32 bg-surface-container-high rounded"></div>
+<div class="h-3 w-4 bg-surface-container-high rounded"></div>
+</div>
+<div class="h-8 w-full bg-surface-container-high/40 rounded animate-pulse flex items-center px-3 justify-between">
+<div class="h-3 w-28 bg-surface-container-high rounded"></div>
+<div class="h-3 w-4 bg-surface-container-high rounded"></div>
+</div>
+<div class="h-8 w-full bg-surface-container-high/20 rounded animate-pulse flex items-center px-3 justify-between">
+<div class="h-3 w-36 bg-surface-container-high rounded"></div>
+<div class="h-3 w-4 bg-surface-container-high rounded"></div>
+</div>
+</div>
+<div class="pt-space-xs space-y-2">
+<div class="h-9 w-full bg-surface-container-high rounded-lg animate-pulse"></div>
+<div class="h-3 w-40 bg-surface-container-high/50 rounded animate-pulse"></div>
+</div>
+</div>
+<div class="bg-surface-container-lowest rounded-xl p-space-md space-y-space-md">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<div class="w-7 h-7 rounded bg-surface-container-high animate-pulse"></div>
+<div class="h-4 w-24 bg-surface-container-high rounded animate-pulse"></div>
+</div>
+<div class="h-5 w-10 bg-surface-container-high rounded-full animate-pulse"></div>
+</div>
+<div class="space-y-2 pt-2">
+<div class="h-8 w-full bg-surface-container-high/60 rounded animate-pulse flex items-center px-3 justify-between">
+<div class="h-3 w-36 bg-surface-container-high rounded"></div>
+<div class="h-3 w-4 bg-surface-container-high rounded"></div>
+</div>
+<div class="h-8 w-full bg-surface-container-high/40 rounded animate-pulse flex items-center px-3 justify-between">
+<div class="h-3 w-24 bg-surface-container-high rounded"></div>
+<div class="h-3 w-4 bg-surface-container-high rounded"></div>
+</div>
+<div class="h-8 w-full bg-surface-container-high/20 rounded animate-pulse flex items-center px-3 justify-between">
+<div class="h-3 w-32 bg-surface-container-high rounded"></div>
+<div class="h-3 w-4 bg-surface-container-high rounded"></div>
+</div>
+</div>
+<div class="pt-space-xs space-y-2">
+<div class="h-9 w-full bg-surface-container-high rounded-lg animate-pulse"></div>
+<div class="h-3 w-44 bg-surface-container-high/50 rounded animate-pulse"></div>
+</div>
+</div>
+</div>
+<div class="mt-space-md pt-space-sm flex items-center justify-between font-mono-sm text-mono-sm text-outline">
+<span>TARGET: OEM_REGISTRY_PARTITION_JP_US</span>
+<span class="text-primary font-semibold">HANDSHAKE ACTIVE</span>
+</div>
+</section>
+<section class="flex flex-col bg-surface-container-lowest rounded-xl p-space-lg shadow-sm">
+<div class="flex items-center justify-between pb-space-md mb-space-md border-b border-surface-container-high">
+<div class="flex items-center gap-space-sm">
+<span class="px-2 py-0.5 rounded font-mono-sm text-mono-sm font-semibold bg-error-container text-error tracking-wide">FRAME B · Could not load</span>
+<span class="font-body-sm text-body-sm text-outline">Upstream timeout · Non-destructive failover</span>
+</div>
+<span class="material-symbols-outlined text-error text-[18px]">cloud_off</span>
+</div>
+<div class="bg-error-container/40 p-space-lg rounded-xl mb-space-lg">
+<div class="flex items-start gap-space-md">
+<div class="w-9 h-9 rounded-lg bg-error-container flex items-center justify-center text-error shrink-0">
+<span class="material-symbols-outlined text-[22px]">error</span>
+</div>
+<div class="flex-1 space-y-1">
+<div class="flex items-center justify-between">
+<h3 class="font-headline-md text-headline-md font-semibold text-on-surface">Could not load trusted sources. Nothing was changed.</h3>
+<span class="font-mono-sm text-mono-sm text-error font-medium">ERR_CATALOG_TIMEOUT_504</span>
+</div>
+<p class="font-body-sm text-body-sm text-secondary">The catalog service did not respond. Local registry integrity preserved.</p>
+<div class="pt-space-md flex flex-wrap items-center gap-space-sm">
+<button class="px-3.5 py-1.5 rounded-lg bg-surface-container-lowest text-error font-body-sm text-body-sm font-medium hover:bg-surface-container transition-colors shadow-sm flex items-center gap-1.5" type="button">
+<span class="material-symbols-outlined text-[16px]">refresh</span>
+                  Try again
+                </button>
+<button class="px-3.5 py-1.5 rounded-lg bg-surface-container text-on-surface font-body-sm text-body-sm font-medium hover:bg-surface-container-high transition-colors flex items-center gap-1.5" type="button">
+<span class="material-symbols-outlined text-[16px]">hub</span>
+                  Check cluster connection
+                </button>
+</div>
+</div>
+</div>
+</div>
+<div class="bg-surface-container-low rounded-xl p-space-md space-y-space-sm">
+<div class="flex items-center justify-between text-outline font-mono-sm text-mono-sm">
+<span>LOCAL REGISTRY AUDIT STATUS</span>
+<span class="text-[#006e31] font-semibold">HASH MATCH VALIDATED</span>
+</div>
+<div class="p-space-sm rounded-lg bg-surface-container-lowest font-mono-sm text-mono-sm space-y-1 text-on-surface-variant">
+<div class="flex justify-between"><span>CACHED RECORD TIMESTAMP</span><span>2024-10-24T18:14:02 UTC</span></div>
+<div class="flex justify-between"><span>PARTITION WRITE LOCK</span><span>ACTIVE (PREVENTS CORRUPTION)</span></div>
+<div class="flex justify-between"><span>UPSTREAM GATEWAY</span><span>us-east-metal.dominion-core.net</span></div>
+</div>
+</div>
+<div class="mt-space-md pt-space-sm flex items-center justify-between font-mono-sm text-mono-sm text-outline">
+<span>SAFE-STATE ENGINE: ACTIVE</span>
+<span>DATA MUTATION REVERSED: 0</span>
+</div>
+</section>
+<section class="flex flex-col bg-surface-container-lowest rounded-xl p-space-lg shadow-sm">
+<div class="flex items-center justify-between pb-space-md mb-space-md border-b border-surface-container-high">
+<div class="flex items-center gap-space-sm">
+<span class="px-2 py-0.5 rounded font-mono-sm text-mono-sm font-semibold bg-surface-container-high text-on-surface tracking-wide">FRAME C · Duplicate address error</span>
+<span class="font-body-sm text-body-sm text-outline">Idempotency &amp; uniqueness rule violation</span>
+</div>
+<span class="material-symbols-outlined text-outline text-[18px]">verified_user</span>
+</div>
+<div class="bg-surface-container-lowest rounded-xl p-space-md space-y-space-md">
+<div class="flex items-center justify-between pb-space-xs">
+<div class="flex items-center gap-space-sm">
+<div class="w-8 h-8 rounded-lg bg-surface-container-high flex items-center justify-center font-headline-md text-headline-md font-bold text-primary">T</div>
+<div>
+<h2 class="font-headline-md text-headline-md font-semibold text-on-surface">Toyota Motor Corporation</h2>
+<div class="font-mono-sm text-mono-sm text-outline">OEM-CODE: TM-GLOBAL-JP</div>
+</div>
+</div>
+<span class="px-2.5 py-0.5 rounded-full font-mono-sm text-mono-sm font-semibold bg-primary-fixed text-primary">3 SOURCES</span>
+</div>
+<div class="space-y-1.5 font-mono-sm text-mono-sm">
+<div class="flex items-center justify-between px-3 py-2 rounded-lg bg-surface-container-low text-on-surface">
+<span class="flex items-center gap-2">
+<span class="w-1.5 h-1.5 rounded-full bg-[#006e31]"></span>
+                toyota-epc.online
+              </span>
+<span class="text-outline text-label-xs">TIER 1 PRIMARY</span>
+</div>
+<div class="flex items-center justify-between px-3 py-2 rounded-lg bg-surface-container-low text-on-surface bg-error-container/20">
+<span class="flex items-center gap-2 text-on-surface font-semibold">
+<span class="w-1.5 h-1.5 rounded-full bg-error"></span>
+                megazip.net
+              </span>
+<span class="px-1.5 py-0.2 rounded bg-error/10 text-error text-label-xs font-mono-sm font-semibold">COLLISION CANDIDATE</span>
+</div>
+<div class="flex items-center justify-between px-3 py-2 rounded-lg bg-surface-container-low text-on-surface">
+<span class="flex items-center gap-2">
+<span class="w-1.5 h-1.5 rounded-full bg-[#006e31]"></span>
+                partsouq.com
+              </span>
+<span class="text-outline text-label-xs">TIER 2 VERIFIED</span>
+</div>
+</div>
+<div class="pt-space-xs space-y-2">
+<label class="block font-label-md text-label-md text-secondary">Add new trusted source endpoint</label>
+<div class="flex items-center gap-space-xs">
+<div class="relative flex-1">
+<input class="w-full h-9 px-3 bg-surface-container-lowest text-on-surface font-mono-sm text-mono-sm rounded-lg bg-error-container/10 focus:outline-none" readonly="" type="text" value="megazip.net"/>
+<span class="absolute right-2.5 top-1/2 -translate-y-1/2 material-symbols-outlined text-error text-[18px]">report</span>
+</div>
+<button class="h-9 px-4 rounded-lg bg-primary-container text-on-primary font-body-sm text-body-sm font-medium hover:bg-primary transition-colors shrink-0" type="button">
+                Add
+              </button>
+</div>
+<div class="flex items-start gap-1.5 text-error font-body-sm text-body-sm">
+<span class="material-symbols-outlined text-[16px] shrink-0 translate-y-0.5">error</span>
+<span><strong class="font-mono-sm text-mono-sm">megazip.net</strong> is already trusted for Toyota.</span>
+</div>
+</div>
+</div>
+<div class="mt-space-md pt-space-sm flex items-center justify-between font-mono-sm text-mono-sm text-outline">
+<span>RULE: CANONICAL_HOST_UNIQUE</span>
+<span class="text-error font-semibold">REJECTED ON INPUT</span>
+</div>
+</section>
+<section class="flex flex-col bg-surface-container-lowest rounded-xl p-space-lg shadow-sm">
+<div class="flex items-center justify-between pb-space-md mb-space-md border-b border-surface-container-high">
+<div class="flex items-center gap-space-sm">
+<span class="px-2 py-0.5 rounded font-mono-sm text-mono-sm font-semibold bg-surface-container-high text-on-surface tracking-wide">FRAME D · Invalid format error</span>
+<span class="font-body-sm text-body-sm text-outline">RFC 1123 Hostname specification sanitizer</span>
+</div>
+<span class="material-symbols-outlined text-outline text-[18px]">spellcheck</span>
+</div>
+<div class="bg-surface-container-lowest rounded-xl p-space-md space-y-space-md">
+<div class="flex items-center justify-between pb-space-xs">
+<div class="flex items-center gap-space-sm">
+<div class="w-8 h-8 rounded-lg bg-surface-container-high flex items-center justify-center font-headline-md text-headline-md font-bold text-primary">H</div>
+<div>
+<h2 class="font-headline-md text-headline-md font-semibold text-on-surface">Honda Motor Co., Ltd.</h2>
+<div class="font-mono-sm text-mono-sm text-outline">OEM-CODE: HD-GLOBAL-PAC</div>
+</div>
+</div>
+<span class="px-2.5 py-0.5 rounded-full font-mono-sm text-mono-sm font-semibold bg-primary-fixed text-primary">2 SOURCES</span>
+</div>
+<div class="space-y-1.5 font-mono-sm text-mono-sm">
+<div class="flex items-center justify-between px-3 py-2 rounded-lg bg-surface-container-low text-on-surface">
+<span class="flex items-center gap-2">
+<span class="w-1.5 h-1.5 rounded-full bg-[#006e31]"></span>
+                hondapartsnow.com
+              </span>
+<span class="text-outline text-label-xs">TIER 1 PRIMARY</span>
+</div>
+<div class="flex items-center justify-between px-3 py-2 rounded-lg bg-surface-container-low text-on-surface">
+<span class="flex items-center gap-2">
+<span class="w-1.5 h-1.5 rounded-full bg-[#006e31]"></span>
+                jp-carparts.com
+              </span>
+<span class="text-outline text-label-xs">TIER 2 VERIFIED</span>
+</div>
+</div>
+<div class="pt-space-xs space-y-2">
+<label class="block font-label-md text-label-md text-secondary">Add new trusted source endpoint</label>
+<div class="flex items-center gap-space-xs">
+<div class="relative flex-1">
+<input class="w-full h-9 px-3 bg-surface-container-lowest text-on-surface font-mono-sm text-mono-sm rounded-lg bg-error-container/10 focus:outline-none" readonly="" type="text" value="manual book 2024"/>
+<span class="absolute right-2.5 top-1/2 -translate-y-1/2 material-symbols-outlined text-error text-[18px]">cancel</span>
+</div>
+<button class="h-9 px-4 rounded-lg bg-primary-container text-on-primary font-body-sm text-body-sm font-medium hover:bg-primary transition-colors shrink-0" type="button">
+                Add
+              </button>
+</div>
+<div class="space-y-1">
+<div class="flex items-start gap-1.5 text-error font-body-sm text-body-sm">
+<span class="material-symbols-outlined text-[16px] shrink-0 translate-y-0.5">error</span>
+<span>Type a website address, like <span class="font-mono-sm text-mono-sm font-medium">amayama.com</span>.</span>
+</div>
+<p class="font-label-xs text-label-xs text-secondary pl-5">Enter a valid host name (e.g. domain.com) without protocol or file paths.</p>
+</div>
+</div>
+</div>
+<div class="mt-space-md pt-space-sm flex items-center justify-between font-mono-sm text-mono-sm text-outline">
+<span>REGEX: ^[a-z0-9]+([\-\.]{1}[a-z0-9]+)*\.[a-z]{2,5}$</span>
+<span class="text-error font-semibold">SYNTAX INVALID</span>
+</div>
+</section>
+</div>
+<div class="bg-surface-container-low rounded-xl p-space-md flex flex-wrap items-center justify-between gap-space-md font-mono-sm text-mono-sm text-secondary">
+<div class="flex items-center gap-space-md">
+<span class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[16px] text-primary">verified</span>
+          DOMINION CLIENT SANITIZER SUITE
+        </span>
+<span class="text-outline-variant">·</span>
+<span>LATENCY: 0.12ms (IN-MEMORY PARSING)</span>
+</div>
+<div class="flex items-center gap-space-sm text-outline">
+<span>SECURITY LEVEL: STRICT RFC FQDN COMPLIANT</span>
+</div>
+</div>
+</div>
+</div></main></div></body></html>

@@ -1,0 +1,1 @@
+-- Base seed hook for `supabase db reset`. Test-copy accounts load from supabase/seeds and e2e fixtures (see config.toml).

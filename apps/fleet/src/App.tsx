@@ -37,7 +37,7 @@ import { PAGE_PERMISSION_MAP } from './utils/permissions';
 import { usePermissions } from './hooks/usePermissions';
 import { useServiceLineScope } from './contexts/ServiceLineScopeContext';
 
-import { isPassengerOnlyMetadataRole } from '@roam/auth-client';
+import { isPassengerOnlyMetadataRole, TestCopyBar } from '@roam/auth-client';
 
 type SettlementsHubTab = 'cash' | 'close-week' | 'restatements';
 type WeekReconciliationHubTab = 'fuel' | 'tolls';
@@ -1148,6 +1148,7 @@ export default function App() {
 
   return (
     <PwaProvider>
+      <TestCopyBar />
       <AuthRecoveryGate
         title="Reset password"
         subtitle={isAdmin ? 'Roam Fleet Admin' : IS_ENTERPRISE_PRODUCT ? 'Roam Enterprise' : 'Roam Fleet'}

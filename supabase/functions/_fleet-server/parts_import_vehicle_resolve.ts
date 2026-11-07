@@ -58,7 +58,7 @@ export async function resolveVehicleForImport(
 
   const { data: broad, error } = await supabase
     .from("vehicle_catalog")
-    .select("id, make, model, chassis_code, production_start_year, production_end_year, version_name")
+    .select("id, make, model, chassis_code, production_start_year, production_end_year, version_name:trim_series")
     .ilike("make", parsed.make)
     .ilike("model", parsed.model)
     .limit(50);

@@ -19,7 +19,13 @@ import {
   AddPartsWizardFooter,
   AddPartsWizardShell,
 } from "./AddPartsWizardChrome";
-import { reviewReachCount, step1DetailsCanAdvance, wizardFooterLabels, type Step1Phase } from "./addPartsShared";
+import {
+  reviewReachCount,
+  step1DetailsCanAdvance,
+  step2SpecificCanAdvance,
+  wizardFooterLabels,
+  type Step1Phase,
+} from "./addPartsShared";
 import type { SelfServePreview } from "./addPartsApi";
 import { emptyDraft, type AddPartsDraft } from "./addPartsTypes";
 import { PlainWordsDrawer } from "./PlainWordsDrawer";
@@ -116,7 +122,13 @@ export function AddPartsTab({ owner }: { owner: boolean }) {
   }, [draft.brand, draft.partNumber, wizardStep]);
 
   useEffect(() => {
-    if (wizardStep < 2) return;
+    if (screen !== "wizard") return;
+    if (!draft.partType) return;
+    if (wizardStep === 1 && step1Phase !== "details") return;
+    if (!draft.evidenceUrl.trim()) {
+      setPreview(null);
+      return;
+    }
     void previewSelfServePart({
       fitMode: draft.fitMode,
       brand: draft.brand,
@@ -124,6 +136,8 @@ export function AddPartsTab({ owner }: { owner: boolean }) {
       partTypeName: draft.partType?.name,
       tradeTerm: draft.partType?.tradeTerm ?? undefined,
       sourceType: draft.sourceType,
+      catalogCarMaker: draft.catalogCarMaker,
+      evidenceUrl: draft.evidenceUrl,
       position: draft.position || draft.listings[0]?.position,
       positionScheme: draft.partType?.positionScheme,
       engineFamilyId: draft.engineFamilyId || undefined,
@@ -135,7 +149,7 @@ export function AddPartsTab({ owner }: { owner: boolean }) {
       excludedVehicleIds: draft.excludedVehicleIds,
       factoryNumbers: draft.factoryNumbers,
     }).then(setPreview).catch(() => setPreview(null));
-  }, [draft, wizardStep]);
+  }, [draft, wizardStep, step1Phase, screen]);
 
   const stepLabel = `ADD PARTS · STEP ${wizardStep}`;
 
@@ -145,6 +159,7 @@ export function AddPartsTab({ owner }: { owner: boolean }) {
     fitMode: draft.fitMode,
     commitCount: reviewReachCount(draft, preview),
     saving,
+    specificListings: draft.fitMode === "specific" ? draft.listings : undefined,
   });
 
   if (screen === "statesGallery") {
@@ -279,6 +294,7 @@ export function AddPartsTab({ owner }: { owner: boolean }) {
         draftNumber={draft.partNumber}
         partTypeName={draft.partType?.name}
         sourceType={draft.sourceType}
+        trustLabel={preview?.trustLabel}
         showStepTracker
         footer={
           wizardStep === 1 && step1Phase === "picker" ? (
@@ -322,6 +338,7 @@ export function AddPartsTab({ owner }: { owner: boolean }) {
               backLabel={footerLabels.backLabel}
               nextLabel={footerLabels.nextLabel}
               centerNote={footerLabels.centerNote}
+              nextDisabled={draft.fitMode === "specific" ? !step2SpecificCanAdvance(draft) : undefined}
             />
           ) : wizardStep === 3 ? (
             <AddPartsWizardFooter
@@ -366,6 +383,7 @@ export function AddPartsTab({ owner }: { owner: boolean }) {
             draft={draft}
             setDraft={setDraft}
             lookup={lookup}
+            preview={preview}
             onChangeType={() => { setStep1Phase("picker"); setDraft(emptyDraft()); setPickerTypeId(null); }}
             onNext={() => setWizardStep(2)}
             onDismissDuplicate={() => setLookup(null)}
@@ -390,17 +408,12 @@ export function AddPartsTab({ owner }: { owner: boolean }) {
             {draft.partType.editorHint ? (
               <p className="font-label-xs text-outline italic">{draft.partType.editorHint}</p>
             ) : null}
-            {draft.fitMode === "specific" ? <Step2SpecificCars draft={draft} setDraft={setDraft} /> : null}
+            {draft.fitMode === "specific" ? <Step2SpecificCars draft={draft} setDraft={setDraft} preview={preview} /> : null}
             {draft.fitMode === "engine" ? <Step2ByEngine draft={draft} setDraft={setDraft} /> : null}
             {draft.fitMode === "spec" ? <Step2BySpec draft={draft} setDraft={setDraft} matchedCarCount={preview?.carCount} /> : null}
             {preview && draft.fitMode !== "specific" ? (
               <p className="text-on-surface-variant font-body-sm">
                 {preview.carCount} car version(s) · total reach {preview.totalReach}
-              </p>
-            ) : null}
-            {draft.fitMode === "specific" && draft.listings.length > 0 ? (
-              <p className="text-on-surface-variant font-body-sm">
-                {draft.listings.length} car{draft.listings.length === 1 ? "" : "s"} selected
               </p>
             ) : null}
           </div>
@@ -415,9 +428,6 @@ export function AddPartsTab({ owner }: { owner: boolean }) {
             draft={draft}
             preview={preview}
             onEditStep={(s) => setWizardStep(s)}
-            onOpenRecentlyAdded={() => {
-              resetWizard();
-            }}
           />
         ) : null}
       </AddPartsWizardShell>

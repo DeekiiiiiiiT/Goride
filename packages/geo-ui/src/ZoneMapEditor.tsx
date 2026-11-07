@@ -1130,10 +1130,10 @@ export function ZoneMapEditor({
     const canEdit = verticesRef.current.length >= 2 && verticesRef.current.length <= 500;
     if (removeMode) {
       poly.setEditable(false);
-      poly.setOptions({ clickable: false, cursor: 'pointer' });
+      (poly as google.maps.Polygon).setOptions({ clickable: false, cursor: 'pointer' } as google.maps.PolygonOptions);
     } else {
       poly.setEditable(canEdit);
-      poly.setOptions({ clickable: canEdit, cursor: undefined });
+      (poly as google.maps.Polygon).setOptions({ clickable: canEdit, cursor: undefined } as google.maps.PolygonOptions);
     }
   }, [removeMode, vertexCount, mapInstance]);
 
@@ -1591,12 +1591,12 @@ export function ZoneMapEditor({
               <span className="inline-flex items-center gap-1.5">
                 <span
                   className={`w-2.5 h-2.5 rounded-sm border ${
-                    hasServiceAreas || uiMode === 'service'
+                    hasServiceAreas
                       ? 'bg-fuchsia-500/70 border-fuchsia-400/50'
                       : 'bg-emerald-500/70 border-emerald-400/50'
                   }`}
                 />
-                {hasServiceAreas || uiMode === 'service' ? 'Service area (live)' : 'Draft (editing)'}
+                {hasServiceAreas ? 'Service area (live)' : 'Draft (editing)'}
               </span>
               {hasServiceAreas ? (
                 <span className="inline-flex items-center gap-1.5">

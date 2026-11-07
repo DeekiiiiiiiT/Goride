@@ -61,7 +61,7 @@ Deno.test("a staff member cannot save a problem", async () => {
       registered.push({ method: "POST", path, handler: handlers[handlers.length - 1] as (c: unknown) => Promise<{ status?: number }> });
     },
     patch() {},
-    delete() {},
+    delete(..._a: unknown[]) {},
   };
   registerCatalogRoutes(route, {} as SupabaseClient);
   const save = registered.find((row) => row.method === "POST" && row.path.endsWith("/symptoms"));
@@ -118,7 +118,7 @@ Deno.test("saving a problem writes the master change log", async () => {
       registered.push({ method: "POST", path, handler: handlers[handlers.length - 1] as (c: unknown) => Promise<unknown> });
     },
     patch() {},
-    delete() {},
+    delete(..._a: unknown[]) {},
   };
   registerCatalogRoutes(route, supabase as unknown as SupabaseClient);
   const save = registered.find((row) => row.method === "POST" && row.path.endsWith("/symptoms"));

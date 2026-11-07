@@ -42,12 +42,13 @@ BEGIN
       'role', 'fleet_owner', 'roles', jsonb_build_array('fleet_owner'),
       'organizationId', v_org, 'productLine', 'fleet'
     ),
-    jsonb_build_object('full_name', 'MM F01 Manager'),
+    jsonb_build_object('full_name', 'MM F01 Manager', 'productLine', 'fleet', 'businessType', 'rideshare'),
     now(), now()
   )
   ON CONFLICT (id) DO UPDATE SET
     encrypted_password = EXCLUDED.encrypted_password,
     raw_app_meta_data = EXCLUDED.raw_app_meta_data,
+    raw_user_meta_data = EXCLUDED.raw_user_meta_data,
     email_confirmed_at = now();
 
   INSERT INTO auth.users (
@@ -63,12 +64,13 @@ BEGIN
       'role', 'fleet_viewer', 'roles', jsonb_build_array('fleet_viewer'),
       'organizationId', v_org, 'productLine', 'fleet'
     ),
-    jsonb_build_object('full_name', 'MM F01 Viewer'),
+    jsonb_build_object('full_name', 'MM F01 Viewer', 'productLine', 'fleet', 'businessType', 'rideshare'),
     now(), now()
   )
   ON CONFLICT (id) DO UPDATE SET
     encrypted_password = EXCLUDED.encrypted_password,
     raw_app_meta_data = EXCLUDED.raw_app_meta_data,
+    raw_user_meta_data = EXCLUDED.raw_user_meta_data,
     email_confirmed_at = now();
 
   INSERT INTO auth.identities (id, user_id, identity_data, provider, provider_id, last_sign_in_at, created_at, updated_at)

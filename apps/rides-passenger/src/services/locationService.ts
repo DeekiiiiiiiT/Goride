@@ -6,7 +6,7 @@
  * Capacitor WebView is https://localhost; the browser key’s HTTP referrer rules
  * block Places JS there — and silent empty results look like “search is broken”.
  */
-import { API_ENDPOINTS, projectId, publicAnonKey } from '@roam/api-client';
+import { API_ENDPOINTS, getSupabaseFunctionsBaseUrl, publicAnonKey } from '@roam/api-client';
 import { isNativeCapacitorPlatform } from '@roam/types';
 
 export interface GeoCoordinates {
@@ -87,7 +87,7 @@ export const loadGoogleMapsApi = async (): Promise<void> => {
         }
 
         const response = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/fleet-core/maps-config-rides`,
+          `${getSupabaseFunctionsBaseUrl()}/fleet-core/maps-config-rides`,
           { headers: { Authorization: `Bearer ${publicAnonKey}` } },
         );
         if (!response.ok) {

@@ -2,7 +2,7 @@
  * Token-based calls for the customer screens that moved to Fleet admin.
  * Uses the signed-in session from PlatformSessionProvider. No Dominion login.
  */
-import { API_ENDPOINTS, projectId, publicAnonKey } from '@roam/api-client';
+import { API_ENDPOINTS, publicAnonKey, supabaseUrl } from '@roam/api-client';
 import { requirePlatformAuthHeaders } from '../auth/platformAuthHeaders';
 import { ledgerApi } from './ledgerApi';
 import type { FuelEntry } from '../types/fuel';
@@ -320,7 +320,7 @@ export const fleetCustomerOpsApi = {
     headers.apikey = headers.apikey || publicAnonKey;
     headers.Accept = 'application/json';
     const response = await fetch(
-      `https://${projectId}.supabase.co/rest/v1/fuel_petrojam_prices?select=id,price_date,gasolene_87,gasolene_90,auto_diesel,ulsd&order=price_date.desc&limit=${limit}`,
+      `${supabaseUrl}/rest/v1/fuel_petrojam_prices?select=id,price_date,gasolene_87,gasolene_90,auto_diesel,ulsd&order=price_date.desc&limit=${limit}`,
       { headers },
     );
     if (!response.ok) throw new Error(await readError(response, 'Failed to load prices'));
@@ -340,7 +340,7 @@ export const fleetCustomerOpsApi = {
     headers.apikey = headers.apikey || publicAnonKey;
     headers.Accept = 'application/json';
     const response = await fetch(
-      `https://${projectId}.supabase.co/rest/v1/fuel_retail_price_markup?select=*&order=effective_from.desc`,
+      `${supabaseUrl}/rest/v1/fuel_retail_price_markup?select=*&order=effective_from.desc`,
       { headers },
     );
     if (!response.ok) throw new Error(await readError(response, 'Failed to load retail markup'));

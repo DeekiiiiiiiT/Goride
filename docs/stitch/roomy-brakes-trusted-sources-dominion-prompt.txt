@@ -1,0 +1,94 @@
+ROAM DOMINION — PARTS DATABASE · TRUSTED SOURCES — DESIGN PROMPT (GOOGLE STITCH)
+
+
+
+
+Roam Dominion - Parts database, "Trusted sources" (Desktop Admin, for the owner):
+
+Design high-fidelity desktop screens for a new "Trusted sources" tab in Dominion's Parts database. Car makers like Toyota, Daihatsu and Suzuki don't publish their parts catalogues openly; the owner reads them through a few websites that look up the maker's own catalogue by a car's frame number. This tab is where the owner keeps, for each car maker, the list of website addresses that count as that maker's own catalogue. When a part or a car fit is saved with a source link from one of those websites, Dominion labels it "Confirmed" instead of "Needs checking".
+
+Dominion is the master parts database. Nothing is blocked; sources not on the list are still saved, just labelled "Needs checking". No prices, suppliers, stock or customer records. Everything else in the Parts database stays as it is.
+
+
+BRAND IDENTITY:
+- Match the existing Roam Dominion admin:
+  - Left sidebar with the Dominion logo; "Parts database" active under Vehicles.
+  - Page title "Parts database" with the tabs: Find parts, Full database, Add parts, Part types, Trusted sources (new, active).
+- LIGHT MODE (default):
+  - Primary: #0153dc; primary container: #dbe1ff
+  - Background: #faf8fe; surface: #ffffff
+  - Text: #30323b; muted text: #5d5f6a
+  - Outline: #797a84
+  - Success: #006e31; warning: #8a5300; error: #a83836
+- DARK MODE:
+  - Background #0b1220, surface #111a2e
+  - Text #e2e8f0, muted #94a3b8
+  - Primary #5b8def, success #4ade80, warning #fbbf24, error #f87171, outline #94a3b8
+- Trust chips: "Confirmed" (green dot + text), "Needs checking" (amber outline + small eye icon).
+- Typography: Inter. Website addresses, counts and dates in a mono font with tabular numerals.
+- Helper and label text is grey (muted), never blue. Buttons always look like buttons; remove / cancel buttons are red. Confirmations are in-app panels, never browser pop-ups.
+- No gradients, glassmorphism, 3D, AI badges or confidence percentages.
+- Sample data:
+  - Toyota — amayama.com, megazip.net, partsouq.com
+  - Daihatsu — amayama.com, megazip.net, partsouq.com
+  - Lexus — amayama.com, megazip.net
+  - Suzuki — (none yet)
+  - Mazda — (none yet)
+  - Each address shows "Added by Deeki T · 6 Nov 2026" in muted mono.
+
+
+DESIGN PRINCIPLES:
+- Desktop-first (1440px wide)
+- One plain sentence at the top explains what the list does
+- One card per car maker; the website addresses are the only content
+- Adding an address is one field and one button
+- Makers with no addresses still show, so the owner sees what's missing
+
+
+SCREEN 1: TRUSTED SOURCES — LIST
+- Under the tabs, a short intro card: title "Trusted sources", body "Websites listed here show a car maker's own parts catalogue for a frame number. Parts and car fits saved with a link from one of these sites are marked Confirmed. Links from anywhere else are saved as Needs checking."
+- A search box "Find a car maker" and a filled button "Add a car maker".
+- One card per car maker, in a two-column grid:
+  - Header: maker name in bold, mono count chip ("3 sites"), and a "⋯" menu button (Rename, Remove maker — red).
+  - Body: one row per website address — globe icon, address in mono, muted "Added by … · date", an outlined "Open" button and a small red "Remove" button.
+  - Footer: a text field "Add a website address" (placeholder "e.g. amayama.com") and an outlined "Add" button.
+  - Makers with no addresses show a muted line "No trusted sites yet — links for this maker are saved as Needs checking." above the add field.
+- A second frame shows the same screen in dark mode.
+
+
+SCREEN 2: ADD AND REMOVE
+- Frame A — adding: the Toyota card with "toyota-epc.example" typed in the field and the Add button focused; below the field a muted line "Only the site address is kept, e.g. amayama.com".
+- Frame B — added: the new row appears in the Toyota card, and a small toast "toyota-epc.example added to Toyota" with an outlined "Undo" button.
+- Frame C — remove: an in-app confirm panel over the card: "Remove partsouq.com from Toyota? Parts already saved stay as they are." with a red "Remove" button and an outlined "Keep" button.
+- Frame D — add a car maker: a small panel with a text field "Car maker" (sample "Honda"), a filled "Add" button and a red "Cancel" button.
+
+
+SCREEN 3: STATES
+- Frame A — loading: grey skeleton cards.
+- Frame B — could not load: a red outlined banner "Could not load trusted sources. Nothing was changed." with an outlined "Try again" button.
+- Frame C — already on the list: the add field shows a muted red line "megazip.net is already trusted for Toyota."
+- Frame D — not a website address: the add field shows a muted red line "Type a website address, like amayama.com."
+
+
+ADDITIONAL UI COMPONENTS:
+- Car maker card (header with count and ⋯ menu, address rows, add field)
+- Address row (globe icon, mono address, added-by line, Open + Remove buttons)
+- In-app confirm panel
+- Toast with Undo
+
+
+INTERACTIONS:
+- **Add:** adds the address to that maker; the count chip updates; toast with Undo.
+- **Remove:** opens the in-app confirm panel; Remove deletes the address; toast with Undo.
+- **Open:** opens the site in a new tab.
+- **Add a car maker:** opens the small panel; the new maker card appears with "No trusted sites yet".
+- **Search:** filters the cards by maker name.
+- **Focus:** keyboard reachable fields and buttons, existing Dominion focus rings.
+
+
+Spec screens / Area
+| Screen | Area |
+|---|---|
+| 1 | Trusted sources list — intro, one card per car maker with its trusted website addresses, light + dark |
+| 2 | Add / added with Undo / remove confirm / add a car maker |
+| 3 | States — loading, could not load, already on the list, not a website address |

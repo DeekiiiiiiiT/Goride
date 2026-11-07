@@ -438,6 +438,7 @@ export async function enrichFleetParts(
       evidenceUrl: item.evidenceUrl ?? null,
       stockQty,
       catalogDecision: item.catalogDecision ?? null,
+      groupId: item.groupId ?? (item.part as { interchange_group_id?: string }).interchange_group_id ?? null,
       part: item.part,
       offers,
     };

@@ -57,7 +57,7 @@ Deno.test("Dominion vehicle-database routes hide customer rows", async () => {
     patch(path: string, ...handlers: unknown[]) {
       registered.push({ method: "PATCH", path, handler: handlers[handlers.length - 1] as (c: unknown) => Promise<unknown> });
     },
-    delete() {},
+    delete(..._a: unknown[]) {},
   };
   const supabase = stubSupabase() as unknown as SupabaseClient;
   registerCatalogRoutes(route, supabase);

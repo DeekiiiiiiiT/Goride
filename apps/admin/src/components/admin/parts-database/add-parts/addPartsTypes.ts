@@ -35,7 +35,17 @@ export type AddPartsDraft = {
   sourceType: SourceType;
   evidenceUrl: string;
   fitMode: FitMode;
-  listings: Array<{ vehicleId: string; label?: string; position?: string; side?: string; yearFrom?: number; yearTo?: number }>;
+  listings: Array<{
+    vehicleId: string;
+    label?: string;
+    position?: string;
+    side?: string;
+    yearFrom?: number;
+    yearTo?: number;
+    /** Specific-cars step: Confirmed vs Needs checking per listing */
+    listingTrust?: "confirmed" | "needs_checking";
+    reason?: string;
+  }>;
   engineFamilyId: string;
   engineCode: string;
   excludedVehicleIds: string[];

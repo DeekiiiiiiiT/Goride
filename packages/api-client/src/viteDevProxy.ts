@@ -8,8 +8,7 @@ export function supabaseUrlFromEnv(env: Record<string, string>): string {
   if (url) return url.replace(/\/$/, '');
   const id = env.VITE_SUPABASE_PROJECT_ID?.trim();
   if (id) return `https://${id}.supabase.co`;
-  // Shared Roam prod project — last-resort so local smoke tests still proxy.
-  return 'https://csfllzzastacofsvcdsc.supabase.co';
+  return 'http://127.0.0.1:54321';
 }
 
 export function supabaseEdgeFunctionsProxy(supabaseUrl: string): Record<string, ProxyOptions> {

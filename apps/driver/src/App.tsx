@@ -13,7 +13,7 @@ import { AppErrorBoundary } from './components/layout/AppErrorBoundary';
 import { ActiveRideRecoveryProvider, useActiveRideRecovery } from './contexts/ActiveRideRecoveryContext';
 import { needsGoogleExtendedSignup } from './utils/googleDriverSignup';
 import { BrowserRouter } from 'react-router-dom';
-import { AuthRecoveryGate } from '@roam/auth-client';
+import { AuthRecoveryGate, TestCopyBar } from '@roam/auth-client';
 import { DriverAdminPortal } from './admin/DriverAdminPortal';
 import { DriverSplashScreen } from './components/layout/DriverSplashScreen';
 import { Toaster } from 'sonner';
@@ -95,7 +95,9 @@ export default function App() {
   const isAdmin = window.location.pathname.startsWith('/admin');
 
   return (
-    <AuthRecoveryGate
+    <>
+      <TestCopyBar />
+      <AuthRecoveryGate
       title="Reset password"
       subtitle={isAdmin ? 'Roam Driver Admin' : 'Roam Driver'}
       signInHref={isAdmin ? '/admin' : '/'}
@@ -121,5 +123,6 @@ export default function App() {
         </QueryClientProvider>
       )}
     </AuthRecoveryGate>
+    </>
   );
 }

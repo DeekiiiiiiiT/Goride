@@ -254,7 +254,7 @@ export function registerPartsImportRoutes(route: RouteApp, supabase: SupabaseCli
       const specKeys = (specKeyRows ?? []).map((row) => row.key).join(",");
       const { data, error } = await supabase
         .from("vehicle_catalog")
-        .select("id, make, model, chassis_code, engine_code, production_start_year, production_end_year, version_name")
+        .select("id, make, model, chassis_code, engine_code, production_start_year, production_end_year, version_name:trim_series")
         .order("make")
         .order("model")
         .limit(5000);

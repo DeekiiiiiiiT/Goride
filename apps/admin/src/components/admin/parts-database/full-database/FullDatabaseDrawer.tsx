@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useAuth } from "../../../auth/AuthContext";
@@ -10,8 +10,16 @@ import {
   fetchPartReferenceTable,
 } from "../../../../services/partsAutoMatchApi";
 import { goDominionPage, writeCatalogSearch } from "../partsCatalogUrl";
-import { excludeListing, fetchMasterPart } from "../partsDatabaseApi";
-import { fitLinkBadge, type FitVia } from "@roam/types/partMatchReason";
+import {
+  excludeListing,
+  fetchMasterPart,
+  patchListingTrust,
+  patchListingYears,
+  saveGuidedPart,
+  type MasterFit,
+  type MasterPartDetail,
+} from "../partsDatabaseApi";
+import { fitLinkBadge, type FitSource, type FitVia } from "@roam/types/partMatchReason";
 import { formatPartPositionSideLabel } from "@roam/types/partPositionNorm";
 import { PartsButton } from "../PartsButton";
 
@@ -45,6 +53,551 @@ function wearSensorLabel(raw: unknown): string {
   const v = String(raw ?? "none").trim().toLowerCase();
   if (!v || v === "none") return "None";
   return v.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+type TrustFilter = "all" | "confirmed" | "needs_checking";
+
+function rowTrustState(trust: string | null | undefined): "confirmed" | "needs_checking" | "other" {
+  const t = String(trust ?? "").trim().toLowerCase();
+  if (t === "confirmed") return "confirmed";
+  if (t === "needs_checking") return "needs_checking";
+  return "other";
+}
+
+function trustCounts(fits: MasterPartDetail["fits"]) {
+  let confirmed = 0;
+  let needs = 0;
+  for (const f of fits) {
+    const s = rowTrustState(f.trust);
+    if (s === "confirmed") confirmed += 1;
+    else if (s === "needs_checking") needs += 1;
+  }
+  return { confirmed, needs, all: fits.length };
+}
+
+function fitReason(fit: MasterFit & { via?: FitVia; fitSource?: FitSource }) {
+  return String(fit.trustReason ?? "").trim();
+}
+
+function isPlatformTwinRow(fit: MasterFit) {
+  return !fit.listingId || fit.linkType === "PLATFORM TWIN";
+}
+
+function CarsItFitsSection({
+  part,
+  owner,
+  ownerTitle,
+  onAddCar,
+  onRefetch,
+  queryError,
+  isLoading,
+  refetch,
+}: {
+  part: MasterPartDetail | null;
+  owner: boolean;
+  ownerTitle: string | undefined;
+  onAddCar: () => void;
+  onRefetch: () => Promise<unknown>;
+  queryError: boolean;
+  isLoading: boolean;
+  refetch: () => void;
+}) {
+  const fits = part?.fits ?? [];
+  const { confirmed: nConf, needs: nNeed, all: nAll } = trustCounts(fits);
+  const [trustFilter, setTrustFilter] = useState<TrustFilter>("all");
+  const [menuKey, setMenuKey] = useState<string | null>(null);
+  const [panel, setPanel] = useState<
+    | null
+    | { kind: "needs_reason"; listingId: string; draft: string }
+    | { kind: "years"; listingId: string; draftFrom: string; draftTo: string; fit: MasterFit & { via?: FitVia; fitSource?: FitSource } }
+    | { kind: "remove_car"; fit: MasterFit & { via?: FitVia; fitSource?: FitSource }; reason: string; source: string }
+  >(null);
+
+  const filtered = fits.filter((f) => {
+    const s = rowTrustState(f.trust);
+    if (trustFilter === "all") return true;
+    if (trustFilter === "confirmed") return s === "confirmed";
+    return s === "needs_checking";
+  });
+
+  const byMake = useMemo(() => {
+    const map = new Map<string, typeof fits>();
+    for (const f of filtered) {
+      const m = f.make || "—";
+      const list = map.get(m) ?? [];
+      list.push(f);
+      map.set(m, list);
+    }
+    return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  }, [filtered]);
+
+  function closeMenu() {
+    setMenuKey(null);
+  }
+
+  async function restoreListingTrust(
+    listingId: string,
+    previous: { trust?: string | null; reason?: string | null },
+  ) {
+    const pt = String(previous.trust ?? "").toLowerCase();
+    if (pt === "auto" || pt === "") {
+      await patchListingTrust(listingId, { trust: "auto", reason: null });
+    } else if (pt === "needs_checking") {
+      await patchListingTrust(listingId, { trust: "needs_checking", reason: previous.reason ?? null });
+    } else if (pt === "confirmed") {
+      await patchListingTrust(listingId, { trust: "confirmed", reason: previous.reason ?? null });
+    } else {
+      await patchListingTrust(listingId, { trust: "auto", reason: null });
+    }
+    await onRefetch();
+    toast.success("Undo complete");
+  }
+
+  async function applyTrustWithUndo(listingId: string, trust: "confirmed" | "needs_checking", reason?: string | null) {
+    if (!owner || !listingId) return;
+    try {
+      const res = await patchListingTrust(listingId, { trust, reason: reason ?? null });
+      toast.success(trust === "confirmed" ? "Marked Confirmed" : "Marked needs checking", {
+        action: {
+          label: "Undo",
+          onClick: () => {
+            void (async () => {
+              try {
+                await restoreListingTrust(listingId, {
+                  trust: res.previous.trust ?? null,
+                  reason: res.previous.reason ?? null,
+                });
+              } catch (e) {
+                toast.error(e instanceof Error ? e.message : "Undo failed");
+              }
+            })();
+          },
+        },
+      });
+      await onRefetch();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not update trust");
+    }
+  }
+
+  async function addTwinListing(fit: MasterFit) {
+    if (!owner || !part?.groupId) return;
+    try {
+      const members = part.groupMembers || [];
+      await saveGuidedPart({
+        variantId: fit.variantId,
+        groupId: part.groupId,
+        position: fit.position || undefined,
+        tickedVariantIds: [fit.variantId],
+        evidenceUrl: part.evidenceUrl ?? undefined,
+        note: "",
+        parts: members.length
+          ? members.map((m) => ({
+            manufacturer: m.brand || part.brand,
+            partNumber: m.number || part.number,
+            name: m.name || part.name,
+            kind: "oem",
+          }))
+          : [{
+            manufacturer: part.brand,
+            partNumber: part.number,
+            name: part.name,
+            kind: "aftermarket",
+          }],
+      });
+      toast.success("Car added to this part");
+      await onRefetch();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not add car");
+    }
+  }
+
+  async function applyYears(listingId: string, yearFrom: number | null, yearTo: number | null) {
+    if (!owner || !listingId) return;
+    try {
+      const res = await patchListingYears(listingId, { yearFrom, yearTo });
+      toast.success("Years updated", {
+        action: {
+          label: "Undo",
+          onClick: () => {
+            void (async () => {
+              try {
+                await patchListingYears(listingId, {
+                  yearFrom: res.previous.yearFrom ?? null,
+                  yearTo: res.previous.yearTo ?? null,
+                });
+                await onRefetch();
+              } catch (e) {
+                toast.error(e instanceof Error ? e.message : "Undo failed");
+              }
+            })();
+          },
+        },
+      });
+      await onRefetch();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not update years");
+    }
+  }
+
+  if (queryError) {
+    return (
+      <div className="rounded-xl border border-error/40 bg-error/10 p-space-md flex flex-col gap-space-sm">
+        <p className="font-body-sm text-error font-medium">Could not load this part. Nothing was changed.</p>
+        <PartsButton variant="secondary" className="self-start" type="button" onClick={() => refetch()}>
+          Try again
+        </PartsButton>
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col gap-space-sm animate-pulse">
+        <div className="h-4 bg-surface-container-high rounded w-1/3" />
+        <div className="h-24 bg-surface-container-high rounded-lg" />
+        <div className="h-24 bg-surface-container-high rounded-lg" />
+      </div>
+    );
+  }
+
+  if (!part) return null;
+
+  return (
+    <div className="flex flex-col gap-space-md">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2">
+          <span className="font-label-xs uppercase tracking-wider text-on-surface-variant font-bold">Cars it fits</span>
+          <span className="font-mono-sm text-mono-sm px-1.5 py-0.5 rounded bg-surface-container-high text-on-surface font-semibold">
+            {nAll} MATCHED
+          </span>
+        </div>
+        <PartsButton variant="secondary" className="font-mono-sm text-mono-sm gap-0.5 disabled:opacity-40" disabled={!owner} title={ownerTitle} onClick={onAddCar}>
+          <span className="material-symbols-outlined text-[15px]">add</span>
+          Add a car
+        </PartsButton>
+      </div>
+
+      {fits.length === 0 ? (
+        <div className="rounded-lg border border-outline-variant/40 bg-surface-container-low p-space-md">
+          <p className="font-body-sm text-on-surface-variant">No car listing yet.</p>
+          <PartsButton variant="secondary" className="mt-2" disabled={!owner} title={ownerTitle} onClick={onAddCar}>
+            Add a car
+          </PartsButton>
+        </div>
+      ) : null}
+
+      {fits.length > 0 && nConf === 0 ? (
+        <div className="rounded-lg border border-amber-500/35 bg-amber-500/10 px-space-md py-space-sm font-body-sm text-amber-900 dark:text-amber-100">
+          None of these cars are confirmed yet.
+        </div>
+      ) : null}
+
+      {fits.length > 0 ? (
+        <div className="flex flex-wrap gap-space-xs">
+          {([
+            ["all", "All", nAll],
+            ["confirmed", "Confirmed", nConf],
+            ["needs_checking", "Needs checking", nNeed],
+          ] as const).map(([id, label, n]) => (
+            <button
+              key={id}
+              type="button"
+              className={
+                trustFilter === id
+                  ? "px-3 py-1.5 rounded-full font-label-xs font-semibold bg-primary-container text-on-primary"
+                  : "px-3 py-1.5 rounded-full font-label-xs font-medium bg-surface-container border border-outline-variant/40 text-on-surface-variant hover:bg-surface-container-high"
+              }
+              onClick={() => setTrustFilter(id)}
+            >
+              {label} ({n})
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      {fits.length > 0
+        ? byMake.map(([make, rows]) => (
+            <div key={make} className="flex flex-col gap-space-sm">
+              <div className="flex items-center gap-2">
+                <span className="font-headline-md font-bold text-on-surface">{make}</span>
+                <span className="font-mono-sm text-mono-sm px-1.5 py-0.5 rounded bg-surface-container text-on-surface-variant">{rows.length}</span>
+              </div>
+              {rows.map((fit) => {
+                const listingId = fit.listingId ?? "";
+                const rowKey = `${listingId}-${fit.variantId}-${fit.chassis}`;
+                const trust = rowTrustState(fit.trust);
+                const linkLbl = fitLinkBadge((fit as { via?: FitVia }).via ?? "direct", (fit as { fitSource?: FitSource }).fitSource);
+                const reason = fitReason(fit);
+                const open = menuKey === rowKey;
+                const twinRow = isPlatformTwinRow(fit);
+                return (
+                  <div
+                    key={rowKey}
+                    className="p-space-sm rounded-xl bg-surface-container border border-outline-variant/30 flex flex-col gap-space-sm"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-start gap-space-sm min-w-0">
+                        <span className="material-symbols-outlined text-primary text-[18px] shrink-0 mt-0.5">directions_car</span>
+                        <div className="min-w-0">
+                          <span className="font-headline-md text-headline-md font-bold text-on-surface block">
+                            {[fit.make, fit.model].filter(Boolean).join(" ")}
+                          </span>
+                          <span className="font-mono-sm text-mono-sm text-on-surface-variant">
+                            {[fit.chassis, fit.years, fitAxleSubtitle(fit.position, (fit as { side?: string }).side)].filter(Boolean).join(" · ")}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center justify-end gap-1.5 shrink-0">
+                        <span
+                          className={`font-mono-sm text-mono-sm px-2 py-0.5 rounded font-semibold ${
+                            linkLbl === "PLATFORM TWIN"
+                              ? "bg-cyan-700/10 text-cyan-800 dark:text-cyan-200"
+                              : "bg-[rgba(1,83,220,0.12)] text-primary dark:bg-primary-container/15 dark:text-[#8eb4ff]"
+                          }`}
+                        >
+                          {linkLbl}
+                        </span>
+                        <span
+                          className={`font-mono-sm text-mono-sm px-2 py-0.5 rounded font-semibold ${
+                            trust === "confirmed"
+                              ? "bg-emerald-600/15 text-emerald-800 dark:text-emerald-200"
+                              : trust === "needs_checking"
+                              ? "bg-amber-500/15 text-amber-900 dark:text-amber-100"
+                              : "bg-surface-container-high text-on-surface-variant"
+                          }`}
+                        >
+                          {trust === "confirmed" ? "Confirmed" : trust === "needs_checking" ? "Needs checking" : "—"}
+                        </span>
+                        {twinRow ? (
+                          <PartsButton
+                            variant="secondary"
+                            className="font-body-sm gap-0.5 disabled:opacity-40"
+                            disabled={!owner}
+                            title={ownerTitle}
+                            type="button"
+                            onClick={() => { void addTwinListing(fit); }}
+                          >
+                            <span className="material-symbols-outlined text-[16px]">add</span>
+                            Add this car
+                          </PartsButton>
+                        ) : (
+                          <div className="relative">
+                            <PartsButton
+                              variant="icon"
+                              className="disabled:opacity-40"
+                              disabled={!owner || !listingId}
+                              title={ownerTitle}
+                              aria-label="Car actions"
+                              onClick={() => setMenuKey(open ? null : rowKey)}
+                            >
+                              <span className="material-symbols-outlined text-[20px]">more_vert</span>
+                            </PartsButton>
+                            {open ? (
+                              <div className="absolute right-0 z-20 mt-1 min-w-[200px] rounded-xl border border-outline-variant/40 bg-surface-container-lowest shadow-lg py-1">
+                                <button
+                                  type="button"
+                                  className="w-full text-left px-3 py-2 font-body-sm hover:bg-surface-container-high disabled:opacity-40"
+                                  disabled={!owner}
+                                  onClick={() => {
+                                    closeMenu();
+                                    void applyTrustWithUndo(listingId, "confirmed", null);
+                                  }}
+                                >
+                                  Mark confirmed
+                                </button>
+                                <button
+                                  type="button"
+                                  className="w-full text-left px-3 py-2 font-body-sm hover:bg-surface-container-high disabled:opacity-40"
+                                  disabled={!owner}
+                                  onClick={() => {
+                                    closeMenu();
+                                    setPanel({ kind: "needs_reason", listingId, draft: "" });
+                                  }}
+                                >
+                                  Mark needs checking…
+                                </button>
+                                <button
+                                  type="button"
+                                  className="w-full text-left px-3 py-2 font-body-sm hover:bg-surface-container-high disabled:opacity-40"
+                                  disabled={!owner}
+                                  onClick={() => {
+                                    closeMenu();
+                                    setPanel({
+                                      kind: "years",
+                                      listingId,
+                                      draftFrom: fit.yearFrom != null ? String(fit.yearFrom) : "",
+                                      draftTo: fit.yearTo != null ? String(fit.yearTo) : "",
+                                      fit,
+                                    });
+                                  }}
+                                >
+                                  Change years
+                                </button>
+                                <button
+                                  type="button"
+                                  className="w-full text-left px-3 py-2 font-body-sm text-error hover:bg-error/10 disabled:opacity-40"
+                                  disabled={!owner}
+                                  onClick={() => {
+                                    closeMenu();
+                                    setPanel({ kind: "remove_car", fit, reason: "", source: "" });
+                                  }}
+                                >
+                                  Remove this car
+                                </button>
+                              </div>
+                            ) : null}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    {trust === "needs_checking" && reason ? (
+                      <p className="font-mono-sm text-mono-sm text-amber-800 dark:text-amber-200 pl-8">{reason}</p>
+                    ) : null}
+                    <div className="flex flex-wrap items-center gap-2 pl-8">
+                      {fit.evidenceUrl ? (
+                        <a
+                          href={fit.evidenceUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 px-3 h-8 rounded-xl border border-outline-variant/60 bg-transparent text-on-surface font-body-sm font-medium hover:bg-surface-container-high"
+                        >
+                          Source
+                          <span className="material-symbols-outlined text-[16px]">open_in_new</span>
+                        </a>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ))
+        : null}
+
+      {panel?.kind === "needs_reason" ? (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-inverse-surface/40" role="dialog">
+          <div className="bg-surface-container-lowest rounded-xl shadow-xl max-w-md w-full p-space-lg border border-outline-variant/40">
+            <h3 className="font-headline-md font-bold text-on-surface mb-2">Reason for needs checking</h3>
+            <p className="font-body-sm text-on-surface-variant mb-3">Short note shown on this car listing.</p>
+            <textarea
+              className="w-full rounded-lg border border-outline-variant/40 bg-surface-container-low px-3 py-2 font-body-sm text-on-surface min-h-[80px]"
+              value={panel.draft}
+              onChange={(e) => setPanel({ ...panel, draft: e.target.value })}
+            />
+            <div className="flex justify-end gap-2 mt-4">
+              <PartsButton variant="danger" onClick={() => setPanel(null)}>
+                Cancel
+              </PartsButton>
+              <PartsButton
+                variant="primary"
+                onClick={() => {
+                  void applyTrustWithUndo(panel.listingId, "needs_checking", panel.draft.trim() || null);
+                  setPanel(null);
+                }}
+              >
+                Save
+              </PartsButton>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {panel?.kind === "years" ? (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-inverse-surface/40" role="dialog">
+          <div className="bg-surface-container-lowest rounded-xl shadow-xl max-w-md w-full p-space-lg border border-outline-variant/40">
+            <h3 className="font-headline-md font-bold text-on-surface mb-2">Change years</h3>
+            <div className="flex gap-2">
+              <label className="flex-1 flex flex-col gap-1">
+                <span className="font-label-xs text-on-surface-variant">From</span>
+                <input
+                  className="rounded-lg border border-outline-variant/40 bg-surface-container-low px-3 py-2"
+                  inputMode="numeric"
+                  value={panel.draftFrom}
+                  onChange={(e) => setPanel({ ...panel, draftFrom: e.target.value })}
+                />
+              </label>
+              <label className="flex-1 flex flex-col gap-1">
+                <span className="font-label-xs text-on-surface-variant">To</span>
+                <input
+                  className="rounded-lg border border-outline-variant/40 bg-surface-container-low px-3 py-2"
+                  inputMode="numeric"
+                  value={panel.draftTo}
+                  onChange={(e) => setPanel({ ...panel, draftTo: e.target.value })}
+                />
+              </label>
+            </div>
+            <div className="flex justify-end gap-2 mt-4">
+              <PartsButton variant="danger" onClick={() => setPanel(null)}>
+                Cancel
+              </PartsButton>
+              <PartsButton
+                variant="primary"
+                onClick={() => {
+                  const yf = panel.draftFrom.trim() ? Number(panel.draftFrom) : null;
+                  const yt = panel.draftTo.trim() ? Number(panel.draftTo) : null;
+                  void applyYears(panel.listingId, yf, yt);
+                  setPanel(null);
+                }}
+              >
+                Save
+              </PartsButton>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {panel?.kind === "remove_car" && part.groupId ? (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-inverse-surface/40" role="dialog">
+          <div className="bg-surface-container-lowest rounded-xl shadow-xl max-w-md w-full p-space-lg border border-outline-variant/40">
+            <h3 className="font-headline-md font-bold text-on-surface mb-2">Remove this car</h3>
+            <p className="font-body-sm text-on-surface-variant mb-3">
+              Remove {[panel.fit.make, panel.fit.model].filter(Boolean).join(" ")} from this part&apos;s fit list.
+            </p>
+            <input
+              className="w-full rounded-lg border border-outline-variant/40 bg-surface-container-low px-3 py-2 mb-2"
+              placeholder="Reason"
+              value={panel.reason}
+              onChange={(e) => setPanel({ ...panel, reason: e.target.value })}
+            />
+            <input
+              className="w-full rounded-lg border border-outline-variant/40 bg-surface-container-low px-3 py-2"
+              placeholder="Source link"
+              value={panel.source}
+              onChange={(e) => setPanel({ ...panel, source: e.target.value })}
+            />
+            <div className="flex justify-end gap-2 mt-4">
+              <PartsButton variant="secondary" onClick={() => setPanel(null)}>
+                Cancel
+              </PartsButton>
+              <PartsButton
+                variant="danger"
+                disabled={!owner || !panel.reason.trim() || !panel.source.trim()}
+                onClick={() => {
+                  void (async () => {
+                    try {
+                      await excludeListing({
+                        groupId: part.groupId!,
+                        variantId: panel.fit.variantId,
+                        reason: panel.reason.trim(),
+                        evidenceUrl: panel.source.trim(),
+                      });
+                      toast.success("Removed from that car");
+                      setPanel(null);
+                      await onRefetch();
+                    } catch (e) {
+                      toast.error(e instanceof Error ? e.message : "Could not remove");
+                    }
+                  })();
+                }}
+              >
+                Remove
+              </PartsButton>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 export function FullDatabaseDrawer({
@@ -85,7 +638,6 @@ export function FullDatabaseDrawer({
   const [busy, setBusy] = useState(false);
   const part = query.data;
   const indexRev = part?.groupRevision ?? part?.indexRevision;
-  const matchedCars = part?.fits.length ?? 0;
   const indexBadge = part?.indexBadge;
   const indexGroupHeadline = part?.indexGroupHeadline;
   const indexGroupCode = part?.indexGroupCode ?? part?.groupCode;
@@ -144,7 +696,7 @@ export function FullDatabaseDrawer({
   }
 
   const shell = (
-      <aside className={`find-parts-sheet bg-surface-container-lowest shadow-xl flex flex-col overflow-hidden rounded-xl ${inline ? "w-[620px] shrink-0 z-30" : "absolute top-0 bottom-0 right-0 w-[620px] max-w-[90vw] shadow-2xl"}`}>
+      <aside className={`find-parts-sheet bg-surface-container-lowest shadow-xl flex flex-col overflow-hidden rounded-xl ${inline ? "w-[min(720px,100%)] shrink-0 z-30" : "absolute top-0 bottom-0 right-0 w-[min(720px,96vw)] max-w-[720px] shadow-2xl"}`}>
         <div className="px-space-xl py-space-lg border-b border-outline-variant/40 bg-surface-container-low flex flex-col gap-space-sm">
           <div className="flex items-start justify-between gap-space-md">
             <div className="flex flex-col gap-1 min-w-0">
@@ -167,9 +719,9 @@ export function FullDatabaseDrawer({
                   </div>
                   <h1 className="font-headline-xl text-headline-xl font-bold text-on-surface tracking-tight">{drawerTitle}</h1>
                 </>
-              ) : <p className="text-secondary">Loading part…</p>}
+              ) : <p className="text-on-surface-variant">Loading part…</p>}
             </div>
-            <button type="button" className="w-8 h-8 rounded-xl bg-surface-container hover:bg-surface-container-high border border-outline-variant/50 flex items-center justify-center text-on-surface-variant" title="Close" onClick={onClose}>
+            <button type="button" className="w-8 h-8 rounded-xl bg-surface-container hover:bg-surface-container-high border border-outline-variant/50 flex items-center justify-center text-on-surface-variant" title="Close" aria-label="Close" onClick={onClose}>
               <span className="material-symbols-outlined text-[18px]">close</span>
             </button>
           </div>
@@ -195,39 +747,18 @@ export function FullDatabaseDrawer({
           ) : null}
         </div>
         <div className="flex-1 overflow-y-auto p-space-xl flex flex-col gap-space-xl">
-          {query.isError ? <p className="text-secondary">Could not load this part. Nothing was changed.</p> : null}
+          <CarsItFitsSection
+            part={part ?? null}
+            owner={owner}
+            ownerTitle={ownerTitle}
+            onAddCar={onAddCar}
+            onRefetch={() => query.refetch()}
+            queryError={query.isError}
+            isLoading={query.isPending}
+            refetch={() => query.refetch()}
+          />
           {part ? (
             <>
-              <div className="flex flex-col gap-space-sm">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <span className="font-label-xs uppercase tracking-wider text-on-surface-variant font-bold">
-                      Cars it fits
-                    </span>
-                    <span className="font-mono-sm text-mono-sm px-1.5 py-0.5 rounded bg-surface-container-high text-on-surface font-semibold">
-                      {matchedCars} MATCHED
-                    </span>
-                  </div>
-                  <PartsButton variant="secondary" className="font-mono-sm text-mono-sm gap-0.5 disabled:opacity-40" disabled={!owner} title={ownerTitle} onClick={onAddCar}>
-                    <span className="material-symbols-outlined text-[15px]">add</span>
-                    Add a car
-                  </PartsButton>
-                </div>
-                {part.fits.length === 0 ? <p className="font-body-sm text-secondary">No car listing yet.</p> : part.fits.map((fit) => (
-                  <div key={`${fit.linkType}-${fit.variantId}`} className="p-space-sm rounded-lg bg-surface-container border border-outline-variant/30 flex items-center justify-between hover:bg-surface-container-high transition-colors">
-                    <div className="flex items-center gap-space-sm min-w-0">
-                      <span className="material-symbols-outlined text-primary text-[18px] shrink-0">directions_car</span>
-                      <div className="min-w-0">
-                        <span className="font-headline-md text-headline-md font-bold text-on-surface block">{[fit.make, fit.model].filter(Boolean).join(" ")}</span>
-                        <span className="font-mono-sm text-mono-sm text-on-surface-variant">{[fit.chassis, fit.years, fitAxleSubtitle(fit.position, (fit as { side?: string }).side)].filter(Boolean).join(" · ")}</span>
-                      </div>
-                    </div>
-                    <span className={`font-mono-sm text-mono-sm px-2 py-0.5 rounded font-semibold shrink-0 ${fitLinkBadge((fit as { via?: FitVia }).via ?? "direct", (fit as { fitSource?: "kept" }).fitSource) === "PLATFORM TWIN" ? "bg-cyan-700/10 text-cyan-800 dark:text-cyan-200" : "bg-[rgba(1,83,220,0.12)] text-primary dark:bg-primary-container/15 dark:text-[#8eb4ff]"}`}>
-                      {fitLinkBadge((fit as { via?: FitVia }).via ?? "direct", (fit as { fitSource?: "kept" }).fitSource)}
-                    </span>
-                  </div>
-                ))}
-              </div>
               <div className="flex flex-col gap-space-md">
                 <div className="flex items-center justify-between gap-2 pt-space-xs">
                   <h2 className="font-headline-lg text-headline-lg text-on-surface font-bold tracking-tight">Cross-references &amp; index numbers</h2>
@@ -383,6 +914,7 @@ function ReferenceBlock({
   const [draftEvidence, setDraftEvidence] = useState("");
   const [draftWear, setDraftWear] = useState("");
   const [menuId, setMenuId] = useState<string | null>(null);
+  const [removeTargetId, setRemoveTargetId] = useState<string | null>(null);
 
   async function addRow() {
     if (!owner || !token) return;
@@ -445,7 +977,7 @@ function ReferenceBlock({
   }
 
   async function removeRow(refId: string) {
-    if (!owner || !token || !window.confirm("Remove this reference row?")) return;
+    if (!owner || !token) return;
     try {
       await deletePartReferenceRow(token, partId, segment, refId);
       toast.success("Removed");
@@ -541,7 +1073,7 @@ function ReferenceBlock({
                 </PartsButton>
                 {menuId === refId ? (
                   <div className="absolute right-0 z-10 mt-1 rounded border border-outline-variant/40 bg-surface-container-lowest shadow p-2">
-                    <PartsButton variant="danger" className="text-xs min-h-[32px] h-8" onClick={() => { void removeRow(refId); setMenuId(null); }}>Remove</PartsButton>
+                    <PartsButton variant="danger" className="text-xs min-h-[32px] h-8" onClick={() => { setRemoveTargetId(refId); setMenuId(null); }}>Remove</PartsButton>
                   </div>
                 ) : null}
                 </td>
@@ -583,6 +1115,27 @@ function ReferenceBlock({
       ) : (
         <PartsButton variant="secondary" className="font-mono-sm disabled:opacity-40" disabled={!owner} onClick={() => { setDraftBrand(partBrand || ""); setAddOpen(true); }}>{addLabel}</PartsButton>
       )}
+      {removeTargetId ? (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-inverse-surface/40" role="dialog">
+          <div className="bg-surface-container-lowest rounded-xl shadow-xl max-w-sm w-full p-space-lg border border-outline-variant/40">
+            <p className="font-body-sm text-on-surface font-medium mb-4">Remove this reference row?</p>
+            <div className="flex justify-end gap-2">
+              <PartsButton variant="secondary" onClick={() => setRemoveTargetId(null)}>Cancel</PartsButton>
+              <PartsButton
+                variant="danger"
+                confirm
+                onClick={() => {
+                  const id = removeTargetId;
+                  setRemoveTargetId(null);
+                  void removeRow(id);
+                }}
+              >
+                Remove
+              </PartsButton>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -28,6 +28,7 @@ type RouteApp = {
   get: (path: string, ...handlers: unknown[]) => void;
   post: (path: string, ...handlers: unknown[]) => void;
   patch: (path: string, ...handlers: unknown[]) => void;
+  delete: (path: string, ...handlers: unknown[]) => void;
 };
 
 function fail(c: Context, error: unknown) {
@@ -42,6 +43,50 @@ function optionalYear(value: unknown): number | null | false {
   return year;
 }
 
+/** Match public.source_domain: host only, lowercase, no scheme/path/port, strip leading www. */
+export function normalizeTrustedSourceDomain(raw: string): { ok: true; domain: string } | { ok: false } {
+  let u = String(raw ?? "").trim();
+  if (!u) return { ok: false };
+  if (u.includes("://")) {
+    u = u.replace(/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//, "");
+  }
+  u = u.split("/")[0] ?? "";
+  u = u.split("?")[0] ?? "";
+  u = u.split(":")[0] ?? "";
+  u = u.trim().toLowerCase();
+  if (u.startsWith("www.")) u = u.slice(4);
+  if (!u || !/^[a-z0-9][a-z0-9.-]*[a-z0-9]$|^[a-z0-9]$/i.test(u)) {
+    return { ok: false };
+  }
+  return { ok: true, domain: u };
+}
+
+function makerNorm(maker: string): string {
+  return String(maker ?? "").trim().toLowerCase();
+}
+
+async function trustedSourceDisplayNames(
+  supabase: SupabaseClient,
+  userIds: string[],
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  const ids = [...new Set(userIds.filter((id) => UUID_RE.test(id)))];
+  if (!ids.length) return out;
+  const { data, error } = await supabase.schema("auth").from("users").select("id, email, raw_user_meta_data").in(
+    "id",
+    ids,
+  );
+  if (error || !data) return out;
+  for (const row of data as Array<{ id: string; email?: string | null; raw_user_meta_data?: Record<string, unknown> | null }>) {
+    const meta = row.raw_user_meta_data ?? {};
+    const name = typeof meta.full_name === "string" ? meta.full_name : typeof meta.name === "string"
+      ? meta.name
+      : null;
+    out.set(row.id, (name && name.trim()) || row.email || row.id);
+  }
+  return out;
+}
+
 function assertCatalogWrite(c: Context): Response | null {
   return assertCatalogWriteResponse(c);
 }
@@ -49,6 +94,22 @@ function assertCatalogWrite(c: Context): Response | null {
 function staffJson(c: Context, body: unknown) {
   assertNoCustomerIdentity(body);
   return c.json(body as Record<string, unknown>);
+}
+
+/** DB trust preview rows use `vehicleId` (catalog UUID); Dominion must not see that key name. */
+function dominionSanitizeListingTrustPreview(out: Record<string, unknown>): void {
+  const mapRows = (rows: Array<Record<string, unknown>>) =>
+    rows.map(({ vehicleId, ...rest }) => ({ catalogId: vehicleId, ...rest }));
+  if (Array.isArray(out.listingTrustPreview)) {
+    out.listingTrustPreview = mapRows(out.listingTrustPreview as Array<Record<string, unknown>>);
+  }
+  const preview = out.preview;
+  if (preview && typeof preview === "object" && !Array.isArray(preview)) {
+    const p = preview as Record<string, unknown>;
+    if (Array.isArray(p.listingTrustPreview)) {
+      p.listingTrustPreview = mapRows(p.listingTrustPreview as Array<Record<string, unknown>>);
+    }
+  }
 }
 
 export function registerCatalogRoutes(route: RouteApp, supabase: SupabaseClient) {
@@ -1008,6 +1069,8 @@ export function registerCatalogRoutes(route: RouteApp, supabase: SupabaseClient)
         partTypeName: c.req.query("partTypeName"),
         tradeTerm: c.req.query("tradeTerm"),
         sourceType: c.req.query("sourceType"),
+        catalogCarMaker: c.req.query("catalogCarMaker"),
+        evidenceUrl: c.req.query("evidenceUrl"),
         position: c.req.query("position"),
         positionScheme: c.req.query("positionScheme"),
         vehicleIds,
@@ -1017,7 +1080,11 @@ export function registerCatalogRoutes(route: RouteApp, supabase: SupabaseClient)
       };
       const { data, error } = await supabase.rpc("self_serve_part_add_preview", { p_input });
       if (error) return c.json({ error: error.message }, 400);
-      return staffJson(c, data ?? {});
+      // The database answers per car with `vehicleId`; Dominion never sends that name (it means a
+      // customer car), so the catalogue car id goes out as `catalogId`.
+      const out = (data ?? {}) as Record<string, unknown>;
+      dominionSanitizeListingTrustPreview(out);
+      return staffJson(c, out);
     } catch (error) {
       return fail(c, error);
     }
@@ -1031,12 +1098,17 @@ export function registerCatalogRoutes(route: RouteApp, supabase: SupabaseClient)
       const actor = c.get("rbacUser") as { userId?: string; id?: string } | undefined;
       const actorId = String(actor?.userId ?? actor?.id ?? "");
       if (UUID_RE.test(actorId)) body.actorId = actorId;
+      const rawCatalogCarMaker = body.catalogCarMaker ?? (body as { catalog_car_maker?: unknown }).catalog_car_maker;
+      if (typeof rawCatalogCarMaker === "string" && rawCatalogCarMaker.trim()) {
+        body.catalogCarMaker = rawCatalogCarMaker.trim();
+      }
       const { data, error } = await supabase.rpc("save_self_serve_part", { p_input: body });
       if (error) return c.json({ error: error.message }, 400);
       const payload = (data ?? {}) as Record<string, unknown>;
       const chassisInput = body.listings ? { listings: body.listings } : { vehicleIds: body.vehicleIds ?? [] };
       const { data: chassisList, error: chassisErr } = await supabase.rpc("self_serve_save_chassis_list", { p_input: chassisInput });
       if (!chassisErr && chassisList) payload.chassisList = chassisList;
+      dominionSanitizeListingTrustPreview(payload);
       return staffJson(c, payload);
     } catch (error) {
       return fail(c, error);
@@ -1217,7 +1289,7 @@ export function registerCatalogRoutes(route: RouteApp, supabase: SupabaseClient)
       const yearTo = Number(c.req.query("yearTo") ?? 0);
       let query = supabase
         .from("vehicle_catalog")
-        .select("id, make, model, chassis_code, engine_code, production_start_year, production_end_year, version_name, platform_id, drivetrain")
+        .select("id, make, model, chassis_code, engine_code, production_start_year, production_end_year, version_name:trim_series, platform_id, drivetrain")
         .order("make")
         .order("model")
         .limit(80);
@@ -1249,6 +1321,301 @@ export function registerCatalogRoutes(route: RouteApp, supabase: SupabaseClient)
         });
       }
       return staffJson(c, { items });
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
+  route.get("/make-server-37f42386/admin/catalog/trusted-sources", requireAuth(), async (c: Context) => {
+    const denied = assertPlatformStaffResponse(c);
+    if (denied) return denied;
+    try {
+      const [{ data: makes, error: makeErr }, { data: rows, error: rowErr }] = await Promise.all([
+        supabase.from("vehicle_catalog").select("make").order("make", { ascending: true }),
+        supabase.from("trusted_source").select("id, kind, maker, domain, added_by, added_at").order("kind").order("maker").order("domain"),
+      ]);
+      if (makeErr) throw makeErr;
+      if (rowErr) throw rowErr;
+      const makerSet = new Set<string>();
+      for (const r of makes ?? []) {
+        const m = String((r as { make?: string }).make ?? "").trim();
+        if (m) makerSet.add(m);
+      }
+      const userIds = (rows ?? []).map((x) => String((x as { added_by?: string | null }).added_by ?? "")).filter((id) =>
+        UUID_RE.test(id)
+      );
+      const names = await trustedSourceDisplayNames(supabase, userIds);
+      type SiteRow = {
+        id: string;
+        domain: string;
+        addedBy: string | null;
+        addedAt: string | null;
+      };
+      const carByMaker = new Map<string, SiteRow[]>();
+      const partByMaker = new Map<string, SiteRow[]>();
+      for (const raw of rows ?? []) {
+        const row = raw as { id: string; kind: string; maker: string; domain: string; added_by?: string | null; added_at?: string | null };
+        const site: SiteRow = {
+          id: row.id,
+          domain: row.domain,
+          addedBy: row.added_by ? (names.get(row.added_by) ?? null) : null,
+          addedAt: row.added_at ?? null,
+        };
+        if (row.kind === "car_maker") {
+          const list = carByMaker.get(row.maker) ?? [];
+          list.push(site);
+          carByMaker.set(row.maker, list);
+        } else {
+          const list = partByMaker.get(row.maker) ?? [];
+          list.push(site);
+          partByMaker.set(row.maker, list);
+        }
+      }
+      // Every maker with trusted sites always shows (even with no cars in the catalogue yet),
+      // plus catalogue makes with none. Matched ignoring case so "TOYOTA" and "Toyota" are one card.
+      const carGroups = new Map<string, { maker: string; sites: SiteRow[] }>();
+      for (const [maker, sites] of carByMaker) {
+        const key = maker.trim().toLowerCase();
+        const g = carGroups.get(key);
+        if (g) g.sites.push(...sites);
+        else carGroups.set(key, { maker, sites: [...sites] });
+      }
+      for (const maker of makerSet) {
+        const key = maker.toLowerCase();
+        if (!carGroups.has(key)) carGroups.set(key, { maker, sites: [] });
+      }
+      const carMakers = [...carGroups.values()].sort((a, b) => a.maker.localeCompare(b.maker));
+      const partMakers = [...partByMaker.keys()].sort((a, b) => a.localeCompare(b)).map((maker) => ({
+        maker,
+        sites: partByMaker.get(maker) ?? [],
+      }));
+      return staffJson(c, { carMakers, partMakers });
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
+  route.post("/make-server-37f42386/admin/catalog/trusted-sources", requireAuth(), async (c: Context) => {
+    const denied = assertCatalogWrite(c);
+    if (denied) return denied;
+    if (!isOwnerUser(c.get("rbacUser") as RbacUser | undefined)) {
+      return c.json({ error: "Only the owner can change parts." }, 403);
+    }
+    try {
+      const user = c.get("rbacUser") as { userId?: string; id?: string } | undefined;
+      const actorId = String(user?.userId ?? user?.id ?? "");
+      const body = await c.req.json() as { kind?: string; maker?: string; domain?: string };
+      const kind = String(body.kind ?? "").trim();
+      const maker = String(body.maker ?? "").trim();
+      const norm = normalizeTrustedSourceDomain(String(body.domain ?? ""));
+      if (!norm.ok) return c.json({ error: "Type a website address, like amayama.com." }, 400);
+      if (kind !== "car_maker" && kind !== "part_maker") return c.json({ error: "Invalid kind" }, 400);
+      if (!maker) return c.json({ error: "Maker is required" }, 400);
+      const { data: exists } = await supabase.from("trusted_source").select("id").eq("kind", kind).eq("maker_norm", makerNorm(maker)).eq(
+        "domain",
+        norm.domain,
+      ).maybeSingle();
+      if (exists) {
+        return c.json({ error: `${norm.domain} is already trusted for ${maker}.` }, 409);
+      }
+      const { data: inserted, error } = await supabase.from("trusted_source").insert({
+        kind,
+        maker,
+        domain: norm.domain,
+        added_by: UUID_RE.test(actorId) ? actorId : null,
+      }).select("id, kind, maker, domain, added_by, added_at").single();
+      if (error) {
+        if (error.code === "23505") {
+          return c.json({ error: `${norm.domain} is already trusted for ${maker}.` }, 409);
+        }
+        throw error;
+      }
+      const { error: recErr } = await supabase.rpc("trust_recompute_auto");
+      if (recErr) throw recErr;
+      await supabase.schema("fleet").from("master_change_log").insert({
+        dataset: "trusted_source",
+        record_id: String(inserted?.id ?? ""),
+        action: "insert",
+        before_json: null,
+        after_json: inserted ?? null,
+        actor: UUID_RE.test(actorId) ? actorId : null,
+        reason: "Trusted source added",
+      });
+      return staffJson(c, inserted ?? {});
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
+  route.delete("/make-server-37f42386/admin/catalog/trusted-sources/:id{[0-9a-fA-F-]{36}}", requireAuth(), async (c: Context) => {
+    const denied = assertCatalogWrite(c);
+    if (denied) return denied;
+    if (!isOwnerUser(c.get("rbacUser") as RbacUser | undefined)) {
+      return c.json({ error: "Only the owner can change parts." }, 403);
+    }
+    try {
+      const user = c.get("rbacUser") as { userId?: string; id?: string } | undefined;
+      const actorId = String(user?.userId ?? user?.id ?? "");
+      const id = c.req.param("id")?.trim() ?? "";
+      if (!UUID_RE.test(id)) return c.json({ error: "Invalid id" }, 400);
+      const { data: removed, error } = await supabase.from("trusted_source").delete().eq("id", id).select("*").maybeSingle();
+      if (error) throw error;
+      if (!removed) return c.json({ error: "Not found" }, 404);
+      const { error: recErr } = await supabase.rpc("trust_recompute_auto");
+      if (recErr) throw recErr;
+      await supabase.schema("fleet").from("master_change_log").insert({
+        dataset: "trusted_source",
+        record_id: id,
+        action: "delete",
+        before_json: removed,
+        after_json: null,
+        actor: UUID_RE.test(actorId) ? actorId : null,
+        reason: "Trusted source removed",
+      });
+      return staffJson(c, removed);
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
+  route.post("/make-server-37f42386/admin/catalog/trusted-sources/maker", requireAuth(), async (c: Context) => {
+    const denied = assertCatalogWrite(c);
+    if (denied) return denied;
+    if (!isOwnerUser(c.get("rbacUser") as RbacUser | undefined)) {
+      return c.json({ error: "Only the owner can change parts." }, 403);
+    }
+    try {
+      const body = await c.req.json() as { kind?: string; maker?: string };
+      const kind = String(body.kind ?? "").trim();
+      const maker = String(body.maker ?? "").trim();
+      if (kind !== "car_maker" && kind !== "part_maker") return c.json({ error: "Invalid kind" }, 400);
+      if (!maker) return c.json({ error: "Maker is required" }, 400);
+      return staffJson(c, { kind, maker });
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
+  route.patch("/make-server-37f42386/admin/catalog/trusted-sources/maker", requireAuth(), async (c: Context) => {
+    const denied = assertCatalogWrite(c);
+    if (denied) return denied;
+    if (!isOwnerUser(c.get("rbacUser") as RbacUser | undefined)) {
+      return c.json({ error: "Only the owner can change parts." }, 403);
+    }
+    try {
+      const user = c.get("rbacUser") as { userId?: string; id?: string } | undefined;
+      const actorId = String(user?.userId ?? user?.id ?? "");
+      const body = await c.req.json() as { kind?: string; from?: string; to?: string };
+      const kind = String(body.kind ?? "").trim();
+      const fromMaker = String(body.from ?? "").trim();
+      const toMaker = String(body.to ?? "").trim();
+      if (kind !== "car_maker" && kind !== "part_maker") return c.json({ error: "Invalid kind" }, 400);
+      if (!fromMaker || !toMaker) return c.json({ error: "from and to are required" }, 400);
+      const { data: updated, error } = await supabase.from("trusted_source").update({ maker: toMaker }).eq("kind", kind).eq(
+        "maker_norm",
+        makerNorm(fromMaker),
+      ).select("id");
+      if (error) throw error;
+      const { error: recErr } = await supabase.rpc("trust_recompute_auto");
+      if (recErr) throw recErr;
+      await supabase.schema("fleet").from("master_change_log").insert({
+        dataset: "trusted_source",
+        record_id: `rename:${kind}:${fromMaker}`,
+        action: "update",
+        before_json: { kind, from: fromMaker },
+        after_json: { kind, to: toMaker, rowCount: updated?.length ?? 0 },
+        actor: UUID_RE.test(actorId) ? actorId : null,
+        reason: "Trusted source maker renamed",
+      });
+      return staffJson(c, { updated: updated?.length ?? 0 });
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
+  route.delete("/make-server-37f42386/admin/catalog/trusted-sources/maker", requireAuth(), async (c: Context) => {
+    const denied = assertCatalogWrite(c);
+    if (denied) return denied;
+    if (!isOwnerUser(c.get("rbacUser") as RbacUser | undefined)) {
+      return c.json({ error: "Only the owner can change parts." }, 403);
+    }
+    try {
+      const user = c.get("rbacUser") as { userId?: string; id?: string } | undefined;
+      const actorId = String(user?.userId ?? user?.id ?? "");
+      const body = await c.req.json() as { kind?: string; maker?: string };
+      const kind = String(body.kind ?? "").trim();
+      const maker = String(body.maker ?? "").trim();
+      if (kind !== "car_maker" && kind !== "part_maker") return c.json({ error: "Invalid kind" }, 400);
+      if (!maker) return c.json({ error: "Maker is required" }, 400);
+      const { data: removed, error } = await supabase.from("trusted_source").delete().eq("kind", kind).eq("maker_norm", makerNorm(maker)).select(
+        "*",
+      );
+      if (error) throw error;
+      const { error: recErr } = await supabase.rpc("trust_recompute_auto");
+      if (recErr) throw recErr;
+      await supabase.schema("fleet").from("master_change_log").insert({
+        dataset: "trusted_source",
+        record_id: `maker:${kind}:${maker}`,
+        action: "delete",
+        before_json: { kind, maker },
+        after_json: { removedCount: removed?.length ?? 0 },
+        actor: UUID_RE.test(actorId) ? actorId : null,
+        reason: "Trusted source maker removed",
+      });
+      return staffJson(c, { removed: removed ?? [] });
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
+  route.patch("/make-server-37f42386/admin/catalog/listings/:id/trust", requireAuth(), async (c: Context) => {
+    const denied = assertCatalogWrite(c);
+    if (denied) return denied;
+    if (!isOwnerUser(c.get("rbacUser") as RbacUser | undefined)) {
+      return c.json({ error: "Only the owner can change parts." }, 403);
+    }
+    try {
+      const id = c.req.param("id")?.trim() ?? "";
+      if (!UUID_RE.test(id)) return c.json({ error: "Invalid listing" }, 400);
+      const body = await c.req.json() as { trust?: string; reason?: string | null };
+      const trust = String(body.trust ?? "").trim().toLowerCase();
+      if (trust !== "confirmed" && trust !== "needs_checking" && trust !== "auto") {
+        return c.json({ error: "Invalid trust" }, 400);
+      }
+      const reason = body.reason != null ? String(body.reason) : null;
+      const { data, error } = await supabase.rpc("admin_part_listing_patch_trust", {
+        p_listing_id: id,
+        p_trust: trust,
+        p_reason: reason,
+      });
+      if (error) return c.json({ error: error.message }, 400);
+      return staffJson(c, data ?? {});
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
+  route.patch("/make-server-37f42386/admin/catalog/listings/:id/years", requireAuth(), async (c: Context) => {
+    const denied = assertCatalogWrite(c);
+    if (denied) return denied;
+    if (!isOwnerUser(c.get("rbacUser") as RbacUser | undefined)) {
+      return c.json({ error: "Only the owner can change parts." }, 403);
+    }
+    try {
+      const id = c.req.param("id")?.trim() ?? "";
+      if (!UUID_RE.test(id)) return c.json({ error: "Invalid listing" }, 400);
+      const body = await c.req.json() as { yearFrom?: number | null; yearTo?: number | null };
+      const yf = optionalYear(body.yearFrom);
+      const yt = optionalYear(body.yearTo);
+      if (yf === false || yt === false) return c.json({ error: "Enter a real year" }, 400);
+      if (yf != null && yt != null && yf > yt) return c.json({ error: "yearFrom must be <= yearTo" }, 400);
+      const { data, error } = await supabase.rpc("admin_part_listing_patch_years", {
+        p_listing_id: id,
+        p_year_from: yf,
+        p_year_to: yt,
+      });
+      if (error) return c.json({ error: error.message }, 400);
+      return staffJson(c, data ?? {});
     } catch (error) {
       return fail(c, error);
     }

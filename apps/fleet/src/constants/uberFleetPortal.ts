@@ -1,3 +1,5 @@
+import { functionsUrl } from '@roam/api-client';
+
 /**
  * Uber Developer Portal values for RoamFleet → Vehicles/Fleet API.
  * Register these exactly in developer.uber.com (org: RoamFleet).
@@ -10,8 +12,7 @@ export const UBER_FLEET_PORTAL = {
   redirectUriProduction: 'https://roamfleet.co/uber-callback',
   /** Dev fallback — must also be registered in Uber Setup if you test locally. */
   redirectUriLocalHint: 'http://localhost:5173/uber-callback',
-  webhookUrl:
-    'https://csfllzzastacofsvcdsc.supabase.co/functions/v1/fleet-core/uber/webhook',
+  webhookUrl: `${functionsUrl}/fleet-core/uber/webhook`,
   docsUrl: 'https://developer.uber.com/docs/vehicles/getting-started',
   /**
    * Full Client Credentials scope set to replace period CSV imports + vehicle ops.

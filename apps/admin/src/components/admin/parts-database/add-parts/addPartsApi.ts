@@ -138,6 +138,7 @@ export type SelfServePreview = {
   excludedCount?: number;
   sentence?: string;
   trustLabel?: string;
+  listingTrustPreview?: Array<{ catalogId: string; trust: string; trustReason?: string | null }>;
   fitSummaryLines?: string[];
   fitSummaryStructured?: {
     positionLabel?: string;
@@ -164,6 +165,8 @@ export async function previewSelfServePart(input: {
   listings?: AddPartsDraft["listings"];
   excludedVehicleIds?: string[];
   factoryNumbers?: Array<{ brand: string; number: string }>;
+  evidenceUrl?: string;
+  catalogCarMaker?: string;
 }) {
   const q = new URLSearchParams({ fitMode: input.fitMode });
   if (input.brand) q.set("brand", input.brand);
@@ -171,6 +174,8 @@ export async function previewSelfServePart(input: {
   if (input.partTypeName) q.set("partTypeName", input.partTypeName);
   if (input.tradeTerm) q.set("tradeTerm", input.tradeTerm);
   if (input.sourceType) q.set("sourceType", input.sourceType);
+  if (input.evidenceUrl?.trim()) q.set("evidenceUrl", input.evidenceUrl.trim());
+  if (input.catalogCarMaker?.trim()) q.set("catalogCarMaker", input.catalogCarMaker.trim());
   if (input.position) q.set("position", input.position);
   if (input.positionScheme) q.set("positionScheme", input.positionScheme);
   if (input.engineCode) q.set("engineCode", input.engineCode);
@@ -192,6 +197,7 @@ export async function saveSelfServePart(draft: AddPartsDraft) {
     name: draft.name || draft.partNumber,
     sourceType: draft.sourceType,
     evidenceUrl: draft.evidenceUrl,
+    catalogCarMaker: draft.catalogCarMaker.trim() || undefined,
     fitMode: draft.fitMode,
     existingPartId: draft.existingPartId,
   };
@@ -202,6 +208,8 @@ export async function saveSelfServePart(draft: AddPartsDraft) {
       side: l.side || draft.side,
       yearFrom: l.yearFrom,
       yearTo: l.yearTo,
+      trust: l.listingTrust,
+      reason: l.listingTrust === "needs_checking" ? (l.reason?.trim() || undefined) : undefined,
     }));
   }
   if (draft.fitMode === "engine") {

@@ -8,6 +8,7 @@ import { pickBestPart, type BestPickItem } from "../../../packages/types/src/par
 import { variantCodeLine, variantPlainLabel, type VariantLabelRow } from "../../../packages/types/src/vehicleVariantLabel.ts";
 import { assembleMatchSections, enrichFleetParts, getCatalogParts } from "./catalog_api.ts";
 import { assertNoCustomerIdentity } from "./catalog_parts_shape.ts";
+import { groupFindSections } from "./parts_finder_group.ts";
 import type { PartsFitPair } from "../../../packages/types/src/partsFitParam.ts";
 
 const CANDIDATE_CAP = 6;
@@ -355,7 +356,7 @@ export async function findParts(
     return id && mergedIds.has(id);
   });
   const universalSource = loaded[0]?.parts.universal;
-  const sections = filteredCatalogItems.length || universalSource
+  const rawSections = filteredCatalogItems.length || universalSource
     ? assembleMatchSections(
       mode === "tiered"
         ? await enrichFleetParts(supabase, "tiered", filteredCatalogItems as never, null, 0) as Array<{ tier?: number; sisterNames?: string | null }>
@@ -363,6 +364,7 @@ export async function findParts(
       universalSource,
     )
     : assembleMatchSections([], []);
+  const sections = groupFindSections(rawSections);
   let coverage = null;
   if (pickedId) {
     const [{ data: readyRow }, { data: specRows }, { data: listingRows }] = await Promise.all([
@@ -417,10 +419,23 @@ async function loadUniversalToleranceMm(
   componentId: string | null,
 ): Promise<number | null> {
   if (!componentId) return null;
+  // universal_part has no part-type column: it links to a part type through its spec key
+  // (spec_key.component_id / maintenance_component_id, or part_type_spec_field.part_type_id).
+  const [{ data: keyRows, error: keyErr }, { data: fieldRows, error: fieldErr }] = await Promise.all([
+    supabase.from("spec_key").select("key").or(`component_id.eq.${componentId},maintenance_component_id.eq.${componentId}`),
+    supabase.from("part_type_spec_field").select("spec_key").eq("part_type_id", componentId),
+  ]);
+  if (keyErr) throw keyErr;
+  if (fieldErr) throw fieldErr;
+  const specKeys = [...new Set([
+    ...(keyRows ?? []).map((r) => String((r as { key?: string }).key ?? "")),
+    ...(fieldRows ?? []).map((r) => String((r as { spec_key?: string }).spec_key ?? "")),
+  ].filter(Boolean))];
+  if (!specKeys.length) return null;
   const { data, error } = await supabase
     .from("universal_part")
     .select("tolerance_mm")
-    .eq("maintenance_component_id", componentId)
+    .in("spec_key", specKeys)
     .not("tolerance_mm", "is", null)
     .order("tolerance_mm", { ascending: true })
     .limit(1)

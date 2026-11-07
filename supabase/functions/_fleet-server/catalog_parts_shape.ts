@@ -36,6 +36,8 @@ export type CatalogPartItem = {
   part: Record<string, unknown>;
   offers: CatalogOffer[];
   catalogDecision?: string | null;
+  /** Interchange group (one physical part); used to put its brand numbers on one card. */
+  groupId?: string | null;
   ruleSource?: string | null;
   position?: string | null;
   alsoKnownAs?: string[];
@@ -77,6 +79,21 @@ export const CORE_PART_OP_CODES = [
   "LGT-WIPER",
   "BRK-ROTOR",
   "SUS-SHOCK",
+] as const;
+
+/** Brake-area component op codes (sys_brakes); keep aligned with maintenance_service_categories under Brakes. */
+export const BRAKE_PART_OP_CODES = [
+  "BRK-PADS",
+  "BRK-SHOES",
+  "BRK-ROTOR",
+  "BRK-FLUID",
+  "BRK-CALIPER",
+  "BRK-DRUM",
+  "BRK-WCYL",
+  "BRK-HOSE",
+  "BRK-MCYL",
+  "BRK-HBCABLE",
+  "BRK-ABS",
 ] as const;
 
 export function variantPartsReady(verifiedCount: number, required = CORE_PART_OP_CODES.length): boolean {

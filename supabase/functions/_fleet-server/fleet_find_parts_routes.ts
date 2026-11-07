@@ -25,8 +25,18 @@ import {
 } from "./catalog_research_intake.ts";
 import { readComponentFitHints } from "./parts_component_fit_hints.ts";
 import { resolvePartsFitPairs } from "../../../packages/types/src/partsFitParam.ts";
+import { readFleetPartLookup } from "./fleet_parts_lookup.ts";
+import { readBrakesOverview } from "./read_brakes_overview.ts";
 
 const PREFIX = "/make-server-37f42386/parts";
+
+/** Database errors are plain objects, not Error: show their message instead of "[object Object]". */
+function errorText(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === "object" && "message" in error) return String((error as { message: unknown }).message);
+  return String(error);
+}
+
 const PHOTO_BUCKET = "parts-request-photos";
 const URGENCY = new Set(["low", "normal", "urgent", "within_24h"]);
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -254,7 +264,36 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
           : null,
       });
     } catch (error) {
-      return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+      return c.json({ error: errorText(error) }, 500);
+    }
+  });
+
+  app.get(`${PREFIX}/lookup`, ...view, async (c: Context) => {
+    try {
+      const partId = (c.req.query("partId") ?? "").trim();
+      const vehicleCatalogId = (c.req.query("variantId") ?? c.req.query("vehicleCatalogId") ?? "").trim() || null;
+      const out = await readFleetPartLookup(supabase, { partId, vehicleCatalogId });
+      if ("error" in out && out.status !== 200) {
+        return c.json({ error: out.error }, out.status);
+      }
+      return c.json(out.body);
+    } catch (error) {
+      return c.json({ error: errorText(error) }, 500);
+    }
+  });
+
+  app.get(`${PREFIX}/brakes-overview`, ...view, async (c: Context) => {
+    try {
+      const variantId = (c.req.query("variantId") ?? "").trim();
+      const yearRaw = Number(c.req.query("year") ?? c.req.query("vehicleYear") ?? "");
+      const vehicleYear = Number.isFinite(yearRaw) && yearRaw > 0 ? yearRaw : null;
+      const out = await readBrakesOverview(supabase, variantId, vehicleYear);
+      if ("error" in out && out.status !== 200) {
+        return c.json({ error: out.error }, out.status);
+      }
+      return c.json(out.body);
+    } catch (error) {
+      return c.json({ error: errorText(error) }, 500);
     }
   });
 
@@ -264,7 +303,7 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
       if (variantId && !UUID_RE.test(variantId)) return c.json({ error: "Invalid variant" }, 400);
       return c.json(await readPartsBrowseForVariant(supabase, variantId || undefined));
     } catch (error) {
-      return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+      return c.json({ error: errorText(error) }, 500);
     }
   });
 
@@ -276,7 +315,7 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
       if (!componentId || !UUID_RE.test(componentId)) return c.json({ error: "componentId required" }, 400);
       return c.json(await readComponentFitHints(supabase, variantId, componentId));
     } catch (error) {
-      return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+      return c.json({ error: errorText(error) }, 500);
     }
   });
 
@@ -284,7 +323,7 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
     try {
       return c.json(await readPartTerm(supabase, (c.req.query("q") ?? "").trim()));
     } catch (error) {
-      return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+      return c.json({ error: errorText(error) }, 500);
     }
   });
 
@@ -294,7 +333,7 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
       if (variantId && !UUID_RE.test(variantId)) return c.json({ error: "Invalid variant" }, 400);
       return c.json(await readSymptoms(supabase, variantId ? { variantId } : undefined));
     } catch (error) {
-      return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+      return c.json({ error: errorText(error) }, 500);
     }
   });
 
@@ -380,7 +419,7 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
       if (error) throw error;
       return c.json({ item: data });
     } catch (error) {
-      return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+      return c.json({ error: errorText(error) }, 500);
     }
   });
 
@@ -390,7 +429,7 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
       if (!orgId) return c.json({ error: "Organization required" }, 400);
       return c.json(await loadPartsActivity(supabase, orgId));
     } catch (error) {
-      return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+      return c.json({ error: errorText(error) }, 500);
     }
   });
 
@@ -413,7 +452,7 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
       if (error) throw error;
       return c.json({ photo_url: path });
     } catch (error) {
-      return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+      return c.json({ error: errorText(error) }, 500);
     }
   });
 
@@ -455,7 +494,7 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
         hub_label: extras.hub_label,
       });
     } catch (error) {
-      return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+      return c.json({ error: errorText(error) }, 500);
     }
   });
 
@@ -480,7 +519,7 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
       }
       return c.json({ makes, models, years: [...years].sort((a, b) => b - a) });
     } catch (error) {
-      return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+      return c.json({ error: errorText(error) }, 500);
     }
   });
 
@@ -520,7 +559,7 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
       if (error) throw error;
       return c.json({ ok: true });
     } catch (error) {
-      return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+      return c.json({ error: errorText(error) }, 500);
     }
   });
 
@@ -594,7 +633,7 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
       });
       return c.json({ items, organizationId: orgId });
     } catch (error) {
-      return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+      return c.json({ error: errorText(error) }, 500);
     }
   });
 
@@ -605,7 +644,7 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
       if (error) throw error;
       return c.json({ items: scopedToOrg(data || [], orgId) });
     } catch (error) {
-      return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+      return c.json({ error: errorText(error) }, 500);
     }
   });
 
@@ -626,7 +665,7 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
       if (error) throw error;
       return c.json({ item: data });
     } catch (error) {
-      return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+      return c.json({ error: errorText(error) }, 500);
     }
   });
 
@@ -644,7 +683,7 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
       if (error) throw error;
       return c.json({ ok: true });
     } catch (error) {
-      return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+      return c.json({ error: errorText(error) }, 500);
     }
   });
 
@@ -664,7 +703,7 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
       if (error) throw error;
       return c.json({ ok: true });
     } catch (error) {
-      return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+      return c.json({ error: errorText(error) }, 500);
     }
   });
 
@@ -685,7 +724,7 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
         },
       });
     } catch (error) {
-      return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+      return c.json({ error: errorText(error) }, 500);
     }
   });
 
@@ -714,7 +753,7 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
       if (error) throw error;
       return c.json({ ok: true });
     } catch (error) {
-      return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+      return c.json({ error: errorText(error) }, 500);
     }
   });
 
@@ -732,7 +771,7 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
       if (error) throw error;
       return c.json({ draft: data?.payload ?? null, updatedAt: data?.updated_at ?? null });
     } catch (error) {
-      return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+      return c.json({ error: errorText(error) }, 500);
     }
   });
 
@@ -756,7 +795,7 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
       if (error) throw error;
       return c.json({ draft: data.payload, updatedAt: data.updated_at });
     } catch (error) {
-      return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+      return c.json({ error: errorText(error) }, 500);
     }
   });
 }

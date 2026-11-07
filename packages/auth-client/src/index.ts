@@ -22,6 +22,7 @@ export { PasswordRecoveryPage } from './components/PasswordRecoveryPage';
 export type { PasswordRecoveryPageProps } from './components/PasswordRecoveryPage';
 export { AuthRecoveryGate } from './components/AuthRecoveryGate';
 export type { AuthRecoveryGateProps } from './components/AuthRecoveryGate';
+export { TestCopyBar, isLocalSupabaseUrl } from './components/TestCopyBar';
 export {
   AUTH_RECOVERY_REDIRECTS,
   recoveryRedirectForSurface,

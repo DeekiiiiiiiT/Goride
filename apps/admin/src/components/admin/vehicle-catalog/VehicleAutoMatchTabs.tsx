@@ -262,7 +262,7 @@ export function VehicleAutoMatchTabs({
 
   function openImportCsv() {
     goDominionPage("parts-catalog");
-    writeCatalogSearch({ tab: "Import" }, "push");
+    writeCatalogSearch({ tab: "Add parts" }, "push");
   }
 
   const duplicateOeWarning = useMemo(() => {

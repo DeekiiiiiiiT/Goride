@@ -1,4 +1,4 @@
-import { projectId } from '../utils/supabase/info';
+import { getSupabaseFunctionsBaseUrl } from '../utils/supabase/info';
 import { supabase } from '../utils/supabase/client';
 import { AuthRequiredError, getHeaders as sharedGetHeaders, requireAuthHeaders } from '../utils/authHeaders';
 export { AuthRequiredError };
@@ -3212,6 +3212,28 @@ export const api = {
       const q = variantId ? `?variantId=${encodeURIComponent(variantId)}` : "";
       const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/browse${q}`, { headers: await getHeaders(null) });
       if (!response.ok) throw new Error("Could not load parts");
+      return response.json();
+  },
+
+  async partsLookup(partId: string, variantId?: string) {
+      const q = new URLSearchParams({ partId });
+      if (variantId) q.set("variantId", variantId);
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/lookup?${q}`, { headers: await getHeaders(null) });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error || "Could not load part detail");
+      }
+      return response.json();
+  },
+
+  async partsBrakesOverview(variantId: string, year?: number | null) {
+      const q = new URLSearchParams({ variantId });
+      if (year != null && year > 0) q.set("year", String(year));
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/brakes-overview?${q}`, { headers: await getHeaders(null) });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error || "Could not load brakes");
+      }
       return response.json();
   },
 
@@ -8570,7 +8592,7 @@ export const api = {
 export async function fetchFleetTimezone(): Promise<string> {
   try {
     const res = await fetch(
-      `https://${projectId}.supabase.co/functions/v1/fleet-core/fleet-timezone`,
+      `${getSupabaseFunctionsBaseUrl()}/fleet-core/fleet-timezone`,
       {
         headers: await requireAuthHeaders(null),
       },

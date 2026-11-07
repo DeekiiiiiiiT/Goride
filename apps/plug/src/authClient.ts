@@ -1,22 +1,29 @@
 import { createClient } from '@supabase/supabase-js';
-import { projectId, publicAnonKey } from '@roam/api-client';
+import { projectId, publicAnonKey, supabaseUrl } from '@roam/api-client';
 
 export { appleSignInEnabled, signInOrder, signInProviderLabel, thisSignInDevice } from './signInOrder';
 export type { SignInLayout, SignInMethod } from './signInOrder';
 
 const LINK_KEY = 'plug-auth-link';
 
-const supabaseUrl = `https://${projectId}.supabase.co`;
+const PLUG_AUTH_STORAGE_KEY = `sb-${projectId}-auth-plug`;
+
+const roamFetch: typeof fetch = (url, options) => {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), 15000);
+  return fetch(url, { ...options, signal: controller.signal }).finally(() => clearTimeout(id));
+};
 
 /** Plug's only login client. Importing the shared client builds the other apps' clients too, and they steal the return link. */
 export const supabasePlugApp = createClient(supabaseUrl, publicAnonKey, {
   auth: {
-    storageKey: `sb-${projectId}-auth-plug`,
+    storageKey: PLUG_AUTH_STORAGE_KEY,
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,
     flowType: 'pkce',
   },
+  global: { fetch: roamFetch },
 });
 
 const RECOVERY_KEY = 'plug-set-password';
@@ -36,23 +43,27 @@ export function clearNewPassword(): void {
 /** Swap a `?code=` return for a Plug session before the app draws. The hash router never sees that code. */
 export async function settlePlugAuth(): Promise<void> {
   if (typeof window === 'undefined') return;
-  const code = new URLSearchParams(window.location.search).get('code');
-  if (!code) {
-    await supabasePlugApp.auth.getSession();
-    return;
+  try {
+    const code = new URLSearchParams(window.location.search).get('code');
+    if (!code) {
+      await supabasePlugApp.auth.getSession();
+      return;
+    }
+    let recovery = false;
+    const { data: { subscription } } = supabasePlugApp.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') recovery = true;
+    });
+    const { error } = await supabasePlugApp.auth.exchangeCodeForSession(code);
+    subscription.unsubscribe();
+    const url = new URL(window.location.href);
+    url.searchParams.delete('code');
+    const next = `${url.pathname}${url.search}${url.hash}`;
+    window.history.replaceState({}, '', next || '/');
+    if (error) sessionStorage.setItem(LINK_KEY, 'wrong-browser');
+    else if (recovery) sessionStorage.setItem(RECOVERY_KEY, '1');
+  } catch {
+    /* Auth warm-up must not block Plug from opening. */
   }
-  let recovery = false;
-  const { data: { subscription } } = supabasePlugApp.auth.onAuthStateChange((event) => {
-    if (event === 'PASSWORD_RECOVERY') recovery = true;
-  });
-  const { error } = await supabasePlugApp.auth.exchangeCodeForSession(code);
-  subscription.unsubscribe();
-  const url = new URL(window.location.href);
-  url.searchParams.delete('code');
-  const next = `${url.pathname}${url.search}${url.hash}`;
-  window.history.replaceState({}, '', next || '/');
-  if (error) sessionStorage.setItem(LINK_KEY, 'wrong-browser');
-  else if (recovery) sessionStorage.setItem(RECOVERY_KEY, '1');
 }
 
 export function takeAuthLinkError(): string | null {

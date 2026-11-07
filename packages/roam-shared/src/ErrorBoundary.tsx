@@ -1,6 +1,6 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertTriangle, RefreshCcw, ShieldAlert } from 'lucide-react';
-import { projectId, publicAnonKey } from '@roam/api-client';
+import { getSupabaseFunctionsBaseUrl, publicAnonKey } from '@roam/api-client';
 
 interface Props {
   children: ReactNode;
@@ -33,7 +33,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/fleet-core/system/log-error`,
+        `${getSupabaseFunctionsBaseUrl()}/fleet-core/system/log-error`,
         {
           method: 'POST',
           headers: {

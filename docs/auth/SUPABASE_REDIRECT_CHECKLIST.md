@@ -36,6 +36,7 @@ Include **scheme + host + port + path** where your apps handle the post-auth lan
 | Roam Haul (hauler) | `http://localhost:3004/` | `https://roamhaul.co/` |
 | Roam Haul admin | `http://localhost:3004/admin` | `https://roamhaul.co/admin` |
 | Roam Plug | `http://localhost:3016/**` | `https://roamplug.app/**` and `https://roam-plug.vercel.app/**` |
+| Test copy (local only, see `docs/test-copy-guide.md`) | `http://127.0.0.1:5180/**` … `5183/**` and `http://localhost:5180/**` … `5183/**` | — (never production) |
 
 Also add:
 

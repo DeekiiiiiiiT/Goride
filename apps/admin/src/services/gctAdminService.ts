@@ -1,7 +1,7 @@
-import { projectId } from '../utils/supabase/info';
+import { getSupabaseFunctionsBaseUrl } from '../utils/supabase/info';
 import { supabase } from '../utils/supabase/client';
 
-const BASE = `https://${projectId}.supabase.co/functions/v1/gct-admin`;
+const BASE = `${getSupabaseFunctionsBaseUrl()}/gct-admin`;
 
 async function authHeaders(): Promise<Record<string, string>> {
   const { data: { session } } = await supabase.auth.getSession();

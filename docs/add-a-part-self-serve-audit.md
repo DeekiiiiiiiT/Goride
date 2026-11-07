@@ -1,22 +1,33 @@
 # Add a part + auto-matching — audit
 
-**Rev 19 · 5 Nov 2026 · Status: DONE.** Goal: a Fleet user opens **Find parts** for a car and sees every part that fits, with a reason and a trust label. **Add a part** is the self-serve front end; auto-match is the engine. Stitch spec: [docs/stitch/dominion-add-a-part/](stitch/dominion-add-a-part/).
+**Rev 34 · 5 Nov 2026 · Status: CLOSED in code — owner catalog uploads left.** Goal: a Fleet user opens **Find parts** for a car and sees every part that fits, with a reason and a trust label. **Add a part** is the self-serve front end; auto-match is the engine. Stitch spec: [docs/stitch/dominion-add-a-part/](stitch/dominion-add-a-part/).
 
-All code is live and every check for this system passes: the parts SQL checks on a fresh database, the add-a-part and auto-match screen tests (Dominion and Fleet), and the parts-import screen tests. AM-S1, AM-S3 and AM-S5 are marked Ported.
+Checked 5 Nov (code scan + overlay screenshots by eye, light and dark): every button in the Parts database section follows the Button rule, including the Cancel overlay; 34 screen tests pass.
+
+## Button rule (whole Parts database section)
+
+| Kind | Use for | Look |
+|---|---|---|
+| **Primary** | The one main action on a screen (Next, Save, Start, Commit) | Solid blue, white text |
+| **Secondary** | Back, Close, Change, Show more, Reset filters, Skip, Export, Sync, View…, Add row, help | White/surface fill, visible border, dark readable text |
+| **Danger** | Cancel, Remove, Delete, Undo, Revert, Decline, Exclude | Red border + red text; the final "yes" inside a confirm overlay is solid red |
+| **Icon** | Copy, close ✕, collapse, ⋯ menu, move up/down | 32 px square, visible border or fill, dark icon, hover tooltip |
+
+- Nothing that acts inside the app may look like a link: no underline, no text-only, no grey button text. Links only open outside websites: blue, readable, with ↗.
+- Minimum height 36 px. Light and dark both readable — **including overlays and drawers**.
+- Not in scope: tabs, step bars, filter chips, selectable cards, table rows.
 
 ## Open — owner only
 
-- Upload the MK Kashiyama **D0051MH** files (Brakes fitment first, then cross-refs) and `brake pads D0051M family - fitment.csv`.
+- Upload the MK Kashiyama **D0051MH** files (Brakes fitment first, then cross-refs) and `brake pads D0051M family - fitment.csv`. Checklist: [owner-add-a-part-catalog-uploads.md](owner-add-a-part-catalog-uploads.md).
 - Add Ford Fiesta and Mazda factory numbers from the car makers' catalogues.
-
-## Outside this audit (CI only)
-
-- **Maintenance updates not live.** The 11 `20261111*_mm_*` updates belong to [vehicle-master-data-audit.md](vehicle-master-data-audit.md). The CI version check stays red until they are live.
-- **Future-dated update files.** The date check flags files dated after today. It clears on its own on 11 Nov 2026, 12:10 UTC.
 
 ## Rules
 
 - Schema changes go in **new** migration files.
 - Tests use fixture IDs only and never touch live catalog rows.
 - Parts are information only: no prices, suppliers or stock.
+- No browser pop-ups (`window.confirm`, `alert`, `prompt`) — always an in-app overlay.
+- No button may look like a link or be faint grey text (Button rule above).
 - Run Playwright with `node node_modules/@playwright/test/cli.js`, not `npx playwright`.
+- Any screen change: rebuild, run `e2e/add-a-part-stitch.spec.ts`, and compare light and dark shots by eye — overlays and drawers included — before calling it done.

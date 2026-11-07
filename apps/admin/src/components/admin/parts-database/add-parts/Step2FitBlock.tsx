@@ -124,9 +124,11 @@ export function AxlePositionButtons({
                 ? "h-10 rounded-lg bg-primary-container text-on-primary font-body-sm font-semibold flex items-center justify-center gap-2 shadow-sm"
                 : "h-10 rounded-lg bg-surface-container-low text-on-surface-variant hover:text-on-surface font-body-sm font-medium flex items-center justify-center gap-2"
             }
+            aria-pressed={active}
             onClick={() => onPick(p.id, "")}
           >
-            <MaterialIcon name={p.icon} className="text-[18px]" />
+            {/* Filled only when picked, so an unpicked axle never looks chosen. */}
+            <MaterialIcon name={active ? "radio_button_checked" : "radio_button_unchecked"} className="text-[18px]" />
             {p.label}
           </button>
         );

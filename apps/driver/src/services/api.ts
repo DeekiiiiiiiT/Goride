@@ -1,4 +1,4 @@
-import { projectId, publicAnonKey } from '../utils/supabase/info';
+import { getSupabaseFunctionsBaseUrl, publicAnonKey } from '../utils/supabase/info';
 import { supabase } from '../utils/supabase/client';
 import { Trip, ImportBatch, CanonicalBatchAuditSnapshot, DriverMetrics, VehicleMetrics, FinancialTransaction, LedgerEntry, LedgerFilterParams, PaginatedLedgerResponse, LedgerDriverOverview, IndriveWalletSummary, DisputeRefund } from '../types/data';
 import type { AppendCanonicalLedgerResult, CanonicalLedgerEventInput } from '../types/ledgerCanonical';
@@ -3842,7 +3842,7 @@ export const api = {
 export async function fetchFleetTimezone(): Promise<string> {
   try {
     const res = await fetch(
-      `https://${projectId}.supabase.co/functions/v1/fleet-core/fleet-timezone`,
+      `${getSupabaseFunctionsBaseUrl()}/fleet-core/fleet-timezone`,
       {
         headers: { Authorization: `Bearer ${publicAnonKey}` },
       },

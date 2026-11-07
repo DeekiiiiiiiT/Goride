@@ -1,4 +1,4 @@
-import { projectId } from '../utils/supabase/info';
+import { getSupabaseFunctionsBaseUrl } from '../utils/supabase/info';
 import { requireAuthHeaders } from '../utils/authHeaders';
 
 export interface AIReceiptResult {
@@ -19,7 +19,7 @@ export const aiVerificationService = {
      * Sends a receipt image to the AI for processing.
      */
     async processReceipt(imageBase64: string): Promise<AIReceiptResult> {
-        const response = await fetch(`https://${projectId}.supabase.co/functions/v1/fleet-core/ai/process-fuel-receipt`, {
+        const response = await fetch(`${getSupabaseFunctionsBaseUrl()}/fleet-core/ai/process-fuel-receipt`, {
             method: 'POST',
             headers: await requireAuthHeaders(),
             body: JSON.stringify({ imageBase64 })
@@ -47,7 +47,7 @@ export const aiVerificationService = {
         correction?: number;
         message: string;
     }> {
-        const response = await fetch(`https://${projectId}.supabase.co/functions/v1/fleet-core/ai/verify-odometer`, {
+        const response = await fetch(`${getSupabaseFunctionsBaseUrl()}/fleet-core/ai/verify-odometer`, {
             method: 'POST',
             headers: await requireAuthHeaders(),
             body: JSON.stringify({ currentOdo, previousOdo, tripsDistance, previousDate, currentDate })

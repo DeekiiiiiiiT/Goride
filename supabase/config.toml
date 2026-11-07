@@ -62,7 +62,12 @@ schema_paths = []
 enabled = true
 # Specifies an ordered list of seed files to load during db reset.
 # Supports glob patterns relative to supabase directory: "./seeds/*.sql"
-sql_paths = ["./seed.sql"]
+sql_paths = [
+  "./seed.sql",
+  "../e2e/fixtures/mm_p01_http_seed.sql",
+  "../e2e/fixtures/mm_f01_http_seed.sql",
+  "./seeds/testcopy_driver_plug.sql",
+]
 
 [db.network_restrictions]
 # Enable management of network restrictions.
@@ -180,6 +185,13 @@ additional_redirect_urls = [
   "http://localhost:5175/**",
   "http://localhost:5176/**",
   "http://localhost:5180/**",
+  "http://127.0.0.1:5180/**",
+  "http://localhost:5181/**",
+  "http://127.0.0.1:5181/**",
+  "http://localhost:5182/**",
+  "http://127.0.0.1:5182/**",
+  "http://localhost:5183/**",
+  "http://127.0.0.1:5183/**",
   "http://localhost:3016/**",
   "http://127.0.0.1:3016/**",
 ]

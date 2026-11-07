@@ -1,4 +1,4 @@
-export const CATALOG_SECTION_TABS = ["Find parts", "Full database", "Add parts"] as const;
+export const CATALOG_SECTION_TABS = ["Find parts", "Full database", "Add parts", "Trusted sources"] as const;
 
 export type CatalogSectionTab = (typeof CATALOG_SECTION_TABS)[number];
 export type CatalogTab = CatalogSectionTab | "Advanced";
@@ -9,6 +9,7 @@ const TAB_TO_QUERY: Record<CatalogTab, string | null> = {
   "Find parts": null,
   "Full database": "database",
   "Add parts": "add-parts",
+  "Trusted sources": "trusted-sources",
   Advanced: "advanced",
 };
 
@@ -18,6 +19,7 @@ export function readCatalogTab(search = window.location.search): CatalogTab {
   const value = new URLSearchParams(search).get("tab");
   if (value && LEGACY_DATABASE.has(value)) return "Full database";
   if (value === "import" || value === "add-parts") return "Add parts";
+  if (value === "trusted-sources") return "Trusted sources";
   if (value === "advanced") return "Advanced";
   return "Find parts";
 }

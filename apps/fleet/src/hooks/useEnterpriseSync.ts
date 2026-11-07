@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { projectId } from '../utils/supabase/info';
+import { getSupabaseFunctionsBaseUrl } from '../utils/supabase/info';
 import { requireAuthHeaders } from '../utils/authHeaders';
 import { useAuth } from '../components/auth/AuthContext';
 import { toast } from 'sonner';
@@ -10,7 +10,7 @@ export function useEnterpriseSync() {
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'error'>('idle');
   const [activeLocks, setActiveLocks] = useState<any[]>([]);
 
-  const baseUrl = `https://${projectId}.supabase.co/functions/v1/fleet-core`;
+  const baseUrl = `${getSupabaseFunctionsBaseUrl()}/fleet-core`;
 
   const loadPreferences = useCallback(async () => {
     if (!user) return;
