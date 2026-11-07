@@ -224,7 +224,8 @@ export function step1DetailsCanAdvance(
   draft: AddPartsDraft,
   lookup: Record<string, unknown> | null,
 ): boolean {
-  if (lookup?.found) return false;
+  // A part already on file blocks Next until the owner picks "Add more cars to it" for that exact part.
+  if (lookup?.found && draft.existingPartId !== String(lookup.partId)) return false;
   const hasCore = Boolean(
     draft.brand.trim()
     && draft.partNumber.trim()

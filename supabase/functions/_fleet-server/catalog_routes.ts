@@ -1298,7 +1298,12 @@ export function registerCatalogRoutes(route: RouteApp, supabase: SupabaseClient)
       if (chassis) query = query.ilike("chassis_code", `%${chassis}%`);
       if (engine) query = query.ilike("engine_code", `%${engine}%`);
       if (q) {
-        query = query.or(`make.ilike.%${q}%,model.ilike.%${q}%,chassis_code.ilike.%${q}%,engine_code.ilike.%${q}%`);
+        // Every word must match somewhere ("Swift ZC13S" = model Swift AND chassis ZC13S).
+        // Commas and brackets would break the filter syntax, so they split words too.
+        const words = q.split(/[\s,()]+/).map((w) => w.trim()).filter(Boolean).slice(0, 5);
+        for (const w of words) {
+          query = query.or(`make.ilike.%${w}%,model.ilike.%${w}%,chassis_code.ilike.%${w}%,engine_code.ilike.%${w}%`);
+        }
       }
       const { data, error } = await query;
       if (error) throw error;

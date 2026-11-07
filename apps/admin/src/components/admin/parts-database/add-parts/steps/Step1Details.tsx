@@ -81,11 +81,32 @@ export function Step1Details({
         </p>
       </div>
 
-      {lookup?.found ? (
+      {lookup?.found && draft.existingPartId === String(lookup.partId) ? (
+        // Owner chose "Add more cars to it": stay here so the source link for the new cars can be pasted.
+        <div className="rounded-xl border border-primary-container/40 bg-primary-container/5 p-space-md flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <div className="space-y-0.5">
+            <p className="font-body-md font-semibold text-on-surface">
+              Adding more cars to {String(lookup.brand)} {String(lookup.number)} · {String(lookup.listingCount)} fits on file
+            </p>
+            <p className="font-body-sm text-on-surface-variant">
+              Paste the page that lists the new cars below, then press Next.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="whitespace-nowrap px-4 h-10 rounded-lg border border-outline-variant/60 bg-surface-container-lowest font-label-md shrink-0"
+            onClick={() => {
+              setDraft({ ...draft, existingPartId: null });
+              onDismissDuplicate();
+            }}
+          >
+            It&apos;s a different part
+          </button>
+        </div>
+      ) : lookup?.found ? (
         <PartExistsPanel
           onAddMore={() => {
             setDraft({ ...draft, existingPartId: String(lookup.partId) });
-            onNext();
           }}
           onDifferent={onDismissDuplicate}
           label={`${String(lookup.brand)} ${String(lookup.number)} · ${String(lookup.listingCount)} fits on file`}
