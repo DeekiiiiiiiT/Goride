@@ -251,6 +251,7 @@ Proof = side-by-side `screen.png` vs live screenshot (light + dark) where every 
 | **4 — Fleet Also fits + one card per part ✅ DONE in code 7 Nov (Fleet 8/8, Dominion 15/15; live pending)** | RB-10, RB-11, RB-12, RB-13 | `/parts/lookup` full fit list + Fleet 1–6 screens | Cursor | e2e on test copy; side-by-side vs Stitch per §5a |
 | 5 — Load the data | RB-06, RB-05, RB-09, RB-08 | add missing cars, link the 17 cars, brake specs on sisters, rotor/drum/fluid | Owner in Dominion (screens from Phase 3) | done-tests 1–8 |
 | 6 — Final gate | RB-14 | all done-tests run through the real API path | Cursor + Claude check | §4 all pass |
+| 8 — Add a part as a true self-serve | RB-18 | redesign Dominion Add a part: one question at a time, catalogue from the link, bulk cars and trust, plain words; plus Dominion Vehicles (search-first list, car page, Car specs to sister cars in one save) | Claude (audit + Stitch prompt), owner (Stitch), Cursor (port) | done-test in the Phase 8 section |
 | 7 — Find parts for normal people | RB-17 | redesign every Fleet Find parts screen: logos, make/model/year, one part number, Verified badge; new design guide | Claude (audit + Stitch prompt), owner (Stitch), Cursor (port) | done-test in the Phase 7 section |
 
 **Phase 1 decisions (6 Nov):**
@@ -377,6 +378,10 @@ Proof = side-by-side `screen.png` vs live screenshot (light + dark) where every 
 - Fixed and live during RB-05 (commit 7345e65b): "Add more cars to it" skipped the source link (now stays on step 1), and the car search matched a single word only (now every word).
 - **5-01 (open, small):** on Add a part step 2, "Change years" resets that car's trust to Confirmed. The owner caught it before saving.
 - **5-02 (fixed 7 Nov):** "Made by the car maker?" could be left blank. The source type then defaulted to "Part maker's own catalogue", so a Toyota part from Partsouq showed Needs checking (no car maker to check the link against). Now Next stays off until Genuine (OEM) or Aftermarket is picked, with "Pick one to continue." (not required when adding cars to a part already on file).
+- **5-03 (fixed in code 7 Nov; migration waiting to run):** the Genuine / Aftermarket answer was never saved. The app did not send it, and `save_self_serve_part` always wrote `part_kind = 'aftermarket'`. So the Roomy front rotor (Toyota 43512-B1081, picked Genuine) was stored as aftermarket. Fix: the app sends `partKind` (`oem` when Genuine), and migration `20261107135127_add_part_genuine_saves_oem.sql` saves it and sets the rotor to `oem`. Done-test: after the migration, the rotor row shows `part_kind = 'oem'`, and the next Genuine part saves as `oem`. **Verified live 7 Nov:** rotor = `oem`; the rear drum Toyota 42431-B1021 saved as `oem`, Confirmed, 2 cars, Rear.
+- **5-04 (fixed in code 7 Nov; migration waiting to run):** saving a car spec (Vehicles → car → Car specs) failed with "canceling statement due to statement timeout". Every save rebuilt `variant_parts_readiness` for all 1,833 cars inline (the nightly rebuild went from 1s on 3 Nov to 24s on 7 Nov; the API limit is 30s). The same rebuild runs inside 8 other saves (guided part saves, catalog import promote, import undo, applicability). Fix: migration `20261107142326_parts_readiness_refresh_in_background.sql`. A save now only marks the summary out of date. A cron job, `parts-readiness-catch-up`, rebuilds it every 10 minutes, and only when marked. The nightly job still rebuilds it straight away. Done-test: saving Brake fluid on the Roomy succeeds in under 2s, and within 10 minutes `private.variant_parts_readiness_dirty` is empty again.
+- **Brake fluid source (7 Nov):** Toyota's own owner's manuals for the Roomy (2016-11 and 2018-11 editions) and the Tank (2020-02) all say **トヨタ純正ブレーキフルード 2500H-A** (Toyota genuine brake fluid 2500H-A), in the spec list (仕様一覧). Car spec value: `Toyota 2500H-A`, source `https://manual.toyota.jp/pdf/roomy/roomy_201811.pdf` (Tank: `https://manual.toyota.jp/pdf/tank/tank_202002.pdf`). No DOT grade is printed there, so none is recorded. Saved on the Roomy pre-facelift and the Tank 1st Gen (verified live 7 Nov).
+- **5-05 (fixed in code 7 Nov; migration waiting to run, then Fleet server deploy):** Fleet → Roomy → Brakes showed "Brake fluid · Not on file yet" although the car has a sourced brake_fluid spec. There were two causes. (a) `universal_section_for_variant` only linked a spec to a part type through `spec_key.maintenance_component_id`, while brake_fluid (and coolant, washer fluid, battery, bulbs, tyre size) are linked through `spec_key.component_id` or `part_type_spec_field`. (b) `read_brakes_overview.ts` counted only part listings, never car specs. Fix: migration `20261107143650_universal_section_all_spec_links.sql` accepts all three links (the same rule as `loadUniversalToleranceMm`), and `readSpecCounts` adds sourced specs (1, or one per matching product) to the count. Test added in `read_brakes_overview.test.ts` (2/2 pass). Done-test: Fleet → Roomy → Brakes shows "Brake fluid · 1 part", and opening it shows "Brake fluid: Toyota 2500H-A".
 - Left: RB-08 (rotor / drum / fluid) and the separate Full database redesign audit (the owner asked for it).
 
 ## Phase 7: Find parts for normal people (RB-17), added 7 Nov at the owner's request
@@ -412,6 +417,47 @@ Proof = side-by-side `screen.png` vs live screenshot (light + dark) where every 
 **Process:** audit list of every screen and button first → new design guide + Stitch prompt → owner makes the screens → port exactly → done-tests on the test copy, written as "a person who knows nothing about cars can find and buy the right part".
 
 **Done-test:** shown only make, model and year, the owner can pick their Roomy, open Brakes, see the front pads with one part number to give a store, and see which other cars it fits by logo, without meeting a single code or jargon word.
+
+## Phase 8: Add a part as a true self-serve (RB-18), added 7 Nov at the owner's request
+
+**RB-18 · Dominion Add a part only works with someone guiding you.** On 7 Nov the owner added 52 cars to the front pads and one rotor. Every step needed outside help. What went wrong, in order:
+1. A part already on file: "Add more cars to it" skipped the source link. (Fixed 7345e65b.)
+2. The car search took one word only. (Fixed 7345e65b.)
+3. With 30+ cars, the "Selected cars" panel became one long scroll. Each car needed its own trust click and typed reason. There was no way to set many cars at once, or to paste a list of chassis codes from the catalogue page.
+4. "Change years" reset that car's trust to Confirmed (5-01, open).
+5. "Made by the car maker?" could be skipped and then silently decided the source type (5-02, fixed d7317b47).
+6. After "Yes — genuine", the "Which car maker's catalogue?" box appeared at the **bottom** of the page, far from the question, under three source-type radio options that repeat the same choice. The owner had to be told where to look.
+7. Step 3 ("Replaces a factory number") is unclear: is it needed, and what goes in it? Every time the answer was "Skip".
+8. Jargon on every step: "LIVE CLUSTER", "INDEX: 113 FITMENTS", "SCHEMA V1.1", "Catalog Level 0 · Audited", "Normalized key", "Primary proof", "Verified Direct Match", "Technical Profile Match Confirmation", "Part identity".
+
+**Fix (one flow a first-time owner finishes alone):**
+- **One question at a time, in order:** what part → brand + number → genuine or aftermarket → (if genuine) which car maker, asked right there and pre-filled from the brand → the link.
+- **Work out the catalogue from the link:** a Partsouq / Amayama / Megazip link with a Toyota part needs no extra question.
+- **Drop the three source-type radios:** the genuine/aftermarket answer plus the link decide it.
+- **Cars:** paste or type several chassis codes at once; tick many rows; set trust for all ticked cars at once.
+- **Reasons:** pick a common reason ("Chassis code differs", "Years differ", "Engine differs", "Maker lists LHD only") or type one.
+- **A compact selected list:** one line per car, with expand to edit; Change years never touches trust.
+- **Factory numbers:** fold them into the part step as an optional "Also sold as" list, or explain plainly when to use them. No separate step that everyone skips.
+- **Plain words everywhere;** remove every jargon label above.
+- **The page works as a guide by itself:** a short hint under each question, and Next explains what's missing.
+
+**Also in Phase 8: Dominion Vehicles (the vehicle catalog section), added 7 Nov at the owner's request ("annoying to use").** Seen on 7 Nov while adding the Roomy's brake fluid:
+- Finding one car means scrolling a long table of near-identical rows. Two rows both read "Toyota · Roomy Custom G · 2016-11–2020-08 · Gas · Petrol · Hatchback · Active", with nothing to tell them apart.
+- The car opens as a panel under the table, far from the row you clicked.
+- Jargon in the header: "SYS_ID: VEC-TOY-M900A-3CD9CB", "OE MATCHING ENGINE · POLL_INTERVAL: 60s", "CROSS REF INDEX · MATCH-V1 OK", "Derived matches".
+- **Car specs** (the fluids, oil, wipers, tyres) sit at the very bottom, under seven spec cards. The add-a-spec row is a bare dropdown, a value box and a link box. There's no hint of what format to type, and no way to add the same spec to sister cars (Roomy, Tank, Thor, Justy) in one go: the same fluid has to be typed once per car.
+- Empty cards and placeholders show as "—" or "0 kg" (Max towing capacity), which look like real data.
+- Before 7 Nov, Save spec failed with a database timeout (5-04, fixed).
+
+**Fix:** a search-first list: make → model → years, one row per real variant, with the difference (engine, trim, facelift) shown on the row. The car opens as its own page. Car specs get their own clear section, with plain labels, an example value for each spec, and "also apply to these sister cars" with ticks. Jargon is removed. Empty values say "Not on file". Same process as Phase 7: Stitch prompt, owner makes the screens, port exactly.
+
+**Fluids are added from Add parts, not Vehicles (owner, 7 Nov).** Today a fluid takes two trips: Vehicles → each car → Car specs (what the car needs, e.g. "Brake fluid: Toyota 2500H-A"), then Add parts → By size or spec (the product). The data stays split, because a car spec is a fact about the car and a part is a product. But the Add parts fluid step asks "Which cars use this?" right there: tick cars (sister cars pre-ticked), add a source link, and it saves the car spec on each ticked car in the same save. Brake fluid also shows under **Fluids & Transmission** (it's only under Brakes today). Done-test: the owner adds Toyota 2500H-A to the Thor and Justy pre-facelift cars from Add parts alone, and Fleet shows "Brake fluid: Toyota 2500H-A" for both.
+
+**Done-test:** with no help, the owner finds the Tank M900A 2016–2020 in under 30 seconds, and adds Brake fluid to the Roomy, Tank, Thor and Justy pre-facelift cars in one save.
+
+**Process:** the same as Phase 7 (owner's Stitch prompt format, audit lists every screen and button, owner makes the screens, port exactly).
+
+**Done-test:** with no help, the owner adds a new genuine part with 3 cars, and adds 10 cars to an existing pad (4 of them Needs checking with a reason) in under 5 minutes. Both save with the right trust.
 
 ## 6. Order
 

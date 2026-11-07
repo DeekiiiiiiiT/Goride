@@ -196,6 +196,8 @@ export async function saveSelfServePart(draft: AddPartsDraft) {
     partNumber: draft.partNumber,
     name: draft.name || draft.partNumber,
     sourceType: draft.sourceType,
+    // Genuine (made by the car maker) or Aftermarket — required on step 1.
+    partKind: draft.madeByCarMaker === true ? "oem" : "aftermarket",
     evidenceUrl: draft.evidenceUrl,
     catalogCarMaker: draft.catalogCarMaker.trim() || undefined,
     fitMode: draft.fitMode,
