@@ -30,7 +30,12 @@ const previewWebServers = [
   // Inventory done-tests only build Fleet + Driver; no inventory spec opens Admin.
   ...(!adminBaseUrl && process.env.INVENTORY_E2E !== '1'
     ? [{
-        command: 'pnpm --filter @roam/admin run dev:testcopy',
+        // CI has no apps/admin/.env.testcopy (gitignored), so dev:testcopy would show the
+        // setup screen. CI builds admin with VITE_SUPABASE_URL=https://example.supabase.co
+        // first; serve that build instead. Locally keep the test copy.
+        command: process.env.CI
+          ? 'pnpm --filter @roam/admin exec vite preview --host 127.0.0.1 --port 5180 --strictPort'
+          : 'pnpm --filter @roam/admin run dev:testcopy',
         url: 'http://127.0.0.1:5180',
         reuseExistingServer: reuseLocalPreviewServer,
         timeout: 120_000,
