@@ -1,6 +1,10 @@
 # Roomy brakes — full fit audit
 
-**Rev 15 · 8 Nov 2026 · Open items only. Everything finished has been removed; git history keeps the old revisions.**
+**Rev 16 · 8 Nov 2026 · Open items only. Everything finished has been removed; git history keeps the old revisions.**
+
+**Rev 16:** RB-24 closed with Toyota's catalogue for a 2017 frame, M900A-0049265 (`supabase/scripts/roomy_old_pad_shoe_numbers_8nov.sql`, run on live 8 Nov).
+- **Pads:** 04491-B1190 is Toyota's pad for every build from 2016-11 to 2020-09. Early cars first had 04491-B1032, now replaced; it is recorded as a "replaces" number. 04465-B1190 is not in Toyota's catalogue for either frame, so it stays Needs checking (shop source only).
+- **Shoes:** builds from 2016-11 to 2019-05 use 04495-B1310, which replaced the original 04495-B2400. Both now share one card, Confirmed for 2WD Roomy and Tank, 2016–2019. 04495-B2430 is 2019–2020 (it was 2016–2020).
 
 **Rev 15:** RB-23 closed. The 4WD Roomy (`7c71d591`) and Tank (`05d10289`) M910A, 2016–2020, now have their Toyota brake parts: 40 fits, all Confirmed. Saved with `supabase/scripts/roomy_4wd_brakes_8nov.sql`; source is Partsouq frame M910A-0059713.
 - 10 parts are shared with the 2WD (Variant M900,910): pads, both calipers, front disc, front hoses No.1/No.2, master cylinder, cable No.1, front ABS left/right.
@@ -50,10 +54,7 @@
 *Fix:* look up an M910A frame built after 2020-09 on Partsouq and repeat the RB-23 steps. For each part, keep the 2016–2020 number where the "Variant" and dates show it is unchanged; add new numbers where they differ.
 *Done-test:* Fleet → a 2021 4WD Roomy → Brakes lists the same brake types as the 2016–2020 4WD.
 
-**RB-24 · The old pad and shoe numbers are still Needs checking.** Toyota 04465-B1190, Daihatsu 04465-B1190 / 04465-B1320 (pads) and Toyota 04495-B2400 (shoes) come only from shop sites. For frame M900A-0344862, Toyota's catalogue shows 04491-B1190 and 04495-B2430 instead. The old numbers may cover earlier builds, which that frame-filtered page hides.
-*Fix:* check Partsouq with a 2016–2018 M900A frame number. If the old numbers are listed there, re-save them with that link and the years they cover, so they become Confirmed. If not, they stay Needs checking with that reason.
-
-**RB-25 · The Blue Print shoe kit is a separate part.** Blue Print ADT34155 sits in its own group instead of with the Roomy's rear shoe kit.
+**RB-25 · The Blue Print shoe kit is a separate part.** Blue Print ADT34155 sits in its own card instead of the Toyota 04495-B1310 / 04495-B2400 shoe card (2016–2019 builds). The only source saying they are the same is Spareto, a TecDoc copy.
 *Fix:* if Blue Print's own catalogue lists ADT34155 for the Roomy M900A, use **Merge same part** in Dominion to put it in the shoe kit's group. If it doesn't, leave it as is.
 
 **RB-26 · Fluid brands sold in Jamaica (later).** Fleet shows only the car maker's named fluid (Toyota 2500H-A). Owners also buy Prestone, Lucas Oil, Johnsen's, ABRO, Flamingo, Penray, STP, Shell, Mobil and Rymax (Vector).
