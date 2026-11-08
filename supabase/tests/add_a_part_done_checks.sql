@@ -109,6 +109,15 @@ BEGIN
     v_platform, v_engine, 'AP-DONE-1KR'
   ) ON CONFLICT (id) DO NOTHING;
 
+  -- Since 3b-09 a part is Confirmed only from a trusted site for its maker:
+  -- make MK Kashiyama's own site trusted for this test.
+  INSERT INTO public.trusted_source (kind, maker, domain)
+  SELECT 'part_maker', 'MK Kashiyama', 'mk-kashiyama.co.jp'
+  WHERE NOT EXISTS (
+    SELECT 1 FROM public.trusted_source
+    WHERE kind = 'part_maker' AND maker_norm = 'mk kashiyama' AND domain = 'mk-kashiyama.co.jp'
+  );
+
   -- Done test 1: MK Kashiyama brake pads, 7 cars, OE replaces, verified
   v_save := public.save_self_serve_part(jsonb_build_object(
     'actorId', v_actor,
@@ -116,7 +125,7 @@ BEGIN
     'brand', 'MK Kashiyama',
     'partNumber', 'D0051MH-DONE',
     'sourceType', 'part_maker_catalogue',
-    'evidenceUrl', 'https://example.com/d0051',
+    'evidenceUrl', 'https://www.mk-kashiyama.co.jp/catalog/d0051',
     'fitMode', 'specific',
     'listings', (
       SELECT jsonb_agg(jsonb_build_object(
