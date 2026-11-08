@@ -90,6 +90,9 @@ export async function seedInventoryFleetSession(
   await page.addInitScript(({ s, ref }) => {
     const json = JSON.stringify(s);
     localStorage.setItem(`sb-${ref}-auth-token`, json);
+    // Fleet uses supabase-js's default key: first part of the API host (127.0.0.1 -> "127").
+    localStorage.setItem('sb-127-auth-token', json);
+    localStorage.setItem('sb-localhost-auth-token', json);
   }, { s: stored, ref: projectRef });
 }
 
@@ -98,6 +101,8 @@ export async function seedInventoryDriverSession(page: import('@playwright/test'
   await page.addInitScript(({ s, ref }) => {
     const json = JSON.stringify(s);
     localStorage.setItem(`sb-${ref}-auth-driver`, json);
+    // Driver uses sb-<projectId>-auth-driver; projectId is "local" on a local Supabase host.
+    localStorage.setItem('sb-local-auth-driver', json);
   }, { s: stored, ref: projectRef });
 }
 
