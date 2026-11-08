@@ -1,6 +1,17 @@
 # Roomy brakes — full fit audit
 
-**Rev 17 · 8 Nov 2026 · Open items only. Everything finished has been removed; git history keeps the old revisions.**
+**Rev 18 · 8 Nov 2026 · Open items only. Everything finished has been removed; git history keeps the old revisions.**
+
+**Rev 18:** RB-27 closed for the 2020-on Roomy except the 4WD X/G grades (now RB-28). Sources are Toyota's catalogue on Partsouq for three frames: 2WD Custom G M900A-0669946, 4WD Custom G M910A-0108951 and 2WD X M900A-0571644. Two scripts, both run on live 8 Nov:
+- `roomy_2020_on_brakes_8nov.sql`: 51 fits on the 2WD 1KR-FE, 2WD 1KR-VET and 4WD.
+- `roomy_2020_on_xg_brakes_8nov.sql`: 6 fits on the 2WD 1KR-FE.
+
+What Toyota shows:
+- **Same on every grade (Confirmed):** pads 04491-B1190, calipers, front disc 43512-B1081 (2020–2024), front hoses No.1/No.2, master cylinder, front ABS. Also 2WD rear hose 90049-22193 and drum 42431-B1021, and 4WD rear hose 90049-22332.
+- **Custom G, electric parking brake (Needs checking, reason "Custom G only"):** 2WD shoes 04495-B2480, rear ABS 890C0-B1010 (right) / B1020 (left), and wheel cylinders with the sides swapped (right 47570-B1020, left 47550-B1030). 4WD shoes 04495-B2470, drum 42431-B1060, wheel cylinders 47570-B1010 (right) / 47550-B1010 (left), rear ABS 890C0-B1030 / B1040. The 4WD page also lists 89545-B1120 "sensor, speed, rear" ×2; it is not saved (it looks like the sensor element inside the 890C0 units).
+- **X / G, hand lever (Needs checking, reason "X and G grades only"):** wheel cylinders on the normal sides (right 47550-B1030, left 47570-B1020), shoes 04495-B2430, cables 46410-B1011 / 46420-B1090 / 46430-B1090. There are no rear ABS sensors, only wires.
+- The two 2016–2020 wheel cylinders were renamed "Rear wheel cylinder"; the side comes from each fit.
+- The catalogue has one row per engine and drive, not per grade, so grade-only parts carry the grade in their reason.
 
 **Rev 17:** RB-25 closed. Blue Print's own catalogue ([partsfinder ADT34155](https://partsfinder.bilsteingroup.com/en/article/blueprint/ADT34155)) lists ADT34155 as replacing Toyota/Daihatsu 04495-B1310 and 04495-B2400, but not 04495-B2430.
 - ADT34155 moved into the Toyota shoe card and is now Confirmed (`supabase/scripts/roomy_blueprint_shoe_merge_8nov.sql`).
@@ -56,9 +67,12 @@
 
 ### Data (owner, in Dominion)
 
-**RB-27 · The 2020-on Roomy (facelift) has no Toyota-confirmed brake parts where they differ from the earlier cars.** This covers the 2WD (`007d4cad` 1KR-VET, `3ed7c48e` 1KR-FE) and the 4WD (`ddf1d527`). The frames used so far cover builds up to 2020-09 only, and the early shoe kit (04495-B1310 / B2400) is known not to fit.
-*Fix:* look up an M900A and an M910A frame built after 2020-09 on Partsouq and repeat the RB-23 steps for each. For each part, keep the 2016–2020 number where the "Variant" and dates show it is unchanged; add new numbers where they differ.
-*Done-test:* Fleet → a 2021 4WD Roomy → Brakes lists the same brake types as the 2016–2020 4WD.
+**RB-28 · The 2020-on 4WD Roomy X / G grades (hand lever) have no rear brake parts or handbrake cables.** No full M910A frame number for an X or G grade turned up, because export sites hide them.
+*Fix:* when an M910A frame for an X or G grade (built after 2020-09) turns up, look up diagrams 4706, 4102 and 4601 on Partsouq and save its wheel cylinders, shoes, drum and cables to the 4WD 2020-on row (`ddf1d527`), with the reason "X and G grades only (hand lever)".
+*Done-test:* Fleet → a 2021 4WD Roomy X → Brakes lists rear shoes and handbrake cables.
+
+**RB-29 · Front disc after 2024-07.** Toyota dates 43512-B1081 to 2024-07 for the 2020-on cars. Later builds may use a newer disc.
+*Fix:* look up a 2025 Roomy frame's diagram 4303 and add the newer disc for 2024–now if it differs.
 
 **RB-26 · Fluid brands sold in Jamaica (later).** Fleet shows only the car maker's named fluid (Toyota 2500H-A). Owners also buy Prestone, Lucas Oil, Johnsen's, ABRO, Flamingo, Penray, STP, Shell, Mobil and Rymax (Vector).
 *Fix:* add these as fluid products (Add a part → By size or spec), each with its grade (DOT 3 / DOT 4 / DOT 5.1) from the brand's own label or catalogue page, never from a shop. The Roomy needs a Toyota source for the grade 2500H-A equals. Until then, other brands show **Needs checking** with the reason "The car maker names its own fluid; this brand's grade isn't confirmed against it". Information only: no prices, no shops.
