@@ -126,6 +126,7 @@ type TierRow = {
   part_badge_code?: string | null;
   part_badge_params?: Record<string, unknown> | null;
   side?: string | null;
+  catalogue_number?: number | null;
   derived_id?: string | null;
   wva?: string | null;
   checking_note?: string | null;
@@ -184,6 +185,7 @@ async function loadTieredReferenceParts(
     partBadgeCode: row.part_badge_code ?? null,
     partBadgeParams: row.part_badge_params ?? null,
     side: row.side ?? null,
+    catalogueNumber: row.catalogue_number ?? null,
     derivedId: row.derived_id ?? null,
     wva: row.wva ?? null,
     groupId: row.interchange_group_id ?? null,

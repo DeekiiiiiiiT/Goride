@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_standard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;family=JetBrains+Mono:wght@600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "background": "#f8f9ff", "inverse-surface": "#213145", "secondary-fixed-dim": "#c3c7cb", "on-tertiary": "#ffffff", "primary": "#000000", "on-surface-variant": "#47464c", "tertiary-fixed": "#ffdbca", "surface-container-high": "#dce9ff", "primary-fixed": "#e4dffc", "on-tertiary-container": "#d95f00", "on-tertiary-fixed-variant": "#783200", "on-secondary-fixed-variant": "#43474b", "primary-fixed-dim": "#c8c3df", "on-primary-fixed": "#1b192e", "primary-container": "#1b192e", "on-primary-fixed-variant": "#46445b", "outline-variant": "#c9c5cd", "secondary": "#5a5f62", "error": "#ba1a1a", "inverse-on-surface": "#eaf1ff", "tertiary-container": "#341100", "tertiary": "#000000", "error-container": "#ffdad6", "surface-container": "#e5eeff", "secondary-fixed": "#dfe3e7", "on-secondary-container": "#5e6367", "surface-container-highest": "#d3e4fe", "on-tertiary-fixed": "#341100", "surface-container-low": "#eff4ff", "surface-container-lowest": "#ffffff", "surface-bright": "#f8f9ff", "surface": "#f8f9ff", "surface-dim": "#cbdbf5", "on-error-container": "#93000a", "on-primary-container": "#84819a", "inverse-primary": "#c8c3df", "on-error": "#ffffff", "on-primary": "#ffffff", "outline": "#78767d", "on-surface": "#0b1c30", "on-background": "#0b1c30", "secondary-container": "#dce0e4", "on-secondary": "#ffffff", "tertiary-fixed-dim": "#ffb690", "on-secondary-fixed": "#171c1f", "surface-variant": "#d3e4fe", "surface-tint": "#5e5c74" }, "borderRadius": { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, "spacing": { "space-sm": "0.5rem", "space-xl": "2rem", "space-xs": "0.25rem", "margin": "1.5rem", "space-md": "1rem", "space-lg": "1.5rem", "gutter": "1.5rem" }, "fontFamily": { "headline-card": [ "Inter" ], "badge-label": [ "Inter" ], "body-base": [ "Inter" ], "part-identifier-mobile": [ "JetBrains Mono" ], "part-identifier": [ "JetBrains Mono" ], "body-muted": [ "Inter" ], "body-base-bold": [ "Inter" ], "headline-page": [ "Inter" ] }, "fontSize": { "headline-card": [ "20px", { "lineHeight": "28px", "letterSpacing": "-0.01em", "fontWeight": "600" } ], "badge-label": [ "13px", { "lineHeight": "16px", "letterSpacing": "0.01em", "fontWeight": "600" } ], "body-base": [ "16px", { "lineHeight": "24px", "fontWeight": "400" } ], "part-identifier-mobile": [ "18px", { "lineHeight": "24px", "letterSpacing": "0.08em", "fontWeight": "600" } ], "part-identifier": [ "22px", { "lineHeight": "28px", "letterSpacing": "0.08em", "fontWeight": "600" } ], "body-muted": [ "14px", { "lineHeight": "20px", "fontWeight": "400" } ], "body-base-bold": [ "16px", { "lineHeight": "24px", "fontWeight": "600" } ], "headline-page": [ "28px", { "lineHeight": "36px", "letterSpacing": "-0.02em", "fontWeight": "600" } ] } } } };</script></head><body class="bg-surface font-body-base text-on-surface antialiased min-h-screen flex flex-col"><header class="fixed top-0 left-0 right-0 w-full z-50 bg-surface-container-lowest/95 backdrop-blur-md shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="h-16 w-full px-6 flex items-center justify-between"><div class="flex items-center gap-6"><div class="flex items-center gap-3"><div class="w-9 h-9 rounded-xl bg-primary flex items-center justify-center text-on-primary font-headline-card"><span class="material-symbols-outlined text-[20px]">local_shipping</span></div><span class="font-body-base-bold text-body-base-bold tracking-tight text-on-surface">Roam Fleet</span></div><nav class="hidden xl:flex items-center gap-1" data-active-classes="bg-primary-container text-on-primary font-body-base-bold rounded-lg"><a class="px-3 py-1.5 rounded-lg text-body-muted font-body-muted text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-colors" data-path="dashboard" href="#">Dashboard</a><a class="px-3 py-1.5 rounded-lg text-body-muted font-body-muted text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-colors" data-path="fleet-operations" href="#">Fleet Operations</a><a class="px-3 py-1.5 rounded-lg text-body-muted font-body-muted text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-colors" data-path="driver-operations" href="#">Driver Operations</a><a class="px-3 py-1.5 rounded-lg text-body-muted font-body-muted text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-colors" data-path="money" href="#">Money</a><a class="px-3 py-1.5 rounded-lg text-body-muted font-body-muted text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-colors" data-path="find-parts" href="#">Vehicle Operations</a><a class="px-3 py-1.5 rounded-lg text-body-muted font-body-muted text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-colors" data-path="delivery-operations" href="#">Delivery Operations</a><a class="px-3 py-1.5 rounded-lg text-body-muted font-body-muted text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-colors" data-path="analytics" href="#">Analytics</a><a class="px-3 py-1.5 rounded-lg text-body-muted font-body-muted text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-colors" data-path="reports" href="#">Reports</a><a class="px-3 py-1.5 rounded-lg text-body-muted font-body-muted text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-colors" data-path="business-finance" href="#">Business Finance</a></nav></div><div class="flex items-center gap-3"><button aria-label="Toggle dark mode" class="w-9 h-9 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors" type="button"><span class="material-symbols-outlined text-[20px]">dark_mode</span></button><button aria-label="Notifications" class="relative w-9 h-9 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors" type="button"><span class="material-symbols-outlined text-[20px]">notifications</span><span class="absolute top-2 right-2 w-2 h-2 rounded-full bg-on-tertiary-container"></span></button><div class="flex items-center gap-2.5 pl-2 py-1 pr-3 rounded-full bg-surface-container-low hover:bg-surface-container transition-colors cursor-pointer"><img alt="Profile" class="w-8 h-8 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDf9K84WjufjFhuNHa0wc0BRddknjxITRgUNL2zJm4dUmCsY6xSlfcP3DpPXywAVhuVyf20cQ6LJmSFhASrKEj1wdtVhKJryz3AM3TDKL3OerjoTWdqdRclNamdoQOqUW9XJeJRB4SImyruARJnnZ4HtTfa5M4m9uLlE893q0tjyEmIOxoIwU4FNwjXm7FtMEFNJJmLai_MTODotScVRM3yyicddkAFQUSRMLgjSjY"/><div class="flex flex-col text-left"><span class="font-body-base-bold text-[12px] leading-tight text-on-surface">Alex Rivera</span><span class="text-[11px] leading-tight text-on-surface-variant">Fleet Manager</span></div><span class="material-symbols-outlined text-[16px] text-on-surface-variant">expand_more</span></div></div></div></header><main class="w-full pt-16 bg-surface flex-1"><div class="flex flex-col w-full">
+<div class="w-full max-w-[1120px] mx-auto px-4 sm:px-6 lg:px-8 py-8 flex flex-col gap-6">
+<!-- Breadcrumb & Section Eyebrow -->
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+<nav class="flex items-center gap-2 font-body-muted text-body-muted text-on-surface-variant">
+<a class="hover:text-on-surface transition-colors" href="#">Fleet</a>
+<span class="material-symbols-outlined text-[16px] text-outline">chevron_right</span>
+<a class="hover:text-on-surface transition-colors" href="#">Maintenance</a>
+<span class="material-symbols-outlined text-[16px] text-outline">chevron_right</span>
+<span class="font-body-base-bold text-on-surface">Find parts</span>
+</nav>
+<div class="inline-flex items-center gap-2 self-start sm:self-auto px-3 py-1.5 rounded-full bg-surface-container-low shadow-sm">
+<div class="w-2.5 h-2.5 rounded-full bg-on-tertiary-container animate-pulse"></div>
+<span class="font-badge-label text-badge-label text-on-surface flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[16px] text-on-tertiary-container">build</span>
+          Fleet Maintenance Operations
+        </span>
+</div>
+</div>
+<!-- Car Header Card -->
+<div class="w-full rounded-[20px] bg-surface-container-lowest shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(15,23,42,0.06)] p-6 sm:p-7 flex flex-col md:flex-row md:items-center justify-between gap-6 transition-all duration-300 hover:shadow-[0_4px_12px_rgba(0,0,0,0.05),0_12px_28px_rgba(15,23,42,0.08)]">
+<!-- Left side: Identity & Badge -->
+<div class="flex items-start sm:items-center gap-4 sm:gap-5">
+<!-- Logo Emblem container -->
+<div class="w-16 h-16 rounded-2xl bg-surface-container flex items-center justify-center shrink-0 shadow-inner">
+<svg class="w-9 h-9 text-on-surface" fill="currentColor" viewbox="0 0 24 24">
+<path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 2.5c2.61 0 4.89 1.15 6.41 2.97-1.78.68-4.04 1.1-6.41 1.1s-4.63-.42-6.41-1.1C7.11 5.65 9.39 4.5 12 4.5zm0 15c-2.82 0-5.26-1.32-6.79-3.37 1.94-.8 4.49-1.28 7.04-1.28s5.1.48 7.04 1.28c-1.53 2.05-3.97 3.37-6.79 3.37zm0-6c-2.98 0-5.6-.46-7.39-1.21C4.22 13.43 4 12.73 4 12c0-1.89.65-3.63 1.74-5.02 1.76.62 3.92.99 6.26.99s4.5-.37 6.26-.99C19.35 8.37 20 10.11 20 12c0 .73-.22 1.43-.61 2.29-1.79.75-4.41 1.21-7.39 1.21z"></path>
+</svg>
+</div>
+<div class="flex flex-col gap-1.5">
+<div class="flex flex-wrap items-center gap-3">
+<h1 class="font-headline-page text-headline-page tracking-tight text-on-surface">Toyota Roomy</h1>
+<!-- Jamaican Plate Chip -->
+<div class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-inverse-surface text-surface-bright shadow-sm">
+<span class="w-2 h-2 rounded-full bg-tertiary-fixed-dim"></span>
+<span class="font-part-identifier text-[15px] tracking-wider leading-none text-surface-container-lowest uppercase">5179KZ</span>
+</div>
+</div>
+<div class="flex flex-wrap items-center gap-3">
+<span class="font-body-muted text-body-muted text-on-surface-variant">2019 · 2WD</span>
+<span class="text-outline-variant text-[12px]">•</span>
+<!-- Verified Fleet Car Badge -->
+<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-surface-container text-on-surface font-badge-label text-badge-label">
+<span class="material-symbols-outlined text-[16px] text-on-tertiary-container" style="font-variation-settings: 'FILL' 1;">verified</span>
+              Verified fleet car
+            </span>
+</div>
+</div>
+</div>
+<!-- Right side: Car Switch Actions -->
+<div class="flex items-center gap-3 self-stretch sm:self-auto justify-end">
+<button class="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface font-body-base-bold text-body-muted transition-colors shadow-sm" type="button">
+<span class="material-symbols-outlined text-[18px]">sync_alt</span>
+<span>Change car</span>
+</button>
+<button class="w-11 h-11 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface flex items-center justify-center transition-colors shadow-sm" title="View vehicle specifications" type="button">
+<span class="material-symbols-outlined text-[20px]">info</span>
+</button>
+</div>
+</div>
+<!-- Search & Fast Filter Section -->
+<div class="w-full rounded-[20px] bg-surface-container-lowest shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(15,23,42,0.06)] p-6 flex flex-col gap-4">
+<!-- Big Search Field -->
+<div class="relative w-full">
+<span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant text-[22px] pointer-events-none">search</span>
+<input class="w-full h-14 pl-12 pr-28 rounded-xl bg-surface-container-low text-on-surface placeholder:text-on-surface-variant font-body-base text-body-base outline-none transition-all shadow-inner focus:bg-surface-container-lowest focus:shadow-md" id="partSearchInput" placeholder="What part do you need? — e.g. brake pads, oil filter, wiper" type="text"/>
+<div class="absolute right-3.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5 pointer-events-none">
+<kbd class="hidden sm:inline-flex items-center justify-center px-2 py-1 rounded bg-surface-container-lowest text-on-surface-variant text-[11px] font-mono shadow-sm">⌘K</kbd>
+<span class="material-symbols-outlined text-[20px] text-on-surface-variant">tune</span>
+</div>
+</div>
+<!-- Popular chips row -->
+<div class="flex items-center gap-2 overflow-x-auto pt-1 pb-1 scrollbar-none">
+<span class="font-body-muted text-body-muted text-on-surface-variant shrink-0 mr-1 flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px]">local_fire_department</span>
+          Popular:
+        </span>
+<button class="group inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-surface-container-low hover:bg-primary hover:text-on-primary text-on-surface font-badge-label text-badge-label transition-all shrink-0 shadow-sm" onclick="selectQuickSearch('Brake pads')" type="button">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant group-hover:text-on-primary">disc_full</span>
+<span>Brake pads</span>
+</button>
+<button class="group inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-surface-container-low hover:bg-primary hover:text-on-primary text-on-surface font-badge-label text-badge-label transition-all shrink-0 shadow-sm" onclick="selectQuickSearch('Oil filter')" type="button">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant group-hover:text-on-primary">filter_alt</span>
+<span>Oil filter</span>
+</button>
+<button class="group inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-surface-container-low hover:bg-primary hover:text-on-primary text-on-surface font-badge-label text-badge-label transition-all shrink-0 shadow-sm" onclick="selectQuickSearch('Wiper blades')" type="button">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant group-hover:text-on-primary">water_drop</span>
+<span>Wiper blades</span>
+</button>
+<button class="group inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-surface-container-low hover:bg-primary hover:text-on-primary text-on-surface font-badge-label text-badge-label transition-all shrink-0 shadow-sm" onclick="selectQuickSearch('Engine oil')" type="button">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant group-hover:text-on-primary">oil_barrel</span>
+<span>Engine oil</span>
+</button>
+<button class="group inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-surface-container-low hover:bg-primary hover:text-on-primary text-on-surface font-badge-label text-badge-label transition-all shrink-0 shadow-sm" onclick="selectQuickSearch('Brake fluid')" type="button">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant group-hover:text-on-primary">opacity</span>
+<span>Brake fluid</span>
+</button>
+<button class="group inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-surface-container-low hover:bg-primary hover:text-on-primary text-on-surface font-badge-label text-badge-label transition-all shrink-0 shadow-sm" onclick="selectQuickSearch('Spark plugs')" type="button">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant group-hover:text-on-primary">bolt</span>
+<span>Spark plugs</span>
+</button>
+</div>
+</div>
+<!-- Main Content Grid (Two-Column asymmetric: Left ~740px, Right ~350px) -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+<!-- LEFT COLUMN: By Area (~67% -> 8 cols) -->
+<div class="lg:col-span-8 flex flex-col gap-5">
+<div class="flex flex-col sm:flex-row sm:items-end justify-between gap-1">
+<div>
+<h2 class="font-headline-card text-headline-card text-on-surface tracking-tight">By area</h2>
+<p class="font-body-muted text-body-muted text-on-surface-variant">Browse verified components by vehicle system</p>
+</div>
+<span class="font-badge-label text-badge-label text-on-surface-variant flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-on-tertiary-container"></span>
+            8 systems verified for this car
+          </span>
+</div>
+<!-- System Grid (8 large picture tiles) -->
+<div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4" id="systemGrid">
+<!-- 1. Brakes (Primary clickable anchor) -->
+<div class="group p-5 rounded-[20px] bg-surface-container-lowest shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(15,23,42,0.06)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.1)] transition-all duration-200 flex flex-col justify-between cursor-pointer relative overflow-hidden" role="button" tabindex="0">
+<div class="flex items-start justify-between">
+<div class="w-12 h-12 rounded-2xl bg-surface-container group-hover:bg-primary group-hover:text-on-primary text-on-surface flex items-center justify-center transition-colors">
+<span class="material-symbols-outlined text-[26px]">disc_full</span>
+</div>
+<span class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-surface-container-low group-hover:bg-primary group-hover:text-on-primary text-on-surface-variant transition-colors">
+<span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+</span>
+</div>
+<div class="mt-6 flex flex-col">
+<h3 class="font-body-base-bold text-body-base-bold text-on-surface group-hover:text-primary transition-colors">Brakes</h3>
+<p class="font-body-muted text-body-muted text-on-surface-variant mt-0.5">12 parts on file</p>
+</div>
+<!-- Accent indicator on hover -->
+<div class="absolute bottom-0 left-0 right-0 h-1 bg-primary scale-x-0 group-hover:scale-x-100 transition-transform origin-left"></div>
+</div>
+<!-- 2. Engine & oil -->
+<div class="group p-5 rounded-[20px] bg-surface-container-lowest shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(15,23,42,0.06)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.1)] transition-all duration-200 flex flex-col justify-between cursor-pointer relative overflow-hidden" role="button" tabindex="0">
+<div class="flex items-start justify-between">
+<div class="w-12 h-12 rounded-2xl bg-surface-container group-hover:bg-primary group-hover:text-on-primary text-on-surface flex items-center justify-center transition-colors">
+<span class="material-symbols-outlined text-[26px]">precision_manufacturing</span>
+</div>
+<span class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-surface-container-low group-hover:bg-primary group-hover:text-on-primary text-on-surface-variant transition-colors">
+<span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+</span>
+</div>
+<div class="mt-6 flex flex-col">
+<h3 class="font-body-base-bold text-body-base-bold text-on-surface group-hover:text-primary transition-colors">Engine &amp; oil</h3>
+<p class="font-body-muted text-body-muted text-on-surface-variant mt-0.5">8 parts on file</p>
+</div>
+<div class="absolute bottom-0 left-0 right-0 h-1 bg-primary scale-x-0 group-hover:scale-x-100 transition-transform origin-left"></div>
+</div>
+<!-- 3. Filters -->
+<div class="group p-5 rounded-[20px] bg-surface-container-lowest shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(15,23,42,0.06)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.1)] transition-all duration-200 flex flex-col justify-between cursor-pointer relative overflow-hidden" role="button" tabindex="0">
+<div class="flex items-start justify-between">
+<div class="w-12 h-12 rounded-2xl bg-surface-container group-hover:bg-primary group-hover:text-on-primary text-on-surface flex items-center justify-center transition-colors">
+<span class="material-symbols-outlined text-[26px]">filter_alt</span>
+</div>
+<span class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-surface-container-low group-hover:bg-primary group-hover:text-on-primary text-on-surface-variant transition-colors">
+<span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+</span>
+</div>
+<div class="mt-6 flex flex-col">
+<h3 class="font-body-base-bold text-body-base-bold text-on-surface group-hover:text-primary transition-colors">Filters</h3>
+<p class="font-body-muted text-body-muted text-on-surface-variant mt-0.5">6 parts on file</p>
+</div>
+<div class="absolute bottom-0 left-0 right-0 h-1 bg-primary scale-x-0 group-hover:scale-x-100 transition-transform origin-left"></div>
+</div>
+<!-- 4. Fluids -->
+<div class="group p-5 rounded-[20px] bg-surface-container-lowest shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(15,23,42,0.06)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.1)] transition-all duration-200 flex flex-col justify-between cursor-pointer relative overflow-hidden" role="button" tabindex="0">
+<div class="flex items-start justify-between">
+<div class="w-12 h-12 rounded-2xl bg-surface-container group-hover:bg-primary group-hover:text-on-primary text-on-surface flex items-center justify-center transition-colors">
+<span class="material-symbols-outlined text-[26px]">water_drop</span>
+</div>
+<span class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-surface-container-low group-hover:bg-primary group-hover:text-on-primary text-on-surface-variant transition-colors">
+<span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+</span>
+</div>
+<div class="mt-6 flex flex-col">
+<h3 class="font-body-base-bold text-body-base-bold text-on-surface group-hover:text-primary transition-colors">Fluids</h3>
+<p class="font-body-muted text-body-muted text-on-surface-variant mt-0.5">5 fluids verified</p>
+</div>
+<div class="absolute bottom-0 left-0 right-0 h-1 bg-primary scale-x-0 group-hover:scale-x-100 transition-transform origin-left"></div>
+</div>
+<!-- 5. Suspension & steering -->
+<div class="group p-5 rounded-[20px] bg-surface-container-lowest shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(15,23,42,0.06)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.1)] transition-all duration-200 flex flex-col justify-between cursor-pointer relative overflow-hidden" role="button" tabindex="0">
+<div class="flex items-start justify-between">
+<div class="w-12 h-12 rounded-2xl bg-surface-container group-hover:bg-primary group-hover:text-on-primary text-on-surface flex items-center justify-center transition-colors">
+<span class="material-symbols-outlined text-[26px]">compress</span>
+</div>
+<span class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-surface-container-low group-hover:bg-primary group-hover:text-on-primary text-on-surface-variant transition-colors">
+<span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+</span>
+</div>
+<div class="mt-6 flex flex-col">
+<h3 class="font-body-base-bold text-body-base-bold text-on-surface group-hover:text-primary transition-colors">Suspension &amp; steering</h3>
+<p class="font-body-muted text-body-muted text-on-surface-variant mt-0.5">14 parts on file</p>
+</div>
+<div class="absolute bottom-0 left-0 right-0 h-1 bg-primary scale-x-0 group-hover:scale-x-100 transition-transform origin-left"></div>
+</div>
+<!-- 6. Lights & wipers -->
+<div class="group p-5 rounded-[20px] bg-surface-container-lowest shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(15,23,42,0.06)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.1)] transition-all duration-200 flex flex-col justify-between cursor-pointer relative overflow-hidden" role="button" tabindex="0">
+<div class="flex items-start justify-between">
+<div class="w-12 h-12 rounded-2xl bg-surface-container group-hover:bg-primary group-hover:text-on-primary text-on-surface flex items-center justify-center transition-colors">
+<span class="material-symbols-outlined text-[26px]">wb_twilight</span>
+</div>
+<span class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-surface-container-low group-hover:bg-primary group-hover:text-on-primary text-on-surface-variant transition-colors">
+<span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+</span>
+</div>
+<div class="mt-6 flex flex-col">
+<h3 class="font-body-base-bold text-body-base-bold text-on-surface group-hover:text-primary transition-colors">Lights &amp; wipers</h3>
+<p class="font-body-muted text-body-muted text-on-surface-variant mt-0.5">9 parts on file</p>
+</div>
+<div class="absolute bottom-0 left-0 right-0 h-1 bg-primary scale-x-0 group-hover:scale-x-100 transition-transform origin-left"></div>
+</div>
+<!-- 7. Battery & electrical -->
+<div class="group p-5 rounded-[20px] bg-surface-container-lowest shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(15,23,42,0.06)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.1)] transition-all duration-200 flex flex-col justify-between cursor-pointer relative overflow-hidden" role="button" tabindex="0">
+<div class="flex items-start justify-between">
+<div class="w-12 h-12 rounded-2xl bg-surface-container group-hover:bg-primary group-hover:text-on-primary text-on-surface flex items-center justify-center transition-colors">
+<span class="material-symbols-outlined text-[26px]">battery_charging_full</span>
+</div>
+<span class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-surface-container-low group-hover:bg-primary group-hover:text-on-primary text-on-surface-variant transition-colors">
+<span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+</span>
+</div>
+<div class="mt-6 flex flex-col">
+<h3 class="font-body-base-bold text-body-base-bold text-on-surface group-hover:text-primary transition-colors">Battery &amp; electrical</h3>
+<p class="font-body-muted text-body-muted text-on-surface-variant mt-0.5">7 parts on file</p>
+</div>
+<div class="absolute bottom-0 left-0 right-0 h-1 bg-primary scale-x-0 group-hover:scale-x-100 transition-transform origin-left"></div>
+</div>
+<!-- 8. Cooling & heating -->
+<div class="group p-5 rounded-[20px] bg-surface-container-lowest shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(15,23,42,0.06)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.1)] transition-all duration-200 flex flex-col justify-between cursor-pointer relative overflow-hidden" role="button" tabindex="0">
+<div class="flex items-start justify-between">
+<div class="w-12 h-12 rounded-2xl bg-surface-container group-hover:bg-primary group-hover:text-on-primary text-on-surface flex items-center justify-center transition-colors">
+<span class="material-symbols-outlined text-[26px]">ac_unit</span>
+</div>
+<span class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-surface-container-low group-hover:bg-primary group-hover:text-on-primary text-on-surface-variant transition-colors">
+<span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+</span>
+</div>
+<div class="mt-6 flex flex-col">
+<h3 class="font-body-base-bold text-body-base-bold text-on-surface group-hover:text-primary transition-colors">Cooling &amp; heating</h3>
+<p class="font-body-muted text-body-muted text-on-surface-variant mt-0.5">4 parts on file</p>
+</div>
+<div class="absolute bottom-0 left-0 right-0 h-1 bg-primary scale-x-0 group-hover:scale-x-100 transition-transform origin-left"></div>
+</div>
+</div>
+</div>
+<!-- RIGHT COLUMN: "Your Roomy needs" Card (~33% -> 4 cols) -->
+<div class="lg:col-span-4 flex flex-col gap-4">
+<div class="rounded-[20px] bg-surface-container-lowest shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(15,23,42,0.06)] p-6 flex flex-col">
+<!-- Card Header -->
+<div class="flex items-start gap-3 pb-4">
+<div class="w-10 h-10 rounded-xl bg-surface-container flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[20px] text-on-surface">fact_check</span>
+</div>
+<div class="flex flex-col">
+<h3 class="font-headline-card text-headline-card text-on-surface leading-snug">Your Roomy needs</h3>
+<p class="font-body-muted text-body-muted text-on-surface-variant text-[13px] leading-tight mt-0.5">Factory fluids, capacities &amp; replacement sizes on file.</p>
+</div>
+</div>
+<!-- Spec List Items -->
+<div class="flex flex-col gap-3 py-3">
+<!-- 1. Engine Oil -->
+<div class="p-3.5 rounded-xl bg-surface-container-low flex items-start justify-between gap-3 group transition-colors hover:bg-surface-container">
+<div class="flex items-start gap-3 min-w-0">
+<div class="w-8 h-8 rounded-lg bg-surface-container-lowest flex items-center justify-center shrink-0 shadow-sm mt-0.5">
+<span class="material-symbols-outlined text-[18px] text-on-surface">oil_barrel</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-body-muted text-body-muted text-on-surface-variant text-[12px]">Engine oil</span>
+<span class="font-body-base-bold text-body-base-bold text-on-surface">0W-20</span>
+<span class="text-[12px] text-on-surface-variant font-body-muted truncate">3.1L refill capacity</span>
+</div>
+</div>
+<button class="w-8 h-8 rounded-lg bg-surface-container-lowest hover:bg-primary hover:text-on-primary text-on-surface-variant flex items-center justify-center shrink-0 shadow-sm transition-colors" onclick="copySpec('0W-20 (3.1L capacity)', this)" title="Copy specification" type="button">
+<span class="material-symbols-outlined text-[16px]">content_copy</span>
+</button>
+</div>
+<!-- 2. CVT fluid -->
+<div class="p-3.5 rounded-xl bg-surface-container-low flex items-start justify-between gap-3 group transition-colors hover:bg-surface-container">
+<div class="flex items-start gap-3 min-w-0">
+<div class="w-8 h-8 rounded-lg bg-surface-container-lowest flex items-center justify-center shrink-0 shadow-sm mt-0.5">
+<span class="material-symbols-outlined text-[18px] text-on-surface">autorenew</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-body-muted text-body-muted text-on-surface-variant text-[12px]">CVT transmission</span>
+<span class="font-body-base-bold text-body-base-bold text-on-surface">CVT Fluid FE</span>
+<span class="text-[12px] text-on-surface-variant font-body-muted truncate">Genuine FE spec fluid</span>
+</div>
+</div>
+<button class="w-8 h-8 rounded-lg bg-surface-container-lowest hover:bg-primary hover:text-on-primary text-on-surface-variant flex items-center justify-center shrink-0 shadow-sm transition-colors" onclick="copySpec('Toyota CVT Fluid FE', this)" title="Copy specification" type="button">
+<span class="material-symbols-outlined text-[16px]">content_copy</span>
+</button>
+</div>
+<!-- 3. Brake fluid -->
+<div class="p-3.5 rounded-xl bg-surface-container-low flex items-start justify-between gap-3 group transition-colors hover:bg-surface-container">
+<div class="flex items-start gap-3 min-w-0">
+<div class="w-8 h-8 rounded-lg bg-surface-container-lowest flex items-center justify-center shrink-0 shadow-sm mt-0.5">
+<span class="material-symbols-outlined text-[18px] text-on-surface">opacity</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-body-muted text-body-muted text-on-surface-variant text-[12px]">Brake fluid</span>
+<span class="font-body-base-bold text-body-base-bold text-on-surface">DOT 4 / 2500H-A</span>
+<span class="text-[12px] text-on-surface-variant font-body-muted truncate">High boiling point formula</span>
+</div>
+</div>
+<button class="w-8 h-8 rounded-lg bg-surface-container-lowest hover:bg-primary hover:text-on-primary text-on-surface-variant flex items-center justify-center shrink-0 shadow-sm transition-colors" onclick="copySpec('DOT 4 / 2500H-A Brake Fluid', this)" title="Copy specification" type="button">
+<span class="material-symbols-outlined text-[16px]">content_copy</span>
+</button>
+</div>
+<!-- 4. Wiper blades -->
+<div class="p-3.5 rounded-xl bg-surface-container-low flex items-start justify-between gap-3 group transition-colors hover:bg-surface-container">
+<div class="flex items-start gap-3 min-w-0">
+<div class="w-8 h-8 rounded-lg bg-surface-container-lowest flex items-center justify-center shrink-0 shadow-sm mt-0.5">
+<span class="material-symbols-outlined text-[18px] text-on-surface">brush</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-body-muted text-body-muted text-on-surface-variant text-[12px]">Wiper blades</span>
+<span class="font-body-base-bold text-body-base-bold text-on-surface truncate">350, 475 &amp; 525 mm</span>
+<span class="text-[12px] text-on-surface-variant font-body-muted truncate">Driver 525 · Pass 475 · Rear 350</span>
+</div>
+</div>
+<button class="w-8 h-8 rounded-lg bg-surface-container-lowest hover:bg-primary hover:text-on-primary text-on-surface-variant flex items-center justify-center shrink-0 shadow-sm transition-colors" onclick="copySpec('Driver: 525mm, Passenger: 475mm, Rear: 350mm', this)" title="Copy specification" type="button">
+<span class="material-symbols-outlined text-[16px]">content_copy</span>
+</button>
+</div>
+</div>
+<!-- Bottom Helpful Banner -->
+<div class="mt-3 p-3.5 rounded-xl bg-surface-container flex items-start gap-2.5">
+<span class="material-symbols-outlined text-[18px] text-on-surface mt-0.5 shrink-0">tips_and_updates</span>
+<p class="font-body-muted text-[13px] leading-snug text-on-surface">
+              Give any of these exact specs to your local auto shop or servicing garage for guaranteed fit.
+            </p>
+</div>
+</div>
+<!-- Fleet Assurance Micro-Tile -->
+<div class="rounded-[20px] bg-surface-container-lowest shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(15,23,42,0.06)] p-5 flex items-center gap-4">
+<div class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center shrink-0 text-on-surface">
+<span class="material-symbols-outlined text-[20px]">thumb_up</span>
+</div>
+<div class="flex flex-col">
+<span class="font-body-base-bold text-body-base-bold text-on-surface text-[14px]">Exact fit guaranteed</span>
+<span class="font-body-muted text-body-muted text-on-surface-variant text-[12px]">All catalog items cross-matched to Plate 5179KZ</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<script>
+  function copySpec(text, btnElement) {
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(text);
+    }
+    const icon = btnElement.querySelector('.material-symbols-outlined');
+    if (icon) {
+      const prevIcon = icon.innerText;
+      icon.innerText = 'check';
+      btnElement.classList.add('bg-primary', 'text-on-primary');
+      setTimeout(() => {
+        icon.innerText = prevIcon;
+        btnElement.classList.remove('bg-primary', 'text-on-primary');
+      }, 1500);
+    }
+  }
+
+  function selectQuickSearch(term) {
+    const input = document.getElementById('partSearchInput');
+    if (input) {
+      input.value = term;
+      input.focus();
+    }
+  }
+</script></main><footer class="w-full bg-surface-container-lowest py-8 shadow-[0_-1px_8px_rgba(0,0,0,0.02)]"><div class="max-w-[1120px] mx-auto px-8 flex flex-col md:flex-row items-center justify-between gap-4 text-body-muted font-body-muted text-on-surface-variant"><div class="flex items-center gap-2"><span class="font-body-base-bold text-on-surface">Roam Fleet</span><span>© 2025 Fleet Systems Inc. All rights reserved.</span></div><div class="flex items-center gap-6"><a class="hover:text-on-surface transition-colors" href="#">Platform Status</a><a class="hover:text-on-surface transition-colors" href="#">Assistance &amp; Support</a><a class="hover:text-on-surface transition-colors" href="#">Privacy</a></div></div></footer></body></html>

@@ -103,7 +103,7 @@ async function main() {
   mkdirSync(stateDir, { recursive: true });
   const functionsEnvFile = join(stateDir, 'functions.env');
   writeFileSync(functionsEnvFile, 'PLUG_USER_HASH_PEPPER=testcopy-local-only-pepper\n', 'utf8');
-  console.error('Serving edge functions (fleet-core, fleet-ops, driver, explorer)…');
+  console.error('Serving edge functions (fleet-core, fleet-ops, driver, explorer, platform-catalog)…');
   spawnBg('functions', npx, [
     'supabase',
     'functions',
@@ -112,6 +112,7 @@ async function main() {
     'fleet-ops',
     'driver',
     'explorer',
+    'platform-catalog',
     '--no-verify-jwt',
     '--env-file',
     functionsEnvFile,

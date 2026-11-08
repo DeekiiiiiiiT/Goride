@@ -1,0 +1,210 @@
+import type { CatalogMakerSummary } from "./vehiclesCatalogApi";
+
+/** Live-aligned capture sample (8 Nov Port step 2 check 2). */
+export const CAPTURE_ROOMY_PRIMARY_ID = "ap900005-0000-4000-8000-000000000002";
+
+export type VehiclesCaptureVehicleSeed = {
+  id: string;
+  make: string;
+  model: string;
+  production_start_year: number;
+  production_end_year: number | null;
+  drivetrain: string;
+  engine_code: string;
+  chassis_code: string;
+  version_name?: string | null;
+  engine_type?: string | null;
+};
+
+/** 5 Roomy + Tank, Thor, Justy — matches live catalog shape. */
+export const vehiclesCaptureVehicleRecords: VehiclesCaptureVehicleSeed[] = [
+  {
+    id: "ap900005-0000-4000-8000-000000000001",
+    make: "Toyota",
+    model: "Roomy",
+    production_start_year: 2020,
+    production_end_year: null,
+    drivetrain: "2WD",
+    engine_code: "1KR-VET",
+    engine_type: "Turbo",
+    chassis_code: "M900A",
+    version_name: "Custom G-T",
+  },
+  {
+    id: CAPTURE_ROOMY_PRIMARY_ID,
+    make: "Toyota",
+    model: "Roomy",
+    production_start_year: 2016,
+    production_end_year: 2020,
+    drivetrain: "2WD",
+    engine_code: "1KR-FE",
+    chassis_code: "M900A",
+    version_name: "Custom G",
+  },
+  {
+    id: "cap-roomy-2016-4wd",
+    make: "Toyota",
+    model: "Roomy",
+    production_start_year: 2016,
+    production_end_year: 2020,
+    drivetrain: "4WD",
+    engine_code: "1KR-FE",
+    chassis_code: "M910A",
+  },
+  {
+    id: "cap-roomy-2020-2wd-fe",
+    make: "Toyota",
+    model: "Roomy",
+    production_start_year: 2020,
+    production_end_year: null,
+    drivetrain: "2WD",
+    engine_code: "1KR-FE",
+    chassis_code: "M900A",
+    version_name: "Custom G",
+  },
+  {
+    id: "cap-roomy-2020-4wd",
+    make: "Toyota",
+    model: "Roomy",
+    production_start_year: 2020,
+    production_end_year: null,
+    drivetrain: "4WD",
+    engine_code: "1KR-FE",
+    chassis_code: "M910A",
+  },
+  {
+    id: "ap900005-0000-4000-8000-000000000003",
+    make: "Toyota",
+    model: "Tank",
+    production_start_year: 2016,
+    production_end_year: 2020,
+    drivetrain: "2WD",
+    engine_code: "1KR-FE",
+    chassis_code: "M900A",
+    version_name: "Custom G",
+  },
+  {
+    id: "ap900005-0000-4000-8000-000000000004",
+    make: "Daihatsu",
+    model: "Thor",
+    production_start_year: 2016,
+    production_end_year: 2020,
+    drivetrain: "2WD",
+    engine_code: "1KR-FE",
+    chassis_code: "M900S",
+    version_name: "G SA III",
+  },
+  {
+    id: "ap900005-0000-4000-8000-000000000005",
+    make: "Subaru",
+    model: "Justy",
+    production_start_year: 2016,
+    production_end_year: 2020,
+    drivetrain: "2WD",
+    engine_code: "1KR-FE",
+    chassis_code: "M900F",
+    version_name: "G Smart Assist",
+  },
+];
+
+export const VEHICLES_CAPTURE_MAKERS: CatalogMakerSummary[] = [
+  { make: "Toyota", logo_storage_path: null, country: null, version_count: 236, model_count: 71 },
+  { make: "Daihatsu", logo_storage_path: null, country: null, version_count: 21, model_count: 15 },
+  { make: "Subaru", logo_storage_path: null, country: null, version_count: 32, model_count: 23 },
+  { make: "Suzuki", logo_storage_path: null, country: null, version_count: 107, model_count: 24 },
+  { make: "Honda", logo_storage_path: null, country: null, version_count: 132, model_count: 20 },
+  { make: "Nissan", logo_storage_path: null, country: null, version_count: 151, model_count: 35 },
+];
+
+export const VEHICLES_CAPTURE_SPEC_KEYS = [
+  { key: "engine_oil_grade", label: "Engine oil grade", value_type: "text", unit: null },
+  { key: "engine_oil_capacity_with_filter_l", label: "Engine oil amount", value_type: "text", unit: "L" },
+  { key: "transmission_fluid", label: "CVT / gearbox fluid", value_type: "text", unit: null },
+  { key: "coolant_type", label: "Coolant", value_type: "text", unit: null },
+  { key: "brake_fluid", label: "Brake fluid", value_type: "text", unit: null },
+  { key: "wiper_driver_mm", label: "Wiper driver", value_type: "number", unit: "mm" },
+  { key: "wiper_passenger_mm", label: "Wiper passenger", value_type: "number", unit: "mm" },
+  { key: "wiper_rear_mm", label: "Wiper rear", value_type: "number", unit: "mm" },
+  { key: "wiper_connector", label: "Wiper connector", value_type: "text", unit: null },
+  { key: "headlight_low_bulb", label: "Headlight bulb (low)", value_type: "text", unit: null },
+  { key: "headlight_high_bulb", label: "Headlight bulb (high)", value_type: "text", unit: null },
+  { key: "tail_bulb", label: "Brake and tail bulb", value_type: "text", unit: null },
+  { key: "indicator_bulb", label: "Indicator bulb", value_type: "text", unit: null },
+  { key: "fog_bulb", label: "Fog lamp bulb", value_type: "text", unit: null },
+  { key: "tire_size", label: "Tyre size", value_type: "text", unit: null },
+  { key: "battery_jis", label: "Battery size", value_type: "text", unit: null },
+  { key: "washer_fluid", label: "Washer fluid", value_type: "text", unit: null },
+];
+
+export const VEHICLES_CAPTURE_CHECKLIST_SPECS = [
+  { specKey: "brake_fluid", label: "Brake fluid", value: "Toyota 2500H-A", reach: "variant", source: "https://example.com/manual" },
+  { specKey: "engine_oil_grade", label: "Engine oil grade", value: "0W-20", reach: "engine_family", source: "https://example.com/manual" },
+  {
+    specKey: "engine_oil_capacity_with_filter_l",
+    label: "Engine oil amount",
+    value: "3.1",
+    unit: "L",
+    reach: "engine_family",
+    source: "https://example.com/manual",
+  },
+];
+
+/** variant_parts_readiness for Roomy 3cd9cbf3 — 4 of 10 verified (V-15, live 8 Nov). */
+export const VEHICLES_CAPTURE_CHECKLIST_JOBS = [
+  { section: "Engine service", opCode: "ENG-OIL", label: "Oil filter", status: "verified", parts: [{ partNumber: "04152-40060" }] },
+  { section: "Engine service", opCode: "ENG-SPARK", label: "Spark plugs", status: "missing", parts: [] },
+  { section: "Engine service", opCode: "ENG-THERM", label: "Thermostat", status: "missing", parts: [] },
+  { section: "Engine service", opCode: "FILT-AIR", label: "Air filter", status: "missing", parts: [] },
+  { section: "Cabin", opCode: "HVAC-CABIN", label: "Cabin (A/C) filter", status: "missing", parts: [] },
+  { section: "Brakes", opCode: "BRK-PADS", label: "Front pads", position: "front", status: "verified", parts: [{ partNumber: "04465-B1190" }] },
+  { section: "Engine service", opCode: "BELT-SERP", label: "Drive belt", status: "missing", parts: [] },
+  { section: "Visibility", opCode: "LGT-WIPER", label: "Wiper, driver", position: "driver", status: "verified", parts: [] },
+  { section: "Brakes", opCode: "BRK-ROTOR", label: "Front rotors", position: "front", status: "verified", parts: [{ partNumber: "43512-B1081" }] },
+  { section: "Suspension", opCode: "SUS-SHOCK", label: "Shock, front left", position: "front-left", status: "missing", parts: [] },
+];
+
+function partStubs(count: number, partNumber: string, name: string) {
+  return Array.from({ length: count }, () => ({ partNumber, name }));
+}
+
+/** Area counts: Brakes 24, Engine 2, Lighting & visibility 3, Transmission 1. */
+export const VEHICLES_CAPTURE_OTHER_PARTS = [
+  { category: "Brakes", parts: partStubs(24, "04491-B1190", "Brake part on file") },
+  { category: "Engine", parts: partStubs(2, "04152-40060", "Engine part on file") },
+  { category: "Lighting & visibility", parts: partStubs(3, "90981-11020", "Lighting part on file") },
+  { category: "Transmission", parts: partStubs(1, "08886-02505", "CVT fluid") },
+];
+
+export const VEHICLES_CAPTURE_SISTER_ROWS = [
+  {
+    id: "ap900005-0000-4000-8000-000000000003",
+    make: "Toyota",
+    model: "Tank",
+    chassis_code: "M900A",
+    production_start_year: 2016,
+    production_end_year: 2020,
+  },
+  {
+    id: "ap900005-0000-4000-8000-000000000004",
+    make: "Daihatsu",
+    model: "Thor",
+    chassis_code: "M900S",
+    production_start_year: 2016,
+    production_end_year: 2020,
+  },
+  {
+    id: "ap900005-0000-4000-8000-000000000005",
+    make: "Subaru",
+    model: "Justy",
+    chassis_code: "M900F",
+    production_start_year: 2016,
+    production_end_year: 2020,
+  },
+];
+
+export const VEHICLES_CAPTURE_CHECKLIST = {
+  specs: VEHICLES_CAPTURE_CHECKLIST_SPECS,
+  jobs: VEHICLES_CAPTURE_CHECKLIST_JOBS,
+  otherParts: VEHICLES_CAPTURE_OTHER_PARTS,
+  supplies: [] as unknown[],
+};

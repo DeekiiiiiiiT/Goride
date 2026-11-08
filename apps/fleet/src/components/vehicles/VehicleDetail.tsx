@@ -46,6 +46,7 @@ import { DatePickerWithRange } from "../ui/date-range-picker";
 import { useAuth } from '../auth/AuthContext';
 import { useServiceLineScope } from '../../contexts/ServiceLineScopeContext';
 import { type VehicleServiceLine } from '../../utils/vehicleServiceLines';
+import { dedupeVehicleDocuments, getVehicleDocumentExpiryState } from '../../utils/vehicleDocumentDisplay';
 import { getFleetVehicleCatalog } from '../../services/pendingVehicleCatalogService';
 import { useMyPendingCatalogRequests } from '../../hooks/useMyPendingCatalogRequests';
 import type { VehicleCatalogRecord } from '../../types/vehicleCatalog';
@@ -766,19 +767,22 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
 
      if (vehicle.insuranceExpiry) {
          if (!savedDocs.some(d => d.type === 'Insurance')) {
+             const insExpiry = vehicle.insuranceExpiry;
+             const insExpired =
+               getVehicleDocumentExpiryState(insExpiry, 'Verified').kind === 'expired';
              docs.push({
                  id: 'insurance-policy',
                  name: 'Insurance Policy',
                  type: 'Insurance',
-                 status: 'Verified',
-                 expiryDate: vehicle.insuranceExpiry,
+                 status: insExpired ? 'Expired' : 'Verified',
+                 expiryDate: insExpiry,
                  uploadDate: new Date().toISOString()
              });
          }
      }
      
      const allDocs = [...docs, ...savedDocs, ...extraDocuments];
-     const uniqueDocs = Array.from(new Map(allDocs.map(item => [item.id, item])).values());
+     const uniqueDocs = dedupeVehicleDocuments(allDocs);
      
      return uniqueDocs.filter(d => !deletedDocIds.includes(String(d.id)));
   }, [vehicle, extraDocuments, deletedDocIds]);

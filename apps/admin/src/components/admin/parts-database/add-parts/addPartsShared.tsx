@@ -1,5 +1,6 @@
 import { MaterialIcon } from "../import/MaterialIcon";
-import type { AddPartsDraft, FitMode, PartTypeRow } from "./addPartsTypes";
+import type { SelfServePreview } from "./addPartsApi";
+import type { AddPartsDraft, FitMode, PartTypeRow, SourceType } from "./addPartsTypes";
 
 /** Maps DB icon_key values to valid Material Symbols names (audit V1). */
 const PART_TYPE_ICON_MAP: Record<string, string> = {
@@ -96,6 +97,7 @@ export function positionSchemeLabel(scheme: string | undefined | null): string {
   if (!scheme || scheme === "none") return "No position";
   if (scheme === "axle" || scheme === "axle_inner_outer") return "Front · Rear";
   if (scheme === "four_corners" || scheme === "axle_left_right") return "Four corners";
+  if (scheme === "axle_numbered") return "Front · Rear · No.1–3";
   if (scheme === "driver_passenger_rear") return "Driver · Passenger · Rear";
   if (scheme === "low_high_beam") return "Low · High beam";
   if (scheme === "front_rear_side") return "Front · Rear · Side";
@@ -109,6 +111,76 @@ export function normalizePartNumberKey(raw: string): string {
 }
 
 /** Single reach number for AP8 badge, plain-words sentence, and save footer. */
+export function defaultListingTrust(
+  preview: SelfServePreview | null | undefined,
+  vehicleId: string,
+): "confirmed" | "needs_checking" | undefined {
+  const row = preview?.listingTrustPreview?.find((x) => x.catalogId === vehicleId);
+  if (row?.trust === "confirmed") return "confirmed";
+  if (row?.trust === "needs_checking") return "needs_checking";
+  return undefined;
+}
+
+/** Apply server trust defaults only for listings the owner has not set manually. */
+export function applyPreviewListingTrust(
+  listings: AddPartsDraft["listings"],
+  preview: SelfServePreview | null | undefined,
+): AddPartsDraft["listings"] {
+  if (!preview?.listingTrustPreview?.length) return listings;
+  return listings.map((l) => {
+    if (l.listingTrustManual) return l;
+    const auto = defaultListingTrust(preview, l.vehicleId);
+    if (auto === undefined) return l;
+    if (l.listingTrust === undefined || l.listingTrust === null) {
+      return { ...l, listingTrust: auto };
+    }
+    return l;
+  });
+}
+
+export function patchSpecificListing(
+  draft: AddPartsDraft,
+  vehicleId: string,
+  patch: Partial<AddPartsDraft["listings"][number]>,
+): AddPartsDraft {
+  return {
+    ...draft,
+    listings: draft.listings.map((l) => (l.vehicleId === vehicleId ? { ...l, ...patch } : l)),
+  };
+}
+
+export type SelfServePartLookup = {
+  found?: boolean;
+  partId?: string;
+  brand?: string;
+  number?: string;
+  listingCount?: number;
+  partKind?: string;
+  sourceType?: SourceType;
+  catalogCarMaker?: string;
+};
+
+/** Step 1 "Add more cars to it": start from how the part on file was saved. */
+export function draftFromPartLookup(draft: AddPartsDraft, lookup: SelfServePartLookup): AddPartsDraft {
+  const partKind = lookup.partKind;
+  const sourceType = lookup.sourceType;
+  const catalogCarMaker = (lookup.catalogCarMaker ?? "").trim();
+  const madeByCarMaker =
+    partKind === "oem" ? true : partKind === "aftermarket" ? false : draft.madeByCarMaker;
+  const nextSource: SourceType =
+    sourceType === "car_maker_catalogue" || sourceType === "part_maker_catalogue" || sourceType === "other"
+      ? sourceType
+      : draft.sourceType;
+  return {
+    ...draft,
+    existingPartId: lookup.partId ? String(lookup.partId) : draft.existingPartId,
+    madeByCarMaker,
+    sourceType: nextSource,
+    catalogCarMaker: nextSource === "car_maker_catalogue" ? catalogCarMaker : draft.catalogCarMaker,
+    brand: madeByCarMaker === true && catalogCarMaker ? catalogCarMaker : draft.brand,
+  };
+}
+
 export function reviewReachCount(
   draft: AddPartsDraft,
   preview: { carCount?: number; totalReach?: number } | null,
@@ -242,6 +314,25 @@ export function step1DetailsCanAdvance(
 
 export function stepFooter(step: number) {
   return `Step ${step} of 4 · Not saved yet`;
+}
+
+export function defaultPartNamePreview(
+  plainName: string,
+  scheme: string,
+  position?: string,
+  side?: string,
+  catalogueNumber?: number,
+): string {
+  const pos = (position ?? "").toLowerCase();
+  const parts: string[] = [];
+  if (pos === "front" || pos === "rear") parts.push(pos === "front" ? "Front" : "Rear");
+  parts.push(plainName.toLowerCase());
+  if (scheme === "axle_numbered" && catalogueNumber != null) {
+    parts.push(`No.${catalogueNumber}`);
+  } else if ((scheme === "four_corners" || scheme === "axle_left_right") && side) {
+    if (side !== "both") parts.push(side === "left" ? "left" : "right");
+  }
+  return parts.join(" ").replace(/\s+/g, " ").trim();
 }
 
 export function AddPartsBreadcrumb({ ap }: { ap?: string }) {

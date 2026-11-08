@@ -40,6 +40,8 @@ export type CatalogPartItem = {
   groupId?: string | null;
   ruleSource?: string | null;
   position?: string | null;
+  side?: string | null;
+  catalogueNumber?: number | null;
   alsoKnownAs?: string[];
   sisterNames?: string | null;
   sourceMake?: string | null;

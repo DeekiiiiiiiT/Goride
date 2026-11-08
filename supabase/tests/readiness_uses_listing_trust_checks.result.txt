@@ -1,0 +1,2 @@
+Local (2026-11-08): BEGIN → ERROR V-15 failed for Roomy 3cd9cbf3…: expected components_ready=4 BRK-PADS=verified, got components_ready=0 BRK-PADS=missing (local lacks production pad/listing seed).
+Live: not run.

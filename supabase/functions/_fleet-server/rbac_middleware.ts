@@ -445,6 +445,27 @@ async function loadAccessFacts(userId: string): Promise<{
   return { seats, ownedOrgs, memberships };
 }
 
+/**
+ * Same access decision a signed-in request gets, for the login routes.
+ * Staff (manager / accountant / viewer) get the Fleet portal from an active
+ * seat, never from a role saved on the login. Fails closed on lookup errors.
+ */
+export async function resolveLoginAccess(user: SupabaseAuthUser): Promise<AccessDecision> {
+  const appMeta = (user.app_metadata || {}) as Record<string, unknown>;
+  const meta = (user.user_metadata || {}) as Record<string, unknown>;
+  const rawRole = pickRawRoleForRbac(appMeta, meta);
+  try {
+    return resolveAccess({
+      jwtRole: rawRole,
+      jwtOrgId: resolveOrganizationId(appMeta, user.id, resolveRole(rawRole)),
+      ...(await loadAccessFacts(user.id)),
+    });
+  } catch (err) {
+    console.warn('[RBAC] login access lookup failed closed', err);
+    return { rawRole: '', resolvedRole: 'unassigned', staffRole: null, organizationId: null, productLine: null, portal: false };
+  }
+}
+
 export function requireAuth(options?: RequireAuthOptions) {
   return async (c: Context, next: Next) => {
     // Sub-apps mounted at `/` with `use("*", requireAuth)` would otherwise block

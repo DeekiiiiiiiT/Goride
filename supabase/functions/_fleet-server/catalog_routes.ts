@@ -1090,6 +1090,174 @@ export function registerCatalogRoutes(route: RouteApp, supabase: SupabaseClient)
     }
   });
 
+  route.get("/make-server-37f42386/admin/catalog/parts/add/link-hints", requireAuth(), async (c: Context) => {
+    const denied = assertPlatformStaffResponse(c);
+    if (denied) return denied;
+    try {
+      const url = (c.req.query("url") ?? "").trim();
+      if (!url) return c.json({ error: "Paste a link first" }, 400);
+      const { data, error } = await supabase.rpc("self_serve_link_hints", { p_url: url });
+      if (error) return c.json({ error: error.message }, 400);
+      return staffJson(c, (data ?? {}) as Record<string, unknown>);
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
+  route.get("/make-server-37f42386/admin/catalog/makers", requireAuth(), async (c: Context) => {
+    const denied = assertPlatformStaffResponse(c);
+    if (denied) return denied;
+    try {
+      const { data, error } = await supabase.rpc("list_catalog_makers_summary");
+      if (error) return c.json({ error: error.message }, 400);
+      const items = Array.isArray(data) ? data : [];
+      return staffJson(c, { items });
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
+  // Vehicles home dashboard: catalogue completeness, most complete cars, recent car/spec edits.
+  route.get("/make-server-37f42386/admin/catalog/vehicles-dashboard", requireAuth(), async (c: Context) => {
+    const denied = assertPlatformStaffResponse(c);
+    if (denied) return denied;
+    try {
+      const ids = (c.req.query("ids") ?? "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter((s) => UUID_RE.test(s))
+        .slice(0, 20);
+      const { data, error } = await supabase.rpc("admin_vehicles_dashboard", { p_car_ids: ids.length ? ids : null });
+      if (error) return c.json({ error: error.message }, 400);
+      return staffJson(c, (data && typeof data === "object" ? data : {}) as Record<string, unknown>);
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
+  route.patch("/make-server-37f42386/admin/catalog/makers/:make", requireAuth(), async (c: Context) => {
+    const denied = assertCatalogWrite(c);
+    if (denied) return denied;
+    try {
+      const make = decodeURIComponent(c.req.param("make") ?? "").trim();
+      if (!make) return c.json({ error: "make required" }, 400);
+      const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+      const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+      if (typeof body.country === "string") patch.country = body.country.trim() || null;
+      if (typeof body.logo_storage_path === "string") {
+        patch.logo_storage_path = body.logo_storage_path.trim() || null;
+      }
+      const { data, error } = await supabase.from("catalog_maker").upsert({ make, ...patch }, { onConflict: "make" }).select().maybeSingle();
+      if (error) throw error;
+      return staffJson(c, data ?? { make });
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
+  route.post("/make-server-37f42386/admin/catalog/makers/:make/logo", requireAuth(), async (c: Context) => {
+    const denied = assertCatalogWrite(c);
+    if (denied) return denied;
+    const BUCKET = "catalog-maker-logos";
+    try {
+      const make = decodeURIComponent(c.req.param("make") ?? "").trim();
+      if (!make) return c.json({ error: "make required" }, 400);
+      const body = await c.req.parseBody();
+      const file = body.file;
+      if (!file || (!(file instanceof File) && !(file instanceof Blob))) {
+        return c.json({ error: "Logo file required" }, 400);
+      }
+      const blob = file as Blob;
+      const mime = (file as File).type || blob.type || "image/png";
+      const allowed = ["image/png", "image/jpeg", "image/webp", "image/svg+xml"];
+      if (!allowed.includes(mime)) return c.json({ error: "Use PNG, JPEG, WebP, or SVG" }, 400);
+      const ext = mime === "image/jpeg" ? "jpg" : mime === "image/svg+xml" ? "svg" : mime.split("/")[1] ?? "png";
+      const slug = make.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "maker";
+      const storagePath = `${slug}.${ext}`;
+      const buf = new Uint8Array(await blob.arrayBuffer());
+      const { error: uploadError } = await supabase.storage.from(BUCKET).upload(storagePath, buf, {
+        contentType: mime,
+        upsert: true,
+      });
+      if (uploadError) throw uploadError;
+      const { data, error } = await supabase
+        .from("catalog_maker")
+        .upsert({ make, logo_storage_path: storagePath, updated_at: new Date().toISOString() }, { onConflict: "make" })
+        .select()
+        .maybeSingle();
+      if (error) throw error;
+      const { data: pub } = supabase.storage.from(BUCKET).getPublicUrl(storagePath);
+      return staffJson(c, {
+        make,
+        logo_storage_path: storagePath,
+        publicUrl: pub?.publicUrl ?? null,
+        row: data ?? { make, logo_storage_path: storagePath },
+      });
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
+  route.post("/make-server-37f42386/admin/catalog/specs/bulk", requireAuth(), (c: Context) => guided(c, "save_catalog_specs_bulk"));
+
+  route.get("/make-server-37f42386/admin/catalog/variants/:id/revisions", requireAuth(), async (c: Context) => {
+    const denied = assertPlatformStaffResponse(c);
+    if (denied) return denied;
+    try {
+      const id = c.req.param("id")?.trim() ?? "";
+      if (!UUID_RE.test(id)) return c.json({ error: "Invalid variant" }, 400);
+      const limit = Math.min(200, Math.max(1, Number(c.req.query("limit") ?? 50)));
+      const { data, error } = await supabase.rpc("list_vehicle_catalog_revisions", {
+        p_variant_id: id,
+        p_limit: limit,
+      });
+      if (error) return c.json({ error: error.message }, 400);
+      return staffJson(c, { items: Array.isArray(data) ? data : [] });
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
+  route.get("/make-server-37f42386/admin/catalog/add-part/sister-vehicles", requireAuth(), async (c: Context) => {
+    const denied = assertPlatformStaffResponse(c);
+    if (denied) return denied;
+    try {
+      const raw = (c.req.query("ids") ?? "").trim();
+      const ids = raw.split(",").map((s) => s.trim()).filter((id) => UUID_RE.test(id));
+      if (!ids.length) return staffJson(c, { items: [] });
+      const { data, error } = await supabase.rpc("self_serve_sister_vehicles", { p_vehicle_ids: ids });
+      if (error) return c.json({ error: error.message }, 400);
+      return staffJson(c, (data ?? { items: [] }) as Record<string, unknown>);
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
+  route.get("/make-server-37f42386/admin/catalog/parts/add/vehicle-spec-values", requireAuth(), async (c: Context) => {
+    const denied = assertPlatformStaffResponse(c);
+    if (denied) return denied;
+    try {
+      const raw = (c.req.query("vehicleIds") ?? "").trim();
+      const specKey = (c.req.query("specKey") ?? "").trim();
+      const ids = raw.split(",").map((s) => s.trim()).filter((id) => UUID_RE.test(id));
+      if (!ids.length || !specKey) return staffJson(c, { items: [] as Array<{ vehicleId: string; value: string | null }> });
+      const { data, error } = await supabase
+        .from("catalog_spec_value")
+        .select("vehicle_catalog_id, value")
+        .eq("spec_key", specKey)
+        .eq("scope", "variant")
+        .in("vehicle_catalog_id", ids);
+      if (error) throw error;
+      const items = (data ?? []).map((row) => ({
+        vehicleId: String((row as { vehicle_catalog_id: string }).vehicle_catalog_id),
+        value: (row as { value: string | null }).value,
+      }));
+      return staffJson(c, { items });
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
   route.post("/make-server-37f42386/admin/catalog/parts/add", requireAuth(), async (c: Context) => {
     const denied = assertCatalogWrite(c);
     if (denied) return denied;
@@ -1110,6 +1278,38 @@ export function registerCatalogRoutes(route: RouteApp, supabase: SupabaseClient)
       if (!chassisErr && chassisList) payload.chassisList = chassisList;
       dominionSanitizeListingTrustPreview(payload);
       return staffJson(c, payload);
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
+  route.post("/make-server-37f42386/admin/catalog/parts/add/catalog-page", requireAuth(), async (c: Context) => {
+    const denied = assertCatalogWrite(c);
+    if (denied) return denied;
+    try {
+      const body = await c.req.json() as Record<string, unknown>;
+      const actor = c.get("rbacUser") as { userId?: string; id?: string } | undefined;
+      const actorId = String(actor?.userId ?? actor?.id ?? "");
+      if (UUID_RE.test(actorId)) body.actorId = actorId;
+      const { data, error } = await supabase.rpc("save_self_serve_catalog_page", { p_input: body });
+      if (error) return c.json({ error: error.message }, 400);
+      return staffJson(c, (data ?? {}) as Record<string, unknown>);
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
+  route.post("/make-server-37f42386/admin/catalog/parts/add/fluid-bundle", requireAuth(), async (c: Context) => {
+    const denied = assertCatalogWrite(c);
+    if (denied) return denied;
+    try {
+      const body = await c.req.json() as Record<string, unknown>;
+      const actor = c.get("rbacUser") as { userId?: string; id?: string } | undefined;
+      const actorId = String(actor?.userId ?? actor?.id ?? "");
+      if (UUID_RE.test(actorId)) body.actorId = actorId;
+      const { data, error } = await supabase.rpc("save_self_serve_fluid_bundle", { p_input: body });
+      if (error) return c.json({ error: error.message }, 400);
+      return staffJson(c, (data ?? {}) as Record<string, unknown>);
     } catch (error) {
       return fail(c, error);
     }

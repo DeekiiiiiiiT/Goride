@@ -55,6 +55,7 @@
     "@roam/toll-core": "workspace:*",
     "@roam/toll-ui": "workspace:*",
     "@roam/types": "workspace:*",
+    "@roam/vehicle-catalog-core": "workspace:*",
     "@roam/ui": "workspace:*",
     "@sentry/react": "^10.69.0",
     "@supabase/supabase-js": "^2",

@@ -79,6 +79,7 @@ import {
 } from "./VehicleCatalogImportDialog";
 import { VehicleCatalogTable } from "./VehicleCatalogTable";
 import { VehicleSpecificationSheet } from "./VehicleSpecificationSheet";
+import { VehiclesStitchFlow } from "./VehiclesStitchFlow";
 
 function rowMatchesSearch(row: VehicleCatalogRecord, q: string): boolean {
   if (!q) return true;
@@ -116,6 +117,7 @@ export function VehicleCatalogManager() {
   const [classFilter, setClassFilter] = useState<"all" | "car" | "motorcycle">("all");
   const [searchQuery, setSearchQuery] = useState("");
 
+  const [legacyTools, setLegacyTools] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<VehicleCatalogRecord | null>(null);
   const [deleteDeps, setDeleteDeps] = useState<CatalogDependencyCounts | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -537,8 +539,15 @@ export function VehicleCatalogManager() {
     return <p className="text-sm text-slate-500">Sign in to manage the vehicle catalog.</p>;
   }
 
+  if (!legacyTools) {
+    return <VehiclesStitchFlow token={token} onOpenLegacy={() => setLegacyTools(true)} />;
+  }
+
   return (
-    <div className="mx-auto w-full max-w-[1440px] space-y-6 text-slate-900">
+    <div className="mx-auto w-full max-w-[1440px] space-y-6 rounded-xl bg-white p-4 text-slate-900 shadow-sm dark:bg-card">
+      <Button type="button" variant="outline" className="mb-2" onClick={() => setLegacyTools(false)}>
+        Back to Vehicles home
+      </Button>
       <nav className="flex items-center gap-1.5 text-xs text-slate-500" aria-label="Breadcrumb">
         <span>Dominion</span>
         <span className="text-slate-400" aria-hidden>›</span>

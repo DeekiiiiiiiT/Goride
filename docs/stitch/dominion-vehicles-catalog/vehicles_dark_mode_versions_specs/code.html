@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_dashboard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "inverse-surface": "#dce2f6", "on-tertiary-fixed-variant": "#005227", "surface-dim": "#0c1321", "on-secondary-container": "#9db2ff", "tertiary-fixed-dim": "#4de082", "on-primary": "#002e6b", "secondary-container": "#264191", "primary": "#aec6ff", "outline-variant": "#424752", "surface-container-highest": "#2e3544", "error-container": "#93000a", "on-primary-container": "#00275e", "on-error": "#690005", "on-tertiary": "#003919", "surface-container-low": "#151b2a", "primary-fixed": "#d8e2ff", "on-surface-variant": "#c3c6d4", "on-secondary": "#05297a", "on-surface": "#dce2f6", "inverse-on-surface": "#2a3040", "surface-variant": "#2e3544", "surface-tint": "#aec6ff", "primary-container": "#5d8ef1", "inverse-primary": "#1e5bba", "surface-container-lowest": "#070e1c", "surface-container": "#19202e", "primary-fixed-dim": "#aec6ff", "secondary": "#b6c4ff", "surface-container-high": "#232a39", "on-secondary-fixed-variant": "#264191", "on-error-container": "#ffdad6", "secondary-fixed-dim": "#b6c4ff", "on-secondary-fixed": "#00164e", "on-tertiary-fixed": "#00210c", "error": "#ffb4ab", "tertiary": "#4de082", "outline": "#8d909e", "on-primary-fixed-variant": "#004397", "background": "#0c1321", "secondary-fixed": "#dce1ff", "surface": "#0c1321", "tertiary-fixed": "#6dfe9c", "tertiary-container": "#00a755", "surface-bright": "#323949", "on-primary-fixed": "#001a43", "on-tertiary-container": "#003115", "on-background": "#dce2f6" }, "borderRadius": { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, "spacing": { "space-sm": "0.5rem", "space-xs": "0.25rem", "margin": "1.5rem", "space-md": "1rem", "gutter": "1rem", "space-xl": "2rem", "space-lg": "1.5rem" }, "fontFamily": { "body-sm": ["Inter"], "headline-lg-mobile": ["Inter"], "label-md": ["Inter"], "headline-sm": ["Inter"], "headline-lg": ["Inter"], "body-lg": ["Inter"], "body-md": ["Inter"], "headline-md": ["Inter"], "headline-xl-mobile": ["Inter"], "title-md": ["Inter"], "label-sm": ["Inter"], "headline-xl": ["Inter"], "code-md": ["JetBrains Mono"], "code-sm": ["JetBrains Mono"] }, "fontSize": { "body-sm": ["12px", { "lineHeight": "16px", "fontWeight": "400" }], "headline-lg-mobile": ["24px", { "lineHeight": "32px", "fontWeight": "600" }], "label-md": ["12px", { "lineHeight": "16px", "fontWeight": "500" }], "headline-sm": ["20px", { "lineHeight": "28px", "fontWeight": "600" }], "headline-lg": ["32px", { "lineHeight": "40px", "fontWeight": "600" }], "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }], "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }], "headline-md": ["24px", { "lineHeight": "32px", "fontWeight": "600" }], "headline-xl-mobile": ["28px", { "lineHeight": "36px", "fontWeight": "600" }], "title-md": ["16px", { "lineHeight": "24px", "fontWeight": "600" }], "label-sm": ["11px", { "lineHeight": "14px", "fontWeight": "500" }], "headline-xl": ["40px", { "lineHeight": "48px", "fontWeight": "600" }], "code-md": ["13px", { "lineHeight": "18px", "fontWeight": "500" }], "code-sm": ["11px", { "lineHeight": "16px", "fontWeight": "500" }] } } } };</script></head><body class="bg-surface font-body-md text-on-surface antialiased"><aside class="fixed left-0 top-0 h-full w-72 bg-surface-container-lowest z-50 flex flex-col justify-between shadow-[0_1px_8px_rgba(0,0,0,0.4)]"><div class="flex flex-col flex-1 overflow-y-auto"><div class="h-16 px-space-lg flex items-center gap-space-sm bg-surface"><span class="material-symbols-outlined text-primary text-[22px]">hub</span><div class="flex flex-col min-w-0"><span class="font-title-md text-title-md text-on-surface tracking-tight truncate">Dominion</span><span class="font-code-sm text-code-sm text-outline tracking-wider uppercase truncate">ROAM ADMIN CONSOLE</span></div></div><div class="px-space-md py-space-md"><div class="mb-space-lg"><div class="px-space-sm mb-space-xs font-label-sm text-label-sm uppercase tracking-wider text-outline">MASTER DATA</div><nav class="flex flex-col gap-space-xs" data-active-classes="bg-primary-container text-on-primary-container font-title-md rounded-lg shadow-sm"><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="overview" href="#"><span class="material-symbols-outlined text-[18px]">dashboard</span><span class="font-body-md text-body-md">Overview</span></a><a aria-current="page" class="flex items-center gap-space-sm px-space-sm py-2 transition-colors bg-primary-container text-on-primary-container font-title-md rounded-lg shadow-sm" data-path="vehicles" href="#"><span class="material-symbols-outlined text-[18px]">directions_car</span><span class="font-body-md text-body-md">Vehicles</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="places-and-maps" href="#"><span class="material-symbols-outlined text-[18px]">map</span><span class="font-body-md text-body-md">Places and Maps</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="fuel" href="#"><span class="material-symbols-outlined text-[18px]">local_gas_station</span><span class="font-body-md text-body-md">Fuel</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="tolls" href="#"><span class="material-symbols-outlined text-[18px]">toll</span><span class="font-body-md text-body-md">Tolls</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="tax-and-vendors" href="#"><span class="material-symbols-outlined text-[18px]">receipt_long</span><span class="font-body-md text-body-md">Tax and Vendors</span></a></nav></div><div class="mb-space-lg"><div class="px-space-sm mb-space-xs font-label-sm text-label-sm uppercase tracking-wider text-outline">CORE MODULES</div><nav class="flex flex-col gap-space-xs" data-active-classes="bg-primary-container text-on-primary-container font-title-md rounded-lg shadow-sm"><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="engines" href="#"><span class="material-symbols-outlined text-[18px]">tune</span><span class="font-body-md text-body-md">Engines</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="distribution" href="#"><span class="material-symbols-outlined text-[18px]">alt_route</span><span class="font-body-md text-body-md">Distribution</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="platform" href="#"><span class="material-symbols-outlined text-[18px]">dns</span><span class="font-body-md text-body-md">Platform</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="back-office" href="#"><span class="material-symbols-outlined text-[18px]">shield_person</span><span class="font-body-md text-body-md">Back Office</span></a></nav></div></div></div><div class="p-space-md bg-surface-container-lowest"><div class="flex items-center justify-between px-space-sm py-space-xs rounded bg-surface-container-low"><span class="font-code-sm text-code-sm text-outline">Registry Engine</span><span class="font-code-sm text-code-sm text-tertiary">v4.18</span></div></div></aside><div class="pl-72"><header class="fixed top-0 left-72 right-0 h-16 bg-surface z-40 flex items-center justify-between px-space-lg shadow-[0_1px_8px_rgba(0,0,0,0.35)]"><div class="flex items-center w-96"><div class="relative w-full flex items-center"><span class="material-symbols-outlined text-outline absolute left-3 text-[18px]">search</span><input class="w-full bg-surface-container-lowest text-on-surface placeholder:text-outline/60 font-body-sm text-body-sm pl-10 pr-14 py-2 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary" placeholder="Search entities, engines, routes..." type="text"/><div class="absolute right-2 px-1.5 py-0.5 rounded bg-surface-container-high font-code-sm text-code-sm text-outline select-none">⌘K</div></div></div><div class="flex items-center gap-space-md"><button class="w-9 h-9 rounded-lg flex items-center justify-center text-outline hover:text-on-surface hover:bg-surface-container-high transition-colors" title="Theme Active: Dark Mode" type="button"><span class="material-symbols-outlined text-[20px]">dark_mode</span></button><div class="flex items-center gap-space-sm pl-space-sm"><div class="flex flex-col text-right"><span class="font-title-md text-title-md text-on-surface leading-tight">Deeki T</span><span class="font-label-sm text-label-sm text-primary">Owner</span></div><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center font-code-sm text-code-sm text-on-primary font-bold">DT</div></div></div></header><main class="w-full pt-16 bg-surface-dim min-h-screen"><div class="flex flex-col w-full">
+<div class="px-space-lg py-space-lg space-y-space-xl max-w-7xl mx-auto w-full">
+<!-- Top Breadcrumb & Metadata Header -->
+<div class="flex flex-col gap-space-sm">
+<div class="flex items-center gap-space-xs text-on-surface-variant">
+<a class="inline-flex items-center gap-1 font-body-sm text-body-sm text-primary hover:underline transition-all" href="#">
+<span class="material-symbols-outlined text-[16px]">arrow_back</span>
+<span>Back to Toyota models</span>
+</a>
+<span class="text-outline text-body-sm">/</span>
+<span class="font-code-sm text-code-sm text-outline uppercase tracking-wider">JDM-CAT-7702</span>
+</div>
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-space-md pt-space-xs">
+<div class="flex items-center gap-space-md">
+<div class="w-14 h-14 rounded-xl bg-surface-container-high flex items-center justify-center p-2.5 shadow-sm">
+<svg class="w-full h-full text-on-surface" fill="currentColor" viewbox="0 0 100 70">
+<path d="M50 0C22.4 0 0 15.7 0 35c0 19.3 22.4 35 50 35s50-15.7 50-35C100 15.7 77.6 0 50 0zm0 6c24 0 43.5 13 43.5 29S74 64 50 64 6.5 51 6.5 35 26 6 50 6zm0 7c-17 0-30.8 10-30.8 22.3 0 12.3 13.8 22.3 30.8 22.3s30.8-10 30.8-22.3C80.8 23 67 13 50 13zm0 5.4c12.8 0 23.3 7.6 23.3 16.9S62.8 52.2 50 52.2s-23.3-7.6-23.3-16.9S37.2 18.4 50 18.4zm0 6.6c-4.2 0-7.8 1.4-10.4 3.7 4.2 1.4 8.7 2.2 13.5 2.2 3.6 0 7-.5 10.1-1.4-2.6-2.7-6.9-4.5-13.2-4.5z"></path>
+</svg>
+</div>
+<div>
+<div class="flex items-center gap-space-sm flex-wrap">
+<h1 class="font-headline-lg text-headline-lg text-on-surface tracking-tight">Toyota Roomy</h1>
+<span class="px-2 py-0.5 rounded bg-surface-container-highest font-code-sm text-code-sm text-on-surface-variant font-medium">DBA-M900A / 4BA-M900A</span>
+</div>
+<p class="font-body-md text-body-md text-on-surface-variant mt-0.5">5 production variants · <span class="font-code-sm text-code-sm text-on-surface">2016 – Present</span> · Nagoya Assembly Plant, JP</p>
+</div>
+</div>
+<div class="flex items-center gap-space-sm self-start md:self-auto">
+<button class="px-space-md py-2 rounded-lg bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-label-md text-label-md transition-colors flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-[16px]">ios_share</span>
+<span>Export Specs</span>
+</button>
+<button class="px-space-md py-2 rounded-lg bg-primary text-on-primary font-label-md text-label-md font-semibold hover:bg-primary-fixed-dim transition-colors flex items-center gap-space-xs shadow-sm">
+<span class="material-symbols-outlined text-[16px]">add</span>
+<span>Add Spec File</span>
+</button>
+</div>
+</div>
+<!-- Sister Cars Line -->
+<div class="mt-space-xs flex items-center flex-wrap gap-2 px-space-md py-2.5 rounded-lg bg-surface-container-lowest text-on-surface-variant">
+<div class="flex items-center gap-1.5 font-label-sm text-label-sm uppercase tracking-wider text-outline font-semibold">
+<span class="material-symbols-outlined text-[16px] text-primary">swap_horiz</span>
+<span>Same Vehicle Platform:</span>
+</div>
+<div class="flex items-center gap-2 flex-wrap">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-surface-container-high font-code-sm text-code-sm text-on-surface">
+<span class="w-1.5 h-1.5 rounded-full bg-primary"></span>
+            Toyota Tank
+          </span>
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-surface-container-high font-code-sm text-code-sm text-on-surface">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>
+            Daihatsu Thor (OEM Base)
+          </span>
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-surface-container-high font-code-sm text-code-sm text-on-surface">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span>
+            Subaru Justy (M900F)
+          </span>
+</div>
+<span class="text-outline font-label-sm text-label-sm ml-auto hidden sm:inline">Parts &amp; drivetrain shared 98.4%</span>
+</div>
+</div>
+<!-- SECTION 1: MODEL VERSIONS (DARK MODE) -->
+<div class="space-y-space-md">
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-space-sm pb-space-xs">
+<div>
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-outline">Section 01</span>
+<h2 class="font-headline-sm text-headline-sm text-on-surface tracking-tight">Model Versions &amp; Powertrain Matrix</h2>
+</div>
+<!-- Filter Pills -->
+<div class="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+<button class="px-3 py-1.5 rounded-full bg-primary-container text-on-primary-container font-label-md text-label-md whitespace-nowrap shadow-sm">All (5)</button>
+<button class="px-3 py-1.5 rounded-full bg-surface-container-high hover:bg-surface-container-highest text-on-surface-variant font-label-md text-label-md whitespace-nowrap transition-colors">2WD (3)</button>
+<button class="px-3 py-1.5 rounded-full bg-surface-container-high hover:bg-surface-container-highest text-on-surface-variant font-label-md text-label-md whitespace-nowrap transition-colors">4WD (2)</button>
+<button class="px-3 py-1.5 rounded-full bg-surface-container-high hover:bg-surface-container-highest text-on-surface-variant font-label-md text-label-md whitespace-nowrap transition-colors">Before 2020 Update (2)</button>
+<button class="px-3 py-1.5 rounded-full bg-surface-container-high hover:bg-surface-container-highest text-on-surface-variant font-label-md text-label-md whitespace-nowrap transition-colors">2020 Update On (3)</button>
+</div>
+</div>
+<!-- Version Rows Container -->
+<div class="grid grid-cols-1 gap-2.5">
+<!-- Row 1: 2016-2020 2WD Petrol -->
+<div class="min-h-[72px] px-space-lg py-3 rounded-xl bg-surface-container hover:bg-surface-container-high transition-all flex flex-col lg:flex-row lg:items-center justify-between gap-space-md group">
+<div class="flex items-center gap-space-md min-w-[280px]">
+<span class="w-8 h-8 rounded-lg bg-surface-container-highest text-primary flex items-center justify-center font-code-sm text-code-sm font-semibold">01</span>
+<div>
+<div class="flex items-center gap-2">
+<span class="font-title-md text-title-md text-on-surface font-semibold">2016–2020</span>
+<span class="px-2 py-0.5 rounded bg-surface-container-lowest font-code-sm text-code-sm text-primary font-medium">2WD · 1.0 petrol</span>
+</div>
+<div class="flex items-center gap-2 mt-0.5">
+<span class="font-code-sm text-code-sm text-on-surface-variant">Chassis: <span class="text-on-surface">M900A</span></span>
+<span class="text-outline text-body-sm">·</span>
+<span class="font-code-sm text-code-sm text-on-surface-variant">Engine: <span class="text-on-surface">1KR-FE (69 PS)</span></span>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-space-lg flex-1 justify-between lg:justify-end">
+<!-- Readiness Bar -->
+<div class="flex flex-col min-w-[170px] max-w-[220px] w-full">
+<div class="flex justify-between items-center mb-1">
+<span class="font-label-sm text-label-sm text-outline">Parts Readiness</span>
+<span class="font-code-sm text-code-sm text-tertiary font-semibold">10/10 Ready</span>
+</div>
+<div class="w-full h-1.5 rounded-full bg-surface-container-lowest overflow-hidden">
+<div class="h-full bg-tertiary rounded-full w-full"></div>
+</div>
+</div>
+<!-- Specs count & tags -->
+<div class="flex items-center gap-space-sm">
+<span class="px-2.5 py-1 rounded bg-surface-container-highest font-code-sm text-code-sm text-on-surface-variant">6 Specs</span>
+<span class="px-2 py-0.5 rounded bg-tertiary-container/30 text-tertiary font-code-sm text-code-sm">CVT (i-CVT)</span>
+</div>
+<!-- Quick View and Action -->
+<div class="flex items-center gap-1">
+<button class="w-8 h-8 rounded-lg bg-surface-container-lowest hover:bg-surface-container-highest flex items-center justify-center text-outline hover:text-on-surface transition-colors" title="Quick Specs View">
+<span class="material-symbols-outlined text-[18px]">visibility</span>
+</button>
+<button class="w-8 h-8 rounded-lg bg-surface-container-lowest hover:bg-surface-container-highest flex items-center justify-center text-outline hover:text-on-surface transition-colors" title="Expand Variant Details">
+<span class="material-symbols-outlined text-[18px]">chevron_right</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Row 2: 2016-2020 4WD Petrol -->
+<div class="min-h-[72px] px-space-lg py-3 rounded-xl bg-surface-container hover:bg-surface-container-high transition-all flex flex-col lg:flex-row lg:items-center justify-between gap-space-md group">
+<div class="flex items-center gap-space-md min-w-[280px]">
+<span class="w-8 h-8 rounded-lg bg-surface-container-highest text-primary flex items-center justify-center font-code-sm text-code-sm font-semibold">02</span>
+<div>
+<div class="flex items-center gap-2">
+<span class="font-title-md text-title-md text-on-surface font-semibold">2016–2020</span>
+<span class="px-2 py-0.5 rounded bg-surface-container-lowest font-code-sm text-code-sm text-secondary font-medium">4WD · 1.0 petrol</span>
+</div>
+<div class="flex items-center gap-2 mt-0.5">
+<span class="font-code-sm text-code-sm text-on-surface-variant">Chassis: <span class="text-on-surface">M910A</span></span>
+<span class="text-outline text-body-sm">·</span>
+<span class="font-code-sm text-code-sm text-on-surface-variant">Engine: <span class="text-on-surface">1KR-FE (69 PS)</span></span>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-space-lg flex-1 justify-between lg:justify-end">
+<!-- Readiness Bar -->
+<div class="flex flex-col min-w-[170px] max-w-[220px] w-full">
+<div class="flex justify-between items-center mb-1">
+<span class="font-label-sm text-label-sm text-outline">Parts Readiness</span>
+<span class="font-code-sm text-code-sm text-tertiary font-semibold">9/10 Ready</span>
+</div>
+<div class="w-full h-1.5 rounded-full bg-surface-container-lowest overflow-hidden">
+<div class="h-full bg-tertiary rounded-full w-[90%]"></div>
+</div>
+</div>
+<div class="flex items-center gap-space-sm">
+<span class="px-2.5 py-1 rounded bg-surface-container-highest font-code-sm text-code-sm text-on-surface-variant">6 Specs</span>
+<span class="px-2 py-0.5 rounded bg-surface-container-highest font-code-sm text-code-sm text-outline">V-Flex 4WD</span>
+</div>
+<div class="flex items-center gap-1">
+<button class="w-8 h-8 rounded-lg bg-surface-container-lowest hover:bg-surface-container-highest flex items-center justify-center text-outline hover:text-on-surface transition-colors" title="Quick Specs View">
+<span class="material-symbols-outlined text-[18px]">visibility</span>
+</button>
+<button class="w-8 h-8 rounded-lg bg-surface-container-lowest hover:bg-surface-container-highest flex items-center justify-center text-outline hover:text-on-surface transition-colors" title="Expand Variant Details">
+<span class="material-symbols-outlined text-[18px]">chevron_right</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Row 3: 2020 on 2WD Petrol Facelift -->
+<div class="min-h-[72px] px-space-lg py-3 rounded-xl bg-surface-container hover:bg-surface-container-high transition-all flex flex-col lg:flex-row lg:items-center justify-between gap-space-md group">
+<div class="flex items-center gap-space-md min-w-[280px]">
+<span class="w-8 h-8 rounded-lg bg-surface-container-highest text-primary flex items-center justify-center font-code-sm text-code-sm font-semibold">03</span>
+<div>
+<div class="flex items-center gap-2">
+<span class="font-title-md text-title-md text-on-surface font-semibold">2020 on</span>
+<span class="px-2 py-0.5 rounded bg-surface-container-lowest font-code-sm text-code-sm text-primary font-medium">2WD · 1.0 petrol (Facelift)</span>
+</div>
+<div class="flex items-center gap-2 mt-0.5">
+<span class="font-code-sm text-code-sm text-on-surface-variant">Chassis: <span class="text-on-surface">M900A</span></span>
+<span class="text-outline text-body-sm">·</span>
+<span class="font-code-sm text-code-sm text-on-surface-variant">Engine: <span class="text-on-surface">1KR-FE Smart Assist</span></span>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-space-lg flex-1 justify-between lg:justify-end">
+<!-- Readiness Bar -->
+<div class="flex flex-col min-w-[170px] max-w-[220px] w-full">
+<div class="flex justify-between items-center mb-1">
+<span class="font-label-sm text-label-sm text-outline">Parts Readiness</span>
+<span class="font-code-sm text-code-sm text-tertiary font-semibold">8/10 Ready</span>
+</div>
+<div class="w-full h-1.5 rounded-full bg-surface-container-lowest overflow-hidden">
+<div class="h-full bg-tertiary rounded-full w-[80%]"></div>
+</div>
+</div>
+<div class="flex items-center gap-space-sm">
+<span class="px-2.5 py-1 rounded bg-surface-container-highest font-code-sm text-code-sm text-on-surface-variant">6 Specs</span>
+<span class="px-2 py-0.5 rounded bg-surface-container-highest font-code-sm text-code-sm text-on-surface-variant">Electric Park Brake</span>
+</div>
+<div class="flex items-center gap-1">
+<button class="w-8 h-8 rounded-lg bg-surface-container-lowest hover:bg-surface-container-highest flex items-center justify-center text-outline hover:text-on-surface transition-colors" title="Quick Specs View">
+<span class="material-symbols-outlined text-[18px]">visibility</span>
+</button>
+<button class="w-8 h-8 rounded-lg bg-surface-container-lowest hover:bg-surface-container-highest flex items-center justify-center text-outline hover:text-on-surface transition-colors" title="Expand Variant Details">
+<span class="material-symbols-outlined text-[18px]">chevron_right</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Row 4: 2020 on 2WD Turbo Facelift -->
+<div class="min-h-[72px] px-space-lg py-3 rounded-xl bg-surface-container hover:bg-surface-container-high transition-all flex flex-col lg:flex-row lg:items-center justify-between gap-space-md group">
+<div class="flex items-center gap-space-md min-w-[280px]">
+<span class="w-8 h-8 rounded-lg bg-surface-container-highest text-primary flex items-center justify-center font-code-sm text-code-sm font-semibold">04</span>
+<div>
+<div class="flex items-center gap-2">
+<span class="font-title-md text-title-md text-on-surface font-semibold">2020 on</span>
+<span class="px-2 py-0.5 rounded bg-surface-container-lowest font-code-sm text-code-sm text-primary font-medium">2WD · 1.0 turbo petrol (Facelift Turbo)</span>
+<span class="px-2 py-0.5 rounded bg-secondary-container text-on-secondary-container font-code-sm text-code-sm font-bold uppercase tracking-wider">TURBO</span>
+</div>
+<div class="flex items-center gap-2 mt-0.5">
+<span class="font-code-sm text-code-sm text-on-surface-variant">Chassis: <span class="text-on-surface">M900A</span></span>
+<span class="text-outline text-body-sm">·</span>
+<span class="font-code-sm text-code-sm text-on-surface-variant">Engine: <span class="text-primary font-semibold">1KR-VET (98 PS)</span></span>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-space-lg flex-1 justify-between lg:justify-end">
+<!-- Readiness Bar -->
+<div class="flex flex-col min-w-[170px] max-w-[220px] w-full">
+<div class="flex justify-between items-center mb-1">
+<span class="font-label-sm text-label-sm text-outline">Parts Readiness</span>
+<span class="font-code-sm text-code-sm text-tertiary font-semibold">7/10 Ready</span>
+</div>
+<div class="w-full h-1.5 rounded-full bg-surface-container-lowest overflow-hidden">
+<div class="h-full bg-tertiary rounded-full w-[70%]"></div>
+</div>
+</div>
+<div class="flex items-center gap-space-sm">
+<span class="px-2.5 py-1 rounded bg-surface-container-highest font-code-sm text-code-sm text-on-surface-variant">6 Specs</span>
+<span class="px-2 py-0.5 rounded bg-surface-container-highest font-code-sm text-code-sm text-on-surface-variant">Intercooled</span>
+</div>
+<div class="flex items-center gap-1">
+<button class="w-8 h-8 rounded-lg bg-surface-container-lowest hover:bg-surface-container-highest flex items-center justify-center text-outline hover:text-on-surface transition-colors" title="Quick Specs View">
+<span class="material-symbols-outlined text-[18px]">visibility</span>
+</button>
+<button class="w-8 h-8 rounded-lg bg-surface-container-lowest hover:bg-surface-container-highest flex items-center justify-center text-outline hover:text-on-surface transition-colors" title="Expand Variant Details">
+<span class="material-symbols-outlined text-[18px]">chevron_right</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Row 5: 2020 on 4WD Duplicate Warning -->
+<div class="min-h-[72px] px-space-lg py-3 rounded-xl bg-surface-container hover:bg-surface-container-high transition-all flex flex-col lg:flex-row lg:items-center justify-between gap-space-md group">
+<div class="flex items-center gap-space-md min-w-[280px]">
+<span class="w-8 h-8 rounded-lg bg-surface-container-highest text-outline flex items-center justify-center font-code-sm text-code-sm font-semibold">05</span>
+<div>
+<div class="flex items-center gap-2 flex-wrap">
+<span class="font-title-md text-title-md text-on-surface font-semibold">2020 on</span>
+<span class="px-2 py-0.5 rounded bg-surface-container-lowest font-code-sm text-code-sm text-secondary font-medium">4WD · 1.0 petrol</span>
+<!-- Warning Duplicate Badge -->
+<div class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-surface-container-lowest text-amber-300 font-label-sm text-label-sm font-medium">
+<span class="material-symbols-outlined text-[14px]">warning</span>
+<span>Looks like a duplicate</span>
+</div>
+</div>
+<div class="flex items-center gap-2 mt-0.5">
+<span class="font-code-sm text-code-sm text-on-surface-variant">Chassis: <span class="text-on-surface">M910A-BGBGE</span></span>
+<span class="text-outline text-body-sm">·</span>
+<span class="font-code-sm text-code-sm text-outline">Potential overlap with Variant #02</span>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-space-md justify-between lg:justify-end">
+<button class="px-3 py-1.5 rounded-lg bg-surface-container-highest hover:bg-surface-container-bright text-on-surface font-label-md text-label-md transition-colors flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[16px] text-primary">merge</span>
+<span>Review and merge row</span>
+</button>
+<button class="w-8 h-8 rounded-lg bg-surface-container-lowest hover:bg-surface-container-highest flex items-center justify-center text-outline hover:text-on-surface transition-colors" title="Quick Specs View">
+<span class="material-symbols-outlined text-[18px]">more_vert</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- SECTION 2: CAR SPECS VIEW (DARK MODE) -->
+<div class="space-y-space-md pt-space-md">
+<div>
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-outline">Section 02</span>
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-space-sm pb-space-sm">
+<div class="flex items-baseline gap-space-sm">
+<h2 class="font-headline-sm text-headline-sm text-on-surface tracking-tight">Active Technical Specifications</h2>
+<span class="font-code-sm text-code-sm text-primary">Toyota Roomy M900A 2WD (2020+)</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="font-code-sm text-code-sm text-tertiary flex items-center gap-1">
+<span class="w-2 h-2 rounded-full bg-tertiary"></span>
+              94% Complete Spec Sheet
+            </span>
+</div>
+</div>
+</div>
+<!-- Navigation Tabs -->
+<div class="flex items-center gap-space-xs bg-surface-container-lowest p-1 rounded-xl max-w-2xl overflow-x-auto">
+<button class="px-space-md py-1.5 rounded-lg text-on-surface-variant hover:text-on-surface font-label-md text-label-md transition-colors whitespace-nowrap">Overview</button>
+<button class="px-space-md py-1.5 rounded-lg bg-primary-container text-on-primary-container font-label-md text-label-md font-semibold shadow-sm whitespace-nowrap">Car specs (Active)</button>
+<button class="px-space-md py-1.5 rounded-lg text-on-surface-variant hover:text-on-surface font-label-md text-label-md transition-colors whitespace-nowrap">Parts on file</button>
+<button class="px-space-md py-1.5 rounded-lg text-on-surface-variant hover:text-on-surface font-label-md text-label-md transition-colors whitespace-nowrap">Sister cars</button>
+<button class="px-space-md py-1.5 rounded-lg text-on-surface-variant hover:text-on-surface font-label-md text-label-md transition-colors whitespace-nowrap">History</button>
+</div>
+<!-- 4 Spec Category Cards Grid -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-space-lg">
+<!-- Card 1: Fluids & Lubricants -->
+<div class="bg-surface-container rounded-2xl p-space-lg flex flex-col justify-between shadow-sm hover:bg-surface-container-high transition-all">
+<div class="space-y-space-md">
+<div class="flex items-center justify-between pb-space-xs">
+<div class="flex items-center gap-space-sm">
+<div class="w-9 h-9 rounded-lg bg-surface-container-highest text-primary flex items-center justify-center">
+<span class="material-symbols-outlined text-[20px]">oil_barrel</span>
+</div>
+<div>
+<h3 class="font-title-md text-title-md text-on-surface">Fluids &amp; Lubricants</h3>
+<p class="font-body-sm text-body-sm text-outline">Factory factory OEM specifications</p>
+</div>
+</div>
+<span class="px-2 py-0.5 rounded bg-surface-container-highest font-code-sm text-code-sm text-tertiary">4 of 4 Verified</span>
+</div>
+<!-- List entries -->
+<div class="space-y-space-sm divide-y-0">
+<div class="flex items-center justify-between p-2.5 rounded-lg bg-surface-container-lowest">
+<div>
+<span class="font-body-sm text-body-sm text-outline block">Engine Oil Grade</span>
+<span class="font-title-md text-title-md text-on-surface font-semibold font-code-md">0W-20</span>
+</div>
+<div class="flex items-center gap-1.5 px-2.5 py-1 rounded bg-tertiary-container/20 text-tertiary font-label-sm text-label-sm font-medium">
+<span class="material-symbols-outlined text-[15px]">verified</span>
+<span>Owner's manual ✓</span>
+</div>
+</div>
+<div class="flex items-center justify-between p-2.5 rounded-lg bg-surface-container-lowest">
+<div>
+<span class="font-body-sm text-body-sm text-outline block">CVT Fluid Specification</span>
+<span class="font-body-md text-body-md text-on-surface font-medium">Toyota CVT Fluid FE</span>
+</div>
+<span class="font-code-sm text-code-sm text-on-surface-variant font-medium">Capacity: 5.7 L</span>
+</div>
+<div class="flex items-center justify-between p-2.5 rounded-lg bg-surface-container-lowest">
+<div>
+<span class="font-body-sm text-body-sm text-outline block">Engine Coolant</span>
+<span class="font-body-md text-body-md text-on-surface font-medium">Super Long Life Coolant (SLLC Pink)</span>
+</div>
+<span class="font-code-sm text-code-sm text-on-surface-variant font-medium">3.1 L (Dry)</span>
+</div>
+<div class="flex items-center justify-between p-2.5 rounded-lg bg-surface-container-lowest">
+<div>
+<span class="font-body-sm text-body-sm text-outline block">Brake Fluid</span>
+<span class="font-body-md text-body-md text-on-surface font-medium">Toyota 2500H-A (DOT 3 / DOT 4)</span>
+</div>
+<span class="px-2 py-0.5 rounded bg-surface-container-high font-code-sm text-code-sm text-outline">Glycol based</span>
+</div>
+</div>
+</div>
+<div class="pt-space-md flex items-center justify-between text-outline font-label-sm text-label-sm">
+<span>Last audited: Aug 2024</span>
+<button class="text-primary hover:underline font-label-md text-label-md flex items-center gap-1">
+<span>View viscosity table</span>
+<span class="material-symbols-outlined text-[14px]">arrow_forward</span>
+</button>
+</div>
+</div>
+<!-- Card 2: Wipers & Lights -->
+<div class="bg-surface-container rounded-2xl p-space-lg flex flex-col justify-between shadow-sm hover:bg-surface-container-high transition-all">
+<div class="space-y-space-md">
+<div class="flex items-center justify-between pb-space-xs">
+<div class="flex items-center gap-space-sm">
+<div class="w-9 h-9 rounded-lg bg-surface-container-highest text-secondary flex items-center justify-center">
+<span class="material-symbols-outlined text-[20px]">highlight</span>
+</div>
+<div>
+<h3 class="font-title-md text-title-md text-on-surface">Wipers &amp; Lights</h3>
+<p class="font-body-sm text-body-sm text-outline">Visibility &amp; optical components</p>
+</div>
+</div>
+<span class="px-2 py-0.5 rounded bg-surface-container-highest font-code-sm text-code-sm text-amber-300">1 Missing Spec</span>
+</div>
+<!-- List entries -->
+<div class="space-y-space-sm">
+<div class="p-2.5 rounded-lg bg-surface-container-lowest space-y-1.5">
+<span class="font-body-sm text-body-sm text-outline block">Wiper Blade Sizes</span>
+<div class="grid grid-cols-3 gap-2">
+<div class="bg-surface-container px-2 py-1.5 rounded flex flex-col">
+<span class="font-label-sm text-label-sm text-outline">Driver</span>
+<span class="font-code-md text-code-md text-on-surface font-semibold">525 mm</span>
+</div>
+<div class="bg-surface-container px-2 py-1.5 rounded flex flex-col">
+<span class="font-label-sm text-label-sm text-outline">Passenger</span>
+<span class="font-code-md text-code-md text-on-surface font-semibold">475 mm</span>
+</div>
+<div class="bg-surface-container px-2 py-1.5 rounded flex flex-col">
+<span class="font-label-sm text-label-sm text-outline">Rear</span>
+<span class="font-code-md text-code-md text-on-surface font-semibold">350 mm</span>
+</div>
+</div>
+</div>
+<div class="flex items-center justify-between p-2.5 rounded-lg bg-surface-container-lowest">
+<div>
+<span class="font-body-sm text-body-sm text-outline block">Headlight Bulb Spec</span>
+<span class="font-body-md text-body-md text-on-surface font-medium">Bi-Beam LED Projector</span>
+</div>
+<span class="px-2 py-0.5 rounded bg-surface-container-high font-code-sm text-code-sm text-tertiary">Integrated Unit</span>
+</div>
+<!-- Missing Spec: Brake Light Bulb -->
+<div class="flex items-center justify-between p-2.5 rounded-lg bg-surface-container-lowest">
+<div>
+<span class="font-body-sm text-body-sm text-outline block">Brake Light Bulb</span>
+<span class="font-body-md text-body-md text-on-surface-variant italic">Not on file</span>
+</div>
+<button class="px-3 py-1 rounded-lg bg-surface-container-highest hover:bg-surface-container-bright text-primary font-label-md text-label-md font-medium transition-colors flex items-center gap-1 shadow-sm">
+<span class="material-symbols-outlined text-[14px]">add</span>
+<span>Add Spec</span>
+</button>
+</div>
+</div>
+</div>
+<div class="pt-space-md flex items-center justify-between text-outline font-label-sm text-label-sm">
+<span>U-hook standard mounts</span>
+<button class="text-primary hover:underline font-label-md text-label-md flex items-center gap-1">
+<span>Connector diagrams</span>
+<span class="material-symbols-outlined text-[14px]">arrow_forward</span>
+</button>
+</div>
+</div>
+<!-- Card 3: Tyres & Wheels -->
+<div class="bg-surface-container rounded-2xl p-space-lg flex flex-col justify-between shadow-sm hover:bg-surface-container-high transition-all">
+<div class="space-y-space-md">
+<div class="flex items-center justify-between pb-space-xs">
+<div class="flex items-center gap-space-sm">
+<div class="w-9 h-9 rounded-lg bg-surface-container-highest text-primary flex items-center justify-center">
+<span class="material-symbols-outlined text-[20px]">tire_repair</span>
+</div>
+<div>
+<h3 class="font-title-md text-title-md text-on-surface">Tyres &amp; Wheels</h3>
+<p class="font-body-sm text-body-sm text-outline">Chassis geometry &amp; rolling stock</p>
+</div>
+</div>
+<span class="px-2 py-0.5 rounded bg-surface-container-highest font-code-sm text-code-sm text-tertiary">Verified</span>
+</div>
+<!-- List entries -->
+<div class="space-y-space-sm">
+<div class="flex items-center justify-between p-2.5 rounded-lg bg-surface-container-lowest">
+<div>
+<span class="font-body-sm text-body-sm text-outline block">Standard Tyre Size</span>
+<span class="font-title-md text-title-md text-on-surface font-semibold font-code-md">165/65R14 79S</span>
+</div>
+<span class="font-code-sm text-code-sm text-outline">Optional: 175/55R15</span>
+</div>
+<div class="flex items-center justify-between p-2.5 rounded-lg bg-surface-container-lowest">
+<div>
+<span class="font-body-sm text-body-sm text-outline block">Wheel Rim Dimensions</span>
+<span class="font-body-md text-body-md text-on-surface font-medium font-code-md">14 x 5.0J (ET+35)</span>
+</div>
+<span class="font-code-sm text-code-sm text-on-surface-variant">PCD: 4x100 · 54.1mm Bore</span>
+</div>
+<div class="flex items-center justify-between p-2.5 rounded-lg bg-surface-container-lowest">
+<div>
+<span class="font-body-sm text-body-sm text-outline block">Recommended Tyre Pressure</span>
+<div class="flex items-center gap-2 mt-0.5">
+<span class="font-code-sm text-code-sm text-on-surface font-semibold">Front: 240 kPa (35 psi)</span>
+<span class="text-outline">/</span>
+<span class="font-code-sm text-code-sm text-on-surface font-semibold">Rear: 240 kPa</span>
+</div>
+</div>
+<span class="px-2 py-0.5 rounded bg-surface-container-high font-code-sm text-code-sm text-outline">Door Jamb Verified</span>
+</div>
+</div>
+</div>
+<div class="pt-space-md flex items-center justify-between text-outline font-label-sm text-label-sm">
+<span>Lug torque: 103 N·m</span>
+<button class="text-primary hover:underline font-label-md text-label-md flex items-center gap-1">
+<span>View wheel fitment</span>
+<span class="material-symbols-outlined text-[14px]">arrow_forward</span>
+</button>
+</div>
+</div>
+<!-- Card 4: Brakes & Stopping -->
+<div class="bg-surface-container rounded-2xl p-space-lg flex flex-col justify-between shadow-sm hover:bg-surface-container-high transition-all">
+<div class="space-y-space-md">
+<div class="flex items-center justify-between pb-space-xs">
+<div class="flex items-center gap-space-sm">
+<div class="w-9 h-9 rounded-lg bg-surface-container-highest text-tertiary flex items-center justify-center">
+<span class="material-symbols-outlined text-[20px]">disc_full</span>
+</div>
+<div>
+<h3 class="font-title-md text-title-md text-on-surface">Brakes &amp; Stopping</h3>
+<p class="font-body-sm text-body-sm text-outline">Hydraulics, rotors, and friction pads</p>
+</div>
+</div>
+<span class="px-2 py-0.5 rounded bg-surface-container-highest font-code-sm text-code-sm text-tertiary">Complete</span>
+</div>
+<!-- List entries -->
+<div class="space-y-space-sm">
+<div class="flex items-center justify-between p-2.5 rounded-lg bg-surface-container-lowest">
+<div>
+<span class="font-body-sm text-body-sm text-outline block">Front Brake Assembly</span>
+<span class="font-title-md text-title-md text-on-surface font-semibold">Ventilated Disc</span>
+</div>
+<div class="text-right">
+<span class="font-code-sm text-code-sm text-on-surface-variant block">Rotor Dia: 254 mm</span>
+<span class="font-label-sm text-label-sm text-outline">Single piston caliper</span>
+</div>
+</div>
+<div class="flex items-center justify-between p-2.5 rounded-lg bg-surface-container-lowest">
+<div>
+<span class="font-body-sm text-body-sm text-outline block">Rear Brake Assembly</span>
+<span class="font-title-md text-title-md text-on-surface font-semibold">Leading-Trailing Drum</span>
+</div>
+<div class="text-right">
+<span class="font-code-sm text-code-sm text-on-surface-variant block">Drum Inner: 200 mm</span>
+<span class="font-label-sm text-label-sm text-outline">Auto-adjusting</span>
+</div>
+</div>
+<div class="flex items-center justify-between p-2.5 rounded-lg bg-surface-container-lowest">
+<div>
+<span class="font-body-sm text-body-sm text-outline block">Parking Brake Mechanism</span>
+<span class="font-body-md text-body-md text-on-surface font-medium">Electric Parking Brake (EPB)</span>
+</div>
+<span class="px-2 py-0.5 rounded bg-tertiary-container/20 text-tertiary font-code-sm text-code-sm">Brake Hold Active</span>
+</div>
+</div>
+</div>
+<div class="pt-space-md flex items-center justify-between text-outline font-label-sm text-label-sm">
+<span>Min pad thickness: 1.0 mm</span>
+<button class="text-primary hover:underline font-label-md text-label-md flex items-center gap-1">
+<span>View part schematics</span>
+<span class="material-symbols-outlined text-[14px]">arrow_forward</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Bottom Action Bar / Status -->
+<div class="p-space-lg rounded-2xl bg-surface-container flex flex-col sm:flex-row items-center justify-between gap-space-md shadow-sm">
+<div class="flex items-center gap-space-md">
+<div class="w-10 h-10 rounded-full bg-surface-container-highest flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[20px]">fact_check</span>
+</div>
+<div>
+<span class="font-title-md text-title-md text-on-surface">Dominion Auto-Registry Engine synchronized</span>
+<p class="font-body-sm text-body-sm text-outline">All Toyota Roomy service manuals &amp; EPC catalogs cross-referenced (199 specs validated).</p>
+</div>
+</div>
+<div class="flex items-center gap-space-sm w-full sm:w-auto justify-end">
+<button class="px-space-md py-2.5 rounded-lg bg-surface-container-highest hover:bg-surface-container-bright text-on-surface font-label-md text-label-md transition-colors">
+          Audit Log
+        </button>
+<button class="px-space-lg py-2.5 rounded-lg bg-primary text-on-primary font-label-md text-label-md font-semibold hover:bg-primary-fixed-dim transition-colors shadow-sm">
+          Save Catalog Changes
+        </button>
+</div>
+</div>
+</div>
+</div></main></div></body></html>

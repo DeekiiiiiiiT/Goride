@@ -6,6 +6,9 @@ import { toast } from "sonner";
 import { PartsButton } from "../PartsButton";
 import { ImportByAreaFlow } from "../import/ImportByAreaFlow";
 import { AddPartsHome } from "./AddPartsHome";
+import { CatalogAddPartsFlow } from "./catalog/CatalogAddPartsFlow";
+import { FluidPartFlow } from "./flows/FluidPartFlow";
+import { ExtendPartFlow } from "./flows/ExtendPartFlow";
 import {
   fetchSelfServePartTypes,
   lookupSelfServePart,
@@ -51,7 +54,17 @@ import {
   AlertDialogTitle,
 } from "../../../ui/alert-dialog";
 
-type Screen = "home" | "wizard" | "saved" | "statesGallery" | "positionCatalog" | "partTypes";
+type Screen =
+  | "home"
+  | "catalog"
+  | "catalogOne"
+  | "fluid"
+  | "extend"
+  | "wizard"
+  | "saved"
+  | "statesGallery"
+  | "positionCatalog"
+  | "partTypes";
 
 export function AddPartsTab({ owner }: { owner: boolean }) {
   const qc = useQueryClient();
@@ -106,6 +119,24 @@ export function AddPartsTab({ owner }: { owner: boolean }) {
     const params = new URLSearchParams(window.location.search);
     if (params.get("addPartsStates") === "1") setScreen("statesGallery");
     if (params.get("addPartsPositionCatalog") === "1") setScreen("positionCatalog");
+    const preVehicle = params.get("vehiclesPreselectVehicleId")?.trim();
+    if (preVehicle) setScreen("catalog");
+    const cap = params.get("addPartsCapture");
+    if (!cap && !preVehicle) return;
+    if (cap === "add_parts_home_hub") setScreen("home");
+    else if (cap === "add_more_cars_to_a_part_already_on_file") setScreen("extend");
+    else if (cap === "fluid_oil_or_size_part_and_which_cars_use_it") setScreen("fluid");
+    else if (cap === "states_edge_cases") setScreen("statesGallery");
+    else if (cap === "step_3_just_one_part") setScreen("catalogOne");
+    else if (
+      cap?.startsWith("step_")
+      || cap === "phone_390px_parts_intake_mobile"
+      || cap === "saved_confirmation_next_steps"
+      || cap === "dark_mode_parts_table_review"
+      || cap === "help_built_into_the_page"
+    ) {
+      setScreen(cap === "step_3_just_one_part" ? "catalogOne" : "catalog");
+    }
   }, []);
 
   useEffect(() => {
@@ -228,15 +259,40 @@ export function AddPartsTab({ owner }: { owner: boolean }) {
     );
   }
 
+  if (screen === "catalog" || screen === "catalogOne") {
+    return (
+      <CatalogAddPartsFlow
+        singlePart={screen === "catalogOne"}
+        onHome={() => setScreen("home")}
+        onFindParts={() => { window.location.search = "?page=parts-catalog&tab=find-parts"; }}
+      />
+    );
+  }
+
+  if (screen === "fluid") {
+    return <FluidPartFlow onHome={() => setScreen("home")} />;
+  }
+
+  if (screen === "extend") {
+    return (
+      <ExtendPartFlow
+        onHome={() => setScreen("home")}
+        onFindParts={() => { window.location.search = "?page=parts-catalog&tab=find-parts"; }}
+      />
+    );
+  }
+
   if (screen === "home") {
     return (
       <>
         <AddPartsHome
           owner={owner}
-          onStart={() => { setScreen("wizard"); setWizardStep(1); setStep1Phase("picker"); setPickerTypeId(null); }}
+          onCatalog={() => setScreen("catalog")}
+          onExtend={() => setScreen("extend")}
+          onFluid={() => setScreen("fluid")}
+          onJustOne={() => setScreen("catalogOne")}
           onBulk={() => setBulk(true)}
-          onPlainWords={() => setPlainWords(true)}
-        onPartTypes={() => setScreen("partTypes")}
+          onPartTypes={() => setScreen("partTypes")}
         />
         <PlainWordsDrawer open={plainWords} onClose={() => setPlainWords(false)} onViewTaxonomy={owner ? () => { setPlainWords(false); setScreen("partTypes"); } : undefined} />
       </>

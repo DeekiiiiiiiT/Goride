@@ -1730,3 +1730,40 @@ body[data-fleet-find-parts-results] [data-maintenance-tab="schedule"] {
     top: 4.5rem;
   }
 }
+
+.fleet-find-parts-everyday {
+  font-family: Inter, system-ui, sans-serif;
+  color: #0a0a0a;
+  min-height: 480px;
+}
+.dark .fleet-find-parts-everyday {
+  color: #fafafa;
+}
+.fleet-find-parts-everyday .material-symbols-outlined {
+  font-family: "Material Symbols Outlined";
+  font-weight: normal;
+  font-style: normal;
+  line-height: 1;
+  font-size: 20px;
+}
+
+/* Everyday capture utilities (tailwind parity for css coverage) */
+.fleet-find-parts-stitch .bg-black\/30 { background-color: rgb(0 0 0 / 0.3); }
+.fleet-find-parts-stitch .font-mono { font-family: ui-monospace, monospace; }
+.fleet-find-parts-stitch .border-black\/10 { border-color: rgb(0 0 0 / 0.1); }
+.fleet-find-parts-stitch .border-black\/5 { border-color: rgb(0 0 0 / 0.05); }
+
+/* Material Symbols' own stylesheet sets font-size:24px and loads after Tailwind; let the size classes win (Stitch icon sizes). */
+.fleet-find-parts-everyday .material-symbols-outlined.text-\[11px\] { font-size: 11px; }
+.fleet-find-parts-everyday .material-symbols-outlined.text-\[13px\] { font-size: 13px; }
+.fleet-find-parts-everyday .material-symbols-outlined.text-\[14px\] { font-size: 14px; }
+.fleet-find-parts-everyday .material-symbols-outlined.text-\[15px\] { font-size: 15px; }
+.fleet-find-parts-everyday .material-symbols-outlined.text-\[16px\] { font-size: 16px; }
+.fleet-find-parts-everyday .material-symbols-outlined.text-\[18px\] { font-size: 18px; }
+.fleet-find-parts-everyday .material-symbols-outlined.text-\[20px\] { font-size: 20px; }
+.fleet-find-parts-everyday .material-symbols-outlined.text-\[22px\] { font-size: 22px; }
+.fleet-find-parts-everyday .material-symbols-outlined.text-\[24px\] { font-size: 24px; }
+.fleet-find-parts-everyday .material-symbols-outlined.text-\[26px\] { font-size: 26px; }
+.fleet-find-parts-everyday .material-symbols-outlined.text-\[30px\] { font-size: 30px; }
+.fleet-find-parts-everyday .material-symbols-outlined.text-\[40px\] { font-size: 40px; }
+.fleet-find-parts-everyday .material-symbols-outlined.text-\[44px\] { font-size: 44px; }

@@ -1,5 +1,5 @@
 import type { Page, Route } from "@playwright/test";
-import type { FleetCar } from "../apps/fleet/src/components/vehicles/find-parts/CarStep";
+import type { FleetCar } from "../apps/fleet/src/components/vehicles/find-parts/fleetCar";
 import type { PartsActivity } from "../apps/fleet/src/components/vehicles/find-parts/PartsActivityPanel";
 import {
   findPartsFixtureBrowse,
@@ -19,6 +19,7 @@ import {
   stitchVisualVehicleContext,
 } from "./findPartsStitchVisualFixtures";
 import { stitchAutoMatchFindResult } from "./findPartsStitchAutoMatchFixtures";
+import { fleetCoreEverydayFixtures } from "./findPartsEverydayCaptureFixtures";
 
 export { FIND_PARTS_FORBIDDEN_SAMPLES } from "../apps/fleet/src/components/vehicles/find-parts/findParts.noSample.banned";
 
@@ -166,13 +167,24 @@ export function fleetCoreStitchVisualFixtures() {
   };
 }
 
-export async function mockFleetCoreRoute(url: string, method: string, fixtures: ReturnType<typeof fleetCorePartsFixtures>) {
+export function fleetCoreEverydayCaptureFixtures() {
+  return fleetCoreEverydayFixtures();
+}
+
+export async function mockFleetCoreRoute(url: string, method: string, fixtures: ReturnType<typeof fleetCorePartsFixtures> | ReturnType<typeof fleetCoreEverydayFixtures>) {
   const path = new URL(url).pathname;
   if (path.endsWith("/team/access")) return fleetTeamAccessFixture;
   if (path.endsWith("/platform-status")) return fleetPlatformStatusFixture;
   if (path.endsWith("/parts/my-vehicles")) return fixtures.myVehicles;
   if (path.endsWith("/parts/vehicle-options")) return fixtures.vehicleOptions;
-  if (path.endsWith("/parts/term")) return fixtures.term;
+  if (path.endsWith("/parts/term")) {
+    const q = new URL(url).searchParams.get("q") || "";
+    if (q && (fixtures as { brakesOverview?: unknown }).brakesOverview) {
+      const { everydayTerm } = await import("./findPartsEverydayCaptureFixtures");
+      return everydayTerm(q);
+    }
+    return fixtures.term;
+  }
   if (path.endsWith("/parts/activity")) return fixtures.activity;
   if (path.includes("/parts/vehicle-context")) return fixtures.vehicleContext;
   if (path.endsWith("/parts/browse")) return fixtures.browse;
@@ -185,11 +197,58 @@ export async function mockFleetCoreRoute(url: string, method: string, fixtures: 
       labelsByPosition: {},
     };
   }
+  if (path.includes("/parts/brakes-overview")) {
+    return (fixtures as { brakesOverview?: unknown }).brakesOverview ?? {};
+  }
+  if (path.endsWith("/parts/catalog-makers")) {
+    const makers = (fixtures as { makers?: Array<{ make: string; logoUrl: string | null }> }).makers;
+    return { items: makers ?? [] };
+  }
+  if (path.includes("/parts/lookup")) {
+    if ((fixtures as { brakesOverview?: unknown }).brakesOverview) {
+      const partId = new URL(url).searchParams.get("partId") || "";
+      const { everydayPartsLookup } = await import("./findPartsEverydayCaptureFixtures");
+      return everydayPartsLookup(partId || undefined);
+    }
+    return (fixtures as { lookup?: unknown }).lookup ?? {};
+  }
   if (path.includes("/parts/find")) {
+    const u = new URL(url);
+    const componentId = u.searchParams.get("componentId") || "";
+    const askGate = u.searchParams.get("make") && !u.searchParams.get("vehicleId");
+    if (askGate && (fixtures as { brakesOverview?: unknown }).brakesOverview) {
+      const { EVERYDAY_VARIANT_ID, everydayVehicleOptions } = await import("./findPartsEverydayCaptureFixtures");
+      return {
+        linked: true,
+        askVariant: true,
+        make: u.searchParams.get("make"),
+        model: u.searchParams.get("model"),
+        year: Number(u.searchParams.get("year") || 2019),
+        candidates: everydayVehicleOptions().versions,
+        pickedVariantId: null,
+      };
+    }
+    if (componentId && (fixtures as { brakesOverview?: unknown }).brakesOverview) {
+      const { everydayFind, EVERYDAY_VARIANT_ID } = await import("./findPartsEverydayCaptureFixtures");
+      return {
+        ...everydayFind(componentId),
+        linked: true,
+        pickedVariantId: fixtures.vehicleContext?.variantId ?? EVERYDAY_VARIANT_ID,
+      };
+    }
+    if (!componentId && (fixtures as { brakesOverview?: unknown }).brakesOverview && u.searchParams.get("vehicleId")) {
+      const { EVERYDAY_VARIANT_ID } = await import("./findPartsEverydayCaptureFixtures");
+      return {
+        ...(fixtures.find as object),
+        linked: true,
+        askVariant: false,
+        pickedVariantId: fixtures.vehicleContext?.variantId ?? EVERYDAY_VARIANT_ID,
+      };
+    }
     return {
       ...fixtures.find,
       linked: fixtures.find?.linked ?? true,
-      askVariant: false,
+      askVariant: (fixtures.find as { askVariant?: boolean })?.askVariant ?? false,
       pickedVariantId: fixtures.vehicleContext?.variantId ?? null,
     };
   }
@@ -210,13 +269,13 @@ export async function installFleetCoreMockRoutes(
     await route.fulfill({ json: {} });
   };
   await page.route("**/functions/v1/fleet-ops/**/maintenance-fleet-summary**", async (route) => {
-    await route.fulfill({ json: { vehicles: [], summary: {} } });
+    await route.fulfill({ json: { items: [] } });
   });
   await page.route("**/__sb/functions/v1/fleet-ops/**/maintenance-fleet-summary**", async (route) => {
-    await route.fulfill({ json: { vehicles: [], summary: {} } });
+    await route.fulfill({ json: { items: [] } });
   });
   await page.route("**/fleet-ops/**/maintenance-fleet-summary**", async (route) => {
-    await route.fulfill({ json: { vehicles: [], summary: {} } });
+    await route.fulfill({ json: { items: [] } });
   });
   await page.route("**/functions/v1/fleet-core/**", fulfillFleetCore);
   await page.route("**/__sb/functions/v1/fleet-core/**", fulfillFleetCore);

@@ -161,6 +161,9 @@ importers:
       '@roam/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      '@roam/vehicle-catalog-core':
+        specifier: workspace:*
+        version: link:../../packages/vehicle-catalog-core
       '@sentry/react':
         specifier: ^10.69.0
         version: 10.69.0(react@18.3.1)
@@ -2697,6 +2700,12 @@ importers:
       vaul:
         specifier: ^1.1.2
         version: 1.1.2(@types/react-dom@18.3.7(@types/react@18.3.28))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+
+  packages/vehicle-catalog-core:
+    devDependencies:
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(jsdom@30.0.1(@noble/hashes@1.8.0))(lightningcss@1.30.1)(terser@5.49.0)
 
   packages/vertical-config:
     dependencies:

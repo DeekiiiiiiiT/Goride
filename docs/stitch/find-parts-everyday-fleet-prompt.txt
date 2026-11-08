@@ -1,0 +1,238 @@
+ROAM FLEET — FIND PARTS FOR EVERYDAY PEOPLE — FULL DESIGN PROMPT (GOOGLE STITCH)
+
+
+
+
+Roam Fleet - Find Parts (Desktop Web App with phone layouts, for car owners, fleet owners and their staff):
+
+Design a complete, modern, high-fidelity redesign of the "Find parts" tab inside Roam Fleet. The person using it knows only three things about a car: the make, the model and the year. They are not a mechanic and have never seen a parts catalogue. They pick their car, say what they need (for example "front brake pads"), and get ONE plain answer: the part, a Verified badge, and one number to give the parts store. They can also see which other cars use the same part, shown by maker logos, so they know the part is common and easy to buy. Find parts is a look-up tool only: Roam does not sell parts, so there are no prices, shops, stock, quotes or carts anywhere. The feeling should be as easy and pleasant as a modern consumer app: big friendly type, maker logos, simple part pictures, lots of white space, one clear next step on every screen, and zero codes or jargon.
+
+
+BRAND IDENTITY:
+- Keep the existing Roam Fleet app frame exactly as it is today (do not redesign it):
+  - **Top:** a white nav row with the black "Roam Fleet" app tile, then: Dashboard, Fleet Operations, Driver Operations, Money, Vehicle Operations (active), Delivery Operations, Analytics, Reports, Business Finance, a bell, the avatar.
+  - **Page title:** breadcrumb "Fleet / Maintenance / Find parts", the title "Fleet Maintenance", then the tab pill: By vehicle, Service ledger, Find parts (active), Work orders, Requests, Inspections, Schedule.
+  - Everything BELOW the tab pill is the new design.
+- Theme: "Friendly modern" — calm, bright, confident, consumer-grade (think of the best modern travel and banking apps), NOT a technical staff tool.
+- LIGHT MODE (default):
+  - Primary: near-black #030213 — main buttons, selected states
+  - Page wash: #f8fafc; cards: #FFFFFF with a soft shadow (0 1px 2px rgba(0,0,0,0.04), 0 8px 24px rgba(15,23,42,0.06)) and a hairline border rgba(0,0,0,0.06)
+  - Text: #0a0a0a; muted text: #64748b
+  - Verified: green #059669 on a soft green #ecfdf5
+  - Check before buying: amber #b45309 on a soft amber #fffbeb
+  - Error: #d4183d on #fff1f2
+  - Soft tile fill (part pictures, logo circles): #f1f5f9
+  - Accent orange #f97316 only for the Fleet Maintenance page icon
+- DARK MODE:
+  - Page #1c1c1e, cards #2a2a2d, border #3a3a3d
+  - Text #fafafa, muted #a1a1aa, primary buttons white #fafafa with near-black text
+  - Verified #34d399 on #064e3b; Check before buying #fbbf24 on #451a03; error #f87171
+- Shapes: cards 20px corner radius, buttons and inputs 12px, chips and badges fully rounded.
+- Typography: Inter. Page titles 28px semibold, card titles 20px semibold, body 16px, muted helper text 14px. The one part number uses a clean mono font at 22px with wide letter spacing so it is easy to read out loud to a store.
+- Maker logos: every car maker is shown by its logo in a soft round tile (Toyota, Daihatsu, Subaru, Suzuki, Mazda, Ford, Perodua, Honda, Nissan, Mitsubishi). The logo always comes before the maker's name.
+- Part pictures: simple flat line illustrations in a soft rounded square (brake pad, brake disc, brake drum, brake shoe, caliper, cable, hose, sensor, fluid bottle, filter, wiper blade, bulb, battery, spark plug).
+- Only two trust badges, both rounded pills with an icon:
+  - **Verified** (green, check-mark icon) — the car maker's own catalogue lists this part for this car.
+  - **Check before buying** (amber, small info icon) — we found this fit in a parts list but the car maker hasn't confirmed it. Tapping it opens a short plain explanation.
+- Buttons always look like buttons: Primary = solid near-black with white text; Secondary = white with a visible #cbd5e1 border and dark text; Danger (Cancel, Remove) = red border and red text. Never underlined text links, never grey text-only buttons. The only real links are to outside websites (a maker's catalogue page), and those are buttons too ("Open the maker's page ↗").
+- Never on any screen: chassis codes (M900A), engine codes (1KR-FE), "Reference number", "OEM", "tier", "fitment", "cross-reference", "interchange", "schematics", "dispatch", "match engine", "confidence", percentages, position tags in capitals, prices, J$, shops, stock, odometer, "last replaced", AI sparkles.
+- When two versions of a car need different parts, say the difference in plain words only: "2WD" / "4WD", "Before the 2020 update" / "From the 2020 update", "1.0 petrol" / "1.5 petrol".
+- Jamaica sample data (real, from Roam's database):
+  - **Fleet cars:** "Toyota Roomy · 2019 · 5179KZ" is the real main sample. The other two cards in Screen 1 are layout placeholders only ("Toyota Tank · 2018 · PLATE", "Suzuki Swift · 2019 · PLATE").
+  - **Roomy brakes on file (all Verified, all genuine Toyota):**
+    - Front brake pads — give the store **04465-B1190**. Other numbers stores may use: Daihatsu 04465-B1320, NiBK PN5562, SB BP25562, Brembo P 16 013, Akebono AN-754WK.
+    - Front brake disc — 43512-B1081
+    - Front brake caliper — Right 47730-B1021, Left 47750-B1021
+    - Front brake hose — Hose 1: 90049-22289, Hose 2: 90049-22290
+    - Front wheel-speed (ABS) sensor — Right 89542-B1040, Left 89543-B1050
+    - Rear brake shoes — 04495-B2430 (Verified); an older number 04495-B2400 shows as Check before buying
+    - Rear brake drum — 42431-B1021
+    - Rear wheel cylinder — Right 47550-B1030, Left 47570-B1020
+    - Rear brake hose — 90049-22193 (same part both sides)
+    - Handbrake cable — Front cable (cable 1) 46410-B1011, Rear cable 2 46420-B1090, Rear cable 3 46430-B1090
+    - Master cylinder — 47201-B1190
+    - Brake fluid — Toyota 2500H-A
+  - **Your car needs (fluids and sizes):** Engine oil 0W-20 (Toyota 08880-WA001), CVT fluid FE (Toyota 08886-02505), Brake fluid Toyota 2500H-A, Wiper blades 350 mm, 475 mm and 525 mm.
+  - **The front pads fit 34 cars in all (yours + 33 others), by maker:**
+    - Toyota (7, including yours): Roomy 2016–2020 (yours), Roomy 2020 on, Roomy 4WD 2016–2020, Roomy 4WD 2020 on, Tank 4WD 2016–2020, Glanza 2019–2022, Glanza 2022 on — all Verified
+    - Daihatsu (4): Thor 2016–2022 (2WD and 4WD) Verified; Materia 2007–2010 Check before buying; Sirion 2006 on Check before buying
+    - Subaru (2): Justy 2016–2022 (2WD and 4WD) Verified
+    - Suzuki (15): Swift 2010–2016, 2012–2017, 2017–2020, 2017–2023, 2023 on; Baleno 2015–2022, 2016–2019, 2022 on, 2026 on; Ertiga 2012–2018, 2018–2022 — Verified; Swift 2010–2013, 2013–2016, 2017–2023 (one version), Ertiga 2022 on — Check before buying
+    - Mazda (3): Demio 2007–2014 Verified; Demio 2007–2011 and 2011–2014 (other versions) Check before buying
+    - Perodua (2): Myvi 2011–2017 Verified; Myvi 2005–2011 Check before buying
+    - Ford (1): Fiesta 2010–2013 Check before buying
+
+
+DESIGN PRINCIPLES:
+- Desktop-first at 1440px inside the Fleet page, plus phone layouts at 390px. Content column max 1120px, centred, with 32px gutters.
+- One question per screen, asked in plain words, with one obvious next step.
+- Picture first, words second: maker logos for cars, line illustrations for parts.
+- One part = one card. All brand numbers for the same part live inside that card, folded away.
+- One number to give the store, always the most trusted one, shown big with a Copy button.
+- Show where the part sits on the car with a tiny top-down car drawing that highlights the wheel or area (front left, rear right, both rear wheels). This replaces every FRONT/REAR tag.
+- Every part type the car has is listed, even when we have nothing yet ("Not on file yet — ask us").
+- Trust is a badge, never a sentence of reasons. Internal reasons never appear in Fleet.
+- Back arrow and the car chip sit at the top of every screen; there are no buttons at the bottom of the page.
+- Calm motion: cards fade and lift slightly on hover, sections slide in, Copy shows a small "Copied" toast.
+- Fully readable in dark mode; tap targets at least 48px on phone.
+
+
+SCREEN 1: WHICH CAR IS IT FOR?
+- Large title "Which car is it for?" and a muted line "Pick one of your cars, or any other car."
+- "Your cars" — a row of large car cards (3 across): maker logo in a soft circle, model "Toyota Roomy" big, year "2019" under it, the plate "5179KZ" in a small rounded plate-style chip. Whole card is a button. Sample cards: Roomy 2019 · 5179KZ, plus two placeholder cards (Tank 2018, Swift 2019).
+- "Another car" — a wide card with a search box "Type a make or model — e.g. Toyota Roomy" and a row of 8 maker logos to tap (Toyota, Honda, Nissan, Suzuki, Mazda, Mitsubishi, Daihatsu, Subaru) plus a secondary button "All makers".
+- Right column (desktop): "Your requests" card — a short list of parts you asked Roam to find, each with a soft status pill ("We're looking", "Added").
+
+
+SCREEN 2: PICK ANOTHER CAR — MAKER → MODEL → YEAR
+- Three small frames showing the flow inside one card, step dots at the top ("Maker · Model · Year"):
+  - Frame A: a grid of maker logos (4 × 3), each logo in a soft tile with the name under it.
+  - Frame B (after tapping Toyota): model cards with the Toyota logo small at the top: Roomy, Tank, Glanza, Corolla, Probox, Hiace, Vitz, Axio — model name big, years muted ("2016 – today").
+  - Frame C (after tapping Roomy): year chips in a grid, 2016 to 2025, large and tappable.
+- A back arrow at the top left of the card returns one step.
+
+
+SCREEN 3: WHICH ROOMY IS YOURS? (ONLY WHEN IT MATTERS)
+- Shown only when two versions of the same car and year take different parts.
+- Title "Which Roomy 2019 is yours?" and a muted line "These two need some different parts."
+- Two large choice cards side by side, each with a simple car silhouette and one plain difference:
+  - "2WD" — "Front-wheel drive."
+  - "4WD" — "All-wheel drive."
+- A secondary button "I'm not sure" under them: shows parts for both, and marks anything that differs with a small "Depends on your version" note.
+
+
+SCREEN 4: WHAT DO YOU NEED? (CAR HOME)
+- Car header card across the top: Toyota logo in a soft circle, "Toyota Roomy" in 28px, "2019 · 2WD" muted, the plate chip "5179KZ", and a secondary button "Change car" on the right.
+- A big search box: "What part do you need? — e.g. brake pads, oil filter, wiper".
+- "Popular" — a row of 6 quick chips with small icons: Brake pads, Oil filter, Wiper blades, Engine oil, Brake fluid, Spark plugs.
+- "By area" — a grid of large picture tiles (3 across): Brakes, Engine & oil, Filters, Fluids, Suspension & steering, Lights & wipers, Battery & electrical, Cooling. Each tile: illustration, area name, and a muted line like "12 parts on file".
+- "Your Roomy needs" card on the right (desktop) or below (phone): a clean list of fluids and sizes, each with an icon and its value — Engine oil "0W-20", CVT fluid "Toyota CVT Fluid FE", Brake fluid "Toyota 2500H-A", Wiper blades "350, 475 and 525 mm". Each value has a small Copy icon button.
+
+
+SCREEN 5: BRAKES FOR YOUR ROOMY
+- Header: back arrow, the brakes illustration, title "Brakes", muted "Toyota Roomy 2019 · 5179KZ".
+- A tiny top-down car drawing on the right of the header with the four wheels outlined.
+- Three soft section cards: "Front wheels", "Rear wheels", "Whole car".
+- Each section lists part types as large rows: part illustration on the left, plain name, a one-line plain helper in muted text, and on the right either a green "Verified" pill or a grey "Not on file yet" pill, then a chevron. Whole row is a button.
+  - Front wheels: Brake pads ("Squeeze the disc to slow the front wheels"), Brake disc, Brake calipers (left & right), Brake hoses, Wheel-speed sensors (ABS).
+  - Rear wheels: Brake shoes ("Press out inside the drum to slow the rear wheels"), Brake drum, Wheel cylinders (left & right), Brake hose, Handbrake cables.
+  - Whole car: Brake fluid, Master cylinder.
+- Hovering a row highlights the matching wheels on the tiny car drawing.
+
+
+SCREEN 6: FRONT BRAKE PADS — THE ANSWER
+- Header: back arrow, "Front brake pads", muted "for your Toyota Roomy 2019 · 5179KZ".
+- One big part card:
+  - Left: brake pad illustration in a soft square, and under it the tiny car drawing with both front wheels highlighted ("Both front wheels").
+  - Title "Front brake pads" (20px) with the green "Verified" pill and a muted line "Genuine Toyota part · set of 4 pads".
+  - A highlighted inner box: "Give the store this number" (muted label), then "04465-B1190" big in mono, and a primary button "Copy number".
+  - A folded row: "Other numbers stores may use (5)" with a chevron. Open state (shown in a second frame): a clean two-column list — Daihatsu 04465-B1320, NiBK PN5562, SB BP25562, Brembo P 16 013, Akebono AN-754WK — each with a small Copy icon button. A muted note: "These are the same pads made by other brands."
+  - "Also fits" row: 6 maker logos overlapping in a line (Toyota, Daihatsu, Subaru, Suzuki, Mazda, Perodua) and "+ Ford", text "Also fits 33 other cars", and a secondary button "See every car".
+  - Bottom right of the card: secondary button "Use in a service log".
+- Second frame: the same screen in dark mode.
+
+
+SCREEN 7: PARTS WITH A LEFT AND RIGHT, OR NUMBERED PARTS
+- Frame A — "Front brake calipers": two side-by-side part cards, each with the tiny car drawing highlighting one wheel: "Right front" (47730-B1021) and "Left front" (47750-B1021), each Verified with its own Copy number button. A muted line on top: "Your Roomy has two — one for each front wheel."
+- Frame B — "Handbrake cables": a simple drawing of the cable path under the car (lever → front cable → two rear cables), with three cards: "Front cable (cable 1)" 46410-B1011, "Rear cable 2" 46420-B1090, "Rear cable 3" 46430-B1090. Muted line: "Your Roomy has three handbrake cables."
+- Frame C — "Rear brake shoes": two cards stacked. First the Verified one (04495-B2430, "Genuine Toyota part"). Under it a lighter card with the amber "Check before buying" pill (04495-B2400) and a muted line "An older number some stores still use."
+
+
+SCREEN 8: EVERY CAR THE FRONT PADS FIT
+- Opens from "See every car" as a large right-side panel (720px) with a close X (bordered icon button) and a back arrow.
+- Header: pad illustration, "Front brake pads", "04465-B1190" with Copy, and a muted line "Ask for any of these cars and you get the same pads."
+- A row of filter pills: "All 34", "Verified only 24".
+- Maker groups as large logo tiles in a grid (3 across): logo, maker name, count ("Suzuki · 15 cars"). Tapping a tile expands it in place to show its cars.
+- Expanded sample — Suzuki: rows with model and years in plain text ("Swift · 2017–2023", "Baleno · 2015–2022", "Ertiga · 2018–2022") and the badge on the right. Rows that differ only by version show the plain difference ("Swift · 2017–2023 · 1.2 petrol").
+- Your own car row is pinned at the top with a "Your car" pill.
+- Bottom section "Where this comes from": one row per source — "Toyota parts catalogue", "SB brake catalogue" — each with a secondary button "Open the maker's page ↗".
+- Second frame: the panel in dark mode.
+
+
+SCREEN 9: "CHECK BEFORE BUYING" — WHAT IT MEANS
+- A small in-app popover (not a browser pop-up) attached to an amber pill:
+  - Title "Check before buying"
+  - Body "We found this fit in a parts list, but the car maker hasn't confirmed it for this car yet. Show the store your car's details and ask them to match it before you pay."
+  - One primary button "Got it".
+- A second popover for the green pill: Title "Verified", body "The car maker's own parts catalogue lists this part for this car."
+
+
+SCREEN 10: A PART WE DON'T HAVE YET
+- Sample: "Rear shock absorbers · Toyota Roomy 2019".
+- One calm centred card: shock absorber illustration, title "We don't have this one yet", body "Your Roomy does have rear shock absorbers. We haven't added the right ones yet — we can find them for you."
+- Primary button "Ask Roam to find it". Under it, muted: "We'll tell you here when it's added."
+- After pressing: the card changes to a green check, "Request sent", and the request shows in "Your requests" with the pill "We're looking".
+
+
+SCREEN 11: SEARCH RESULTS
+- The search box from Screen 4 with "pads" typed.
+- Results as large rows with illustrations: "Front brake pads — Verified", "Rear brake shoes — Verified" (with muted hint "Your Roomy uses shoes at the back, not pads"). Each row is a button.
+- No-results frame: "Nothing called "turbo hose" for your Roomy yet." with the primary button "Ask Roam to find it".
+
+
+SCREEN 12: YOUR REQUESTS
+- A clean list (full width): part illustration, part name, car ("Toyota Roomy 2019 · 5179KZ"), date asked, and a status pill: "We're looking" (amber), "Added" (green, with a primary button "See the part"), "We couldn't find it" (grey, with a muted reason in one line).
+- Empty state: illustration, "No requests yet", muted "When you ask us to find a part, it shows here."
+
+
+SCREEN 13: STATES
+- Frame A — loading: Screen 6 layout with soft grey skeleton blocks (picture square, title bar, number box).
+- Frame B — couldn't load: a soft red banner "We couldn't load the parts. Nothing was changed." with a secondary button "Try again".
+- Frame C — car we don't know yet (sample "Toyota Rush 2018"): a calm card "We don't have the Toyota Rush 2018 in our list yet." with the primary button "Ask Roam to add this car".
+- Frame D — offline: a slim banner at the top "You're offline. Showing what you last opened."
+
+
+SCREEN 14: PHONE (390px)
+- Screens 4, 6 and 8 at 390px wide:
+  - Car header becomes a compact bar: logo, "Roomy 2019", plate chip, "Change" button.
+  - Area tiles become 2 across; "Your Roomy needs" moves under the tiles.
+  - The part card stacks: picture and car drawing on top, then title and badge, then the number box full width with a full-width "Copy number" button.
+  - The "every car" panel becomes a full-screen sheet; maker tiles become a 2-across grid; car rows wrap to two lines.
+- No sideways scrolling anywhere.
+
+
+ADDITIONAL UI COMPONENTS:
+- Car card (logo circle, model, year, plate chip)
+- Maker logo tile (logo, name, optional count)
+- Part type row (illustration, plain name, helper line, badge or "Not on file yet", chevron)
+- Part answer card with the "Give the store this number" box and Copy button
+- "Other numbers stores may use" fold
+- Tiny top-down car drawing with highlighted wheels or areas
+- Handbrake cable path drawing
+- Verified and Check before buying pills, each with its in-app popover
+- Request status pills: We're looking / Added / We couldn't find it
+- Toast: "Copied 04465-B1190"
+- Skeleton blocks, soft error banner, offline banner
+
+
+INTERACTIONS:
+- **Car card / maker logo / model / year:** each tap moves to the next question with a short slide.
+- **Version cards (2WD / 4WD / I'm not sure):** picks the version; "I'm not sure" keeps both and marks differences.
+- **Area tile / part row / search result:** opens the part answer (Screen 6/7) or "We don't have this one yet" (Screen 10).
+- **Copy number / Copy icon:** copies and shows the "Copied" toast for 2 seconds.
+- **"Other numbers stores may use":** opens and closes in place.
+- **See every car:** opens the right panel; maker tiles expand in place; filter pills narrow the list and update counts.
+- **Badges:** tap or hover opens the small in-app popover; "Got it" closes it.
+- **Ask Roam to find it / Ask Roam to add this car:** sends the request; the card turns into "Request sent".
+- **Open the maker's page ↗:** opens the outside website in a new tab.
+- **Back arrow:** always one step back; the car chip opens "Which car is it for?".
+- **Keyboard:** every tile, row and button reachable with Tab, Enter opens, Esc closes panels and popovers, visible focus rings.
+
+
+Spec screens / Area
+| Screen | Area |
+|---|---|
+| 1 | Which car is it for? — your cars as cards, another car by search or maker logo, your requests |
+| 2 | Pick another car — maker logos → model cards → year chips |
+| 3 | Which version is yours? — 2WD / 4WD / I'm not sure (only when parts differ) |
+| 4 | Car home — car header, search, popular chips, area picture tiles, "Your Roomy needs" |
+| 5 | Brakes for your car — Front wheels / Rear wheels / Whole car, tiny car drawing |
+| 6 | Front brake pads answer — one number to give the store, Copy, other numbers folded, also fits by logos (light + dark) |
+| 7 | Left/right parts, numbered cables, Verified + Check before buying on one type |
+| 8 | Every car it fits — maker logo tiles, expand, filter, sources (light + dark) |
+| 9 | Verified / Check before buying popovers |
+| 10 | We don't have this one yet → Ask Roam to find it → Request sent |
+| 11 | Search results and no results |
+| 12 | Your requests |
+| 13 | States — loading, couldn't load, unknown car, offline |
+| 14 | Phone 390px — car home, part answer, every car sheet |

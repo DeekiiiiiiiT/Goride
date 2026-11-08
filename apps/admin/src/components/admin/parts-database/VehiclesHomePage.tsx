@@ -1,10 +1,31 @@
 // Stitch: dominion-redesign/c160c221588b4987b7a9d6737e69c3c2
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
 import { useAuth } from "../../auth/AuthContext";
 import { fetchMaintenanceGovernanceFlag } from "../maintenance-master/maintenanceMasterApi";
 import { fetchPartsOverview } from "./partsDatabaseApi";
 import "./partsDatabase.css";
+
+const MM_GOVERNANCE_STORAGE_KEY = "dominion.mmGovernance";
+
+function readMmGovernanceFromStorage(): boolean | undefined {
+  try {
+    const raw = localStorage.getItem(MM_GOVERNANCE_STORAGE_KEY);
+    if (raw == null) return undefined;
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed === "boolean") return parsed;
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function writeMmGovernanceToStorage(value: boolean): void {
+  try {
+    localStorage.setItem(MM_GOVERNANCE_STORAGE_KEY, JSON.stringify(value));
+  } catch {
+    // ignore
+  }
+}
 
 const MODULES = [
   { id: "motor-vehicles", label: "Vehicle catalog", detail: "Makes, models, and the record you open with the eye button.", icon: "dataset" },
@@ -19,11 +40,25 @@ const MODULES = [
 export function VehiclesHomePage({ onNavigate }: { onNavigate: (page: string) => void }) {
   const { session } = useAuth();
   const token = session?.access_token ?? "";
-  const [mmGovernance, setMmGovernance] = useState(false);
-  useEffect(() => {
-    if (!token) return;
-    void fetchMaintenanceGovernanceFlag(token).then(setMmGovernance);
-  }, [token]);
+  const mmGovernanceInitial = readMmGovernanceFromStorage();
+  const governanceQuery = useQuery({
+    queryKey: ["mm-governance-flag"],
+    queryFn: async () => {
+      try {
+        const result = await fetchMaintenanceGovernanceFlag(token);
+        writeMmGovernanceToStorage(result);
+        return result;
+      } catch {
+        return readMmGovernanceFromStorage() ?? false;
+      }
+    },
+    enabled: Boolean(token),
+    staleTime: 10 * 60 * 1000,
+    initialData: mmGovernanceInitial,
+    // The remembered value shows at once, but still ask the server on every visit.
+    initialDataUpdatedAt: 0,
+  });
+  const mmGovernance = governanceQuery.data === true;
   const modules = MODULES.filter((m) => m.id !== "maintenance-templates" || mmGovernance);
   const query = useQuery({ queryKey: ["parts-overview"], queryFn: fetchPartsOverview, retry: false });
   const data = query.data;

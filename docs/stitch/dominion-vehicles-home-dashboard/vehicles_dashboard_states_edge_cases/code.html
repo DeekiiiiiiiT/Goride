@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_dashboard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = {"darkMode":"class","theme":{"extend":{"colors":{"secondary":"#565e74","secondary-fixed-dim":"#bec6e0","primary-fixed-dim":"#b4c5ff","on-surface":"#1b1b20","on-secondary":"#ffffff","outline-variant":"#c3c6d7","on-error-container":"#93000a","surface-bright":"#faf8fe","surface-dim":"#dbd9df","inverse-on-surface":"#f2f0f6","primary-fixed":"#dbe1ff","surface-container-low":"#f5f3f9","surface":"#faf8fe","tertiary-fixed-dim":"#bfc5e2","on-background":"#1b1b20","inverse-surface":"#2f3035","primary-container":"#0153dc","on-error":"#ffffff","on-primary-fixed-variant":"#003ea8","error-container":"#ffdad6","surface-container-high":"#e9e7ed","on-primary-container":"#ced8ff","surface-tint":"#0053db","background":"#faf8fe","on-tertiary-fixed-variant":"#3f465e","primary":"#003ea9","on-primary":"#ffffff","on-tertiary-container":"#d2d8f6","on-tertiary":"#ffffff","on-surface-variant":"#434655","on-secondary-fixed":"#131b2e","on-secondary-container":"#5c647a","outline":"#737686","on-secondary-fixed-variant":"#3f465c","inverse-primary":"#b4c5ff","tertiary-container":"#575e77","secondary-fixed":"#dae2fd","on-tertiary-fixed":"#141b30","surface-variant":"#e3e2e7","surface-container-lowest":"#ffffff","surface-container-highest":"#e3e2e7","error":"#ba1a1a","surface-container":"#efedf3","tertiary":"#40465e","tertiary-fixed":"#dbe1ff","on-primary-fixed":"#00174b","secondary-container":"#dae2fd"},"borderRadius":{"DEFAULT":"0.25rem","lg":"0.5rem","xl":"0.75rem","full":"9999px"},"spacing":{"gutter":"1.5rem","space-sm":"0.5rem","space-xl":"2rem","space-xs":"0.25rem","space-md":"1rem","space-lg":"1.5rem","margin":"2rem"},"fontFamily":{"headline-lg":["Inter"],"headline-md":["Inter"],"body-sm":["Inter"],"body-md":["Inter"],"code-md":["JetBrains Mono"],"code-sm":["JetBrains Mono"],"headline-xl":["Inter"],"caption":["Inter"],"body-lg":["Inter"],"hint-sm":["Inter"]},"fontSize":{"headline-lg":["20px",{"lineHeight":"28px","letterSpacing":"-0.015em","fontWeight":"600"}],"headline-md":["18px",{"lineHeight":"24px","letterSpacing":"-0.01em","fontWeight":"600"}],"body-sm":["14px",{"lineHeight":"20px","letterSpacing":"0em","fontWeight":"400"}],"body-md":["15px",{"lineHeight":"22px","letterSpacing":"0em","fontWeight":"400"}],"code-md":["14px",{"lineHeight":"20px","letterSpacing":"-0.02em","fontWeight":"500"}],"code-sm":["12px",{"lineHeight":"16px","letterSpacing":"-0.01em","fontWeight":"500"}],"headline-xl":["26px",{"lineHeight":"34px","letterSpacing":"-0.02em","fontWeight":"600"}],"caption":["12px",{"lineHeight":"16px","letterSpacing":"0.02em","fontWeight":"500"}],"body-lg":["16px",{"lineHeight":"24px","letterSpacing":"0em","fontWeight":"400"}],"hint-sm":["13px",{"lineHeight":"18px","letterSpacing":"0.01em","fontWeight":"400"}]}}}};</script></head><body class="bg-surface font-body-md text-on-surface antialiased min-h-screen"><aside class="fixed left-0 top-0 h-full w-[260px] bg-[#0c1321] text-inverse-on-surface z-50 flex flex-col justify-between select-none shadow-[2px_0_12px_rgba(0,0,0,0.18)]"><div class="flex flex-col"><div class="h-16 px-space-md flex items-center gap-space-sm bg-[#070e1c]/60"><div class="w-8 h-8 rounded-lg bg-primary-container flex items-center justify-center shadow-sm"><span class="material-symbols-outlined text-on-primary text-[20px]">hub</span></div><div class="flex flex-col min-w-0"><span class="font-headline-md text-[14px] leading-tight text-white tracking-tight truncate">Dominion</span><span class="font-caption text-[11px] text-[#8e95a5] uppercase tracking-wider truncate">Roam Admin Console</span></div></div><nav class="px-space-sm py-space-md space-y-space-md overflow-y-auto" data-active-classes="bg-primary-container text-white font-medium rounded-lg"><div class="space-y-space-xs"><div class="px-space-sm py-space-xs font-caption text-[11px] uppercase tracking-widest text-[#697285] font-semibold">Master Data</div><div class="space-y-0.5"><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg font-body-sm text-[#a5adc2] hover:bg-[#151f33] hover:text-white transition-colors" data-path="overview" href="#"><span class="material-symbols-outlined text-[18px]">dashboard</span><span>Overview</span></a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg font-body-sm text-[#a5adc2] hover:bg-[#151f33] hover:text-white transition-colors" data-path="vehicles-catalog" href="#"><span class="material-symbols-outlined text-[18px]">directions_car</span><span>Vehicles</span></a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg font-body-sm text-[#a5adc2] hover:bg-[#151f33] hover:text-white transition-colors" data-path="places-and-maps" href="#"><span class="material-symbols-outlined text-[18px]">map</span><span>Places and Maps</span></a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg font-body-sm text-[#a5adc2] hover:bg-[#151f33] hover:text-white transition-colors" data-path="fuel" href="#"><span class="material-symbols-outlined text-[18px]">local_gas_station</span><span>Fuel</span></a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg font-body-sm text-[#a5adc2] hover:bg-[#151f33] hover:text-white transition-colors" data-path="tolls" href="#"><span class="material-symbols-outlined text-[18px]">toll</span><span>Tolls</span></a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg font-body-sm text-[#a5adc2] hover:bg-[#151f33] hover:text-white transition-colors" data-path="tax-and-vendors" href="#"><span class="material-symbols-outlined text-[18px]">receipt_long</span><span>Tax and Vendors</span></a></div></div><div class="space-y-space-xs"><div class="px-space-sm py-space-xs font-caption text-[11px] uppercase tracking-widest text-[#697285] font-semibold">Core Modules</div><div class="space-y-0.5"><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg font-body-sm text-[#a5adc2] hover:bg-[#151f33] hover:text-white transition-colors" data-path="engines" href="#"><span class="material-symbols-outlined text-[18px]">settings_input_component</span><span>Engines</span></a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg font-body-sm text-[#a5adc2] hover:bg-[#151f33] hover:text-white transition-colors" data-path="distribution" href="#"><span class="material-symbols-outlined text-[18px]">alt_route</span><span>Distribution</span></a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg font-body-sm text-[#a5adc2] hover:bg-[#151f33] hover:text-white transition-colors" data-path="platform-settings" href="#"><span class="material-symbols-outlined text-[18px]">tune</span><span>Platform</span></a><a class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg font-body-sm text-[#a5adc2] hover:bg-[#151f33] hover:text-white transition-colors" data-path="back-office" href="#"><span class="material-symbols-outlined text-[18px]">admin_panel_settings</span><span>Back Office</span></a></div></div></nav></div><div class="p-space-sm bg-[#070e1c]/40 m-space-sm rounded-lg flex items-center justify-between"><div class="flex items-center gap-space-xs"><span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span><span class="font-caption text-[11px] text-[#8e95a5]">Master Sync Active</span></div><span class="font-code-sm text-[11px] text-[#697285]">v2.4</span></div></aside><div class="pl-[260px]"><header class="fixed top-0 left-[260px] right-0 h-16 bg-surface/90 backdrop-blur-md z-40 px-space-lg flex items-center justify-between shadow-[0_1px_8px_rgba(1,83,220,0.04)]"><div class="flex-1 max-w-xl"><div class="relative flex items-center w-full"><span class="material-symbols-outlined absolute left-3 text-secondary text-[20px] pointer-events-none">search</span><input class="w-full h-11 pl-10 pr-14 bg-surface-container-lowest text-on-surface placeholder:text-secondary rounded-lg font-body-sm shadow-[0_2px_8px_rgba(1,83,220,0.03)] focus:outline-none focus:ring-2 focus:ring-primary-container transition-all" placeholder="Search entities, engines, routes…" type="text"/><div class="absolute right-2.5 flex items-center"><kbd class="px-1.5 py-0.5 rounded bg-surface-container font-caption text-[11px] text-secondary font-medium tracking-tight shadow-sm">⌘K</kbd></div></div></div><div class="flex items-center gap-space-md ml-space-md"><button aria-label="Toggle dark mode" class="w-9 h-9 rounded-lg flex items-center justify-center bg-surface-container-lowest text-secondary hover:text-on-surface hover:bg-surface-container transition-all shadow-[0_2px_6px_rgba(1,83,220,0.04)]" type="button"><span class="material-symbols-outlined text-[20px]">dark_mode</span></button><div class="flex items-center gap-space-sm pl-space-sm py-1"><div class="flex flex-col text-right"><span class="font-body-sm font-semibold text-on-surface leading-tight">Deeki T</span><span class="font-caption text-secondary text-[11px]">Owner</span></div><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center shadow-sm"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="relative pt-16 bg-surface min-h-screen"><div class="flex flex-col w-full">
+<div class="max-w-[1120px] mx-auto w-full px-margin py-space-lg flex flex-col gap-space-lg">
+<!-- Screen Navigation Header & State Switcher -->
+<div class="flex flex-col gap-space-md">
+<div class="flex items-center justify-between flex-wrap gap-space-md bg-surface-container-lowest p-space-lg rounded-xl shadow-sm">
+<div class="flex flex-col gap-space-xs">
+<div class="flex items-center gap-space-sm">
+<span class="font-code-sm text-secondary bg-surface-container px-space-xs py-0.5 rounded uppercase tracking-wider">Diagnostics &amp; Sandbox</span>
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>
+<span class="font-hint-sm text-secondary">Vehicles Master DB v2.4</span>
+</div>
+<h1 class="font-headline-xl text-on-surface tracking-tight">Vehicles Dashboard States Matrix</h1>
+<p class="font-body-sm text-secondary max-w-2xl">
+            Live behavioral inspection of resilient UI fault tolerance, skeleton shimmering rhythms, gracefully degraded micro-surfaces, and cold-start zero state records.
+          </p>
+</div>
+<div class="flex items-center gap-space-xs bg-surface-container p-1 rounded-lg">
+<button class="state-tab-btn px-3 py-1.5 rounded-md font-body-sm text-on-surface bg-surface-container-lowest shadow-sm transition-all flex items-center gap-1.5" id="tab-btn-all" onclick="switchStateView('all')">
+<span class="material-symbols-outlined text-[16px] text-primary-container">dashboard_customize</span>
+<span>All 4 Frames</span>
+</button>
+<button class="state-tab-btn px-3 py-1.5 rounded-md font-body-sm text-secondary hover:text-on-surface transition-all flex items-center gap-1.5" id="tab-btn-frameA" onclick="switchStateView('frameA')">
+<span class="w-2 h-2 rounded-full bg-secondary-fixed-dim"></span>
+<span>A: Loading</span>
+</button>
+<button class="state-tab-btn px-3 py-1.5 rounded-md font-body-sm text-secondary hover:text-on-surface transition-all flex items-center gap-1.5" id="tab-btn-frameB" onclick="switchStateView('frameB')">
+<span class="w-2 h-2 rounded-full bg-error"></span>
+<span>B: Could Not Load</span>
+</button>
+<button class="state-tab-btn px-3 py-1.5 rounded-md font-body-sm text-secondary hover:text-on-surface transition-all flex items-center gap-1.5" id="tab-btn-frameC" onclick="switchStateView('frameC')">
+<span class="w-2 h-2 rounded-full bg-primary-container"></span>
+<span>C: Empty Sections</span>
+</button>
+<button class="state-tab-btn px-3 py-1.5 rounded-md font-body-sm text-secondary hover:text-on-surface transition-all flex items-center gap-1.5" id="tab-btn-frameD" onclick="switchStateView('frameD')">
+<span class="w-2 h-2 rounded-full bg-tertiary"></span>
+<span>D: One Tile Failed</span>
+</button>
+</div>
+</div>
+</div>
+<!-- FRAME A: LOADING (SKELETON SHIMMER) -->
+<section class="state-frame flex flex-col gap-space-md" id="frame-a-container">
+<div class="flex items-center justify-between bg-surface-container-high px-space-md py-space-sm rounded-lg">
+<div class="flex items-center gap-space-sm">
+<span class="font-code-md text-on-surface font-semibold bg-surface-container-lowest px-2 py-0.5 rounded shadow-sm">FRAME A</span>
+<span class="font-body-md font-semibold text-on-surface">Loading State (Full Pulsing Shimmer Grid)</span>
+<span class="font-caption text-secondary">Initial fetch &amp; hydration delay pattern</span>
+</div>
+<div class="flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-secondary animate-ping"></span>
+<span class="font-code-sm text-secondary">Shimmer Active</span>
+</div>
+</div>
+<!-- Simulated Dashboard Skeleton Body -->
+<div class="bg-surface-container-lowest p-space-xl rounded-xl shadow-sm flex flex-col gap-space-lg">
+<!-- Header Skeleton -->
+<div class="flex items-center justify-between pb-space-md">
+<div class="flex flex-col gap-2">
+<div class="h-7 w-48 bg-surface-container-highest rounded-md animate-pulse"></div>
+<div class="h-4 w-72 bg-surface-container rounded animate-pulse"></div>
+</div>
+<div class="flex items-center gap-space-sm">
+<div class="h-9 w-28 bg-surface-container rounded-lg animate-pulse"></div>
+<div class="h-9 w-36 bg-surface-container-highest rounded-lg animate-pulse"></div>
+</div>
+</div>
+<!-- Search Bar & Filter Chips Skeleton -->
+<div class="flex flex-col gap-space-sm">
+<div class="h-11 w-full bg-surface-container-low rounded-lg animate-pulse flex items-center px-4">
+<div class="w-4 h-4 bg-surface-container-highest rounded-full"></div>
+<div class="ml-3 h-3.5 w-64 bg-surface-container rounded"></div>
+</div>
+<div class="flex items-center gap-space-sm">
+<div class="h-7 w-20 bg-surface-container rounded-full animate-pulse"></div>
+<div class="h-7 w-24 bg-surface-container rounded-full animate-pulse"></div>
+<div class="h-7 w-16 bg-surface-container rounded-full animate-pulse"></div>
+<div class="h-7 w-28 bg-surface-container rounded-full animate-pulse"></div>
+<div class="h-7 w-20 bg-surface-container rounded-full animate-pulse"></div>
+</div>
+</div>
+<!-- 4 Summary Tiles Skeleton -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-space-md">
+<div class="p-space-md bg-surface-container-low rounded-xl flex flex-col gap-3">
+<div class="h-3.5 w-24 bg-surface-container rounded animate-pulse"></div>
+<div class="h-8 w-20 bg-surface-container-highest rounded-md animate-pulse"></div>
+<div class="h-3 w-32 bg-surface-container rounded animate-pulse"></div>
+</div>
+<div class="p-space-md bg-surface-container-low rounded-xl flex flex-col gap-3">
+<div class="h-3.5 w-28 bg-surface-container rounded animate-pulse"></div>
+<div class="h-8 w-16 bg-surface-container-highest rounded-md animate-pulse"></div>
+<div class="h-2 w-full bg-surface-container rounded-full animate-pulse"></div>
+</div>
+<div class="p-space-md bg-surface-container-low rounded-xl flex flex-col gap-3">
+<div class="h-3.5 w-20 bg-surface-container rounded animate-pulse"></div>
+<div class="h-8 w-14 bg-surface-container-highest rounded-md animate-pulse"></div>
+<div class="h-3 w-36 bg-surface-container rounded animate-pulse"></div>
+</div>
+<div class="p-space-md bg-surface-container-low rounded-xl flex flex-col gap-3">
+<div class="h-3.5 w-32 bg-surface-container rounded animate-pulse"></div>
+<div class="h-8 w-12 bg-surface-container-highest rounded-md animate-pulse"></div>
+<div class="h-3 w-40 bg-surface-container rounded animate-pulse"></div>
+</div>
+</div>
+<!-- Main Body Grid Skeletons -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-space-lg">
+<!-- Left Column (8 cols) -->
+<div class="lg:col-span-8 flex flex-col gap-space-lg">
+<!-- Catalogue Completeness Card Skeleton -->
+<div class="p-space-lg bg-surface-container-low rounded-xl flex flex-col gap-space-md">
+<div class="flex items-center justify-between">
+<div class="h-5 w-52 bg-surface-container-highest rounded animate-pulse"></div>
+<div class="h-4 w-16 bg-surface-container rounded animate-pulse"></div>
+</div>
+<div class="h-4 w-full bg-surface-container-highest rounded-full animate-pulse"></div>
+<div class="flex items-center gap-space-sm pt-2">
+<div class="h-6 w-24 bg-surface-container rounded-md animate-pulse"></div>
+<div class="h-6 w-28 bg-surface-container rounded-md animate-pulse"></div>
+<div class="h-6 w-20 bg-surface-container rounded-md animate-pulse"></div>
+</div>
+<div class="h-px bg-surface-container my-1"></div>
+<div class="flex flex-col gap-space-sm">
+<div class="h-4 w-36 bg-surface-container rounded animate-pulse"></div>
+<div class="h-10 w-full bg-surface-container rounded-lg animate-pulse"></div>
+<div class="h-10 w-full bg-surface-container rounded-lg animate-pulse"></div>
+<div class="h-10 w-full bg-surface-container rounded-lg animate-pulse"></div>
+</div>
+</div>
+<!-- Makers Card Skeleton (6 circular logo tiles) -->
+<div class="p-space-lg bg-surface-container-low rounded-xl flex flex-col gap-space-md">
+<div class="flex items-center justify-between">
+<div class="h-5 w-24 bg-surface-container-highest rounded animate-pulse"></div>
+<div class="h-4 w-20 bg-surface-container rounded animate-pulse"></div>
+</div>
+<div class="grid grid-cols-3 sm:grid-cols-6 gap-space-sm">
+<div class="flex flex-col items-center gap-2 p-2">
+<div class="w-12 h-12 rounded-full bg-surface-container-highest animate-pulse"></div>
+<div class="h-3 w-12 bg-surface-container rounded animate-pulse"></div>
+</div>
+<div class="flex flex-col items-center gap-2 p-2">
+<div class="w-12 h-12 rounded-full bg-surface-container-highest animate-pulse"></div>
+<div class="h-3 w-10 bg-surface-container rounded animate-pulse"></div>
+</div>
+<div class="flex flex-col items-center gap-2 p-2">
+<div class="w-12 h-12 rounded-full bg-surface-container-highest animate-pulse"></div>
+<div class="h-3 w-14 bg-surface-container rounded animate-pulse"></div>
+</div>
+<div class="flex flex-col items-center gap-2 p-2">
+<div class="w-12 h-12 rounded-full bg-surface-container-highest animate-pulse"></div>
+<div class="h-3 w-11 bg-surface-container rounded animate-pulse"></div>
+</div>
+<div class="flex flex-col items-center gap-2 p-2">
+<div class="w-12 h-12 rounded-full bg-surface-container-highest animate-pulse"></div>
+<div class="h-3 w-12 bg-surface-container rounded animate-pulse"></div>
+</div>
+<div class="flex flex-col items-center gap-2 p-2">
+<div class="w-12 h-12 rounded-full bg-surface-container-highest animate-pulse"></div>
+<div class="h-3 w-9 bg-surface-container rounded animate-pulse"></div>
+</div>
+</div>
+</div>
+<!-- Recently Opened (2 Car Cards Skeleton) -->
+<div class="p-space-lg bg-surface-container-low rounded-xl flex flex-col gap-space-md">
+<div class="h-5 w-40 bg-surface-container-highest rounded animate-pulse"></div>
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-space-md">
+<div class="p-space-md bg-surface-container rounded-lg flex flex-col gap-3">
+<div class="h-24 w-full bg-surface-container-highest rounded animate-pulse"></div>
+<div class="h-4 w-32 bg-surface-container-highest rounded animate-pulse"></div>
+<div class="h-3 w-20 bg-surface-container rounded animate-pulse"></div>
+</div>
+<div class="p-space-md bg-surface-container rounded-lg flex flex-col gap-3">
+<div class="h-24 w-full bg-surface-container-highest rounded animate-pulse"></div>
+<div class="h-4 w-28 bg-surface-container-highest rounded animate-pulse"></div>
+<div class="h-3 w-24 bg-surface-container rounded animate-pulse"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Right Column (4 cols) -->
+<div class="lg:col-span-4 flex flex-col gap-space-lg">
+<!-- Needs Attention Skeleton (4 rows) -->
+<div class="p-space-md bg-surface-container-low rounded-xl flex flex-col gap-space-sm">
+<div class="h-5 w-32 bg-surface-container-highest rounded animate-pulse mb-2"></div>
+<div class="h-12 w-full bg-surface-container rounded-lg animate-pulse"></div>
+<div class="h-12 w-full bg-surface-container rounded-lg animate-pulse"></div>
+<div class="h-12 w-full bg-surface-container rounded-lg animate-pulse"></div>
+<div class="h-12 w-full bg-surface-container rounded-lg animate-pulse"></div>
+</div>
+<!-- Recently Added Parts Skeleton -->
+<div class="p-space-md bg-surface-container-low rounded-xl flex flex-col gap-space-sm">
+<div class="h-5 w-36 bg-surface-container-highest rounded animate-pulse mb-2"></div>
+<div class="h-9 w-full bg-surface-container rounded animate-pulse"></div>
+<div class="h-9 w-full bg-surface-container rounded animate-pulse"></div>
+<div class="h-9 w-full bg-surface-container rounded animate-pulse"></div>
+</div>
+<!-- Recently Changed Cars Skeleton -->
+<div class="p-space-md bg-surface-container-low rounded-xl flex flex-col gap-space-sm">
+<div class="h-5 w-40 bg-surface-container-highest rounded animate-pulse mb-2"></div>
+<div class="h-10 w-full bg-surface-container rounded animate-pulse"></div>
+<div class="h-10 w-full bg-surface-container rounded animate-pulse"></div>
+<div class="h-10 w-full bg-surface-container rounded animate-pulse"></div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- FRAME B: COULD NOT LOAD (GLOBAL ERROR BANNER + FUNCTIONAL FALLBACK) -->
+<section class="state-frame flex flex-col gap-space-md" id="frame-b-container">
+<div class="flex items-center justify-between bg-error-container px-space-md py-space-sm rounded-lg">
+<div class="flex items-center gap-space-sm">
+<span class="font-code-md text-on-error-container font-semibold bg-surface-container-lowest px-2 py-0.5 rounded shadow-sm">FRAME B</span>
+<span class="font-body-md font-semibold text-on-error-container">Could Not Load State (System Graceful Fault)</span>
+<span class="font-caption text-on-error-container">API network interruption / gateway timeout</span>
+</div>
+<span class="font-code-sm text-on-error-container font-medium">HTTP 503 / Master Sync Stalled</span>
+</div>
+<div class="bg-surface-container-lowest p-space-xl rounded-xl shadow-sm flex flex-col gap-space-lg">
+<!-- Prominent Error Banner -->
+<div class="bg-error-container text-on-error-container p-space-md rounded-xl flex items-start justify-between gap-space-md shadow-sm">
+<div class="flex items-start gap-space-sm">
+<span class="material-symbols-outlined text-error text-[28px] shrink-0 mt-0.5" style="font-variation-settings: 'FILL' 1;">error</span>
+<div class="flex flex-col gap-1">
+<span class="font-headline-md text-on-error-container">Could not load the vehicles dashboard. Nothing was changed.</span>
+<p class="font-body-sm text-on-surface-variant max-w-3xl">
+                The catalog aggregation endpoint timed out while calculating completeness aggregates across 56 manufacturers. Your local offline cache is intact and pending batch modifications have not been discarded.
+              </p>
+</div>
+</div>
+<button class="shrink-0 bg-surface-container-lowest text-on-surface px-4 py-2 rounded-lg font-body-sm font-medium hover:bg-surface-container transition-colors shadow-sm flex items-center gap-1.5" onclick="this.innerHTML='Retrying...'; setTimeout(()=&gt;{ this.innerHTML='&lt;span class=\'material-symbols-outlined text-[16px]\'&gt;refresh&lt;/span&gt;Try again'; }, 1000)">
+<span class="material-symbols-outlined text-[16px]">refresh</span>
+<span>Try again</span>
+</button>
+</div>
+<!-- Fully Functional Search Box & Filter Chips -->
+<div class="flex flex-col gap-space-sm">
+<div class="relative flex items-center w-full">
+<span class="material-symbols-outlined absolute left-3.5 text-secondary text-[20px]">search</span>
+<input class="w-full h-11 pl-11 pr-24 bg-surface-container-low text-on-surface rounded-lg font-body-sm focus:outline-none focus:bg-surface-container-lowest transition-all" placeholder="Search a car — e.g. Toyota Roomy 2019, M900A, 1KR-FE" type="text" value="Toyota Roomy 2019, M900A"/>
+<div class="absolute right-3 flex items-center gap-1">
+<span class="font-caption text-secondary bg-surface-container px-2 py-0.5 rounded">Cached Filter</span>
+</div>
+</div>
+<div class="flex items-center gap-space-xs flex-wrap">
+<button class="px-3 py-1 rounded-full bg-primary-container text-on-primary font-caption flex items-center gap-1">
+<span>All Makers</span>
+<span class="material-symbols-outlined text-[14px]">close</span>
+</button>
+<button class="px-3 py-1 rounded-full bg-surface-container text-secondary hover:text-on-surface font-caption">Passenger Cars</button>
+<button class="px-3 py-1 rounded-full bg-surface-container text-secondary hover:text-on-surface font-caption">Commercial Fleet</button>
+<button class="px-3 py-1 rounded-full bg-surface-container text-secondary hover:text-on-surface font-caption">Hybrids / BEV</button>
+<button class="px-3 py-1 rounded-full bg-surface-container text-secondary hover:text-on-surface font-caption">Unverified Trims</button>
+</div>
+</div>
+<!-- Fallback Degraded Guidance Canvas -->
+<div class="p-space-xl bg-surface-container-low rounded-xl flex flex-col items-center justify-center text-center gap-space-md py-16">
+<div class="w-14 h-14 rounded-full bg-surface-container-high flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined text-[30px]">cloud_off</span>
+</div>
+<div class="flex flex-col gap-1 max-w-md">
+<span class="font-headline-md text-on-surface">Offline Fallback View</span>
+<p class="font-body-sm text-secondary">
+              Summary counters and streaming telemetry cannot be rendered right now. You can still direct-navigate to specific vehicle VINs or local cached registries using the search bar above.
+            </p>
+</div>
+<div class="flex items-center gap-space-sm pt-2">
+<a class="px-4 py-2 bg-primary-container text-on-primary rounded-lg font-body-sm font-medium hover:opacity-90 transition-opacity" href="#">
+              Open Cached Car Catalog
+            </a>
+<a class="px-4 py-2 bg-surface-container text-on-surface rounded-lg font-body-sm font-medium hover:bg-surface-container-high transition-colors" href="#">
+              Inspect Network Diagnostics
+            </a>
+</div>
+</div>
+</div>
+</section>
+<!-- FRAME C: EMPTY SECTIONS (ZERO ITEM / COLD-START STATE) -->
+<section class="state-frame flex flex-col gap-space-md" id="frame-c-container">
+<div class="flex items-center justify-between bg-primary-fixed px-space-md py-space-sm rounded-lg">
+<div class="flex items-center gap-space-sm">
+<span class="font-code-md text-on-primary-fixed font-semibold bg-surface-container-lowest px-2 py-0.5 rounded shadow-sm">FRAME C</span>
+<span class="font-body-md font-semibold text-on-primary-fixed">Empty Sections State (Zero Record Defaults)</span>
+<span class="font-caption text-on-primary-fixed-variant">Clean state testing &amp; actionable empty cards</span>
+</div>
+<span class="font-code-sm text-on-primary-fixed font-medium">Database: 0 Entities Initialized</span>
+</div>
+<div class="bg-surface-container-lowest p-space-xl rounded-xl shadow-sm flex flex-col gap-space-lg">
+<!-- Header -->
+<div class="flex items-center justify-between">
+<div class="flex flex-col gap-0.5">
+<h2 class="font-headline-lg text-on-surface">Vehicles Master Registry</h2>
+<p class="font-body-sm text-secondary">Initial workspace setup — no historical revisions logged</p>
+</div>
+<div class="flex items-center gap-space-sm">
+<button class="px-4 py-2 bg-primary-container text-on-primary font-body-sm font-medium rounded-lg shadow-sm hover:opacity-95 transition-opacity flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[18px]">add</span>
+<span>Register First Vehicle</span>
+</button>
+</div>
+</div>
+<!-- 4 Empty Baseline Counters -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-space-md">
+<div class="p-space-md bg-surface-container-low rounded-xl flex flex-col justify-between h-28">
+<span class="font-caption text-secondary uppercase tracking-wider">Car Versions</span>
+<div class="flex items-baseline gap-space-xs">
+<span class="font-headline-xl text-on-surface font-semibold">0</span>
+<span class="font-hint-sm text-secondary">across 0 makers</span>
+</div>
+<span class="font-hint-sm text-secondary">Ready for data import</span>
+</div>
+<div class="p-space-md bg-surface-container-low rounded-xl flex flex-col justify-between h-28">
+<span class="font-caption text-secondary uppercase tracking-wider">Cars with Parts</span>
+<div class="flex items-baseline gap-space-xs">
+<span class="font-headline-xl text-on-surface font-semibold">0%</span>
+<span class="font-hint-sm text-secondary">catalog coverage</span>
+</div>
+<div class="w-full bg-surface-container h-1.5 rounded-full overflow-hidden">
+<div class="bg-primary-container h-full w-0"></div>
+</div>
+</div>
+<div class="p-space-md bg-surface-container-low rounded-xl flex flex-col justify-between h-28">
+<span class="font-caption text-secondary uppercase tracking-wider">Parts on File</span>
+<div class="flex items-baseline gap-space-xs">
+<span class="font-headline-xl text-on-surface font-semibold">0</span>
+<span class="font-hint-sm text-secondary">in parts database</span>
+</div>
+<span class="font-hint-sm text-secondary">No components mapped</span>
+</div>
+<div class="p-space-md bg-surface-container-low rounded-xl flex flex-col justify-between h-28">
+<span class="font-caption text-secondary uppercase tracking-wider">Waiting to Check</span>
+<div class="flex items-baseline gap-space-xs">
+<span class="font-headline-xl text-on-surface font-semibold">0</span>
+<span class="font-hint-sm text-secondary">queue items</span>
+</div>
+<div class="flex items-center gap-1 text-emerald-600">
+<span class="material-symbols-outlined text-[14px]">check_circle</span>
+<span class="font-caption">Queue clear</span>
+</div>
+</div>
+</div>
+<!-- Main Body Grid with Specified Empty Patterns -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-space-lg">
+<!-- Left Column (8 cols) -->
+<div class="lg:col-span-8 flex flex-col gap-space-lg">
+<!-- Catalogue Completeness Card with Empty "Most complete cars" -->
+<div class="p-space-lg bg-surface-container-low rounded-xl flex flex-col gap-space-md">
+<div class="flex items-center justify-between">
+<div>
+<h3 class="font-headline-md text-on-surface">How complete is the catalogue?</h3>
+<span class="font-hint-sm text-secondary">Breakdown of engine, transmission, brakes and fluids</span>
+</div>
+<span class="font-code-sm text-secondary">0 / 0 Specifications</span>
+</div>
+<!-- Empty progress strip -->
+<div class="w-full h-3 bg-surface-container-high rounded-full overflow-hidden flex">
+<div class="h-full bg-secondary w-full opacity-20"></div>
+</div>
+<!-- Specified requirement: Most complete cars section empty container -->
+<div class="flex flex-col gap-space-sm pt-space-sm">
+<span class="font-caption uppercase tracking-wider text-secondary font-semibold">Most complete cars</span>
+<div class="p-space-lg bg-surface-container-lowest rounded-lg flex flex-col items-center justify-center text-center gap-space-sm py-10 shadow-sm">
+<div class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined text-[20px]">layers_clear</span>
+</div>
+<span class="font-body-md font-medium text-on-surface">No car has key parts on file yet.</span>
+<p class="font-hint-sm text-secondary max-w-sm">Attach OEM engine oil filters, spark plugs, or rotor dimensions to populate catalog depth.</p>
+<button class="mt-2 px-4 py-2 bg-primary-container text-on-primary rounded-lg font-body-sm font-medium hover:opacity-90 transition-opacity flex items-center gap-1">
+<span class="material-symbols-outlined text-[18px]">add</span>
+<span>Add a part</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Recently Opened Card (Empty State Pattern) -->
+<div class="p-space-lg bg-surface-container-low rounded-xl flex flex-col gap-space-md">
+<div class="flex items-center justify-between">
+<h3 class="font-headline-md text-on-surface">Recently opened</h3>
+<span class="font-caption text-secondary">Personal history</span>
+</div>
+<!-- Specified requirement: Cars you open will show here -->
+<div class="p-space-lg bg-surface-container-lowest rounded-lg flex flex-col items-center justify-center text-center gap-space-xs py-8 shadow-sm">
+<span class="material-symbols-outlined text-secondary text-[26px]">manage_search</span>
+<span class="font-body-md text-secondary font-normal mt-1">Cars you open will show here.</span>
+<span class="font-caption text-outline">Search or click a car from the master registry to pin it to quick access.</span>
+</div>
+</div>
+</div>
+<!-- Right Column (4 cols) -->
+<div class="lg:col-span-4 flex flex-col gap-space-lg">
+<!-- Needs Attention Card (Specified requirement: Green tick icon + text) -->
+<div class="p-space-md bg-surface-container-low rounded-xl flex flex-col gap-space-sm">
+<div class="flex items-center justify-between mb-1">
+<h3 class="font-headline-md text-on-surface">Needs attention</h3>
+<span class="font-caption bg-surface-container px-2 py-0.5 rounded text-secondary">0 flags</span>
+</div>
+<div class="p-space-md bg-surface-container-lowest rounded-lg flex items-center gap-space-sm shadow-sm py-5">
+<div class="w-8 h-8 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+<div class="flex flex-col">
+<span class="font-body-md font-medium text-on-surface">Nothing needs attention right now.</span>
+<span class="font-caption text-secondary">Duplicate VINs, unresolved trim codes, and data conflicts will appear here.</span>
+</div>
+</div>
+</div>
+<!-- Recently Added Parts Card (Specified requirement: No parts saved yet + button) -->
+<div class="p-space-md bg-surface-container-low rounded-xl flex flex-col gap-space-sm">
+<div class="flex items-center justify-between mb-1">
+<h3 class="font-headline-md text-on-surface">Recently added parts</h3>
+</div>
+<div class="p-space-md bg-surface-container-lowest rounded-lg flex flex-col items-center justify-center text-center gap-space-xs py-6 shadow-sm">
+<span class="material-symbols-outlined text-secondary text-[24px]">construction</span>
+<span class="font-body-md text-on-surface font-medium mt-1">No parts saved yet.</span>
+<p class="font-hint-sm text-secondary mb-2">Create standard mechanical part numbers or import catalog tables.</p>
+<button class="px-4 py-2 bg-primary-container text-on-primary rounded-lg font-body-sm font-medium hover:opacity-90 transition-opacity flex items-center gap-1">
+<span class="material-symbols-outlined text-[18px]">add</span>
+<span>Add a part</span>
+</button>
+</div>
+</div>
+<!-- Recently Changed Cars Card (Specified requirement: No edits yet + clock icon) -->
+<div class="p-space-md bg-surface-container-low rounded-xl flex flex-col gap-space-sm">
+<div class="flex items-center justify-between mb-1">
+<h3 class="font-headline-md text-on-surface">Recently changed cars</h3>
+</div>
+<div class="p-space-md bg-surface-container-lowest rounded-lg flex flex-col items-center justify-center text-center gap-space-xs py-6 shadow-sm">
+<div class="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined text-[20px]">history</span>
+</div>
+<span class="font-body-md text-secondary font-normal mt-1">No edits yet.</span>
+<span class="font-caption text-outline">Field modifications and audit trails will appear here automatically.</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- FRAME D: ONE TILE FAILED (ISOLATED COMPONENT FAILURE) -->
+<section class="state-frame flex flex-col gap-space-md" id="frame-d-container">
+<div class="flex items-center justify-between bg-surface-container-high px-space-md py-space-sm rounded-lg">
+<div class="flex items-center gap-space-sm">
+<span class="font-code-md text-on-surface font-semibold bg-surface-container-lowest px-2 py-0.5 rounded shadow-sm">FRAME D</span>
+<span class="font-body-md font-semibold text-on-surface">One Tile Failed State (Isolated Resilient Degradation)</span>
+<span class="font-caption text-secondary">Single microservice failure while surrounding UI remains intact</span>
+</div>
+<span class="font-code-sm text-secondary">Partial Degradation Mode</span>
+</div>
+<div class="bg-surface-container-lowest p-space-xl rounded-xl shadow-sm flex flex-col gap-space-lg">
+<!-- Header -->
+<div class="flex items-center justify-between pb-space-xs">
+<div class="flex flex-col">
+<h2 class="font-headline-lg text-on-surface">Vehicles Live Telemetry &amp; Registry</h2>
+<p class="font-body-sm text-secondary">56 Vehicle makers active • Dominion sync heartbeat 4s ago</p>
+</div>
+<div class="flex items-center gap-space-sm">
+<button class="px-3.5 py-1.5 bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm font-medium rounded-lg transition-colors flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[16px]">file_download</span>
+<span>Export CSV</span>
+</button>
+<button class="px-4 py-2 bg-primary-container text-on-primary font-body-sm font-medium rounded-lg shadow-sm hover:opacity-95 transition-opacity flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[18px]">add</span>
+<span>New Vehicle Trim</span>
+</button>
+</div>
+</div>
+<!-- 4 SUMMARY TILES ROW (HIGHLIGHTED SPECIFICATION) -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-space-md">
+<!-- Tile 1: Normal -->
+<div class="p-space-md bg-surface-container-low rounded-xl flex flex-col justify-between h-32 hover:bg-surface-container transition-colors">
+<div class="flex items-center justify-between">
+<span class="font-caption text-secondary uppercase tracking-wider font-semibold">Car versions</span>
+<span class="material-symbols-outlined text-secondary text-[18px]">directions_car</span>
+</div>
+<div class="flex flex-col">
+<div class="flex items-baseline gap-space-xs">
+<span class="font-headline-xl text-on-surface font-semibold">1,833</span>
+</div>
+<span class="font-hint-sm text-secondary">across 56 makers</span>
+</div>
+<div class="flex items-center gap-1 text-emerald-700">
+<span class="material-symbols-outlined text-[14px]">trending_up</span>
+<span class="font-caption">+12 added this week</span>
+</div>
+</div>
+<!-- Tile 2: ONE TILE FAILED (Target Specification) -->
+<div class="p-space-md bg-surface-container-low rounded-xl flex flex-col justify-between h-32 relative overflow-hidden bg-gradient-to-br from-surface-container-low to-error-container/20">
+<div class="flex items-center justify-between">
+<span class="font-caption text-secondary uppercase tracking-wider font-semibold">Cars with parts</span>
+<span class="material-symbols-outlined text-error text-[18px]">warning</span>
+</div>
+<div class="flex items-center justify-between gap-space-sm my-0.5">
+<div class="flex flex-col">
+<span class="font-headline-md text-[#5d5f68] font-medium tracking-tight">Not loaded</span>
+<span class="font-caption text-secondary">Timeout on part indexer</span>
+</div>
+<!-- 32px high, visible outline button as requested -->
+<button class="h-8 px-3 rounded-md bg-surface-container-lowest text-on-surface font-caption font-medium hover:bg-surface-container transition-all flex items-center gap-1 shadow-sm" onclick="this.innerHTML='Loading...'; setTimeout(()=&gt;{ this.innerHTML='&lt;span class=\'material-symbols-outlined text-[14px]\'&gt;refresh&lt;/span&gt;Retry'; }, 900)">
+<span class="material-symbols-outlined text-[14px]">refresh</span>
+<span>Retry</span>
+</button>
+</div>
+<!-- Progress bar showing dashed error track -->
+<div class="w-full flex items-center gap-1">
+<div class="w-full h-1.5 rounded-full bg-surface-container-high overflow-hidden flex items-center">
+<div class="h-full w-full bg-[repeating-linear-gradient(45deg,#c3c6d7,#c3c6d7_4px,#efedf3_4px,#efedf3_8px)]"></div>
+</div>
+</div>
+</div>
+<!-- Tile 3: Normal -->
+<div class="p-space-md bg-surface-container-low rounded-xl flex flex-col justify-between h-32 hover:bg-surface-container transition-colors">
+<div class="flex items-center justify-between">
+<span class="font-caption text-secondary uppercase tracking-wider font-semibold">Parts on file</span>
+<span class="material-symbols-outlined text-secondary text-[18px]">extension</span>
+</div>
+<div class="flex flex-col">
+<div class="flex items-baseline gap-space-xs">
+<span class="font-headline-xl text-on-surface font-semibold">28</span>
+</div>
+<span class="font-hint-sm text-secondary">in the parts database</span>
+</div>
+<span class="font-caption text-secondary">100% verified dimensions</span>
+</div>
+<!-- Tile 4: Normal -->
+<div class="p-space-md bg-surface-container-low rounded-xl flex flex-col justify-between h-32 hover:bg-surface-container transition-colors">
+<div class="flex items-center justify-between">
+<span class="font-caption text-secondary uppercase tracking-wider font-semibold">Waiting to check</span>
+<span class="material-symbols-outlined text-secondary text-[18px]">assignment_ind</span>
+</div>
+<div class="flex flex-col">
+<div class="flex items-baseline gap-space-xs">
+<span class="font-headline-xl text-on-surface font-semibold">6</span>
+</div>
+<span class="font-hint-sm text-secondary">cars and parts for a person</span>
+</div>
+<span class="font-caption text-primary-container font-medium hover:underline cursor-pointer">Open audit queue →</span>
+</div>
+</div>
+<!-- Surrounding cards fully intact and normal -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-space-lg">
+<!-- Left Column (8 cols): Fully Intact Normal Content -->
+<div class="lg:col-span-8 flex flex-col gap-space-lg">
+<!-- Catalogue Completeness Normal -->
+<div class="p-space-lg bg-surface-container-low rounded-xl flex flex-col gap-space-md">
+<div class="flex items-center justify-between">
+<div>
+<h3 class="font-headline-md text-on-surface">How complete is the catalogue?</h3>
+<span class="font-hint-sm text-secondary">1,420 of 1,833 variants have baseline mechanical coverage</span>
+</div>
+<span class="font-code-md text-primary font-semibold">77.4%</span>
+</div>
+<!-- Multi-segment completion bar -->
+<div class="w-full h-3 bg-surface-container-high rounded-full overflow-hidden flex shadow-inner">
+<div class="h-full bg-primary-container" style="width: 58%;" title="Engine &amp; Transmission"></div>
+<div class="h-full bg-secondary" style="width: 14%;" title="Brake System"></div>
+<div class="h-full bg-tertiary-container" style="width: 5.4%;" title="Suspension"></div>
+</div>
+<div class="flex items-center gap-space-md text-caption text-secondary flex-wrap">
+<div class="flex items-center gap-1.5">
+<span class="w-2.5 h-2.5 rounded-sm bg-primary-container"></span>
+<span>Powertrain (58%)</span>
+</div>
+<div class="flex items-center gap-1.5">
+<span class="w-2.5 h-2.5 rounded-sm bg-secondary"></span>
+<span>Braking / Chassis (14%)</span>
+</div>
+<div class="flex items-center gap-1.5">
+<span class="w-2.5 h-2.5 rounded-sm bg-tertiary-container"></span>
+<span>Fluids &amp; Servicing (5.4%)</span>
+</div>
+<div class="flex items-center gap-1.5">
+<span class="w-2.5 h-2.5 rounded-sm bg-surface-container-high"></span>
+<span>Missing (22.6%)</span>
+</div>
+</div>
+<!-- Most complete cars table intact -->
+<div class="flex flex-col gap-space-xs pt-space-xs">
+<span class="font-caption uppercase tracking-wider text-secondary font-semibold">Most complete cars</span>
+<div class="bg-surface-container-lowest rounded-lg divide-y divide-surface-container shadow-sm overflow-hidden">
+<div class="p-space-sm flex items-center justify-between hover:bg-surface-container-low transition-colors">
+<div class="flex items-center gap-space-sm">
+<div class="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center font-code-sm font-semibold text-secondary">TY</div>
+<div class="flex flex-col">
+<span class="font-body-sm font-semibold text-on-surface">Toyota Prius (ZVW51) 2018–2022</span>
+<span class="font-caption text-secondary">2ZR-FXE • 1.8L Hybrid • e-CVT</span>
+</div>
+</div>
+<div class="flex items-center gap-space-md">
+<span class="font-code-sm text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded font-semibold">98% parts</span>
+<button class="p-1 text-secondary hover:text-on-surface rounded">
+<span class="material-symbols-outlined text-[18px]">chevron_right</span>
+</button>
+</div>
+</div>
+<div class="p-space-sm flex items-center justify-between hover:bg-surface-container-low transition-colors">
+<div class="flex items-center gap-space-sm">
+<div class="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center font-code-sm font-semibold text-secondary">MZ</div>
+<div class="flex flex-col">
+<span class="font-body-sm font-semibold text-on-surface">Mazda CX-5 (KF5P) 2017–2023</span>
+<span class="font-caption text-secondary">PY-VPS • 2.5L Skyactiv-G • 6AT</span>
+</div>
+</div>
+<div class="flex items-center gap-space-md">
+<span class="font-code-sm text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded font-semibold">92% parts</span>
+<button class="p-1 text-secondary hover:text-on-surface rounded">
+<span class="material-symbols-outlined text-[18px]">chevron_right</span>
+</button>
+</div>
+</div>
+<div class="p-space-sm flex items-center justify-between hover:bg-surface-container-low transition-colors">
+<div class="flex items-center gap-space-sm">
+<div class="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center font-code-sm font-semibold text-secondary">SU</div>
+<div class="flex flex-col">
+<span class="font-body-sm font-semibold text-on-surface">Subaru Forester (SK9) 2018–2022</span>
+<span class="font-caption text-secondary">FB25 • 2.5L Boxer • Lineartronic</span>
+</div>
+</div>
+<div class="flex items-center gap-space-md">
+<span class="font-code-sm text-primary font-semibold bg-primary-fixed px-2 py-0.5 rounded">86% parts</span>
+<button class="p-1 text-secondary hover:text-on-surface rounded">
+<span class="material-symbols-outlined text-[18px]">chevron_right</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Makers Normal Grid (6 tiles) -->
+<div class="p-space-lg bg-surface-container-low rounded-xl flex flex-col gap-space-md">
+<div class="flex items-center justify-between">
+<h3 class="font-headline-md text-on-surface">Top Makers</h3>
+<a class="font-caption text-primary font-semibold hover:underline" href="#">View all 56 →</a>
+</div>
+<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-space-sm">
+<div class="p-space-sm bg-surface-container-lowest rounded-xl flex flex-col items-center text-center gap-1 shadow-sm hover:shadow transition-shadow cursor-pointer">
+<div class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center font-code-md font-bold text-on-surface">T</div>
+<span class="font-body-sm font-semibold text-on-surface">Toyota</span>
+<span class="font-code-sm text-secondary">412 cars</span>
+</div>
+<div class="p-space-sm bg-surface-container-lowest rounded-xl flex flex-col items-center text-center gap-1 shadow-sm hover:shadow transition-shadow cursor-pointer">
+<div class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center font-code-md font-bold text-on-surface">H</div>
+<span class="font-body-sm font-semibold text-on-surface">Honda</span>
+<span class="font-code-sm text-secondary">289 cars</span>
+</div>
+<div class="p-space-sm bg-surface-container-lowest rounded-xl flex flex-col items-center text-center gap-1 shadow-sm hover:shadow transition-shadow cursor-pointer">
+<div class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center font-code-md font-bold text-on-surface">N</div>
+<span class="font-body-sm font-semibold text-on-surface">Nissan</span>
+<span class="font-code-sm text-secondary">244 cars</span>
+</div>
+<div class="p-space-sm bg-surface-container-lowest rounded-xl flex flex-col items-center text-center gap-1 shadow-sm hover:shadow transition-shadow cursor-pointer">
+<div class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center font-code-md font-bold text-on-surface">M</div>
+<span class="font-body-sm font-semibold text-on-surface">Mazda</span>
+<span class="font-code-sm text-secondary">198 cars</span>
+</div>
+<div class="p-space-sm bg-surface-container-lowest rounded-xl flex flex-col items-center text-center gap-1 shadow-sm hover:shadow transition-shadow cursor-pointer">
+<div class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center font-code-md font-bold text-on-surface">S</div>
+<span class="font-body-sm font-semibold text-on-surface">Subaru</span>
+<span class="font-code-sm text-secondary">167 cars</span>
+</div>
+<div class="p-space-sm bg-surface-container-lowest rounded-xl flex flex-col items-center text-center gap-1 shadow-sm hover:shadow transition-shadow cursor-pointer">
+<div class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center font-code-md font-bold text-on-surface">V</div>
+<span class="font-body-sm font-semibold text-on-surface">Volvo</span>
+<span class="font-code-sm text-secondary">123 cars</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Right Column (4 cols): Intact Normal Content -->
+<div class="lg:col-span-4 flex flex-col gap-space-lg">
+<!-- Needs Attention Intact (with duplicate warning pill) -->
+<div class="p-space-md bg-surface-container-low rounded-xl flex flex-col gap-space-sm">
+<div class="flex items-center justify-between mb-1">
+<h3 class="font-headline-md text-on-surface">Needs attention</h3>
+<span class="font-code-sm text-secondary bg-surface-container px-2 py-0.5 rounded font-medium">3 active</span>
+</div>
+<!-- Warning Duplicate Resolution Pill as per Brand Style -->
+<div class="p-space-sm bg-[#fff4dc] text-[#8a5a00] rounded-lg flex items-start gap-space-xs shadow-sm">
+<span class="material-symbols-outlined text-[18px] shrink-0 mt-0.5">warning</span>
+<div class="flex flex-col gap-0.5">
+<span class="font-body-sm font-semibold">Looks like a duplicate</span>
+<span class="font-caption leading-tight">Toyota Tank (M900A) vs Toyota Roomy (M900A) badge twin.</span>
+<button class="mt-1 font-caption font-bold text-[#8a5a00] hover:underline self-start">Review &amp; Merge →</button>
+</div>
+</div>
+<!-- Missing specs task -->
+<div class="p-space-sm bg-surface-container-lowest rounded-lg flex items-start gap-space-xs shadow-sm">
+<span class="material-symbols-outlined text-secondary text-[18px] shrink-0 mt-0.5">help_outline</span>
+<div class="flex flex-col gap-0.5 flex-1">
+<span class="font-body-sm font-semibold text-on-surface">Missing Curb Weight</span>
+<span class="font-caption text-secondary">Nissan Note e-POWER (HE12)</span>
+<div class="flex items-center justify-between mt-1">
+<span class="font-hint-sm text-[#5d5f68]">Not on file</span>
+<button class="px-2 py-0.5 text-xs font-medium rounded bg-surface-container hover:bg-surface-container-high text-on-surface">+ Add</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Recently Added Parts Normal -->
+<div class="p-space-md bg-surface-container-low rounded-xl flex flex-col gap-space-sm">
+<div class="flex items-center justify-between mb-1">
+<h3 class="font-headline-md text-on-surface">Recently added parts</h3>
+<span class="font-caption text-secondary">Last 24h</span>
+</div>
+<div class="p-space-sm bg-surface-container-lowest rounded-lg flex items-center justify-between shadow-sm">
+<div class="flex flex-col">
+<span class="font-body-sm font-semibold text-on-surface">Denso Iridium SC20HR11</span>
+<span class="font-caption text-secondary">Spark Plug • 14mm Hex</span>
+</div>
+<span class="font-code-sm bg-surface-container px-2 py-0.5 rounded text-secondary">OEM</span>
+</div>
+<div class="p-space-sm bg-surface-container-lowest rounded-lg flex items-center justify-between shadow-sm">
+<div class="flex flex-col">
+<span class="font-body-sm font-semibold text-on-surface">Akebono AN-748WK</span>
+<span class="font-caption text-secondary">Front Ceramic Brake Pads</span>
+</div>
+<span class="font-code-sm bg-surface-container px-2 py-0.5 rounded text-secondary">JDM</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+</div>
+</div>
+<script>
+  function switchStateView(target) {
+    const frames = {
+      frameA: document.getElementById('frame-a-container'),
+      frameB: document.getElementById('frame-b-container'),
+      frameC: document.getElementById('frame-c-container'),
+      frameD: document.getElementById('frame-d-container')
+    };
+
+    const buttons = {
+      all: document.getElementById('tab-btn-all'),
+      frameA: document.getElementById('tab-btn-frameA'),
+      frameB: document.getElementById('tab-btn-frameB'),
+      frameC: document.getElementById('tab-btn-frameC'),
+      frameD: document.getElementById('tab-btn-frameD')
+    };
+
+    // Reset button styles
+    Object.values(buttons).forEach(btn => {
+      btn.className = "state-tab-btn px-3 py-1.5 rounded-md font-body-sm text-secondary hover:text-on-surface transition-all flex items-center gap-1.5";
+    });
+
+    if (target === 'all') {
+      // Show all frames
+      Object.values(frames).forEach(f => f.classList.remove('hidden'));
+      buttons.all.className = "state-tab-btn px-3 py-1.5 rounded-md font-body-sm text-on-surface bg-surface-container-lowest shadow-sm transition-all flex items-center gap-1.5";
+    } else {
+      // Hide all and display target
+      Object.keys(frames).forEach(key => {
+        if (key === target) {
+          frames[key].classList.remove('hidden');
+          frames[key].scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } else {
+          frames[key].classList.add('hidden');
+        }
+      });
+      buttons[target].className = "state-tab-btn px-3 py-1.5 rounded-md font-body-sm text-on-surface bg-surface-container-lowest shadow-sm transition-all flex items-center gap-1.5";
+    }
+  }
+</script></main></div></body></html>

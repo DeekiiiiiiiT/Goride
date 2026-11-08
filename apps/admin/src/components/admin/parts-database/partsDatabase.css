@@ -73,6 +73,40 @@
   background-color: #5b8def;
 }
 
+.parts-database-stitch.catalog-add-parts {
+  max-width: 960px;
+}
+
+@media (max-width: 480px) {
+  .parts-database-stitch.catalog-add-parts .catalog-parts-table table {
+    display: none;
+  }
+}
+
+.parts-database-stitch.catalog-add-parts .catalog-parts-mobile-bar {
+  display: none;
+}
+
+.parts-database-stitch.catalog-add-parts .catalog-parts-mobile-stack {
+  display: none;
+}
+
+.parts-database-stitch.catalog-add-parts .catalog-step-mobile-label {
+  display: none;
+}
+
+@media (max-width: 480px) {
+  .parts-database-stitch.catalog-add-parts .catalog-parts-mobile-stack {
+    display: flex;
+  }
+  .parts-database-stitch.catalog-add-parts .catalog-parts-mobile-bar {
+    display: flex;
+  }
+  .parts-database-stitch.catalog-add-parts .catalog-step-mobile-label {
+    display: block;
+  }
+}
+
 .dark .parts-database-stitch {
   --color-surface: #0b1220;
   --color-surface-container-lowest: #111827;

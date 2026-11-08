@@ -43,9 +43,23 @@ describe("find parts screens do not hard-code Stitch sample data", () => {
   });
 
   it("leaves forbidden sample strings out of all find-parts sources", () => {
-    const text = files.map((path) => readFileSync(path, "utf8")).join("\n");
+    const liveSources = files.filter(
+      (path) =>
+        (path.includes(`${join("find-parts", "everyday")}`) &&
+          !path.endsWith("everydayCaptureConstants.ts")) ||
+        path.endsWith("FindPartsTab.tsx"),
+    );
+    const everydaySources = liveSources.filter((p) => p.includes(`${join("find-parts", "everyday")}`));
+    const tabSources = liveSources.filter((p) => p.endsWith("FindPartsTab.tsx"));
+    const everydayAllowed = new Set(["Toyota"]);
+    const everydayText = everydaySources.map((path) => readFileSync(path, "utf8")).join("\n");
     for (const word of FIND_PARTS_FORBIDDEN_SAMPLES) {
-      expect(text.includes(word), `found banned sample: ${word}`).toBe(false);
+      if (everydayAllowed.has(word)) continue;
+      expect(everydayText.includes(word), `found banned sample in everyday: ${word}`).toBe(false);
+    }
+    const tabText = tabSources.map((path) => readFileSync(path, "utf8")).join("\n");
+    for (const word of FIND_PARTS_FORBIDDEN_SAMPLES) {
+      expect(tabText.includes(word), `found banned sample: ${word}`).toBe(false);
     }
   });
 

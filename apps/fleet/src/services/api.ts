@@ -3237,6 +3237,12 @@ export const api = {
       return response.json();
   },
 
+  async partsCatalogMakers() {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/catalog-makers`, { headers: await getHeaders(null) });
+      if (!response.ok) throw new Error("Could not load maker logos");
+      return response.json() as Promise<{ items: Array<{ make: string; logoUrl: string | null }> }>;
+  },
+
   async partsComponentFitHints(variantId: string, componentId: string) {
       const q = new URLSearchParams({ variantId, componentId });
       const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/component-fit-hints?${q}`, { headers: await getHeaders(null) });

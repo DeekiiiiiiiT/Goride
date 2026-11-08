@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_dashboard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{colors:{"outline":"#737686","on-primary-fixed-variant":"#003ea8","on-secondary-container":"#5d637d","surface":"#faf8ff","surface-bright":"#faf8ff","on-error-container":"#93000a","on-background":"#191b24","surface-container":"#ededf9","primary-fixed":"#dbe1ff","background":"#faf8ff","surface-container-lowest":"#ffffff","tertiary-container":"#575e74","outline-variant":"#c3c6d7","on-surface":"#191b24","surface-variant":"#e1e1ed","secondary":"#575d77","on-primary-fixed":"#00174b","tertiary":"#3f475b","on-tertiary":"#ffffff","surface-container-low":"#f3f3ff","secondary-container":"#dbe1ff","primary-fixed-dim":"#b4c5ff","surface-dim":"#d9d9e5","surface-container-high":"#e7e7f3","surface-container-highest":"#e1e1ed","on-error":"#ffffff","surface-tint":"#0053db","inverse-surface":"#2e3039","inverse-primary":"#b4c5ff","tertiary-fixed":"#dbe2fb","on-secondary":"#ffffff","secondary-fixed":"#dbe1ff","primary":"#003ea9","error":"#ba1a1a","error-container":"#ffdad6","on-tertiary-fixed-variant":"#3f465b","on-secondary-fixed":"#141b30","on-tertiary-container":"#d1d8f1","on-primary":"#ffffff","on-secondary-fixed-variant":"#3f465e","on-tertiary-fixed":"#131b2d","tertiary-fixed-dim":"#bfc6df","secondary-fixed-dim":"#bfc5e2","inverse-on-surface":"#f0f0fc","on-surface-variant":"#434655","on-primary-container":"#ced8ff","primary-container":"#0153dc"},borderRadius:{"DEFAULT":"0.25rem","lg":"0.5rem","xl":"0.75rem","full":"9999px"},spacing:{"space-xs":"0.25rem","space-lg":"1.5rem","space-xl":"2rem","gutter":"1.5rem","margin":"2rem","space-sm":"0.5rem","space-md":"1rem"},fontFamily:{"data-mono-sm":["Inter"],"body-lg":["Inter"],"headline-lg":["Inter"],"data-mono-md":["Inter"],"headline-xl":["Inter"],"label-lg":["Inter"],"headline-md":["Inter"],"label-md":["Inter"],"body-md":["Inter"],"body-sm":["Inter"],"label-sm":["Inter"]},fontSize:{"data-mono-sm":["0.75rem",{"lineHeight":"1rem","fontWeight":"500"}],"body-lg":["1rem",{"lineHeight":"1.5rem","fontWeight":"400"}],"headline-lg":["1.5rem",{"lineHeight":"2rem","letterSpacing":"-0.015em","fontWeight":"600"}],"data-mono-md":["0.875rem",{"lineHeight":"1.25rem","fontWeight":"500"}],"headline-xl":["2rem",{"lineHeight":"2.5rem","letterSpacing":"-0.02em","fontWeight":"600"}],"label-lg":["0.875rem",{"lineHeight":"1.25rem","fontWeight":"600"}],"headline-md":["1.25rem",{"lineHeight":"1.75rem","letterSpacing":"-0.01em","fontWeight":"600"}],"label-md":["0.75rem",{"lineHeight":"1rem","fontWeight":"500"}],"body-md":["0.875rem",{"lineHeight":"1.375rem","fontWeight":"400"}],"body-sm":["0.75rem",{"lineHeight":"1.125rem","fontWeight":"400"}],"label-sm":["0.6875rem",{"lineHeight":"0.875rem","letterSpacing":"0.04em","fontWeight":"600"}]}}}};</script></head><body class="bg-surface font-body-md text-body-md text-on-surface"><aside class="fixed left-0 top-0 h-full w-[260px] bg-[#0b1329] z-50 flex flex-col justify-between overflow-y-auto"><div class="p-space-lg"><div class="flex items-center gap-space-sm mb-space-lg"><div class="w-8 h-8 rounded-lg bg-primary-container flex items-center justify-center text-on-primary font-headline-md text-headline-md font-bold">D</div><div><div class="font-headline-md text-headline-md text-white font-bold leading-tight tracking-tight">Dominion</div><div class="flex items-center gap-1.5 mt-0.5"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span><span class="font-label-sm text-label-sm text-slate-400">Roam Admin Console</span></div></div></div><nav class="flex flex-col gap-space-lg" data-active-classes="bg-white/10 text-white font-bold rounded-lg"><div class="flex flex-col gap-1"><div class="font-label-sm text-label-sm uppercase tracking-wider text-slate-400 px-space-sm py-1">Master Data</div><a class="flex items-center gap-2.5 px-space-sm py-1.5 rounded-lg text-slate-300 hover:bg-white/5 hover:text-white font-label-md text-label-md transition-colors" data-path="overview" href="#"><span class="material-symbols-outlined text-[18px]">dashboard</span><span>Overview</span></a><a class="flex items-center gap-2.5 px-space-sm py-1.5 rounded-lg text-slate-300 hover:bg-white/5 hover:text-white font-label-md text-label-md transition-colors" data-path="vehicles-active" href="#"><span class="material-symbols-outlined text-[18px]">directions_car</span><span>Vehicles active</span></a><a class="flex items-center gap-2.5 px-space-sm py-1.5 rounded-lg text-slate-300 hover:bg-white/5 hover:text-white font-label-md text-label-md transition-colors" data-path="parts-database" href="#"><span class="material-symbols-outlined text-[18px]">build_circle</span><span>Parts database</span></a><a class="flex items-center gap-2.5 px-space-sm py-1.5 rounded-lg text-slate-300 hover:bg-white/5 hover:text-white font-label-md text-label-md transition-colors" data-path="places-and-maps" href="#"><span class="material-symbols-outlined text-[18px]">map</span><span>Places and Maps</span></a><a class="flex items-center gap-2.5 px-space-sm py-1.5 rounded-lg text-slate-300 hover:bg-white/5 hover:text-white font-label-md text-label-md transition-colors" data-path="fuel" href="#"><span class="material-symbols-outlined text-[18px]">local_gas_station</span><span>Fuel</span></a><a class="flex items-center gap-2.5 px-space-sm py-1.5 rounded-lg text-slate-300 hover:bg-white/5 hover:text-white font-label-md text-label-md transition-colors" data-path="tolls" href="#"><span class="material-symbols-outlined text-[18px]">toll</span><span>Tolls</span></a><a class="flex items-center gap-2.5 px-space-sm py-1.5 rounded-lg text-slate-300 hover:bg-white/5 hover:text-white font-label-md text-label-md transition-colors" data-path="tax-and-vendors" href="#"><span class="material-symbols-outlined text-[18px]">receipt_long</span><span>Tax and Vendors</span></a></div><div class="flex flex-col gap-1"><div class="font-label-sm text-label-sm uppercase tracking-wider text-slate-400 px-space-sm py-1">Engines</div><a class="flex items-center gap-2.5 px-space-sm py-1.5 rounded-lg text-slate-300 hover:bg-white/5 hover:text-white font-label-md text-label-md transition-colors" data-path="fuel-brain" href="#"><span class="material-symbols-outlined text-[18px]">psychology</span><span>Fuel Brain</span></a><a class="flex items-center gap-2.5 px-space-sm py-1.5 rounded-lg text-slate-300 hover:bg-white/5 hover:text-white font-label-md text-label-md transition-colors" data-path="toll-brain" href="#"><span class="material-symbols-outlined text-[18px]">memory</span><span>Toll Brain</span></a><a class="flex items-center gap-2.5 px-space-sm py-1.5 rounded-lg text-slate-300 hover:bg-white/5 hover:text-white font-label-md text-label-md transition-colors" data-path="matching-brain" href="#"><span class="material-symbols-outlined text-[18px]">hub</span><span>Matching Brain</span></a></div><div class="flex flex-col gap-1"><div class="font-label-sm text-label-sm uppercase tracking-wider text-slate-400 px-space-sm py-1">Distribution</div><a class="flex items-center gap-2.5 px-space-sm py-1.5 rounded-lg text-slate-300 hover:bg-white/5 hover:text-white font-label-md text-label-md transition-colors" data-path="apps" href="#"><span class="material-symbols-outlined text-[18px]">apps</span><span>Apps</span></a><a class="flex items-center gap-2.5 px-space-sm py-1.5 rounded-lg text-slate-300 hover:bg-white/5 hover:text-white font-label-md text-label-md transition-colors" data-path="data-api" href="#"><span class="material-symbols-outlined text-[18px]">api</span><span>Data API</span></a><a class="flex items-center gap-2.5 px-space-sm py-1.5 rounded-lg text-slate-300 hover:bg-white/5 hover:text-white font-label-md text-label-md transition-colors" data-path="change-requests" href="#"><span class="material-symbols-outlined text-[18px]">published_with_changes</span><span>Change requests</span></a></div><div class="flex flex-col gap-1"><div class="font-label-sm text-label-sm uppercase tracking-wider text-slate-400 px-space-sm py-1">Platform</div><a class="flex items-center gap-2.5 px-space-sm py-1.5 rounded-lg text-slate-300 hover:bg-white/5 hover:text-white font-label-md text-label-md transition-colors" data-path="staff-and-roles" href="#"><span class="material-symbols-outlined text-[18px]">group</span><span>Staff and roles</span></a><a class="flex items-center gap-2.5 px-space-sm py-1.5 rounded-lg text-slate-300 hover:bg-white/5 hover:text-white font-label-md text-label-md transition-colors" data-path="activity-log" href="#"><span class="material-symbols-outlined text-[18px]">history</span><span>Activity log</span></a><a class="flex items-center gap-2.5 px-space-sm py-1.5 rounded-lg text-slate-300 hover:bg-white/5 hover:text-white font-label-md text-label-md transition-colors" data-path="platform-ops" href="#"><span class="material-symbols-outlined text-[18px]">terminal</span><span>Platform Ops</span></a><a class="flex items-center gap-2.5 px-space-sm py-1.5 rounded-lg text-slate-300 hover:bg-white/5 hover:text-white font-label-md text-label-md transition-colors" data-path="global-settings" href="#"><span class="material-symbols-outlined text-[18px]">settings</span><span>Global settings</span></a></div><div class="flex flex-col gap-1"><div class="font-label-sm text-label-sm uppercase tracking-wider text-slate-400 px-space-sm py-1">Back Office</div><a class="flex items-center gap-2.5 px-space-sm py-1.5 rounded-lg text-slate-300 hover:bg-white/5 hover:text-white font-label-md text-label-md transition-colors" data-path="gct-registrations" href="#"><span class="material-symbols-outlined text-[18px]">how_to_reg</span><span>GCT registrations</span></a><a class="flex items-center gap-2.5 px-space-sm py-1.5 rounded-lg text-slate-300 hover:bg-white/5 hover:text-white font-label-md text-label-md transition-colors" data-path="ledger" href="#"><span class="material-symbols-outlined text-[18px]">account_balance_wallet</span><span>Ledger</span></a><a class="flex items-center gap-2.5 px-space-sm py-1.5 rounded-lg text-slate-300 hover:bg-white/5 hover:text-white font-label-md text-label-md transition-colors" data-path="remittance" href="#"><span class="material-symbols-outlined text-[18px]">payments</span><span>Remittance</span></a></div></nav></div><div class="p-space-md border-t border-white/10"><div class="flex items-center justify-between text-slate-400 font-label-sm text-label-sm px-space-sm"><span>Dominion Core</span><span class="font-data-mono-sm text-data-mono-sm">v4.12.0</span></div></div></aside><div class="pl-[260px]"><header class="fixed top-0 left-[260px] right-0 h-16 bg-surface-container-lowest border-b border-surface-container-high z-40 flex items-center justify-between px-space-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="flex items-center flex-1 max-w-md"><div class="relative w-full flex items-center"><span class="material-symbols-outlined absolute left-3 text-secondary text-[20px]">search</span><input class="w-full h-10 pl-10 pr-12 rounded-lg bg-surface-container-low border border-outline-variant font-body-sm text-body-sm text-on-surface placeholder:text-secondary focus:outline-none focus:border-primary-container focus:ring-2 focus:ring-primary-container/15 transition-all" placeholder="Search entities, engines, routes…" type="text"/><kbd class="absolute right-2.5 px-1.5 py-0.5 rounded bg-surface border border-outline-variant font-data-mono-sm text-data-mono-sm text-secondary">⌘K</kbd></div></div><div class="flex items-center gap-space-md"><button class="w-9 h-9 rounded-lg flex items-center justify-center text-secondary hover:bg-surface-container hover:text-on-surface transition-colors" type="button"><span class="material-symbols-outlined text-[20px]">dark_mode</span></button><button class="w-9 h-9 rounded-lg flex items-center justify-center text-secondary hover:bg-surface-container hover:text-on-surface relative transition-colors" type="button"><span class="material-symbols-outlined text-[20px]">notifications</span><span class="absolute top-2 right-2 w-2 h-2 rounded-full bg-error"></span></button><div class="h-6 w-[1px] bg-surface-container-high"></div><div class="flex items-center gap-space-sm pl-space-xs"><div class="flex flex-col text-right"><span class="font-label-md text-label-md text-on-surface font-semibold">Deeki T</span><span class="font-label-sm text-label-sm text-secondary">Owner</span></div><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center font-label-md text-label-md text-on-primary font-semibold">DT</div></div></div></header><main class="relative pt-16 bg-surface min-h-screen"><div class="flex flex-col w-full">
+<div class="px-margin py-space-lg flex flex-col gap-space-lg max-w-[1560px] mx-auto w-full">
+<!-- Stepper Navigation -->
+<div class="w-full bg-surface-container-lowest rounded-xl p-space-md shadow-sm">
+<div class="grid grid-cols-1 md:grid-cols-4 gap-space-md">
+<!-- Step 1: Completed -->
+<div class="flex items-center gap-space-sm px-space-sm py-1.5 opacity-80">
+<div class="w-7 h-7 rounded-full bg-surface-container-high flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[16px] font-bold">check</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-label-sm text-label-sm text-secondary uppercase tracking-wider">Step 1</span>
+<span class="font-label-md text-label-md text-on-surface truncate">The page</span>
+</div>
+</div>
+<!-- Step 2: Completed -->
+<div class="flex items-center gap-space-sm px-space-sm py-1.5 opacity-80">
+<div class="w-7 h-7 rounded-full bg-surface-container-high flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[16px] font-bold">check</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-label-sm text-label-sm text-secondary uppercase tracking-wider">Step 2</span>
+<span class="font-label-md text-label-md text-on-surface truncate">Cars</span>
+</div>
+</div>
+<!-- Step 3: Active -->
+<div class="flex items-center gap-space-sm px-space-sm py-1.5 bg-primary-fixed/40 rounded-lg">
+<div class="w-7 h-7 rounded-full bg-primary-container text-on-primary flex items-center justify-center font-data-mono-sm text-data-mono-sm shadow-sm">
+            3
+          </div>
+<div class="flex flex-col min-w-0">
+<span class="font-label-sm text-label-sm text-primary font-bold uppercase tracking-wider">Current step</span>
+<span class="font-label-md text-label-md text-primary font-bold truncate">Parts</span>
+</div>
+</div>
+<!-- Step 4: Upcoming -->
+<div class="flex items-center gap-space-sm px-space-sm py-1.5 opacity-50">
+<div class="w-7 h-7 rounded-full bg-surface-container flex items-center justify-center font-data-mono-sm text-data-mono-sm text-secondary">
+            4
+          </div>
+<div class="flex flex-col min-w-0">
+<span class="font-label-sm text-label-sm text-secondary uppercase tracking-wider">Next</span>
+<span class="font-label-md text-label-md text-secondary truncate">Review</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Pinned Context Header Strip -->
+<div class="bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col xl:flex-row xl:items-center justify-between gap-space-md">
+<!-- Source Context -->
+<div class="flex items-center gap-space-md flex-wrap">
+<div class="flex items-center gap-space-sm bg-surface-container-low px-space-sm py-1.5 rounded-lg">
+<div class="w-6 h-6 rounded bg-primary-fixed flex items-center justify-center text-primary font-label-sm font-bold">
+            PS
+          </div>
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-secondary">Catalog link source</span>
+<span class="font-label-md text-label-md text-on-surface font-semibold truncate max-w-xs md:max-w-md">Toyota's own catalogue · Parking brake cables</span>
+</div>
+<button class="ml-2 px-2 py-0.5 rounded bg-surface-container text-secondary hover:text-on-surface font-label-sm text-label-sm transition-colors" type="button">
+            Change link
+          </button>
+</div>
+<div class="h-6 w-[1px] bg-surface-container-high hidden xl:block"></div>
+<!-- Selected Vehicle Chips -->
+<div class="flex items-center gap-2 flex-wrap">
+<span class="font-label-sm text-label-sm text-secondary uppercase tracking-wider mr-1">Target cars:</span>
+<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-container text-on-surface font-label-md text-label-md">
+<span>Roomy 2WD 2016–2020</span>
+<button class="hover:text-primary transition-colors flex items-center" title="Edit Car" type="button">
+<span class="material-symbols-outlined text-[14px]">edit</span>
+</button>
+</div>
+<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-container text-on-surface font-label-md text-label-md">
+<span>Tank 2WD 2016–2020</span>
+<button class="hover:text-primary transition-colors flex items-center" title="Edit Car" type="button">
+<span class="material-symbols-outlined text-[14px]">edit</span>
+</button>
+</div>
+<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-secondary-fixed/50 text-secondary-fixed-dim font-label-md text-label-md">
+<span>Daihatsu Thor (+2 sister cars)</span>
+<button class="hover:text-primary transition-colors flex items-center" title="Edit Sister Cars" type="button">
+<span class="material-symbols-outlined text-[14px]">edit</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Autosave Status -->
+<div class="flex items-center gap-2 text-secondary font-label-sm text-label-sm self-end xl:self-center shrink-0">
+<span class="material-symbols-outlined text-[16px] text-primary" style="font-variation-settings: 'FILL' 1;">cloud_done</span>
+<span>Autosaved 4s ago</span>
+</div>
+</div>
+<!-- Main Workspace Card -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden flex flex-col">
+<!-- Card Top Bar: Title & Primary Actions -->
+<div class="p-space-lg flex flex-col md:flex-row md:items-center justify-between gap-space-md bg-surface-container-low/30">
+<div>
+<h1 class="font-headline-lg text-headline-lg text-on-surface">Add each part on the page</h1>
+<p class="font-body-md text-body-md text-secondary mt-0.5">One row per part number. Copy the number exactly as printed.</p>
+</div>
+<div class="flex items-center gap-space-sm shrink-0">
+<button class="px-space-md h-10 rounded-lg bg-surface-container-high text-on-surface hover:bg-surface-container-highest font-label-md text-label-md transition-colors" type="button">
+            Save draft
+          </button>
+<button class="px-space-lg h-10 rounded-lg bg-primary-container text-on-primary hover:bg-primary font-label-md text-label-md transition-all flex items-center gap-1.5 shadow-sm" type="button">
+<span>Next: review</span>
+<span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+</button>
+</div>
+</div>
+<!-- Parts Data Table Wrapper -->
+<div class="w-full overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface-container-low text-secondary font-label-sm text-label-sm uppercase tracking-wider h-11">
+<th class="py-2.5 px-space-md font-semibold w-[220px]">Part type</th>
+<th class="py-2.5 px-space-md font-semibold w-[200px]">Part number</th>
+<th class="py-2.5 px-space-md font-semibold">Where on the car</th>
+<th class="py-2.5 px-space-md font-semibold w-[240px]">Years</th>
+<th class="py-2.5 px-space-md font-semibold text-right w-[64px]">Actions</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-surface-container-high font-body-md text-body-md text-on-surface">
+<!-- Row 1: Front Cable No.1 -->
+<tr class="hover:bg-surface-container-low/40 transition-colors group">
+<td class="py-space-md px-space-md align-top">
+<div class="relative flex items-center">
+<div class="w-8 h-8 rounded-lg bg-secondary-container text-primary flex items-center justify-center shrink-0 mr-2">
+<span class="material-symbols-outlined text-[18px]">cable</span>
+</div>
+<div class="flex-1 min-w-0">
+<div class="font-label-md text-label-md text-on-surface font-semibold">Handbrake cable</div>
+<span class="font-label-sm text-label-sm text-secondary block">Mechanical link</span>
+</div>
+<button class="text-secondary hover:text-on-surface ml-1 p-1" type="button">
+<span class="material-symbols-outlined text-[16px]">arrow_drop_down</span>
+</button>
+</div>
+</td>
+<td class="py-space-md px-space-md align-top">
+<div class="flex flex-col gap-1">
+<div class="relative">
+<input class="w-full h-10 px-3 rounded-lg bg-surface-container-lowest font-data-mono-md text-data-mono-md text-on-surface focus:outline-none focus:bg-surface-container-low transition-colors" type="text" value="46410-B1011"/>
+<span class="absolute right-2.5 top-2.5 material-symbols-outlined text-primary text-[18px]">check_circle</span>
+</div>
+<span class="font-label-sm text-label-sm text-secondary">Standard format parsed</span>
+</div>
+</td>
+<td class="py-space-md px-space-md align-top">
+<div class="flex flex-col gap-2">
+<!-- Segmented Control Groups -->
+<div class="flex items-center gap-3 flex-wrap">
+<!-- Segment 1: Front / Rear -->
+<div class="inline-flex rounded-lg bg-surface-container p-0.5">
+<button class="px-2.5 py-1 rounded bg-primary-container text-on-primary font-label-md text-label-md shadow-xs" type="button">Front</button>
+<button class="px-2.5 py-1 rounded text-secondary hover:text-on-surface font-label-md text-label-md" type="button">Rear</button>
+</div>
+<span class="text-secondary/50 font-label-md">·</span>
+<!-- Segment 2: No.1 / No.2 / No.3 -->
+<div class="inline-flex rounded-lg bg-surface-container p-0.5">
+<button class="px-2.5 py-1 rounded bg-primary-container text-on-primary font-label-md text-label-md shadow-xs" type="button">No.1</button>
+<button class="px-2.5 py-1 rounded text-secondary hover:text-on-surface font-label-md text-label-md" type="button">No.2</button>
+<button class="px-2.5 py-1 rounded text-secondary hover:text-on-surface font-label-md text-label-md" type="button">No.3</button>
+</div>
+</div>
+<!-- Metadata derivation -->
+<div class="flex items-center gap-2 text-secondary font-label-sm text-label-sm">
+<span class="font-medium text-on-surface-variant">Saves as:</span>
+<span class="bg-surface-container-high px-1.5 py-0.5 rounded text-on-surface font-semibold">Front handbrake cable No.1</span>
+</div>
+<!-- Fold Toggle for Alternate Numbers -->
+<div class="pt-1">
+<button class="flex items-center gap-1 text-secondary hover:text-on-surface font-label-sm text-label-sm" type="button">
+<span class="material-symbols-outlined text-[14px]">arrow_right</span>
+<span class="font-medium">Also sold under other numbers (0)</span>
+<span class="text-secondary/70 ml-1 font-normal">— Only if the page shows an old or replacement number.</span>
+</button>
+</div>
+</div>
+</td>
+<td class="py-space-md px-space-md align-top">
+<div class="flex items-center justify-between p-2 rounded-lg bg-surface-container-low">
+<div class="flex flex-col min-w-0">
+<span class="font-label-sm text-label-sm text-secondary">Applies to:</span>
+<span class="font-label-md text-label-md text-on-surface font-medium truncate">Same as cars (2016–2020)</span>
+</div>
+<button class="px-2 py-1 rounded bg-surface-container-highest text-secondary hover:text-on-surface font-label-sm text-label-sm transition-colors" type="button">
+                    Change
+                  </button>
+</div>
+</td>
+<td class="py-space-md px-space-md align-top text-right">
+<button class="w-8 h-8 rounded-lg bg-error-container text-error hover:bg-error hover:text-on-error flex items-center justify-center transition-colors ml-auto" title="Delete row" type="button">
+<span class="material-symbols-outlined text-[18px]">delete</span>
+</button>
+</td>
+</tr>
+<!-- Row 2: Rear Handbrake Cable No.2 (Left) -->
+<tr class="hover:bg-surface-container-low/40 transition-colors group">
+<td class="py-space-md px-space-md align-top">
+<div class="relative flex items-center">
+<div class="w-8 h-8 rounded-lg bg-secondary-container text-primary flex items-center justify-center shrink-0 mr-2">
+<span class="material-symbols-outlined text-[18px]">cable</span>
+</div>
+<div class="flex-1 min-w-0">
+<div class="font-label-md text-label-md text-on-surface font-semibold">Handbrake cable</div>
+<span class="font-label-sm text-label-sm text-secondary block">Mechanical link</span>
+</div>
+<button class="text-secondary hover:text-on-surface ml-1 p-1" type="button">
+<span class="material-symbols-outlined text-[16px]">arrow_drop_down</span>
+</button>
+</div>
+</td>
+<td class="py-space-md px-space-md align-top">
+<div class="flex flex-col gap-1">
+<div class="relative">
+<input class="w-full h-10 px-3 rounded-lg bg-surface-container-lowest font-data-mono-md text-data-mono-md text-on-surface focus:outline-none focus:bg-surface-container-low transition-colors" type="text" value="46420-B1090"/>
+<span class="absolute right-2.5 top-2.5 material-symbols-outlined text-primary text-[18px]">check_circle</span>
+</div>
+<span class="font-label-sm text-label-sm text-secondary">Verified match in OEM ledger</span>
+</div>
+</td>
+<td class="py-space-md px-space-md align-top">
+<div class="flex flex-col gap-2">
+<div class="flex items-center gap-3 flex-wrap">
+<!-- Segment 1: Front / Rear -->
+<div class="inline-flex rounded-lg bg-surface-container p-0.5">
+<button class="px-2.5 py-1 rounded text-secondary hover:text-on-surface font-label-md text-label-md" type="button">Front</button>
+<button class="px-2.5 py-1 rounded bg-primary-container text-on-primary font-label-md text-label-md shadow-xs" type="button">Rear</button>
+</div>
+<span class="text-secondary/50 font-label-md">·</span>
+<!-- Segment 2: Left / Right / Both -->
+<div class="inline-flex rounded-lg bg-surface-container p-0.5">
+<button class="px-2.5 py-1 rounded bg-primary-container text-on-primary font-label-md text-label-md shadow-xs" type="button">Left</button>
+<button class="px-2.5 py-1 rounded text-secondary hover:text-on-surface font-label-md text-label-md" type="button">Right</button>
+<button class="px-2.5 py-1 rounded text-secondary hover:text-on-surface font-label-md text-label-md" type="button">Both</button>
+</div>
+<span class="text-secondary/50 font-label-md">·</span>
+<!-- Segment 3: No.1 / No.2 / No.3 -->
+<div class="inline-flex rounded-lg bg-surface-container p-0.5">
+<button class="px-2.5 py-1 rounded text-secondary hover:text-on-surface font-label-md text-label-md" type="button">No.1</button>
+<button class="px-2.5 py-1 rounded bg-primary-container text-on-primary font-label-md text-label-md shadow-xs" type="button">No.2</button>
+<button class="px-2.5 py-1 rounded text-secondary hover:text-on-surface font-label-md text-label-md" type="button">No.3</button>
+</div>
+</div>
+<!-- Metadata derivation -->
+<div class="flex items-center gap-2 text-secondary font-label-sm text-label-sm">
+<span class="font-medium text-on-surface-variant">Saves as:</span>
+<span class="bg-surface-container-high px-1.5 py-0.5 rounded text-on-surface font-semibold">Rear handbrake cable No.2 (Left)</span>
+</div>
+</div>
+</td>
+<td class="py-space-md px-space-md align-top">
+<div class="flex items-center justify-between p-2 rounded-lg bg-surface-container-low">
+<div class="flex flex-col min-w-0">
+<span class="font-label-sm text-label-sm text-secondary">Applies to:</span>
+<span class="font-label-md text-label-md text-on-surface font-medium truncate">Same as cars</span>
+</div>
+<button class="px-2 py-1 rounded bg-surface-container-highest text-secondary hover:text-on-surface font-label-sm text-label-sm transition-colors" type="button">
+                    Change
+                  </button>
+</div>
+</td>
+<td class="py-space-md px-space-md align-top text-right">
+<button class="w-8 h-8 rounded-lg bg-error-container text-error hover:bg-error hover:text-on-error flex items-center justify-center transition-colors ml-auto" title="Delete row" type="button">
+<span class="material-symbols-outlined text-[18px]">delete</span>
+</button>
+</td>
+</tr>
+<!-- Row 3: Rear Handbrake Cable No.3 (Right) -->
+<tr class="hover:bg-surface-container-low/40 transition-colors group">
+<td class="py-space-md px-space-md align-top">
+<div class="relative flex items-center">
+<div class="w-8 h-8 rounded-lg bg-secondary-container text-primary flex items-center justify-center shrink-0 mr-2">
+<span class="material-symbols-outlined text-[18px]">cable</span>
+</div>
+<div class="flex-1 min-w-0">
+<div class="font-label-md text-label-md text-on-surface font-semibold">Handbrake cable</div>
+<span class="font-label-sm text-label-sm text-secondary block">Mechanical link</span>
+</div>
+<button class="text-secondary hover:text-on-surface ml-1 p-1" type="button">
+<span class="material-symbols-outlined text-[16px]">arrow_drop_down</span>
+</button>
+</div>
+</td>
+<td class="py-space-md px-space-md align-top">
+<div class="flex flex-col gap-1">
+<div class="relative">
+<input class="w-full h-10 px-3 rounded-lg bg-surface-container-lowest font-data-mono-md text-data-mono-md text-on-surface focus:outline-none focus:bg-surface-container-low transition-colors" type="text" value="46430-B1090"/>
+<span class="absolute right-2.5 top-2.5 material-symbols-outlined text-primary text-[18px]">check_circle</span>
+</div>
+<span class="font-label-sm text-label-sm text-secondary">Verified match in OEM ledger</span>
+</div>
+</td>
+<td class="py-space-md px-space-md align-top">
+<div class="flex flex-col gap-2">
+<div class="flex items-center gap-3 flex-wrap">
+<!-- Segment 1: Front / Rear -->
+<div class="inline-flex rounded-lg bg-surface-container p-0.5">
+<button class="px-2.5 py-1 rounded text-secondary hover:text-on-surface font-label-md text-label-md" type="button">Front</button>
+<button class="px-2.5 py-1 rounded bg-primary-container text-on-primary font-label-md text-label-md shadow-xs" type="button">Rear</button>
+</div>
+<span class="text-secondary/50 font-label-md">·</span>
+<!-- Segment 2: Left / Right / Both -->
+<div class="inline-flex rounded-lg bg-surface-container p-0.5">
+<button class="px-2.5 py-1 rounded text-secondary hover:text-on-surface font-label-md text-label-md" type="button">Left</button>
+<button class="px-2.5 py-1 rounded bg-primary-container text-on-primary font-label-md text-label-md shadow-xs" type="button">Right</button>
+<button class="px-2.5 py-1 rounded text-secondary hover:text-on-surface font-label-md text-label-md" type="button">Both</button>
+</div>
+<span class="text-secondary/50 font-label-md">·</span>
+<!-- Segment 3: No.1 / No.2 / No.3 -->
+<div class="inline-flex rounded-lg bg-surface-container p-0.5">
+<button class="px-2.5 py-1 rounded text-secondary hover:text-on-surface font-label-md text-label-md" type="button">No.1</button>
+<button class="px-2.5 py-1 rounded text-secondary hover:text-on-surface font-label-md text-label-md" type="button">No.2</button>
+<button class="px-2.5 py-1 rounded bg-primary-container text-on-primary font-label-md text-label-md shadow-xs" type="button">No.3</button>
+</div>
+</div>
+<!-- Metadata derivation -->
+<div class="flex items-center gap-2 text-secondary font-label-sm text-label-sm">
+<span class="font-medium text-on-surface-variant">Saves as:</span>
+<span class="bg-surface-container-high px-1.5 py-0.5 rounded text-on-surface font-semibold">Rear handbrake cable No.3 (Right)</span>
+</div>
+</div>
+</td>
+<td class="py-space-md px-space-md align-top">
+<div class="flex items-center justify-between p-2 rounded-lg bg-surface-container-low">
+<div class="flex flex-col min-w-0">
+<span class="font-label-sm text-label-sm text-secondary">Applies to:</span>
+<span class="font-label-md text-label-md text-on-surface font-medium truncate">Same as cars</span>
+</div>
+<button class="px-2 py-1 rounded bg-surface-container-highest text-secondary hover:text-on-surface font-label-sm text-label-sm transition-colors" type="button">
+                    Change
+                  </button>
+</div>
+</td>
+<td class="py-space-md px-space-md align-top text-right">
+<button class="w-8 h-8 rounded-lg bg-error-container text-error hover:bg-error hover:text-on-error flex items-center justify-center transition-colors ml-auto" title="Delete row" type="button">
+<span class="material-symbols-outlined text-[18px]">delete</span>
+</button>
+</td>
+</tr>
+<!-- Row 4: ALREADY ON FILE EXAMPLE -->
+<tr class="hover:bg-surface-container-low/40 transition-colors group bg-surface-container-low/20">
+<td class="py-space-md px-space-md align-top">
+<div class="relative flex items-center">
+<div class="w-8 h-8 rounded-lg bg-primary-fixed text-primary flex items-center justify-center shrink-0 mr-2">
+<span class="material-symbols-outlined text-[18px]">file_download</span>
+</div>
+<div class="flex-1 min-w-0">
+<div class="font-label-md text-label-md text-on-surface font-semibold">Rear brake hose</div>
+<span class="font-label-sm text-label-sm text-secondary block">Fluid line</span>
+</div>
+<button class="text-secondary hover:text-on-surface ml-1 p-1" type="button">
+<span class="material-symbols-outlined text-[16px]">arrow_drop_down</span>
+</button>
+</div>
+</td>
+<td class="py-space-md px-space-md align-top">
+<div class="flex flex-col gap-1">
+<div class="relative">
+<input class="w-full h-10 px-3 rounded-lg bg-surface-container-lowest font-data-mono-md text-data-mono-md text-on-surface focus:outline-none focus:bg-surface-container-low transition-colors" type="text" value="90049-22193"/>
+<span class="absolute right-2.5 top-2.5 material-symbols-outlined text-primary text-[18px]">inventory_2</span>
+</div>
+<span class="font-label-sm text-label-sm text-primary font-medium">Existing entity recognized</span>
+</div>
+</td>
+<td class="py-space-md px-space-md align-top">
+<div class="flex flex-col gap-2">
+<div class="flex items-center gap-3 flex-wrap">
+<div class="inline-flex rounded-lg bg-surface-container p-0.5">
+<button class="px-2.5 py-1 rounded bg-primary-container text-on-primary font-label-md text-label-md shadow-xs" type="button">Rear</button>
+</div>
+<span class="text-secondary/50 font-label-md">·</span>
+<div class="inline-flex rounded-lg bg-surface-container p-0.5">
+<button class="px-2.5 py-1 rounded bg-primary-container text-on-primary font-label-md text-label-md shadow-xs" type="button">Both</button>
+</div>
+</div>
+<!-- Calm Blue Info Banner -->
+<div class="p-2.5 rounded-lg bg-secondary-container/40 text-on-secondary-fixed flex items-start gap-2 max-w-xl">
+<span class="material-symbols-outlined text-[18px] text-primary shrink-0 mt-0.5">info</span>
+<span class="font-label-md text-label-md">
+<strong>Already on file</strong> as Rear brake hose (2 cars). We'll automatically append these cars to it with no duplicate records created.
+                    </span>
+</div>
+</div>
+</td>
+<td class="py-space-md px-space-md align-top">
+<div class="flex items-center justify-between p-2 rounded-lg bg-surface-container-low">
+<div class="flex flex-col min-w-0">
+<span class="font-label-sm text-label-sm text-secondary">Applies to:</span>
+<span class="font-label-md text-label-md text-on-surface font-medium truncate">Same as cars</span>
+</div>
+<button class="px-2 py-1 rounded bg-surface-container-highest text-secondary hover:text-on-surface font-label-sm text-label-sm transition-colors" type="button">
+                    Change
+                  </button>
+</div>
+</td>
+<td class="py-space-md px-space-md align-top text-right">
+<button class="w-8 h-8 rounded-lg bg-error-container text-error hover:bg-error hover:text-on-error flex items-center justify-center transition-colors ml-auto" title="Delete row" type="button">
+<span class="material-symbols-outlined text-[18px]">delete</span>
+</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Table Bottom Actions & Bulk Paste Drawer Preview -->
+<div class="p-space-lg bg-surface-container-lowest flex flex-col gap-space-md">
+<div class="flex flex-wrap items-center justify-between gap-space-md">
+<div class="flex items-center gap-space-sm flex-wrap">
+<button class="px-space-md h-10 rounded-lg bg-surface-container text-on-surface hover:bg-surface-container-high font-label-md text-label-md flex items-center gap-1.5 transition-colors" type="button">
+<span class="material-symbols-outlined text-[18px]">add</span>
+<span>Add another part</span>
+</button>
+<button class="px-space-md h-10 rounded-lg bg-secondary-container/60 text-primary hover:bg-secondary-container font-label-md text-label-md flex items-center gap-1.5 transition-colors" id="toggle-paste-btn" type="button">
+<span class="material-symbols-outlined text-[18px]">content_paste</span>
+<span>Paste several numbers</span>
+</button>
+</div>
+<!-- Quick Micro-Hint Strip -->
+<div class="flex items-center gap-2 text-secondary font-label-sm text-label-sm">
+<span class="material-symbols-outlined text-[16px] text-primary">lightbulb</span>
+<span>Tip: Press <kbd class="px-1.5 py-0.5 rounded bg-surface-container text-on-surface font-data-mono-sm text-data-mono-sm">Tab</kbd> to move across cells · Press <kbd class="px-1.5 py-0.5 rounded bg-surface-container text-on-surface font-data-mono-sm text-data-mono-sm">Enter</kbd> to spawn a new row</span>
+</div>
+</div>
+<!-- Integrated Paste Modal / Drawer Preview -->
+<div class="p-space-md rounded-xl bg-surface-container-low flex flex-col gap-space-sm" id="paste-drawer">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[20px]">assignment</span>
+<span class="font-label-lg text-label-lg text-on-surface font-semibold">Bulk Part Ingestion</span>
+</div>
+<span class="font-label-sm text-label-sm text-secondary">Auto-maps to: Handbrake cable</span>
+</div>
+<p class="font-body-sm text-body-sm text-secondary">
+            Paste a list of part numbers — each line becomes a distinct row configured with the current part type. Empty rows are skipped.
+          </p>
+<textarea class="w-full p-space-sm rounded-lg bg-surface-container-lowest font-data-mono-sm text-data-mono-sm text-on-surface focus:outline-none focus:bg-surface-container-high transition-colors" placeholder="46410-B1010
+46420-B1020
+46430-B1030" rows="3"></textarea>
+<div class="flex items-center justify-end gap-space-sm mt-1">
+<button class="px-space-md h-9 rounded-lg bg-surface-container text-secondary hover:text-on-surface font-label-md text-label-md transition-colors" onclick="document.getElementById('paste-drawer').classList.toggle('hidden')" type="button">
+              Cancel
+            </button>
+<button class="px-space-md h-9 rounded-lg bg-primary-container text-on-primary hover:bg-primary font-label-md text-label-md transition-colors" type="button">
+              Process 3 lines
+            </button>
+</div>
+</div>
+</div>
+</div>
+<!-- Global Wizard Footer Navigation Bar -->
+<div class="flex items-center justify-between pt-space-sm pb-space-lg">
+<button class="px-space-md h-11 rounded-lg bg-surface-container-lowest text-on-surface hover:bg-surface-container font-label-md text-label-md flex items-center gap-2 shadow-sm transition-colors" type="button">
+<span class="material-symbols-outlined text-[18px]">arrow_back</span>
+<span>Back: Step 2 (Cars)</span>
+</button>
+<div class="flex items-center gap-space-md">
+<div class="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded bg-surface-container font-label-sm text-label-sm text-secondary">
+<span>Press</span>
+<kbd class="px-1.5 py-0.5 rounded bg-surface-container-lowest text-on-surface font-data-mono-sm text-data-mono-sm font-semibold">Enter ↵</kbd>
+<span>to continue</span>
+</div>
+<button class="px-space-xl h-11 rounded-lg bg-primary-container text-on-primary hover:bg-primary font-label-lg text-label-lg font-semibold flex items-center gap-2 shadow-sm transition-all" type="button">
+<span>Next: review</span>
+<span class="material-symbols-outlined text-[20px]">arrow_forward</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<script>
+  // Simple drawer toggle interaction
+  document.getElementById('toggle-paste-btn')?.addEventListener('click', function() {
+    const drawer = document.getElementById('paste-drawer');
+    if (drawer) {
+      drawer.classList.toggle('hidden');
+    }
+  });
+</script></main></div></body></html>

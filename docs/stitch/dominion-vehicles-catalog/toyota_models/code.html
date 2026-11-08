@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_dashboard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{colors:{"on-primary-fixed-variant":"#003ea8","outline":"#737686","on-primary":"#ffffff","primary":"#003ea9","on-secondary-fixed":"#131b2e","surface-variant":"#e3e2e7","secondary-fixed-dim":"#bec6e0","secondary":"#565e74","surface-container-low":"#f5f3f9","primary-container":"#0153dc","primary-fixed":"#dbe1ff","secondary-container":"#dae2fd","on-surface":"#1b1b20","surface-container-high":"#e9e7ed","on-primary-container":"#ced8ff","inverse-surface":"#2f3035","tertiary-container":"#575e77","on-error":"#ffffff","on-background":"#1b1b20","on-error-container":"#93000a","on-tertiary-fixed":"#141b30","tertiary-fixed-dim":"#bfc5e2","primary-fixed-dim":"#b4c5ff","surface-tint":"#0053db","outline-variant":"#c3c6d7","tertiary":"#40465e","on-tertiary":"#ffffff","background":"#faf8fe","error-container":"#ffdad6","surface-dim":"#dbd9df","surface-bright":"#faf8fe","on-secondary-container":"#5c647a","on-surface-variant":"#434655","on-tertiary-container":"#d2d8f6","surface-container":"#efedf3","on-secondary":"#ffffff","surface":"#faf8fe","on-secondary-fixed-variant":"#3f465c","error":"#ba1a1a","on-tertiary-fixed-variant":"#3f465e","inverse-primary":"#b4c5ff","inverse-on-surface":"#f2f0f6","on-primary-fixed":"#00174b","surface-container-lowest":"#ffffff","tertiary-fixed":"#dbe1ff","surface-container-highest":"#e3e2e7","secondary-fixed":"#dae2fd"},borderRadius:{DEFAULT:"0.25rem",lg:"0.5rem",xl:"0.75rem",full:"9999px"},spacing:{margin:"2rem","space-xl":"2rem","space-xs":"0.25rem",gutter:"1.5rem","space-lg":"1.5rem","space-md":"1rem","space-sm":"0.5rem"},fontFamily:{"hint-sm":["Inter"],"body-md":["Inter"],"code-sm":["JetBrains Mono"],"body-sm":["Inter"],caption:["Inter"],"body-lg":["Inter"],"code-md":["JetBrains Mono"],"headline-xl":["Inter"],"headline-md":["Inter"],"headline-lg":["Inter"]},fontSize:{"hint-sm":["13px",{lineHeight:"18px",letterSpacing:"0.01em",fontWeight:"400"}],"body-md":["15px",{lineHeight:"22px",letterSpacing:"0em",fontWeight:"400"}],"code-sm":["12px",{lineHeight:"16px",letterSpacing:"-0.01em",fontWeight:"500"}],"body-sm":["14px",{lineHeight:"20px",letterSpacing:"0em",fontWeight:"400"}],caption:["12px",{lineHeight:"16px",letterSpacing:"0.02em",fontWeight:"500"}],"body-lg":["16px",{lineHeight:"24px",letterSpacing:"0em",fontWeight:"400"}],"code-md":["14px",{lineHeight:"20px",letterSpacing:"-0.02em",fontWeight:"500"}],"headline-xl":["26px",{lineHeight:"34px",letterSpacing:"-0.02em",fontWeight:"600"}],"headline-md":["18px",{lineHeight:"24px",letterSpacing:"-0.01em",fontWeight:"600"}],"headline-lg":["20px",{lineHeight:"28px",letterSpacing:"-0.015em",fontWeight:"600"}]}}}}</script></head><body class="bg-surface font-body-md text-on-surface antialiased"><aside class="fixed left-0 top-0 bottom-0 w-64 bg-on-secondary-fixed z-50 flex flex-col justify-between overflow-y-auto select-none"><div class="flex flex-col"><div class="h-16 px-space-lg flex items-center gap-space-sm bg-on-tertiary-fixed"><div class="w-7 h-7 rounded-lg bg-primary-container flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">hub</span></div><div class="flex flex-col"><span class="font-headline-md text-[14px] leading-tight text-white font-semibold tracking-tight">Dominion</span><span class="font-caption text-[11px] text-secondary-fixed-dim leading-none uppercase tracking-wider">Roam Admin Console</span></div></div><div class="px-space-md py-space-sm"><nav class="flex flex-col gap-space-xs" data-active-classes="bg-primary-container text-white font-medium shadow-sm"><div class="pt-space-md pb-space-xs px-space-sm"><span class="font-caption text-[10px] uppercase font-bold tracking-widest text-secondary-fixed-dim/70">Master Data</span></div><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-secondary-fixed-dim hover:bg-on-tertiary-fixed hover:text-white transition-colors" data-path="overview" href="#"><span class="material-symbols-outlined text-[18px]">dashboard</span><span class="font-body-sm text-body-sm">Overview</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-secondary-fixed-dim hover:bg-on-tertiary-fixed hover:text-white transition-colors" data-path="vehicles" href="#"><span class="material-symbols-outlined text-[18px]">directions_car</span><span class="font-body-sm text-body-sm">Vehicles</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-secondary-fixed-dim hover:bg-on-tertiary-fixed hover:text-white transition-colors" data-path="places-and-maps" href="#"><span class="material-symbols-outlined text-[18px]">map</span><span class="font-body-sm text-body-sm">Places and Maps</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-secondary-fixed-dim hover:bg-on-tertiary-fixed hover:text-white transition-colors" data-path="fuel" href="#"><span class="material-symbols-outlined text-[18px]">local_gas_station</span><span class="font-body-sm text-body-sm">Fuel</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-secondary-fixed-dim hover:bg-on-tertiary-fixed hover:text-white transition-colors" data-path="tolls" href="#"><span class="material-symbols-outlined text-[18px]">toll</span><span class="font-body-sm text-body-sm">Tolls</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-secondary-fixed-dim hover:bg-on-tertiary-fixed hover:text-white transition-colors" data-path="tax-and-vendors" href="#"><span class="material-symbols-outlined text-[18px]">receipt_long</span><span class="font-body-sm text-body-sm">Tax and Vendors</span></a><div class="pt-space-md pb-space-xs px-space-sm"><span class="font-caption text-[10px] uppercase font-bold tracking-widest text-secondary-fixed-dim/70">Core Modules</span></div><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-secondary-fixed-dim hover:bg-on-tertiary-fixed hover:text-white transition-colors" data-path="engines" href="#"><span class="material-symbols-outlined text-[18px]">manufacturing</span><span class="font-body-sm text-body-sm">Engines</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-secondary-fixed-dim hover:bg-on-tertiary-fixed hover:text-white transition-colors" data-path="distribution" href="#"><span class="material-symbols-outlined text-[18px]">swap_horiz</span><span class="font-body-sm text-body-sm">Distribution</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-secondary-fixed-dim hover:bg-on-tertiary-fixed hover:text-white transition-colors" data-path="platform" href="#"><span class="material-symbols-outlined text-[18px]">layers</span><span class="font-body-sm text-body-sm">Platform</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-secondary-fixed-dim hover:bg-on-tertiary-fixed hover:text-white transition-colors" data-path="back-office" href="#"><span class="material-symbols-outlined text-[18px]">admin_panel_settings</span><span class="font-body-sm text-body-sm">Back Office</span></a></nav></div></div><div class="p-space-md m-space-sm bg-on-tertiary-fixed rounded-lg"><div class="flex items-center justify-between text-secondary-fixed-dim"><span class="font-caption text-caption">Registry Engine</span><span class="font-code-sm text-code-sm px-1.5 py-0.5 rounded bg-on-secondary-fixed text-primary-fixed">v4.18</span></div></div></aside><div class="pl-64 flex flex-col min-h-screen"><header class="fixed top-0 left-64 right-0 h-16 bg-surface/85 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-40 flex items-center justify-between px-space-xl"><div class="flex-1 max-w-lg"><div class="relative flex items-center"><span class="material-symbols-outlined absolute left-space-md text-secondary text-[20px] pointer-events-none">search</span><input class="w-full h-11 pl-10 pr-12 rounded-lg bg-surface-container-lowest font-body-sm text-body-sm text-on-surface placeholder:text-secondary shadow-[0_2px_8px_rgba(1,83,220,0.04)] focus:outline-none focus:ring-2 focus:ring-primary-container transition-all" placeholder="Search entities, engines, routes…" type="search"/><span class="absolute right-space-sm font-caption text-caption text-secondary bg-surface-container px-2 py-0.5 rounded">⌘K</span></div></div><div class="flex items-center gap-space-md"><button aria-label="Toggle dark mode" class="w-9 h-9 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-colors" type="button"><span class="material-symbols-outlined text-[20px]">dark_mode</span></button><div class="flex items-center gap-space-sm pl-space-sm"><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="font-caption text-on-primary text-[11px] font-semibold tracking-tight">DT</span></div><div class="flex flex-col text-left"><span class="font-body-sm text-[13px] font-semibold text-on-surface leading-tight">Deeki T</span><span class="font-caption text-caption text-secondary leading-tight">Owner</span></div></div></div></header><main class="w-full pt-16 bg-surface flex-1"><div class="flex flex-col w-full">
+<div class="w-full max-w-[1120px] mx-auto px-space-xl py-space-lg flex flex-col gap-space-lg">
+<!-- Top Navigation / Context Trail -->
+<div class="flex items-center justify-between">
+<a class="inline-flex items-center gap-1.5 text-secondary hover:text-primary transition-colors font-body-sm text-body-sm group" href="#">
+<span class="material-symbols-outlined text-[18px] group-hover:-translate-x-0.5 transition-transform">arrow_back</span>
+<span>Back to Vehicles</span>
+</a>
+<div class="flex items-center gap-space-sm">
+<span class="font-caption text-caption text-secondary uppercase tracking-widest">Catalog Partition:</span>
+<span class="font-code-sm text-code-sm px-2 py-0.5 rounded bg-surface-container text-on-surface font-medium">OEM_JPN_004</span>
+</div>
+</div>
+<!-- Maker Header Entity Card -->
+<div class="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-space-md">
+<div class="flex items-start md:items-center gap-space-md">
+<!-- Maker Circular Insignia Badge -->
+<div class="w-16 h-16 rounded-full bg-surface-container-lowest shadow-sm flex items-center justify-center p-2.5 shrink-0">
+<svg class="w-full h-full text-on-surface" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="5" viewbox="0 0 100 70">
+<!-- Stylized Toyota Tri-Ellipse Emblem Geometry -->
+<ellipse cx="50" cy="35" rx="46" ry="31"></ellipse>
+<ellipse cx="50" cy="35" rx="17" ry="24"></ellipse>
+<path d="M 12 24 C 32 16, 68 16, 88 24"></path>
+</svg>
+</div>
+<div class="flex flex-col">
+<div class="flex items-center gap-space-sm flex-wrap">
+<h1 class="font-headline-xl text-headline-xl text-on-surface font-semibold tracking-tight">Toyota</h1>
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary-container font-caption text-[11px] font-semibold text-on-secondary-fixed">
+<span class="w-1.5 h-1.5 rounded-full bg-primary-container"></span>
+              VERIFIED OEM
+            </span>
+</div>
+<p class="font-body-sm text-body-sm text-secondary mt-0.5">
+            236 versions <span class="text-outline-variant font-code-sm mx-1">·</span> 71 models <span class="text-outline-variant font-code-sm mx-1">·</span> Japan <span class="text-secondary/70">(HQ: Toyota City, Aichi)</span>
+</p>
+</div>
+</div>
+<!-- Header Action Cluster -->
+<div class="flex items-center gap-space-sm shrink-0 self-end md:self-auto">
+<button class="h-[38px] px-3.5 bg-surface-container-lowest hover:bg-surface-container text-on-surface rounded-lg font-body-sm text-body-sm font-medium shadow-sm flex items-center gap-2 transition-all" type="button">
+<span class="material-symbols-outlined text-[18px] text-secondary">edit</span>
+<span>Edit maker</span>
+</button>
+<button class="h-[38px] px-4 bg-primary-container hover:bg-primary text-on-primary rounded-lg font-body-sm text-body-sm font-medium shadow-sm flex items-center gap-1.5 transition-all" type="button">
+<span class="material-symbols-outlined text-[18px]">add</span>
+<span>Add model</span>
+</button>
+</div>
+</div>
+<!-- Search & Filter Palette -->
+<div class="flex flex-col gap-space-sm">
+<div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-space-sm">
+<!-- Live Search Box with Keyboard Hint -->
+<div class="relative flex-1 flex items-center">
+<span class="material-symbols-outlined absolute left-3.5 text-secondary text-[20px] pointer-events-none">search</span>
+<input class="w-full h-11 pl-10 pr-12 rounded-lg bg-surface-container-lowest font-body-sm text-body-sm text-on-surface placeholder:text-secondary shadow-sm focus:outline-none focus:bg-surface-container-lowest focus:shadow-md transition-all" placeholder="Search Toyota models — e.g. Roomy, Yaris, Corolla, RAV4..." type="search"/>
+<span class="absolute right-3 font-caption text-[11px] text-secondary bg-surface-container px-2 py-0.5 rounded font-code-sm pointer-events-none">/</span>
+</div>
+<!-- Sort Select Trigger -->
+<div class="relative shrink-0">
+<button class="h-11 px-3.5 bg-surface-container-lowest text-on-surface rounded-lg font-body-sm text-body-sm font-medium shadow-sm flex items-center gap-2 hover:bg-surface-container transition-all" type="button">
+<span class="material-symbols-outlined text-[18px] text-secondary">swap_vert</span>
+<span>Sorted by: <span class="font-semibold text-primary">Most versions</span></span>
+<span class="material-symbols-outlined text-[16px] text-secondary ml-1">expand_more</span>
+</button>
+</div>
+</div>
+<!-- Segment Quick Filter Horizontal Rail -->
+<div class="flex items-center gap-1.5 overflow-x-auto pb-1 pt-1 scrollbar-none">
+<button class="px-3.5 py-1.5 rounded-full bg-primary-container text-on-primary font-caption text-caption whitespace-nowrap shadow-sm" type="button">
+          All models <span class="ml-1 opacity-80 font-code-sm">71</span>
+</button>
+<button class="px-3.5 py-1.5 rounded-full bg-surface-container-lowest text-secondary hover:text-on-surface hover:bg-surface-container font-caption text-caption whitespace-nowrap shadow-sm transition-colors" type="button">
+          Compact &amp; Minivan <span class="ml-1 font-code-sm text-secondary/80">14</span>
+</button>
+<button class="px-3.5 py-1.5 rounded-full bg-surface-container-lowest text-secondary hover:text-on-surface hover:bg-surface-container font-caption text-caption whitespace-nowrap shadow-sm transition-colors" type="button">
+          Hatchback &amp; Sedan <span class="ml-1 font-code-sm text-secondary/80">22</span>
+</button>
+<button class="px-3.5 py-1.5 rounded-full bg-surface-container-lowest text-secondary hover:text-on-surface hover:bg-surface-container font-caption text-caption whitespace-nowrap shadow-sm transition-colors" type="button">
+          SUV &amp; Crossover <span class="ml-1 font-code-sm text-secondary/80">18</span>
+</button>
+<button class="px-3.5 py-1.5 rounded-full bg-surface-container-lowest text-secondary hover:text-on-surface hover:bg-surface-container font-caption text-caption whitespace-nowrap shadow-sm transition-colors" type="button">
+          Commercial / Van <span class="ml-1 font-code-sm text-secondary/80">11</span>
+</button>
+<button class="px-3.5 py-1.5 rounded-full bg-surface-container-lowest text-secondary hover:text-on-surface hover:bg-surface-container font-caption text-caption whitespace-nowrap shadow-sm transition-colors" type="button">
+          Active production <span class="ml-1 font-code-sm text-secondary/80">54</span>
+</button>
+</div>
+</div>
+<!-- Models Grid (4 across, responsive 12 items) -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-space-md">
+<!-- Card 1: Roomy (Active / Focus Model) -->
+<a class="group bg-surface-container-lowest rounded-xl p-space-md shadow-sm hover:shadow-md transition-all flex flex-col justify-between relative overflow-hidden" href="#">
+<div class="absolute top-0 left-0 right-0 h-1 bg-primary-container"></div>
+<div class="flex flex-col">
+<div class="flex items-start justify-between gap-1">
+<h3 class="font-headline-md text-headline-md text-on-surface group-hover:text-primary transition-colors">Roomy</h3>
+<span class="font-caption text-[11px] font-semibold px-2 py-0.5 rounded bg-primary-fixed text-on-primary-fixed shrink-0">
+              5 versions
+            </span>
+</div>
+<span class="font-caption text-caption text-secondary mt-0.5">2016 – today</span>
+<div class="mt-space-sm flex flex-col gap-1.5">
+<span class="inline-block px-2 py-0.5 rounded bg-surface-container-low font-caption text-[11px] text-on-surface-variant font-medium self-start">
+              Minivan / Tall wagon
+            </span>
+<div class="flex items-center gap-1.5 text-secondary font-hint-sm text-[12px] bg-secondary-fixed/30 rounded p-1.5">
+<span class="material-symbols-outlined text-[16px] text-primary shrink-0">link</span>
+<span class="truncate">Shared: Tank, Thor, Justy</span>
+</div>
+</div>
+</div>
+<div class="mt-space-md pt-space-sm flex items-center justify-between text-secondary bg-surface-container-low/50 -mx-space-md -mb-space-md px-space-md py-2.5 rounded-b-xl">
+<div class="flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-primary-container"></span>
+<span class="font-caption text-[11px] text-on-surface-variant font-medium">Key parts 8/10</span>
+</div>
+<span class="font-caption text-[11px] text-secondary group-hover:text-primary transition-colors flex items-center">
+            Details <span class="material-symbols-outlined text-[14px] ml-0.5">chevron_right</span>
+</span>
+</div>
+</a>
+<!-- Card 2: Tank -->
+<a class="group bg-surface-container-lowest rounded-xl p-space-md shadow-sm hover:shadow-md transition-all flex flex-col justify-between" href="#">
+<div class="flex flex-col">
+<div class="flex items-start justify-between gap-1">
+<h3 class="font-headline-md text-headline-md text-on-surface group-hover:text-primary transition-colors">Tank</h3>
+<span class="font-caption text-[11px] font-semibold px-2 py-0.5 rounded bg-surface-container font-code-sm text-secondary shrink-0">
+              2 versions
+            </span>
+</div>
+<span class="font-caption text-caption text-secondary mt-0.5">2016 – 2020</span>
+<div class="mt-space-sm flex flex-col gap-1.5">
+<span class="inline-block px-2 py-0.5 rounded bg-surface-container-low font-caption text-[11px] text-on-surface-variant font-medium self-start">
+              Compact MPV
+            </span>
+<div class="flex items-center gap-1.5 text-secondary font-hint-sm text-[12px] bg-secondary-fixed/20 rounded p-1.5">
+<span class="material-symbols-outlined text-[16px] text-secondary shrink-0">repeat</span>
+<span class="truncate">Sister car of Roomy</span>
+</div>
+</div>
+</div>
+<div class="mt-space-md pt-space-sm flex items-center justify-between text-secondary bg-surface-container-low/50 -mx-space-md -mb-space-md px-space-md py-2.5 rounded-b-xl">
+<div class="flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+<span class="font-caption text-[11px] text-on-surface-variant font-medium">All specs complete</span>
+</div>
+<span class="font-caption text-[11px] text-secondary group-hover:text-primary transition-colors flex items-center">
+<span class="material-symbols-outlined text-[14px]">chevron_right</span>
+</span>
+</div>
+</a>
+<!-- Card 3: Yaris -->
+<a class="group bg-surface-container-lowest rounded-xl p-space-md shadow-sm hover:shadow-md transition-all flex flex-col justify-between" href="#">
+<div class="flex flex-col">
+<div class="flex items-start justify-between gap-1">
+<h3 class="font-headline-md text-headline-md text-on-surface group-hover:text-primary transition-colors">Yaris</h3>
+<span class="font-caption text-[11px] font-semibold px-2 py-0.5 rounded bg-primary-fixed text-on-primary-fixed shrink-0">
+              38 versions
+            </span>
+</div>
+<span class="font-caption text-caption text-secondary mt-0.5">1999 – today</span>
+<div class="mt-space-sm flex flex-col gap-1.5">
+<span class="inline-block px-2 py-0.5 rounded bg-surface-container-low font-caption text-[11px] text-on-surface-variant font-medium self-start">
+              Subcompact Hatchback
+            </span>
+<div class="font-code-sm text-[11px] text-secondary truncate py-1">
+              XP210 / XP130 / XP90
+            </div>
+</div>
+</div>
+<div class="mt-space-md pt-space-sm flex items-center justify-between text-secondary bg-surface-container-low/50 -mx-space-md -mb-space-md px-space-md py-2.5 rounded-b-xl">
+<div class="flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+<span class="font-caption text-[11px] text-on-surface-variant font-medium">Key parts 10/10</span>
+</div>
+<span class="font-caption text-[11px] text-secondary group-hover:text-primary transition-colors flex items-center">
+<span class="material-symbols-outlined text-[14px]">chevron_right</span>
+</span>
+</div>
+</a>
+<!-- Card 4: Corolla -->
+<a class="group bg-surface-container-lowest rounded-xl p-space-md shadow-sm hover:shadow-md transition-all flex flex-col justify-between" href="#">
+<div class="flex flex-col">
+<div class="flex items-start justify-between gap-1">
+<h3 class="font-headline-md text-headline-md text-on-surface group-hover:text-primary transition-colors">Corolla</h3>
+<span class="font-caption text-[11px] font-semibold px-2 py-0.5 rounded bg-primary-fixed text-on-primary-fixed shrink-0">
+              44 versions
+            </span>
+</div>
+<span class="font-caption text-caption text-secondary mt-0.5">1966 – today</span>
+<div class="mt-space-sm flex flex-col gap-1.5">
+<span class="inline-block px-2 py-0.5 rounded bg-surface-container-low font-caption text-[11px] text-on-surface-variant font-medium self-start">
+              Compact Family / Touring
+            </span>
+<div class="font-code-sm text-[11px] text-secondary truncate py-1">
+              E210 / E170 / E140
+            </div>
+</div>
+</div>
+<div class="mt-space-md pt-space-sm flex items-center justify-between text-secondary bg-surface-container-low/50 -mx-space-md -mb-space-md px-space-md py-2.5 rounded-b-xl">
+<div class="flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+<span class="font-caption text-[11px] text-on-surface-variant font-medium">Key parts 10/10</span>
+</div>
+<span class="font-caption text-[11px] text-secondary group-hover:text-primary transition-colors flex items-center">
+<span class="material-symbols-outlined text-[14px]">chevron_right</span>
+</span>
+</div>
+</a>
+<!-- Card 5: RAV4 -->
+<a class="group bg-surface-container-lowest rounded-xl p-space-md shadow-sm hover:shadow-md transition-all flex flex-col justify-between" href="#">
+<div class="flex flex-col">
+<div class="flex items-start justify-between gap-1">
+<h3 class="font-headline-md text-headline-md text-on-surface group-hover:text-primary transition-colors">RAV4</h3>
+<span class="font-caption text-[11px] font-semibold px-2 py-0.5 rounded bg-primary-fixed text-on-primary-fixed shrink-0">
+              24 versions
+            </span>
+</div>
+<span class="font-caption text-caption text-secondary mt-0.5">1994 – today</span>
+<div class="mt-space-sm flex flex-col gap-1.5">
+<span class="inline-block px-2 py-0.5 rounded bg-surface-container-low font-caption text-[11px] text-on-surface-variant font-medium self-start">
+              Compact Crossover SUV
+            </span>
+<div class="font-code-sm text-[11px] text-secondary truncate py-1">
+              XA50 / XA40 / XA30
+            </div>
+</div>
+</div>
+<div class="mt-space-md pt-space-sm flex items-center justify-between text-secondary bg-surface-container-low/50 -mx-space-md -mb-space-md px-space-md py-2.5 rounded-b-xl">
+<div class="flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-primary-container"></span>
+<span class="font-caption text-[11px] text-on-surface-variant font-medium">Key parts 9/10</span>
+</div>
+<span class="font-caption text-[11px] text-secondary group-hover:text-primary transition-colors flex items-center">
+<span class="material-symbols-outlined text-[14px]">chevron_right</span>
+</span>
+</div>
+</a>
+<!-- Card 6: Prius -->
+<a class="group bg-surface-container-lowest rounded-xl p-space-md shadow-sm hover:shadow-md transition-all flex flex-col justify-between" href="#">
+<div class="flex flex-col">
+<div class="flex items-start justify-between gap-1">
+<h3 class="font-headline-md text-headline-md text-on-surface group-hover:text-primary transition-colors">Prius</h3>
+<span class="font-caption text-[11px] font-semibold px-2 py-0.5 rounded bg-primary-fixed text-on-primary-fixed shrink-0">
+              18 versions
+            </span>
+</div>
+<span class="font-caption text-caption text-secondary mt-0.5">1997 – today</span>
+<div class="mt-space-sm flex flex-col gap-1.5">
+<span class="inline-block px-2 py-0.5 rounded bg-surface-container-low font-caption text-[11px] text-on-surface-variant font-medium self-start">
+              Hybrid Liftback
+            </span>
+<div class="font-code-sm text-[11px] text-secondary truncate py-1">
+              XW60 / XW50 / XW30
+            </div>
+</div>
+</div>
+<div class="mt-space-md pt-space-sm flex items-center justify-between text-secondary bg-surface-container-low/50 -mx-space-md -mb-space-md px-space-md py-2.5 rounded-b-xl">
+<div class="flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-primary-container"></span>
+<span class="font-caption text-[11px] text-on-surface-variant font-medium">Key parts 8/10</span>
+</div>
+<span class="font-caption text-[11px] text-secondary group-hover:text-primary transition-colors flex items-center">
+<span class="material-symbols-outlined text-[14px]">chevron_right</span>
+</span>
+</div>
+</a>
+<!-- Card 7: Vitz (Archived / Legacy) -->
+<a class="group bg-surface-container-lowest rounded-xl p-space-md shadow-sm hover:shadow-md transition-all flex flex-col justify-between opacity-80 hover:opacity-100" href="#">
+<div class="flex flex-col">
+<div class="flex items-start justify-between gap-1">
+<h3 class="font-headline-md text-headline-md text-on-surface group-hover:text-primary transition-colors">Vitz</h3>
+<span class="font-caption text-[11px] font-semibold px-2 py-0.5 rounded bg-surface-container font-code-sm text-secondary shrink-0">
+              16 versions
+            </span>
+</div>
+<span class="font-caption text-caption text-secondary mt-0.5">1999 – 2019</span>
+<div class="mt-space-sm flex flex-col gap-1.5">
+<span class="inline-block px-2 py-0.5 rounded bg-surface-container-low font-caption text-[11px] text-on-surface-variant font-medium self-start">
+              Japanese market Yaris
+            </span>
+<span class="font-caption text-[11px] text-secondary italic">
+              Merged into global XP210
+            </span>
+</div>
+</div>
+<div class="mt-space-md pt-space-sm flex items-center justify-between text-secondary bg-surface-container-low/50 -mx-space-md -mb-space-md px-space-md py-2.5 rounded-b-xl">
+<div class="flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-outline"></span>
+<span class="font-caption text-[11px] text-secondary font-medium">Archived</span>
+</div>
+<span class="font-caption text-[11px] text-secondary group-hover:text-primary transition-colors flex items-center">
+<span class="material-symbols-outlined text-[14px]">chevron_right</span>
+</span>
+</div>
+</a>
+<!-- Card 8: Aqua -->
+<a class="group bg-surface-container-lowest rounded-xl p-space-md shadow-sm hover:shadow-md transition-all flex flex-col justify-between" href="#">
+<div class="flex flex-col">
+<div class="flex items-start justify-between gap-1">
+<h3 class="font-headline-md text-headline-md text-on-surface group-hover:text-primary transition-colors">Aqua</h3>
+<span class="font-caption text-[11px] font-semibold px-2 py-0.5 rounded bg-primary-fixed text-on-primary-fixed shrink-0">
+              12 versions
+            </span>
+</div>
+<span class="font-caption text-caption text-secondary mt-0.5">2011 – today</span>
+<div class="mt-space-sm flex flex-col gap-1.5">
+<span class="inline-block px-2 py-0.5 rounded bg-surface-container-low font-caption text-[11px] text-on-surface-variant font-medium self-start">
+              B-segment Hybrid
+            </span>
+<div class="font-hint-sm text-[12px] text-secondary truncate py-1">
+              Prius c international
+            </div>
+</div>
+</div>
+<div class="mt-space-md pt-space-sm flex items-center justify-between text-secondary bg-surface-container-low/50 -mx-space-md -mb-space-md px-space-md py-2.5 rounded-b-xl">
+<div class="flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-amber-500"></span>
+<span class="font-caption text-[11px] text-on-surface-variant font-medium">Key parts 7/10</span>
+</div>
+<span class="font-caption text-[11px] text-secondary group-hover:text-primary transition-colors flex items-center">
+<span class="material-symbols-outlined text-[14px]">chevron_right</span>
+</span>
+</div>
+</a>
+<!-- Card 9: Noah -->
+<a class="group bg-surface-container-lowest rounded-xl p-space-md shadow-sm hover:shadow-md transition-all flex flex-col justify-between" href="#">
+<div class="flex flex-col">
+<div class="flex items-start justify-between gap-1">
+<h3 class="font-headline-md text-headline-md text-on-surface group-hover:text-primary transition-colors">Noah</h3>
+<span class="font-caption text-[11px] font-semibold px-2 py-0.5 rounded bg-primary-fixed text-on-primary-fixed shrink-0">
+              15 versions
+            </span>
+</div>
+<span class="font-caption text-caption text-secondary mt-0.5">2001 – today</span>
+<div class="mt-space-sm flex flex-col gap-1.5">
+<span class="inline-block px-2 py-0.5 rounded bg-surface-container-low font-caption text-[11px] text-on-surface-variant font-medium self-start">
+              Mid-size Minivan
+            </span>
+<div class="font-code-sm text-[11px] text-secondary truncate py-1">
+              R90 / R80 / R60
+            </div>
+</div>
+</div>
+<div class="mt-space-md pt-space-sm flex items-center justify-between text-secondary bg-surface-container-low/50 -mx-space-md -mb-space-md px-space-md py-2.5 rounded-b-xl">
+<div class="flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-amber-500"></span>
+<span class="font-caption text-[11px] text-on-surface-variant font-medium">Key parts 6/10</span>
+</div>
+<span class="font-caption text-[11px] text-secondary group-hover:text-primary transition-colors flex items-center">
+<span class="material-symbols-outlined text-[14px]">chevron_right</span>
+</span>
+</div>
+</a>
+<!-- Card 10: Voxy -->
+<a class="group bg-surface-container-lowest rounded-xl p-space-md shadow-sm hover:shadow-md transition-all flex flex-col justify-between" href="#">
+<div class="flex flex-col">
+<div class="flex items-start justify-between gap-1">
+<h3 class="font-headline-md text-headline-md text-on-surface group-hover:text-primary transition-colors">Voxy</h3>
+<span class="font-caption text-[11px] font-semibold px-2 py-0.5 rounded bg-primary-fixed text-on-primary-fixed shrink-0">
+              14 versions
+            </span>
+</div>
+<span class="font-caption text-caption text-secondary mt-0.5">2001 – today</span>
+<div class="mt-space-sm flex flex-col gap-1.5">
+<span class="inline-block px-2 py-0.5 rounded bg-surface-container-low font-caption text-[11px] text-on-surface-variant font-medium self-start">
+              Sport Minivan (Noah twin)
+            </span>
+<div class="font-code-sm text-[11px] text-secondary truncate py-1">
+              R90 / R80 / R60
+            </div>
+</div>
+</div>
+<div class="mt-space-md pt-space-sm flex items-center justify-between text-secondary bg-surface-container-low/50 -mx-space-md -mb-space-md px-space-md py-2.5 rounded-b-xl">
+<div class="flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-amber-500"></span>
+<span class="font-caption text-[11px] text-on-surface-variant font-medium">Key parts 7/10</span>
+</div>
+<span class="font-caption text-[11px] text-secondary group-hover:text-primary transition-colors flex items-center">
+<span class="material-symbols-outlined text-[14px]">chevron_right</span>
+</span>
+</div>
+</a>
+<!-- Card 11: Harrier -->
+<a class="group bg-surface-container-lowest rounded-xl p-space-md shadow-sm hover:shadow-md transition-all flex flex-col justify-between" href="#">
+<div class="flex flex-col">
+<div class="flex items-start justify-between gap-1">
+<h3 class="font-headline-md text-headline-md text-on-surface group-hover:text-primary transition-colors">Harrier</h3>
+<span class="font-caption text-[11px] font-semibold px-2 py-0.5 rounded bg-primary-fixed text-on-primary-fixed shrink-0">
+              11 versions
+            </span>
+</div>
+<span class="font-caption text-caption text-secondary mt-0.5">1997 – today</span>
+<div class="mt-space-sm flex flex-col gap-1.5">
+<span class="inline-block px-2 py-0.5 rounded bg-surface-container-low font-caption text-[11px] text-on-surface-variant font-medium self-start">
+              Mid-size Crossover
+            </span>
+<div class="font-code-sm text-[11px] text-secondary truncate py-1">
+              XU80 / XU60
+            </div>
+</div>
+</div>
+<div class="mt-space-md pt-space-sm flex items-center justify-between text-secondary bg-surface-container-low/50 -mx-space-md -mb-space-md px-space-md py-2.5 rounded-b-xl">
+<div class="flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-primary-container"></span>
+<span class="font-caption text-[11px] text-on-surface-variant font-medium">Key parts 9/10</span>
+</div>
+<span class="font-caption text-[11px] text-secondary group-hover:text-primary transition-colors flex items-center">
+<span class="material-symbols-outlined text-[14px]">chevron_right</span>
+</span>
+</div>
+</a>
+<!-- Card 12: Land Cruiser -->
+<a class="group bg-surface-container-lowest rounded-xl p-space-md shadow-sm hover:shadow-md transition-all flex flex-col justify-between" href="#">
+<div class="flex flex-col">
+<div class="flex items-start justify-between gap-1">
+<h3 class="font-headline-md text-headline-md text-on-surface group-hover:text-primary transition-colors">Land Cruiser</h3>
+<span class="font-caption text-[11px] font-semibold px-2 py-0.5 rounded bg-primary-fixed text-on-primary-fixed shrink-0">
+              28 versions
+            </span>
+</div>
+<span class="font-caption text-caption text-secondary mt-0.5">1951 – today</span>
+<div class="mt-space-sm flex flex-col gap-1.5">
+<span class="inline-block px-2 py-0.5 rounded bg-surface-container-low font-caption text-[11px] text-on-surface-variant font-medium self-start">
+              Heavy Duty 4WD
+            </span>
+<div class="font-code-sm text-[11px] text-secondary truncate py-1">
+              J300 / J200 / J70
+            </div>
+</div>
+</div>
+<div class="mt-space-md pt-space-sm flex items-center justify-between text-secondary bg-surface-container-low/50 -mx-space-md -mb-space-md px-space-md py-2.5 rounded-b-xl">
+<div class="flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+<span class="font-caption text-[11px] text-on-surface-variant font-medium">Key parts 10/10</span>
+</div>
+<span class="font-caption text-[11px] text-secondary group-hover:text-primary transition-colors flex items-center">
+<span class="material-symbols-outlined text-[14px]">chevron_right</span>
+</span>
+</div>
+</a>
+</div>
+<!-- Audit & Sync Insight Panel -->
+<div class="bg-surface-container-low rounded-xl p-space-md flex flex-col sm:flex-row items-center justify-between gap-space-md mt-space-sm">
+<div class="flex items-center gap-space-md">
+<div class="w-10 h-10 rounded-lg bg-surface-container-lowest flex items-center justify-center text-primary-container shadow-sm shrink-0">
+<span class="material-symbols-outlined text-[22px]">sync_saved_locally</span>
+</div>
+<div class="flex flex-col">
+<span class="font-headline-md text-[14px] text-on-surface font-semibold leading-tight">Master Catalog Synchronization Status</span>
+<span class="font-body-sm text-body-sm text-secondary leading-tight mt-0.5">
+            54 of 71 models are actively produced. Sister vehicle linkage engine is active across JDM sub-compacts.
+          </span>
+</div>
+</div>
+<button class="h-9 px-3.5 bg-surface-container-lowest hover:bg-surface-container text-on-surface rounded-lg font-caption text-caption font-semibold shadow-sm shrink-0 transition-colors" type="button">
+        Run Catalog Integrity Check
+      </button>
+</div>
+<!-- Footer Summary & Pagination Bar -->
+<div class="flex flex-col sm:flex-row items-center justify-between gap-space-md pt-space-sm pb-space-xl text-secondary">
+<span class="font-hint-sm text-hint-sm">
+        Showing <strong class="text-on-surface font-semibold font-code-sm">12</strong> of <strong class="text-on-surface font-semibold font-code-sm">71</strong> models on file
+      </span>
+<!-- Pagination Group -->
+<div class="flex items-center gap-1.5">
+<button class="w-8 h-8 rounded-lg bg-surface-container-lowest text-secondary flex items-center justify-center shadow-sm disabled:opacity-40" disabled="" type="button">
+<span class="material-symbols-outlined text-[16px]">chevron_left</span>
+</button>
+<button class="w-8 h-8 rounded-lg bg-primary-container text-on-primary font-caption text-caption font-semibold flex items-center justify-center shadow-sm" type="button">
+          1
+        </button>
+<button class="w-8 h-8 rounded-lg bg-surface-container-lowest text-on-surface hover:bg-surface-container font-caption text-caption font-medium flex items-center justify-center shadow-sm transition-colors" type="button">
+          2
+        </button>
+<button class="w-8 h-8 rounded-lg bg-surface-container-lowest text-on-surface hover:bg-surface-container font-caption text-caption font-medium flex items-center justify-center shadow-sm transition-colors" type="button">
+          3
+        </button>
+<span class="px-1 text-secondary font-code-sm text-[12px]">…</span>
+<button class="w-8 h-8 rounded-lg bg-surface-container-lowest text-on-surface hover:bg-surface-container font-caption text-caption font-medium flex items-center justify-center shadow-sm transition-colors" type="button">
+          6
+        </button>
+<button class="w-8 h-8 rounded-lg bg-surface-container-lowest text-secondary hover:text-on-surface hover:bg-surface-container flex items-center justify-center shadow-sm transition-colors" type="button">
+<span class="material-symbols-outlined text-[16px]">chevron_right</span>
+</button>
+</div>
+</div>
+</div>
+</div></main></div></body></html>

@@ -56,6 +56,20 @@ const SHOCK_TYPE = {
   specFields: [],
 };
 
+const HANDBRAKE_CABLE_TYPE = {
+  id: "a9000003-0000-4000-8000-000000000030",
+  opCode: "BRK-HBCABLE",
+  name: "Handbrake cable",
+  tradeTerm: "handbrake cable",
+  editorHint: "Front or rear; catalogue No.1–No.3 when the diagram numbers them.",
+  defaultFitMode: "specific",
+  positionScheme: "axle_numbered",
+  status: "active",
+  iconKey: "cable",
+  areaId: "b1000000-0000-4000-8000-000000000004",
+  specFields: [],
+};
+
 const EXTRA_TYPES = [
   { opCode: "BRK-SHOES", name: "Brake shoes", defaultFitMode: "specific", positionScheme: "axle", tradeTerm: "shoes", editorHint: "", status: "active", iconKey: "disc_full", specFields: [] },
   { opCode: "ENG-SPARK", name: "Spark plugs", defaultFitMode: "engine", positionScheme: "none", tradeTerm: "spark", editorHint: "", status: "active", iconKey: "bolt", specFields: [] },
@@ -72,6 +86,7 @@ function typeRow(t: typeof EXTRA_TYPES[0], idx: number) {
 
 export const MOCK_PART_TYPES = [
   BRAKE_TYPE,
+  HANDBRAKE_CABLE_TYPE,
   OIL_TYPE,
   WIPER_TYPE,
   SHOCK_TYPE,
@@ -81,11 +96,11 @@ export const MOCK_PART_TYPES = [
 const ENGINE_ID = "00000000-0000-4000-8000-000000000099";
 const PLATFORM_SISTER = "p-m900-sister";
 const MOCK_VEHICLES = [
-  { id: "ap900005-0000-4000-8000-000000000001", make: "Toyota", model: "Roomy", chassis_code: "M900A", production_start_year: 2020, production_end_year: null, engine_code: "1KR-VET", version_name: "Custom G-T", platform_id: PLATFORM_SISTER },
-  { id: "ap900005-0000-4000-8000-000000000002", make: "Toyota", model: "Roomy", chassis_code: "M900A", production_start_year: 2016, production_end_year: 2020, engine_code: "1KR-FE", version_name: "X / G", platform_id: PLATFORM_SISTER },
-  { id: "ap900005-0000-4000-8000-000000000003", make: "Toyota", model: "Tank", chassis_code: "M900A", production_start_year: 2016, production_end_year: 2020, engine_code: "1KR-FE", version_name: "Custom G", platform_id: PLATFORM_SISTER },
-  { id: "ap900005-0000-4000-8000-000000000004", make: "Daihatsu", model: "Thor", chassis_code: "M900S", production_start_year: 2016, production_end_year: null, engine_code: "1KR-FE", version_name: "G SA III", platform_id: PLATFORM_SISTER },
-  { id: "ap900005-0000-4000-8000-000000000005", make: "Subaru", model: "Justy", chassis_code: "M900F", production_start_year: 2016, production_end_year: null, engine_code: "1KR-FE", version_name: "G Smart Assist", platform_id: PLATFORM_SISTER },
+  { id: "ap900005-0000-4000-8000-000000000001", make: "Toyota", model: "Roomy", chassis_code: "M900A", production_start_year: 2020, production_end_year: null, engine_code: "1KR-VET", version_name: "Custom G-T", platform_id: PLATFORM_SISTER, drivetrain: "2WD" },
+  { id: "ap900005-0000-4000-8000-000000000002", make: "Toyota", model: "Roomy", chassis_code: "M900A", production_start_year: 2016, production_end_year: 2020, engine_code: "1KR-FE", version_name: "Custom G", platform_id: PLATFORM_SISTER, drivetrain: "2WD" },
+  { id: "ap900005-0000-4000-8000-000000000003", make: "Toyota", model: "Tank", chassis_code: "M900A", production_start_year: 2016, production_end_year: 2020, engine_code: "1KR-FE", version_name: "Custom G", platform_id: PLATFORM_SISTER, drivetrain: "2WD" },
+  { id: "ap900005-0000-4000-8000-000000000004", make: "Daihatsu", model: "Thor", chassis_code: "M900S", production_start_year: 2016, production_end_year: 2020, engine_code: "1KR-FE", version_name: "G SA III", platform_id: PLATFORM_SISTER, drivetrain: "2WD" },
+  { id: "ap900005-0000-4000-8000-000000000005", make: "Subaru", model: "Justy", chassis_code: "M900F", production_start_year: 2016, production_end_year: 2020, engine_code: "1KR-FE", version_name: "G Smart Assist", platform_id: PLATFORM_SISTER, drivetrain: "2WD" },
   { id: "ap900005-0000-4000-8000-000000000006", make: "Toyota", model: "Tank", chassis_code: "M910A", production_start_year: 2016, production_end_year: 2020, engine_code: "1KR-FE", version_name: "4WD", platform_id: PLATFORM_SISTER, drivetrain: "4WD" },
   { id: "ap900005-0000-4000-8000-000000000007", make: "Toyota", model: "Roomy", chassis_code: "M910A", production_start_year: 2016, production_end_year: 2020, engine_code: "1KR-FE", version_name: "4WD", platform_id: PLATFORM_SISTER, drivetrain: "4WD" },
   { id: "ap900005-0000-4000-8000-000000000008", make: "Daihatsu", model: "Boon", chassis_code: "M700S", production_start_year: 2016, production_end_year: null, engine_code: "1KR-FE", version_name: "Standard", platform_id: PLATFORM_SISTER },
@@ -223,15 +238,34 @@ export async function installAddPartsMocks(page: Page, state?: AddPartsMockState
     if (url.includes("/add-part/vehicles")) {
       const u = new URL(url);
       const q = (u.searchParams.get("q") ?? "").toLowerCase();
+      const chassis = (u.searchParams.get("chassis") ?? "").toLowerCase();
       let items = MOCK_VEHICLES;
-      if (q) {
+      if (q || chassis) {
+        const needle = q || chassis;
         items = MOCK_VEHICLES.filter((v) =>
-          v.make.toLowerCase().includes(q)
-          || v.model.toLowerCase().includes(q)
-          || (v.chassis_code ?? "").toLowerCase().includes(q),
+          v.make.toLowerCase().includes(needle)
+          || v.model.toLowerCase().includes(needle)
+          || (v.chassis_code ?? "").toLowerCase().includes(needle),
         );
+        if (!items.length && chassis) {
+          items = MOCK_VEHICLES.filter((v) => (v.chassis_code ?? "").toLowerCase().includes(chassis));
+        }
       }
       return route.fulfill({ json: { items } });
+    }
+    if (url.includes("/add-part/sister-vehicles")) {
+      const sisters = MOCK_VEHICLES.filter((v) => v.model === "Thor" || v.model === "Justy");
+      return route.fulfill({ json: { items: sisters } });
+    }
+    if (url.includes("parts/add/link-hints")) {
+      return route.fulfill({
+        json: {
+          ok: true,
+          trustedSite: true,
+          catalogMaker: "Toyota",
+          frameCodes: ["M900A"],
+        },
+      });
     }
     if (url.includes("vehicle-options")) {
       return route.fulfill({ json: { makes: ["Toyota", "Daihatsu"], models: ["Roomy", "Tank"], years: [2019, 2018] } });

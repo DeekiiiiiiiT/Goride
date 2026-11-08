@@ -27,7 +27,7 @@ const SLUG_TO_SYMBOL: Record<string, string> = {
   lighting: "lightbulb",
   visibility: "lightbulb",
   oil: "settings_suggest",
-  droplet: "filter_alt",
+  droplet: "water_drop",
   wind: "air",
   gears: "motion_sensor_active",
 };

@@ -7653,6 +7653,13 @@
           ]
         }
       },
+      "packages/vehicle-catalog-core": {
+        "packageJson": {
+          "dependencies": [
+            "npm:vitest@^3.2.4"
+          ]
+        }
+      },
       "packages/vertical-config": {
         "packageJson": {
           "dependencies": [

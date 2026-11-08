@@ -54,6 +54,19 @@ export function applyMmF01HttpSeed() {
   });
 }
 
+export function applyVehicleDocumentsOverlaySeed() {
+  const sql = readFileSync(join(process.cwd(), "e2e", "fixtures", "vehicle_documents_overlay_seed.sql"), "utf8");
+  execSync(`docker exec -i supabase_db_Goride psql -U postgres -d postgres -v ON_ERROR_STOP=1`, {
+    input: sql,
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+}
+
+/** Restore mm-f01 vehicles after document overlay e2e. */
+export function resetVehicleDocumentsOverlaySeed() {
+  applyMmF01HttpSeed();
+}
+
 export function resetMmF01Vehicle1505OdometerFixture() {
   const sql = [
     `DELETE FROM fleet.odometer_readings WHERE organization_id = '${MM_F01_ORG}' AND vehicle_id = '${MM_F01_VEHICLE_1505}';`,

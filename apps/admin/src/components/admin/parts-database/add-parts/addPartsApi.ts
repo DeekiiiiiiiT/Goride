@@ -1,7 +1,7 @@
 import { API_ENDPOINTS } from "../../../../services/apiConfig";
 import { publicAnonKey } from "../../../../utils/supabase/info";
 import { supabase } from "../../../../utils/supabase/client";
-import type { AddPartsDraft, FitMode, PartTypeRow } from "./addPartsTypes";
+import type { AddPartsDraft, CatalogLinkHints, FitMode, PartTypeRow } from "./addPartsTypes";
 
 async function authHeaders(): Promise<HeadersInit> {
   const token = (await supabase.auth.getSession()).data.session?.access_token ?? "";
@@ -83,6 +83,11 @@ export type AddPartVehicleRow = {
   version_name?: string | null;
   platform_id?: string | null;
   drivetrain?: string | null;
+  engine_type?: string | null;
+  engine_displacement_l?: number | null;
+  fuel_type?: string | null;
+  fuel_category?: string | null;
+  trim_series?: string | null;
 };
 
 export async function searchAddPartVehicles(query: {
@@ -126,9 +131,50 @@ export async function upsertPartType(body: Record<string, unknown>, id?: string)
   return catalogPost<{ id: string }>("part-types", body);
 }
 
+export type SelfServePartLookupResponse = {
+  found?: boolean;
+  partId?: string;
+  brand?: string;
+  number?: string;
+  listingCount?: number;
+  partKind?: string;
+  partTypeId?: string;
+  sourceType?: "car_maker_catalogue" | "part_maker_catalogue" | "other";
+  catalogCarMaker?: string;
+};
+
+export async function fetchMasterPartForExtend(partId: string) {
+  const data = await catalogGet<Record<string, unknown>>(`parts/master/${partId}`);
+  const fits = (Array.isArray(data.fits) ? data.fits : []) as Array<Record<string, unknown>>;
+  const listings = fits
+    .map((f) => ({
+      vehicleId: String(f.variantId ?? ""),
+      label: [f.make, f.model].filter(Boolean).join(" ").trim() || undefined,
+      yearFrom: typeof f.yearFrom === "number" ? f.yearFrom : undefined,
+      yearTo: typeof f.yearTo === "number" ? f.yearTo : undefined,
+    }))
+    .filter((l) => l.vehicleId);
+  return {
+    name: typeof data.name === "string" ? data.name : undefined,
+    listings,
+  };
+}
+
+export async function fetchVehicleSpecValues(vehicleIds: string[], specKey: string) {
+  if (!vehicleIds.length || !specKey.trim()) return [] as Array<{ vehicleId: string; value: string | null }>;
+  const q = new URLSearchParams({
+    vehicleIds: vehicleIds.join(","),
+    specKey,
+  });
+  const data = await catalogGet<{ items: Array<{ vehicleId: string; value: string | null }> }>(
+    `parts/add/vehicle-spec-values?${q}`,
+  );
+  return data.items ?? [];
+}
+
 export async function lookupSelfServePart(brand: string, number: string) {
   const q = new URLSearchParams({ brand, number });
-  return catalogGet<Record<string, unknown>>(`parts/lookup?${q}`);
+  return catalogGet<SelfServePartLookupResponse>(`parts/lookup?${q}`);
 }
 
 export type SelfServePreview = {
@@ -189,6 +235,51 @@ export async function previewSelfServePart(input: {
   return catalogGet<SelfServePreview>(`parts/add/preview?${q}`);
 }
 
+export async function fetchSelfServeLinkHints(url: string): Promise<CatalogLinkHints> {
+  const q = new URLSearchParams({ url });
+  return catalogGet<CatalogLinkHints>(`parts/add/link-hints?${q}`);
+}
+
+export type SisterVehicleRow = AddPartVehicleRow;
+
+export async function fetchSisterVehicles(vehicleIds: string[]) {
+  if (!vehicleIds.length) return [] as SisterVehicleRow[];
+  const q = new URLSearchParams({ ids: vehicleIds.join(",") });
+  const data = await catalogGet<{ items: SisterVehicleRow[] }>(`add-part/sister-vehicles?${q}`);
+  return data.items ?? [];
+}
+
+export async function saveCatalogPage(input: {
+  evidenceUrl: string;
+  sourceType: string;
+  catalogCarMaker?: string;
+  partKind: "oem" | "aftermarket";
+  brand?: string;
+  vehicleListings: Array<{
+    vehicleId: string;
+    yearFrom?: number;
+    yearTo?: number;
+    trust?: string;
+    reason?: string;
+  }>;
+  parts: Array<{
+    partTypeId: string;
+    brand: string;
+    partNumber: string;
+    position?: string;
+    side?: string;
+    catalogueNumber?: number;
+    existingPartId?: string | null;
+    factoryNumbers?: Array<{ brand: string; number: string }>;
+  }>;
+}) {
+  return catalogPost<Record<string, unknown>>("parts/add/catalog-page", input);
+}
+
+export async function saveFluidBundle(input: Record<string, unknown>) {
+  return catalogPost<Record<string, unknown>>("parts/add/fluid-bundle", input);
+}
+
 export async function saveSelfServePart(draft: AddPartsDraft) {
   const body: Record<string, unknown> = {
     partTypeId: draft.partType?.id,
@@ -208,6 +299,7 @@ export async function saveSelfServePart(draft: AddPartsDraft) {
       vehicleId: l.vehicleId,
       position: l.position || draft.position,
       side: l.side || draft.side,
+      catalogueNumber: l.catalogueNumber ?? draft.catalogueNumber,
       yearFrom: l.yearFrom,
       yearTo: l.yearTo,
       trust: l.listingTrust,

@@ -1,0 +1,226 @@
+ROAM DOMINION — ADD PARTS, A TRUE SELF-SERVE FLOW (ONE PAGE, MANY PARTS, MANY CARS) — FULL DESIGN PROMPT (GOOGLE STITCH)
+
+
+
+
+Roam Dominion - Parts database, "Add parts" (Desktop Admin, for the owner and catalog editors, who are not mechanics):
+
+Design a complete, modern, high-fidelity redesign of the "Add parts" tab in the Roam Dominion admin console. The real job is always the same: the owner has a parts catalogue page open (for example Toyota's own catalogue on Partsouq) that shows a diagram and a list of part numbers for one car, and wants to get every part on that page into the database for that car and its sister cars. Today that takes one full 4-step trip per part, retyping the same link, the same car maker and the same cars every time, clicking trust car by car, and asking someone where the next question is. Adding the brakes for one car took a whole day. The new flow starts from the page: paste the link once, pick the cars once, then add each part on the page as a quick row, check one review, and save everything in one go. The app works out everything it can from the link (which car maker, genuine or not, how trusted). It asks only one plain question at a time, right where you are looking. A first-time owner must finish it alone, without anyone guiding them, to the standard of a team of UI/UX experts. Dominion is the master reference database: no fleet names or plates, and no prices, suppliers, stock or quantities anywhere.
+
+
+BRAND IDENTITY:
+- Keep the Dominion console frame exactly as it is today:
+  - dark navy left sidebar "Dominion · Roam Admin Console" with groups MASTER DATA (Overview, Vehicles active, Places and Maps, Fuel, Tolls, Tax and Vendors), ENGINES (Fuel Brain, Toll Brain, Matching Brain), DISTRIBUTION (Apps, Data API, Change requests), PLATFORM (Staff and roles, Activity log, Platform Ops, Global settings), BACK OFFICE (GCT registrations, Ledger, Remittance)
+  - top bar: search "Search entities, engines, routes…" with a ⌘K chip, moon icon, user "Deeki T · Owner"
+  - page title "Parts database" with the tabs "Find parts", "Full database", "Add parts" (selected), "Trusted sources"; primary button "+ Add parts" top right
+- Remove these labels from the page header everywhere: "LIVE CLUSTER", "INDEX: N FITMENTS", "SCHEMA V1.1", "MATCH TYPES ON", "Catalog Level 0 · Audited", and the mono breadcrumb strip. Replace with one plain muted line under the title: "Every part, and every car it fits."
+- Theme: "Calm modern workspace" — light, spacious, clear, confident.
+- LIGHT MODE (default):
+  - Primary: #0153dc; primary container: #dbe1ff
+  - Success / Verified: #006e31 on #e6f4ea
+  - Warning / Needs checking: #8a5a00 on #fff4dc
+  - Error: #a83836 on #fdecec
+  - Outline: #797a84; hairlines #e6e7ee
+  - Background: #faf8fe; cards white, 16px radius, hairline border plus a very soft shadow (0 4px 16px rgba(1,83,220,0.04))
+  - Text: #30323b; muted text: #5d5f68
+- DARK MODE:
+  - Background #0b1220; cards #111a2e; hairlines #1e293b
+  - Text #e2e8f0; muted #94a3b8
+  - Primary #5b8def; Verified #4ade80; Needs checking #fbbf24; error #f87171
+- Trust pills (Dominion keeps its own words; reasons are allowed here):
+  - "Verified" — green pill with a shield-check icon
+  - "Needs checking" — amber pill with a clock icon, plus the reason in a muted line under the car
+- Typography: Inter. Titles 26px semibold, questions 20px semibold, body 15px, hints 13px muted. Part numbers, chassis codes and years in a mono font with tabular numerals.
+- Maker logos in small round tiles beside every car maker name (Toyota, Daihatsu, Subaru, Suzuki).
+- Part type icons: Material Symbols Outlined, 20px, in a soft #dbe1ff rounded square.
+- Buttons always look like buttons: Primary = solid #0153dc, white text; Secondary = white with a visible #c5c6d0 border and dark text; Danger (Cancel, Remove, Leave without saving) = red #a83836 border and red text, solid red only for the final "Leave without saving". Icon buttons 32px with a visible border. Never underlined text links, never grey text-only buttons.
+- Every confirm is an in-app dialog, never a browser pop-up.
+- Plain words only on screen. Never: "Normalized key", "Primary proof", "Verified Direct Match", "Technical Profile Match Confirmation", "Part identity", "schema", "cluster", "index", "fitment", "interchange", "tier", "OE" on its own. Use "Part number", "The page you found it on", "Fits", "Same part".
+- Sample data (real, from the live database, Toyota Roomy brakes, 7 Nov):
+  - Catalogue page: "https://partsouq.com/en/catalog/toyota/diagram/JP/2019/TANK-ROOMY/M900A-AGBGE/category/2/diagram/4601/illustration/461556B" → read as "Partsouq · Toyota's own catalogue · Parking brake cables · Trusted site"
+  - Cars on that page: Toyota Roomy (2WD) 2016–2020 · M900A, Toyota Tank (2WD) 2016–2020 · M900A. Sister cars offered: Daihatsu Thor M900S, Subaru Justy M900F, and the 4WD versions Roomy M910A / Tank M910A.
+  - Parts on that page: Handbrake cable 46410-B1011 · Front · No.1; Handbrake cable 46420-B1090 · Rear · No.2; Handbrake cable 46430-B1090 · Rear · No.3.
+  - A second page (rear drum, diagram 4706): Rear brake shoe kit 04495-B2430 · Rear; Rear wheel cylinder 47550-B1030 · Rear · Right; Rear wheel cylinder 47570-B1020 · Rear · Left.
+  - Already on file example: "Toyota 90049-22193 · Rear brake hose · fits 2 cars".
+  - Fluid example: Toyota "2500H-A" brake fluid, used by Roomy, Tank, Thor and Justy (before the 2020 update).
+  - Needs-checking reasons (pick list): "Chassis code differs", "Years differ", "Engine differs", "Maker lists left-hand drive only", "Seen in a shop's list only".
+
+
+DESIGN PRINCIPLES:
+- Desktop-first at 1440px; content column max 960px, centred. A 390px phone frame is included for checking on the go.
+- Start from the catalogue page, not from one part. Link and cars are entered once and reused for every part on that page.
+- One question at a time, revealed in order directly under the last answer (never at the bottom of the page, never in a separate box elsewhere).
+- The app answers what it can by itself and shows it as a filled, editable answer with a small "Worked out from your link" note.
+- Several things at once: paste many chassis codes, tick many cars, set trust for all ticked cars, add many part rows.
+- Compact lists: one line per car or part, expand to edit. Changing years never changes trust.
+- The page is its own guide: a short hint under each question with a real example; "Next" is always clickable and, if something is missing, scrolls to it and says what's needed in red under that field.
+- A slim stepper at the top: "1 The page · 2 Cars · 3 Parts · 4 Review". Done steps get a tick and can be clicked to go back.
+- Nothing is saved until "Save all"; every save can be undone from "Recently added".
+- The existing "Trusted sources" tab, "Full database" and "Find parts" tabs stay as they are.
+
+
+SCREEN 1: ADD PARTS — HOME
+- Title "What are you adding?" with a muted line "Pick how you found the part."
+- Three large choice cards (icon, title, one-line description, primary or secondary button):
+  - "Parts from a catalogue page" — RECOMMENDED pill — "Several parts from one diagram, for the same cars. One save." Button "Start".
+  - "Add more cars to a part already on file" — "Type its number, then add the cars." Button "Find the part".
+  - "A fluid, oil or size part" — "Brake fluid, engine oil, wiper blades, bulbs, batteries — and which cars use it." Button "Start".
+- A smaller line under the cards: secondary button "Just one part" (same flow with one row).
+- "Recently added" card: the last 5 saves as one-line rows (part icon, "3 handbrake cables · Roomy + Tank", "7 Nov, 9:42 pm", "Saved by Deeki T"), each with a secondary "Open" button and a red-outline "Undo" button.
+
+
+SCREEN 2: STEP 1 — THE PAGE YOU FOUND THE PARTS ON
+- Question "Paste the page you're looking at" with the hint "The catalogue page that shows the part numbers — e.g. a Partsouq, Amayama or Megazip diagram, or the part maker's own website."
+- A large URL input with a paste icon button inside it.
+- After paste (second frame), answers appear right under the input, one per line, each with a small "Worked out from your link" note and an outlined "Change" button:
+  - "Site: Partsouq" + green "Trusted site" pill
+  - "Whose catalogue: Toyota's own catalogue" (Toyota logo)
+  - "Genuine Toyota parts" (made by the car maker)
+  - "Diagram: Parking brake cables"
+- Third frame — a site we can't read on its own (e.g. a shop's website): the same input, then ONE question at a time under it:
+  - "Who made these parts?" two large choice buttons: "The car maker (genuine)" / "Another brand".
+  - If "The car maker": "Which car maker?" — a row of logo tiles (Toyota pre-selected when the brand typed matches).
+  - If "Another brand": "Which brand?" — a search box with logos for common brands (NiBK, SB, Brembo, Akebono, KYB, MANN-FILTER, Denso, NGK).
+  - An amber note: "This site isn't on your trusted list, so these fits will save as Needs checking." with a secondary button "Add this site to trusted sources".
+- Primary button "Next: the cars" at the top right of the card.
+
+
+SCREEN 3: STEP 2 — WHICH CARS IS THIS PAGE FOR?
+- Question "Which cars does this page cover?" with the hint "Type a model or paste the frame / chassis codes from the page — several at once is fine, e.g. M900A, M910A."
+- A large search input; under it, results grouped by model, each model under its maker logo:
+  - Each row is ONE real version with its difference in plain words first and the code muted after it: "Roomy · 2016–2020 · 2WD · 1.0 petrol · M900A", "Roomy · 2016–2020 · 4WD · 1.0 petrol · M910A", "Roomy · 2020 on · 2WD · after the update · M900A".
+  - A checkbox per row and a "Tick all Roomy" checkbox on each model group.
+- A highlighted suggestion card: "Same car, other badges" — Toyota Tank, Daihatsu Thor, Subaru Justy logos — "These are built on the same car. Add the matching versions?" with a secondary button "Add 3 sister cars".
+- Right side (sticky): "Selected · 2 cars" compact list — one line per car: maker logo, "Toyota Roomy 2WD", years "2016–2020" as a small editable mono field, and a 32px red-outline remove icon button. "Clear all" red-outline button at the bottom.
+- Paste result frame: after pasting "M900A, M910A, M920A": a green line "Found 4 versions for M900A and M910A" and an amber line "M920A — no car with this code yet" with a secondary button "Ask to add this car".
+- Primary button "Next: the parts" at the top right.
+
+
+SCREEN 4: STEP 3 — THE PARTS ON THIS PAGE
+- Header strip (always visible in steps 3 and 4): Partsouq logo, "Toyota's own catalogue · Parking brake cables", and car chips "Roomy 2WD 2016–2020", "Tank 2WD 2016–2020", each with a small outlined "Edit" button.
+- Question "Add each part on the page" with the hint "One row per part number. Copy the number exactly as printed."
+- A clean editable table, one row per part, 56px rows:
+  - Part type: a searchable picker with icons (opens a small menu; typing "cable" finds Handbrake cable)
+  - Part number (mono)
+  - Where on the car: segmented buttons that change with the part type — "Front / Rear", then "Left / Right / Both" when the type has sides, and "No.1 / No.2 / No.3" when the catalogue numbers them (handbrake cables, brake hoses)
+  - Years: "Same as cars" by default, with a small outlined "Change" button that opens a from–to editor for that row only
+  - A 32px red-outline remove icon button
+- Sample rows: Handbrake cable · 46410-B1011 · Front · No.1; Handbrake cable · 46420-B1090 · Rear · No.2; Handbrake cable · 46430-B1090 · Rear · No.3.
+- Under each row, in muted text, the name it will save as: "Front handbrake cable No.1".
+- Already-on-file row (sample 90049-22193): a blue info line inside the row: "Already on file as Rear brake hose (2 cars). We'll add these cars to it." No extra step.
+- Under the table: secondary button "+ Add another part" and secondary button "Paste several numbers" (opens a small box: paste a list, each line becomes a row).
+- Optional fold "Also sold under other numbers" per row (closed by default): a small list of brand + number for the same part, with the hint "Only if the page shows an old or replacement number."
+- Primary button "Next: review" at the top right.
+
+
+SCREEN 5: TRUST FOR EACH CAR (ONLY WHEN SOMETHING DIFFERS)
+- Shown inside Step 4 as the first card. Default state: a single green line "All 2 cars are Verified — Toyota's own catalogue lists them." with a secondary button "Mark some as Needs checking".
+- Expanded frame (sample with 10 cars): a compact list, one line per car, each with a checkbox and its pill. A bulk bar appears when cars are ticked: "4 cars ticked" → segmented "Verified / Needs checking" → reason pick list (Chassis code differs, Years differ, Engine differs, Maker lists left-hand drive only, Seen in a shop's list only, Other…) → primary "Apply to 4 cars".
+- Changing years on a car never touches its pill.
+
+
+SCREEN 6: STEP 4 — REVIEW AND SAVE
+- Title "Check and save" with a summary line in large type: "3 parts × 2 cars = 6 fits".
+- One card per part: icon, the saved name ("Front handbrake cable No.1"), number in mono, "Genuine Toyota", and under it the cars as compact chips with their years and Verified pill.
+- A muted line per part where something special happens: "Already on file — adding 2 cars", "Also sold as Daihatsu 04465-B1320".
+- The page link shown once at the top with an outlined "Open ↗" button.
+- Primary button "Save all 3 parts" at the top right; secondary "Back to parts".
+
+
+SCREEN 7: SAVED
+- A calm success card: green check, "3 parts saved to 2 cars", and the list of names.
+- Three next steps as buttons:
+  - Primary "Add more from this page" (keeps link and cars, clears the part rows)
+  - Secondary "Same cars, new page" (keeps the cars, asks for a new link)
+  - Secondary "See them in Find parts"
+- A muted line: "Changed your mind? Undo from Recently added."
+
+
+SCREEN 8: ADD MORE CARS TO A PART ALREADY ON FILE
+- Step 1 frame: one big input "Type the part number" → a result card appears: part icon, "Rear brake hose", "Toyota 90049-22193", "Genuine Toyota", "Fits 2 cars" with their maker logos, and a primary "Add cars to this part".
+- Next frame: the same Step 1 page as Screen 2, already filled from the part on file ("Genuine Toyota parts", "Toyota's own catalogue") — only the link is asked. Then Screen 3 (cars), skipping Step 3. The cars already on file show as locked rows with a "Already on file" pill.
+
+
+SCREEN 9: A FLUID, OIL OR SIZE PART (AND WHICH CARS USE IT)
+- Sample: brake fluid Toyota 2500H-A.
+- One question at a time: "What is it?" (picker with Brake fluid, Engine oil, Coolant, CVT / transmission fluid, Wiper blade, Bulb, Battery, Tyre) → "Brand and product number" (Toyota · 2500H-A) → the spec in plain words with an example under it ("Brake fluid type — e.g. DOT 3, DOT 4") → "The page you found it on".
+- Then "Which cars use this?": car list with sister cars pre-ticked (Roomy, Tank, Thor, Justy — before the 2020 update) and a note "We'll also add 'Brake fluid: Toyota 2500H-A' to each ticked car's specs."
+- Review shows both results: "1 product saved" and "4 cars now show Brake fluid: Toyota 2500H-A".
+
+
+SCREEN 10: JUST ONE PART
+- The same flow as Screens 2–6 with a single row in Step 3, and the stepper reading "1 The page · 2 Cars · 3 The part · 4 Review". Show Step 3 with one row (Front brake disc · 43512-B1081 · Front) and the "Add another part" button still there.
+
+
+SCREEN 11: HELP BUILT INTO THE PAGE
+- Frame A: "Next" pressed with no cars ticked: the page scrolls to the car search, which gets a red outline and the line "Pick at least one car this page is for."
+- Frame B: a "What does this mean?" small outlined icon button next to "Where on the car" opens an in-app popover: "Front / Rear — which axle. Left / Right — which side, looking from the driver's seat. No.1 / No.2 — the number the catalogue gives parts that come in a set, like handbrake cables."
+- Frame C: hovering a car's code shows a tooltip "Frame code from the car's ID plate — used to tell versions apart."
+
+
+SCREEN 12: STATES
+- Frame A — link pasted that isn't a web address: red line "That doesn't look like a web link. Copy it from your browser's address bar."
+- Frame B — the same part number typed twice in Step 3: both rows get an amber outline and "This number is already in row 1."
+- Frame C — save failed: soft red banner "Nothing was saved. Your rows are still here." with a secondary "Try again".
+- Frame D — part type not in the list: last item in the type picker "Can't find it? Ask to add a part type" opens a small form (name, one-line description, primary "Send").
+- Frame E — loading skeletons for the car search and the review cards.
+- Frame F — Cancel pressed with unsaved rows: in-app dialog "Leave without saving? The 3 part rows will be lost." with secondary "Keep editing" and solid red "Leave without saving".
+
+
+SCREEN 13: DARK MODE
+- Screens 4 (parts table) and 6 (review) in dark mode.
+
+
+SCREEN 14: PHONE (390px)
+- Screens 2, 4 and 6 at 390px: the stepper becomes "Step 3 of 4 · Parts"; the parts table becomes stacked row cards (type, number, position buttons, years, remove) with "+ Add another part" full width; the selected-cars panel becomes a bottom bar "2 cars · Edit".
+
+
+ADDITIONAL UI COMPONENTS:
+- Choice card (icon, title, description, button, optional RECOMMENDED pill)
+- Link input with paste button and "Worked out from your link" answer lines
+- Car result row (logo, model, plain difference, years, muted code, checkbox) and model group with "Tick all"
+- "Same car, other badges" suggestion card
+- Selected cars compact list with editable years and red remove buttons
+- Parts table row with type picker, number, adaptive position buttons (Front/Rear, Left/Right/Both, No.1/No.2/No.3), years, remove
+- "Paste several numbers" box
+- Bulk trust bar with reason pick list
+- Review part card with car chips and trust pills
+- Success card with next-step buttons
+- Recently added row with Open and Undo
+- In-app confirm dialog; in-app popover; tooltip
+
+
+INTERACTIONS:
+- **Paste a link:** the app reads it at once and fills site, catalogue, genuine and diagram; each has a "Change" button.
+- **Car search:** typing several codes separated by commas or spaces finds all of them; ticking a model's "Tick all" ticks every version under it.
+- **Add sister cars:** ticks the matching versions of Tank, Thor and Justy and adds them to Selected.
+- **Years "Change":** opens a small from–to editor in place; saving it changes only the years.
+- **Part type picked:** the "Where on the car" buttons change to fit that type; the saved name preview updates.
+- **Part number typed:** checked against the database as you type; already-on-file shows the blue info line.
+- **Paste several numbers:** each pasted line becomes a row with the last-used part type.
+- **Mark some as Needs checking:** shows checkboxes; the bulk bar applies one choice and one reason to all ticked cars.
+- **Next:** always clickable; if something is missing, scrolls to it and explains in red.
+- **Save all:** saves every part and car in one go; on failure nothing is saved and all rows stay.
+- **Add more from this page / Same cars, new page:** start again with the link and/or cars kept.
+- **Undo (Recently added):** in-app dialog "Undo this save? 3 parts and 6 fits will be removed." with red "Undo save".
+- **Cancel:** in-app dialog when anything is unsaved.
+- **Keyboard:** Enter adds a new part row from the last cell; Tab moves across a row; Esc closes menus.
+
+
+Spec screens / Area
+| Screen | Area |
+|---|---|
+| 1 | Add parts home — catalogue page (recommended), more cars for a part on file, fluid/size part, just one part, Recently added with Undo |
+| 2 | Step 1 — paste the page; answers worked out from the link; unknown site asks one question at a time |
+| 3 | Step 2 — which cars: multi-code search, versions in plain words, sister cars, compact selected list |
+| 4 | Step 3 — parts on this page: table rows with adaptive Front/Rear, Left/Right, No.1–No.3, years, already-on-file line |
+| 5 | Trust per car — all Verified by default, bulk Needs checking with reason pick list |
+| 6 | Step 4 — review: parts × cars, saved names, Save all |
+| 7 | Saved — add more from this page, same cars new page, see in Find parts |
+| 8 | Add more cars to a part already on file |
+| 9 | Fluid, oil or size part + which cars use it (also saves the car spec) |
+| 10 | Just one part |
+| 11 | Help built into the page — Next explains, popover, tooltip |
+| 12 | States — bad link, duplicate row, save failed, missing type, loading, leave without saving |
+| 13 | Dark mode — parts table, review |
+| 14 | Phone 390px — page, parts, review |

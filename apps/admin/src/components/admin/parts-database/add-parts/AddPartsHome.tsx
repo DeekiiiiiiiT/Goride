@@ -1,203 +1,221 @@
-// Stitch AP1
-import { useQuery } from "@tanstack/react-query";
+// Stitch A1
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { toast } from "sonner";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "../../../ui/alert-dialog";
 import { PartsButton } from "../PartsButton";
 import { MaterialIcon } from "../import/MaterialIcon";
-import { fetchMyPartTypeRequests, fetchRecentSelfServeParts, undoSelfServePart } from "./addPartsApi";
-import { AddPartsScreenFrame } from "./AddPartsScreenFrame";
-import { fitModeDisplay, PartTypeIcon } from "./addPartsShared";
-import { toast } from "sonner";
+import { fetchRecentSelfServeParts, undoSelfServePart } from "./addPartsApi";
+import { PartTypeIcon } from "./addPartsShared";
 
 function formatRecentWhen(iso: unknown): string {
   if (!iso) return "";
   const d = new Date(String(iso));
   if (Number.isNaN(d.getTime())) return "";
-  const now = new Date();
-  const sameDay = d.toDateString() === now.toDateString();
-  const yesterday = new Date(now);
-  yesterday.setDate(now.getDate() - 1);
-  const time = d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
-  if (sameDay) return `Today ${time}`;
-  if (d.toDateString() === yesterday.toDateString()) return `Yesterday ${time}`;
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-}
-
-function rowIconKey(row: Record<string, unknown>): string | null {
-  const ik = row.iconKey ?? row.partTypeIconKey;
-  if (ik) return String(ik);
-  return null;
+  return d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
 export function AddPartsHome({
-  owner,
-  onStart,
+  onCatalog,
+  onExtend,
+  onFluid,
+  onJustOne,
   onBulk,
-  onPlainWords,
   onPartTypes,
+  owner,
 }: {
-  owner: boolean;
-  onStart: () => void;
+  onCatalog: () => void;
+  onExtend: () => void;
+  onFluid: () => void;
+  onJustOne: () => void;
   onBulk: () => void;
-  onPlainWords: () => void;
   onPartTypes: () => void;
+  owner: boolean;
 }) {
+  const qc = useQueryClient();
   const recentQuery = useQuery({ queryKey: ["self-serve-recent"], queryFn: fetchRecentSelfServeParts });
-  const myRequests = useQuery({ queryKey: ["part-type-requests-mine"], queryFn: () => fetchMyPartTypeRequests("pending") });
   const items = recentQuery.data?.items ?? [];
-  const verified = (label: string) => label.toLowerCase().includes("verified");
+  const [undoTarget, setUndoTarget] = useState<Record<string, unknown> | null>(null);
 
   return (
-    <AddPartsScreenFrame
-      ap="AP1"
-      title="Add parts"
-      subtitle="Found a part on a catalogue page? Add it in about 2 minutes."
-    >
-      <div className="w-full bg-surface-container-lowest rounded-xl p-10 shadow-sm flex flex-col items-center text-center">
-        <div className="w-14 h-14 rounded-full bg-primary-fixed flex items-center justify-center mb-5 text-primary-container shadow-xs">
-          <MaterialIcon name="travel_explore" className="text-[30px]" filled />
-        </div>
-        <h2 className="font-headline-lg text-headline-lg text-on-surface tracking-tight mb-2">I found a part</h2>
-        <p className="font-body-md text-body-md text-on-surface-variant max-w-md mb-6">
-          Tell us the part, how it fits, and where you saw it.
-        </p>
-        <button
-          type="button"
-          className="bg-primary-container hover:bg-primary text-on-primary px-8 py-2.5 rounded-lg font-label-md text-label-md font-semibold transition-all shadow-sm flex items-center gap-2 group cursor-pointer"
-          onClick={onStart}
-        >
-          <span>Start</span>
-          <MaterialIcon name="arrow_forward" className="text-[16px] transition-transform group-hover:translate-x-1" />
-        </button>
-        <div className="w-full mt-8 pt-6 flex items-center justify-center gap-3 flex-wrap">
-          <PartsButton variant="secondary" className="flex items-center gap-1" onClick={onPlainWords}>
-            <MaterialIcon name="help_outline" className="text-[16px]" />
-            <span>What do these words mean?</span>
-          </PartsButton>
-          <PartsButton variant="secondary" className="flex items-center gap-1" onClick={onBulk}>
-            <span>Bulk upload (advanced)</span>
-            <MaterialIcon name="arrow_right_alt" className="text-[14px]" />
-          </PartsButton>
-          {owner ? (
-            <PartsButton variant="secondary" onClick={onPartTypes}>Part types</PartsButton>
-          ) : null}
-        </div>
+    <div className="parts-database-stitch add-parts-flow w-full max-w-[960px] mx-auto px-margin flex flex-col gap-space-lg py-space-lg">
+      <div>
+        <h2 className="text-[30px] font-semibold tracking-tight text-[#30323b] dark:text-[#e2e8f0]">What are you adding?</h2>
+        <p className="mt-1 text-[16px] text-[#5d5f68] dark:text-[#94a3b8]">Pick how you found the part.</p>
       </div>
-
-      {(myRequests.data?.items?.length ?? 0) > 0 ? (
-        <section className="rounded-xl bg-surface-container-lowest shadow-xs p-5">
-          <h3 className="font-headline-md text-headline-md text-on-surface mb-2">Your requests</h3>
-          <ul className="divide-y divide-surface-container-low font-body-sm">
-            {myRequests.data!.items.map((r) => (
-              <li key={String(r.id)} className="py-2 flex flex-wrap gap-2">
-                <span className="font-label-md text-label-md font-semibold text-on-surface">{String(r.name)}</span>
-                <span className="font-mono-sm text-mono-sm text-on-surface-variant">{String(r.status)}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-
-      <section className="flex flex-col gap-3">
-        <div className="flex items-center justify-between flex-wrap gap-2">
-          <div className="flex items-center gap-2.5">
-            <h3 className="font-headline-md text-headline-md text-on-surface">Recently added</h3>
-            <span className="font-mono-sm text-mono-sm bg-surface-container-high text-on-surface-variant px-2 py-0.5 rounded-full font-medium">
-              {items.length} part{items.length === 1 ? "" : "s"}
-            </span>
-          </div>
-          <span className="font-mono-sm text-mono-sm text-outline hidden sm:inline">
-            Self-serve parts added by catalog editors · Reversible within 24h
-          </span>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-space-lg items-stretch">
+        <ChoiceCard
+          recommended
+          icon="menu_book"
+          title="Parts from a catalogue page"
+          description="Several parts from one diagram, for the same cars. One save."
+          action="Start"
+          onClick={onCatalog}
+        />
+        <ChoiceCard
+          icon="directions_car"
+          title="Add more cars to a part already on file"
+          description="Type its number, then add the cars."
+          action="Find the part"
+          onClick={onExtend}
+        />
+        <ChoiceCard
+          icon="water_drop"
+          title="A fluid, oil or size part"
+          description="Brake fluid, engine oil, wiper blades, bulbs, batteries — and which cars use it."
+          action="Start"
+          onClick={onFluid}
+        />
+      </div>
+      <div className="flex flex-wrap items-center gap-4 rounded-2xl border border-[#e6e7ee] bg-white px-5 py-4 shadow-[0_4px_16px_rgba(1,83,220,0.04)] dark:border-[#1e293b] dark:bg-[#111a2e]">
+        <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#eef0f6] dark:bg-[#1e293b]"><MaterialIcon name="bolt" className="text-[22px]" /></span>
+        <p className="flex-1 text-[16px] text-[#30323b] dark:text-[#e2e8f0]"><span className="font-semibold">Need to add a single part?</span> <span className="text-[#5d5f68] dark:text-[#94a3b8]">Same steps, one row.</span></p>
+        <PartsButton variant="secondary" onClick={onJustOne}><MaterialIcon name="edit_note" className="text-[18px]" /> Just one part</PartsButton>
+      </div>
+      {owner ? (
+        <div className="flex flex-wrap gap-2">
+          <PartsButton variant="secondary" onClick={onBulk}>Bulk upload (advanced)</PartsButton>
+          <PartsButton variant="secondary" onClick={onPartTypes}>Part types</PartsButton>
         </div>
-        <div className="w-full bg-surface-container-lowest rounded-xl shadow-xs overflow-hidden divide-y divide-surface-container-low">
-          {items.map((row) => {
+      ) : (
+        <PartsButton variant="secondary" onClick={onBulk}>Bulk upload (advanced)</PartsButton>
+      )}
+      <section className="rounded-2xl border border-[#e6e7ee] bg-white shadow-[0_4px_16px_rgba(1,83,220,0.04)] overflow-hidden dark:border-[#1e293b] dark:bg-[#111a2e]">
+        <div className="flex items-start gap-3 p-6">
+          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#eef0f6] dark:bg-[#1e293b]"><MaterialIcon name="history" className="text-[22px]" /></span>
+          <div>
+            <h3 className="flex items-center gap-2 text-[22px] font-semibold text-[#30323b] dark:text-[#e2e8f0]">Recently added <span className="rounded-md bg-[#eef0f6] px-2 py-0.5 text-[12px] font-medium text-[#5d5f68] dark:bg-[#1e293b] dark:text-[#94a3b8]">Last 5 saves</span></h3>
+            <p className="mt-0.5 text-[14px] text-[#5d5f68] dark:text-[#94a3b8]">Undo removes the whole save.</p>
+          </div>
+        </div>
+        <ul className="divide-y divide-[#e6e7ee] border-t border-[#e6e7ee] dark:divide-[#1e293b] dark:border-[#1e293b]">
+          {items.length === 0 ? (
+            <li className="p-space-lg font-body-sm text-on-surface-variant">Nothing saved yet from Add parts.</li>
+          ) : items.slice(0, 5).map((row) => {
             const r = row as Record<string, unknown>;
-            const trust = String(r.trustLabel ?? "");
-            const fit = fitModeDisplay(String(r.fitMode ?? ""));
-            const partLabel = String(r.partTypeName ?? r.tradeTerm ?? "Part");
-            const fitSummary = String(r.fitSummary ?? r.reachLabel ?? "");
-            const sourceHost = String(r.sourceHost ?? r.evidenceHost ?? "");
-            const whenIso = r.promotedAt ?? r.when;
-            const undoOk = r.undoEligible === true || r.canUndo === true;
+            const summary = String(r.summaryLine ?? r.plainWordsSentence ?? `${r.partNumber ?? "Part"}`);
+            const carHint = String(r.vehicleHint ?? "").trim();
+            const iconKey = String(r.iconKey ?? "");
+            const savedBy = String(r.promotedByName ?? r.savedBy ?? "").trim();
             return (
-              <div key={String(r.batchId)} className="px-5 py-3.5 flex items-center justify-between hover:bg-surface-container-low transition-colors group gap-3">
-                <div className="flex items-center gap-3.5 min-w-0">
-                  <div className="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center text-outline group-hover:text-primary-container transition-colors shrink-0">
-                    <PartTypeIcon iconKey={rowIconKey(r)} className="text-[18px]" />
-                  </div>
-                  <div className="flex flex-col min-w-0">
-                    <div className="flex items-center gap-2 truncate">
-                      <span className="font-label-md text-label-md text-on-surface font-semibold">{String(r.brand)}</span>
-                      <span className="font-mono-sm text-mono-sm text-on-surface bg-surface-container px-1.5 py-0.2 rounded font-semibold tracking-wide">
-                        {String(r.partNumber)}
-                      </span>
-                      <span className="text-outline font-bold">·</span>
-                      <span className="font-body-sm text-body-sm text-on-surface-variant truncate">{partLabel}</span>
-                    </div>
-                    <div className="flex items-center gap-3 mt-1 font-mono-sm text-mono-sm text-on-surface-variant flex-wrap">
-                      <span className="flex items-center gap-1 text-on-secondary-container bg-surface-container-high px-1.5 py-0.2 rounded">
-                        <MaterialIcon name={fit.icon} className="text-[13px]" />
-                        <span>{fit.label}</span>
-                      </span>
-                      {fitSummary ? (
-                        <>
-                          <span className="text-outline">·</span>
-                          <span className="text-on-surface font-medium">{fitSummary}</span>
-                        </>
+              <li key={String(r.batchId)} className="px-6 py-4 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-start gap-3 min-w-0 flex-1">
+                  <span className="w-12 h-12 rounded-xl bg-[#dbe1ff] flex items-center justify-center shrink-0 dark:bg-[#1e3a8a]/40">
+                    {iconKey ? (
+                      <PartTypeIcon iconKey={iconKey} className="text-[22px] text-primary-container" />
+                    ) : (
+                      <MaterialIcon name="inventory_2" className="text-[22px] text-primary-container" />
+                    )}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-[16px] font-semibold truncate text-[#30323b] dark:text-[#e2e8f0]">{summary}</p>
+                    <div className="flex flex-wrap items-center gap-2 mt-1">
+                      {carHint ? (
+                        <span className="px-2 py-0.5 rounded-md bg-[#dbe1ff] text-[#0153dc] text-[13px] font-medium truncate max-w-[240px] dark:bg-[#1e3a8a]/40 dark:text-[#93b4ff]">
+                          {carHint}
+                        </span>
                       ) : null}
-                      {sourceHost ? (
-                        <>
-                          <span className="text-outline">·</span>
-                          <span className="text-outline">{sourceHost}</span>
-                        </>
+                      <span className="font-body-sm text-on-surface-variant">{formatRecentWhen(r.promotedAt)}</span>
+                      {savedBy ? (
+                        <span className="font-body-sm text-on-surface-variant">· Saved by {savedBy}</span>
                       ) : null}
                     </div>
                   </div>
                 </div>
-                <div className="flex items-center gap-4 shrink-0 pl-4">
-                  {verified(trust) ? (
-                    <span className="font-mono-sm text-mono-sm text-[#006e31] bg-[rgba(0,110,49,0.08)] px-2 py-0.5 rounded flex items-center gap-1">
-                      <MaterialIcon name="verified_user" className="text-[13px]" filled />
-                      <span>Verified</span>
-                    </span>
-                  ) : (
-                    <span className="font-mono-sm text-mono-sm text-[#b45309] bg-[#fff8e6] px-2 py-0.5 rounded flex items-center gap-1">
-                      <MaterialIcon name="schedule" className="text-[13px]" />
-                      <span>Needs checking</span>
-                    </span>
-                  )}
-                  <span className="font-mono-sm text-mono-sm text-outline hidden md:inline">{formatRecentWhen(whenIso)}</span>
+                <div className="flex gap-2 shrink-0">
                   <PartsButton
-                    variant="danger"
-                    className="font-mono-sm text-mono-sm min-h-0 h-8 px-2"
-                    disabled={!undoOk}
-                    title={String(r.undoReason ?? "Undo")}
+                    variant="secondary"
                     onClick={() => {
-                      void undoSelfServePart(String(r.batchId))
-                        .then(() => { toast.success("Undone"); void recentQuery.refetch(); })
-                        .catch((e) => toast.error(e instanceof Error ? e.message : "Undo failed"));
+                      window.location.assign("/?page=parts-catalog&tab=find-parts");
                     }}
                   >
-                    Undo
+                    <MaterialIcon name="visibility" className="text-[18px]" /> Open
                   </PartsButton>
+                  {r.undoEligible ? (
+                    <PartsButton variant="danger" onClick={() => setUndoTarget(r)}><MaterialIcon name="undo" className="text-[18px]" /> Undo</PartsButton>
+                  ) : null}
                 </div>
-              </div>
+              </li>
             );
           })}
-          {items.length === 0 ? (
-            <p className="py-8 text-center font-body-sm text-body-sm text-on-surface-variant">Nothing added yet — start above.</p>
-          ) : null}
-        </div>
+        </ul>
       </section>
+      <AlertDialog open={Boolean(undoTarget)} onOpenChange={(o) => !o && setUndoTarget(null)}>
+        <AlertDialogContent className="parts-database-stitch">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Undo this save?</AlertDialogTitle>
+            <AlertDialogDescription>Parts and fits from this save will be removed.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel asChild><PartsButton variant="secondary">Keep</PartsButton></AlertDialogCancel>
+            <AlertDialogAction asChild>
+              <PartsButton
+                variant="danger"
+                confirm
+                onClick={() => {
+                  const id = String(undoTarget?.batchId ?? "");
+                  void undoSelfServePart(id)
+                    .then(() => {
+                      toast.success("Undone");
+                      setUndoTarget(null);
+                      void qc.invalidateQueries({ queryKey: ["self-serve-recent"] });
+                    })
+                    .catch((e) => toast.error(e instanceof Error ? e.message : "Undo failed"));
+                }}
+              >
+                Undo save
+              </PartsButton>
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
 
-      <section className="rounded-xl bg-surface-container-low border border-outline-variant/30 p-space-lg flex flex-col sm:flex-row gap-space-md items-start sm:items-center">
-        <MaterialIcon name="info" className="text-primary text-[22px] shrink-0" />
-        <div>
-          <h3 className="font-headline-md text-headline-md text-on-surface">Information only</h3>
-          <p className="font-body-sm text-body-sm text-on-surface-variant mt-1">
-            Parts you add here are fitment and catalogue facts for Fleet — not prices, suppliers, or stock levels.
-          </p>
+function ChoiceCard({
+  recommended,
+  icon,
+  title,
+  description,
+  action,
+  onClick,
+}: {
+  recommended?: boolean;
+  icon: string;
+  title: string;
+  description: string;
+  action: string;
+  onClick: () => void;
+}) {
+  return (
+    <div className={`relative flex min-h-[340px] flex-col justify-between rounded-2xl border bg-white p-7 shadow-[0_4px_16px_rgba(1,83,220,0.04)] dark:bg-[#111a2e] ${recommended ? "border-[#0153dc]/40 dark:border-[#1e3a8a]" : "border-[#e6e7ee] dark:border-[#1e293b]"}`}>
+      {recommended ? (
+        <span className="absolute -top-3 left-6 z-10 inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#dbe1ff] text-[#0153dc] text-[12px] font-semibold shadow-sm dark:bg-[#1e3a8a] dark:text-[#93b4ff]">
+          <MaterialIcon name="star" className="text-[12px]" filled />
+          Recommended
+        </span>
+      ) : null}
+      <div>
+        <div className={`w-14 h-14 rounded-xl flex items-center justify-center mb-6 ${recommended ? "bg-[#dbe1ff] text-[#0153dc] dark:bg-[#1e3a8a]/40" : "bg-[#eef0f6] text-[#30323b] dark:bg-[#1e293b] dark:text-[#e2e8f0]"}`}>
+          <MaterialIcon name={icon} className="text-[26px]" />
         </div>
-      </section>
-    </AddPartsScreenFrame>
+        <h3 className="mb-3 text-[22px] font-semibold leading-snug text-[#30323b] dark:text-[#e2e8f0]">{title}</h3>
+        <p className="text-[16px] leading-relaxed text-[#5d5f68] dark:text-[#94a3b8]">{description}</p>
+      </div>
+      <PartsButton variant={recommended ? "primary" : "secondary"} className="w-full mt-6 !h-12 text-[16px]" onClick={onClick}>
+        {action}
+        <MaterialIcon name={recommended ? "arrow_forward" : action === "Find the part" ? "search" : "tune"} className="text-[18px]" />
+      </PartsButton>
+    </div>
   );
 }

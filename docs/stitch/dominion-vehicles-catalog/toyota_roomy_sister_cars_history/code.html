@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_dashboard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{colors:{"on-primary-fixed-variant":"#003ea8","outline":"#737686","on-primary":"#ffffff","primary":"#003ea9","on-secondary-fixed":"#131b2e","surface-variant":"#e3e2e7","secondary-fixed-dim":"#bec6e0","secondary":"#565e74","surface-container-low":"#f5f3f9","primary-container":"#0153dc","primary-fixed":"#dbe1ff","secondary-container":"#dae2fd","on-surface":"#1b1b20","surface-container-high":"#e9e7ed","on-primary-container":"#ced8ff","inverse-surface":"#2f3035","tertiary-container":"#575e77","on-error":"#ffffff","on-background":"#1b1b20","on-error-container":"#93000a","on-tertiary-fixed":"#141b30","tertiary-fixed-dim":"#bfc5e2","primary-fixed-dim":"#b4c5ff","surface-tint":"#0053db","outline-variant":"#c3c6d7","tertiary":"#40465e","on-tertiary":"#ffffff","background":"#faf8fe","error-container":"#ffdad6","surface-dim":"#dbd9df","surface-bright":"#faf8fe","on-secondary-container":"#5c647a","on-surface-variant":"#434655","on-tertiary-container":"#d2d8f6","surface-container":"#efedf3","on-secondary":"#ffffff","surface":"#faf8fe","on-secondary-fixed-variant":"#3f465c","error":"#ba1a1a","on-tertiary-fixed-variant":"#3f465e","inverse-primary":"#b4c5ff","inverse-on-surface":"#f2f0f6","on-primary-fixed":"#00174b","surface-container-lowest":"#ffffff","tertiary-fixed":"#dbe1ff","surface-container-highest":"#e3e2e7","secondary-fixed":"#dae2fd"},borderRadius:{DEFAULT:"0.25rem",lg:"0.5rem",xl:"0.75rem",full:"9999px"},spacing:{margin:"2rem","space-xl":"2rem","space-xs":"0.25rem",gutter:"1.5rem","space-lg":"1.5rem","space-md":"1rem","space-sm":"0.5rem"},fontFamily:{"hint-sm":["Inter"],"body-md":["Inter"],"code-sm":["JetBrains Mono"],"body-sm":["Inter"],caption:["Inter"],"body-lg":["Inter"],"code-md":["JetBrains Mono"],"headline-xl":["Inter"],"headline-md":["Inter"],"headline-lg":["Inter"]},fontSize:{"hint-sm":["13px",{lineHeight:"18px",letterSpacing:"0.01em",fontWeight:"400"}],"body-md":["15px",{lineHeight:"22px",letterSpacing:"0em",fontWeight:"400"}],"code-sm":["12px",{lineHeight:"16px",letterSpacing:"-0.01em",fontWeight:"500"}],"body-sm":["14px",{lineHeight:"20px",letterSpacing:"0em",fontWeight:"400"}],caption:["12px",{lineHeight:"16px",letterSpacing:"0.02em",fontWeight:"500"}],"body-lg":["16px",{lineHeight:"24px",letterSpacing:"0em",fontWeight:"400"}],"code-md":["14px",{lineHeight:"20px",letterSpacing:"-0.02em",fontWeight:"500"}],"headline-xl":["26px",{lineHeight:"34px",letterSpacing:"-0.02em",fontWeight:"600"}],"headline-md":["18px",{lineHeight:"24px",letterSpacing:"-0.01em",fontWeight:"600"}],"headline-lg":["20px",{lineHeight:"28px",letterSpacing:"-0.015em",fontWeight:"600"}]}}}}</script></head><body class="bg-surface font-body-md text-on-surface antialiased"><aside class="fixed left-0 top-0 bottom-0 w-64 bg-on-secondary-fixed z-50 flex flex-col justify-between overflow-y-auto select-none"><div class="flex flex-col"><div class="h-16 px-space-lg flex items-center gap-space-sm bg-on-tertiary-fixed"><div class="w-7 h-7 rounded-lg bg-primary-container flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">hub</span></div><div class="flex flex-col"><span class="font-headline-md text-[14px] leading-tight text-white font-semibold tracking-tight">Dominion</span><span class="font-caption text-[11px] text-secondary-fixed-dim leading-none uppercase tracking-wider">Roam Admin Console</span></div></div><div class="px-space-md py-space-sm"><nav class="flex flex-col gap-space-xs" data-active-classes="bg-primary-container text-white font-medium shadow-sm"><div class="pt-space-md pb-space-xs px-space-sm"><span class="font-caption text-[10px] uppercase font-bold tracking-widest text-secondary-fixed-dim/70">Master Data</span></div><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-secondary-fixed-dim hover:bg-on-tertiary-fixed hover:text-white transition-colors" data-path="overview" href="#"><span class="material-symbols-outlined text-[18px]">dashboard</span><span class="font-body-sm text-body-sm">Overview</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-secondary-fixed-dim hover:bg-on-tertiary-fixed hover:text-white transition-colors" data-path="vehicles" href="#"><span class="material-symbols-outlined text-[18px]">directions_car</span><span class="font-body-sm text-body-sm">Vehicles</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-secondary-fixed-dim hover:bg-on-tertiary-fixed hover:text-white transition-colors" data-path="places-and-maps" href="#"><span class="material-symbols-outlined text-[18px]">map</span><span class="font-body-sm text-body-sm">Places and Maps</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-secondary-fixed-dim hover:bg-on-tertiary-fixed hover:text-white transition-colors" data-path="fuel" href="#"><span class="material-symbols-outlined text-[18px]">local_gas_station</span><span class="font-body-sm text-body-sm">Fuel</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-secondary-fixed-dim hover:bg-on-tertiary-fixed hover:text-white transition-colors" data-path="tolls" href="#"><span class="material-symbols-outlined text-[18px]">toll</span><span class="font-body-sm text-body-sm">Tolls</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-secondary-fixed-dim hover:bg-on-tertiary-fixed hover:text-white transition-colors" data-path="tax-and-vendors" href="#"><span class="material-symbols-outlined text-[18px]">receipt_long</span><span class="font-body-sm text-body-sm">Tax and Vendors</span></a><div class="pt-space-md pb-space-xs px-space-sm"><span class="font-caption text-[10px] uppercase font-bold tracking-widest text-secondary-fixed-dim/70">Core Modules</span></div><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-secondary-fixed-dim hover:bg-on-tertiary-fixed hover:text-white transition-colors" data-path="engines" href="#"><span class="material-symbols-outlined text-[18px]">manufacturing</span><span class="font-body-sm text-body-sm">Engines</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-secondary-fixed-dim hover:bg-on-tertiary-fixed hover:text-white transition-colors" data-path="distribution" href="#"><span class="material-symbols-outlined text-[18px]">swap_horiz</span><span class="font-body-sm text-body-sm">Distribution</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-secondary-fixed-dim hover:bg-on-tertiary-fixed hover:text-white transition-colors" data-path="platform" href="#"><span class="material-symbols-outlined text-[18px]">layers</span><span class="font-body-sm text-body-sm">Platform</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-secondary-fixed-dim hover:bg-on-tertiary-fixed hover:text-white transition-colors" data-path="back-office" href="#"><span class="material-symbols-outlined text-[18px]">admin_panel_settings</span><span class="font-body-sm text-body-sm">Back Office</span></a></nav></div></div><div class="p-space-md m-space-sm bg-on-tertiary-fixed rounded-lg"><div class="flex items-center justify-between text-secondary-fixed-dim"><span class="font-caption text-caption">Registry Engine</span><span class="font-code-sm text-code-sm px-1.5 py-0.5 rounded bg-on-secondary-fixed text-primary-fixed">v4.18</span></div></div></aside><div class="pl-64 flex flex-col min-h-screen"><header class="fixed top-0 left-64 right-0 h-16 bg-surface/85 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-40 flex items-center justify-between px-space-xl"><div class="flex-1 max-w-lg"><div class="relative flex items-center"><span class="material-symbols-outlined absolute left-space-md text-secondary text-[20px] pointer-events-none">search</span><input class="w-full h-11 pl-10 pr-12 rounded-lg bg-surface-container-lowest font-body-sm text-body-sm text-on-surface placeholder:text-secondary shadow-[0_2px_8px_rgba(1,83,220,0.04)] focus:outline-none focus:ring-2 focus:ring-primary-container transition-all" placeholder="Search entities, engines, routes…" type="search"/><span class="absolute right-space-sm font-caption text-caption text-secondary bg-surface-container px-2 py-0.5 rounded">⌘K</span></div></div><div class="flex items-center gap-space-md"><button aria-label="Toggle dark mode" class="w-9 h-9 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-colors" type="button"><span class="material-symbols-outlined text-[20px]">dark_mode</span></button><div class="flex items-center gap-space-sm pl-space-sm"><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="font-caption text-on-primary text-[11px] font-semibold tracking-tight">DT</span></div><div class="flex flex-col text-left"><span class="font-body-sm text-[13px] font-semibold text-on-surface leading-tight">Deeki T</span><span class="font-caption text-caption text-secondary leading-tight">Owner</span></div></div></div></header><main class="w-full pt-16 bg-surface flex-1"><div class="flex flex-col w-full">
+<div class="w-full max-w-[1120px] mx-auto px-space-xl py-space-lg flex flex-col gap-space-lg">
+<!-- Breadcrumb & Top Bar Navigation -->
+<div class="flex items-center justify-between">
+<nav class="flex items-center gap-space-xs text-secondary">
+<a class="inline-flex items-center gap-1 font-body-sm text-body-sm text-secondary hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined text-[18px]">arrow_back</span>
+<span>Back to Toyota Roomy versions</span>
+</a>
+<span class="text-secondary/40 font-code-sm">/</span>
+<span class="font-code-sm text-code-sm text-on-surface-variant font-medium">M900A · 1KR-FE</span>
+</nav>
+<div class="flex items-center gap-space-sm">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-secondary-container/60 text-on-secondary-container font-caption text-caption">
+<span class="w-1.5 h-1.5 rounded-full bg-primary-container"></span>
+          Registry ID: <span class="font-code-sm font-semibold">#TY-M900A-01</span>
+</span>
+<div class="flex items-center gap-1 bg-surface-container px-2 py-0.5 rounded text-secondary font-caption text-caption">
+<span class="material-symbols-outlined text-[15px]">database</span>
+<span>Catalog v2.4</span>
+</div>
+</div>
+</div>
+<!-- Vehicle Identity Header Card -->
+<section class="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm border border-outline-variant/30 flex flex-col gap-space-md">
+<div class="flex flex-col lg:flex-row lg:items-start justify-between gap-space-md">
+<!-- Left: Badge + Titles -->
+<div class="flex items-start gap-space-md">
+<div class="w-14 h-14 rounded-xl bg-surface-container flex items-center justify-center shrink-0 border border-outline-variant/40 shadow-xs">
+<!-- Toyota Insignia Graphic -->
+<svg class="w-8 h-8 text-on-surface" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" viewbox="0 0 24 24">
+<ellipse cx="12" cy="12" rx="10" ry="7"></ellipse>
+<ellipse cx="12" cy="11.5" rx="4.5" ry="5.5"></ellipse>
+<ellipse cx="12" cy="9" rx="8" ry="3.5"></ellipse>
+</svg>
+</div>
+<div class="flex flex-col">
+<div class="flex flex-wrap items-center gap-space-xs">
+<h1 class="font-headline-lg text-headline-lg text-on-surface font-semibold tracking-tight">Toyota Roomy</h1>
+<span class="inline-flex items-center px-2 py-0.5 rounded-full bg-primary-fixed text-on-primary-fixed-variant font-caption text-[11px] font-semibold">
+                Active Production Record · Gen 1 Phase 1
+              </span>
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-surface-container text-on-surface-variant font-caption text-caption">
+<span class="material-symbols-outlined text-[13px] text-primary">link</span>
+                3 Sister Badges Synced
+              </span>
+</div>
+<p class="font-body-md text-body-md text-secondary mt-0.5">
+              2016–2020 · 2WD · 1.0 petrol naturally aspirated
+            </p>
+<div class="flex flex-wrap items-center gap-space-sm mt-2 text-on-surface-variant font-code-sm text-code-sm">
+<span class="px-2 py-0.5 rounded bg-surface-container-low font-medium">Chassis: M900A</span>
+<span class="text-secondary/50">•</span>
+<span class="px-2 py-0.5 rounded bg-surface-container-low font-medium">Engine: 1KR-FE</span>
+<span class="text-secondary/50">•</span>
+<span class="px-2 py-0.5 rounded bg-surface-container-low font-medium">Type: DBA-M900A-BGBGE</span>
+</div>
+</div>
+</div>
+<!-- Right: Actions -->
+<div class="flex items-center gap-space-sm self-start">
+<button class="px-3.5 py-2 rounded-lg bg-surface-container-lowest border border-outline-variant text-on-surface hover:bg-surface-container-low hover:border-secondary transition-colors font-body-sm text-body-sm inline-flex items-center gap-1.5 shadow-xs" type="button">
+<span class="material-symbols-outlined text-[18px] text-secondary">edit</span>
+<span>Edit details</span>
+</button>
+<button class="px-3.5 py-2 rounded-lg bg-surface-container-lowest border border-error/40 text-error hover:bg-error-container/40 transition-colors font-body-sm text-body-sm inline-flex items-center gap-1.5 shadow-xs" type="button">
+<span class="material-symbols-outlined text-[18px]">archive</span>
+<span>Retire version</span>
+</button>
+<button class="px-3.5 py-2 rounded-lg bg-primary-container text-white hover:bg-primary transition-colors font-body-sm text-body-sm font-medium inline-flex items-center gap-1.5 shadow-sm" type="button">
+<span class="material-symbols-outlined text-[18px]">add</span>
+<span>Add spec</span>
+</button>
+</div>
+</div>
+<!-- Navigation Tabs -->
+<div class="pt-space-sm border-t border-surface-container-highest flex items-center justify-between gap-space-md overflow-x-auto">
+<div class="flex items-center gap-1" role="tablist">
+<button aria-selected="false" class="px-3 py-2 rounded-lg font-body-sm text-body-sm text-secondary hover:text-on-surface hover:bg-surface-container transition-colors" role="tab">
+            Overview
+          </button>
+<button aria-selected="false" class="px-3 py-2 rounded-lg font-body-sm text-body-sm text-secondary hover:text-on-surface hover:bg-surface-container transition-colors inline-flex items-center gap-1.5" role="tab">
+<span>Car specs</span>
+<span class="font-code-sm text-[11px] px-1.5 py-0.2 rounded-full bg-surface-container text-secondary">18</span>
+</button>
+<button aria-selected="false" class="px-3 py-2 rounded-lg font-body-sm text-body-sm text-secondary hover:text-on-surface hover:bg-surface-container transition-colors inline-flex items-center gap-1.5" role="tab">
+<span>Parts on file</span>
+<span class="font-code-sm text-[11px] px-1.5 py-0.2 rounded-full bg-surface-container text-secondary">27</span>
+</button>
+<button aria-selected="true" class="px-3.5 py-2 rounded-lg font-body-sm text-body-sm font-semibold bg-primary-fixed text-on-primary-fixed-variant inline-flex items-center gap-1.5 shadow-xs" role="tab">
+<span class="material-symbols-outlined text-[16px] text-primary">diversity_3</span>
+<span>Sister cars</span>
+<span class="font-code-sm text-[11px] px-1.5 py-0.2 rounded-full bg-primary-container text-white font-bold">3</span>
+</button>
+<button aria-selected="false" class="px-3 py-2 rounded-lg font-body-sm text-body-sm text-secondary hover:text-on-surface hover:bg-surface-container transition-colors inline-flex items-center gap-1.5" role="tab">
+<span class="material-symbols-outlined text-[16px]">history</span>
+<span>History &amp; Changelog</span>
+</button>
+</div>
+<!-- Sister Sync Status Pill -->
+<div class="hidden sm:inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-surface-container text-on-surface-variant font-caption text-caption">
+<span class="material-symbols-outlined text-[14px] text-primary">sync</span>
+<span>Broadcast Engine: <span class="font-code-sm text-primary font-semibold">Active (auto)</span></span>
+</div>
+</div>
+</section>
+<!-- Shared Notice Banner: Sister Specs Policy -->
+<div class="rounded-xl p-space-md bg-secondary-container/40 border border-secondary-container flex items-center justify-between gap-space-md">
+<div class="flex items-center gap-space-sm">
+<div class="w-8 h-8 rounded-lg bg-surface-container-lowest flex items-center justify-center text-primary shrink-0 shadow-xs">
+<span class="material-symbols-outlined text-[20px]">sync_alt</span>
+</div>
+<div>
+<p class="font-body-sm text-body-sm font-medium text-on-surface">
+            Cross-Badge Registry Mirroring
+          </p>
+<p class="font-caption text-caption text-secondary">
+            Changes to core mechanical specifications (engine oil viscosity, brake fluids, wheel lug patterns) automatically offer bulk propagation across all 3 sister badges.
+          </p>
+</div>
+</div>
+<div class="shrink-0 flex items-center gap-2">
+<span class="font-caption text-caption text-secondary hidden md:inline">Last synced 14 mins ago</span>
+<button class="px-3 py-1.5 rounded-lg bg-surface-container-lowest border border-outline-variant text-on-surface hover:bg-surface-container-low text-caption font-medium transition-colors inline-flex items-center gap-1 shadow-xs" type="button">
+<span class="material-symbols-outlined text-[15px]">refresh</span>
+<span>Force sync</span>
+</button>
+</div>
+</div>
+<!-- Main Dynamic Workspace: Frame A (Sister Cars) & Frame B (History) -->
+<div class="grid grid-cols-1 xl:grid-cols-12 gap-space-lg items-start">
+<!-- FRAME A: SISTER CARS (Left / Primary Section, 7 Cols) -->
+<section class="xl:col-span-7 flex flex-col gap-space-md">
+<!-- Header row of Frame A -->
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-space-xs">
+<div>
+<div class="flex items-center gap-2">
+<h2 class="font-headline-md text-headline-md font-semibold text-on-surface">Sister Cars</h2>
+<span class="font-caption text-[11px] font-bold px-2 py-0.5 rounded-full bg-surface-container-high text-on-surface-variant uppercase tracking-wider">Badge Twins</span>
+</div>
+<p class="font-hint-sm text-hint-sm text-secondary mt-0.5">
+              Same car sold under other badges. Most parts and specs are shared.
+            </p>
+</div>
+<button class="self-start sm:self-auto px-3.5 py-2 rounded-lg bg-surface-container-lowest border border-outline-variant text-on-surface hover:bg-surface-container-low hover:border-secondary transition-colors font-body-sm text-body-sm font-medium inline-flex items-center gap-1.5 shadow-xs shrink-0" type="button">
+<span class="material-symbols-outlined text-[18px] text-primary">add_link</span>
+<span>Link another sister car</span>
+</button>
+</div>
+<!-- 3 Sister Car Cards Grid / Stack -->
+<div class="flex flex-col gap-space-md">
+<!-- Card 1: Toyota Tank -->
+<article class="bg-surface-container-lowest rounded-xl p-space-md border border-outline-variant/40 shadow-xs hover:border-primary/40 transition-all">
+<div class="flex items-start justify-between gap-space-sm mb-space-sm">
+<div class="flex items-center gap-space-sm">
+<!-- Maker Badge -->
+<div class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center shrink-0 border border-outline-variant/40">
+<svg class="w-6 h-6 text-on-surface" fill="none" stroke="currentColor" stroke-width="1.8" viewbox="0 0 24 24">
+<ellipse cx="12" cy="12" rx="9" ry="6"></ellipse>
+<ellipse cx="12" cy="12" rx="4" ry="5"></ellipse>
+<ellipse cx="12" cy="10" rx="7.5" ry="3"></ellipse>
+</svg>
+</div>
+<div>
+<div class="flex items-center gap-2">
+<h3 class="font-headline-md text-[17px] font-semibold text-on-surface">Toyota Tank</h3>
+<span class="font-caption text-[11px] px-1.5 py-0.2 rounded bg-surface-container text-on-surface-variant">Front Grille Variant</span>
+</div>
+<p class="font-code-sm text-code-sm text-secondary">Chassis M900A / M910A · 2016–2020</p>
+</div>
+</div>
+<!-- Sync status pill -->
+<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-secondary-container/80 text-on-secondary-fixed font-caption text-caption font-medium shrink-0">
+<span class="material-symbols-outlined text-[14px] text-primary">task_alt</span>
+<span>100% specs synced</span>
+</span>
+</div>
+<!-- Matching Versions List -->
+<div class="mt-space-sm bg-surface-container-low/70 rounded-lg p-space-sm flex flex-col gap-2">
+<div class="font-caption text-[11px] font-bold uppercase tracking-wider text-secondary px-1 flex items-center justify-between">
+<span>Matching Versions Linked</span>
+<span class="font-code-sm text-caption lowercase font-normal">2 trim records</span>
+</div>
+<!-- Version 1 -->
+<div class="bg-surface-container-lowest rounded p-2.5 flex items-center justify-between border border-outline-variant/20">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-primary"></span>
+<div class="flex flex-col">
+<span class="font-body-sm text-body-sm font-medium text-on-surface">2016–2020 · 2WD · 1.0 petrol</span>
+<span class="font-code-sm text-code-sm text-secondary">Code: M900A · Engine: 1KR-FE</span>
+</div>
+</div>
+<span class="font-caption text-[11px] font-medium px-2 py-0.5 rounded bg-primary-fixed text-on-primary-fixed-variant">
+                  Direct Twin
+                </span>
+</div>
+<!-- Version 2 -->
+<div class="bg-surface-container-lowest rounded p-2.5 flex items-center justify-between border border-outline-variant/20">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-secondary/50"></span>
+<div class="flex flex-col">
+<span class="font-body-sm text-body-sm text-on-surface">2016–2020 · 4WD · 1.0 petrol</span>
+<span class="font-code-sm text-code-sm text-secondary">Code: M910A · Engine: 1KR-FE</span>
+</div>
+</div>
+<span class="font-caption text-[11px] font-medium px-2 py-0.5 rounded bg-surface-container text-on-surface-variant">
+                  Sister 4WD
+                </span>
+</div>
+</div>
+<!-- Card Bottom Controls -->
+<div class="mt-space-sm pt-space-xs flex items-center justify-between">
+<div class="flex items-center gap-2 text-secondary font-caption text-caption">
+<span class="material-symbols-outlined text-[15px]">inventory_2</span>
+<span>27 of 27 parts match</span>
+</div>
+<div class="flex items-center gap-2">
+<button class="px-2.5 py-1 rounded text-caption font-medium text-secondary hover:text-on-surface hover:bg-surface-container transition-colors inline-flex items-center gap-1" type="button">
+<span class="material-symbols-outlined text-[14px]">tune</span>
+<span>Sync settings</span>
+</button>
+<button class="px-2.5 py-1 rounded text-caption font-medium text-primary hover:bg-primary-fixed/40 transition-colors inline-flex items-center gap-1" type="button">
+<span>View model</span>
+<span class="material-symbols-outlined text-[14px]">open_in_new</span>
+</button>
+</div>
+</div>
+</article>
+<!-- Card 2: Daihatsu Thor (OEM Origin) -->
+<article class="bg-surface-container-lowest rounded-xl p-space-md border border-outline-variant/40 shadow-xs hover:border-primary/40 transition-all">
+<div class="flex items-start justify-between gap-space-sm mb-space-sm">
+<div class="flex items-center gap-space-sm">
+<!-- Daihatsu Logo Tile -->
+<div class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center shrink-0 border border-outline-variant/40">
+<span class="font-headline-md text-[18px] font-bold text-on-surface tracking-tighter">D</span>
+</div>
+<div>
+<div class="flex items-center gap-2">
+<h3 class="font-headline-md text-[17px] font-semibold text-on-surface">Daihatsu Thor</h3>
+<span class="font-caption text-[11px] font-semibold px-2 py-0.2 rounded bg-tertiary-fixed text-on-tertiary-fixed">OEM Origin</span>
+</div>
+<p class="font-code-sm text-code-sm text-secondary">Chassis M900S / M910S · 2016–today</p>
+</div>
+</div>
+<!-- Sync status pill -->
+<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-surface-container text-on-surface-variant font-caption text-caption font-medium shrink-0">
+<span class="material-symbols-outlined text-[14px] text-tertiary">check_circle</span>
+<span>94.2% parts match</span>
+</span>
+</div>
+<!-- Matching Versions List -->
+<div class="mt-space-sm bg-surface-container-low/70 rounded-lg p-space-sm flex flex-col gap-2">
+<div class="font-caption text-[11px] font-bold uppercase tracking-wider text-secondary px-1 flex items-center justify-between">
+<span>Matching Versions Linked</span>
+<span class="font-code-sm text-caption lowercase font-normal">3 trim records</span>
+</div>
+<!-- Version 1 -->
+<div class="bg-surface-container-lowest rounded p-2.5 flex items-center justify-between border border-outline-variant/20">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-primary"></span>
+<div class="flex flex-col">
+<span class="font-body-sm text-body-sm font-medium text-on-surface">2016–2020 · 2WD · 1.0 petrol</span>
+<span class="font-code-sm text-code-sm text-secondary">Code: M900S · Engine: 1KR-FE</span>
+</div>
+</div>
+<span class="font-caption text-[11px] font-medium px-2 py-0.5 rounded bg-primary-fixed text-on-primary-fixed-variant">
+                  Base OEM Twin
+                </span>
+</div>
+<!-- Version 2 -->
+<div class="bg-surface-container-lowest rounded p-2.5 flex items-center justify-between border border-outline-variant/20">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-secondary/50"></span>
+<div class="flex flex-col">
+<span class="font-body-sm text-body-sm text-on-surface">2016–2020 · 2WD · 1.0 turbo petrol</span>
+<span class="font-code-sm text-code-sm text-secondary">Code: M900S · Engine: 1KR-VET</span>
+</div>
+</div>
+<span class="font-caption text-[11px] font-medium px-2 py-0.5 rounded bg-surface-container text-on-surface-variant">
+                  Turbo Variant
+                </span>
+</div>
+<!-- Version 3 -->
+<div class="bg-surface-container-lowest rounded p-2.5 flex items-center justify-between border border-outline-variant/20">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-secondary/50"></span>
+<div class="flex flex-col">
+<span class="font-body-sm text-body-sm text-on-surface">2016–2020 · 4WD · 1.0 petrol</span>
+<span class="font-code-sm text-code-sm text-secondary">Code: M910S · Engine: 1KR-FE</span>
+</div>
+</div>
+<span class="font-caption text-[11px] font-medium px-2 py-0.5 rounded bg-surface-container text-on-surface-variant">
+                  4WD Twin
+                </span>
+</div>
+</div>
+<!-- Card Bottom Controls -->
+<div class="mt-space-sm pt-space-xs flex items-center justify-between">
+<div class="flex items-center gap-2 text-secondary font-caption text-caption">
+<span class="material-symbols-outlined text-[15px] text-on-surface-variant">info</span>
+<span>Manufactured at Daihatsu Ikeda Plant</span>
+</div>
+<div class="flex items-center gap-2">
+<button class="px-2.5 py-1 rounded text-caption font-medium text-secondary hover:text-on-surface hover:bg-surface-container transition-colors inline-flex items-center gap-1" type="button">
+<span class="material-symbols-outlined text-[14px]">tune</span>
+<span>Sync settings</span>
+</button>
+<button class="px-2.5 py-1 rounded text-caption font-medium text-primary hover:bg-primary-fixed/40 transition-colors inline-flex items-center gap-1" type="button">
+<span>View model</span>
+<span class="material-symbols-outlined text-[14px]">open_in_new</span>
+</button>
+</div>
+</div>
+</article>
+<!-- Card 3: Subaru Justy -->
+<article class="bg-surface-container-lowest rounded-xl p-space-md border border-outline-variant/40 shadow-xs hover:border-primary/40 transition-all">
+<div class="flex items-start justify-between gap-space-sm mb-space-sm">
+<div class="flex items-center gap-space-sm">
+<!-- Subaru Logo Tile -->
+<div class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center shrink-0 border border-outline-variant/40">
+<span class="material-symbols-outlined text-on-surface text-[22px]">stars</span>
+</div>
+<div>
+<div class="flex items-center gap-2">
+<h3 class="font-headline-md text-[17px] font-semibold text-on-surface">Subaru Justy</h3>
+<span class="font-caption text-[11px] px-1.5 py-0.2 rounded bg-surface-container text-on-surface-variant">Subaru Badge Rebadge</span>
+</div>
+<p class="font-code-sm text-code-sm text-secondary">Chassis M900F / M910F · 2016–today</p>
+</div>
+</div>
+<!-- Sync status pill -->
+<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-secondary-container/80 text-on-secondary-fixed font-caption text-caption font-medium shrink-0">
+<span class="material-symbols-outlined text-[14px] text-primary">task_alt</span>
+<span>100% specs synced</span>
+</span>
+</div>
+<!-- Matching Versions List -->
+<div class="mt-space-sm bg-surface-container-low/70 rounded-lg p-space-sm flex flex-col gap-2">
+<div class="font-caption text-[11px] font-bold uppercase tracking-wider text-secondary px-1 flex items-center justify-between">
+<span>Matching Versions Linked</span>
+<span class="font-code-sm text-caption lowercase font-normal">2 trim records</span>
+</div>
+<!-- Version 1 -->
+<div class="bg-surface-container-lowest rounded p-2.5 flex items-center justify-between border border-outline-variant/20">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-primary"></span>
+<div class="flex flex-col">
+<span class="font-body-sm text-body-sm font-medium text-on-surface">2016–2020 · 2WD · 1.0 petrol</span>
+<span class="font-code-sm text-code-sm text-secondary">Code: M900F · Engine: 1KR-FE</span>
+</div>
+</div>
+<span class="font-caption text-[11px] font-medium px-2 py-0.5 rounded bg-primary-fixed text-on-primary-fixed-variant">
+                  Direct Twin
+                </span>
+</div>
+<!-- Version 2 -->
+<div class="bg-surface-container-lowest rounded p-2.5 flex items-center justify-between border border-outline-variant/20">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-secondary/50"></span>
+<div class="flex flex-col">
+<span class="font-body-sm text-body-sm text-on-surface">2016–2020 · 4WD · 1.0 petrol</span>
+<span class="font-code-sm text-code-sm text-secondary">Code: M910F · Engine: 1KR-FE</span>
+</div>
+</div>
+<span class="font-caption text-[11px] font-medium px-2 py-0.5 rounded bg-surface-container text-on-surface-variant">
+                  Sister 4WD
+                </span>
+</div>
+</div>
+<!-- Card Bottom Controls -->
+<div class="mt-space-sm pt-space-xs flex items-center justify-between">
+<div class="flex items-center gap-2 text-secondary font-caption text-caption">
+<span class="material-symbols-outlined text-[15px]">verified</span>
+<span>OEM wiring harness and cabin filters shared</span>
+</div>
+<div class="flex items-center gap-2">
+<button class="px-2.5 py-1 rounded text-caption font-medium text-secondary hover:text-on-surface hover:bg-surface-container transition-colors inline-flex items-center gap-1" type="button">
+<span class="material-symbols-outlined text-[14px]">tune</span>
+<span>Sync settings</span>
+</button>
+<button class="px-2.5 py-1 rounded text-caption font-medium text-primary hover:bg-primary-fixed/40 transition-colors inline-flex items-center gap-1" type="button">
+<span>View model</span>
+<span class="material-symbols-outlined text-[14px]">open_in_new</span>
+</button>
+</div>
+</div>
+</article>
+</div>
+</section>
+<!-- FRAME B: HISTORY & CHANGELOG TIMELINE (Right / Secondary Section, 5 Cols) -->
+<section class="xl:col-span-5 flex flex-col gap-space-md">
+<!-- Header row of Frame B -->
+<div class="flex items-center justify-between">
+<div>
+<div class="flex items-center gap-2">
+<h2 class="font-headline-md text-headline-md font-semibold text-on-surface">History &amp; Audit</h2>
+<span class="font-caption text-[11px] font-bold px-2 py-0.5 rounded-full bg-surface-container text-secondary">6 events</span>
+</div>
+<p class="font-hint-sm text-hint-sm text-secondary mt-0.5">
+              Immutable ledger of manual edits &amp; synced changes.
+            </p>
+</div>
+<button class="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center text-secondary hover:text-on-surface hover:bg-surface-container-high transition-colors" title="Filter changelog" type="button">
+<span class="material-symbols-outlined text-[18px]">filter_list</span>
+</button>
+</div>
+<!-- Timeline Container Card -->
+<div class="bg-surface-container-lowest rounded-xl p-space-md border border-outline-variant/40 shadow-xs flex flex-col">
+<div class="relative pl-6 flex flex-col gap-space-lg before:content-[''] before:absolute before:left-2.5 before:top-3 before:bottom-3 before:w-[2px] before:bg-surface-container-highest">
+<!-- Item 1: Today 7 Nov (Undoable) -->
+<div class="relative flex flex-col gap-1.5 group">
+<!-- Dot Indicator -->
+<div class="absolute -left-6 top-1 w-5 h-5 rounded-full bg-surface-container-lowest border-2 border-primary flex items-center justify-center">
+<span class="w-1.5 h-1.5 rounded-full bg-primary"></span>
+</div>
+<!-- Timestamp & Actor -->
+<div class="flex items-center justify-between gap-2">
+<div class="flex items-center gap-1.5 flex-wrap">
+<span class="font-caption text-caption font-semibold text-on-surface">Today, 7 Nov</span>
+<span class="text-secondary/50 font-caption">•</span>
+<span class="font-caption text-caption text-secondary">14:22</span>
+<span class="inline-flex items-center gap-1 text-[11px] font-medium text-primary px-1.5 py-0.2 rounded bg-primary-fixed/50">
+<span class="w-1 h-1 rounded-full bg-primary"></span>
+                    Deeki T
+                  </span>
+</div>
+<!-- Outlined Undo Button -->
+<button class="px-2.5 py-1 rounded bg-surface-container-lowest border border-outline-variant text-on-surface hover:bg-surface-container hover:border-secondary transition-colors font-caption text-caption font-medium inline-flex items-center gap-1 shadow-2xs" type="button">
+<span class="material-symbols-outlined text-[13px] text-secondary">undo</span>
+<span>Undo</span>
+</button>
+</div>
+<!-- Change Description -->
+<div class="bg-surface-container-low/70 rounded-lg p-2.5 flex flex-col gap-1 border border-outline-variant/20">
+<p class="font-body-sm text-body-sm text-on-surface">
+                  Added Brake fluid spec: <span class="font-code-sm font-semibold text-primary">Toyota 2500H-A (DOT 4 / SAE J1703)</span>
+</p>
+<div class="flex items-center gap-1 font-caption text-[11px] text-secondary">
+<span class="material-symbols-outlined text-[13px] text-primary">sync</span>
+<span>Propagated to 3 sister badge variants</span>
+</div>
+</div>
+</div>
+<!-- Item 2: Yesterday 6 Nov (Undoable) -->
+<div class="relative flex flex-col gap-1.5 group">
+<!-- Dot Indicator -->
+<div class="absolute -left-6 top-1 w-5 h-5 rounded-full bg-surface-container-lowest border-2 border-secondary/60 flex items-center justify-center">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>
+</div>
+<!-- Timestamp & Actor -->
+<div class="flex items-center justify-between gap-2">
+<div class="flex items-center gap-1.5 flex-wrap">
+<span class="font-caption text-caption font-semibold text-on-surface">Yesterday, 6 Nov</span>
+<span class="text-secondary/50 font-caption">•</span>
+<span class="font-caption text-caption text-secondary">11:05</span>
+<span class="inline-flex items-center gap-1 text-[11px] font-medium text-on-surface-variant px-1.5 py-0.2 rounded bg-surface-container">
+                    Deeki T
+                  </span>
+</div>
+<!-- Outlined Undo Button -->
+<button class="px-2.5 py-1 rounded bg-surface-container-lowest border border-outline-variant text-on-surface hover:bg-surface-container hover:border-secondary transition-colors font-caption text-caption font-medium inline-flex items-center gap-1 shadow-2xs" type="button">
+<span class="material-symbols-outlined text-[13px] text-secondary">undo</span>
+<span>Undo</span>
+</button>
+</div>
+<!-- Change Description -->
+<div class="bg-surface-container-low/70 rounded-lg p-2.5 flex flex-col gap-1 border border-outline-variant/20">
+<p class="font-body-sm text-body-sm text-on-surface">
+                  Changed production years to <span class="font-code-sm font-semibold text-on-surface">2016–2020</span>
+</p>
+<p class="font-caption text-[11px] text-secondary">
+                  Previously was set to <span class="line-through">2016–2019</span> based on preliminary catalog.
+                </p>
+</div>
+</div>
+<!-- Item 3: 4 Nov (Sister Link Added) -->
+<div class="relative flex flex-col gap-1.5 group">
+<!-- Dot Indicator -->
+<div class="absolute -left-6 top-1 w-5 h-5 rounded-full bg-surface-container-lowest border-2 border-secondary/60 flex items-center justify-center">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>
+</div>
+<!-- Timestamp & Actor -->
+<div class="flex items-center justify-between gap-2">
+<div class="flex items-center gap-1.5 flex-wrap">
+<span class="font-caption text-caption font-semibold text-on-surface">4 Nov</span>
+<span class="text-secondary/50 font-caption">•</span>
+<span class="font-caption text-caption text-secondary">09:30</span>
+<span class="inline-flex items-center gap-1 text-[11px] font-medium text-on-surface-variant px-1.5 py-0.2 rounded bg-surface-container">
+                    Deeki T
+                  </span>
+</div>
+<!-- Outlined Undo Button -->
+<button class="px-2.5 py-1 rounded bg-surface-container-lowest border border-outline-variant text-on-surface hover:bg-surface-container hover:border-secondary transition-colors font-caption text-caption font-medium inline-flex items-center gap-1 shadow-2xs" type="button">
+<span class="material-symbols-outlined text-[13px] text-secondary">undo</span>
+<span>Undo</span>
+</button>
+</div>
+<!-- Change Description -->
+<div class="bg-surface-container-low/70 rounded-lg p-2.5 flex flex-col gap-1 border border-outline-variant/20">
+<p class="font-body-sm text-body-sm text-on-surface">
+                  Linked sister vehicle model <span class="font-code-sm font-semibold text-on-surface">Subaru Justy (M900F)</span>
+</p>
+<p class="font-caption text-[11px] text-secondary">
+                  Initialized matching spec rules across 18 telemetry fields.
+                </p>
+</div>
+</div>
+<!-- Item 4: 28 Oct (Wiper specs) -->
+<div class="relative flex flex-col gap-1.5 group">
+<!-- Dot Indicator -->
+<div class="absolute -left-6 top-1 w-5 h-5 rounded-full bg-surface-container-lowest border-2 border-secondary/60 flex items-center justify-center">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>
+</div>
+<!-- Timestamp & Actor -->
+<div class="flex items-center justify-between gap-2">
+<div class="flex items-center gap-1.5 flex-wrap">
+<span class="font-caption text-caption font-semibold text-on-surface">28 Oct</span>
+<span class="text-secondary/50 font-caption">•</span>
+<span class="font-caption text-caption text-secondary">16:45</span>
+<span class="inline-flex items-center gap-1 text-[11px] font-medium text-on-surface-variant px-1.5 py-0.2 rounded bg-surface-container">
+                    Deeki T
+                  </span>
+</div>
+<!-- Outlined Undo Button -->
+<button class="px-2.5 py-1 rounded bg-surface-container-lowest border border-outline-variant text-on-surface hover:bg-surface-container hover:border-secondary transition-colors font-caption text-caption font-medium inline-flex items-center gap-1 shadow-2xs" type="button">
+<span class="material-symbols-outlined text-[13px] text-secondary">undo</span>
+<span>Undo</span>
+</button>
+</div>
+<!-- Change Description -->
+<div class="bg-surface-container-low/70 rounded-lg p-2.5 flex flex-col gap-1 border border-outline-variant/20">
+<p class="font-body-sm text-body-sm text-on-surface">
+                  Verified wiper blade dimension specs
+                </p>
+<p class="font-code-sm text-code-sm text-secondary">
+                  Driver: 525mm · Passenger: 475mm · Rear: 350mm
+                </p>
+</div>
+</div>
+<!-- Item 5: 14 Oct (Initial Import - Non-undoable root) -->
+<div class="relative flex flex-col gap-1.5 opacity-80">
+<!-- Dot Indicator -->
+<div class="absolute -left-6 top-1 w-5 h-5 rounded-full bg-surface-container border-2 border-secondary/30 flex items-center justify-center">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary/50"></span>
+</div>
+<!-- Timestamp & System Actor -->
+<div class="flex items-center justify-between gap-2">
+<div class="flex items-center gap-1.5 flex-wrap">
+<span class="font-caption text-caption font-semibold text-on-surface">14 Oct</span>
+<span class="text-secondary/50 font-caption">•</span>
+<span class="font-caption text-caption text-secondary">10:12</span>
+<span class="inline-flex items-center gap-1 text-[11px] font-medium text-secondary px-1.5 py-0.2 rounded bg-surface-container-highest">
+<span class="material-symbols-outlined text-[12px]">smart_toy</span>
+                    System Auto-Import
+                  </span>
+</div>
+<span class="font-caption text-[11px] text-secondary italic">Initial commit</span>
+</div>
+<!-- Change Description -->
+<div class="bg-surface-container/60 rounded-lg p-2.5 flex flex-col gap-1">
+<p class="font-body-sm text-body-sm text-on-surface">
+                  Initialized vehicle master record from <span class="font-code-sm font-medium">Toyota EPC Catalog JPN_004</span>
+</p>
+<p class="font-caption text-[11px] text-secondary">
+                  Base engine displacement, transmission CVT ratio, and curb weight logged.
+                </p>
+</div>
+</div>
+</div>
+<!-- Bottom Footer Link -->
+<div class="mt-space-md pt-space-sm border-t border-surface-container-highest flex items-center justify-between text-secondary">
+<span class="font-caption text-caption">Retention: 365 days audit trails</span>
+<button class="font-caption text-caption text-primary hover:underline inline-flex items-center gap-0.5" type="button">
+<span>View full JSON export</span>
+<span class="material-symbols-outlined text-[14px]">arrow_outward</span>
+</button>
+</div>
+</div>
+<!-- Metric Summary Card (Mini Widget) -->
+<div class="bg-surface-container-lowest rounded-xl p-space-md border border-outline-variant/40 shadow-xs flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center text-primary shrink-0">
+<span class="material-symbols-outlined text-[20px]">verified_user</span>
+</div>
+<div>
+<p class="font-body-sm text-body-sm font-semibold text-on-surface">Spec Integrity Status</p>
+<p class="font-caption text-caption text-secondary">0 conflicting values between sister badges</p>
+</div>
+</div>
+<span class="font-caption text-caption font-semibold px-2 py-0.5 rounded bg-primary-fixed text-on-primary-fixed-variant">
+            Verified Healthy
+          </span>
+</div>
+</section>
+</div>
+</div>
+</div></main></div></body></html>

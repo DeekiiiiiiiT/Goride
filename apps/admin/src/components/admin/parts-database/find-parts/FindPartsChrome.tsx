@@ -40,8 +40,11 @@ export function FindPartsChrome({
   const database = activeTab === "Full database";
   const findParts = activeTab === "Find parts";
   const trustedSources = activeTab === "Trusted sources";
+  const addParts = activeTab === "Add parts";
   const ownerTitle = owner ? undefined : "Only the owner can change parts.";
-  const subtitle = database
+  const subtitle = addParts
+    ? "Every part, and every car it fits."
+    : database
     ? "Every part, car family and size-based part on file, in one searchable place. Direct catalog overview."
     : trustedSources
     ? "Car maker and part maker sites that count as Confirmed when you save a source link to them."
@@ -50,6 +53,7 @@ export function FindPartsChrome({
   return (
     <div className="flex flex-col w-full">
       <div className="find-parts-header px-space-xl pt-space-md pb-space-sm bg-surface-container-lowest shadow-sm flex flex-col gap-space-sm">
+        {!addParts ? (
         <div className="flex items-center justify-between gap-3 pb-1 border-b border-outline-variant/40">
           <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-1.5 font-mono-sm text-mono-sm text-secondary">
             <PartsButton variant="secondary" className={crumbBtn} onClick={onNavigateDominion}>DOMINION</PartsButton>
@@ -89,17 +93,20 @@ export function FindPartsChrome({
             <span className="px-2 py-0.5 rounded-full bg-surface-container border border-outline-variant/40 text-secondary font-mono-sm text-[10px] uppercase font-semibold">{schemaLabel}</span>
           </div>
         </div>
+        ) : null}
 
         <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-space-md pt-2">
           <div>
             <div className="flex items-center gap-3 flex-wrap">
               <h1 className="parts-db-title font-headline-xl text-on-surface tracking-tight">Parts database</h1>
-              <span className="px-2.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 font-mono-sm text-mono-sm font-semibold">LIVE CLUSTER</span>
+              {addParts ? null : (
+                <span className="px-2.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 font-mono-sm text-mono-sm font-semibold">LIVE CLUSTER</span>
+              )}
             </div>
             <p className="font-body-md text-body-md text-secondary mt-1">{subtitle}</p>
           </div>
           <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
-            {database || findParts || trustedSources ? null : (
+            {database || findParts || trustedSources || addParts ? null : (
               <span className="font-mono-sm text-mono-sm uppercase text-secondary bg-surface-container-high px-2.5 py-1 rounded-lg">{matchTypesLabel}</span>
             )}
             {database ? (
@@ -113,7 +120,7 @@ export function FindPartsChrome({
                   <span>Export CSV</span>
                 </button>
               </>
-            ) : trustedSources ? null : (
+            ) : trustedSources || addParts ? null : (
               <button
                 className={advancedActive
                   ? "flex items-center gap-1.5 px-3.5 h-9 rounded-xl bg-primary-container text-on-primary font-body-sm text-body-sm font-semibold shadow-sm"
@@ -161,7 +168,7 @@ export function FindPartsChrome({
                     ) : null}
                     {name}
                   </span>
-                  {name === "Add parts" ? (
+                  {name === "Add parts" && !addParts ? (
                     <span className="px-1.5 py-0.2 rounded-full bg-surface-container text-secondary text-[10px] font-mono-sm font-bold">2 min</span>
                   ) : null}
                   {on ? <span className="absolute bottom-0 left-0 right-0 h-[2.5px] bg-primary-container" /> : null}
@@ -174,7 +181,7 @@ export function FindPartsChrome({
               <span className="material-symbols-outlined text-[16px]">tune</span>
               <span>Advanced tune</span>
             </PartsButton>
-          ) : (
+          ) : addParts ? null : (
             <div className="ml-auto hidden lg:flex items-center gap-1.5 text-secondary font-mono-sm text-mono-sm pb-2 shrink-0">
               <span className="material-symbols-outlined text-[16px] text-primary">verified_user</span>
               <span className="text-on-surface-variant font-medium">Catalog Level 0</span>

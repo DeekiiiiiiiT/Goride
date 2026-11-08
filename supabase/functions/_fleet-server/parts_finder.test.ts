@@ -294,3 +294,92 @@ Deno.test("findParts returns tolerance_mm and interchange group count", async ()
   assertEquals(body.universal_part?.tolerance_mm, 0.05);
   assertEquals(body.databaseNodeGroups, 2);
 });
+
+function tierRowFromPartId(partId: string) {
+  return {
+    tier: 1,
+    part_id: partId,
+    part_name: "Front brake pad set",
+    oem_part_number: "04465-B1190",
+    manufacturer: "Toyota",
+    part_kind: "oem",
+    fit_scope: null,
+    rule_source: null,
+    position: "front",
+    maintenance_component_id: null,
+    category_id: null,
+    sister_names: null,
+    source_make: null,
+    reference_oem: null,
+    also_known_as: [],
+    confirmed_installs: 0,
+    description: null,
+    evidence_url: null,
+    match_reason_code: null,
+    match_reason_params: null,
+    match_status: null,
+    fit_source: null,
+    via: null,
+    part_badge_code: null,
+    part_badge_params: null,
+    side: null,
+    catalogue_number: null,
+    derived_id: null,
+    wva: null,
+    checking_note: null,
+    interchange_group_id: partId,
+  };
+}
+
+function roomy2019Client(partsByVariant: Record<string, string[]>) {
+  const variants = [car("m900"), car("m910")];
+  return {
+    from(table: string) {
+      if (table === "vehicle_catalog") return chain(variants);
+      if (table === "variant_parts_readiness") return chain({ ready: true });
+      if (table === "supplier_part_offer") return chain([]);
+      if (table === "component_related_supply") return chain([]);
+      if (table === "part_listing") return chain([]);
+      if (table === "part_master") return chain([]);
+      return chain([]);
+    },
+    rpc(name: string, args?: Record<string, unknown>) {
+      if (name === "parts_for_vehicle") {
+        const catalogId = String(args?.p_catalog_id ?? "");
+        const ids = partsByVariant[catalogId] ?? [];
+        return Promise.resolve({ data: ids.map(tierRowFromPartId), error: null });
+      }
+      if (name === "universal_section_for_variant") {
+        return Promise.resolve({ data: [], error: null });
+      }
+      return Promise.resolve({ data: null, error: null });
+    },
+  };
+}
+
+Deno.test("Roomy 2019 2WD vs 4WD sets askVariant from parts_for_vehicle", async () => {
+  const sameParts = roomy2019Client({
+    m900: ["pad-shared"],
+    m910: ["pad-shared"],
+  });
+  const sameBody = await findParts(sameParts as never, {
+    make: "Toyota",
+    model: "Roomy",
+    year: 2019,
+    orgId: null,
+  });
+  assertEquals(sameBody.askVariant, false);
+
+  const differentParts = roomy2019Client({
+    m900: ["pad-2wd"],
+    m910: ["pad-4wd"],
+  });
+  const askBody = await findParts(differentParts as never, {
+    make: "Toyota",
+    model: "Roomy",
+    year: 2019,
+    orgId: null,
+  });
+  assertEquals(askBody.askVariant, true);
+  assertEquals(askBody.candidates.length, 2);
+});

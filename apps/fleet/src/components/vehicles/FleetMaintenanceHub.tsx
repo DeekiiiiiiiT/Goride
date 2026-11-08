@@ -471,26 +471,13 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
         >
           {findPartsActive ? (
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-              <div>
-                <nav className="flex items-center gap-1.5 text-caption text-on-surface-variant mb-1" aria-label="Breadcrumb">
-                  <span>Fleet</span>
-                  <span>/</span>
-                  <span>Maintenance</span>
-                  <span>/</span>
-                  <span className="font-medium text-on-surface">Parts Match Intelligence</span>
-                </nav>
-                <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600 dark:bg-amber-950/40 dark:border-amber-800">
-                    <Wrench className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h1 className="text-2xl font-bold tracking-tight text-on-surface">Fleet Maintenance</h1>
-                    <p className="text-xs text-on-surface-variant mt-0.5 max-w-2xl">
-                      Parts catalog encyclopedia — factory part matches, sister vehicle interchange, and verification audit trails.
-                    </p>
-                  </div>
-                </div>
-              </div>
+              <nav className="flex items-center gap-1.5 text-caption text-on-surface-variant" aria-label="Breadcrumb">
+                <span>Fleet</span>
+                <span>/</span>
+                <span>Maintenance</span>
+                <span>/</span>
+                <span className="font-medium text-on-surface">Find parts</span>
+              </nav>
             </div>
           ) : null}
           <TabsList className={`h-10 bg-surface-container p-1 ${findPartsActive ? "shrink-0 self-end" : ""}`}>

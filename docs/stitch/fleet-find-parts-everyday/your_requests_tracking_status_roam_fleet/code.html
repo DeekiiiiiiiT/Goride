@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<meta content="web_standard" name="shell-type"/>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;family=JetBrains+Mono:wght@600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style>
+<script src="https://cdn.tailwindcss.com"></script>
+<script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "tertiary": "#000000", "inverse-surface": "#213145", "primary": "#000000", "surface-variant": "#d3e4fe", "on-tertiary-fixed-variant": "#783200", "surface-container-highest": "#d3e4fe", "on-tertiary-fixed": "#341100", "on-secondary-fixed-variant": "#43474b", "secondary": "#5a5f62", "surface-bright": "#f8f9ff", "on-secondary-container": "#5e6367", "surface-container-low": "#eff4ff", "surface": "#f8f9ff", "error": "#ba1a1a", "inverse-on-surface": "#eaf1ff", "on-primary-fixed": "#1b192e", "background": "#f8f9ff", "secondary-fixed-dim": "#c3c7cb", "error-container": "#ffdad6", "surface-tint": "#5e5c74", "primary-container": "#1b192e", "surface-container-lowest": "#ffffff", "tertiary-container": "#341100", "on-tertiary-container": "#d95f00", "on-surface-variant": "#47464c", "surface-container-high": "#dce9ff", "tertiary-fixed": "#ffdbca", "on-error-container": "#93000a", "on-surface": "#0b1c30", "on-error": "#ffffff", "outline-variant": "#c9c5cd", "secondary-container": "#dce0e4", "primary-fixed": "#e4dffc", "on-tertiary": "#ffffff", "tertiary-fixed-dim": "#ffb690", "surface-dim": "#cbdbf5", "outline": "#78767d", "on-primary-fixed-variant": "#46445b", "on-primary": "#ffffff", "inverse-primary": "#c8c3df", "secondary-fixed": "#dfe3e7", "on-primary-container": "#84819a", "on-secondary-fixed": "#171c1f", "surface-container": "#e5eeff", "primary-fixed-dim": "#c8c3df", "on-background": "#0b1c30", "on-secondary": "#ffffff" }, "borderRadius": { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, "spacing": { "space-sm": "0.5rem", "space-xs": "0.25rem", "space-xl": "2rem", "space-md": "1rem", "space-lg": "1.5rem", "margin": "1.5rem", "gutter": "1.5rem" }, "fontFamily": { "badge-label": [ "Inter" ], "body-muted": [ "Inter" ], "body-base": [ "Inter" ], "headline-page": [ "Inter" ], "headline-card": [ "Inter" ], "body-base-bold": [ "Inter" ], "part-identifier": [ "JetBrains Mono" ], "part-identifier-mobile": [ "JetBrains Mono" ] }, "fontSize": { "badge-label": [ "13px", { "lineHeight": "16px", "letterSpacing": "0.01em", "fontWeight": "600" } ], "body-muted": [ "14px", { "lineHeight": "20px", "fontWeight": "400" } ], "body-base": [ "16px", { "lineHeight": "24px", "fontWeight": "400" } ], "headline-page": [ "28px", { "lineHeight": "36px", "letterSpacing": "-0.02em", "fontWeight": "600" } ], "headline-card": [ "20px", { "lineHeight": "28px", "letterSpacing": "-0.01em", "fontWeight": "600" } ], "body-base-bold": [ "16px", { "lineHeight": "24px", "fontWeight": "600" } ], "part-identifier": [ "22px", { "lineHeight": "28px", "letterSpacing": "0.08em", "fontWeight": "600" } ], "part-identifier-mobile": [ "18px", { "lineHeight": "24px", "letterSpacing": "0.08em", "fontWeight": "600" } ] } } } };</script>
+</head>
+<body class="bg-surface font-body-base text-on-surface antialiased min-h-screen">
+<header class="fixed top-0 left-0 right-0 w-full z-50 bg-surface-container-lowest/95 backdrop-blur-md shadow-[0_1px_8px_rgba(0,0,0,0.04)]">
+<div class="h-16 w-full px-6 flex items-center justify-between">
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-3">
+<div class="w-9 h-9 rounded-xl bg-primary flex items-center justify-center text-on-primary font-headline-card shadow-sm">
+<span class="material-symbols-outlined text-[20px]">local_shipping</span>
+</div>
+<span class="font-body-base-bold text-body-base-bold tracking-tight text-on-surface">Roam Fleet</span>
+</div>
+<nav class="hidden xl:flex items-center gap-1" data-active-classes="bg-primary-container text-on-primary font-body-base-bold rounded-lg shadow-sm">
+<a class="px-3 py-1.5 rounded-lg text-body-muted font-body-muted text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-colors" data-path="dashboard" href="#">Dashboard</a>
+<a class="px-3 py-1.5 rounded-lg text-body-muted font-body-muted text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-colors" data-path="fleet-operations" href="#">Fleet Operations</a>
+<a class="px-3 py-1.5 rounded-lg text-body-muted font-body-muted text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-colors" data-path="driver-operations" href="#">Driver Operations</a>
+<a class="px-3 py-1.5 rounded-lg text-body-muted font-body-muted text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-colors" data-path="money" href="#">Money</a>
+<a class="px-3 py-1.5 rounded-lg text-body-muted font-body-muted text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-colors bg-primary-container text-on-primary font-body-base-bold" data-path="vehicle-operations" href="#">Vehicle Operations</a>
+<a class="px-3 py-1.5 rounded-lg text-body-muted font-body-muted text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-colors" data-path="delivery-operations" href="#">Delivery Operations</a>
+<a class="px-3 py-1.5 rounded-lg text-body-muted font-body-muted text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-colors" data-path="analytics" href="#">Analytics</a>
+<a class="px-3 py-1.5 rounded-lg text-body-muted font-body-muted text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-colors" data-path="reports" href="#">Reports</a>
+<a class="px-3 py-1.5 rounded-lg text-body-muted font-body-muted text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-colors" data-path="business-finance" href="#">Business Finance</a>
+</nav>
+</div>
+<div class="flex items-center gap-3">
+<button aria-label="Toggle dark mode" class="w-9 h-9 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors" type="button">
+<span class="material-symbols-outlined text-[20px]">dark_mode</span>
+</button>
+<button aria-label="Notifications" class="relative w-9 h-9 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors" type="button">
+<span class="material-symbols-outlined text-[20px]">notifications</span>
+<span class="absolute top-2 right-2 w-2 h-2 rounded-full bg-on-tertiary-container"></span>
+</button>
+<div class="flex items-center gap-2.5 pl-2 py-1 pr-3 rounded-full bg-surface-container-low hover:bg-surface-container transition-colors cursor-pointer">
+<img alt="Profile" class="w-8 h-8 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDf9K84WjufjFhuNHa0wc0BRddknjxITRgUNL2zJm4dUmCsY6xSlfcP3DpPXywAVhuVyf20cQ6LJmSFhASrKEj1wdtVhKJryz3AM3TDKL3OerjoTWdqdRclNamdoQOqUW9XJeJRB4SImyruARJnnZ4HtTfa5M4m9uLlE893q0tjyEmIOxoIwU4FNwjXm7FtMEFNJJmLai_MTODotScVRM3yyicddkAFQUSRMLgjSjY"/>
+<div class="flex flex-col text-left">
+<span class="font-body-base-bold text-[12px] leading-tight text-on-surface">Alex Rivera</span>
+<span class="text-[11px] leading-tight text-on-surface-variant">Fleet Manager</span>
+</div>
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">expand_more</span>
+</div>
+</div>
+</div>
+<div class="bg-surface-container-lowest border-t border-black/[0.04] px-6 py-2.5">
+<div class="max-w-[1200px] mx-auto flex flex-col md:flex-row md:items-center justify-between gap-3">
+<nav aria-label="Breadcrumb" class="flex items-center gap-2 text-body-muted font-body-muted text-on-surface-variant text-[13px]">
+<a class="hover:text-on-surface transition-colors" href="#">Fleet</a>
+<span class="text-outline-variant text-[12px]">/</span>
+<a class="hover:text-on-surface transition-colors" href="#">Maintenance</a>
+<span class="text-outline-variant text-[12px]">/</span>
+<span class="font-body-base-bold text-on-surface">Find parts</span>
+</nav>
+<nav aria-label="Maintenance sub-navigation" class="flex items-center gap-1.5" data-active-classes="bg-primary text-on-primary font-body-base-bold">
+<a class="px-3.5 py-1.5 rounded-full text-[13px] font-body-base-bold bg-primary text-on-primary transition-colors" data-path="find-parts" href="#">Find parts</a>
+<a class="px-3.5 py-1.5 rounded-full text-[13px] font-body-muted text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-colors" data-path="service-logs" href="#">Service Logs</a>
+<a class="px-3.5 py-1.5 rounded-full text-[13px] font-body-muted text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-colors" data-path="fleet-health" href="#">Fleet Health</a>
+<a class="px-3.5 py-1.5 rounded-full text-[13px] font-body-muted text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-colors" data-path="scheduled-repairs" href="#">Scheduled Repairs</a>
+</nav>
+</div>
+</div>
+</header>
+<main class="w-full pt-[116px] bg-surface min-h-[calc(100vh-140px)]"><div class="flex flex-col w-full">
+<div class="w-full max-w-[1200px] mx-auto px-6 py-8 flex flex-col gap-8">
+<!-- Top Context & Header -->
+<div class="flex flex-col gap-6">
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
+<div class="flex flex-col gap-2">
+<div class="flex items-center gap-2">
+<span class="px-2.5 py-1 rounded-full bg-surface-container text-on-surface-variant font-badge-label text-badge-label inline-flex items-center gap-1.5">
+<span class="w-1.5 h-1.5 rounded-full bg-on-tertiary-container animate-pulse"></span>
+              Catalog Investigation Desk
+            </span>
+</div>
+<h1 class="font-headline-page text-headline-page text-on-surface tracking-tight">Your requests</h1>
+<p class="font-body-base text-body-base text-on-surface-variant max-w-2xl">
+            Parts our team is tracking down from maker catalogs for your fleet vehicles. We verify diagrams directly with manufacturers to ensure zero fitment guesswork.
+          </p>
+</div>
+<div class="flex items-center gap-3 shrink-0">
+<button class="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-primary text-on-primary font-body-base-bold text-body-base shadow-sm hover:opacity-90 active:scale-[0.99] transition-all" type="button">
+<span class="material-symbols-outlined text-[20px]">add</span>
+            Request another part
+          </button>
+</div>
+</div>
+<!-- Quick Metrics Ribbon -->
+<div class="grid grid-cols-2 sm:grid-cols-4 gap-3 p-1.5 bg-surface-container-low rounded-2xl">
+<div class="flex items-center gap-3 px-4 py-3 bg-surface-container-lowest rounded-xl shadow-sm">
+<div class="w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center text-on-surface">
+<span class="material-symbols-outlined text-[20px]">inventory_2</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-headline-card text-headline-card leading-none text-on-surface">4</span>
+<span class="font-body-muted text-[12px] text-on-surface-variant leading-tight mt-0.5">Total in flight</span>
+</div>
+</div>
+<div class="flex items-center gap-3 px-4 py-3 bg-surface-container-lowest rounded-xl shadow-sm">
+<div class="w-9 h-9 rounded-lg bg-tertiary-fixed flex items-center justify-center text-on-tertiary-container">
+<span class="material-symbols-outlined text-[20px]">hourglass_top</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-headline-card text-headline-card leading-none text-on-tertiary-container">1</span>
+<span class="font-body-muted text-[12px] text-on-surface-variant leading-tight mt-0.5">Looking now</span>
+</div>
+</div>
+<div class="flex items-center gap-3 px-4 py-3 bg-surface-container-lowest rounded-xl shadow-sm">
+<div class="w-9 h-9 rounded-lg bg-surface-container-highest flex items-center justify-center text-on-surface">
+<span class="material-symbols-outlined text-[20px]">verified</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-headline-card text-headline-card leading-none text-on-surface">2</span>
+<span class="font-body-muted text-[12px] text-on-surface-variant leading-tight mt-0.5">Verified &amp; added</span>
+</div>
+</div>
+<div class="flex items-center gap-3 px-4 py-3 bg-surface-container-lowest rounded-xl shadow-sm">
+<div class="w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined text-[20px]">help_center</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-headline-card text-headline-card leading-none text-secondary">1</span>
+<span class="font-body-muted text-[12px] text-on-surface-variant leading-tight mt-0.5">Needs specialist</span>
+</div>
+</div>
+</div>
+<!-- Filter Tabs Bar -->
+<div class="flex flex-wrap items-center justify-between gap-3 pt-2">
+<div class="inline-flex p-1 bg-surface-container-low rounded-xl gap-1" id="filter-tab-group" role="tablist">
+<button class="tab-btn px-4 py-2 rounded-lg font-body-base-bold text-body-muted bg-primary text-on-primary shadow-sm transition-all" data-filter="all" type="button">
+            All requests <span class="ml-1 opacity-80">(4)</span>
+</button>
+<button class="tab-btn px-4 py-2 rounded-lg font-body-muted text-body-muted text-on-surface-variant hover:text-on-surface hover:bg-surface-container-lowest transition-all" data-filter="looking" type="button">
+            We're looking <span class="ml-1 px-1.5 py-0.2 rounded-full bg-surface-container-highest text-[11px] font-body-base-bold">1</span>
+</button>
+<button class="tab-btn px-4 py-2 rounded-lg font-body-muted text-body-muted text-on-surface-variant hover:text-on-surface hover:bg-surface-container-lowest transition-all" data-filter="added" type="button">
+            Added <span class="ml-1 px-1.5 py-0.2 rounded-full bg-surface-container-highest text-[11px] font-body-base-bold">2</span>
+</button>
+<button class="tab-btn px-4 py-2 rounded-lg font-body-muted text-body-muted text-on-surface-variant hover:text-on-surface hover:bg-surface-container-lowest transition-all" data-filter="notfound" type="button">
+            Couldn't find <span class="ml-1 px-1.5 py-0.2 rounded-full bg-surface-container text-[11px] font-body-base-bold">1</span>
+</button>
+</div>
+<div class="flex items-center gap-2 text-body-muted font-body-muted text-on-surface-variant">
+<span class="material-symbols-outlined text-[18px]">verified_user</span>
+<span>Diagram checks are guaranteed exact matches</span>
+</div>
+</div>
+</div>
+<!-- Active Requests List -->
+<div class="flex flex-col gap-4" id="requests-container">
+<!-- Item 1: Looking (AC Compressor Belt) -->
+<article class="request-row bg-surface-container-lowest rounded-[20px] p-6 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(15,23,42,0.06)] flex flex-col lg:flex-row lg:items-center justify-between gap-6 transition-all hover:shadow-[0_4px_16px_rgba(0,0,0,0.08)]" data-status="looking">
+<div class="flex items-start sm:items-center gap-5 min-w-0">
+<!-- Part Illustration -->
+<div class="relative w-16 h-16 sm:w-20 sm:h-20 shrink-0 rounded-2xl bg-surface-container-low flex items-center justify-center p-3">
+<span class="material-symbols-outlined text-[36px] text-on-tertiary-container">tune</span>
+<div class="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-tertiary-fixed flex items-center justify-center shadow-xs">
+<span class="material-symbols-outlined text-[14px] text-on-tertiary-fixed-variant">sync</span>
+</div>
+</div>
+<div class="flex flex-col gap-2 min-w-0">
+<div class="flex flex-wrap items-center gap-2">
+<h2 class="font-headline-card text-headline-card text-on-surface truncate">AC Compressor Belt</h2>
+<div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-surface-container text-on-surface font-badge-label text-badge-label">
+<span class="material-symbols-outlined text-[15px] text-on-surface-variant">directions_car</span>
+                Toyota Roomy 2019 · 5179KZ
+              </div>
+</div>
+<div class="flex flex-wrap items-center gap-y-1 gap-x-3 text-body-muted font-body-muted text-on-surface-variant">
+<span class="flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px]">schedule</span>
+                Requested yesterday · Oct 24, 2025
+              </span>
+<span class="w-1 h-1 rounded-full bg-outline-variant"></span>
+<span>Ref #RF-88201</span>
+</div>
+<!-- Helper Note -->
+<div class="flex items-start sm:items-center gap-2 mt-1 px-3.5 py-2 rounded-xl bg-surface-container-low max-w-2xl">
+<span class="material-symbols-outlined text-[18px] text-on-tertiary-container shrink-0 mt-0.5 sm:mt-0">info</span>
+<p class="font-body-muted text-body-muted text-on-surface-variant leading-snug">
+                Checking manufacturer build sheets for 1KR-FE belt length. Usually takes under 24 hrs.
+              </p>
+</div>
+</div>
+</div>
+<div class="flex flex-row lg:flex-col items-center lg:items-end justify-between gap-3 shrink-0 pt-4 lg:pt-0">
+<div class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-tertiary-fixed text-on-tertiary-fixed-variant font-badge-label text-badge-label shadow-xs">
+<span class="w-2 h-2 rounded-full bg-on-tertiary-container animate-ping"></span>
+            We're looking
+          </div>
+<span class="text-body-muted font-body-muted text-on-surface-variant text-[13px]">In catalog queue</span>
+</div>
+</article>
+<!-- Item 2: Added (Front Brake Pads) -->
+<article class="request-row bg-surface-container-lowest rounded-[20px] p-6 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(15,23,42,0.06)] flex flex-col lg:flex-row lg:items-center justify-between gap-6 transition-all hover:shadow-[0_4px_16px_rgba(0,0,0,0.08)]" data-status="added">
+<div class="flex items-start sm:items-center gap-5 min-w-0">
+<!-- Part Illustration -->
+<div class="relative w-16 h-16 sm:w-20 sm:h-20 shrink-0 rounded-2xl bg-surface-container-low flex items-center justify-center p-3">
+<span class="material-symbols-outlined text-[36px] text-on-surface">album</span>
+<div class="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-primary flex items-center justify-center shadow-xs">
+<span class="material-symbols-outlined text-[14px] text-on-primary">done</span>
+</div>
+</div>
+<div class="flex flex-col gap-2 min-w-0">
+<div class="flex flex-wrap items-center gap-2">
+<h2 class="font-headline-card text-headline-card text-on-surface truncate">Front Brake Pads</h2>
+<div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-surface-container text-on-surface font-badge-label text-badge-label">
+<span class="material-symbols-outlined text-[15px] text-on-surface-variant">directions_car</span>
+                Toyota Tank 2018 · 8421HB
+              </div>
+</div>
+<div class="flex flex-wrap items-center gap-3">
+<div class="inline-flex items-center gap-2 px-2.5 py-1 rounded-lg bg-surface-container-low">
+<span class="font-body-muted text-[12px] text-on-surface-variant">Manufacturer Code</span>
+<span class="font-part-identifier text-[16px] leading-tight text-on-surface font-semibold tracking-wider">04465-B1360</span>
+</div>
+<span class="w-1 h-1 rounded-full bg-outline-variant"></span>
+<span class="text-body-muted font-body-muted text-on-surface-variant flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px]">schedule</span>
+                Requested 3 days ago · Oct 22, 2025
+              </span>
+</div>
+<p class="font-body-muted text-body-muted text-on-surface-variant">
+              Full caliper assembly match confirmed for front axle vented discs. Ready in catalog.
+            </p>
+</div>
+</div>
+<div class="flex flex-row lg:flex-col items-center lg:items-end justify-between gap-4 shrink-0 pt-4 lg:pt-0">
+<div class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-surface-container-highest text-on-surface font-badge-label text-badge-label">
+<span class="material-symbols-outlined text-[16px] text-on-surface">verified</span>
+            Added to catalog
+          </div>
+<a class="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-on-primary font-body-base-bold text-body-muted shadow-sm hover:opacity-90 active:scale-[0.98] transition-all" href="#">
+            See the part
+            <span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+</a>
+</div>
+</article>
+<!-- Item 3: Added (Rear Hub Bearing) -->
+<article class="request-row bg-surface-container-lowest rounded-[20px] p-6 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(15,23,42,0.06)] flex flex-col lg:flex-row lg:items-center justify-between gap-6 transition-all hover:shadow-[0_4px_16px_rgba(0,0,0,0.08)]" data-status="added">
+<div class="flex items-start sm:items-center gap-5 min-w-0">
+<!-- Part Illustration -->
+<div class="relative w-16 h-16 sm:w-20 sm:h-20 shrink-0 rounded-2xl bg-surface-container-low flex items-center justify-center p-3">
+<span class="material-symbols-outlined text-[36px] text-on-surface">adjust</span>
+<div class="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-primary flex items-center justify-center shadow-xs">
+<span class="material-symbols-outlined text-[14px] text-on-primary">done</span>
+</div>
+</div>
+<div class="flex flex-col gap-2 min-w-0">
+<div class="flex flex-wrap items-center gap-2">
+<h2 class="font-headline-card text-headline-card text-on-surface truncate">Rear Hub Bearing</h2>
+<div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-surface-container text-on-surface font-badge-label text-badge-label">
+<span class="material-symbols-outlined text-[15px] text-on-surface-variant">directions_car</span>
+                Suzuki Swift 2019 · 3104JA
+              </div>
+</div>
+<div class="flex flex-wrap items-center gap-3">
+<div class="inline-flex items-center gap-2 px-2.5 py-1 rounded-lg bg-surface-container-low">
+<span class="font-body-muted text-[12px] text-on-surface-variant">Manufacturer Code</span>
+<span class="font-part-identifier text-[16px] leading-tight text-on-surface font-semibold tracking-wider">43402-52R00</span>
+</div>
+<span class="w-1 h-1 rounded-full bg-outline-variant"></span>
+<span class="text-body-muted font-body-muted text-on-surface-variant flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px]">schedule</span>
+                Requested 5 days ago · Oct 20, 2025
+              </span>
+</div>
+<p class="font-body-muted text-body-muted text-on-surface-variant">
+              ABS sensor ring compatibility verified for standard rear axle hub.
+            </p>
+</div>
+</div>
+<div class="flex flex-row lg:flex-col items-center lg:items-end justify-between gap-4 shrink-0 pt-4 lg:pt-0">
+<div class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-surface-container-highest text-on-surface font-badge-label text-badge-label">
+<span class="material-symbols-outlined text-[16px] text-on-surface">verified</span>
+            Added to catalog
+          </div>
+<a class="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-on-primary font-body-base-bold text-body-muted shadow-sm hover:opacity-90 active:scale-[0.98] transition-all" href="#">
+            See the part
+            <span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+</a>
+</div>
+</article>
+<!-- Item 4: Couldn't find (Rear Spoiler Bracket) -->
+<article class="request-row bg-surface-container-lowest rounded-[20px] p-6 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(15,23,42,0.06)] flex flex-col lg:flex-row lg:items-center justify-between gap-6 transition-all hover:shadow-[0_4px_16px_rgba(0,0,0,0.08)]" data-status="notfound">
+<div class="flex items-start sm:items-center gap-5 min-w-0">
+<!-- Part Illustration -->
+<div class="relative w-16 h-16 sm:w-20 sm:h-20 shrink-0 rounded-2xl bg-surface-container-low flex items-center justify-center p-3">
+<span class="material-symbols-outlined text-[36px] text-secondary">extension_off</span>
+<div class="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-surface-variant flex items-center justify-center shadow-xs">
+<span class="material-symbols-outlined text-[14px] text-secondary">help</span>
+</div>
+</div>
+<div class="flex flex-col gap-2 min-w-0">
+<div class="flex flex-wrap items-center gap-2">
+<h2 class="font-headline-card text-headline-card text-on-surface truncate">Rear Spoiler Bracket</h2>
+<div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-surface-container text-on-surface font-badge-label text-badge-label">
+<span class="material-symbols-outlined text-[15px] text-on-surface-variant">directions_car</span>
+                Toyota Roomy 2019 · 5179KZ
+              </div>
+</div>
+<div class="flex flex-wrap items-center gap-y-1 gap-x-3 text-body-muted font-body-muted text-on-surface-variant">
+<span class="flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px]">schedule</span>
+                Requested Oct 18, 2025
+              </span>
+<span class="w-1 h-1 rounded-full bg-outline-variant"></span>
+<span>Ref #RF-87992</span>
+</div>
+<!-- Reason Note -->
+<div class="flex items-start sm:items-center gap-2 mt-1 px-3.5 py-2 rounded-xl bg-surface-container-low max-w-2xl">
+<span class="material-symbols-outlined text-[18px] text-secondary shrink-0 mt-0.5 sm:mt-0">flag</span>
+<p class="font-body-muted text-body-muted text-on-surface-variant leading-snug">
+                Reason: Aftermarket dealer accessory not listed in official Toyota factory parts manuals.
+              </p>
+</div>
+</div>
+</div>
+<div class="flex flex-row lg:flex-col items-center lg:items-end justify-between gap-4 shrink-0 pt-4 lg:pt-0">
+<div class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-surface-container text-secondary font-badge-label text-badge-label">
+<span class="material-symbols-outlined text-[16px] text-secondary">search_off</span>
+            We couldn't find it
+          </div>
+<button class="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-surface-container-lowest text-on-surface font-body-base-bold text-body-muted shadow-sm hover:bg-surface-container-low active:scale-[0.98] transition-all" type="button">
+<span class="material-symbols-outlined text-[18px]">support_agent</span>
+            Ask a specialist
+          </button>
+</div>
+</article>
+</div>
+<!-- Empty State Preview Demonstration Card -->
+<div class="mt-4 flex flex-col gap-4">
+<div class="flex items-center justify-between">
+<span class="font-badge-label text-badge-label text-on-surface-variant uppercase tracking-wider">
+          Experience Preview · First-time User view
+        </span>
+<button class="text-body-muted font-body-base-bold text-on-surface hover:underline text-[13px] flex items-center gap-1" id="toggle-empty-view-btn" type="button">
+<span class="material-symbols-outlined text-[16px]">visibility</span>
+          Toggle Simulated Empty State
+        </button>
+</div>
+<section class="bg-surface-container-lowest rounded-[20px] p-8 md:p-12 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(15,23,42,0.06)] flex flex-col items-center text-center" id="empty-state-card">
+<!-- Calm line illustration container -->
+<div class="w-20 h-20 rounded-2xl bg-surface-container-low flex items-center justify-center mb-6 text-on-surface-variant">
+<svg class="w-10 h-10 text-on-surface" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 48 48">
+<path d="M8 14h32v24a4 4 0 0 1-4 4H12a4 4 0 0 1-4-4V14z"></path>
+<path d="M18 14V8a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v6"></path>
+<path d="M20 23h8"></path>
+<circle cx="24" cy="31" r="3"></circle>
+</svg>
+</div>
+<h3 class="font-headline-card text-headline-card text-on-surface mb-2">No requests yet</h3>
+<p class="font-body-muted text-body-muted text-on-surface-variant max-w-md mb-6 leading-relaxed">
+          When you ask us to find a part, it shows here with real-time updates as our team verifies manufacturer diagrams.
+        </p>
+<div class="flex flex-wrap items-center justify-center gap-3">
+<button class="px-5 py-2.5 rounded-xl bg-surface-container text-on-surface font-body-base-bold text-body-muted hover:bg-surface-container-high transition-colors" type="button">
+            Browse catalog
+          </button>
+<button class="px-5 py-2.5 rounded-xl bg-primary text-on-primary font-body-base-bold text-body-muted shadow-sm hover:opacity-90 transition-opacity" type="button">
+            Make your first request
+          </button>
+</div>
+</section>
+</div>
+<!-- Assurance Footer Callout -->
+<div class="p-6 rounded-[20px] bg-surface-container-low flex flex-col sm:flex-row items-center justify-between gap-4">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded-xl bg-surface-container-lowest flex items-center justify-center text-on-surface shrink-0 shadow-xs">
+<span class="material-symbols-outlined text-[22px]">format_image_left</span>
+</div>
+<div class="flex flex-col">
+<span class="font-body-base-bold text-body-base-bold text-on-surface">Official Diagram Guarantee</span>
+<span class="font-body-muted text-body-muted text-on-surface-variant">We cross-reference every part against exact chassis vehicle tags before adding to your fleet list.</span>
+</div>
+</div>
+<div class="flex items-center gap-2 shrink-0">
+<span class="font-body-muted text-body-muted text-on-surface-variant text-[13px]">Average reply: <strong>4.2 hrs</strong></span>
+</div>
+</div>
+</div>
+</div>
+<script>
+  // Filter tabs interaction
+  const filterButtons = document.querySelectorAll('.tab-btn');
+  const requestRows = document.querySelectorAll('.request-row');
+
+  filterButtons.forEach(button => {
+    button.addEventListener('click', () => {
+      // Toggle button styles
+      filterButtons.forEach(btn => {
+        btn.classList.remove('bg-primary', 'text-on-primary', 'shadow-sm', 'font-body-base-bold');
+        btn.classList.add('text-on-surface-variant', 'font-body-muted');
+      });
+      button.classList.add('bg-primary', 'text-on-primary', 'shadow-sm', 'font-body-base-bold');
+      button.classList.remove('text-on-surface-variant', 'font-body-muted');
+
+      const filter = button.getAttribute('data-filter');
+      requestRows.forEach(row => {
+        if (filter === 'all' || row.getAttribute('data-status') === filter) {
+          row.style.display = 'flex';
+        } else {
+          row.style.display = 'none';
+        }
+      });
+    });
+  });
+
+  // Toggle empty state preview visibility for presentation
+  const toggleBtn = document.getElementById('toggle-empty-view-btn');
+  const emptyCard = document.getElementById('empty-state-card');
+  const reqContainer = document.getElementById('requests-container');
+  let showingEmptyOnly = false;
+
+  toggleBtn?.addEventListener('click', () => {
+    showingEmptyOnly = !showingEmptyOnly;
+    if (showingEmptyOnly) {
+      reqContainer.style.display = 'none';
+      emptyCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      toggleBtn.innerHTML = '<span class="material-symbols-outlined text-[16px]">visibility_off</span> Show full list';
+    } else {
+      reqContainer.style.display = 'flex';
+      toggleBtn.innerHTML = '<span class="material-symbols-outlined text-[16px]">visibility</span> Toggle Simulated Empty State';
+    }
+  });
+</script></main>
+<footer class="w-full bg-surface-container-lowest py-8 shadow-[0_-1px_8px_rgba(0,0,0,0.02)] mt-auto">
+<div class="max-w-[1200px] mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-4 text-body-muted font-body-muted text-on-surface-variant">
+<div class="flex items-center gap-2">
+<span class="font-body-base-bold text-on-surface">Roam Fleet</span>
+<span>© 2025 Fleet Systems Inc. All rights reserved.</span>
+</div>
+<div class="flex items-center gap-6">
+<a class="hover:text-on-surface transition-colors" href="#">Platform Status</a>
+<a class="hover:text-on-surface transition-colors" href="#">Assistance &amp; Support</a>
+<a class="hover:text-on-surface transition-colors" href="#">Privacy</a>
+</div>
+</div>
+</footer>
+</body></html>

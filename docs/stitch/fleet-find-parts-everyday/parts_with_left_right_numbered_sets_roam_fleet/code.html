@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_standard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;family=JetBrains+Mono:wght@600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "background": "#f8f9ff", "inverse-surface": "#213145", "secondary-fixed-dim": "#c3c7cb", "on-tertiary": "#ffffff", "primary": "#000000", "on-surface-variant": "#47464c", "tertiary-fixed": "#ffdbca", "surface-container-high": "#dce9ff", "primary-fixed": "#e4dffc", "on-tertiary-container": "#d95f00", "on-tertiary-fixed-variant": "#783200", "on-secondary-fixed-variant": "#43474b", "primary-fixed-dim": "#c8c3df", "on-primary-fixed": "#1b192e", "primary-container": "#1b192e", "on-primary-fixed-variant": "#46445b", "outline-variant": "#c9c5cd", "secondary": "#5a5f62", "error": "#ba1a1a", "inverse-on-surface": "#eaf1ff", "tertiary-container": "#341100", "tertiary": "#000000", "error-container": "#ffdad6", "surface-container": "#e5eeff", "secondary-fixed": "#dfe3e7", "on-secondary-container": "#5e6367", "surface-container-highest": "#d3e4fe", "on-tertiary-fixed": "#341100", "surface-container-low": "#eff4ff", "surface-container-lowest": "#ffffff", "surface-bright": "#f8f9ff", "surface": "#f8f9ff", "surface-dim": "#cbdbf5", "on-error-container": "#93000a", "on-primary-container": "#84819a", "inverse-primary": "#c8c3df", "on-error": "#ffffff", "on-primary": "#ffffff", "outline": "#78767d", "on-surface": "#0b1c30", "on-background": "#0b1c30", "secondary-container": "#dce0e4", "on-secondary": "#ffffff", "tertiary-fixed-dim": "#ffb690", "on-secondary-fixed": "#171c1f", "surface-variant": "#d3e4fe", "surface-tint": "#5e5c74" }, "borderRadius": { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, "spacing": { "space-sm": "0.5rem", "space-xl": "2rem", "space-xs": "0.25rem", "margin": "1.5rem", "space-md": "1rem", "space-lg": "1.5rem", "gutter": "1.5rem" }, "fontFamily": { "headline-card": [ "Inter" ], "badge-label": [ "Inter" ], "body-base": [ "Inter" ], "part-identifier-mobile": [ "JetBrains Mono" ], "part-identifier": [ "JetBrains Mono" ], "body-muted": [ "Inter" ], "body-base-bold": [ "Inter" ], "headline-page": [ "Inter" ] }, "fontSize": { "headline-card": [ "20px", { "lineHeight": "28px", "letterSpacing": "-0.01em", "fontWeight": "600" } ], "badge-label": [ "13px", { "lineHeight": "16px", "letterSpacing": "0.01em", "fontWeight": "600" } ], "body-base": [ "16px", { "lineHeight": "24px", "fontWeight": "400" } ], "part-identifier-mobile": [ "18px", { "lineHeight": "24px", "letterSpacing": "0.08em", "fontWeight": "600" } ], "part-identifier": [ "22px", { "lineHeight": "28px", "letterSpacing": "0.08em", "fontWeight": "600" } ], "body-muted": [ "14px", { "lineHeight": "20px", "fontWeight": "400" } ], "body-base-bold": [ "16px", { "lineHeight": "24px", "fontWeight": "600" } ], "headline-page": [ "28px", { "lineHeight": "36px", "letterSpacing": "-0.02em", "fontWeight": "600" } ] } } } };</script></head><body class="bg-surface font-body-base text-on-surface antialiased min-h-screen flex flex-col"><header class="fixed top-0 left-0 right-0 w-full z-50 bg-surface-container-lowest/95 backdrop-blur-md shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="h-16 w-full px-6 flex items-center justify-between"><div class="flex items-center gap-6"><div class="flex items-center gap-3"><div class="w-9 h-9 rounded-xl bg-primary flex items-center justify-center text-on-primary font-headline-card"><span class="material-symbols-outlined text-[20px]">local_shipping</span></div><span class="font-body-base-bold text-body-base-bold tracking-tight text-on-surface">Roam Fleet</span></div><nav class="hidden xl:flex items-center gap-1" data-active-classes="bg-primary-container text-on-primary font-body-base-bold rounded-lg"><a class="px-3 py-1.5 rounded-lg text-body-muted font-body-muted text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-colors" data-path="dashboard" href="#">Dashboard</a><a class="px-3 py-1.5 rounded-lg text-body-muted font-body-muted text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-colors" data-path="fleet-operations" href="#">Fleet Operations</a><a class="px-3 py-1.5 rounded-lg text-body-muted font-body-muted text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-colors" data-path="driver-operations" href="#">Driver Operations</a><a class="px-3 py-1.5 rounded-lg text-body-muted font-body-muted text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-colors" data-path="money" href="#">Money</a><a class="px-3 py-1.5 rounded-lg text-body-muted font-body-muted text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-colors" data-path="find-parts" href="#">Vehicle Operations</a><a class="px-3 py-1.5 rounded-lg text-body-muted font-body-muted text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-colors" data-path="delivery-operations" href="#">Delivery Operations</a><a class="px-3 py-1.5 rounded-lg text-body-muted font-body-muted text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-colors" data-path="analytics" href="#">Analytics</a><a class="px-3 py-1.5 rounded-lg text-body-muted font-body-muted text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-colors" data-path="reports" href="#">Reports</a><a class="px-3 py-1.5 rounded-lg text-body-muted font-body-muted text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-colors" data-path="business-finance" href="#">Business Finance</a></nav></div><div class="flex items-center gap-3"><button aria-label="Toggle dark mode" class="w-9 h-9 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors" type="button"><span class="material-symbols-outlined text-[20px]">dark_mode</span></button><button aria-label="Notifications" class="relative w-9 h-9 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors" type="button"><span class="material-symbols-outlined text-[20px]">notifications</span><span class="absolute top-2 right-2 w-2 h-2 rounded-full bg-on-tertiary-container"></span></button><div class="flex items-center gap-2.5 pl-2 py-1 pr-3 rounded-full bg-surface-container-low hover:bg-surface-container transition-colors cursor-pointer"><img alt="Profile" class="w-8 h-8 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDf9K84WjufjFhuNHa0wc0BRddknjxITRgUNL2zJm4dUmCsY6xSlfcP3DpPXywAVhuVyf20cQ6LJmSFhASrKEj1wdtVhKJryz3AM3TDKL3OerjoTWdqdRclNamdoQOqUW9XJeJRB4SImyruARJnnZ4HtTfa5M4m9uLlE893q0tjyEmIOxoIwU4FNwjXm7FtMEFNJJmLai_MTODotScVRM3yyicddkAFQUSRMLgjSjY"/><div class="flex flex-col text-left"><span class="font-body-base-bold text-[12px] leading-tight text-on-surface">Alex Rivera</span><span class="text-[11px] leading-tight text-on-surface-variant">Fleet Manager</span></div><span class="material-symbols-outlined text-[16px] text-on-surface-variant">expand_more</span></div></div></div></header><main class="w-full pt-16 bg-surface flex-1"><div class="flex flex-col w-full">
+<!-- Subtle decorative ambient background bloom -->
+<div class="relative w-full max-w-[1200px] mx-auto px-4 md:px-6 py-6 md:py-10">
+<!-- Top Utility Bar / Breadcrumb Navigation -->
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+<div class="flex items-center flex-wrap gap-2 text-on-surface-variant font-body-muted text-body-muted">
+<a class="hover:text-on-surface transition-colors" href="#">Fleet</a>
+<span class="text-outline-variant">/</span>
+<a class="hover:text-on-surface transition-colors" href="#">Maintenance</a>
+<span class="text-outline-variant">/</span>
+<a class="hover:text-on-surface transition-colors" href="#">Find parts</a>
+<span class="text-outline-variant">/</span>
+<a class="hover:text-on-surface transition-colors font-body-base-bold text-on-surface" href="#">Toyota Roomy 2019</a>
+<span class="text-outline-variant">/</span>
+<span class="text-secondary font-body-base-bold">Brakes</span>
+</div>
+<div class="flex items-center gap-3">
+<!-- Back action -->
+<a class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-surface-container-lowest text-on-surface hover:bg-surface-container-low font-body-muted text-body-muted shadow-sm transition-all" href="#">
+<span class="material-symbols-outlined text-[18px]">arrow_back</span>
+<span>Back to brakes</span>
+</a>
+<!-- Vehicle context indicator pill -->
+<div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface-container-high text-on-surface font-badge-label text-badge-label">
+<span class="material-symbols-outlined text-[16px] text-on-tertiary-container">directions_car</span>
+<span>Toyota Roomy 2019</span>
+<span class="text-on-surface-variant">•</span>
+<span class="font-part-identifier text-body-muted tracking-normal text-on-surface">5179KZ</span>
+</div>
+</div>
+</div>
+<!-- Page Header Block -->
+<header class="mb-10 max-w-3xl">
+<div class="inline-flex items-center gap-1.5 mb-2.5 px-2.5 py-1 rounded-full bg-secondary-fixed text-on-secondary-fixed font-badge-label text-[11px] uppercase tracking-wider">
+<span class="material-symbols-outlined text-[14px]">tune</span>
+<span>Orientation &amp; Sequencing Guide</span>
+</div>
+<h1 class="font-headline-page text-headline-page text-on-surface tracking-tight mb-2">
+        Parts with Left &amp; Right, or Numbered Parts
+      </h1>
+<p class="font-body-base text-body-base text-on-surface-variant leading-relaxed">
+        Some components are side-specific or part of a numbered set. Here is exactly how to identify each piece without guesswork.
+      </p>
+</header>
+<div class="flex flex-col gap-12">
+<!-- ========================================================================= -->
+<!-- FRAME A: Front Brake Calipers (Left & Right) -->
+<!-- ========================================================================= -->
+<section class="flex flex-col gap-4">
+<div class="flex flex-col md:flex-row md:items-baseline justify-between gap-1">
+<div>
+<h2 class="font-headline-card text-headline-card text-on-surface">Front brake calipers</h2>
+<p class="font-body-muted text-body-muted text-on-surface-variant">Your Roomy has two — one for each front wheel.</p>
+</div>
+<span class="font-badge-label text-badge-label text-secondary">Front Axle • Left / Right Pair</span>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+<!-- Card 1: Right Front Caliper -->
+<div class="bg-surface-container-lowest rounded-[20px] p-6 shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between">
+<div>
+<!-- Top Row: Top-down vehicle preview & Verified pill -->
+<div class="flex items-start justify-between gap-4 mb-5">
+<div class="flex items-center gap-3">
+<!-- Top-down car miniature (Right Front active) -->
+<div class="w-16 h-20 rounded-xl bg-surface-container-low p-2 flex items-center justify-center relative">
+<svg class="w-full h-full" fill="none" viewbox="0 0 60 84" xmlns="http://www.w3.org/2000/svg">
+<!-- Car body silhouette -->
+<rect fill="#e2e8f0" height="72" rx="10" stroke="#cbd5e1" stroke-width="2" width="32" x="14" y="6"></rect>
+<!-- Front windshield arc -->
+<path d="M19 26C19 22 41 22 41 26" stroke="#94a3b8" stroke-linecap="round" stroke-width="2"></path>
+<!-- Rear windshield arc -->
+<path d="M19 64C19 67 41 67 41 64" stroke="#94a3b8" stroke-linecap="round" stroke-width="2"></path>
+<!-- 4 Wheels -->
+<!-- Front-Left Wheel (Inactive) -->
+<rect fill="#94a3b8" height="14" rx="2" width="6" x="8" y="14"></rect>
+<!-- Front-Right Wheel (ACTIVE: Highlighted with orange accent) -->
+<rect class="animate-pulse" fill="#d95f00" height="15" rx="2" width="7" x="46" y="14"></rect>
+<circle cx="49.5" cy="21.5" r="7" stroke="#d95f00" stroke-opacity="0.4" stroke-width="1.5"></circle>
+<!-- Rear-Left Wheel (Inactive) -->
+<rect fill="#cbd5e1" height="14" rx="2" width="6" x="8" y="56"></rect>
+<!-- Rear-Right Wheel (Inactive) -->
+<rect fill="#cbd5e1" height="14" rx="2" width="6" x="46" y="56"></rect>
+</svg>
+</div>
+<div>
+<span class="font-badge-label text-[11px] text-on-surface-variant uppercase tracking-wider block">Position</span>
+<span class="font-body-base-bold text-body-base-bold text-on-surface">Right front wheel</span>
+</div>
+</div>
+<!-- Verified Genuine Fit Pill -->
+<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#ecfdf5] text-[#059669] font-badge-label text-badge-label">
+<span class="material-symbols-outlined text-[16px]">check_circle</span>
+<span>Verified genuine fit</span>
+</span>
+</div>
+<h3 class="font-headline-card text-headline-card text-on-surface mb-1">Right front brake caliper</h3>
+<p class="font-body-muted text-body-muted text-on-surface-variant mb-5">
+                Passenger side on RHD vehicles. Cast hydraulic caliper unit.
+              </p>
+</div>
+<!-- Number readout block -->
+<div class="rounded-xl bg-surface-container-low p-4 mt-auto">
+<span class="font-badge-label text-[12px] text-on-surface-variant uppercase tracking-wider block mb-1">
+                Give the store this number
+              </span>
+<div class="flex items-center justify-between gap-3 flex-wrap">
+<span class="font-part-identifier text-part-identifier text-on-surface tracking-wider select-all" id="part-caliper-rf">47730-B1021</span>
+<button class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-on-primary font-body-base-bold text-body-muted hover:opacity-90 active:scale-95 transition-all shadow-sm" onclick="copyPart('part-caliper-rf', this)" type="button">
+<span class="material-symbols-outlined text-[16px]">content_copy</span>
+<span>Copy number</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Card 2: Left Front Caliper -->
+<div class="bg-surface-container-lowest rounded-[20px] p-6 shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between">
+<div>
+<!-- Top Row: Top-down vehicle preview & Verified pill -->
+<div class="flex items-start justify-between gap-4 mb-5">
+<div class="flex items-center gap-3">
+<!-- Top-down car miniature (Left Front active) -->
+<div class="w-16 h-20 rounded-xl bg-surface-container-low p-2 flex items-center justify-center relative">
+<svg class="w-full h-full" fill="none" viewbox="0 0 60 84" xmlns="http://www.w3.org/2000/svg">
+<!-- Car body silhouette -->
+<rect fill="#e2e8f0" height="72" rx="10" stroke="#cbd5e1" stroke-width="2" width="32" x="14" y="6"></rect>
+<!-- Front windshield arc -->
+<path d="M19 26C19 22 41 22 41 26" stroke="#94a3b8" stroke-linecap="round" stroke-width="2"></path>
+<!-- Rear windshield arc -->
+<path d="M19 64C19 67 41 67 41 64" stroke="#94a3b8" stroke-linecap="round" stroke-width="2"></path>
+<!-- 4 Wheels -->
+<!-- Front-Left Wheel (ACTIVE: Highlighted with orange accent) -->
+<rect class="animate-pulse" fill="#d95f00" height="15" rx="2" width="7" x="7" y="14"></rect>
+<circle cx="10.5" cy="21.5" r="7" stroke="#d95f00" stroke-opacity="0.4" stroke-width="1.5"></circle>
+<!-- Front-Right Wheel (Inactive) -->
+<rect fill="#94a3b8" height="14" rx="2" width="6" x="46" y="14"></rect>
+<!-- Rear-Left Wheel (Inactive) -->
+<rect fill="#cbd5e1" height="14" rx="2" width="6" x="8" y="56"></rect>
+<!-- Rear-Right Wheel (Inactive) -->
+<rect fill="#cbd5e1" height="14" rx="2" width="6" x="46" y="56"></rect>
+</svg>
+</div>
+<div>
+<span class="font-badge-label text-[11px] text-on-surface-variant uppercase tracking-wider block">Position</span>
+<span class="font-body-base-bold text-body-base-bold text-on-surface">Left front wheel</span>
+</div>
+</div>
+<!-- Verified Genuine Fit Pill -->
+<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#ecfdf5] text-[#059669] font-badge-label text-badge-label">
+<span class="material-symbols-outlined text-[16px]">check_circle</span>
+<span>Verified genuine fit</span>
+</span>
+</div>
+<h3 class="font-headline-card text-headline-card text-on-surface mb-1">Left front brake caliper</h3>
+<p class="font-body-muted text-body-muted text-on-surface-variant mb-5">
+                Driver side on RHD vehicles. Cast hydraulic caliper unit.
+              </p>
+</div>
+<!-- Number readout block -->
+<div class="rounded-xl bg-surface-container-low p-4 mt-auto">
+<span class="font-badge-label text-[12px] text-on-surface-variant uppercase tracking-wider block mb-1">
+                Give the store this number
+              </span>
+<div class="flex items-center justify-between gap-3 flex-wrap">
+<span class="font-part-identifier text-part-identifier text-on-surface tracking-wider select-all" id="part-caliper-lf">47750-B1021</span>
+<button class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-on-primary font-body-base-bold text-body-muted hover:opacity-90 active:scale-95 transition-all shadow-sm" onclick="copyPart('part-caliper-lf', this)" type="button">
+<span class="material-symbols-outlined text-[16px]">content_copy</span>
+<span>Copy number</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- ========================================================================= -->
+<!-- FRAME B: Handbrake Cables (Numbered Cable Set) -->
+<!-- ========================================================================= -->
+<section class="flex flex-col gap-5">
+<div>
+<h2 class="font-headline-card text-headline-card text-on-surface">Handbrake cables</h2>
+<p class="font-body-muted text-body-muted text-on-surface-variant">Your Roomy has three handbrake cables arranged from lever to drums.</p>
+</div>
+<!-- Integrated Cable Path Graphic Diagram -->
+<div class="bg-surface-container-lowest rounded-[20px] p-6 shadow-sm overflow-hidden">
+<div class="flex flex-col lg:flex-row items-center justify-between gap-6">
+<div class="w-full lg:w-1/3">
+<span class="font-badge-label text-badge-label text-on-tertiary-container uppercase tracking-wider flex items-center gap-1.5 mb-2">
+<span class="material-symbols-outlined text-[16px]">alt_route</span>
+                Chassis Routing Guide
+              </span>
+<h3 class="font-headline-card text-headline-card text-on-surface mb-2">3-Piece Equalizer System</h3>
+<p class="font-body-muted text-body-muted text-on-surface-variant">
+                Cable 1 transfers pulling tension from the cabin lever through the floor tunnel to a central junction balance, which splits force evenly into Cable 2 (Left) and Cable 3 (Right).
+              </p>
+</div>
+<!-- SVG Schematic Drawing -->
+<div class="w-full lg:w-2/3 bg-surface-container-low rounded-2xl p-4 md:p-6 flex items-center justify-center">
+<svg class="w-full max-w-[620px] h-auto" fill="none" viewbox="0 0 680 180" xmlns="http://www.w3.org/2000/svg">
+<!-- Center chassis guide dash lines -->
+<line stroke="#cbd5e1" stroke-dasharray="4 4" stroke-width="1.5" x1="40" x2="640" y1="90" y2="90"></line>
+<!-- Handbrake Cabin Lever Node -->
+<rect fill="#ffffff" height="50" rx="12" stroke="#94a3b8" stroke-width="2" width="50" x="25" y="65"></rect>
+<path d="M43 97L55 76" stroke="#0b1c30" stroke-linecap="round" stroke-width="3.5"></path>
+<circle cx="56" cy="74" fill="#d95f00" r="4"></circle>
+<text class="font-badge-label text-[11px]" fill="#47464c" text-anchor="middle" x="50" y="135">Cabin Lever</text>
+<!-- CABLE 1 Path (Lever to Equalizer) -->
+<path d="M75 90 L 260 90" stroke="#0b1c30" stroke-linecap="round" stroke-width="4"></path>
+<!-- Cable 1 Tag Indicator -->
+<rect fill="#1b192e" height="24" rx="12" width="80" x="130" y="58"></rect>
+<text class="font-badge-label text-[11px]" fill="#ffffff" font-weight="600" text-anchor="middle" x="170" y="74">Cable 1 (Front)</text>
+<!-- Central Equalizer Junction Box -->
+<rect fill="#dce9ff" height="48" rx="8" stroke="#5e5c74" stroke-width="2" width="48" x="260" y="66"></rect>
+<circle cx="284" cy="90" fill="#1b192e" r="5"></circle>
+<text class="font-badge-label text-[11px]" fill="#47464c" text-anchor="middle" x="284" y="132">Equalizer</text>
+<!-- CABLE 2 Path (Junction to Left Drum, top branch) -->
+<path d="M308 86 C 360 82, 420 45, 520 45" stroke="#0b1c30" stroke-linecap="round" stroke-width="3.5"></path>
+<!-- Cable 2 Tag -->
+<rect fill="#eff4ff" height="22" rx="11" stroke="#cbd5e1" stroke-width="1" width="94" x="375" y="24"></rect>
+<text class="font-badge-label text-[10px]" fill="#0b1c30" font-weight="600" text-anchor="middle" x="422" y="39">Cable 2 (Left Drum)</text>
+<!-- Left Rear Drum Hub -->
+<rect fill="#ffffff" height="40" rx="10" stroke="#94a3b8" stroke-width="2" width="90" x="520" y="25"></rect>
+<circle cx="540" cy="45" fill="#d95f00" r="7"></circle>
+<text class="font-badge-label text-[11px]" fill="#0b1c30" font-weight="600" x="575" y="49">Left Drum</text>
+<!-- CABLE 3 Path (Junction to Right Drum, bottom branch) -->
+<path d="M308 94 C 360 98, 420 135, 520 135" stroke="#0b1c30" stroke-linecap="round" stroke-width="3.5"></path>
+<!-- Cable 3 Tag -->
+<rect fill="#eff4ff" height="22" rx="11" stroke="#cbd5e1" stroke-width="1" width="96" x="375" y="135"></rect>
+<text class="font-badge-label text-[10px]" fill="#0b1c30" font-weight="600" text-anchor="middle" x="423" y="150">Cable 3 (Right Drum)</text>
+<!-- Right Rear Drum Hub -->
+<rect fill="#ffffff" height="40" rx="10" stroke="#94a3b8" stroke-width="2" width="90" x="520" y="115"></rect>
+<circle cx="540" cy="135" fill="#d95f00" r="7"></circle>
+<text class="font-badge-label text-[11px]" fill="#0b1c30" font-weight="600" x="575" y="139">Right Drum</text>
+</svg>
+</div>
+</div>
+</div>
+<!-- 3 Specific Cable Selection Cards -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+<!-- Cable 1 -->
+<div class="bg-surface-container-lowest rounded-[20px] p-6 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
+<div>
+<div class="flex items-center justify-between gap-2 mb-3">
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed font-badge-label text-[11px]">
+                  #1 Front Lead
+                </span>
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#ecfdf5] text-[#059669] font-badge-label text-[12px]">
+<span class="material-symbols-outlined text-[14px]">check</span>
+                  Verified
+                </span>
+</div>
+<h3 class="font-headline-card text-headline-card text-on-surface mb-1">Front cable (Cable 1)</h3>
+<p class="font-body-muted text-body-muted text-on-surface-variant mb-6">
+                Runs from lever to floor junction under console.
+              </p>
+</div>
+<div class="rounded-xl bg-surface-container-low p-4 mt-auto">
+<span class="font-badge-label text-[11px] text-on-surface-variant uppercase tracking-wider block mb-1">Part Number</span>
+<div class="flex items-center justify-between gap-2">
+<span class="font-part-identifier text-[18px] text-on-surface tracking-wide" id="cable-1-num">46410-B1011</span>
+<button class="p-2 rounded-lg bg-surface-container-lowest hover:bg-surface text-on-surface shadow-xs transition-colors" onclick="copyPart('cable-1-num', this)" title="Copy code" type="button">
+<span class="material-symbols-outlined text-[18px]">content_copy</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Cable 2 -->
+<div class="bg-surface-container-lowest rounded-[20px] p-6 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
+<div>
+<div class="flex items-center justify-between gap-2 mb-3">
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed font-badge-label text-[11px]">
+                  #2 Left Branch
+                </span>
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#ecfdf5] text-[#059669] font-badge-label text-[12px]">
+<span class="material-symbols-outlined text-[14px]">check</span>
+                  Verified
+                </span>
+</div>
+<h3 class="font-headline-card text-headline-card text-on-surface mb-1">Rear cable 2 (Left rear wheel)</h3>
+<p class="font-body-muted text-body-muted text-on-surface-variant mb-6">
+                From central junction to left drum assembly.
+              </p>
+</div>
+<div class="rounded-xl bg-surface-container-low p-4 mt-auto">
+<span class="font-badge-label text-[11px] text-on-surface-variant uppercase tracking-wider block mb-1">Part Number</span>
+<div class="flex items-center justify-between gap-2">
+<span class="font-part-identifier text-[18px] text-on-surface tracking-wide" id="cable-2-num">46420-B1090</span>
+<button class="p-2 rounded-lg bg-surface-container-lowest hover:bg-surface text-on-surface shadow-xs transition-colors" onclick="copyPart('cable-2-num', this)" title="Copy code" type="button">
+<span class="material-symbols-outlined text-[18px]">content_copy</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Cable 3 -->
+<div class="bg-surface-container-lowest rounded-[20px] p-6 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
+<div>
+<div class="flex items-center justify-between gap-2 mb-3">
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed font-badge-label text-[11px]">
+                  #3 Right Branch
+                </span>
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#ecfdf5] text-[#059669] font-badge-label text-[12px]">
+<span class="material-symbols-outlined text-[14px]">check</span>
+                  Verified
+                </span>
+</div>
+<h3 class="font-headline-card text-headline-card text-on-surface mb-1">Rear cable 3 (Right rear wheel)</h3>
+<p class="font-body-muted text-body-muted text-on-surface-variant mb-6">
+                From central junction to right drum assembly.
+              </p>
+</div>
+<div class="rounded-xl bg-surface-container-low p-4 mt-auto">
+<span class="font-badge-label text-[11px] text-on-surface-variant uppercase tracking-wider block mb-1">Part Number</span>
+<div class="flex items-center justify-between gap-2">
+<span class="font-part-identifier text-[18px] text-on-surface tracking-wide" id="cable-3-num">46430-B1090</span>
+<button class="p-2 rounded-lg bg-surface-container-lowest hover:bg-surface text-on-surface shadow-xs transition-colors" onclick="copyPart('cable-3-num', this)" title="Copy code" type="button">
+<span class="material-symbols-outlined text-[18px]">content_copy</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- ========================================================================= -->
+<!-- FRAME C: Rear Brake Shoes (Verified vs Check Before Buying) -->
+<!-- ========================================================================= -->
+<section class="flex flex-col gap-4">
+<div>
+<h2 class="font-headline-card text-headline-card text-on-surface">Rear brake shoes</h2>
+<p class="font-body-muted text-body-muted text-on-surface-variant">Shows the latest genuine factory part and an older alternative stores still carry.</p>
+</div>
+<div class="flex flex-col gap-4">
+<!-- Card 1 (Prominent Standard: Verified) -->
+<div class="bg-surface-container-lowest rounded-[20px] p-6 md:p-8 shadow-sm hover:shadow-md transition-all relative overflow-hidden">
+<div class="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
+<div class="flex-1">
+<div class="flex items-center gap-3 mb-2.5">
+<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#ecfdf5] text-[#059669] font-badge-label text-badge-label">
+<span class="material-symbols-outlined text-[16px]">verified</span>
+<span>Verified Genuine Part</span>
+</span>
+<span class="font-badge-label text-badge-label text-secondary">Box of 4 shoes (Left &amp; Right)</span>
+</div>
+<h3 class="font-headline-page text-headline-card md:text-headline-page text-on-surface mb-1">
+                  Rear brake shoes — Set of 4
+                </h3>
+<p class="font-body-base text-body-muted text-on-surface-variant mb-4">
+                  Genuine Toyota part • Current production specification
+                </p>
+<div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-container-low text-on-surface font-body-muted text-[13px]">
+<span class="material-symbols-outlined text-[16px] text-[#059669]">check_circle</span>
+<span>Guaranteed exact fit for all 2016–2020 Toyota Roomy models.</span>
+</div>
+</div>
+<!-- Main Copy Action Box -->
+<div class="w-full lg:w-auto min-w-[280px] bg-surface-container-low p-5 rounded-2xl flex flex-col justify-between gap-3">
+<span class="font-badge-label text-[11px] text-on-surface-variant uppercase tracking-wider">
+                  Give the store this number
+                </span>
+<span class="font-part-identifier text-part-identifier text-on-surface tracking-wider" id="shoes-verified-num">
+                  04495-B2430
+                </span>
+<button class="w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-primary text-on-primary font-body-base-bold text-body-base hover:opacity-90 active:scale-[0.98] transition-all shadow-sm" onclick="copyPart('shoes-verified-num', this)" type="button">
+<span class="material-symbols-outlined text-[18px]">content_copy</span>
+<span>Copy number</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Card 2 (Lower Card: Amber Warning Treatment) -->
+<div class="bg-surface-container-lowest rounded-[20px] p-6 md:p-7 shadow-xs">
+<div class="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
+<div class="flex-1">
+<div class="flex items-center gap-3 mb-2">
+<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#fffbeb] text-[#b45309] font-badge-label text-badge-label">
+<span class="material-symbols-outlined text-[16px]">info</span>
+<span>Check before buying</span>
+</span>
+<span class="font-badge-label text-badge-label text-on-surface-variant">Older catalog number</span>
+</div>
+<h3 class="font-headline-card text-headline-card text-on-surface mb-1">
+                  Older part number: <span class="font-part-identifier text-part-identifier-mobile text-on-surface font-normal">04495-B2400</span>
+</h3>
+<p class="font-body-muted text-body-muted text-on-surface-variant mb-3">
+                  An older number some stores still use.
+                </p>
+<p class="font-body-muted text-[13px] text-on-surface-variant max-w-2xl leading-relaxed">
+                  Manufactured for earlier production batches. Usually fits, but ask the store counter clerk to check their interchange book before paying.
+                </p>
+</div>
+<!-- Secondary Action + Clarification -->
+<div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full lg:w-auto">
+<button class="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-surface-container-low text-on-surface-variant hover:text-on-surface font-body-muted text-body-muted transition-colors" onclick="toggleClarificationModal()" type="button">
+<span class="material-symbols-outlined text-[18px]">help_outline</span>
+<span>What does this mean?</span>
+</button>
+<button class="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-surface-container-lowest text-on-surface font-body-base-bold text-body-muted hover:bg-surface-container-low shadow-xs transition-colors" onclick="copyPart('shoes-older-raw', this)" type="button">
+<span class="material-symbols-outlined text-[16px]">content_copy</span>
+<span>Copy older number</span>
+</button>
+<span class="hidden" id="shoes-older-raw">04495-B2400</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Reassurance Footer Banner -->
+<div class="rounded-2xl bg-surface-container-high p-5 md:p-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+<div class="flex items-center gap-3.5">
+<div class="w-10 h-10 rounded-full bg-surface-container-lowest flex items-center justify-center text-on-surface">
+<span class="material-symbols-outlined text-[20px]">thumb_up</span>
+</div>
+<div>
+<h4 class="font-body-base-bold text-body-base-bold text-on-surface">Confidence Guarantee</h4>
+<p class="font-body-muted text-body-muted text-on-surface-variant">All highlighted numbers match manufacturer warehouse specs for Toyota Roomy (2016–2020).</p>
+</div>
+</div>
+<a class="inline-flex items-center gap-2 text-on-surface font-body-base-bold text-body-muted hover:underline shrink-0" href="#">
+<span>Explore front suspension</span>
+<span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+</a>
+</div>
+</div>
+</div>
+<!-- Micro-interaction Notification Toast -->
+<div class="fixed bottom-6 right-6 z-50 bg-primary text-on-primary px-4 py-3 rounded-xl shadow-xl flex items-center gap-2.5 font-body-muted text-body-muted transition-all duration-300 transform translate-y-16 opacity-0 pointer-events-none" id="copy-toast">
+<span class="material-symbols-outlined text-[20px] text-[#059669]">check_circle</span>
+<span id="toast-message">Part number copied to clipboard</span>
+</div>
+<!-- Popover / Informational Drawer Modal for 'What does this mean?' -->
+<div class="fixed inset-0 z-50 bg-primary/40 backdrop-blur-xs flex items-center justify-center p-4 opacity-0 pointer-events-none transition-opacity duration-200" id="info-modal">
+<div class="bg-surface-container-lowest rounded-[20px] max-w-lg w-full p-6 md:p-8 shadow-xl transform scale-95 transition-transform duration-200" id="info-modal-box">
+<div class="flex items-center justify-between mb-4">
+<div class="flex items-center gap-2.5 text-[#b45309]">
+<span class="material-symbols-outlined text-[24px]">info</span>
+<h3 class="font-headline-card text-headline-card text-on-surface">Older Part Numbers Explained</h3>
+</div>
+<button class="w-8 h-8 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container-low transition-colors" onclick="toggleClarificationModal()" type="button">
+<span class="material-symbols-outlined text-[20px]">close</span>
+</button>
+</div>
+<div class="space-y-3 font-body-base text-body-base text-on-surface-variant leading-relaxed mb-6">
+<p>
+          Car manufacturers periodically refresh parts to improve material coatings, reduce dust, or consolidate packaging.
+        </p>
+<p>
+          The number <strong class="text-on-surface font-body-base-bold">04495-B2400</strong> was the initial factory assembly component. The newer number <strong class="text-on-surface font-body-base-bold">04495-B2430</strong> is the direct superseded replacement.
+        </p>
+<p class="font-body-muted text-body-muted bg-surface-container-low p-3 rounded-xl text-on-surface">
+<strong>Tip:</strong> If a local supplier only has the older number in stock, it is safe to use as long as the counter clerk verifies their supplier catalog interchange.
+        </p>
+</div>
+<button class="w-full py-3 rounded-xl bg-primary text-on-primary font-body-base-bold text-body-base hover:opacity-90 transition-opacity" onclick="toggleClarificationModal()" type="button">
+        Understood
+      </button>
+</div>
+</div>
+<script>
+    function copyPart(elementId, btnElement) {
+      const el = document.getElementById(elementId);
+      if (!el) return;
+      const textToCopy = el.innerText || el.textContent;
+      
+      navigator.clipboard.writeText(textToCopy.trim()).then(() => {
+        showToast('Copied: ' + textToCopy.trim());
+        
+        // Micro-interaction on button
+        const origHtml = btnElement.innerHTML;
+        btnElement.innerHTML = '<span class="material-symbols-outlined text-[16px] text-[#059669]">done</span><span>Copied!</span>';
+        setTimeout(() => {
+          btnElement.innerHTML = origHtml;
+        }, 1800);
+      }).catch(() => {
+        showToast('Copied to clipboard');
+      });
+    }
+
+    function showToast(msg) {
+      const toast = document.getElementById('copy-toast');
+      const msgEl = document.getElementById('toast-message');
+      if (!toast || !msgEl) return;
+      msgEl.innerText = msg;
+      toast.classList.remove('translate-y-16', 'opacity-0', 'pointer-events-none');
+      toast.classList.add('translate-y-0', 'opacity-100');
+      
+      setTimeout(() => {
+        toast.classList.add('translate-y-16', 'opacity-0', 'pointer-events-none');
+        toast.classList.remove('translate-y-0', 'opacity-100');
+      }, 2500);
+    }
+
+    function toggleClarificationModal() {
+      const modal = document.getElementById('info-modal');
+      const modalBox = document.getElementById('info-modal-box');
+      if (!modal || !modalBox) return;
+
+      const isClosed = modal.classList.contains('pointer-events-none');
+      if (isClosed) {
+        modal.classList.remove('opacity-0', 'pointer-events-none');
+        modal.classList.add('opacity-100');
+        modalBox.classList.remove('scale-95');
+        modalBox.classList.add('scale-100');
+      } else {
+        modal.classList.add('opacity-0', 'pointer-events-none');
+        modal.classList.remove('opacity-100');
+        modalBox.classList.add('scale-95');
+        modalBox.classList.remove('scale-100');
+      }
+    }
+  </script>
+</div></main><footer class="w-full bg-surface-container-lowest py-8 shadow-[0_-1px_8px_rgba(0,0,0,0.02)]"><div class="max-w-[1120px] mx-auto px-8 flex flex-col md:flex-row items-center justify-between gap-4 text-body-muted font-body-muted text-on-surface-variant"><div class="flex items-center gap-2"><span class="font-body-base-bold text-on-surface">Roam Fleet</span><span>© 2025 Fleet Systems Inc. All rights reserved.</span></div><div class="flex items-center gap-6"><a class="hover:text-on-surface transition-colors" href="#">Platform Status</a><a class="hover:text-on-surface transition-colors" href="#">Assistance &amp; Support</a><a class="hover:text-on-surface transition-colors" href="#">Privacy</a></div></div></footer></body></html>

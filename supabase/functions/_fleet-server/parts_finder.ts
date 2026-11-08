@@ -37,12 +37,14 @@ export type FoundPart = {
   groupId?: string | null;
   wva?: string | null;
   derivedId?: string | null;
+  catalogueNumber?: number | null;
 };
 
 type LoosePart = {
   tier?: number;
   position?: string | null;
   side?: string | null;
+  catalogueNumber?: number | null;
   sisterNames?: string | null;
   sourceMake?: string | null;
   referenceOem?: string | null;
@@ -197,6 +199,10 @@ function toFound(item: LoosePart, variantId: string): FoundPart {
     }),
     position: axis(item.position),
     side: sideOf(item.side),
+    catalogueNumber:
+      item.catalogueNumber != null && Number.isFinite(Number(item.catalogueNumber))
+        ? Math.trunc(Number(item.catalogueNumber))
+        : null,
     status: decision === "confirmed" ? "verified" : "needs_checking",
     fitsVariantIds: variantId ? [variantId] : [],
     evidenceUrl: item.evidenceUrl ?? null,

@@ -1,0 +1,163 @@
+ROAM DOMINION — VEHICLES (THE CAR CATALOGUE), SEARCH-FIRST WITH A PAGE PER CAR — FULL DESIGN PROMPT (GOOGLE STITCH)
+
+
+
+
+Roam Dominion - Vehicles (Desktop Admin, for the owner and catalog editors, who are not mechanics):
+
+Design a complete, modern, high-fidelity redesign of the "Vehicles" section in the Roam Dominion admin console. It holds the master list of every car version Roam knows (1,833 versions across 56 makers). Every app reads its cars from here, and Find parts, car specs and the Add parts flow all depend on it. Today finding one car means scrolling a long table of near-identical rows. Two rows can both read "Toyota · Roomy Custom G · 2016-11–2020-08 · Gas · Petrol · Hatchback · Active" with nothing to tell them apart. The car opens as a panel under the table, far from the row you clicked. Car specs (fluids, oil, wipers, tyres) sit at the very bottom with a bare dropdown, and the same fluid has to be typed once per sister car. The new section is search-first: maker → model → the versions as clear rows that say how they differ. Each car opens as its own page, with a clear Car specs section that can save the same spec to sister cars in one go. It must feel modern and calm, and a first-time owner must use it alone.
+
+
+BRAND IDENTITY:
+- Keep the Dominion console frame exactly as it is today:
+  - dark navy left sidebar "Dominion · Roam Admin Console" (MASTER DATA: Overview, Vehicles active, Places and Maps, Fuel, Tolls, Tax and Vendors; ENGINES; DISTRIBUTION; PLATFORM; BACK OFFICE)
+  - top bar: search "Search entities, engines, routes…" with ⌘K, moon icon, user "Deeki T · Owner"
+- Remove these labels from Vehicles everywhere: "SYS_ID: VEC-…", "OE MATCHING ENGINE · POLL_INTERVAL: 60s", "CROSS REF INDEX · MATCH-V1 OK", "Derived matches", mono breadcrumb strips. The page title is simply "Vehicles" with the muted line "Every car Roam knows, and what each one needs."
+- Theme: "Calm modern workspace".
+- LIGHT MODE (default):
+  - Primary: #0153dc; primary container: #dbe1ff
+  - Success: #006e31 on #e6f4ea; warning: #8a5a00 on #fff4dc; error: #a83836 on #fdecec
+  - Outline: #797a84; hairlines #e6e7ee
+  - Background: #faf8fe; cards white, 16px radius, hairline border plus a very soft shadow (0 4px 16px rgba(1,83,220,0.04))
+  - Text: #30323b; muted text: #5d5f68
+- DARK MODE:
+  - Background #0b1220; cards #111a2e; hairlines #1e293b
+  - Text #e2e8f0; muted #94a3b8; primary #5b8def; success #4ade80; warning #fbbf24; error #f87171
+- Maker logos in round tiles everywhere a maker is named; the logo comes first.
+- Typography: Inter. Titles 26px semibold, section titles 18px semibold, body 15px, hints 13px muted. Frame codes, engine codes and years in a mono font with tabular numerals, always AFTER the plain words.
+- Empty values never show "—", "0" or "0 kg": they show a muted "Not on file" with a small outlined "Add" button.
+- Buttons always look like buttons: Primary = solid #0153dc; Secondary = white with a visible #c5c6d0 border; Danger (Remove, Retire, Cancel) = red #a83836 border and red text, solid red only for a final confirm. Icon buttons 32px with a visible border. No underlined text links, no grey text-only buttons. Every confirm is an in-app dialog, never a browser pop-up.
+- Sample data (real, from the live database):
+  - Toyota Roomy versions: "2016–2020 · 2WD · 1.0 petrol · M900A · 1KR-FE"; "2016–2020 · 4WD · 1.0 petrol · M910A · 1KR-FE"; "2020 on · 2WD · 1.0 petrol · M900A · 1KR-FE"; "2020 on · 2WD · 1.0 turbo petrol · M900A · 1KR-VET"; "2020 on · 4WD · 1.0 petrol · M910A · 1KR-FE".
+  - Toyota Tank: "2016–2020 · 2WD · M900A", "2016–2022 · 4WD · M910A".
+  - Sister cars (same car, other badges): Daihatsu Thor M900S / M910S, Subaru Justy M900F / M910F.
+  - Roomy 2016–2020 2WD car specs: Engine oil "0W-20"; CVT fluid "Toyota CVT Fluid FE"; Brake fluid "Toyota 2500H-A"; Wiper blades "350 mm, 475 mm and 525 mm"; Front brakes "Ventilated disc"; Rear brakes "Drum".
+  - Parts on file for that Roomy: Brakes 20 parts, Engine 2 (oil filter), Fluids 2, Lights & wipers 3; key parts ready "3 of 10".
+
+
+DESIGN PRINCIPLES:
+- Desktop-first at 1440px; content column max 1120px. A 390px phone frame is included.
+- Search first: one big search box finds any car by make, model, year, frame code or engine code, several words at once ("roomy 2019 4wd").
+- Maker → model → version, each a clear step with logos; the versions list says in plain words how each row differs.
+- One real car version = one row. If two rows are truly identical, the row shows an amber "Looks like a duplicate" pill.
+- Clicking a car opens its own page (with a back arrow), not a panel under the table.
+- KEEP UNCHANGED: the existing eye (quick view) button on each row still opens today's quick-view overlay, exactly as it is now. Clicking anywhere else on the row opens the new car page.
+- Car specs have their own section with plain labels, an example for each, a source link, and "Also save to sister cars".
+- Empty values say "Not on file". Nothing shows a fake zero.
+- Back arrow at the top of every page; no action buttons at the bottom of long pages.
+
+
+SCREEN 1: VEHICLES — HOME
+- Title "Vehicles", muted line, and a primary button "+ Add a car" at the top right.
+- A large search box "Search a car — e.g. Toyota Roomy 2019, M900A, 1KR-FE".
+- "Makers" — a grid of maker logo tiles (6 across), each with the name and a muted count ("Toyota · 236 versions"). A secondary button "All 56 makers".
+- "Recently opened" — a row of 4 compact car cards (logo, "Toyota Roomy", "2016–2020 · 2WD").
+- "Needs attention" card on the right: plain counts with buttons (the numbers are layout placeholders; real counts come from the database) — "12 cars have no specs yet · Review", "3 possible duplicate rows · Review", "5 makers have no logo · Add logos".
+
+
+SCREEN 2: A MAKER — ITS MODELS
+- Header: Toyota logo (large), "Toyota", muted "236 versions · 71 models", secondary button "Edit maker" (name, country, logo upload).
+- A search box "Search Toyota models".
+- Model cards in a grid (4 across): model name big ("Roomy"), years muted ("2016 – today"), and "5 versions". Whole card is a button.
+
+
+SCREEN 3: A MODEL — ITS VERSIONS
+- Header: back arrow, Toyota logo, "Toyota Roomy", muted "5 versions · 2016 – today", sister cars line with logos "Same car: Toyota Tank, Daihatsu Thor, Subaru Justy" (each a small outlined button).
+- Filter pills: "All", "2WD", "4WD", "Before 2020 update", "2020 update on".
+- Version rows (72px, white cards in a list), each:
+  - Years big "2016–2020", then the plain difference "2WD · 1.0 petrol", then the codes muted in mono "M900A · 1KR-FE"
+  - A small readiness bar "Key parts 3 of 10" and a specs count "6 specs"
+  - On the right: the eye quick-view icon button (unchanged behaviour) and a chevron
+- One sample pair shows how near-duplicates now differ: "2020 on · 2WD · 1.0 petrol · 1KR-FE" vs "2020 on · 2WD · 1.0 turbo petrol · 1KR-VET".
+
+
+SCREEN 4: THE CAR PAGE — OVERVIEW
+- Header card: back arrow, Toyota logo, "Toyota Roomy", "2016–2020 · 2WD · 1.0 petrol", codes muted "M900A · 1KR-FE", secondary button "Edit details", and a red-outline "Retire" button.
+- Section tabs under the header: Overview (selected), Car specs, Parts on file, Sister cars, History.
+- Overview: a clean two-column fact grid with plain labels: Years, Body, Drive, Engine, Fuel, Gearbox, Seats, Doors. Empty facts show "Not on file" with an outlined "Add" button.
+- Right column: "At a glance" card — key parts readiness ring "3 of 10", specs "6 on file", sister cars as logos.
+
+
+SCREEN 5: THE CAR PAGE — CAR SPECS
+- The "Car specs" tab. Groups as cards with icons: "Fluids" (Engine oil, Engine oil amount, CVT / gearbox fluid, Coolant, Brake fluid), "Wipers & lights" (Wiper blades, Headlight bulb, Brake light bulb), "Tyres & wheels" (Tyre size), "Battery" (Battery size), "Brakes" (Front brakes, Rear brakes).
+- Each spec row: plain label, the value, a small source pill ("Owner's manual ✓", "Toyota catalogue ✓") and an outlined "Edit" button. Missing specs: "Not on file" + outlined "Add".
+- Sample values from the sample data.
+
+
+SCREEN 6: ADD OR EDIT A CAR SPEC
+- A right-side panel (520px) with a close X (bordered icon button):
+  - "Which spec?" — searchable list with icons and plain names.
+  - The value field with a live example under it, e.g. for Brake fluid "e.g. Toyota 2500H-A, or DOT 3"; for Wiper blades three small fields "Driver / Passenger / Rear (mm)"; for Tyre size "e.g. 165/65R14".
+  - "Where did you find it?" — link field, or a choice "Owner's manual" / "Maker's catalogue" / "Other".
+  - "Also save to these sister cars" — tick list with logos, pre-ticked with the same-years versions: Toyota Tank 2016–2020 2WD, Daihatsu Thor 2016–2020 2WD, Subaru Justy 2016–2020 2WD.
+  - Primary "Save to 4 cars"; secondary "Cancel".
+- A second frame shows the success toast "Brake fluid saved to 4 cars".
+
+
+SCREEN 7: THE CAR PAGE — PARTS ON FILE
+- The "Parts on file" tab: area cards (Brakes 20, Engine 2, Fluids 2, Lights & wipers 3, Suspension 0) with icons; each opens the Parts database filtered to this car.
+- A "Key parts" checklist: Engine oil ✓, Spark plugs —, Thermostat —, Air filter —, Cabin filter —, Brake pads ✓, Drive belt —, Wiper blades ✓, Brake rotor ✓, Shock absorbers —; missing ones have a primary "Add parts" button that opens Add parts with this car already picked.
+
+
+SCREEN 8: SISTER CARS AND HISTORY TABS
+- Frame A — Sister cars: logo cards for Toyota Tank, Daihatsu Thor, Subaru Justy, each listing its matching versions; a muted note "Same car sold under other badges. Most parts and specs are shared." and a secondary "Link another sister car".
+- Frame B — History: a plain timeline ("7 Nov · Deeki T added Brake fluid: Toyota 2500H-A", "6 Nov · Deeki T changed years to 2016–2020"), each with an outlined "Undo" button where it can be undone.
+
+
+SCREEN 9: ADD A CAR
+- Full page, one question at a time: Maker (logo tiles) → Model (search or new) → Years (from / to) → How this version differs (Drive 2WD/4WD, Engine size, Fuel, Gearbox, Update) → Frame and engine codes (optional, with the hint "From the car's ID plate") → Review → primary "Add car".
+- A duplicate check on Review: amber line "A Toyota Roomy 2016–2020 2WD 1.0 petrol already exists" with a secondary "Open it".
+
+
+SCREEN 10: STATES
+- Frame A — search with no results: "No car matches "roomy 2014"." with primary "+ Add a car".
+- Frame B — loading skeletons for maker tiles and version rows.
+- Frame C — couldn't load: soft red banner "We couldn't load the cars. Nothing was changed." with secondary "Try again".
+- Frame D — Retire pressed: in-app dialog "Retire Toyota Roomy 2016–2020 2WD? It disappears from Fleet and Plug car pickers. Parts stay on file." with secondary "Keep it" and solid red "Retire".
+
+
+SCREEN 11: DARK MODE
+- Screens 3 (versions) and 5 (car specs) in dark mode.
+
+
+SCREEN 12: PHONE (390px)
+- Screens 1, 3 and 5 at 390px: maker tiles 3 across; version rows wrap to two lines (years + difference, then codes); tabs become a scrollable pill row; the spec panel becomes a full-screen sheet.
+
+
+ADDITIONAL UI COMPONENTS:
+- Maker logo tile with count; model card; version row with plain difference, muted codes, readiness bar, quick-view eye and chevron
+- Car page header with tabs
+- Fact grid with "Not on file" + Add
+- Spec row with source pill and Edit
+- Spec panel with example text and sister-car ticks
+- Area card; key parts checklist
+- Timeline row with Undo
+- "Looks like a duplicate" pill; in-app confirm dialog; toast
+
+
+INTERACTIONS:
+- **Search:** results update as you type; matches make, model, years, frame code and engine code, several words at once.
+- **Maker tile / model card / version row:** opens the next level; the eye button opens the existing quick-view overlay unchanged.
+- **Filter pills:** narrow the versions list.
+- **Tabs:** switch sections on the car page; the URL changes so a tab can be linked.
+- **Add / Edit spec:** opens the right panel; "Also save to these sister cars" saves the same spec to every ticked car in one save.
+- **Add parts (from Parts on file):** opens Add parts with this car already selected.
+- **Retire / Undo:** always an in-app dialog.
+- **Keyboard:** "/" focuses search; Enter opens; Esc closes panels.
+
+
+Spec screens / Area
+| Screen | Area |
+|---|---|
+| 1 | Vehicles home — search, maker logos, recently opened, needs attention |
+| 2 | A maker — models grid, maker logo edit |
+| 3 | A model — versions in plain words, filters, sister cars, quick-view eye kept |
+| 4 | Car page — Overview facts, "Not on file" |
+| 5 | Car page — Car specs grouped with sources |
+| 6 | Add/edit a spec — example values, source, also save to sister cars |
+| 7 | Car page — Parts on file by area, key parts checklist |
+| 8 | Sister cars tab and History tab with Undo |
+| 9 | Add a car — one question at a time, duplicate check |
+| 10 | States — no results, loading, couldn't load, retire dialog |
+| 11 | Dark mode — versions, car specs |
+| 12 | Phone 390px — home, versions, car specs |

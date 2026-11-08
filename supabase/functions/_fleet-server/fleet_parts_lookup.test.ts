@@ -5,9 +5,10 @@
 import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { readFleetPartLookup } from "./fleet_parts_lookup.ts";
 
-function mockSb(data: unknown, error: { message: string } | null = null) {
+function mockSb(data: unknown, error: { message: string } | null = null, versions: unknown[] = []) {
   return {
     rpc: () => Promise.resolve({ data, error }),
+    from: () => ({ select: () => ({ in: () => Promise.resolve({ data: versions, error: null }) }) }),
   };
 }
 
@@ -37,10 +38,11 @@ Deno.test("lookup maps fits with engine field", async () => {
       linkType: "DIRECT",
       trust: "confirmed",
     }],
-  }) as never, { partId, vehicleCatalogId: "e2000005-0000-4000-8000-000000000010" });
+  }, null, [{ id: "e2000005-0000-4000-8000-000000000010", trim_series: "Pre-Facelift" }]) as never, { partId, vehicleCatalogId: "e2000005-0000-4000-8000-000000000010" });
   assertEquals(out.status, 200);
   if ("body" in out) {
     assertEquals(out.body!.alsoFits[0].engine, "FX-1KR");
     assertEquals(out.body!.alsoFits[0].isYourCar, true);
+    assertEquals(out.body!.alsoFits[0].version, "Pre-Facelift");
   }
 });

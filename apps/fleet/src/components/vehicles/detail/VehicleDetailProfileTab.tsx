@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { FileText, Upload, Loader2 } from 'lucide-react';
+import { Eye, FileText, Upload, Loader2 } from 'lucide-react';
 import { Button } from '../../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../ui/card';
 import { Badge } from '../../ui/badge';
@@ -15,6 +15,11 @@ import {
   type VehicleServiceLine,
 } from '../../../utils/vehicleServiceLines';
 import { cn } from '../../ui/utils';
+import {
+  formatVehicleDocumentExpiryLine,
+  getVehicleDocumentExpiryState,
+} from '../../../utils/vehicleDocumentDisplay';
+import { VehicleDocumentDetailsDialog } from './VehicleDocumentDetailsDialog';
 
 export type VehicleDetailGeneralInfoFields = {
   make: string;
@@ -67,6 +72,7 @@ export function VehicleDetailProfileTab({
   const showPlatformEditor = orgServiceLines.length > 1 && Boolean(onSaveServiceLines);
   const [draftLines, setDraftLines] = useState<VehicleServiceLine[]>(() => vehicleServiceLines(vehicle));
   const [savingLines, setSavingLines] = useState(false);
+  const [viewingDocument, setViewingDocument] = useState<VehicleDocument | null>(null);
 
   useEffect(() => {
     setDraftLines(vehicleServiceLines(vehicle));
@@ -228,33 +234,69 @@ export function VehicleDetailProfileTab({
                   </TabsContent>
 
                   <TabsContent value="documents" className="space-y-6">
-                      <Card>
+                      <Card className="dark:bg-slate-900 dark:border-slate-800">
                           <CardHeader>
                               <div className="flex justify-between items-center">
-                                  <CardTitle>Documents</CardTitle>
+                                  <CardTitle className="dark:text-slate-50">Documents</CardTitle>
                                   <Button variant="outline" size="sm" onClick={() => setIsUploadOpen(true)}>
                                       <Upload className="h-4 w-4 mr-2" /> Upload
                                   </Button>
                               </div>
                           </CardHeader>
                           <CardContent>
-                              <div className="space-y-2">
-                                  {documents.map(doc => (
-                                      <div key={doc.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100">
-                                          <div className="flex items-center gap-3">
-                                              <FileText className="h-5 w-5 text-indigo-500" />
-                                              <div>
-                                                  <p className="font-medium text-sm text-slate-900">{doc.name}</p>
-                                                  <p className="text-xs text-slate-500">Expires: {doc.expiryDate || 'N/A'}</p>
+                              <div className="space-y-2" data-testid="vehicle-documents-list">
+                                  {documents.map(doc => {
+                                    const expiryState = getVehicleDocumentExpiryState(doc.expiryDate, doc.status);
+                                    return (
+                                      <div
+                                        key={doc.id}
+                                        className="flex items-center justify-between gap-2 p-3 bg-slate-50 dark:bg-slate-800/60 rounded-lg border border-slate-100 dark:border-slate-700"
+                                        data-testid={`vehicle-document-row-${doc.id}`}
+                                      >
+                                          <div className="flex items-center gap-3 min-w-0 flex-1">
+                                              <FileText className="h-5 w-5 text-indigo-500 shrink-0" />
+                                              <div className="min-w-0">
+                                                  <p className="font-medium text-sm text-slate-900 dark:text-slate-100 truncate">{doc.name}</p>
+                                                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                                                    Expires: {formatVehicleDocumentExpiryLine(doc.expiryDate)}
+                                                  </p>
                                               </div>
                                           </div>
-                                          <Badge variant={doc.status === 'Verified' ? 'default' : 'secondary'}>{doc.status}</Badge>
+                                          <div className="flex items-center gap-2 shrink-0">
+                                            <Badge
+                                              variant="outline"
+                                              className={cn('font-medium', expiryState.badgeClassName)}
+                                              data-testid={`vehicle-document-badge-${doc.id}`}
+                                            >
+                                              {expiryState.statusLabel}
+                                            </Badge>
+                                            <Button
+                                              type="button"
+                                              variant="outline"
+                                              size="icon"
+                                              className="h-9 w-9 border-slate-200 dark:border-slate-600"
+                                              aria-label={`View details for ${doc.name}`}
+                                              data-testid={`vehicle-document-view-${doc.id}`}
+                                              onClick={() => setViewingDocument(doc)}
+                                            >
+                                              <Eye className="h-4 w-4" />
+                                            </Button>
+                                          </div>
                                       </div>
-                                  ))}
-                                  {documents.length === 0 && <p className="text-sm text-slate-500 text-center py-4">No documents uploaded.</p>}
+                                    );
+                                  })}
+                                  {documents.length === 0 && <p className="text-sm text-slate-500 dark:text-slate-400 text-center py-4">No documents uploaded.</p>}
                               </div>
                           </CardContent>
                       </Card>
+                      <VehicleDocumentDetailsDialog
+                        doc={viewingDocument}
+                        vehicle={vehicle}
+                        open={viewingDocument != null}
+                        onOpenChange={(open) => {
+                          if (!open) setViewingDocument(null);
+                        }}
+                      />
                   </TabsContent>
 
                   <TabsContent value="maintenance" className="space-y-6">

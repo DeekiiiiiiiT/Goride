@@ -60,6 +60,7 @@ import {
   isPlatformOwnerFromAuthUser,
   platformMfaRequiredResponse,
   rbacUserFromSupabaseUser,
+  resolveLoginAccess,
   type RbacUser,
 } from "./rbac_middleware.ts";
 import { logAdminAction, getAuditLogs, getAuditLogsByActor } from "./audit_log.ts";
@@ -84,7 +85,6 @@ import { assertExpectedUpdatedAt, stripConcurrencyToken } from "./optimistic_con
 import {
   resolveProductLine,
   inferProductLineFromUser,
-  assertFleetOwnerProductLine,
   isEnabledBusinessType,
   isProductLine,
   ALL_BUSINESS_TYPES,
@@ -10126,8 +10126,11 @@ export function registerResidualMonolithRoutes(app: Hono) {
         }, 401);
       }
 
-      // Fleet portal: admin / fleet_owner (app_metadata.roles or legacy user_metadata.role)
-      if (!userCanAccessFleetPortal(data.user)) {
+      // Fleet portal: admin / fleet_owner on the login, or an active staff seat
+      // (manager / accountant / viewer). Staff roles come from seats only.
+      const ownerLogin = userCanAccessFleetPortal(data.user);
+      const seatAccess = ownerLogin ? null : await resolveLoginAccess(data.user);
+      if (!ownerLogin && !seatAccess?.portal) {
         await anonClient.auth.signOut();
         await recordFailedAttempt(clientIp, 'fleet');
         await recordFailedAttempt(email.toLowerCase(), 'fleet');
@@ -10138,11 +10141,13 @@ export function registerResidualMonolithRoutes(app: Hono) {
         }, 401);
       }
 
-      const userRole = data?.user?.user_metadata?.role ?? 'admin';
+      const userRole = seatAccess?.staffRole ?? data?.user?.user_metadata?.role ?? 'admin';
 
       const loginProductLine = resolveProductLine(c);
-      const ownerProductLine = inferProductLineFromUser(data.user?.user_metadata as Record<string, unknown>);
-      if (!assertFleetOwnerProductLine(data.user?.user_metadata as Record<string, unknown>, loginProductLine)) {
+      // A staff seat carries its own product line; owners keep the login's.
+      const ownerProductLine = seatAccess?.productLine
+        ?? inferProductLineFromUser(data.user?.user_metadata as Record<string, unknown>);
+      if (ownerProductLine !== loginProductLine) {
         await anonClient.auth.signOut();
         await recordFailedAttempt(clientIp, 'fleet');
         await recordFailedAttempt(email.toLowerCase(), 'fleet');

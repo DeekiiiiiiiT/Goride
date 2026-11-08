@@ -1,5 +1,7 @@
 // Stitch AP12 — position + spec fields per part type
+import { useEffect, useState } from "react";
 import { MaterialIcon } from "../import/MaterialIcon";
+import { PartsButton } from "../PartsButton";
 import type { AddPartsDraft, PartTypeRow } from "./addPartsTypes";
 
 const AXLE_POSITIONS = [
@@ -104,13 +106,129 @@ export function ChassisCornerDiagram({
   );
 }
 
+const SIDE_OPTIONAL = [
+  { id: "left", label: "Left" },
+  { id: "right", label: "Right" },
+] as const;
+
+const CATALOGUE_NUMBERS = [1, 2, 3] as const;
+
+export function AxleNumberedPositionBlock({
+  position,
+  side,
+  catalogueNumber,
+  onPosition,
+  onSide,
+  onCatalogue,
+}: {
+  position: string;
+  side: string;
+  catalogueNumber?: number;
+  onPosition: (pos: string) => void;
+  onSide: (side: string) => void;
+  onCatalogue: (n: number | undefined) => void;
+}) {
+  const [sidePickerOpen, setSidePickerOpen] = useState(() => side === "left" || side === "right");
+  useEffect(() => {
+    if (side === "left" || side === "right") setSidePickerOpen(true);
+  }, [side]);
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-3 flex-wrap">
+        <AxlePositionButtons position={position} axleLabel="plain" onPick={(pos) => onPosition(pos)} />
+        <div className="inline-flex rounded-lg bg-surface-container p-0.5 gap-0.5">
+          {CATALOGUE_NUMBERS.map((n) => {
+            const active = catalogueNumber === n;
+            return (
+              <button
+                key={n}
+                type="button"
+                className={
+                  active
+                    ? "px-2.5 py-1 rounded-md bg-primary-container text-on-primary font-label-md text-label-md font-semibold shadow-xs"
+                    : "px-2.5 py-1 rounded-md text-on-surface-variant hover:text-on-surface font-label-md text-label-md"
+                }
+                aria-pressed={active}
+                onClick={() => onCatalogue(active ? undefined : n)}
+              >
+                {`No.${n}`}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      {sidePickerOpen ? (
+        <div className="inline-flex rounded-lg bg-surface-container p-0.5 gap-0.5 self-start">
+          {SIDE_OPTIONAL.map((s) => {
+            const active = side === s.id;
+            return (
+              <button
+                key={s.id}
+                type="button"
+                className={
+                  active
+                    ? "px-2.5 py-1 rounded-md bg-primary-container text-on-primary font-label-md text-label-md font-semibold shadow-xs"
+                    : "px-2.5 py-1 rounded-md text-on-surface-variant hover:text-on-surface font-label-md text-label-md"
+                }
+                aria-pressed={active}
+                onClick={() => {
+                  const next = active ? "" : s.id;
+                  onSide(next);
+                  if (!next) setSidePickerOpen(false);
+                }}
+              >
+                {s.label}
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        <PartsButton variant="secondary" className="self-start text-body-sm" onClick={() => setSidePickerOpen(true)}>
+          This part has a left and right
+        </PartsButton>
+      )}
+    </div>
+  );
+}
+
 export function AxlePositionButtons({
   position,
+  axleLabel = "axle",
   onPick,
 }: {
   position: string;
+  axleLabel?: "axle" | "plain";
   onPick: (pos: string, side: string) => void;
 }) {
+  if (axleLabel === "plain") {
+    const plain = [
+      { id: "front", label: "Front" },
+      { id: "rear", label: "Rear" },
+    ];
+    return (
+      <div className="inline-flex rounded-lg bg-surface-container p-0.5 gap-0.5">
+        {plain.map((p) => {
+          const active = position === p.id;
+          return (
+            <button
+              key={p.id}
+              type="button"
+              className={
+                active
+                  ? "px-2.5 py-1 rounded-md bg-primary-container text-on-primary font-label-md text-label-md font-semibold shadow-xs"
+                  : "px-2.5 py-1 rounded-md text-on-surface-variant hover:text-on-surface font-label-md text-label-md"
+              }
+              aria-pressed={active}
+              onClick={() => onPick(p.id, "")}
+            >
+              {p.label}
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
   return (
     <div className="grid grid-cols-2 gap-space-sm">
       {AXLE_POSITIONS.map((p) => {
@@ -193,6 +311,9 @@ export function PositionChips({
   }
   if (scheme === "front_rear_side") {
     return <TriplePositionRow options={FRONT_REAR_SIDE} position={position} onPick={onPick} />;
+  }
+  if (scheme === "axle_numbered") {
+    return null;
   }
   if (scheme === "four_corners" || scheme === "axle_left_right") {
     return (

@@ -3,7 +3,7 @@
  * Does not replace FixedExpenseConfig; assignments project into that shape.
  */
 
-import type { CanonicalExpenseFrequency, ExpenseCategory } from './expenses';
+import type { CanonicalExpenseFrequency, ExpenseCategory } from './expenses.ts';
 
 export type ExpenseDocumentStatus =
   | 'draft'

@@ -4,8 +4,9 @@ import { useQuery } from "@tanstack/react-query";
 import { MaterialIcon } from "../../import/MaterialIcon";
 import type { AddPartsDraft } from "../addPartsTypes";
 import { searchAddPartVehicles, type AddPartVehicleRow, type SelfServePreview } from "../addPartsApi";
+import { applyPreviewListingTrust, defaultListingTrust, patchSpecificListing } from "../addPartsShared";
 import { fetchVehicleOptions } from "../../partsDatabaseApi";
-import { PositionChips, AxlePositionButtons } from "../Step2FitBlock";
+import { PositionChips, AxlePositionButtons, AxleNumberedPositionBlock } from "../Step2FitBlock";
 import { PartsButton } from "../../PartsButton";
 import { RequestCarPanel } from "../states/RequestCarPanel";
 
@@ -29,18 +30,6 @@ function sourceTypePhrase(t: string): string {
   if (t === "car_maker_catalogue") return "Car maker catalogue";
   if (t === "part_maker_catalogue") return "Part maker catalogue";
   return "Other source";
-}
-
-function defaultListingTrust(
-  preview: SelfServePreview | null | undefined,
-  vehicleId: string,
-): "confirmed" | "needs_checking" | undefined {
-  // Only the server decides the default (from the link and the trusted-sources list).
-  // Until it has answered for this car, leave it blank so its answer can fill it in.
-  const row = preview?.listingTrustPreview?.find((x) => x.catalogId === vehicleId);
-  if (row?.trust === "confirmed") return "confirmed";
-  if (row?.trust === "needs_checking") return "needs_checking";
-  return undefined;
 }
 
 const emptyFilters = { make: "", model: "", chassis: "", engine: "", yearFrom: "", yearTo: "" };
@@ -111,14 +100,7 @@ export function Step2SpecificCars({
     if (!preview?.listingTrustPreview?.length) return;
     setDraft((d) => {
       if (!d.listings.length) return d;
-      const next = d.listings.map((l) => {
-        const auto = defaultListingTrust(preview, l.vehicleId);
-        if (auto === undefined || l.listingTrust === auto) return l;
-        if (l.listingTrust === undefined || l.listingTrust === null) {
-          return { ...l, listingTrust: auto };
-        }
-        return l;
-      });
+      const next = applyPreviewListingTrust(d.listings, preview);
       if (!next.some((l, i) => l.listingTrust !== d.listings[i]?.listingTrust)) return d;
       return { ...d, listings: next };
     });
@@ -135,6 +117,19 @@ export function Step2SpecificCars({
       position: pos,
       side,
       listings: draft.listings.map((l) => ({ ...l, position: pos, side })),
+    });
+  }
+
+  function setNumberedFit(patch: Partial<Pick<AddPartsDraft, "position" | "side" | "catalogueNumber">>) {
+    const next = {
+      position: patch.position ?? draft.position,
+      side: patch.side !== undefined ? patch.side : draft.side,
+      catalogueNumber: patch.catalogueNumber !== undefined ? patch.catalogueNumber : draft.catalogueNumber,
+    };
+    setDraft({
+      ...draft,
+      ...next,
+      listings: draft.listings.map((l) => ({ ...l, ...next })),
     });
   }
 
@@ -156,6 +151,7 @@ export function Step2SpecificCars({
             label,
             position: draft.position,
             side: draft.side,
+            catalogueNumber: draft.catalogueNumber,
             yearFrom: v.production_start_year ?? undefined,
             yearTo,
             listingTrust: lt,
@@ -167,10 +163,7 @@ export function Step2SpecificCars({
   }
 
   function patchListing(vehicleId: string, patch: Partial<AddPartsDraft["listings"][number]>) {
-    setDraft({
-      ...draft,
-      listings: draft.listings.map((l) => (l.vehicleId === vehicleId ? { ...l, ...patch } : l)),
-    });
+    setDraft((d) => patchSpecificListing(d, vehicleId, patch));
   }
 
   if (!draft.partType) return null;
@@ -369,6 +362,15 @@ export function Step2SpecificCars({
               <p className="font-headline-md text-on-surface">Where on the car?</p>
               {draft.partType.positionScheme === "axle" || draft.partType.positionScheme === "axle_inner_outer" ? (
                 <AxlePositionButtons position={globalAxlePosition} onPick={setAxlePosition} />
+              ) : draft.partType.positionScheme === "axle_numbered" ? (
+                <AxleNumberedPositionBlock
+                  position={globalAxlePosition}
+                  side={draft.side}
+                  catalogueNumber={draft.catalogueNumber}
+                  onPosition={(pos) => setNumberedFit({ position: pos })}
+                  onSide={(side) => setNumberedFit({ side })}
+                  onCatalogue={(n) => setNumberedFit({ catalogueNumber: n })}
+                />
               ) : (
                 <PositionChips
                   scheme={draft.partType.positionScheme}
@@ -422,7 +424,7 @@ export function Step2SpecificCars({
                             ? "px-3 py-1.5 rounded-md font-label-xs font-semibold bg-primary-container text-on-primary"
                             : "px-3 py-1.5 rounded-md font-label-xs text-on-surface-variant"
                         }
-                        onClick={() => patchListing(l.vehicleId, { listingTrust: "confirmed", reason: "" })}
+                        onClick={() => patchListing(l.vehicleId, { listingTrust: "confirmed", listingTrustManual: true, reason: "" })}
                       >
                         Confirmed
                       </button>
@@ -433,7 +435,7 @@ export function Step2SpecificCars({
                             ? "px-3 py-1.5 rounded-md font-label-xs font-semibold bg-amber-500/20 text-amber-900 dark:text-amber-100"
                             : "px-3 py-1.5 rounded-md font-label-xs text-on-surface-variant"
                         }
-                        onClick={() => patchListing(l.vehicleId, { listingTrust: "needs_checking" })}
+                        onClick={() => patchListing(l.vehicleId, { listingTrust: "needs_checking", listingTrustManual: true })}
                       >
                         Needs checking
                       </button>

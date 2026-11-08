@@ -6,7 +6,7 @@ import type { Context } from "npm:hono@4.3.11";
 import { requireAuth, requirePermission, requireAnyPermission } from "../rbac_middleware.ts";
 import { getOrgId } from "../org_scope.ts";
 import { loadLatestMaintenanceJobRun, insertMaintenanceAuditLog } from "../maintenance_logging_helpers.ts";
-import { fleetDb } from "../repos/baseRepo.ts";
+import { fleetDb, fleetTable } from "../repos/baseRepo.ts";
 
 type RouteApp = {
   get: (path: string, ...handlers: unknown[]) => void;
@@ -77,7 +77,7 @@ export function registerMaintenanceAlertsKpiRoutes(route: RouteApp, supabase: Su
         });
         return c.json({ items });
       } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : String(e);
+        const msg = errorMessage(e);
         return c.json({ error: msg }, 500);
       }
     },
@@ -97,7 +97,7 @@ export function registerMaintenanceAlertsKpiRoutes(route: RouteApp, supabase: Su
         if (error) throw error;
         return c.json({ checks: data || [] });
       } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : String(e);
+        const msg = errorMessage(e);
         return c.json({ error: msg }, 500);
       }
     },
@@ -111,7 +111,7 @@ export function registerMaintenanceAlertsKpiRoutes(route: RouteApp, supabase: Su
         const orgId = getOrgId(c);
         if (!orgId) return c.json({ error: "Organization required" }, 400);
         const { data, error } = await fleetDb()
-          .from("maintenance_kpi_monthly_v")
+          .from(fleetTable("maintenance_kpi_monthly_v"))
           .select("*")
           .eq("organization_id", orgId)
           .order("month_start", { ascending: false })
@@ -119,7 +119,7 @@ export function registerMaintenanceAlertsKpiRoutes(route: RouteApp, supabase: Su
         if (error) throw error;
         return c.json({ items: data || [] });
       } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : String(e);
+        const msg = errorMessage(e);
         return c.json({ error: msg }, 500);
       }
     },
@@ -135,7 +135,7 @@ export function registerMaintenanceAlertsKpiRoutes(route: RouteApp, supabase: Su
         const run = await loadLatestMaintenanceJobRun(orgId);
         return c.json({ run: run ?? null });
       } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : String(e);
+        const msg = errorMessage(e);
         return c.json({ error: msg }, 500);
       }
     },
@@ -151,7 +151,7 @@ export function registerMaintenanceAlertsKpiRoutes(route: RouteApp, supabase: Su
         if (!driverId) return c.json({ error: "Unauthorized" }, 401);
         const orgId = getOrgId(c);
         const q = fleetDb()
-          .from("driver_maintenance_notifications")
+          .from(fleetTable("driver_maintenance_notifications"))
           .select("*")
           .eq("driver_user_id", driverId)
           .order("created_at", { ascending: false })
@@ -162,7 +162,7 @@ export function registerMaintenanceAlertsKpiRoutes(route: RouteApp, supabase: Su
         if (error) throw error;
         return c.json({ items: data || [] });
       } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : String(e);
+        const msg = errorMessage(e);
         return c.json({ error: msg }, 500);
       }
     },
@@ -178,7 +178,7 @@ export function registerMaintenanceAlertsKpiRoutes(route: RouteApp, supabase: Su
         if (!driverId) return c.json({ error: "Unauthorized" }, 401);
         const id = c.req.param("id");
         const { data, error } = await fleetDb()
-          .from("driver_maintenance_notifications")
+          .from(fleetTable("driver_maintenance_notifications"))
           .update({ read_at: new Date().toISOString() })
           .eq("id", id)
           .eq("driver_user_id", driverId)
@@ -188,7 +188,7 @@ export function registerMaintenanceAlertsKpiRoutes(route: RouteApp, supabase: Su
         if (!data) return c.json({ error: "Not found" }, 404);
         return c.json({ item: data });
       } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : String(e);
+        const msg = errorMessage(e);
         return c.json({ error: msg }, 500);
       }
     },
@@ -242,9 +242,18 @@ export function registerMaintenanceAlertsKpiRoutes(route: RouteApp, supabase: Su
 
         return c.json({ item: updated });
       } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : String(e);
+        const msg = errorMessage(e);
         return c.json({ error: msg }, 500);
       }
     },
   );
+}
+
+/** Database errors are plain objects, not Error; read their message. */
+function errorMessage(e: unknown): string {
+  if (e instanceof Error) return e.message;
+  if (e && typeof e === "object" && typeof (e as { message?: unknown }).message === "string") {
+    return (e as { message: string }).message;
+  }
+  return String(e);
 }

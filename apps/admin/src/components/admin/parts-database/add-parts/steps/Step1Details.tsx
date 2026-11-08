@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { AddPartsDraft, SourceType } from "../addPartsTypes";
 import { fetchTopBrandsForPartType } from "../addPartsApi";
 import type { SelfServePreview } from "../addPartsApi";
-import { CAR_MAKER_CATALOGUE_OPTIONS, PartTypeIcon, normalizePartNumberKey, effectiveTrustLabel, isVerifiedTrustLabel } from "../addPartsShared";
+import { CAR_MAKER_CATALOGUE_OPTIONS, PartTypeIcon, draftFromPartLookup, normalizePartNumberKey, effectiveTrustLabel, isVerifiedTrustLabel, type SelfServePartLookup } from "../addPartsShared";
 import { MaterialIcon } from "../../import/MaterialIcon";
 import { PartsButton } from "../../PartsButton";
 import { PartExistsPanel } from "../states/PartExistsPanel";
@@ -106,7 +106,7 @@ export function Step1Details({
       ) : lookup?.found ? (
         <PartExistsPanel
           onAddMore={() => {
-            setDraft({ ...draft, existingPartId: String(lookup.partId) });
+            setDraft(draftFromPartLookup(draft, lookup as SelfServePartLookup));
           }}
           onDifferent={onDismissDuplicate}
           label={`${String(lookup.brand)} ${String(lookup.number)} · ${String(lookup.listingCount)} fits on file`}

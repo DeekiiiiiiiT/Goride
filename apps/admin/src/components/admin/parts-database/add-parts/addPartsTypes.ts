@@ -40,10 +40,13 @@ export type AddPartsDraft = {
     label?: string;
     position?: string;
     side?: string;
+    catalogueNumber?: number;
     yearFrom?: number;
     yearTo?: number;
     /** Specific-cars step: Confirmed vs Needs checking per listing */
     listingTrust?: "confirmed" | "needs_checking";
+    /** Set when the owner picks Confirmed / Needs checking; preview must not overwrite */
+    listingTrustManual?: boolean;
     reason?: string;
   }>;
   engineFamilyId: string;
@@ -54,10 +57,81 @@ export type AddPartsDraft = {
   specValues: Record<string, string>;
   position: string;
   side: string;
+  catalogueNumber?: number;
   factoryNumbers: Array<{ brand: string; number: string }>;
   existingPartId: string | null;
   skipReplacesStep: boolean;
 };
+
+export type CatalogVehicleListing = {
+  vehicleId: string;
+  yearFrom?: number;
+  yearTo?: number;
+  trust?: "confirmed" | "needs_checking";
+  reason?: string;
+  label?: string;
+  make?: string;
+  model?: string;
+  chassisCode?: string | null;
+  /** Plain difference line for Selected panel (e.g. 2WD · 1.0 petrol) */
+  diffLabel?: string;
+  /** A8: cars already on file — shown locked, not sent as new fits */
+  locked?: boolean;
+};
+
+export type CatalogPartRow = {
+  clientId: string;
+  partTypeId: string;
+  partType?: PartTypeRow | null;
+  brand: string;
+  partNumber: string;
+  position?: string;
+  side?: string;
+  catalogueNumber?: number;
+  existingPartId?: string | null;
+  factoryNumbers?: Array<{ brand: string; number: string }>;
+};
+
+export type CatalogLinkHints = {
+  ok?: boolean;
+  host?: string | null;
+  trustedSite?: boolean;
+  catalogMaker?: string | null;
+  frameCodes?: string[];
+  sourceTrust?: string;
+  error?: string;
+};
+
+export type CatalogPageDraft = {
+  evidenceUrl: string;
+  sourceType: SourceType;
+  catalogCarMaker: string;
+  madeByCarMaker: boolean | null;
+  partKind: "oem" | "aftermarket";
+  linkHints: CatalogLinkHints | null;
+  vehicleListings: CatalogVehicleListing[];
+  partRows: CatalogPartRow[];
+  brandDefault: string;
+  /** A8 extend part flow */
+  extendMode?: boolean;
+  extendPartId?: string | null;
+  extendPartLabel?: string;
+  extendListingCount?: number;
+};
+
+export function emptyCatalogDraft(): CatalogPageDraft {
+  return {
+    evidenceUrl: "",
+    sourceType: "car_maker_catalogue",
+    catalogCarMaker: "",
+    madeByCarMaker: null,
+    partKind: "oem",
+    linkHints: null,
+    vehicleListings: [],
+    partRows: [],
+    brandDefault: "",
+  };
+}
 
 export function emptyDraft(): AddPartsDraft {
   return {
@@ -79,6 +153,7 @@ export function emptyDraft(): AddPartsDraft {
     specValues: {},
     position: "",
     side: "",
+    catalogueNumber: undefined,
     factoryNumbers: [],
     existingPartId: null,
     skipReplacesStep: false,

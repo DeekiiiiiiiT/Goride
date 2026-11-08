@@ -1,4 +1,4 @@
-﻿-- Phase 3b (3b-09): part trust from evidence link via source_trust, not sourceType alone.
+-- Phase 3b (3b-09): part trust from evidence link via source_trust, not sourceType alone.
 
 CREATE OR REPLACE FUNCTION public.save_self_serve_part(p_input jsonb)
 RETURNS jsonb

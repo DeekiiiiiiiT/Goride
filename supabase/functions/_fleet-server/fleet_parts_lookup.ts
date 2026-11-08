@@ -41,6 +41,21 @@ export async function readFleetPartLookup(supabase: SupabaseClient, input: Fleet
     : null;
 
   const rawFits = Array.isArray(body.fits) ? body.fits : [];
+  // Several catalog versions share make/model/chassis/years (e.g. Demio DE5FS Sport CVT / Sport 5MT / 15C):
+  // add the version so the Also fits rows can be told apart.
+  const fitIds = [...new Set(rawFits.map((row) => String((row as { variantId?: unknown })?.variantId ?? "")).filter((id) => UUID_RE.test(id)))];
+  const versionById = new Map<string, string>();
+  if (fitIds.length) {
+    const { data: versions, error: versionErr } = await supabase
+      .from("vehicle_catalog")
+      .select("id, trim_series")
+      .in("id", fitIds);
+    if (versionErr) throw versionErr;
+    for (const v of (versions ?? []) as Array<{ id: string; trim_series?: string | null }>) {
+      const t = String(v.trim_series ?? "").trim();
+      if (t) versionById.set(String(v.id), t);
+    }
+  }
   const alsoFits = rawFits.map((row) => {
     const fit = (row && typeof row === "object" ? row : {}) as Record<string, unknown>;
     const link = String(fit.linkType ?? "DIRECT");
@@ -54,6 +69,7 @@ export async function readFleetPartLookup(supabase: SupabaseClient, input: Fleet
       make: String(fit.make ?? ""),
       model: String(fit.model ?? ""),
       chassis: String(fit.chassis ?? ""),
+      version: versionById.get(variantId) ?? "",
       engine: String(fit.engine ?? ""),
       years: String(fit.years ?? ""),
       trust,

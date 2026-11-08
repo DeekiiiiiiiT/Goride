@@ -20,7 +20,6 @@ import { PartsButton } from "../PartsButton";
 import { readCatalogFilters, writeCatalogSearch, type CatalogMatch } from "../partsCatalogUrl";
 import { fetchPartMatchHealth } from "../../../../services/partsAutoMatchApi";
 import { FullDatabaseDrawer } from "./FullDatabaseDrawer";
-import { MasterRepositoryIndex } from "./MasterRepositoryIndex";
 import { FullDatabaseFilterPanel } from "./FullDatabaseFilterPanel";
 import { FullDatabaseGroupedTable } from "./FullDatabaseGroupedTable";
 import { FullDatabaseSummaryBar } from "./FullDatabaseSummaryBar";
@@ -240,9 +239,6 @@ export function FullDatabaseTab({
     () => [...parts.oem, ...parts.engine, ...parts.aftermarket],
     [parts],
   );
-  const repositoryTitle = assembly
-    ? `Master Repository Index: ${assembly}`
-    : "Master Repository Index";
   const changedAt = overview.data?.lastCatalogChangeAt;
   const changedLabel = changedAt
     ? new Date(changedAt).toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).toUpperCase()
@@ -258,7 +254,7 @@ export function FullDatabaseTab({
         </button>
       </div>
       <div className="p-margin flex items-start gap-space-lg">
-        <aside className={`${filtersOpen ? "fixed inset-x-0 bottom-0 z-40 max-h-[80vh] overflow-y-auto rounded-t-xl shadow-2xl" : "hidden"} lg:flex lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto lg:w-[280px] lg:shrink-0 lg:rounded-xl lg:shadow-sm w-full bg-surface-container-lowest border border-outline-variant/40 p-space-md flex-col`}>
+        <aside className={`${filtersOpen ? "fixed inset-x-0 bottom-0 z-40 max-h-[80vh] overflow-y-auto rounded-t-xl shadow-2xl" : "hidden"} lg:flex lg:sticky lg:top-24 lg:self-start lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto lg:w-[280px] lg:shrink-0 lg:rounded-xl lg:shadow-sm w-full bg-surface-container-lowest border border-outline-variant/40 p-space-md flex-col`}>
           <div className="lg:hidden flex justify-end mb-2">
             <PartsButton variant="secondary" onClick={() => setFiltersOpen(false)}>Close</PartsButton>
           </div>
@@ -314,30 +310,7 @@ export function FullDatabaseTab({
               </div>
             </div>
           ) : null}
-          {openId ? (
-            <div className="relative w-full flex gap-space-lg items-start">
-              <MasterRepositoryIndex
-                rows={indexRows}
-                activePartId={openId}
-                title={repositoryTitle}
-                totalLoaded={search.data?.total ?? indexRows.length}
-              />
-              <FullDatabaseDrawer
-                partId={openId}
-                inline
-                onClose={() => setOpenId("")}
-                onAddCar={() => {
-                  const row = indexRows.find((item) => item.partId === openId);
-                  onEditPart(row?.groupId ?? null);
-                }}
-                onEdit={() => {
-                  const row = indexRows.find((item) => item.partId === openId);
-                  onEditPart(row?.groupId ?? null);
-                }}
-              />
-            </div>
-          ) : null}
-          {!openId && search.data && !search.isLoading ? (
+          {search.data && !search.isLoading ? (
             <FullDatabaseGroupedTable
               match={match}
               parts={parts}
@@ -363,7 +336,7 @@ export function FullDatabaseTab({
               onAddEngine={onAddPart}
             />
           ) : null}
-          {!openId && search.data && !search.isLoading ? (
+          {search.data && !search.isLoading ? (
             <div className="w-full p-space-md rounded-xl bg-surface-container-lowest border border-outline-variant/40 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between shadow-sm">
               <div className="flex items-start gap-2 text-secondary font-body-sm text-body-sm">
                 <span className="material-symbols-outlined text-primary text-[20px]">verified_user</span>
@@ -390,6 +363,20 @@ export function FullDatabaseTab({
             <UniversalPartsSection owner={owner} editorOnly startId={universalEditId} onDismiss={() => { setUniversalEditor(""); setUniversalEditId(""); void client.invalidateQueries({ queryKey: ["catalog-master"] }); }} />
           </div>
         </div>
+      ) : null}
+      {openId ? (
+        <FullDatabaseDrawer
+          partId={openId}
+          onClose={() => setOpenId("")}
+          onAddCar={() => {
+            const row = indexRows.find((item) => item.partId === openId);
+            onEditPart(row?.groupId ?? null);
+          }}
+          onEdit={() => {
+            const row = indexRows.find((item) => item.partId === openId);
+            onEditPart(row?.groupId ?? null);
+          }}
+        />
       ) : null}
       {viewUniversal ? (
         <div className="fixed inset-0 z-50 bg-black/30 flex items-end sm:items-center justify-center p-4" onClick={() => setViewUniversal(null)}>

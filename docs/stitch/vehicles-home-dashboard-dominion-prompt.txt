@@ -1,0 +1,114 @@
+ROAM DOMINION — VEHICLES HOME AS A CALM DASHBOARD — FULL DESIGN PROMPT (GOOGLE STITCH)
+
+
+
+
+Roam Dominion - Vehicles home (Desktop Admin, for the owner and catalog editors, who are not mechanics):
+
+Redesign only the first page of the "Vehicles" section in the Roam Dominion admin console: the page you land on before you pick a maker or a car. Dominion is Roam's master database. Vehicles holds every car version in it (1,833 versions across 56 makers), and the Roam apps read their cars from here. This page shows the database itself and nothing from the apps: no fleets, drivers, customers, requests or usage. Today the home page is a search box, a makers card, two "Recently opened" cards and a "Needs attention" card. It looks empty and tells the owner nothing about the state of the catalogue. The new home is a calm dashboard. At a glance the owner sees how big the catalogue is, how complete it is (which cars have their key parts and specs on file), what changed lately, and what needs a person. It must stay uncluttered: a few clear cards, plenty of white space, every number a button that opens the list behind it. KEEP the "Needs attention" card and the "Recently opened" cards; they move into the new layout but keep their content and behaviour.
+
+
+BRAND IDENTITY:
+- Keep the Dominion console frame exactly as it is today:
+  - dark navy left sidebar "Dominion · Roam Admin Console" (MASTER DATA: Overview, Vehicles active, Places and Maps, Fuel, Tolls, Tax and Vendors; ENGINES; DISTRIBUTION; PLATFORM; BACK OFFICE)
+  - top bar: search "Search entities, engines, routes…" with ⌘K, moon icon, user "Deeki T · Owner"
+- No system labels anywhere: no "SYS_ID", "INDEX", "SCHEMA", "LIVE CLUSTER", "REPO CACHE", latency, version numbers or mono breadcrumb strips. The page title is simply "Vehicles" with the muted line "Every car Roam knows, and what each one needs."
+- Theme: "Calm modern workspace".
+- LIGHT MODE (default):
+  - Primary: #0153dc; primary container: #dbe1ff
+  - Success: #006e31 on #e6f4ea; warning: #8a5a00 on #fff4dc; error: #a83836 on #fdecec
+  - Outline: #797a84; hairlines #e6e7ee
+  - Background: #faf8fe; cards white, 16px radius, hairline border plus a very soft shadow (0 4px 16px rgba(1,83,220,0.04))
+  - Text: #30323b; muted text: #5d5f68
+- DARK MODE:
+  - Background #0b1220; cards #111a2e; hairlines #1e293b
+  - Text #e2e8f0; muted #94a3b8; primary #5b8def; success #4ade80; warning #fbbf24; error #f87171
+- Readiness colours (same everywhere): 8–10 of 10 green #006e31, 4–7 of 10 amber #8a5a00, 0–3 of 10 red #a83836. Bars are 6px tall, rounded, on a #eef0f6 track.
+- Maker logos in round tiles everywhere a maker is named; the logo comes first. A maker with no logo shows its first letter in a soft round tile.
+- Typography: Inter. Title 26px semibold, card titles 18px semibold, big numbers 32px semibold with tabular numerals, body 15px, hints 13px muted. Frame codes in a mono font, always AFTER the plain words.
+- Buttons always look like buttons: Primary = solid #0153dc; Secondary = white with a visible #c5c6d0 border; Danger = red #a83836 border and red text. Icon buttons 32px with a visible border. No underlined text links, no grey text-only buttons.
+- Sample data (the numbers are layout placeholders; real values come from the database):
+  - Catalogue: 1,833 versions · 56 makers · 63 cars with parts · 28 parts on file · 6 waiting to check.
+  - Makers: Toyota 236 versions, Honda 312, Nissan 284, Daihatsu 142, Mazda 119, Subaru 98.
+  - Catalogue completeness (key parts on file, out of 10): 8–10 ready 4 versions; 4–7 ready 59 versions; 1–3 ready 0 versions; none yet 1,770 versions. Car specs: 41 versions have specs, 1,792 have none.
+  - Most complete cars: Toyota Roomy 2016–2020 · 2WD (key parts 4 of 10, 6 specs); Toyota Tank 2016–2020 · 2WD (4 of 10, 6 specs); Toyota Roomy 2016–2020 · 4WD (4 of 10, 3 specs).
+  - Recently changed cars: "Toyota Roomy 2016–2020 · 2WD · specs edited · Deeki T · 7 Nov"; "Toyota Tank 2016–2020 · 2WD · brake fluid added · Deeki T · 7 Nov".
+  - Recently added parts: "Front brake hose No.1 · Toyota Roomy, Toyota Tank · 7 Nov"; "Rear handbrake cable No.3 · Toyota Roomy, Toyota Tank · 7 Nov"; "Front brake pads · Toyota Roomy, Toyota Tank · 7 Nov".
+  - Recently opened: Toyota Roomy 2016–2020 · 4WD · M910A; Toyota Roomy 2020 on · 4WD · M910A.
+
+
+DESIGN PRINCIPLES:
+- Desktop-first at 1440px; content column max 1120px. A 390px phone frame is included.
+- Calm, not busy: at most 6 cards on the page, each with one job. Nothing decorative: no charts that don't answer a question, no sparkline noise, no fake trends.
+- Every number is a button: clicking a count opens the list it counts.
+- Search stays first and big: one box finds any car by make, model, year, frame code or engine code.
+- Readiness means "key parts on file out of 10" for that car, shown the same way on every card.
+- Database only: every number on this page counts rows in Dominion (cars, makers, parts, specs, edits, rows waiting for approval). Nothing comes from Roam Fleet, Driver, Plug or any other app.
+- Empty sections say so in plain words with one button, never a blank card or a fake zero.
+- KEEP UNCHANGED: the "Needs attention" card (same rows and buttons) and the "Recently opened" cards (same click opens the car page). Clicking a maker tile still opens that maker's models.
+
+
+SCREEN 1: VEHICLES HOME — THE DASHBOARD (LIGHT)
+- Header row: title "Vehicles", muted line "Every car Roam knows, and what each one needs.", and on the right a secondary button "Import & tools" and a primary button "+ Add a car".
+- A large search box "Search a car — e.g. Toyota Roomy 2019, M900A, 1KR-FE", with small outlined "Try:" chips under it (Toyota Roomy, M900A, 1KR-FE, Tank 2019).
+- A row of 4 summary tiles (white cards, icon top right, big number, one muted line under it):
+  - "Car versions" · 1,833 · "across 56 makers"
+  - "Cars with parts" · 63 · "of 1,833 versions" with a thin progress bar
+  - "Parts on file" · 28 · "in the parts database"
+  - "Waiting to check" · 6 · "cars and parts for a person" (amber number when above 0)
+- Left column (wide):
+  - "How complete is the catalogue" card — one wide stacked bar across the card, split into 4 coloured parts by key parts on file: "8–10 ready" green, "4–7 ready" amber, "1–3 ready" red, "None yet" grey track. Under it, a legend row with each count ("4 versions", "59 versions", "0", "1,770"), each a button that opens that list. A second, thinner line under it: "Car specs: 41 versions have specs · 1,792 have none", with the numbers as buttons.
+  - "Most complete cars" list inside the same card (3 rows): maker logo, "Toyota Roomy" bold, "2016–2020 · 2WD" muted, the readiness bar "Key parts 4 of 10" and "6 specs" on the right, then a chevron. A secondary button "See all" at the top right of the list.
+  - "Makers" card — grid of maker logo tiles (3 across, 2 rows), each with the name and a muted "236 versions". A secondary button "All 56 makers" at the top right.
+  - "Recently opened" — the same compact car cards as today (logo, "Toyota Roomy", "2016–2020 · 4WD", mono "M910A" chip), 2 across, now with the readiness bar "Key parts 4 of 10" at the bottom of each card.
+- Right column (narrow):
+  - "Needs attention" card with a red count pill, KEPT from today. Rows, each a soft tinted box with an icon, a plain sentence and a secondary button:
+    - amber: "Looks like a duplicate · 128 possible duplicate versions" · "Review"
+    - grey: "12 cars have no specs yet" · "Review"
+    - grey: "5 makers have no logo" · "Add logos"
+    - grey: "6 rows waiting for approval" · "Open pending"
+    - When nothing needs a person: a green tick and "Nothing needs attention right now."
+  - "Recently added parts" card — the last 5 parts saved, each row: part name bold ("Front brake hose No.1"), the cars in muted text ("Toyota Roomy, Toyota Tank"), and the date on the right ("7 Nov"). A secondary button "Open parts database".
+  - "Recently changed cars" card — the last 5 edits to car versions, each row: maker logo, car and version ("Toyota Roomy 2016–2020 · 2WD"), what changed in plain words ("specs edited"), who and when muted ("Deeki T · 7 Nov").
+
+
+SCREEN 2: STATES
+- Frame A — loading: the same layout with soft grey skeleton blocks in each card (no spinners).
+- Frame B — could not load: a red banner at the top "Could not load the vehicles dashboard. Nothing was changed." with a secondary button "Try again"; the search box still works.
+- Frame C — empty sections: "Most complete cars" says "No car has key parts on file yet." with a primary button "Add a part"; "Recently changed cars" says "No edits yet."; "Recently opened" says "Cars you open will show here." ; "Recently added parts" says "No parts saved yet." with a primary button "Add a part".
+- Frame D — one tile failed: the "Cars with parts" tile shows "Not loaded" in muted text with a small outlined "Retry" button; the rest of the page is normal.
+
+
+SCREEN 3: DARK MODE
+- Screen 1 in dark mode with the dark tokens above. Readiness colours use the dark success / warning / error values. Logos sit on #1e293b round tiles.
+
+
+SCREEN 4: PHONE (390px)
+- One column, 16px side padding, in this order: header (buttons wrap under the title, full width), search, the 4 tiles as a 2 × 2 grid, Needs attention, How complete is the catalogue (the bar full width, legend wraps to 2 × 2), Recently opened (one per row), Makers (2 across), Recently added parts, Recently changed cars.
+
+
+ADDITIONAL UI COMPONENTS:
+- Summary tile: white card, label 13px uppercase-free plain words, icon 20px top right in a soft #dbe1ff circle, big number, muted line, optional thin progress bar.
+- Readiness bar: label "Key parts 4 of 10" on the left, the bar under it, colour by the readiness rule.
+- Completeness bar: 12px tall, rounded ends, four parts side by side in the readiness colours plus a grey "None yet" part; each legend item is a small coloured dot, the label and the count.
+- Attention row: tinted box (amber #fff4dc for duplicates, #f3f4f8 for the rest), 20px icon, sentence, secondary button on the right.
+- Maker tile: round logo 40px, name 15px semibold, muted version count, whole tile is a button with a hover border #0153dc.
+- Part feed row: name, cars, date; the whole row is a button.
+
+
+INTERACTIONS:
+- Clicking a summary tile opens the list behind it (all versions, cars with parts, the parts database, the waiting list).
+- Clicking a "Most complete cars" row, a "Recently changed cars" row or a "Recently opened" card opens that car's page.
+- Clicking a completeness legend count or a specs count opens the list of those versions.
+- Clicking a maker tile opens that maker's models; "All 56 makers" opens the full maker list.
+- Each "Needs attention" button opens its list (duplicates, cars without specs, makers without logos, pending catalog).
+- Clicking a "Recently added parts" row opens that part in the parts database.
+- Typing in the search box shows results under it as today.
+- Hover on any card or row: border turns #0153dc; focus rings are visible for keyboard users.
+
+
+Spec screens / Area
+Screen 1 — Vehicles home dashboard (light) / Vehicles
+Screen 2 — States: loading, could not load, empty sections, one tile failed / Vehicles
+Screen 3 — Dark mode / Vehicles
+Screen 4 — Phone 390px / Vehicles

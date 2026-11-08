@@ -297,6 +297,27 @@ export function registerFleetFindPartsRoutes(app: RouteApp, supabase: SupabaseCl
     }
   });
 
+  app.get(`${PREFIX}/catalog-makers`, ...view, async (c: Context) => {
+    try {
+      const LOGO_BUCKET = "catalog-maker-logos";
+      const { data, error } = await supabase.from("catalog_maker").select("make, logo_storage_path").order("make");
+      if (error) return c.json({ error: errorText(error) }, 500);
+      const items = (data ?? []).map((row) => {
+        const make = String((row as { make?: string }).make ?? "");
+        const storagePath = (row as { logo_storage_path?: string | null }).logo_storage_path?.trim() || null;
+        let logoUrl: string | null = null;
+        if (storagePath) {
+          const { data: pub } = supabase.storage.from(LOGO_BUCKET).getPublicUrl(storagePath);
+          logoUrl = pub?.publicUrl ?? null;
+        }
+        return { make, logoUrl };
+      });
+      return c.json({ items });
+    } catch (error) {
+      return c.json({ error: errorText(error) }, 500);
+    }
+  });
+
   app.get(`${PREFIX}/browse`, ...view, async (c: Context) => {
     try {
       const variantId = c.req.query("variantId")?.trim() || "";

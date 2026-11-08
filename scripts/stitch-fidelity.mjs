@@ -320,6 +320,11 @@ for (const row of fleetReadme.split('\n').filter((l) => /^\| FP\d/.test(l))) {
   const checked = /^(Ported|Built)/.test(status);
   const deferred = /^Deferred\b/i.test(status);
   const notStarted = /^Not started\b/.test(status);
+  // Screens replaced by a newer Stitch port (old files deleted on purpose).
+  if (/^Replaced\b/i.test(status)) {
+    if (report) console.log(`replaced ${num}`);
+    continue;
+  }
   if (deferred) {
     if (report) console.log(`deferred ${num}`);
     continue;

@@ -11,6 +11,9 @@ DO $$
 DECLARE
   v_actor uuid := '11111111-1111-4111-8111-111111111111'::uuid;
   v_brk_pads uuid;
+  v_brk_hose uuid;
+  v_brk_hbcable uuid;
+  v_brk_abs uuid;
   v_eng_oil uuid;
   v_eng_o2 uuid;
   v_wiper uuid;
@@ -33,6 +36,8 @@ DECLARE
   v_detail jsonb;
   v_area_cs uuid;
   v_batch_cs uuid;
+  v_pm_name text;
+  v_expected_name text;
 BEGIN
   SELECT c.id, c.parent_id INTO v_brk_pads, v_brk_area
   FROM public.maintenance_service_categories c
@@ -41,6 +46,18 @@ BEGIN
   IF v_brk_pads IS NULL THEN
     RAISE EXCEPTION 'Done test setup: BRK-PADS part type missing';
   END IF;
+
+  SELECT c.id INTO v_brk_hose FROM public.maintenance_service_categories c
+  WHERE c.op_code = 'BRK-HOSE' AND c.is_part IS TRUE AND c.part_type_status = 'active' LIMIT 1;
+  IF v_brk_hose IS NULL THEN RAISE EXCEPTION 'Done test setup: BRK-HOSE missing'; END IF;
+
+  SELECT c.id INTO v_brk_hbcable FROM public.maintenance_service_categories c
+  WHERE c.op_code = 'BRK-HBCABLE' AND c.is_part IS TRUE AND c.part_type_status = 'active' LIMIT 1;
+  IF v_brk_hbcable IS NULL THEN RAISE EXCEPTION 'Done test setup: BRK-HBCABLE missing'; END IF;
+
+  SELECT c.id INTO v_brk_abs FROM public.maintenance_service_categories c
+  WHERE c.op_code = 'BRK-ABS' AND c.is_part IS TRUE AND c.part_type_status = 'active' LIMIT 1;
+  IF v_brk_abs IS NULL THEN RAISE EXCEPTION 'Done test setup: BRK-ABS missing'; END IF;
 
   SELECT c.id INTO v_eng_oil FROM public.maintenance_service_categories c
   WHERE c.op_code = 'ENG-OIL' AND c.is_part IS TRUE AND c.part_type_status = 'active' LIMIT 1;
@@ -123,6 +140,159 @@ BEGIN
     ) p WHERE p.part_id = v_part AND p.position = 'front'
   ) THEN
     RAISE EXCEPTION 'Done test 1 failed: part not on first car via parts_for_vehicle';
+  END IF;
+
+  -- 5-14: no typed name → type + position, never part number
+  SELECT pm.name INTO v_pm_name FROM public.part_master pm WHERE pm.id = v_part;
+  IF btrim(v_pm_name) = btrim('D0051MH-DONE') THEN
+    RAISE EXCEPTION '5-14 failed: name equals part number';
+  END IF;
+  SELECT public.self_serve_default_part_name(
+    coalesce(c.plain_name, c.name),
+    c.position_scheme,
+    'front',
+    NULL
+  ) INTO v_expected_name
+  FROM public.maintenance_service_categories c
+  WHERE c.id = v_brk_pads;
+  IF v_pm_name IS DISTINCT FROM v_expected_name THEN
+    RAISE EXCEPTION '5-14 failed: expected name %, got %', v_expected_name, v_pm_name;
+  END IF;
+
+  v_save := public.save_self_serve_part(jsonb_build_object(
+    'actorId', v_actor,
+    'partTypeId', v_brk_pads,
+    'brand', 'NamedCo',
+    'partNumber', 'NAMED-PADS-001',
+    'name', 'Owner custom pad name',
+    'sourceType', 'part_maker_catalogue',
+    'evidenceUrl', 'https://example.com/named',
+    'fitMode', 'specific',
+    'listings', jsonb_build_array(jsonb_build_object(
+      'vehicleId', 'a0900005-0000-4000-8000-000000000004',
+      'position', 'Front'
+    ))
+  ));
+  IF NOT EXISTS (
+    SELECT 1 FROM public.part_master pm
+    WHERE pm.oem_part_number_norm = public.part_import_norm_number('NAMED-PADS-001')
+      AND pm.name = 'Owner custom pad name'
+  ) THEN
+    RAISE EXCEPTION '5-14 failed: explicit name was not kept';
+  END IF;
+
+  -- 5-14: rear left + rear right → "Rear <type>" with no side in the name
+  v_save := public.save_self_serve_part(jsonb_build_object(
+    'actorId', v_actor,
+    'partTypeId', v_brk_hose,
+    'brand', 'Toyota',
+    'partNumber', 'HOSE-DUAL-SIDE',
+    'sourceType', 'part_maker_catalogue',
+    'evidenceUrl', 'https://example.com/hose-dual',
+    'fitMode', 'specific',
+    'listings', jsonb_build_array(
+      jsonb_build_object('vehicleId', v_roomy::text, 'position', 'Rear', 'side', 'Left'),
+      jsonb_build_object('vehicleId', v_roomy::text, 'position', 'Rear', 'side', 'Right')
+    )
+  ));
+  SELECT public.self_serve_default_part_name(
+    coalesce(c.plain_name, c.name),
+    c.position_scheme,
+    'rear',
+    NULL
+  ) INTO v_expected_name
+  FROM public.maintenance_service_categories c
+  WHERE c.id = v_brk_hose;
+  SELECT pm.name INTO v_pm_name
+  FROM public.part_master pm
+  WHERE pm.id = (v_save->>'partId')::uuid;
+  IF v_pm_name IS DISTINCT FROM v_expected_name THEN
+    RAISE EXCEPTION '5-14 dual-side failed: expected %, got %', v_expected_name, v_pm_name;
+  END IF;
+  IF position(',' IN v_pm_name) > 0 THEN
+    RAISE EXCEPTION '5-14 dual-side failed: name must not include a side: %', v_pm_name;
+  END IF;
+
+  -- 5-11 / 5-12: axle_numbered — rear cable No.2 without side; duplicate fit = already on file
+  v_save := public.save_self_serve_part(jsonb_build_object(
+    'actorId', v_actor,
+    'partTypeId', v_brk_hbcable,
+    'brand', 'Toyota',
+    'partNumber', 'CABLE-511-REAR2',
+    'sourceType', 'part_maker_catalogue',
+    'evidenceUrl', 'https://example.com/cable-511',
+    'fitMode', 'specific',
+    'listings', jsonb_build_array(jsonb_build_object(
+      'vehicleId', v_roomy::text,
+      'position', 'Rear',
+      'catalogueNumber', 2
+    ))
+  ));
+  SELECT pm.name INTO v_pm_name
+  FROM public.part_master pm WHERE pm.id = (v_save->>'partId')::uuid;
+  IF v_pm_name IS DISTINCT FROM 'Rear handbrake cable No.2' THEN
+    RAISE EXCEPTION '5-11 failed: expected Rear handbrake cable No.2, got %', v_pm_name;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.part_listing pl
+    JOIN public.part_master pm ON pm.interchange_group_id = pl.interchange_group_id
+    WHERE pm.id = (v_save->>'partId')::uuid
+      AND pl.vehicle_catalog_id = v_roomy
+      AND pl.position = 'rear'
+      AND pl.side IS NULL
+      AND pl.catalogue_number = 2
+  ) THEN
+    RAISE EXCEPTION '5-11 failed: listing missing rear catalogue_number 2';
+  END IF;
+  BEGIN
+    PERFORM public.save_self_serve_part(jsonb_build_object(
+      'actorId', v_actor,
+      'partTypeId', v_brk_hbcable,
+      'brand', 'Toyota',
+      'partNumber', 'CABLE-511-REAR2',
+      'sourceType', 'part_maker_catalogue',
+      'evidenceUrl', 'https://example.com/cable-511',
+      'fitMode', 'specific',
+      'listings', jsonb_build_array(jsonb_build_object(
+        'vehicleId', v_roomy::text,
+        'position', 'Rear',
+        'catalogueNumber', 2
+      ))
+    ));
+    RAISE EXCEPTION '5-11 failed: duplicate save should not succeed';
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM NOT LIKE '%Nothing new to save%' THEN
+      RAISE;
+    END IF;
+  END;
+
+  -- 5-14 capitals: acronym plain names keep capitals when position is prefixed
+  IF public.self_serve_default_part_name('ABS wheel sensor', 'axle_left_right', 'front', 'left')
+    IS DISTINCT FROM 'Front ABS wheel sensor, left' THEN
+    RAISE EXCEPTION '5-14 capitals failed: ABS wheel sensor front left';
+  END IF;
+  IF public.self_serve_default_part_name('Brake caliper', 'axle_left_right', 'front', 'right')
+    IS DISTINCT FROM 'Front brake caliper, right' THEN
+    RAISE EXCEPTION '5-14 capitals failed: Brake caliper front right';
+  END IF;
+  v_save := public.save_self_serve_part(jsonb_build_object(
+    'actorId', v_actor,
+    'partTypeId', v_brk_abs,
+    'brand', 'Toyota',
+    'partNumber', 'ABS-SAVE-LEFT',
+    'sourceType', 'part_maker_catalogue',
+    'evidenceUrl', 'https://example.com/abs-left',
+    'fitMode', 'specific',
+    'listings', jsonb_build_array(
+      jsonb_build_object('vehicleId', v_roomy::text, 'position', 'Front', 'side', 'Left')
+    )
+  ));
+  IF NOT EXISTS (
+    SELECT 1 FROM public.part_master pm
+    WHERE pm.id = (v_save->>'partId')::uuid
+      AND pm.name = 'Front ABS wheel sensor, left'
+  ) THEN
+    RAISE EXCEPTION '5-14 capitals failed: save ABS front left name';
   END IF;
 
   -- Done test 2 / AS4-01: engine fit, 22 cars, exclude one
@@ -466,6 +636,15 @@ BEGIN
     WHERE sv.vehicle_catalog_id = v_roomy AND sv.spec_key = 'wiper_driver_mm' AND sv.value = '600'
   ) THEN
     RAISE EXCEPTION 'Done test 12 failed: spec value still present after undo';
+  END IF;
+
+  -- 5-14: no self-serve part should still use part number as name
+  SELECT count(*)::int INTO v_cnt
+  FROM public.part_master pm
+  WHERE pm.maintenance_component_id IS NOT NULL
+    AND btrim(pm.name) = btrim(pm.oem_part_number);
+  IF v_cnt > 0 THEN
+    RAISE EXCEPTION '5-14 backfill guard failed: % part(s) still have name = part number', v_cnt;
   END IF;
 
   -- AS4-05: engine detail caps vehicles at 200

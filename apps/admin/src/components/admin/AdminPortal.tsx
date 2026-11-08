@@ -297,7 +297,7 @@ export function AdminPortal() {
         </div>
       )}
       {currentPage === 'motor-vehicles' && (
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px] dark:bg-card">
+        <div className="min-h-[600px]">
           <VehicleCatalogManager />
         </div>
       )}

@@ -33,6 +33,10 @@ export default defineConfig({
       { find: '@roam/finance-core', replacement: path.resolve(repoRoot, 'packages/finance-core/src/index.ts') },
       { find: '@roam/fuel-core', replacement: path.resolve(repoRoot, 'packages/fuel-core/src') },
       {
+        find: '@roam/vehicle-catalog-core',
+        replacement: path.resolve(repoRoot, 'packages/vehicle-catalog-core/src/index.ts'),
+      },
+      {
         find: '@roam/roam-shared/fuel',
         replacement: path.resolve(repoRoot, 'packages/roam-shared/src/fuel/jaaFuelStatementMatcher.ts'),
       },

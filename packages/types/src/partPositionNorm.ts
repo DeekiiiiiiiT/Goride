@@ -56,14 +56,26 @@ export function partSideCovers(
 export function formatPartPositionSideLabel(
   position: string | null | undefined,
   side?: string | null | undefined,
+  catalogueNumber?: number | null | undefined,
 ): string {
   const { position: p, side: s } = normalizePartPositionSide(position, side);
-  if (!p) return "Any position";
-  const axle = p === "front" ? "Front" : "Rear";
-  if (!s) return axle;
-  if (s === "both") return `${axle} both sides`;
-  const sideLabel = s === "left" ? "left" : "right";
-  return `${axle} ${sideLabel}`;
+  const cat =
+    catalogueNumber != null && Number.isFinite(Number(catalogueNumber))
+      ? Math.trunc(Number(catalogueNumber))
+      : null;
+  if (!p && cat == null) return "Any position";
+  const axle = p === "front" ? "Front" : p === "rear" ? "Rear" : null;
+  let label = axle ?? "";
+  if (s && s !== "both") {
+    const sideLabel = s === "left" ? "left" : "right";
+    label = label ? `${label} ${sideLabel}` : sideLabel;
+  } else if (s === "both" && label) {
+    label = `${label} both sides`;
+  }
+  if (cat != null && cat >= 1) {
+    label = label ? `${label} · No.${cat}` : `No.${cat}`;
+  }
+  return label || "Any position";
 }
 
 export function formatAxleTag(position: string | null | undefined): string {
