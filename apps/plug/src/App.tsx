@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
-import { TestCopyBar } from '@roam/auth-client/components/TestCopyBar';
+import { TestCopyBar } from '@roam/auth-client/components/TestCopyBar.tsx';
 import { AuthProvider } from './auth';
 import { plugSend } from './api';
 import { readQueue, removeJob } from './offline';
