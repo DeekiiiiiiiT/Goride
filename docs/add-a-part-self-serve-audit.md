@@ -2,6 +2,8 @@
 
 **Rev 34 · 5 Nov 2026 · Status: CLOSED in code — owner catalog uploads left.** Goal: a Fleet user opens **Find parts** for a car and sees every part that fits, with a reason and a trust label. **Add a part** is the self-serve front end; auto-match is the engine. Stitch spec: [docs/stitch/dominion-add-a-part/](stitch/dominion-add-a-part/).
 
+**8 Nov 2026 — open: rewrite the behaviour tests for the new screens.** The A1–A14 Stitch port replaced the old wizard. `e2e/add-a-part-stitch.spec.ts` and `e2e/add-a-part-done.spec.ts` (44 tests, including real saves) still target the old "Add parts" heading, so CI now runs `e2e/dominion-add-parts-self-serve-capture.spec.ts` instead (look only). *Fix:* port the done-tests (save, draft clears, request part type, specific cars / by engine / by size) to the new A1–A14 flow and put them back in `parts-auto-match-e2e.yml`.
+
 Checked 5 Nov (code scan + overlay screenshots by eye, light and dark): every button in the Parts database section follows the Button rule, including the Cancel overlay; 34 screen tests pass.
 
 ## Button rule (whole Parts database section)

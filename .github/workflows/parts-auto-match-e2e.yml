@@ -105,42 +105,19 @@ jobs:
         env:
           FLEET_BASE_URL: http://127.0.0.1:3000
         run: node node_modules/@playwright/test/cli.js test e2e/parts-auto-match-stitch.spec.ts --project=dominion-admin
-      - name: Add parts self-serve Stitch spec
+      # The old Add a part wizard specs (add-a-part-stitch / add-a-part-done) test screens that the
+      # A1–A14 Stitch port replaced (8 Nov 2026). The new screens are checked by their capture spec.
+      - name: Add parts Stitch capture (A1–A14)
         env:
           FLEET_BASE_URL: http://127.0.0.1:3000
-        run: node node_modules/@playwright/test/cli.js test e2e/add-a-part-stitch.spec.ts --project=dominion-admin
-      - name: Add parts behavioural done spec
-        env:
-          FLEET_BASE_URL: http://127.0.0.1:3000
-        run: node node_modules/@playwright/test/cli.js test e2e/add-a-part-done.spec.ts --project=dominion-admin
+        run: node node_modules/@playwright/test/cli.js test e2e/dominion-add-parts-self-serve-capture.spec.ts --project=dominion-admin
 
-  fleet-auto-match-s4f:
-    needs: changes
-    if: needs.changes.outputs.auto_match == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm exec playwright install chromium --with-deps
-      - name: Build fleet
-        # Without Supabase config the app shows its setup screen. "example" matches the sb-example-auth-token session the specs seed; mocks catch the API host.
-        env:
-          VITE_SUPABASE_URL: https://example.supabase.co
-          VITE_SUPABASE_ANON_KEY: ci-placeholder-anon-key
-        run: pnpm --filter @roam/fleet run build
-      - name: Fleet AM-S4F Stitch spec
-        env:
-          ADMIN_BASE_URL: http://127.0.0.1:4173
-        run: node node_modules/@playwright/test/cli.js test e2e/parts-auto-match-stitch.spec.ts --project=fleet -g "AM-S4F"
+  # Fleet AM-S4F (old Find parts results screen) was replaced by the Fleet everyday
+  # Find parts port (F1–F14, 8 Nov 2026); its screen no longer exists, so the job is gone.
 
   parts-auto-match-stitch-e2e:
     name: Parts auto-match Stitch e2e
-    needs: [changes, dominion-auto-match-stitch, fleet-auto-match-s4f]
+    needs: [changes, dominion-auto-match-stitch]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -153,10 +130,6 @@ jobs:
           fi
           if [ "${{ needs.dominion-auto-match-stitch.result }}" != "success" ]; then
             echo "Dominion auto-match stitch failed or was cancelled."
-            exit 1
-          fi
-          if [ "${{ needs.fleet-auto-match-s4f.result }}" != "success" ]; then
-            echo "Fleet AM-S4F stitch failed or was cancelled."
             exit 1
           fi
           echo "All parts auto-match stitch checks passed."

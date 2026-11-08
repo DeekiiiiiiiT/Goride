@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { installAddPartsSession } from "./addPartsStitchHelpers";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -33,29 +34,8 @@ function token() {
 }
 
 async function installOwnerSession(page: import("@playwright/test").Page) {
-  const access = token();
-  const user = {
-    id: "11111111-1111-4111-8111-111111111111",
-    aud: "authenticated",
-    role: "authenticated",
-    email: "owner@example.com",
-    app_metadata: { role: "platform_owner" },
-    user_metadata: { name: "Dominion Owner" },
-  };
-  const session = {
-    access_token: access,
-    refresh_token: "refresh",
-    token_type: "bearer",
-    expires_in: 3600,
-    expires_at: Math.floor(Date.now() / 1000) + 3600,
-    user,
-  };
-  await page.addInitScript((stored) => {
-    localStorage.setItem("sb-example-auth-token", JSON.stringify(stored));
-  }, session);
-  await page.route("**/auth/v1/**", async (route) => {
-    await route.fulfill({ json: session });
-  });
+  // Shared fake owner login: answers the authenticator (aal2) checks the portal now makes.
+  await installAddPartsSession(page, { role: "platform_owner" });
 }
 
 const mockAreas = {

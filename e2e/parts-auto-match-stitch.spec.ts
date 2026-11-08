@@ -3,6 +3,7 @@
  * Run: pnpm exec playwright test e2e/parts-auto-match-stitch.spec.ts --project=dominion-admin
  */
 import { expect, test } from "@playwright/test";
+import { installAddPartsSession } from "./addPartsStitchHelpers";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
@@ -42,34 +43,14 @@ function token() {
 }
 
 async function installOwnerSession(page: import("@playwright/test").Page, dark = false) {
-  const access = token();
-  const user = {
-    id: "11111111-1111-4111-8111-111111111111",
-    aud: "authenticated",
-    role: "authenticated",
-    email: "owner@example.com",
-    app_metadata: { role: "platform_owner" },
-    user_metadata: { name: "Dominion Owner" },
-  };
-  const session = {
-    access_token: access,
-    refresh_token: "refresh",
-    token_type: "bearer",
-    expires_in: 3600,
-    expires_at: Math.floor(Date.now() / 1000) + 3600,
-    user,
-  };
-  await page.addInitScript(({ stored, useDark }) => {
-    localStorage.setItem("sb-example-auth-token", JSON.stringify(stored));
-    localStorage.setItem("sb-csfllzzastacofsvcdsc-auth-token", JSON.stringify(stored));
-    if (useDark) {
-      document.documentElement.classList.add("dark");
-      localStorage.setItem("roam-admin-theme", "dark");
-    }
-  }, { stored: session, useDark: dark });
-  await page.route("**/auth/v1/**", async (route) => {
-    await route.fulfill({ json: session });
-  });
+  // Shared fake owner login: answers the authenticator (aal2) checks the portal now makes.
+  await installAddPartsSession(page, { role: "platform_owner", dark });
+}
+
+/** The old catalog table (with the Factory part numbers tab) now sits behind "Import & tools" on Vehicles. */
+async function openLegacyVehicleCatalog(page: import("@playwright/test").Page) {
+  await page.goto("/?page=motor-vehicles");
+  await page.getByRole("button", { name: /Import & tools/i }).click({ timeout: 30_000 });
 }
 
 function decodeHtmlEntities(text: string): string {
@@ -222,6 +203,17 @@ const STITCH_PHRASE_SKIPS: Record<string, string[]> = {
 };
 
 const AM_APP_ONLY_LABELS: Record<string, string[]> = {
+  // Per-car trust controls added later by the Roomy brakes Dominion 1 Stitch screen.
+  "AM-S2-part-cross-references-drawer.html": [
+    "Confirmed",
+    "Needs checking",
+    "All",
+    "Mark confirmed",
+    "Mark needs checking",
+    "Change years",
+    "Remove this car",
+    "Add this car",
+  ],
   "AM-S4-find-parts-why-matches.html": [
     "Dimension Match",
     "Auto-matched",
@@ -277,6 +269,7 @@ async function assertStitchLabelParity(
   const allowed = new Set((AM_APP_ONLY_LABELS[htmlFile] ?? []).map((s) => s.toLowerCase()));
   const controls = scope.locator("button, a[href], [role='button']");
   const total = await controls.count();
+  const unknown: string[] = [];
   for (let i = 0; i < total; i++) {
     const label = normalizeControlLabel((await controls.nth(i).innerText()) || "");
     if (!label || label.length < 3 || label.length > 80) continue;
@@ -289,7 +282,10 @@ async function assertStitchLabelParity(
     if (stitchText.includes(withoutCount)) continue;
     if (stitchText.includes(lower)) continue;
     if (stitchPhrases(htmlFile, dir, 4).some((p) => lower.includes(p.toLowerCase()))) continue;
-    throw new Error(`App control label not in Stitch (${htmlFile}): ${label}`);
+    unknown.push(label);
+  }
+  if (unknown.length) {
+    throw new Error(`App control label not in Stitch (${htmlFile}): ${[...new Set(unknown)].join(" | ")}`);
   }
 }
 
@@ -436,7 +432,7 @@ test.describe("Dominion parts auto-match Stitch fidelity", () => {
   });
 
   test("AM-S1 vehicle factory part numbers tab", async ({ page }) => {
-    await page.goto("/?page=motor-vehicles");
+    await openLegacyVehicleCatalog(page);
     await expect(page.getByRole("heading", { name: /Vehicle catalog/i })).toBeVisible({ timeout: 30_000 });
     await page.getByTitle("View specs").first().click();
     await expect(page.getByText("Factory part numbers")).toBeVisible({ timeout: 15_000 });
@@ -542,7 +538,7 @@ test.describe("Dominion AM screen states (light)", () => {
       "AM-S1",
       "loading",
       async () => {
-        await page.goto("/?page=motor-vehicles");
+        await openLegacyVehicleCatalog(page);
         await page.getByTitle("View specs").first().click();
         await page.getByRole("button", { name: /Factory part numbers/i }).click();
       },
@@ -557,7 +553,7 @@ test.describe("Dominion AM screen states (light)", () => {
       "AM-S1",
       "empty",
       async () => {
-        await page.goto("/?page=motor-vehicles");
+        await openLegacyVehicleCatalog(page);
         await page.getByTitle("View specs").first().click();
         await page.getByRole("button", { name: /Factory part numbers/i }).click();
       },
@@ -572,7 +568,7 @@ test.describe("Dominion AM screen states (light)", () => {
       "AM-S1",
       "error",
       async () => {
-        await page.goto("/?page=motor-vehicles");
+        await openLegacyVehicleCatalog(page);
         await page.getByTitle("View specs").first().click();
         await page.getByRole("button", { name: /Factory part numbers/i }).click();
       },
@@ -757,7 +753,7 @@ dominionDescribe("error", "Dominion auto-match error surfaces", () => {
 
 dominionDescribe("flagOff", "Dominion auto-match flag off", () => {
   test("AM-S1 shows matching engine off", async ({ page }) => {
-    await page.goto("/?page=motor-vehicles");
+    await openLegacyVehicleCatalog(page);
     await expect(page.getByRole("heading", { name: /Vehicle catalog/i })).toBeVisible({ timeout: 30_000 });
     await page.getByTitle("View specs").first().click();
     await page.getByRole("button", { name: /Factory part numbers/i }).click();
