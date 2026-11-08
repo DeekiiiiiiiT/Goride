@@ -71,6 +71,6 @@ Sources of every number:
 ## Open
 1. ~~Run the migrations on live~~ **Done 8 Nov.** Both are live. The function and both views exist, and the public role can't use them. Live split of 1,833 versions: 0 have 8–10 key parts, 4 have 4–7, 48 have 1–3, 1,781 have none. 23 versions have specs.
 2. ~~Deploy~~ **Done 8 Nov.**
-3. **Run on live:** `20261108163024_revoke_trust_trigger_fns.sql` (locks two trigger functions; CI's migration check stays red until it is on live).
+3. ~~Run on live: `20261108163024_revoke_trust_trigger_fns.sql`~~ **Done 8 Nov** (owner ran it).
 4. **Playwright can't load any test file on this PC** ("did not expect test() to be called here"). CI runs them fine. `e2e/dominion-vehicles-home-dashboard-capture.spec.ts` is ready.
 5. **Parts import e2e has been red since 7 Nov** (it can't find "Bulk upload (advanced)", though the button is still in AddPartsHome). Not caused by this work.
