@@ -1,6 +1,11 @@
 # Roomy brakes — full fit audit
 
-**Rev 14 · 8 Nov 2026 · Open items only. Everything finished has been removed; git history keeps the old revisions.**
+**Rev 15 · 8 Nov 2026 · Open items only. Everything finished has been removed; git history keeps the old revisions.**
+
+**Rev 15:** RB-23 closed. The 4WD Roomy (`7c71d591`) and Tank (`05d10289`) M910A, 2016–2020, now have their Toyota brake parts: 40 fits, all Confirmed. Saved with `supabase/scripts/roomy_4wd_brakes_8nov.sql`; source is Partsouq frame M910A-0059713.
+- 10 parts are shared with the 2WD (Variant M900,910): pads, both calipers, front disc, front hoses No.1/No.2, master cylinder, cable No.1, front ABS left/right.
+- 8 parts are 4WD-only (Variant M910): rear wheel cylinder 47560-B5010 (left and right), shoes 04495-B1051, drum 42431-97502, rear hose 90049-22186 (left and right, built to 2020-07), cables 46420-B1120 (No.2) and 46430-B1120 (No.3), rear ABS 89545-B1100 (right) and 89546-B1100 (left).
+- New item RB-27 for the 2020-on 4WD.
 
 **Rev 14:** everything committed (83fad398) and deployed: fleet-core and the other fleet functions, plus the Dominion and Fleet sites (new code checked on roamdominion.co and roamfleet.co).
 - RB-21 closed. The versions list showed a hard-coded "3/10" for every version except the open car. It now reads real readiness from `admin_vehicles_dashboard`.
@@ -41,9 +46,9 @@
 
 ### Data (owner, in Dominion)
 
-**RB-23 · The 4WD Roomy / Tank (M910A) has no brake parts.** Everything on file is for the 2WD M900A.
-*Fix:* enter the M910A brake parts from Partsouq for an M910A frame number. Known from diagram 4601: rear cables 46420-B1120 (No.2) and 46430-B1120 (No.3); the No.1 cable 46410-B1011 is shared with the M900A.
-*Done-test:* Fleet → a 4WD Roomy → Brakes lists the same brake types as the 2WD, with the M910A cable numbers.
+**RB-27 · The 2020-on 4WD Roomy (M910A facelift, `ddf1d527`) has no brake parts.** The frame used for RB-23 covers builds up to 2020-09 only.
+*Fix:* look up an M910A frame built after 2020-09 on Partsouq and repeat the RB-23 steps. For each part, keep the 2016–2020 number where the "Variant" and dates show it is unchanged; add new numbers where they differ.
+*Done-test:* Fleet → a 2021 4WD Roomy → Brakes lists the same brake types as the 2016–2020 4WD.
 
 **RB-24 · The old pad and shoe numbers are still Needs checking.** Toyota 04465-B1190, Daihatsu 04465-B1190 / 04465-B1320 (pads) and Toyota 04495-B2400 (shoes) come only from shop sites. For frame M900A-0344862, Toyota's catalogue shows 04491-B1190 and 04495-B2430 instead. The old numbers may cover earlier builds, which that frame-filtered page hides.
 *Fix:* check Partsouq with a 2016–2018 M900A frame number. If the old numbers are listed there, re-save them with that link and the years they cover, so they become Confirmed. If not, they stay Needs checking with that reason.
