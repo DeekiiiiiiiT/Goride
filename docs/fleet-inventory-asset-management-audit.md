@@ -1,6 +1,6 @@
 # Fleet Inventory — Blueprint
 
-**Rev 55 · 5 Nov 2026 · LIVE** (commit `937efea1`, fleet-core v242). Follows [the playbook](how-we-build-playbook.md). This is the only plan file for this section. Rev 1–50 are in git history (Rev 50 = the full system, live 5 Nov, commit `e204225b`).
+**Rev 56 · 8 Nov 2026 · LIVE; CI inventory tests red (T-01)** (commit `937efea1`, fleet-core v242). Follows [the playbook](how-we-build-playbook.md). This is the only plan file for this section. Rev 1–50 are in git history (Rev 50 = the full system, live 5 Nov, commit `e204225b`).
 **Scope:** Fleet → Vehicle Operations → Inventory; Roam Driver → My car kit. Admin is out of scope.
 
 ## Goal
@@ -27,7 +27,13 @@ On 5 Nov the owner cut the extras (purchasing, counts, device tracking). Per-uni
 
 ## Open
 
-None. **Live and checked by the planner (5 Nov):** 11 items, 7 movements and 22 ledger rows, all unchanged. The dash camera and its history are kept. The removed tables are gone, only phase 0–3 switches remain, the ledger chain check is ok, and the last migration is `20261114120000`. Still to do: the owner tries the done-tests by hand, then G2–G4.
+**T-01 · The GitHub "Inventory done-tests" step has never passed.** (Found 8 Nov.)
+- **Cause 1, fixed 8 Nov (`103fb6bf`):** the test helper saved the fake login under `sb-<project_id>-auth-*`. On a local Supabase, Fleet reads `sb-127-auth-token` and Driver reads `sb-local-auth-driver`, so every spec sat on the sign-in page.
+- **Cause 2, open:** the 18 specs in `e2e/inventory-done-test-01…18.spec.ts` were written before the 5 Nov cut-down (Rev 51–53). They still test removed things: spec 10 expects 403 on `/purchase-orders` (now 404), seeds insert into removed tables (02, 03, 04, 07, 12, 13 fail in psql), and they click buttons and screens that changed (01, 05, 06, 08, 11, 14–18 time out). Run `42511304722` has every failure reason.
+- **Fix:** replace the 18 specs with one spec per done-test 1–17 below. Each clicks the real screen and checks the database rows. No new screens are needed: all of them exist (Overview, Stock, Vehicle kits, Assets, Movements, Alerts, Driver My car kit).
+- **Note:** the specs only run on GitHub (`scripts/run-inventory-done-tests.mjs` resets the local database and maps a Z: drive). The owner is handling this in a separate chat.
+
+Before T-01: none. **Live and checked by the planner (5 Nov):** 11 items, 7 movements and 22 ledger rows, all unchanged. The dash camera and its history are kept. The removed tables are gone, only phase 0–3 switches remain, the ledger chain check is ok, and the last migration is `20261114120000`. Still to do: the owner tries the done-tests by hand, then G2–G4.
 
 **Built (Rev 54):** S-01 to S-12 are done on the local copy.
 - **Migrations:** `20261106132300_fleet_inventory_s02_cutdown.sql` and `20261106132400_fleet_inventory_s08_s12_asset_rpcs.sql`.
