@@ -1,6 +1,12 @@
 # Roomy brakes — full fit audit
 
-**Rev 16 · 8 Nov 2026 · Open items only. Everything finished has been removed; git history keeps the old revisions.**
+**Rev 17 · 8 Nov 2026 · Open items only. Everything finished has been removed; git history keeps the old revisions.**
+
+**Rev 17:** RB-25 closed. Blue Print's own catalogue ([partsfinder ADT34155](https://partsfinder.bilsteingroup.com/en/article/blueprint/ADT34155)) lists ADT34155 as replacing Toyota/Daihatsu 04495-B1310 and 04495-B2400, but not 04495-B2430.
+- ADT34155 moved into the Toyota shoe card and is now Confirmed (`supabase/scripts/roomy_blueprint_shoe_merge_8nov.sql`).
+- `partsfinder.bilsteingroup.com` was added to Trusted sources as Blue Print's own site.
+- Two wrong links were removed: yoshiparts had put that card on the 2020-on 2WD Roomy versions, but Toyota ends the kit at 2019-05.
+- RB-27 now covers the 2020-on Roomy, 2WD and 4WD.
 
 **Rev 16:** RB-24 closed with Toyota's catalogue for a 2017 frame, M900A-0049265 (`supabase/scripts/roomy_old_pad_shoe_numbers_8nov.sql`, run on live 8 Nov).
 - **Pads:** 04491-B1190 is Toyota's pad for every build from 2016-11 to 2020-09. Early cars first had 04491-B1032, now replaced; it is recorded as a "replaces" number. 04465-B1190 is not in Toyota's catalogue for either frame, so it stays Needs checking (shop source only).
@@ -50,12 +56,9 @@
 
 ### Data (owner, in Dominion)
 
-**RB-27 · The 2020-on 4WD Roomy (M910A facelift, `ddf1d527`) has no brake parts.** The frame used for RB-23 covers builds up to 2020-09 only.
-*Fix:* look up an M910A frame built after 2020-09 on Partsouq and repeat the RB-23 steps. For each part, keep the 2016–2020 number where the "Variant" and dates show it is unchanged; add new numbers where they differ.
+**RB-27 · The 2020-on Roomy (facelift) has no Toyota-confirmed brake parts where they differ from the earlier cars.** This covers the 2WD (`007d4cad` 1KR-VET, `3ed7c48e` 1KR-FE) and the 4WD (`ddf1d527`). The frames used so far cover builds up to 2020-09 only, and the early shoe kit (04495-B1310 / B2400) is known not to fit.
+*Fix:* look up an M900A and an M910A frame built after 2020-09 on Partsouq and repeat the RB-23 steps for each. For each part, keep the 2016–2020 number where the "Variant" and dates show it is unchanged; add new numbers where they differ.
 *Done-test:* Fleet → a 2021 4WD Roomy → Brakes lists the same brake types as the 2016–2020 4WD.
-
-**RB-25 · The Blue Print shoe kit is a separate part.** Blue Print ADT34155 sits in its own card instead of the Toyota 04495-B1310 / 04495-B2400 shoe card (2016–2019 builds). The only source saying they are the same is Spareto, a TecDoc copy.
-*Fix:* if Blue Print's own catalogue lists ADT34155 for the Roomy M900A, use **Merge same part** in Dominion to put it in the shoe kit's group. If it doesn't, leave it as is.
 
 **RB-26 · Fluid brands sold in Jamaica (later).** Fleet shows only the car maker's named fluid (Toyota 2500H-A). Owners also buy Prestone, Lucas Oil, Johnsen's, ABRO, Flamingo, Penray, STP, Shell, Mobil and Rymax (Vector).
 *Fix:* add these as fluid products (Add a part → By size or spec), each with its grade (DOT 3 / DOT 4 / DOT 5.1) from the brand's own label or catalogue page, never from a shop. The Roomy needs a Toyota source for the grade 2500H-A equals. Until then, other brands show **Needs checking** with the reason "The car maker names its own fluid; this brand's grade isn't confirmed against it". Information only: no prices, no shops.
