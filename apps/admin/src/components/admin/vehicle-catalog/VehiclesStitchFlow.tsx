@@ -248,14 +248,24 @@ export function VehiclesStitchFlow({
     return m;
   }, [carId, specs, versionsForModel]);
 
+  // Real key-parts readiness for every version of this model (same numbers as the dashboard).
+  const versionIds = versionsForModel.map((v) => v.id);
+  const versionsReadinessQuery = useQuery({
+    queryKey: ["vehicles-dashboard", "versions", versionIds.join(",")],
+    queryFn: () => fetchVehiclesDashboard(versionIds),
+    enabled: !cap && versionIds.length > 0 && (screen === "model" || screen === "car"),
+    retry: false,
+  });
   const keyPartsById = useMemo(() => {
-    const ready = jobs.filter((j) => j.status === "verified").length;
     const m = new Map<string, { ready: number; total: number }>();
-    for (const v of versionsForModel) {
-      m.set(v.id, { ready: v.id === carId ? ready : 3, total: 10 });
+    if (cap) {
+      const ready = jobs.filter((j) => j.status === "verified").length;
+      for (const v of versionsForModel) m.set(v.id, { ready: v.id === carId ? ready : 4, total: 10 });
+      return m;
     }
+    for (const c of versionsReadinessQuery.data?.cars ?? []) m.set(c.id, { ready: c.keyParts, total: 10 });
     return m;
-  }, [jobs, versionsForModel, carId]);
+  }, [cap, jobs, versionsForModel, carId, versionsReadinessQuery.data]);
 
   function openCar(r: VehicleCatalogRecord, nextTab = "overview") {
     setMake(r.make);

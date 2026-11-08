@@ -1126,7 +1126,7 @@ export function registerCatalogRoutes(route: RouteApp, supabase: SupabaseClient)
         .split(",")
         .map((s) => s.trim())
         .filter((s) => UUID_RE.test(s))
-        .slice(0, 20);
+        .slice(0, 100);
       const { data, error } = await supabase.rpc("admin_vehicles_dashboard", { p_car_ids: ids.length ? ids : null });
       if (error) return c.json({ error: error.message }, 400);
       return staffJson(c, (data && typeof data === "object" ? data : {}) as Record<string, unknown>);

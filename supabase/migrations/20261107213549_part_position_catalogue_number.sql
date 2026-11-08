@@ -1267,7 +1267,11 @@ REFRESH MATERIALIZED VIEW public.variant_parts_readiness;
 
 DO $$
 BEGIN
-  IF NOT EXISTS (
+  -- Only on a database that has the Roomy row (live); an empty replay skips the check.
+  IF EXISTS (
+    SELECT 1 FROM public.vehicle_catalog
+    WHERE id = '3cd9cbf3-a804-4817-82db-400cf6abf13a'::uuid
+  ) AND NOT EXISTS (
     SELECT 1 FROM public.variant_parts_readiness
     WHERE variant_id = '3cd9cbf3-a804-4817-82db-400cf6abf13a'::uuid
   ) THEN

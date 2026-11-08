@@ -228,11 +228,18 @@ function catalogClientWithTolerance(
   return {
     from(table: string) {
       if (table === "vehicle_catalog") return chain(variants);
+      // universal_part links to a part type through its spec key (4-05).
+      if (table === "spec_key") {
+        return { select: () => ({ or: () => Promise.resolve({ data: [{ key: "brake_pad_thickness" }], error: null }) }) };
+      }
+      if (table === "part_type_spec_field") {
+        return { select: () => ({ eq: () => Promise.resolve({ data: [], error: null }) }) };
+      }
       if (table === "universal_part") {
         const row = toleranceMm != null ? { tolerance_mm: toleranceMm } : null;
         return {
           select: () => ({
-            eq: () => ({
+            in: () => ({
               not: () => ({
                 order: () => ({
                   limit: () => ({

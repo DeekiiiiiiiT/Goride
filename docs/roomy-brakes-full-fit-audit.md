@@ -1,6 +1,10 @@
 # Roomy brakes — full fit audit
 
-**Rev 13 · 8 Nov 2026 · Open items only. Everything finished has been removed; git history keeps the old revisions.**
+**Rev 14 · 8 Nov 2026 · Open items only. Everything finished has been removed; git history keeps the old revisions.**
+
+**Rev 14:** everything committed (83fad398) and deployed: fleet-core and the other fleet functions, plus the Dominion and Fleet sites (new code checked on roamdominion.co and roamfleet.co).
+- RB-21 closed. The versions list showed a hard-coded "3/10" for every version except the open car. It now reads real readiness from `admin_vehicles_dashboard`.
+- RB-22 closed. The Fleet port did not break the test. Its fake database still answered the old tolerance query that 4-05 replaced. The fake is updated and the 14/14 tests in `parts_finder.test.ts` pass.
 
 **Rev 13:** RB-20 (Fleet test copy login) closed.
 - `mm-f01-fleet@local.test` signs in at http://127.0.0.1:5181 in a real browser (fleet-login 200).
@@ -24,7 +28,7 @@
   - The Stitch exports are in `docs/stitch/fleet-find-parts-everyday/`, `dominion-add-parts-self-serve/` and `dominion-vehicles-catalog/`.
   - Each screen's `live.png` sits next to its `screen.png` there.
   - Checks: Fleet capture 49/49, both Dominion captures pass, 130 admin unit tests pass, no type errors in the ported files.
-- **Not live yet:** the ported screens and the edge code they use. Also the earlier built-but-held items: Fleet "Your car needs" card and Also fits version label, Add a part fixes 5-13 and 5-01, and the No.1 / No.2 / No.3 buttons.
+- **Live (8 Nov):** all 40 ported screens and the edge code they use, plus the earlier held items (Fleet "Your car needs" card, Also fits label, Add a part fixes 5-13 and 5-01, No.1 / No.2 / No.3 buttons).
 
 ---
 
@@ -34,16 +38,6 @@
 
 **RB-19 · Owner review of the 40 screens.** The owner has not yet looked at the ported screens on the test copy.
 *Done-test:* the owner opens every screen in Fleet and Dominion on the test copy, in light, dark and phone width, and says each one matches its Stitch screen. Anything that doesn't match becomes its own item here.
-
-**RB-21 · The Vehicles sample data still says 3 of 10 on the versions list.** The car page sample says 4 of 10, which matches live. The versions list sample (`keyPartsById` in the Vehicles capture fixtures, admin and `e2e/` copies) still says 3.
-*Fix:* set the Roomy 2016–2020 2WD sample to 4 of 10 in both fixture copies.
-*Done-test:* `toyota_roomy_versions/live.png` shows "4/10 ready" on the first row.
-
-### Tests
-
-**RB-22 · One Deno test fails:** `findParts returns tolerance_mm and interchange group count`. Cursor said it already failed before the Fleet port. Nobody has proven that.
-*Fix:* run it on the code from before the port. If it fails there too, it is outside this audit and is noted as such. If it passes there, the port broke it and it gets fixed here.
-*Done-test:* the test passes, or it is shown to fail on the pre-port code too.
 
 ### Data (owner, in Dominion)
 

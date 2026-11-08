@@ -1,6 +1,6 @@
 # Dominion Vehicles home dashboard
 
-**Rev 2 · 8 Nov 2026 · Ported; database live; code not committed or deployed.**
+**Rev 3 · 8 Nov 2026 · LIVE.** Committed (83fad398) and deployed: fleet-core, the Dominion site and the Fleet site. The new code was found in the live bundles on roamdominion.co.
 
 **Goal:** the first page of Dominion → Vehicles shows the state of the car database at a glance: how big it is, how complete it is, what changed, and what needs a person. Database only: nothing from Roam Fleet or any other app.
 
@@ -70,5 +70,7 @@ Sources of every number:
 
 ## Open
 1. ~~Run the migrations on live~~ **Done 8 Nov.** Both are live. The function and both views exist, and the public role can't use them. Live split of 1,833 versions: 0 have 8–10 key parts, 4 have 4–7, 48 have 1–3, 1,781 have none. 23 versions have specs.
-2. **Deploy:** fleet-core plus the Dominion site; then the page works on your normal Dominion.
-3. **Playwright can't load any test file right now** ("did not expect test() to be called here"), the old specs too. `e2e/dominion-vehicles-home-dashboard-capture.spec.ts` is ready for when that is fixed.
+2. ~~Deploy~~ **Done 8 Nov.**
+3. **Run on live:** `20261108163024_revoke_trust_trigger_fns.sql` (locks two trigger functions; CI's migration check stays red until it is on live).
+4. **Playwright can't load any test file on this PC** ("did not expect test() to be called here"). CI runs them fine. `e2e/dominion-vehicles-home-dashboard-capture.spec.ts` is ready.
+5. **Parts import e2e has been red since 7 Nov** (it can't find "Bulk upload (advanced)", though the button is still in AddPartsHome). Not caused by this work.

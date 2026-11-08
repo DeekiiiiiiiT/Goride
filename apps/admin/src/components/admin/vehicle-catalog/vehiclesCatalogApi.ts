@@ -45,7 +45,7 @@ export type VehiclesDashboard = {
 
 /** Database-only numbers for the Vehicles home (nothing from the apps). */
 export function fetchVehiclesDashboard(carIds: string[] = []) {
-  const ids = carIds.slice(0, 20).join(",");
+  const ids = carIds.slice(0, 100).join(",");
   return getJson<VehiclesDashboard>(ids ? `vehicles-dashboard?ids=${ids}` : "vehicles-dashboard");
 }
 
