@@ -2026,7 +2026,7 @@ BEGIN
   ) VALUES (
     v_grp, v_car, 'rear', 'left', 'https://example.com/imp-kp-list', 'import'
   )
-  ON CONFLICT (interchange_group_id, vehicle_catalog_id, position, side) DO UPDATE
+  ON CONFLICT (interchange_group_id, vehicle_catalog_id, position, side, catalogue_number) DO UPDATE
     SET origin = 'import', evidence_url = EXCLUDED.evidence_url;
   PERFORM public.part_match_derived_keep(v_derived, NULL, 'proof 61');
   IF NOT EXISTS (
