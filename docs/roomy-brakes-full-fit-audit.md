@@ -1,13 +1,15 @@
 # Roomy brakes — full fit audit
 
-**Rev 18 · 8 Nov 2026 · Open items only. Everything finished has been removed; git history keeps the old revisions.**
+**Rev 19 · 8 Nov 2026 · Open items only. Everything finished has been removed; git history keeps the old revisions.**
+
+**Rev 19:** RB-29 closed. A 2025 Roomy G (frame M900A-1172533, built 2025-01) uses the same front disc, 43512-B1081, dated 2024-08 to 2026-05. The 2024-07 end was only a catalogue date split, so the three 2020-on disc fits now run 2020 to now.
 
 **Rev 18:** RB-27 closed for the 2020-on Roomy except the 4WD X/G grades (now RB-28). Sources are Toyota's catalogue on Partsouq for three frames: 2WD Custom G M900A-0669946, 4WD Custom G M910A-0108951 and 2WD X M900A-0571644. Two scripts, both run on live 8 Nov:
 - `roomy_2020_on_brakes_8nov.sql`: 51 fits on the 2WD 1KR-FE, 2WD 1KR-VET and 4WD.
 - `roomy_2020_on_xg_brakes_8nov.sql`: 6 fits on the 2WD 1KR-FE.
 
 What Toyota shows:
-- **Same on every grade (Confirmed):** pads 04491-B1190, calipers, front disc 43512-B1081 (2020–2024), front hoses No.1/No.2, master cylinder, front ABS. Also 2WD rear hose 90049-22193 and drum 42431-B1021, and 4WD rear hose 90049-22332.
+- **Same on every grade (Confirmed):** pads 04491-B1190, calipers, front disc 43512-B1081 (2020 to now; see Rev 19), front hoses No.1/No.2, master cylinder, front ABS. Also 2WD rear hose 90049-22193 and drum 42431-B1021, and 4WD rear hose 90049-22332.
 - **Custom G, electric parking brake (Needs checking, reason "Custom G only"):** 2WD shoes 04495-B2480, rear ABS 890C0-B1010 (right) / B1020 (left), and wheel cylinders with the sides swapped (right 47570-B1020, left 47550-B1030). 4WD shoes 04495-B2470, drum 42431-B1060, wheel cylinders 47570-B1010 (right) / 47550-B1010 (left), rear ABS 890C0-B1030 / B1040. The 4WD page also lists 89545-B1120 "sensor, speed, rear" ×2; it is not saved (it looks like the sensor element inside the 890C0 units).
 - **X / G, hand lever (Needs checking, reason "X and G grades only"):** wheel cylinders on the normal sides (right 47550-B1030, left 47570-B1020), shoes 04495-B2430, cables 46410-B1011 / 46420-B1090 / 46430-B1090. There are no rear ABS sensors, only wires.
 - The two 2016–2020 wheel cylinders were renamed "Rear wheel cylinder"; the side comes from each fit.
@@ -70,9 +72,6 @@ What Toyota shows:
 **RB-28 · The 2020-on 4WD Roomy X / G grades (hand lever) have no rear brake parts or handbrake cables.** No full M910A frame number for an X or G grade turned up, because export sites hide them.
 *Fix:* when an M910A frame for an X or G grade (built after 2020-09) turns up, look up diagrams 4706, 4102 and 4601 on Partsouq and save its wheel cylinders, shoes, drum and cables to the 4WD 2020-on row (`ddf1d527`), with the reason "X and G grades only (hand lever)".
 *Done-test:* Fleet → a 2021 4WD Roomy X → Brakes lists rear shoes and handbrake cables.
-
-**RB-29 · Front disc after 2024-07.** Toyota dates 43512-B1081 to 2024-07 for the 2020-on cars. Later builds may use a newer disc.
-*Fix:* look up a 2025 Roomy frame's diagram 4303 and add the newer disc for 2024–now if it differs.
 
 **RB-26 · Fluid brands sold in Jamaica (later).** Fleet shows only the car maker's named fluid (Toyota 2500H-A). Owners also buy Prestone, Lucas Oil, Johnsen's, ABRO, Flamingo, Penray, STP, Shell, Mobil and Rymax (Vector).
 *Fix:* add these as fluid products (Add a part → By size or spec), each with its grade (DOT 3 / DOT 4 / DOT 5.1) from the brand's own label or catalogue page, never from a shop. The Roomy needs a Toyota source for the grade 2500H-A equals. Until then, other brands show **Needs checking** with the reason "The car maker names its own fluid; this brand's grade isn't confirmed against it". Information only: no prices, no shops.
