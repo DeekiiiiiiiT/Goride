@@ -1,6 +1,8 @@
 # Roomy brakes — full fit audit
 
-**Rev 20 · 8 Nov 2026 · Open items only. Everything finished has been removed; git history keeps the old revisions.**
+**Rev 21 · 8 Nov 2026 · COMPLETE.** All work is done and live. The only item left is RB-26 (fluid brands), parked by the owner for later.
+
+**Rev 21:** RB-19 closed: the owner reviewed the redesigned screens on 8 Nov and said they are fine. The audit is complete.
 
 **Rev 20:** RB-28 closed (`roomy_2020_on_4wd_xg_brakes_8nov.sql`, 9 fits, run on live 8 Nov). With no frame number available, Partsouq was opened by model code (M910A-GBGE, 4WD G type), which shows every version's lines; the lines marked "M910..G,X" were used.
 - Wheel cylinders: right 47550-B1010, left 47570-B1010 (the Custom G parts on the opposite sides). Both were renamed "Rear wheel cylinder (2020-on 4WD)".
@@ -69,13 +71,6 @@ What Toyota shows:
 ---
 
 ## Open items
-
-### Screens
-
-**RB-19 · Owner review of the 40 screens.** The owner has not yet looked at the ported screens on the test copy.
-*Done-test:* the owner opens every screen in Fleet and Dominion on the test copy, in light, dark and phone width, and says each one matches its Stitch screen. Anything that doesn't match becomes its own item here.
-
-### Data (owner, in Dominion)
 
 **RB-26 · Fluid brands sold in Jamaica — parked by the owner (8 Nov: "stick to parts").** What is known so far: Toyota 2500H-A is sold as 08882-00190 (0.5 L) and 08882-00191 (1 L), labelled FMVSS No.116 DOT 3 and JIS K2233 BF-3. That comes from shop listings only (Yahoo! Shopping, MonotaRO, Pricey). Partsouq does not list fluids. The Roomy's brake fluid spec in Dominion has no source link. The quickest Toyota source is the brake fluid reservoir cap or the owner's manual on 5179KZ.
 
