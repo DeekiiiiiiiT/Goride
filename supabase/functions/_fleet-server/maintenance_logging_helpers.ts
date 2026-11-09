@@ -7,7 +7,7 @@ import {
   interpolateExpectedOdometer,
   maintenanceServiceRecordedAt,
 } from "../../../packages/finance-core/src/maintenanceOdometerExpected.ts";
-import { fleetDb } from "./repos/baseRepo.ts";
+import { fleetDb, fleetTable } from "./repos/baseRepo.ts";
 import { getOrgId } from "./org_scope.ts";
 
 export { maintenanceServiceRecordedAt };
@@ -183,7 +183,7 @@ export async function assessOdometerAnomaly(
   reading: number,
   recordedAt: string,
 ): Promise<OdometerAnomalyAssessment> {
-  const { data, error } = await supabase.rpc("assess_odometer_anomaly", {
+  const { data, error } = await supabase.rpc("fleet_assess_odometer_anomaly", {
     p_vehicle_id: vehicleId,
     p_reading: reading,
     p_recorded_at: recordedAt,
@@ -264,7 +264,7 @@ async function loadNeighborReading(
 ): Promise<OdometerReadingNeighbor | null> {
   if (reading == null || !recordedAt) return null;
   const { data } = await fleetDb()
-    .from("odometer_readings")
+    .from(fleetTable("odometer_readings"))
     .select("reading, recorded_at, source")
     .eq("vehicle_id", vehicleId)
     .eq("organization_id", orgId)

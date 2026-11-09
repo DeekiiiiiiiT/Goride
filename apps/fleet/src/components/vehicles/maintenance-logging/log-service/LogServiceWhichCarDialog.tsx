@@ -75,7 +75,7 @@ export function LogServiceWhichCarDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[620px] p-0 gap-0 overflow-hidden">
+      <DialogContent hideCloseButton className="sm:max-w-[620px] p-0 gap-0 overflow-hidden">
         <div className="px-6 pt-6 pb-3 flex items-start justify-between">
           <div>
             <h1 className="text-xl font-bold text-on-surface tracking-tight">{LOG_SERVICE_COPY.whichCarTitle}</h1>

@@ -192,7 +192,8 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
     [items],
   );
 
-  const nightlyMissed = !loading && !nightlyRun?.success;
+  // A failed page load says nothing about the nightly job; only judge it when the data loaded.
+  const nightlyMissed = !loading && !error && !nightlyRun?.success;
 
   const loadRequests = useCallback(async () => {
     setRequestsLoading(true);

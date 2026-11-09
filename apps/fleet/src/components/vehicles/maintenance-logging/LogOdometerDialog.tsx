@@ -61,7 +61,7 @@ export function LogOdometerDialog({
 
   return (
     <ResponsiveDialog open={open} onOpenChange={onOpenChange}>
-      <ResponsiveDialogContent className="sm:max-w-[520px] p-0 gap-0 overflow-hidden">
+      <ResponsiveDialogContent hideCloseButton className="sm:max-w-[520px] p-0 gap-0 overflow-hidden">
         <div className="px-6 pt-6 pb-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-lg bg-surface-container flex items-center justify-center text-primary">

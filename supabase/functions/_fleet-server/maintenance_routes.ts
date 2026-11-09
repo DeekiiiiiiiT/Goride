@@ -67,7 +67,7 @@ import {
 import { registerMaintenanceAlertsKpiRoutes } from "./maintenance/routes_alerts_kpi.ts";
 import { registerMaintenanceInspectionRoutes } from "./maintenance/routes_inspections.ts";
 import { registerMaintenanceWorkOrderRoutes } from "./maintenance/routes_work_orders.ts";
-import { fleetDb } from "./repos/baseRepo.ts";
+import { fleetDb, fleetTable } from "./repos/baseRepo.ts";
 import { registerMaintenanceMasterRoutes } from "./maintenance_master_routes.ts";
 import { buildLogServiceContext } from "./maintenance_log_service_context.ts";
 import { assertCatalogWriteResponse, governWriteOrProposal } from "./catalog_access.ts";
@@ -4038,7 +4038,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         const source = c.req.query("source")?.trim();
         const flagged = c.req.query("flagged") === "true";
         let q = fleetDb()
-          .from("odometer_readings")
+          .from(fleetTable("odometer_readings"))
           .select("*")
           .eq("vehicle_id", vehicleId)
           .eq("organization_id", orgId)
@@ -4068,7 +4068,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         const id = c.req.param("id");
         const userId = c.get("userId") as string | undefined;
         const { data, error } = await fleetDb()
-          .from("odometer_readings")
+          .from(fleetTable("odometer_readings"))
           .update({
             is_anomaly: false,
             is_verified: true,
@@ -4101,7 +4101,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         const body = (await c.req.json()) as Record<string, unknown>;
         const reason = String(body.reason ?? "").trim() || "voided";
         const { data, error } = await fleetDb()
-          .from("odometer_readings")
+          .from(fleetTable("odometer_readings"))
           .update({
             is_voided: true,
             void_reason: reason,

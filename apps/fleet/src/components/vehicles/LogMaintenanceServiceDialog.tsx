@@ -9,6 +9,9 @@ import { Textarea } from "../ui/textarea";
 import {
   ResponsiveDialog,
   ResponsiveDialogContent,
+  ResponsiveDialogDescription,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
 } from '../ui/responsive-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { Checkbox } from "../ui/checkbox";
@@ -542,7 +545,6 @@ export function LogMaintenanceServiceDialog({
     setLineDetailCategories([]);
     setAnomalyAcknowledged(false);
     setOdometerCheck(null);
-    setWorkOrderRef("");
 
     const existingDraft =
       draftUserId && !initialLog?.id ? readLogServiceDraft(draftUserId, vehicleId) : null;
@@ -1289,7 +1291,7 @@ export function LogMaintenanceServiceDialog({
 
   return (
     <ResponsiveDialog open={open} onOpenChange={onOpenChange}>
-      <ResponsiveDialogContent className="sm:max-w-[720px] max-h-[90vh] flex flex-col p-0 overflow-hidden gap-0">
+      <ResponsiveDialogContent hideCloseButton className="sm:max-w-[720px] max-h-[90vh] flex flex-col p-0 overflow-hidden gap-0">
         <LogServiceWizardChrome
           activeStep={dialogWizardStep(step)}
           vehicle={strip}
