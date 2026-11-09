@@ -1,6 +1,6 @@
 # RoamFleet Maintenance Logging — Audit
 
-**Rev 13 · 8 Nov 2026** · Open items only. Everything else is done and checked.
+**Rev 14 · 9 Nov 2026** · Open items only. Everything else is done and checked.
 **Scope:** logging only. The full system is in `fleet-maintenance-enterprise-audit.md`.
 
 **Checked 8 Nov:** nightly job `fleet-maintenance-nightly` ran by itself every day 1–8 Nov at 07:00 UTC, 8 of 8 succeeded (S-04 closed).
@@ -24,9 +24,9 @@
 
 ## Open items
 
-### O-01 · Live app still has F-01 to F-06
-The fixes are in the code and the test copy only. The live app still crashes on Log service until the Fleet site, the `fleet-ops` server and the F-04 migration are live.
-**Done when:** on live, Log service reaches step 4, odometer history lists readings, and 6 Jan 2026 + 1,230,000 km shows Check reading.
+### O-01 · Confirm the Fleet site build is live
+Status 9 Nov 03:50 UTC: committed `388d31e4`. **F-04 migration live** (owner ran it; logbook row present; anon/signed-in blocked; function runs). **fleet-ops deployed**, smoke checks passed, so F-03 and F-04 are live. **Fleet site not confirmed:** the deploy hook fired at 03:42 (HTTP 201), but no finished build was seen and Vercel's bot check blocked automated checks. F-01, F-02, F-05 and F-06 are live only once that build is.
+**Done when:** on roamfleet.co, Log service → pick a car → Continue reaches the date and mileage step without a crash, odometer history lists readings, and 6 Jan 2026 + 1,230,000 km shows Check reading.
 
 ### O-02 · Car with no reading shows "OK" instead of "Odometer needed"
 1505LM has no reading, but the overview, the Which car list and the status column show **OK**. Stitch shows **Odometer needed** with a **Log odometer** button and "Log an odometer reading to see km-based items". The row's status comes from the server (`fleetStatus`).
