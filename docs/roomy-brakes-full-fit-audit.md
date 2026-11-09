@@ -73,7 +73,9 @@ What Toyota shows:
 *Fix:* when an M910A frame for an X or G grade (built after 2020-09) turns up, look up diagrams 4706, 4102 and 4601 on Partsouq and save its wheel cylinders, shoes, drum and cables to the 4WD 2020-on row (`ddf1d527`), with the reason "X and G grades only (hand lever)".
 *Done-test:* Fleet → a 2021 4WD Roomy X → Brakes lists rear shoes and handbrake cables.
 
-**RB-26 · Fluid brands sold in Jamaica (later).** Fleet shows only the car maker's named fluid (Toyota 2500H-A). Owners also buy Prestone, Lucas Oil, Johnsen's, ABRO, Flamingo, Penray, STP, Shell, Mobil and Rymax (Vector).
+**RB-26 · Fluid brands sold in Jamaica — parked by the owner (8 Nov: "stick to parts").** What is known so far: Toyota 2500H-A is sold as 08882-00190 (0.5 L) and 08882-00191 (1 L), labelled FMVSS No.116 DOT 3 and JIS K2233 BF-3. That comes from shop listings only (Yahoo! Shopping, MonotaRO, Pricey). Partsouq does not list fluids. The Roomy's brake fluid spec in Dominion has no source link. The quickest Toyota source is the brake fluid reservoir cap or the owner's manual on 5179KZ.
+
+**Original item:** Fleet shows only the car maker's named fluid (Toyota 2500H-A). Owners also buy Prestone, Lucas Oil, Johnsen's, ABRO, Flamingo, Penray, STP, Shell, Mobil and Rymax (Vector).
 *Fix:* add these as fluid products (Add a part → By size or spec), each with its grade (DOT 3 / DOT 4 / DOT 5.1) from the brand's own label or catalogue page, never from a shop. The Roomy needs a Toyota source for the grade 2500H-A equals. Until then, other brands show **Needs checking** with the reason "The car maker names its own fluid; this brand's grade isn't confirmed against it". Information only: no prices, no shops.
 *Done-test:* the Roomy's Brake fluid page lists Toyota 2500H-A as Confirmed, plus at least 3 brands of the matching grade, each with its own source.
 
