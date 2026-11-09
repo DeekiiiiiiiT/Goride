@@ -1,6 +1,14 @@
 # Roomy brakes — full fit audit
 
-**Rev 19 · 8 Nov 2026 · Open items only. Everything finished has been removed; git history keeps the old revisions.**
+**Rev 20 · 8 Nov 2026 · Open items only. Everything finished has been removed; git history keeps the old revisions.**
+
+**Rev 20:** RB-28 closed (`roomy_2020_on_4wd_xg_brakes_8nov.sql`, 9 fits, run on live 8 Nov). With no frame number available, Partsouq was opened by model code (M910A-GBGE, 4WD G type), which shows every version's lines; the lines marked "M910..G,X" were used.
+- Wheel cylinders: right 47550-B1010, left 47570-B1010 (the Custom G parts on the opposite sides). Both were renamed "Rear wheel cylinder (2020-on 4WD)".
+- Shoes 04495-B5080, drum 42431-B5020, cables 46410-B1011 / 46420-B1150 / 46430-B1150.
+- Rear ABS 89545-B1100 / 89546-B1100, the same as the 2016–2020 4WD.
+- Tip for later lookups: `partsouq.com/en/catalog/toyota/diagram/JP/<year>/TANK-ROOMY/<model code>/category/<2 chassis | 4 electrical>/diagram/<n>` opens without a frame number.
+
+**Every Roomy / Tank version, grade and drive now has its Toyota brake parts on file.**
 
 **Rev 19:** RB-29 closed. A 2025 Roomy G (frame M900A-1172533, built 2025-01) uses the same front disc, 43512-B1081, dated 2024-08 to 2026-05. The 2024-07 end was only a catalogue date split, so the three 2020-on disc fits now run 2020 to now.
 
@@ -68,10 +76,6 @@ What Toyota shows:
 *Done-test:* the owner opens every screen in Fleet and Dominion on the test copy, in light, dark and phone width, and says each one matches its Stitch screen. Anything that doesn't match becomes its own item here.
 
 ### Data (owner, in Dominion)
-
-**RB-28 · The 2020-on 4WD Roomy X / G grades (hand lever) have no rear brake parts or handbrake cables.** No full M910A frame number for an X or G grade turned up, because export sites hide them.
-*Fix:* when an M910A frame for an X or G grade (built after 2020-09) turns up, look up diagrams 4706, 4102 and 4601 on Partsouq and save its wheel cylinders, shoes, drum and cables to the 4WD 2020-on row (`ddf1d527`), with the reason "X and G grades only (hand lever)".
-*Done-test:* Fleet → a 2021 4WD Roomy X → Brakes lists rear shoes and handbrake cables.
 
 **RB-26 · Fluid brands sold in Jamaica — parked by the owner (8 Nov: "stick to parts").** What is known so far: Toyota 2500H-A is sold as 08882-00190 (0.5 L) and 08882-00191 (1 L), labelled FMVSS No.116 DOT 3 and JIS K2233 BF-3. That comes from shop listings only (Yahoo! Shopping, MonotaRO, Pricey). Partsouq does not list fluids. The Roomy's brake fluid spec in Dominion has no source link. The quickest Toyota source is the brake fluid reservoir cap or the owner's manual on 5179KZ.
 
