@@ -36,6 +36,7 @@ DELETE FROM delivery.merchants WHERE id = 'b6010009-0000-4000-8000-000000000903'
 DELETE FROM delivery.courier_availability WHERE driver_id = 'a6010004-0000-4000-8000-000000000004'::uuid;
 DELETE FROM delivery.courier_profiles WHERE user_id = 'a6010004-0000-4000-8000-000000000004'::uuid;
 DELETE FROM fleet.drivers WHERE id = 'inv-done-driver-fleet-row';
+DELETE FROM public.driver_profiles WHERE user_id = 'a6010004-0000-4000-8000-000000000004'::uuid;
 
 DELETE FROM fleet.vehicles WHERE organization_id = 'f6010000-0000-4000-8000-000000000099';
 DELETE FROM public.kv_store_37f42386 WHERE key LIKE '%f6010000-0000-4000-8000-000000000099%';

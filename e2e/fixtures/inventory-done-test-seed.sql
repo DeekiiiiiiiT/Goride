@@ -131,6 +131,14 @@ BEGIN
         AND ur.scope_id = v_org_uuid
     );
 
+  -- Driver app needs a finished profile, or it shows the "How do you drive?" onboarding.
+  INSERT INTO public.driver_profiles (user_id, mode, fleet_id, status, onboarding_complete, display_name)
+  SELECT v_driver, 'fleet', v_org_uuid, 'active', true, 'Inv Done Driver'
+  WHERE NOT EXISTS (SELECT 1 FROM public.driver_profiles p WHERE p.user_id = v_driver);
+  UPDATE public.driver_profiles
+     SET mode = 'fleet', fleet_id = v_org_uuid, status = 'active', onboarding_complete = true
+   WHERE user_id = v_driver;
+
   INSERT INTO fleet.inv_settings (organization_id)
   VALUES (v_org)
   ON CONFLICT (organization_id) DO NOTHING;

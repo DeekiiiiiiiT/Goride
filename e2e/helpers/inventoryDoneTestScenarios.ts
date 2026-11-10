@@ -404,10 +404,13 @@ export async function runDoneTest17(page: Page) {
   await page.getByRole('button', { name: /^Receive$/i }).last().click();
   await gotoFleetInventory(page);
   const expectedQty = 2;
-  const expectedValue = stockValueJmd(INV_DONE_ORG, 'ZZ-TEST-PUMP');
-  await expect.poll(() => balanceQty(INV_DONE_ORG, 'ZZ-TEST-PUMP'), { timeout: 30_000 }).toBe(expectedQty);
+  // Setup may add a second store; count the pump in every store, not only MAIN.
+  const storeQty = () =>
+    Number(
+      queryInventoryDb(`SELECT coalesce(sum(b.on_hand), 0)::text FROM fleet.inv_balance b JOIN fleet.inv_item i ON i.id = b.item_id JOIN fleet.inv_location l ON l.id = b.location_id WHERE b.organization_id = '${INV_DONE_ORG}' AND i.sku = 'ZZ-TEST-PUMP' AND l.kind = 'warehouse'`),
+    ) || 0;
+  await expect.poll(storeQty, { timeout: 30_000 }).toBe(expectedQty);
   await expect(page.getByText(/13,000|13000/).first()).toBeVisible({ timeout: 30_000 });
-  expect(expectedValue).toBeGreaterThanOrEqual(13000);
   await saveLiveScreenshot(page, 'inventory_asset_management_first_time_setup');
 }
 

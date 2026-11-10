@@ -451,6 +451,9 @@ const ALL_CUSTOMER_PERMISSIONS: Permission[] = [
   'recon.view', 'recon.prepare', 'recon.approve',
   'inventory.view', 'inventory.move', 'inventory.adjust', 'inventory.kits.manage',
   'inventory.purchasing', 'inventory.export', 'inventory.report',
+  // Write-off approvals were removed (5 Nov cut-down); approve now guards reverse,
+  // driver-report resolve and alert actions, which owners/managers must be able to do.
+  'inventory.approve',
 ];
 
 /** Expense Hub permissions. Owner and manager get all; accountant gets view + export. */

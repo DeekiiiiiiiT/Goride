@@ -73,6 +73,14 @@ export function useIn7KitTemplateForm(templateId?: string | null) {
     if (templateId) setSelectedTemplateId(templateId);
   }, [templateId]);
 
+  // No kit passed in (Vehicle kits → Edit kit): open the kit the cars are on, else the first one.
+  useEffect(() => {
+    if (selectedTemplateId || !templates.length) return;
+    const carKitCode = strField(shell.kitComplianceRows[0] ?? {}, 'kit_code', '');
+    const onCars = templates.find((t) => strField(t, 'code', '') === carKitCode);
+    setSelectedTemplateId(strField(onCars ?? templates[0], 'id', ''));
+  }, [selectedTemplateId, templates, shell.kitComplianceRows]);
+
   useEffect(() => {
     const tpl = templates.find((t) => strField(t, 'id', '') === selectedTemplateId);
     const rawLines = (tpl?.lines as Row[] | undefined) ?? (tpl?.template_lines as Row[] | undefined) ?? [];
