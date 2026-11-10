@@ -62,8 +62,9 @@ export const inventoryApi = {
   stock: (params?: URLSearchParams) =>
     invFetch(`/stock${params?.toString() ? `?${params}` : ''}`),
   stockKpis: () => invFetch('/stock/kpis'),
+  /** No params = every item (pickers and lists must not stop at the first page of 50). */
   items: (params?: URLSearchParams) =>
-    invFetch(`/items${params?.toString() ? `?${params}` : ''}`),
+    invFetch(`/items?${params?.toString() ? params : 'all=1'}`),
   item: (id: string) => invFetch(`/items/${encodeURIComponent(id)}`),
   createItem: (body: unknown, idempotencyKey: string) =>
     invFetch('/items', {

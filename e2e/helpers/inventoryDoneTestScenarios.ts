@@ -61,6 +61,25 @@ function receiveSku(org: string, sku: string, qty: number, unitCost: number, ide
   `);
 }
 
+/** Puts stock in a car (receive into MAIN, then issue to the car) so the driver sees it "in the car". */
+function putInCar(org: string, sku: string, vehicleId: string, idem: string) {
+  receiveSku(org, sku, 1, 1200, `${idem}-rcv`);
+  execInventoryDb(`
+    SELECT fleet.inv_issue_to_vehicles(
+      '${org}',
+      (SELECT id FROM fleet.inv_location WHERE organization_id = '${org}' AND lower(code) = 'main'),
+      jsonb_build_array(jsonb_build_object(
+        'item_id', (SELECT id FROM fleet.inv_item WHERE organization_id = '${org}' AND sku = '${sku}'),
+        'qty', 1
+      )),
+      ARRAY['${vehicleId}'],
+      false,
+      false,
+      '${idem.replace(/'/g, "''")}-issue'
+    );
+  `);
+}
+
 async function waitPhaseFlag(path: string, wantOk: boolean) {
   await expect.poll(
     async () => {
@@ -158,6 +177,8 @@ export async function runDoneTest04(page: Page) {
 
 export async function runDoneTest05(page: Page) {
   const before = driverReportCount(INV_DONE_ORG, 'missing');
+  // Only items that are in the car offer "Report a problem" (missing ones are already known to the fleet).
+  putInCar(INV_DONE_ORG, 'ZZ-TEST-TRI', VEH1, 'dt05-tri');
   await seedInventoryDriverSession(page);
   await gotoDriverCarKit(page);
   await page.getByRole('button', { name: /Report a problem/i }).first().click();
@@ -176,6 +197,8 @@ export async function runDoneTest05(page: Page) {
 
 export async function runDoneTest06(page: Page) {
   const before = driverReportCount(INV_DONE_ORG, 'missing');
+  // Only items that are in the car offer "Report a problem" (missing ones are already known to the fleet).
+  putInCar(INV_DONE_ORG, 'ZZ-TEST-TRI', VEH1, 'dt06-tri');
   await seedInventoryDriverSession(page);
   await gotoDriverCarKit(page);
   await page.context().setOffline(true);
