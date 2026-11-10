@@ -25,12 +25,47 @@ export type LogServiceDateMileageStepProps = {
   onAcknowledgeAnomaly?: () => void;
 };
 
-function formatNeighborLine(
-  neighbor: { reading: number; recordedAt: string; sourceLabel: string } | null,
-): string | null {
-  if (!neighbor) return null;
-  const d = formatMaintenanceDisplayDate(neighbor.recordedAt.slice(0, 10));
-  return `${d}: ${neighbor.reading.toLocaleString()} km (${neighbor.sourceLabel})`;
+type ReadingChoice = { key: string; label: string; reading: number; source: string };
+
+/** Readings the user can tap to fill the odometer: before, best guess, after. */
+export function buildReadingChoices(
+  checkResult: OdometerCheckResult | null | undefined,
+  serviceDate: string,
+): ReadingChoice[] {
+  if (!checkResult) return [];
+  const choices: ReadingChoice[] = [];
+  const { before, after, expected } = checkResult;
+  if (before) {
+    choices.push({
+      key: "before",
+      label: LOG_SERVICE_COPY.pickBeforeLabel(formatMaintenanceDisplayDate(before.recordedAt.slice(0, 10))),
+      reading: before.reading,
+      source: before.sourceLabel,
+    });
+  }
+  const roundedExpected = expected != null ? Math.round(expected) : null;
+  if (
+    roundedExpected != null &&
+    roundedExpected > 0 &&
+    roundedExpected !== before?.reading &&
+    roundedExpected !== after?.reading
+  ) {
+    choices.push({
+      key: "expected",
+      label: LOG_SERVICE_COPY.pickExpectedLabel(formatMaintenanceDisplayDate(serviceDate)),
+      reading: roundedExpected,
+      source: "estimate",
+    });
+  }
+  if (after && after.reading !== before?.reading) {
+    choices.push({
+      key: "after",
+      label: LOG_SERVICE_COPY.pickAfterLabel(formatMaintenanceDisplayDate(after.recordedAt.slice(0, 10))),
+      reading: after.reading,
+      source: after.sourceLabel,
+    });
+  }
+  return choices;
 }
 
 export function LogServiceDateMileageStep({
@@ -50,6 +85,7 @@ export function LogServiceDateMileageStep({
   const odoEmpty = !odometer || odometer <= 0;
   const showAnomaly =
     checkResult?.isAnomaly === true && !anomalyAcknowledged && !odoEmpty && Boolean(date);
+  const readingChoices = showAnomaly ? buildReadingChoices(checkResult, date) : [];
 
   return (
     <div className="flex flex-col gap-6">
@@ -138,33 +174,59 @@ export function LogServiceDateMileageStep({
                 {LOG_SERVICE_COPY.checkReadingTitle}
               </span>
               <p className="text-sm text-on-tertiary-fixed-variant leading-relaxed">
-                {LOG_SERVICE_COPY.checkReadingBody}
+                {LOG_SERVICE_COPY.checkReadingBody(odometer, formatMaintenanceDisplayDate(date))}
               </p>
-              {(formatNeighborLine(checkResult?.before ?? null) ||
-                formatNeighborLine(checkResult?.after ?? null)) && (
-                <span className="font-mono text-xs font-semibold text-on-tertiary-fixed block mt-1">
-                  {[formatNeighborLine(checkResult?.before ?? null), formatNeighborLine(checkResult?.after ?? null)]
-                    .filter(Boolean)
-                    .join(" · ")}
-                </span>
-              )}
             </div>
           </div>
-          <div className="flex items-center gap-3 pt-1 pl-11 flex-wrap">
-            <button
-              type="button"
-              className="px-4 py-1.5 rounded-lg bg-surface-container-lowest text-on-surface text-sm font-semibold shadow-sm hover:bg-surface-container transition-colors"
-              onClick={() => document.getElementById("svc-odo")?.focus()}
-            >
-              {LOG_SERVICE_COPY.fixReadingLabel}
-            </button>
-            <button
-              type="button"
-              className="px-4 py-1.5 rounded-lg bg-tertiary-container text-on-tertiary text-sm font-medium hover:opacity-90 transition-opacity"
-              onClick={() => onAcknowledgeAnomaly?.()}
-            >
-              {LOG_SERVICE_COPY.keepReadingLabel}
-            </button>
+
+          {readingChoices.length > 0 ? (
+            <div className="flex flex-col gap-2 pl-11">
+              <span className="text-xs font-semibold uppercase tracking-wide text-on-tertiary-fixed">
+                {LOG_SERVICE_COPY.pickReadingHeading}
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                {readingChoices.map((c) => (
+                  <button
+                    key={c.key}
+                    type="button"
+                    data-testid={`odo-pick-${c.key}`}
+                    onClick={() => onOdometerChange(c.reading)}
+                    className="flex flex-col items-start gap-0.5 px-3 py-2 rounded-lg bg-surface-container-lowest text-left shadow-sm ring-1 ring-outline-variant hover:ring-2 hover:ring-primary focus:outline-none focus:ring-2 focus:ring-primary transition"
+                  >
+                    <span className="text-xs text-stitch-secondary">{c.label}</span>
+                    <span className="font-mono text-base font-bold text-on-surface">
+                      {c.key === "expected" ? "~" : ""}
+                      {c.reading.toLocaleString()} km
+                    </span>
+                    <span className="text-[11px] text-stitch-secondary">{c.source}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          <div className="flex flex-col gap-1.5 pt-1 pl-11">
+            <div className="flex items-center gap-3 flex-wrap">
+              <button
+                type="button"
+                className="px-4 py-1.5 rounded-lg bg-surface-container-lowest text-on-surface text-sm font-semibold shadow-sm ring-1 ring-outline-variant hover:bg-surface-container transition-colors"
+                onClick={() => {
+                  const el = document.getElementById("svc-odo") as HTMLInputElement | null;
+                  el?.focus();
+                  el?.select();
+                }}
+              >
+                {LOG_SERVICE_COPY.fixReadingLabel}
+              </button>
+              <button
+                type="button"
+                className="px-4 py-1.5 rounded-lg bg-tertiary-container text-on-tertiary text-sm font-semibold shadow-sm hover:opacity-90 transition-opacity"
+                onClick={() => onAcknowledgeAnomaly?.()}
+              >
+                {LOG_SERVICE_COPY.keepReadingLabel(odometer)}
+              </button>
+            </div>
+            <span className="text-xs text-on-tertiary-fixed-variant">{LOG_SERVICE_COPY.keepReadingHint}</span>
           </div>
         </div>
       ) : null}

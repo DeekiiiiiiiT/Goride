@@ -10,26 +10,39 @@ export type MaintenanceDueKind = "service_package" | "statutory_inspection";
 export type MaintenanceCategoryKind = "system" | "component";
 
 /** Garage action on a job line. */
+/** One action list everywhere (DB check, server WO_LINE_ACTIONS, Dominion) — engine-service-sections-plan D5. */
 export type MaintenanceLineAction =
   | "inspect"
+  | "clean"
+  | "adjust"
   | "replace"
   | "rotate"
   | "balance"
   | "flush"
   | "top_up"
   | "repair"
+  | "machine"
+  | "rebuild"
   | "other";
 
 export const MAINTENANCE_LINE_ACTIONS: { value: MaintenanceLineAction; label: string }[] = [
   { value: "inspect", label: "Inspect" },
+  { value: "clean", label: "Clean" },
+  { value: "adjust", label: "Adjust" },
   { value: "replace", label: "Replace" },
   { value: "rotate", label: "Rotate" },
   { value: "balance", label: "Balance" },
   { value: "flush", label: "Flush" },
   { value: "top_up", label: "Top-up" },
   { value: "repair", label: "Repair" },
+  { value: "machine", label: "Machine" },
+  { value: "rebuild", label: "Rebuild" },
   { value: "other", label: "Other" },
 ];
+
+export const MAINTENANCE_ACTION_LABEL: Record<string, string> = Object.fromEntries(
+  MAINTENANCE_LINE_ACTIONS.map((a) => [a.value, a.label]),
+);
 
 export type MaintenanceWorkOrderStatus =
   | "draft"
@@ -69,6 +82,12 @@ export interface MaintenanceServiceCategory {
   kind: MaintenanceCategoryKind;
   parent_id?: string | null;
   op_code?: string | null;
+  /** false = a service/job (alignment, rotation…), true = a physical part. Services get the short Log service form. */
+  is_part?: boolean;
+  /** What the line saves as its action (Dominion sets it; required for every job). */
+  default_action?: MaintenanceLineAction | null;
+  /** Plain-English "what is this for" text; shown as the card tooltip in Log service. */
+  description?: string | null;
   /** When true, Fleet tracks LF/RF/LR/RR separately for outstanding work. */
   position_aware?: boolean;
   /** Fallback interval when component is not in a package. */

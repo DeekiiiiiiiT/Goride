@@ -1,7 +1,9 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, ClipboardCheck, Loader2, Package, Plus, Search } from "lucide-react";
 import { MaintenanceIcon } from "../../MaintenanceIcon";
 import { LOG_SERVICE_COPY } from "./logServiceCopy";
+import { JobTooltip } from "./JobTooltip";
+import { actionLabel } from "./systemSections";
 import type { MaintenanceServiceCategory } from "../../../../types/maintenance";
 
 export type LogServicePackageChoice = {
@@ -19,12 +21,116 @@ export type LogServiceSuggestedOp = {
   categoryName: string;
   systemName: string | null;
   iconKey: string | null;
-  status: "overdue" | "due_soon";
+  /** Absent for plain search hits that are not due. */
+  status?: "overdue" | "due_soon" | null;
 };
+
+/** One row per job: the server sends one suggestion per wheel position (e.g. Brakes ×4). */
+export function dedupeSuggestedOps(ops: LogServiceSuggestedOp[]): LogServiceSuggestedOp[] {
+  const byId = new Map<string, LogServiceSuggestedOp>();
+  for (const op of ops) {
+    const prev = byId.get(op.categoryId);
+    if (!prev || (prev.status !== "overdue" && op.status === "overdue")) byId.set(op.categoryId, op);
+  }
+  return [...byId.values()];
+}
+
+/** Rank jobs/groups/packages for the search box. Every word must match name, group or description. */
+export function searchLogServiceJobs(args: {
+  query: string;
+  jobs: MaintenanceServiceCategory[];
+  /** All groups — used for the group name shown next to a job. */
+  systems: MaintenanceServiceCategory[];
+  /** Groups the user can open (the Quick jobs cards). Only these appear as group results. */
+  pickableGroups: MaintenanceServiceCategory[];
+  packages: LogServicePackageChoice[];
+  dueOps: LogServiceSuggestedOp[];
+  /** Job id → section in its own group (e.g. "Crankshaft & Rotating Assembly"). */
+  sectionNameByJob?: Map<string, string>;
+  limit?: number;
+}): LogServiceSuggestedOp[] {
+  const q = args.query.trim().toLowerCase();
+  if (!q) return [];
+  const words = q.split(/\s+/).filter(Boolean);
+  const systemName = new Map(args.systems.map((s) => [s.id, s.name]));
+  const dueById = new Map(args.dueOps.map((o) => [o.categoryId, o.status ?? null]));
+  const scored: Array<{ op: LogServiceSuggestedOp; score: number }> = [];
+
+  const score = (name: string, group: string, desc: string): number => {
+    const n = name.toLowerCase();
+    const hay = `${n} ${group.toLowerCase()} ${desc.toLowerCase()}`;
+    if (!words.every((w) => hay.includes(w))) return 0;
+    if (n.startsWith(q)) return 100;
+    if (n.includes(q)) return 80;
+    if (words.every((w) => n.includes(w))) return 70;
+    if (words.every((w) => `${n} ${group.toLowerCase()}`.includes(w))) return 50;
+    return 20; // description-only match, e.g. "pads" → Brakes
+  };
+
+  for (const p of args.packages) {
+    const s = score(p.shortLabel, "package", "");
+    if (s) {
+      scored.push({
+        op: {
+          categoryId: p.id,
+          categoryName: p.shortLabel,
+          systemName: "Package",
+          iconKey: p.iconKey,
+          status: p.status === "overdue" ? "overdue" : null,
+        },
+        score: s + 5,
+      });
+    }
+  }
+  for (const sys of args.pickableGroups) {
+    const s = score(sys.name, "", sys.description || "");
+    if (s) {
+      scored.push({
+        op: { categoryId: sys.id, categoryName: sys.name, systemName: "Group", iconKey: sys.icon_key, status: null },
+        score: s - 1,
+      });
+    }
+  }
+  for (const job of args.jobs) {
+    const group = job.parent_id ? systemName.get(job.parent_id) ?? "" : "";
+    const section = args.sectionNameByJob?.get(job.id) ?? "";
+    const s = score(job.name, `${group} ${section}`, job.description || "");
+    if (s) {
+      // F3: "Group · Section · Action" (section only when the job sits in one of its own group's sections).
+      const label = [group, section, actionLabel(job.default_action)].filter(Boolean).join(" · ");
+      scored.push({
+        op: {
+          categoryId: job.id,
+          categoryName: job.name,
+          systemName: label || null,
+          iconKey: job.icon_key,
+          status: dueById.get(job.id) ?? null,
+        },
+        score: s + (dueById.get(job.id) === "overdue" ? 3 : 0),
+      });
+    }
+  }
+  scored.sort((a, b) => b.score - a.score || a.op.categoryName.localeCompare(b.op.categoryName));
+  const seen = new Set<string>();
+  const out: LogServiceSuggestedOp[] = [];
+  for (const { op } of scored) {
+    if (seen.has(op.categoryId)) continue;
+    seen.add(op.categoryId);
+    out.push(op);
+    if (out.length >= (args.limit ?? 8)) break;
+  }
+  return out;
+}
 
 export type LogServiceWhatWasDoneStepProps = {
   packages: LogServicePackageChoice[];
   quickJobs: MaintenanceServiceCategory[];
+  /** Every job (component), so search finds jobs that are not due. */
+  allJobs?: MaintenanceServiceCategory[];
+  /** Every group (system), for group names in results. */
+  allSystems?: MaintenanceServiceCategory[];
+  /** Job id → section in its own group, for search labels. */
+  sectionNameByJob?: Map<string, string>;
   quickJobsLoading: boolean;
   suggestedOperations?: LogServiceSuggestedOp[];
   inspectionPointCount?: number;
@@ -48,6 +154,9 @@ function packageCardClass(status?: LogServicePackageChoice["status"]): string {
 export function LogServiceWhatWasDoneStep({
   packages,
   quickJobs,
+  allJobs = [],
+  allSystems = [],
+  sectionNameByJob,
   quickJobsLoading,
   suggestedOperations = [],
   inspectionPointCount = 24,
@@ -59,50 +168,45 @@ export function LogServiceWhatWasDoneStep({
 }: LogServiceWhatWasDoneStepProps) {
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
+  const searchBoxRef = useRef<HTMLDivElement | null>(null);
 
+  // Close the dropdown when the user clicks or taps anywhere outside the search box.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setSearch("");
+    if (!searchOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (searchBoxRef.current && !searchBoxRef.current.contains(e.target as Node)) {
         setSearchOpen(false);
       }
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
+    document.addEventListener("pointerdown", onPointerDown, true);
+    return () => document.removeEventListener("pointerdown", onPointerDown, true);
+  }, [searchOpen]);
+
+  const dueOps = useMemo(() => dedupeSuggestedOps(suggestedOperations), [suggestedOperations]);
+  const hasQuery = search.trim().length > 0;
 
   const searchHits = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return suggestedOperations.slice(0, 5);
-    const pkgHits = packages
-      .filter((p) => p.shortLabel.toLowerCase().includes(q))
-      .map(
-        (p): LogServiceSuggestedOp => ({
-          categoryId: p.id,
-          categoryName: p.shortLabel,
-          systemName: "Package",
-          iconKey: p.iconKey,
-          status: p.status === "overdue" ? "overdue" : "due_soon",
-        }),
-      );
-    const sysHits = quickJobs
-      .filter((s) => s.name.toLowerCase().includes(q))
-      .map(
-        (s): LogServiceSuggestedOp => ({
-          categoryId: s.id,
-          categoryName: s.name,
-          systemName: "System",
-          iconKey: s.icon_key,
-          status: "due_soon",
-        }),
-      );
-    const opHits = suggestedOperations.filter(
-      (o) =>
-        o.categoryName.toLowerCase().includes(q) ||
-        (o.systemName && o.systemName.toLowerCase().includes(q)),
-    );
-    return [...opHits, ...pkgHits, ...sysHits].slice(0, 8);
-  }, [search, suggestedOperations, packages, quickJobs]);
+    if (!hasQuery) return dueOps.slice(0, 5);
+    return searchLogServiceJobs({
+      query: search,
+      jobs: allJobs,
+      systems: allSystems.length ? allSystems : quickJobs,
+      pickableGroups: quickJobs,
+      sectionNameByJob,
+      packages,
+      dueOps,
+    });
+  }, [hasQuery, search, dueOps, allJobs, allSystems, quickJobs, packages, sectionNameByJob]);
+
+  const pickHit = (op: LogServiceSuggestedOp) => {
+    setSearchOpen(false);
+    setSearch("");
+    if (onPickSuggested) onPickSuggested(op);
+    else {
+      const pkg = packages.find((p) => p.id === op.categoryId);
+      if (pkg) onPickPackage(pkg);
+    }
+  };
 
   const sortedPackages = useMemo(() => {
     const score = (p: LogServicePackageChoice) => {
@@ -133,7 +237,7 @@ export function LogServiceWhatWasDoneStep({
           ) : null}
         </div>
 
-        <div className="relative w-full">
+        <div className="relative w-full" ref={searchBoxRef}>
           <div className="bg-surface-container-low rounded-lg p-1 flex items-center shadow-sm">
             <div className="px-2 text-stitch-secondary flex items-center">
               <Search className="w-5 h-5" />
@@ -146,6 +250,19 @@ export function LogServiceWhatWasDoneStep({
                 setSearchOpen(true);
               }}
               onFocus={() => setSearchOpen(true)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape" && (searchOpen || search)) {
+                  // Close the dropdown only — don't let Esc also close the whole Log service window.
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setSearch("");
+                  setSearchOpen(false);
+                }
+                if (e.key === "Enter" && searchHits.length > 0) {
+                  e.preventDefault();
+                  pickHit(searchHits[0]);
+                }
+              }}
               placeholder="Search a job — e.g. oil change, brake pads, wipers"
               className="w-full bg-transparent text-sm text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none py-1"
             />
@@ -153,24 +270,22 @@ export function LogServiceWhatWasDoneStep({
               ESC
             </span>
           </div>
-          {searchOpen && searchHits.length > 0 ? (
-            <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-30 bg-surface-container-lowest rounded-lg shadow-xl overflow-hidden p-1 flex flex-col gap-0.5">
+          {searchOpen && (searchHits.length > 0 || hasQuery) ? (
+            <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-30 bg-surface-container-lowest rounded-lg shadow-xl overflow-hidden p-1 flex flex-col gap-0.5 ring-1 ring-outline-variant/30">
               <div className="px-3 py-1 text-[10px] text-stitch-secondary uppercase font-semibold">
-                {LOG_SERVICE_COPY.suggestedOperations}
+                {hasQuery ? LOG_SERVICE_COPY.searchResultsHeading : LOG_SERVICE_COPY.suggestedOperations}
               </div>
+              {hasQuery && searchHits.length === 0 ? (
+                <p className="px-3 py-2 text-sm text-stitch-secondary">
+                  {LOG_SERVICE_COPY.searchNoMatch(search.trim())}
+                </p>
+              ) : null}
               {searchHits.map((op) => (
                 <button
-                  key={`${op.categoryId}-${op.categoryName}`}
+                  key={op.categoryId}
                   type="button"
                   className="w-full text-left px-3 py-2 rounded hover:bg-surface-container flex items-center justify-between group transition-colors"
-                  onClick={() => {
-                    setSearchOpen(false);
-                    if (onPickSuggested) onPickSuggested(op);
-                    else {
-                      const pkg = packages.find((p) => p.id === op.categoryId);
-                      if (pkg) onPickPackage(pkg);
-                    }
-                  }}
+                  onClick={() => pickHit(op)}
                 >
                   <div className="flex items-center gap-2 min-w-0">
                     <MaintenanceIcon iconKey={op.iconKey || "wrench"} className="w-4 h-4 text-primary shrink-0" />
@@ -277,8 +392,8 @@ export function LogServiceWhatWasDoneStep({
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {quickJobs.map((sys) => (
+              <JobTooltip key={sys.id} text={sys.description}>
               <button
-                key={sys.id}
                 type="button"
                 onClick={() => onPickSystem(sys)}
                 className="flex flex-col items-center gap-2 p-4 rounded-xl border border-outline-variant/40 bg-surface-container-lowest hover:bg-surface-container-low transition-colors text-center min-h-[108px]"
@@ -288,6 +403,7 @@ export function LogServiceWhatWasDoneStep({
                 </div>
                 <span className="text-sm font-medium text-on-surface leading-tight">{sys.name}</span>
               </button>
+              </JobTooltip>
             ))}
           </div>
         )}

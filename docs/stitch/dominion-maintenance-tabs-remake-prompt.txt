@@ -1,0 +1,76 @@
+ROAM DOMINION — MAINTENANCE TEMPLATES: REMAKE 3 TABS (GOOGLE STITCH)
+Service packages · Review list · History
+Spec for content: docs/engine-service-sections-plan.md (History = DM5). Sit beside the new Jobs tab (S43a–S43d).
+
+
+
+
+Roam Dominion - Maintenance templates, 3 tabs remade (Desktop Admin, for the owner and catalog staff):
+
+Redraw three tabs of the Maintenance templates section of the Roam Dominion admin console: "Service packages", "Review list" and "History". The "Part schedules" and "Jobs" tabs are already designed — these three must look like the same product (same cards, chips, buttons and spacing as the Jobs tab you designed: job rows with icon, name, mono code, small grey chips, outline buttons). In this section a JOB is one piece of maintenance work (e.g. "Spark Plugs", "Wheel Alignment"); a PART SCHEDULE says how often a job is due (e.g. every 40,000 km or 24 months); a SERVICE PACKAGE is one garage visit that only lists which jobs are done together and never sets how often a job is due; jobs are arranged into SECTIONS inside a group (e.g. Engine → Air Intake & Induction); "ALSO DO" links suggest jobs that go together. Dominion never shows customer names, fleet names, plates, car counts, prices, suppliers or stock. Draw each screen at FULL HEIGHT so every element is visible; nothing may be cut off, blurred or hidden.
+
+BRAND IDENTITY:
+- Match the existing Dominion console exactly:
+  - dark navy left sidebar "Dominion · Roam Admin Console"; groups: Overview; MASTER DATA (Vehicles — highlighted, Places and Maps, Fuel, Tolls, Tax and Vendors); ENGINES (Fuel Brain, Toll Brain, Matching Brain); DISTRIBUTION (Apps, Data API, Change requests); PLATFORM (Staff and roles, Activity log, Platform Ops, Global settings); BACK OFFICE (GCT registrations, Ledger, Remittance); bottom status "KGN-DC-01 · JMD READY". Nothing else in the sidebar.
+  - top bar: search "Search entities, engines, routes…" with ⌘K chip, sun/moon icon, user "DT · Deeki T · Owner", sign-out icon. Nothing else.
+  - breadcrumb in mono caps "DOMINION › MASTER DATA › VEHICLES › MAINTENANCE TEMPLATES"
+  - title "Maintenance templates", subtitle "How often each part is serviced, for which cars, and why."
+  - tabs in this order: "Part schedules", "Service packages", "Jobs", "Review list", "History"
+- LIGHT MODE (default): Primary #0153dc; primary container #dbe1ff; success #006e31; warning #8a5a00; error #a83836; outline #797a84; hairlines #e6e7ee; background #faf8fe; cards white, 16px radius, 1px hairline border, no heavy shadows; text #30323b; muted #5d5f68. Grey chip fill #eeedf6.
+- DARK MODE: background #0b1220; cards #111a2e; hairlines #1e293b; text #e2e8f0; muted #94a3b8; primary #5b8def; success #4ade80; warning #fbbf24; error #f87171. Chips keep a visible fill in dark mode.
+- Chips (word + icon, never colour alone): "Active" green dot on pale green · "Retired" grey with archive icon · "Required" small solid blue · "Check only" small grey outline · action chips in grey (Replace, Clean, Inspect, Adjust, Machine, Rebuild, Flush, Top up, Rotate, Balance, Repair).
+- Typography: Inter. Distances, months, dates and codes in a mono font with tabular numerals. Distances written "40,000 km".
+- Icons: Material Symbols Outlined, 20px.
+
+BUTTON RULES (strict):
+- Every action is a real button with a visible border or fill — never plain text, never underlined, never a bare "Details" word.
+- Destructive buttons (Reject, Retire, Remove, Cancel) are red (red fill or red outline).
+- One primary (blue) button per screen or drawer at most.
+- No browser pop-ups; confirmations are in-app dialogs.
+
+DESIGN PRINCIPLES:
+- Calm and exact, a well-kept service manual
+- Plain words first, codes small and muted
+- No percentages, no made-up IDs, no server/node/sync/version/registry labels, no "cars updated" counts, no prices
+- Use only the real data listed under each screen
+
+SCREEN 1: SERVICE PACKAGES TAB
+- "Service packages" tab selected
+- Explanation line: "A package is one garage visit. It lists jobs; each job keeps its own schedule."
+- Five package cards in this order (real data):
+  1. Basic Service · Active · "Every 5,000 km or 3 months · whichever first" — jobs: Engine oil & filter (5,000 km or 3 months, Required), Tire Pressure Check (10,000 km or 6 months, Required, Check only), Fluids (Washer / Coolant) (10,000 km or 6 months, Required, Check only), Brake Fluid (40,000 km or 24 months, Required, Check only), Rotate Tires (10,000 km or 6 months, Required, Check only), Radiator Coolant Flush (100,000 km or 60 months, Required, Check only)
+  2. Inspection · Active · "Every 5,000 km or 3 months" — Engine oil & filter, Tire Change, Tire Pressure Check, Fluids (Washer / Coolant), Lights Check
+  3. Intermediate Service · Active · "Every 10,000 km or 6 months" — 10 jobs: Engine oil & filter, Tire Change, Tire Pressure Check, Fluids (Washer / Coolant), Lights Check, Rotate Tires, Engine Air Filter, Cabin A/C Filter, Wiper Blades, Brakes
+  4. Major Service · Active · "Every 40,000 km or 24 months" — 14 jobs (show the first 8 and a grey "+ 6 more" chip button that expands)
+  5. Long-Term Service · Active · "Every 100,000 km or 60 months" — Spark Plugs, Radiator Coolant Flush
+- Each card: header row with package name, Active chip, visit rhythm in mono, job count chip ("6 jobs"); then the jobs as a compact grid of small tiles (job icon, name, its OWN schedule in small mono, chips Required / Check only, action chip); a single muted line at the bottom of the card ONLY when the package has Check-only jobs: "Check only = looked at during this visit, replaced only when its own schedule says so."; card button on the right: outline "Edit jobs"
+- The long one-line list of job names under the title (as in the old screen) is REMOVED — the tiles already say it
+- No "+ New package", "Rename" or "Retire" buttons (not built yet)
+
+SCREEN 2: REVIEW LIST TAB
+- "Review list" tab selected with an amber count badge when anything is waiting
+- One short explanation line: "Things that need your decision. Nothing here blocks the live schedules."
+- Two sub-tabs as a segmented control (not underlined text): "Two schedules for the same cars (0)" and "Waiting for owner approval (0)"
+- Frame A — EMPTY (this is today's real state): a single centred card with a check-circle icon, "All clear", muted "Nothing waiting for review or approval." — no other text
+- Frame B — WITH ONE ITEM OF EACH KIND (state frame, sample values):
+  - Conflict card: job "Engine oil & filter", scope chip "Platform M900A"; two side-by-side columns "Schedule A · every 10,000 km or 6 months · Car maker · added 1 Nov 2026" and "Schedule B · every 7,500 km or 6 months · Roam policy · added 4 Nov 2026"; buttons: outline "Keep A", outline "Keep B", red outline "Retire both"; muted line "The one you don't keep is retired."
+  - Approval card: who asked ("Support · Kemar"), what change in mono (before → after: "Brake Fluid: 40,000 km or 24 months → 30,000 km or 24 months"), reason in quotes, source chip; buttons: red outline "Reject" (opens a small in-app box asking for a reason), primary "Approve"
+
+SCREEN 3: HISTORY TAB
+- "History" tab selected
+- Toolbar: search "Filter by job…"; segmented filter "All | Jobs | Sections | Also-do links | Schedules" (All selected); date range dropdown "Last 30 days"; outline button "Export CSV" with download icon
+- Timeline list grouped by day with a small mono day heading ("10 Nov 2026", "9 Nov 2026"); each row: small round avatar initials, one plain sentence, mono time on the right, a kind chip (Job / Section / Also do / Schedule), and an outline icon button with a chevron to expand. Rows (real kinds of change, sample names):
+  - "Deeki T added Fuel Pressure Test to Engine." · Job
+  - "Deeki T put Fuel Pressure Test in Fuel System." · Section
+  - "Deeki T added 'also do': Spark Plugs → Ignition coil ('Same access')." · Also do
+  - "Deeki T changed Throttle Body Cleaning's description." · Job
+  - "Deeki T moved Spark Plug Wires to the top of Ignition System." · Section
+  - "Deeki T retired Fuel Pressure Test (removed from 1 section, 0 links)." · Job
+  - "Roam setup created Brake Fluid schedule: 40,000 km or 24 months · whichever first." · Schedule
+- One row shown EXPANDED: a two-column before / after box in mono listing only the fields that changed (e.g. "description: 'Cleans the throttle…' → 'Removes carbon from the throttle…'")
+- Empty state frame: "No changes in this range."
+- No "cars updated" tags
+
+STATES FRAME (one small frame): loading skeleton of the History list; error card "Couldn't load history" with outline "Try again".
+
+Draw Light and Dark versions of every screen.

@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_dashboard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "tertiary": "#40465e", "on-secondary-fixed-variant": "#3f465c", "primary-fixed-dim": "#b4c5ff", "on-surface-variant": "#434655", "surface-variant": "#e3e2e7", "secondary-container": "#dae2fd", "on-primary": "#ffffff", "outline": "#737686", "inverse-on-surface": "#f2f0f6", "on-secondary-container": "#5c647a", "primary": "#003ea9", "on-background": "#1b1b20", "surface-container-highest": "#e3e2e7", "background": "#faf8fe", "secondary-fixed-dim": "#bec6e0", "surface-container-high": "#e9e7ed", "on-primary-container": "#ced8ff", "primary-container": "#0153dc", "on-primary-fixed-variant": "#003ea8", "on-tertiary-fixed": "#141b30", "surface-tint": "#0053db", "error": "#ba1a1a", "primary-fixed": "#dbe1ff", "secondary": "#565e74", "outline-variant": "#c3c6d7", "tertiary-fixed": "#dbe1ff", "inverse-primary": "#b4c5ff", "secondary-fixed": "#dae2fd", "tertiary-fixed-dim": "#bfc5e2", "on-surface": "#1b1b20", "surface-bright": "#faf8fe", "inverse-surface": "#2f3035", "on-secondary": "#ffffff", "on-error-container": "#93000a", "surface": "#faf8fe", "surface-container": "#efedf3", "surface-container-low": "#f5f3f9", "on-tertiary-container": "#d2d8f6", "tertiary-container": "#575e77", "on-secondary-fixed": "#131b2e", "on-tertiary-fixed-variant": "#3f465e", "on-error": "#ffffff", "on-primary-fixed": "#00174b", "surface-container-lowest": "#ffffff", "on-tertiary": "#ffffff", "surface-dim": "#dbd9df", "error-container": "#ffdad6" }, "borderRadius": { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, "spacing": { "space-xl": "2rem", "space-md": "1rem", "margin": "2rem", "space-lg": "1.5rem", "gutter": "1.5rem", "space-sm": "0.5rem", "space-xs": "0.25rem" }, "fontFamily": { "code-md": [ "JetBrains Mono" ], "hint-sm": [ "Inter" ], "headline-md": [ "Inter" ], "headline-lg": [ "Inter" ], "body-sm": [ "Inter" ], "body-md": [ "Inter" ], "caption": [ "Inter" ], "code-sm": [ "JetBrains Mono" ], "body-lg": [ "Inter" ], "headline-xl": [ "Inter" ] }, "fontSize": { "code-md": [ "14px", { "lineHeight": "20px", "letterSpacing": "-0.02em", "fontWeight": "500" } ], "hint-sm": [ "13px", { "lineHeight": "18px", "letterSpacing": "0.01em", "fontWeight": "400" } ], "headline-md": [ "18px", { "lineHeight": "24px", "letterSpacing": "-0.01em", "fontWeight": "600" } ], "headline-lg": [ "20px", { "lineHeight": "28px", "letterSpacing": "-0.015em", "fontWeight": "600" } ], "body-sm": [ "14px", { "lineHeight": "20px", "letterSpacing": "0em", "fontWeight": "400" } ], "body-md": [ "15px", { "lineHeight": "22px", "letterSpacing": "0em", "fontWeight": "400" } ], "caption": [ "12px", { "lineHeight": "16px", "letterSpacing": "0.02em", "fontWeight": "500" } ], "code-sm": [ "12px", { "lineHeight": "16px", "letterSpacing": "-0.01em", "fontWeight": "500" } ], "body-lg": [ "16px", { "lineHeight": "24px", "letterSpacing": "0em", "fontWeight": "400" } ], "headline-xl": [ "26px", { "lineHeight": "34px", "letterSpacing": "-0.02em", "fontWeight": "600" } ] } } } };</script></head><body class="bg-surface font-body-md text-on-surface antialiased"><aside class="fixed left-0 top-0 h-full w-[260px] bg-[#070e1c] z-50 flex flex-col justify-between select-none shadow-[2px_0_12px_rgba(7,14,28,0.12)]"><div class="flex flex-col h-full"><div class="h-16 px-space-lg flex items-center justify-between border-b border-white/5"><div class="flex items-center gap-space-sm"><div class="w-8 h-8 rounded-lg bg-primary-container flex items-center justify-center text-on-primary font-headline-lg font-bold"><span class="material-symbols-outlined text-[20px]">directions_car</span></div><div class="flex flex-col"><span class="text-white font-headline-md text-[16px] tracking-wide uppercase font-bold leading-tight">Dominion</span><span class="text-outline-variant font-code-sm text-[10px] uppercase tracking-wider">Admin Console</span></div></div><span class="material-symbols-outlined text-outline text-[18px] cursor-pointer hover:text-white transition-colors">unfold_more</span></div><div class="flex-1 overflow-y-auto py-space-md px-space-sm space-y-space-md"><div class="space-y-space-xs"><div class="px-space-sm text-[11px] font-bold uppercase tracking-wider text-outline">Master Data</div><nav class="space-y-[2px]" data-active-classes="bg-primary-container text-white font-medium rounded-lg shadow-[0_2px_8px_rgba(1,83,220,0.3)]"><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-outline-variant hover:bg-white/5 hover:text-white transition-all font-body-sm" data-path="overview" href="#"><span class="material-symbols-outlined text-[18px]">grid_view</span><span>Overview</span></a><a class="flex items-center justify-between px-space-sm py-2 rounded-lg text-outline-variant hover:bg-white/5 hover:text-white transition-all font-body-sm" data-path="vehicles" href="#"><div class="flex items-center gap-space-sm"><span class="material-symbols-outlined text-[18px]">commute</span><span>Vehicles</span></div><span class="px-1.5 py-0.5 rounded-full bg-primary/40 text-primary-fixed font-code-sm text-[11px]">Active</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-outline-variant hover:bg-white/5 hover:text-white transition-all font-body-sm" data-path="places-and-maps" href="#"><span class="material-symbols-outlined text-[18px]">distance</span><span>Places and Maps</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-outline-variant hover:bg-white/5 hover:text-white transition-all font-body-sm" data-path="fuel" href="#"><span class="material-symbols-outlined text-[18px]">local_gas_station</span><span>Fuel</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-outline-variant hover:bg-white/5 hover:text-white transition-all font-body-sm" data-path="tolls" href="#"><span class="material-symbols-outlined text-[18px]">toll</span><span>Tolls</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-outline-variant hover:bg-white/5 hover:text-white transition-all font-body-sm" data-path="tax-and-vendors" href="#"><span class="material-symbols-outlined text-[18px]">receipt_long</span><span>Tax and Vendors</span></a></nav></div><div class="space-y-space-xs"><div class="px-space-sm text-[11px] font-bold uppercase tracking-wider text-outline">Engines</div><nav class="space-y-[2px]" data-active-classes="bg-primary-container text-white font-medium rounded-lg"><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-outline-variant hover:bg-white/5 hover:text-white transition-all font-body-sm" data-path="engine-registry" href="#"><span class="material-symbols-outlined text-[18px]">engineering</span><span>Engine Registry</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-outline-variant hover:bg-white/5 hover:text-white transition-all font-body-sm" data-path="telematics-sync" href="#"><span class="material-symbols-outlined text-[18px]">sync_alt</span><span>Telematics Sync</span></a></nav></div><div class="space-y-space-xs"><div class="px-space-sm text-[11px] font-bold uppercase tracking-wider text-outline">Distribution</div><nav class="space-y-[2px]" data-active-classes="bg-primary-container text-white font-medium rounded-lg"><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-outline-variant hover:bg-white/5 hover:text-white transition-all font-body-sm" data-path="hubs-depots" href="#"><span class="material-symbols-outlined text-[18px]">hub</span><span>Hubs &amp; Depots</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-outline-variant hover:bg-white/5 hover:text-white transition-all font-body-sm" data-path="route-allocations" href="#"><span class="material-symbols-outlined text-[18px]">route</span><span>Allocations</span></a></nav></div><div class="space-y-space-xs"><div class="px-space-sm text-[11px] font-bold uppercase tracking-wider text-outline">Platform</div><nav class="space-y-[2px]" data-active-classes="bg-primary-container text-white font-medium rounded-lg"><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-outline-variant hover:bg-white/5 hover:text-white transition-all font-body-sm" data-path="system-nodes" href="#"><span class="material-symbols-outlined text-[18px]">dns</span><span>System Nodes</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-outline-variant hover:bg-white/5 hover:text-white transition-all font-body-sm" data-path="integrations" href="#"><span class="material-symbols-outlined text-[18px]">extension</span><span>Integrations</span></a></nav></div><div class="space-y-space-xs"><div class="px-space-sm text-[11px] font-bold uppercase tracking-wider text-outline">Back Office</div><nav class="space-y-[2px]" data-active-classes="bg-primary-container text-white font-medium rounded-lg"><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-outline-variant hover:bg-white/5 hover:text-white transition-all font-body-sm" data-path="audit-logs" href="#"><span class="material-symbols-outlined text-[18px]">history_edu</span><span>Audit Logs</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-outline-variant hover:bg-white/5 hover:text-white transition-all font-body-sm" data-path="compliance-rules" href="#"><span class="material-symbols-outlined text-[18px]">gavel</span><span>Compliance</span></a></nav></div></div><div class="p-space-sm bg-[#0c1321] border-t border-white/5"><div class="flex items-center justify-between px-space-sm py-2 rounded-lg bg-white/5"><div class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span><span class="font-code-sm text-white/90 text-[11px] tracking-tight">KGN-DC-01 · JMD READY</span></div><span class="material-symbols-outlined text-outline text-[16px]">speed</span></div></div></div></aside><div class="pl-[260px]"><header class="fixed top-0 left-[260px] right-0 h-16 bg-surface/90 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-40 px-space-xl flex items-center justify-between"><div class="flex items-center flex-1 max-w-xl"><div class="relative w-full flex items-center"><span class="material-symbols-outlined absolute left-3 text-secondary text-[20px]">search</span><input class="w-full h-11 pl-10 pr-12 rounded-lg bg-surface-container-lowest text-on-surface font-body-sm placeholder:text-secondary focus:outline-none focus:ring-2 focus:ring-primary shadow-[0_2px_8px_rgba(1,83,220,0.04)] transition-all" placeholder="Search entities, engines, routes…" type="text"/><span class="absolute right-3 px-1.5 py-0.5 rounded bg-surface-container text-on-surface-variant font-code-sm text-[11px] select-none">⌘K</span></div></div><div class="flex items-center gap-space-md"><button aria-label="Theme Toggle" class="w-9 h-9 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-all" type="button"><span class="material-symbols-outlined text-[20px]">dark_mode</span></button><div class="h-5 w-[1px] bg-surface-variant"></div><div class="flex items-center gap-space-sm"><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div><div class="flex flex-col text-left"><span class="font-headline-md text-on-surface text-[13px] leading-tight">DT · Deeki T</span><span class="font-caption text-secondary text-[11px]">Owner</span></div></div><button aria-label="Sign out" class="w-8 h-8 rounded-lg flex items-center justify-center text-secondary hover:text-error hover:bg-error-container/30 transition-all" type="button"><span class="material-symbols-outlined text-[19px]">logout</span></button></div></header><div class="pt-16 bg-surface-container-low"><div class="w-full px-space-xl py-space-md bg-surface-container-lowest shadow-[0_1px_4px_rgba(0,0,0,0.02)]"><div class="max-w-[1120px] mx-auto"><div class="flex items-center gap-2 font-code-sm text-secondary text-[12px] uppercase tracking-wider mb-space-sm"><span class="hover:text-primary cursor-pointer transition-colors">DOMINION</span><span class="material-symbols-outlined text-[14px] text-outline-variant">chevron_right</span><span class="hover:text-primary cursor-pointer transition-colors">MASTER DATA</span><span class="material-symbols-outlined text-[14px] text-outline-variant">chevron_right</span><span class="hover:text-primary cursor-pointer transition-colors">VEHICLES</span><span class="material-symbols-outlined text-[14px] text-outline-variant">chevron_right</span><span class="text-primary font-semibold">MAINTENANCE TEMPLATES</span></div><div class="flex items-center gap-space-lg"><nav class="flex items-center gap-space-lg" data-active-classes="border-b-2 border-primary text-primary font-semibold"><a class="pb-2 text-on-surface-variant hover:text-on-surface font-body-sm flex items-center gap-1.5 transition-colors" data-path="part-schedules" href="#"><span>Part schedules</span><span class="px-1.5 py-0.2 rounded-full bg-surface-container font-code-sm text-[11px] text-secondary">16</span></a><a class="pb-2 text-on-surface-variant hover:text-on-surface font-body-sm flex items-center gap-1.5 transition-colors" data-path="service-packages" href="#"><span>Service packages</span><span class="px-1.5 py-0.2 rounded-full bg-surface-container font-code-sm text-[11px] text-secondary">5</span></a><a aria-current="page" class="pb-2 flex items-center gap-1.5 transition-colors border-b-2 border-primary text-primary font-semibold" data-path="jobs" href="#"><span>Jobs</span><span class="px-1.5 py-0.2 rounded-full bg-primary-fixed text-primary font-code-sm text-[11px]">68</span></a><a class="pb-2 text-on-surface-variant hover:text-on-surface font-body-sm flex items-center gap-1.5 transition-colors" data-path="review-list" href="#"><span>Review list</span><span class="px-1.5 py-0.2 rounded-full bg-error-container text-on-error-container font-code-sm text-[11px]">1</span></a><a class="pb-2 text-on-surface-variant hover:text-on-surface font-body-sm flex items-center gap-1.5 transition-colors" data-path="history" href="#"><span>History</span></a></nav></div></div></div></div><main class="relative w-full min-h-[calc(100vh-140px)] bg-surface px-space-xl py-space-lg"><div class="max-w-[1120px] mx-auto"><div class="flex flex-col w-full">
+<!-- Top Workspace Context & Action Header -->
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-space-md mb-space-xl">
+<div class="flex items-center gap-space-md">
+<button class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-surface-container-lowest text-on-surface hover:bg-surface-container font-body-sm font-medium shadow-sm transition-all" type="button">
+<span class="material-symbols-outlined text-[18px] text-secondary">arrow_back</span>
+<span>Jobs</span>
+</button>
+<div class="flex items-baseline gap-2">
+<h1 class="font-headline-xl text-on-surface tracking-tight">Sections · Engine</h1>
+<span class="font-code-sm text-secondary uppercase tracking-wider px-2 py-0.5 rounded bg-surface-container-high">Registry Tier 1</span>
+</div>
+</div>
+<div class="flex items-center gap-space-sm">
+<div class="relative">
+<button class="inline-flex items-center justify-between min-w-[170px] h-[38px] px-3.5 rounded-lg bg-surface-container-lowest text-on-surface font-body-sm shadow-sm hover:bg-surface-container transition-all" type="button">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px] text-primary">engineering</span>
+<span class="font-medium">Engine</span>
+</div>
+<span class="material-symbols-outlined text-[18px] text-secondary">expand_more</span>
+</button>
+</div>
+<button class="inline-flex items-center gap-1.5 h-[38px] px-4 rounded-lg bg-primary-container text-on-primary font-body-sm font-medium shadow-[0_2px_8px_rgba(1,83,220,0.25)] hover:bg-primary transition-all" type="button">
+<span class="material-symbols-outlined text-[18px]">add</span>
+<span>Add section group</span>
+</button>
+</div>
+</div>
+<!-- Main Section Group Cards Stack -->
+<div class="flex flex-col gap-space-xl">
+<!-- CARD 1: EXTERNAL BOLT-ON & INDUCTION -->
+<div class="flex flex-col w-full bg-surface-container-lowest rounded-xl shadow-[0_4px_16px_rgba(1,83,220,0.04)] overflow-visible">
+<!-- Group Header -->
+<div class="p-space-lg bg-surface-container-lowest rounded-t-xl flex flex-col md:flex-row md:items-center justify-between gap-space-md">
+<div class="flex items-center gap-space-sm">
+<span class="w-2.5 h-2.5 rounded-full bg-primary-container"></span>
+<div class="flex flex-col">
+<span class="font-caption text-secondary uppercase tracking-wider font-semibold">Group 01</span>
+<h2 class="font-headline-lg text-on-surface">External bolt-on &amp; induction</h2>
+</div>
+<span class="ml-2 px-2 py-0.5 rounded bg-secondary-container text-on-secondary-container font-code-sm text-caption">6 Sections</span>
+</div>
+<div class="flex items-center gap-2 flex-wrap">
+<button class="h-8 px-3 rounded-lg bg-surface-container-lowest text-on-surface hover:bg-surface-container font-body-sm shadow-sm transition-all" type="button">
+            Rename
+          </button>
+<div class="flex items-center gap-1">
+<button aria-label="Move group up" class="w-8 h-8 rounded-lg bg-surface-container-lowest text-secondary hover:text-on-surface hover:bg-surface-container shadow-sm flex items-center justify-center transition-all" type="button">
+<span class="material-symbols-outlined text-[18px]">arrow_upward</span>
+</button>
+<button aria-label="Move group down" class="w-8 h-8 rounded-lg bg-surface-container-lowest text-secondary hover:text-on-surface hover:bg-surface-container shadow-sm flex items-center justify-center transition-all" type="button">
+<span class="material-symbols-outlined text-[18px]">arrow_downward</span>
+</button>
+</div>
+<button class="h-8 px-3 rounded-lg bg-surface-container-lowest text-primary hover:bg-surface-container font-body-sm font-medium shadow-sm transition-all flex items-center gap-1" type="button">
+<span class="material-symbols-outlined text-[16px]">add_circle</span>
+<span>Add section</span>
+</button>
+<!-- Disabled Group Delete with Tooltip Pill -->
+<div class="relative group/delete flex items-center">
+<button class="h-8 px-3 rounded-lg bg-surface-container-low text-outline cursor-not-allowed font-body-sm flex items-center gap-1 opacity-70" disabled="" type="button">
+<span class="material-symbols-outlined text-[16px]">delete</span>
+<span>Delete</span>
+</button>
+<div class="absolute right-0 bottom-full mb-1.5 hidden group-hover/delete:flex items-center gap-1.5 px-2.5 py-1 rounded bg-inverse-surface text-inverse-on-surface font-caption shadow-lg whitespace-nowrap z-30">
+<span class="material-symbols-outlined text-[14px] text-error-container">error</span>
+<span>Has sections — delete them first</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Group Content Body -->
+<div class="p-space-lg pt-0 flex flex-col gap-space-lg">
+<!-- EXPANDED SECTION: Air Intake & Induction -->
+<div class="rounded-xl bg-surface-container-low p-space-lg flex flex-col gap-space-md shadow-sm">
+<!-- Section Bar -->
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-space-md pb-space-sm">
+<div class="flex items-start gap-space-sm">
+<div class="w-10 h-10 rounded-lg bg-secondary-container text-primary flex items-center justify-center shadow-sm shrink-0">
+<span class="material-symbols-outlined text-[22px]">air</span>
+</div>
+<div class="flex flex-col">
+<div class="flex items-center gap-2">
+<h3 class="font-headline-md text-on-surface">Air Intake &amp; Induction</h3>
+<span class="px-2 py-0.5 rounded-full bg-primary-fixed text-primary font-code-sm text-[11px]">Primary Intake</span>
+</div>
+<div class="flex items-center gap-space-sm mt-0.5">
+<p class="font-hint-sm text-secondary">Parts that bring clean air into the engine. All on the outside — nothing is taken apart.</p>
+<button class="text-primary hover:underline font-body-sm font-medium inline-flex items-center gap-0.5" type="button">
+<span class="material-symbols-outlined text-[14px]">edit</span> Edit
+                  </button>
+</div>
+</div>
+</div>
+<!-- Section Level Actions -->
+<div class="flex items-center gap-2 self-start md:self-auto">
+<button class="h-8 px-3 rounded-lg bg-surface-container-lowest text-on-surface hover:bg-surface font-body-sm shadow-sm transition-all" type="button">
+                Rename
+              </button>
+<!-- Disabled Section Delete with Tooltip -->
+<div class="relative group/secdelete flex items-center">
+<button class="h-8 px-3 rounded-lg bg-surface-container text-outline cursor-not-allowed font-body-sm flex items-center gap-1 opacity-70" disabled="" type="button">
+<span class="material-symbols-outlined text-[16px]">delete</span>
+<span>Delete</span>
+</button>
+<div class="absolute right-0 bottom-full mb-1.5 hidden group-hover/secdelete:flex items-center gap-1.5 px-2.5 py-1 rounded bg-inverse-surface text-inverse-on-surface font-caption shadow-lg whitespace-nowrap z-30">
+<span class="material-symbols-outlined text-[14px] text-error-container">lock</span>
+<span>Has jobs — remove them first</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Ordered Job List inside Section -->
+<div class="flex flex-col gap-2">
+<!-- Job 1 -->
+<div class="flex items-center justify-between p-3 rounded-lg bg-surface-container-lowest shadow-sm hover:shadow-md transition-shadow">
+<div class="flex items-center gap-3">
+<div class="w-6 h-6 rounded flex items-center justify-center font-code-sm text-secondary bg-surface-container">
+                  1
+                </div>
+<div class="flex flex-col sm:flex-row sm:items-center gap-2">
+<span class="font-body-md font-medium text-on-surface">Engine Air Filter</span>
+<div class="flex items-center gap-1.5 flex-wrap">
+<span class="px-2 py-0.5 rounded bg-surface-container text-on-surface-variant font-code-sm">Part</span>
+<span class="px-2 py-0.5 rounded bg-surface-container text-on-surface-variant font-code-sm">Replace</span>
+<span class="px-2 py-0.5 rounded bg-secondary-container text-on-secondary-container font-code-sm">Listed from Filters</span>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<div class="flex items-center gap-1">
+<button aria-label="Move job up" class="w-7 h-7 rounded bg-surface-container text-secondary hover:text-on-surface flex items-center justify-center transition-colors" type="button">
+<span class="material-symbols-outlined text-[16px]">arrow_upward</span>
+</button>
+<button aria-label="Move job down" class="w-7 h-7 rounded bg-surface-container text-secondary hover:text-on-surface flex items-center justify-center transition-colors" type="button">
+<span class="material-symbols-outlined text-[16px]">arrow_downward</span>
+</button>
+</div>
+<button class="h-7 px-2.5 rounded bg-surface-container-lowest text-error hover:bg-error-container/40 font-body-sm transition-colors" type="button">
+                  Remove
+                </button>
+</div>
+</div>
+<!-- Job 2 -->
+<div class="flex items-center justify-between p-3 rounded-lg bg-surface-container-lowest shadow-sm hover:shadow-md transition-shadow">
+<div class="flex items-center gap-3">
+<div class="w-6 h-6 rounded flex items-center justify-center font-code-sm text-secondary bg-surface-container">
+                  2
+                </div>
+<div class="flex flex-col sm:flex-row sm:items-center gap-2">
+<span class="font-body-md font-medium text-on-surface">Throttle Body Cleaning</span>
+<div class="flex items-center gap-1.5 flex-wrap">
+<span class="px-2 py-0.5 rounded bg-surface-container text-on-surface-variant font-code-sm">Service</span>
+<span class="px-2 py-0.5 rounded bg-surface-container text-on-surface-variant font-code-sm">Clean</span>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<div class="flex items-center gap-1">
+<button aria-label="Move job up" class="w-7 h-7 rounded bg-surface-container text-secondary hover:text-on-surface flex items-center justify-center transition-colors" type="button">
+<span class="material-symbols-outlined text-[16px]">arrow_upward</span>
+</button>
+<button aria-label="Move job down" class="w-7 h-7 rounded bg-surface-container text-secondary hover:text-on-surface flex items-center justify-center transition-colors" type="button">
+<span class="material-symbols-outlined text-[16px]">arrow_downward</span>
+</button>
+</div>
+<button class="h-7 px-2.5 rounded bg-surface-container-lowest text-error hover:bg-error-container/40 font-body-sm transition-colors" type="button">
+                  Remove
+                </button>
+</div>
+</div>
+<!-- Job 3 -->
+<div class="flex items-center justify-between p-3 rounded-lg bg-surface-container-lowest shadow-sm hover:shadow-md transition-shadow">
+<div class="flex items-center gap-3">
+<div class="w-6 h-6 rounded flex items-center justify-center font-code-sm text-secondary bg-surface-container">
+                  3
+                </div>
+<div class="flex flex-col sm:flex-row sm:items-center gap-2">
+<span class="font-body-md font-medium text-on-surface">Intake Manifold Gasket</span>
+<div class="flex items-center gap-1.5 flex-wrap">
+<span class="px-2 py-0.5 rounded bg-surface-container text-on-surface-variant font-code-sm">Part</span>
+<span class="px-2 py-0.5 rounded bg-surface-container text-on-surface-variant font-code-sm">Replace</span>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<div class="flex items-center gap-1">
+<button aria-label="Move job up" class="w-7 h-7 rounded bg-surface-container text-secondary hover:text-on-surface flex items-center justify-center transition-colors" type="button">
+<span class="material-symbols-outlined text-[16px]">arrow_upward</span>
+</button>
+<button aria-label="Move job down" class="w-7 h-7 rounded bg-surface-container text-secondary hover:text-on-surface flex items-center justify-center transition-colors" type="button">
+<span class="material-symbols-outlined text-[16px]">arrow_downward</span>
+</button>
+</div>
+<button class="h-7 px-2.5 rounded bg-surface-container-lowest text-error hover:bg-error-container/40 font-body-sm transition-colors" type="button">
+                  Remove
+                </button>
+</div>
+</div>
+</div>
+<!-- Add Jobs Anchor & Popover Launcher -->
+<div class="relative pt-1 flex flex-col items-start">
+<button class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary-fixed text-primary font-body-sm font-semibold shadow-[0_2px_8px_rgba(1,83,220,0.18)] transition-all" id="add-jobs-trigger" type="button">
+<span class="material-symbols-outlined text-[18px]">library_add</span>
+<span>+ Add jobs to section</span>
+<span class="material-symbols-outlined text-[16px]">expand_less</span>
+</button>
+<!-- OPEN POPOVER PICKER (Anchored directly below "+ Add jobs to section") -->
+<div class="relative mt-3 w-full max-w-[380px] bg-surface-container-lowest rounded-xl shadow-[0_12px_32px_-4px_rgba(15,23,42,0.14),0_4px_12px_-2px_rgba(1,83,220,0.06)] z-20 flex flex-col overflow-hidden" id="job-popover-picker">
+<!-- Search Head -->
+<div class="p-3 bg-surface-container-low flex flex-col gap-2">
+<div class="relative flex items-center w-full">
+<span class="material-symbols-outlined absolute left-2.5 text-secondary text-[18px]">search</span>
+<input class="w-full h-9 pl-9 pr-3 rounded-lg bg-surface-container-lowest text-on-surface font-body-sm placeholder:text-secondary focus:outline-none focus:ring-2 focus:ring-primary shadow-sm" placeholder="Find a job…" type="text" value=""/>
+</div>
+<div class="flex items-center justify-between px-1 text-secondary font-caption">
+<span>Available jobs in registry</span>
+<span class="font-code-sm">2 SELECTED</span>
+</div>
+</div>
+<!-- Job Checklist Options -->
+<div class="p-2 flex flex-col gap-1 max-h-[220px] overflow-y-auto">
+<!-- Option 1: Selected & Enabled -->
+<label class="flex items-center gap-3 p-2 rounded-lg hover:bg-surface-container cursor-pointer transition-colors bg-secondary-container/20">
+<input checked="" class="w-4 h-4 rounded text-primary-container focus:ring-primary accent-primary-container" type="checkbox"/>
+<div class="flex flex-col min-w-0">
+<span class="font-body-sm font-medium text-on-surface truncate">Fuel Pressure Test</span>
+<span class="font-code-sm text-secondary text-[11px]">Engine · Diagnostic</span>
+</div>
+</label>
+<!-- Option 2: Disabled with notice -->
+<div class="flex items-center gap-3 p-2 rounded-lg bg-surface-container/50 opacity-60 cursor-not-allowed">
+<input class="w-4 h-4 rounded cursor-not-allowed" disabled="" type="checkbox"/>
+<div class="flex flex-col min-w-0">
+<span class="font-body-sm text-outline truncate">Throttle Body Cleaning · Engine</span>
+<span class="font-hint-sm text-outline text-[11px] italic">in Air Intake &amp; Induction</span>
+</div>
+</div>
+<!-- Option 3: Selected & Enabled with Cross-list pill -->
+<label class="flex items-center justify-between gap-2 p-2 rounded-lg hover:bg-surface-container cursor-pointer transition-colors bg-secondary-container/20">
+<div class="flex items-center gap-3 min-w-0">
+<input checked="" class="w-4 h-4 rounded text-primary-container focus:ring-primary accent-primary-container shrink-0" type="checkbox"/>
+<div class="flex flex-col min-w-0">
+<span class="font-body-sm font-medium text-on-surface truncate">Fuel filter</span>
+<span class="font-code-sm text-secondary text-[11px]">Filters · Cartridge</span>
+</div>
+</div>
+<span class="px-2 py-0.5 rounded bg-primary-fixed text-primary font-code-sm text-[10px] uppercase font-semibold shrink-0">Cross-list</span>
+</label>
+</div>
+<!-- Popover Footer -->
+<div class="p-3 bg-surface-container-low flex items-center justify-between gap-2">
+<button class="h-8 px-3 rounded-lg bg-surface-container-lowest text-error hover:bg-error-container/40 font-body-sm font-medium shadow-sm transition-all" type="button">
+                  Cancel
+                </button>
+<button class="h-8 px-4 rounded-lg bg-primary-container text-on-primary font-body-sm font-medium shadow-sm hover:bg-primary transition-all flex items-center gap-1.5" type="button">
+<span class="material-symbols-outlined text-[16px]">check</span>
+<span>Add 2 jobs</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Collapsed Sections inside Group 1 -->
+<div class="flex flex-col gap-2 pt-2">
+<div class="px-1 text-secondary font-caption uppercase tracking-wider font-semibold">Other Sections in this Group</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+<!-- Fuel System -->
+<div class="p-3 rounded-lg bg-surface-container-low flex items-center justify-between hover:bg-surface-container transition-colors">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-secondary text-[18px]">drag_indicator</span>
+<span class="font-body-sm font-medium text-on-surface">Fuel System</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="px-2 py-0.5 rounded bg-surface-container-highest text-on-surface font-code-sm text-[11px]">8 jobs</span>
+<span class="material-symbols-outlined text-outline text-[18px]">expand_more</span>
+</div>
+</div>
+<!-- Ignition System -->
+<div class="p-3 rounded-lg bg-surface-container-low flex items-center justify-between hover:bg-surface-container transition-colors">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-secondary text-[18px]">drag_indicator</span>
+<span class="font-body-sm font-medium text-on-surface">Ignition System</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="px-2 py-0.5 rounded bg-surface-container-highest text-on-surface font-code-sm text-[11px]">4 jobs</span>
+<span class="material-symbols-outlined text-outline text-[18px]">expand_more</span>
+</div>
+</div>
+<!-- Accessory & Timing Drive -->
+<div class="p-3 rounded-lg bg-surface-container-low flex items-center justify-between hover:bg-surface-container transition-colors">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-secondary text-[18px]">drag_indicator</span>
+<span class="font-body-sm font-medium text-on-surface">Accessory &amp; Timing Drive</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="px-2 py-0.5 rounded bg-surface-container-highest text-on-surface font-code-sm text-[11px]">5 jobs</span>
+<span class="material-symbols-outlined text-outline text-[18px]">expand_more</span>
+</div>
+</div>
+<!-- Fluids & Emissions -->
+<div class="p-3 rounded-lg bg-surface-container-low flex items-center justify-between hover:bg-surface-container transition-colors">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-secondary text-[18px]">drag_indicator</span>
+<span class="font-body-sm font-medium text-on-surface">Fluids &amp; Emissions</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="px-2 py-0.5 rounded bg-surface-container-highest text-on-surface font-code-sm text-[11px]">7 jobs</span>
+<span class="material-symbols-outlined text-outline text-[18px]">expand_more</span>
+</div>
+</div>
+<!-- Cooling System -->
+<div class="p-3 rounded-lg bg-surface-container-low flex items-center justify-between hover:bg-surface-container transition-colors md:col-span-2">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-secondary text-[18px]">drag_indicator</span>
+<span class="font-body-sm font-medium text-on-surface">Cooling System</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="px-2 py-0.5 rounded bg-surface-container-highest text-on-surface font-code-sm text-[11px]">6 jobs</span>
+<span class="material-symbols-outlined text-outline text-[18px]">expand_more</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- CARD 2: TOP END (CYLINDER HEAD) -->
+<div class="flex flex-col w-full bg-surface-container-lowest rounded-xl shadow-[0_4px_16px_rgba(1,83,220,0.04)]">
+<div class="p-space-lg flex flex-col md:flex-row md:items-center justify-between gap-space-md">
+<div class="flex items-center gap-space-sm">
+<span class="w-2.5 h-2.5 rounded-full bg-secondary"></span>
+<div class="flex flex-col">
+<span class="font-caption text-secondary uppercase tracking-wider font-semibold">Group 02</span>
+<h2 class="font-headline-lg text-on-surface">Top end (cylinder head)</h2>
+</div>
+<span class="ml-2 px-2 py-0.5 rounded bg-surface-container-high text-secondary font-code-sm text-caption">1 Section</span>
+</div>
+<div class="flex items-center gap-2 flex-wrap">
+<button class="h-8 px-3 rounded-lg bg-surface-container-lowest text-on-surface hover:bg-surface-container font-body-sm shadow-sm transition-all" type="button">
+            Rename
+          </button>
+<div class="flex items-center gap-1">
+<button aria-label="Move group up" class="w-8 h-8 rounded-lg bg-surface-container-lowest text-secondary hover:text-on-surface hover:bg-surface-container shadow-sm flex items-center justify-center transition-all" type="button">
+<span class="material-symbols-outlined text-[18px]">arrow_upward</span>
+</button>
+<button aria-label="Move group down" class="w-8 h-8 rounded-lg bg-surface-container-lowest text-secondary hover:text-on-surface hover:bg-surface-container shadow-sm flex items-center justify-center transition-all" type="button">
+<span class="material-symbols-outlined text-[18px]">arrow_downward</span>
+</button>
+</div>
+<button class="h-8 px-3 rounded-lg bg-surface-container-lowest text-primary hover:bg-surface-container font-body-sm font-medium shadow-sm transition-all flex items-center gap-1" type="button">
+<span class="material-symbols-outlined text-[16px]">add_circle</span>
+<span>Add section</span>
+</button>
+<button class="h-8 px-3 rounded-lg bg-surface-container-lowest text-error hover:bg-error-container/40 font-body-sm shadow-sm transition-all" type="button">
+            Delete
+          </button>
+</div>
+</div>
+<div class="px-space-lg pb-space-lg">
+<div class="p-3.5 rounded-lg bg-surface-container-low flex items-center justify-between hover:bg-surface-container transition-colors">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-secondary text-[20px]">layers</span>
+<div class="flex flex-col">
+<span class="font-body-md font-medium text-on-surface">Cylinder Head</span>
+<span class="font-hint-sm text-secondary">Valves, camshafts, seals, and head fasteners</span>
+</div>
+</div>
+<div class="flex items-center gap-3">
+<span class="px-2 py-0.5 rounded bg-surface-container-highest text-on-surface font-code-sm text-[12px]">6 jobs</span>
+<button class="text-primary hover:underline font-body-sm font-medium" type="button">Expand</button>
+</div>
+</div>
+</div>
+</div>
+<!-- CARD 3: BOTTOM END (ENGINE BLOCK) -->
+<div class="flex flex-col w-full bg-surface-container-lowest rounded-xl shadow-[0_4px_16px_rgba(1,83,220,0.04)]">
+<div class="p-space-lg flex flex-col md:flex-row md:items-center justify-between gap-space-md">
+<div class="flex items-center gap-space-sm">
+<span class="w-2.5 h-2.5 rounded-full bg-secondary"></span>
+<div class="flex flex-col">
+<span class="font-caption text-secondary uppercase tracking-wider font-semibold">Group 03</span>
+<h2 class="font-headline-lg text-on-surface">Bottom end (engine block)</h2>
+</div>
+<span class="ml-2 px-2 py-0.5 rounded bg-surface-container-high text-secondary font-code-sm text-caption">2 Sections</span>
+</div>
+<div class="flex items-center gap-2 flex-wrap">
+<button class="h-8 px-3 rounded-lg bg-surface-container-lowest text-on-surface hover:bg-surface-container font-body-sm shadow-sm transition-all" type="button">
+            Rename
+          </button>
+<div class="flex items-center gap-1">
+<button aria-label="Move group up" class="w-8 h-8 rounded-lg bg-surface-container-lowest text-secondary hover:text-on-surface hover:bg-surface-container shadow-sm flex items-center justify-center transition-all" type="button">
+<span class="material-symbols-outlined text-[18px]">arrow_upward</span>
+</button>
+<button aria-label="Move group down" class="w-8 h-8 rounded-lg bg-surface-container-lowest text-secondary hover:text-on-surface hover:bg-surface-container shadow-sm flex items-center justify-center transition-all" type="button">
+<span class="material-symbols-outlined text-[18px]">arrow_downward</span>
+</button>
+</div>
+<button class="h-8 px-3 rounded-lg bg-surface-container-lowest text-primary hover:bg-surface-container font-body-sm font-medium shadow-sm transition-all flex items-center gap-1" type="button">
+<span class="material-symbols-outlined text-[16px]">add_circle</span>
+<span>Add section</span>
+</button>
+<button class="h-8 px-3 rounded-lg bg-surface-container-lowest text-error hover:bg-error-container/40 font-body-sm shadow-sm transition-all" type="button">
+            Delete
+          </button>
+</div>
+</div>
+<div class="px-space-lg pb-space-lg flex flex-col gap-2">
+<div class="p-3.5 rounded-lg bg-surface-container-low flex items-center justify-between hover:bg-surface-container transition-colors">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-secondary text-[20px]">reorder</span>
+<div class="flex flex-col">
+<span class="font-body-md font-medium text-on-surface">Pistons &amp; Compression</span>
+<span class="font-hint-sm text-secondary">Rings, wrist pins, and connecting rod bearings</span>
+</div>
+</div>
+<div class="flex items-center gap-3">
+<span class="px-2 py-0.5 rounded bg-surface-container-highest text-on-surface font-code-sm text-[12px]">3 jobs</span>
+<button class="text-primary hover:underline font-body-sm font-medium" type="button">Expand</button>
+</div>
+</div>
+<div class="p-3.5 rounded-lg bg-surface-container-low flex items-center justify-between hover:bg-surface-container transition-colors">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-secondary text-[20px]">rotate_right</span>
+<div class="flex flex-col">
+<span class="font-body-md font-medium text-on-surface">Crankshaft &amp; Rotating Assembly</span>
+<span class="font-hint-sm text-secondary">Main journals, flywheel, harmonic balancer, rear main seal</span>
+</div>
+</div>
+<div class="flex items-center gap-3">
+<span class="px-2 py-0.5 rounded bg-surface-container-highest text-on-surface font-code-sm text-[12px]">4 jobs</span>
+<button class="text-primary hover:underline font-body-sm font-medium" type="button">Expand</button>
+</div>
+</div>
+</div>
+</div>
+<!-- CARD 4: WHOLE ENGINE -->
+<div class="flex flex-col w-full bg-surface-container-lowest rounded-xl shadow-[0_4px_16px_rgba(1,83,220,0.04)] mb-space-xl">
+<div class="p-space-lg flex flex-col md:flex-row md:items-center justify-between gap-space-md">
+<div class="flex items-center gap-space-sm">
+<span class="w-2.5 h-2.5 rounded-full bg-secondary"></span>
+<div class="flex flex-col">
+<span class="font-caption text-secondary uppercase tracking-wider font-semibold">Group 04</span>
+<h2 class="font-headline-lg text-on-surface">Whole engine</h2>
+</div>
+<span class="ml-2 px-2 py-0.5 rounded bg-surface-container-high text-secondary font-code-sm text-caption">1 Section</span>
+</div>
+<div class="flex items-center gap-2 flex-wrap">
+<button class="h-8 px-3 rounded-lg bg-surface-container-lowest text-on-surface hover:bg-surface-container font-body-sm shadow-sm transition-all" type="button">
+            Rename
+          </button>
+<div class="flex items-center gap-1">
+<button aria-label="Move group up" class="w-8 h-8 rounded-lg bg-surface-container-lowest text-secondary hover:text-on-surface hover:bg-surface-container shadow-sm flex items-center justify-center transition-all" type="button">
+<span class="material-symbols-outlined text-[18px]">arrow_upward</span>
+</button>
+<button aria-label="Move group down" class="w-8 h-8 rounded-lg bg-surface-container-lowest text-secondary hover:text-on-surface hover:bg-surface-container shadow-sm flex items-center justify-center transition-all" type="button">
+<span class="material-symbols-outlined text-[18px]">arrow_downward</span>
+</button>
+</div>
+<button class="h-8 px-3 rounded-lg bg-surface-container-lowest text-primary hover:bg-surface-container font-body-sm font-medium shadow-sm transition-all flex items-center gap-1" type="button">
+<span class="material-symbols-outlined text-[16px]">add_circle</span>
+<span>Add section</span>
+</button>
+<button class="h-8 px-3 rounded-lg bg-surface-container-lowest text-error hover:bg-error-container/40 font-body-sm shadow-sm transition-all" type="button">
+            Delete
+          </button>
+</div>
+</div>
+<div class="px-space-lg pb-space-lg">
+<div class="p-3.5 rounded-lg bg-surface-container-low flex items-center justify-between hover:bg-surface-container transition-colors">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-secondary text-[20px]">precision_manufacturing</span>
+<div class="flex flex-col">
+<span class="font-body-md font-medium text-on-surface">Whole Engine</span>
+<span class="font-hint-sm text-secondary">Complete long-block swaps, teardown &amp; crate drops</span>
+</div>
+</div>
+<div class="flex items-center gap-3">
+<span class="px-2 py-0.5 rounded bg-surface-container-highest text-on-surface font-code-sm text-[12px]">1 job</span>
+<button class="text-primary hover:underline font-body-sm font-medium" type="button">Expand</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+<script>
+    (function initManageSections() {
+      const trigger = document.getElementById('add-jobs-trigger');
+      const popover = document.getElementById('job-popover-picker');
+      if (!trigger || !popover) return;
+
+      trigger.addEventListener('click', (e) => {
+        e.stopPropagation();
+        popover.classList.toggle('hidden');
+      });
+
+      const cancelBtn = popover.querySelector('button');
+      if (cancelBtn) {
+        cancelBtn.addEventListener('click', () => {
+          popover.classList.add('hidden');
+        });
+      }
+    })();
+  </script>
+</div></div></main></div></body></html>

@@ -1,5 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { ChevronRight, Eye, Loader2, Trash2 } from "lucide-react";
+import { groupJobsPreview, groupServiceHistoryRows } from "./serviceHistoryGroups";
+import {
+  ServiceHistoryDeleteDialog,
+  ServiceHistoryViewDialog,
+  type DeleteJobTarget,
+} from "./ServiceHistoryRowDialogs";
 import { api } from "../../../services/api";
 import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
@@ -56,6 +62,10 @@ export function MaintenanceServiceHistoryPanel({ vehicles }: { vehicles: Vehicle
   const [error, setError] = useState<string | null>(null);
   const [rows, setRows] = useState<HistoryRow[]>([]);
   const [total, setTotal] = useState(0);
+  /** Row the user opened: the whole service (work order) it belongs to. */
+  const [viewing, setViewing] = useState<{ workOrderId: string; label: string } | null>(null);
+  /** The one job (row) the user clicked delete on. */
+  const [deleting, setDeleting] = useState<DeleteJobTarget | null>(null);
 
   const fromDate = useMemo(() => {
     const months = Number(fromMonths) || 12;
@@ -90,6 +100,17 @@ export function MaintenanceServiceHistoryPanel({ vehicles }: { vehicles: Vehicle
     void load();
   }, [load]);
 
+  /** One group per date + car; the arrow opens its jobs. */
+  const groups = useMemo(() => groupServiceHistoryRows(rows), [rows]);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const toggleGroup = (key: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+
   const vehicleById = useMemo(() => {
     const m = new Map<string, VehicleOption>();
     for (const v of vehicles) m.set(v.vehicleId, v);
@@ -103,7 +124,7 @@ export function MaintenanceServiceHistoryPanel({ vehicles }: { vehicles: Vehicle
           <div>
             <h2 className="text-lg font-semibold text-on-surface tracking-tight">Maintenance Audit Trail</h2>
             <p className="text-sm text-on-surface-variant mt-0.5">
-              Every service that was done, one line per part.
+              Every service that was done, grouped by date. Press the arrow to see each job.
             </p>
           </div>
           <div className="flex items-center gap-1 font-mono text-[11px] text-stitch-secondary">
@@ -213,7 +234,7 @@ export function MaintenanceServiceHistoryPanel({ vehicles }: { vehicles: Vehicle
         ) : rows.length === 0 ? (
           <p className="text-center py-12 text-sm text-stitch-secondary">No completed service lines in this range.</p>
         ) : (
-          <table className="w-full text-left border-collapse min-w-[800px]">
+          <table className="w-full text-left border-collapse min-w-[880px]">
             <thead>
               <tr className="bg-surface-container-low text-stitch-secondary text-[11px] uppercase tracking-wider">
                 <th className="py-2 px-4 font-semibold">Date</th>
@@ -224,10 +245,72 @@ export function MaintenanceServiceHistoryPanel({ vehicles }: { vehicles: Vehicle
                 <th className="py-2 px-4 font-semibold">Provider</th>
                 <th className="py-2 px-4 font-semibold text-right">Cost</th>
                 <th className="py-2 px-4 font-semibold text-center">Invoice</th>
+                <th className="py-2 px-4 font-semibold text-center">Actions</th>
               </tr>
             </thead>
             <tbody className="text-sm divide-y divide-surface-container">
-              {rows.map((row, idx) => {
+              {groups.map((g) => {
+                const open = expanded.has(g.key);
+                const gVeh = vehicleById.get(g.vehicleId);
+                const gPlate = gVeh?.licensePlate ?? "";
+                const gName = gVeh ? [gVeh.make, gVeh.model].filter(Boolean).join(" ") : g.vehicleId;
+                const kmLabel =
+                  g.minKm == null
+                    ? "—"
+                    : g.minKm === g.maxKm
+                      ? `${g.minKm.toLocaleString()} km`
+                      : `${g.minKm.toLocaleString()}–${(g.maxKm ?? g.minKm).toLocaleString()} km`;
+                return (
+                  <React.Fragment key={g.key}>
+                    <tr
+                      className={`cursor-pointer ${open ? "bg-surface-container-low" : "hover:bg-surface-container-low/60"}`}
+                      onClick={() => toggleGroup(g.key)}
+                    >
+                      <td className="py-3 px-4 whitespace-nowrap font-semibold">
+                        <button
+                          type="button"
+                          aria-expanded={open}
+                          aria-label={open ? "Hide jobs" : "Show jobs"}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleGroup(g.key);
+                          }}
+                          className="inline-flex items-center gap-2"
+                        >
+                          <span className="w-7 h-7 rounded-lg border border-outline-variant/50 bg-surface-container-lowest flex items-center justify-center">
+                            <ChevronRight className={`w-4 h-4 transition-transform ${open ? "rotate-90" : ""}`} />
+                          </span>
+                          {formatDate(g.date, false)}
+                        </button>
+                      </td>
+                      <td className="py-3 px-4 whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          <span>{gName || "—"}</span>
+                          {gPlate ? (
+                            <span className="font-mono text-[10px] bg-surface-container-high px-1.5 py-0.5 rounded font-bold tracking-widest">
+                              {gPlate}
+                            </span>
+                          ) : null}
+                        </div>
+                      </td>
+                      <td className="py-3 px-4" colSpan={2}>
+                        <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold bg-primary text-on-primary mr-2">
+                          {g.rows.length} job{g.rows.length === 1 ? "" : "s"}
+                        </span>
+                        <span className="text-on-surface-variant">{groupJobsPreview(g.jobNames)}</span>
+                      </td>
+                      <td className="py-3 px-4 whitespace-nowrap font-mono text-stitch-secondary">{kmLabel}</td>
+                      <td className="py-3 px-4 whitespace-nowrap">{g.providers.join(", ") || "—"}</td>
+                      <td className="py-3 px-4 whitespace-nowrap text-right font-mono font-semibold">
+                        {formatMoney(g.currency, g.total)}
+                      </td>
+                      <td className="py-3 px-4 text-center text-stitch-secondary">
+                        {g.invoiceCount ? `${g.invoiceCount}` : "—"}
+                      </td>
+                      <td className="py-3 px-4" />
+                    </tr>
+                    {open
+                      ? g.rows.map((row, idx) => {
                 const vid = String(row.vehicle_id ?? row.vehicleId ?? "");
                 const veh = vehicleById.get(vid);
                 const plate = veh?.licensePlate ?? "";
@@ -238,9 +321,21 @@ export function MaintenanceServiceHistoryPanel({ vehicles }: { vehicles: Vehicle
                 const dateUnknown =
                   row.date_unknown === true
                   || (row.payload_json as { dateUnknown?: boolean } | undefined)?.dateUnknown === true;
+                const workOrderId = String(row.work_order_id ?? row.workOrderId ?? "").trim();
+                const lineId = String(row.line_id ?? row.lineId ?? "").trim();
+                const jobName = String(row.category_name ?? row.categoryName ?? "this job");
+                const rowLabel = [
+                  formatDate(row.performed_at_date ?? row.performedAtDate, dateUnknown),
+                  [vehName, plate].filter(Boolean).join(" "),
+                ]
+                  .filter(Boolean)
+                  .join(" · ");
                 return (
-                  <tr key={String(row.line_id ?? row.lineId ?? idx)} className="hover:bg-surface-container-low/60">
-                    <td className="py-3 px-4 whitespace-nowrap font-medium">
+                  <tr
+                    key={String(row.line_id ?? row.lineId ?? idx)}
+                    className="bg-surface-container-lowest hover:bg-surface-container-low/60"
+                  >
+                    <td className="py-3 pl-14 pr-4 whitespace-nowrap text-stitch-secondary text-xs">
                       {formatDate(row.performed_at_date ?? row.performedAtDate, dateUnknown)}
                     </td>
                     <td className="py-3 px-4 whitespace-nowrap">
@@ -292,7 +387,44 @@ export function MaintenanceServiceHistoryPanel({ vehicles }: { vehicles: Vehicle
                         <span className="text-stitch-secondary">—</span>
                       )}
                     </td>
+                    <td className="py-3 px-4">
+                      <div className="flex items-center justify-center gap-2">
+                        {workOrderId ? (
+                          <button
+                            type="button"
+                            title="View service"
+                            aria-label="View service"
+                            onClick={() => setViewing({ workOrderId, label: rowLabel })}
+                            className="w-8 h-8 rounded-lg border border-outline-variant/50 bg-surface-container-lowest flex items-center justify-center text-on-surface hover:bg-surface-container"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                        ) : null}
+                        {lineId ? (
+                          <button
+                            type="button"
+                            title={`Delete ${jobName}`}
+                            aria-label={`Delete ${jobName}`}
+                            onClick={() =>
+                              setDeleting({
+                                lineId,
+                                jobName,
+                                costLabel: formatMoney(currency, lineTotal),
+                                summary: rowLabel,
+                              })
+                            }
+                            className="w-8 h-8 rounded-lg bg-error text-on-error flex items-center justify-center hover:bg-error/90"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        ) : null}
+                      </div>
+                    </td>
                   </tr>
+                );
+                        })
+                      : null}
+                  </React.Fragment>
                 );
               })}
             </tbody>
@@ -321,6 +453,20 @@ export function MaintenanceServiceHistoryPanel({ vehicles }: { vehicles: Vehicle
           </div>
         </div>
       ) : null}
+
+      <ServiceHistoryViewDialog
+        workOrderId={viewing?.workOrderId ?? null}
+        vehicleLabel={viewing?.label ?? ""}
+        onClose={() => setViewing(null)}
+      />
+      <ServiceHistoryDeleteDialog
+        target={deleting}
+        onClose={() => setDeleting(null)}
+        onDeleted={() => {
+          setDeleting(null);
+          void load();
+        }}
+      />
     </div>
   );
 }

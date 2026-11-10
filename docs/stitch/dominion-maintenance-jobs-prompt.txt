@@ -1,0 +1,115 @@
+ROAM DOMINION — MAINTENANCE: JOBS (4 SCREENS, GOOGLE STITCH)
+Spec for content: docs/engine-service-sections-plan.md (Rev 5, Layer 3 DM1–DM4).
+
+
+
+
+Roam Dominion - Maintenance · Jobs (Desktop Admin, for the owner and catalog staff):
+
+Design four screens for the new "Jobs" tab of the Maintenance templates section of the Roam Dominion admin console. It replaces the old "Part types" tab. The other screens of this section (Part schedules, Service packages, Review list, History) already exist — these must look like the same product and sit beside them. In this section a JOB is one piece of maintenance work you can log, e.g. "Spark Plugs", "Throttle Body Cleaning", "Wheel Alignment". Every job has a HOME GROUP (Engine, Filters, Brakes, Tires & wheels, Fluids, Belts & hoses, Lighting & visibility, Suspension & steering, Transmission, HVAC, Battery & electrical) and a FORM TYPE: a SERVICE (only a cost is logged) or a PART (quantity, price, brand and part number are logged). Inside a group, jobs can be arranged into SECTION GROUPS and SECTIONS, e.g. Engine → "External bolt-on & induction" → "Air Intake & Induction". A job from another group can be LISTED in a section without moving (e.g. Engine Air Filter lives in Filters but is listed in Engine · Air Intake & Induction). "ALSO DO" links suggest work that naturally goes together (e.g. Piston Ring Replacement → Head Gasket, note "The head is already off."). Jobs are never deleted — they are retired. Dominion never shows customer names, fleet names, plates, prices, suppliers or stock. Draw each screen at FULL HEIGHT so every element is visible; nothing may be cut off, blurred or hidden behind another layer except where a frame below says so.
+
+BRAND IDENTITY:
+- Match the existing Dominion console exactly:
+  - dark navy left sidebar with "Dominion · Roam Admin Console"; groups MASTER DATA (Overview, Vehicles — highlighted, Places and Maps, Fuel, Tolls, Tax and Vendors), ENGINES (Fuel Brain, Toll Brain, Matching Brain), DISTRIBUTION (Apps, Data API, Change requests), PLATFORM (Staff and roles, Activity log, Platform Ops, Global settings), BACK OFFICE (GCT registrations, Ledger, Remittance); bottom status "KGN-DC-01 · JMD READY". Maintenance lives inside Vehicles — no separate sidebar item.
+  - top bar: search "Search entities, engines, routes…" with a ⌘K chip, moon icon, user "DT · Deeki T · Owner", sign-out icon. Nothing else.
+  - breadcrumb in mono caps "DOMINION › MASTER DATA › VEHICLES › MAINTENANCE TEMPLATES"
+  - page title "Maintenance templates", subtitle "How often each part is serviced, for which cars, and why."
+  - tabs in this order: "Part schedules" (16), "Service packages" (5), "Jobs" (68) — selected, "Review list" (1, amber badge), "History"
+- LIGHT MODE (default):
+  - Primary: #0153dc; primary container: #dbe1ff
+  - Success: #006e31; warning: #8a5a00; error: #a83836
+  - Outline: #797a84; hairline dividers #e6e7ee
+  - Background: #faf8fe; cards white, 16px radius, 1px hairline border, no heavy shadows
+  - Text: #30323b; muted text: #5d5f68
+- DARK MODE:
+  - Background: #0b1220; cards #111a2e; hairlines #1e293b
+  - Text: #e2e8f0; muted #94a3b8
+  - Primary: #5b8def
+  - Success: #4ade80; warning: #fbbf24; error: #f87171
+  - Outline: #94a3b8
+- Chips (word + icon, never colour alone):
+  - Form type: "Service" (grey outline, wrench icon) · "Part" (primary outline, cog icon)
+  - Action: small neutral pill with the action word: Replace, Clean, Inspect, Adjust, Machine, Rebuild, Flush, Top up, Rotate, Balance, Repair, Other
+  - Status: "Active" green dot · "Retired" grey fill with archive icon
+  - Listed-in: small primary-container pill with a link icon, e.g. "Listed in Engine · Air Intake & Induction"
+- Typography: Inter. Codes (spark_plugs, ENG-SPARK) and counts in a mono font with tabular numerals.
+- Icons: Material Symbols Outlined, 20px.
+
+BUTTON RULES (strict):
+- Every action is a real button with a visible border or fill — never plain text, never underlined.
+- Destructive buttons (Retire, Delete, Remove, Cancel) are red (#a83836 fill or red outline).
+- One primary (blue) button per screen or drawer.
+- No browser pop-ups; confirmations are in-app dialogs.
+
+DESIGN PRINCIPLES:
+- Calm and exact, a well-kept service manual, not a spreadsheet
+- Plain words first, codes small and muted
+- No percentages, no made-up IDs, no server/node/sync/version labels, no prices, suppliers, stock, customer names or plates
+- Use only the real data listed under each screen
+
+SCREEN 1 (DM1): JOBS TAB — LIST
+- Toolbar row: search field "Search jobs, codes…"; filter dropdown "Group: All groups"; segmented "Active | Retired" (Active selected); on the right two buttons: secondary "Manage sections", primary "+ Add job"
+- Summary line, muted mono: "68 jobs · 11 groups · Engine has 10 sections"
+- The list is grouped by home group. Each group is a card with a header row: group icon, group name, mono count, chevron (expanded).
+- ENGINE card (expanded) shows its section groups as small caps headings, each with its sections as sub-headings (icon + name + mono job count), each section listing its job rows:
+  - "EXTERNAL BOLT-ON & INDUCTION"
+    - Air Intake & Induction (3): Engine Air Filter [Part] [Replace] [Listed from Filters] · Throttle Body Cleaning [Service] [Clean] · Intake Manifold Gasket [Part] [Replace]
+    - Fuel System (2): Fuel Injector Cleaning / Induction Service [Service] [Clean] · Fuel Injector Replacement [Part] [Replace]
+    - Ignition System (3): Spark Plugs · Ignition coil · Spark Plug Wires — all [Part] [Replace]
+    - Accessory & Timing Drive (3), Fluids & Emissions (5), Cooling System (2) — show collapsed with counts
+  - "TOP END (CYLINDER HEAD)": Cylinder Head (6) — collapsed with count
+  - "BOTTOM END (ENGINE BLOCK)": Pistons & Compression (3), Crankshaft & Rotating Assembly (4) — collapsed
+  - "WHOLE ENGINE": Whole Engine (1) — collapsed
+- Each job row: job icon, name, muted mono code under the name (e.g. "throttle_body_cleaning · ENG-TBC"), form-type chip, action chip, status chip, and on the right two buttons: "Edit" (outline) and "Retire" (red outline)
+- FILTERS card (collapsed header only) shows a muted line under its name: "Engine Air Filter is also listed in Engine · Air Intake & Induction"
+- Other group cards (Brakes 11, Tires & wheels 7, Fluids 5, Lighting & visibility 6, …) collapsed with counts
+- Show one empty state inside the Engine card at the bottom: a dashed row "Fuel Pressure Test section — 0 jobs — add some" with an outline button "+ Add jobs"
+
+SCREEN 2 (DM2): ADD / EDIT JOB — RIGHT DRAWER (FULL HEIGHT)
+- Behind: the Jobs list dimmed but readable; drawer 560px wide, full window height, all content visible
+- Header: "Edit job · Piston Ring Replacement", close X
+- Fields:
+  - "Name" — "Piston Ring Replacement"
+  - "Home group" — dropdown "Engine", shown LOCKED (lock icon) with helper "Locked — this job has been used in service logs."
+  - "Form type" — segmented "Service | Part" with Part selected, LOCKED with the same helper
+  - "Default action" — dropdown "Replace" (the list: Inspect, Clean, Adjust, Replace, Rotate, Balance, Flush, Top up, Repair, Machine, Rebuild, Other); helper "What a mechanic usually does with this job. Saved on every log line."
+  - "Description" — textarea "Replacing worn piston rings to bring back compression and stop the engine burning oil." helper "Shown when someone taps ⓘ while logging."
+  - "Icon" — a small row of 8 icon choices with "gears" selected
+- Section "Also do" (outgoing): list of 4 rows, each: job name + muted note + red outline button "Remove":
+  - Head Gasket — "The head is already off."
+  - Cylinder Honing / Boring — "New rings need freshly honed cylinders."
+  - Valve Stem Seal Replacement — "Easy while the head is off."
+  - Engine oil & filter — "Fresh oil after engine work."
+  - Under the list: outline button "+ Add 'also do'"
+- Read-only line below: "Suggested with: (none)" in muted text
+- Sticky footer: red outline "Cancel", primary "Save job"
+- Also draw a second small frame of the same drawer in ADD mode: title "Add job", Home group "Engine" (unlocked dropdown), Form type "Service" selected (unlocked), Default action "Inspect", Name "Fuel Pressure Test", empty Also do with "+ Add 'also do'", footer "Cancel" (red outline) + "Add job" (primary)
+
+SCREEN 3 (DM3): MANAGE SECTIONS — ENGINE (FULL PAGE PANEL)
+- Header: back button "← Jobs", title "Sections · Engine", group dropdown "Engine" on the right
+- Primary button "+ Add section group"
+- Four section-group cards in order, each with header: name, buttons "Rename" (outline), "Move up" / "Move down" (icon buttons with borders), "+ Add section" (outline), "Delete" (red outline, DISABLED with tooltip "Has sections — delete them first")
+  1. External bolt-on & induction — sections listed: Air Intake & Induction, Fuel System, Ignition System, Accessory & Timing Drive, Fluids & Emissions, Cooling System
+  2. Top end (cylinder head) — Cylinder Head
+  3. Bottom end (engine block) — Pistons & Compression, Crankshaft & Rotating Assembly
+  4. Whole engine — Whole Engine
+- Expand "Air Intake & Induction" to show: icon picker chip (wind), description line "Parts that bring clean air into the engine. All on the outside — nothing is taken apart." with outline button "Edit", and its job list in order with per-row "Move up"/"Move down" icon buttons and red outline "Remove": Engine Air Filter [Listed from Filters] · Throttle Body Cleaning · Intake Manifold Gasket; below: outline button "+ Add jobs to section"; section buttons "Rename", "Delete" (red outline, DISABLED, tooltip "Has jobs — remove them first")
+- Draw the "+ Add jobs to section" picker open as a popover: search "Find a job…", list with checkboxes: "Fuel Pressure Test · Engine" (enabled), "Throttle Body Cleaning · Engine" (greyed, muted "in Air Intake & Induction"), "Fuel filter · Filters" (enabled); footer buttons "Cancel" (red outline) and "Add 2 jobs" (primary)
+
+SCREEN 4 (DM4): RETIRE JOB — DIALOG
+- Behind: the Jobs list dimmed
+- Centered dialog 480px: title "Retire Fuel Pressure Test?"
+- Body as a short list with icons:
+  - "Hidden from logging in Fleet."
+  - "Removed from 1 section (Fuel System)."
+  - "Removed from 0 'also do' links (it suggests, and it is suggested by)."
+  - "Old service logs keep it — nothing is erased."
+- Footer buttons: "Keep it" (outline), "Retire job" (red fill)
+- Also a small second frame: a RETIRED job row in the list showing chip "Retired", outline button "Restore" and beside it muted text "Restore doesn't put it back in sections or 'also do' links — add them again."
+
+STATES FRAME (one small frame):
+- Loading skeleton of the Jobs list
+- Error card "Couldn't load jobs" with outline button "Try again"
+- Empty search "No job matches 'xyz'"
+
+Draw Light and Dark versions of every screen.

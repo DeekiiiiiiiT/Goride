@@ -3,6 +3,7 @@ import { CheckCircle2 } from "lucide-react";
 import { MaintenanceIcon } from "../../MaintenanceIcon";
 import type { MaintenanceServiceCategory } from "../../../../types/maintenance";
 import { groupCategoriesBySystem } from "../../../../types/maintenance";
+import { JobTooltip } from "./JobTooltip";
 
 export function LogServiceComponentPicker({
   packageLabel,
@@ -38,8 +39,8 @@ export function LogServiceComponentPicker({
             const selected = selectedCategoryIds.includes(cat.id);
             const logged = categoryHasLine(cat);
             return (
+              <JobTooltip key={cat.id} text={cat.description}>
               <button
-                key={cat.id}
                 type="button"
                 onClick={() => onComponentTap(cat)}
                 className={`relative flex flex-col items-center gap-2 p-4 rounded-xl border transition-colors text-center min-h-[108px] ${
@@ -62,6 +63,7 @@ export function LogServiceComponentPicker({
                 </div>
                 <span className="text-sm font-medium text-on-surface leading-tight">{cat.name}</span>
               </button>
+              </JobTooltip>
             );
           })}
         </div>
@@ -78,8 +80,8 @@ export function LogServiceComponentPicker({
                   const selected = selectedCategoryIds.includes(cat.id);
                   const logged = categoryHasLine(cat);
                   return (
+                    <JobTooltip key={cat.id} text={cat.description}>
                     <button
-                      key={cat.id}
                       type="button"
                       onClick={() => onComponentTap(cat)}
                       className={`relative flex flex-col items-center gap-2 p-4 rounded-xl border transition-colors text-center min-h-[108px] ${
@@ -102,6 +104,7 @@ export function LogServiceComponentPicker({
                       </div>
                       <span className="text-sm font-medium text-on-surface leading-tight">{cat.name}</span>
                     </button>
+                    </JobTooltip>
                   );
                 })}
               </div>

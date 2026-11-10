@@ -44,6 +44,18 @@ import {
   writeLogServiceDraft,
 } from "./maintenance-logging/log-service/logServiceDraft";
 import type { LogServiceVehicleStrip, LogServiceWizardStep } from "./maintenance-logging/log-service";
+import {
+  defaultActionForCategory,
+  hiddenLineFieldsFor,
+  isServiceJob,
+  serviceJobAmount,
+  serviceJobCost,
+} from "./maintenance-logging/log-service/logServiceJobCost";
+import {
+  homeSectionNameByJob,
+  visibleSections,
+  type SystemSections,
+} from "./maintenance-logging/log-service/systemSections";
 import { logServiceOemMatchSummary } from "./maintenance-logging/log-service/logServiceOemMatchSummary";
 import type {
   CatalogMaintenanceTaskOption,
@@ -70,6 +82,8 @@ type DialogStep =
   | "inspect";
 type LogMode = "package" | "quick_job" | "inspect";
 
+type LogServicePackageStatus = "overdue" | "due_soon" | "ok" | "mandatory";
+
 type PackageChoice = {
   id: string;
   label: string;
@@ -77,7 +91,10 @@ type PackageChoice = {
   iconKey: string;
   templateId?: string;
   categories: MaintenanceServiceCategory[];
-  dueKind?: CatalogMaintenanceTaskOption["dueKind"];
+  dueKind?: CatalogMaintenanceTaskOption["dueKind"] | LogServicePackageStatus;
+  intervalText?: string;
+  status?: LogServicePackageStatus;
+  kmLabel?: string | null;
 };
 
 const TIRE_BRAKE_POSITIONS = ["LF", "RF", "LR", "RR"] as const;
@@ -157,6 +174,7 @@ function packageFromPreset(p: (typeof MAINTENANCE_SCHEDULE_PRESETS)[number]): Pa
 }
 
 function emptyValuesForCategory(cat: MaintenanceServiceCategory): Record<string, string | number | boolean | null> {
+  if (cat.is_part === false) return { cost_mode: "total", service_amount: null };
   const values: Record<string, string | number | boolean | null> = {};
   for (const field of cat.field_schema?.fields || []) {
     if (field.type === "boolean") values[field.key] = false;
@@ -225,6 +243,25 @@ function lineFromCategoryValues(
   extras: LineExtras,
 ): MaintenanceLogLine {
   const isSynthetic = cat.id.startsWith("synthetic-");
+  if (isServiceJob(cat)) {
+    return {
+      categoryId: isSynthetic ? undefined : cat.id,
+      categoryCode: cat.code,
+      categoryName: cat.name,
+      systemId: extras.system?.id,
+      systemCode: extras.system?.code,
+      systemName: extras.system?.name,
+      action: extras.action,
+      labor: serviceJobCost(values, extras.positions, extras.complimentary),
+      positions: extras.positions.length ? [...extras.positions] : undefined,
+      complimentary: extras.complimentary || undefined,
+      notes: typeof values.notes === "string" ? values.notes : undefined,
+      values: {
+        cost_mode: values.cost_mode === "per_wheel" ? "per_wheel" : "total",
+        service_amount: serviceJobAmount(values),
+      },
+    };
+  }
   const conditionRaw = values.condition;
   const hours = extras.laborHours;
   const rate = extras.laborRate;
@@ -281,6 +318,15 @@ function categoryMatchLine(cat: MaintenanceServiceCategory, line: MaintenanceLog
   );
 }
 
+/** Service title for one or more jobs: "Wheel Alignment + Wheel Balancing", "A + B + 2 more". */
+export function quickJobTypeLabel(lines: MaintenanceLogLine[]): string {
+  const done = lines.filter((l) => !l.recommended);
+  const source = done.length ? done : lines;
+  const names = [...new Set(source.map((l) => (l.categoryName || "").trim()).filter(Boolean))];
+  if (names.length <= 2) return names.join(" + ");
+  return `${names.slice(0, 2).join(" + ")} + ${names.length - 2} more`;
+}
+
 function dialogWizardStep(step: DialogStep): LogServiceWizardStep {
   if (step === "dateMileage") return 1;
   if (step === "lineDetails") return 3;
@@ -308,12 +354,17 @@ export function LogMaintenanceServiceDialog({
   > | null>(null);
   const [lineDetailCategories, setLineDetailCategories] = useState<MaintenanceServiceCategory[]>([]);
   const [step, setStep] = useState<DialogStep>("dateMileage");
-  const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
+  const [idempotencyKey, setIdempotencyKey] = useState<string>(() => crypto.randomUUID());
   const [isLoading, setIsLoading] = useState(false);
   const [scanLoading, setScanLoading] = useState(false);
   const [quickJobsLoading, setQuickJobsLoading] = useState(false);
   const [quickJobs, setQuickJobs] = useState<MaintenanceServiceCategory[]>([]);
   const [allSystems, setAllSystems] = useState<MaintenanceServiceCategory[]>([]);
+  /** Every job (component) — powers the "Search a job" box. */
+  const [allComponents, setAllComponents] = useState<MaintenanceServiceCategory[]>([]);
+  /** Sections per group (F1), loaded once per open for every group on the "What was done?" screen. */
+  const [sectionsBySystem, setSectionsBySystem] = useState<Map<string, SystemSections>>(new Map());
+  const sectionNameByJob = useMemo(() => homeSectionNameByJob(sectionsBySystem), [sectionsBySystem]);
   const [systemComponents, setSystemComponents] = useState<MaintenanceServiceCategory[]>([]);
   const [systemComponentsLoading, setSystemComponentsLoading] = useState(false);
 
@@ -366,7 +417,7 @@ export function LogMaintenanceServiceDialog({
         intervalText: ctx.intervalText ?? undefined,
         status: ctx.status,
         kmLabel: ctx.kmLabel,
-      } as PackageChoice & { intervalText?: string; status?: string; kmLabel?: string | null };
+      };
     });
   }, [catalogTemplates, logServiceContext]);
 
@@ -376,22 +427,23 @@ export function LogMaintenanceServiceDialog({
       shortLabel: p.shortLabel,
       iconKey: p.iconKey,
       dueKind: p.dueKind,
-      intervalText: (p as { intervalText?: string }).intervalText ?? null,
-      status: (p as { status?: "overdue" | "due_soon" | "ok" | "mandatory" }).status,
-      kmLabel: (p as { kmLabel?: string | null }).kmLabel ?? null,
+      intervalText: p.intervalText ?? null,
+      status: p.status,
+      kmLabel: p.kmLabel ?? null,
     }));
   }, [packageChoices]);
 
   const catalogById = useMemo(() => {
     const m = new Map<string, MaintenanceServiceCategory>();
     for (const s of allSystems) m.set(s.id, s);
+    for (const c of allComponents) m.set(c.id, c);
     for (const c of systemComponents) m.set(c.id, c);
     for (const pkg of packageChoices) {
       for (const c of pkg.categories) m.set(c.id, c);
     }
     for (const q of quickJobs) m.set(q.id, q);
     return m;
-  }, [allSystems, systemComponents, packageChoices, quickJobs]);
+  }, [allSystems, allComponents, systemComponents, packageChoices, quickJobs]);
 
   const packageGrouped = useMemo(() => {
     if (!selectedPackage) return [];
@@ -513,6 +565,15 @@ export function LogMaintenanceServiceDialog({
     onOpenChange(false);
   }, [draftUserId, vehicleId, onOpenChange]);
 
+  const handleWizardStepClick = useCallback(
+    (wizardStep: LogServiceWizardStep) => {
+      if (wizardStep === 1) setStep("dateMileage");
+      else if (wizardStep === 2) setStep("whatWasDone");
+      else if (wizardStep === 3 && lineDetailCategories.length > 0) setStep("lineDetails");
+    },
+    [lineDetailCategories.length],
+  );
+
   // Reset + load systems / quick jobs when dialog opens
   useEffect(() => {
     if (!open) return;
@@ -546,17 +607,22 @@ export function LogMaintenanceServiceDialog({
     setAnomalyAcknowledged(false);
     setOdometerCheck(null);
 
-    const existingDraft =
+    const savedDraft =
       draftUserId && !initialLog?.id ? readLogServiceDraft(draftUserId, vehicleId) : null;
+    // Only a draft with jobs in it is worth keeping. It reopens on Review (jobs listed,
+    // "Add another job" / "Discard draft" there). A draft with no jobs is dropped so the
+    // window always opens fresh on step 1 — never stranded half-way.
+    const existingDraft = savedDraft && savedDraft.lines.length > 0 ? savedDraft : null;
+    if (savedDraft && !existingDraft && draftUserId) clearLogServiceDraft(draftUserId, vehicleId);
 
     if (existingDraft && !initialLog?.id) {
-      setFormMeta({ ...existingDraft.formMeta });
+      setFormMeta({ ...existingDraft.formMeta, id: existingDraft.formMeta.id ?? undefined });
       setLines(existingDraft.lines);
       setLogMode(existingDraft.logMode);
       setSelectedCategoryIds(existingDraft.selectedCategoryIds);
       setIdempotencyKey(existingDraft.idempotencyKey);
       setAnomalyAcknowledged(existingDraft.anomalyAcknowledged);
-      setStep(existingDraft.step as DialogStep);
+      setStep("review");
       const pkg = packageChoices.find((p) => p.id === existingDraft.selectedPackageId) ?? null;
       setSelectedPackage(pkg);
       const sys = allSystems.find((s) => s.id === existingDraft.selectedSystemId) ?? null;
@@ -609,12 +675,36 @@ export function LogMaintenanceServiceDialog({
         console.error(err);
         return { items: [] as MaintenanceServiceCategory[] };
       }),
+      api.listMaintenanceCategories("component").catch((err) => {
+        console.error(err);
+        return { items: [] as MaintenanceServiceCategory[] };
+      }),
     ])
-      .then(([qj, systems]) => {
+      .then(([qj, systems, comps]) => {
         if (cancelled) return;
         const qItems = qj.items || [];
         const sItems = systems.items || [];
-        setQuickJobs(qItems.length ? qItems : sItems.filter((s) => s.quick_job_eligible));
+        setAllComponents(
+          (comps.items || []).filter(
+            (c) => (c as { status?: string }).status !== "retired",
+          ),
+        );
+        const pickable = qItems.length ? qItems : sItems.filter((s) => s.quick_job_eligible);
+        setQuickJobs(pickable);
+        // Sections for every pickable group, in parallel; a failure just means the flat grid (F4).
+        void Promise.all(
+          pickable.map((g) =>
+            api
+              .getSystemSections(g.id)
+              .then((s) => [g.id, s] as const)
+              .catch(() => null),
+          ),
+        ).then((pairs) => {
+          if (cancelled) return;
+          const m = new Map<string, SystemSections>();
+          for (const p of pairs) if (p && p[1]?.groups?.length) m.set(p[0], p[1]);
+          setSectionsBySystem(m);
+        });
         setAllSystems(sItems.length ? sItems : qItems.filter((s) => s.kind === "system" || s.code?.startsWith("sys_")));
       })
       .catch((err) => {
@@ -663,17 +753,17 @@ export function LogMaintenanceServiceDialog({
     };
   }, [step, activeCategory, vehicleId]);
 
+  /** A job always saves under its OWN home group (parent_id), never the group it was picked from (F2). */
   const resolveSystemForComponent = (
     cat: MaintenanceServiceCategory,
   ): MaintenanceServiceCategory | null => {
-    if (selectedSystem) return selectedSystem;
     if (cat.parent_id) {
       const fromAll = allSystems.find((s) => s.id === cat.parent_id);
       if (fromAll) return fromAll;
       const fromCat = catalogById.get(cat.parent_id);
       if (fromCat) return fromCat;
     }
-    return null;
+    return selectedSystem ?? null;
   };
 
   const openCategoryForm = (
@@ -689,7 +779,7 @@ export function LogMaintenanceServiceDialog({
         : emptyValuesForCategory(cat),
     );
     setLineExtras({
-      action: (existing?.action as MaintenanceLineAction) || "replace",
+      action: (existing?.action as MaintenanceLineAction) || defaultActionForCategory(cat),
       laborHours: existing?.laborHours ?? null,
       laborRate: existing?.laborRate ?? null,
       brand: existing?.brand || "",
@@ -717,12 +807,15 @@ export function LogMaintenanceServiceDialog({
     else setStep("lineDetails");
   };
 
+  // Jobs already added stay when the user picks another group ("Add another job").
+  const hasAddedJobs = lines.length > 0;
+
   const handlePickPackage = (pkg: PackageChoice) => {
     setLogMode("package");
     setSelectedPackage(pkg);
     setSelectedSystem(null);
     setSelectedCategoryIds([]);
-    setLines([]);
+    if (!hasAddedJobs) setLines([]);
     setFormQueue([]);
     setFormMeta((prev) => ({ ...prev, type: pkg.label }));
     setStep("component");
@@ -730,12 +823,14 @@ export function LogMaintenanceServiceDialog({
 
   const handlePickSystem = async (system: MaintenanceServiceCategory) => {
     setLogMode("quick_job");
-    setSelectedPackage(null);
+    if (!hasAddedJobs) {
+      setSelectedPackage(null);
+      setLines([]);
+    }
     setSelectedSystem(system);
     setSelectedCategoryIds([]);
-    setLines([]);
     setFormQueue([]);
-    setFormMeta((prev) => ({ ...prev, type: system.name }));
+    if (!hasAddedJobs) setFormMeta((prev) => ({ ...prev, type: system.name }));
     setStep("system");
     setSystemComponentsLoading(true);
     try {
@@ -757,7 +852,7 @@ export function LogMaintenanceServiceDialog({
 
   const handleOpenInspection = () => {
     setLogMode("inspect");
-    setSelectedPackage(null);
+    if (!hasAddedJobs) setSelectedPackage(null);
     setSelectedSystem(null);
     setSelectedCategoryIds([]);
     setFormQueue([]);
@@ -765,9 +860,19 @@ export function LogMaintenanceServiceDialog({
     setStep("inspect");
   };
 
-  const handlePickQuickComponent = (cat: MaintenanceServiceCategory) => {
-    setSelectedCategoryIds([cat.id]);
-    enterLineDetailsForCategories([cat], selectedSystem);
+  const handleToggleQuickComponent = (cat: MaintenanceServiceCategory) => {
+    setSelectedCategoryIds((prev) =>
+      prev.includes(cat.id) ? prev.filter((id) => id !== cat.id) : [...prev, cat.id],
+    );
+  };
+
+  const handleContinueFromSystem = () => {
+    // Ticked jobs may come from "Also do" chips in another group, so look them up in the full catalog.
+    const cats = selectedCategoryIds
+      .map((id) => catalogById.get(id) ?? systemComponents.find((c) => c.id === id))
+      .filter((c): c is MaintenanceServiceCategory => Boolean(c));
+    if (cats.length === 0) return;
+    enterLineDetailsForCategories(cats, null);
   };
 
   const handleComponentTap = (cat: MaintenanceServiceCategory) => {
@@ -823,7 +928,7 @@ export function LogMaintenanceServiceDialog({
           c.id !== activeCategory.id &&
           !newLines.some((l) => categoryMatchLine(c, l)),
       );
-      if (next) openCategoryForm(next, lineExtras.system);
+      if (next) openCategoryForm(next);
       else setActiveCategory(null);
       return;
     }
@@ -867,7 +972,18 @@ export function LogMaintenanceServiceDialog({
     const cat = catalogById.get(op.categoryId);
     if (cat) {
       setLogMode("quick_job");
-      enterLineDetailsForCategories([cat], resolveSystemForComponent(cat));
+      if (!hasAddedJobs) setSelectedPackage(null);
+      // Open the job inside its own group, so Back lands on that group with the job ticked.
+      const parent = cat.parent_id
+        ? allSystems.find((s) => s.id === cat.parent_id) ?? catalogById.get(cat.parent_id) ?? null
+        : null;
+      setSelectedSystem(parent);
+      if (parent) {
+        setSystemComponents(allComponents.filter((c) => c.parent_id === parent.id));
+      }
+      setSelectedCategoryIds([cat.id]);
+      if (!hasAddedJobs) setFormMeta((prev) => ({ ...prev, type: cat.name }));
+      enterLineDetailsForCategories([cat], parent);
     }
   };
 
@@ -920,8 +1036,9 @@ export function LogMaintenanceServiceDialog({
   };
 
   const buildSavePayload = (logId: string, invoiceUrl: string) => {
+    // A package stays the main service even when extra jobs from other groups were added.
     const effectiveMode: "package" | "quick_job" =
-      logMode === "package" ? "package" : "quick_job";
+      logMode === "package" || selectedPackage ? "package" : "quick_job";
     const advanceSchedule = effectiveMode === "package" && markPackageComplete;
     const templateId = advanceSchedule
       ? selectedPackage?.templateId || initialLog?.templateId
@@ -931,9 +1048,7 @@ export function LogMaintenanceServiceDialog({
     const typeLabel =
       effectiveMode === "package"
         ? packageLabel || formMeta.type || "Regular Maintenance"
-        : lines.find((l) => !l.recommended)?.categoryName ||
-          lines[0]?.categoryName ||
-          formMeta.type;
+        : quickJobTypeLabel(lines) || formMeta.type;
 
     return {
       ...formMeta,
@@ -1089,7 +1204,15 @@ export function LogMaintenanceServiceDialog({
   };
 
   const handleBack = () => {
-    if (step === "dateMileage" || step === "whatWasDone") {
+    if (step === "whatWasDone" && hasAddedJobs) {
+      setStep("review");
+      return;
+    }
+    if (step === "whatWasDone" && lines.length === 0) {
+      setStep("dateMileage");
+      return;
+    }
+    if (step === "dateMileage") {
       onOpenChange(false);
       return;
     }
@@ -1117,7 +1240,9 @@ export function LogMaintenanceServiceDialog({
     }
     if (step === "review") {
       if (lineDetailCategories.length > 0) setStep("lineDetails");
-      else setStep("inspect");
+      else if (logMode === "inspect") setStep("inspect");
+      // Reopened from a saved draft: no details form in memory, so go to "What was done?".
+      else setStep("whatWasDone");
     }
   };
 
@@ -1133,6 +1258,24 @@ export function LogMaintenanceServiceDialog({
         : [...prev.positions, pos],
     }));
   };
+
+  const ALL_WHEELS = ["LF", "RF", "LR", "RR"];
+  const serviceFormFor = (cat: MaintenanceServiceCategory) =>
+    isServiceJob(cat)
+      ? {
+          costMode: (fieldValues.cost_mode === "per_wheel" ? "per_wheel" : "total") as "total" | "per_wheel",
+          amount: serviceJobAmount(fieldValues),
+          onCostModeChange: (mode: "total" | "per_wheel") =>
+            setFieldValues((prev) => ({ ...prev, cost_mode: mode })),
+          onAmountChange: (v: number | null) =>
+            setFieldValues((prev) => ({ ...prev, service_amount: v })),
+          onToggleAllPositions: () =>
+            setLineExtras((prev) => ({
+              ...prev,
+              positions: ALL_WHEELS.every((p) => prev.positions.includes(p)) ? [] : [...ALL_WHEELS],
+            })),
+        }
+      : undefined;
 
   const renderField = (field: MaintenanceCategoryFieldDef) => {
     const id = `cat-field-${field.key}`;
@@ -1296,17 +1439,28 @@ export function LogMaintenanceServiceDialog({
           activeStep={dialogWizardStep(step)}
           vehicle={strip}
           onClose={() => onOpenChange(false)}
+          onStepClick={handleWizardStepClick}
           footer={
             <>
-              <Button variant="ghost" onClick={handleBack} className="text-on-surface">
-                {step === "whatWasDone" || step === "dateMileage" ? (
-                  LOG_SERVICE_COPY.cancelLabel
-                ) : (
-                  <>
-                    <ArrowLeft className="w-4 h-4 mr-2" /> Back
-                  </>
-                )}
-              </Button>
+              <div className="flex items-center gap-2">
+                {/* Cancel on every step: closes and throws the draft away, so the next open starts at step 1. */}
+                <Button
+                  type="button"
+                  data-testid="log-service-cancel"
+                  onClick={clearDraftAndClose}
+                  className="bg-error text-on-error hover:bg-error/90"
+                >
+                  {LOG_SERVICE_COPY.cancelLabel}
+                </Button>
+                {step !== "dateMileage" ? (
+                  <Button type="button" variant="outline" onClick={handleBack} className="text-on-surface">
+                    <ArrowLeft className="w-4 h-4 mr-2" />
+                    {step === "whatWasDone" && hasAddedJobs
+                      ? LOG_SERVICE_COPY.backToReview(lines.length)
+                      : LOG_SERVICE_COPY.backLabel}
+                  </Button>
+                ) : null}
+              </div>
               <div className="flex items-center gap-2">
                 {step === "dateMileage" ? (
                   <LogServiceWizardContinueButton
@@ -1316,6 +1470,13 @@ export function LogMaintenanceServiceDialog({
                       setOdoTouched(true);
                       if (canContinueDateStep) setStep("whatWasDone");
                     }}
+                  />
+                ) : null}
+                {step === "system" ? (
+                  <LogServiceWizardContinueButton
+                    label={LOG_SERVICE_COPY.continueWithJobs(selectedCategoryIds.length)}
+                    disabled={selectedCategoryIds.length < 1}
+                    onClick={handleContinueFromSystem}
                   />
                 ) : null}
                 {step === "component" && (selectedCategoryIds.length >= 1 || lines.length >= 1) ? (
@@ -1343,14 +1504,20 @@ export function LogMaintenanceServiceDialog({
                 ) : null}
                 {step === "review" ? (
                   <>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      className="text-on-surface-variant hover:text-on-surface"
-                      onClick={clearDraftAndClose}
-                    >
-                      {LOG_SERVICE_COPY.discardDraft}
-                    </Button>
+                    {!initialLog?.id ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        data-testid="log-service-add-another-job"
+                        onClick={() => {
+                          setActiveCategory(null);
+                          setLineDetailCategories([]);
+                          setStep("whatWasDone");
+                        }}
+                      >
+                        {LOG_SERVICE_COPY.addAnotherJob}
+                      </Button>
+                    ) : null}
                     <LogServiceWizardContinueButton
                       label={LOG_SERVICE_COPY.logServiceLabel}
                       disabled={isLoading || lines.length < 1 || Number(formMeta.odo) <= 0}
@@ -1393,6 +1560,9 @@ export function LogMaintenanceServiceDialog({
             <LogServiceWhatWasDoneStep
               packages={packageChoicesForStep}
               quickJobs={quickJobs}
+              allJobs={allComponents}
+              allSystems={allSystems}
+              sectionNameByJob={sectionNameByJob}
               quickJobsLoading={quickJobsLoading}
               suggestedOperations={logServiceContext?.suggestedOperations}
               inspectionPointCount={logServiceContext?.inspectionPointCount}
@@ -1411,7 +1581,17 @@ export function LogMaintenanceServiceDialog({
               system={selectedSystem}
               components={systemComponents}
               loading={systemComponentsLoading}
-              onPickComponent={handlePickQuickComponent}
+              sections={visibleSections(sectionsBySystem.get(selectedSystem.id))}
+              selectedIds={selectedCategoryIds}
+              isAdded={categoryHasLine}
+              onToggleComponent={handleToggleQuickComponent}
+              onToggleRelated={(rel) =>
+                setSelectedCategoryIds((prev) =>
+                  prev.includes(rel.categoryId)
+                    ? prev.filter((id) => id !== rel.categoryId)
+                    : [...prev, rel.categoryId],
+                )
+              }
             />
           )}
 
@@ -1454,9 +1634,10 @@ export function LogMaintenanceServiceDialog({
                       systemName={lineExtras.system?.name}
                       action={lineExtras.action}
                       onActionChange={(action) => setLineExtras((prev) => ({ ...prev, action }))}
-                      categoryFields={(cat.field_schema?.fields || defaultFieldSchema().fields).map(
-                        renderField,
-                      )}
+                      categoryFields={(cat.field_schema?.fields || defaultFieldSchema().fields)
+                        .filter((f) => !hiddenLineFieldsFor(cat).includes(f.key))
+                        .map(renderField)}
+                      hiddenFields={hiddenLineFieldsFor(cat)}
                       laborHours={lineExtras.laborHours}
                       laborRate={lineExtras.laborRate}
                       onLaborHoursChange={(v) => setLineExtras((prev) => ({ ...prev, laborHours: v }))}
@@ -1490,6 +1671,7 @@ export function LogMaintenanceServiceDialog({
                       lineTotalLabel="Line total"
                       currency={formMeta.currency || "JMD"}
                       lineTotal={draftLineTotal}
+                      serviceForm={serviceFormFor(cat)}
                     />
                   )}
                   {activeCategory?.id !== cat.id && (
@@ -1524,9 +1706,10 @@ export function LogMaintenanceServiceDialog({
               systemName={lineExtras.system?.name}
               action={lineExtras.action}
               onActionChange={(action) => setLineExtras((prev) => ({ ...prev, action }))}
-              categoryFields={(activeCategory.field_schema?.fields || defaultFieldSchema().fields).map(
-                renderField,
-              )}
+              categoryFields={(activeCategory.field_schema?.fields || defaultFieldSchema().fields)
+                .filter((f) => !hiddenLineFieldsFor(activeCategory).includes(f.key))
+                .map(renderField)}
+              hiddenFields={hiddenLineFieldsFor(activeCategory)}
               laborHours={lineExtras.laborHours}
               laborRate={lineExtras.laborRate}
               onLaborHoursChange={(v) => setLineExtras((prev) => ({ ...prev, laborHours: v }))}
@@ -1560,6 +1743,7 @@ export function LogMaintenanceServiceDialog({
               lineTotalLabel="Line total"
               currency={formMeta.currency || "JMD"}
               lineTotal={draftLineTotal}
+              serviceForm={serviceFormFor(activeCategory)}
             />
           )}
 
@@ -1603,7 +1787,7 @@ export function LogMaintenanceServiceDialog({
                 const cat = pkgCat || qj || catalogById.get(line.categoryId || "");
                 if (cat) openCategoryForm(cat);
               }}
-              showMarkPackageComplete={logMode === "package"}
+              showMarkPackageComplete={logMode === "package" || Boolean(selectedPackage)}
               markPackageComplete={markPackageComplete}
               onMarkPackageCompleteChange={setMarkPackageComplete}
               whatHappensNext={

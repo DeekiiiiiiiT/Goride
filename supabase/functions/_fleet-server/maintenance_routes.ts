@@ -70,6 +70,7 @@ import { registerMaintenanceWorkOrderRoutes } from "./maintenance/routes_work_or
 import { fleetDb, fleetTable } from "./repos/baseRepo.ts";
 import { registerMaintenanceMasterRoutes } from "./maintenance_master_routes.ts";
 import { buildLogServiceContext } from "./maintenance_log_service_context.ts";
+import { buildSystemSections } from "./maintenance_system_sections.ts";
 import { assertCatalogWriteResponse, governWriteOrProposal } from "./catalog_access.ts";
 
 const assertVehicleCatalogPlatformAccess = assertPlatformStaffResponse;
@@ -276,8 +277,21 @@ function parseDueKind(v: unknown): "service_package" | "statutory_inspection" | 
   return null;
 }
 
+/**
+ * Full path of the work-orders collection for an internal app.request, including the
+ * function prefix (e.g. "/fleet-ops"). fleet-ops is built with basePath("/fleet-ops"), so a
+ * bare "/maintenance-work-orders/…" internal request is a route miss (404) and leaves the
+ * new work order stuck "in_progress".
+ */
+export function workOrdersBasePath(requestPath: string): string {
+  const marker = "/maintenance-work-orders";
+  const i = requestPath.indexOf(marker);
+  return i >= 0 ? requestPath.slice(0, i + marker.length) : marker;
+}
+
 const WO_LINE_ACTIONS = new Set([
-  "inspect", "replace", "rotate", "balance", "flush", "top_up", "repair", "other",
+  "inspect", "clean", "adjust", "replace", "rotate", "balance", "flush", "top_up", "repair",
+  "machine", "rebuild", "other",
 ]);
 
 function computeWoLineTotal(line: Record<string, unknown>): number {
@@ -400,6 +414,7 @@ function mapDbLineToApi(row: Record<string, unknown>): Record<string, unknown> {
     declined: row.declined === true,
     values: row.values_json,
     lineTotal: row.line_total != null ? Number(row.line_total) : undefined,
+    voidedAt: row.voided_at ?? null,
   };
 }
 
@@ -965,7 +980,17 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           ? null
           : String(body.op_code).trim().slice(0, 80);
         const iconKeyRaw = body.icon_key != null ? String(body.icon_key).trim() : "wrench";
-        const row = {
+        const isPart = kind === "component" && body.is_part !== false;
+        const WO_ACTIONS = new Set([
+          "inspect", "clean", "adjust", "replace", "rotate", "balance", "flush", "top_up", "repair",
+          "machine", "rebuild", "other",
+        ]);
+        let default_action: string | undefined;
+        if (kind === "component") {
+          const rawAction = body.default_action != null ? String(body.default_action).trim() : "";
+          default_action = WO_ACTIONS.has(rawAction) ? rawAction : (isPart ? "replace" : "other");
+        }
+        const row: Record<string, unknown> = {
           code: code.slice(0, 80),
           name: name.slice(0, 200),
           icon_key: (iconKeyRaw || "wrench").slice(0, 40),
@@ -978,6 +1003,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           position_aware: kind === "component" && body.position_aware === true,
           updated_at: new Date().toISOString(),
         };
+        if (default_action !== undefined) row.default_action = default_action;
         const { data, error } = await supabase
           .from("maintenance_service_categories")
           .insert(row)
@@ -1279,6 +1305,102 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           .order("sort_order", { ascending: true });
         if (error) throw error;
         return c.json({ items: data || [] });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return c.json({ error: msg }, 500);
+      }
+    },
+  );
+
+  route.get(
+    "/maintenance-categories/systems/:systemId/sections",
+    requireAuth(),
+    async (c) => {
+      try {
+        const systemId = c.req.param("systemId")?.trim() ?? "";
+        if (!isUuid(systemId)) return c.json({ error: "Invalid system id" }, 400);
+
+        const [sgRes, secRes, memRes, homeRes, relRes, sysRes] = await Promise.all([
+          supabase
+            .from("maintenance_job_section_groups")
+            .select("id, code, name, sort_order")
+            .eq("system_id", systemId)
+            .order("sort_order"),
+          supabase
+            .from("maintenance_job_sections")
+            .select("id, group_id, code, name, description, icon_key, sort_order")
+            .eq("system_id", systemId)
+            .order("sort_order"),
+          supabase
+            .from("maintenance_job_section_members")
+            .select("section_id, category_id, sort_order")
+            .eq("system_id", systemId),
+          supabase
+            .from("maintenance_service_categories")
+            .select("*")
+            .eq("kind", "component")
+            .eq("parent_id", systemId),
+          supabase.from("maintenance_job_relations").select("from_category_id, to_category_id, note"),
+          supabase
+            .from("maintenance_service_categories")
+            .select("id, name")
+            .eq("kind", "system"),
+        ]);
+
+        for (const r of [sgRes, secRes, memRes, homeRes, relRes, sysRes]) {
+          if (r.error) throw r.error;
+        }
+
+        const { data: allComp, error: allErr } = await supabase
+          .from("maintenance_service_categories")
+          .select("*")
+          .eq("kind", "component");
+        if (allErr) throw allErr;
+        const allJobsById = new Map<string, Record<string, unknown>>();
+        for (const j of allComp || []) {
+          allJobsById.set(String((j as { id: string }).id), j as Record<string, unknown>);
+        }
+        const homeList = (homeRes.data || []) as Record<string, unknown>[];
+
+        const systemsById = new Map(
+          (sysRes.data || []).map((s) => [
+            String((s as { id: string }).id),
+            { id: String((s as { id: string }).id), name: String((s as { name: string }).name) },
+          ]),
+        );
+
+        const payload = buildSystemSections(
+          systemId,
+          (sgRes.data || []).map((g) => ({
+            id: String((g as { id: string }).id),
+            code: String((g as { code: string }).code),
+            name: String((g as { name: string }).name),
+            sort_order: Number((g as { sort_order: number }).sort_order),
+          })),
+          (secRes.data || []).map((s) => ({
+            id: String((s as { id: string }).id),
+            group_id: String((s as { group_id: string }).group_id),
+            code: String((s as { code: string }).code),
+            name: String((s as { name: string }).name),
+            description: String((s as { description: string }).description),
+            icon_key: String((s as { icon_key: string }).icon_key),
+            sort_order: Number((s as { sort_order: number }).sort_order),
+          })),
+          (memRes.data || []).map((m) => ({
+            section_id: String((m as { section_id: string }).section_id),
+            category_id: String((m as { category_id: string }).category_id),
+            sort_order: (m as { sort_order: number | null }).sort_order,
+          })),
+          homeList,
+          (relRes.data || []).map((r) => ({
+            from_category_id: String((r as { from_category_id: string }).from_category_id),
+            to_category_id: String((r as { to_category_id: string }).to_category_id),
+            note: String((r as { note: string }).note),
+          })),
+          systemsById,
+          allJobsById,
+        );
+        return c.json(payload);
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
         return c.json({ error: msg }, 500);
@@ -3003,7 +3125,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
                 request: (path: string, init?: RequestInit, env?: unknown) => Promise<Response>;
               };
               const replayRes = await honoApp.request(
-                `/maintenance-work-orders/${existing.id}/complete`,
+                `${workOrdersBasePath(c.req.path)}/${existing.id}/complete`,
                 {
                   method: "POST",
                   headers: c.req.raw.headers,
@@ -3096,7 +3218,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
             request: (path: string, init?: RequestInit, env?: unknown) => Promise<Response>;
           };
           return honoApp.request(
-            `/maintenance-work-orders/${woId}/complete`,
+            `${workOrdersBasePath(c.req.path)}/${woId}/complete`,
             {
               method: "POST",
               headers: c.req.raw.headers,
@@ -3509,7 +3631,10 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           throw odoErr;
         }
 
-        const { data: finalizeResult, error: finalizeErr } = await supabase.rpc("log_service", {
+        // fleet.log_service is not reachable over PostgREST (fleet schema is not exposed), so call
+        // the public wrapper. A bare rpc("log_service") failed with "function not found" AFTER the
+        // books had posted, returning 500 for a service that had actually saved.
+        const { data: finalizeResult, error: finalizeErr } = await supabase.rpc("fleet_log_service", {
           payload: {
             organizationId: orgId,
             vehicleId,
@@ -3890,6 +4015,113 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
     },
   );
 
+  // Delete ONE job from a saved service (the row the user clicked). The other jobs stay.
+  route.post(
+    "/maintenance-work-order-lines/:lineId/void",
+    requireAuth(),
+    requirePermission("vehicles.edit"),
+    async (c) => {
+      try {
+        const orgId = getOrgId(c);
+        if (!orgId) return c.json({ error: "Organization required" }, 400);
+        const lineId = c.req.param("lineId");
+        if (!isUuid(lineId)) return c.json({ error: "Invalid id" }, 400);
+        const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+        const reason = String(body.reason ?? "").trim();
+        if (!reason) return c.json({ error: "reason is required" }, 400);
+
+        const { data: res, error: rpcErr } = await supabase.rpc("fleet_void_work_order_line", {
+          p_organization_id: orgId,
+          p_line_id: lineId,
+          p_reason: reason,
+        });
+        if (rpcErr) {
+          const msg = rpcErr.message || "";
+          if (/not found|already deleted|Only saved/i.test(msg)) return c.json({ error: msg }, 400);
+          throw rpcErr;
+        }
+        const out = (res || {}) as {
+          workOrderId?: string;
+          vehicleId?: string;
+          recordId?: string | null;
+          jobName?: string;
+          lineTotal?: number;
+          newTotal?: number;
+          remainingJobs?: number;
+          serviceVoided?: boolean;
+        };
+        const vehicleId = String(out.vehicleId ?? "");
+        const recordId = out.recordId ? String(out.recordId) : null;
+        const newTotal = Number(out.newTotal ?? 0) || 0;
+
+        // Books: re-post the service at its new total (same delete + re-append as editing a record).
+        let ledgerWarning: string | undefined;
+        if (recordId) {
+          try {
+            await deleteCanonicalLedgerBySource("financial_event", [recordId]);
+            if (!out.serviceVoided && newTotal > 0) {
+              const { data: rec } = await supabase
+                .from("maintenance_records")
+                .select("id, vehicle_id, performed_at_date, currency, service_type, provider")
+                .eq("id", recordId)
+                .maybeSingle();
+              if (rec) {
+                const ledgerInput = {
+                  id: recordId,
+                  vehicleId: String(rec.vehicle_id ?? vehicleId),
+                  performed_at_date: String(rec.performed_at_date ?? ""),
+                  cost: newTotal,
+                  status: "Completed",
+                  currency: String(rec.currency ?? "JMD"),
+                  service_type: rec.service_type != null ? String(rec.service_type) : undefined,
+                  provider: rec.provider != null ? String(rec.provider) : undefined,
+                };
+                if (isMaintenanceLedgerEligible(ledgerInput)) {
+                  const r = await appendCanonicalMaintenanceIfEligible(ledgerInput, c);
+                  if (r.failed) ledgerWarning = "Job deleted but the books were not updated — contact support";
+                }
+              }
+            }
+          } catch (ledgerErr) {
+            console.error("[maintenance line void] ledger re-post failed:", ledgerErr);
+            ledgerWarning = "Job deleted but the books were not updated — contact support";
+          }
+          if (out.serviceVoided) {
+            try {
+              await voidOdometerReading(
+                { vehicleId, source: "service", referenceId: recordId },
+                `Service voided: ${reason}`,
+              );
+            } catch (odoErr) {
+              console.error("[maintenance line void] odometer reading void failed:", odoErr);
+            }
+          }
+        }
+
+        if (vehicleId) await recomputeScheduleForVehicle(supabase, vehicleId);
+        await insertMaintenanceEvent(supabase, {
+          organizationId: orgId,
+          vehicleId,
+          type: out.serviceVoided ? "service.voided" : "service.line_voided",
+          payload: { workOrderId: out.workOrderId, lineId, jobName: out.jobName, reason, newTotal },
+        });
+        await insertMaintenanceAuditLog(supabase, {
+          organizationId: orgId,
+          entityType: "maintenance_work_order_line",
+          entityId: lineId,
+          reason,
+          before: { lineTotal: out.lineTotal, jobName: out.jobName },
+          after: { voided: true, newServiceTotal: newTotal, remainingJobs: out.remainingJobs },
+        });
+
+        return c.json({ ...out, ledgerWarning });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return c.json({ error: msg }, 500);
+      }
+    },
+  );
+
   route.post(
     "/maintenance-work-orders/:id/void",
     requireAuth(),
@@ -3937,6 +4169,26 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
             await deleteCanonicalLedgerBySource("financial_event", [recordId]);
           } catch (ledgerErr) {
             console.error("[maintenance void] ledger reversal failed:", ledgerErr);
+          }
+        }
+
+        // A voided service must stop counting toward due dates and stop being an odometer reading.
+        const voidedAtIso = new Date().toISOString();
+        const { error: svcLedgerErr } = await supabase
+          .from("maintenance_service_ledger")
+          .update({ voided_at: voidedAtIso })
+          .eq("work_order_id", id)
+          .eq("organization_id", orgId)
+          .is("voided_at", null);
+        if (svcLedgerErr) throw svcLedgerErr;
+        if (recordId) {
+          try {
+            await voidOdometerReading(
+              { vehicleId: String(wo.vehicle_id), source: "service", referenceId: recordId },
+              `Service voided: ${reason}`,
+            );
+          } catch (odoErr) {
+            console.error("[maintenance void] odometer reading void failed:", odoErr);
           }
         }
 

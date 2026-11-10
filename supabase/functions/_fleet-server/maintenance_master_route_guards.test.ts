@@ -21,6 +21,10 @@ Deno.test("each maintenance master route has a Deno test name slot", () => {
     "GET /admin/maintenance/history",
     "POST /admin/maintenance/conflicts/:id/resolve",
     "PATCH /vehicles/:vehicleId/maintenance/custom-interval",
+    "GET /admin/maintenance/jobs",
+    "PUT /admin/maintenance/section-groups/order",
+    "PUT /admin/maintenance/sections/:id/members",
+    "POST /admin/maintenance/job-relations",
   ];
   for (const key of expected) {
     assertEquals(key in MAINTENANCE_MASTER_ROUTE_GUARDS, true, key);

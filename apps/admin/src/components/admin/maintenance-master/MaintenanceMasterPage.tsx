@@ -8,7 +8,6 @@ import "./maintenanceMasterTheme.css";
 import {
   createMaintenanceRule,
   fetchAllMaintenanceCategories,
-  fetchCategoryUsage,
   fetchGlobalPackages,
   fetchMaintenanceGovernanceFlag,
   fetchMaintenanceHistory,
@@ -17,12 +16,12 @@ import {
   fetchPartSchedulesIndex,
   fetchPreviewSchedule,
   fetchReviewList,
-  fetchRuleImpact,
   historyExportUrl,
   patchMaintenanceRule,
   retireBothConflictRules,
+  approveProposal,
+  rejectProposal,
   retireMaintenanceRule,
-  retirePartType,
   resolveConflict,
   downloadCsv,
   type MaintenanceRule,
@@ -33,17 +32,16 @@ import {
 import { MaintenanceMasterImpactDialog } from "./MaintenanceMasterImpactDialog";
 import { MaintenanceMasterPackageDrawer } from "./MaintenanceMasterPackageDrawer";
 import { MaintenanceMasterPreviewPanel } from "./MaintenanceMasterPreviewPanel";
-import { MaintenanceMasterRetireDialog } from "./MaintenanceMasterRetireDialog";
 import { MaintenanceMasterScheduleDrawer, SAVE_ERROR } from "./MaintenanceMasterScheduleDrawer";
 import { NIGHTLY_COPY } from "./maintenanceMasterFormat";
 import { HistoryTab } from "./HistoryTab";
 import { PackagesTab } from "./PackagesTab";
 import { PartScheduleLadderView } from "./PartScheduleLadderView";
 import { PartSchedulesTab } from "./PartSchedulesTab";
-import { PartTypesTab } from "./PartTypesTab";
+import { JobsTab } from "./jobs/JobsTab";
 import { ReviewTab } from "./ReviewTab";
 
-type Tab = "schedules" | "packages" | "part-types" | "review" | "history";
+type Tab = "schedules" | "packages" | "jobs" | "review" | "history";
 
 const WRITE_ROLES = new Set(["platform_owner", "platform_support", "platform_catalog_editor"]);
 
@@ -83,7 +81,6 @@ export function MaintenanceMasterPage() {
 
   const [impactOpen, setImpactOpen] = useState(false);
   const [impactMode, setImpactMode] = useState<"confirm" | "draft_preview">("confirm");
-  const [impactCars, setImpactCars] = useState(0);
   const [impactBeforeAfter, setImpactBeforeAfter] = useState<{
     before_km: number | null;
     before_months: number | null;
@@ -94,11 +91,6 @@ export function MaintenanceMasterPage() {
   const [pendingPayload, setPendingPayload] = useState<Record<string, unknown> | null>(null);
   const [pendingRuleId, setPendingRuleId] = useState<string | null>(null);
 
-  const [retireOpen, setRetireOpen] = useState(false);
-  const [retireCategory, setRetireCategory] = useState<MaintenanceServiceCategory | null>(null);
-  const [retireUsageRows, setRetireUsageRows] = useState<{ label: string; count: number }[]>([]);
-  const [retireBusy, setRetireBusy] = useState(false);
-  const [fleetUsageByCategory, setFleetUsageByCategory] = useState<Map<string, number>>(new Map());
 
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewCatalogId, setPreviewCatalogId] = useState("");
@@ -167,19 +159,13 @@ export function MaintenanceMasterPage() {
 
   const reviewBadge = review.conflicts.length + review.proposals.length;
 
+  // Dominion never counts Roam Fleet cars: the box only shows the schedule before → after.
   const openImpactForRule = async (ruleId: string, draftPreview: boolean) => {
     if (!token) return;
-    try {
-      const { impact } = await fetchRuleImpact(token, ruleId);
-      const count = Number((impact as { count?: number }).count ?? 0);
-      setImpactCars(count);
-      setImpactMode(draftPreview ? "draft_preview" : "confirm");
-      setPendingRuleId(ruleId);
-      setPendingPayload(null);
-      setImpactOpen(true);
-    } catch {
-      toast.error("Could not load impact");
-    }
+    setImpactMode(draftPreview ? "draft_preview" : "confirm");
+    setPendingRuleId(ruleId);
+    setPendingPayload(null);
+    setImpactOpen(true);
   };
 
   const handleRequestImpact = async (payload: Record<string, unknown>, mode: "draft" | "active") => {
@@ -203,21 +189,10 @@ export function MaintenanceMasterPage() {
     if (mode === "draft") {
       if (ruleId) await openImpactForRule(ruleId, true);
       else {
-        setImpactCars(0);
         setImpactMode("draft_preview");
         setImpactOpen(true);
       }
       return;
-    }
-    try {
-      if (ruleId) {
-        const { impact } = await fetchRuleImpact(token, ruleId);
-        setImpactCars(Number((impact as { count?: number }).count ?? 0));
-      } else {
-        setImpactCars(summary?.fleetCarsUsingSchedules ?? 0);
-      }
-    } catch {
-      setImpactCars(summary?.fleetCarsUsingSchedules ?? 0);
     }
     setImpactMode("confirm");
     setImpactOpen(true);
@@ -233,7 +208,7 @@ export function MaintenanceMasterPage() {
       } else {
         await createMaintenanceRule(token, { ...pendingPayload, status: "active" });
       }
-      toast.success(`Saved · ${impactCars} Roam Fleet cars updated ${NIGHTLY_COPY}`, { duration: 8000 });
+      toast.success("Schedule saved. Apps pick it up tonight.", { duration: 8000 });
       setImpactOpen(false);
       setDrawerOpen(false);
       setPendingPayload(null);
@@ -260,28 +235,11 @@ export function MaintenanceMasterPage() {
     }
   };
 
-  const openRetire = async (cat: MaintenanceServiceCategory) => {
-    setRetireCategory(cat);
-    setRetireOpen(true);
-    if (!token) return;
-    try {
-      const u = await fetchCategoryUsage(token, cat.id);
-      setRetireUsageRows([
-        { label: "Schedules", count: u.schedules },
-        { label: "Packages", count: u.packages },
-        { label: "Inspections", count: u.inspections },
-        { label: "Parts in catalogue", count: u.partsInCatalogue },
-      ]);
-      setFleetUsageByCategory((prev) => new Map(prev).set(cat.id, u.fleetCarsUsingPart));
-    } catch {
-      setRetireUsageRows([]);
-    }
-  };
 
   const tabs: { id: Tab; label: string; badge?: number }[] = [
     { id: "schedules", label: "Part schedules" },
     { id: "packages", label: "Service packages" },
-    { id: "part-types", label: "Part types" },
+    { id: "jobs", label: "Jobs" },
     { id: "review", label: "Review list", badge: reviewBadge || summary?.reviewCount },
     { id: "history", label: "History" },
   ];
@@ -427,15 +385,8 @@ export function MaintenanceMasterPage() {
         />
       ) : null}
 
-      {!detailCategory && tab === "part-types" ? (
-        <PartTypesTab
-          categories={categories}
-          rules={rules}
-          usageFleetByCategory={fleetUsageByCategory}
-          canWrite={canWrite && !analystReadOnly}
-          onRetire={(c) => void openRetire(c)}
-          onAddPartType={() => toast.message("Use Parts catalog to add part types.")}
-        />
+      {!detailCategory && tab === "jobs" ? (
+        <JobsTab token={token} canWrite={canWrite && !analystReadOnly} />
       ) : null}
 
       {!detailCategory && tab === "review" ? (
@@ -446,12 +397,30 @@ export function MaintenanceMasterPage() {
           canWrite={canWrite && !analystReadOnly}
           onKeep={(id, ruleId) => void resolveConflict(token, id, ruleId).then(() => reload())}
           onRetireBoth={(id) => void retireBothConflictRules(token, id).then(() => reload())}
+          onApprove={async (id) => {
+            try {
+              await approveProposal(token, id);
+              toast.success("Approved and applied");
+              await reload();
+            } catch (e: unknown) {
+              toast.error(e instanceof Error ? e.message : "Couldn't approve");
+            }
+          }}
+          onReject={async (id, note) => {
+            try {
+              await rejectProposal(token, id, note);
+              toast.success("Request rejected");
+              await reload();
+            } catch (e: unknown) {
+              toast.error(e instanceof Error ? e.message : "Couldn't reject");
+            }
+          }}
         />
       ) : null}
 
       {!detailCategory && tab === "history" ? (
         <HistoryTab
-          history={history}
+          token={token}
           onExport={() => void downloadCsv(historyExportUrl(token), token, "maintenance-history.csv")}
         />
       ) : null}
@@ -489,31 +458,11 @@ export function MaintenanceMasterPage() {
       <MaintenanceMasterImpactDialog
         open={impactOpen}
         mode={impactMode}
-        carCount={impactCars}
         beforeAfter={impactBeforeAfter}
         onClose={() => setImpactOpen(false)}
         onConfirm={impactMode === "confirm" ? () => void confirmImpactSave() : undefined}
         busy={impactBusy}
         supportProposal={role === "platform_support"}
-      />
-
-      <MaintenanceMasterRetireDialog
-        open={retireOpen}
-        partName={retireCategory?.name ?? "Part type"}
-        usage={retireUsageRows}
-        onClose={() => setRetireOpen(false)}
-        onConfirm={() => {
-          if (!retireCategory || !token) return;
-          setRetireBusy(true);
-          void retirePartType(token, retireCategory.id)
-            .then(() => {
-              setRetireOpen(false);
-              void reload();
-            })
-            .catch((e: Error) => toast.error(e.message))
-            .finally(() => setRetireBusy(false));
-        }}
-        busy={retireBusy}
       />
 
       <MaintenanceMasterPreviewPanel

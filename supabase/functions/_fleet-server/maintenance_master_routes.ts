@@ -8,6 +8,7 @@ import {
   assertCatalogGovernResponse,
   assertCatalogWriteResponse,
   bodyRequestsGovernActivation,
+  catalogActorId,
   governWriteOrProposal,
 } from "./catalog_access.ts";
 import { getOrgId } from "./org_scope.ts";
@@ -15,6 +16,10 @@ import { isMaintenanceMasterGovernanceEnabled } from "./maintenance_master_flag.
 import { ROAM_POLICY_STARTER_SET, matchCategoryId } from "./maintenance_master_starter.ts";
 import { enrichMaintenanceDueItems, fetchScheduleExplain } from "./maintenance_master_fleet_enrich.ts";
 import { fleetDb } from "./repos/baseRepo.ts";
+import {
+  MAINTENANCE_JOBS_ADMIN_ROUTE_GUARDS,
+  registerMaintenanceJobsAdminRoutes,
+} from "./maintenance_jobs_admin_routes.ts";
 
 function errMsg(e: unknown): string {
   if (e instanceof Error) return e.message;
@@ -57,10 +62,24 @@ function intervalChangedRevision(oldRow: Record<string, unknown>, newRow: Record
   return km(oldRow) !== km(newRow) || n(oldRow.interval_months) !== n(newRow.interval_months);
 }
 
+/** How an approved support request is applied (same routes the owner uses). */
+export function proposalReplay(
+  action: string,
+  entityId: string,
+  payload: Record<string, unknown>,
+): { method: string; path: string; body?: Record<string, unknown> } | null {
+  if (action === "create_active_rule") return { method: "POST", path: "/admin/maintenance/rules", body: payload };
+  if (action === "patch_rule") return { method: "PATCH", path: `/admin/maintenance/rules/${entityId}`, body: payload };
+  if (action === "retire_rule") return { method: "POST", path: `/admin/maintenance/rules/${entityId}/retire` };
+  return null;
+}
+
 type RouteApp = {
   get: (path: string, ...handlers: unknown[]) => void;
   post: (path: string, ...handlers: unknown[]) => void;
   patch: (path: string, ...handlers: unknown[]) => void;
+  put: (path: string, ...handlers: unknown[]) => void;
+  delete: (path: string, ...handlers: unknown[]) => void;
 };
 
 export function registerMaintenanceMasterRoutes(route: RouteApp, supabase: SupabaseClient): void {
@@ -376,6 +395,72 @@ export function registerMaintenanceMasterRoutes(route: RouteApp, supabase: Supab
         .order("created_at", { ascending: false });
       if (pErr) throw pErr;
       return c.json({ conflicts: conflicts || [], proposals: proposals || [] });
+    } catch (e: unknown) {
+      return c.json({ error: e instanceof Error ? e.message : String(e) }, 500);
+    }
+  });
+
+  // Owner approves a support request: replay it through the same route the owner would use,
+  // so every existing rule (impact, review list, history) applies. Then mark it approved.
+  route.post("/admin/maintenance/proposals/:id/approve", requireAuth(), async (c: Context) => {
+    const denied = assertCatalogGovernResponse(c);
+    if (denied) return denied;
+    try {
+      const id = c.req.param("id");
+      const { data: p, error } = await supabase
+        .from("catalog_governance_proposal")
+        .select("*")
+        .eq("id", id)
+        .maybeSingle();
+      if (error) throw error;
+      if (!p || String(p.status) !== "pending") return c.json({ error: "This request is no longer waiting." }, 409);
+      const replay = proposalReplay(String(p.action), String(p.entity_id), (p.payload ?? {}) as Record<string, unknown>);
+      if (!replay) return c.json({ error: "This kind of request can't be approved here." }, 400);
+      const base = c.req.path.slice(0, c.req.path.indexOf("/admin/maintenance"));
+      const app = route as unknown as {
+        request: (path: string, init?: RequestInit, env?: unknown) => Promise<Response>;
+      };
+      const res = await app.request(
+        `${base}${replay.path}`,
+        { method: replay.method, headers: c.req.raw.headers, body: replay.body ? JSON.stringify(replay.body) : undefined },
+        c.env,
+      );
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        return c.json({ error: body.error || "The change could not be applied." }, res.status as 400);
+      }
+      const { error: upErr } = await supabase
+        .from("catalog_governance_proposal")
+        .update({ status: "approved", reviewed_by: catalogActorId(c), reviewed_at: new Date().toISOString() })
+        .eq("id", id);
+      if (upErr) throw upErr;
+      return c.json({ success: true });
+    } catch (e: unknown) {
+      return c.json({ error: e instanceof Error ? e.message : String(e) }, 500);
+    }
+  });
+
+  route.post("/admin/maintenance/proposals/:id/reject", requireAuth(), async (c: Context) => {
+    const denied = assertCatalogGovernResponse(c);
+    if (denied) return denied;
+    try {
+      const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+      const note = String(body.note ?? "").trim();
+      if (!note) return c.json({ error: "Say why you're rejecting it." }, 400);
+      const { data, error } = await supabase
+        .from("catalog_governance_proposal")
+        .update({
+          status: "rejected",
+          review_note: note,
+          reviewed_by: catalogActorId(c),
+          reviewed_at: new Date().toISOString(),
+        })
+        .eq("id", c.req.param("id"))
+        .eq("status", "pending")
+        .select("id");
+      if (error) throw error;
+      if (!data?.length) return c.json({ error: "This request is no longer waiting." }, 409);
+      return c.json({ success: true });
     } catch (e: unknown) {
       return c.json({ error: e instanceof Error ? e.message : String(e) }, 500);
     }
@@ -777,10 +862,44 @@ export function registerMaintenanceMasterRoutes(route: RouteApp, supabase: Supab
   route.get("/admin/maintenance/history", requireAuth(), async (c: Context) => {
     const denied = assertPlatformStaffResponse(c);
     if (denied) return denied;
-    const entityTable = String(c.req.query("entity") ?? "maintenance_task_templates");
+    const kind = String(c.req.query("kind") ?? "").trim();
     const entityId = String(c.req.query("id") ?? "");
+    const entityQuery = String(c.req.query("entity") ?? "").trim();
+    const TABLES_ALL = [
+      "maintenance_service_categories",
+      "maintenance_job_section_groups",
+      "maintenance_job_sections",
+      "maintenance_job_section_members",
+      "maintenance_job_relations",
+      "maintenance_task_templates",
+    ];
+    let entityTables: string[];
+    if (entityQuery) {
+      entityTables = [entityQuery];
+    } else if (!kind || kind === "schedules") {
+      entityTables = ["maintenance_task_templates"];
+    } else if (kind === "jobs") {
+      entityTables = ["maintenance_service_categories"];
+    } else if (kind === "sections") {
+      entityTables = [
+        "maintenance_job_section_groups",
+        "maintenance_job_sections",
+        "maintenance_job_section_members",
+      ];
+    } else if (kind === "links") {
+      entityTables = ["maintenance_job_relations"];
+    } else if (kind === "all") {
+      entityTables = TABLES_ALL;
+    } else {
+      return c.json({ error: "Kind must be jobs, sections, links, schedules, or all." }, 400);
+    }
     try {
-      let q = supabase.from("platform_revision").select("*").eq("entity_table", entityTable).order("created_at", { ascending: false }).limit(100);
+      let q = supabase
+        .from("platform_revision")
+        .select("*")
+        .in("entity_table", entityTables)
+        .order("created_at", { ascending: false })
+        .limit(200);
       if (entityId) q = q.eq("entity_id", entityId);
       const { data, error } = await q;
       if (error) throw error;
@@ -1025,6 +1144,8 @@ export function registerMaintenanceMasterRoutes(route: RouteApp, supabase: Supab
     },
   );
 
+  registerMaintenanceJobsAdminRoutes(route, supabase);
+
   route.get(
     "/vehicles/:vehicleId/maintenance/schedule-explain",
     requireAuth(),
@@ -1134,9 +1255,12 @@ export const MAINTENANCE_MASTER_ROUTE_GUARDS: Record<string, "catalog.write" | "
   "POST /admin/maintenance/rules/:id/retire": "catalog.govern",
   "GET /admin/maintenance/preview": "staff_read",
   "GET /admin/maintenance/history": "staff_read",
+  "POST /admin/maintenance/proposals/:id/approve": "catalog.govern",
+  "POST /admin/maintenance/proposals/:id/reject": "catalog.govern",
   "POST /admin/maintenance/conflicts/:id/resolve": "catalog.write",
   "PATCH /vehicles/:vehicleId/maintenance/custom-interval": "vehicles.edit",
   "DELETE /vehicles/:vehicleId/maintenance/custom-interval": "vehicles.edit",
   "PATCH /vehicles/:vehicleId/maintenance/severe-duty": "vehicles.edit",
   "GET /vehicles/:vehicleId/maintenance/schedule-explain": "vehicles.view",
+  ...MAINTENANCE_JOBS_ADMIN_ROUTE_GUARDS,
 };

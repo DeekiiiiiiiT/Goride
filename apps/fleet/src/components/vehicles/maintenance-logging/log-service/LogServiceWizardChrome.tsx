@@ -14,7 +14,13 @@ export type LogServiceVehicleStrip = {
 
 const STEP_LABELS = LOG_SERVICE_COPY.stepBarLabels;
 
-function StepBar({ activeStep }: { activeStep: LogServiceWizardStep }) {
+function StepBar({
+  activeStep,
+  onStepClick,
+}: {
+  activeStep: LogServiceWizardStep;
+  onStepClick?: (step: LogServiceWizardStep) => void;
+}) {
   return (
     <div className="bg-surface-container-lowest px-6 py-4 shadow-[0_1px_0_0_rgba(0,0,0,0.06)]">
       <div className="grid grid-cols-4 gap-2 items-center">
@@ -22,8 +28,9 @@ function StepBar({ activeStep }: { activeStep: LogServiceWizardStep }) {
           const stepNum = (index + 1) as LogServiceWizardStep;
           const isActive = stepNum === activeStep;
           const isComplete = stepNum < activeStep;
-          return (
-            <div key={label} className="flex flex-col gap-1 min-w-0">
+          const canClick = isComplete && onStepClick;
+          const rowContent = (
+            <>
               <div className="flex items-center gap-1.5 min-w-0">
                 {isComplete ? (
                   <span className="w-5 h-5 rounded-full bg-primary text-on-primary flex items-center justify-center shrink-0">
@@ -51,6 +58,27 @@ function StepBar({ activeStep }: { activeStep: LogServiceWizardStep }) {
                   isActive || isComplete ? "bg-primary" : "bg-surface-container-highest"
                 }`}
               />
+            </>
+          );
+          return (
+            <div key={label} className="flex flex-col gap-1 min-w-0">
+              {canClick ? (
+                <button
+                  type="button"
+                  aria-current={undefined}
+                  onClick={() => onStepClick(stepNum)}
+                  className="flex flex-col gap-1 min-w-0 text-left rounded-lg border border-outline-variant/40 bg-surface-container-low px-2 py-1.5 hover:bg-surface-container hover:border-outline-variant transition-colors cursor-pointer"
+                >
+                  {rowContent}
+                </button>
+              ) : (
+                <div
+                  className="flex flex-col gap-1 min-w-0"
+                  aria-current={isActive ? "step" : undefined}
+                >
+                  {rowContent}
+                </div>
+              )}
             </div>
           );
         })}
@@ -63,12 +91,14 @@ export function LogServiceWizardChrome({
   activeStep,
   vehicle,
   onClose,
+  onStepClick,
   children,
   footer,
 }: {
   activeStep: LogServiceWizardStep;
   vehicle: LogServiceVehicleStrip;
   onClose: () => void;
+  onStepClick?: (step: LogServiceWizardStep) => void;
   children: React.ReactNode;
   footer?: React.ReactNode;
 }) {
@@ -125,7 +155,7 @@ export function LogServiceWizardChrome({
         </div>
       </div>
 
-      <StepBar activeStep={activeStep} />
+      <StepBar activeStep={activeStep} onStepClick={onStepClick} />
 
       <div className="flex-1 overflow-y-auto px-6 py-6">{children}</div>
 

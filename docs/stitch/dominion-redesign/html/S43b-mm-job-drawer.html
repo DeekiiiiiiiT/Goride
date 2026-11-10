@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_dashboard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "tertiary": "#40465e", "on-secondary-fixed-variant": "#3f465c", "primary-fixed-dim": "#b4c5ff", "on-surface-variant": "#434655", "surface-variant": "#e3e2e7", "secondary-container": "#dae2fd", "on-primary": "#ffffff", "outline": "#737686", "inverse-on-surface": "#f2f0f6", "on-secondary-container": "#5c647a", "primary": "#003ea9", "on-background": "#1b1b20", "surface-container-highest": "#e3e2e7", "background": "#faf8fe", "secondary-fixed-dim": "#bec6e0", "surface-container-high": "#e9e7ed", "on-primary-container": "#ced8ff", "primary-container": "#0153dc", "on-primary-fixed-variant": "#003ea8", "on-tertiary-fixed": "#141b30", "surface-tint": "#0053db", "error": "#ba1a1a", "primary-fixed": "#dbe1ff", "secondary": "#565e74", "outline-variant": "#c3c6d7", "tertiary-fixed": "#dbe1ff", "inverse-primary": "#b4c5ff", "secondary-fixed": "#dae2fd", "tertiary-fixed-dim": "#bfc5e2", "on-surface": "#1b1b20", "surface-bright": "#faf8fe", "inverse-surface": "#2f3035", "on-secondary": "#ffffff", "on-error-container": "#93000a", "surface": "#faf8fe", "surface-container": "#efedf3", "surface-container-low": "#f5f3f9", "on-tertiary-container": "#d2d8f6", "tertiary-container": "#575e77", "on-secondary-fixed": "#131b2e", "on-tertiary-fixed-variant": "#3f465e", "on-error": "#ffffff", "on-primary-fixed": "#00174b", "surface-container-lowest": "#ffffff", "on-tertiary": "#ffffff", "surface-dim": "#dbd9df", "error-container": "#ffdad6" }, "borderRadius": { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, "spacing": { "space-xl": "2rem", "space-md": "1rem", "margin": "2rem", "space-lg": "1.5rem", "gutter": "1.5rem", "space-sm": "0.5rem", "space-xs": "0.25rem" }, "fontFamily": { "code-md": [ "JetBrains Mono" ], "hint-sm": [ "Inter" ], "headline-md": [ "Inter" ], "headline-lg": [ "Inter" ], "body-sm": [ "Inter" ], "body-md": [ "Inter" ], "caption": [ "Inter" ], "code-sm": [ "JetBrains Mono" ], "body-lg": [ "Inter" ], "headline-xl": [ "Inter" ] }, "fontSize": { "code-md": [ "14px", { "lineHeight": "20px", "letterSpacing": "-0.02em", "fontWeight": "500" } ], "hint-sm": [ "13px", { "lineHeight": "18px", "letterSpacing": "0.01em", "fontWeight": "400" } ], "headline-md": [ "18px", { "lineHeight": "24px", "letterSpacing": "-0.01em", "fontWeight": "600" } ], "headline-lg": [ "20px", { "lineHeight": "28px", "letterSpacing": "-0.015em", "fontWeight": "600" } ], "body-sm": [ "14px", { "lineHeight": "20px", "letterSpacing": "0em", "fontWeight": "400" } ], "body-md": [ "15px", { "lineHeight": "22px", "letterSpacing": "0em", "fontWeight": "400" } ], "caption": [ "12px", { "lineHeight": "16px", "letterSpacing": "0.02em", "fontWeight": "500" } ], "code-sm": [ "12px", { "lineHeight": "16px", "letterSpacing": "-0.01em", "fontWeight": "500" } ], "body-lg": [ "16px", { "lineHeight": "24px", "letterSpacing": "0em", "fontWeight": "400" } ], "headline-xl": [ "26px", { "lineHeight": "34px", "letterSpacing": "-0.02em", "fontWeight": "600" } ] } } } };</script></head><body class="bg-surface font-body-md text-on-surface antialiased"><aside class="fixed left-0 top-0 h-full w-[260px] bg-[#070e1c] z-50 flex flex-col justify-between select-none shadow-[2px_0_12px_rgba(7,14,28,0.12)]"><div class="flex flex-col h-full"><div class="h-16 px-space-lg flex items-center justify-between border-b border-white/5"><div class="flex items-center gap-space-sm"><div class="w-8 h-8 rounded-lg bg-primary-container flex items-center justify-center text-on-primary font-headline-lg font-bold"><span class="material-symbols-outlined text-[20px]">directions_car</span></div><div class="flex flex-col"><span class="text-white font-headline-md text-[16px] tracking-wide uppercase font-bold leading-tight">Dominion</span><span class="text-outline-variant font-code-sm text-[10px] uppercase tracking-wider">Admin Console</span></div></div><span class="material-symbols-outlined text-outline text-[18px] cursor-pointer hover:text-white transition-colors">unfold_more</span></div><div class="flex-1 overflow-y-auto py-space-md px-space-sm space-y-space-md"><div class="space-y-space-xs"><div class="px-space-sm text-[11px] font-bold uppercase tracking-wider text-outline">Master Data</div><nav class="space-y-[2px]" data-active-classes="bg-primary-container text-white font-medium rounded-lg shadow-[0_2px_8px_rgba(1,83,220,0.3)]"><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-outline-variant hover:bg-white/5 hover:text-white transition-all font-body-sm" data-path="overview" href="#"><span class="material-symbols-outlined text-[18px]">grid_view</span><span>Overview</span></a><a class="flex items-center justify-between px-space-sm py-2 rounded-lg text-outline-variant hover:bg-white/5 hover:text-white transition-all font-body-sm" data-path="vehicles" href="#"><div class="flex items-center gap-space-sm"><span class="material-symbols-outlined text-[18px]">commute</span><span>Vehicles</span></div><span class="px-1.5 py-0.5 rounded-full bg-primary/40 text-primary-fixed font-code-sm text-[11px]">Active</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-outline-variant hover:bg-white/5 hover:text-white transition-all font-body-sm" data-path="places-and-maps" href="#"><span class="material-symbols-outlined text-[18px]">distance</span><span>Places and Maps</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-outline-variant hover:bg-white/5 hover:text-white transition-all font-body-sm" data-path="fuel" href="#"><span class="material-symbols-outlined text-[18px]">local_gas_station</span><span>Fuel</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-outline-variant hover:bg-white/5 hover:text-white transition-all font-body-sm" data-path="tolls" href="#"><span class="material-symbols-outlined text-[18px]">toll</span><span>Tolls</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-outline-variant hover:bg-white/5 hover:text-white transition-all font-body-sm" data-path="tax-and-vendors" href="#"><span class="material-symbols-outlined text-[18px]">receipt_long</span><span>Tax and Vendors</span></a></nav></div><div class="space-y-space-xs"><div class="px-space-sm text-[11px] font-bold uppercase tracking-wider text-outline">Engines</div><nav class="space-y-[2px]" data-active-classes="bg-primary-container text-white font-medium rounded-lg"><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-outline-variant hover:bg-white/5 hover:text-white transition-all font-body-sm" data-path="engine-registry" href="#"><span class="material-symbols-outlined text-[18px]">engineering</span><span>Engine Registry</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-outline-variant hover:bg-white/5 hover:text-white transition-all font-body-sm" data-path="telematics-sync" href="#"><span class="material-symbols-outlined text-[18px]">sync_alt</span><span>Telematics Sync</span></a></nav></div><div class="space-y-space-xs"><div class="px-space-sm text-[11px] font-bold uppercase tracking-wider text-outline">Distribution</div><nav class="space-y-[2px]" data-active-classes="bg-primary-container text-white font-medium rounded-lg"><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-outline-variant hover:bg-white/5 hover:text-white transition-all font-body-sm" data-path="hubs-depots" href="#"><span class="material-symbols-outlined text-[18px]">hub</span><span>Hubs &amp; Depots</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-outline-variant hover:bg-white/5 hover:text-white transition-all font-body-sm" data-path="route-allocations" href="#"><span class="material-symbols-outlined text-[18px]">route</span><span>Allocations</span></a></nav></div><div class="space-y-space-xs"><div class="px-space-sm text-[11px] font-bold uppercase tracking-wider text-outline">Platform</div><nav class="space-y-[2px]" data-active-classes="bg-primary-container text-white font-medium rounded-lg"><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-outline-variant hover:bg-white/5 hover:text-white transition-all font-body-sm" data-path="system-nodes" href="#"><span class="material-symbols-outlined text-[18px]">dns</span><span>System Nodes</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-outline-variant hover:bg-white/5 hover:text-white transition-all font-body-sm" data-path="integrations" href="#"><span class="material-symbols-outlined text-[18px]">extension</span><span>Integrations</span></a></nav></div><div class="space-y-space-xs"><div class="px-space-sm text-[11px] font-bold uppercase tracking-wider text-outline">Back Office</div><nav class="space-y-[2px]" data-active-classes="bg-primary-container text-white font-medium rounded-lg"><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-outline-variant hover:bg-white/5 hover:text-white transition-all font-body-sm" data-path="audit-logs" href="#"><span class="material-symbols-outlined text-[18px]">history_edu</span><span>Audit Logs</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-outline-variant hover:bg-white/5 hover:text-white transition-all font-body-sm" data-path="compliance-rules" href="#"><span class="material-symbols-outlined text-[18px]">gavel</span><span>Compliance</span></a></nav></div></div><div class="p-space-sm bg-[#0c1321] border-t border-white/5"><div class="flex items-center justify-between px-space-sm py-2 rounded-lg bg-white/5"><div class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span><span class="font-code-sm text-white/90 text-[11px] tracking-tight">KGN-DC-01 · JMD READY</span></div><span class="material-symbols-outlined text-outline text-[16px]">speed</span></div></div></div></aside><div class="pl-[260px]"><header class="fixed top-0 left-[260px] right-0 h-16 bg-surface/90 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-40 px-space-xl flex items-center justify-between"><div class="flex items-center flex-1 max-w-xl"><div class="relative w-full flex items-center"><span class="material-symbols-outlined absolute left-3 text-secondary text-[20px]">search</span><input class="w-full h-11 pl-10 pr-12 rounded-lg bg-surface-container-lowest text-on-surface font-body-sm placeholder:text-secondary focus:outline-none focus:ring-2 focus:ring-primary shadow-[0_2px_8px_rgba(1,83,220,0.04)] transition-all" placeholder="Search entities, engines, routes…" type="text"/><span class="absolute right-3 px-1.5 py-0.5 rounded bg-surface-container text-on-surface-variant font-code-sm text-[11px] select-none">⌘K</span></div></div><div class="flex items-center gap-space-md"><button aria-label="Theme Toggle" class="w-9 h-9 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-all" type="button"><span class="material-symbols-outlined text-[20px]">dark_mode</span></button><div class="h-5 w-[1px] bg-surface-variant"></div><div class="flex items-center gap-space-sm"><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div><div class="flex flex-col text-left"><span class="font-headline-md text-on-surface text-[13px] leading-tight">DT · Deeki T</span><span class="font-caption text-secondary text-[11px]">Owner</span></div></div><button aria-label="Sign out" class="w-8 h-8 rounded-lg flex items-center justify-center text-secondary hover:text-error hover:bg-error-container/30 transition-all" type="button"><span class="material-symbols-outlined text-[19px]">logout</span></button></div></header><div class="pt-16 bg-surface-container-low"><div class="w-full px-space-xl py-space-md bg-surface-container-lowest shadow-[0_1px_4px_rgba(0,0,0,0.02)]"><div class="max-w-[1120px] mx-auto"><div class="flex items-center gap-2 font-code-sm text-secondary text-[12px] uppercase tracking-wider mb-space-sm"><span class="hover:text-primary cursor-pointer transition-colors">DOMINION</span><span class="material-symbols-outlined text-[14px] text-outline-variant">chevron_right</span><span class="hover:text-primary cursor-pointer transition-colors">MASTER DATA</span><span class="material-symbols-outlined text-[14px] text-outline-variant">chevron_right</span><span class="hover:text-primary cursor-pointer transition-colors">VEHICLES</span><span class="material-symbols-outlined text-[14px] text-outline-variant">chevron_right</span><span class="text-primary font-semibold">MAINTENANCE TEMPLATES</span></div><div class="flex items-center gap-space-lg"><nav class="flex items-center gap-space-lg" data-active-classes="border-b-2 border-primary text-primary font-semibold"><a class="pb-2 text-on-surface-variant hover:text-on-surface font-body-sm flex items-center gap-1.5 transition-colors" data-path="part-schedules" href="#"><span>Part schedules</span><span class="px-1.5 py-0.2 rounded-full bg-surface-container font-code-sm text-[11px] text-secondary">16</span></a><a class="pb-2 text-on-surface-variant hover:text-on-surface font-body-sm flex items-center gap-1.5 transition-colors" data-path="service-packages" href="#"><span>Service packages</span><span class="px-1.5 py-0.2 rounded-full bg-surface-container font-code-sm text-[11px] text-secondary">5</span></a><a aria-current="page" class="pb-2 flex items-center gap-1.5 transition-colors border-b-2 border-primary text-primary font-semibold" data-path="jobs" href="#"><span>Jobs</span><span class="px-1.5 py-0.2 rounded-full bg-primary-fixed text-primary font-code-sm text-[11px]">68</span></a><a class="pb-2 text-on-surface-variant hover:text-on-surface font-body-sm flex items-center gap-1.5 transition-colors" data-path="review-list" href="#"><span>Review list</span><span class="px-1.5 py-0.2 rounded-full bg-error-container text-on-error-container font-code-sm text-[11px]">1</span></a><a class="pb-2 text-on-surface-variant hover:text-on-surface font-body-sm flex items-center gap-1.5 transition-colors" data-path="history" href="#"><span>History</span></a></nav></div></div></div></div><main class="relative w-full min-h-[calc(100vh-140px)] bg-surface px-space-xl py-space-lg"><div class="max-w-[1120px] mx-auto"><div class="flex flex-col w-full relative">
+<!-- BACKGROUND CONTEXT: Master Maintenance Template - Jobs Registry Behind Drawer Layer -->
+<div class="w-full space-y-space-md opacity-35 filter blur-[0.6px] pointer-events-none select-none transition-all duration-300">
+<!-- Top Action Ribbon -->
+<div class="flex items-center justify-between bg-surface-container-lowest p-space-md rounded-lg shadow-sm">
+<div class="flex items-center gap-space-md">
+<div class="flex items-center gap-space-xs bg-surface-container-low px-3 py-1.5 rounded-lg">
+<span class="material-symbols-outlined text-[18px] text-secondary">filter_list</span>
+<span class="font-body-sm text-on-surface font-medium">Filter by group:</span>
+<span class="font-code-sm text-primary font-semibold">Engine (24)</span>
+</div>
+<div class="flex items-center gap-2 bg-surface-container-low px-3 py-1.5 rounded-lg">
+<span class="material-symbols-outlined text-[18px] text-secondary">category</span>
+<span class="font-body-sm text-secondary">Type:</span>
+<span class="font-code-sm text-on-surface font-medium">All Units</span>
+</div>
+</div>
+<div class="flex items-center gap-space-sm">
+<button class="h-9 px-space-md rounded-lg bg-surface-container text-on-surface font-body-sm font-medium flex items-center gap-1.5" type="button">
+<span class="material-symbols-outlined text-[18px]">file_download</span>
+          Export Matrix
+        </button>
+<button class="h-9 px-space-md rounded-lg bg-primary-container text-on-primary font-body-sm font-medium flex items-center gap-1.5 shadow-sm" type="button">
+<span class="material-symbols-outlined text-[18px]">add</span>
+          New Job Definition
+        </button>
+</div>
+</div>
+<!-- Background Table Mockup -->
+<div class="bg-surface-container-lowest rounded-lg shadow-sm overflow-hidden">
+<div class="grid grid-cols-12 gap-space-md px-space-lg py-3 bg-surface-container text-on-surface-variant font-code-sm text-[11px] uppercase tracking-wider font-semibold">
+<div class="col-span-4">Job Specification &amp; Code</div>
+<div class="col-span-2">Home Group</div>
+<div class="col-span-2">Execution Type</div>
+<div class="col-span-2">Default Action</div>
+<div class="col-span-2 text-right">Linked Recs</div>
+</div>
+<div class="space-y-[1px] bg-surface-variant/30">
+<div class="grid grid-cols-12 gap-space-md px-space-lg py-3.5 bg-surface-container-lowest items-center">
+<div class="col-span-4 flex items-center gap-space-sm">
+<div class="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[18px]">settings</span>
+</div>
+<div>
+<div class="font-headline-md text-on-surface text-[14px]">Piston Ring Replacement</div>
+<div class="font-code-sm text-secondary text-[11px]">JOB-ENG-0822 · OEM Tier 2</div>
+</div>
+</div>
+<div class="col-span-2"><span class="px-2 py-0.5 rounded bg-surface-container font-code-sm text-[11px] text-on-surface">Engine</span></div>
+<div class="col-span-2"><span class="px-2 py-0.5 rounded bg-secondary-container text-on-secondary-container font-code-sm text-[11px]">Part</span></div>
+<div class="col-span-2 font-body-sm text-on-surface">Replace</div>
+<div class="col-span-2 text-right font-code-sm text-primary font-semibold">4 Outgoing</div>
+</div>
+<div class="grid grid-cols-12 gap-space-md px-space-lg py-3.5 bg-surface-container-lowest items-center">
+<div class="col-span-4 flex items-center gap-space-sm">
+<div class="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined text-[18px]">build</span>
+</div>
+<div>
+<div class="font-headline-md text-on-surface text-[14px]">Head Gasket Resurface &amp; Fit</div>
+<div class="font-code-sm text-secondary text-[11px]">JOB-ENG-0411 · Mechanical</div>
+</div>
+</div>
+<div class="col-span-2"><span class="px-2 py-0.5 rounded bg-surface-container font-code-sm text-[11px] text-on-surface">Engine</span></div>
+<div class="col-span-2"><span class="px-2 py-0.5 rounded bg-surface-container-high text-on-surface-variant font-code-sm text-[11px]">Service</span></div>
+<div class="col-span-2 font-body-sm text-on-surface">Machine</div>
+<div class="col-span-2 text-right font-code-sm text-secondary">2 Outgoing</div>
+</div>
+<div class="grid grid-cols-12 gap-space-md px-space-lg py-3.5 bg-surface-container-lowest items-center">
+<div class="col-span-4 flex items-center gap-space-sm">
+<div class="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined text-[18px]">speed</span>
+</div>
+<div>
+<div class="font-headline-md text-on-surface text-[14px]">Fuel Pressure Diagnostics</div>
+<div class="font-code-sm text-secondary text-[11px]">JOB-ENG-0901 · Calibration</div>
+</div>
+</div>
+<div class="col-span-2"><span class="px-2 py-0.5 rounded bg-surface-container font-code-sm text-[11px] text-on-surface">Engine</span></div>
+<div class="col-span-2"><span class="px-2 py-0.5 rounded bg-surface-container-high text-on-surface-variant font-code-sm text-[11px]">Service</span></div>
+<div class="col-span-2 font-body-sm text-on-surface">Inspect</div>
+<div class="col-span-2 text-right font-code-sm text-outline">None</div>
+</div>
+</div>
+</div>
+</div>
+<!-- FIXED MODAL BACKDROP OVERLAY -->
+<div class="fixed inset-0 z-40 bg-[#0f172a]/45 backdrop-blur-[2px] transition-opacity"></div>
+<!-- FLYOUT DRAWER: EDIT MODE (Primary Interactive Specimen - Anchored Right) -->
+<aside class="fixed right-0 top-0 h-screen w-[560px] max-w-[90vw] z-50 bg-surface-container-lowest flex flex-col shadow-2xl overflow-hidden" id="editJobDrawer">
+<!-- Drawer Header -->
+<header class="h-16 px-space-lg flex items-center justify-between bg-surface-container-lowest flex-shrink-0">
+<div class="flex items-center gap-space-sm min-w-0">
+<div class="w-2.5 h-2.5 rounded-full bg-primary flex-shrink-0"></div>
+<h2 class="font-headline-md text-on-surface text-[20px] font-semibold tracking-tight truncate">
+          Edit job · <span class="text-primary">Piston Ring Replacement</span>
+</h2>
+</div>
+<button aria-label="Close drawer" class="w-8 h-8 rounded-lg bg-surface-container hover:bg-surface-container-high text-secondary hover:text-on-surface flex items-center justify-center transition-colors flex-shrink-0" type="button">
+<span class="material-symbols-outlined text-[18px]">close</span>
+</button>
+</header>
+<!-- Drawer Scrollable Form Body -->
+<div class="flex-1 overflow-y-auto px-space-lg py-space-md space-y-space-lg">
+<!-- Field: Name -->
+<div class="space-y-1.5">
+<label class="block font-caption text-secondary uppercase tracking-wider text-[11px]" for="job-name-edit">
+          Name <span class="text-error">*</span>
+</label>
+<div class="relative">
+<input class="w-full h-11 px-3.5 rounded-lg bg-surface-container-lowest text-on-surface font-body-md shadow-sm focus:outline-none focus:ring-2 focus:ring-primary" id="job-name-edit" type="text" value="Piston Ring Replacement"/>
+</div>
+</div>
+<!-- Field: Home Group (LOCKED) -->
+<div class="space-y-1.5">
+<div class="flex items-center justify-between">
+<label class="block font-caption text-secondary uppercase tracking-wider text-[11px]">Home group</label>
+<span class="flex items-center gap-1 font-caption text-secondary text-[11px]">
+<span class="material-symbols-outlined text-[14px]">lock</span>
+            System Locked
+          </span>
+</div>
+<div class="h-11 px-3.5 rounded-lg bg-surface-container-high text-on-surface-variant flex items-center justify-between cursor-not-allowed">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px] text-secondary">tune</span>
+<span class="font-body-md font-medium">Engine</span>
+</div>
+<span class="material-symbols-outlined text-secondary text-[18px]">lock</span>
+</div>
+<div class="flex items-center gap-1.5 text-secondary">
+<span class="material-symbols-outlined text-[14px] text-secondary">info</span>
+<span class="font-hint-sm text-secondary text-[12px]">Locked — this job has been used in service logs.</span>
+</div>
+</div>
+<!-- Field: Form Type (LOCKED SEGMENTED) -->
+<div class="space-y-1.5">
+<div class="flex items-center justify-between">
+<label class="block font-caption text-secondary uppercase tracking-wider text-[11px]">Form type</label>
+<span class="flex items-center gap-1 font-caption text-secondary text-[11px]">
+<span class="material-symbols-outlined text-[14px]">lock</span>
+            Immutable Schema
+          </span>
+</div>
+<div class="grid grid-cols-2 p-1 bg-surface-container rounded-lg opacity-85 cursor-not-allowed">
+<div class="py-2 flex items-center justify-center gap-2 text-secondary font-body-sm font-medium">
+<span class="material-symbols-outlined text-[18px]">build</span>
+<span>Service</span>
+</div>
+<div class="py-2 flex items-center justify-center gap-2 rounded-md bg-surface-container-lowest text-primary font-body-sm font-semibold shadow-sm">
+<span class="material-symbols-outlined text-[18px]">settings</span>
+<span>Part</span>
+</div>
+</div>
+<div class="flex items-center gap-1.5 text-secondary">
+<span class="material-symbols-outlined text-[14px] text-secondary">info</span>
+<span class="font-hint-sm text-secondary text-[12px]">Locked — this job has been used in service logs.</span>
+</div>
+</div>
+<!-- Field: Default Action Dropdown -->
+<div class="space-y-1.5">
+<label class="block font-caption text-secondary uppercase tracking-wider text-[11px]" for="default-action-select">Default action</label>
+<div class="relative">
+<select class="w-full h-11 px-3.5 pr-10 rounded-lg bg-surface-container-lowest text-on-surface font-body-md shadow-sm appearance-none focus:outline-none focus:ring-2 focus:ring-primary" id="default-action-select">
+<option value="inspect">Inspect</option>
+<option value="clean">Clean</option>
+<option value="adjust">Adjust</option>
+<option selected="" value="replace">Replace</option>
+<option value="rotate">Rotate</option>
+<option value="balance">Balance</option>
+<option value="flush">Flush</option>
+<option value="topup">Top up</option>
+<option value="repair">Repair</option>
+<option value="machine">Machine</option>
+<option value="rebuild">Rebuild</option>
+<option value="other">Other</option>
+</select>
+<span class="material-symbols-outlined absolute right-3 top-3 pointer-events-none text-secondary text-[20px]">expand_more</span>
+</div>
+<p class="font-hint-sm text-secondary text-[12px]">What a mechanic usually does with this job. Saved on every log line.</p>
+</div>
+<!-- Field: Description -->
+<div class="space-y-1.5">
+<label class="block font-caption text-secondary uppercase tracking-wider text-[11px]" for="job-description-edit">Description</label>
+<textarea class="w-full p-3 rounded-lg bg-surface-container-lowest text-on-surface font-body-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-primary leading-relaxed" id="job-description-edit" rows="3">Replacing worn piston rings to bring back compression and stop the engine burning oil.</textarea>
+<div class="flex items-center gap-1 font-hint-sm text-secondary text-[12px]">
+<span class="material-symbols-outlined text-[14px]">info</span>
+<span>Shown when someone taps ⓘ while logging.</span>
+</div>
+</div>
+<!-- Field: Icon Selection (Row of 8) -->
+<div class="space-y-2">
+<label class="block font-caption text-secondary uppercase tracking-wider text-[11px]">Icon</label>
+<div class="grid grid-cols-8 gap-2">
+<!-- Item 1 -->
+<button aria-label="Icon build" class="h-9 w-9 rounded-lg bg-surface-container hover:bg-surface-container-high text-secondary flex items-center justify-center transition-all" type="button">
+<span class="material-symbols-outlined text-[18px]">build</span>
+</button>
+<!-- Item 2 (Active Gears) -->
+<button aria-label="Icon settings" class="h-9 w-9 rounded-lg bg-primary-fixed text-primary ring-2 ring-primary flex items-center justify-center shadow-sm" type="button">
+<span class="material-symbols-outlined text-[18px]">settings</span>
+</button>
+<!-- Item 3 -->
+<button aria-label="Icon engineering" class="h-9 w-9 rounded-lg bg-surface-container hover:bg-surface-container-high text-secondary flex items-center justify-center transition-all" type="button">
+<span class="material-symbols-outlined text-[18px]">engineering</span>
+</button>
+<!-- Item 4 -->
+<button aria-label="Icon precision manufacturing" class="h-9 w-9 rounded-lg bg-surface-container hover:bg-surface-container-high text-secondary flex items-center justify-center transition-all" type="button">
+<span class="material-symbols-outlined text-[18px]">precision_manufacturing</span>
+</button>
+<!-- Item 5 -->
+<button aria-label="Icon speed" class="h-9 w-9 rounded-lg bg-surface-container hover:bg-surface-container-high text-secondary flex items-center justify-center transition-all" type="button">
+<span class="material-symbols-outlined text-[18px]">speed</span>
+</button>
+<!-- Item 6 -->
+<button aria-label="Icon gas station" class="h-9 w-9 rounded-lg bg-surface-container hover:bg-surface-container-high text-secondary flex items-center justify-center transition-all" type="button">
+<span class="material-symbols-outlined text-[18px]">local_gas_station</span>
+</button>
+<!-- Item 7 -->
+<button aria-label="Icon tire repair" class="h-9 w-9 rounded-lg bg-surface-container hover:bg-surface-container-high text-secondary flex items-center justify-center transition-all" type="button">
+<span class="material-symbols-outlined text-[18px]">tire_repair</span>
+</button>
+<!-- Item 8 -->
+<button aria-label="Icon electric car" class="h-9 w-9 rounded-lg bg-surface-container hover:bg-surface-container-high text-secondary flex items-center justify-center transition-all" type="button">
+<span class="material-symbols-outlined text-[18px]">electric_car</span>
+</button>
+</div>
+</div>
+<!-- Section: Also Do (outgoing) -->
+<div class="pt-space-sm space-y-space-md">
+<div class="flex items-start justify-between">
+<div>
+<h3 class="font-headline-md text-on-surface text-[15px] font-semibold">Also do (outgoing)</h3>
+<p class="font-hint-sm text-secondary text-[12px]">Recommended auxiliary tasks automatically prompted when scheduling this job.</p>
+</div>
+<span class="px-2 py-0.5 rounded-full bg-surface-container font-code-sm text-[11px] text-secondary">4 linked</span>
+</div>
+<!-- 4 Structured Rows -->
+<div class="space-y-2">
+<!-- Row 1 -->
+<div class="p-3 rounded-lg bg-surface-container-low flex items-center justify-between gap-space-sm shadow-[0_1px_3px_rgba(0,0,0,0.03)] hover:bg-surface-container transition-colors">
+<div class="flex items-center gap-space-sm min-w-0">
+<div class="w-8 h-8 rounded bg-surface-container-lowest flex items-center justify-center text-primary flex-shrink-0">
+<span class="material-symbols-outlined text-[18px]">view_stream</span>
+</div>
+<div class="min-w-0">
+<div class="font-body-md text-on-surface font-semibold text-[14px] leading-tight truncate">Head Gasket</div>
+<div class="font-hint-sm text-secondary text-[12px] truncate">“The head is already off.”</div>
+</div>
+</div>
+<button class="px-2.5 py-1 rounded bg-error-container/40 hover:bg-error-container text-error font-caption text-[11px] font-medium flex items-center gap-1 transition-colors flex-shrink-0" type="button">
+<span class="material-symbols-outlined text-[14px]">remove_circle</span>
+              Remove
+            </button>
+</div>
+<!-- Row 2 -->
+<div class="p-3 rounded-lg bg-surface-container-low flex items-center justify-between gap-space-sm shadow-[0_1px_3px_rgba(0,0,0,0.03)] hover:bg-surface-container transition-colors">
+<div class="flex items-center gap-space-sm min-w-0">
+<div class="w-8 h-8 rounded bg-surface-container-lowest flex items-center justify-center text-primary flex-shrink-0">
+<span class="material-symbols-outlined text-[18px]">circle</span>
+</div>
+<div class="min-w-0">
+<div class="font-body-md text-on-surface font-semibold text-[14px] leading-tight truncate">Cylinder Honing / Boring</div>
+<div class="font-hint-sm text-secondary text-[12px] truncate">“New rings need freshly honed cylinders.”</div>
+</div>
+</div>
+<button class="px-2.5 py-1 rounded bg-error-container/40 hover:bg-error-container text-error font-caption text-[11px] font-medium flex items-center gap-1 transition-colors flex-shrink-0" type="button">
+<span class="material-symbols-outlined text-[14px]">remove_circle</span>
+              Remove
+            </button>
+</div>
+<!-- Row 3 -->
+<div class="p-3 rounded-lg bg-surface-container-low flex items-center justify-between gap-space-sm shadow-[0_1px_3px_rgba(0,0,0,0.03)] hover:bg-surface-container transition-colors">
+<div class="flex items-center gap-space-sm min-w-0">
+<div class="w-8 h-8 rounded bg-surface-container-lowest flex items-center justify-center text-primary flex-shrink-0">
+<span class="material-symbols-outlined text-[18px]">check_circle</span>
+</div>
+<div class="min-w-0">
+<div class="font-body-md text-on-surface font-semibold text-[14px] leading-tight truncate">Valve Stem Seal Replacement</div>
+<div class="font-hint-sm text-secondary text-[12px] truncate">“Easy while the head is off.”</div>
+</div>
+</div>
+<button class="px-2.5 py-1 rounded bg-error-container/40 hover:bg-error-container text-error font-caption text-[11px] font-medium flex items-center gap-1 transition-colors flex-shrink-0" type="button">
+<span class="material-symbols-outlined text-[14px]">remove_circle</span>
+              Remove
+            </button>
+</div>
+<!-- Row 4 -->
+<div class="p-3 rounded-lg bg-surface-container-low flex items-center justify-between gap-space-sm shadow-[0_1px_3px_rgba(0,0,0,0.03)] hover:bg-surface-container transition-colors">
+<div class="flex items-center gap-space-sm min-w-0">
+<div class="w-8 h-8 rounded bg-surface-container-lowest flex items-center justify-center text-primary flex-shrink-0">
+<span class="material-symbols-outlined text-[18px]">opacity</span>
+</div>
+<div class="min-w-0">
+<div class="font-body-md text-on-surface font-semibold text-[14px] leading-tight truncate">Engine oil &amp; filter</div>
+<div class="font-hint-sm text-secondary text-[12px] truncate">“Fresh oil after engine work.”</div>
+</div>
+</div>
+<button class="px-2.5 py-1 rounded bg-error-container/40 hover:bg-error-container text-error font-caption text-[11px] font-medium flex items-center gap-1 transition-colors flex-shrink-0" type="button">
+<span class="material-symbols-outlined text-[14px]">remove_circle</span>
+              Remove
+            </button>
+</div>
+</div>
+<!-- Add Outgoing Action -->
+<button class="w-full py-2.5 rounded-lg bg-surface-container-low hover:bg-surface-container text-primary font-body-sm font-semibold flex items-center justify-center gap-2 transition-colors" type="button">
+<span class="material-symbols-outlined text-[18px]">add</span>
+          + Add ‘also do’
+        </button>
+<!-- Read-only suggestions feedback -->
+<div class="px-1 py-1 flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px] text-secondary">alt_route</span>
+<span class="font-code-sm text-secondary text-[12px]">Suggested with: (none)</span>
+</div>
+</div>
+</div>
+<!-- Sticky Drawer Footer -->
+<footer class="h-20 px-space-lg bg-surface-container-lowest flex items-center justify-between flex-shrink-0">
+<button class="h-10 px-space-md rounded-lg bg-error-container/30 hover:bg-error-container/50 text-error font-body-sm font-medium transition-colors" type="button">
+        Cancel
+      </button>
+<button class="h-10 px-space-xl rounded-lg bg-primary-container hover:bg-primary text-on-primary font-body-sm font-semibold shadow-md flex items-center gap-2 transition-all" type="button">
+<span class="material-symbols-outlined text-[18px]">save</span>
+        Save job
+      </button>
+</footer>
+</aside>
+<!-- SECONDARY COMPARISON PANEL: ADD MODE DRAWER PREVIEW -->
+<!-- Positioned in canvas for complete side-by-side design audit and specification handover -->
+<div class="relative z-30 mt-6 max-w-[620px] bg-surface-container-lowest rounded-xl shadow-xl p-space-lg space-y-space-md">
+<div class="flex items-center justify-between pb-2">
+<div class="flex items-center gap-2">
+<span class="px-2 py-0.5 rounded bg-primary-fixed text-primary font-code-sm text-[11px] uppercase tracking-wider font-bold">Add Mode State</span>
+<h3 class="font-headline-md text-on-surface text-[17px] font-semibold">Job Definition Panel (Add Mode Variant)</h3>
+</div>
+<span class="font-caption text-secondary text-[12px]">Unlocked Archetype</span>
+</div>
+<!-- Simulated Add Drawer Inside Card -->
+<div class="rounded-lg bg-surface p-space-md space-y-space-md">
+<!-- Title -->
+<div class="flex items-center justify-between">
+<div class="font-headline-md text-on-surface text-[18px] font-semibold">Add job</div>
+<button aria-label="Close" class="w-7 h-7 rounded-md bg-surface-container text-secondary flex items-center justify-center" type="button">
+<span class="material-symbols-outlined text-[16px]">close</span>
+</button>
+</div>
+<!-- Add: Name Input -->
+<div class="space-y-1">
+<label class="block font-caption text-secondary uppercase tracking-wider text-[11px]" for="job-name-add">Name</label>
+<input class="w-full h-10 px-3 rounded-lg bg-surface-container-lowest text-on-surface font-body-md shadow-sm focus:outline-none focus:ring-1 focus:ring-primary" id="job-name-add" type="text" value="Fuel Pressure Test"/>
+</div>
+<!-- Add: Home Group Unlocked -->
+<div class="space-y-1">
+<div class="flex items-center justify-between">
+<label class="block font-caption text-secondary uppercase tracking-wider text-[11px]" for="home-group-add">Home group</label>
+<span class="font-caption text-primary text-[11px] font-medium">Editable</span>
+</div>
+<div class="relative">
+<select class="w-full h-10 px-3 pr-8 rounded-lg bg-surface-container-lowest text-on-surface font-body-md shadow-sm appearance-none focus:outline-none focus:ring-1 focus:ring-primary" id="home-group-add">
+<option selected="">Engine</option>
+<option>Transmission &amp; Driveline</option>
+<option>Braking System</option>
+<option>Suspension &amp; Steering</option>
+<option>Electrical &amp; Telematics</option>
+<option>HVAC &amp; Cabin</option>
+</select>
+<span class="material-symbols-outlined absolute right-2.5 top-2.5 pointer-events-none text-secondary text-[18px]">expand_more</span>
+</div>
+</div>
+<!-- Add: Form Type Segmented Unlocked -->
+<div class="space-y-1">
+<label class="block font-caption text-secondary uppercase tracking-wider text-[11px]">Form type</label>
+<div class="grid grid-cols-2 p-1 bg-surface-container rounded-lg">
+<div class="py-1.5 flex items-center justify-center gap-1.5 rounded-md bg-surface-container-lowest text-primary font-body-sm font-semibold shadow-sm cursor-pointer">
+<span class="material-symbols-outlined text-[16px]">build</span>
+<span>Service</span>
+</div>
+<div class="py-1.5 flex items-center justify-center gap-1.5 text-secondary font-body-sm font-medium hover:text-on-surface cursor-pointer">
+<span class="material-symbols-outlined text-[16px]">settings</span>
+<span>Part</span>
+</div>
+</div>
+</div>
+<!-- Add: Default Action -->
+<div class="space-y-1">
+<label class="block font-caption text-secondary uppercase tracking-wider text-[11px]" for="default-action-add">Default action</label>
+<div class="relative">
+<select class="w-full h-10 px-3 pr-8 rounded-lg bg-surface-container-lowest text-on-surface font-body-md shadow-sm appearance-none focus:outline-none focus:ring-1 focus:ring-primary" id="default-action-add">
+<option selected="">Inspect</option>
+<option>Clean</option>
+<option>Adjust</option>
+<option>Replace</option>
+<option>Flush</option>
+<option>Calibrate</option>
+</select>
+<span class="material-symbols-outlined absolute right-2.5 top-2.5 pointer-events-none text-secondary text-[18px]">expand_more</span>
+</div>
+</div>
+<!-- Add: Description Empty Placeholder -->
+<div class="space-y-1">
+<label class="block font-caption text-secondary uppercase tracking-wider text-[11px]" for="job-description-add">Description</label>
+<textarea class="w-full p-2.5 rounded-lg bg-surface-container-lowest text-on-surface font-body-sm placeholder:text-outline-variant shadow-sm focus:outline-none focus:ring-1 focus:ring-primary" id="job-description-add" placeholder="Enter operational guidance for technicians..." rows="2"></textarea>
+</div>
+<!-- Add: Also Do (Empty State) -->
+<div class="space-y-2 pt-1">
+<div class="flex items-center justify-between">
+<span class="font-body-sm font-semibold text-on-surface">Also do (outgoing)</span>
+<span class="font-code-sm text-secondary text-[11px]">0 linked</span>
+</div>
+<div class="p-3 rounded-lg bg-surface-container-low text-center space-y-2">
+<p class="font-hint-sm text-secondary text-[12px]">No secondary tasks linked yet.</p>
+<button class="px-3 py-1.5 rounded-md bg-surface-container-lowest hover:bg-surface-container text-primary font-body-sm font-semibold text-[13px] shadow-sm inline-flex items-center gap-1" type="button">
+<span class="material-symbols-outlined text-[16px]">add</span>
+            + Add ‘also do’
+          </button>
+</div>
+<div class="font-code-sm text-secondary text-[11px]">Suggested with: (none)</div>
+</div>
+<!-- Add Mode Footer -->
+<div class="pt-2 flex items-center justify-between">
+<button class="h-9 px-space-md rounded-lg bg-error-container/30 hover:bg-error-container/50 text-error font-body-sm font-medium transition-colors" type="button">
+          Cancel
+        </button>
+<button class="h-9 px-space-lg rounded-lg bg-primary-container hover:bg-primary text-on-primary font-body-sm font-semibold shadow-sm flex items-center gap-1.5 transition-all" type="button">
+<span class="material-symbols-outlined text-[17px]">add_task</span>
+          Add job
+        </button>
+</div>
+</div>
+</div>
+</div></div></main></div></body></html>

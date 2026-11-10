@@ -4,6 +4,7 @@
     "jsr:@std/assert@*": "1.0.19",
     "jsr:@std/assert@1": "1.0.19",
     "jsr:@std/assert@1.0.13": "1.0.13",
+    "jsr:@std/assert@^1.0.19": "1.0.19",
     "jsr:@std/csv@*": "1.0.6",
     "jsr:@std/fs@1": "1.0.24",
     "jsr:@std/internal@^1.0.12": "1.0.14",
@@ -11,6 +12,7 @@
     "jsr:@std/internal@^1.0.6": "1.0.14",
     "jsr:@std/path@1": "1.1.6",
     "jsr:@std/path@^1.1.5": "1.1.6",
+    "jsr:@std/testing@*": "1.0.21",
     "jsr:@std/yaml@1.0.5": "1.0.5",
     "jsr:@supabase/supabase-js@2.49.8": "2.49.8",
     "npm:@capacitor-community/contacts@7": "7.2.0_@capacitor+core@7.6.8",
@@ -186,6 +188,12 @@
       "integrity": "c68485c2a4dfbb5ae3cc74fae4e8c4e5d874cf8a8ed12927917235c758b46cbe",
       "dependencies": [
         "jsr:@std/internal@^1.0.14"
+      ]
+    },
+    "@std/testing@1.0.21": {
+      "integrity": "a0d14b2519005242821565091127c7d6fa96ca1b330e84e9249afcd602ee764f",
+      "dependencies": [
+        "jsr:@std/assert@^1.0.19"
       ]
     },
     "@std/yaml@1.0.5": {

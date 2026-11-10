@@ -52,7 +52,145 @@ export type LogServiceLineDetailsStepProps = {
   lineTotalLabel: string;
   currency: string;
   lineTotal: number;
+  /** Fixed boxes to hide for this job: "labor_hours", "part_number" (see hiddenLineFieldsFor). */
+  hiddenFields?: string[];
+  /** Set for service jobs (alignment, rotation…): shows the short form — wheels + cost only. */
+  serviceForm?: {
+    costMode: "total" | "per_wheel";
+    amount: number | null;
+    onCostModeChange: (mode: "total" | "per_wheel") => void;
+    onAmountChange: (v: number | null) => void;
+    onToggleAllPositions: () => void;
+  };
 };
+
+function PositionButtons({
+  positions,
+  onTogglePosition,
+  onToggleAll,
+}: {
+  positions: string[];
+  onTogglePosition: (pos: string) => void;
+  onToggleAll?: () => void;
+}) {
+  const allOn = TIRE_BRAKE_POSITIONS.every((p) => positions.includes(p));
+  return (
+    <div className="flex flex-wrap gap-2">
+      {TIRE_BRAKE_POSITIONS.map((pos) => {
+        const on = positions.includes(pos);
+        return (
+          <button
+            key={pos}
+            type="button"
+            aria-pressed={on}
+            onClick={() => onTogglePosition(pos)}
+            className={`min-h-11 min-w-11 px-3 rounded-lg border-2 text-sm font-semibold transition-colors ${
+              on
+                ? "border-primary bg-primary text-on-primary"
+                : "border-outline-variant/40 bg-surface-container-lowest text-on-surface-variant hover:border-primary/40"
+            }`}
+          >
+            {pos}
+          </button>
+        );
+      })}
+      {onToggleAll ? (
+        <button
+          type="button"
+          aria-pressed={allOn}
+          onClick={onToggleAll}
+          className={`min-h-11 px-4 rounded-lg border-2 text-sm font-semibold transition-colors ${
+            allOn
+              ? "border-primary bg-primary text-on-primary"
+              : "border-outline-variant/40 bg-surface-container-lowest text-on-surface hover:border-primary/40"
+          }`}
+        >
+          {LOG_SERVICE_COPY.allFourWheels}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function ServiceJobForm(props: LogServiceLineDetailsStepProps & { serviceForm: NonNullable<LogServiceLineDetailsStepProps["serviceForm"]> }) {
+  const { serviceForm: sf, showPositions, positions, onTogglePosition, complimentary, onComplimentaryChange, currency, lineTotal, lineTotalLabel } = props;
+  const perWheel = sf.costMode === "per_wheel";
+  const wheelCount = positions.length;
+  return (
+    <>
+      {showPositions ? (
+        <div className="space-y-2">
+          <Label>{LOG_SERVICE_COPY.whichWheels}</Label>
+          <PositionButtons positions={positions} onTogglePosition={onTogglePosition} onToggleAll={sf.onToggleAllPositions} />
+        </div>
+      ) : null}
+
+      <div className="space-y-2">
+        <Label htmlFor="service-amount">{LOG_SERVICE_COPY.serviceCostLabel}</Label>
+        {showPositions ? (
+          <div className="inline-flex rounded-lg border border-outline-variant/40 p-1 bg-surface-container-low gap-1">
+            {(["total", "per_wheel"] as const).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                aria-pressed={sf.costMode === mode}
+                onClick={() => sf.onCostModeChange(mode)}
+                className={`px-4 py-1.5 rounded-md text-sm font-semibold transition-colors ${
+                  sf.costMode === mode
+                    ? "bg-primary text-on-primary shadow-sm"
+                    : "bg-surface-container-lowest text-on-surface hover:bg-surface-container"
+                }`}
+              >
+                {mode === "total" ? LOG_SERVICE_COPY.costModeTotal : LOG_SERVICE_COPY.costModePerWheel}
+              </button>
+            ))}
+          </div>
+        ) : null}
+        <div className="relative max-w-xs">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-medium text-stitch-secondary">
+            {currency}
+          </span>
+          <Input
+            id="service-amount"
+            type="number"
+            min={0}
+            inputMode="decimal"
+            disabled={complimentary}
+            className="pl-12 bg-surface-container-lowest border-outline-variant/40"
+            placeholder={perWheel ? LOG_SERVICE_COPY.perWheelPlaceholder : LOG_SERVICE_COPY.totalPlaceholder}
+            value={sf.amount ?? ""}
+            onChange={(e) => sf.onAmountChange(e.target.value === "" ? null : Number(e.target.value))}
+          />
+        </div>
+        {perWheel && showPositions ? (
+          <p className="text-xs text-stitch-secondary">
+            {wheelCount === 0
+              ? LOG_SERVICE_COPY.pickWheelsForPerWheel
+              : LOG_SERVICE_COPY.perWheelMath(currency, sf.amount ?? 0, wheelCount)}
+          </p>
+        ) : null}
+      </div>
+
+      <div className="flex items-center gap-3">
+        <Checkbox
+          id="complimentary"
+          checked={complimentary}
+          onCheckedChange={(checked: boolean | "indeterminate") => onComplimentaryChange(checked === true)}
+        />
+        <Label htmlFor="complimentary" className="cursor-pointer">
+          {LOG_SERVICE_COPY.noChargeLabel}
+        </Label>
+      </div>
+
+      <div className="rounded-lg border border-outline-variant/40 bg-surface-container-low px-4 py-3 flex justify-between items-center">
+        <span className="text-sm text-stitch-secondary">{lineTotalLabel}</span>
+        <span className="font-semibold text-on-surface">
+          {currency} {lineTotal.toLocaleString()}
+        </span>
+      </div>
+    </>
+  );
+}
 
 export function LogServiceLineDetailsStep(props: LogServiceLineDetailsStepProps) {
   const {
@@ -107,6 +245,10 @@ export function LogServiceLineDetailsStep(props: LogServiceLineDetailsStepProps)
         </div>
       </div>
 
+      {props.serviceForm ? (
+        <ServiceJobForm {...props} serviceForm={props.serviceForm} />
+      ) : (
+      <>
       <div className="space-y-2">
         <Label>Action</Label>
         <Select value={action} onValueChange={(v: string) => onActionChange(v as MaintenanceLineAction)}>
@@ -126,6 +268,7 @@ export function LogServiceLineDetailsStep(props: LogServiceLineDetailsStepProps)
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">{categoryFields}</div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {!props.hiddenFields?.includes("labor_hours") ? (
         <div className="space-y-2">
           <Label htmlFor="labor-hours">Labor hours</Label>
           <Input
@@ -139,6 +282,7 @@ export function LogServiceLineDetailsStep(props: LogServiceLineDetailsStepProps)
             }
           />
         </div>
+        ) : null}
         <div className="space-y-2">
           <Label htmlFor="labor-rate">Labor rate</Label>
           <Input
@@ -160,6 +304,7 @@ export function LogServiceLineDetailsStep(props: LogServiceLineDetailsStepProps)
             onChange={(e) => onBrandChange(e.target.value)}
           />
         </div>
+        {!props.hiddenFields?.includes("part_number") ? (
         <div className="space-y-2">
           <Label htmlFor="part-number">Part number</Label>
           <Input
@@ -169,6 +314,7 @@ export function LogServiceLineDetailsStep(props: LogServiceLineDetailsStepProps)
             onChange={(e) => onPartNumberChange(e.target.value)}
           />
         </div>
+        ) : null}
       </div>
 
       {showPositions ? (
@@ -272,6 +418,8 @@ export function LogServiceLineDetailsStep(props: LogServiceLineDetailsStepProps)
           {currency} {lineTotal.toLocaleString()}
         </span>
       </div>
+      </>
+      )}
     </div>
   );
 }

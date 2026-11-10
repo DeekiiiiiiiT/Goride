@@ -2580,6 +2580,16 @@ export const api = {
   },
 
   /** Components under a system (quick-job drill-down). */
+  /** Engine-style sections for one group (V1). Groups without sections return groups: []. */
+  async getSystemSections(systemId: string) {
+      const response = await fetchWithRetry(
+        `${API_ENDPOINTS.fleetOps}/maintenance-categories/systems/${encodeURIComponent(systemId)}/sections`,
+        { headers: await getHeaders(null) },
+      );
+      if (!response.ok) throw new Error("Failed to fetch sections");
+      return (await response.json()) as import("../components/vehicles/maintenance-logging/log-service/systemSections").SystemSections;
+  },
+
   async listSystemComponents(systemId: string) {
       const response = await fetchWithRetry(
         `${API_ENDPOINTS.fleetOps}/maintenance-categories/systems/${encodeURIComponent(systemId)}/components`,
@@ -2787,6 +2797,46 @@ export const api = {
       throw new Error((err as { error?: string }).error || "Failed to clear do not drive");
     }
     return response.json() as Promise<{ item: Record<string, unknown> }>;
+  },
+
+  /** Delete ONE job from a saved service. Other jobs stay; the books are re-posted at the new total. */
+  async voidWorkOrderLine(lineId: string, reason: string) {
+      const response = await fetchWithRetry(
+        `${API_ENDPOINTS.fleetOps}/maintenance-work-order-lines/${encodeURIComponent(lineId)}/void`,
+        {
+          method: "POST",
+          headers: await getHeaders(),
+          body: JSON.stringify({ reason }),
+        },
+      );
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error((err as { error?: string }).error || "Failed to delete job");
+      }
+      return response.json() as Promise<{
+        jobName?: string;
+        newTotal?: number;
+        remainingJobs?: number;
+        serviceVoided?: boolean;
+        ledgerWarning?: string;
+      }>;
+  },
+
+  /** Void a completed service: hides it from history, reverses the books entry, refreshes due dates. */
+  async voidWorkOrder(id: string, reason: string) {
+      const response = await fetchWithRetry(
+        `${API_ENDPOINTS.fleetOps}/maintenance-work-orders/${encodeURIComponent(id)}/void`,
+        {
+          method: "POST",
+          headers: await getHeaders(),
+          body: JSON.stringify({ reason }),
+        },
+      );
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error((err as { error?: string }).error || "Failed to delete service");
+      }
+      return response.json() as Promise<{ item: MaintenanceWorkOrder }>;
   },
 
   async getWorkOrder(id: string) {
@@ -3250,8 +3300,9 @@ export const api = {
       return response.json();
   },
 
-  async partsTerm(q: string) {
-      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/term?q=${encodeURIComponent(q)}`, { headers: await getHeaders(null) });
+  async partsTerm(q: string, vehicleId: string) {
+      const params = new URLSearchParams({ q, vehicleId });
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/term?${params}`, { headers: await getHeaders(null) });
       if (!response.ok) throw new Error("Could not search parts");
       return response.json();
   },
@@ -3301,15 +3352,6 @@ export const api = {
         throw new FleetCoreRequestError(response.status, message);
       }
       return response.json();
-  },
-
-  async partsVehicleOptions(query: { make?: string; model?: string }) {
-      const q = new URLSearchParams();
-      if (query.make) q.set("make", query.make);
-      if (query.model) q.set("model", query.model);
-      const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/vehicle-options?${q}`, { headers: await getHeaders(null) });
-      if (!response.ok) throw new Error("Could not load cars");
-      return response.json() as Promise<{ makes: string[]; models: string[]; years: number[] }>;
   },
 
   async requestFindPart(body: Record<string, unknown>) {
@@ -3364,7 +3406,7 @@ export const api = {
       return response.json();
   },
 
-  async requestCatalogAddition(body: { make: string; model: string; year: number; vehicleId?: string | null }) {
+  async requestCatalogAddition(body: { make: string; model: string; year: number; vehicleId: string }) {
       const response = await fetchWithRetry(`${API_ENDPOINTS.fleetCore}/parts/catalog-request`, {
         method: "POST",
         headers: await getHeaders(),

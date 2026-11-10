@@ -3,6 +3,7 @@ import { Loader2 } from "lucide-react";
 import { api } from "../../../services/api";
 import { Button } from "../../ui/button";
 import { MaintenanceWorkOrderVendorPicker } from "./MaintenanceWorkOrderVendorPicker";
+import type { MaintenanceWorkOrderStatus } from "../../../types/maintenance";
 
 type WoRow = {
   id: string;
@@ -67,7 +68,7 @@ export function MaintenanceWorkOrdersTab({
   }, [items]);
 
   const transition = async (id: string, status: string) => {
-    await api.updateWorkOrder(id, { status: status as import("../../types/maintenance").MaintenanceWorkOrderStatus });
+    await api.updateWorkOrder(id, { status: status as MaintenanceWorkOrderStatus });
     await load();
     onRefreshHub?.();
   };

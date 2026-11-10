@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_dashboard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "tertiary": "#40465e", "on-secondary-fixed-variant": "#3f465c", "primary-fixed-dim": "#b4c5ff", "on-surface-variant": "#434655", "surface-variant": "#e3e2e7", "secondary-container": "#dae2fd", "on-primary": "#ffffff", "outline": "#737686", "inverse-on-surface": "#f2f0f6", "on-secondary-container": "#5c647a", "primary": "#003ea9", "on-background": "#1b1b20", "surface-container-highest": "#e3e2e7", "background": "#faf8fe", "secondary-fixed-dim": "#bec6e0", "surface-container-high": "#e9e7ed", "on-primary-container": "#ced8ff", "primary-container": "#0153dc", "on-primary-fixed-variant": "#003ea8", "on-tertiary-fixed": "#141b30", "surface-tint": "#0053db", "error": "#ba1a1a", "primary-fixed": "#dbe1ff", "secondary": "#565e74", "outline-variant": "#c3c6d7", "tertiary-fixed": "#dbe1ff", "inverse-primary": "#b4c5ff", "secondary-fixed": "#dae2fd", "tertiary-fixed-dim": "#bfc5e2", "on-surface": "#1b1b20", "surface-bright": "#faf8fe", "inverse-surface": "#2f3035", "on-secondary": "#ffffff", "on-error-container": "#93000a", "surface": "#faf8fe", "surface-container": "#efedf3", "surface-container-low": "#f5f3f9", "on-tertiary-container": "#d2d8f6", "tertiary-container": "#575e77", "on-secondary-fixed": "#131b2e", "on-tertiary-fixed-variant": "#3f465e", "on-error": "#ffffff", "on-primary-fixed": "#00174b", "surface-container-lowest": "#ffffff", "on-tertiary": "#ffffff", "surface-dim": "#dbd9df", "error-container": "#ffdad6" }, "borderRadius": { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, "spacing": { "space-xl": "2rem", "space-md": "1rem", "margin": "2rem", "space-lg": "1.5rem", "gutter": "1.5rem", "space-sm": "0.5rem", "space-xs": "0.25rem" }, "fontFamily": { "code-md": [ "JetBrains Mono" ], "hint-sm": [ "Inter" ], "headline-md": [ "Inter" ], "headline-lg": [ "Inter" ], "body-sm": [ "Inter" ], "body-md": [ "Inter" ], "caption": [ "Inter" ], "code-sm": [ "JetBrains Mono" ], "body-lg": [ "Inter" ], "headline-xl": [ "Inter" ] }, "fontSize": { "code-md": [ "14px", { "lineHeight": "20px", "letterSpacing": "-0.02em", "fontWeight": "500" } ], "hint-sm": [ "13px", { "lineHeight": "18px", "letterSpacing": "0.01em", "fontWeight": "400" } ], "headline-md": [ "18px", { "lineHeight": "24px", "letterSpacing": "-0.01em", "fontWeight": "600" } ], "headline-lg": [ "20px", { "lineHeight": "28px", "letterSpacing": "-0.015em", "fontWeight": "600" } ], "body-sm": [ "14px", { "lineHeight": "20px", "letterSpacing": "0em", "fontWeight": "400" } ], "body-md": [ "15px", { "lineHeight": "22px", "letterSpacing": "0em", "fontWeight": "400" } ], "caption": [ "12px", { "lineHeight": "16px", "letterSpacing": "0.02em", "fontWeight": "500" } ], "code-sm": [ "12px", { "lineHeight": "16px", "letterSpacing": "-0.01em", "fontWeight": "500" } ], "body-lg": [ "16px", { "lineHeight": "24px", "letterSpacing": "0em", "fontWeight": "400" } ], "headline-xl": [ "26px", { "lineHeight": "34px", "letterSpacing": "-0.02em", "fontWeight": "600" } ] } } } };</script></head><body class="bg-surface font-body-md text-on-surface antialiased"><aside class="fixed left-0 top-0 h-full w-[260px] bg-[#070e1c] z-50 flex flex-col justify-between select-none shadow-[2px_0_12px_rgba(7,14,28,0.12)]"><div class="flex flex-col h-full"><div class="h-16 px-space-lg flex items-center justify-between border-b border-white/5"><div class="flex items-center gap-space-sm"><div class="w-8 h-8 rounded-lg bg-primary-container flex items-center justify-center text-on-primary font-headline-lg font-bold"><span class="material-symbols-outlined text-[20px]">directions_car</span></div><div class="flex flex-col"><span class="text-white font-headline-md text-[16px] tracking-wide uppercase font-bold leading-tight">Dominion</span><span class="text-outline-variant font-code-sm text-[10px] uppercase tracking-wider">Admin Console</span></div></div><span class="material-symbols-outlined text-outline text-[18px] cursor-pointer hover:text-white transition-colors">unfold_more</span></div><div class="flex-1 overflow-y-auto py-space-md px-space-sm space-y-space-md"><div class="space-y-space-xs"><div class="px-space-sm text-[11px] font-bold uppercase tracking-wider text-outline">Master Data</div><nav class="space-y-[2px]" data-active-classes="bg-primary-container text-white font-medium rounded-lg shadow-[0_2px_8px_rgba(1,83,220,0.3)]"><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-outline-variant hover:bg-white/5 hover:text-white transition-all font-body-sm" data-path="overview" href="#"><span class="material-symbols-outlined text-[18px]">grid_view</span><span>Overview</span></a><a class="flex items-center justify-between px-space-sm py-2 rounded-lg text-outline-variant hover:bg-white/5 hover:text-white transition-all font-body-sm" data-path="vehicles" href="#"><div class="flex items-center gap-space-sm"><span class="material-symbols-outlined text-[18px]">commute</span><span>Vehicles</span></div><span class="px-1.5 py-0.5 rounded-full bg-primary/40 text-primary-fixed font-code-sm text-[11px]">Active</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-outline-variant hover:bg-white/5 hover:text-white transition-all font-body-sm" data-path="places-and-maps" href="#"><span class="material-symbols-outlined text-[18px]">distance</span><span>Places and Maps</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-outline-variant hover:bg-white/5 hover:text-white transition-all font-body-sm" data-path="fuel" href="#"><span class="material-symbols-outlined text-[18px]">local_gas_station</span><span>Fuel</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-outline-variant hover:bg-white/5 hover:text-white transition-all font-body-sm" data-path="tolls" href="#"><span class="material-symbols-outlined text-[18px]">toll</span><span>Tolls</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-outline-variant hover:bg-white/5 hover:text-white transition-all font-body-sm" data-path="tax-and-vendors" href="#"><span class="material-symbols-outlined text-[18px]">receipt_long</span><span>Tax and Vendors</span></a></nav></div><div class="space-y-space-xs"><div class="px-space-sm text-[11px] font-bold uppercase tracking-wider text-outline">Engines</div><nav class="space-y-[2px]" data-active-classes="bg-primary-container text-white font-medium rounded-lg"><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-outline-variant hover:bg-white/5 hover:text-white transition-all font-body-sm" data-path="engine-registry" href="#"><span class="material-symbols-outlined text-[18px]">engineering</span><span>Engine Registry</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-outline-variant hover:bg-white/5 hover:text-white transition-all font-body-sm" data-path="telematics-sync" href="#"><span class="material-symbols-outlined text-[18px]">sync_alt</span><span>Telematics Sync</span></a></nav></div><div class="space-y-space-xs"><div class="px-space-sm text-[11px] font-bold uppercase tracking-wider text-outline">Distribution</div><nav class="space-y-[2px]" data-active-classes="bg-primary-container text-white font-medium rounded-lg"><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-outline-variant hover:bg-white/5 hover:text-white transition-all font-body-sm" data-path="hubs-depots" href="#"><span class="material-symbols-outlined text-[18px]">hub</span><span>Hubs &amp; Depots</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-outline-variant hover:bg-white/5 hover:text-white transition-all font-body-sm" data-path="route-allocations" href="#"><span class="material-symbols-outlined text-[18px]">route</span><span>Allocations</span></a></nav></div><div class="space-y-space-xs"><div class="px-space-sm text-[11px] font-bold uppercase tracking-wider text-outline">Platform</div><nav class="space-y-[2px]" data-active-classes="bg-primary-container text-white font-medium rounded-lg"><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-outline-variant hover:bg-white/5 hover:text-white transition-all font-body-sm" data-path="system-nodes" href="#"><span class="material-symbols-outlined text-[18px]">dns</span><span>System Nodes</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-outline-variant hover:bg-white/5 hover:text-white transition-all font-body-sm" data-path="integrations" href="#"><span class="material-symbols-outlined text-[18px]">extension</span><span>Integrations</span></a></nav></div><div class="space-y-space-xs"><div class="px-space-sm text-[11px] font-bold uppercase tracking-wider text-outline">Back Office</div><nav class="space-y-[2px]" data-active-classes="bg-primary-container text-white font-medium rounded-lg"><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-outline-variant hover:bg-white/5 hover:text-white transition-all font-body-sm" data-path="audit-logs" href="#"><span class="material-symbols-outlined text-[18px]">history_edu</span><span>Audit Logs</span></a><a class="flex items-center gap-space-sm px-space-sm py-2 rounded-lg text-outline-variant hover:bg-white/5 hover:text-white transition-all font-body-sm" data-path="compliance-rules" href="#"><span class="material-symbols-outlined text-[18px]">gavel</span><span>Compliance</span></a></nav></div></div><div class="p-space-sm bg-[#0c1321] border-t border-white/5"><div class="flex items-center justify-between px-space-sm py-2 rounded-lg bg-white/5"><div class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span><span class="font-code-sm text-white/90 text-[11px] tracking-tight">KGN-DC-01 · JMD READY</span></div><span class="material-symbols-outlined text-outline text-[16px]">speed</span></div></div></div></aside><div class="pl-[260px]"><header class="fixed top-0 left-[260px] right-0 h-16 bg-surface/90 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-40 px-space-xl flex items-center justify-between"><div class="flex items-center flex-1 max-w-xl"><div class="relative w-full flex items-center"><span class="material-symbols-outlined absolute left-3 text-secondary text-[20px]">search</span><input class="w-full h-11 pl-10 pr-12 rounded-lg bg-surface-container-lowest text-on-surface font-body-sm placeholder:text-secondary focus:outline-none focus:ring-2 focus:ring-primary shadow-[0_2px_8px_rgba(1,83,220,0.04)] transition-all" placeholder="Search entities, engines, routes…" type="text"/><span class="absolute right-3 px-1.5 py-0.5 rounded bg-surface-container text-on-surface-variant font-code-sm text-[11px] select-none">⌘K</span></div></div><div class="flex items-center gap-space-md"><button aria-label="Theme Toggle" class="w-9 h-9 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-all" type="button"><span class="material-symbols-outlined text-[20px]">dark_mode</span></button><div class="h-5 w-[1px] bg-surface-variant"></div><div class="flex items-center gap-space-sm"><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div><div class="flex flex-col text-left"><span class="font-headline-md text-on-surface text-[13px] leading-tight">DT · Deeki T</span><span class="font-caption text-secondary text-[11px]">Owner</span></div></div><button aria-label="Sign out" class="w-8 h-8 rounded-lg flex items-center justify-center text-secondary hover:text-error hover:bg-error-container/30 transition-all" type="button"><span class="material-symbols-outlined text-[19px]">logout</span></button></div></header><div class="pt-16 bg-surface-container-low"><div class="w-full px-space-xl py-space-md bg-surface-container-lowest shadow-[0_1px_4px_rgba(0,0,0,0.02)]"><div class="max-w-[1120px] mx-auto"><div class="flex items-center gap-2 font-code-sm text-secondary text-[12px] uppercase tracking-wider mb-space-sm"><span class="hover:text-primary cursor-pointer transition-colors">DOMINION</span><span class="material-symbols-outlined text-[14px] text-outline-variant">chevron_right</span><span class="hover:text-primary cursor-pointer transition-colors">MASTER DATA</span><span class="material-symbols-outlined text-[14px] text-outline-variant">chevron_right</span><span class="hover:text-primary cursor-pointer transition-colors">VEHICLES</span><span class="material-symbols-outlined text-[14px] text-outline-variant">chevron_right</span><span class="text-primary font-semibold">MAINTENANCE TEMPLATES</span></div><div class="flex items-center gap-space-lg"><nav class="flex items-center gap-space-lg" data-active-classes="border-b-2 border-primary text-primary font-semibold"><a class="pb-2 text-on-surface-variant hover:text-on-surface font-body-sm flex items-center gap-1.5 transition-colors" data-path="part-schedules" href="#"><span>Part schedules</span><span class="px-1.5 py-0.2 rounded-full bg-surface-container font-code-sm text-[11px] text-secondary">16</span></a><a class="pb-2 text-on-surface-variant hover:text-on-surface font-body-sm flex items-center gap-1.5 transition-colors" data-path="service-packages" href="#"><span>Service packages</span><span class="px-1.5 py-0.2 rounded-full bg-surface-container font-code-sm text-[11px] text-secondary">5</span></a><a aria-current="page" class="pb-2 flex items-center gap-1.5 transition-colors border-b-2 border-primary text-primary font-semibold" data-path="jobs" href="#"><span>Jobs</span><span class="px-1.5 py-0.2 rounded-full bg-primary-fixed text-primary font-code-sm text-[11px]">68</span></a><a class="pb-2 text-on-surface-variant hover:text-on-surface font-body-sm flex items-center gap-1.5 transition-colors" data-path="review-list" href="#"><span>Review list</span><span class="px-1.5 py-0.2 rounded-full bg-error-container text-on-error-container font-code-sm text-[11px]">1</span></a><a class="pb-2 text-on-surface-variant hover:text-on-surface font-body-sm flex items-center gap-1.5 transition-colors" data-path="history" href="#"><span>History</span></a></nav></div></div></div></div><main class="relative w-full min-h-[calc(100vh-140px)] bg-surface px-space-xl py-space-lg"><div class="max-w-[1120px] mx-auto"><div class="flex flex-col w-full gap-space-xl">
+<!-- Top Utility Context Bar -->
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-space-md">
+<div class="flex flex-col">
+<div class="flex items-center gap-space-xs text-secondary font-code-sm text-code-sm uppercase tracking-wider">
+<span class="w-2 h-2 rounded-full bg-primary"></span>
+<span>Inspection Spec · DM4 Dialog Architecture</span>
+</div>
+<h1 class="font-headline-xl text-headline-xl text-on-surface font-semibold tracking-tight mt-1">
+        Retire Lifecycle &amp; System Boundary States
+      </h1>
+<p class="font-body-sm text-body-sm text-secondary mt-0.5">
+        Verification patterns for destructive retirement flows, catalog dissociation rules, and peripheral fallback states.
+      </p>
+</div>
+<div class="flex items-center gap-space-sm self-start md:self-auto">
+<div class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-container-high text-on-surface-variant font-code-sm text-code-sm">
+<span class="material-symbols-outlined text-[16px] text-primary">link</span>
+<span>LINKAGE: DECOUPLED ON RETIRE</span>
+</div>
+<div class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-container text-secondary font-code-sm text-code-sm">
+<span class="material-symbols-outlined text-[16px]">verified</span>
+<span>JMD SPEC 4.8.2</span>
+</div>
+</div>
+</div>
+<!-- SECTION 1: MODAL DIALOG + RESTORED ROW PREVIEW -->
+<section class="flex flex-col gap-space-md">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-sm">
+<span class="px-2 py-0.5 rounded bg-primary-container text-on-primary font-code-sm text-code-sm font-semibold">STAGE 01</span>
+<h2 class="font-headline-md text-headline-md text-on-surface">Retirement Modal &amp; Dissociation Handshake</h2>
+</div>
+<span class="font-caption text-caption text-secondary">Triggered via Contextual Action Menu in Catalog</span>
+</div>
+<!-- Frame simulating backdrop viewport + active floating modal -->
+<div class="relative w-full rounded-2xl bg-surface-container overflow-hidden shadow-xl p-space-lg flex flex-col items-center justify-center min-h-[580px]">
+<!-- Behind: Simulated Table View under Frosted Veil -->
+<div class="absolute inset-0 p-space-lg select-none opacity-40 filter blur-[2px] pointer-events-none flex flex-col gap-space-sm">
+<div class="flex items-center justify-between pb-3">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-lg bg-surface-container-highest"></div>
+<div class="w-48 h-5 rounded bg-surface-container-highest"></div>
+</div>
+<div class="flex gap-2">
+<div class="w-24 h-8 rounded-lg bg-surface-container-highest"></div>
+<div class="w-28 h-8 rounded-lg bg-surface-container-highest"></div>
+</div>
+</div>
+<!-- Mock rows -->
+<div class="w-full bg-surface-container-lowest rounded-xl p-4 flex items-center justify-between">
+<div class="flex items-center gap-4">
+<div class="w-9 h-9 rounded-lg bg-surface-container-high"></div>
+<div class="space-y-1">
+<div class="w-40 h-4 rounded bg-surface-container-high"></div>
+<div class="w-28 h-3 rounded bg-surface-container"></div>
+</div>
+</div>
+<div class="w-20 h-6 rounded bg-surface-container"></div>
+</div>
+<div class="w-full bg-surface-container-lowest rounded-xl p-4 flex items-center justify-between">
+<div class="flex items-center gap-4">
+<div class="w-9 h-9 rounded-lg bg-surface-container-high"></div>
+<div class="space-y-1">
+<div class="w-52 h-4 rounded bg-surface-container-high"></div>
+<div class="w-32 h-3 rounded bg-surface-container"></div>
+</div>
+</div>
+<div class="w-20 h-6 rounded bg-surface-container"></div>
+</div>
+<div class="w-full bg-surface-container-lowest rounded-xl p-4 flex items-center justify-between">
+<div class="flex items-center gap-4">
+<div class="w-9 h-9 rounded-lg bg-surface-container-high"></div>
+<div class="space-y-1">
+<div class="w-36 h-4 rounded bg-surface-container-high"></div>
+<div class="w-24 h-3 rounded bg-surface-container"></div>
+</div>
+</div>
+<div class="w-20 h-6 rounded bg-surface-container"></div>
+</div>
+</div>
+<!-- Backdrop scrim overlay -->
+<div class="absolute inset-0 bg-inverse-surface/40 backdrop-blur-sm transition-opacity"></div>
+<!-- Centered Modal Confirmation Sheet -->
+<div class="relative w-full max-w-[480px] bg-surface-container-lowest rounded-2xl shadow-2xl p-space-lg z-20 flex flex-col gap-space-lg">
+<!-- Header -->
+<div class="flex items-start gap-space-md">
+<div class="w-12 h-12 rounded-xl bg-secondary-container flex items-center justify-center shrink-0 text-on-secondary-container">
+<span class="material-symbols-outlined text-[26px]">warning</span>
+</div>
+<div class="flex flex-col flex-1 pt-1">
+<div class="flex items-center justify-between">
+<h3 class="font-headline-md text-headline-md text-on-surface font-semibold leading-tight">
+                Retire Fuel Pressure Test?
+              </h3>
+<button aria-label="Dismiss dialog" class="w-7 h-7 rounded-lg flex items-center justify-center text-outline hover:text-on-surface hover:bg-surface-container transition-all" type="button">
+<span class="material-symbols-outlined text-[18px]">close</span>
+</button>
+</div>
+<span class="font-code-sm text-code-sm text-secondary mt-1 tracking-tight">ENG-FPT-008 · REVISION 3</span>
+</div>
+</div>
+<!-- Body / Impact Checklist -->
+<div class="flex flex-col gap-2.5 bg-surface-container-low rounded-xl p-space-md">
+<div class="flex items-start gap-3">
+<div class="w-7 h-7 rounded-lg bg-surface-container-lowest flex items-center justify-center shrink-0 text-secondary mt-0.5 shadow-sm">
+<span class="material-symbols-outlined text-[16px]">visibility_off</span>
+</div>
+<div class="flex flex-col">
+<span class="font-body-sm text-body-sm text-on-surface font-medium">Hidden from logging in Fleet</span>
+<span class="font-hint-sm text-hint-sm text-secondary">Technicians will no longer see this job in active work orders.</span>
+</div>
+</div>
+<div class="flex items-start gap-3">
+<div class="w-7 h-7 rounded-lg bg-surface-container-lowest flex items-center justify-center shrink-0 text-secondary mt-0.5 shadow-sm">
+<span class="material-symbols-outlined text-[16px]">content_cut</span>
+</div>
+<div class="flex flex-col">
+<span class="font-body-sm text-body-sm text-on-surface font-medium">Removed from 1 section</span>
+<span class="font-hint-sm text-hint-sm text-secondary">Detached immediately from <span class="font-code-sm text-code-sm text-on-surface font-medium">Fuel System (SYS-04)</span>.</span>
+</div>
+</div>
+<div class="flex items-start gap-3">
+<div class="w-7 h-7 rounded-lg bg-surface-container-lowest flex items-center justify-center shrink-0 text-secondary mt-0.5 shadow-sm">
+<span class="material-symbols-outlined text-[16px]">link_off</span>
+</div>
+<div class="flex flex-col">
+<span class="font-body-sm text-body-sm text-on-surface font-medium">Removed from 0 "also do" links</span>
+<span class="font-hint-sm text-hint-sm text-secondary">No cross-job recommendations or triggers currently depend on it.</span>
+</div>
+</div>
+<div class="flex items-start gap-3">
+<div class="w-7 h-7 rounded-lg bg-surface-container-lowest flex items-center justify-center shrink-0 text-secondary mt-0.5 shadow-sm">
+<span class="material-symbols-outlined text-[16px]">history_edu</span>
+</div>
+<div class="flex flex-col">
+<span class="font-body-sm text-body-sm text-on-surface font-medium">Old service logs keep it</span>
+<span class="font-hint-sm text-hint-sm text-secondary">Nothing is erased from vehicle audit history or closed maintenance records.</span>
+</div>
+</div>
+</div>
+<!-- Footer / Action Row -->
+<div class="flex items-center justify-end gap-space-sm pt-2">
+<button class="px-space-md py-2 rounded-lg bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-body-sm text-body-sm font-medium transition-all shadow-sm" type="button">
+            Keep it
+          </button>
+<button class="px-space-md py-2 rounded-lg bg-error hover:bg-on-error-container text-on-error font-body-sm text-body-sm font-medium transition-all flex items-center gap-1.5 shadow-md" type="button">
+<span class="material-symbols-outlined text-[18px]">archive</span>
+<span>Retire job</span>
+</button>
+</div>
+</div>
+</div>
+<!-- SHOWCASE CARD: RETIRED JOB ROW IN LIST & RESTORE ACTION -->
+<div class="w-full bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col gap-space-sm">
+<div class="flex items-center justify-between">
+<span class="font-caption text-caption text-secondary uppercase tracking-wider font-semibold">
+          Post-Retirement Inline Catalog Row
+        </span>
+<span class="font-code-sm text-code-sm text-outline">State: INACTIVE_PRESERVED</span>
+</div>
+<div class="w-full bg-surface-container-low rounded-lg p-space-md flex flex-col lg:flex-row lg:items-center justify-between gap-space-md transition-all hover:bg-surface-container">
+<!-- Left: Item Meta -->
+<div class="flex items-center gap-space-md min-w-0">
+<div class="w-10 h-10 rounded-lg bg-surface-container-highest text-outline flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[20px]">speed</span>
+</div>
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-space-sm flex-wrap">
+<span class="font-headline-md text-headline-md text-secondary line-through font-medium">Fuel Pressure Test</span>
+<span class="px-2 py-0.5 rounded-full bg-surface-container-highest text-on-surface-variant font-code-sm text-code-sm flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">archive</span>
+<span>Retired</span>
+</span>
+</div>
+<div class="flex items-center gap-2 font-code-sm text-code-sm text-secondary mt-0.5">
+<span>fuel_pressure_test</span>
+<span>·</span>
+<span class="text-outline">ENG-FPT</span>
+<span>·</span>
+<span>Detached from 1 section</span>
+</div>
+</div>
+</div>
+<!-- Right: Action & Explainer Notice -->
+<div class="flex flex-col sm:flex-row sm:items-center gap-space-md lg:justify-end shrink-0">
+<p class="font-hint-sm text-hint-sm text-secondary max-w-xs text-left sm:text-right">
+            Restore doesn’t put it back in sections or "also do" links — add them again.
+          </p>
+<button class="px-space-md py-2 rounded-lg bg-surface-container-lowest hover:bg-primary hover:text-on-primary text-primary font-body-sm text-body-sm font-semibold transition-all shadow-sm flex items-center justify-center gap-1.5 shrink-0" type="button">
+<span class="material-symbols-outlined text-[18px]">unarchive</span>
+<span>Restore</span>
+</button>
+</div>
+</div>
+</div>
+</section>
+<!-- SECTION 2: STATES FRAME (DIAGNOSTICS & EDGE CASES) -->
+<section class="flex flex-col gap-space-md pt-space-md">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-sm">
+<span class="px-2 py-0.5 rounded bg-tertiary-container text-on-tertiary font-code-sm text-code-sm font-semibold">STAGE 02</span>
+<h2 class="font-headline-md text-headline-md text-on-surface">Boundary &amp; Fault State Topology</h2>
+</div>
+<span class="font-caption text-caption text-secondary">Interactive Edge Cases · Network Resilience</span>
+</div>
+<!-- Diagnostic Grid: 3 Responsive Columns -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-space-lg">
+<!-- 1. LOADING STATE: Shimmer Skeleton Placeholder -->
+<div class="flex flex-col bg-surface-container-lowest rounded-xl p-space-lg shadow-sm">
+<div class="flex items-center justify-between pb-space-md">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-primary-container"></span>
+<span class="font-headline-md text-headline-md text-on-surface">Loading State</span>
+</div>
+<span class="font-code-sm text-code-sm text-secondary">LATENCY SHIMMER</span>
+</div>
+<p class="font-hint-sm text-hint-sm text-secondary mb-space-md">
+          Non-blocking content shimmer for network synchronizations, eliminating layout shift.
+        </p>
+<!-- Skeleton Frame -->
+<div class="flex flex-col gap-space-sm w-full animate-pulse">
+<!-- Toolbar skeleton -->
+<div class="flex items-center justify-between gap-3 p-3 bg-surface-container-low rounded-lg">
+<div class="w-1/3 h-5 rounded bg-surface-container-highest"></div>
+<div class="w-16 h-5 rounded bg-surface-container-highest"></div>
+</div>
+<!-- Section title skeleton -->
+<div class="w-24 h-4 rounded bg-surface-container-high mt-2"></div>
+<!-- Mock Job Rows -->
+<div class="p-3 bg-surface-container-low rounded-lg flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-md bg-surface-container-highest"></div>
+<div class="space-y-1.5">
+<div class="w-28 h-3.5 rounded bg-surface-container-highest"></div>
+<div class="w-20 h-2.5 rounded bg-surface-container-high"></div>
+</div>
+</div>
+<div class="w-12 h-6 rounded-md bg-surface-container-highest"></div>
+</div>
+<div class="p-3 bg-surface-container-low rounded-lg flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-md bg-surface-container-highest"></div>
+<div class="space-y-1.5">
+<div class="w-32 h-3.5 rounded bg-surface-container-highest"></div>
+<div class="w-16 h-2.5 rounded bg-surface-container-high"></div>
+</div>
+</div>
+<div class="w-12 h-6 rounded-md bg-surface-container-highest"></div>
+</div>
+<div class="p-3 bg-surface-container-low rounded-lg flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-md bg-surface-container-highest"></div>
+<div class="space-y-1.5">
+<div class="w-24 h-3.5 rounded bg-surface-container-highest"></div>
+<div class="w-24 h-2.5 rounded bg-surface-container-high"></div>
+</div>
+</div>
+<div class="w-12 h-6 rounded-md bg-surface-container-highest"></div>
+</div>
+</div>
+<div class="mt-space-lg pt-space-sm flex items-center justify-between font-code-sm text-code-sm text-outline">
+<span>PULSE: 60FPS</span>
+<span>FLICKER FREE</span>
+</div>
+</div>
+<!-- 2. ERROR STATE CARD -->
+<div class="flex flex-col bg-surface-container-lowest rounded-xl p-space-lg shadow-sm justify-between">
+<div>
+<div class="flex items-center justify-between pb-space-md">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-error"></span>
+<span class="font-headline-md text-headline-md text-on-surface">Error Card</span>
+</div>
+<span class="font-code-sm text-code-sm text-error">RPC FAIL 503</span>
+</div>
+<p class="font-hint-sm text-hint-sm text-secondary mb-space-md">
+            Explicit error recovery container when cloud blueprint catalog sync fails.
+          </p>
+<!-- Error Content Module -->
+<div class="p-space-lg rounded-xl bg-error-container/40 flex flex-col items-center text-center">
+<div class="w-12 h-12 rounded-xl bg-error-container text-on-error-container flex items-center justify-center mb-space-sm shadow-sm">
+<span class="material-symbols-outlined text-[28px]">cloud_off</span>
+</div>
+<h4 class="font-headline-md text-headline-md text-on-error-container font-semibold">
+              Couldn’t load jobs
+            </h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1.5 max-w-[240px]">
+              Network error while synchronizing maintenance blueprints with Master Engine Registry.
+            </p>
+<div class="w-full h-[1px] bg-outline-variant/30 my-space-md"></div>
+<button class="w-full py-2.5 px-space-md rounded-lg bg-surface-container-lowest hover:bg-surface-container text-on-surface font-body-sm text-body-sm font-semibold transition-all shadow-sm flex items-center justify-center gap-2" type="button">
+<span class="material-symbols-outlined text-[18px] text-primary">replay</span>
+<span>Try again</span>
+</button>
+</div>
+</div>
+<div class="mt-space-lg pt-space-sm flex items-center justify-between font-code-sm text-code-sm text-secondary">
+<span>FAILOVER: KGN-DC-02</span>
+<span>RETRY EXPONENTIAL</span>
+</div>
+</div>
+<!-- 3. EMPTY SEARCH RESULT -->
+<div class="flex flex-col bg-surface-container-lowest rounded-xl p-space-lg shadow-sm justify-between">
+<div>
+<div class="flex items-center justify-between pb-space-md">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-secondary"></span>
+<span class="font-headline-md text-headline-md text-on-surface">Empty Search</span>
+</div>
+<span class="font-code-sm text-code-sm text-secondary">QUERY: "xyz"</span>
+</div>
+<p class="font-hint-sm text-hint-sm text-secondary mb-space-md">
+            Zero-hit state offering query reset and suggestion to avoid dead ends.
+          </p>
+<!-- Empty State Container -->
+<div class="p-space-lg rounded-xl bg-surface-container-low flex flex-col items-center text-center">
+<div class="w-12 h-12 rounded-xl bg-surface-container-highest text-secondary flex items-center justify-center mb-space-sm">
+<span class="material-symbols-outlined text-[28px]">search_off</span>
+</div>
+<h4 class="font-headline-md text-headline-md text-on-surface font-semibold">
+              No job matches "xyz"
+            </h4>
+<p class="font-body-sm text-body-sm text-secondary mt-1.5 max-w-[240px]">
+              Check your spelling or filter by another group such as Transmission or Powertrain.
+            </p>
+<div class="w-full h-[1px] bg-surface-variant/40 my-space-md"></div>
+<button class="w-full py-2.5 px-space-md rounded-lg bg-surface-container-lowest hover:bg-surface-container text-on-surface font-body-sm text-body-sm font-medium transition-all shadow-sm flex items-center justify-center gap-2" type="button">
+<span class="material-symbols-outlined text-[18px]">backspace</span>
+<span>Clear search</span>
+</button>
+</div>
+</div>
+<div class="mt-space-lg pt-space-sm flex items-center justify-between font-code-sm text-code-sm text-secondary">
+<span>INDEX: 68 RECORDINGS</span>
+<span>WILDCARD ENABLED</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Section 3: Invariant Telematics Footer Spec (Master Data Context) -->
+<footer class="w-full bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col md:flex-row items-center justify-between gap-space-md mt-space-sm">
+<div class="flex items-center gap-space-md">
+<div class="w-9 h-9 rounded-lg bg-primary-fixed flex items-center justify-center text-on-primary-fixed">
+<span class="material-symbols-outlined text-[20px]">database</span>
+</div>
+<div class="flex flex-col">
+<span class="font-body-sm text-body-sm text-on-surface font-semibold">Audit Ledger Protection Active</span>
+<span class="font-hint-sm text-hint-sm text-secondary">Retiring maintenance blueprints archives linkage records in <span class="font-code-sm text-code-sm text-on-surface">t_maintenance_ledger_dm4</span>.</span>
+</div>
+</div>
+<div class="flex items-center gap-space-sm">
+<button class="px-space-md py-2 rounded-lg bg-surface-container text-on-surface-variant hover:text-on-surface font-code-sm text-code-sm transition-all" type="button">
+        EXPORT DIFF AUDIT
+      </button>
+<button class="px-space-md py-2 rounded-lg bg-primary text-on-primary font-code-sm text-code-sm font-medium hover:bg-primary-container transition-all shadow-sm" type="button">
+        SCHEMA DOCS
+      </button>
+</div>
+</footer>
+</div></div></main></div></body></html>

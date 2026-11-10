@@ -293,3 +293,27 @@ export async function downloadCsv(url: string, token: string, filename: string) 
   a.click();
   URL.revokeObjectURL(a.href);
 }
+
+/** History across jobs, sections, also-do links and schedules (V8). kind: all | jobs | sections | links | schedules. */
+export async function fetchMaintenanceHistoryKind(token: string, kind: string) {
+  const res = await fetch(`${OPS}/admin/maintenance/history?kind=${encodeURIComponent(kind)}`, {
+    headers: headers(token, false),
+  });
+  if (!res.ok) throw new Error(await parseErr(res));
+  const body = (await res.json()) as { items?: Record<string, unknown>[] };
+  return body.items || [];
+}
+
+export async function approveProposal(token: string, id: string) {
+  const res = await fetch(`${OPS}/admin/maintenance/proposals/${id}/approve`, { method: "POST", headers: headers(token) });
+  if (!res.ok) throw new Error(await parseErr(res));
+}
+
+export async function rejectProposal(token: string, id: string, note: string) {
+  const res = await fetch(`${OPS}/admin/maintenance/proposals/${id}/reject`, {
+    method: "POST",
+    headers: headers(token),
+    body: JSON.stringify({ note }),
+  });
+  if (!res.ok) throw new Error(await parseErr(res));
+}

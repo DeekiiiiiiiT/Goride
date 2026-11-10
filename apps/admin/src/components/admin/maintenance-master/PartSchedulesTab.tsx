@@ -108,7 +108,7 @@ export function PartSchedulesTab({
         </div>
       ) : null}
 
-      <div className="grid gap-3 md:grid-cols-4">
+      <div className="grid gap-3 md:grid-cols-3">
         <SummaryCard
           title="Part schedules"
           value={String(summary?.partScheduleCount ?? indexRows.length)}
@@ -137,11 +137,6 @@ export function PartSchedulesTab({
             ))}
           </div>
         </div>
-        <SummaryCard
-          title="Roam Fleet cars using them"
-          value={String(summary?.fleetCarsUsingSchedules ?? 0)}
-          detail={`${summary?.fleetCarsUsingSchedules ?? 0} Roam Fleet cars`}
-        />
         <SummaryCard
           title="Needs your attention"
           value={String(summary?.reviewCount ?? 0)}
