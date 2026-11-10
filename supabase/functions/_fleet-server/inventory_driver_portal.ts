@@ -113,7 +113,7 @@ export async function buildDriverCarKitPayload(
 
   const { data: vehicle } = await db()
     .from("fleet_vehicles")
-    .select("id, license_plate, make, model, year, odometer, fuel_level, color, vin")
+    .select("id, license_plate, make, model, year, color, vin")
     .eq("organization_id", org)
     .eq("id", resolvedId)
     .maybeSingle();
@@ -171,8 +171,8 @@ export async function buildDriverCarKitPayload(
       vehicleMakeModel: vehicleMakeModel ?? plate,
       vehicleColor,
       vinLast4,
-      odometerKm: vehicle?.odometer ?? null,
-      fuelLevelPct: vehicle?.fuel_level ?? null,
+      odometerKm: null,
+      fuelLevelPct: null,
       items: [],
       openReportCount: 0,
       fixedUnseenCount,
@@ -249,8 +249,8 @@ export async function buildDriverCarKitPayload(
     vehicleMakeModel: vehicleMakeModel ?? plate,
     vehicleColor,
     vinLast4,
-    odometerKm: vehicle?.odometer ?? null,
-    fuelLevelPct: vehicle?.fuel_level ?? null,
+    odometerKm: null,
+    fuelLevelPct: null,
     items,
     extras: [],
     openReportCount,

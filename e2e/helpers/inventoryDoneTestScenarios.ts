@@ -20,7 +20,6 @@ import {
   approvalStatusForItem,
   roadClearanceBlockCount,
   itemId,
-  kitComplianceDailyCount,
   kitTemplateLineCount,
   vestComplianceMissingCount,
   approvalIdForItem,
@@ -161,7 +160,7 @@ export async function runDoneTest05(page: Page) {
   const before = driverReportCount(INV_DONE_ORG, 'missing');
   await seedInventoryDriverSession(page);
   await gotoDriverCarKit(page);
-  await page.getByRole('button', { name: /Report/i }).first().click();
+  await page.getByRole('button', { name: /Report a problem/i }).first().click();
   await page.getByRole('radio', { name: /Missing/i }).click();
   await page.getByRole('button', { name: /Attach photo/i }).click();
   await page.getByRole('button', { name: /Send report/i }).click();
@@ -180,7 +179,7 @@ export async function runDoneTest06(page: Page) {
   await seedInventoryDriverSession(page);
   await gotoDriverCarKit(page);
   await page.context().setOffline(true);
-  await page.getByRole('button', { name: /Report/i }).first().click();
+  await page.getByRole('button', { name: /Report a problem/i }).first().click();
   await page.getByRole('radio', { name: /Missing/i }).click();
   await page.getByRole('button', { name: /Send report/i }).click();
   await page.waitForTimeout(2000);
@@ -352,13 +351,18 @@ export async function runDoneTest13(page: Page) {
 }
 
 export async function runDoneTest14(page: Page) {
-  const before = kitComplianceDailyCount(INV_DONE_ORG);
+  // The weekly kit check stamps the car's kit as inspected; the nightly job writes the daily summary.
+  const inspectedAt = () =>
+    queryInventoryDb(
+      `SELECT coalesce(max(last_inspected_at)::text, '') FROM fleet.vehicle_kit WHERE organization_id = '${INV_DONE_ORG}' AND vehicle_id = '${VEH1}'`,
+    );
+  const before = inspectedAt();
   await seedInventoryDriverSession(page);
   const driverBase = (process.env.DRIVER_BASE_URL || 'http://127.0.0.1:5174').replace(/\/$/, '');
   await page.goto(`${driverBase}/?capture=weekly-kit`);
   await page.locator('#btn-confirm-all').waitFor({ state: 'visible', timeout: 120_000 });
   await page.locator('#btn-confirm-all').click();
-  await expect.poll(() => kitComplianceDailyCount(INV_DONE_ORG), { timeout: 60_000 }).toBe(before + 1);
+  await expect.poll(inspectedAt, { timeout: 60_000 }).not.toBe(before);
   await saveLiveScreenshot(page, 'weekly_check_in_kit_step', false);
 }
 
@@ -415,7 +419,7 @@ export async function runDoneTest17(page: Page) {
       queryInventoryDb(`SELECT coalesce(sum(b.on_hand), 0)::text FROM fleet.inv_balance b JOIN fleet.inv_item i ON i.id = b.item_id JOIN fleet.inv_location l ON l.id = b.location_id WHERE b.organization_id = '${INV_DONE_ORG}' AND i.sku = 'ZZ-TEST-PUMP' AND l.kind = 'warehouse'`),
     ) || 0;
   await expect.poll(storeQty, { timeout: 30_000 }).toBe(expectedQty);
-  await expect(page.getByText(/13,000|13000/).first()).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator('text=/13,000|13000/ >> visible=true').first()).toBeVisible({ timeout: 30_000 });
   await saveLiveScreenshot(page, 'inventory_asset_management_first_time_setup');
 }
 
