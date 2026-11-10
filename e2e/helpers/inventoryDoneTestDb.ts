@@ -14,27 +14,23 @@ function psqlOnPath() {
   }
 }
 
+/**
+ * SQL goes in on stdin (`-f -`), never on the command line: Windows cmd cuts a
+ * multi-line `-c "..."` at the first line break, so queries silently returned nothing.
+ */
+function psqlCommand(flags: string): string {
+  return psqlOnPath()
+    ? `psql "${dbUrl}" ${flags} -v ON_ERROR_STOP=1 -f -`
+    : `docker exec -i ${dbContainer} psql -U postgres -d postgres ${flags} -v ON_ERROR_STOP=1 -f -`;
+}
+
 /** Run a read-only SQL query; returns trimmed stdout rows (tab-separated). */
 export function queryInventoryDb(sql: string): string {
-  const escaped = sql.replace(/"/g, '\\"');
-  if (psqlOnPath()) {
-    return execSync(`psql "${dbUrl}" -tA -v ON_ERROR_STOP=1 -c "${escaped}"`, { encoding: 'utf8' }).trim();
-  }
-  return execSync(
-    `docker exec ${dbContainer} psql -U postgres -d postgres -tA -v ON_ERROR_STOP=1 -c "${escaped}"`,
-    { encoding: 'utf8' },
-  ).trim();
+  return execSync(psqlCommand('-tA'), { input: sql, encoding: 'utf8' }).trim();
 }
 
 export function execInventoryDb(sql: string) {
-  const escaped = sql.replace(/"/g, '\\"');
-  if (psqlOnPath()) {
-    execSync(`psql "${dbUrl}" -v ON_ERROR_STOP=1 -c "${escaped}"`, { stdio: 'inherit' });
-    return;
-  }
-  execSync(`docker exec ${dbContainer} psql -U postgres -d postgres -v ON_ERROR_STOP=1 -c "${escaped}"`, {
-    stdio: 'inherit',
-  });
+  execSync(psqlCommand(''), { input: sql, stdio: ['pipe', 'inherit', 'inherit'] });
 }
 
 export function movementCount(org: string, movementType?: string): number {

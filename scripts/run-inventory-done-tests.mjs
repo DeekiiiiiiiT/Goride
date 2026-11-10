@@ -14,33 +14,19 @@ const isWin = process.platform === 'win32';
 const pnpm = isWin ? 'pnpm.cmd' : 'pnpm';
 const npx = isWin ? 'npx.cmd' : 'npx';
 
-/** Windows: long repo paths break `supabase functions serve` (ENAMETOOLONG). */
-const SUBST_DRIVE = 'Z:';
-let workRoot = root;
-let substMapped = false;
-
-function mapSubstIfNeeded() {
-  if (!isWin) return;
-  const check = spawnSync('subst', [], { encoding: 'utf8', shell: true });
-  const substOut = check.stdout || '';
-  if (substOut.includes(`${SUBST_DRIVE}`)) {
-    workRoot = `${SUBST_DRIVE}\\`;
-    return;
-  }
-  const map = spawnSync('subst', [SUBST_DRIVE, root], { shell: true });
-  if (map.status !== 0) {
-    console.error('run-inventory-done-tests: subst failed — map Z: to the repo or use a shorter path');
-    process.exit(1);
-  }
-  workRoot = `${SUBST_DRIVE}\\`;
-  substMapped = true;
-}
-
-function unmapSubstIfNeeded() {
-  if (!substMapped) return;
-  spawnSync('subst', [SUBST_DRIVE, '/d'], { shell: true, stdio: 'ignore' });
-  substMapped = false;
-}
+/**
+ * Usage:
+ *   pnpm test:inventory              → all done-tests
+ *   pnpm test:inventory 05 17        → only done-tests 05 and 17
+ *   pnpm test:inventory completion   → only the completion done-tests
+ *   --keep-db                        → leave the local test database running (faster next start)
+ *
+ * The repo lives at a short path (C:\Roam\Goride), so no shortcut drive is needed on Windows.
+ */
+const workRoot = root;
+const argv = process.argv.slice(2);
+const keepDb = argv.includes('--keep-db');
+const picks = argv.filter((a) => !a.startsWith('--')).map((a) => a.toLowerCase().replace(/^0?(\d)$/, '0$1'));
 
 const DATABASE_URL =
   process.env.DATABASE_URL || 'postgresql://postgres:postgres@127.0.0.1:54322/postgres';
@@ -179,7 +165,7 @@ async function waitForFunction(slug, timeoutMs = 180_000) {
 
 async function main() {
   assertLocalDatabaseUrl();
-  mapSubstIfNeeded();
+  const started = Date.now();
 
   run('npx', ['supabase', 'start', '-x', SUPABASE_START_EXCLUDE]);
   run('npx', ['supabase', 'db', 'reset']);
@@ -252,8 +238,14 @@ async function main() {
   const specDir = join(workRoot, 'e2e');
   const specFiles = readdirSync(specDir)
     .filter((f) => /^inventory-done-test-.+\.spec\.ts$/.test(f))
+    // Picked tests only; the postflight "left clean" check always runs last.
+    .filter((f) => !picks.length || /z-postflight/.test(f) || picks.some((p) => f === `inventory-done-test-${p}.spec.ts`))
     .sort()
     .map((f) => join('e2e', f).replace(/\\/g, '/'));
+  if (picks.length && specFiles.length < 2) {
+    throw new Error(`No done-test matches "${picks.join(' ')}" (use e.g. 05, 17, completion)`);
+  }
+  console.error(`\n>>> setup done in ${Math.round((Date.now() - started) / 1000)}s; running ${specFiles.length - 1} test file(s)`);
 
   run(
     'node',
@@ -274,5 +266,8 @@ main()
   .finally(() => {
     killChildren();
     killFunctionsServe();
-    unmapSubstIfNeeded();
+    // Leave nothing running unless asked (CI machines are thrown away anyway).
+    if (!keepDb && !process.env.CI) {
+      spawnSync(npx, ['supabase', 'stop'], { cwd: workRoot, stdio: 'inherit', shell: isWin });
+    }
   });
