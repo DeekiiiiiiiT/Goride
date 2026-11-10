@@ -46,6 +46,8 @@ export function resolveCarKitAction(target: EventTarget | null): CarKitNavAction
   if (!(target instanceof Element)) return null;
   const el = target.closest('[data-car-kit-action], button, a');
   if (!el) return null;
+  // Buttons that pass their own data (item name, issue type) run their own handler.
+  if (el.hasAttribute('data-car-kit-self')) return null;
   const explicit = el.getAttribute('data-car-kit-action') as CarKitNavAction | null;
   if (explicit) return explicit;
 

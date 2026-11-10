@@ -78,6 +78,7 @@ export function Dk1KitItemRows({
                   <button
                     type="button"
                     className="font-body-sm text-body-sm font-semibold text-secondary hover:text-error transition-colors py-1.5 px-2 -mr-2 min-h-[48px] flex items-center"
+                    data-car-kit-self
                     onClick={() => onReport?.(item.name)}
                   >
                     Report a problem

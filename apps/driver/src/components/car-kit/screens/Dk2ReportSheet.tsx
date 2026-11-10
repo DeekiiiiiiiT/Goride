@@ -160,7 +160,7 @@ export function Dk2ReportSheet({
       <p className="text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2" role="alert">{sendError}</p>
       ) : null}
 
-      <button type="button" className="w-full h-[52px] min-h-[50px] rounded-xl bg-emerald-600 text-white font-label-button text-base font-semibold shadow-md hover:bg-emerald-700 active:scale-[0.99] transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:pointer-events-none" id="submitReportBtn" disabled={sending} onClick={() => onSend?.({ issueType, notes: reportNotes, hasPhoto })}>
+      <button type="button" className="w-full h-[52px] min-h-[50px] rounded-xl bg-emerald-600 text-white font-label-button text-base font-semibold shadow-md hover:bg-emerald-700 active:scale-[0.99] transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:pointer-events-none" id="submitReportBtn" data-car-kit-self disabled={sending} onClick={() => onSend?.({ issueType, notes: reportNotes, hasPhoto })}>
       <span className={`material-symbols-outlined text-[20px]${sending ? ' animate-spin' : ''}`}>{sending ? 'progress_activity' : 'send'}</span>
       <span>{sending ? 'Sending report…' : 'Send report'}</span>
       </button>
