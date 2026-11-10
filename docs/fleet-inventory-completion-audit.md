@@ -1,6 +1,18 @@
 # Fleet Inventory — Completion Audit
 
-**Rev 2 · 10 Nov 2026 · CODE COMPLETE — not live yet.** IV-01 to IV-16 are fixed in code, along with 10 more bugs found while building (IV-21 to IV-30). Not live yet: the migration `20261110125114_fleet_inventory_completion.sql` hasn't been applied, the fleet-core and delivery servers are still the old version, and the Fleet site isn't rebuilt. After that, only the owner data (IV-17 to IV-20) is left. Follows [the playbook](how-we-build-playbook.md).
+**Rev 3 · 10 Nov 2026 · CLOSED — live and all tests green.** IV-01 to IV-19 and IV-21 to IV-35 are done and live. Both migrations are applied. Main `1b748075` deployed fleet-core v256, delivery v922, fleet-pay v136 and the Vercel sites; all 7 main workflows passed, CI included. The CI inventory job is fully green: 27/27 click-through done-tests, the completion SQL checks, and 56/56 Deno engine tests. Only IV-20 is left (the owner adds the Dash Camera serial). Follows [the playbook](how-we-build-playbook.md).
+
+### Rev 3 — found while greening the old done-tests (all fixed + live)
+
+| # | Problem | Fix |
+|---|---|---|
+| IV-31 | The driver car kit asked `fleet_vehicles` for `odometer` and `fuel_level`, which don't exist (in prod either), so the vehicle lookup failed and drivers saw the car's internal id instead of its plate. | Select only real columns (`inventory_driver_portal.ts`). |
+| IV-32 | Fleet item pickers (kit editor "Add equipment line", Receive, Opening balances, Register asset, Import, Item editor) loaded only the first 50 items. | `inventoryApi.items()` with no params asks for `?all=1`. |
+| IV-33 | In the driver app, the car-kit click router swallowed **Report a problem** and **Send report**, so every report lost the item name and the chosen issue type (it arrived as "Kit item · Not working"). | Those buttons carry `data-car-kit-self`, and the router skips them. |
+| IV-34 | **Resend now** (after an offline send fails) dropped the issue type and note, and used a new duplicate-guard key, so it could post twice. | Resend sends the saved draft with the same key. |
+| IV-35 | Owner and manager lacked `inventory.approve`, so Reverse and Resolve answered Forbidden. | Added to the customer permission catalog. |
+
+**Test fixes in Rev 3 (old 5 Nov done-tests, T-01):** the test driver is now linked to TEST-001. The vest check uses `item_id` (the view has no `sku`). Test 17 waits for the receive save. Test 14 checks `vehicle_kit.last_inspected_at`, because the daily summary row comes from the nightly job, not the weekly check. Tests 05/06 put an item in the car first, because only items in the car offer "Report a problem". Test 06 presses Resend now. The completion SQL check no longer inserts the generated `bin_key`. The CI inventory job now installs Deno.
 **Scope:** Roam Fleet → Vehicle Operations → Inventory (`/vehicle-operations/inventory`): the Overview, Stock, Vehicle kits, Assets, Movements and Alerts tabs, and every dialog opened from them. The Roam Driver app is out of scope, except where Fleet has to see what drivers report.
 **Separate from** [fleet-inventory-asset-management-audit.md](fleet-inventory-asset-management-audit.md), which covered the 5 Nov cut-down. This audit starts from what is live today.
 
