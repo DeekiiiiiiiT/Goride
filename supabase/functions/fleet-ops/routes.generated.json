@@ -1,7 +1,7 @@
 {
   "slug": "fleet-ops",
-  "generatedAt": "2026-11-10T01:14:13.679Z",
-  "routeCount": 141,
+  "generatedAt": "2026-11-10T02:21:12.201Z",
+  "routeCount": 143,
   "routes": [
     "DELETE ${ADMIN_CAT}/:id",
     "DELETE ${ADMIN}/:id",
@@ -113,6 +113,8 @@
     "POST /admin/maintenance/jobs",
     "POST /admin/maintenance/jobs/:id/restore",
     "POST /admin/maintenance/jobs/:id/retire",
+    "POST /admin/maintenance/proposals/:id/approve",
+    "POST /admin/maintenance/proposals/:id/reject",
     "POST /admin/maintenance/rules",
     "POST /admin/maintenance/rules/:id/retire",
     "POST /admin/maintenance/rules/load-roam-policy-starter",

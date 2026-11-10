@@ -1,7 +1,7 @@
 {
   "slug": "fleet-core",
-  "generatedAt": "2026-11-08T16:28:50.837Z",
-  "routeCount": 881,
+  "generatedAt": "2026-11-10T02:21:12.279Z",
+  "routeCount": 880,
   "routes": [
     "ALL /make-server-37f42386/webhooks/wipay-fleet-modules",
     "DELETE ${ADMIN_CAT}/:id",
@@ -199,7 +199,6 @@
     "GET ${PREFIX}/team/staff/invites/mine",
     "GET ${PREFIX}/term",
     "GET ${PREFIX}/vehicle-context",
-    "GET ${PREFIX}/vehicle-options",
     "GET ${PREFIX}/workforce/members",
     "GET ${PREFIX}/workforce/members/:userId/offboarding-check",
     "GET ${base}/customers",
