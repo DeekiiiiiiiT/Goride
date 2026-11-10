@@ -59,8 +59,8 @@ BEGIN
   VALUES (v_org, v_car_a, v_tpl, v_ver), (v_org, v_car_b, v_tpl, v_ver);
 
   -- Car A: jack on hand, camera installed (single unit), toll tag, fuel card via its driver.
-  INSERT INTO fleet.inv_balance (organization_id, item_id, location_id, bin_key, on_hand, reserved, value)
-  VALUES (v_org, v_jack, v_loc_a, '00000000-0000-0000-0000-000000000000', 1, 0, 100);
+  INSERT INTO fleet.inv_balance (organization_id, item_id, location_id, on_hand, reserved, value)
+  VALUES (v_org, v_jack, v_loc_a, 1, 0, 100);
   INSERT INTO fleet.inv_asset (organization_id, asset_tag, item_id, status, location_id, purchase_cost)
   VALUES (v_org, 'ZZ-CAM-1', v_cam, 'installed', v_loc_a, 500);
   INSERT INTO fleet.toll_tags (id, organization_id, tag_number, vehicle_id, legacy_kv_id)
